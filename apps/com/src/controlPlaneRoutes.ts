@@ -3078,6 +3078,8 @@ export async function tryControlPlane(
           usernames: storage.usernames,
           // #85 — enforce the demo rolling-token ceiling in production.
           demoLlmLedger: storage.demoLlmLedger,
+          // The monthly "ai-tokens" allowance (metering core).
+          meter: new D1MeterStorage(env.DB),
           // Both the endpoint AND the signing secret must be present for
           // a `flagship` issue; missing either ⇒ the handler's 503.
           inferenceEndpoint: inferenceSecret ? inferenceEndpoint : null,
@@ -3123,6 +3125,7 @@ export async function tryControlPlane(
           tiers: storage.tiers,
           usernames: storage.usernames,
           mintProviderKey: async () => ({ key: "", providerKeyId: "" }),
+          meter: new D1MeterStorage(env.DB),
         },
         decodeURIComponent(m[1]!),
       ),
@@ -3140,6 +3143,8 @@ export async function tryControlPlane(
       await handleLlmPromoUsage(
         {
           llmPromo: storage.llmPromo,
+          meter: new D1MeterStorage(env.DB),
+          tiers: storage.tiers,
           verifyToken: async (token) => {
             const v = await verifyScopedInferenceToken(token, inferenceSecret);
             return v.ok ? { ok: true, username: v.claims.username } : { ok: false };

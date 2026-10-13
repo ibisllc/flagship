@@ -20,6 +20,10 @@
  * Per-call default token caps:
  *   1000 input / 500 output (free + hobby)
  *   2000 input / 1000 output (maker)
+ *
+ * On top of those, with a `meter` dep the account's monthly "ai-tokens"
+ * allowance (meter.ts) gates every issue, fed by the TRUE tokens the
+ * in-house shim reports to /api/llm-promo/usage.
  */
 
 import {
@@ -28,9 +32,11 @@ import {
   type LlmProvider,
 } from "@flagship/protocol";
 import type { InferenceEndpoint } from "./inferenceEndpoint.js";
+import { meterCheck, meterRecord, type MeterVerdict } from "./meter.js";
 import type {
   DemoLlmLedgerStorage,
   LlmPromoStorage,
+  MeterStorage,
   TierName,
   TierStorage,
   UsernameStorage,
@@ -78,6 +84,17 @@ export interface LlmPromoDeps {
   demoLlmTokenCap?: number;
   /** Demo window override (default {@link DEMO_LLM_WINDOW_MS_DEFAULT}). */
   demoLlmWindowMs?: number;
+  /**
+   * The metering core's counters. Present ⇒ an account whose monthly
+   * "ai-tokens" allowance is used up gets no new credential (429), and
+   * status reports the allowance. Absent ⇒ only the call caps apply.
+   */
+  meter?: MeterStorage;
+}
+
+/** The "ai-tokens" allowance as clients see it: counts only. */
+function aiTokensBody(v: MeterVerdict) {
+  return { used: v.used, allowance: v.allowance, remaining: v.remaining, action: v.action, resetsAt: v.resetsAt };
 }
 
 export interface TierCaps {
@@ -196,6 +213,19 @@ export async function handleLlmPromoIssue(
     }
   }
 
+  // The monthly in-house token allowance (true usage from the shim). Every
+  // issue needs at least one token left; outstanding credentials can still
+  // overshoot by their per-call caps before the next report lands.
+  if (deps.meter) {
+    const ai = await meterCheck({ meter: deps.meter, tiers: deps.tiers, now: () => now }, r.username, "ai-tokens", 1);
+    if (ai.action === "stop") {
+      return {
+        status: 429,
+        body: { error: "monthly AI token allowance reached", tier: ai.tier, aiTokens: aiTokensBody(ai) },
+      };
+    }
+  }
+
   // Clamp the desired caps to the tier's per-call caps.
   const dailyInput = Math.min(r.desiredDailyInputTokenCap, caps.perCallInputTokens);
   const dailyOutput = Math.min(r.desiredDailyOutputTokenCap, caps.perCallOutputTokens);
@@ -287,7 +317,15 @@ export interface LlmPromoUsageDeps {
    */
   verifyToken: (token: string) => Promise<{ ok: true; username: string } | { ok: false }>;
   now?: () => number;
+  /** Present ⇒ the report's tokens (input + output) are also recorded as
+   *  the metering core's "ai-tokens", and the reply carries the allowance
+   *  verdict (action "stop" once no token is left) so the shim can stop
+   *  early. `tiers` resolves the allowance (absent ⇒ free). */
+  meter?: MeterStorage;
+  tiers?: TierStorage;
 }
+
+const NO_TIERS: TierStorage = { get: async () => undefined, put: async () => {} };
 
 interface UsageBody {
   token?: string;
@@ -330,7 +368,15 @@ export async function handleLlmPromoUsage(
     Math.floor(body.outputTokens),
     now,
   );
-  return ok({ ok: true });
+  if (!deps.meter) return ok({ ok: true });
+  const ai = await meterRecord(
+    { meter: deps.meter, tiers: deps.tiers ?? NO_TIERS, now: () => now },
+    v.username,
+    "ai-tokens",
+    body.inputTokens + body.outputTokens,
+    1,
+  );
+  return ok({ ok: true, aiTokens: aiTokensBody(ai) });
 }
 
 export async function handleLlmPromoStatus(
@@ -346,6 +392,9 @@ export async function handleLlmPromoStatus(
   const today = Math.floor(now / 86_400_000);
   const daily = await deps.llmPromo.getDaily(username, today);
   const lifetime = await deps.llmPromo.getLifetime(username);
+  const ai = deps.meter
+    ? await meterCheck({ meter: deps.meter, tiers: deps.tiers, now: () => now }, username, "ai-tokens", 1)
+    : null;
   return ok({
     tier,
     daily: {
@@ -361,5 +410,6 @@ export async function handleLlmPromoStatus(
       input: caps.perCallInputTokens,
       output: caps.perCallOutputTokens,
     },
+    ...(ai ? { aiTokens: aiTokensBody(ai) } : {}),
   });
 }

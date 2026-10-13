@@ -7,11 +7,13 @@ import { ed, signLlmPromoIssue, type Keypair } from "@flagship/protocol";
 import {
   InMemoryDemoLlmLedgerStorage,
   InMemoryLlmPromoStorage,
+  InMemoryMeterStorage,
   InMemoryTierStorage,
   InMemoryUsernameStorage,
 } from "@flagship/storage";
 import { handleLlmPromoIssue, handleLlmPromoStatus, handleLlmPromoUsage } from "../src/llmPromo.js";
 import { verifyScopedInferenceToken, mintScopedInferenceToken } from "../src/inferenceToken.js";
+import { METER_RESOURCES, meterPeriodKey } from "../src/meter.js";
 
 function makeIrk(): Keypair {
   const priv = new Uint8Array(32);
@@ -389,5 +391,99 @@ describe("/api/llm-promo/status", () => {
     expect(body.daily.used).toBe(1);
     expect(body.daily.cap).toBe(50);
     expect(body.lifetime.cap).toBe(200);
+  });
+});
+
+describe("/api/llm-promo — ai-tokens through the metering core", () => {
+  const SECRET = "shim-secret";
+  const FREE_TOKENS = METER_RESOURCES["ai-tokens"].tiers.free.allowance;
+  const verifyToken = async (token: string) => {
+    const v = await verifyScopedInferenceToken(token, SECRET);
+    return v.ok ? { ok: true as const, username: v.claims.username } : { ok: false as const };
+  };
+  async function tokenFor(username: string): Promise<string> {
+    return mintScopedInferenceToken(
+      { username, keyId: "fp-x", iat: Date.now(), exp: Date.now() + 3_600_000, dailyInputTokenCap: 100_000, dailyOutputTokenCap: 100_000 },
+      SECRET,
+    );
+  }
+  async function world() {
+    const usernames = new InMemoryUsernameStorage();
+    const irk = makeIrk(); await seed(usernames, "alice", irk);
+    const llmPromo = new InMemoryLlmPromoStorage();
+    const tiers = new InMemoryTierStorage();
+    const meter = new InMemoryMeterStorage();
+    let mints = 0;
+    const mintProviderKey = async (args: { provider: string; expiresAt: number }) => {
+      mints++;
+      return stubMint(args);
+    };
+    const issue = async () => {
+      const claim = makeRequest();
+      return handleLlmPromoIssue(
+        { llmPromo, tiers, usernames, meter, mintProviderKey },
+        { request: claim, signature: bytesToHex(signLlmPromoIssue(claim, irk)) },
+      );
+    };
+    return { usernames, llmPromo, tiers, meter, issue, mints: () => mints };
+  }
+  const month = () => meterPeriodKey("month", Date.now());
+
+  it("usage records input + output as ai-tokens and replies with the allowance", async () => {
+    const { llmPromo, tiers, meter } = await world();
+    const token = await tokenFor("alice");
+    const r = await handleLlmPromoUsage({ llmPromo, verifyToken, meter, tiers }, { token, inputTokens: 1200, outputTokens: 300 });
+    expect(r.status).toBe(200);
+    expect((await meter.get("alice", "ai-tokens", month()))?.amount).toBe(1500);
+    const body = r.body as { aiTokens: { used: number; allowance: number; remaining: number; action: string } };
+    expect(body.aiTokens).toMatchObject({ used: 1500, allowance: FREE_TOKENS, remaining: FREE_TOKENS - 1500, action: "allow" });
+    // The promo's own token columns still see the report.
+    expect((await llmPromo.getLifetime("alice"))?.lifetimeInputTokens).toBe(1200);
+  });
+
+  it("usage without a meter dep keeps the old reply", async () => {
+    const llmPromo = new InMemoryLlmPromoStorage();
+    const r = await handleLlmPromoUsage({ llmPromo, verifyToken }, { token: await tokenFor("alice"), inputTokens: 1, outputTokens: 1 });
+    expect(r.body).toEqual({ ok: true });
+  });
+
+  it("issues while tokens remain", async () => {
+    const { meter, issue } = await world();
+    await meter.add("alice", "ai-tokens", month(), FREE_TOKENS - 1, Date.now());
+    expect((await issue()).status).toBe(200);
+  });
+
+  it("stops issuing once the reported tokens use up the allowance, without minting or counting a call", async () => {
+    const { llmPromo, tiers, meter, issue, mints } = await world();
+    const token = await tokenFor("alice");
+    const r = await handleLlmPromoUsage({ llmPromo, verifyToken, meter, tiers }, { token, inputTokens: FREE_TOKENS, outputTokens: 0 });
+    expect((r.body as { aiTokens: { action: string } }).aiTokens.action).toBe("stop");
+
+    const denied = await issue();
+    expect(denied.status).toBe(429);
+    const body = denied.body as { error: string; aiTokens: { remaining: number; resetsAt: number } };
+    expect(body.error).toContain("AI token allowance");
+    expect(body.aiTokens.remaining).toBe(0);
+    expect(body.aiTokens.resetsAt).toBeGreaterThan(Date.now());
+    expect(mints()).toBe(0);
+    const today = Math.floor(Date.now() / 86_400_000);
+    expect((await llmPromo.getDaily("alice", today))?.dailyCount ?? 0).toBe(0);
+  });
+
+  it("the per-call caps still apply under the token allowance", async () => {
+    const { llmPromo, issue } = await world();
+    const today = Math.floor(Date.now() / 86_400_000);
+    for (let i = 0; i < 50; i++) await llmPromo.bumpDaily("alice", today, 1, 1);
+    const r = await issue();
+    expect(r.status).toBe(429);
+    expect((r.body as { error: string }).error).toBe("daily promo cap reached");
+  });
+
+  it("status reports the ai-tokens allowance", async () => {
+    const { usernames, llmPromo, tiers, meter } = await world();
+    await meter.add("alice", "ai-tokens", month(), 42, Date.now());
+    const r = await handleLlmPromoStatus({ llmPromo, tiers, usernames, meter, mintProviderKey: stubMint }, "alice");
+    const body = r.body as { aiTokens: { used: number; allowance: number } };
+    expect(body.aiTokens).toMatchObject({ used: 42, allowance: FREE_TOKENS });
   });
 });
