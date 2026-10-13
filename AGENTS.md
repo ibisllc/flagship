@@ -104,6 +104,14 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   logs) through `buildModelRedactor` (`server-daemon/src/llm/modelPrivacy.ts`).
   An AI only ever works on a private staging copy with sample data, and a
   live service is never attached to an AI session again.
+- **A visitor's identity is per app** (owner rule, 2026-10-13;
+  `docs/service-access-gating.md`). A person's key toward an app is derived
+  from their account root and that app only, whoever invited them, so a
+  server owner can link two grants for the SAME app ("John" and "Chess
+  Club") but never the same person across two apps or servers. No
+  long-lived id may be shared between contexts. App ranks are fixed and
+  ordered: Member < Manager < Master (crown) < the box owner; apps decide
+  what each rank may do, the box never blocks writes by rank.
 - **Unlaunched features live entirely on their own branch; `main` ships clean.**
   Every not-yet-launched feature — site literature, app code (iOS/Android/
   webapp), backend logic, AND tests — lives ONLY on its feature branch, so
@@ -161,7 +169,9 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 Scope agreed 2026-10-13 in `docs/launch-mvp.md` (date to be set): free only,
 no payments; free AI credits on by default; free tier slowed, not cut, past
 25 GB; custom domains, name change + dibs, marketplace and payments come
-after. Windows/Linux Studio ship as "preview".
+after. Windows/Linux Studio ship as "preview". **Share this server** (another
+account can view or co-manage a server, never destroy it) is in the MVP
+(`docs/share-a-server.md`, branch `feat/share-server`).
 
 ### Urgent
 

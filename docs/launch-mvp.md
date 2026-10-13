@@ -28,6 +28,13 @@ launch (`anonymous-vouchers.md`).
 5. **The GA close-out list** in `AGENTS.md` (prod-wipe script, build-time
    disk passphrase, demo switches, debug endpoints, quiet console).
 6. **CA endorsement lease renewed** (due 2026-11-05 regardless).
+7. **Share this server:** one account is one person, so a household shares
+   servers between accounts. The owner grants another account "Can view" or
+   "Can manage" (never delete, wipe, transfer or re-share); boot unlock and
+   app data are separate opt-ins, off by default (`share-a-server.md`).
+8. **Access control on every app:** "Open to all | Members only" plus a
+   members list in both modes, with ranks Member < Manager < Master and a
+   per-app identity for each visitor.
 
 ## Proven on real hardware before launch
 
