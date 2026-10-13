@@ -28,7 +28,7 @@ The four open questions this spec flagged are now resolved:
 | # | User story | Path | Assurance | Offer promote-at-add? |
 |---|---|---|---|---|
 | 1 | Owner adds their OWN 2nd device | Phase 3b cross-device QR: admin mints QR → new device scans → SAS match → `DeviceAdmit` (`AddDeviceViewModel`) | **HIGH** (admin-initiated, synchronous, SAS-confirmed) | **Yes** (default-off + warning) |
-| 2 | Owner adds another PERSON present with them | same QR+SAS ceremony, different human's device | **HIGH channel**, but grants a *different person* admin | **Yes** (default-off + stronger warning) |
+| 2 | ~~Owner adds another PERSON present with them~~ | **Superseded 2026-10-13:** an account is one person; other people get a server shared with their own account (`share-a-server.md`), never a device on yours | — | — |
 | 3 | Remote / async "request to join" the owner approves later | any approval path with no synchronous SAS ("someone tried to log into our cloud and we approve") | **LOW** | **No** — device starts non-admin; promotion is a separate explicit action |
 | 4 | Owner recovers onto a new device | WebAuthn-PRF credential recovery; admin root is escrowed under the credential (D-3) | **HIGH** (credential-proven) | device re-establishes admin from the escrowed root |
 
