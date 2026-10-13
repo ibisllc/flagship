@@ -47,7 +47,7 @@ import {
   type MeterDeps as CoreDeps,
   type MeterVerdict as CoreVerdict,
 } from "@ibisllc/billing-metering";
-import type { MeterStorage, TierName, TierStorage } from "@flagship/storage";
+import type { MeterStorage, TierName, TierStorage, TierSubscriptionRecord } from "@flagship/storage";
 import type { MeterPlan, OverAllowancePolicy } from "@ibisllc/billing-metering";
 
 export {
@@ -127,7 +127,10 @@ export async function effectiveTierOf(
   username: string,
   nowMsValue: number,
 ): Promise<TierName> {
-  const rec = await tiers.get(username.toLowerCase());
+  return tierFrom(await tiers.get(username.toLowerCase()), nowMsValue);
+}
+
+function tierFrom(rec: TierSubscriptionRecord | undefined, nowMsValue: number): TierName {
   if (!rec || rec.tier === "free") return "free";
   if (rec.currentPeriodEnd !== undefined && rec.currentPeriodEnd < nowMsValue) {
     return "free"; // subscription lapsed
@@ -135,11 +138,23 @@ export async function effectiveTierOf(
   return rec.tier;
 }
 
+/** effectiveTierOf for many accounts in one lookup (relay batches). */
+async function effectiveTiersOf(
+  tiers: TierStorage,
+  usernames: string[],
+  nowMsValue: number,
+): Promise<ReadonlyMap<string, TierName>> {
+  if (!tiers.getMany) return new Map();
+  const recs = await tiers.getMany(usernames);
+  return new Map(usernames.map((u) => [u, tierFrom(recs.get(u), nowMsValue)]));
+}
+
 function core(deps: MeterDeps): CoreDeps<MeterResource, TierName> {
   return {
     catalog: { ...METER_RESOURCES, ...deps.resources },
     store: deps.meter,
     planOf: (account, nowMs) => effectiveTierOf(deps.tiers, account, nowMs),
+    plansOf: (accounts, nowMs) => effectiveTiersOf(deps.tiers, accounts, nowMs),
     now: deps.now,
   };
 }

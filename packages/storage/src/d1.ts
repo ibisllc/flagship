@@ -3253,24 +3253,46 @@ export class D1LlmPromoStorage implements LlmPromoStorage {
   }
 }
 
+interface TierRow {
+  username: string; tier: string; stripe_customer_id: string | null; stripe_subscription_id: string | null;
+  current_period_end: number | null; irk_receipt_hex: string | null; irk_signature_hex: string | null;
+  updated_at: number;
+}
+
+function tierFromRow(r: TierRow): TierSubscriptionRecord {
+  return {
+    username: r.username,
+    tier: r.tier as "free" | "hobby" | "maker",
+    stripeCustomerId: r.stripe_customer_id ?? undefined,
+    stripeSubscriptionId: r.stripe_subscription_id ?? undefined,
+    currentPeriodEnd: r.current_period_end ?? undefined,
+    irkReceiptHex: r.irk_receipt_hex ?? undefined,
+    irkSignatureHex: r.irk_signature_hex ?? undefined,
+    updatedAt: r.updated_at,
+  };
+}
+
+/** D1 refuses a query with more than 100 bound parameters. */
+const D1_MAX_PARAMS = 100;
+
 export class D1TierStorage implements TierStorage {
   constructor(private readonly db: D1Database) {}
   async get(u: string): Promise<TierSubscriptionRecord | undefined> {
-    const r = await this.db.prepare(`SELECT * FROM tier_subscriptions WHERE username = ?`).bind(u).first<{
-      username: string; tier: string; stripe_customer_id: string | null; stripe_subscription_id: string | null;
-      current_period_end: number | null; irk_receipt_hex: string | null; irk_signature_hex: string | null;
-      updated_at: number;
-    }>();
-    return r ? {
-      username: r.username,
-      tier: r.tier as "free" | "hobby" | "maker",
-      stripeCustomerId: r.stripe_customer_id ?? undefined,
-      stripeSubscriptionId: r.stripe_subscription_id ?? undefined,
-      currentPeriodEnd: r.current_period_end ?? undefined,
-      irkReceiptHex: r.irk_receipt_hex ?? undefined,
-      irkSignatureHex: r.irk_signature_hex ?? undefined,
-      updatedAt: r.updated_at,
-    } : undefined;
+    const r = await this.db.prepare(`SELECT * FROM tier_subscriptions WHERE username = ?`).bind(u).first<TierRow>();
+    return r ? tierFromRow(r) : undefined;
+  }
+  async getMany(us: string[]): Promise<Map<string, TierSubscriptionRecord>> {
+    const out = new Map<string, TierSubscriptionRecord>();
+    const unique = [...new Set(us)];
+    for (let i = 0; i < unique.length; i += D1_MAX_PARAMS) {
+      const chunk = unique.slice(i, i + D1_MAX_PARAMS);
+      const { results } = await this.db
+        .prepare(`SELECT * FROM tier_subscriptions WHERE username IN (${chunk.map(() => "?").join(",")})`)
+        .bind(...chunk)
+        .all<TierRow>();
+      for (const r of results) out.set(r.username, tierFromRow(r));
+    }
+    return out;
   }
   async put(rec: TierSubscriptionRecord): Promise<void> {
     await this.db.prepare(

@@ -92,8 +92,10 @@ export const EGRESS_LEASE_POLICY: MeterLeasePolicy = {
   overTtlMs: 60_000,
 };
 
-/** Most accounts one report may carry (the relay sends at most 500). */
-export const MAX_USAGE_REPORT_ITEMS = 1000;
+/** Most accounts one report may carry: the relay's batch size. Each is one
+ *  statement in the report's D1 batch, and a Worker invocation may run 1000
+ *  queries, so this leaves headroom. */
+export const MAX_USAGE_REPORT_ITEMS = 500;
 
 function statusFrom(v: MeterVerdict): QuotaStatus {
   const billed = v.policy === "allow";

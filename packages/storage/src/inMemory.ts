@@ -781,6 +781,14 @@ export class InMemoryTierStorage implements TierStorage {
   private byUser = new Map<string, TierSubscriptionRecord>();
   async get(u: string) { const r = this.byUser.get(u); return r ? { ...r } : undefined; }
   async put(r: TierSubscriptionRecord): Promise<void> { this.byUser.set(r.username, { ...r }); }
+  async getMany(us: string[]): Promise<Map<string, TierSubscriptionRecord>> {
+    const out = new Map<string, TierSubscriptionRecord>();
+    for (const u of us) {
+      const r = this.byUser.get(u);
+      if (r) out.set(u, { ...r });
+    }
+    return out;
+  }
 }
 
 /** Metering counters (D1 twin: D1MeterStorage): the core's in-memory store. */

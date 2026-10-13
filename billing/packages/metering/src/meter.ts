@@ -52,6 +52,9 @@ export interface MeterDeps<Resource extends string = string, Plan extends string
   store: MeterStore;
   /** The account's plan right now (the host's subscription lookup). */
   planOf: (account: string, nowMs: number) => Promise<Plan>;
+  /** Optional bulk form of planOf, used for batches (one lookup instead of
+   *  one per account). Accounts missing from the map fall back to planOf. */
+  plansOf?: (accounts: string[], nowMs: number) => Promise<ReadonlyMap<string, Plan>>;
   now?: () => number;
 }
 
@@ -181,7 +184,7 @@ export async function meterCheck<R extends string, P extends string>(
 }
 
 /** Judge a total the caller already holds (a batch add's result) as of
- *  `nowMs`, without touching the store. */
+ *  `nowMs`, without touching the store. Pass `plan` when it is already known. */
 export async function meterJudgeAt<R extends string, P extends string>(
   deps: MeterDeps<R, P>,
   account: string,
@@ -189,7 +192,9 @@ export async function meterJudgeAt<R extends string, P extends string>(
   used: number,
   nowMs: number,
   need = 0,
+  plan?: P,
 ): Promise<MeterVerdict<R, P>> {
   const spec = specOf(deps, resource);
-  return judge(account, resource, spec, await deps.planOf(account, nowMs), nowMs, used, wholeNonNegative(need, "need"));
+  const p = plan ?? (await deps.planOf(account, nowMs));
+  return judge(account, resource, spec, p, nowMs, used, wholeNonNegative(need, "need"));
 }

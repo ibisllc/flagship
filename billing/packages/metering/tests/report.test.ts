@@ -105,4 +105,31 @@ describe("meterReport", () => {
     await expect(meterReport(deps(noBatch), { batchId: ID, items: one })).rejects.toThrow(/addBatch/);
     expect(await meterReport(deps(noBatch), { items: one })).toMatchObject({ duplicate: false });
   });
+
+  it("looks plans up once per batch through plansOf, falling back to planOf", async () => {
+    const asked: string[][] = [];
+    const single: string[] = [];
+    const d: MeterDeps<Resource, Plan> = {
+      ...deps(),
+      planOf: async (a) => {
+        single.push(a);
+        return "basic";
+      },
+      plansOf: async (accounts) => {
+        asked.push(accounts);
+        return new Map([["pro", "pro" as const]]);
+      },
+    };
+    const r = await meterReport(d, {
+      batchId: ID,
+      items: [
+        { account: "pro", resource: "bandwidth", amount: 500 },
+        { account: "ann", resource: "bandwidth", amount: 1 },
+        { account: "pro", resource: "tokens", amount: 1 },
+      ],
+    });
+    expect(asked).toEqual([["pro", "ann"]]);
+    expect(single).toEqual(["ann"]);
+    expect(r.verdicts.map((v) => v.plan)).toEqual(["pro", "basic", "pro"]);
+  });
 });

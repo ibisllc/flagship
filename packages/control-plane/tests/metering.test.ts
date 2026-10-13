@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { InMemoryMeterStorage, type TierName, type TierSubscriptionRecord, type TierStorage } from "@flagship/storage";
+import { InMemoryMeterStorage, InMemoryTierStorage, type TierName, type TierSubscriptionRecord, type TierStorage } from "@flagship/storage";
 import {
   recordEgress,
   quotaStatus,
@@ -231,5 +231,28 @@ describe("metering — idempotent batches and budget leases", () => {
     });
     expect(results(r.body)).toHaveLength(1);
     expect(results(r.body)[0]!.usedBytes).toBe(3);
+  });
+
+  it("judges a batch's tiers in one bulk lookup, lapsed subs as free", async () => {
+    const tiers = new InMemoryTierStorage();
+    await tiers.put({ username: "paid", tier: "hobby", updatedAt: 1 });
+    await tiers.put({ username: "lapsed", tier: "hobby", currentPeriodEnd: NOW - 1, updatedAt: 1 });
+    let single = 0;
+    const get = tiers.get.bind(tiers);
+    tiers.get = async (u) => {
+      single++;
+      return get(u);
+    };
+    const d: MeteringDeps = { meter: new InMemoryMeterStorage(), tiers, now: () => NOW };
+    const r = await handleUsageReport(d, SECRET, SECRET, {
+      batchId: ID,
+      items: ["paid", "lapsed", "nobody"].map((username) => ({ username, bytes: 30 * GB })),
+    });
+    expect(results(r.body).map((x) => [x.username, x.admit])).toEqual([
+      ["paid", true],
+      ["lapsed", false],
+      ["nobody", false],
+    ]);
+    expect(single).toBe(0);
   });
 });

@@ -2138,6 +2138,8 @@ export interface TierSubscriptionRecord {
 export interface TierStorage {
   get(username: string): Promise<TierSubscriptionRecord | undefined>;
   put(rec: TierSubscriptionRecord): Promise<void>;
+  /** Optional bulk get (metering batches): only usernames with a record. */
+  getMany?(usernames: string[]): Promise<Map<string, TierSubscriptionRecord>>;
 }
 
 // ──────────────────────────────────────────────────────────────────────

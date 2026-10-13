@@ -10,7 +10,14 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
-import { D1MeterStorage, InMemoryMeterStorage, type MeterStorage } from "../src/index.js";
+import {
+  D1MeterStorage,
+  D1TierStorage,
+  InMemoryMeterStorage,
+  InMemoryTierStorage,
+  type MeterStorage,
+  type TierStorage,
+} from "../src/index.js";
 import { createSqliteD1, type SqliteD1 } from "./support/sqliteD1.js";
 
 const handles: SqliteD1[] = [];
@@ -166,5 +173,20 @@ describe("migration 0070 — meter_batches", () => {
     ).rejects.toThrow(/boom/);
     expect(await store.get("alice", "egress", "2026-10")).toBeUndefined();
     expect((sqlite.raw.prepare("SELECT COUNT(*) AS n FROM meter_batches").get() as { n: number }).n).toBe(0);
+  });
+});
+
+describe.each<[string, () => TierStorage]>([
+  ["InMemory", () => new InMemoryTierStorage()],
+  ["D1", () => new D1TierStorage(d1().sqlite)],
+])("TierStorage.getMany (%s) — one lookup per relay batch", (_name, make) => {
+  it("returns only the usernames with a record, across D1's 100-parameter chunks", async () => {
+    const t = make();
+    for (const u of ["alice", "u150"]) await t.put({ username: u, tier: "hobby", updatedAt: 1 });
+    const names = ["alice", "bob", "alice", ...Array.from({ length: 200 }, (_, i) => `u${i}`)];
+    const got = await t.getMany!(names);
+    expect([...got.keys()].sort()).toEqual(["alice", "u150"]);
+    expect(got.get("u150")?.tier).toBe("hobby");
+    expect((await t.getMany!([])).size).toBe(0);
   });
 });

@@ -45,7 +45,8 @@ function wholeNonNegative(n: number): number {
 
 /** Record a batch of usage and judge every account in it. Items for the same
  *  (account, resource) are summed. With a `batchId`, the store must implement
- *  `addBatch`. */
+ *  `addBatch`. Plans come from `plansOf` in one call when the host has it,
+ *  else from `planOf` once per account, concurrently. */
 export async function meterReport<R extends string, P extends string>(
   deps: MeterDeps<R, P>,
   report: MeterReport<R>,
@@ -83,10 +84,19 @@ export async function meterReport<R extends string, P extends string>(
     for (const e of entries) totals.push((await deps.store.get(e.account, e.resource, e.period))?.amount ?? 0);
   }
 
+  const accounts = [...new Set(entries.map((e) => e.account))];
+  const plans = new Map<string, P>(deps.plansOf ? await deps.plansOf(accounts, now) : []);
+  await Promise.all(
+    accounts
+      .filter((a) => !plans.has(a))
+      .map(async (a) => {
+        plans.set(a, await deps.planOf(a, now));
+      }),
+  );
   const verdicts: MeterVerdict<R, P>[] = [];
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i]!;
-    verdicts.push(await meterJudgeAt(deps, e.account, e.resource, totals[i] ?? 0, now));
+    verdicts.push(await meterJudgeAt(deps, e.account, e.resource, totals[i] ?? 0, now, 0, plans.get(e.account)));
   }
   return { duplicate, verdicts };
 }
