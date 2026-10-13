@@ -23,11 +23,15 @@
  * size and SHA-256 are of the bytes sent), and asks for up to
  * APP_COPY_PARALLEL chunks at once. Older boxes on either side ignore both.
  *
+ * With LAN-direct on, the description also lists the source's local addresses
+ * (`lan`); the target then fetches the parts there, still as `https://<source>`
+ * (appCopy/lanFetch.ts), and falls back to the relay the moment that fails.
+ *
  * Owner env values ride only sealed under a key both boxes derive from the
  * account's shared gossip key (CGK); a box without it sends the names alone.
  */
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from "node:crypto";
-import type { AppCopyGrant } from "@flagship/protocol";
+import type { AppCopyGrant, LanEndpoint } from "@flagship/protocol";
 import type { AppMembershipSnapshot } from "../membership.js";
 
 export const APP_COPY_EXPORT_PATH = "/api/app-copy/export";
@@ -111,6 +115,8 @@ export interface CopyMeta {
   env: { names: string[]; sealed?: SealedEnv };
   /** The owner-signed access list the source enforces; null on the default list. */
   accessList: string | null;
+  /** Where the target may fetch the parts without the relay (the source's LAN listener). */
+  lan?: LanEndpoint[];
 }
 
 export interface EnvContext {

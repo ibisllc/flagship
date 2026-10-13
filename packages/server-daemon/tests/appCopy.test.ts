@@ -5,6 +5,7 @@
  * data restored before first start, and that a failure or a restart leaves
  * nothing behind.
  */
+import type { LanEndpoint } from "@flagship/protocol";
 import { randomBytes } from "node:crypto";
 import { mkdtempSync, readdirSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
@@ -24,6 +25,8 @@ import { buildAppCopySource } from "../src/appCopy/source.js";
 import { AppCopyStore, INTERRUPTED_REASON } from "../src/appCopy/store.js";
 import { buildAppCopyTarget, COPIES_PATH, COPY_PATH } from "../src/appCopy/target.js";
 import type { AppCopyOps } from "../src/appCopy/ops.js";
+import type { LanFetch } from "../src/appCopy/lanFetch.js";
+import { pickLanEndpoint } from "../src/appCopy/target.js";
 import { APP_COPY_CHUNK_BYTES, APP_COPY_EXPORT_PATH, APP_COPY_PARALLEL, copyEnvKeyFromCgk, fetchEnvelopeBytes } from "../src/appCopy/wire.js";
 import { DbWriteLedger } from "../src/dataLayer/ownerDb.js";
 import { DataProvisioner, InMemoryFilesAdmin, InMemoryPostgresAdmin } from "../src/dataLayer/index.js";
@@ -140,6 +143,10 @@ interface WorldOpts {
   targetOps?: Partial<AppCopyOps>;
   targetStartOk?: boolean;
   now?: () => number;
+  /** The source's LAN-direct addresses, offered in the description. */
+  sourceLan?: LanEndpoint[];
+  /** The target's LAN route; given the world's source, so it can answer as it. */
+  lanFetch?: (source: ReturnType<typeof buildAppCopySource>) => LanFetch;
 }
 
 async function world(o: WorldOpts = {}) {
@@ -191,6 +198,7 @@ async function world(o: WorldOpts = {}) {
     access: srcAccess,
     accessList: (id) => (srcLists.held(id) ? srcLists.list(id) : null),
     ledger: new DbWriteLedger(join(dir, "src-ledger.json"), now, 60 * 60_000),
+    ...(o.sourceLan ? { lanEndpoints: () => o.sourceLan! } : {}),
     now,
   });
   await source.init();
@@ -232,6 +240,8 @@ async function world(o: WorldOpts = {}) {
     },
     pollMs: 1,
     sleep: () => new Promise((r) => setTimeout(r, 1)),
+    lanFetch: o.lanFetch ? o.lanFetch(source) : null,
+    ownLanAddresses: () => ["192.168.64.42"],
     now,
   });
   const screens = (companion = false) =>
@@ -291,7 +301,7 @@ describe("the owner's order on the target (POST /api/screens/services/copy)", ()
     await w.target.settle();
     const done = await call(w, "GET", COPIES_PATH);
     expect(done.json).toEqual({
-      copies: [{ copyId: r.json.copyId, serviceId: SERVICE, appName: "notes", sourceServer: SRC, state: "done", startedAt: expect.any(Number) }],
+      copies: [{ copyId: r.json.copyId, serviceId: SERVICE, appName: "notes", sourceServer: SRC, state: "done", route: "relay", startedAt: expect.any(Number) }],
     });
 
     const app = w.dst.platform.byServiceId(SERVICE)!;
@@ -396,6 +406,66 @@ describe("the owner's order on the target (POST /api/screens/services/copy)", ()
     expect(loaded!.equals(big)).toBe(true);
     expect(most).toBeGreaterThan(1);
     expect(most).toBeLessThanOrEqual(APP_COPY_PARALLEL);
+  });
+
+  describe("over the local network (LAN-direct)", () => {
+    const SRC_LAN = { address: "192.168.64.48", port: 443 };
+    /** A LAN route that reaches the world's source, logging what it carried. */
+    const viaLan = (log: Array<{ endpoint: LanEndpoint; part: string }>, fail = false) => (source: ReturnType<typeof buildAppCopySource>) =>
+      (async (endpoint, url, init) => {
+        const part = (JSON.parse(init.body) as { part: string }).part;
+        log.push({ endpoint, part });
+        if (fail) throw new Error("connect ETIMEDOUT");
+        // Same URL as the relay: only the address it connects to differs.
+        expect(url).toBe(`https://${SRC}${APP_COPY_EXPORT_PATH}`);
+        const r = await source.handle({ method: init.method, path: new URL(url).pathname, headers: init.headers, body: Buffer.from(init.body) });
+        return new Response(r!.body, { status: r!.status, headers: r!.headers ?? {} });
+      }) satisfies LanFetch;
+
+    it("fetches the parts at the source's LAN address once the description names one", async () => {
+      const lan: Array<{ endpoint: LanEndpoint; part: string }> = [];
+      const w = await world({ sourceLan: [SRC_LAN], lanFetch: viaLan(lan) });
+      await call(w, "POST", COPY_PATH, grant());
+      await w.target.settle();
+      const copy = (await call(w, "GET", COPIES_PATH)).json.copies[0];
+      expect(copy).toMatchObject({ state: "done", route: "lan" });
+      // The description came through the relay (it's where the address is learned); every part after it locally.
+      expect(w.fetchLog.every((f) => f.part === "meta")).toBe(true);
+      expect(lan.map((l) => l.part).sort()).toEqual(["db:default", "done", "files", "image", "source"]);
+      expect(lan.every((l) => l.endpoint.address === SRC_LAN.address)).toBe(true);
+      expect(w.dst.platform.byServiceId(SERVICE)).toBeTruthy();
+    });
+
+    it("falls back to the relay for good when the LAN address doesn't answer", async () => {
+      const lan: Array<{ endpoint: LanEndpoint; part: string }> = [];
+      const w = await world({ sourceLan: [SRC_LAN], lanFetch: viaLan(lan, true) });
+      await call(w, "POST", COPY_PATH, grant());
+      await w.target.settle();
+      expect((await call(w, "GET", COPIES_PATH)).json.copies[0]).toMatchObject({ state: "done", route: "relay" });
+      // Each worker already underway may try once; after that it's relay only.
+      expect(lan.length).toBeLessThanOrEqual(APP_COPY_PARALLEL);
+      expect(w.fetchLog.map((f) => f.part)).toEqual(expect.arrayContaining(["image", "db:default", "files", "source", "done"]));
+    });
+
+    it("never connects to an address that isn't a LAN one", async () => {
+      const lan: Array<{ endpoint: LanEndpoint; part: string }> = [];
+      const w = await world({ sourceLan: [{ address: "203.0.113.7", port: 443 }], lanFetch: viaLan(lan) });
+      await call(w, "POST", COPY_PATH, grant());
+      await w.target.settle();
+      expect((await call(w, "GET", COPIES_PATH)).json.copies[0]).toMatchObject({ state: "done", route: "relay" });
+      expect(lan).toEqual([]);
+    });
+
+    it("prefers a source address on the target's own subnet", () => {
+      const offered = [
+        { address: "10.0.0.5", port: 443 },
+        { address: "192.168.64.48", port: 443 },
+      ];
+      expect(pickLanEndpoint(offered, ["192.168.64.42"])).toEqual({ address: "192.168.64.48", port: 443 });
+      expect(pickLanEndpoint(offered, [])).toEqual({ address: "10.0.0.5", port: 443 });
+      expect(pickLanEndpoint([{ address: "8.8.8.8", port: 443 }, { address: "192.168.1.2", port: 0 }], [])).toBeNull();
+      expect(pickLanEndpoint("nope", [])).toBeNull();
+    });
   });
 
   it("without the account's shared key on the target, env names wait as pendingEnv", async () => {

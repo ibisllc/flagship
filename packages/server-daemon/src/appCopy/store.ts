@@ -33,6 +33,8 @@ export interface CopyRecord {
   reason?: string;
   startedAt: number;
   finishedAt?: number;
+  /** How the data came: over the local network or through the relay. */
+  route?: "lan" | "relay";
   /** Env names whose values couldn't come along (the owner sets them here). */
   pendingEnv?: string[];
   held?: CopyHeld;

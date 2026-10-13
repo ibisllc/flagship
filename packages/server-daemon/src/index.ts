@@ -2588,6 +2588,7 @@ async function wireRuntimeSurfaces(deps: {
       access: { exportEntry: (id) => deps.serviceAccessRef.current?.exportEntry(id) ?? null },
       accessList: (id) => runtime.egress.exportList(id),
       ledger: new DbWriteLedger(join(dataDir, "data", "app-copy-exports.json"), undefined, 60 * 60_000),
+      lanEndpoints: () => runtime.lan?.endpoints() ?? [],
       log: (m) => console.log(m),
     });
     await source.init();
@@ -2614,6 +2615,8 @@ async function wireRuntimeSurfaces(deps: {
       },
       egress: { noteCopied: (id, list, declared) => runtime.egress.noteCopied(id, list, declared) },
       ledger: new DbWriteLedger(join(dataDir, "data", "app-copy-orders.json"), undefined, 60 * 60_000),
+      // A box kept relay-only (FLAGSHIP_LAN_DIRECT=0) fetches through the relay too.
+      ...(runtime.lan ? { ownLanAddresses: () => runtime.lan?.endpoints().map((e) => e.address) ?? [] } : { lanFetch: null }),
       log: (m) => console.log(m),
     });
     void target.recover(interrupted).catch((e: Error) => console.warn(`[app-copy] recovery failed: ${e.message}`));

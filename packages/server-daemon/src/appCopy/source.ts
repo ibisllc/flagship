@@ -22,7 +22,7 @@ import { mkdir, open, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { constants as zlibConstants, createGzip } from "node:zlib";
-import { ed, parseAppCopyGrant, verifyAppCopyGrant, type AppCopyGrant, type Bytes } from "@flagship/protocol";
+import { ed, parseAppCopyGrant, verifyAppCopyGrant, type AppCopyGrant, type Bytes, type LanEndpoint } from "@flagship/protocol";
 import { authorizeSensitiveOrder } from "../adminAuthorityLocal.js";
 import type { SensitiveAuthority } from "../egress/approvals.js";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
@@ -67,6 +67,8 @@ export interface AppCopySourceOptions extends SensitiveAuthority {
   sourceDir?: string | null;
   /** Each order opens one export, remembered across restarts (DbWriteLedger). */
   ledger: { claim(key: string): Promise<boolean> };
+  /** The LAN-direct listener's addresses, offered to the target in the description. */
+  lanEndpoints?: () => LanEndpoint[];
   now?: () => number;
   log?: (m: string) => void;
 }
@@ -173,6 +175,8 @@ export function buildAppCopySource(opts: AppCopySourceOptions) {
       },
       accessList: opts.accessList?.(app.serviceId) ?? null,
     };
+    const lan = opts.lanEndpoints?.() ?? [];
+    if (lan.length > 0) s.meta.lan = lan;
   }
 
   async function chunk(s: ExportSession, part: string, offset: number): Promise<HttpResponse> {

@@ -27,6 +27,7 @@ import { pipeline } from "node:stream/promises";
 import { createGunzip } from "node:zlib";
 import {
   egressSuggestions,
+  isLanAddress,
   parseAppCopyGrant,
   parseManifest,
   parseServiceId,
@@ -35,6 +36,7 @@ import {
   type AppCopyGrant,
   type Bytes,
   type InstallServiceRequest,
+  type LanEndpoint,
 } from "@flagship/protocol";
 import { authorizeSensitiveOrder } from "../adminAuthorityLocal.js";
 import type { SensitiveAuthority } from "../egress/approvals.js";
@@ -44,6 +46,7 @@ import type { AppDataCredentials } from "../dataLayer/provisioner.js";
 import type { AppEnvStore } from "../serviceEnvStore.js";
 import { writeSourceTree } from "../llm/serviceSource.js";
 import type { AppCopyOps } from "./ops.js";
+import { makeLanFetch, type LanFetch } from "./lanFetch.js";
 import { AppCopyStore, type CopyHeld, type CopyRecord } from "./store.js";
 import {
   APP_COPY_CHUNK_BYTES,
@@ -94,6 +97,10 @@ export interface AppCopyTargetOptions extends SensitiveAuthority {
   fetch?: (url: string, init: { method: string; headers: Record<string, string>; body: string; signal?: AbortSignal }) => Promise<Response>;
   /** `https://<server>` by default. */
   baseUrl?: (server: string) => string;
+  /** Fetch over the source's LAN listener; null ⇒ always the relay. */
+  lanFetch?: LanFetch | null;
+  /** This box's own LAN addresses (to prefer a source address on the same subnet). */
+  ownLanAddresses?: () => string[];
   pollMs?: number;
   /** How long the source may take to make the bundle. Default 60 min. */
   prepareTimeoutMs?: number;
@@ -110,6 +117,25 @@ const P = { meta: 0.02, fetchStart: 0.05, fetchEnd: 0.8, image: 0.85, start: 0.9
 
 class CopyFailed extends Error {}
 
+/** How one copy reaches its source: the LAN endpoint while it works, else the relay. */
+interface Route {
+  lan: LanEndpoint | null;
+  /** Data chunks that came over the LAN. */
+  lanChunks: number;
+}
+
+/** A local address of the source to try: one on this box's own /24 (or /64) first. */
+export function pickLanEndpoint(offered: unknown, own: string[]): LanEndpoint | null {
+  if (!Array.isArray(offered)) return null;
+  const ok = offered.filter(
+    (e): e is LanEndpoint =>
+      typeof e?.address === "string" && isLanAddress(e.address) && Number.isInteger(e.port) && e.port > 0 && e.port < 65536,
+  );
+  const prefix = (a: string) => (a.includes(":") ? a.split(":").slice(0, 4).join(":") : a.split(".").slice(0, 3).join("."));
+  const mine = new Set(own.map(prefix));
+  return ok.find((e) => mine.has(prefix(e.address))) ?? ok[0] ?? null;
+}
+
 export function buildAppCopyTarget(opts: AppCopyTargetOptions) {
   const now = opts.now ?? (() => Date.now());
   const log = opts.log ?? (() => {});
@@ -117,6 +143,7 @@ export function buildAppCopyTarget(opts: AppCopyTargetOptions) {
   const fetchImpl = opts.fetch ?? ((u, i) => fetch(u, i));
   const baseUrl = opts.baseUrl ?? ((s: string) => `https://${s}`);
   const pollMs = opts.pollMs ?? 2000;
+  const lanFetch = opts.lanFetch === undefined ? makeLanFetch() : opts.lanFetch;
   const authority = {
     ownerIrkPub: opts.ownerIrkPub,
     ...(opts.adminRootPub ? { adminRootPub: opts.adminRootPub } : {}),
@@ -127,7 +154,7 @@ export function buildAppCopyTarget(opts: AppCopyTargetOptions) {
   const json = (status: number, body: unknown): HttpResponse => ({ status, headers: J, body: JSON.stringify(body) });
   const err = (status: number, error: string, extra: Record<string, unknown> = {}) => json(status, { error, ...extra });
 
-  async function post(grant: AppCopyGrant, signature: string, part: string, offset: number): Promise<Response> {
+  async function post(grant: AppCopyGrant, signature: string, part: string, offset: number, route?: Route): Promise<Response> {
     const issuedAt = now();
     const auth = opts.signAsBox(
       fetchEnvelopeBytes({
@@ -141,12 +168,25 @@ export function buildAppCopyTarget(opts: AppCopyTargetOptions) {
         issuedAt,
       }),
     );
-    return fetchImpl(`${baseUrl(grant.sourceServer)}${APP_COPY_EXPORT_PATH}`, {
+    const url = `${baseUrl(grant.sourceServer)}${APP_COPY_EXPORT_PATH}`;
+    const init = {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ from: opts.serverFqdn, grant, signature, part, offset, issuedAt, auth: toHex(auth), accept: COPY_ENCODINGS }),
       signal: AbortSignal.timeout(5 * 60_000),
-    });
+    };
+    const lan = route?.lan;
+    if (lan && lanFetch) {
+      try {
+        const res = await lanFetch(lan, url, init);
+        if (res.status === 200 && part !== "meta" && part !== "done") route.lanChunks++;
+        return res;
+      } catch (e) {
+        if (route.lan) log(`[app-copy] ${grant.serviceId}: ${grant.sourceServer} isn't answering on the local network (${(e as Error).message}); using the relay`);
+        route.lan = null;
+      }
+    }
+    return fetchImpl(url, init);
   }
 
   async function refusal(res: Response): Promise<string> {
@@ -213,6 +253,7 @@ export function buildAppCopyTarget(opts: AppCopyTargetOptions) {
     part: CopyMeta["parts"][number],
     path: string,
     onBytes: (n: number) => void,
+    route: Route,
   ): Promise<void> {
     const fh = await open(path, "w", 0o600);
     try {
@@ -221,7 +262,7 @@ export function buildAppCopyTarget(opts: AppCopyTargetOptions) {
       const fetchRange = async (start: number): Promise<void> => {
         const end = Math.min(start + APP_COPY_CHUNK_BYTES, part.bytes);
         for (let offset = start; offset < end; ) {
-          const res = await post(grant, signature, part.name, offset);
+          const res = await post(grant, signature, part.name, offset, route);
           if (res.status !== 200) throw new CopyFailed(await refusal(res));
           const buf = Buffer.from(await res.arrayBuffer());
           if (buf.length === 0 || offset + buf.length > end) throw new CopyFailed(`the source server sent a bad piece of ${part.name}`);
@@ -278,6 +319,8 @@ export function buildAppCopyTarget(opts: AppCopyTargetOptions) {
       const appName = typeof manifest.name === "string" ? manifest.name : rec.appName;
       await opts.store.update(rec.copyId, { appName });
 
+      const route: Route = { lan: lanFetch ? pickLanEndpoint(meta.lan, opts.ownLanAddresses?.() ?? []) : null, lanChunks: 0 };
+      if (route.lan) log(`[app-copy] ${grant.serviceId}: fetching from ${grant.sourceServer} on the local network`);
       const total = meta.parts.reduce((n, p) => n + p.bytes, 0);
       let got = 0;
       const files = new Map<string, string>();
@@ -287,10 +330,10 @@ export function buildAppCopyTarget(opts: AppCopyTargetOptions) {
         await download(grant, signature, part, path, (n) => {
           got += n;
           opts.store.setProgress(rec.copyId, P.fetchStart + (P.fetchEnd - P.fetchStart) * (total > 0 ? got / total : 1));
-        });
+        }, route);
         files.set(part.name, await decoded(part, path));
       }
-      void post(grant, signature, "done", 0).then(
+      void post(grant, signature, "done", 0, route).then(
         (r) => r.body?.cancel().catch(() => {}),
         () => {},
       );
@@ -388,6 +431,7 @@ export function buildAppCopyTarget(opts: AppCopyTargetOptions) {
         progress: undefined,
         finishedAt: now(),
         held: undefined,
+        route: route.lanChunks > 0 ? "lan" : "relay",
         ...(pendingEnv.length > 0 ? { pendingEnv } : {}),
       });
       log(`[app-copy] ${grant.serviceId}: copied from ${grant.sourceServer}`);
@@ -482,6 +526,7 @@ export function buildAppCopyTarget(opts: AppCopyTargetOptions) {
       state: r.state,
       ...(r.progress !== undefined ? { progress: Math.round(r.progress * 100) / 100 } : {}),
       ...(r.reason ? { reason: r.reason } : {}),
+      ...(r.route ? { route: r.route } : {}),
       startedAt: r.startedAt,
       ...(r.pendingEnv && r.pendingEnv.length > 0 ? { pendingEnv: r.pendingEnv } : {}),
     };

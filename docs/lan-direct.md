@@ -79,6 +79,26 @@ on another route).
 and the box cert names the public hostname, so a page can't reach the box by
 LAN address with valid TLS. The webapp keeps using the relay.
 
+## Box to box (app copies, 2026-10-12)
+
+Copying an app between two of the owner's servers (`docs/app-placement.md`
+§5) used to cross the owner's uplink twice: target → relay → source and back.
+With LAN-direct on, the source adds its bound LAN endpoints to the copy's
+description (`lan` in the `meta` answer). That answer reaches only the box the
+owner's signed order names as target, over the relayed TLS that ends on the
+source, so the home network's layout goes to no one else and needs no
+signature of its own. The target then sends every later request (each still
+signed with its identity key) to that address, but still as
+`https://<source>` (`appCopy/lanFetch.ts`): SNI, Host and the WebPKI
+certificate check are against the source's own name, so a device that merely
+holds the address can't answer. It prefers an endpoint on its own /24, never
+tries a non-LAN address, gives a connection 3 s, and falls back to the relay
+for the rest of the copy at the first failure. The copy records `route`
+(`lan` | `relay`). A box with `FLAGSHIP_LAN_DIRECT=0` neither offers nor uses
+a LAN route. Studio's hosted VMs share one NAT subnet on their Mac
+(`192.168.64.0/24`), so two VMs on the same Mac copy over it even though a
+phone on the Wi-Fi can't reach them.
+
 ## Threat model
 
 | Threat | Outcome |
