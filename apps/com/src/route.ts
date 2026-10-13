@@ -261,6 +261,8 @@ export interface RouteEnv {
   /** HMAC secret the promo minter signs scoped inference tokens with, and
    *  the metering shim verifies + reports usage under. See ControlPlaneEnv. */
   FLAGSHIP_INFERENCE_TOKEN_SECRET?: string;
+  /** Free AI tokens per account. See ControlPlaneEnv.FLAGSHIP_FREE_AI_TOKENS. */
+  FLAGSHIP_FREE_AI_TOKENS?: string;
   /** WebSocket URL daemons dial for the tunnel hub (discovery endpoint). */
   TUNNEL_HUB_URL?: string;
   /** Control-plane apex — a test env (gym) sets "gym.flagshipserver.com"; unset

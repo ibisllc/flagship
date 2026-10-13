@@ -1,0 +1,27 @@
+{
+  "about": "flagship/llm-promo-issue/v1 (docs/build-modes.md, free AI credits). Canonical: tag|username|serverFqdn|provider|desiredDailyInputTokenCap|desiredDailyOutputTokenCap|issuedAt. Free AI clients always send provider \"flagship\" and both caps 0; serverFqdn is the box the build runs on, or empty for a status read. These cases sign with the protocol IRK derived from umkSeedHex (deriveIRK / deriveProtocolIrkSeed) only to pin the bytes; a real request is signed with the key .com holds for the account, the same one each app signs push registration with.",
+  "umkSeedHex": "2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a",
+  "pub": "c49775473bf9dcf5ad1608c8e66823d55dc6889be27e42a029fd9de195c8d7e4",
+  "cases": [
+    {
+      "username": "harry",
+      "serverFqdn": "home.harry.flagship.services",
+      "provider": "flagship",
+      "desiredDailyInputTokenCap": 0,
+      "desiredDailyOutputTokenCap": 0,
+      "issuedAt": 1700000000000,
+      "canonical": "flagship/llm-promo-issue/v1|harry|home.harry.flagship.services|flagship|0|0|1700000000000",
+      "signature": "8ea882db132fe24e6054a89e09cab338f4a1339d3ff463bd7c84a650e2473be78600c91e1c2aaab3e1ee8a8c40146141cf5d3354d1870a3925bd40e5fd2a070c"
+    },
+    {
+      "username": "harry",
+      "serverFqdn": "",
+      "provider": "flagship",
+      "desiredDailyInputTokenCap": 0,
+      "desiredDailyOutputTokenCap": 0,
+      "issuedAt": 1700000000000,
+      "canonical": "flagship/llm-promo-issue/v1|harry||flagship|0|0|1700000000000",
+      "signature": "ce1ec3520b50a974b1ff6ca7796d65f6f5bb840c3949b4d3ab1c26a440791846badb620f9e2287532feccee5c790166cb3faa3201018e2b8e0df26352d0c5b0c"
+    }
+  ]
+}

@@ -46,6 +46,7 @@ export * from "./auditEvents.js";
 export * from "./pushBridge.js";
 export * from "./entitlementRevocations.js";
 export * from "./llmPromo.js";
+export * from "./freeAiCredits.js";
 export * from "./userIdentity.js";
 export * from "./inheritance.js";
 export * from "./podInventory.js";

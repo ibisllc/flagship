@@ -133,7 +133,11 @@ export type RateLimitEndpoint =
   | "voici-shorten"
   // SEC-3 — LLM promo / BYOK-credit issuance. Tighter than voici (each issue
   // mints a scoped provider key + bumps the ledger), per-IP at the edge.
-  | "llm-promo-issue";
+  | "llm-promo-issue"
+  // Free AI credits: an IRK-signed token mint (one per build start and per
+  // reply) or a status read. Minting records nothing, so this only fences
+  // signature-check load from one address.
+  | "free-ai";
 
 interface AxisLimit {
   axis: "ip" | "irk" | "usernameHash";
@@ -285,6 +289,10 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
   // SEC-3 — LLM promo / BYOK-credit issuance. Tighter: 5/h per-IP (token
   // farming is the concern, and a legitimate client issues rarely).
   "llm-promo-issue": [{ axis: "ip", limit: 5, windowSec: 3600 }],
+  "free-ai": [
+    { axis: "ip", limit: 30, windowSec: 60 },
+    { axis: "ip", limit: 600, windowSec: 3600 },
+  ],
 };
 
 export interface RateLimitInput {
@@ -509,6 +517,11 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   }
   if (m === "POST" && pathname === "/api/llm-promo/issue") {
     return "llm-promo-issue";
+  }
+  // The shim's /api/free-ai/allowance check comes from Cloudflare's own
+  // addresses on every model call, and is token-authenticated: not limited.
+  if (m === "POST" && (pathname === "/api/free-ai/token" || pathname === "/api/free-ai/status")) {
+    return "free-ai";
   }
   return null;
 }

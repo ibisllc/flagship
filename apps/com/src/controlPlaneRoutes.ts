@@ -164,6 +164,12 @@ import {
   handleLlmPromoIssue,
   handleLlmPromoStatus,
   handleLlmPromoUsage,
+  handleFreeAiAllowance,
+  handleFreeAiStatus,
+  handleFreeAiToken,
+  parseFreeAiAllowance,
+  promoStorageLedger,
+  type FreeAiDeps,
   parseBlessedInferenceEndpoint,
   mintScopedInferenceToken,
   verifyScopedInferenceToken,
@@ -324,6 +330,12 @@ export interface ControlPlaneEnv {
    * FLAGSHIP_INFERENCE_TOKEN_SECRET`.
    */
   FLAGSHIP_INFERENCE_TOKEN_SECRET?: string;
+
+  /**
+   * Free AI tokens (input + output) per account, as a whole number. Unset ⇒
+   * `FREE_AI_TOKENS_DEFAULT`; "0" turns free AI off. A plain var.
+   */
+  FLAGSHIP_FREE_AI_TOKENS?: string;
 
   /**
    * Shared bearer secret for the dedicated boot worker's NOTIFY PIPE
@@ -681,6 +693,9 @@ const ROUTE_RE = {
   LLM_PROMO_ISSUE: /^\/api\/llm-promo\/issue$/,
   LLM_PROMO_STATUS: /^\/api\/llm-promo\/status\/([^/]+)$/,
   LLM_PROMO_USAGE: /^\/api\/llm-promo\/usage$/,
+  FREE_AI_TOKEN: /^\/api\/free-ai\/token$/,
+  FREE_AI_STATUS: /^\/api\/free-ai\/status$/,
+  FREE_AI_ALLOWANCE: /^\/api\/free-ai\/allowance$/,
   CERT_REVOCATIONS_POST: /^\/api\/cert-revocations$/,
   CERT_REVOCATIONS_GET: /^\/api\/cert-revocations\/([^/]+)$/,
   REVOCATIONS_LIST: /^\/api\/revocations$/,
@@ -3066,10 +3081,36 @@ export async function tryControlPlane(
     );
   }
 
+  // ── Free AI credits (docs/build-modes.md) ─────────────────
+  if (
+    method === "POST" &&
+    (ROUTE_RE.FREE_AI_TOKEN.test(path) || ROUTE_RE.FREE_AI_STATUS.test(path) || ROUTE_RE.FREE_AI_ALLOWANCE.test(path))
+  ) {
+    const freeAi: FreeAiDeps = {
+      usernames: storage.usernames,
+      ledger: promoStorageLedger(storage.llmPromo),
+      endpoint: parseBlessedInferenceEndpoint(env.FLAGSHIP_INFERENCE_ENDPOINT),
+      tokenSecret: env.FLAGSHIP_INFERENCE_TOKEN_SECRET,
+      allowanceTokens: parseFreeAiAllowance(env.FLAGSHIP_FREE_AI_TOKENS),
+    };
+    const body = await readJson(request);
+    if (ROUTE_RE.FREE_AI_TOKEN.test(path)) return finish(await handleFreeAiToken(freeAi, body));
+    if (ROUTE_RE.FREE_AI_STATUS.test(path)) return finish(await handleFreeAiStatus(freeAi, body));
+    return finishPlain(await handleFreeAiAllowance(freeAi, body));
+  }
+
   // ── LLM promo ──────────────────────────────────────────────
   if (method === "POST" && ROUTE_RE.LLM_PROMO_ISSUE.test(path)) {
     const inferenceEndpoint = parseBlessedInferenceEndpoint(env.FLAGSHIP_INFERENCE_ENDPOINT);
     const inferenceSecret = env.FLAGSHIP_INFERENCE_TOKEN_SECRET;
+    const issueBody = await readJson(request);
+    // Anthropic, OpenAI and Google can't mint per-user keys with a hard
+    // token cap, so only the metered in-house endpoint is offered; never
+    // hand out a placeholder key the box can't use.
+    const issueProvider = (issueBody as { request?: { provider?: unknown } } | undefined)?.request?.provider;
+    if (issueProvider !== undefined && issueProvider !== "flagship") {
+      return finish({ status: 410, body: { error: "only free AI credits are offered; use /api/free-ai/token" } });
+    }
     return finish(
       await handleLlmPromoIssue(
         {
@@ -3086,9 +3127,8 @@ export async function tryControlPlane(
           // For `provider:"flagship"` mint a scoped, short-lived (1h)
           // `.com`-signed token the metering shim verifies — NOT a real
           // upstream key. Refuse if the signing secret is unset (belt to
-          // the handler's endpoint-configured check). Upstream providers
-          // (anthropic/openai/google) keep the deterministic stub until
-          // their real scoped-key APIs are wired.
+          // the handler's endpoint-configured check). Other providers are
+          // refused above.
           mintProviderKey: async (args) => {
             if (args.provider === "flagship") {
               if (!inferenceSecret) throw new Error("inference token secret not configured");
@@ -3107,13 +3147,10 @@ export async function tryControlPlane(
               );
               return { key, providerKeyId: keyId };
             }
-            return {
-              key: `fk-${args.provider}-${args.username}-${args.expiresAt}`,
-              providerKeyId: `pkid-${args.expiresAt}`,
-            };
+            throw new Error("only the flagship provider is offered");
           },
         },
-        await readJson(request),
+        issueBody,
       ),
     );
   }

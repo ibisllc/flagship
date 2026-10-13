@@ -82,6 +82,13 @@ describe("rateLimit — endpoint detection", () => {
     expect(LIMITS["llm-promo-issue"]?.[0]?.limit).toBe(5);
   });
 
+  it("limits free AI token mints and status reads per-IP, but not the shim's allowance check", () => {
+    expect(endpointFor("POST", "/api/free-ai/token")).toBe("free-ai");
+    expect(endpointFor("POST", "/api/free-ai/status")).toBe("free-ai");
+    expect(endpointFor("POST", "/api/free-ai/allowance")).toBeNull();
+    expect(LIMITS["free-ai"]?.every((a) => a.axis === "ip")).toBe(true);
+  });
+
   it("rate-limits the IRK-signed push-token revoke per-IP", () => {
     expect(endpointFor("DELETE", "/api/push/0123456789abcdef")).toBe("push-revoke");
     expect(LIMITS["push-revoke"]?.every((a) => a.axis === "ip")).toBe(true);
