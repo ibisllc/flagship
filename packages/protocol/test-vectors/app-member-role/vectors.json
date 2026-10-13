@@ -29,6 +29,15 @@
       "issuedAt": 1712345678901,
       "canonical": "flagship/app-member-role/v1|media.harry.flagship.services|harry-chess-club|invite:9f1c2d3e4b5a69788796a5b4c3d2e1f0|editor|1712345678901",
       "signature": "1153ca52a5d9f6a9a922414f5bdc09053b7dd60527cdc421e5fcba0c4ebad418d4757e682efed2b911d04ff1ceaf9eea89c891a2d46ffed0165dead5cd13d60f"
+    },
+    {
+      "serverDomain": "media.harry.flagship.services",
+      "serviceId": "harry-chess-club",
+      "target": "grant:9f1c2d3e4b5a69788796a5b4c3d2e1f0/086abb1c191c86e7cb68d4736f73c68f8b0c55c2a3fafa6a2c770fc308ab242a",
+      "role": "admin",
+      "issuedAt": 1712345678902,
+      "canonical": "flagship/app-member-role/v1|media.harry.flagship.services|harry-chess-club|grant:9f1c2d3e4b5a69788796a5b4c3d2e1f0/086abb1c191c86e7cb68d4736f73c68f8b0c55c2a3fafa6a2c770fc308ab242a|admin|1712345678902",
+      "signature": "7411e84f9264966c4852012273172e76818a7836d10cec5ae8c156b7111836b4e74a4c01ecfdcb9e8228e47dc77dc3a9a950cc7e6287d14883004cbb2c2e3c01"
     }
   ],
   "invalid": [
@@ -46,7 +55,7 @@
       "target": "aid:abababababababababababababababababababababababababababababababab",
       "role": "member",
       "issuedAt": 1700000000000,
-      "why": "roles are the fixed ladder only"
+      "why": "roles are the three ranks only"
     },
     {
       "serverDomain": "home.harry.flagship.services",
@@ -95,6 +104,22 @@
       "role": "editor",
       "issuedAt": 1700000000000,
       "why": "invite id must not carry a separator"
+    },
+    {
+      "serverDomain": "home.harry.flagship.services",
+      "serviceId": "harry-weather",
+      "target": "grant:inv-1",
+      "role": "editor",
+      "issuedAt": 1700000000000,
+      "why": "grant target needs invite id / aid"
+    },
+    {
+      "serverDomain": "home.harry.flagship.services",
+      "serviceId": "harry-weather",
+      "target": "grant:inv-1/ABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABAB",
+      "role": "editor",
+      "issuedAt": 1700000000000,
+      "why": "grant aid must be 64 lowercase hex"
     },
     {
       "serverDomain": "home.harry.flagship.services",

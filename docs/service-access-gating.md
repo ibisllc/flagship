@@ -109,28 +109,34 @@ role is chosen at creation). The toggle never changes the list.
 - **Removing someone:** on an open app they lose their role and visit
   anonymously; on a members-only app they are signed out and kept out.
 
-**Roles** are Flagship's fixed ladder, never app-defined (the manifest's
-`custom_roles` are ignored for members; its `default_role` is the role of a
-grant the owner gave none, `member` being the older name for editor):
+**Roles** are three ordered ranks Flagship imposes, never app-defined (the
+manifest's `custom_roles` are ignored for members), plus the implicit `owner`
+(the box owner only, never given). Lowest: uses the app as its members do
+(apps decide what that allows: in a game it still saves games). Middle: more.
+Highest: changes or deletes anyone's things and the app's settings. Owner:
+the highest + Flagship-level control (access control, delete). The box only
+delivers identity and rank honestly; apps enforce. **The rank names are not
+final** (proposed: Member < Moderator < Admin, each with an optional per-app
+one-line description from the manifest). Until the owner confirms, the wire
+names are `viewer` < `editor` < `admin`, the manifest's `default_role` maps
+onto them (`member` → editor, `owner` → admin), and each client keeps the
+display names in one place (webapp `lib/memberRoles.js` ROLE_LABELS, iOS
+`AppMemberRole.label`, Android `AppMemberRole.label`).
 
-| role | can |
-|---|---|
-| `viewer` | see the app |
-| `editor` | viewer + add and change their own things |
-| `admin` | editor + change or delete anyone's things and the app's settings |
-| `owner` | admin + Flagship-level control (access control, delete); the box owner only, never given |
-
-**Grants.** Every invite is a grant with a role; a person can hold several for
-one app (a personal invite and group links all bind their per-author contact
-AID). Their role is the **highest** of their live grants; revoking one leaves
-the others, and only someone left with no grant stops being a member. The box
-keeps the grants in the service's allow-list state (`groups`: inviteId → AIDs,
-personal invites included) and the roles beside them (`roles.invites`,
-`roles.aids` for members who joined before personal invites were tracked).
+**Grants.** Every redemption of an invite is its own grant, with its own role
+(its own, else the invite's, else the app's default) and revocation: a group
+link's joins are separate per-person bindings. A person can hold several
+grants for one app (a personal invite and group links all bind their
+per-author contact AID). Their role is the **highest** of their live grants;
+revoking one leaves the others, and only someone left with no grant stops
+being a member. The box keeps the grants in the service's allow-list state
+(`groups`: inviteId → AIDs, personal invites included) and the roles beside
+them (`roles.grants` per join, `roles.invites` per invite, `roles.aids` for
+members who joined before personal invites were tracked).
 
 **Signed orders.** A role change is `flagship/app-member-role/v1|<serverDomain>|
-<serviceId>|<target>|<role>|<issuedAt>` (`target` = `invite:<inviteId>` or
-`aid:<hex>`), signed by the sensitive-order key and verified by the box
+<serviceId>|<target>|<role>|<issuedAt>` (`target` = `invite:<inviteId>`,
+`grant:<inviteId>/<aid>` for one join, or `aid:<hex>`), signed by the sensitive-order key and verified by the box
 (`memberRoles.ts`: `GET /api/screens/services/:id/members`,
 `POST …/members/role`), at most 10 minutes old and newer than the last order
 for that target. Vectors: `packages/protocol/test-vectors/app-member-role/`.
@@ -146,10 +152,11 @@ the knock page (or goes straight back when already signed in), and after the
 phone approves, the browser returns to `next` (a same-origin path). Apps link
 there; private routes still show the knock page themselves.
 
-**Not yet (owner to confirm):** treating anonymous visitors of an open app as
-`viewer`, and the proxy enforcing viewer = read-only methods. Both would sit
-in `appMemberSession.ts` / the app proxy and need no change to the stores or
-orders.
+**Not built yet:** removing one person's join from a group link on its own
+(the order to name a single grant for revocation; today a person is removed
+from the box entirely, or a whole invite is revoked), the per-app rank
+descriptions, and treating anonymous visitors of an open app as the lowest
+rank (owner to confirm). The proxy never enforces a rank: apps do.
 
 ## Notes
 - AID is a NEW UMK-derived key (parallel to the versioned IRK). Add `deriveAccountId` to

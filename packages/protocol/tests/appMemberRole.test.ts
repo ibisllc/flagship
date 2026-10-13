@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   appMemberRoleCanonicalBytes,
   appMemberRoleTargetAid,
+  appMemberRoleTargetGrant,
   appMemberRoleTargetInvite,
   parseAppMemberRoleOrder,
   parseAppMemberRoleTarget,
@@ -67,9 +68,15 @@ describe("app-member-role beyond the vectors", () => {
 
   it("builds and reads targets", () => {
     expect(base.target).toBe(`aid:${"ab".repeat(32)}`);
-    expect(parseAppMemberRoleTarget(base.target)).toEqual({ kind: "aid", id: "ab".repeat(32) });
-    expect(parseAppMemberRoleTarget(appMemberRoleTargetInvite("inv-1"))).toEqual({ kind: "invite", id: "inv-1" });
+    expect(parseAppMemberRoleTarget(base.target)).toEqual({ kind: "aid", aid: "ab".repeat(32) });
+    expect(parseAppMemberRoleTarget(appMemberRoleTargetInvite("inv-1"))).toEqual({ kind: "invite", inviteId: "inv-1" });
+    expect(parseAppMemberRoleTarget(appMemberRoleTargetGrant("inv-1", "CD".repeat(32)))).toEqual({
+      kind: "grant",
+      inviteId: "inv-1",
+      aid: "cd".repeat(32),
+    });
     expect(parseAppMemberRoleTarget("invite:")).toBeNull();
+    expect(parseAppMemberRoleTarget(`grant:inv-1/${"cd".repeat(31)}`)).toBeNull();
   });
 
   it("a signature covers exactly one box, app, target, role and time", () => {

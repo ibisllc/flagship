@@ -102,12 +102,12 @@ that AID, else the manifest's `default_role`. Only the box owner is ever
 `owner`: a default (or assigned) role of `owner` gives an invited person
 `admin`.
 
-Roles are Flagship's fixed ladder (docs/service-access-gating.md, "Open mode +
-members"): `viewer` sees the app; `editor` also adds and changes their own
-things; `admin` also changes or deletes anyone's things and the app's
-settings; `owner` (the box owner only) also has Flagship-level control. The
-owner gives each member a role; a person holding several invites has the
-highest. `default_role: "member"` is the older name for `editor`.
+Roles are three ordered ranks Flagship imposes (docs/service-access-gating.md,
+"Open mode + members"), for now `viewer` < `editor` < `admin` on the wire (the
+names aren't final), plus `owner` for the box owner. The owner gives each
+member a rank; a person holding several invites has the highest. The box
+delivers the rank; the app decides what each rank may do.
+`default_role: "member"` is the older name for `editor`.
 
 On an open app a member is an anonymous visitor until they sign in: link to
 `/__flagship/sign-in?next=<path>` (and `/__flagship/sign-out?next=<path>`),

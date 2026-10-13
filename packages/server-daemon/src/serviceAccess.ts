@@ -51,6 +51,8 @@ import {
   type ServiceInviteListQuery,
   type ServiceVisitProof,
   type SetServiceAccessMode,
+  APP_MEMBER_ROLES,
+  type AppMemberRoleTarget,
 } from "@flagship/protocol";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
 
@@ -76,23 +78,26 @@ interface ServiceAccessEntry {
 }
 
 /**
- * Roles the owner set with signed `flagship/app-member-role/v1` orders, on the
- * fixed ladder viewer < editor < admin (only the box owner is `owner`). Each
- * grant (invite) carries a role, unset meaning the app's default; a member's
- * role is the highest of their live grants and of any role set on them
- * directly (`aids`, for members who joined before grants were tracked).
+ * Roles the owner set with signed `flagship/app-member-role/v1` orders, on
+ * Flagship's three ordered ranks (only the box owner is `owner`). Every
+ * redemption of an invite is its own grant: its role is its own (`grants`),
+ * else the invite's (`invites`), else the app's default. A member's role is
+ * the highest of their live grants and of any role set on them directly
+ * (`aids`, for members who joined before grants were tracked).
  */
 export interface MemberRoles {
   /** member AID → role */
   aids: Record<string, string>;
   /** inviteId → role, for everyone who joins through that invite */
   invites: Record<string, string>;
+  /** `<inviteId>/<aid>` → role of one person's join (every redemption is its own grant) */
+  grants: Record<string, string>;
   /** order target → the issuedAt of the last order applied to it (replay guard) */
   seq: Record<string, number>;
 }
 
-/** The roles an owner can give, lowest first. */
-export const MEMBER_ROLE_LADDER = ["viewer", "editor", "admin"] as const;
+/** The ranks an owner can give, lowest first (their wire names; the one place on the box). */
+export const MEMBER_ROLE_LADDER = APP_MEMBER_ROLES;
 export type MemberRole = (typeof MEMBER_ROLE_LADDER)[number];
 
 /**
@@ -121,7 +126,7 @@ function higher(a: MemberRole | null, b: MemberRole | null): MemberRole | null {
 }
 
 function emptyRoles(): MemberRoles {
-  return { aids: {}, invites: {}, seq: {} };
+  return { aids: {}, invites: {}, grants: {}, seq: {} };
 }
 
 function readRoles(v: unknown): MemberRoles {
@@ -134,6 +139,7 @@ function readRoles(v: unknown): MemberRoles {
   };
   strMap(r.aids, out.aids);
   strMap(r.invites, out.invites);
+  strMap(r.grants, out.grants);
   if (r.seq && typeof r.seq === "object") {
     for (const [k, x] of Object.entries(r.seq)) if (typeof x === "number") out.seq[k] = x;
   }
@@ -141,7 +147,7 @@ function readRoles(v: unknown): MemberRoles {
 }
 
 function copyRoles(r: MemberRoles): MemberRoles {
-  return { aids: { ...r.aids }, invites: { ...r.invites }, seq: { ...r.seq } };
+  return { aids: { ...r.aids }, invites: { ...r.invites }, grants: { ...r.grants }, seq: { ...r.seq } };
 }
 
 type PersistShape = Record<string, Omit<ServiceAccessEntry, "roles"> & { roles?: MemberRoles }>;
@@ -301,6 +307,10 @@ export class ServiceAccessStore {
     }
     const roles = readRoles(e.roles);
     for (const aid of Object.keys(roles.aids)) if (!allow.includes(aid)) delete roles.aids[aid];
+    for (const key of Object.keys(roles.grants)) {
+      const [id, aid] = key.split("/");
+      if (!groups[id!]?.includes(aid!)) delete roles.grants[key];
+    }
     this.byService.set(serviceRef, { mode: e.mode === "restricted" ? "restricted" : "open", allow, groups, roles });
     await this.persist();
   }
@@ -355,6 +365,7 @@ export class ServiceAccessStore {
     // visitor again, on a members-only one they are kept out.
     const hadRole = aid in e.roles.aids;
     delete e.roles.aids[aid];
+    for (const key of Object.keys(e.roles.grants)) if (key.endsWith(`/${aid}`)) delete e.roles.grants[key];
     if (e.allow.length === before) {
       if (hadRole) await this.persist();
       return false;
@@ -380,6 +391,7 @@ export class ServiceAccessStore {
       if (!members || members.length === 0) continue;
       delete e.groups[inviteId];
       delete e.roles.invites[inviteId];
+      for (const key of Object.keys(e.roles.grants)) if (key.startsWith(`${inviteId}/`)) delete e.roles.grants[key];
       // Revoking one grant leaves a person's others: only someone left with
       // no grant at all stops being a member.
       for (const aid of members) {
@@ -408,9 +420,15 @@ export class ServiceAccessStore {
   }
 
   /** The role an invite gives (unset: the app's default). */
-  grantRole(serviceRef: string, inviteId: string, defaultRole: string): MemberRole {
+  inviteRole(serviceRef: string, inviteId: string, defaultRole: string): MemberRole {
     const set = ladderRole(this.byService.get(serviceRef)?.roles.invites[inviteId]);
     return set ?? ladderRole(defaultRole) ?? "viewer";
+  }
+
+  /** The role of one person's join through an invite: its own, else the invite's. */
+  grantRole(serviceRef: string, inviteId: string, aidHex: string, defaultRole: string): MemberRole {
+    const own = ladderRole(this.byService.get(serviceRef)?.roles.grants[`${inviteId}/${aidHex.toLowerCase()}`]);
+    return own ?? this.inviteRole(serviceRef, inviteId, defaultRole);
   }
 
   /**
@@ -425,7 +443,7 @@ export class ServiceAccessStore {
     let best = ladderRole(e.roles.aids[aid]);
     let anySet = best !== null;
     for (const id of this.grantsOf(e, aid)) {
-      const set = ladderRole(e.roles.invites[id]);
+      const set = ladderRole(e.roles.grants[`${id}/${aid}`]) ?? ladderRole(e.roles.invites[id]);
       if (set !== null) anySet = true;
       best = higher(best, set ?? ladderRole(defaultRole) ?? "viewer");
     }
@@ -454,7 +472,7 @@ export class ServiceAccessStore {
    */
   async setRole(
     serviceRef: string,
-    target: { kind: "aid" | "invite"; id: string },
+    target: AppMemberRoleTarget,
     targetKey: string,
     role: MemberRole,
     issuedAt: number,
@@ -463,8 +481,9 @@ export class ServiceAccessStore {
     const last = e.roles.seq[targetKey];
     if (last !== undefined && issuedAt <= last) return "stale";
     e.roles.seq[targetKey] = issuedAt;
-    if (target.kind === "aid") e.roles.aids[target.id.toLowerCase()] = role;
-    else e.roles.invites[target.id] = role;
+    if (target.kind === "aid") e.roles.aids[target.aid] = role;
+    else if (target.kind === "invite") e.roles.invites[target.inviteId] = role;
+    else e.roles.grants[`${target.inviteId}/${target.aid}`] = role;
     await this.persist();
     return "ok";
   }

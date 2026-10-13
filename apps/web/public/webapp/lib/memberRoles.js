@@ -1,13 +1,16 @@
 // Members' roles in an app (docs/service-access-gating.md, "Open mode +
-// members"). Roles are Flagship's fixed ladder viewer < editor < admin (the
-// box owner is always owner). Every invite is a grant with a role; a person
+// members"). Roles are Flagship's three ordered ranks (the box owner is always
+// owner). Every invite is a grant with a role; a person
 // holding several has the highest. The owner changes a role with a signed
 // order the box verifies under its sensitive-order key:
 //
 //   flagship/app-member-role/v1|<serverDomain>|<serviceId>|<target>|<role>|<issuedAt ms>
 //
-// target = `invite:<inviteId>` (a grant) or `aid:<hex>` (a member who joined
-// before personal invites were tracked as grants).
+// target = `invite:<inviteId>` (an invite: everyone who joins through it),
+// `grant:<inviteId>/<aid>` (one person's join: every redemption is its own
+// grant) or `aid:<hex>` (a member who joined before grants were tracked).
+// The wire names are the three ranks; their display names live in ROLE_LABELS
+// only, so a rename is one line here.
 //
 // Must pass packages/protocol/test-vectors/app-member-role/vectors.json.
 
@@ -23,6 +26,7 @@ export function roleLabel(role) {
 
 const AID_TARGET_RE = /^aid:[0-9a-f]{64}$/;
 const INVITE_TARGET_RE = /^invite:[A-Za-z0-9._-]{1,128}$/;
+const GRANT_TARGET_RE = /^grant:[A-Za-z0-9._-]{1,128}\/[0-9a-f]{64}$/;
 
 function toHex(bytes) {
   let s = "";
@@ -41,7 +45,8 @@ function fieldGuard(name, v) {
 export function canonicalAppMemberRoleBytes({ serverDomain, serviceId, target, role, issuedAt }) {
   fieldGuard("serverDomain", serverDomain);
   fieldGuard("serviceId", serviceId);
-  if (!AID_TARGET_RE.test(String(target ?? "")) && !INVITE_TARGET_RE.test(String(target ?? ""))) {
+  const t = String(target ?? "");
+  if (!AID_TARGET_RE.test(t) && !INVITE_TARGET_RE.test(t) && !GRANT_TARGET_RE.test(t)) {
     throw new Error("app-member-role: bad target");
   }
   if (!MEMBER_ROLES.includes(role)) throw new Error("app-member-role: bad role");
@@ -52,6 +57,7 @@ export function canonicalAppMemberRoleBytes({ serverDomain, serviceId, target, r
 }
 
 export const inviteTarget = (inviteId) => `invite:${inviteId}`;
+export const grantTarget = (inviteId, aidHex) => `grant:${inviteId}/${String(aidHex).toLowerCase()}`;
 export const aidTarget = (aidHex) => `aid:${String(aidHex).toLowerCase()}`;
 
 /** Resolves to the POST body `{order, signature}`. */

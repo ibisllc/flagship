@@ -176,6 +176,13 @@ describe("setting a role", () => {
       family: "viewer",
       "sam-1": "admin",
     });
+    // One person's join through the group is its own grant with its own role.
+    expect((await send(order({ target: `grant:family/${OTHER}`, role: "editor", issuedAt: NOW + 2 })))?.status).toBe(200);
+    expect(store.grantRole(SERVICE, "family", OTHER, "member")).toBe("editor");
+    expect(store.inviteRole(SERVICE, "family", "member")).toBe("viewer");
+    // A grant someone doesn't hold is refused.
+    expect((await send(order({ target: `grant:other-link/${OTHER}`, role: "editor", issuedAt: NOW + 3 })))?.status).toBe(422);
+    expect((await send(order({ target: `grant:family/${OTHER}`, role: "viewer", issuedAt: NOW + 4 })))?.status).toBe(200);
     // Revoking the personal invite leaves the group: still a member, now viewer.
     await store.revokeGroup("sam-1", SERVICE);
     expect(store.isAllowed(SERVICE, OTHER)).toBe(true);

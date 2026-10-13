@@ -391,7 +391,7 @@ describe("open apps: members sign in on purpose (docs/service-access-gating.md, 
     const up = await container();
     const app = makeApp(up.port);
     await access.addAllowed(SVC, hex(memberAid.publicKey));
-    await access.setRole(SVC, { kind: "aid", id: hex(memberAid.publicKey) }, `aid:${hex(memberAid.publicKey)}`, "viewer", 1);
+    await access.setRole(SVC, { kind: "aid", aid: hex(memberAid.publicKey) }, `aid:${hex(memberAid.publicKey)}`, "viewer", 1);
     const b = await box(app);
     // Anonymous on the public page until they sign in.
     await send(b.port, "/pub");

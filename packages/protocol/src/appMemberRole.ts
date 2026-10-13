@@ -10,9 +10,13 @@
  *
  *   flagship/app-member-role/v1|<serverDomain>|<serviceId>|<target>|<role>|<issuedAt ms>
  *
- * `target` is `aid:<64 lowercase hex>` (a member's account id for this
- * owner) or `invite:<inviteId>`. `role` is a rung of Flagship's fixed ladder,
- * `viewer` < `editor` < `admin`; `owner` is the box owner only and never given.
+ * `target` is `invite:<inviteId>` (an invite: everyone who joins through it
+ * and has no role of their own), `grant:<inviteId>/<64 lowercase hex>` (one
+ * person's join through that invite: every redemption is its own grant) or
+ * `aid:<64 lowercase hex>` (a member who joined before grants were tracked).
+ * `role` is one of Flagship's three ordered ranks, on the wire `viewer` <
+ * `editor` < `admin` (the display names live in each client, in one place);
+ * `owner` is the box owner only and never given.
  *
  * `test-vectors/app-member-role/vectors.json` is the cross-platform reference.
  */
@@ -27,7 +31,7 @@ export interface AppMemberRoleOrder {
   serverDomain: string;
   /** The installed service, `<creator>-<slug>`. */
   serviceId: string;
-  /** `aid:<hex>` for a member, `invite:<inviteId>` for an invite link. */
+  /** `invite:<inviteId>`, `grant:<inviteId>/<aid hex>` or `aid:<hex>`. */
   target: string;
   role: string;
   /** Unix ms. */
@@ -38,6 +42,7 @@ export interface AppMemberRoleOrder {
 export const APP_MEMBER_ROLES = ["viewer", "editor", "admin"] as const;
 const AID_TARGET_RE = /^aid:[0-9a-f]{64}$/;
 const INVITE_TARGET_RE = /^invite:[A-Za-z0-9._-]{1,128}$/;
+const GRANT_TARGET_RE = /^grant:([A-Za-z0-9._-]{1,128})\/([0-9a-f]{64})$/;
 
 export function appMemberRoleTargetAid(aidHex: string): string {
   return `aid:${aidHex.toLowerCase()}`;
@@ -47,10 +52,21 @@ export function appMemberRoleTargetInvite(inviteId: string): string {
   return `invite:${inviteId}`;
 }
 
-/** `{kind, id}` for a well-formed target, else null. */
-export function parseAppMemberRoleTarget(t: string): { kind: "aid" | "invite"; id: string } | null {
-  if (AID_TARGET_RE.test(t)) return { kind: "aid", id: t.slice(4) };
-  if (INVITE_TARGET_RE.test(t)) return { kind: "invite", id: t.slice(7) };
+export function appMemberRoleTargetGrant(inviteId: string, aidHex: string): string {
+  return `grant:${inviteId}/${aidHex.toLowerCase()}`;
+}
+
+export type AppMemberRoleTarget =
+  | { kind: "aid"; aid: string }
+  | { kind: "invite"; inviteId: string }
+  | { kind: "grant"; inviteId: string; aid: string };
+
+/** The parsed target, or null when malformed. */
+export function parseAppMemberRoleTarget(t: string): AppMemberRoleTarget | null {
+  if (AID_TARGET_RE.test(t)) return { kind: "aid", aid: t.slice(4) };
+  if (INVITE_TARGET_RE.test(t)) return { kind: "invite", inviteId: t.slice(7) };
+  const g = GRANT_TARGET_RE.exec(t);
+  if (g) return { kind: "grant", inviteId: g[1]!, aid: g[2]! };
   return null;
 }
 

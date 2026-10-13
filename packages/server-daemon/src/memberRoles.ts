@@ -4,14 +4,16 @@
  *
  *   GET  /api/screens/services/:id/members
  *        → { mode, roles, defaultRole, members:[{aid, role, grants:[{inviteId, role}], direct}], invites:[{inviteId, role, set}] }
+ *          (a member's grants are their joins, one per invite redeemed; an invite's role is the one new joins get)
  *   POST /api/screens/services/:id/members/role   { order, signature } → { ok, target, role }
  *
  * The members are the app's allow-list (people who joined through an invite
  * link), in either mode: on an open app a member who signs in gets their
- * role, on a members-only app only members get in. Every invite is a grant
- * with a role (unset: the app's default); a person may hold several (a
- * personal invite and group links) and has the highest. Roles are Flagship's
- * fixed ladder viewer < editor < admin; `owner` is the box owner only.
+ * role, on a members-only app only members get in. Every redemption of an
+ * invite is its own grant with a role (its own, else the invite's, else the
+ * app's default); a person may hold several (a personal invite and group
+ * links) and has the highest. Roles are Flagship's three ordered ranks;
+ * `owner` is the box owner only.
  *
  * A role change is the owner's signed `flagship/app-member-role/v1` order,
  * checked under the box's sensitive-order authority, at most 10 minutes old
@@ -49,7 +51,16 @@ export interface MemberRolesHttpOptions extends SensitiveAuthority {
   serverDomain: string;
   store: Pick<
     ServiceAccessStore,
-    "mode" | "allowList" | "isAllowed" | "isOwner" | "roleOf" | "roles" | "setRole" | "grants" | "grantRole"
+    | "mode"
+    | "allowList"
+    | "isAllowed"
+    | "isOwner"
+    | "roleOf"
+    | "roles"
+    | "setRole"
+    | "grants"
+    | "grantRole"
+    | "inviteRole"
   >;
   /** An installed app's manifest; null when not installed here. */
   app: (serviceId: string) => { manifest: Pick<AppManifest, "access"> } | null;
@@ -79,7 +90,7 @@ export function buildMemberRolesHttp(
       .map((aid) => {
         const grants = opts.store.grants(serviceId, aid).map((inviteId) => {
           known.add(inviteId);
-          return { inviteId, role: opts.store.grantRole(serviceId, inviteId, defaultRole) };
+          return { inviteId, role: opts.store.grantRole(serviceId, inviteId, aid, defaultRole) };
         });
         return {
           aid,
@@ -90,7 +101,7 @@ export function buildMemberRolesHttp(
       });
     const invites = [...known].map((inviteId) => ({
       inviteId,
-      role: opts.store.grantRole(serviceId, inviteId, defaultRole),
+      role: opts.store.inviteRole(serviceId, inviteId, defaultRole),
       set: inviteId in set.invites,
     }));
     return json(200, { serviceId, mode: opts.store.mode(serviceId), roles, defaultRole, members, invites });
@@ -118,9 +129,12 @@ export function buildMemberRolesHttp(
     const role = (MEMBER_ROLE_LADDER as readonly string[]).includes(order.role) ? ladderRole(order.role) : null;
     if (!role) return err(422, `"${order.role}" isn't a role: use viewer, editor or admin`);
     const target = parseAppMemberRoleTarget(order.target)!;
-    if (target.kind === "aid") {
-      if (opts.store.isOwner(target.id)) return err(422, "the owner is always the owner");
-      if (!opts.store.isAllowed(serviceId, target.id)) return err(422, "not a member of this app");
+    if (target.kind !== "invite") {
+      if (opts.store.isOwner(target.aid)) return err(422, "the owner is always the owner");
+      if (!opts.store.isAllowed(serviceId, target.aid)) return err(422, "not a member of this app");
+    }
+    if (target.kind === "grant" && !opts.store.grants(serviceId, target.aid).includes(target.inviteId)) {
+      return err(422, "they didn't join through that invite");
     }
     const r = await opts.store.setRole(serviceId, target, order.target, role, order.issuedAt);
     if (r === "stale") return err(409, "a newer change was already made: sign it again");
