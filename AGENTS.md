@@ -371,6 +371,17 @@ macOS began memory-pressure kills (16 GB Mac, two 4 GB VMs), the other two had
 no such signal. home3 (same image) had no pstore dumps after ~6 h. Box journals are volatile
 (`/run/log/journal`), so a crash loop leaves no daemon log on disk.
 
+**leticia's Docker won't start (2026-10-13):** dockerd dies at load with
+`symbol lookup error: …/libsystemd.so.0` (a damaged system library, same
+pattern as home2). `dockerHealth.ts` now reports dockerd's own error and, for a
+library/exec failure, `systemRepair.ts` reinstalls every package `dpkg
+--verify` flags, at the installed version, from a .deb checked against apt's
+lists (mirror files expanded), through dpkg alone because apt links
+libsystemd too. Drilled on a Debian 13 arm64 VM (damaged libsystemd →
+Docker back up in ~35 s). Only package files are covered: damage elsewhere
+(node_modules, images) isn't. leticia's `systemctl show` also fails; the next
+error says why.
+
 ### Desktop Studio
 
 - **Mac:** notarized DMG at `/download/mac` (`scripts/release-studio.sh`;

@@ -93,6 +93,40 @@ describe("waking dockerd", () => {
     expect(h.ok === false && h.reason).toMatch(/containerd is failed/);
   });
 
+  const LIBSYSTEMD = "/usr/sbin/dockerd: symbol lookup error: /lib/aarch64-linux-gnu/libsystemd.so.0: undefined symbol: , version GLIBC_2.17";
+  const CNI =
+    'time="2026-10-12T17:59:48.665403033Z" level=error msg="failed to load cni during init, please check CRI plugin status before setting up network for pods" error="cni config load failed: no network config found in /etc/cni/net.d: cni plugin not initialized: failed to load cni config"';
+
+  it("reinstalls damaged system packages when dockerd can't load a library", async () => {
+    const b = box({ journal: [LIBSYSTEMD, ...SYSTEMD], startsWhen: (n) => n >= 2 });
+    const asked: string[] = [];
+    const h = await wakeDocker({ cmd: b.cmd, ...fast, repairSystem: async () => (asked.push("repair"), { ok: true, packages: ["libsystemd0"] }) });
+    expect(asked).toEqual(["repair"]);
+    expect(h).toEqual({ ok: true, repaired: "Damaged system files were reinstalled (libsystemd0)" });
+  });
+
+  it("says why when the damage can't be repaired, without containerd's CNI noise", async () => {
+    const b = box({ journal: [LIBSYSTEMD, ...SYSTEMD], containerd: "inactive" });
+    const cmd = { ...b.cmd, capture: async (c: string, a: string[]) => (c === "journalctl" && a[1] === "containerd.service" ? { stdout: `${CNI}\n`, stderr: "" } : b.cmd.capture(c, a)) };
+    const h = await wakeDocker({ cmd, ...fast, repairSystem: async () => ({ ok: false, packages: ["libsystemd0"], reason: "damaged system packages couldn't be downloaded to repair them (libsystemd0 257.9-1)" }) });
+    expect(h.ok === false && h.reason).toBe(
+      `Docker isn't running on this server (docker.service is failed/failed, result exit-code, exit 1, restarted 4 times; containerd is inactive). dockerd said: ${LIBSYSTEMD}. Damaged system packages couldn't be downloaded to repair them (libsystemd0 257.9-1)`,
+    );
+  });
+
+  it("says why systemctl couldn't report the unit", async () => {
+    const b = box({ journal: [] });
+    const cmd = {
+      ...b.cmd,
+      capture: async (c: string, a: string[]) => {
+        if (c === "systemctl") throw Object.assign(new Error("systemctl exited with code 1: Failed to connect to bus: No such file or directory"), { stdout: "" });
+        return b.cmd.capture(c, a);
+      },
+    };
+    const h = await wakeDocker({ cmd, ...fast });
+    expect(h.ok === false && h.reason).toMatch(/^Docker isn't running on this server \(docker\.service state unknown \(systemctl exited with code 1: Failed to connect to bus: No such file or directory\); containerd is unknown\)/);
+  });
+
   it("runs one attempt at a time for everyone asking", async () => {
     const b = box({ journal: [], startsWhen: () => true });
     const [a, c] = await Promise.all([wakeDocker({ cmd: b.cmd, ...fast }), wakeDocker({ cmd: b.cmd, ...fast })]);

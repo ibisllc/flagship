@@ -6,10 +6,12 @@
  * around it) and repairs the one failure an unclean stop commonly leaves: a
  * corrupt network database, which is moved aside (never deleted) for dockerd
  * to rebuild. Nothing else of Docker's state is ever touched: images and
- * volumes hold the owner's apps and data.
+ * volumes hold the owner's apps and data. When dockerd can't even load (a
+ * damaged system library), the damaged system packages are reinstalled.
  */
 import { rename, stat } from "node:fs/promises";
 import type { CommandRunner } from "./serviceRunner.js";
+import { repairSystemPackages, type SystemRepairOptions } from "./systemRepair.js";
 
 export const DOCKER_NETWORK_DB = "/var/lib/docker/network/files/local-kv.db";
 
@@ -23,6 +25,8 @@ export interface WakeDockerOptions {
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
   log?: (m: string) => void;
+  /** In place of repairSystemPackages (tests). */
+  repairSystem?: (o: SystemRepairOptions) => ReturnType<typeof repairSystemPackages>;
 }
 
 /** With a custom format, `docker info` exits 0 when dockerd is down; only a version says it answered. */
@@ -34,6 +38,9 @@ export async function dockerAnswers(cmd: Required<CommandRunner>): Promise<boole
     return false;
   }
 }
+
+/** dockerd (or a library it loads) is damaged on disk, so it can't even run. */
+const BINARY_BROKEN = /symbol lookup error|error while loading shared libraries|cannot open shared object|invalid ELF header|file too short|ELF load command|exec format error|status=(132|135|139)|SIGSEGV|SIGBUS|SIGILL/i;
 
 /** A network-controller database dockerd can't open (boltdb corruption). */
 const NETWORK_DB_BROKEN = /(local-kv\.db|network controller)[\s\S]*(bolt|kmap|invalid database|corrupt|page \d+|self identifies|unexpected EOF|checksum)/i;
@@ -65,6 +72,17 @@ async function wake(o: WakeDockerOptions): Promise<DockerHealth> {
     await startUnits(o.cmd);
     if (await waitUp(o)) return { ok: true, repaired: `Docker's network database was damaged; it was moved aside (${aside}) and rebuilt` };
   }
+  if (BINARY_BROKEN.test(failure.errors.join("\n"))) {
+    log("[docker] dockerd can't load; checking the system's files for damage");
+    const r = await (o.repairSystem ?? repairSystemPackages)({ cmd: o.cmd, log });
+    if (!r.ok) return { ok: false, reason: `${describe(await dockerFailure(o.cmd))}. ${capitalize(r.reason)}` };
+    if (r.packages.length > 0) {
+      await startUnits(o.cmd);
+      const fixed = `damaged system files were reinstalled (${r.packages.join(", ")})`;
+      if (await waitUp(o)) return { ok: true, repaired: capitalize(fixed) };
+      return { ok: false, reason: `${describe(await dockerFailure(o.cmd))}. ${capitalize(fixed)}, but Docker still won't start` };
+    }
+  }
   return { ok: false, reason: describe(await dockerFailure(o.cmd)) };
 }
 
@@ -92,11 +110,16 @@ export interface DockerFailure {
   errors: string[];
 }
 
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 async function show(cmd: Required<CommandRunner>, unit: string, props: string[]): Promise<Record<string, string>> {
   const r = await cmd
     .capture("systemctl", ["show", unit, ...props.map((p) => `--property=${p}`)], { timeoutMs: 15_000 })
-    .catch((e: { stdout?: string }) => ({ stdout: e.stdout ?? "" }));
+    .catch((e: Error & { stdout?: string }) => ({ stdout: e.stdout ?? "", error: e.message }));
   const out: Record<string, string> = {};
+  if ("error" in r && r.error) out.error = r.error.replace(/\s+/g, " ").slice(0, 200);
   for (const line of r.stdout.split("\n")) {
     const i = line.indexOf("=");
     if (i > 0) out[line.slice(0, i)] = line.slice(i + 1).trim();
@@ -106,6 +129,8 @@ async function show(cmd: Required<CommandRunner>, unit: string, props: string[])
 
 /** systemd's own lines about the unit, which say only that it failed. */
 const SYSTEMD_LINE = /^(docker|containerd)\.(service|socket)[: ]|^(Failed to start|Started|Starting|Stopped|Stopping|Consumed|Scheduled restart)/;
+/** Lines that read as errors but say nothing about why dockerd stopped. */
+const NOISE_LINE = /failed to load cni during init|cni config load failed/i;
 const ERROR_LINE = /level=(error|fatal)|failed to start daemon|Error starting daemon|panic:|unable to configure|failed to (load|initialize|create|mount|register)|error initializing|no such file|permission denied|address already in use/i;
 
 async function journalErrors(cmd: Required<CommandRunner>, unit: string, n: number): Promise<string[]> {
@@ -115,7 +140,7 @@ async function journalErrors(cmd: Required<CommandRunner>, unit: string, n: numb
   const own = r.stdout
     .split("\n")
     .map((l) => l.trim())
-    .filter((l) => l !== "" && !SYSTEMD_LINE.test(l));
+    .filter((l) => l !== "" && !SYSTEMD_LINE.test(l) && !NOISE_LINE.test(l));
   const errors = own.filter((l) => ERROR_LINE.test(l));
   const pick = (errors.length > 0 ? errors : own).slice(-n);
   return [...new Set(pick)].map((l) => (l.length > 300 ? `${l.slice(0, 300)}…` : l));
@@ -123,7 +148,8 @@ async function journalErrors(cmd: Required<CommandRunner>, unit: string, n: numb
 
 export async function dockerFailure(cmd: Required<CommandRunner>): Promise<DockerFailure> {
   const docker = await show(cmd, "docker.service", ["ActiveState", "SubState", "Result", "ExecMainStatus", "NRestarts"]);
-  const containerd = (await show(cmd, "containerd.service", ["ActiveState"])).ActiveState ?? "unknown";
+  const c = await show(cmd, "containerd.service", ["ActiveState"]);
+  const containerd = c.ActiveState ?? "unknown";
   const errors = await journalErrors(cmd, "docker.service", 3);
   if (containerd !== "active") errors.push(...(await journalErrors(cmd, "containerd.service", 2)).map((l) => `containerd: ${l}`));
   return { docker, containerd, errors };
@@ -133,7 +159,7 @@ export function describe(f: DockerFailure): string {
   const d = f.docker;
   const unit = d.ActiveState
     ? `docker.service is ${d.ActiveState}${d.SubState ? `/${d.SubState}` : ""}${d.Result && d.Result !== "success" ? `, result ${d.Result}` : ""}${d.ExecMainStatus && d.ExecMainStatus !== "0" ? `, exit ${d.ExecMainStatus}` : ""}${d.NRestarts && d.NRestarts !== "0" ? `, restarted ${d.NRestarts} times` : ""}`
-    : "docker.service state unknown";
+    : `docker.service state unknown${d.error ? ` (${d.error})` : ""}`;
   const parts = [`Docker isn't running on this server (${unit}${f.containerd !== "active" ? `; containerd is ${f.containerd}` : ""})`];
   if (f.errors.length > 0) parts.push(`dockerd said: ${f.errors.join(" | ")}`);
   return parts.join(". ");
