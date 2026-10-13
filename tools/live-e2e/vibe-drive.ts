@@ -4,7 +4,7 @@
  *
  * Mirrors adapt-drive.ts's session-minting + BYOK credential delivery, but for
  * the scratch path: there is no git repo — the owner gives a prose prompt and
- * the box's AI AUTHORS the whole app (manifest + Dockerfile + source) by
+ * the box's AI AUTHORS the whole app (manifest + source; the box writes the build) by
  * streaming the emit-format the VibeCodeStreamParser reads, then the result is
  * deployed and must serve HTTP 200.
  *
@@ -49,13 +49,10 @@ const DEFAULT_PROMPT =
   "authentication — make GET / a public route (access.public_routes: [\"/\"]). " +
   "The app must read the PORT environment variable the platform injects and " +
   "bind 0.0.0.0:$PORT (do NOT hardcode a port). Set runtime.port in the " +
-  "manifest to the same value you EXPOSE. " +
-  "CRITICAL build-consistency rules: your file set must be SELF-CONTAINED — " +
-  "the Dockerfile may ONLY `COPY` files you actually emit in this same " +
-  "response. Use plain `node:20-alpine`, a SINGLE source file, NO third-party " +
-  "npm packages (use only Node's built-in `node:http`), and therefore NO " +
-  "package.json and NO `npm install` step — copy just your one source file and " +
-  "run it directly. Keep it tiny.";
+  "manifest to the same port. " +
+  "Use runtime.base \"node-24\" with runtime.start [\"node\", \"src/index.js\"], " +
+  "a SINGLE source file, NO third-party npm packages (only Node's built-in " +
+  "`node:http`), and a package.json with no dependencies. Keep it tiny.";
 const PROMPT = process.env.VIBE_PROMPT || DEFAULT_PROMPT;
 
 function log(s: string): void {
@@ -168,7 +165,7 @@ async function main(): Promise<void> {
 
   // 3. Poll the session to terminal. The model streams server-side; we poll
   //    P1.7 for status + files, and resolve any mid-build pause it hits.
-  log(`\n  → driving the from-scratch build (the AI streams manifest + Dockerfile + source)…`);
+  log(`\n  → driving the from-scratch build (the AI streams manifest + source)…`);
   const start = Date.now();
   const deadline = start + 5 * 60 * 1000;
   let status = "streaming";
@@ -231,7 +228,7 @@ async function main(): Promise<void> {
             body: JSON.stringify({
               text:
                 "Yes — keep it minimal. Return 'hello from flagship gym' on GET /, make GET / public, " +
-                "listen on $PORT, and emit the manifest + Dockerfile + source now, then finish with === END ===.",
+                "listen on $PORT, and emit the manifest + package.json + source now, then finish with === END ===.",
             }),
           });
           log(`    · resolved talkToUser → steered to finish`);
@@ -252,7 +249,10 @@ async function main(): Promise<void> {
     `build did not reach ready-to-deploy (status=${status} after ${secs}s)`,
   );
   assert(files["flagship.app.json"], `the AI emitted no flagship.app.json (files: ${Object.keys(files).join(", ")})`);
-  assert(files["Dockerfile"], `the AI emitted no Dockerfile (files: ${Object.keys(files).join(", ")})`);
+  assert(
+    JSON.parse(files["flagship.app.json"]).runtime?.base,
+    `the AI's manifest names no runtime.base (files: ${Object.keys(files).join(", ")})`,
+  );
 
   // 4. The build JOURNAL — the AI's transcript (value-free).
   log(`\n  === AI build transcript (build journal) ===`);

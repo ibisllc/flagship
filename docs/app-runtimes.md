@@ -155,10 +155,13 @@ approval says otherwise (some vendor images need to start as root and drop).
 }
 ```
 
-Exactly one of `base` (tiers 1–2) or `image` (tier 3). `start` is the command
-(argv, no shell); default for `node-24` is `npm start` when package.json has a
-`start` script, for `python-3.13` none (required); `static` takes none and
-`root` (the folder to serve, default `.`).
+`base` (tiers 1–2) or `image` (tier 3). A runtime app carries no `image`
+until the box builds it; the box then sets `image` to its local tag beside
+`base` (the installed manifest has both, and `base` decides the build).
+`start` is the command (argv, no shell); `node-24` defaults to `npm start`,
+`python-3.13` requires one, `static` takes none and has `root` (the folder to
+serve, default the whole app). Parsed in `packages/protocol/src/manifest.ts`
+(`RUNTIME_BASES`).
 
 ### 6.2 What the box builds
 
@@ -180,10 +183,22 @@ The box writes the build; the app has no say in `FROM` or `RUN`.
 
 ### 6.3 What the AI writes
 
-Code, `flagship.app.json` (with `runtime.base`), `package-lock.json` /
-`requirements.txt`, `migrations/*.sql`, optional `seed.sql`. Never a
-Dockerfile: `validate` rejects one in a runtime app, and the contract and
-prompts stop asking for it.
+Code, `flagship.app.json` (with `runtime.base`), `package.json` (and its lock)
+/ `requirements.txt`, `migrations/*.sql`, optional `seed.sql`. Never a build
+file (`Dockerfile`, `Containerfile`, `.dockerignore` at the app's root:
+`isBuildFilePath`):
+
+- every AI write goes through `BuildWorkspace.write`, which refuses them (the
+  build agent's tools, git-import adaptation, IDE/MCP sessions);
+- a chat's files are all the model's, so a chat must name `runtime.base` and
+  any build file it emits is dropped;
+- `validate` passes a manifest without `runtime.base` only when the workspace
+  holds a Dockerfile, which can then only be the imported repo's own (tier 3,
+  unchanged by the AI);
+- a published repo adapter (an AI's changes, replayed on other boxes) can't add
+  or change a build file (`repoAdapterProblems`);
+- for a runtime app, `runDockerBuild` replaces whatever build file the context
+  holds with the box's own (`runtimes/buildContext.ts`).
 
 ## 7. The app bundle
 
@@ -211,9 +226,12 @@ refused with "update this server first" (no compatibility needed yet).
 
 ## 9. Phases
 
-1. **Now**: catalog (`node-24`, `python-3.13`, `static`); manifest
-   `runtime.base`/`start`; box-written build; AI contract without Dockerfiles;
-   non-root `--user` for runtime apps; `enable_icc=false` (done).
+1. **Done 2026-10-12**: catalog (`node-24`, `python-3.13`, `static`;
+   `runtimes/catalog.ts`); manifest `runtime.base`/`start`/`root`; box-written
+   build (`runtimes/buildFile.ts`); AI prompts and contract without
+   Dockerfiles, and AI writes of build files refused; runtime apps run as the
+   runtime's unprivileged `USER` (baked into the box's build; `--user` for
+   tier 3 comes with phase 7); `enable_icc=false` on every sandbox bridge.
 2. gVisor for every app (`runsc` install + `--runtime=runsc`, fail closed).
 3. Install in a locked-down container; COPY-only assembly; bundle hashing.
 4. Copies send bundles (§8); runtime prefetch and pruning.

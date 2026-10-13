@@ -27,13 +27,12 @@ const MANIFEST = JSON.stringify({
   name: "hello",
   version: "0.1.0",
   description: "Hello",
-  runtime: { image: "x", port: 8080 },
+  runtime: { base: "node-24", port: 8080, start: ["node", "index.js"] },
   access: { enabled: true, default_role: "member", public_routes: ["/"] },
 });
 const ADAPTED = {
   ...ORIGINAL,
   "index.js": ORIGINAL["index.js"].replace("3000", "process.env.PORT"),
-  Dockerfile: "FROM node:20-alpine\nCOPY . .\nEXPOSE 8080\nCMD [\"node\",\"index.js\"]\n",
   "flagship.app.json": MANIFEST,
 };
 const ADAPTER_FILE = buildAdapterFile(MANIFEST, deriveRepoAdapter(ORIGINAL, ADAPTED, { repo: REPO, base: COMMIT }));
@@ -103,7 +102,7 @@ describe("importing a repo that carries its own adapter", () => {
     expect(lookups).toEqual([]);
     await o.deploy(r.buildId);
     expect(deployed[0]!.files["index.js"]).toContain("process.env.PORT");
-    expect(deployed[0]!.files.Dockerfile).toContain("EXPOSE 8080");
+    expect(deployed[0]!.files.Dockerfile).toBeUndefined();
     expect(JSON.parse(deployed[0]!.files["flagship.app.json"]!)).not.toHaveProperty("adapter");
     await settle();
     expect(submitted).toEqual([]);
@@ -166,7 +165,7 @@ describe("the adapter index", () => {
         model: "m",
         toolUses: [
           { id: "1", name: "write_file", input: { path: "index.js", content: ADAPTED["index.js"] } },
-          { id: "2", name: "write_file", input: { path: "Dockerfile", content: ADAPTED.Dockerfile } },
+          { id: "2", name: "write_file", input: { path: "index.js", content: ADAPTED["index.js"] } },
           { id: "3", name: "write_file", input: { path: "flagship.app.json", content: MANIFEST.replace('"hello"', '"my-private-name"') } },
           { id: "4", name: "deploy", input: {} },
         ],
@@ -197,7 +196,7 @@ describe("the adapter index", () => {
         content: "",
         model: "m",
         toolUses: [
-          { id: "1", name: "write_file", input: { path: "Dockerfile", content: ADAPTED.Dockerfile } },
+          { id: "1", name: "write_file", input: { path: "index.js", content: ADAPTED["index.js"] } },
           { id: "2", name: "write_file", input: { path: "flagship.app.json", content: MANIFEST } },
           { id: "3", name: "deploy", input: {} },
         ],
@@ -335,7 +334,7 @@ describe("a repo's own flagship.app.json is its author's", () => {
         content: "",
         model: "m",
         toolUses: [
-          { id: "1", name: "write_file", input: { path: "Dockerfile", content: ADAPTED.Dockerfile } },
+          { id: "1", name: "write_file", input: { path: "index.js", content: ADAPTED["index.js"] } },
           { id: "2", name: "write_file", input: { path: "flagship.app.json", content: MANIFEST } },
           { id: "3", name: "deploy", input: {} },
         ],
@@ -365,7 +364,7 @@ describe("a repo's own flagship.app.json is its author's", () => {
         model: "m",
         toolUses: [
           { id: "1", name: "write_file", input: { path: "index.js", content: ADAPTED["index.js"] } },
-          { id: "2", name: "write_file", input: { path: "Dockerfile", content: ADAPTED.Dockerfile } },
+          { id: "2", name: "write_file", input: { path: "index.js", content: ADAPTED["index.js"] } },
           { id: "3", name: "write_file", input: { path: "flagship.app.json", content: MANIFEST.replace('"hello"', '"mine"') } },
         ],
       },
@@ -397,7 +396,7 @@ describe("the store's answer, and fixing what it refused", () => {
         model: "m",
         toolUses: [
           { id: "1", name: "write_file", input: { path: "index.js", content: ADAPTED["index.js"] } },
-          { id: "2", name: "write_file", input: { path: "Dockerfile", content: ADAPTED.Dockerfile } },
+          { id: "2", name: "write_file", input: { path: "index.js", content: ADAPTED["index.js"] } },
           { id: "3", name: "write_file", input: { path: "flagship.app.json", content: MANIFEST } },
           { id: "4", name: "deploy", input: {} },
         ],

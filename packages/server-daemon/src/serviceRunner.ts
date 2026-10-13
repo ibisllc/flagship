@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { checkBuildContextDockerfile } from "./buildmodes/dockerfilePolicy.js";
+import { prepareRuntimeContext } from "./runtimes/buildContext.js";
 import { networkCreateArgs } from "./egress/networks.js";
 import { notifyContainersChanged, sandboxBuildArgs, sandboxRunArgs } from "./egress/sandboxNetworking.js";
 import { FILES_MOUNT, isFilesVolume } from "./dataLayer/naming.js";
@@ -280,10 +281,9 @@ export const realCommandRunner: CommandRunner = {
  *  - a wall-clock TIMEOUT (enforced by the CommandRunner) kills a build that
  *    hangs or spins, so a malicious Dockerfile can't pin a builder forever.
  *
- * NO base-image digest pinning is imposed here: the user's Dockerfile picks its
- * own `FROM`, so we can't rewrite it — the base is recorded in the build log
- * (the captured output below) rather than forced. Where the build pipeline
- * controls the base (future first-party templates), pin at that layer.
+ * A runtime app's build is the box's own (runtimes/buildContext.ts), on a base
+ * pinned by digest in the catalog. An imported repo's own Dockerfile picks its
+ * own `FROM`, recorded in the build log (the captured output below).
  */
 export interface DockerBuildLimits {
   /** `--memory`, e.g. "2g". */
@@ -367,6 +367,8 @@ export async function runDockerBuild(
   contextDir: string,
   limits: DockerBuildLimits = DEFAULT_DOCKER_BUILD_LIMITS,
 ): Promise<void> {
+  // A runtime app gets the box's own build; any other build still has to pass the policy.
+  await prepareRuntimeContext(contextDir);
   const policy = await checkBuildContextDockerfile(contextDir);
   if (policy && !policy.ok) throw new Error(`the Dockerfile is not allowed on this box:\n${policy.problems.join("\n")}`);
   const args = dockerBuildArgs(image, contextDir, limits);

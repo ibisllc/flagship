@@ -24,7 +24,7 @@ const MANIFEST = JSON.stringify({
   schema_version: 1,
   name: "habits",
   version: "0.1.0",
-  runtime: { image: "x", port: 8080 },
+  runtime: { base: "static", image: "x", port: 8080 },
   access: { enabled: true, default_role: "owner" },
 });
 

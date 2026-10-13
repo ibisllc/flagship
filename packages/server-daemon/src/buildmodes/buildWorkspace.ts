@@ -15,11 +15,24 @@
  * deploy step would later reject.
  */
 
+import { isBuildFilePath } from "@flagship/protocol";
+
 const MAX_PATH_LEN = 512;
 const MAX_FILE_BYTES = 1024 * 1024; // 1 MiB per file
 const MAX_FILES = 2000;
 
 export type WriteResult = { ok: true } | { ok: false; reason: string };
+
+/** The box writes a runtime app's build; an AI never writes these (docs/app-runtimes.md §6.3). */
+export const isBuildFile = isBuildFilePath;
+
+export const BUILD_FILE_REFUSED =
+  "the box writes the build itself: set runtime.base in flagship.app.json (node-24, python-3.13 or static) instead of writing a Dockerfile";
+
+/** A copy of `files` without the build files an AI may have produced. */
+export function withoutBuildFiles<T>(files: Record<string, T>): Record<string, T> {
+  return Object.fromEntries(Object.entries(files).filter(([p]) => !isBuildFile(p)));
+}
 
 export function isSafeBuildPath(path: string): boolean {
   if (typeof path !== "string" || path.length === 0 || path.length > MAX_PATH_LEN) return false;
@@ -54,6 +67,7 @@ export class BuildWorkspace {
 
   write(path: string, content: string): WriteResult {
     if (!isSafeBuildPath(path)) return { ok: false, reason: `unsafe path: ${path}` };
+    if (isBuildFile(path)) return { ok: false, reason: BUILD_FILE_REFUSED };
     if (typeof content !== "string") return { ok: false, reason: "content must be a string" };
     if (Buffer.byteLength(content, "utf8") > MAX_FILE_BYTES) {
       return { ok: false, reason: `file exceeds ${MAX_FILE_BYTES} bytes` };

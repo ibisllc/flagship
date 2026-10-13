@@ -55,7 +55,7 @@ const ORIGINAL: Record<string, string> = {
 const ADAPTED: Record<string, string> = {
   "index.js": "const a = 1;\nconst b = 2;\nconst port = process.env.PORT;\napp.listen(port);\nconst c = 3;\n",
   "README.md": "# Notes\n",
-  Dockerfile: "FROM node:20-alpine\nEXPOSE 8080\n",
+  "src/flagship.js": "export const port = Number(process.env.PORT);\n",
 };
 
 function adapterFile(opts: { repo?: string; base?: string; adapted?: Record<string, string>; manifest?: string } = {}): string {
@@ -258,7 +258,7 @@ describe("POST /api/adapters/submit", () => {
 
   it("keeps a different file for the same repo as its own entry", async () => {
     await submit(submission());
-    await submit(submission({ file: adapterFile({ adapted: { ...ADAPTED, Dockerfile: "FROM node:22\n" } }) }));
+    await submit(submission({ file: adapterFile({ adapted: { ...ADAPTED, "src/flagship.js": "export const port = 8080;\n" } }) }));
     expect(await rows()).toHaveLength(2);
   });
 
@@ -476,7 +476,7 @@ describe("/api/admin/adapter-blocklist", () => {
 
   it("adding drops the queue for it, case-insensitively, and blocks new submissions", async () => {
     await submit(submission());
-    await submit(submission({ file: adapterFile({ adapted: { ...ADAPTED, Dockerfile: "FROM node:22\n" } }) }));
+    await submit(submission({ file: adapterFile({ adapted: { ...ADAPTED, "src/flagship.js": "export const port = 8080;\n" } }) }));
     expect(fx.bucket.objects.size).toBe(2);
     const res = await block("https://github.com/Me/Notes");
     expect(res.status).toBe(200);
@@ -785,7 +785,7 @@ describe("POST /api/adapters/submit with wait", () => {
     ]);
     expect((await rows())[0]!.pending_confirmations).toBe(1);
     // A new adaptation of the same repo is welcome.
-    expect((await ask({ file: adapterFile({ adapted: { ...ADAPTED, Dockerfile: "FROM node:22\n" } }) })).body.status).toBe("kept");
+    expect((await ask({ file: adapterFile({ adapted: { ...ADAPTED, "src/flagship.js": "export const port = 8080;\n" } }) })).body.status).toBe("kept");
   });
 });
 

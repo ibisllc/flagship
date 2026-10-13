@@ -29,6 +29,7 @@
 
 import { join } from "node:path";
 import {
+  RUNTIME_BASES,
   verifyInstallService,
   type InstallServiceRequest,
 } from "@flagship/protocol";
@@ -42,7 +43,7 @@ import { writeSourceTree } from "./serviceSource.js";
 import { whileDeploying, type DeployingTracker } from "../serviceActivity.js";
 import { noRedaction, type ModelRedactor } from "./modelPrivacy.js";
 import type { BuildJournal } from "../buildmodes/buildJournal.js";
-import { BuildWorkspace } from "../buildmodes/buildWorkspace.js";
+import { BuildWorkspace, withoutBuildFiles } from "../buildmodes/buildWorkspace.js";
 import { BuildToolHost } from "../buildmodes/buildToolHost.js";
 import { runBuildAgent, type AgentRunner } from "../buildmodes/buildAgent.js";
 import { filesDigest, stagingDataHooks, type StagingHost } from "../buildmodes/staging.js";
@@ -110,11 +111,14 @@ export function buildDeploySession(deps: DeploySessionDeps) {
   };
 
   async function deployNow(session: VibeCodeSession, override: DeploySessionOverride): Promise<DeployResult> {
-    const files = override.files ?? session.files();
+    // The model writes every file of a chat, so the box writes its build.
+    const files = withoutBuildFiles(override.files ?? session.files());
     const manifestJson = files["flagship.app.json"];
     if (!manifestJson) {
       return { ok: false, reason: "session has no flagship.app.json" };
     }
+    const noRuntime = chatRuntimeProblem(manifestJson);
+    if (noRuntime) return { ok: false, reason: noRuntime };
     let manifest: { name?: unknown; runtime?: { image?: unknown } };
     try {
       manifest = JSON.parse(manifestJson);
@@ -287,9 +291,11 @@ export function buildStagedChatDeploy(deps: StagedChatDeployDeps) {
     opts: { onPhase?: (phase: ChatDeployPhase) => void } = {},
   ): Promise<DeployResult> {
     const id = session.meta.sessionId;
-    const ws = new BuildWorkspace(session.files());
+    const ws = new BuildWorkspace(withoutBuildFiles(session.files()));
     const manifestJson = ws.manifestJson();
     if (!manifestJson) return { ok: false, reason: "session has no flagship.app.json" };
+    const noRuntime = chatRuntimeProblem(manifestJson);
+    if (noRuntime) return { ok: false, reason: noRuntime };
     let slug = session.meta.name ?? "";
     if (!slug) {
       try {
@@ -396,3 +402,16 @@ const noJournal: BuildJournal = {
   list: async () => [],
   forget: async () => {},
 };
+
+/** Why a chat's app can't be built: it names no runtime (or its manifest doesn't parse). */
+function chatRuntimeProblem(manifestJson: string): string | null {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(manifestJson);
+  } catch (e) {
+    return `manifest is not valid JSON: ${(e as Error).message}`;
+  }
+  const base = (raw as { runtime?: { base?: unknown } } | null)?.runtime?.base;
+  if (typeof base === "string" && (RUNTIME_BASES as readonly string[]).includes(base)) return null;
+  return `set runtime.base in flagship.app.json to one of ${RUNTIME_BASES.join(", ")}: the box builds the app on it`;
+}

@@ -12,7 +12,7 @@
  * I/O, no dependencies. docs/repo-adapters.md.
  */
 
-import { parseManifest } from "./manifest.js";
+import { isBuildFilePath, parseManifest } from "./manifest.js";
 
 export const REPO_ADAPTER_VERSION = 1;
 export const MANIFEST_PATH = "flagship.app.json";
@@ -465,6 +465,9 @@ export function repoAdapterProblems(
   for (const p of paths) {
     if (unsafePath(p)) problems.push(`unsafe path: ${p}`);
     if (p === MANIFEST_PATH) problems.push(`${MANIFEST_PATH} can't be added, edited or removed by its own adapter`);
+  }
+  for (const p of [...Object.keys(adapter.add ?? {}), ...patchedPaths(adapter)]) {
+    if (isBuildFilePath(p)) problems.push(`an adapter can't add or change ${p}: the box writes the build from runtime.base`);
   }
   if (!opts.skipSecrets) problems.push(...addedSecrets(adapter, manifestJson, opts.publicText ?? []));
   return [...new Set(problems)];

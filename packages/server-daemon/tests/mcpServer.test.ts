@@ -8,7 +8,7 @@ const VALID_MANIFEST = JSON.stringify({
   name: "notes",
   version: "0.1.0",
   description: "Notes",
-  runtime: { image: "flagship/notes:0.1.0", port: 8080 },
+  runtime: { base: "static", image: "flagship/notes:0.1.0", port: 8080 },
   data: { stores: { postgres: true } },
   network: { subdomain: "notes" },
   access: { enabled: true, default_role: "member", public_routes: [] },
@@ -139,14 +139,20 @@ describe("McpBuildServer — validate", () => {
     expect(JSON.parse(v.text).ok).toBe(false);
   });
 
-  it("passes a valid manifest but flags missing Dockerfile", async () => {
+  it("asks for a runtime, and never lets the IDE write the build itself", async () => {
     const { server } = makeServer();
-    await callTool(server, "write_file", { path: "flagship.app.json", content: VALID_MANIFEST });
+    const noBase = JSON.stringify({ ...JSON.parse(VALID_MANIFEST), runtime: { image: "x:1", port: 8080 } });
+    await callTool(server, "write_file", { path: "flagship.app.json", content: noBase });
     const v = await callTool(server, "validate");
-    expect(JSON.parse(v.text).problems).toContain("missing Dockerfile");
-    await callTool(server, "write_file", { path: "Dockerfile", content: "FROM node:20-alpine" });
-    const v2 = await callTool(server, "validate");
-    expect(JSON.parse(v2.text).ok).toBe(true);
+    expect(JSON.parse(v.text).problems.join()).toMatch(/set runtime.base to one of node-24, python-3.13, static/);
+    for (const path of ["Dockerfile", "dockerfile", "Containerfile", ".dockerignore", "Dockerfile.prod"]) {
+      const w = await callTool(server, "write_file", { path, content: "FROM evil/image" });
+      expect(w.text).toMatch(/the box writes the build itself/);
+    }
+    // A nested Dockerfile isn't the build; it's just a file.
+    expect((await callTool(server, "write_file", { path: "docs/Dockerfile", content: "x" })).text).toMatch(/"ok":true/);
+    await callTool(server, "write_file", { path: "flagship.app.json", content: VALID_MANIFEST });
+    expect(JSON.parse((await callTool(server, "validate")).text).ok).toBe(true);
   });
 });
 

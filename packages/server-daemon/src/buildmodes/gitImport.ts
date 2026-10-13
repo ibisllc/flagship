@@ -401,7 +401,8 @@ export function buildAdaptPrompt(files: Record<string, string>, maxChars = 60_00
   const omitted = names.filter((n) => !included.includes(n));
   const header =
     `Adapt the following Git repository into a Flagship app. Add a valid ` +
-    `flagship.app.json, a Dockerfile, and any migrations; rewrite storage ` +
+    `flagship.app.json (with runtime.base: node-24, python-3.13 or static; ` +
+    `the box builds the app on it, so write no Dockerfile) and any migrations; rewrite storage ` +
     `to the FLAGSHIP_* env vars; remove the app's own auth (the daemon ` +
     `injects identity headers); expose only the manifest's single port; ` +
     `respect the platform hard-rules. Change as little as possible: the ` +

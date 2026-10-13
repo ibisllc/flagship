@@ -48,8 +48,33 @@ export interface AppDistribution {
   public?: boolean;
 }
 
+/** The runtimes a box builds apps on (docs/app-runtimes.md §4); the box pins each. */
+export const RUNTIME_BASES = ["node-24", "python-3.13", "static"] as const;
+export type RuntimeBase = (typeof RUNTIME_BASES)[number];
+
+/**
+ * The files at an app's root that decide how it's built. An AI (or an
+ * adapter, which is an AI's changes replayed) never adds or changes them: the
+ * box writes the build for a runtime app.
+ */
+export function isBuildFilePath(path: string): boolean {
+  return !path.includes("/") && /^(\.dockerignore|(docker|container)file(\..+)?)$/i.test(path);
+}
+
 export interface AppRuntime {
-  /** OCI image reference. Must be pullable by the Flagship server. */
+  /**
+   * The runtime the box builds the app on (docs/app-runtimes.md). The box
+   * writes the build itself; an app's own Dockerfile is ignored.
+   */
+  base?: RuntimeBase;
+  /** The start command (argv, no shell). node-24 defaults to `npm start`; python-3.13 needs one. */
+  start?: string[];
+  /** `static`: the folder to serve, relative to the app (default the whole app). */
+  root?: string;
+  /**
+   * The image the app runs. A runtime app leaves it out: the box sets it to
+   * the image it built. Otherwise an OCI reference the box can pull.
+   */
   image: string;
   /** Port the container exposes. */
   port: number;
@@ -409,7 +434,32 @@ function parseRuntime(v: unknown, e: (m: string) => void): AppRuntime | undefine
     return undefined;
   }
   const r = v as Record<string, unknown>;
-  const image = stringField(r, "runtime.image", e, "image");
+  let base: RuntimeBase | undefined;
+  if (r.base !== undefined) {
+    if (typeof r.base === "string" && (RUNTIME_BASES as readonly string[]).includes(r.base)) base = r.base as RuntimeBase;
+    else e(`runtime.base must be one of ${RUNTIME_BASES.join(", ")}`);
+  }
+  let start: string[] | undefined;
+  if (r.start !== undefined) {
+    if (
+      !Array.isArray(r.start) ||
+      r.start.length < 1 ||
+      r.start.length > 32 ||
+      r.start.some((a) => typeof a !== "string" || a.length < 1 || a.length > 1024 || /[\u0000-\u001f]/.test(a))
+    ) {
+      e("runtime.start must be a command as 1-32 strings (no shell), e.g. [\"node\", \"server.js\"]");
+    } else start = [...(r.start as string[])];
+    if (r.base === undefined) e("runtime.start needs runtime.base");
+  }
+  let root: string | undefined;
+  if (r.root !== undefined) {
+    if (typeof r.root !== "string" || !/^[A-Za-z0-9._/-]{1,200}$/.test(r.root) || r.root.split("/").includes("..")) {
+      e("runtime.root must be a folder inside the app, e.g. \"public\"");
+    } else root = r.root;
+    if (r.base !== "static") e("runtime.root is only for the static runtime");
+  }
+  // A runtime app's image is the one the box builds; it has none until then.
+  const image = base !== undefined && r.image === undefined ? "" : stringField(r, "runtime.image", e, "image");
   const port = numberField(r, "runtime.port", e, "port");
   if (port !== undefined && (port < 1 || port > 65535 || !Number.isInteger(port))) {
     e("runtime.port must be an integer in [1, 65535]");
@@ -433,8 +483,8 @@ function parseRuntime(v: unknown, e: (m: string) => void): AppRuntime | undefine
       }
     }
   }
-  if (!image || port === undefined) return undefined;
-  return { image, port, env };
+  if ((!image && base === undefined) || image === undefined || port === undefined) return undefined;
+  return { ...(base ? { base } : {}), ...(start ? { start } : {}), ...(root ? { root } : {}), image, port, env };
 }
 
 function parseData(v: unknown, e: (m: string) => void, notes: string[]): AppData | undefined {

@@ -28,7 +28,7 @@ Flagship is a personal-cloud platform. Every user runs their own server at home.
 A single response containing, in order:
 
 1. \`flagship.app.json\` — manifest that conforms to schema_version 1.
-2. \`Dockerfile\` — multi-stage where useful, final stage exposes \`runtime.port\`.
+2. The dependency list for the runtime: \`package.json\` (node-24) or \`requirements.txt\` (python-3.13); none for static. Never a Dockerfile: the box builds the app on \`runtime.base\` itself.
 3. One or more source files under \`src/\` (or another single source root). Keep it minimal — a working v0.1.0, not a finished product.
 4. At most one initial migration at \`migrations/0001_init.sql\` if the app uses Postgres. Migrations are plain SQL; the daemon runs each new \`migrations/*.sql\` file once, in filename order, before the version that ships it starts. A later schema change is a new numbered file, never an edit to one that already ran.
 
@@ -41,9 +41,9 @@ If the user's request is ambiguous on something that materially changes the mani
 - DO NOT use raw browser CDP, Puppeteer, Playwright, or shell out to Chromium. The pod-resident browser is a daemon-mediated high-level API; apps that need it set \`browser.domains\` and call \`/.flagship/browser/*\` from inside the container. Don't try to run your own.
 - DO NOT listen on any port other than \`runtime.port\`. No second HTTP server, no metrics port, no debug port.
 - The app has NO internet. A live app can reach only hosts listed in \`network.egress\`, over HTTPS (443) or HTTP (80), and only after the owner approves them on their phone; until then, and in the private test copy, those names don't resolve. Declare only hosts the app truly needs, and make it work (with a clear message) while they're blocked.
-- The Docker build's RUN steps reach only package registries (npm, PyPI, Debian/Ubuntu/Alpine mirrors, GitHub, Go, crates.io, RubyGems). DO NOT use \`ADD <url>\` (download in a RUN step or COPY from the repo), and take FROM / COPY --from images only from docker.io, ghcr.io, quay.io, mcr.microsoft.com, public.ecr.aws or gcr.io; the box rejects anything else.
+- The box builds the app itself on the runtime you name in \`runtime.base\` (\`node-24\`, \`python-3.13\` or \`static\`): it installs the dependencies you list (\`npm install\` / \`npm ci\`, \`pip install -r requirements.txt\`) with access to the package registries only, copies your files to \`/app\`, and runs \`runtime.start\` as an unprivileged user. DO NOT emit a Dockerfile (the box ignores it), and don't rely on system packages beyond the runtime's own.
 - DO NOT write outside the data layer. The container's filesystem is wiped on every deploy. Persist data in Postgres (\`FLAGSHIP_PG_URL\`) and files in \`FLAGSHIP_FILES_DIR\` (see "Storing things" below). S3 and Redis are NOT available. A sqlite file outside that folder dies at the next restart; use Postgres instead.
-- The container's root filesystem is READ-ONLY; only \`/tmp\` is writable (64 MB scratch, wiped on restart). Every Linux capability is dropped, so nothing can change file ownership or switch user. Put pid/temp/cache files in \`/tmp\`. Stock nginx/httpd/caddy images exit at startup here; for static files use \`nginxinc/nginx-unprivileged:alpine\` (listens on 8080) or busybox \`httpd -f -p 0.0.0.0:$PORT\`.
+- The container's root filesystem is READ-ONLY; only \`/tmp\` is writable (64 MB scratch, wiped on restart). Every Linux capability is dropped, so nothing can change file ownership or switch user. Put pid/temp/cache files in \`/tmp\`. For a site of static files use \`runtime.base: "static"\`: it serves \`runtime.root\` (default the whole app) on port 8080.
 - DO NOT define env vars whose names start with \`FLAGSHIP_\`. That prefix is reserved.
 - DO NOT hardcode the username, hostname, or any \`<user>.flagship.services\` URL. Apps move between boxes; hardcoded identities break on transfer. Take everything from the request headers and \`FLAGSHIP_*\` env.
 
@@ -55,8 +55,10 @@ If the user's request is ambiguous on something that materially changes the mani
 - \`name\`: lowercase DNS label, 1-63 chars, [a-z0-9-]. Becomes the slug.
 - \`version\`: semver. Start at \`"0.1.0"\`.
 - \`description\`: a short label, **at most 30 characters**, no marketing copy. The user already knows what they asked for. Longer values are rejected by the manifest validator.
-- \`runtime.image\`: docker image reference. Use \`flagship/<name>:0.1.0\` — the daemon builds it locally from your Dockerfile and tags it.
-- \`runtime.port\`: integer, 1-65535. The container's listening port.
+- \`runtime.base\`: \`"node-24"\`, \`"python-3.13"\` or \`"static"\`. The runtime the box builds the app on. No \`runtime.image\`: the box sets it.
+- \`runtime.start\`: the start command as a list, no shell, e.g. \`["node", "src/index.js"]\` or \`["python", "app.py"]\`. Required for python-3.13; node-24 defaults to \`npm start\`; never for static.
+- \`runtime.root\`: static only: the folder to serve, e.g. \`"public"\`.
+- \`runtime.port\`: integer, 1-65535. The port the app listens on (\`$PORT\` carries it); 8080 for static.
 - \`runtime.env\`: optional, string -> string. No \`FLAGSHIP_\` prefix.
 - \`data.stores.postgres\`: \`true\` for a single default DB, or \`["a", "b"]\` for named instances, or omit if not needed.
 - \`data.stores.files\`: \`true\` for the app's one files folder (uploads, images, exports), or omit if not needed. Only \`true\`/\`false\`.
@@ -87,8 +89,8 @@ Emit nothing before the first \`===\` divider and nothing after the closing \`==
 \`\`\`
 === flagship.app.json ===
 <JSON, pretty-printed, 2-space indent>
-=== Dockerfile ===
-<Dockerfile contents>
+=== package.json ===
+<the dependencies, for node-24 (requirements.txt for python-3.13)>
 === src/<file> ===
 <source>
 === migrations/0001_init.sql ===
@@ -119,8 +121,9 @@ Your response:
   "version": "0.1.0",
   "description": "Household shopping list",
   "runtime": {
-    "image": "flagship/shopping:0.1.0",
-    "port": 8080
+    "base": "node-24",
+    "port": 8080,
+    "start": ["node", "src/index.js"]
   },
   "data": {
     "stores": { "postgres": true }
@@ -140,14 +143,6 @@ Your response:
   "type": "module",
   "dependencies": { "pg": "^8.11.0" }
 }
-=== Dockerfile ===
-FROM node:20-alpine
-WORKDIR /app
-COPY package.json ./
-RUN npm install --omit=dev
-COPY src ./src
-EXPOSE 8080
-CMD ["node", "src/index.js"]
 === src/index.js ===
 import { createServer } from "node:http";
 import pg from "pg";

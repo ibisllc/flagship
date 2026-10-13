@@ -21,7 +21,7 @@ const VALID_MANIFEST = JSON.stringify({
   name: "shopping",
   version: "0.1.0",
   description: "List",
-  runtime: { image: "flagship/shopping:0.1.0", port: 8080 },
+  runtime: { base: "static", image: "flagship/shopping:0.1.0", port: 8080 },
   data: { stores: { postgres: true } },
   network: { subdomain: "shopping" },
   access: { enabled: true, default_role: "member", public_routes: [] },
@@ -146,7 +146,8 @@ describe("BuildOrchestrator — git AI adapt", () => {
 
     const r = await o.adaptGit(created.buildId, { instructions: "make it teal" });
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.fileCount).toBe(3);
+    // The model's Dockerfile is refused: the box writes the build.
+    if (r.ok) expect(r.fileCount).toBe(2);
 
     // The repo tree was rendered into the user prompt; the owner's
     // instructions were appended; the system prompt is the emit-format one.
@@ -159,6 +160,7 @@ describe("BuildOrchestrator — git AI adapt", () => {
     expect(ws.read("flagship.app.json")).toBeTruthy();
     expect(JSON.parse(ws.read("flagship.app.json")!).name).toBe("shopping");
     expect(ws.read("src/index.js")).toContain("adapted");
+    expect(ws.read("Dockerfile")).toBeNull();
 
     const entries = await journal.read(created.buildId);
     expect(entries.some((e) => e.kind === "adapt-step" && e.actor === "ai")).toBe(true);
@@ -255,7 +257,7 @@ describe("BuildOrchestrator — AGENTIC adapt", () => {
   it("drives read → write → validate → deploy over the shared tool surface and deploys", async () => {
     const deployed: Array<{ files: Record<string, string> }> = [];
     // The fake model: turn 1 reads the contract + lists files; turn 2 reads
-    // the source; turn 3 writes a manifest + Dockerfile; turn 4 validates;
+    // the source; turn 3 writes a manifest + tries a Dockerfile (refused); turn 4 validates;
     // turn 5 deploys. A genuine multi-turn tool conversation.
     const agent = scriptedAgentRunner([
       () => ({ toolUses: [tu("a1", "get_contract"), tu("a2", "list_files")] }),
@@ -305,7 +307,7 @@ describe("BuildOrchestrator — AGENTIC adapt", () => {
     // The workspace was shaped by the AI's write_file calls.
     const ws = o.workspace(created.buildId)!;
     expect(ws.read("flagship.app.json")).toBeTruthy();
-    expect(ws.read("Dockerfile")).toContain("node:20-alpine");
+    expect(ws.read("Dockerfile")).toBeNull();
 
     // Genuine multi-turn: by turn 2 the model's message history carried a
     // tool result turn (role "tool") from turn 1's calls.
@@ -687,7 +689,7 @@ describe("buildModesHttp", () => {
     const id2 = JSON.parse(c2!.body as string).buildId;
     const ok = await handle(req({ method: "POST", path: `/api/build/sessions/${id2}/adapt`, body: jbody({ instructions: "go" }) }));
     expect(ok!.status).toBe(200);
-    expect(JSON.parse(ok!.body as string)).toEqual({ ok: true, fileCount: 3 });
+    expect(JSON.parse(ok!.body as string)).toEqual({ ok: true, fileCount: 2 });
   });
 
   it("POST .../adapt 502s on a parse-level failure (no manifest)", async () => {

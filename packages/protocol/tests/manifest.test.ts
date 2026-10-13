@@ -169,6 +169,32 @@ describe("parseManifest — name and version", () => {
 });
 
 describe("parseManifest — runtime", () => {
+  it("a runtime app names its base and needs no image (the box builds it)", () => {
+    const m = { ...valid(), runtime: { base: "node-24", port: 3000, start: ["node", "server.js"] } };
+    const r = parseManifest(m);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.manifest.runtime).toEqual({ base: "node-24", start: ["node", "server.js"], image: "", port: 3000, env: undefined });
+    // Once built, the box sets the image beside the base, and both survive a re-parse.
+    const built = parseManifest({ ...m, runtime: { ...m.runtime, image: "flagship-vibe-harry--x:1" } });
+    expect(built.ok && built.manifest.runtime).toMatchObject({ base: "node-24", image: "flagship-vibe-harry--x:1" });
+  });
+
+  it("refuses an unknown base, a shell string as start, and start or root without the right base", () => {
+    const errs = (runtime: unknown) => {
+      const r = parseManifest({ ...valid(), runtime });
+      return r.ok ? [] : r.errors;
+    };
+    expect(errs({ base: "node-18", port: 3000 }).join()).toMatch(/runtime.base must be one of node-24, python-3.13, static/);
+    expect(errs({ base: "node-24", port: 3000, start: "node server.js" }).join()).toMatch(/runtime.start must be a command/);
+    expect(errs({ base: "node-24", port: 3000, start: ["node", "a\nb"] }).join()).toMatch(/runtime.start/);
+    expect(errs({ image: "x:1", port: 3000, start: ["node"] }).join()).toMatch(/runtime.start needs runtime.base/);
+    expect(errs({ base: "node-24", port: 3000, root: "public" }).join()).toMatch(/only for the static runtime/);
+    expect(errs({ base: "static", port: 8080, root: "../etc" }).join()).toMatch(/runtime.root must be a folder inside the app/);
+    expect(errs({ base: "static", port: 8080, root: "public" })).toEqual([]);
+    expect(errs({ port: 3000 }).join()).toMatch(/runtime.image must be a non-empty string/);
+  });
+
   it("rejects missing image", () => {
     const m = valid();
     delete (m.runtime as { image?: string }).image;

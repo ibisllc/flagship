@@ -27,7 +27,7 @@
  * it goes live. See docs/ai-privacy-and-staging.md §2.
  */
 
-import { parseManifest } from "@flagship/protocol";
+import { RUNTIME_BASES, parseManifest } from "@flagship/protocol";
 import type { BuildJournal, BuildMode } from "./buildJournal.js";
 import type { BuildWorkspace } from "./buildWorkspace.js";
 import { renderContractMarkdown } from "./contract.js";
@@ -166,7 +166,7 @@ export const BUILD_TOOL_SPECS: BuildToolSpec[] = [
   {
     name: "write_file",
     description:
-      "Create or overwrite a file in the build workspace. Paths are repo-relative (forward slashes, no '..').",
+      "Create or overwrite a file in the build workspace. Paths are repo-relative (forward slashes, no '..'). Never a Dockerfile: the box writes the build from runtime.base.",
     inputSchema: {
       type: "object",
       properties: { path: { type: "string" }, content: { type: "string" } },
@@ -181,7 +181,7 @@ export const BUILD_TOOL_SPECS: BuildToolSpec[] = [
   {
     name: "validate",
     description:
-      "Validate the workspace's flagship.app.json against the manifest schema (and check a Dockerfile is present). Returns problems, or ok.",
+      "Validate the workspace's flagship.app.json against the manifest schema (and that the box can build it: runtime.base). Returns problems, or ok.",
     inputSchema: { type: "object", properties: {} },
   },
   {
@@ -366,10 +366,17 @@ export class BuildToolHost {
             journalSummary: `validate: ${result.errors.length} problem(s)`,
           };
         }
-        const dockerfile = this.ctx.workspace.read("Dockerfile");
+        // A runtime app is built by the box. Without a runtime, only the
+        // imported repo's own Dockerfile (an AI can't write one) can build it.
+        const dockerfile = result.manifest.runtime.base ? null : this.ctx.workspace.read("Dockerfile");
         const policy = dockerfile == null ? null : checkDockerfile(dockerfile);
         const dockerfileProblems = policy && !policy.ok ? policy.problems : [];
-        const problems = [...(dockerfile == null ? ["missing Dockerfile"] : []), ...dockerfileProblems];
+        const problems = [
+          ...(!result.manifest.runtime.base && dockerfile == null
+            ? [`set runtime.base to one of ${RUNTIME_BASES.join(", ")}: the box builds the app on it`]
+            : []),
+          ...dockerfileProblems,
+        ];
         return {
           text: JSON.stringify({
             ok: problems.length === 0,

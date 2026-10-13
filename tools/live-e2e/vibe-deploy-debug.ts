@@ -75,7 +75,7 @@ async function main() {
   const start = await http(`https://${fqdn}/api/screens/vibe-code/start`, {
     method: "POST", headers: hdr,
     body: JSON.stringify({
-      prompt: "Build a minimal static website that serves the text 'hello gate'. Produce an index.html AND a Dockerfile that SERVES it over HTTP — use `FROM nginx:alpine`, COPY index.html into /usr/share/nginx/html/, and the container listens on port 80. The flagship.app.json runtime.port MUST be 80. The site must return HTTP 200 with 'hello gate' in the body at '/'.",
+      prompt: "Build a minimal static website that serves the text 'hello gate'. Produce an index.html and use runtime.base \"static\" (it serves the app's files on port 8080, so runtime.port MUST be 8080). The site must return HTTP 200 with 'hello gate' in the body at '/'.",
       model: AI_MODEL, credential: { provider: "openai", apiKey: AI_KEY },
     }),
   });

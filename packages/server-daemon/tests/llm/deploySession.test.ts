@@ -1,3 +1,4 @@
+import { RUNTIMES } from "../../src/runtimes/catalog.js";
 import { describe, expect, it } from "vitest";
 import { boxSigner, swkOps } from "../helpers/keyCustody.js";
 import type { SwkOps } from "../../src/keyCustodian.js";
@@ -57,7 +58,7 @@ const MANIFEST = JSON.stringify({
   schema_version: 1,
   name: "habits",
   version: "0.1.0",
-  runtime: { image: "placeholder/will-be-overwritten:0", port: 8080 },
+  runtime: { base: "static", image: "placeholder/will-be-overwritten:0", port: 8080 },
   data: {},
   network: { subdomain: "habits" },
   access: { enabled: true, default_role: "owner" },
@@ -134,8 +135,10 @@ describe("buildDeploySession", () => {
       expect(calls.some((c) => c.startsWith("docker run ") && c.includes(r.image))).toBe(true);
 
       // source tree was actually written
+      // The model's Dockerfile never reaches the build: the box wrote its own.
       const dockerfile = await readFile(join(wd.dir, "alice--habits", "Dockerfile"), "utf8");
-      expect(dockerfile).toContain("FROM busybox");
+      expect(dockerfile).toContain(`FROM ${RUNTIMES.static.image}`);
+      expect(dockerfile).not.toContain("busybox");
       const main = await readFile(join(wd.dir, "alice--habits", "src", "main.js"), "utf8");
       expect(main).toContain("console.log");
     } finally {
@@ -291,9 +294,7 @@ describe("buildDeploySession", () => {
           commitSeen = true;
           // Verify the request body includes our files.
           const body = JSON.parse(init?.body ?? "{}") as { files: Array<{ path: string }> };
-          expect(body.files.map((f) => f.path).sort()).toEqual(
-            ["Dockerfile", "flagship.app.json", "src/main.js"].sort(),
-          );
+          expect(body.files.map((f) => f.path).sort()).toEqual(["flagship.app.json", "src/main.js"].sort());
           return jsonReply(200, { commit: { sha: "deadbeef" } });
         }
         throw new Error(`unexpected forgejo call ${method} ${url}`);

@@ -18,7 +18,7 @@ const VALID_MANIFEST = JSON.stringify({
   name: "notes",
   version: "0.1.0",
   description: "Notes",
-  runtime: { image: "flagship/notes:0.1.0", port: 8080 },
+  runtime: { base: "static", image: "flagship/notes:0.1.0", port: 8080 },
   data: { stores: {} },
   network: { subdomain: "notes" },
   access: { enabled: true, default_role: "member", public_routes: ["/"] },
@@ -76,7 +76,7 @@ describe("runBuildAgent", () => {
     const host = makeHost("b1", ws, journal, () => deployCount++);
     const model = scripted([
       { toolUses: [tu("a1", "get_contract")] },
-      { toolUses: [tu("b1", "write_file", { path: "flagship.app.json", content: VALID_MANIFEST }), tu("b2", "write_file", { path: "Dockerfile", content: "FROM node:20-alpine" })] },
+      { toolUses: [tu("b1", "write_file", { path: "flagship.app.json", content: VALID_MANIFEST }), tu("b2", "write_file", { path: "index.html", content: "<h1>notes</h1>" })] },
       { toolUses: [tu("c1", "validate")] },
       { toolUses: [tu("e0", "finish")] },
       { toolUses: [tu("d1", "deploy")] },

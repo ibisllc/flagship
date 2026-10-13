@@ -73,7 +73,7 @@ const MANIFEST = JSON.stringify({
   schema_version: 1,
   name: "envapp",
   version: "0.1.0",
-  runtime: { image: "node:20", port: 8080 },
+  runtime: { base: "static", image: "node:20", port: 8080 },
   data: {},
   network: { subdomain: "envapp" },
   access: { enabled: true, default_role: "viewer" },

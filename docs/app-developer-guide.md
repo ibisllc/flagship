@@ -22,15 +22,18 @@ Every service's git repo has at the root:
 
 ```
 flagship.app.json   # the manifest (schema_version=1)
-Dockerfile          # OCI image build (or a prebuilt image referenced from the manifest)
+package.json        # node-24: dependencies (requirements.txt for python-3.13)
 README.md           # human-readable description
-src/, etc.          # whatever your runtime needs
+src/, etc.          # the app's own files
+migrations/*.sql    # optional: the schema, applied in order
 ```
 
-The manifest's `runtime.image` is the OCI ref the daemon pulls. You
-can build it yourself and push to a registry, or include a Dockerfile
-that the daemon's build pipeline (when the user vibe-codes the service)
-runs in-place.
+The manifest's `runtime.base` names the runtime the box builds the app on
+(`node-24`, `python-3.13` or `static`; see [app runtimes](app-runtimes.md)).
+The box writes the build itself: it installs the dependencies, copies the
+app's files and runs `runtime.start` as an unprivileged user, so there is no
+Dockerfile. Apps that need something else (a vendor's own image) set
+`runtime.image` instead; those come only from an owner's import.
 
 ## Storing data
 

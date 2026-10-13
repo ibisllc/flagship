@@ -383,7 +383,7 @@ describe("review once a key exists", () => {
   const adapterFile = (marker: string) =>
     JSON.stringify({
       ...MANIFEST,
-      adapter: { version: 1, source: { repo: NOTES, base: BASE_A }, add: { Dockerfile: ["FROM node:20", `# ${marker}`, ""] } },
+      adapter: { version: 1, source: { repo: NOTES, base: BASE_A }, add: { "src/flagship.js": ["export {};", `// ${marker}`, ""] } },
     });
   const reviewed: string[] = [];
 
@@ -483,7 +483,7 @@ describe("complaints, retirement and insights", () => {
   const fileText = (marker: string) =>
     JSON.stringify({
       ...MANIFEST,
-      adapter: { version: 1, source: { repo: NOTES, base: BASE_A }, add: { Dockerfile: ["FROM node:20", `# ${marker}`, ""] } },
+      adapter: { version: 1, source: { repo: NOTES, base: BASE_A }, add: { "src/flagship.js": ["export {};", `// ${marker}`, ""] } },
     });
   const KEY = { ADAPTER_REVIEW_ANTHROPIC_KEY: "sk-test" };
   let prompts: string[];

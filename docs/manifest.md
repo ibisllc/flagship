@@ -39,7 +39,7 @@ This page is a field-by-field reference. For workflow + how-to, see
 | `name` | yes | DNS label (lowercase, 1-63 chars, `[a-z0-9-]`, no leading hyphen). |
 | `description` | no | Free text. |
 | `version` | yes | Semver. `1.2.3` or `1.2.3-beta.4`. |
-| `runtime` | yes | Container image + port + env. |
+| `runtime` | yes | The runtime (or image) + port + start command + env. |
 | `data` | yes | Persistence (Postgres / a files folder) + scratch path. |
 | `network` | yes | Subdomain under `<user>.flagship.services`. |
 | `access` | yes | Identity gate + roles + public routes + sister-service allowlist. |
@@ -51,16 +51,20 @@ This page is a field-by-field reference. For workflow + how-to, see
 
 ```json
 "runtime": {
-  "image": "ghcr.io/alice/habits:0.1.0",
+  "base": "node-24",
   "port": 8080,
+  "start": ["node", "server.js"],
   "env": { "LOG_LEVEL": "info" }
 }
 ```
 
 | Field | Required | Notes |
 |---|---|---|
-| `image` | yes | OCI ref the daemon can pull. |
-| `port` | yes | Container's listening port. |
+| `base` | one of `base` / `image` | The runtime the box builds the app on: `node-24`, `python-3.13` or `static` ([app runtimes](app-runtimes.md)). The box writes the build; an app's own Dockerfile is ignored. |
+| `start` | python-3.13 | The start command as a list (no shell). `node-24` defaults to `npm start`; `static` takes none. Needs `base`. |
+| `root` | no | `static` only: the folder to serve (default the whole app). |
+| `image` | one of `base` / `image` | An OCI ref the daemon can pull, for an app that isn't built on a runtime (an imported repo's own Dockerfile, or a vendor image). A runtime app leaves it out: the box sets it to the image it built. |
+| `port` | yes | The port the app listens on (`$PORT` carries it). `static`: 8080. |
 | `env` | no | Plain string→string. **Reserved**: keys starting with `FLAGSHIP_` are managed by the runtime — services cannot set them. The runtime injects `FLAGSHIP_APP_ID`, `FLAGSHIP_APP_TOKEN`, and any data-store URLs (see `data.stores`). |
 
 ## `data`
@@ -215,8 +219,9 @@ rejections. Common causes:
   "version": "0.1.0",
   "description": "Daily habit tracker.",
   "runtime": {
-    "image": "ghcr.io/alice/habits:0.1.0",
-    "port": 8080
+    "base": "node-24",
+    "port": 8080,
+    "start": ["node", "server.js"]
   },
   "data": {
     "stores": { "postgres": true }

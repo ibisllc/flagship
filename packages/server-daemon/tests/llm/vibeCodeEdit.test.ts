@@ -36,7 +36,7 @@ const manifest = (over: Record<string, unknown> = {}) =>
     schema_version: 1,
     name: "notes",
     version: "0.1.0",
-    runtime: { image: "x:0", port: 8080 },
+    runtime: { base: "static", image: "x:0", port: 8080 },
     data: { stores: { postgres: true } },
     network: {},
     access: { enabled: true, default_role: "owner" },

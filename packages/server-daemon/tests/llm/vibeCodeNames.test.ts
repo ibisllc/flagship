@@ -39,7 +39,7 @@ function sessionWithFiles(reg: VibeCodeSessionRegistry, name: string | undefined
       schema_version: 1,
       name: manifestName,
       version: "0.1.0",
-      runtime: { image: "x:0", port: 8080 },
+      runtime: { base: "static", image: "x:0", port: 8080 },
       data: {},
       network: {},
       access: { enabled: true, default_role: "owner" },

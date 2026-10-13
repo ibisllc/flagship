@@ -119,6 +119,18 @@ describe("repo adapters", () => {
     expect(repoAdapterProblems(good, MANIFEST)).toEqual([]);
   });
 
+  it("never carries a build file: the box writes the build", () => {
+    const adds = deriveRepoAdapter({ "a.js": "1\n" }, { "a.js": "1\n", Dockerfile: "FROM evil\n", ".dockerignore": "x\n" }, SRC);
+    const p = repoAdapterProblems(adds, MANIFEST).join("\n");
+    expect(p).toMatch(/can't add or change Dockerfile/);
+    expect(p).toMatch(/can't add or change \.dockerignore/);
+    const edits = deriveRepoAdapter({ Containerfile: "FROM a\n" }, { Containerfile: "FROM b\n" }, SRC);
+    expect(repoAdapterProblems(edits, MANIFEST).join()).toMatch(/can't add or change Containerfile/);
+    // Removing the repo's own, or a nested file that merely has the name, is fine.
+    expect(repoAdapterProblems(deriveRepoAdapter({ Dockerfile: "x\n" }, {}, SRC), MANIFEST)).toEqual([]);
+    expect(repoAdapterProblems(deriveRepoAdapter({}, { "docs/Dockerfile": "x\n" }, SRC), MANIFEST)).toEqual([]);
+  });
+
   it("counts only secrets the adaptation brings in, not ones the public repo already has", () => {
     const key = "AKIAABCDEFGHIJKLMNOP";
     const moved = deriveRepoAdapter({ "a.js": `const k = "${key}";\n` }, { "b.js": `const k = "${key}";\n` }, SRC);

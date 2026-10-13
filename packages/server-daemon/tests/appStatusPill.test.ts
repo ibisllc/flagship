@@ -297,7 +297,7 @@ describe("status pill — activity", () => {
   });
 
   const EDIT_FILES = {
-    "flagship.app.json": JSON.stringify({ schema_version: 1, name: "notes", runtime: { image: "x", port: 8080 } }),
+    "flagship.app.json": JSON.stringify({ schema_version: 1, name: "notes", runtime: { base: "static", image: "x", port: 8080 } }),
     Dockerfile: "FROM node:20-alpine\nEXPOSE 8080\n",
   };
   const editedPlatform = (onRedeploy: () => void) =>
