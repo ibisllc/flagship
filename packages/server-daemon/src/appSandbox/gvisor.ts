@@ -72,8 +72,23 @@ export async function ensureGvisor(o: EnsureGvisorOptions): Promise<GvisorResult
       await install(o, arch, base, dir, want);
     }
     const version = (await o.cmd.capture(runsc, ["--version"], { timeoutMs: 15_000 })).stdout.split("\n")[0]?.trim() || GVISOR_RELEASE;
-    await registerWithDocker(o, runsc);
-    await probe(o);
+    // With docker's systemd cgroup driver, runsc may need to be told so; try
+    // as installed first, and keep whichever runs an app-shaped container.
+    const driver = (await o.cmd.capture("docker", ["info", "--format", "{{.CgroupDriver}}"], { timeoutMs: 15_000 }).catch(() => ({ stdout: "" }))).stdout.trim();
+    const variants: string[][] = driver === "systemd" ? [[], ["--systemd-cgroup"]] : [[]];
+    let failure: Error | null = null;
+    for (const runtimeArgs of variants) {
+      await registerWithDocker(o, runsc, runtimeArgs);
+      try {
+        await probe(o);
+        failure = null;
+        break;
+      } catch (e) {
+        failure = e as Error;
+        log(`[app-sandbox] gVisor${runtimeArgs.length ? ` with ${runtimeArgs.join(" ")}` : ""} failed its test container: ${failure.message}`);
+      }
+    }
+    if (failure) throw failure;
     await pruneOtherReleases(base);
     return { ok: true, version, runscPath: runsc };
   } catch (e) {
@@ -130,7 +145,7 @@ async function extractWithTar(cmd: Required<CommandRunner>, tarball: string, dir
 }
 
 /** Add `runsc` to dockerd's runtimes, keeping everything else in daemon.json. */
-async function registerWithDocker(o: EnsureGvisorOptions, runsc: string): Promise<void> {
+async function registerWithDocker(o: EnsureGvisorOptions, runsc: string, runtimeArgs: string[]): Promise<void> {
   const path = o.daemonJson ?? DOCKER_DAEMON_JSON;
   let cfg: Record<string, unknown> = {};
   let text: string | null = null;
@@ -148,7 +163,7 @@ async function registerWithDocker(o: EnsureGvisorOptions, runsc: string): Promis
     if (typeof cfg !== "object" || cfg === null || Array.isArray(cfg)) throw new Error(`${path} isn't a JSON object`);
   }
   const runtimes = (cfg.runtimes ?? {}) as Record<string, unknown>;
-  const want = { path: runsc };
+  const want = runtimeArgs.length > 0 ? { path: runsc, runtimeArgs } : { path: runsc };
   if (JSON.stringify(runtimes[GVISOR_RUNTIME]) !== JSON.stringify(want)) {
     cfg.runtimes = { ...runtimes, [GVISOR_RUNTIME]: want };
     await mkdir(join(path, ".."), { recursive: true });
@@ -168,7 +183,7 @@ async function registerWithDocker(o: EnsureGvisorOptions, runsc: string): Promis
   throw new Error("Docker didn't pick up the gVisor runtime");
 }
 
-/** Run one throwaway container under gVisor, locked down like an app. */
+/** Run one throwaway container under gVisor, locked down and limited like an app. */
 async function probe(o: EnsureGvisorOptions): Promise<void> {
   try {
     await o.cmd.capture(
@@ -181,6 +196,14 @@ async function probe(o: EnsureGvisorOptions): Promise<void> {
         "--read-only",
         "--cap-drop=ALL",
         "--security-opt=no-new-privileges",
+        "--memory",
+        "64m",
+        "--cpus",
+        "0.5",
+        "--pids-limit",
+        "32",
+        "--tmpfs",
+        "/tmp:rw,size=8m",
         "--entrypoint",
         "true",
         o.probeImage,

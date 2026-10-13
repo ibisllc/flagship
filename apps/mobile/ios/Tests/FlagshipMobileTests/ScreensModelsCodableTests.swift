@@ -64,6 +64,18 @@ final class ScreensModelsCodableTests: XCTestCase {
         XCTAssertNil(LastUpdate(outcome: "exploded", at: 1).summary)
     }
 
+    func test_serverDetailResponse_appSandboxNotice() throws {
+        let base = #""serverFqdn":"home.harry.flagship.services","username":"harry","daemonVersion":"0.1.0","startedAt":1,"uptimeMs":2,"serviceCount":0,"pairedSessionCount":0,"recentInstallEvents":[]"#
+        func decode(_ extra: String) throws -> ServerDetailResponse {
+            try JSONDecoder().decode(ServerDetailResponse.self, from: Data("{\(base)\(extra)}".utf8))
+        }
+        XCTAssertNil(try decode("").appSandbox)
+        let n = try decode(#","appSandbox":{"state":"unavailable","reason":"no network"}"#).appSandbox?.notice
+        XCTAssertEqual(n, AppSandbox.Notice(danger: true, text: "Apps can't start on this server: the sandbox they run in isn't working (no network). The server tries again every 10 minutes."))
+        XCTAssertEqual(try decode(#","appSandbox":{"state":"starting"}"#).appSandbox?.notice?.danger, false)
+        XCTAssertNil(try decode(#","appSandbox":{"state":"ready","version":"runsc"}"#).appSandbox?.notice)
+    }
+
     func test_vibeCodeFrame_roundTripsAllVariants() throws {
         let frames: [VibeCodeFrame] = [
             .token(text: "hello"),

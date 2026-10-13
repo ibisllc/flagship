@@ -236,8 +236,15 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   `enable_icc=false`. Breaking: chat and AI-built apps must name a runtime,
   and existing AI apps get one on their next edit. Needs an endorsed box
   release and a `.com` deploy (adapter rule). Not yet built on a real box:
-  the three runtimes' builds and a non-root app writing `/data`. Next phases:
-  gVisor for every app, a COPY-only build with installs in a locked-down
+  the three runtimes' builds and a non-root app writing `/data`. **Phase 2
+  built (`appSandbox/`):** every app and staging copy runs under gVisor
+  `20260921.0` (SHA-512-pinned bundle, ~130 MB download, installed once into
+  `/usr/local/lib/flagship-gvisor/`, registered in `/etc/docker/daemon.json`,
+  proved with an app-shaped test container, retrying `--systemd-cgroup` when
+  docker uses the systemd driver); no app starts without it, and the server
+  page says why on all three apps. Never run on a real box yet: the download,
+  `systemctl reload docker`, the cgroup question, and Node/Python/nginx under
+  runsc on the arm64 Studio VMs. Next phases: a COPY-only build with installs in a locked-down
   container, copies that send the app bundle instead of the image, disk
   quotas and Postgres role limits, vetted packages, owner-approved tier-3
   images.

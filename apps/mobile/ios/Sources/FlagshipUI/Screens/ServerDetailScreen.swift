@@ -236,6 +236,13 @@ public struct ServerDetailScreen: View {
                 case .loaded(let d):
                     overview(d: d, c: c)
                     if let apps {
+                        if let n = d.appSandbox?.notice {
+                            Text(n.text)
+                                .font(FS.font.bodySm())
+                                .foregroundColor(n.danger ? c.danger : c.textMuted)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .accessibilityIdentifier("sd-app-sandbox-notice")
+                        }
                         ServerAppsSection(controller: apps, onOpenApp: onOpenApp, onCreate: onCreateApp)
                     }
                     MetricsSection(state: metrics)

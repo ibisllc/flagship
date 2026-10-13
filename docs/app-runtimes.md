@@ -238,7 +238,8 @@ refused with "update this server first" (no compatibility needed yet).
    (zstd installed when missing), re-hashed every boot, registered in
    `/etc/docker/daemon.json` (other settings kept) with a `systemctl reload
    docker`, and proved with a locked-down `--runtime=runsc` container of the
-   pinned helper image. Boot doesn't wait for it; `docker run` of an app does,
+   pinned helper image, run with an app's limits (and, if that fails under
+   docker's systemd cgroup driver, again with `--systemd-cgroup`). Boot doesn't wait for it; `docker run` of an app does,
    and refuses without it (retried every 10 minutes; apps restart once it
    works). Server detail reports `appSandbox`; the server page warns while
    apps can't start. Helper containers (files archive, staging listing) and

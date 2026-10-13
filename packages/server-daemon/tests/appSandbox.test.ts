@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { mkdtemp, readFile, writeFile, mkdir, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,9 +9,16 @@ import { appSandboxRunArgs, appSandboxStatus, keepAppSandbox, resetAppSandbox, s
 import { AppRunner, type CommandRunner } from "../src/serviceRunner.js";
 
 const TARBALL = Buffer.from("pretend gvisor bundle");
+const readFileSyncSafe = (p: string) => {
+  try {
+    return readFileSync(p, "utf8");
+  } catch {
+    return "";
+  }
+};
 const SHA = createHash("sha512").update(TARBALL).digest("hex");
 
-function rig(o: { probeFails?: boolean; runtimes?: string; reloadFails?: boolean } = {}) {
+function rig(o: { probeFails?: boolean | ((daemonJson: string) => boolean); runtimes?: string; reloadFails?: boolean; driver?: string; daemonJson?: () => string } = {}) {
   const calls: string[] = [];
   let registered = false;
   const cmd: Required<CommandRunner> = {
@@ -24,8 +32,10 @@ function rig(o: { probeFails?: boolean; runtimes?: string; reloadFails?: boolean
     capture: async (c, a) => {
       calls.push(`${c} ${a.join(" ")}`);
       if (a[0] === "--version") return { stdout: `runsc version release-${GVISOR_RELEASE}\nspec: 1.1.0\n`, stderr: "" };
+      if (c === "docker" && a[0] === "info" && a[2] === "{{.CgroupDriver}}") return { stdout: `${o.driver ?? "cgroupfs"}\n`, stderr: "" };
       if (c === "docker" && a[0] === "info") return { stdout: o.runtimes ?? (registered ? '{"runc":{},"runsc":{"path":"x"}}' : '{"runc":{}}'), stderr: "" };
-      if (c === "docker" && a[0] === "run" && o.probeFails) {
+      const fails = typeof o.probeFails === "function" ? o.probeFails(o.daemonJson?.() ?? "") : o.probeFails;
+      if (c === "docker" && a[0] === "run" && fails) {
         throw Object.assign(new Error("exit 125"), { stderr: "docker: Error response from daemon: unknown or invalid runtime name: runsc\n" });
       }
       return { stdout: "", stderr: "" };
@@ -75,6 +85,7 @@ describe("installing gVisor", () => {
     expect(probe).toContain("--runtime=runsc");
     expect(probe).toContain("--network=none");
     expect(probe).toContain("--cap-drop=ALL");
+    expect(probe).toContain("--memory 64m");
     expect(await readFile(join(d.base, GVISOR_RELEASE, "gvisor-bin", "gvisor_sentry"), "utf8")).toBe("sentry");
     expect(await readdir(d.base)).toEqual([GVISOR_RELEASE]);
   });
@@ -120,6 +131,20 @@ describe("installing gVisor", () => {
     const d = await dirs();
     const res = await ensureGvisor({ cmd: r.cmd, probeImage: "h", baseDir: d.base, daemonJson: d.daemonJson, arch: "aarch64", fetch: r.fetch, extract: r.extract, pinnedSha512: SHA, sleep: async () => {} });
     expect(res).toEqual({ ok: false, reason: "gVisor couldn't run a container on this server: docker: Error response from daemon: unknown or invalid runtime name: runsc" });
+  });
+
+  it("tells runsc about systemd cgroups only when the plain setup can't run a limited container", async () => {
+    const d = await dirs();
+    const r = rig({ driver: "systemd", probeFails: (json) => !json.includes("--systemd-cgroup"), daemonJson: () => readFileSyncSafe(d.daemonJson) });
+    const res = await ensureGvisor({ cmd: r.cmd, probeImage: "h", baseDir: d.base, daemonJson: d.daemonJson, arch: "aarch64", fetch: r.fetch, extract: r.extract, pinnedSha512: SHA, sleep: async () => {} });
+    expect(res.ok).toBe(true);
+    expect(JSON.parse(await readFile(d.daemonJson, "utf8")).runtimes.runsc).toEqual({ path: join(d.base, GVISOR_RELEASE, "runsc"), runtimeArgs: ["--systemd-cgroup"] });
+    expect(r.calls.filter((c) => c === "systemctl reload docker")).toHaveLength(2);
+    // With the cgroupfs driver there's nothing else to try.
+    const d2 = await dirs();
+    const r2 = rig({ driver: "cgroupfs", probeFails: true });
+    expect((await ensureGvisor({ cmd: r2.cmd, probeImage: "h", baseDir: d2.base, daemonJson: d2.daemonJson, arch: "aarch64", fetch: r2.fetch, extract: r2.extract, pinnedSha512: SHA, sleep: async () => {} })).ok).toBe(false);
+    expect(r2.calls.filter((c) => c === "systemctl reload docker")).toHaveLength(1);
   });
 
   it("isn't offered on a processor gVisor doesn't support", async () => {

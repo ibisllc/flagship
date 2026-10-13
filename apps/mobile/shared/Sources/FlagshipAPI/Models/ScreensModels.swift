@@ -80,6 +80,47 @@ public struct ServerDetailResponse: Codable, Equatable, Sendable {
     public let recentInstallEvents: [RecentInstallEvent]
     /// Verdict of the most recent update order. Absent from older daemons.
     public var lastUpdate: LastUpdate? = nil
+    /// The sandbox every app runs in (gVisor). Absent from older daemons.
+    public var appSandbox: AppSandbox? = nil
+}
+
+/// The box's app sandbox (docs/app-runtimes.md §5.1): `off`, `starting`,
+/// `ready` (with `version`) or `unavailable` (with `reason`: no app can start).
+public struct AppSandbox: Codable, Equatable, Sendable {
+    public let state: String
+    public let version: String?
+    public let reason: String?
+
+    public init(state: String, version: String? = nil, reason: String? = nil) {
+        self.state = state
+        self.version = version
+        self.reason = reason
+    }
+
+    public struct Notice: Equatable, Sendable {
+        public let danger: Bool
+        public let text: String
+
+        public init(danger: Bool, text: String) {
+            self.danger = danger
+            self.text = text
+        }
+    }
+
+    /// What the server page says, or nil. Matches the webapp's appSandboxNotice.
+    public var notice: Notice? {
+        switch state {
+        case "unavailable":
+            return Notice(
+                danger: true,
+                text: "Apps can't start on this server: the sandbox they run in isn't working (\(reason ?? "unknown reason")). The server tries again every 10 minutes."
+            )
+        case "starting":
+            return Notice(danger: false, text: "Setting up the sandbox apps run in. They start once it's ready.")
+        default:
+            return nil
+        }
+    }
 }
 
 /// One maintainer-endorsed release, placed relative to the box's running commit.
