@@ -675,7 +675,10 @@ struct PrivacyScreen: View {
                     // Already past auth → stay unlocked this session.
                     app.markUnlocked()
                 } catch {
-                    pendingError = "Couldn't enable: \(error.localizedDescription)"
+                    let gate = BiometricGate.GateError.from(error)
+                    if !gate.isSilent {
+                        pendingError = "Couldn't enable: \(gate.localizedDescription)"
+                    }
                 }
             }
         } else {

@@ -11,12 +11,13 @@ import FlagshipCore
 /// owned by Settings. This is purely the lock surface.
 ///
 /// Failure modes:
-///   - User cancels → stays on lock screen with a "Try again" button.
-///   - Biometric not available on device → falls back to a "Sign out
-///     of Flagship to continue" affordance (no useful auth path forward
-///     from a phone with broken biometrics + Face ID-required setting).
+///   - User cancels, or the system ends the prompt → no message; the
+///     Unlock button stays.
+///   - No device screen lock → explains it next to the Sign out escape.
+///   - Anything else → one plain sentence (`message(for:)`).
 struct BiometricLockScreen: View {
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(AppState.self) private var app
     @State private var status: Status = .idle
     @State private var attemptedAuto = false
@@ -100,20 +101,36 @@ struct BiometricLockScreen: View {
                 ? "This erases this device's account key from the Keychain and returns you to the start. Sign back in with your recovery passkey to restore it — your account and servers stay put."
                 : "You have no cloud recovery set up. Erasing this device's key with no backup means there's no way to sign back in — your account access is lost for good.")
         }
-        // Auto-prompt on first appearance — pattern most password-manager
+        // Auto-prompt once the app is in front — pattern most password-manager
         // apps follow — EXCEPT when the user reached this screen by tapping
         // "Lock" in Settings. A deliberate lock that instantly auto-unlocks
         // itself is pointless, so in that case we wait for an explicit tap.
-        // Launch + return-from-background still auto-prompt. Subsequent failures
-        // also require an explicit tap so we don't infinite-loop on "User
-        // cancelled" if the user genuinely wants to back out and force-quit.
-        .task {
-            if !attemptedAuto {
-                attemptedAuto = true
-                if !app.awaitingManualUnlock {
-                    await tryUnlock()
-                }
-            }
+        // The screen mounts while the app is still launching or already in
+        // the background (the relock on `.background`), where LocalAuthentication
+        // refuses to prompt; waiting for `.active` is what keeps that refusal
+        // from showing up as an error before anyone was asked anything.
+        .task(id: scenePhase) {
+            await autoUnlockIfReady()
+        }
+    }
+
+    private func autoUnlockIfReady() async {
+        guard scenePhase == .active, !attemptedAuto, !app.awaitingManualUnlock,
+              status != .authenticating else { return }
+        attemptedAuto = true
+        await tryUnlock()
+    }
+
+    /// What the lock screen says after an attempt; nil says nothing.
+    static func message(for error: Error) -> String? {
+        let gate = BiometricGate.GateError.from(error)
+        switch gate {
+        case .userCancelled, .interrupted:
+            return nil
+        case .notAvailable:
+            return "No device screen lock is set up. Set one, disable the lock from Settings on another paired device, or sign out and start fresh."
+        default:
+            return gate.errorDescription
         }
     }
 
@@ -123,12 +140,13 @@ struct BiometricLockScreen: View {
             try await BiometricGate().evaluate(reason: "Unlock Flagship")
             app.markUnlocked()
             status = .idle
-        } catch BiometricGate.GateError.notAvailable {
-            status = .failed("No device screen lock is set up. Set one, disable the lock from Settings on another paired device, or sign out and start fresh.")
-        } catch BiometricGate.GateError.userCancelled {
-            status = .failed("Cancelled. Tap above to try again.")
         } catch {
-            status = .failed("Couldn't authenticate: \(error.localizedDescription)")
+            // A prompt the system ended because the app left the foreground
+            // gets one more automatic try the next time it comes back.
+            if BiometricGate.GateError.from(error) == .interrupted, scenePhase != .active {
+                attemptedAuto = false
+            }
+            status = Self.message(for: error).map(Status.failed) ?? .idle
         }
     }
 }
