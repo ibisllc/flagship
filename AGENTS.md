@@ -228,6 +228,19 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   there's no live endpoint to assign per-member roles; app roles can count the
   box's databases via pg_database (names are opaque); v1 invite links (no `a=`)
   need re-inviting; boxes without `ownerAidPub` can't recognise their owner.
+- **App runtimes (2026-10-12, phase 1 in `8ddf19a9`).** `docs/app-runtimes.md`.
+  Apps name `runtime.base` (`node-24`, `python-3.13`, `static`, pinned by
+  digest in `runtimes/catalog.ts`); the box writes the build and runs the app
+  as the runtime's unprivileged user; an AI can't write a Dockerfile (an
+  imported repo's own still builds); every sandbox bridge has
+  `enable_icc=false`. Breaking: chat and AI-built apps must name a runtime,
+  and existing AI apps get one on their next edit. Needs an endorsed box
+  release and a `.com` deploy (adapter rule). Not yet built on a real box:
+  the three runtimes' builds and a non-root app writing `/data`. Next phases:
+  gVisor for every app, a COPY-only build with installs in a locked-down
+  container, copies that send the app bundle instead of the image, disk
+  quotas and Postgres role limits, vetted packages, owner-approved tier-3
+  images.
 - **LAN-direct (merged to `main` 2026-10-12, through `1f5eef30`).**
   `docs/lan-direct.md`. A box listens on its private LAN addresses at :443
   (piped into the same loopback TLS server the tunnel feeds;
