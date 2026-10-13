@@ -186,6 +186,25 @@ account can view or co-manage a server, never destroy it) is in the MVP
 
 ### In flight
 
+- **Free AI credits (2026-10-13): built on `main`, not live.** Every account
+  gets `FLAGSHIP_FREE_AI_TOKENS` (default 1M) model tokens; the apps sign a
+  `flagship/llm-promo-issue/v1` request, `.com` `/api/free-ai/token` mints a
+  12-hour pass, the box calls the meter shim (`infra/inference/shim`) through
+  the relay, and the shim checks `/api/free-ai/allowance`, strips anything
+  identifying, calls any OpenAI-compatible upstream and meters usage back.
+  On by default in all three apps (Settings "820k of 1M free AI tokens left",
+  the AI-key step skipped with no saved key); `docs/build-modes.md`. Usage is
+  read through the `AiCreditsLedger` seam: wire it to the metering core's
+  "ai-tokens" when that lands. **Owner:** pick a hosted model API with
+  tool calls, no prompt retention and prepaid credit; deploy the shim with
+  `UPSTREAM_CHAT_URL`/`UPSTREAM_MODEL` + secrets `UPSTREAM_API_KEY` and
+  `FLAGSHIP_INFERENCE_TOKEN_SECRET`; set the same secret and
+  `FLAGSHIP_INFERENCE_ENDPOINT` on `.com` and redeploy it
+  (`infra/inference/README.md`). Box side ("Show free AI refusals on the box
+  in the shim's words": default model, readable refusals) needs endorsing;
+  older boxes still build, as the apps send the model (git adapt excepted). Open: accounts are free to create, so the
+  provider's prepaid balance and the shim's `PAUSED` switch are the real
+  budget ceiling.
 - **iOS 1.0 (build 4) approved on the App Store (2026-10-13).** Reviewer login:
   demo `playstore-test-0725`, shared with Google Play review: never tear it
   down while a review is open (Studio's store review will use it too). Still to
