@@ -323,7 +323,9 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   ltree, btree_gin, btree_gist and vector; database/role names are opaque
   (HMAC under `DATA_NAME_KEY`), and an app role can connect only to its own
   database. `data.stores.files` mounts a per-app named volume at `/data`
-  (`FLAGSHIP_FILES_DIR`); an old manifest's `objects` becomes files and `kv`
+  (`FLAGSHIP_FILES_DIR`; `flagship-files-<creator>--<slug>`, dev
+  `flagship-devfiles-…`; before `a3b4c396` a dashed username failed every
+  install with data stores); an old manifest's `objects` becomes files and `kv`
   its Postgres database. Backups dump Postgres and each files volume (also
   without the Postgres creds); self-delete removes the files volumes. The
   unit runs `init.sh` on every boot and retries, removes the old containers
