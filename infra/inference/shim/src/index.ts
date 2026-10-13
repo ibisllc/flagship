@@ -6,7 +6,7 @@
  * it. Per call it:
  *   1. verifies the scoped `.com` token (Bearer);
  *   2. asks `.com` how much of the account's allowance is left, and stops
- *      at zero with a message pointing to bring-your-own-key;
+ *      at zero with `.com`'s reason (used up this week, busy today, ended);
  *   3. rebuilds the request from an allowlist (no `user`, no message
  *      names, no extras, the upstream's own model id, capped output) and
  *      sends it to the upstream with only our key: no box headers, no
@@ -53,7 +53,8 @@ interface Ctx {
   waitUntil(p: Promise<unknown>): void;
 }
 
-export const USED_UP_MESSAGE = "Your free AI credits are used up. Add your own AI key to keep building.";
+export const USED_UP_MESSAGE =
+  "Your free AI credits for this week are used up. More arrive on Monday, or add your own AI key to keep building.";
 export const UNAVAILABLE_MESSAGE = "Free AI isn't available right now. You can add your own AI key.";
 export const EXPIRED_MESSAGE = "This free AI pass has expired. Send your message again to continue.";
 export const BUSY_MESSAGE = "Free AI is busy right now. Try again in a minute.";
@@ -78,9 +79,11 @@ export default {
         : aiError(403, "This free AI token isn't valid.", "free-ai-token-invalid");
     }
 
-    const remaining = await remainingTokens(env, token);
-    if (remaining === null) return aiError(503, UNAVAILABLE_MESSAGE, "free-ai-unavailable");
-    if (remaining <= 0) return aiError(429, USED_UP_MESSAGE, "free-ai-used-up");
+    const allowance = await checkAllowance(env, token);
+    if (allowance === null) return aiError(503, UNAVAILABLE_MESSAGE, "free-ai-unavailable");
+    if (allowance.remainingTokens <= 0) {
+      return aiError(429, allowance.message ?? USED_UP_MESSAGE, allowance.code ?? "free-ai-used-up");
+    }
 
     let raw: unknown;
     try {
@@ -162,8 +165,15 @@ function comUrl(env: Env, path: string): string {
   return `${env.COM_BASE_URL.replace(/\/$/, "")}${path}`;
 }
 
-/** The account's remaining free tokens, or null when `.com` can't say (fail closed). */
-async function remainingTokens(env: Env, token: string): Promise<number | null> {
+/**
+ * What `.com` says is left for the pass's account, with its reason when
+ * nothing is (used up, busy today, ended); null when `.com` can't say, which
+ * fails the call closed.
+ */
+async function checkAllowance(
+  env: Env,
+  token: string,
+): Promise<{ remainingTokens: number; code?: string; message?: string } | null> {
   try {
     const r = await fetch(comUrl(env, "/api/free-ai/allowance"), {
       method: "POST",
@@ -171,8 +181,13 @@ async function remainingTokens(env: Env, token: string): Promise<number | null> 
       body: JSON.stringify({ token }),
     });
     if (!r.ok) return null;
-    const b = (await r.json()) as { remainingTokens?: unknown };
-    return typeof b.remainingTokens === "number" ? b.remainingTokens : null;
+    const b = (await r.json()) as { remainingTokens?: unknown; code?: unknown; message?: unknown };
+    if (typeof b.remainingTokens !== "number") return null;
+    return {
+      remainingTokens: b.remainingTokens,
+      ...(typeof b.code === "string" && b.code.startsWith("free-ai") ? { code: b.code } : {}),
+      ...(typeof b.message === "string" ? { message: b.message } : {}),
+    };
   } catch {
     return null;
   }

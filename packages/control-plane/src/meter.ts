@@ -11,6 +11,12 @@
 //   "egress"     bytes   month   free: throttle (the .services relay slows the
 //                                account to 256 kbit/s); paid: allow, billed
 //   "ai-tokens"  tokens  month   stop (no new AI-promo credential until reset)
+//   "ai-promo-week" / "ai-promo-starter" / "ai-promo-global" /
+//   "ai-promo-input" / "ai-promo-output": the free AI promotion's weekly
+//       top-up, one-time starter reserve, all-accounts daily cap and raw
+//       token counts. Their allowances come from `.com` config at call time
+//       (freeAiCredits.ts passes them as `deps.resources`); the entries here
+//       are the defaults.
 //
 // API (runtime-agnostic; Worker and tests alike):
 //   meterRecord(deps, account, resource, amount, need = 0) → MeterVerdict
@@ -38,6 +44,7 @@ import {
   type MeterVerdict as CoreVerdict,
 } from "@ibisllc/billing-metering";
 import type { MeterStorage, TierName, TierStorage } from "@flagship/storage";
+import type { MeterPlan, OverAllowancePolicy } from "@ibisllc/billing-metering";
 
 export {
   meterPeriodKey,
@@ -51,7 +58,22 @@ export {
 
 const GB = 1024 * 1024 * 1024;
 
-export type MeterResource = "egress" | "ai-tokens";
+export type MeterResource =
+  | "egress"
+  | "ai-tokens"
+  | "ai-promo-week"
+  | "ai-promo-starter"
+  | "ai-promo-global"
+  | "ai-promo-input"
+  | "ai-promo-output";
+
+/** Every tier gets the same plan (the promotion isn't tiered). */
+export function sameForEveryTier(allowance: number, over: OverAllowancePolicy): Record<TierName, MeterPlan> {
+  return { free: { allowance, over }, hobby: { allowance, over }, maker: { allowance, over } };
+}
+
+/** "Effectively unlimited": a counter that only records. */
+const RECORD_ONLY = Number.MAX_SAFE_INTEGER;
 
 export const METER_RESOURCES: Readonly<MeterCatalog<MeterResource, TierName>> = {
   // Free worst case = 25 GB × Fly egress (~$0.02/GB) ≈ $0.50/mo per account.
@@ -75,6 +97,13 @@ export const METER_RESOURCES: Readonly<MeterCatalog<MeterResource, TierName>> = 
       maker: { allowance: 20_000_000, over: "stop" },
     },
   },
+  // Weighted tokens (input × input weight + output × output weight).
+  "ai-promo-week": { unit: "tokens", period: "week", plans: sameForEveryTier(500_000, "stop") },
+  "ai-promo-starter": { unit: "tokens", period: "lifetime", plans: sameForEveryTier(2_000_000, "stop") },
+  // One counter for every account (account id "*").
+  "ai-promo-global": { unit: "tokens", period: "day", plans: sameForEveryTier(50_000_000, "stop") },
+  "ai-promo-input": { unit: "tokens", period: "month", plans: sameForEveryTier(RECORD_ONLY, "allow") },
+  "ai-promo-output": { unit: "tokens", period: "month", plans: sameForEveryTier(RECORD_ONLY, "allow") },
 };
 
 export interface MeterDeps {

@@ -167,8 +167,8 @@ import {
   handleFreeAiAllowance,
   handleFreeAiStatus,
   handleFreeAiToken,
-  parseFreeAiAllowance,
-  promoStorageLedger,
+  freeAiConfigFromEnv,
+  recordFreeAiUsage,
   type FreeAiDeps,
   parseBlessedInferenceEndpoint,
   mintScopedInferenceToken,
@@ -332,10 +332,17 @@ export interface ControlPlaneEnv {
   FLAGSHIP_INFERENCE_TOKEN_SECRET?: string;
 
   /**
-   * Free AI tokens (input + output) per account, as a whole number. Unset ⇒
-   * `FREE_AI_TOKENS_DEFAULT`; "0" turns free AI off. A plain var.
+   * The free AI promotion's numbers (plain vars, all optional; see
+   * `freeAiConfigFromEnv`): starter reserve, weekly top-up and the
+   * all-accounts daily cap in weighted tokens, the input/output weights, and
+   * an end date (ISO 8601 or epoch ms) after which free AI stops.
    */
-  FLAGSHIP_FREE_AI_TOKENS?: string;
+  AI_PROMO_STARTER_TOKENS?: string;
+  AI_PROMO_WEEKLY_TOKENS?: string;
+  AI_PROMO_DAILY_CAP_TOKENS?: string;
+  AI_PROMO_INPUT_WEIGHT?: string;
+  AI_PROMO_OUTPUT_WEIGHT?: string;
+  AI_PROMO_ENDS_AT?: string;
 
   /**
    * Shared bearer secret for the dedicated boot worker's NOTIFY PIPE
@@ -3088,10 +3095,13 @@ export async function tryControlPlane(
   ) {
     const freeAi: FreeAiDeps = {
       usernames: storage.usernames,
-      ledger: promoStorageLedger(storage.llmPromo),
+      servers: storage.servers,
+      daemonStatus: storage.daemonStatus,
+      meter: new D1MeterStorage(env.DB),
+      tiers: storage.tiers,
       endpoint: parseBlessedInferenceEndpoint(env.FLAGSHIP_INFERENCE_ENDPOINT),
       tokenSecret: env.FLAGSHIP_INFERENCE_TOKEN_SECRET,
-      allowanceTokens: parseFreeAiAllowance(env.FLAGSHIP_FREE_AI_TOKENS),
+      config: freeAiConfigFromEnv(env),
     };
     const body = await readJson(request);
     if (ROUTE_RE.FREE_AI_TOKEN.test(path)) return finish(await handleFreeAiToken(freeAi, body));
@@ -3176,20 +3186,33 @@ export async function tryControlPlane(
     if (!inferenceSecret) {
       return finishPlain({ status: 503, body: { error: "in-house inference not configured" } });
     }
-    return finish(
-      await handleLlmPromoUsage(
-        {
-          llmPromo: storage.llmPromo,
-          meter: new D1MeterStorage(env.DB),
-          tiers: storage.tiers,
-          verifyToken: async (token) => {
-            const v = await verifyScopedInferenceToken(token, inferenceSecret);
-            return v.ok ? { ok: true, username: v.claims.username } : { ok: false };
-          },
+    const usageBody = (await readJson(request)) as { inputTokens?: number; outputTokens?: number } | undefined;
+    const meter = new D1MeterStorage(env.DB);
+    let reportedFor: string | null = null;
+    const res = await handleLlmPromoUsage(
+      {
+        llmPromo: storage.llmPromo,
+        meter,
+        tiers: storage.tiers,
+        verifyToken: async (token) => {
+          const v = await verifyScopedInferenceToken(token, inferenceSecret);
+          if (v.ok) reportedFor = v.claims.username;
+          return v.ok ? { ok: true, username: v.claims.username } : { ok: false };
         },
-        await readJson(request),
-      ),
+      },
+      usageBody,
     );
+    // The same report also charges the free AI promotion (weekly top-up,
+    // then starter reserve, plus the all-accounts daily counter).
+    if (res.status === 200 && reportedFor && usageBody) {
+      await recordFreeAiUsage(
+        { meter, tiers: storage.tiers, config: freeAiConfigFromEnv(env) },
+        reportedFor,
+        usageBody.inputTokens ?? 0,
+        usageBody.outputTokens ?? 0,
+      );
+    }
+    return finish(res);
   }
 
   // ── Entitlement revocation lists (N12c) ───────────────────────

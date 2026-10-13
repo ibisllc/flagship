@@ -11,6 +11,7 @@ import { createSqliteD1 } from "../../../packages/storage/tests/support/sqliteD1
 import { deriveIRK, signLlmPromoIssue, type LlmPromoIssueRequest } from "@flagship/protocol";
 
 const ORIGIN = "https://flagshipserver.com";
+const BOX = "home.alice.flagship.services";
 const irk = deriveIRK({ seed: new Uint8Array(32).fill(5) });
 const hex = (b: Uint8Array) => [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
 
@@ -18,11 +19,21 @@ async function setup(vars: Partial<ControlPlaneEnv> = {}) {
   const sqlite = createSqliteD1();
   const storage = new D1Storage(sqlite as unknown as D1Database);
   await storage.usernames.put({ username: "alice", irkPubHex: hex(irk.publicKey), claimedAt: 1 });
+  await storage.servers.put({ serverDomain: BOX, username: "alice", identityPubKeyHex: "00", registeredAt: 1 });
+  await storage.daemonStatus.put({
+    serverDomain: BOX,
+    certSha256: null,
+    certValidUntil: null,
+    certIssuer: null,
+    servicesServedJson: "[]",
+    lastReported: Date.now(),
+  });
   const env: ControlPlaneEnv = {
     DB: sqlite as unknown as D1Database,
     FLAGSHIP_INFERENCE_ENDPOINT: JSON.stringify({ baseUrl: "https://inference.example.test", model: "flagship-free" }),
     FLAGSHIP_INFERENCE_TOKEN_SECRET: "route-secret",
-    FLAGSHIP_FREE_AI_TOKENS: "1000",
+    AI_PROMO_WEEKLY_TOKENS: "400",
+    AI_PROMO_STARTER_TOKENS: "600",
     ...vars,
   };
   return { env, close: () => sqlite.close() };
@@ -49,7 +60,7 @@ async function post(env: ControlPlaneEnv, path: string, body: unknown) {
 }
 
 describe("free AI routes", () => {
-  it("mints, meters through the shim's endpoints, and stops at the allowance", async () => {
+  it("mints, meters through the shim's endpoints (week first, output weighted), and stops at the allowance", async () => {
     const { env, close } = await setup();
     try {
       const minted = await post(env, "/api/free-ai/token", signedBody());
@@ -59,20 +70,35 @@ describe("free AI routes", () => {
       const allowance = await post(env, "/api/free-ai/allowance", { token });
       expect(allowance.body).toMatchObject({ ok: true, remainingTokens: 1000 });
 
-      const usage = await post(env, "/api/llm-promo/usage", { token, inputTokens: 600, outputTokens: 150 });
-      expect(usage.status).toBe(200);
-
+      // 100 in + 50 out × 4 = 300 weighted, all from this week's 400.
+      expect((await post(env, "/api/llm-promo/usage", { token, inputTokens: 100, outputTokens: 50 })).status).toBe(200);
       const status = await post(env, "/api/free-ai/status", signedBody());
-      expect(status.body).toEqual({
+      expect(status.body).toMatchObject({
         available: true,
-        credits: { usedTokens: 750, allowanceTokens: 1000, remainingTokens: 250 },
+        reason: null,
+        credits: { week: { used: 300, remaining: 100 }, starter: { used: 0, remaining: 600 }, remainingTokens: 700 },
       });
 
-      await post(env, "/api/llm-promo/usage", { token, inputTokens: 250, outputTokens: 0 });
+      await post(env, "/api/llm-promo/usage", { token, inputTokens: 700, outputTokens: 0 });
       const spent = await post(env, "/api/free-ai/token", signedBody());
       expect(spent.status).toBe(429);
       expect(spent.body.code).toBe("free-ai-used-up");
-      expect((await post(env, "/api/free-ai/allowance", { token })).body).toMatchObject({ remainingTokens: 0 });
+      expect((await post(env, "/api/free-ai/allowance", { token })).body).toMatchObject({
+        remainingTokens: 0,
+        code: "free-ai-used-up",
+      });
+    } finally {
+      close();
+    }
+  });
+
+  it("stops after the end date and tells the apps it has ended", async () => {
+    const { env, close } = await setup({ AI_PROMO_ENDS_AT: "2020-01-01T00:00:00Z" });
+    try {
+      const r = await post(env, "/api/free-ai/token", signedBody());
+      expect(r.status).toBe(410);
+      expect(r.body.code).toBe("free-ai-ended");
+      expect((await post(env, "/api/free-ai/status", signedBody())).body).toMatchObject({ available: false, ended: true });
     } finally {
       close();
     }

@@ -1,101 +1,247 @@
 /**
- * Free AI credits — the launch path for building apps without your own AI
- * key (docs/build-modes.md "Free AI credits").
+ * Free AI credits — "for a limited time, building your apps is free on
+ * Flagship" (docs/build-modes.md "Free AI credits").
  *
  * The phone or webapp signs a `flagship/llm-promo-issue/v1` request
- * (provider "flagship") and `.com` answers with a short-lived scoped token
- * for the metering shim (infra/inference/shim), the only place the model is
- * reached. The box gets that token as an ordinary `source:"promo"`
- * credential and calls the shim through the hub relay; the shim checks the
- * account's allowance here before each call and reports true usage to
- * `/api/llm-promo/usage` after it.
+ * (provider "flagship") and `.com` answers with a short-lived scoped pass for
+ * the metering shim (infra/inference/shim), the only place the model is
+ * reached. The box gets that pass as an ordinary `source:"promo"` credential
+ * and calls the shim through the hub relay; the shim checks the account here
+ * before each call and reports true usage to `/api/llm-promo/usage`, which
+ * records it through {@link recordFreeAiUsage}.
  *
- * Minting records nothing: only metered usage counts against the
- * allowance, so clients can mint a fresh token for every build and reply.
- * The allowance is read through {@link AiCreditsLedger}, the one seam the
- * shared metering core ("ai-tokens") replaces when it lands; until then it
- * reads the metered totals `handleLlmPromoUsage` already records.
+ * The allowance, all counted on the metering core (meter.ts):
+ *   - a weekly top-up ("ai-promo-week", resets Monday 00:00 UTC, the rest
+ *     doesn't carry over), spent first;
+ *   - a one-time starter reserve ("ai-promo-starter"), spent after it;
+ *   - only while the account has a registered server that reported in the
+ *     last day, so a farm of accounts without boxes gets nothing;
+ *   - a cap on every account's use together per UTC day ("ai-promo-global"),
+ *     so the promotion can't cost more than a set amount a day;
+ *   - until an optional end date.
+ * Tokens are weighted (an output token costs more to serve); raw input and
+ * output are recorded too ("ai-promo-input"/"ai-promo-output"). All numbers
+ * are `.com` config ({@link freeAiConfigFromEnv}). Minting records nothing,
+ * so the apps mint a fresh pass for every build start and reply.
  */
 
 import { verifyLlmPromoIssue, type LlmPromoIssueRequest } from "@flagship/protocol";
-import type { LlmPromoStorage, UsernameStorage } from "@flagship/storage";
+import type {
+  DaemonStatusStorage,
+  MeterStorage,
+  ServerStorage,
+  TierStorage,
+  UsernameStorage,
+} from "@flagship/storage";
 import { hexToBytes } from "./hex.js";
 import type { InferenceEndpoint } from "./inferenceEndpoint.js";
 import { mintScopedInferenceToken, verifyScopedInferenceToken } from "./inferenceToken.js";
+import { meterCheck, meterRecord, sameForEveryTier, type MeterDeps, type MeterResource } from "./meter.js";
 import { forbidden, malformed, notFound, type HandlerResponse } from "./types.js";
 
-/** Tokens (input + output) each account may use for free. */
-export const FREE_AI_TOKENS_DEFAULT = 1_000_000;
-
-/** How long a minted token works. Clients mint a fresh one per send. */
+/** How long a minted pass works. The apps mint a fresh one per send. */
 export const FREE_AI_TOKEN_TTL_MS = 12 * 60 * 60_000;
 
-export const FREE_AI_USED_UP_MESSAGE =
-  "Your free AI credits are used up. Add your own AI key to keep building.";
-export const FREE_AI_UNAVAILABLE_MESSAGE =
-  "Free AI isn't available right now. You can add your own AI key.";
+/** A server counts as running when it reported in this long ago or less. */
+export const SERVER_SEEN_WINDOW_MS = 24 * 60 * 60_000;
+
+/** The account id of the all-accounts daily counter. */
+const GLOBAL_ACCOUNT = "*";
+
+export const FREE_AI_MESSAGES = {
+  usedUp: "Your free AI credits for this week are used up. More arrive on Monday, or add your own AI key to keep building.",
+  busyToday: "Free building is busy today. Try again tomorrow, or use your own AI key.",
+  ended: "The free building period has ended — use your own AI key.",
+  noServer: "Free AI credits start once one of your servers is running.",
+  unavailable: "Free AI isn't available right now. You can add your own AI key.",
+} as const;
+
+export interface FreeAiConfig {
+  /** One-time reserve per account, in weighted tokens. */
+  starterTokens: number;
+  /** Top-up each ISO week, in weighted tokens; doesn't accumulate. */
+  weeklyTokens: number;
+  /** Every account together, per UTC day, in weighted tokens. */
+  dailyCapTokens: number;
+  /** Weighted tokens = input × inputWeight + output × outputWeight. */
+  inputWeight: number;
+  outputWeight: number;
+  /** After this (ms), nothing new is issued and the apps hide free AI. */
+  endsAt: number | null;
+}
+
+export const FREE_AI_DEFAULTS: FreeAiConfig = {
+  starterTokens: 2_000_000,
+  weeklyTokens: 500_000,
+  dailyCapTokens: 50_000_000,
+  inputWeight: 1,
+  outputWeight: 4,
+  endsAt: null,
+};
+
+function wholeOr(raw: string | undefined, fallback: number): number {
+  if (raw === undefined || raw.trim() === "") return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : fallback;
+}
+
+function weightOr(raw: string | undefined, fallback: number): number {
+  if (raw === undefined || raw.trim() === "") return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
+/** ISO 8601 date/time or epoch ms; anything else ⇒ no end date. */
+function dateOrNull(raw: string | undefined): number | null {
+  if (raw === undefined || raw.trim() === "") return null;
+  const t = raw.trim();
+  const ms = /^\d+$/.test(t) ? Number(t) : Date.parse(t);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+/**
+ * The promotion's numbers from `.com` env vars, each optional:
+ *   AI_PROMO_STARTER_TOKENS   (default 2,000,000)
+ *   AI_PROMO_WEEKLY_TOKENS    (default 500,000)
+ *   AI_PROMO_DAILY_CAP_TOKENS (default 50,000,000, all accounts together)
+ *   AI_PROMO_INPUT_WEIGHT     (default 1)
+ *   AI_PROMO_OUTPUT_WEIGHT    (default 4)
+ *   AI_PROMO_ENDS_AT          (ISO 8601 or epoch ms; unset ⇒ no end date)
+ * A malformed value falls back to its default rather than breaking the promo.
+ */
+export function freeAiConfigFromEnv(env: Record<string, string | undefined>): FreeAiConfig {
+  return {
+    starterTokens: wholeOr(env.AI_PROMO_STARTER_TOKENS, FREE_AI_DEFAULTS.starterTokens),
+    weeklyTokens: wholeOr(env.AI_PROMO_WEEKLY_TOKENS, FREE_AI_DEFAULTS.weeklyTokens),
+    dailyCapTokens: wholeOr(env.AI_PROMO_DAILY_CAP_TOKENS, FREE_AI_DEFAULTS.dailyCapTokens),
+    inputWeight: weightOr(env.AI_PROMO_INPUT_WEIGHT, FREE_AI_DEFAULTS.inputWeight),
+    outputWeight: weightOr(env.AI_PROMO_OUTPUT_WEIGHT, FREE_AI_DEFAULTS.outputWeight),
+    endsAt: dateOrNull(env.AI_PROMO_ENDS_AT),
+  };
+}
+
+/** Weighted tokens for a usage report (rounded up). */
+export function weightedTokens(cfg: FreeAiConfig, inputTokens: number, outputTokens: number): number {
+  return Math.ceil(Math.max(0, inputTokens) * cfg.inputWeight + Math.max(0, outputTokens) * cfg.outputWeight);
+}
 
 export interface AiCredits {
+  week: { used: number; allowance: number; remaining: number; resetsAt: number | null };
+  starter: { used: number; allowance: number; remaining: number };
+  /** Totals across both, as the first apps read them. */
   usedTokens: number;
   allowanceTokens: number;
   remainingTokens: number;
 }
 
-/** Where the account's AI-token use is read from. */
-export interface AiCreditsLedger {
-  usedTokens(username: string): Promise<number>;
+/** Why free AI can't be used right now (null: it can, while credits remain). */
+export type FreeAiBlock = "unconfigured" | "ended" | "no-server" | "busy-today" | null;
+
+export interface FreeAiDeps {
+  usernames: UsernameStorage;
+  servers: ServerStorage;
+  daemonStatus: DaemonStatusStorage;
+  meter: MeterStorage;
+  tiers: TierStorage;
+  /** Null when the endpoint or the token secret isn't configured. */
+  endpoint: InferenceEndpoint | null;
+  tokenSecret: string | undefined;
+  config?: FreeAiConfig;
+  freshnessMs?: number;
+  now?: () => number;
+  /** Test seam for the pass's key id. */
+  newKeyId?: () => string;
 }
 
-/** The ledger over the metered totals in `llm_promo_lifetime`. */
-export function promoStorageLedger(storage: LlmPromoStorage): AiCreditsLedger {
+type MeterSide = Pick<FreeAiDeps, "meter" | "tiers" | "config" | "now">;
+
+function cfgOf(deps: { config?: FreeAiConfig }): FreeAiConfig {
+  return deps.config ?? FREE_AI_DEFAULTS;
+}
+
+function nowOf(deps: { now?: () => number }): number {
+  return (deps.now ?? (() => Date.now()))();
+}
+
+function meterDeps(deps: MeterSide): MeterDeps {
+  const cfg = cfgOf(deps);
   return {
-    async usedTokens(username) {
-      const rec = await storage.getLifetime(username);
-      return (rec?.lifetimeInputTokens ?? 0) + (rec?.lifetimeOutputTokens ?? 0);
+    meter: deps.meter,
+    tiers: deps.tiers,
+    now: deps.now,
+    resources: {
+      "ai-promo-week": { unit: "tokens", period: "week", plans: sameForEveryTier(cfg.weeklyTokens, "stop") },
+      "ai-promo-starter": { unit: "tokens", period: "lifetime", plans: sameForEveryTier(cfg.starterTokens, "stop") },
+      "ai-promo-global": { unit: "tokens", period: "day", plans: sameForEveryTier(cfg.dailyCapTokens, "stop") },
     },
   };
 }
 
-/** Parse `FLAGSHIP_FREE_AI_TOKENS`; absent or invalid ⇒ the default. "0" turns free AI off. */
-export function parseFreeAiAllowance(raw: string | undefined): number {
-  if (raw === undefined || raw.trim() === "") return FREE_AI_TOKENS_DEFAULT;
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n < 0) return FREE_AI_TOKENS_DEFAULT;
-  return Math.floor(n);
+function check(deps: MeterSide, account: string, r: MeterResource) {
+  return meterCheck(meterDeps(deps), account, r);
 }
 
-export interface FreeAiDeps {
-  usernames: UsernameStorage;
-  ledger: AiCreditsLedger;
-  /** Null when the endpoint or the token secret isn't configured. */
-  endpoint: InferenceEndpoint | null;
-  tokenSecret: string | undefined;
-  allowanceTokens?: number;
-  freshnessMs?: number;
-  now?: () => number;
-  /** Test seam for the token's key id. */
-  newKeyId?: () => string;
+/** The account's weekly and starter credits right now. */
+export async function freeAiCredits(deps: MeterSide, username: string): Promise<AiCredits> {
+  const week = await check(deps, username, "ai-promo-week");
+  const starter = await check(deps, username, "ai-promo-starter");
+  return {
+    week: { used: week.used, allowance: week.allowance, remaining: week.remaining, resetsAt: week.resetsAt },
+    starter: { used: starter.used, allowance: starter.allowance, remaining: starter.remaining },
+    usedTokens: week.used + starter.used,
+    allowanceTokens: week.allowance + starter.allowance,
+    remainingTokens: week.remaining + starter.remaining,
+  };
 }
+
+/** Has every account together used today's cap? */
+async function busyToday(deps: MeterSide): Promise<boolean> {
+  return (await check(deps, GLOBAL_ACCOUNT, "ai-promo-global")).remaining <= 0;
+}
+
+function ended(deps: { config?: FreeAiConfig; now?: () => number }): boolean {
+  const endsAt = cfgOf(deps).endsAt;
+  return endsAt !== null && nowOf(deps) >= endsAt;
+}
+
+/** A registered, unrevoked server of the account reported in recently. */
+export async function hasRunningServer(
+  deps: Pick<FreeAiDeps, "servers" | "daemonStatus" | "now">,
+  username: string,
+): Promise<boolean> {
+  const since = nowOf(deps) - SERVER_SEEN_WINDOW_MS;
+  for (const s of await deps.servers.listForUser(username)) {
+    if (s.revokedAt !== undefined) continue;
+    const st = await deps.daemonStatus.get(s.serverDomain);
+    if (st && st.lastReported >= since) return true;
+  }
+  return false;
+}
+
+async function blockFor(deps: FreeAiDeps, username: string): Promise<FreeAiBlock> {
+  if (!deps.endpoint || !deps.tokenSecret) return "unconfigured";
+  if (ended(deps)) return "ended";
+  if (!(await hasRunningServer(deps, username))) return "no-server";
+  if (await busyToday(deps)) return "busy-today";
+  return null;
+}
+
+const BLOCK_REPLY: Record<Exclude<FreeAiBlock, null>, { status: number; code: string; message: string }> = {
+  unconfigured: { status: 503, code: "free-ai-unavailable", message: FREE_AI_MESSAGES.unavailable },
+  ended: { status: 410, code: "free-ai-ended", message: FREE_AI_MESSAGES.ended },
+  "no-server": { status: 403, code: "free-ai-no-server", message: FREE_AI_MESSAGES.noServer },
+  "busy-today": { status: 429, code: "free-ai-busy-today", message: FREE_AI_MESSAGES.busyToday },
+};
 
 interface SignedBody {
   request?: Partial<LlmPromoIssueRequest>;
   signature?: unknown;
 }
 
-async function creditsFor(deps: FreeAiDeps, username: string): Promise<AiCredits> {
-  const allowanceTokens = deps.allowanceTokens ?? FREE_AI_TOKENS_DEFAULT;
-  const usedTokens = Math.max(0, await deps.ledger.usedTokens(username));
-  return { usedTokens, allowanceTokens, remainingTokens: Math.max(0, allowanceTokens - usedTokens) };
-}
-
-function available(deps: FreeAiDeps): boolean {
-  return !!deps.endpoint && !!deps.tokenSecret && (deps.allowanceTokens ?? FREE_AI_TOKENS_DEFAULT) > 0;
-}
-
 /**
- * Check a signed free-AI request: well-formed, provider "flagship", signed
- * by the account's AID or IRK (the dual-accept every account-signed `.com`
- * call uses), and fresh. Returns the normalised username or an error.
+ * Check a signed free-AI request: well-formed, provider "flagship", signed by
+ * the account's AID or IRK (the dual-accept every account-signed `.com` call
+ * uses), and fresh. Returns the lowercased username or an error.
  */
 async function authenticate(
   deps: FreeAiDeps,
@@ -140,26 +286,42 @@ async function authenticate(
     }
   });
   if (!signed) return { ok: false, res: forbidden("invalid signature") };
-  const now = (deps.now ?? (() => Date.now()))();
-  if (Math.abs(now - r.issuedAt) > (deps.freshnessMs ?? 5 * 60_000)) {
+  if (Math.abs(nowOf(deps) - r.issuedAt) > (deps.freshnessMs ?? 5 * 60_000)) {
     return { ok: false, res: forbidden("stale request") };
   }
   return { ok: true, username: r.username.toLowerCase() };
 }
 
-/** `POST /api/free-ai/status` — the account's free AI credits. */
+/**
+ * `POST /api/free-ai/status` — what the apps show. `available` is false when
+ * free AI isn't configured or has ended (`ended: true`: the apps hide it);
+ * `reason` names what stops it right now ("no-server", "busy-today"), with
+ * `message` to show.
+ */
 export async function handleFreeAiStatus(
   deps: FreeAiDeps,
   body: SignedBody | undefined,
 ): Promise<HandlerResponse> {
   const auth = await authenticate(deps, body);
   if (!auth.ok) return auth.res;
-  return { status: 200, body: { available: available(deps), credits: await creditsFor(deps, auth.username) } };
+  const block = await blockFor(deps, auth.username);
+  const credits = await freeAiCredits(deps, auth.username);
+  const available = block !== "unconfigured" && block !== "ended";
+  return {
+    status: 200,
+    body: {
+      available,
+      ended: block === "ended",
+      reason: available ? block : null,
+      ...(block ? { message: BLOCK_REPLY[block].message } : {}),
+      credits,
+    },
+  };
 }
 
 /**
- * `POST /api/free-ai/token` — a credential the box can build with. Nothing
- * is counted here; the shim meters what the token is actually used for.
+ * `POST /api/free-ai/token` — a pass the box can build with. Nothing is
+ * counted here; the shim meters what it's actually used for.
  */
 export async function handleFreeAiToken(
   deps: FreeAiDeps,
@@ -167,18 +329,22 @@ export async function handleFreeAiToken(
 ): Promise<HandlerResponse> {
   const auth = await authenticate(deps, body);
   if (!auth.ok) return auth.res;
-  if (!available(deps) || !deps.endpoint || !deps.tokenSecret) {
-    return { status: 503, body: { error: FREE_AI_UNAVAILABLE_MESSAGE, code: "free-ai-unavailable" } };
+  const block = await blockFor(deps, auth.username);
+  if (block) {
+    const b = BLOCK_REPLY[block];
+    return { status: b.status, body: { error: b.message, code: b.code } };
   }
-  const credits = await creditsFor(deps, auth.username);
+  const credits = await freeAiCredits(deps, auth.username);
   if (credits.remainingTokens <= 0) {
-    return { status: 429, body: { error: FREE_AI_USED_UP_MESSAGE, code: "free-ai-used-up", credits } };
+    return { status: 429, body: { error: FREE_AI_MESSAGES.usedUp, code: "free-ai-used-up", credits } };
   }
-  const now = (deps.now ?? (() => Date.now()))();
-  const expiresAt = now + FREE_AI_TOKEN_TTL_MS;
+  const endpoint = deps.endpoint!;
+  const now = nowOf(deps);
+  const endsAt = cfgOf(deps).endsAt;
+  const expiresAt = Math.min(now + FREE_AI_TOKEN_TTL_MS, endsAt ?? Number.POSITIVE_INFINITY);
   const keyId = deps.newKeyId?.() ?? `fa-${crypto.randomUUID()}`;
   // The per-token caps are what an older shim enforces on its own; the
-  // account allowance the shim checks before each call is the real limit.
+  // allowance the shim checks before each call is the real limit.
   const apiKey = await mintScopedInferenceToken(
     {
       username: auth.username,
@@ -188,20 +354,14 @@ export async function handleFreeAiToken(
       dailyInputTokenCap: credits.remainingTokens,
       dailyOutputTokenCap: credits.remainingTokens,
     },
-    deps.tokenSecret,
+    deps.tokenSecret!,
   );
   return {
     status: 200,
     body: {
       ok: true,
-      credential: {
-        provider: "flagship",
-        apiKey,
-        baseUrl: deps.endpoint.baseUrl,
-        source: "promo",
-        relay: true,
-      },
-      model: deps.endpoint.model,
+      credential: { provider: "flagship", apiKey, baseUrl: endpoint.baseUrl, source: "promo", relay: true },
+      model: endpoint.model,
       expiresAt,
       credits,
     },
@@ -209,24 +369,59 @@ export async function handleFreeAiToken(
 }
 
 /**
- * `POST /api/free-ai/allowance` — the shim's check before each model call.
- * Authenticated by the token itself (only `.com` can mint one).
+ * `POST /api/free-ai/allowance` — the shim's check before each model call,
+ * authenticated by the pass itself (only `.com` can mint one). A refusal
+ * carries the `code` and `message` the shim hands the box.
  */
 export async function handleFreeAiAllowance(
-  deps: Pick<FreeAiDeps, "ledger" | "tokenSecret" | "allowanceTokens" | "now">,
+  deps: Pick<FreeAiDeps, "meter" | "tiers" | "tokenSecret" | "config" | "now">,
   body: { token?: unknown } | undefined,
 ): Promise<HandlerResponse> {
   if (!deps.tokenSecret) {
-    return { status: 503, body: { error: FREE_AI_UNAVAILABLE_MESSAGE, code: "free-ai-unavailable" } };
+    return { status: 503, body: { error: FREE_AI_MESSAGES.unavailable, code: "free-ai-unavailable" } };
   }
   if (!body || typeof body.token !== "string") return malformed("malformed body");
-  const now = (deps.now ?? (() => Date.now()))();
-  const v = await verifyScopedInferenceToken(body.token, deps.tokenSecret, now);
+  const v = await verifyScopedInferenceToken(body.token, deps.tokenSecret, nowOf(deps));
   if (!v.ok) return forbidden("invalid inference token");
-  const allowanceTokens = deps.allowanceTokens ?? FREE_AI_TOKENS_DEFAULT;
-  const usedTokens = Math.max(0, await deps.ledger.usedTokens(v.claims.username));
+  const credits = await freeAiCredits(deps, v.claims.username);
+  const stop = ended(deps)
+    ? { code: "free-ai-ended", message: FREE_AI_MESSAGES.ended }
+    : (await busyToday(deps))
+      ? { code: "free-ai-busy-today", message: FREE_AI_MESSAGES.busyToday }
+      : credits.remainingTokens <= 0
+        ? { code: "free-ai-used-up", message: FREE_AI_MESSAGES.usedUp }
+        : null;
   return {
     status: 200,
-    body: { ok: true, remainingTokens: Math.max(0, allowanceTokens - usedTokens), allowanceTokens },
+    body: {
+      ok: true,
+      remainingTokens: stop ? 0 : credits.remainingTokens,
+      allowanceTokens: credits.allowanceTokens,
+      ...(stop ?? {}),
+    },
   };
+}
+
+/**
+ * Charge a usage report from the shim: raw input and output are recorded as
+ * they are; the weighted total comes out of this week's top-up first, then
+ * the starter reserve, and is added to the all-accounts daily counter.
+ */
+export async function recordFreeAiUsage(
+  deps: MeterSide,
+  username: string,
+  inputTokens: number,
+  outputTokens: number,
+): Promise<AiCredits> {
+  const md = meterDeps(deps);
+  const account = username.toLowerCase();
+  await meterRecord(md, account, "ai-promo-input", Math.max(0, Math.floor(inputTokens)));
+  await meterRecord(md, account, "ai-promo-output", Math.max(0, Math.floor(outputTokens)));
+  const weighted = weightedTokens(cfgOf(deps), inputTokens, outputTokens);
+  const week = await meterCheck(md, account, "ai-promo-week");
+  const fromWeek = Math.min(weighted, week.remaining);
+  if (fromWeek > 0) await meterRecord(md, account, "ai-promo-week", fromWeek);
+  if (weighted > fromWeek) await meterRecord(md, account, "ai-promo-starter", weighted - fromWeek);
+  await meterRecord(md, GLOBAL_ACCOUNT, "ai-promo-global", weighted);
+  return freeAiCredits(deps, account);
 }

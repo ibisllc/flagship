@@ -83,38 +83,60 @@ well-behaved author avoid building something the harness would reject.
 
 ## Free AI credits
 
-An owner can build with AI before bringing a key of their own. Every account
-gets an allowance of model tokens (`FLAGSHIP_FREE_AI_TOKENS` on `.com`,
-default 1,000,000, input + output; `0` turns it off).
+"For a limited time, building your apps is free on Flagship." Free AI is a
+launch promotion, not forever (later, tokens are bought from us). An owner
+can build with AI before bringing a key of their own.
+
+**The allowance** (all `.com` vars, each optional; numbers are *weighted*
+tokens, input × `AI_PROMO_INPUT_WEIGHT` + output × `AI_PROMO_OUTPUT_WEIGHT`,
+default 1 and 4, since output costs more to serve):
+
+| var | default | meaning |
+|---|---|---|
+| `AI_PROMO_WEEKLY_TOKENS` | 500,000 | top-up each ISO week (Monday 00:00 UTC); the rest doesn't carry over; spent first |
+| `AI_PROMO_STARTER_TOKENS` | 2,000,000 | one-time reserve per account, spent after the week's |
+| `AI_PROMO_DAILY_CAP_TOKENS` | 50,000,000 | every account together per UTC day; past it nobody gets new passes or calls until tomorrow ("Free building is busy today…") |
+| `AI_PROMO_INPUT_WEIGHT` / `AI_PROMO_OUTPUT_WEIGHT` | 1 / 4 | the weights |
+| `AI_PROMO_ENDS_AT` | none | ISO 8601 or epoch ms; after it nothing is issued ("The free building period has ended — use your own AI key") and the apps hide free AI |
+
+Only an account with a registered, unrevoked server that reported to `.com`
+in the last 24 hours gets free AI ("Free AI credits start once one of your
+servers is running"), so creating accounts without boxes gets nothing.
+Counted on the metering core (`packages/control-plane/src/meter.ts`):
+`ai-promo-week` (week), `ai-promo-starter` (lifetime), `ai-promo-global`
+(day, account `*`), and raw `ai-promo-input` / `ai-promo-output` (month).
 
 - **Claim = sign.** The phone or webapp signs
   `flagship/llm-promo-issue/v1|username|serverFqdn|flagship|0|0|issuedAt` with
   the account IRK (vectors: `packages/protocol/test-vectors/llm-promo-issue/`)
   and posts it to `.com`: `POST /api/free-ai/status` →
-  `{available, credits:{usedTokens, allowanceTokens, remainingTokens}}`;
+  `{available, ended, reason: null|"no-server"|"busy-today", message?,
+  credits:{week:{used, allowance, remaining, resetsAt}, starter:{used,
+  allowance, remaining}, usedTokens, allowanceTokens, remainingTokens}}`;
   `POST /api/free-ai/token` → `{credential:{provider:"flagship", apiKey,
-  baseUrl, source:"promo", relay:true}, model, expiresAt, credits}`, or 429
-  `free-ai-used-up` / 503 `free-ai-unavailable` with the owner-facing message.
+  baseUrl, source:"promo", relay:true}, model, expiresAt, credits}`, or
+  `{error, code}`: 403 `free-ai-no-server`, 410 `free-ai-ended`, 429
+  `free-ai-busy-today` / `free-ai-used-up`, 503 `free-ai-unavailable`.
   Minting records nothing (`packages/control-plane/src/freeAiCredits.ts`), so
-  apps mint a fresh 12-hour pass for every build start and every reply.
+  apps mint a fresh 12-hour pass (never past the end date) for every build
+  start and every reply.
 - **On by default.** The AI-key step lists "Free AI credits" first and is
-  skipped for an owner with no saved key; Settings shows "820k of 1M free AI
-  tokens left", and once they're spent, "You've used your free AI credits. Add
-  your own AI key to keep building." Nothing is sold, so there is no purchase
-  wording.
+  skipped for an owner with no saved key; Settings shows "This week: 340k of
+  500k left · Starter reserve: 1.2M", or why free AI can't be used now with a
+  way to add your own key. Nothing is sold, so there is no purchase wording.
 - **The box** treats the pass as any credential: sealed per session, sent
   through the hub relay, its SSRF guard pinned to the pass's host. Its default
   model for `flagship` is a placeholder the shim replaces, and a refusal from
   the shim reaches the owner in the shim's own words (`freeAiMessage`).
 - **The shim** (`infra/inference/shim`) is the only front door: it verifies
   the pass, asks `.com` (`POST /api/free-ai/allowance`) what's left and stops
-  at zero, rebuilds the request from an allowlist (no `user`, no message
-  names, no extras; the upstream's model id; capped output) and calls any
-  OpenAI-compatible upstream with only our key, then reports true usage (or
-  an estimate) to `POST /api/llm-promo/usage`. The upstream sees Cloudflare's
-  address and our account, never the box, the owner or their account name.
-- **Accounting** reads the metered totals through `AiCreditsLedger`; the
-  shared metering core ("ai-tokens") replaces that one seam when it lands.
+  with `.com`'s reason at zero, rebuilds the request from an allowlist (no
+  `user`, no message names, no extras; the upstream's model id; capped
+  output) and calls any OpenAI-compatible upstream with only our key, then
+  reports true input and output (or an estimate) to
+  `POST /api/llm-promo/usage`, which charges the promotion too. The upstream
+  sees Cloudflare's address and our account, never the box, the owner or
+  their account name.
 - Anthropic, OpenAI and Google can't mint per-user keys with a hard token
   cap, so `/api/llm-promo/issue` refuses them (410) instead of handing out a
   placeholder key; the phone-OTP claim (`apps/web/src/routes/llmPromo.ts`)

@@ -143,6 +143,18 @@ describe("free-AI shim", () => {
     expect(seen).toHaveLength(0);
   });
 
+  it("passes on .com's reason when it stops the call", async () => {
+    vi.stubGlobal("fetch", async () =>
+      new Response(
+        JSON.stringify({ ok: true, remainingTokens: 0, code: "free-ai-busy-today", message: "Free building is busy today." }),
+        { status: 200 },
+      ),
+    );
+    const { res } = await call({ messages: [{ role: "user", content: "x" }] }, await token());
+    expect(res.status).toBe(429);
+    expect(await res.json()).toEqual({ error: { message: "Free building is busy today.", code: "free-ai-busy-today" } });
+  });
+
   it("fails closed when .com can't answer the allowance check", async () => {
     vi.stubGlobal("fetch", async () => new Response("down", { status: 500 }));
     const { res } = await call({ messages: [{ role: "user", content: "x" }] }, await token());

@@ -43,9 +43,11 @@ No GPUs to run, pay per token. Choose a provider whose API:
 
 Serve an open coding model with tool calling (a Qwen-Coder-class model is
 what the build prompts were tuned against). Budget: an app build is roughly
-a few hundred thousand tokens, mostly input; at the default 1,000,000 tokens
-per account, the worst case per account is the provider's price for ~1M
-tokens. Set `FLAGSHIP_FREE_AI_TOKENS` on `.com` to change the allowance.
+a few hundred thousand tokens, mostly input. The allowance (weekly top-up,
+starter reserve, the output weight, an end date) is `.com` config (`AI_PROMO_*`,
+`docs/build-modes.md`), and `AI_PROMO_DAILY_CAP_TOKENS` (default 50M weighted
+tokens a day, every account together) bounds what the promotion can cost per
+day however it's abused.
 
 ## Owner steps
 
@@ -70,8 +72,9 @@ tokens. Set `FLAGSHIP_FREE_AI_TOKENS` on `.com` to change the allowance.
    cd ../.. && npx tsc -b && (cd apps/com && npm run deploy)
    ```
    `model` here is only a label (the shim pins the real one).
-4. Check: Settings in any app shows "1M of 1M free AI tokens left"; a build
-   with no saved key runs; Settings then shows fewer tokens left.
+4. Check, with a running server on the account: Settings in any app shows
+   "This week: 500k of 500k left · Starter reserve: 2M"; a build with no
+   saved key runs; Settings then shows less left this week.
 
 Pause everyone at once with `PAUSED = "1"` in the shim's vars (redeploy).
 Rotating the secret invalidates outstanding passes (≤ 12 h); set it on both.
