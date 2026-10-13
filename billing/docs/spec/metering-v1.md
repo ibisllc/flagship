@@ -79,7 +79,8 @@ host bug and throws.
 ## Storage
 
 A store implements `add` (atomic increment returning the new total) and
-`get`. The reference SQL (`packages/metering/schema/meter_counters.sql`)
+`get`, and optionally `addBatch` for idempotent batches
+(`schema/meter_batches.sql`; see report-and-lease-v1). The reference SQL (`packages/metering/schema/meter_counters.sql`)
 is one table keyed by `(account, resource, period)` with a single-statement
 upsert, portable across SQLite 3.35+ (including Cloudflare D1) and
 PostgreSQL. Amounts are 64-bit (a month of bytes exceeds 32).
@@ -87,7 +88,10 @@ PostgreSQL. Amounts are 64-bit (a month of bytes exceeds 32).
 ## Accuracy and failure
 
 The library assumes the host batches and reports usage; a report that is
-lost under-counts, and a counter is never decremented. Hosts should fail
+lost under-counts, and a counter is never decremented. A batch carrying an id
+is counted at most once, and central can answer each account with a budget
+lease the edge enforces until it reports again; both are specified in
+[report-and-lease-v1](./report-and-lease-v1.md). Hosts should fail
 open on a metering outage for `throttle` resources (serving at full speed
 beats cutting a user off) and decide for themselves for `stop` resources.
 A `stop` check before a grant cannot see usage not yet reported, so grants

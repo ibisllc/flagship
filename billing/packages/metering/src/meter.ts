@@ -179,3 +179,17 @@ export async function meterCheck<R extends string, P extends string>(
   const rec = await deps.store.get(account, resource, meterPeriodKey(spec.period, now));
   return judge(account, resource, spec, await deps.planOf(account, now), now, rec?.amount ?? 0, n);
 }
+
+/** Judge a total the caller already holds (a batch add's result) as of
+ *  `nowMs`, without touching the store. */
+export async function meterJudgeAt<R extends string, P extends string>(
+  deps: MeterDeps<R, P>,
+  account: string,
+  resource: R,
+  used: number,
+  nowMs: number,
+  need = 0,
+): Promise<MeterVerdict<R, P>> {
+  const spec = specOf(deps, resource);
+  return judge(account, resource, spec, await deps.planOf(account, nowMs), nowMs, used, wholeNonNegative(need, "need"));
+}

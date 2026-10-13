@@ -3,20 +3,61 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { InMemoryMeterStore, type MeterCounter, type MeterStore } from "../src/index.js";
+import { InMemoryMeterStore, type MeterBatchResult, type MeterCounter, type MeterStore } from "../src/index.js";
 
-const SCHEMA = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../schema/meter_counters.sql"), "utf8");
+const schema = (f: string) => readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../schema", f), "utf8");
+const SCHEMA = schema("meter_counters.sql") + schema("meter_batches.sql");
 
 // The statements schema/meter_counters.sql documents, run for real.
 interface SqliteDb {
   exec(sql: string): void;
-  prepare(sql: string): { get(...p: unknown[]): unknown };
+  prepare(sql: string): { get(...p: unknown[]): unknown; run(...p: unknown[]): unknown };
 }
-function sqliteStore(): MeterStore {
+type Store = MeterStore & Required<Pick<MeterStore, "addBatch">>;
+function sqliteStore(): Store {
   const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite") as { DatabaseSync: new (p: string) => SqliteDb };
   const db = new DatabaseSync(":memory:");
   db.exec(SCHEMA);
+  let claims = 0;
   return {
+    async addBatch(batchId, entries, now, keepUntil): Promise<MeterBatchResult> {
+      const claim = `c${++claims}`;
+      db.exec("BEGIN");
+      try {
+        db.prepare(
+          `DELETE FROM meter_batches WHERE batch_id IN
+             (SELECT batch_id FROM meter_batches WHERE keep_until < ? LIMIT 32)`,
+        ).run(now);
+        const claimed = db
+          .prepare(
+            `INSERT INTO meter_batches (batch_id, claim, keep_until) VALUES (?, ?, ?)
+             ON CONFLICT (batch_id) DO NOTHING RETURNING batch_id`,
+          )
+          .get(batchId, claim, keepUntil);
+        const totals: number[] = [];
+        for (const e of entries) {
+          const r = db
+            .prepare(
+              `INSERT INTO meter_counters (account, resource, period, amount, updated_at)
+               SELECT ?, ?, ?, ?, ?
+               WHERE EXISTS (SELECT 1 FROM meter_batches WHERE batch_id = ? AND claim = ?)
+               ON CONFLICT (account, resource, period) DO UPDATE SET
+                 amount     = meter_counters.amount + excluded.amount,
+                 updated_at = excluded.updated_at
+               RETURNING amount`,
+            )
+            .get(e.account, e.resource, e.period, Math.max(0, Math.floor(e.amount)), now, batchId, claim) as
+            | { amount: number }
+            | undefined;
+          if (r) totals.push(r.amount);
+        }
+        db.exec("COMMIT");
+        return claimed ? { duplicate: false, totals } : { duplicate: true };
+      } catch (e) {
+        db.exec("ROLLBACK");
+        throw e;
+      }
+    },
     async add(account, resource, period, amount, now) {
       const r = db
         .prepare(
@@ -46,7 +87,7 @@ function sqliteStore(): MeterStore {
   };
 }
 
-describe.each<[string, () => MeterStore]>([
+describe.each<[string, () => Store]>([
   ["InMemoryMeterStore", () => new InMemoryMeterStore()],
   ["SQL schema (SQLite)", sqliteStore],
 ])("%s", (_name, make) => {
@@ -94,5 +135,39 @@ describe.each<[string, () => MeterStore]>([
     const s = make();
     await s.add("a|b", "c", "d", 1, 1);
     expect(await s.get("a", "b|c", "d")).toBeUndefined();
+  });
+
+  describe("addBatch", () => {
+    const e = (account: string, amount: number) => ({ account, resource: "bandwidth", period: "2026-10", amount });
+
+    it("adds every entry once and returns the new totals in order", async () => {
+      const s = make();
+      await s.add("ann", "bandwidth", "2026-10", 5, 1);
+      expect(await s.addBatch("b-0000000000000001", [e("ann", 10), e("bo", 3)], 2, 100)).toEqual({
+        duplicate: false,
+        totals: [15, 3],
+      });
+      expect((await s.get("bo", "bandwidth", "2026-10"))?.updatedAt).toBe(2);
+    });
+
+    it("a retried batch id changes nothing", async () => {
+      const s = make();
+      await s.addBatch("b-0000000000000001", [e("ann", 10)], 1, 100);
+      expect(await s.addBatch("b-0000000000000001", [e("ann", 10)], 2, 100)).toEqual({ duplicate: true });
+      expect((await s.get("ann", "bandwidth", "2026-10"))?.amount).toBe(10);
+      expect(await s.addBatch("b-0000000000000002", [e("ann", 1)], 3, 100)).toEqual({ duplicate: false, totals: [11] });
+    });
+
+    it("forgets an id after keepUntil, so it would count again", async () => {
+      const s = make();
+      await s.addBatch("b-0000000000000001", [e("ann", 10)], 1, 50);
+      expect(await s.addBatch("b-0000000000000001", [e("ann", 10)], 51, 200)).toEqual({ duplicate: false, totals: [20] });
+    });
+
+    it("an empty batch still claims its id", async () => {
+      const s = make();
+      expect(await s.addBatch("b-0000000000000001", [], 1, 100)).toEqual({ duplicate: false, totals: [] });
+      expect(await s.addBatch("b-0000000000000001", [], 2, 100)).toEqual({ duplicate: true });
+    });
   });
 });
