@@ -243,9 +243,13 @@ export function isEgressHost(h: string): boolean {
 export interface AppAccess {
   /** Mandatory true. Apps cannot opt out of identity injection. */
   enabled: true;
-  /** Default role assigned to a new member. */
-  default_role: "owner" | "admin" | "member" | "viewer";
-  /** Custom role labels the app understands (passed through unchanged). */
+  /**
+   * The role a member has until the owner gives them another, on Flagship's
+   * fixed ladder viewer < editor < admin. `member` is the older name for
+   * editor; `owner` gives members admin (only the box owner is owner).
+   */
+  default_role: "owner" | "admin" | "editor" | "member" | "viewer";
+  /** Older manifests' app-defined role labels; members' roles are the fixed ladder. */
   custom_roles?: string[];
   /**
    * Paths the app exposes to anonymous visitors (X-Flagship-User: anonymous).
@@ -329,7 +333,7 @@ export type ManifestParseResult =
   | { ok: false; errors: string[] };
 
 const RESERVED_ENV_PREFIX = "FLAGSHIP_";
-const VALID_ROLES = new Set(["owner", "admin", "member", "viewer"]);
+const VALID_ROLES = new Set(["owner", "admin", "editor", "member", "viewer"]);
 const NAME_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
 const SUBDOMAIN_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
 const VERSION_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
@@ -662,7 +666,7 @@ function parseAccess(v: unknown, e: (m: string) => void): AppAccess | undefined 
   let defaultRole: AppAccess["default_role"] = "viewer";
   if (a.default_role !== undefined) {
     if (typeof a.default_role !== "string" || !VALID_ROLES.has(a.default_role)) {
-      e("access.default_role must be one of owner, admin, member, viewer");
+      e("access.default_role must be one of viewer, editor, admin (or the older owner, member)");
     } else {
       defaultRole = a.default_role as AppAccess["default_role"];
     }

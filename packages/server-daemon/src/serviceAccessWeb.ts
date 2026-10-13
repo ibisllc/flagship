@@ -47,6 +47,14 @@ import type { HttpRequest, HttpResponse } from "./runtime.js";
 const JSON_H = { "content-type": "application/json" };
 const HTML_H = { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" };
 
+/**
+ * An app's sign-in and sign-out links (docs/app-apis.md §5). On an open app a
+ * member is an anonymous visitor until they sign in on purpose; the app links
+ * here (`?next=<path>` brings them back).
+ */
+export const SIGN_IN_PATH = "/__flagship/sign-in";
+export const SIGN_OUT_PATH = "/__flagship/sign-out";
+
 /** Holder cookie binding the browser that requested the knock page to its pageId. */
 export const KNOCK_HOLDER_COOKIE = "Flagship-Knock";
 
@@ -147,8 +155,12 @@ export interface ServiceAccessWebOptions {
 }
 
 export interface ServiceAccessWeb {
-  /** Routes the web-experience endpoints (poll / authorize / session status+close). Null = not ours. */
-  handle: (req: HttpRequest) => Promise<HttpResponse | null>;
+  /**
+   * Routes the web-experience endpoints (poll / authorize / session
+   * status+close), and on an app's own host (`appServiceRef`, the service the
+   * SNI router selected) its sign-in and sign-out links. Null = not ours.
+   */
+  handle: (req: HttpRequest, appServiceRef?: string | null) => Promise<HttpResponse | null>;
   /**
    * Called by the enforcement layer when it would DENY a request to a restricted
    * `serviceRef`: returns the knock page (200 HTML + holder cookie) for a
@@ -195,7 +207,11 @@ export function buildServiceAccessWeb(opts: ServiceAccessWebOptions): ServiceAcc
     if (method !== "GET" && method !== "HEAD") return null;
     const accept = (req.headers.accept ?? "").toLowerCase();
     if (!accept.includes("text/html")) return null;
+    return serveKnock(serviceRef, req, null);
+  }
 
+  /** The knock page; `next` (sign-in) is where the browser goes once signed in, else it reloads. */
+  function serveKnock(serviceRef: string, req: HttpRequest, next: string | null): HttpResponse {
     const host = (req.headers.host ?? "").split(":")[0]!.toLowerCase();
     const suffix = `.${opts.serverId.toLowerCase()}`;
     const label = host.endsWith(suffix) ? host.slice(0, host.length - suffix.length) : "";
@@ -212,11 +228,47 @@ export function buildServiceAccessWeb(opts: ServiceAccessWebOptions): ServiceAcc
           knockTtlMs / 1000,
         )}`,
       },
-      body: renderKnockPage({ pageId, deeplink }),
+      body: renderKnockPage({ pageId, deeplink, next }),
     };
   }
 
-  async function handle(req: HttpRequest): Promise<HttpResponse | null> {
+  /** Whether this browser already holds a live session for a member (or the owner) of `serviceRef`. */
+  function signedIn(serviceRef: string, req: HttpRequest): string | null {
+    const token = readCookie(req.headers.cookie, SESSION_COOKIE);
+    if (!token) return null;
+    const sess = opts.sessions.lookup(token, now());
+    if (!sess || sess.serviceRef !== serviceRef || !opts.store.isAllowed(serviceRef, sess.aid)) return null;
+    return token;
+  }
+
+  async function handleSignInOut(serviceRef: string, req: HttpRequest): Promise<HttpResponse | null> {
+    const q = req.path.indexOf("?");
+    const path = q === -1 ? req.path : req.path.slice(0, q);
+    const query = q === -1 ? "" : req.path.slice(q + 1);
+    if (path !== SIGN_IN_PATH && path !== SIGN_OUT_PATH) return null;
+    const method = req.method.toUpperCase();
+    if (method !== "GET" && method !== "HEAD") return bad(405, "method not allowed");
+    const next = safeNext(new URLSearchParams(query).get("next"));
+    if (path === SIGN_IN_PATH) {
+      if (signedIn(serviceRef, req)) return redirect(next);
+      return serveKnock(serviceRef, req, next);
+    }
+    const token = readCookie(req.headers.cookie, SESSION_COOKIE);
+    if (token) await opts.sessions.closeByToken(token);
+    return {
+      ...redirect(next),
+      headers: {
+        ...redirect(next).headers,
+        "set-cookie": `${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`,
+      },
+    };
+  }
+
+  async function handle(req: HttpRequest, appServiceRef?: string | null): Promise<HttpResponse | null> {
+    if (appServiceRef && req.path.startsWith("/__flagship/sign-")) {
+      const r = await handleSignInOut(appServiceRef, req);
+      if (r) return r;
+    }
     // Browser poll: GET /__flagship/knock/<pageId>/status — ungated (registered
     // before enforcement), same-origin from the knock page (carries the holder).
     if (req.method === "GET" && req.path.startsWith("/__flagship/knock/") && req.path.endsWith("/status")) {
@@ -372,17 +424,20 @@ export function buildServiceAccessWeb(opts: ServiceAccessWebOptions): ServiceAcc
  * visitor to another origin — same rule as `defaultApexPage`), `noindex`, and
  * minimal disclosure (no owner / service name). The QR is baked server-side.
  */
-function renderKnockPage(args: { pageId: string; deeplink: string }): string {
+function renderKnockPage(args: { pageId: string; deeplink: string; next: string | null }): string {
   const qr = renderQrSvg(args.deeplink, { size: 200, foreground: "#0f172a" });
   const pageJson = JSON.stringify(args.pageId);
   const deeplinkJson = JSON.stringify(args.deeplink);
+  // `<` escaped so a path can never close the script element.
+  const nextJson = JSON.stringify(args.next).replace(/</g, "\\u003c");
+  const signIn = args.next !== null;
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Restricted — Flagship</title>
+<title>${signIn ? "Sign in" : "Restricted"} — Flagship</title>
 <style>
   :root { color-scheme: light dark; }
   body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
@@ -406,8 +461,12 @@ function renderKnockPage(args: { pageId: string; deeplink: string }): string {
 </head>
 <body>
   <main class="card">
-    <h1>Access is restricted</h1>
-    <p class="muted">This page is on a Flagship cloud. Authenticate with your Flagship app to view it.</p>
+    <h1>${signIn ? "Sign in" : "Access is restricted"}</h1>
+    <p class="muted">${
+      signIn
+        ? "This site is on a Flagship cloud. Sign in with your Flagship app."
+        : "This page is on a Flagship cloud. Authenticate with your Flagship app to view it."
+    }</p>
     <div class="qr">${qr}</div>
     <a class="btn" id="access">Access site</a>
     <p class="alt"><a id="getlink">Get link to paste in the app</a></p>
@@ -417,6 +476,7 @@ function renderKnockPage(args: { pageId: string; deeplink: string }): string {
 (function(){
   var PAGE = ${pageJson};
   var LINK = ${deeplinkJson};
+  var NEXT = ${nextJson};
   document.getElementById('access').setAttribute('href', LINK);
   document.getElementById('getlink').addEventListener('click', function(){
     var box = document.getElementById('codebox');
@@ -428,7 +488,7 @@ function renderKnockPage(args: { pageId: string; deeplink: string }): string {
     fetch('/__flagship/knock/' + PAGE + '/status', { headers:{accept:'application/json'}, cache:'no-store' })
       .then(function(r){ return r.json(); })
       .then(function(j){
-        if (j && j.status === 'authorized'){ location.reload(); return; }
+        if (j && j.status === 'authorized'){ if (NEXT) location.replace(NEXT); else location.reload(); return; }
         setTimeout(poll, 2000);
       })
       .catch(function(){ setTimeout(poll, 2500); });
@@ -438,6 +498,17 @@ function renderKnockPage(args: { pageId: string; deeplink: string }): string {
 </script>
 </body>
 </html>`;
+}
+
+/** A same-origin path to return to after sign-in/out; anything else becomes "/". */
+function safeNext(raw: string | null): string {
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//") || raw.startsWith("/\\")) return "/";
+  if (/[\u0000-\u001f\u007f]/.test(raw) || raw.length > 2048) return "/";
+  return raw;
+}
+
+function redirect(location: string): HttpResponse & { headers: Record<string, string> } {
+  return { status: 302, headers: { location, "cache-control": "no-store" }, body: "" };
 }
 
 function parseKnockAuthorization(raw: unknown): KnockAuthorization | null {

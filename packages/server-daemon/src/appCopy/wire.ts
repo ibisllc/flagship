@@ -33,6 +33,7 @@
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from "node:crypto";
 import type { AppCopyGrant, LanEndpoint } from "@flagship/protocol";
 import type { AppMembershipSnapshot } from "../membership.js";
+import type { MemberRoles } from "../serviceAccess.js";
 
 export const APP_COPY_EXPORT_PATH = "/api/app-copy/export";
 export const TAG_APP_COPY_FETCH = "flagship/app-copy-fetch/v1";
@@ -92,6 +93,8 @@ export interface CopyAccessEntry {
   mode: "open" | "restricted";
   allow: string[];
   groups: Record<string, string[]>;
+  /** Owner-set member roles; absent from a source that predates them. */
+  roles?: MemberRoles;
 }
 
 export interface SealedEnv {

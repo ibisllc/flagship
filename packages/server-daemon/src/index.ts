@@ -80,6 +80,7 @@ import {
   ServiceSessionStore,
 } from "./serviceAccess.js";
 import { buildServiceAccessWeb } from "./serviceAccessWeb.js";
+import { buildMemberRolesHttp } from "./memberRoles.js";
 import { buildAppSessionResolver } from "./appMemberSession.js";
 import { buildDaemonHttp, type DaemonContext } from "./httpApi.js";
 import {
@@ -2664,6 +2665,32 @@ async function wireRuntimeSurfaces(deps: {
             }),
           }
         : null,
+    memberRoles: cfg
+      ? {
+          handle: (path, method, req) => {
+            const store = deps.serviceAccessRef.current;
+            if (!store) {
+              return Promise.resolve({
+                status: 503,
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ error: "access control isn't ready yet" }),
+              });
+            }
+            return buildMemberRolesHttp({
+              serverDomain: env.serverFqdn,
+              ownerIrkPub: cfg.irkPublicKey,
+              ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+              username: cfg.userId,
+              store,
+              app: (id) => {
+                const a = runtime.servicePlatform?.byServiceId(id);
+                return a ? { manifest: a.manifest } : null;
+              },
+              log: (m) => console.log(m),
+            })(path, method, req);
+          },
+        }
+      : null,
     appApiKeys: runtime.appApiKeys,
     accessAlerts: accessAlertSetting,
     serverFqdn: env.serverFqdn,

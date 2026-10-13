@@ -10,22 +10,27 @@
  *   - the session must be live and issued for THIS app (a cookie for another
  *     app, an expired or closed one is anonymous);
  *   - its AID must still be let in: the owner's AID always is, anyone else
- *     only while on the app's allow-list (removing them, or revoking their
- *     invite, signs them out on their next request);
- *   - role: `owner` for the owner's AID; otherwise the role the membership
- *     store holds for that AID, else the manifest's `default_role` (never
+ *     only while on the app's members list (removing them, or revoking their
+ *     invite, signs them out on their next request). This holds in both
+ *     modes: on an open app a member who signs in gets their role, anyone
+ *     else is an anonymous visitor;
+ *   - role, on Flagship's fixed ladder viewer < editor < admin: `owner` for
+ *     the owner's AID; otherwise the highest of the roles the owner gave
+ *     their grants (the invites they joined through) or them, with signed
+ *     `flagship/app-member-role/v1` orders, else the role the legacy
+ *     membership store holds, else the manifest's `default_role` (never
  *     `owner`, which only the box owner carries: a default of `owner` gives
  *     invited people `admin`);
  *   - stable id: per app, from the app secret and the AID, so it survives the
  *     person's device and key changes and can't be linked across apps.
  */
 import type { Bytes } from "@flagship/protocol";
-import { readSessionCookie, type ServiceAccessStore, type ServiceSessionStore } from "./serviceAccess.js";
+import { ladderRole, readSessionCookie, type ServiceAccessStore, type ServiceSessionStore } from "./serviceAccess.js";
 import type { SessionResolver } from "./serviceProxy.js";
 
 export interface AppSessionResolverOptions {
   sessions: Pick<ServiceSessionStore, "lookup">;
-  access: Pick<ServiceAccessStore, "isAllowed" | "isOwner">;
+  access: Pick<ServiceAccessStore, "isAllowed" | "isOwner" | "roleOf">;
   now?: () => number;
 }
 
@@ -43,10 +48,12 @@ export function buildAppSessionResolver(opts: AppSessionResolverOptions): Sessio
 
     function roleFor(aidHex: string, pub: Bytes): string {
       if (opts.access.isOwner(aidHex)) return "owner";
-      const assigned = app.membership.members.getRole(pub);
-      if (assigned !== null && assigned !== "owner") return assigned;
       const d = app.manifest.access.default_role;
-      return d === "owner" ? "admin" : d;
+      const set = opts.access.roleOf(app.serviceId, aidHex, d);
+      if (set !== null) return set;
+      const assigned = ladderRole(app.membership.members.getRole(pub));
+      if (assigned !== null) return assigned;
+      return ladderRole(d) ?? "viewer";
     }
   };
 }

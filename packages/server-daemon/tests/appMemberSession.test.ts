@@ -239,13 +239,14 @@ describe("invited members", () => {
     const cookie = await cookieOf(b, memberAid);
     expect((await send(b.port, "/private", { cookie })).status).toBe(200);
     const h = up.seen();
-    expect(h["x-flagship-role"]).toBe("member");
+    // The manifest's older "member" default is the ladder's editor.
+    expect(h["x-flagship-role"]).toBe("editor");
     expect(h["x-flagship-user"]).toBe(app.membership.stableIdFor(memberAid.publicKey));
     expect(h["x-flagship-user"]).not.toBe(app.membership.stableIdFor(ownerAid.publicKey));
     expect(verifyInjected(h)).toBe(true);
-    app.membership.members.internalAdd(memberAid.publicKey, "editor");
+    app.membership.members.internalAdd(memberAid.publicKey, "viewer");
     await send(b.port, "/private", { cookie });
-    expect(up.seen()["x-flagship-role"]).toBe("editor");
+    expect(up.seen()["x-flagship-role"]).toBe("viewer");
   });
 
   it("an invited person never gets the owner role", async () => {
@@ -357,5 +358,85 @@ describe("API keys", () => {
     await access.setMode(SVC, "restricted");
     expect((await send(b.port, "/private", { authorization: `Bearer ${k}` })).status).toBe(200);
     expect(up.seen()["x-flagship-role"]).toBe("api");
+  });
+});
+
+describe("open apps: members sign in on purpose (docs/service-access-gating.md, Open mode + members)", () => {
+  /** Approve a knock page the way a phone does; returns the session cookie or the refusal status. */
+  async function approveKnock(
+    b: Awaited<ReturnType<typeof box>>,
+    page: { headers: IncomingHttpHeaders; body: string },
+    aid: Keypair,
+  ): Promise<{ cookie: string } | { refused: number }> {
+    const holder = cookieValue(page.headers["set-cookie"], "Flagship-Knock");
+    const pageId = /var PAGE = "([0-9a-f]{32})"/.exec(page.body)![1]!;
+    const authorization = { serverId: SERVER, serviceRef: SVC, pageId, visitorAID: aid.publicKey, issuedAt: Date.now() };
+    const approve = await b.accessWeb.handle({
+      method: "POST",
+      path: "/api/service-access/knock/authorize",
+      headers: {},
+      body: Buffer.from(
+        JSON.stringify({
+          authorization: { ...authorization, visitorAID: hex(aid.publicKey) },
+          sig: hex(signKnockAuthorization(authorization, aid)),
+        }),
+      ),
+    });
+    if (approve!.status !== 200) return { refused: approve!.status };
+    const poll = await send(b.port, `/__flagship/knock/${pageId}/status`, { cookie: holder });
+    return { cookie: cookieValue(poll.headers["set-cookie"], "Flagship-App-Session") };
+  }
+
+  it("a member signs in from the sign-in link and the app sees the role the owner set", async () => {
+    const up = await container();
+    const app = makeApp(up.port);
+    await access.addAllowed(SVC, hex(memberAid.publicKey));
+    await access.setRole(SVC, { kind: "aid", id: hex(memberAid.publicKey) }, `aid:${hex(memberAid.publicKey)}`, "viewer", 1);
+    const b = await box(app);
+    // Anonymous on the public page until they sign in.
+    await send(b.port, "/pub");
+    expect(up.seen()["x-flagship-role"]).toBe("anonymous");
+    const page = await send(b.port, "/__flagship/sign-in?next=/pub?tab=2");
+    expect(page.status).toBe(200);
+    expect(page.body).toContain("<h1>Sign in</h1>");
+    expect(page.body).toContain('var NEXT = "/pub?tab=2"');
+    const r = await approveKnock(b, page, memberAid);
+    if (!("cookie" in r)) throw new Error(`refused ${r.refused}`);
+    await send(b.port, "/pub", { cookie: r.cookie });
+    expect(up.seen()["x-flagship-role"]).toBe("viewer");
+    // The owner's role beats the legacy membership store.
+    app.membership.members.internalAdd(memberAid.publicKey, "admin");
+    await send(b.port, "/pub", { cookie: r.cookie });
+    expect(up.seen()["x-flagship-role"]).toBe("viewer");
+    // Already signed in: the link goes straight back.
+    const again = await send(b.port, "/__flagship/sign-in?next=/pub", { cookie: r.cookie });
+    expect(again.status).toBe(302);
+    expect(again.headers.location).toBe("/pub");
+    // Removed from the members: an anonymous visitor again (the app stays open).
+    await access.removeAllowed(SVC, hex(memberAid.publicKey));
+    const after = await send(b.port, "/pub", { cookie: r.cookie });
+    expect(after.status).toBe(200);
+    expect(up.seen()["x-flagship-role"]).toBe("anonymous");
+  });
+
+  it("someone who isn't a member can't sign in on an open app", async () => {
+    const up = await container();
+    const b = await box(makeApp(up.port));
+    const page = await send(b.port, "/__flagship/sign-in");
+    expect(await approveKnock(b, page, strangerAid)).toEqual({ refused: 401 });
+  });
+
+  it("sign-out ends the session and returns to a same-origin path only", async () => {
+    const up = await container();
+    const b = await box(makeApp(up.port));
+    const cookie = await cookieOf(b, ownerAid);
+    const out = await send(b.port, "/__flagship/sign-out?next=//evil.example/x", { cookie });
+    expect(out.status).toBe(302);
+    expect(out.headers.location).toBe("/");
+    expect(String(out.headers["set-cookie"])).toContain("Flagship-App-Session=;");
+    await send(b.port, "/pub", { cookie });
+    expect(up.seen()["x-flagship-role"]).toBe("anonymous");
+    const page = await send(b.port, "/__flagship/sign-in?next=https://evil.example/");
+    expect(page.body).toContain('var NEXT = "/"');
   });
 });

@@ -96,10 +96,22 @@ another app, an expired, closed or unknown one, or one whose person was
 removed is anonymous. The app gets `X-Flagship-User` = a per-app stable id
 derived from the app secret and the AID (the same person has unrelated ids in
 two apps; it survives their device and key changes) and `X-Flagship-Role` =
-`owner` for the owner, otherwise the role the app's membership store holds for
+`owner` for the owner, otherwise the highest role the owner gave the person's
+invites (or them), else the role the app's membership store holds for
 that AID, else the manifest's `default_role`. Only the box owner is ever
 `owner`: a default (or assigned) role of `owner` gives an invited person
-`admin`. A box with no owner AID pinned can't recognise its owner, so its
+`admin`.
+
+Roles are Flagship's fixed ladder (docs/service-access-gating.md, "Open mode +
+members"): `viewer` sees the app; `editor` also adds and changes their own
+things; `admin` also changes or deletes anyone's things and the app's
+settings; `owner` (the box owner only) also has Flagship-level control. The
+owner gives each member a role; a person holding several invites has the
+highest. `default_role: "member"` is the older name for `editor`.
+
+On an open app a member is an anonymous visitor until they sign in: link to
+`/__flagship/sign-in?next=<path>` (and `/__flagship/sign-out?next=<path>`),
+which the box serves on the app's own host. A box with no owner AID pinned can't recognise its owner, so its
 private pages are reachable only with API keys.
 
 If the owner asks for their own sign-in, the AI may build it:

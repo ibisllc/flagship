@@ -64,14 +64,87 @@ interface ServiceAccessEntry {
   /** Lower-hex bound AIDs allowed to reach a restricted service. */
   allow: string[];
   /**
-   * GROUP membership: inviteId → the AIDs bound via that (multi-use) invite, so
-   * a `.com` group revoke can prune the whole set in one op (v2 §Phase 3). A
-   * personal invite contributes one entry; the AIDs also live in `allow`.
+   * Grants: inviteId → the AIDs that joined through that invite (a personal
+   * invite holds one, a group link many). One person can hold several grants
+   * (a personal invite and group links all bind the same per-author contact
+   * AID); revoking one grant leaves the others. The AIDs also live in `allow`.
+   * Binds recorded before personal invites were tracked here have no grant.
    */
   groups: Record<string, string[]>;
+  /** Owner-set roles (docs/service-access-gating.md, "Open mode + members"). */
+  roles: MemberRoles;
 }
 
-type PersistShape = Record<string, ServiceAccessEntry>;
+/**
+ * Roles the owner set with signed `flagship/app-member-role/v1` orders, on the
+ * fixed ladder viewer < editor < admin (only the box owner is `owner`). Each
+ * grant (invite) carries a role, unset meaning the app's default; a member's
+ * role is the highest of their live grants and of any role set on them
+ * directly (`aids`, for members who joined before grants were tracked).
+ */
+export interface MemberRoles {
+  /** member AID → role */
+  aids: Record<string, string>;
+  /** inviteId → role, for everyone who joins through that invite */
+  invites: Record<string, string>;
+  /** order target → the issuedAt of the last order applied to it (replay guard) */
+  seq: Record<string, number>;
+}
+
+/** The roles an owner can give, lowest first. */
+export const MEMBER_ROLE_LADDER = ["viewer", "editor", "admin"] as const;
+export type MemberRole = (typeof MEMBER_ROLE_LADDER)[number];
+
+/**
+ * A role on the ladder: an older name maps to its rung (`member` → editor),
+ * `owner` is never given to a member (→ admin), anything else is null.
+ */
+export function ladderRole(role: string | null | undefined): MemberRole | null {
+  switch (role) {
+    case "viewer":
+    case "editor":
+    case "admin":
+      return role;
+    case "member":
+      return "editor";
+    case "owner":
+      return "admin";
+    default:
+      return null;
+  }
+}
+
+function higher(a: MemberRole | null, b: MemberRole | null): MemberRole | null {
+  if (a === null) return b;
+  if (b === null) return a;
+  return MEMBER_ROLE_LADDER.indexOf(a) >= MEMBER_ROLE_LADDER.indexOf(b) ? a : b;
+}
+
+function emptyRoles(): MemberRoles {
+  return { aids: {}, invites: {}, seq: {} };
+}
+
+function readRoles(v: unknown): MemberRoles {
+  const out = emptyRoles();
+  if (!v || typeof v !== "object") return out;
+  const r = v as Record<string, unknown>;
+  const strMap = (m: unknown, into: Record<string, string>) => {
+    if (!m || typeof m !== "object") return;
+    for (const [k, x] of Object.entries(m)) if (typeof x === "string") into[k] = x;
+  };
+  strMap(r.aids, out.aids);
+  strMap(r.invites, out.invites);
+  if (r.seq && typeof r.seq === "object") {
+    for (const [k, x] of Object.entries(r.seq)) if (typeof x === "number") out.seq[k] = x;
+  }
+  return out;
+}
+
+function copyRoles(r: MemberRoles): MemberRoles {
+  return { aids: { ...r.aids }, invites: { ...r.invites }, seq: { ...r.seq } };
+}
+
+type PersistShape = Record<string, Omit<ServiceAccessEntry, "roles"> & { roles?: MemberRoles }>;
 
 /** Allow-list size cap per service (M5) — bounds a runaway/abusive group link. */
 export const ALLOW_LIST_CAP = 5000;
@@ -157,7 +230,7 @@ export class ServiceAccessStore {
           }
         }
       }
-      this.byService.set(ref, { mode: e.mode, allow: [...new Set(allow)], groups });
+      this.byService.set(ref, { mode: e.mode, allow: [...new Set(allow)], groups, roles: readRoles(e.roles) });
     }
   }
 
@@ -189,27 +262,35 @@ export class ServiceAccessStore {
   private entry(serviceRef: string): ServiceAccessEntry {
     let e = this.byService.get(serviceRef);
     if (!e) {
-      e = { mode: "open", allow: [], groups: {} };
+      e = { mode: "open", allow: [], groups: {}, roles: emptyRoles() };
       this.byService.set(serviceRef, e);
     }
     return e;
   }
 
-  /** A service's mode and allow-list, to copy it to another server; null when it has none. */
-  exportEntry(serviceRef: string): { mode: ServiceAccessMode; allow: string[]; groups: Record<string, string[]> } | null {
+  /** A service's mode, allow-list and roles, to copy it to another server; null when it has none. */
+  exportEntry(
+    serviceRef: string,
+  ): { mode: ServiceAccessMode; allow: string[]; groups: Record<string, string[]>; roles: MemberRoles } | null {
     const e = this.byService.get(serviceRef);
     if (!e) return null;
     return {
       mode: e.mode,
       allow: [...e.allow],
       groups: Object.fromEntries(Object.entries(e.groups).map(([k, v]) => [k, [...v]])),
+      roles: copyRoles(e.roles),
     };
   }
 
   /** Take a copied service's mode and allow-list (appCopy/), replacing whatever this box had. */
   async importEntry(
     serviceRef: string,
-    e: { mode: ServiceAccessMode; allow: readonly string[]; groups: Readonly<Record<string, readonly string[]>> },
+    e: {
+      mode: ServiceAccessMode;
+      allow: readonly string[];
+      groups: Readonly<Record<string, readonly string[]>>;
+      roles?: MemberRoles;
+    },
   ): Promise<void> {
     const hex = (a: string) => /^[0-9a-f]{64}$/.test(a);
     const allow = [...new Set(e.allow.map((a) => a.toLowerCase()).filter(hex))].slice(0, ALLOW_LIST_CAP);
@@ -218,7 +299,9 @@ export class ServiceAccessStore {
       const kept = aids.map((a) => a.toLowerCase()).filter((a) => allow.includes(a));
       if (kept.length > 0) groups[id] = kept;
     }
-    this.byService.set(serviceRef, { mode: e.mode === "restricted" ? "restricted" : "open", allow, groups });
+    const roles = readRoles(e.roles);
+    for (const aid of Object.keys(roles.aids)) if (!allow.includes(aid)) delete roles.aids[aid];
+    this.byService.set(serviceRef, { mode: e.mode === "restricted" ? "restricted" : "open", allow, groups, roles });
     await this.persist();
   }
 
@@ -268,7 +351,14 @@ export class ServiceAccessStore {
       e.groups[gid] = (e.groups[gid] ?? []).filter((x) => x !== aid);
       if (e.groups[gid]!.length === 0) delete e.groups[gid];
     }
-    if (e.allow.length === before) return false;
+    // A removed member keeps no role: on an open app they are an anonymous
+    // visitor again, on a members-only one they are kept out.
+    const hadRole = aid in e.roles.aids;
+    delete e.roles.aids[aid];
+    if (e.allow.length === before) {
+      if (hadRole) await this.persist();
+      return false;
+    }
     await this.persist();
     return true;
   }
@@ -288,22 +378,101 @@ export class ServiceAccessStore {
       if (!e) continue;
       const members = e.groups[inviteId];
       if (!members || members.length === 0) continue;
+      delete e.groups[inviteId];
+      delete e.roles.invites[inviteId];
+      // Revoking one grant leaves a person's others: only someone left with
+      // no grant at all stops being a member.
       for (const aid of members) {
+        if (this.grantsOf(e, aid).length > 0) continue;
         const before = e.allow.length;
         e.allow = e.allow.filter((x) => x !== aid);
         if (e.allow.length !== before) pruned++;
+        delete e.roles.aids[aid];
       }
-      delete e.groups[inviteId];
       changed = true;
     }
     if (changed) await this.persist();
     return pruned;
   }
 
+  private grantsOf(e: ServiceAccessEntry, aid: string): string[] {
+    return Object.entries(e.groups)
+      .filter(([, members]) => members.includes(aid))
+      .map(([id]) => id);
+  }
+
+  /** The invites a member joined through (their grants), oldest first. */
+  grants(serviceRef: string, aidHex: string): string[] {
+    const e = this.byService.get(serviceRef);
+    return e ? this.grantsOf(e, aidHex.toLowerCase()) : [];
+  }
+
+  /** The role an invite gives (unset: the app's default). */
+  grantRole(serviceRef: string, inviteId: string, defaultRole: string): MemberRole {
+    const set = ladderRole(this.byService.get(serviceRef)?.roles.invites[inviteId]);
+    return set ?? ladderRole(defaultRole) ?? "viewer";
+  }
+
+  /**
+   * A member's role: the highest of their grants' roles and any role set on
+   * them directly; null when the owner set none of those (the app's default
+   * then applies, through the legacy membership store first).
+   */
+  roleOf(serviceRef: string, aidHex: string, defaultRole: string): MemberRole | null {
+    const e = this.byService.get(serviceRef);
+    if (!e) return null;
+    const aid = aidHex.toLowerCase();
+    let best = ladderRole(e.roles.aids[aid]);
+    let anySet = best !== null;
+    for (const id of this.grantsOf(e, aid)) {
+      const set = ladderRole(e.roles.invites[id]);
+      if (set !== null) anySet = true;
+      best = higher(best, set ?? ladderRole(defaultRole) ?? "viewer");
+    }
+    return anySet ? best : null;
+  }
+
+  /** The roles the owner set on a service (a copy). */
+  roles(serviceRef: string): MemberRoles {
+    return copyRoles(this.byService.get(serviceRef)?.roles ?? emptyRoles());
+  }
+
+  /**
+   * Remove a member only when they hold no grant any more (the revocation
+   * poller's fallback for binds the grant map didn't capture).
+   */
+  async removeIfUngranted(serviceRef: string, aidHex: string): Promise<boolean> {
+    const e = this.byService.get(serviceRef);
+    if (!e || this.grantsOf(e, aidHex.toLowerCase()).length > 0) return false;
+    return this.removeAllowed(serviceRef, aidHex);
+  }
+
+  /**
+   * Apply a verified role order. `targetKey` is the order's target string; an
+   * order no newer than the last one applied to that target is refused, so a
+   * captured order can't be replayed or undo a later one.
+   */
+  async setRole(
+    serviceRef: string,
+    target: { kind: "aid" | "invite"; id: string },
+    targetKey: string,
+    role: MemberRole,
+    issuedAt: number,
+  ): Promise<"ok" | "stale"> {
+    const e = this.entry(serviceRef);
+    const last = e.roles.seq[targetKey];
+    if (last !== undefined && issuedAt <= last) return "stale";
+    e.roles.seq[targetKey] = issuedAt;
+    if (target.kind === "aid") e.roles.aids[target.id.toLowerCase()] = role;
+    else e.roles.invites[target.id] = role;
+    await this.persist();
+    return "ok";
+  }
+
   private async persist(): Promise<void> {
     const out: PersistShape = {};
     for (const [ref, e] of this.byService) {
-      out[ref] = { mode: e.mode, allow: e.allow, groups: e.groups };
+      out[ref] = { mode: e.mode, allow: e.allow, groups: e.groups, roles: e.roles };
     }
     await mkdir(dirname(this.statePath), { recursive: true });
     const tmp = `${this.statePath}.tmp`;
@@ -466,6 +635,14 @@ export class ServiceSessionStore {
   async closeBySecretId(secretId: string): Promise<boolean> {
     const token = this.bySecretId.get(secretId);
     if (!token) return false;
+    this.drop(token);
+    await this.persist();
+    return true;
+  }
+
+  /** Sign-out from the browser itself: kills the session its cookie names. Idempotent. */
+  async closeByToken(token: string): Promise<boolean> {
+    if (!this.byToken.has(token)) return false;
     this.drop(token);
     await this.persist();
     return true;
@@ -959,8 +1136,9 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     // For a GROUP invite (create.maxRedemptions present) bind under the inviteId
     // so a group revoke can prune the whole set.
     const boundAID = comBody.boundAID.toLowerCase();
-    const inviteId = verified.maxRedemptions !== undefined ? verified.inviteId : undefined;
-    const added = await opts.store.addAllowed(verified.serviceRef, boundAID, inviteId);
+    // Every invite is a grant (a personal one holds one person), so revoking it
+    // or giving it a role reaches exactly the people who joined through it.
+    const added = await opts.store.addAllowed(verified.serviceRef, boundAID, verified.inviteId);
     if (!added && !opts.store.isAllowed(verified.serviceRef, boundAID)) {
       // The add was refused (allow-list at cap) and the AID is not already in.
       return bad(409, "service allow-list is full");
@@ -1276,13 +1454,13 @@ export function buildRevocationPoller(opts: RevocationPollerOptions): Revocation
     for (const r of body.revoked ?? []) {
       if (typeof r.inviteId !== "string") continue;
       const serviceRef = typeof r.serviceRef === "string" ? r.serviceRef : undefined;
-      // Group-prune by inviteId (covers personal + group; a personal invite is a
-      // group of one). Falls back to per-AID removal for any AID the group map
-      // didn't capture (e.g. an older bind recorded before group tracking).
+      // Grant-prune by inviteId (covers personal + group; a personal invite is a
+      // grant of one). Falls back to per-AID removal for any AID the grant map
+      // didn't capture (an older bind), unless they still hold another grant.
       pruned += await opts.store.revokeGroup(r.inviteId, serviceRef);
       if (Array.isArray(r.boundAIDs) && serviceRef) {
         for (const aid of r.boundAIDs) {
-          if (typeof aid === "string" && (await opts.store.removeAllowed(serviceRef, aid))) pruned++;
+          if (typeof aid === "string" && (await opts.store.removeIfUngranted(serviceRef, aid))) pruned++;
         }
       }
     }

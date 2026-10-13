@@ -93,6 +93,64 @@ Key usage (the owner's asymmetry):
   friend's webapp should call `establish-session` (browser-driven, signed from the in-page UMK→AID)
   so the `Set-Cookie` lands in that browser.
 
+## Open mode + members (owner, 2026-10-13)
+
+The app page's **Access control** screen: a toggle **Open to all | Members only**
+and, below it in both modes, **Members (n)**: people (name, role) and groups
+(label, role, "k of N joined"), with **+ Add person** and **+ Add group** (the
+role is chosen at creation). The toggle never changes the list.
+
+- **Open to all:** anyone gets in. Someone who isn't a member is an anonymous
+  visitor with no role. A member who signs in with their phone gets their role.
+- **Members only:** only members and the owner get in; anyone else gets the
+  knock page. Switching to it asks once: "Only these N people will be able to
+  open it."
+- **The owner** is always `owner`.
+- **Removing someone:** on an open app they lose their role and visit
+  anonymously; on a members-only app they are signed out and kept out.
+
+**Roles** are Flagship's fixed ladder, never app-defined (the manifest's
+`custom_roles` are ignored for members; its `default_role` is the role of a
+grant the owner gave none, `member` being the older name for editor):
+
+| role | can |
+|---|---|
+| `viewer` | see the app |
+| `editor` | viewer + add and change their own things |
+| `admin` | editor + change or delete anyone's things and the app's settings |
+| `owner` | admin + Flagship-level control (access control, delete); the box owner only, never given |
+
+**Grants.** Every invite is a grant with a role; a person can hold several for
+one app (a personal invite and group links all bind their per-author contact
+AID). Their role is the **highest** of their live grants; revoking one leaves
+the others, and only someone left with no grant stops being a member. The box
+keeps the grants in the service's allow-list state (`groups`: inviteId → AIDs,
+personal invites included) and the roles beside them (`roles.invites`,
+`roles.aids` for members who joined before personal invites were tracked).
+
+**Signed orders.** A role change is `flagship/app-member-role/v1|<serverDomain>|
+<serviceId>|<target>|<role>|<issuedAt>` (`target` = `invite:<inviteId>` or
+`aid:<hex>`), signed by the sensitive-order key and verified by the box
+(`memberRoles.ts`: `GET /api/screens/services/:id/members`,
+`POST …/members/role`), at most 10 minutes old and newer than the last order
+for that target. Vectors: `packages/protocol/test-vectors/app-member-role/`.
+Mode changes and removals stay the owner-IRK orders above. Clients send the
+invite's role right after creating it, and skip that when it is the default.
+Removing a person prunes their AID on the box only when that was their last
+grant; otherwise the box drops just that grant when its revocation poller sees
+the `.com` revoke.
+
+**Signing in on an open app.** The box serves `/__flagship/sign-in?next=<path>`
+and `/__flagship/sign-out?next=<path>` on every app's own host: sign-in shows
+the knock page (or goes straight back when already signed in), and after the
+phone approves, the browser returns to `next` (a same-origin path). Apps link
+there; private routes still show the knock page themselves.
+
+**Not yet (owner to confirm):** treating anonymous visitors of an open app as
+`viewer`, and the proxy enforcing viewer = read-only methods. Both would sit
+in `appMemberSession.ts` / the app proxy and need no change to the stores or
+orders.
+
 ## Notes
 - AID is a NEW UMK-derived key (parallel to the versioned IRK). Add `deriveAccountId` to
   `@flagship/protocol` (`keys.ts`) + the Swift/Kotlin/webapp keystores (follow-up for clients).
