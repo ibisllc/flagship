@@ -1,0 +1,108 @@
+{
+  "about": "flagship/app-member-role/v1 (docs/service-access-gating.md, Open mode + members). Key: the protocol IRK derived from the UMK seed.",
+  "umkSeedHex": "2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a",
+  "pub": "c49775473bf9dcf5ad1608c8e66823d55dc6889be27e42a029fd9de195c8d7e4",
+  "cases": [
+    {
+      "serverDomain": "home.harry.flagship.services",
+      "serviceId": "harry-weather",
+      "target": "aid:086abb1c191c86e7cb68d4736f73c68f8b0c55c2a3fafa6a2c770fc308ab242a",
+      "role": "admin",
+      "issuedAt": 1700000000000,
+      "canonical": "flagship/app-member-role/v1|home.harry.flagship.services|harry-weather|aid:086abb1c191c86e7cb68d4736f73c68f8b0c55c2a3fafa6a2c770fc308ab242a|admin|1700000000000",
+      "signature": "9b621c10708de153937c9db29994c198d6381b7c7f8c75ba8d9852b6313f6346992664982c73106dc780e3b1a755ca91c0306ed98428482984234aa436444403"
+    },
+    {
+      "serverDomain": "home.harry.flagship.services",
+      "serviceId": "harry-weather",
+      "target": "invite:ea4ab8be66710610842cf6ef0d7e56bd",
+      "role": "viewer",
+      "issuedAt": 1700000000001,
+      "canonical": "flagship/app-member-role/v1|home.harry.flagship.services|harry-weather|invite:ea4ab8be66710610842cf6ef0d7e56bd|viewer|1700000000001",
+      "signature": "6f12e59653d92b5646d8f2bc54e184113fb629adea4bd08c30d68903f6b1b6d42dec662ba7cfbe3959c46e66e312ccd3dba32798df6b1ca9d831a322be1b6701"
+    },
+    {
+      "serverDomain": "media.harry.flagship.services",
+      "serviceId": "harry-chess-club",
+      "target": "invite:9f1c2d3e4b5a69788796a5b4c3d2e1f0",
+      "role": "editor",
+      "issuedAt": 1712345678901,
+      "canonical": "flagship/app-member-role/v1|media.harry.flagship.services|harry-chess-club|invite:9f1c2d3e4b5a69788796a5b4c3d2e1f0|editor|1712345678901",
+      "signature": "1153ca52a5d9f6a9a922414f5bdc09053b7dd60527cdc421e5fcba0c4ebad418d4757e682efed2b911d04ff1ceaf9eea89c891a2d46ffed0165dead5cd13d60f"
+    }
+  ],
+  "invalid": [
+    {
+      "serverDomain": "home.harry.flagship.services",
+      "serviceId": "harry-weather",
+      "target": "aid:abababababababababababababababababababababababababababababababab",
+      "role": "owner",
+      "issuedAt": 1700000000000,
+      "why": "owner is never given"
+    },
+    {
+      "serverDomain": "home.harry.flagship.services",
+      "serviceId": "harry-weather",
+      "target": "aid:abababababababababababababababababababababababababababababababab",
+      "role": "member",
+      "issuedAt": 1700000000000,
+      "why": "roles are the fixed ladder only"
+    },
+    {
+      "serverDomain": "home.harry.flagship.services",
+      "serviceId": "harry-weather",
+      "target": "aid:abababababababababababababababababababababababababababababababab",
+      "role": "Admin",
+      "issuedAt": 1700000000000,
+      "why": "roles are lowercase"
+    },
+    {
+      "serverDomain": "home.harry.flagship.services",
+      "serviceId": "harry-weather",
+      "target": "aid:abababababababababababababababababababababababababababababababab",
+      "role": "",
+      "issuedAt": 1700000000000,
+      "why": "role must not be empty"
+    },
+    {
+      "serverDomain": "home.harry.flagship.services",
+      "serviceId": "harry-weather",
+      "target": "aid:ABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABAB",
+      "role": "editor",
+      "issuedAt": 1700000000000,
+      "why": "aid target must be 64 lowercase hex"
+    },
+    {
+      "serverDomain": "home.harry.flagship.services",
+      "serviceId": "harry-weather",
+      "target": "aid:abcd",
+      "role": "editor",
+      "issuedAt": 1700000000000,
+      "why": "aid target too short"
+    },
+    {
+      "serverDomain": "home.harry.flagship.services",
+      "serviceId": "harry-weather",
+      "target": "user:alex",
+      "role": "editor",
+      "issuedAt": 1700000000000,
+      "why": "unknown target kind"
+    },
+    {
+      "serverDomain": "home.harry.flagship.services",
+      "serviceId": "harry-weather",
+      "target": "invite:a|b",
+      "role": "editor",
+      "issuedAt": 1700000000000,
+      "why": "invite id must not carry a separator"
+    },
+    {
+      "serverDomain": "home.harry.flagship.services",
+      "serviceId": "harry|weather",
+      "target": "aid:abababababababababababababababababababababababababababababababab",
+      "role": "editor",
+      "issuedAt": 1700000000000,
+      "why": "serviceId must not carry a separator"
+    }
+  ]
+}

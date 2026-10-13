@@ -38,5 +38,6 @@ export * from "./repoAdapter.js";
 export * from "./appEgress.js";
 export * from "./appAccess.js";
 export * from "./appDbWrite.js";
+export * from "./appMemberRole.js";
 export * from "./appApiKey.js";
 export * from "./appCopy.js";
