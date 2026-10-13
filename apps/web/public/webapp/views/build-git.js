@@ -39,6 +39,7 @@ import {
 import { enterVibeCode, showConflict } from "./vibe-code.js";
 import { enterBuildJournal } from "./build-journal.js";
 import { enterBuildKey } from "./build-key.js";
+import { freshCredential } from "../lib/freeAi.js";
 import { getSession } from "../lib/state.js";
 import { turnRelayOffForCredential } from "../providers.js";
 import { RELAY_TURNED_OFF, TURN_RELAY_OFF, isRelayFailure } from "../lib/aiRelay.js";
@@ -428,6 +429,7 @@ async function adapt() {
   adaptProgress = null;
   renderAdapting();
   try {
+    adaptCredential = await freshCredential(adaptCredential, "");
     const body = adaptRequestBody({ credential: adaptCredential, share });
     const outcome = await startAndFollowAdapt({
       start: () => boxFetch(`${path}/adapt`, { method: "POST", body: JSON.stringify(body) }),

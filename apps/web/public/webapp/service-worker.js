@@ -117,7 +117,11 @@
 //       it, so it never shows another server's detail under its name.
 //  v62: an app's page no longer offers a custom domain (a Pro feature that
 //       lives on feat/custom-domains until it launches).
-const SHELL_VERSION = "v62";
+//  v63: free AI credits: Settings shows what's left (or the way to your own
+//       key), the AI-key step offers them first and is skipped for an
+//       owner with no saved key, and builds mint a fresh pass per send;
+//       the phone-number claim form is gone; precaches lib/freeAi.js.
+const SHELL_VERSION = "v63";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -181,6 +185,7 @@ const OPTIONAL_SHELL = [
   "/lib/accessAlerts.js",
   "/lib/pushSetting.js",
   "/lib/appApiKeys.js",
+  "/lib/freeAi.js",
   "/lib/appDb.js",
   "/lib/knockIdentity.js",
   "/lib/appPlacement.js",

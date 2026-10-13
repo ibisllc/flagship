@@ -1,4 +1,3 @@
-import { bytesToHex, signWithIrk } from "../keystore.js";
 import {
   notificationPermission,
   subscribeToWebPush,
@@ -8,11 +7,12 @@ import {
 import { applyPushSetting, pushNotificationsEnabled } from "../lib/pushSetting.js";
 import { $, registerView, show } from "../lib/router.js";
 import { getSession, ensureUsername, lockSession } from "../lib/state.js";
-import { escapeHtml, sha256Bytes } from "../lib/util.js";
+import { escapeHtml } from "../lib/util.js";
 import { toast } from "../lib/toast.js";
 import { humanError } from "../lib/humanError.js";
 import { loadProviders, addProvider, removeProvider, setActive, setRelay } from "../providers.js";
 import { relayCaption } from "../lib/aiRelay.js";
+import { CARD_NOTE, UNAVAILABLE_MESSAGE, USED_UP_MESSAGE, creditsLine, fetchFreeAiStatus } from "../lib/freeAi.js";
 import { renderActiveProviderChip, stopRenewals } from "./home.js";
 import { handleReset } from "./unlock.js";
 import { enterRecovery } from "./recovery.js";
@@ -34,22 +34,10 @@ import { isDemoProfile } from "../lib/demoAccount.js";
 
 registerView("view-settings");
 
-const FLAGSHIP_PROMO_LABEL_PREFIX = "Flagship promo";
-
 function maskKey(k) {
   if (!k) return "";
   if (k.length < 12) return "••••";
   return k.slice(0, 4) + "••••" + k.slice(-4);
-}
-
-function isPromoEntry(e) {
-  return e?.label?.startsWith(FLAGSHIP_PROMO_LABEL_PREFIX);
-}
-
-/** Attach an HTTP status to an Error so humanError() can branch on it. */
-function withStatusLocal(err, status) {
-  err.status = status;
-  return err;
 }
 
 export { refreshPushStatus };
@@ -102,33 +90,16 @@ export async function renderProviders() {
     return;
   }
   const stored = await loadProviders(session.umk);
-  const hasPromoEntry = stored.entries.some(isPromoEntry);
-
-  if (!hasPromoEntry) {
-    const cta = document.createElement("div");
-    cta.className = "card";
-    cta.innerHTML = `
-      <div class="weight-600">Flagship free credits</div>
-      <div class="note mt-2">
-        500k tokens / 100k per day on our hosted coding model. Verify a phone number to claim once.
-        Once issued, the key lives on this device — flagshipserver.com cannot read your prompts.
-      </div>
-      <button id="promo-claim-go" class="full-width mt-3">Get free credits</button>
-    `;
-    list.appendChild(cta);
-  }
-
-  if (hasPromoEntry) void refreshPromoBalance();
+  void renderFreeAiCard();
 
   for (const e of stored.entries) {
     const isActive = stored.activeId === e.id;
     const card = document.createElement("div");
     card.className = `card mt-2 provider-entry${isActive ? " is-active" : ""}`;
-    const promoBadge = isPromoEntry(e) ? '<span class="pill ok">free credits</span>' : "";
     card.innerHTML = `
       <div class="row row-top">
         <div>
-          <div class="weight-600">${escapeHtml(e.label)} ${promoBadge} <span class="pill">${escapeHtml(e.provider)}</span></div>
+          <div class="weight-600">${escapeHtml(e.label)} <span class="pill">${escapeHtml(e.provider)}</span></div>
           <div class="value text-xs mt-1">${escapeHtml(maskKey(e.apiKey))}</div>
           ${e.defaultModel ? `<div class="faint-sm">default: ${escapeHtml(e.defaultModel)}</div>` : ""}
           <label class="inline-check mt-1">
@@ -186,171 +157,34 @@ export async function renderProviders() {
       }
     });
   });
-  $("promo-claim-go")?.addEventListener("click", () => {
-    $("promo-issuance-form")?.classList.remove("hidden");
-    $("promo-step-otp")?.classList.add("hidden");
-    $("promo-step-phone")?.classList.remove("hidden");
-  });
 }
 
-// Credit-balance display for the free-credits (flagship) provider. Reads
-// the already-built GET /api/llm-promo/status/:user (tier + daily/lifetime
-// usage). Best-effort: a fetch failure just hides the card. When the
-// lifetime cap is spent, surface the "switch to your own key" prompt.
-async function refreshPromoBalance() {
-  const el = $("promo-balance");
-  if (!el) return;
-  let username;
-  try {
-    username = await ensureUsername();
-  } catch {
-    el.classList.add("hidden");
-    return;
-  }
-  let status;
-  try {
-    const r = await fetch(`/api/llm-promo/status/${encodeURIComponent(username)}`);
-    if (!r.ok) throw new Error(`status ${r.status}`);
-    status = await r.json();
-  } catch {
-    el.classList.add("hidden");
-    return;
-  }
-  const daily = status.daily ?? { used: 0, cap: 0 };
-  const lifetime = status.lifetime ?? { used: 0, cap: -1 };
-  const lifetimeSpent = lifetime.cap !== -1 && lifetime.used >= lifetime.cap;
-  const lifetimeText =
-    lifetime.cap === -1
-      ? "unlimited"
-      : `${Math.max(0, lifetime.cap - lifetime.used)} of ${lifetime.cap} left`;
-  el.className = "card mt-2";
-  el.innerHTML = `
-    <div class="row row-top">
-      <div class="weight-600">Free credits</div>
-      <span class="pill">${escapeHtml(status.tier ?? "free")}</span>
-    </div>
-    <div class="note mt-2">
-      Today: ${daily.used ?? 0} of ${daily.cap ?? 0} · Lifetime: ${escapeHtml(lifetimeText)}
-    </div>
-    ${
-      lifetimeSpent
-        ? `<div class="note mt-2 warn">You've used all your free credits. Add your own provider key to keep building.</div>
-           <button id="promo-switch-byok" class="full-width mt-2">Add your own key</button>`
-        : ""
-    }
+/** The settings view's free AI card body for a status read (null = hide). Exported for tests. */
+export function freeAiCardHtml(status) {
+  if (!status) return null;
+  const spent = status.available && (status.credits?.remainingTokens ?? 0) <= 0;
+  const line = !status.available ? UNAVAILABLE_MESSAGE : spent ? USED_UP_MESSAGE : creditsLine(status.credits);
+  return `
+    <div class="weight-600">Free AI credits</div>
+    <div class="note mt-2${spent ? " warn" : ""}" id="free-ai-line">${escapeHtml(line)}</div>
+    ${status.available && !spent ? `<div class="faint-sm mt-1">${escapeHtml(CARD_NOTE)}</div>` : ""}
+    ${!status.available || spent ? '<button id="free-ai-add-key" class="full-width mt-2">Add your own key</button>' : ""}
   `;
-  if (lifetimeSpent) {
-    $("promo-switch-byok")?.addEventListener("click", () => handleAddProvider());
-  }
 }
 
-let promoIssuanceCtx = null;
-
-async function startPromoIssuance() {
-  const session = getSession();
-  if (!session.umk) return toast("Unlock first", "err");
-  const username = await ensureUsername().catch((e) => {
-    toast(e.message, "err");
-    return null;
-  });
-  if (!username) return;
-  const phone = $("promo-phone").value.trim();
-  if (!/^\+[1-9][0-9]{6,14}$/.test(phone)) {
-    return toast("Phone number must be E.164 (e.g. +15555550100)", "err");
+// The free AI credits card: what's left, and the way to your own key when
+// they're used up or unavailable. Hidden when the status can't be read.
+async function renderFreeAiCard() {
+  const el = $("free-ai-card");
+  if (!el) return;
+  const html = freeAiCardHtml(await fetchFreeAiStatus());
+  if (!html) {
+    el.classList.add("hidden");
+    return;
   }
-  const identityHash = await sha256Bytes(new TextEncoder().encode(phone));
-  const issuedAt = Date.now();
-  const canonical = new TextEncoder().encode(
-    `flagship/llm-promo-issue-start/v1|${username}|phone-otp|${bytesToHex(identityHash)}|${issuedAt}`,
-  );
-  const sig = await signWithIrk(session.umk, canonical);
-  try {
-    const r = await fetch("/api/llm-promo/issue/start", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        request: {
-          userId: username,
-          method: "phone-otp",
-          identityHash: bytesToHex(identityHash),
-          issuedAt,
-        },
-        signature: bytesToHex(sig),
-        identity: phone,
-      }),
-    });
-    if (!r.ok) {
-      const body = await r.text();
-      console.error("promo issue/start failed", r.status, body);
-      throw withStatusLocal(new Error(`promo issue/start ${r.status}`), r.status);
-    }
-    const body = await r.json();
-    promoIssuanceCtx = { ticket: body.ticket, username };
-    $("promo-step-phone")?.classList.add("hidden");
-    $("promo-step-otp")?.classList.remove("hidden");
-    toast("We sent you a code");
-  } catch (e) {
-    console.error("promo issue/start error", e);
-    toast(humanError(e), "err");
-  }
-}
-
-async function completePromoIssuance() {
-  const session = getSession();
-  if (!session.umk || !promoIssuanceCtx) return;
-  const otp = $("promo-otp").value.trim();
-  if (!/^[0-9]{6}$/.test(otp)) return toast("OTP must be 6 digits", "err");
-  const otpHash = await sha256Bytes(new TextEncoder().encode(otp));
-  const issuedAt = Date.now();
-  const canonical = new TextEncoder().encode(
-    `flagship/llm-promo-issue-complete/v1|${promoIssuanceCtx.username}|${promoIssuanceCtx.ticket}|${bytesToHex(otpHash)}|${issuedAt}`,
-  );
-  const sig = await signWithIrk(session.umk, canonical);
-  try {
-    const r = await fetch("/api/llm-promo/issue/complete", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        request: {
-          userId: promoIssuanceCtx.username,
-          ticket: promoIssuanceCtx.ticket,
-          otpHash: bytesToHex(otpHash),
-          issuedAt,
-        },
-        signature: bytesToHex(sig),
-        otp,
-      }),
-    });
-    if (!r.ok) {
-      const body = await r.text();
-      console.error("promo issue/complete failed", r.status, body);
-      throw withStatusLocal(new Error(`promo issue/complete ${r.status}`), r.status);
-    }
-    const { key } = await r.json();
-    await addProvider(session.umk, {
-      // The in-house inference posture: an OpenAI-compatible RunPod/vLLM
-      // endpoint reached with a scoped .com token. `source: "promo"` is
-      // sealed with the credential so the box pins its SSRF guard to the
-      // blessed host (a leaked token can't be redirected elsewhere).
-      provider: "flagship",
-      label: `Flagship promo (${key.keyId})`,
-      apiKey: key.apiKey,
-      baseUrl: key.baseUrl,
-      defaultModel: key.model,
-      source: "promo",
-      relay: true,
-    });
-    promoIssuanceCtx = null;
-    $("promo-issuance-form")?.classList.add("hidden");
-    $("promo-otp").value = "";
-    $("promo-phone").value = "";
-    await renderProviders();
-    await renderActiveProviderChip();
-    toast("Free credits ready — selected as active provider");
-  } catch (e) {
-    console.error("promo issue/complete error", e);
-    toast(humanError(e), "err");
-  }
+  el.className = "card mt-2";
+  el.innerHTML = html;
+  $("free-ai-add-key")?.addEventListener("click", () => handleAddProvider());
 }
 
 async function handleAddProvider() {
@@ -624,12 +458,4 @@ export function initSettingsView() {
   $("np-cancel")?.addEventListener("click", () =>
     $("add-provider-form").classList.add("hidden"),
   );
-  $("promo-start-go")?.addEventListener("click", startPromoIssuance);
-  $("promo-complete-go")?.addEventListener("click", completePromoIssuance);
-  $("promo-cancel")?.addEventListener("click", () => {
-    promoIssuanceCtx = null;
-    $("promo-issuance-form")?.classList.add("hidden");
-    $("promo-otp").value = "";
-    $("promo-phone").value = "";
-  });
 }

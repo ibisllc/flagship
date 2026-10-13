@@ -1089,38 +1089,9 @@
       <!-- View 5: Settings — providers, identity, reset. -->
       <section id="view-settings" class="hidden">
         <h2>AI providers</h2>
-        <div id="promo-balance" class="hidden"></div>
+        <div id="free-ai-card" class="hidden"></div>
         <div id="providers-list"></div>
         <button id="add-provider-go" class="full-width mt-2">+ Add provider</button>
-
-        <div class="card hidden mt-2" id="promo-issuance-form">
-          <h3>Claim free credits</h3>
-          <div id="promo-step-phone">
-            <p class="note">
-              We use your phone number to issue one promo key per person. The number is hashed before storage; we don't keep it in the clear.
-            </p>
-            <label for="promo-phone">Phone (E.164)</label>
-            <input id="promo-phone" type="tel" placeholder="+15555550100" autocomplete="tel" />
-            <div class="row-gap-3">
-              <button id="promo-start-go">Send code</button>
-              <button class="secondary" id="promo-cancel">Cancel</button>
-            </div>
-          </div>
-          <div id="promo-step-otp" class="hidden">
-            <p class="note">
-              Enter the 6-digit code we just sent.
-            </p>
-            <label for="promo-otp">Code</label>
-            <input id="promo-otp" type="text" inputmode="numeric" maxlength="6" placeholder="123456" autocomplete="one-time-code" />
-            <div class="row-gap-3">
-              <button id="promo-complete-go">Claim</button>
-              <button class="secondary" id="promo-cancel-2" onclick="document.getElementById('promo-cancel').click()">Cancel</button>
-            </div>
-          </div>
-          <p class="faint-sm mt-3">
-            Once issued, the key lives only on this device. flagshipserver.com cannot read your prompts — they go phone → your server → our GPU directly.
-          </p>
-        </div>
 
         <div class="card hidden mt-2" id="add-provider-form">
           <h3>New provider</h3>

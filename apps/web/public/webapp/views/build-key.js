@@ -6,7 +6,9 @@
 // box's model (marketplace install, IDE/MCP — which uses the user's own
 // editor AI) skip this entirely.
 //
-// Adding and choosing are separate: "Add an API key" opens a form that saves
+// Free AI credits come first: a new owner with no saved key builds on them
+// straight away (the step is skipped), and anyone else sees them as the
+// first row while any are left. Adding and choosing are separate: "Add an API key" opens a form that saves
 // the key to this device's list (and makes it the last-used one); each saved
 // key has "Use this", which hands the credential back IN MEMORY via onChosen
 // and moves the flow on, and a confirmed delete. The raw key never touches
@@ -37,6 +39,7 @@ import {
   PROMO_ID,
 } from "../providers.js";
 import { relayCaption } from "../lib/aiRelay.js";
+import { UNAVAILABLE_MESSAGE, USED_UP_MESSAGE, fetchFreeAiStatus, formatTokens, mintFreeAiCredential } from "../lib/freeAi.js";
 
 registerView("view-build-key");
 
@@ -44,6 +47,8 @@ registerView("view-build-key");
 let onChosenCb = null;
 let backView = "view-build-source";
 let savedCount = 0;
+// The box the build will run on (named in the free AI pass), when known.
+let targetFqdn = "";
 
 // Keys are ALWAYS masked in any slug/list — only the typed input ever holds
 // the plaintext.
@@ -84,6 +89,48 @@ async function chooseEntry(e) {
   onChosenCb(credentialFor(e));
 }
 
+/**
+ * What the free AI row shows for a status read: "use" (with the tokens
+ * left), "spent", "unavailable", or null (no row). Exported for tests.
+ */
+export function freeAiRowState(status) {
+  if (!status) return null;
+  if (!status.available) return { kind: "unavailable", text: UNAVAILABLE_MESSAGE };
+  const left = status.credits?.remainingTokens ?? 0;
+  if (left <= 0) return { kind: "spent", text: USED_UP_MESSAGE };
+  return { kind: "use", text: `${formatTokens(left)} left` };
+}
+
+/** Skip the step and build on free AI: no saved keys, and some credits left. */
+export function shouldAutoUseFreeAi(savedEntries, status) {
+  return (savedEntries || []).length === 0 && freeAiRowState(status)?.kind === "use";
+}
+
+async function chooseFreeAi() {
+  if (typeof onChosenCb !== "function") return;
+  try {
+    const { credential } = await mintFreeAiCredential(targetFqdn);
+    onChosenCb(credential);
+  } catch (e) {
+    toast(e.message || UNAVAILABLE_MESSAGE, "err");
+    showForm(true);
+    await renderSaved({ autoFreeAi: false });
+  }
+}
+
+function freeAiRowHtml(state) {
+  if (!state) return "";
+  const use = state.kind === "use";
+  return `
+      <div class="card mt-2 build-key-row" id="build-key-free-ai">
+        <div class="build-key-row-body">
+          <strong>Free AI credits</strong>
+          <span class="${use ? "value text-sm" : "note"}">${escapeHtml(state.text)}</span>
+        </div>
+        ${use ? '<button class="build-key-use" id="build-key-free-ai-use">Use this</button>' : ""}
+      </div>`;
+}
+
 async function confirmDelete(e) {
   const ok = await inlineConfirm({
     title: DELETE_TITLE,
@@ -102,7 +149,7 @@ async function confirmDelete(e) {
   await renderSaved();
 }
 
-async function renderSaved() {
+async function renderSaved({ autoFreeAi = false } = {}) {
   const box = $("build-key-saved");
   if (!box) return;
   box.innerHTML = "";
@@ -119,13 +166,23 @@ async function renderSaved() {
   }
   const entries = stored.entries || [];
   savedCount = entries.length;
+  const status = await fetchFreeAiStatus();
+  if (autoFreeAi && shouldAutoUseFreeAi(entries, status)) {
+    toast("Using your free AI credits", "info");
+    await chooseFreeAi();
+    return;
+  }
+  const freeRow = freeAiRowHtml(freeAiRowState(status));
   $("bk-cancel")?.classList.toggle("hidden", savedCount === 0);
   if (entries.length === 0) {
-    showForm(true);
+    box.innerHTML = freeRow;
+    $("build-key-free-ai-use")?.addEventListener("click", () => void chooseFreeAi());
+    if (freeAiRowState(status)?.kind !== "use") showForm(true);
     return;
   }
 
   box.innerHTML =
+    freeRow +
     `<p class="note build-section-caption">Saved keys</p>` +
     orderedEntries(entries, stored.activeId)
       .map(
@@ -143,6 +200,7 @@ async function renderSaved() {
       )
       .join("");
 
+  $("build-key-free-ai-use")?.addEventListener("click", () => void chooseFreeAi());
   const byId = (id) => entries.find((e) => e.id === id);
   box.querySelectorAll("[data-use-id]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -239,14 +297,17 @@ export function initBuildKeyView() {
 }
 
 // Open the key step.
-//   onChosen — called with the in-memory { provider, apiKey, baseUrl?, relay }
-//   back     — view id for the back button (default: the chooser)
+//   onChosen   — called with the in-memory { provider, apiKey, baseUrl?, relay }
+//                (a free AI pass also carries source "promo" and model)
+//   back       — view id for the back button (default: the chooser)
+//   serverFqdn — the box the build runs on, when known
 // (contextLabel is still accepted from callers; the page no longer shows it.)
-export function enterBuildKey({ onChosen, back } = {}) {
+export function enterBuildKey({ onChosen, back, serverFqdn } = {}) {
   onChosenCb = onChosen ?? null;
   backView = back || "view-build-source";
+  targetFqdn = serverFqdn || "";
   clearForm();
   showForm(false);
   show("view-build-key");
-  void renderSaved();
+  void renderSaved({ autoFreeAi: true });
 }

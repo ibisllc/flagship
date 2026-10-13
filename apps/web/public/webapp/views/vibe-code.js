@@ -46,6 +46,7 @@ import { deployPhaseText, deployRequestBody, startAndFollowChatDeploy } from "..
 import { RELAY_TURNED_OFF, TURN_RELAY_OFF, isRelayFailure } from "../lib/aiRelay.js";
 import { turnRelayOffForCredential } from "../providers.js";
 import { getSession } from "../lib/state.js";
+import { freshCredential, isFreeAiCredential } from "../lib/freeAi.js";
 
 registerView("view-vibe-code");
 
@@ -244,6 +245,8 @@ async function send() {
     if (pendingTalkToolId) {
       // Follow-up turn answering the AI's talkToUser question.
       const replyBody = { text, attachments };
+      // A free AI pass is swapped for a fresh one on every reply.
+      buildCredential = await freshCredential(buildCredential, client().fqdn);
       if (buildCredential) replyBody.credential = buildCredential;
       await boxFetch(
         `/api/screens/llm/sessions/${encodeURIComponent(activeSessionId)}/reply`,
@@ -258,11 +261,18 @@ async function send() {
     schedulePoll();
     await poll();
   } catch (e) {
-    toast(e instanceof ScreensError ? e.message : String(e), "err");
+    toast(errorText(e), "err");
   } finally {
     sendBtn.disabled = false;
     sendBtn.textContent = "Send";
   }
+}
+
+/** What a failed send shows: the box's or free AI's own words, else the raw error. */
+export function errorText(e) {
+  if (e instanceof ScreensError) return e.message;
+  if (typeof e?.code === "string" && e.code.startsWith("free-ai")) return e.message;
+  return String(e);
 }
 
 function clearComposer() {
@@ -402,7 +412,10 @@ async function startBuild(text) {
     // box can drive the build with the owner's chosen key. YOU decide the
     // name (→ slug/web address) + who can see it; both ride the start.
     const startBody = { prompt: text, attachments, name: slug };
+    buildCredential = await freshCredential(buildCredential, client().fqdn);
     if (buildCredential) startBody.credential = buildCredential;
+    // Free AI names its model: boxes from before the free AI default need it.
+    if (isFreeAiCredential(buildCredential) && buildCredential.model) startBody.model = buildCredential.model;
     const visEl = $("vc-visibility");
     if (visEl && (visEl.value === "just-me" || visEl.value === "link")) {
       startBody.visibility = visEl.value;
@@ -431,6 +444,7 @@ async function startBuild(text) {
       enterBuildKey({
         contextLabel: "Start from scratch with AI",
         back: "view-vibe-code",
+        serverFqdn: client().fqdn,
         onChosen: (credential) => {
           buildCredential = credential;
           show("view-vibe-code");
@@ -451,7 +465,20 @@ async function startBuild(text) {
     schedulePoll();
     await poll();
   } catch (e) {
-    toast(e instanceof ScreensError ? e.message : String(e), "err");
+    toast(errorText(e), "err");
+    if (e?.code === "free-ai-used-up") {
+      // Out of free credits before the build started: straight to adding a key.
+      buildCredential = null;
+      enterBuildKey({
+        back: "view-vibe-code",
+        serverFqdn: client().fqdn,
+        onChosen: (credential) => {
+          buildCredential = credential;
+          show("view-vibe-code");
+          void send();
+        },
+      });
+    }
   } finally {
     starting = false;
     const sendBtn = $("vc-send");

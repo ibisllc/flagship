@@ -62,9 +62,9 @@ append-only **build journal** per build):
 
 | Mode | Who authors | Model key on the box? | Where the key lives |
 |---|---|---|---|
-| **scratch** | the box's daemon | yes (transient, sealed for the session) | phone BYOK / Flagship promo |
+| **scratch** | the box's daemon | yes (transient, sealed for the session) | phone BYOK / free AI credits |
 | **git** (fit) | nobody (deterministic) | **no** | — |
-| **git** (adapt) | the box's daemon | yes (transient) | phone BYOK / promo |
+| **git** (adapt) | the box's daemon | yes (transient) | phone BYOK / free AI credits |
 | **mcp** (connect IDE) | the user's IDE (Cursor/Cline) | **no** | the user's own IDE subscription |
 | **marketplace** | already authored | **no** | — |
 
@@ -80,6 +80,45 @@ single port, domain-gated browser API (`serviceRunner`/`serviceProxy`). So an
 artifact from *any* author (internal AI, external IDE, a git repo, a human)
 is contained by the same walls; the contract/prompt is a courtesy that lets a
 well-behaved author avoid building something the harness would reject.
+
+## Free AI credits
+
+An owner can build with AI before bringing a key of their own. Every account
+gets an allowance of model tokens (`FLAGSHIP_FREE_AI_TOKENS` on `.com`,
+default 1,000,000, input + output; `0` turns it off).
+
+- **Claim = sign.** The phone or webapp signs
+  `flagship/llm-promo-issue/v1|username|serverFqdn|flagship|0|0|issuedAt` with
+  the account IRK (vectors: `packages/protocol/test-vectors/llm-promo-issue/`)
+  and posts it to `.com`: `POST /api/free-ai/status` →
+  `{available, credits:{usedTokens, allowanceTokens, remainingTokens}}`;
+  `POST /api/free-ai/token` → `{credential:{provider:"flagship", apiKey,
+  baseUrl, source:"promo", relay:true}, model, expiresAt, credits}`, or 429
+  `free-ai-used-up` / 503 `free-ai-unavailable` with the owner-facing message.
+  Minting records nothing (`packages/control-plane/src/freeAiCredits.ts`), so
+  apps mint a fresh 12-hour pass for every build start and every reply.
+- **On by default.** The AI-key step lists "Free AI credits" first and is
+  skipped for an owner with no saved key; Settings shows "820k of 1M free AI
+  tokens left", and once they're spent, "You've used your free AI credits. Add
+  your own AI key to keep building." Nothing is sold, so there is no purchase
+  wording.
+- **The box** treats the pass as any credential: sealed per session, sent
+  through the hub relay, its SSRF guard pinned to the pass's host. Its default
+  model for `flagship` is a placeholder the shim replaces, and a refusal from
+  the shim reaches the owner in the shim's own words (`freeAiMessage`).
+- **The shim** (`infra/inference/shim`) is the only front door: it verifies
+  the pass, asks `.com` (`POST /api/free-ai/allowance`) what's left and stops
+  at zero, rebuilds the request from an allowlist (no `user`, no message
+  names, no extras; the upstream's model id; capped output) and calls any
+  OpenAI-compatible upstream with only our key, then reports true usage (or
+  an estimate) to `POST /api/llm-promo/usage`. The upstream sees Cloudflare's
+  address and our account, never the box, the owner or their account name.
+- **Accounting** reads the metered totals through `AiCreditsLedger`; the
+  shared metering core ("ai-tokens") replaces that one seam when it lands.
+- Anthropic, OpenAI and Google can't mint per-user keys with a hard token
+  cap, so `/api/llm-promo/issue` refuses them (410) instead of handing out a
+  placeholder key; the phone-OTP claim (`apps/web/src/routes/llmPromo.ts`)
+  only ever ran on the Fastify dev surface and no app calls it.
 
 ## The journal (`buildmodes/buildJournal.ts`)
 

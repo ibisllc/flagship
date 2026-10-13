@@ -558,12 +558,6 @@ const RENEWAL_TICK_MS = 30 * 60 * 1000;
 let renewalTimer = null;
 let renewalLastServerList = null; // dedupe: only kick a tick when servers change
 
-const FLAGSHIP_PROMO_LABEL_PREFIX = "Flagship promo";
-
-function isPromoEntry(e) {
-  return e?.label?.startsWith(FLAGSHIP_PROMO_LABEL_PREFIX);
-}
-
 const ACCOUNT_RESET_BANNER_ID = "home-account-reset-banner";
 
 // Mirrors wizard.js's `recoveryWarn` slot — the wizard SETs this to "true"
@@ -1352,19 +1346,18 @@ export async function renderActiveProviderChip() {
     chip.innerHTML = `
       <div class="row">
         <div>
-          <div class="weight-600">No active provider</div>
-          <div class="muted-sm">claim free credits or add your own key</div>
+          <div class="weight-600">Free AI credits</div>
+          <div class="muted-sm">used when you build with AI; add your own key any time</div>
         </div>
         <button class="secondary" id="chip-settings">settings</button>
       </div>
     `;
   } else {
-    const promo = isPromoEntry(e);
     chip.innerHTML = `
       <div class="row">
         <div>
           <div class="weight-600">${escapeHtml(e.label)} <span class="pill">${escapeHtml(e.provider)}</span></div>
-          <div class="muted-sm">${promo ? "Flagship-issued key — flagshipserver.com cannot read prompts" : "key on this device — flagshipserver.com cannot read prompts"}</div>
+          <div class="muted-sm">key on this device — flagshipserver.com cannot read prompts</div>
         </div>
         <button class="secondary" id="chip-settings">manage</button>
       </div>

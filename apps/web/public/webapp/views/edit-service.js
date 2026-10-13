@@ -29,6 +29,8 @@ import { enterBuildKey } from "./build-key.js";
 import { enterBuildMcp } from "./build-mcp.js";
 import { enterBuildJournal } from "./build-journal.js";
 import { openVibeCodeSession } from "./vibe-code.js";
+import { toast } from "../lib/toast.js";
+import { freshCredential, isFreeAiCredential } from "../lib/freeAi.js";
 
 registerView("view-edit-service");
 registerView("view-edit-describe");
@@ -98,7 +100,14 @@ async function start() {
   updateStartButton();
   try {
     const body = { prompt, editServiceId: id };
+    try {
+      credential = await freshCredential(credential, "");
+    } catch (e) {
+      toast(e.message, "err");
+      return;
+    }
     if (credential) body.credential = credential;
+    if (isFreeAiCredential(credential) && credential.model) body.model = credential.model;
     let r;
     try {
       r = await screensFetch("/api/screens/vibe-code/start", {
