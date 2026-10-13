@@ -142,6 +142,7 @@ targets:
         # to passcode, but the prompt looks stock — TF3 ASC review-bot
         # flags absence.
         INFOPLIST_KEY_NSFaceIDUsageDescription: "Flagship uses Face ID to confirm sensitive actions like approving unlock or revoking a server."
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: "Flagship talks to your server directly when it's on the same network, which is faster than going through the relay."
         # ASC review-bot wants a category for every app. Flagship is a
         # tool / utility, not entertainment or social.
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities

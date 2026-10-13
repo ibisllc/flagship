@@ -114,7 +114,7 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   **`feat/custom-names`** (dibs + paid name change) and **`feat/custom-domains`**
   (custom domains as a Pro feature) — the last two branch OFF `feat/marketplace`
   (they need its payment rail), so rebase them onto it after it moves —
-  **`feat/lan-direct`** and **`feat/free-tier-throttle`** (both off `main`). **No marketplace/retail code may sit on `main` until
+  and **`feat/free-tier-throttle`** (off `main`). **No marketplace/retail code may sit on `main` until
   that feature launches** — branching IS the gate, there is NO gating/flag code
   in `main`.
   - **`feat/transfer-a-box` was a *develop-then-MERGE* branch — DONE.** Merged to
@@ -228,6 +228,19 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   there's no live endpoint to assign per-member roles; app roles can count the
   box's databases via pg_database (names are opaque); v1 invite links (no `a=`)
   need re-inviting; boxes without `ownerAidPub` can't recognise their owner.
+- **LAN-direct (merged to `main` 2026-10-12, through `1f5eef30`).**
+  `docs/lan-direct.md`. A box listens on its private LAN addresses at :443
+  (piped into the same loopback TLS server the tunnel feeds;
+  `FLAGSHIP_LAN_DIRECT=0` keeps it relay-only) and serves an STK-signed
+  `flagship/lan-hint/v1` to paired devices; Android and iOS (CONNECT proxy,
+  `NSLocalNetworkUsageDescription` added) route to it once it proves itself.
+  App copies use it box to box: the source offers its endpoints in the copy
+  description, the target fetches there as `https://<source>` and falls back
+  to the relay (the copy records `route`). Same release: copies are gzipped
+  and fetched 4 chunks at a time, and the Docker liveness check is fixed
+  (`docker info --format` exits 0 with dockerd down, so ce6471c4's restart
+  never ran). Not yet run live: a phone on a metal box's Wi-Fi, and a copy
+  between two Studio VMs (needs the endorsed release on both).
 - **Where an app runs (2026-10-12, box `73211505`, apps through `a79b4de9`).**
   `docs/app-placement.md`. Make leader never moved the box new apps were
   created on, and the app page's runs-on boxes came from the leader (its Save
@@ -351,7 +364,8 @@ no such signal. home3 (same image) had no pstore dumps after ~6 h. Box journals 
   20+ and pkexec. Neither has been run on a real Windows PC or Linux desktop:
   see "Validating on Windows and Linux" below.
 - Studio's VM networking is NAT on every host, so a hosted VM can never be
-  reached directly from a phone on the same Wi-Fi (matters for `feat/lan-direct`).
+  reached directly from a phone on the same Wi-Fi (LAN-direct can't help a
+  phone there; two VMs on one Mac do reach each other).
 
 ### Validating on Windows and Linux
 
@@ -442,9 +456,6 @@ metal), plus the Debian 13.7.0 check. Record results under "Desktop Studio".
   wording at launch. Remaining: live e2e, Stripe price ids.
 - **`feat/free-tier-throttle`:** 256 kbit/s over quota instead of a hard stop;
   needs a `.services` deploy once merged.
-- **`feat/lan-direct`:** needs a metal box and a dev-built phone on one Wi-Fi
-  (Studio VMs are NAT), a recipe whose `installerGitRef` is the branch (phones
-  always sign `main`), and `NSLocalNetworkUsageDescription` on iOS.
 - **`feat/phone-usb-burn`:** validate the OTG write on a real phone + stick,
   publish the seed and set `FLAGSHIP_ISO_SEED`.
 - **`feat/retail`** (NFC box), **`feat/browser-extension`**, **`alpine`** (parked
