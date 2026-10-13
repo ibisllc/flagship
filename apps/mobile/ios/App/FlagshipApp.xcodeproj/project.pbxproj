@@ -14,6 +14,7 @@
 		0B9051D212D7ABF830BFC8C6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4BCF8466537CDEBE460F85A8 /* Assets.xcassets */; };
 		1C9D09A9144DD8F14716442B /* FlagshipWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 320466AFB364B4CE4A1DB396 /* FlagshipWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		25FF22502B5437B43895A9CB /* ProvisionPhaseComplication.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95FE2F4580A4DFDE33146944 /* ProvisionPhaseComplication.swift */; };
+		A1C0C0A11CE5500000000001 /* AccessControlScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0A11CE5500000000002 /* AccessControlScreenshotTests.swift */; };
 		348FD2E20DDB83B215026A45 /* AppStoreScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0F97547E19F9E2FA08E4F04 /* AppStoreScreenshotTests.swift */; };
 		34D09AC29C29E289630C4402 /* WatchRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1087DEB8E4808BCCBC78D8AB /* WatchRootView.swift */; };
 		37CD93243A7D74054B520FA0 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 5E2730A9F5FEA2A10B78AFB0 /* PrivacyInfo.xcprivacy */; };
@@ -156,6 +157,7 @@
 		94B12B136089A4BDE59177C0 /* GymTotalDetailTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymTotalDetailTests.swift; sourceTree = "<group>"; };
 		95FE2F4580A4DFDE33146944 /* ProvisionPhaseComplication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProvisionPhaseComplication.swift; sourceTree = "<group>"; };
 		AC644708931B6CC8A4F4273F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		A1C0C0A11CE5500000000002 /* AccessControlScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessControlScreenshotTests.swift; sourceTree = "<group>"; };
 		B0F97547E19F9E2FA08E4F04 /* AppStoreScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStoreScreenshotTests.swift; sourceTree = "<group>"; };
 		C026689338C66E2541C8B3EF /* FlagshipApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = FlagshipApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CA43A33A5EACE6A2A88A7032 /* ios */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ios; path = ..; sourceTree = SOURCE_ROOT; };
@@ -321,6 +323,7 @@
 		F51043E76B25BB084043EA15 /* UITests */ = {
 			isa = PBXGroup;
 			children = (
+				A1C0C0A11CE5500000000002 /* AccessControlScreenshotTests.swift */,
 				B0F97547E19F9E2FA08E4F04 /* AppStoreScreenshotTests.swift */,
 				9320B5267D47AFDE76FD5D46 /* GymEveryMergeTests.swift */,
 				1CCAE03802624702DE798B52 /* GymFeatureMirrorTests.swift */,
@@ -568,6 +571,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A1C0C0A11CE5500000000001 /* AccessControlScreenshotTests.swift in Sources */,
 				348FD2E20DDB83B215026A45 /* AppStoreScreenshotTests.swift in Sources */,
 				8CDC40B8810F689102B838D2 /* GymEveryMergeTests.swift in Sources */,
 				BD9630458EA132BCD16ADCA4 /* GymFeatureMirrorTests.swift in Sources */,

@@ -8,10 +8,13 @@ import FlagshipCore
 /// Admin orchestrator for per-service access gating (docs/service-access-gating.md,
 /// "## v2 hardening").
 ///
-/// On the server-detail "Who can open this" surface:
+/// On the service's "Access control" surface (docs/service-access-gating.md,
+/// "Open mode + members"; the toggle and the members list are independent):
 ///   - reads the TRUE mode from the box (`GET /api/service-access/<ref>`),
-///   - toggles open ⇄ restricted with an owner-IRK `set-service-access-mode`
-///     envelope to the box's pinned pipe,
+///   - toggles Open to all ⇄ Members only with an owner-IRK
+///     `set-service-access-mode` envelope to the box's pinned pipe,
+///   - reads each member's grants and rank from the box (owner session) and
+///     changes a rank with a signed `flagship/app-member-role/v1` order,
 ///   - manages the allow-list across the THREE invite tiers (personal auto /
 ///     personal manual / group multi-use): add a person/group (seal the bundle
 ///     under the household key → **AID-sign** the create → POST `.com` → return
@@ -92,6 +95,12 @@ public final class ServiceAccessViewModel {
 
     public var busyMode = false
     public var busyAdd = false
+    /// The box's members, grants and ranks; nil until read (or when it can't be).
+    public private(set) var members: AppMembersResponse?
+    /// Rows whose rank change is being signed / sent (by inviteId).
+    public private(set) var busyRoles: Set<String> = []
+    /// Set when an invite was created but its rank couldn't be set.
+    public private(set) var roleNotice: String?
 
     private let client: any ServiceAccessClient
     private let serverDomain: String
@@ -104,6 +113,10 @@ public final class ServiceAccessViewModel {
     private let authorAidKeys: @MainActor (String) async throws -> (aid: Curve25519.Signing.PrivateKey, household: Data)
     /// Owner IRK signer — the box mode toggle + allow-remove (the box pins the IRK).
     private let irkSigner: @MainActor (String) async throws -> Curve25519.Signing.PrivateKey
+    /// The box's owner-session API (members + ranks); nil ⇒ no ranks shown.
+    private let screens: (any ScreensClient)?
+    /// Sensitive-order signer for rank changes (admin root when held, else the IRK).
+    private let roleSigner: AppAccessSigner
     private let now: () -> Int64
 
     public init(
@@ -114,8 +127,12 @@ public final class ServiceAccessViewModel {
         controlBase: URL = Endpoints.controlBaseUrl,
         authorAidKeys: (@MainActor (String) async throws -> (aid: Curve25519.Signing.PrivateKey, household: Data))? = nil,
         irkSigner: (@MainActor (String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
+        screens: (any ScreensClient)? = nil,
+        roleSigner: AppAccessSigner? = nil,
         now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }
     ) {
+        self.screens = screens
+        self.roleSigner = roleSigner ?? AppAccessOrder.defaultSigner
         self.client = client
         self.serverDomain = serverDomain
         self.serviceRef = serviceRef
@@ -135,10 +152,62 @@ public final class ServiceAccessViewModel {
             restricted = state.isRestricted
             allowCount = state.allowCount
             phase = .ready
-            if restricted { await refreshPeople() }
+            async let people: Void = refreshPeople()
+            async let roles: Void = refreshMembers()
+            _ = await (people, roles)
         } catch {
             phase = .failed("Couldn't reach the box to load access settings.")
         }
+    }
+
+    /// Read the members, their grants and ranks from the box.
+    public func refreshMembers() async {
+        guard let screens else { return }
+        members = try? await screens.appMembers(serviceId: serviceRef)
+    }
+
+    /// The rank one row shows (nil until the box has answered).
+    public func role(for p: Person) -> AppMemberRole? {
+        guard let members else { return nil }
+        return AppMemberRole(wire: members.rowRole(inviteId: p.inviteId, boundAID: p.isGroup ? nil : p.boundAID))
+    }
+
+    /// "also in Family: Member" for a person who joined through other invites too.
+    public func alsoIn(for p: Person) -> String {
+        guard let members, !p.isGroup else { return "" }
+        let others = members.otherGrants(inviteId: p.inviteId, boundAID: p.boundAID) { id in
+            self.people.first { $0.inviteId == id }?.name
+        }
+        return AppMembersResponse.alsoInText(others)
+    }
+
+    /// How many people a members-only switch leaves able to open it.
+    public var memberPeopleCount: Int { members?.members.count ?? allowCount }
+
+    /// Sign + send a rank change for one row. Returns whether the box took it.
+    @discardableResult
+    public func setRole(_ role: AppMemberRole, for p: Person) async -> Bool {
+        guard let screens, let members, !busyRoles.contains(p.inviteId) else { return false }
+        busyRoles.insert(p.inviteId)
+        defer { busyRoles.remove(p.inviteId) }
+        let target = members.roleTarget(inviteId: p.inviteId, boundAID: p.isGroup ? nil : p.boundAID)
+        do {
+            try await sendRole(screens: screens, target: target, role: role, reason: "Change \(p.name)'s rank")
+            await refreshMembers()
+            return true
+        } catch {
+            phase = .failed("Couldn't change \(p.name)'s rank. Try again in a moment.")
+            return false
+        }
+    }
+
+    private func sendRole(screens: any ScreensClient, target: String, role: AppMemberRole, reason: String) async throws {
+        let key = try await roleSigner(reason)
+        let order = AppMemberRoleOrder(serverDomain: serverDomain, serviceId: serviceRef, target: target,
+                                       role: role.rawValue, issuedAt: now())
+        let sig = try key.signature(for: try order.canonicalBytes())
+        _ = try await screens.setAppMemberRole(serviceId: serviceRef,
+                                               AppMemberRoleRequest(order: order, signature: HexUtil.encode(sig)))
     }
 
     /// Owner-IRK-sign + POST the mode change. Reverts `restricted` on failure.
@@ -149,17 +218,18 @@ public final class ServiceAccessViewModel {
         let mode = want ? "restricted" : "open"
         do {
             let key = try await irkSigner(want
-                ? "Restrict \(serviceRef) to your allow-list"
-                : "Open \(serviceRef) to anyone with the link")
+                ? "Make \(serviceRef) members only"
+                : "Open \(serviceRef) to all")
             let bytes = try ServiceInvite.canonicalSetAccessMode(
                 serverId: serverDomain, serviceRef: serviceRef, mode: mode, issuedAt: now())
             let sig = try ServiceInvite.sign(bytes, with: key)
             let request: [String: Any] = ["serverId": serverDomain, "serviceRef": serviceRef, "mode": mode, "issuedAt": now()]
             _ = try await client.setAccessMode(serverDomain: serverDomain, request: request, signatureHex: HexUtil.encode(sig))
+            // The members list never changes with the mode.
             restricted = want
-            if want { await refreshPeople() } else { people = [] }
+            phase = .ready
         } catch {
-            phase = .failed("Couldn't change who can open this. Try again in a moment.")
+            phase = .failed("Couldn't change access. Try again in a moment.")
         }
     }
 
@@ -169,7 +239,7 @@ public final class ServiceAccessViewModel {
     /// derives their per-author contact AID) and — for a MANUAL invite — the
     /// inviteId (so the friend can sign the acceptance).
     @discardableResult
-    public func addPerson(name: String, photo: String?, tier: InviteTier = .personalAuto) async -> String? {
+    public func addPerson(name: String, photo: String?, tier: InviteTier = .personalAuto, role: AppMemberRole? = nil) async -> String? {
         if busyAdd { return nil }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
@@ -232,7 +302,20 @@ public final class ServiceAccessViewModel {
                 inviteId: tier.isManual ? inviteId : nil)
             lastInviteLink = link
             lastInviteTier = tier
-            await refreshPeople()
+            roleNotice = nil
+            // The rank rides a signed order right after the create; the app's
+            // default rank needs none.
+            if let role, let screens, role.rawValue != members?.defaultRole {
+                do {
+                    try await sendRole(screens: screens, target: AppMemberRoleOrder.inviteTarget(inviteId),
+                                       role: role, reason: "Give \(trimmed) a rank")
+                } catch {
+                    roleNotice = "Created, but couldn't set the rank. Change it in the list."
+                }
+            }
+            async let people: Void = refreshPeople()
+            async let roles: Void = refreshMembers()
+            _ = await (people, roles)
             return link
         } catch {
             phase = .failed("Couldn't create the invite. Try again in a moment.")
@@ -249,9 +332,13 @@ public final class ServiceAccessViewModel {
     /// friend with live access.
     public func remove(inviteId: String) async {
         let person = people.first(where: { $0.inviteId == inviteId })
-        // AIDs to prune from the box: a group's whole set, else the single bind.
+        // AIDs to prune from the box: a group's whole set, else the single bind
+        // — only those for whom this was their last grant. Someone who also
+        // holds another invite keeps it: the box drops just this grant when
+        // its revocation poller sees the `.com` revoke.
         var aids: [String] = person?.groupBoundAIDs ?? []
         if aids.isEmpty, let single = person?.boundAID, !single.isEmpty { aids = [single] }
+        if let members { aids = members.aidsToPrune(inviteId: inviteId, aids: aids) }
 
         var revokeFailed = false
         var pruneFailed = false
@@ -290,7 +377,9 @@ public final class ServiceAccessViewModel {
             }
         }
 
-        await refreshPeople()
+        async let refreshed: Void = refreshPeople()
+        async let roles: Void = refreshMembers()
+        _ = await (refreshed, roles)
         if pruneFailed {
             phase = .failed("Removed from the directory, but couldn't reach the box to revoke access. Try again so they're fully removed.")
         } else if revokeFailed {
@@ -303,7 +392,7 @@ public final class ServiceAccessViewModel {
     /// GROUP invite renders as ONE row carrying its whole bound set + cap.
     public func refreshPeople() async {
         do {
-            let keys = try await authorAidKeys("Show who can open \(serviceRef)")
+            let keys = try await authorAidKeys("Show the members of \(serviceRef)")
             let aidPubHex = HexUtil.encode(keys.aid.publicKey.rawRepresentation)
             let ts = now()
             // OWNER-SIGNED list query (scope "list", cursor 0).

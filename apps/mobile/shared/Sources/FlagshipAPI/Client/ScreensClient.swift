@@ -154,6 +154,13 @@ public protocol ScreensClient: Sendable {
     /// `flagship/app-db-write/v1` order, read-write.
     func serviceDbQuery(serviceId: String, store: String, _ req: AppDbQueryRequest) async throws -> AppDbQueryResult
 
+    // Access control — members' roles (docs/service-access-gating.md, "Open
+    // mode + members"). Owner sessions only: companions get 403.
+    /// `GET /api/screens/services/<id>/members`: the members, their grants and ranks.
+    func appMembers(serviceId: String) async throws -> AppMembersResponse
+    /// `POST …/members/role`: the owner's signed `flagship/app-member-role/v1` order.
+    func setAppMemberRole(serviceId: String, _ req: AppMemberRoleRequest) async throws -> AppMemberRoleResponse
+
     // Copying an app between the owner's servers (docs/app-placement.md §5).
     /// `POST /api/screens/services/copy` to the TARGET box: the owner's signed
     /// `flagship/app-copy/v1` order. 202 `{copyId}`; an older box answers 404.
@@ -397,6 +404,12 @@ public extension ScreensClient {
     }
     func serviceDbQuery(serviceId: String, store: String, _ req: AppDbQueryRequest) async throws -> AppDbQueryResult {
         throw ScreensClientError.notImplemented("app database")
+    }
+    func appMembers(serviceId: String) async throws -> AppMembersResponse {
+        throw ScreensClientError.notImplemented("app members")
+    }
+    func setAppMemberRole(serviceId: String, _ req: AppMemberRoleRequest) async throws -> AppMemberRoleResponse {
+        throw ScreensClientError.notImplemented("app members")
     }
     func accessRequestEvents() -> AsyncStream<Void> {
         AsyncStream { $0.finish() }

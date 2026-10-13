@@ -401,6 +401,51 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             rows: wateringRows)
         return ["plants": plants, "waterings": waterings]
     }
+    // MARK: Access control — members' roles
+
+    /// Per-service members the box would list (nil: none yet, default editor).
+    public var mockMembers: [String: AppMembersResponse] = [:]
+    public private(set) var setAppMemberRoleCalls: [(serviceId: String, req: AppMemberRoleRequest)] = []
+    /// Status to answer the next role change with (e.g. 403), once.
+    public var mockMemberRoleStatus: Int?
+
+    public func appMembers(serviceId: String) async throws -> AppMembersResponse {
+        try await tick()
+        return mockMembers[serviceId]
+            ?? AppMembersResponse(serviceId: serviceId, mode: "open", defaultRole: "member", members: [], invites: [])
+    }
+
+    /// Mirrors the box: records the order and updates the listed role.
+    public func setAppMemberRole(serviceId: String, _ req: AppMemberRoleRequest) async throws -> AppMemberRoleResponse {
+        try await tick()
+        setAppMemberRoleCalls.append((serviceId, req))
+        if let status = mockMemberRoleStatus {
+            mockMemberRoleStatus = nil
+            throw ScreensClientError.http(status: status, message: #"{"error":"refused"}"#)
+        }
+        let cur = try await appMembers(serviceId: serviceId)
+        let t = req.order.target
+        var invites = cur.invites
+        var members = cur.members
+        if t.hasPrefix("invite:") {
+            let id = String(t.dropFirst(7))
+            invites.removeAll { $0.inviteId == id }
+            invites.append(AppMemberInviteRole(inviteId: id, role: req.order.role, set: true))
+            members = members.map { m in
+                AppMember(aid: m.aid, role: m.role,
+                          grants: m.grants.map { $0.inviteId == id ? AppMemberGrant(inviteId: id, role: req.order.role) : $0 },
+                          direct: m.direct)
+            }
+        } else if t.hasPrefix("aid:") {
+            let aid = String(t.dropFirst(4))
+            members = members.map { $0.aid == aid ? AppMember(aid: aid, role: req.order.role, grants: $0.grants, direct: req.order.role) : $0 }
+        }
+        mockMembers[serviceId] = AppMembersResponse(serviceId: serviceId, mode: cur.mode, roles: cur.roles,
+                                                   defaultRole: cur.defaultRole, descriptions: cur.descriptions,
+                                                   members: members, invites: invites)
+        return AppMemberRoleResponse(ok: true, target: t, role: req.order.role)
+    }
+
     /// When set, a signed query is refused unless this key made the signature.
     public var mockDbVerifyKey: Data?
     public private(set) var serviceDbQueryCalls: [(serviceId: String, store: String, req: AppDbQueryRequest)] = []

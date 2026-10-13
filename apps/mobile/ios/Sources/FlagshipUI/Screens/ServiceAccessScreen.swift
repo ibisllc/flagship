@@ -3,19 +3,20 @@ import PhotosUI
 import FlagshipAPI
 import FlagshipCore
 
-/// Admin "Who can open this" screen for per-service access gating
-/// (docs/service-access-gating.md). Mirrors the webapp `views/service-access.js`:
-///   - an open ⇄ restricted toggle (reads the TRUE mode from the box; sets it
-///     with an owner-IRK envelope),
-///   - when restricted, an allow-list manager: add a person (name + optional
-///     photo → mint a capability invite via `.com` → copyable/shareable
-///     `https://<server>.<user>/invite#<secret>` link), the people list
-///     (decrypted bundle name/photo, bound vs invite-sent), remove (revoke).
+/// Admin "Access control" screen (docs/service-access-gating.md, "Open mode +
+/// members"). Mirrors the webapp `views/service-access.js`:
+///   - a two-way Open to all | Members only toggle (reads the TRUE mode from
+///     the box; sets it with an owner-IRK envelope; rolls back on failure),
+///   - in both modes, Members (n): people and groups with a rank picker each
+///     (a signed `flagship/app-member-role/v1` order), + Add person / + Add
+///     group (the rank chosen at creation), remove (revoke).
 ///
 /// Self-contained: reads the box+`.com` access client from the environment.
 public struct ServiceAccessScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.serviceAccessClient) private var client
+    @Environment(\.screensClient) private var screens
+    @Environment(\.serviceAccessKeys) private var keys
     @Environment(ToastCenter.self) private var toasts
 
     private let serverDomain: String
@@ -24,36 +25,27 @@ public struct ServiceAccessScreen: View {
     private let username: String
 
     @State private var vm: ServiceAccessViewModel?
-    @State private var restrictedToggle = false
+    /// The mode picked but not yet confirmed / saved; nil shows the box's.
+    @State private var pendingMode: Mode?
+    @State private var applyingMode = false
+    @State private var confirmMembersOnly = false
+    @State private var adding: AddKind?
     @State private var name = ""
+    @State private var newRole: AppMemberRole = .member
+    @State private var approveFirst = false
     @State private var photoItem: PhotosPickerItem?
     @State private var photoDataUri: String?
     @State private var confirmRemove: ServiceAccessViewModel.Person?
-    /// The create-time invite tier (docs §v2 Phase 3).
-    @State private var tierKind: TierKind = .personalAuto
     @State private var groupMaxText = "10"
-    @State private var groupExpires = false
+    @State private var groupExpires = true
 
-    /// UI-only enum (the VM's InviteTier carries the assoc. values). The group
-    /// picker fields (`groupMaxText`/`groupExpires`) supply the rest.
-    private enum TierKind: String, CaseIterable, Identifiable {
-        case personalAuto, personalManual, group
+    enum Mode: String, CaseIterable, Identifiable {
+        case open, membersOnly
         var id: String { rawValue }
-        var label: String {
-            switch self {
-            case .personalAuto:   return "One person"
-            case .personalManual: return "One person — I approve"
-            case .group:          return "A group"
-            }
-        }
-        var blurb: String {
-            switch self {
-            case .personalAuto:   return "A private link for one person. The first account to open it gets in."
-            case .personalManual: return "Most secure. They accept, send a reply back to you, and you approve it — so a leaked link alone can't get in."
-            case .group:          return "One link several people can use. Lower-trust: anyone the link reaches (up to the limit) gets in."
-            }
-        }
+        var label: String { self == .open ? "Open to all" : "Members only" }
     }
+
+    enum AddKind { case person, group }
 
     public init(serverDomain: String, serviceRef: String, serviceLabel: String, username: String) {
         self.serverDomain = serverDomain
@@ -67,35 +59,65 @@ public struct ServiceAccessScreen: View {
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s4) {
                 headerCard(c: c)
-                toggleCard(c: c)
-                if restrictedToggle {
-                    addPersonCard(c: c)
-                    peopleSection(c: c)
-                }
+                modeCard(c: c)
+                membersSection(c: c)
                 Spacer().frame(height: FS.space.s12)
             }
             .padding(.horizontal, FS.space.s6)
             .padding(.top, FS.space.s4)
+            .fsReadingColumn()
         }
         .background(c.bg.ignoresSafeArea())
-        .navigationTitle("Who can open this")
+        .navigationTitle("Access control")
         .navigationBarTitleDisplayMode(.inline)
         .task { await reload() }
         .confirmationDialog(
-            "Remove \(confirmRemove?.name ?? "this person")?",
+            "Members only?",
+            isPresented: $confirmMembersOnly,
+            titleVisibility: .visible
+        ) {
+            Button("Members only") { applyMode(.membersOnly) }
+            Button("Cancel", role: .cancel) { pendingMode = nil }
+        } message: {
+            Text(membersOnlyMessage)
+        }
+        .onChange(of: confirmMembersOnly) { _, shown in
+            // Dismissed without choosing: the toggle goes back.
+            if !shown && !applyingMode { pendingMode = nil }
+        }
+        .confirmationDialog(
+            confirmRemove?.isGroup == true ? "Revoke \(confirmRemove?.name ?? "this group")?" : "Remove \(confirmRemove?.name ?? "this person")?",
             isPresented: Binding(get: { confirmRemove != nil }, set: { if !$0 { confirmRemove = nil } }),
             titleVisibility: .visible
         ) {
-            Button("Remove", role: .destructive) {
+            Button(confirmRemove?.isGroup == true ? "Revoke" : "Remove", role: .destructive) {
                 if let p = confirmRemove { Task { await remove(p) } }
                 confirmRemove = nil
             }
             Button("Cancel", role: .cancel) { confirmRemove = nil }
         } message: {
-            Text(confirmRemove?.isGroup == true
-                 ? "Everyone in this group loses access the next time they try to open it. The link stops working. You can create a new group later."
-                 : "They'll lose access the next time they try to open it. You can re-add them later with a new link.")
+            Text(removeMessage(confirmRemove))
         }
+    }
+
+    /// What the toggle shows: the pick in flight, else the box's mode.
+    private var mode: Mode { pendingMode ?? ((vm?.restricted ?? false) ? .membersOnly : .open) }
+
+    private var membersOnlyMessage: String {
+        let n = vm?.memberPeopleCount ?? 0
+        return n == 1 ? "Only this 1 person will be able to open it." : "Only these \(n) people will be able to open it."
+    }
+
+    private func removeMessage(_ p: ServiceAccessViewModel.Person?) -> String {
+        let membersOnly = mode == .membersOnly
+        if p?.isGroup == true {
+            return membersOnly
+                ? "Everyone who joined through this link loses access, unless they were also invited another way."
+                : "Everyone who joined through this link loses their rank and can still visit as anyone can."
+        }
+        return membersOnly
+            ? "They're signed out and kept out. You can invite them again later."
+            : "They lose their rank and can still visit as anyone can. You can invite them again later."
     }
 
     // MARK: header
@@ -114,23 +136,20 @@ public struct ServiceAccessScreen: View {
         }
     }
 
-    // MARK: toggle
+    // MARK: mode
 
     @ViewBuilder
-    private func toggleCard(c: FSColors) -> some View {
+    private func modeCard(c: FSColors) -> some View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s3) {
-                Text("**Open** — anyone with the link can open it. **Restricted** — only people you add below.")
-                    .font(FS.font.caption())
-                    .foregroundColor(c.textMuted)
-                Toggle(isOn: Binding(
-                    get: { restrictedToggle },
-                    set: { want in onToggle(want) }
+                Picker("Who can open it", selection: Binding(
+                    get: { mode },
+                    set: { want in onPickMode(want) }
                 )) {
-                    Text("Restrict to an allow-list").foregroundColor(c.text)
+                    ForEach(Mode.allCases) { m in Text(m.label).tag(m) }
                 }
-                .tint(c.primary)
-                .disabled(vm?.busyMode ?? false)
+                .pickerStyle(.segmented)
+                .disabled(vm == nil || vm?.busyMode == true || applyingMode)
                 .accessibilityIdentifier("service-access-restrict-toggle")
                 statusLine(c: c)
             }
@@ -139,71 +158,146 @@ public struct ServiceAccessScreen: View {
 
     @ViewBuilder
     private func statusLine(c: FSColors) -> some View {
-        switch vm?.phase {
-        case .none, .loading:
-            Text("Loading…").font(FS.font.caption()).foregroundColor(c.textMuted)
-        case .failed(let msg):
-            Text(msg).font(FS.font.caption()).foregroundColor(c.danger)
-        default:
-            Text(restrictedToggle ? "Restricted — \(allowCountLabel)" : "Open to anyone with the link")
-                .font(FS.font.caption())
-                .foregroundColor(c.textMuted)
-                .accessibilityIdentifier("service-access-mode-status")
+        HStack(spacing: FS.space.s2) {
+            if vm?.busyMode == true || applyingMode { ProgressView().controlSize(.small) }
+            switch vm?.phase {
+            case .none, .loading:
+                Text("Loading…").font(FS.font.caption()).foregroundColor(c.textMuted)
+            case .failed(let msg):
+                Text(msg).font(FS.font.caption()).foregroundColor(c.danger)
+                    .accessibilityIdentifier("service-access-mode-status")
+            default:
+                Text(vm?.busyMode == true || applyingMode ? "Saving…"
+                     : mode == .membersOnly ? "Only members and you can open it. Anyone else is asked to sign in."
+                     : "Anyone can open it. Members who sign in get their rank.")
+                    .font(FS.font.caption())
+                    .foregroundColor(c.textMuted)
+                    .accessibilityIdentifier("service-access-mode-status")
+            }
         }
     }
 
-    private var allowCountLabel: String {
-        let n = vm?.allowCount ?? 0
-        return n == 1 ? "1 person added" : "\(n) people added"
-    }
-
-    // MARK: add person
+    // MARK: members
 
     @ViewBuilder
-    private func addPersonCard(c: FSColors) -> some View {
+    private func membersSection(c: FSColors) -> some View {
+        let people = vm?.people ?? []
+        VStack(alignment: .leading, spacing: FS.space.s3) {
+            Text("MEMBERS (\(people.count))")
+                .font(FS.font.caption())
+                .fontWeight(.semibold)
+                .foregroundColor(c.textMuted)
+                .accessibilityIdentifier("service-access-members-title")
+            HStack(spacing: FS.space.s3) {
+                FSSecondaryButton("+ Add person", block: true) { openAdd(.person) }
+                    .accessibilityIdentifier("service-access-add-person")
+                FSSecondaryButton("+ Add group", block: true) { openAdd(.group) }
+                    .accessibilityIdentifier("service-access-add-group")
+            }
+            if let adding { addCard(adding, c: c) }
+            if people.isEmpty {
+                FSCard {
+                    Text("No members yet. Add a person or a group.")
+                        .font(FS.font.body())
+                        .foregroundColor(c.textMuted)
+                }
+            } else {
+                ForEach(people) { person in personRow(person, c: c) }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func addCard(_ kind: AddKind, c: FSColors) -> some View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s3) {
-                Text(tierKind == .group ? "Add a group" : "Add a person")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(c.text)
-                Text("Names & photos stay encrypted to your account — flagshipserver.com stores only ciphertext and never sees them. The link is a bearer capability: send it over a private channel.")
+                HStack {
+                    Text(kind == .group ? "Add a group" : "Add a person")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(c.text)
+                    Spacer()
+                    Button { adding = nil; vm?.clearLink() } label: {
+                        Image(systemName: "xmark.circle.fill").foregroundColor(c.textMuted)
+                    }
+                    .accessibilityLabel("Close")
+                }
+                Text("Names & photos stay encrypted to your account — flagshipserver.com stores only ciphertext. Send the link over a private channel.")
                     .font(FS.font.caption())
                     .foregroundColor(c.textMuted)
-                tierPicker(c: c)
                 FSField(
                     value: $name,
-                    label: tierKind == .group ? "Group name (only you see it)" : "Name (only you + your servers see it)",
-                    placeholder: tierKind == .group ? "Chess club" : "Alex")
+                    label: kind == .group ? "Group name (only you + your servers see it)" : "Name (only you + your servers see it)",
+                    placeholder: kind == .group ? "Chess club" : "Alex")
                     .accessibilityIdentifier("service-access-name-field")
-                if tierKind == .group { groupFields(c: c) }
-                else { photoRow(c: c) }
+                HStack {
+                    Text("Rank").foregroundColor(c.text)
+                    Spacer()
+                    rolePicker(selection: newRole, id: "service-access-new-role") { newRole = $0 }
+                }
+                if let desc = vm?.members?.description(of: newRole) {
+                    Text(desc).font(FS.font.caption()).foregroundColor(c.textMuted)
+                }
+                if kind == .group {
+                    Text("Everyone who joins through the link gets this rank.")
+                        .font(FS.font.caption())
+                        .foregroundColor(c.textMuted)
+                    groupFields(c: c)
+                } else {
+                    photoRow(c: c)
+                    Toggle(isOn: $approveFirst) {
+                        Text("I approve them before they get in").foregroundColor(c.text)
+                    }
+                    .tint(c.primary)
+                    .accessibilityIdentifier("service-access-approve-toggle")
+                }
                 FSPrimaryButton(vm?.busyAdd == true ? "Creating…" : "Create invite link", block: true, large: true) {
-                    Task { await addPerson() }
+                    Task { await add(kind) }
                 }
                 .disabled(vm?.busyAdd == true || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 .accessibilityIdentifier("service-access-create-invite")
+                if let note = vm?.roleNotice {
+                    Text(note).font(FS.font.caption()).foregroundColor(c.danger)
+                }
                 if let link = vm?.lastInviteLink {
-                    resultBlock(c: c, link: link)
+                    InviteShareCard(title: "Shareable link", subtitle: shareSubtitle, link: link, idPrefix: "service-access-share")
                 }
             }
         }
     }
 
-    @ViewBuilder
-    private func tierPicker(c: FSColors) -> some View {
-        VStack(alignment: .leading, spacing: FS.space.s2) {
-            Picker("Invite type", selection: $tierKind) {
-                ForEach(TierKind.allCases) { t in
-                    Text(t.label).tag(t)
+    /// A rank menu (the display names come from `AppMemberRole.label` only);
+    /// each item carries the app's one line for that rank, Master its crown.
+    private func rolePicker(selection: AppMemberRole, id: String, busy: Bool = false,
+                            onPick: @escaping (AppMemberRole) -> Void) -> some View {
+        let c = FSColors.scheme(scheme)
+        return Menu {
+            ForEach(AppMemberRole.allCases) { r in
+                // A menu item reads title, subtitle and image from its label.
+                Button { onPick(r) } label: {
+                    Text(r.label)
+                    if let d = vm?.members?.description(of: r) { Text(d) }
+                    if r == selection { Image(systemName: "checkmark") }
+                    else if r.crowned { Image(systemName: "crown.fill") }
                 }
             }
-            .pickerStyle(.segmented)
-            .accessibilityIdentifier("service-access-tier-picker")
-            Text(tierKind.blurb)
-                .font(FS.font.caption())
-                .foregroundColor(tierKind == .group ? c.warning : c.textMuted)
-                .accessibilityIdentifier("service-access-tier-blurb")
+        } label: {
+            HStack(spacing: 4) {
+                if busy { ProgressView().controlSize(.mini) }
+                if selection.crowned {
+                    Image(systemName: "crown.fill").font(.system(size: 12)).foregroundColor(Color(red: 0.79, green: 0.64, blue: 0.15))
+                }
+                Text(selection.label).font(.system(size: 14, weight: .semibold))
+                Image(systemName: "chevron.up.chevron.down").font(.system(size: 11, weight: .semibold))
+            }
+            .foregroundColor(c.primary)
+            .padding(.horizontal, FS.space.s3)
+            .frame(minHeight: 32)
+            .background(c.surfaceSunken)
+            .clipShape(Capsule())
         }
+        .disabled(busy)
+        .accessibilityIdentifier(id)
+        .accessibilityLabel("Rank: \(selection.label)")
     }
 
     @ViewBuilder
@@ -217,9 +311,6 @@ public struct ServiceAccessScreen: View {
             }
             .tint(c.primary)
             .accessibilityIdentifier("service-access-group-expires")
-            Text("A group link is a standing liability — set a limit and an expiry.")
-                .font(FS.font.caption())
-                .foregroundColor(c.textMuted)
         }
     }
 
@@ -245,46 +336,15 @@ public struct ServiceAccessScreen: View {
         }
     }
 
-    @ViewBuilder
-    private func resultBlock(c: FSColors, link: String) -> some View {
-        InviteShareCard(
-            title: "Shareable link",
-            subtitle: shareSubtitle,
-            link: link,
-            idPrefix: "service-access-share")
-    }
-
-    /// Tier-specific guidance shown under the freshly-created link.
+    /// Guidance shown under the freshly-created link.
     private var shareSubtitle: String {
         switch vm?.lastInviteTier {
         case .some(.personalManual):
             return "They'll accept, then send a reply back to you — open it to approve them."
         case .some(.group):
-            return "Anyone with this link (up to the limit) gets in. Share it carefully."
+            return "Anyone with this link (up to the limit) joins. Share it carefully."
         default:
             return "Send it over a private channel. It locks to the first account that opens it."
-        }
-    }
-
-    // MARK: people list
-
-    @ViewBuilder
-    private func peopleSection(c: FSColors) -> some View {
-        VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("People with access")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundColor(c.text)
-            if (vm?.people ?? []).isEmpty {
-                FSCard {
-                    Text("No one added yet. Create an invite link above.")
-                        .font(FS.font.body())
-                        .foregroundColor(c.textMuted)
-                }
-            } else {
-                ForEach(vm?.people ?? []) { person in
-                    personRow(person, c: c)
-                }
-            }
         }
     }
 
@@ -293,28 +353,40 @@ public struct ServiceAccessScreen: View {
             HStack(spacing: FS.space.s3) {
                 avatar(p, c: c)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(p.name).font(FS.font.body()).foregroundColor(c.text)
+                    Text(p.name).font(FS.font.body()).foregroundColor(c.text).lineLimit(1)
                     Text(statusLine(p))
                         .font(FS.font.caption())
                         .foregroundColor(c.textMuted)
                         .accessibilityIdentifier("service-access-status-\(p.inviteId)")
+                    if let also = vm?.alsoIn(for: p), !also.isEmpty {
+                        Text(also).font(FS.font.caption()).foregroundColor(c.textMuted)
+                    }
                 }
-                Spacer()
-                Button(p.isGroup ? "Remove group" : "Remove", role: .destructive) { confirmRemove = p }
-                    .buttonStyle(.bordered)
-                    .accessibilityIdentifier("service-access-remove-\(p.inviteId)")
+                Spacer(minLength: FS.space.s2)
+                if let role = vm?.role(for: p) {
+                    rolePicker(selection: role, id: "service-access-role-\(p.inviteId)",
+                               busy: vm?.busyRoles.contains(p.inviteId) == true) { r in
+                        Task { await pickRole(r, for: p) }
+                    }
+                }
+                Button { confirmRemove = p } label: {
+                    Image(systemName: p.isGroup ? "xmark.circle" : "person.crop.circle.badge.minus")
+                        .foregroundColor(c.danger)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(p.isGroup ? "Revoke \(p.name)" : "Remove \(p.name)")
+                .accessibilityIdentifier("service-access-remove-\(p.inviteId)")
             }
         }
     }
 
-    /// The per-row status line: a group shows "k/N" (N = cap, 0 = ∞); a manual
-    /// invite says it's owner-approved; a personal invite shows bound/pending.
+    /// A group shows "k of N joined" (N = cap, 0 = no limit); an approve-first
+    /// invite waits for the owner; a personal invite shows bound/pending.
     private func statusLine(_ p: ServiceAccessViewModel.Person) -> String {
         if p.isGroup {
             let used = p.groupBoundAIDs.count
             let cap = p.groupMax ?? 0
-            let capStr = cap == 0 ? "no limit" : "\(cap)"
-            return "group · \(used)/\(capStr)"
+            return cap == 0 ? "\(used) joined" : "\(used) of \(cap) joined"
         }
         if p.manual && !p.bound { return "you approve · not yet in" }
         return p.bound ? "active" : "invite sent — not opened yet"
@@ -353,40 +425,76 @@ public struct ServiceAccessScreen: View {
             client: client,
             serverDomain: serverDomain,
             serviceRef: serviceRef,
-            username: username
+            username: username,
+            authorAidKeys: keys?.authorAidKeys,
+            irkSigner: keys?.irkSigner,
+            screens: screens,
+            roleSigner: keys?.roleSigner
         )
         vm = m
         await m.load()
-        restrictedToggle = m.restricted
         if case .failed(let msg) = m.phase { toasts.error(msg) }
     }
 
     @MainActor
-    private func onToggle(_ want: Bool) {
-        // Optimistic flip so the section reveals/hides immediately; the VM
-        // re-reads + reverts on failure.
-        restrictedToggle = want
+    private func onPickMode(_ want: Mode) {
+        guard want != mode, vm?.busyMode != true, !applyingMode else { return }
+        pendingMode = want
+        if want == .membersOnly {
+            confirmMembersOnly = true
+        } else {
+            applyMode(.open)
+        }
+    }
+
+    /// Sign + post the mode; the toggle rolls back if the box refuses.
+    @MainActor
+    private func applyMode(_ want: Mode) {
         guard let vm else { return }
+        pendingMode = want
+        applyingMode = true
         Task {
-            await vm.setMode(restricted: want)
-            restrictedToggle = vm.restricted
+            await vm.setMode(restricted: want == .membersOnly)
+            // The box's answer wins: a refused change rolls the toggle back.
+            pendingMode = nil
+            applyingMode = false
             if case .failed(let msg) = vm.phase {
                 toasts.error(msg)
             } else {
-                toasts.success(want ? "Now restricted to your allow-list." : "Now open to anyone with the link.")
+                toasts.success(want == .membersOnly ? "Now members only." : "Now open to all.")
             }
         }
     }
 
     @MainActor
-    private func addPerson() async {
+    private func openAdd(_ kind: AddKind) {
+        adding = kind
+        vm?.clearLink()
+        name = ""
+        approveFirst = false
+        photoDataUri = nil
+        photoItem = nil
+        newRole = AppMemberRole(wire: vm?.members?.defaultRole) ?? .member
+    }
+
+    @MainActor
+    private func add(_ kind: AddKind) async {
         guard let vm else { return }
-        let tier = currentTier()
-        // The group tier carries no per-person photo.
-        let photo = tierKind == .group ? nil : photoDataUri
-        let link = await vm.addPerson(name: name, photo: photo, tier: tier)
+        let tier: ServiceAccessViewModel.InviteTier
+        switch kind {
+        case .group:
+            let maxN = max(0, Int(groupMaxText.trimmingCharacters(in: .whitespaces)) ?? 0)
+            let expiresAt: Int64? = groupExpires
+                ? Int64(Date().addingTimeInterval(7 * 24 * 60 * 60).timeIntervalSince1970 * 1000)
+                : nil
+            tier = .group(maxRedemptions: maxN, expiresAt: expiresAt)
+        case .person:
+            tier = approveFirst ? .personalManual : .personalAuto
+        }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let link = await vm.addPerson(name: trimmed, photo: kind == .group ? nil : photoDataUri, tier: tier, role: newRole)
         if link != nil {
-            toasts.success(tierKind == .group ? "Group invite created." : "Invite for \(name.trimmingCharacters(in: .whitespacesAndNewlines)) created.")
+            toasts.success(kind == .group ? "Group invite created." : "Invite for \(trimmed) created.")
             name = ""
             photoDataUri = nil
             photoItem = nil
@@ -395,20 +503,13 @@ public struct ServiceAccessScreen: View {
         }
     }
 
-    /// Build the VM's `InviteTier` from the picker + group fields.
-    private func currentTier() -> ServiceAccessViewModel.InviteTier {
-        switch tierKind {
-        case .personalAuto:
-            return .personalAuto
-        case .personalManual:
-            return .personalManual
-        case .group:
-            let maxN = max(0, Int(groupMaxText.trimmingCharacters(in: .whitespaces)) ?? 0)
-            // 7 days from now, in epoch-ms, when the owner opted into an expiry.
-            let expiresAt: Int64? = groupExpires
-                ? Int64(Date().addingTimeInterval(7 * 24 * 60 * 60).timeIntervalSince1970 * 1000)
-                : nil
-            return .group(maxRedemptions: maxN, expiresAt: expiresAt)
+    @MainActor
+    private func pickRole(_ role: AppMemberRole, for p: ServiceAccessViewModel.Person) async {
+        guard let vm, role != vm.role(for: p) else { return }
+        if await vm.setRole(role, for: p) {
+            toasts.success("\(p.name) is now \(role.label).")
+        } else if case .failed(let msg) = vm.phase {
+            toasts.error(msg)
         }
     }
 
@@ -416,7 +517,7 @@ public struct ServiceAccessScreen: View {
     private func remove(_ p: ServiceAccessViewModel.Person) async {
         guard let vm else { return }
         await vm.remove(inviteId: p.inviteId)
-        if case .failed(let msg) = vm.phase { toasts.error(msg) } else { toasts.success("Removed.") }
+        if case .failed(let msg) = vm.phase { toasts.error(msg) } else { toasts.success(p.isGroup ? "Group revoked." : "Removed.") }
     }
 
     @MainActor

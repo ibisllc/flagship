@@ -153,6 +153,15 @@ interface ScreensClient {
     suspend fun serviceDbQuery(serviceId: String, store: String, req: AppDbQueryRequest): AppDbQueryResult =
         throw ScreensError.NotImplemented("database")
 
+    /** `GET /api/screens/services/:serviceId/members` (Access control): the
+     *  members, their grants and ranks. Owner sessions only (companions get 403). */
+    suspend fun appMembers(serviceId: String): AppMembersResponse =
+        throw ScreensError.NotImplemented("app members")
+
+    /** `POST …/members/role`: the owner's signed `flagship/app-member-role/v1` order. */
+    suspend fun setAppMemberRole(serviceId: String, req: AppMemberRoleRequest): AppMemberRoleResponse =
+        throw ScreensError.NotImplemented("app members")
+
     /** `GET /api/screens/services/:serviceId/api-keys` (docs/app-apis.md §3).
      *  A box without API keys answers 404. */
     suspend fun serviceApiKeys(serviceId: String): AppApiKeysResponse =

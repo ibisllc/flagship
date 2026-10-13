@@ -331,7 +331,7 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                         Column(Modifier.weight(1f)) {
                             Text("Access control", color = FS.colors.text, style = TextStyle(fontSize = 16.sp))
                             Text(
-                                "Open to all or members only, and each member's role",
+                                "Open to all or members only, and each member's rank",
                                 color = FS.colors.textMuted,
                                 style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
                             )

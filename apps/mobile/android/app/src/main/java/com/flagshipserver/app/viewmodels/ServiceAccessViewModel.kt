@@ -1,7 +1,10 @@
-// Admin orchestrator for per-service access gating (docs/service-access-gating.md
-// §v2 hardening). Mirror of iOS ServiceAccessViewModel + the webapp
-// views/service-access.js:
-//   - read the TRUE mode from the box, toggle open <-> restricted (owner-IRK),
+// Admin orchestrator for a service's Access control (docs/service-access-gating.md,
+// "Open mode + members"; the toggle and the members list are independent).
+// Mirror of iOS ServiceAccessViewModel + the webapp views/service-access.js:
+//   - read the TRUE mode from the box, toggle Open to all <-> Members only
+//     (owner-IRK), never touching the members list,
+//   - read each member's grants and rank from the box (owner session) and change
+//     a rank with a signed flagship/app-member-role/v1 order,
 //   - allow-list: ADD a person across THREE tiers (personal auto-approve /
 //     personal manual-approve / group multi-use) -> seal {name,photo?} under the
 //     household key -> AID-sign the create -> POST .com -> return the share-link
@@ -20,8 +23,14 @@ package com.flagshipserver.app.viewmodels
 
 import android.content.Context
 import androidx.lifecycle.ViewModel
+import com.flagshipserver.app.api.AppMemberRoleOrderBody
+import com.flagshipserver.app.api.AppMemberRoleRequest
+import com.flagshipserver.app.api.AppMembersResponse
+import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.ServiceAccessClient
 import com.flagshipserver.app.api.ServiceInviteRow
+import com.flagshipserver.app.core.AppMemberRole
+import com.flagshipserver.app.core.AppMemberRoleOrder
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.InviteLink
 import com.flagshipserver.app.core.ServiceInvite
@@ -89,6 +98,10 @@ class ServiceAccessViewModel(
     /** Household key — seals/opens the {name, photo?} bundle. */
     private val householdKey: suspend (reason: String) -> ByteArray = { r -> Keystore.deriveHouseholdKey(r) },
     private val now: () -> Long = { System.currentTimeMillis() },
+    /** The box's owner-session API (members + ranks); null ⇒ no ranks shown. */
+    private val screens: ScreensClient? = null,
+    /** Sensitive-order signer for rank changes (admin root when held, else the IRK). */
+    private val roleSigner: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.adminSigningKey(r) },
 ) : ViewModel() {
     private val _phase = MutableStateFlow<ServiceAccessPhase>(ServiceAccessPhase.Idle)
     val phase: StateFlow<ServiceAccessPhase> = _phase.asStateFlow()
@@ -112,6 +125,70 @@ class ServiceAccessViewModel(
     private val _busyFinalize = MutableStateFlow(false)
     val busyFinalize: StateFlow<Boolean> = _busyFinalize.asStateFlow()
 
+    /** The box's members, grants and ranks; null until read (or when it can't be). */
+    private val _members = MutableStateFlow<AppMembersResponse?>(null)
+    val members: StateFlow<AppMembersResponse?> = _members.asStateFlow()
+    /** Rows whose rank change is being signed / sent (by inviteId). */
+    private val _busyRoles = MutableStateFlow<Set<String>>(emptySet())
+    val busyRoles: StateFlow<Set<String>> = _busyRoles.asStateFlow()
+    /** Set when an invite was created but its rank couldn't be set. */
+    private val _roleNotice = MutableStateFlow<String?>(null)
+    val roleNotice: StateFlow<String?> = _roleNotice.asStateFlow()
+
+    /** Read the members, their grants and ranks from the box. */
+    suspend fun refreshMembers() {
+        val s = screens ?: return
+        _members.value = runCatching { s.appMembers(serviceRef) }.getOrNull()
+    }
+
+    /** The rank one row shows (null until the box has answered). */
+    fun roleFor(p: AccessPerson): AppMemberRole? {
+        val m = _members.value ?: return null
+        return AppMemberRole.fromWire(m.rowRole(p.inviteId, if (p.isGroup) null else p.boundAidHex))
+    }
+
+    /** "also in Family: Member" for a person who joined through other invites too. */
+    fun alsoIn(p: AccessPerson): String {
+        val m = _members.value ?: return ""
+        if (p.isGroup) return ""
+        val others = m.otherGrants(p.inviteId, p.boundAidHex) { id -> _people.value.firstOrNull { it.inviteId == id }?.name }
+        return AppMembersResponse.alsoInText(others) { AppMemberRole.fromWire(it)?.label ?: it }
+    }
+
+    /** How many people a members-only switch leaves able to open it. */
+    val memberPeopleCount: Int get() = _members.value?.members?.size ?: _allowCount.value
+
+    /** Sign + send a rank change for one row. Returns whether the box took it. */
+    suspend fun setRole(role: AppMemberRole, p: AccessPerson): Boolean {
+        val s = screens ?: return false
+        val m = _members.value ?: return false
+        if (p.inviteId in _busyRoles.value) return false
+        _busyRoles.value = _busyRoles.value + p.inviteId
+        return try {
+            val target = m.roleTarget(p.inviteId, if (p.isGroup) null else p.boundAidHex)
+            sendRole(s, target, role, "Change ${p.name}'s rank")
+            refreshMembers()
+            true
+        } catch (e: Throwable) {
+            _phase.value = ServiceAccessPhase.Failed("Couldn't change ${p.name}'s rank. Try again in a moment.")
+            false
+        } finally {
+            _busyRoles.value = _busyRoles.value - p.inviteId
+        }
+    }
+
+    private suspend fun sendRole(s: ScreensClient, target: String, role: AppMemberRole, reason: String) {
+        val key = roleSigner(reason)
+        val signed = AppMemberRoleOrder.sign(
+            key, AppMemberRoleOrder.Order(serverDomain, serviceRef, target, role.wire, now()),
+        )
+        val o = signed.order
+        s.setAppMemberRole(
+            serviceRef,
+            AppMemberRoleRequest(AppMemberRoleOrderBody(o.serverDomain, o.serviceId, o.target, o.role, o.issuedAt), signed.signatureHex),
+        )
+    }
+
     suspend fun load() {
         _phase.value = ServiceAccessPhase.Loading
         try {
@@ -119,7 +196,8 @@ class ServiceAccessViewModel(
             _restricted.value = state.isRestricted
             _allowCount.value = state.allowCount
             _phase.value = ServiceAccessPhase.Ready
-            if (state.isRestricted) refreshPeople()
+            refreshPeople()
+            refreshMembers()
         } catch (e: Throwable) {
             _phase.value = ServiceAccessPhase.Failed("Couldn't reach the box to load access settings.")
         }
@@ -132,8 +210,8 @@ class ServiceAccessViewModel(
         val mode = if (restricted) "restricted" else "open"
         return try {
             val key = irkSigner(
-                if (restricted) "Restrict $serviceRef to your allow-list"
-                else "Open $serviceRef to anyone with the link",
+                if (restricted) "Make $serviceRef members only"
+                else "Open $serviceRef to all",
             )
             val ts = now()
             val bytes = ServiceInvite.canonicalSetAccessMode(serverDomain, serviceRef, mode, ts)
@@ -145,11 +223,12 @@ class ServiceAccessViewModel(
                 put("issuedAt", JsonPrimitive(ts))
             }
             client.setAccessMode(serverDomain, request, HexUtil.encode(sig))
+            // The members list never changes with the mode.
             _restricted.value = restricted
-            if (restricted) refreshPeople() else _people.value = emptyList()
+            _phase.value = ServiceAccessPhase.Ready
             true
         } catch (e: Throwable) {
-            _phase.value = ServiceAccessPhase.Failed("Couldn't change who can open this. Try again in a moment.")
+            _phase.value = ServiceAccessPhase.Failed("Couldn't change access. Try again in a moment.")
             false
         } finally {
             _busyMode.value = false
@@ -169,6 +248,7 @@ class ServiceAccessViewModel(
         tier: InviteTier = InviteTier.PERSONAL_AUTO,
         maxRedemptions: Int = 0,
         expiresAt: Long? = null,
+        role: AppMemberRole? = null,
     ): String? {
         if (_busyAdd.value) return null
         val trimmed = name.trim()
@@ -209,7 +289,19 @@ class ServiceAccessViewModel(
             val linkInviteId = if (tier == InviteTier.PERSONAL_MANUAL) inviteId else null
             val link = InviteLink.shareLink(serverDomain, HexUtil.encode(secret), HexUtil.encode(aid), linkInviteId)
             _lastLink.value = link
+            _roleNotice.value = null
+            // The rank rides a signed order right after the create; the app's
+            // default rank needs none.
+            val s = screens
+            if (role != null && s != null && role.wire != _members.value?.defaultRole) {
+                try {
+                    sendRole(s, AppMemberRoleOrder.inviteTarget(inviteId), role, "Give $trimmed a rank")
+                } catch (e: Throwable) {
+                    _roleNotice.value = "Created, but couldn't set the rank. Change it in the list."
+                }
+            }
             refreshPeople()
+            refreshMembers()
             link
         } catch (e: Throwable) {
             _phase.value = ServiceAccessPhase.Failed("Couldn't create the invite. Try again in a moment.")
@@ -276,15 +368,22 @@ class ServiceAccessViewModel(
 
         // 2) Box allow-list prune — for every bound AID (group: all members; else
         //    the single bound AID). This is what actually reaches the box.
-        val targets = (memberAids + listOfNotNull(boundAidHex))
+        // Only the AIDs for whom this was their last grant: someone who also
+        // holds another invite keeps it (the box drops just this grant when its
+        // revocation poller sees the .com revoke).
+        val bound = (memberAids + listOfNotNull(boundAidHex))
             .mapNotNull { it.lowercase().takeIf { a -> a.isNotEmpty() } }
             .distinct()
+        val targets = _members.value?.aidsToPrune(inviteId, bound) ?: bound
         var boxOk = true
         if (targets.isNotEmpty()) {
             boxOk = pruneAids(serviceRef, targets, ts)
         }
 
-        if (comOk && boxOk) refreshPeople()
+        if (comOk && boxOk) {
+            refreshPeople()
+            refreshMembers()
+        }
     }
 
     /** Per-member removal from a GROUP (the group itself stays). Prunes ONE bound
@@ -322,7 +421,7 @@ class ServiceAccessViewModel(
      *  to ONE entry showing "k/N" + its bound members. */
     suspend fun refreshPeople() {
         try {
-            val reason = "Show who can open $serviceRef"
+            val reason = "Show the members of $serviceRef"
             val aidPub = aidPubHex(reason)
             val hh = householdKey(reason)
             val ts = now()
@@ -372,6 +471,7 @@ class ServiceAccessViewModel(
             serverDomain: String,
             serviceRef: String,
             username: String,
-        ): ServiceAccessViewModel = ServiceAccessViewModel(serverDomain, serviceRef, username)
+            screens: ScreensClient? = null,
+        ): ServiceAccessViewModel = ServiceAccessViewModel(serverDomain, serviceRef, username, screens = screens)
     }
 }

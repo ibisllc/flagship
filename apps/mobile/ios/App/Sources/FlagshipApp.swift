@@ -395,6 +395,17 @@ struct FlagshipApp: App {
     // session. Live/mock split as the other box-direct clients.
     private let mockServiceAccess = MockServiceAccessClient()
     private let liveServiceAccess: any ServiceAccessClient
+    /// Gym-only (`-smoke-mode -smoke-access-fixture`): a members list on the
+    /// demo apps' Access control, signed with fixed keys instead of the Keystore.
+    private let accessFixture = AccessFixtureOnce()
+    private var accessFixtureKeys: ServiceAccessKeys? {
+        let args = ProcessInfo.processInfo.arguments
+        guard args.contains("-smoke-mode"), args.contains("-smoke-access-fixture"), !dev.useLiveClient else { return nil }
+        return accessFixture.keys {
+            ServiceAccessFixture.seed(access: mockServiceAccess, screens: mockClient,
+                                      serviceIds: ["bright-maple--plants", "bright-maple--wiki", "trent--scratchpad"])
+        }
+    }
     // Every LIVE /pods response feeds the cert-pin registry (verify the
     // STK-signed daemon-status per pod → install/clear that box's
     // fingerprint pin). Live-only by construction: the Mock never invokes
@@ -470,6 +481,7 @@ struct FlagshipApp: App {
                 .environment(\.leadsClient, activeLeads)
                 .environment(\.serviceUninstallClient, activeServiceUninstall)
                 .environment(\.serviceAccessClient, activeServiceAccess)
+                .environment(\.serviceAccessKeys, accessFixtureKeys)
                 .environment(\.serverTransferClient, activeServerTransfer)
                 .environment(\.serverMigrationClient, activeServerMigration)
                 .environment(\.pushRegistrar, pushRegistrar)
@@ -615,5 +627,16 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         didFailToRegisterForRemoteNotificationsWithError error: Error
     ) {
         Task { @MainActor in push?.setDeviceToken(nil) }
+    }
+}
+
+/// Seeds the gym's Access control fixture once per launch.
+private final class AccessFixtureOnce {
+    private var cached: ServiceAccessKeys?
+    func keys(_ make: () -> ServiceAccessKeys) -> ServiceAccessKeys {
+        if let cached { return cached }
+        let k = make()
+        cached = k
+        return k
     }
 }

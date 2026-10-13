@@ -278,6 +278,14 @@ class LiveScreensClient(
         return request("${dbPath(serviceId, store)}/query", AppDbQueryResult.serializer(), "POST", body, readTimeoutSeconds = 30)
     }
 
+    override suspend fun appMembers(serviceId: String): AppMembersResponse =
+        request("${servicePath(serviceId)}/members", AppMembersResponse.serializer())
+
+    override suspend fun setAppMemberRole(serviceId: String, req: AppMemberRoleRequest): AppMemberRoleResponse {
+        val body = json.encodeToString(AppMemberRoleRequest.serializer(), req).toByteArray()
+        return request("${servicePath(serviceId)}/members/role", AppMemberRoleResponse.serializer(), "POST", body)
+    }
+
     override suspend fun serviceApiKeys(serviceId: String): AppApiKeysResponse =
         request("${servicePath(serviceId)}/api-keys", AppApiKeysResponse.serializer())
 

@@ -364,6 +364,47 @@ class MockScreensClient(
         return stores[store] ?: throw ScreensError.Http(404, """{"error":"no such store"}""")
     }
 
+    // ---------- Access control — members' ranks ------------------------
+
+    /** Per-service members the box would list (absent: none, default editor). */
+    val membersFixture: MutableMap<String, AppMembersResponse> = mutableMapOf()
+    val setAppMemberRoleCalls: MutableList<Pair<String, AppMemberRoleRequest>> = mutableListOf()
+    /** Status to refuse the next rank change with (e.g. 403), once. */
+    var memberRoleStatus: Int? = null
+
+    override suspend fun appMembers(serviceId: String): AppMembersResponse {
+        tick()
+        return membersFixture[serviceId] ?: AppMembersResponse(serviceId = serviceId, mode = "open", defaultRole = "member")
+    }
+
+    /** Mirrors the box: records the order and updates the listed rank. */
+    override suspend fun setAppMemberRole(serviceId: String, req: AppMemberRoleRequest): AppMemberRoleResponse {
+        tick()
+        setAppMemberRoleCalls.add(serviceId to req)
+        memberRoleStatus?.let { memberRoleStatus = null; throw ScreensError.Http(it, """{"error":"refused"}""") }
+        val cur = appMembers(serviceId)
+        val t = req.order.target
+        val role = req.order.role
+        val next = when {
+            t.startsWith("invite:") -> {
+                val id = t.removePrefix("invite:")
+                cur.copy(
+                    invites = cur.invites.filter { it.inviteId != id } + AppMemberInviteRole(id, role, true),
+                    members = cur.members.map { m ->
+                        m.copy(grants = m.grants.map { if (it.inviteId == id) it.copy(role = role) else it })
+                    },
+                )
+            }
+            t.startsWith("aid:") -> {
+                val aid = t.removePrefix("aid:")
+                cur.copy(members = cur.members.map { if (it.aid == aid) it.copy(role = role, direct = role) else it })
+            }
+            else -> cur
+        }
+        membersFixture[serviceId] = next
+        return AppMemberRoleResponse(ok = true, target = t, role = role)
+    }
+
     override suspend fun serviceDb(serviceId: String): AppDbOverview {
         tick()
         dbError?.let { throw it }

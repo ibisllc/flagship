@@ -147,29 +147,43 @@ final class GymLiveTests: XCTestCase {
             gymShot(app, "service-detail-live")
             access.tap()
             XCTAssertTrue(
-                app.navigationBars["Who can open this"].waitForExistence(timeout: 20),
-                "'Manage access' should push the 'Who can open this' access screen."
+                app.navigationBars["Access control"].waitForExistence(timeout: 20),
+                "The 'Access control' row should push the Access control screen."
             )
         }
         return reached
     }
 
-    /// Ensure the access screen is RESTRICTED (the allow-list manager only shows
-    /// when restricted, so the invite-mint controls need this first). Idempotent:
-    /// flips the toggle on only if the status line isn't already restricted.
+    /// The Open to all | Members only toggle (a segmented control).
+    private func modeToggle(_ app: XCUIApplication) -> XCUIElement {
+        app.segmentedControls["service-access-restrict-toggle"]
+    }
+
+    private func isMembersOnly(_ app: XCUIApplication) -> Bool {
+        modeToggle(app).buttons["Members only"].isSelected
+    }
+
+    /// Switch to Members only, confirming the "Only these N people…" prompt.
+    private func switchToMembersOnly(_ app: XCUIApplication) {
+        modeToggle(app).buttons["Members only"].tap()
+        let confirm = app.sheets.buttons["Members only"].firstMatch
+        if confirm.waitForExistence(timeout: 5) { confirm.tap() }
+        else {
+            // iPad presents the confirmation as a popover: the second "Members only".
+            let second = app.buttons.matching(NSPredicate(format: "label == %@", "Members only")).element(boundBy: 1)
+            if second.exists { second.tap() }
+        }
+    }
+
+    /// Ensure the access screen is MEMBERS ONLY. Idempotent.
     private func ensureRestricted(_ app: XCUIApplication) {
-        let toggle = app.switches["service-access-restrict-toggle"]
         XCTAssertTrue(
-            toggle.waitForExistence(timeout: 20),
-            "The access screen should render the open⇄restricted toggle."
+            modeToggle(app).waitForExistence(timeout: 20),
+            "The access screen should render the Open to all | Members only toggle."
         )
-        // A SwiftUI Toggle reports "1"/"0" in its value. Flip to restricted if off.
-        let isOn = (toggle.value as? String) == "1"
-        if !isOn {
-            toggle.tap()
-            // The box round-trips set-service-access-mode; the add-person card
-            // (create-invite control) reveals once the mode is restricted.
-            _ = app.buttons["service-access-create-invite"].waitForExistence(timeout: 20)
+        if !isMembersOnly(app) {
+            switchToMembersOnly(app)
+            _ = app.staticTexts["service-access-mode-status"].waitForExistence(timeout: 20)
         }
     }
 
@@ -183,17 +197,15 @@ final class GymLiveTests: XCTestCase {
         let app = launchLive()
         guard openLiveServiceAccess(app) else { return }
 
-        let toggle = app.switches["service-access-restrict-toggle"]
-        XCTAssertTrue(toggle.waitForExistence(timeout: 20), "The access screen should render the restrict toggle.")
+        let toggle = modeToggle(app)
+        XCTAssertTrue(toggle.waitForExistence(timeout: 20), "The access screen should render the mode toggle.")
         gymShot(app, "access-open")
 
-        // Flip to restricted.
-        toggle.tap()
+        // Switch to members only (confirming the prompt).
+        switchToMembersOnly(app)
         // The status line reflects the live mode; the allow-list manager reveals.
         let status = app.staticTexts["service-access-mode-status"]
-        let restrictedSurfaced =
-            status.waitForExistence(timeout: 20)
-            || app.buttons["service-access-create-invite"].waitForExistence(timeout: 10)
+        let restrictedSurfaced = status.waitForExistence(timeout: 20)
         XCTAssertTrue(
             restrictedSurfaced,
             "Restricting the live service should surface the restricted status / allow-list manager."
@@ -202,9 +214,8 @@ final class GymLiveTests: XCTestCase {
 
         // Restore the baseline: flip back to open so the demo box is left public.
         // (Best-effort cleanup — the assertion above is the verdict.)
-        let toggleAfter = app.switches["service-access-restrict-toggle"]
-        if toggleAfter.exists, (toggleAfter.value as? String) == "1" {
-            toggleAfter.tap()
+        if toggle.exists, isMembersOnly(app) {
+            toggle.buttons["Open to all"].tap()
             _ = status.waitForExistence(timeout: 10)
         }
         gymShot(app, "access-restored")
@@ -221,23 +232,20 @@ final class GymLiveTests: XCTestCase {
     func test_gatingInviteTiers() throws {
         let app = launchLive()
         guard openLiveServiceAccess(app) else { return }
-        ensureRestricted(app)
 
-        let tierPicker = app.segmentedControls["service-access-tier-picker"]
+        let addPerson = app.buttons["service-access-add-person"]
+        let addGroup = app.buttons["service-access-add-group"]
         XCTAssertTrue(
-            tierPicker.waitForExistence(timeout: 20),
-            "Restricted access should render the 3-tier invite picker (One person / I approve / A group)."
+            addPerson.waitForExistence(timeout: 20) && addGroup.exists,
+            "Access control should offer + Add person and + Add group (in either mode)."
         )
-        XCTAssertEqual(
-            tierPicker.buttons.count, 3,
-            "The invite tier picker should offer exactly three tiers."
-        )
-        gymShot(app, "tier-picker")
+        gymShot(app, "add-buttons")
 
         let nameField = app.textFields["service-access-name-field"]
         let createBtn = app.buttons["service-access-create-invite"]
 
-        // ── Tier 1: personal auto-approve (the default tier). ──
+        // ── A person (anyone the link reaches first gets in). ──
+        addPerson.tap()
         XCTAssertTrue(nameField.waitForExistence(timeout: 15), "The add-person card should render the name field.")
         nameField.tap()
         nameField.typeText("Gym Auto")
@@ -248,31 +256,25 @@ final class GymLiveTests: XCTestCase {
         XCTAssertTrue(
             app.staticTexts["service-access-share-url"].waitForExistence(timeout: 25)
                 || app.otherElements["service-access-share-url"].waitForExistence(timeout: 5),
-            "Creating a personal auto-approve invite should surface a shareable link (the .com row was minted)."
+            "Creating a person's invite should surface a shareable link (the .com row was minted)."
         )
         gymShot(app, "personal-auto-link")
 
-        // ── Tier 2: personal manual-approve ("One person — I approve"). ──
-        // The picker's middle segment selects manual-approve.
-        if tierPicker.buttons.element(boundBy: 1).exists {
-            tierPicker.buttons.element(boundBy: 1).tap()
-        }
-        if nameField.exists {
+        // ── A person you approve first. ──
+        if revealBySwipe(app, addPerson, tries: 3) { addPerson.tap() }
+        let approve = app.switches["service-access-approve-toggle"]
+        if nameField.waitForExistence(timeout: 10) {
             nameField.tap()
-            // Clear any residual text, then type the manual label.
             nameField.typeText("Gym Manual")
+            if revealBySwipe(app, approve, tries: 3) { approve.tap() }
             if createBtn.isEnabled { createBtn.tap() }
             _ = app.staticTexts["service-access-share-url"].waitForExistence(timeout: 25)
             gymShot(app, "personal-manual-link")
         }
 
-        // ── Tier 3: group / multi-use ("A group"). ──
-        if tierPicker.buttons.element(boundBy: 2).exists {
-            tierPicker.buttons.element(boundBy: 2).tap()
-        }
-        // The group tier swaps the name placeholder + reveals the max-redemptions
-        // field. Name the group, set a cap, create.
-        if nameField.exists {
+        // ── A group link with a cap. ──
+        if revealBySwipe(app, addGroup, tries: 3) { addGroup.tap() }
+        if nameField.waitForExistence(timeout: 10) {
             nameField.tap()
             nameField.typeText("Gym Group")
         }
@@ -298,7 +300,7 @@ final class GymLiveTests: XCTestCase {
         // on a live box — the tier picker + a minted link are the hard verdict
         // (asserted above). Treat the guest-list render as a strong soft signal.
         XCTAssertTrue(
-            listSurfaced || tierPicker.exists,
+            listSurfaced || addPerson.exists,
             "The access screen should still be present with the minted invites (guest list label-only)."
         )
         gymShot(app, "guest-list")

@@ -289,6 +289,13 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
         let body = try JSONEncoder().encode(req)
         return try await request(dbPath(serviceId, "/\(segment(store))/query"), method: "POST", body: body, timeout: 30)
     }
+    public func appMembers(serviceId: String) async throws -> AppMembersResponse {
+        try await request("/api/screens/services/\(segment(serviceId))/members")
+    }
+    public func setAppMemberRole(serviceId: String, _ req: AppMemberRoleRequest) async throws -> AppMemberRoleResponse {
+        let body = try JSONEncoder().encode(req)
+        return try await request("/api/screens/services/\(segment(serviceId))/members/role", method: "POST", body: body)
+    }
     public func accessAlertsSetting() async throws -> AccessAlertsSetting {
         try await request("/api/screens/settings/access-alerts")
     }

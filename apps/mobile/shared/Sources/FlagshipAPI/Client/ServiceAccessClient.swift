@@ -516,6 +516,8 @@ public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Send
     /// Targets ONLY the box allow-list prune (so a test can fail the prune leg
     /// while the `.com` revoke succeeds). Thrown once, then cleared.
     public var removeAllowError: Error?
+    /// When true, a created invite shows up in the next list (like `.com`).
+    public var listsCreatedInvites = false
 
     public init() {}
     private func maybeThrow() throws { if let e = nextError { nextError = nil; throw e } }
@@ -553,6 +555,14 @@ public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Send
     public func createInvite(controlBase: URL, username: String, request: [String: Any], signatureHex: String) async throws {
         try maybeThrow()
         lock.withLock { _create.append(CreateCall(username: username, request: flatten(request), signatureHex: signatureHex)) }
+        if listsCreatedInvites, let id = request["inviteId"] as? String, let ref = request["serviceRef"] as? String {
+            let maxN = request["maxRedemptions"] as? Int
+            rows.append(ServiceInviteRow(
+                inviteId: id, serviceRef: ref, encryptedBundleHex: (request["encryptedBundle"] as? String) ?? "",
+                boundAidHex: nil, boundAt: nil, createdAt: 1, revokedAt: nil,
+                maxRedemptions: maxN, redemptions: maxN == nil ? nil : 0,
+                approvalMode: request["approvalMode"] as? String))
+        }
     }
 
     public func listInvites(controlBase: URL, username: String, query: [String: String], signatureHex: String) async throws -> [ServiceInviteRow] {

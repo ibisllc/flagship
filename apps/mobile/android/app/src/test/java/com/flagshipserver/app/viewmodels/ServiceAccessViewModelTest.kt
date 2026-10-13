@@ -275,6 +275,59 @@ class ServiceAccessViewModelTest {
         assertTrue(vm.phase.value is ServiceAccessPhase.Failed)
     }
 
+    @Test fun setMode_keepsTheMembersList() = runTest {
+        val row = """{"invites":[{"inviteId":"inv-1","serviceRef":"$serviceRef","encryptedBundle":"00","boundAID":null}]}"""
+        val t = FakeTransport(getJsonByUrl = mapOf("service-invites" to row, "service-access" to """{"mode":"open","allowCount":0}"""))
+        val vm = makeVM(ServiceAccessClient(boxTransport = t, comTransport = t))
+        vm.load()
+        val before = vm.people.value
+        assertEquals(1, before.size)
+        assertTrue(vm.setMode(restricted = true))
+        assertEquals(before, vm.people.value)
+        assertTrue(vm.setMode(restricted = false))
+        assertEquals("the toggle never changes the list", before, vm.people.value)
+    }
+
+    @Test fun roles_newInviteSendsSignedOrderUnlessDefault_andRefusalRollsBack() = runTest {
+        val t = FakeTransport()
+        val screens = com.flagshipserver.app.api.MockScreensClient()
+        val roleKp = Ed25519Sign.KeyPair.newKeyPairFromSeed(ByteArray(32) { 7 })
+        val vm = ServiceAccessViewModel(
+            serverDomain = server, serviceRef = serviceRef, username = username,
+            client = ServiceAccessClient(boxTransport = t, comTransport = t),
+            irkSigner = { Ed25519Sign(irkKp.privateKey) },
+            aidSigner = { ServerKeys.deriveAccountId(umkSeed) },
+            aidPubHex = { HexUtil.encode(aidPub) },
+            householdKey = { household },
+            now = { 1_700_000_000_000 },
+            screens = screens,
+            roleSigner = { Ed25519Sign(roleKp.privateKey) },
+        )
+        vm.load()
+        assertNotNull(vm.members.value)
+        vm.addPerson("Alex", null, role = com.flagshipserver.app.core.AppMemberRole.MEMBER)
+        assertTrue("the app's default role needs no order", screens.setAppMemberRoleCalls.isEmpty())
+        vm.addPerson("Club", null, InviteTier.GROUP, 5, null, com.flagshipserver.app.core.AppMemberRole.MANAGER)
+        assertEquals(1, screens.setAppMemberRoleCalls.size)
+        val (svc, req) = screens.setAppMemberRoleCalls[0]
+        assertEquals(serviceRef, svc)
+        assertTrue(req.order.target.startsWith("invite:"))
+        assertEquals("manager", req.order.role)
+        val bytes = com.flagshipserver.app.core.AppMemberRoleOrder.canonicalBytes(
+            com.flagshipserver.app.core.AppMemberRoleOrder.Order(req.order.serverDomain, req.order.serviceId, req.order.target, req.order.role, req.order.issuedAt),
+        )
+        assertTrue(ServiceInvite.verify(HexUtil.decode(req.signature)!!, bytes, roleKp.publicKey))
+
+        val p = AccessPerson(inviteId = "inv-9", name = "Sam", photo = null, bound = false)
+        assertEquals(com.flagshipserver.app.core.AppMemberRole.MEMBER, vm.roleFor(p))
+        screens.memberRoleStatus = 403
+        assertFalse(vm.setRole(com.flagshipserver.app.core.AppMemberRole.MASTER, p))
+        assertEquals(com.flagshipserver.app.core.AppMemberRole.MEMBER, vm.roleFor(p))
+        assertTrue(vm.phase.value is ServiceAccessPhase.Failed)
+        assertTrue(vm.setRole(com.flagshipserver.app.core.AppMemberRole.MASTER, p))
+        assertEquals(com.flagshipserver.app.core.AppMemberRole.MASTER, vm.roleFor(p))
+    }
+
     @Test fun setMode_failureSurfaces() = runTest {
         val t = FakeTransport(failPost = RuntimeException("403"))
         val vm = makeVM(ServiceAccessClient(boxTransport = t, comTransport = t))

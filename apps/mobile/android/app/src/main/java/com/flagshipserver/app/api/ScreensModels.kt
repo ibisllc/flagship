@@ -1245,3 +1245,89 @@ data class CompanionResolvePendingResponse(
     val ok: Boolean,
     val alreadyResolved: Boolean? = null,
 )
+
+// ---------- Access control — members' ranks ----------------------------
+//
+// Wire parity with packages/server-daemon/src/memberRoles.ts. Every
+// redemption of an invite is its own grant; a person holding several has the
+// highest rank.
+
+@Serializable
+data class AppMemberGrant(val inviteId: String, val role: String)
+
+@Serializable
+data class AppMember(
+    val aid: String,
+    val role: String,
+    val grants: List<AppMemberGrant> = emptyList(),
+    val direct: String? = null,
+)
+
+@Serializable
+data class AppMemberInviteRole(val inviteId: String, val role: String, val set: Boolean = false)
+
+/** `GET /api/screens/services/:id/members`. */
+@Serializable
+data class AppMembersResponse(
+    val serviceId: String,
+    val mode: String,
+    val roles: List<String> = listOf("member", "manager", "master"),
+    val defaultRole: String,
+    /** The app's one line per rank (its manifest's `role_descriptions`). */
+    val descriptions: Map<String, String> = emptyMap(),
+    val members: List<AppMember> = emptyList(),
+    val invites: List<AppMemberInviteRole> = emptyList(),
+) {
+    fun description(role: String): String? = descriptions[role]?.takeIf { it.isNotEmpty() }
+
+    fun member(aid: String?): AppMember? = aid?.lowercase()?.let { a -> members.firstOrNull { it.aid == a } }
+
+    /** Where a rank change for one row goes: a person's personal invite is their
+     *  grant; a member who joined before grants were tracked, by their AID. */
+    fun roleTarget(inviteId: String, boundAID: String?): String {
+        val m = member(boundAID)
+        if (m != null && m.grants.none { it.inviteId == inviteId }) return "aid:${m.aid}"
+        return "invite:$inviteId"
+    }
+
+    fun rowRole(inviteId: String, boundAID: String?): String {
+        val m = member(boundAID)
+        if (m != null && m.grants.none { it.inviteId == inviteId }) return m.role
+        return invites.firstOrNull { it.inviteId == inviteId }?.role ?: defaultRole
+    }
+
+    /** The person's other grants, for "also in Family: Viewer". */
+    fun otherGrants(inviteId: String, boundAID: String?, label: (String) -> String?): List<Pair<String, String>> {
+        val m = member(boundAID) ?: return emptyList()
+        return m.grants.filter { it.inviteId != inviteId }.mapNotNull { g ->
+            label(g.inviteId)?.takeIf { it.isNotEmpty() }?.let { it to g.role }
+        }
+    }
+
+    /** Only the AIDs for whom this grant was the last one are pruned on the box. */
+    fun aidsToPrune(inviteId: String, aids: List<String>): List<String> = aids.filter { aid ->
+        val m = member(aid) ?: return@filter true
+        m.grants.all { it.inviteId == inviteId }
+    }
+
+    companion object {
+        fun alsoInText(others: List<Pair<String, String>>, label: (String) -> String): String =
+            if (others.isEmpty()) "" else "also in " + others.joinToString(", ") { (l, r) -> "$l: ${label(r)}" }
+    }
+}
+
+@Serializable
+data class AppMemberRoleOrderBody(
+    val serverDomain: String,
+    val serviceId: String,
+    val target: String,
+    val role: String,
+    val issuedAt: Long,
+)
+
+/** `POST /api/screens/services/:id/members/role` body. */
+@Serializable
+data class AppMemberRoleRequest(val order: AppMemberRoleOrderBody, val signature: String)
+
+@Serializable
+data class AppMemberRoleResponse(val ok: Boolean, val target: String, val role: String)

@@ -213,7 +213,7 @@ export async function renderServiceDetail(serviceId) {
         <span class="edit-row-icon" aria-hidden="true">${usersIcon}</span>
         <span class="edit-row-body">
           <strong>Access control</strong>
-          <span class="note">Open to all or members only, and each member's role</span>
+          <span class="note">Open to all or members only, and each member's rank</span>
         </span>
       </button>
       <h2 class="mt-4">Backup</h2>

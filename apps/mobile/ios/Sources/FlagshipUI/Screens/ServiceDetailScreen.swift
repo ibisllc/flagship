@@ -536,7 +536,7 @@ public struct ServiceDetailScreen: View {
                         Image(systemName: "person.2.fill").foregroundColor(c.primary)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Access control").foregroundColor(c.text)
-                            Text("Open to all or members only, and each member's role")
+                            Text("Open to all or members only, and each member's rank")
                                 .font(FS.font.caption())
                                 .foregroundColor(c.textMuted)
                         }
