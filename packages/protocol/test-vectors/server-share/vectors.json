@@ -1,0 +1,631 @@
+{
+  "about": "Share this server (docs/share-a-server.md). Every platform must: derive every value in `keys` from the two UMK seeds and the secret; build each envelope's canonical string from `fields` and reproduce the Ed25519 signature with the named signer (owner = IRK of ownerUmkSeedHex standing in for the sensitive key, member = deriveShareMemberKey(memberUmk, shareId), inbox = deriveShareInboxKey(memberUmk)); refuse every `refuse` case; fail to verify every `reject` case against the named public key; AES-256-GCM-seal each `sealed` plaintext (exact UTF-8 bytes) with the key, nonce and AAD to the given hex, and open it back; build and parse the links. Label length counts Unicode code points.",
+  "keys": {
+    "ownerUmkSeedHex": "2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a",
+    "ownerSignerPub": "c49775473bf9dcf5ad1608c8e66823d55dc6889be27e42a029fd9de195c8d7e4",
+    "otherSignerPub": "e7dfdee7332c18b7da2e1ffd6407d953f2feb4fa63845975ee204c4eb3eec2f8",
+    "memberUmkSeedHex": "5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b",
+    "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+    "secretHex": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc",
+    "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+    "inboxPubHex": "f3d62192673262d6144a7aa2bfc5bcfd6dfbcb8f11be1829ad53d78da65a9ac4",
+    "inboxSealKeyHex": "b21f94a253764c5a2090414218a207ef11b50c3146859e2af6e7c85613998a42",
+    "token": "278fe645a09c46a08abb046ad5a6be062dd5f8dd515845c1c651a48538ba8138",
+    "tokenHash": "fa71e2c9bc9fc7746a28c41f5c6bf01186aa47f3a5c78780198deedc369e7c48",
+    "linkKeyHex": "b70aaa71a05cd3fa1716c34ac2e30f81463ecabab62abd35530a194b6054d4ba",
+    "householdKeyHex": "7477eaff62328cd23c2ad6a1cd134a0a2d41a6899bcf67be3e8d327c9025685f",
+    "sas": "765227",
+    "sasFormatted": "765 227"
+  },
+  "envelopes": [
+    {
+      "kind": "grant",
+      "signer": "owner",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "level": "view",
+        "unlockAtBoot": false,
+        "seeAppData": false,
+        "label": "Sam",
+        "issuedAt": 1760000000000
+      },
+      "canonical": "flagship/server-share/v1|home.harry.flagship.services|0f1e2d3c4b5a69788796a5b4c3d2e1f0|eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff|view|0|0|Sam|1760000000000",
+      "signature": "5b0611e5415c77f3eba2f76a837c8f928f213081a94ac5abb95f8800ca462c2ca7bd75985054fb346be2543c695306cf8593393fe8a2a4485cf39d9a08d1310a"
+    },
+    {
+      "kind": "grant",
+      "signer": "owner",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "level": "manage",
+        "unlockAtBoot": true,
+        "seeAppData": true,
+        "label": "Grandma Rose 🌹",
+        "issuedAt": 1760000000001
+      },
+      "canonical": "flagship/server-share/v1|home.harry.flagship.services|0f1e2d3c4b5a69788796a5b4c3d2e1f0|eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff|manage|1|1|Grandma Rose 🌹|1760000000001",
+      "signature": "160661fd1906b21a31256edeff41ab3145453ee369fe32054e79ba71c419efc2c1e721f65a50b0cc4465929f2d19197b6a8d4e51f94e22a7ebc4b195fd6b550e"
+    },
+    {
+      "kind": "revoke",
+      "signer": "owner",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "issuedAt": 1760000000002
+      },
+      "canonical": "flagship/server-share-revoke/v1|home.harry.flagship.services|0f1e2d3c4b5a69788796a5b4c3d2e1f0|1760000000002",
+      "signature": "dc75926ba06236b1b2687fc84bf3ec2525c1bd02b88b407bfb772be68c8bb2b6702e1c2034045d01a376c5edaa73a44c7dead03ef3c7171b7beda78e95b2d802"
+    },
+    {
+      "kind": "accept",
+      "signer": "member",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "acceptedAt": 1760000000003
+      },
+      "canonical": "flagship/server-share-accept/v1|home.harry.flagship.services|0f1e2d3c4b5a69788796a5b4c3d2e1f0|eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff|1760000000003",
+      "signature": "50999d34b1de7600b47225f8b811500dbc38079261d4e1d33c22f9e6c4f2089f3d9c5865dfcdbaa463e6367a588f1d83e4b7668782fb8431535cf931c57e4604"
+    },
+    {
+      "kind": "leave",
+      "signer": "member",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "issuedAt": 1760000000004
+      },
+      "canonical": "flagship/server-share-leave/v1|home.harry.flagship.services|0f1e2d3c4b5a69788796a5b4c3d2e1f0|eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff|1760000000004",
+      "signature": "d822ead95c7761070c96f0fbe1789052076f9c22adc27f2f1a2d14b40bec8e2a0930fdd4918ba0a84ab2569c938da5c4a8d536c95737a57309df8ebc43d4a608"
+    },
+    {
+      "kind": "session",
+      "signer": "member",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "nonceHex": "abababababababababababababababababababababababababababababababab",
+        "issuedAt": 1760000000005
+      },
+      "canonical": "flagship/server-share-session/v1|home.harry.flagship.services|0f1e2d3c4b5a69788796a5b4c3d2e1f0|eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff|abababababababababababababababababababababababababababababababab|1760000000005",
+      "signature": "d0acf86253a4034b635e55af581026706e512345e4da8cf61e1c8da93d22955c4f2c1d0cc7edd20f0e59a7511753c326fc90ed81870e3abbd4a77e8b07c9cf0a"
+    },
+    {
+      "kind": "offer",
+      "signer": "owner",
+      "fields": {
+        "username": "harry",
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "tokenHash": "fa71e2c9bc9fc7746a28c41f5c6bf01186aa47f3a5c78780198deedc369e7c48",
+        "offerSha256": "4c7f3da0386523b102328418c28d886bb9dc9c555671884e8fcc9bcba407e819",
+        "ownerSha256": "399125dce05696449185c92b8e60a3cfb1d8e3c5bab47c3aa2dc0c7b9a687eb0",
+        "expiresAt": 1760604800000,
+        "issuedAt": 1760000000006
+      },
+      "canonical": "flagship/server-share-offer/v1|harry|home.harry.flagship.services|0f1e2d3c4b5a69788796a5b4c3d2e1f0|fa71e2c9bc9fc7746a28c41f5c6bf01186aa47f3a5c78780198deedc369e7c48|4c7f3da0386523b102328418c28d886bb9dc9c555671884e8fcc9bcba407e819|399125dce05696449185c92b8e60a3cfb1d8e3c5bab47c3aa2dc0c7b9a687eb0|1760604800000|1760000000006",
+      "signature": "5a22b15e02a202cd6217c15971d0c5c9161323b02a88c554fc696e94d06448ad1c7e7747c094fdac793e8c9822a2e967c777ffdb3e78e5ea6f2655b873cebe0a"
+    },
+    {
+      "kind": "list",
+      "signer": "owner",
+      "fields": {
+        "username": "harry",
+        "issuedAt": 1760000000007
+      },
+      "canonical": "flagship/server-share-list/v1|harry|1760000000007",
+      "signature": "e7138c5901a22e58c6ffb6cdcbf0de15e33dc2fb064ca8528526e3a0abd87ec5b2df50eb6784f0fefbb2c7e86b8382eba0fd1c567180b7de0ab8cf97f746a10e"
+    },
+    {
+      "kind": "unlock",
+      "signer": "owner",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "sealedSha256": "a06c292077f828158545171201dd0241004d262722a28f8fe39bbe129a079e17",
+        "issuedAt": 1760000000008
+      },
+      "canonical": "flagship/server-share-unlock/v1|home.harry.flagship.services|0f1e2d3c4b5a69788796a5b4c3d2e1f0|eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff|a06c292077f828158545171201dd0241004d262722a28f8fe39bbe129a079e17|1760000000008",
+      "signature": "7396fc046bd2c47330e037638435f3787d61f82cfcadc0668eac94c4c2ade1053b421d16bc30c881e632eeae9b401fa3b8afac4614ecd7e9f3aacfe09a1d9904"
+    },
+    {
+      "kind": "unlock",
+      "signer": "owner",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "sealedSha256": "off",
+        "issuedAt": 1760000000009
+      },
+      "canonical": "flagship/server-share-unlock/v1|home.harry.flagship.services|0f1e2d3c4b5a69788796a5b4c3d2e1f0|eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff|off|1760000000009",
+      "signature": "0703b6e3bd88e2c1603fdcc9fc36220dbc4110c5eec18425338a7102028f2b83522d63ad209af73ccf8d8ca7aa9e00cde9a1552acc5747b0f55500eeb5df8d04"
+    },
+    {
+      "kind": "inbox",
+      "signer": "inbox",
+      "fields": {
+        "inboxPubHex": "f3d62192673262d6144a7aa2bfc5bcfd6dfbcb8f11be1829ad53d78da65a9ac4",
+        "op": "put",
+        "entryId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "ctSha256": "19652a0d11ed320f35edc2d3f29b3de9a4139add0deb820cd1da9e26265f3789",
+        "issuedAt": 1760000000010
+      },
+      "canonical": "flagship/share-inbox/v1|f3d62192673262d6144a7aa2bfc5bcfd6dfbcb8f11be1829ad53d78da65a9ac4|put|a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1|19652a0d11ed320f35edc2d3f29b3de9a4139add0deb820cd1da9e26265f3789|1760000000010",
+      "signature": "dacf5baa15439c1835d148ecbd658f6a91fac4498e837951f35841d1e4350713aee1d5040b97319be3eda37d0fc19271fe15c46ebad2c6fde9842f0dc579e40c"
+    },
+    {
+      "kind": "inbox",
+      "signer": "inbox",
+      "fields": {
+        "inboxPubHex": "f3d62192673262d6144a7aa2bfc5bcfd6dfbcb8f11be1829ad53d78da65a9ac4",
+        "op": "list",
+        "entryId": "",
+        "ctSha256": "",
+        "issuedAt": 1760000000011
+      },
+      "canonical": "flagship/share-inbox/v1|f3d62192673262d6144a7aa2bfc5bcfd6dfbcb8f11be1829ad53d78da65a9ac4|list|||1760000000011",
+      "signature": "a155ae5573c8638fb0823b9a4a4803e4c3766496049971975810721ec4bc238355b03de956282aa6847f71566b86a4d18bea8cc26790936392f0850f65f30409"
+    },
+    {
+      "kind": "inbox",
+      "signer": "inbox",
+      "fields": {
+        "inboxPubHex": "f3d62192673262d6144a7aa2bfc5bcfd6dfbcb8f11be1829ad53d78da65a9ac4",
+        "op": "delete",
+        "entryId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "ctSha256": "",
+        "issuedAt": 1760000000012
+      },
+      "canonical": "flagship/share-inbox/v1|f3d62192673262d6144a7aa2bfc5bcfd6dfbcb8f11be1829ad53d78da65a9ac4|delete|a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1||1760000000012",
+      "signature": "1a57db5f6bc5c898469e1c39e0f33326f952cfb67491050d042c75a00a766e266b201d8042020f9df1a5bf8bafa9ad98dc172b33f768d0b716818d205a7e6a01"
+    }
+  ],
+  "refuse": [
+    {
+      "kind": "grant",
+      "why": "level is not view or manage",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "level": "admin",
+        "unlockAtBoot": false,
+        "seeAppData": false,
+        "label": "Sam",
+        "issuedAt": 1760000000000
+      }
+    },
+    {
+      "kind": "grant",
+      "why": "label carries the separator",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "level": "view",
+        "unlockAtBoot": false,
+        "seeAppData": false,
+        "label": "Sam|owner",
+        "issuedAt": 1760000000000
+      }
+    },
+    {
+      "kind": "grant",
+      "why": "label is empty",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "level": "view",
+        "unlockAtBoot": false,
+        "seeAppData": false,
+        "label": "",
+        "issuedAt": 1760000000000
+      }
+    },
+    {
+      "kind": "grant",
+      "why": "label is not trimmed",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "level": "view",
+        "unlockAtBoot": false,
+        "seeAppData": false,
+        "label": " Sam",
+        "issuedAt": 1760000000000
+      }
+    },
+    {
+      "kind": "grant",
+      "why": "label has a control character",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "level": "view",
+        "unlockAtBoot": false,
+        "seeAppData": false,
+        "label": "Sa\nm",
+        "issuedAt": 1760000000000
+      }
+    },
+    {
+      "kind": "grant",
+      "why": "label is longer than 64 code points",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "level": "view",
+        "unlockAtBoot": false,
+        "seeAppData": false,
+        "label": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "issuedAt": 1760000000000
+      }
+    },
+    {
+      "kind": "grant",
+      "why": "shareId is uppercase",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0F1E2D3C4B5A69788796A5B4C3D2E1F0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "level": "view",
+        "unlockAtBoot": false,
+        "seeAppData": false,
+        "label": "Sam",
+        "issuedAt": 1760000000000
+      }
+    },
+    {
+      "kind": "grant",
+      "why": "shareId is too short",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "level": "view",
+        "unlockAtBoot": false,
+        "seeAppData": false,
+        "label": "Sam",
+        "issuedAt": 1760000000000
+      }
+    },
+    {
+      "kind": "grant",
+      "why": "memberPubHex is not 64 hex",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "level": "view",
+        "unlockAtBoot": false,
+        "seeAppData": false,
+        "label": "Sam",
+        "issuedAt": 1760000000000
+      }
+    },
+    {
+      "kind": "grant",
+      "why": "serverDomain is empty",
+      "fields": {
+        "serverDomain": "",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "level": "view",
+        "unlockAtBoot": false,
+        "seeAppData": false,
+        "label": "Sam",
+        "issuedAt": 1760000000000
+      }
+    },
+    {
+      "kind": "grant",
+      "why": "serverDomain carries the separator",
+      "fields": {
+        "serverDomain": "a|b",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "level": "view",
+        "unlockAtBoot": false,
+        "seeAppData": false,
+        "label": "Sam",
+        "issuedAt": 1760000000000
+      }
+    },
+    {
+      "kind": "grant",
+      "why": "issuedAt is negative",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "level": "view",
+        "unlockAtBoot": false,
+        "seeAppData": false,
+        "label": "Sam",
+        "issuedAt": -1
+      }
+    },
+    {
+      "kind": "session",
+      "why": "nonce is not 64 hex",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "nonceHex": "ab",
+        "issuedAt": 1760000000000
+      }
+    },
+    {
+      "kind": "unlock",
+      "why": "sealedSha256 is neither hex nor off",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "sealedSha256": "on",
+        "issuedAt": 1760000000000
+      }
+    },
+    {
+      "kind": "inbox",
+      "why": "list carries an entryId",
+      "fields": {
+        "inboxPubHex": "f3d62192673262d6144a7aa2bfc5bcfd6dfbcb8f11be1829ad53d78da65a9ac4",
+        "op": "list",
+        "entryId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "ctSha256": "",
+        "issuedAt": 1760000000000
+      }
+    },
+    {
+      "kind": "inbox",
+      "why": "put has no ctSha256",
+      "fields": {
+        "inboxPubHex": "f3d62192673262d6144a7aa2bfc5bcfd6dfbcb8f11be1829ad53d78da65a9ac4",
+        "op": "put",
+        "entryId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "ctSha256": "",
+        "issuedAt": 1760000000000
+      }
+    },
+    {
+      "kind": "inbox",
+      "why": "delete carries a ctSha256",
+      "fields": {
+        "inboxPubHex": "f3d62192673262d6144a7aa2bfc5bcfd6dfbcb8f11be1829ad53d78da65a9ac4",
+        "op": "delete",
+        "entryId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "ctSha256": "abababababababababababababababababababababababababababababababab",
+        "issuedAt": 1760000000000
+      }
+    },
+    {
+      "kind": "inbox",
+      "why": "op is unknown",
+      "fields": {
+        "inboxPubHex": "f3d62192673262d6144a7aa2bfc5bcfd6dfbcb8f11be1829ad53d78da65a9ac4",
+        "op": "wipe",
+        "entryId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "ctSha256": "",
+        "issuedAt": 1760000000000
+      }
+    }
+  ],
+  "reject": [
+    {
+      "why": "signed by a key that is not the owner's",
+      "kind": "grant",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "level": "view",
+        "unlockAtBoot": false,
+        "seeAppData": false,
+        "label": "Sam",
+        "issuedAt": 1760000000000
+      },
+      "signature": "c6d4df2e73b517070dc4be0a16b08199c317f0496d9355f3c06f9580e9e91ff36d5e028015f3acbd4ca11281314e451b57327afb20fe36694ad6bf9a428f2e00",
+      "pub": "owner"
+    },
+    {
+      "why": "level escalated after signing",
+      "kind": "grant",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "level": "manage",
+        "unlockAtBoot": false,
+        "seeAppData": false,
+        "label": "Sam",
+        "issuedAt": 1760000000000
+      },
+      "signature": "5b0611e5415c77f3eba2f76a837c8f928f213081a94ac5abb95f8800ca462c2ca7bd75985054fb346be2543c695306cf8593393fe8a2a4485cf39d9a08d1310a",
+      "pub": "owner"
+    },
+    {
+      "why": "unlock opt-in turned on after signing",
+      "kind": "grant",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "level": "view",
+        "unlockAtBoot": true,
+        "seeAppData": false,
+        "label": "Sam",
+        "issuedAt": 1760000000000
+      },
+      "signature": "5b0611e5415c77f3eba2f76a837c8f928f213081a94ac5abb95f8800ca462c2ca7bd75985054fb346be2543c695306cf8593393fe8a2a4485cf39d9a08d1310a",
+      "pub": "owner"
+    },
+    {
+      "why": "app-data opt-in turned on after signing",
+      "kind": "grant",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "level": "view",
+        "unlockAtBoot": false,
+        "seeAppData": true,
+        "label": "Sam",
+        "issuedAt": 1760000000000
+      },
+      "signature": "5b0611e5415c77f3eba2f76a837c8f928f213081a94ac5abb95f8800ca462c2ca7bd75985054fb346be2543c695306cf8593393fe8a2a4485cf39d9a08d1310a",
+      "pub": "owner"
+    },
+    {
+      "why": "grant moved to another server",
+      "kind": "grant",
+      "fields": {
+        "serverDomain": "media.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "level": "view",
+        "unlockAtBoot": false,
+        "seeAppData": false,
+        "label": "Sam",
+        "issuedAt": 1760000000000
+      },
+      "signature": "5b0611e5415c77f3eba2f76a837c8f928f213081a94ac5abb95f8800ca462c2ca7bd75985054fb346be2543c695306cf8593393fe8a2a4485cf39d9a08d1310a",
+      "pub": "owner"
+    },
+    {
+      "why": "the member signed a grant for themself",
+      "kind": "grant",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "level": "view",
+        "unlockAtBoot": false,
+        "seeAppData": false,
+        "label": "Sam",
+        "issuedAt": 1760000000000
+      },
+      "signature": "0505f9df8e583a3241f6a878ea22f5ab46a8d7805452deb03527a0972e3d65f142a3878f65802ad0950489b0e650933027ddd41f1295c395ca755edb8040cc0b",
+      "pub": "owner"
+    },
+    {
+      "why": "an accept signature replayed as a leave",
+      "kind": "leave",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "issuedAt": 1760000000003
+      },
+      "signature": "50999d34b1de7600b47225f8b811500dbc38079261d4e1d33c22f9e6c4f2089f3d9c5865dfcdbaa463e6367a588f1d83e4b7668782fb8431535cf931c57e4604",
+      "pub": "member"
+    }
+  ],
+  "sealed": [
+    {
+      "name": "offer",
+      "keyHex": "b70aaa71a05cd3fa1716c34ac2e30f81463ecabab62abd35530a194b6054d4ba",
+      "aad": "flagship/server-share/offer/v1|0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+      "plaintext": "{\"v\":1,\"serverDomain\":\"home.harry.flagship.services\",\"serverName\":\"home\",\"stkPubHex\":\"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\",\"level\":\"manage\",\"unlockAtBoot\":true,\"seeAppData\":false,\"expiresAt\":1760604800000}",
+      "nonceHex": "010101010101010101010101",
+      "sealed": "010101010101010101010101a5c2f2c19fd1f591c0eaf1cf3cb83d3f7eec34004278827eb3db89e048df018c1c0a14b947e581cd84af6486a600430c36cc2718cb71e66d157e6e18cc58b10c2067b57dd036815a6e6ad05ea1e9fc210a4afbd0ce2720ee54c5e71563f23920601a9eadb2331b541681d531497911054343185d555cf083723d83ae20740a239a11f785ce4bb1101da3aaa9b8d6c701d3c0b41b70806589912e4be7a12481e2264f3a9545abb051a24345a8929a7fc3f896a120cb033f4434a184554c707e977a3449849f7072b9463394e2d29cc9a0e35b647edeeef5c39c58c19611c4592b2d5749c10a8a6fa2d4c7d754c57a1a1a5c060705c59c951eb3d0"
+    },
+    {
+      "name": "acceptance",
+      "keyHex": "b70aaa71a05cd3fa1716c34ac2e30f81463ecabab62abd35530a194b6054d4ba",
+      "aad": "flagship/server-share/acceptance/v1|0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+      "plaintext": "{\"v\":1,\"accept\":{\"serverDomain\":\"home.harry.flagship.services\",\"shareId\":\"0f1e2d3c4b5a69788796a5b4c3d2e1f0\",\"memberPubHex\":\"eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff\",\"acceptedAt\":1760000000003},\"signature\":\"50999d34b1de7600b47225f8b811500dbc38079261d4e1d33c22f9e6c4f2089f3d9c5865dfcdbaa463e6367a588f1d83e4b7668782fb8431535cf931c57e4604\"}",
+      "nonceHex": "020202020202020202020202",
+      "sealed": "02020202020202020202020240b6ccab53d2ccf820c73890af2746cb15d8ec9d0e9e1cc9b29dbdf9c91e48fc942cb6577145f058fa315fef8e7fba798bcd8d9c72098f27c41e4c3665977732ce8b9cdbbf312e1fd42592531e3d74bf2dc882a69808a4404e453f305323f71c7fa4c5da713db8221745daa56c3b3bbda57166a3b732ffd89a2feb7a2f992c822281b3a669b5385819f6129dce20c4616acab8bd79fd6485a84056312f220238f55c35f3e9b6c8f64b081eaa7e2425d2968410b22980bcece08a5d838e52cba68f639cca516dd2881121357e7c24e242902e757ba25013e257aeea357cb8337d9615774cd712d798e59f77a0540b713bc1dd4b74ddc7fb47dcb801f4fc864653071e4bec1f07152a4e3fcd0d2f840f4f81ec2aca9030a87d522a526e16135c6e29d01070238d2199d60bd2cec1ba74885aeb068b1fcda9dbd45e650865f2420e4a2f500c4d73a359dcd5b0d4e787f677f88dcd35421137b285e796b3436a9bb0194862329bd7804294e159b40ab4db1aa37d6af5af44689839"
+    },
+    {
+      "name": "owner",
+      "keyHex": "7477eaff62328cd23c2ad6a1cd134a0a2d41a6899bcf67be3e8d327c9025685f",
+      "aad": "flagship/server-share/owner/v1|0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+      "plaintext": "{\"v\":1,\"secretHex\":\"030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc\",\"label\":\"Sam\",\"level\":\"manage\",\"unlockAtBoot\":true,\"seeAppData\":false}",
+      "nonceHex": "030303030303030303030303",
+      "sealed": "03030303030303030303030359b216dfa9b4e6a2a1e6691b1b53a7c28e826ba1094df009e724895085143f6363a295d39f736a767441bf1e9c7c4953acee72ca4e7e1e3b4b9189cf6d0aabde17492e362f7c1e316cc50435a8e39d574d864408c922a9cecb8d86184fc39b91926fbee095f4e9cc610518db912d1b195d7de4414b74ff2219320bd4fd4163dad15f6f81cf16a324006be83673e4ef440ff7d19d0dacbc68e8c70c771e33c002b79a104383a2b7b6811a47fa"
+    },
+    {
+      "name": "inbox",
+      "keyHex": "b21f94a253764c5a2090414218a207ef11b50c3146859e2af6e7c85613998a42",
+      "aad": "flagship/share-inbox/entry/v1|a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "plaintext": "{\"v\":1,\"shareId\":\"0f1e2d3c4b5a69788796a5b4c3d2e1f0\",\"secretHex\":\"030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc\",\"serverDomain\":\"home.harry.flagship.services\",\"serverName\":\"home\",\"acceptedAt\":1760000000003}",
+      "nonceHex": "040404040404040404040404",
+      "sealed": "040404040404040404040404fd2122f95bddeb157bc81a6ca22c0d5a7fe2345f0a59e886d74c51eeaaf2b0dedbcd76a0b84adc0151141ed01b5e09844a613d4d383686d4c0d4b1838868bc259308af81d939e20b0ef198b9f6d1814b05dd0d369575560a3cb766fed971c2781e4596da8c23f3afc556f111bb62e97e768f5d71f62ee7eff952e827be39c4e23b3c0ddf5f5ffe112c42a3d0bf3e5ad111bf650be3b9a2fc9b576ef7e0462d42b98d70db4e8efad2c88add970f8ac3af63c52c51cb1784adff913bbdf8cbdef8bb6f0b49d8671a9d548171d648e344aeb3445876e5349b5707bc0c75f3dc99720c15775583bbc4e7678d16254d890c70"
+    }
+  ],
+  "links": {
+    "build": {
+      "apex": "https://flagshipserver.com",
+      "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+      "secretHex": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc",
+      "link": "https://flagshipserver.com/share#s=0f1e2d3c4b5a69788796a5b4c3d2e1f0&k=030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc"
+    },
+    "parse": [
+      {
+        "in": "https://flagshipserver.com/share#s=0f1e2d3c4b5a69788796a5b4c3d2e1f0&k=030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc",
+        "out": {
+          "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+          "secretHex": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc"
+        }
+      },
+      {
+        "in": "flagship://share?s=0f1e2d3c4b5a69788796a5b4c3d2e1f0&k=030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc",
+        "out": {
+          "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+          "secretHex": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc"
+        }
+      },
+      {
+        "in": "  s=0f1e2d3c4b5a69788796a5b4c3d2e1f0&k=030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc  ",
+        "out": {
+          "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+          "secretHex": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc"
+        }
+      },
+      {
+        "in": "https://flagshipserver.com/share#k=030A11181F262D343B424950575E656C737A81888F969DA4ABB2B9C0C7CED5DC&s=0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "out": {
+          "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+          "secretHex": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc"
+        }
+      },
+      {
+        "in": "https://flagshipserver.com/invite#s=0f1e2d3c4b5a69788796a5b4c3d2e1f0&k=030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc",
+        "out": null
+      },
+      {
+        "in": "https://flagshipserver.com/share?s=0f1e2d3c4b5a69788796a5b4c3d2e1f0&k=030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc",
+        "out": null
+      },
+      {
+        "in": "https://flagshipserver.com/share#s=0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "out": null
+      },
+      {
+        "in": "https://flagshipserver.com/share#s=0f1e2d3c4b5a69788796a5b4c3d2e1f0&k=0a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc",
+        "out": null
+      },
+      {
+        "in": "flagship://join?sid=x&pk=y",
+        "out": null
+      }
+    ]
+  }
+}
