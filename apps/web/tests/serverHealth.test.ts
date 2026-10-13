@@ -32,10 +32,9 @@ function healthy(over: Record<string, unknown> = {}, daemon: Record<string, unkn
 
 describe("serverHealthVerdict", () => {
   it("shows nothing without a report", async () => {
-    const { serverHealthVerdict, renderHealthCard } = await load();
+    const { serverHealthVerdict } = await load();
     expect(serverHealthVerdict(undefined, NOW)).toBeNull();
     expect(serverHealthVerdict({}, NOW)).toBeNull();
-    expect(renderHealthCard(null)).toBe("");
   });
 
   it("a stale report hides everything else", async () => {
@@ -100,17 +99,5 @@ describe("health card", () => {
     expect(healthForServer(pods, "home.alice.flagship.services")).toBe(h);
     expect(healthForServer(pods, "work.alice.flagship.services")).toBeNull();
     expect(healthForServer(undefined, "home.alice.flagship.services")).toBeNull();
-  });
-
-  it("renders a muted line when healthy and a warning card otherwise", async () => {
-    const { renderHealthCard } = await load();
-    const ok = renderHealthCard({ ok: true, lines: ["Healthy · 1 MB free of 2 MB · disk 3% · up 4m"] });
-    expect(ok).toContain('id="server-health-ok"');
-    expect(ok).not.toContain("Server health");
-    const bad = renderHealthCard({ ok: false, lines: ["Can't reach the Flagship relay.", "Disk is <99>% full."] });
-    expect(bad).toContain("Server health");
-    expect(bad).toContain('class="card warning"');
-    expect(bad).toContain("Can't reach the Flagship relay.");
-    expect(bad).toContain("Disk is &lt;99&gt;% full.");
   });
 });

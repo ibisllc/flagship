@@ -298,6 +298,8 @@ describe("server page Danger zone", () => {
     expect(html).toContain('id="delete-server-btn"');
     expect(html).not.toContain("unrevoke-server-btn");
     expect(html).not.toMatch(/cannot be undone|brick/i);
+    expect(html).toContain(">Delete and wipe this server</button>");
+    expect(html).not.toContain('class="note');
   });
 
   it("offers Un-revoke instead of Revoke on a revoked server", () => {

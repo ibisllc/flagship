@@ -2,8 +2,6 @@
 // relayed on /pods (`pod.health`, control-plane serverHealth.ts). Copy is
 // shared word for word with iOS and Android.
 
-import { escapeHtml } from "./util.js";
-
 export const HEALTH_STALE_AFTER_MIN = 5;
 
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
@@ -72,18 +70,4 @@ export function healthForServer(pods, fqdn) {
     (p) => typeof p?.serverDomain === "string" && p.serverDomain.toLowerCase() === target && !p.revokedAt,
   );
   return pod?.health ?? null;
-}
-
-/** The server page's health block: a muted line when healthy, a warning card
- *  under "Server health" otherwise, nothing without a report. */
-export function renderHealthCard(verdict) {
-  if (!verdict) return "";
-  if (verdict.ok) {
-    return `<p class="note small" id="server-health-ok">${escapeHtml(verdict.lines[0] ?? "")}</p>`;
-  }
-  return `
-    <h2 class="mt-4">Server health</h2>
-    <div class="card warning" id="server-health-issues">
-      ${verdict.lines.map((l) => `<p class="note">${escapeHtml(l)}</p>`).join("")}
-    </div>`;
 }

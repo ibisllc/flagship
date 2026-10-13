@@ -121,7 +121,10 @@
 //       key), the AI-key step offers them first and is skipped for an
 //       owner with no saved key, and builds mint a fresh pass per send;
 //       the phone-number claim form is gone; precaches lib/freeAi.js.
-const SHELL_VERSION = "v63";
+//  v64: a server's page groups Health, CPU, Memory, Disk, Network and
+//       Certificate in one Monitoring pane of rows that expand in place, and
+//       its Danger zone is just the buttons; precaches lib/serverMonitoring.js.
+const SHELL_VERSION = "v64";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -189,6 +192,7 @@ const OPTIONAL_SHELL = [
   "/lib/appDb.js",
   "/lib/knockIdentity.js",
   "/lib/appPlacement.js",
+  "/lib/serverMonitoring.js",
   "/views/bootstrap.js",
   "/views/wizard.js",
   "/views/unlock.js",

@@ -21,7 +21,6 @@ import {
   findPod,
   isListableRevocation,
   openDeleteServerDialog,
-  serverLabelOf,
 } from "../lib/deleteServer.js";
 import { controlApex } from "../lib/apex.js";
 import {
@@ -98,7 +97,16 @@ import { inlineConfirm } from "../lib/modal.js";
 import { formatWhen } from "../lib/dateFormat.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
 import { liveSync } from "../lib/liveSync.js";
-import { serverHealthVerdict, healthForServer, renderHealthCard } from "../lib/serverHealth.js";
+import { healthForServer } from "../lib/serverHealth.js";
+import {
+  healthRow,
+  metricRows,
+  metricsDetailHtml,
+  METRIC_KEYS,
+  paintMonitorRow,
+  renderMonitoringSection,
+  wireMonitoringPane,
+} from "../lib/serverMonitoring.js";
 
 registerView("view-server-detail");
 
@@ -175,31 +183,14 @@ export function isRestorableRevokedPod(pod) {
  * @param {{ serverFqdn: string, username: string, revoked: boolean }} o
  */
 export function renderDangerZoneCard({ serverFqdn, username, revoked }) {
-  const label = serverLabelOf(serverFqdn);
-  const revokeBlock = revoked
-    ? `
-        <p class="note">
-          Revoked: this server can't connect or unlock until you un-revoke it.
-          Its name stays reserved.
-        </p>
-        <button id="unrevoke-server-btn" class="full-width mt-2">Un-revoke server</button>`
-    : `
-        <p class="note">
-          Locks this server out right away: it can't connect or unlock until you
-          un-revoke it. Its name stays reserved. Use this if the box is lost or
-          stolen.
-        </p>
-        <button id="revoke-server-btn" class="danger full-width mt-2">Revoke server (reversible)</button>`;
+  const revokeButton = revoked
+    ? `<button id="unrevoke-server-btn" class="full-width">Un-revoke server</button>`
+    : `<button id="revoke-server-btn" class="danger full-width">Revoke server (reversible)</button>`;
   return `
       <h2 class="mt-4">Danger zone</h2>
       <div class="card" id="danger-zone-card" data-server-fqdn="${escapeHtml(serverFqdn)}" data-username="${escapeHtml(username)}">
-        ${revokeBlock}
-        <p class="note mt-3">
-          Deletes <strong>${escapeHtml(label)}</strong> for good. If the box is
-          online it erases its data and powers off; if it's offline it can never
-          come back online. The name becomes free to reuse.
-        </p>
-        <button id="delete-server-btn" class="danger full-width mt-2">Delete server</button>
+        ${revokeButton}
+        <button id="delete-server-btn" class="danger full-width mt-2">Delete and wipe this server</button>
       </div>`;
 }
 
@@ -215,6 +206,7 @@ export function renderUnreachableDetail({ serverFqdn, username, revoked, message
         <div class="row"><span class="label">FQDN</span><span class="value">${escapeHtml(serverFqdn)}</span></div>
         <p class="${revoked ? "note" : "err-text"} mt-2" data-detail-unreachable>${escapeHtml(status)}</p>
       </div>
+      ${renderMonitoringSection()}
       ${renderDangerZoneCard({ serverFqdn, username, revoked })}`;
 }
 
@@ -252,6 +244,8 @@ export async function renderServerDetail() {
       message: e?.status === 0 ? "this device isn't paired with it yet" : e instanceof ScreensError ? e.message : humanError(e),
     });
     wireDangerZone(knownFqdn, username, { revoked, pod });
+    wireMonitoringPane(root);
+    healthPaint?.();
     return;
   }
   const lookedUp = await podPromise;
@@ -268,11 +262,6 @@ export async function renderServerDetail() {
         <div class="row"><span class="label">Version</span><span class="value">${escapeHtml(shortCommit(body.currentCommit))}</span></div>
         <div class="row"><span class="label">Uptime</span><span class="value">${escapeHtml(fmtUptime(body.uptimeMs))}</span></div>
       </div>
-      <h2 class="mt-4">Cert</h2>
-      <div class="card">
-        <div class="row"><span class="label">Not after</span><span class="value">${escapeHtml(fmtDate(body.certNotAfter))}</span></div>
-        <div class="row"><span class="label">SANs</span><span class="value text-xs">${escapeHtml((body.certSans ?? []).join(", ") || "—")}</span></div>
-      </div>
       <h2 class="mt-4">Counters</h2>
       <div class="card">
         <div class="row"><span class="label">Apps installed</span><span class="value">${body.serviceCount}</span></div>
@@ -286,6 +275,7 @@ export async function renderServerDetail() {
           : `<p class="note mt-4" id="app-sandbox-notice">${escapeHtml(n.text)}</p>`;
       })()}
       <div id="server-apps">${serverAppsHtml([], { loading: true, canCreate: !isCompanionProfile() })}</div>
+      ${renderMonitoringSection({ detail: body })}
       <h2 class="mt-4">Auto-unlock</h2>
       <div class="card" id="auto-unlock-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
         <p class="note">
@@ -300,14 +290,6 @@ export async function renderServerDetail() {
         </div>
         <div id="auto-unlock-leases-list" class="mt-1"></div>
         <button id="auto-unlock-enable" class="full-width mt-2">Enable for 7 days</button>
-      </div>
-      <h2 class="mt-4">Live metrics</h2>
-      <div class="card" id="server-metrics-card">
-        <div class="row"><span class="label">CPU</span><span class="value" id="metrics-cpu">…</span></div>
-        <div class="row"><span class="label">Memory</span><span class="value" id="metrics-mem">…</span></div>
-        <div class="row"><span class="label">Disk</span><span class="value" id="metrics-disk">…</span></div>
-        <div class="row"><span class="label">Network</span><span class="value" id="metrics-net">…</span></div>
-        <p class="note small" id="metrics-collected-at">Loading…</p>
       </div>
       <h2 class="mt-4">Recent install events</h2>
       ${(body.recentInstallEvents ?? []).length === 0
@@ -499,6 +481,8 @@ export async function renderServerDetail() {
       revoked: isRestorableRevokedPod(detailPod),
       pod: detailPod,
     });
+    wireMonitoringPane(root);
+    healthPaint?.();
     startMetricsPolling(body.serverFqdn);
   } catch (e) {
     if (e instanceof ScreensError) {
@@ -514,28 +498,30 @@ export async function renderServerDetail() {
 let detailFqdn = "";
 let healthUnsub = null;
 let healthTimer = null;
+let healthPaint = null;
 
 function stopHealthWatch() {
   if (healthUnsub) { healthUnsub(); healthUnsub = null; }
   if (healthTimer) { clearInterval(healthTimer); healthTimer = null; }
+  healthPaint = null;
 }
 
 // Re-evaluated on every live-sync snapshot and every 30 s, so a report that
 // stops arriving turns into "No health report for N min" on screen.
+// The Health row lives in the Monitoring pane, which the page re-renders, so
+// each paint looks the row up again.
 function startHealthWatch(fqdn) {
   stopHealthWatch();
-  const el = $("server-health");
-  if (!el) return;
-  el.innerHTML = "";
   if (!fqdn) return;
-  let pods = [];
+  let pods = liveSync.get?.()?.pods ?? [];
   const paint = () => {
     if ($("view-server-detail")?.classList.contains("hidden")) {
       stopHealthWatch();
       return;
     }
-    el.innerHTML = renderHealthCard(serverHealthVerdict(healthForServer(pods, fqdn), Date.now()));
+    paintMonitorRow($("server-detail-content"), "health", healthRow(healthForServer(pods, fqdn), Date.now()));
   };
+  healthPaint = paint;
   healthUnsub = liveSync.subscribe((snap) => {
     pods = snap?.pods ?? [];
     paint();
@@ -678,19 +664,6 @@ async function refreshLeases(serverFqdn) {
   });
 }
 
-// Format bytes → human (1.4 GB / 312 KB / ...). Mirrors the
-// `humanBytes` helper in iOS/Android ServerDetailScreen.
-function humanBytes(n) {
-  if (typeof n !== "number" || !isFinite(n) || n < 0) return "—";
-  const k = 1024;
-  if (n < k) return `${n} B`;
-  const units = ["KB", "MB", "GB", "TB"];
-  let v = n / k;
-  let i = 0;
-  while (v >= k && i < units.length - 1) { v /= k; i++; }
-  return `${v.toFixed(1)} ${units[i]}`;
-}
-
 let metricsTimer = null;
 let metricsFor = "";
 function startMetricsPolling(serverFqdn) {
@@ -708,21 +681,15 @@ function startMetricsPolling(serverFqdn) {
         `/api/screens/server-metrics/${encodeURIComponent(serverFqdn)}`,
       );
       if (metricsFor !== serverFqdn) return;
-      const cpu = $("metrics-cpu");
-      const mem = $("metrics-mem");
-      const disk = $("metrics-disk");
-      const net = $("metrics-net");
-      const at = $("metrics-collected-at");
-      if (cpu) cpu.textContent = `${(m.cpuPercent ?? 0).toFixed(1)}%`;
-      if (mem) mem.textContent = `${humanBytes(m.memUsedBytes)} / ${humanBytes(m.memTotalBytes)}`;
-      if (disk) disk.textContent = `${humanBytes(m.diskUsedBytes)} / ${humanBytes(m.diskTotalBytes)}`;
-      if (net) net.textContent =
-        `↓ ${humanBytes(m.netRxBytesPerSec)}/s · ↑ ${humanBytes(m.netTxBytesPerSec)}/s`;
-      if (at) at.textContent = `Collected ${formatWhen(m.collectedAt)}`;
+      const root = $("server-detail-content");
+      const rows = metricRows(m);
+      const details = metricsDetailHtml(m);
+      for (const key of METRIC_KEYS) paintMonitorRow(root, key, { ...rows[key], detail: details[key] });
     } catch (e) {
       if (metricsFor !== serverFqdn) return;
-      const at = $("metrics-collected-at");
-      if (at) at.textContent = `Couldn't reach daemon: ${e.message ?? e}`;
+      const root = $("server-detail-content");
+      const why = `<p class="note">${escapeHtml(humanError(e))}</p>`;
+      for (const key of METRIC_KEYS) paintMonitorRow(root, key, { value: "Unavailable", tone: "", detail: why });
     }
   };
   void tick();
