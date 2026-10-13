@@ -89,13 +89,12 @@ async function ownerAuthorized(
   deps: ServerShareDeps,
   username: string,
   verifyWith: (pubHex: string) => boolean,
-  alsoAcceptAid = false,
 ): Promise<Res | null> {
   const userRec = await deps.usernames.get(username);
   if (!userRec) return notFound("username not registered");
   const authz = await authorizeSensitiveComOp(
     { grants: deps.grants, now: deps.now },
-    { username, userRec, verifyWith, alsoAcceptAid, now: clock(deps) },
+    { username, userRec, verifyWith, now: clock(deps) },
   );
   return authz.ok ? null : forbidden("invalid signature");
 }
@@ -149,8 +148,12 @@ export async function handleListServerShares(deps: ServerShareDeps, username: st
   if (!list || !s) return malformed("malformed list request");
   if (list.username !== u.label) return forbidden("request is for another account");
   if (!fresh(deps, list.issuedAt)) return forbidden("stale request");
-  const denied = await ownerAuthorized(deps, u.label, (pub) => verifyServerShareList(list, s, hexToBytes(pub)), true);
-  if (denied) return denied;
+  // A read of ciphertext only the owner's devices can open: any of the
+  // account's keys may sign it, so listing never needs the admin root.
+  const userRec = await deps.usernames.get(u.label);
+  if (!userRec) return notFound("username not registered");
+  const keys = [userRec.irkPubHex, userRec.aidPubHex, userRec.adminRootPubHex].filter((k): k is string => typeof k === "string" && HEX64.test(k.toLowerCase()));
+  if (!keys.some((k) => verifyServerShareList(list, s, hexToBytes(k.toLowerCase())))) return forbidden("invalid signature");
   const rows = await deps.shares.listForOwner(u.label);
   const shares = await Promise.all(
     rows.map(async (r) => ({

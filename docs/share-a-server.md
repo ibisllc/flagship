@@ -54,7 +54,7 @@ Residual risks, stated plainly:
   its sealed copy to re-seal it for the box. Turning the opt-in off or ending
   the share deletes B's copy on `.com`, but a B who kept the plaintext could
   still open a disk image. The cut is complete only after a disk-key rotation,
-  which no flow does yet (§9 open question 3).
+  which no flow does yet (§10 Q3).
 - **The box does not authenticate boot approvers** (true for A too today:
   `boot-core/gate.ts` is the authority, plus who can open the sealed key).
   B's approval is gated the same way: `.com` checks B's pairwise key against
@@ -106,7 +106,7 @@ fields are lowercase; times are Unix ms, non-negative safe integers.
 | 4 | `flagship/server-share-leave/v1` | `serverDomain\|shareId\|memberPubHex\|issuedAt` | B's member key | S, `.com` |
 | 5 | `flagship/server-share-session/v1` | `serverDomain\|shareId\|memberPubHex\|nonceHex\|issuedAt` | B's member key | S |
 | 6 | `flagship/server-share-offer/v1` | `username\|serverDomain\|shareId\|tokenHash\|offerSha256\|ownerSha256\|expiresAt\|issuedAt` | A's sensitive key | `.com` |
-| 7 | `flagship/server-share-list/v1` | `username\|issuedAt` | A's sensitive key (or AID/IRK, like the invite list) | `.com` |
+| 7 | `flagship/server-share-list/v1` | `username\|issuedAt` | any of A's account keys (IRK, AID or admin root): it only reads ciphertext | `.com` |
 | 8 | `flagship/server-share-unlock/v1` | `serverDomain\|shareId\|memberPubHex\|sealedSha256\|issuedAt` | A's sensitive key | `.com` |
 | 9 | `flagship/share-inbox/v1` | `inboxPubHex\|op\|entryId\|ctSha256\|issuedAt` | B's inbox key | `.com` |
 
@@ -228,7 +228,7 @@ A's IRK (or A's watch delegate) post the reply. For B:
    member key of an unlock deposit for S whose share has not ended.
 5. **Off:** A signs #8 with `sealedSha256 = off`; ending the share deletes the
    copy too. No push reaches B (a push token would link B's account to the
-   share at `.com`); B sees pending start-ups when B's app is open (§9 Q1).
+   share at `.com`); B sees pending start-ups when B's app is open (§10 Q1).
 
 ### 5.5 See app data (opt-in)
 
@@ -264,7 +264,7 @@ unchanged.
 | `POST …/query` with a B-signed `app-db-write/v1` | manage + data |
 | `GET/POST /api/screens/shares`, `POST /api/screens/shares/revoke`, `GET /api/screens/activity` | owner |
 | Everything else under `/api/screens/*` (companion, paired sessions, url-controller, api-keys, copy, env set/unset, app-invite, peer-backup toggle, app-backup, orders/send, install-events, post-recovery, adapter-report, `POST …/egress`) | owner |
-| `/api/build/*`, `/mcp/build/*`, `/api/llm/sessions*` (IDE and legacy builds) | owner (v1; §9 Q4) |
+| `/api/build/*`, `/mcp/build/*`, `/api/llm/sessions*` (IDE and legacy builds) | owner (v1; §10 Q4) |
 | `/api/power`, `/api/deadman/*`, `POST /api/front-page`, `/api/journal`, `/api/service-access*`, `/api/service-certs/*`, `/api/services*`, `/api/orders-from-user`, `/api/identity/pending`, `/api/phone/alerts*` | owner (A-signed or owner session) |
 
 New box routes:
@@ -285,7 +285,7 @@ New box routes:
 | Route | Auth | Purpose |
 |---|---|---|
 | `POST /api/users/:u/server-shares` | #6, sensitive (`authorizeSensitiveComOp`); S must be `:u`'s, live | create the offer row |
-| `POST /api/users/:u/server-shares/list` | #7, AID/IRK/admin root | A's rows with acceptances (sealed) |
+| `POST /api/users/:u/server-shares/list` | #7, any of A's account keys | A's rows with acceptances (sealed) |
 | `POST /api/users/:u/server-shares/:id/revoke` | #2, sensitive | end the row, keep the signed revoke, drop B's boot copy |
 | `POST /api/users/:u/server-shares/:id/unlock` | #8, sensitive | put or withdraw B's boot copy |
 | `GET /api/server-shares/:id` | share token | offer, sealed acceptance, state, `unlock` flag |
@@ -340,7 +340,83 @@ with unlock at boot, a start-up approval card when S waits. At the bottom,
 **Add a device** (all three apps) says it is for your own phones and tablets,
 and points to Share this server for other people.
 
-## 9. Open questions for the owner
+## 9. Client contract (all three apps)
+
+`apex` is the control origin (`https://flagshipserver.com` in production),
+`boot` the boot host (`https://boot.flagshipserver.com`), `box` the server
+(`https://<serverDomain>`). Box calls use `x-flagship-session` as today:
+A's paired-session token, or B's share token (`fss_…`).
+
+**A shares** (server page → Share this server):
+1. Pick label, level, unlock at boot, see app data. Mint `shareId`, `k`.
+2. `offerHex = seal(linkKey(k), "offer"|shareId, {v:1, serverDomain, serverName, stkPubHex, level, unlockAtBoot, seeAppData, expiresAt: now+7d})`;
+   `stkPubHex` is the server's `identityPubKey` from `/api/users/:u/pods`.
+3. `ownerHex = seal(householdKey, "owner"|shareId, {v:1, secretHex:k, label, level, unlockAtBoot, seeAppData})`.
+4. Sign #6 with the sensitive key (biometric) and
+   `POST apex/api/users/:u/server-shares {offer, signature, offerHex, ownerHex}`.
+5. Show `https://flagshipserver.com/share#s=<shareId>&k=<kHex>` as text, QR and share sheet.
+
+**A's "Shared with" card** (loads with the page):
+1. `GET box/api/screens/shares` → `{shares, ended}` (the truth for who has access).
+2. Sign #7 with any account key; `POST apex/api/users/:u/server-shares/list {list, signature}`
+   → `{shares:[{shareId, serverDomain, state, owner, acceptance, …, unlock}]}`.
+   Keep rows for this server. Open `owner` (household key) → `k`, label, level, opt-ins.
+3. A row `accepted` whose id isn't active on the box: open `acceptance` with
+   `linkKey(k)`, check `accept` names this server and share, verify its
+   signature with `accept.memberPubHex`, show "**<label>** accepted. Does their
+   phone show **123 456**?" (`shareSas`). Confirm → sign #1 (sensitive key,
+   biometric) → `POST box/api/screens/shares {grant, signature, accept, acceptSignature}`;
+   then, if unlock at boot, deposit (below).
+4. A row `offered`: "Waiting for <label> to open the link" with Copy link and Cancel.
+5. An active share: level and the two opt-ins are editable (a new #1, same
+   share id and key, later `issuedAt`; no acceptance needed). Remove → #2 →
+   `POST box/api/screens/shares/revoke {revoke, signature}` and
+   `POST apex/api/users/:u/server-shares/:id/revoke {revoke, signature}` (a 404 there is fine).
+   Cancel of a pending offer is the `.com` revoke only.
+6. **Unlock deposit:** `GET apex/api/server/<S>/sealed-luks-key`, open it with A's key
+   exactly as boot approval does, `sealed = sealForEd25519Recipient(diskKey, memberPub)`,
+   sign #8 over `sha256hex(sealedHex)` → `POST apex/api/users/:u/server-shares/:id/unlock {unlock, signature, sealedKey}`.
+   Off: #8 with `sealedSha256: "off"` and no `sealedKey`.
+7. An **Activity** card: `GET box/api/screens/activity?limit=50` → entries; a share's
+   lines read "<label> · <action>".
+
+**B accepts** (link, QR scan, or paste):
+1. Parse the link; `token = shareTokenFromSecret(k)`.
+2. `GET apex/api/server-shares/:id` with `x-flagship-share-token: token`
+   → `{serverDomain, state, offer, …}`; open `offer`. 404 = bad link, 410 = expired/ended.
+3. Accept → `member = deriveShareMemberKey(UMK, shareId)`; sign #3; seal
+   `{v:1, accept, signature}` with `linkKey(k)`, AAD "acceptance"|shareId;
+   `POST apex/api/server-shares/:id/accept {acceptance}` (409 = someone else used the link).
+4. Save to the inbox: random `entryId`; `ct = seal(inboxSealKey, "entry"|entryId, {v:1, shareId, secretHex, serverDomain, serverName, acceptedAt})`;
+   sign #9 `put` with the inbox key; `POST apex/api/share-inbox {request, signature, ct}`.
+5. Show the SAS and "Read this code to the owner", then try to sign in until it works.
+
+**B signs in to S:** `GET box/api/shares/nonce` → sign #5 → `POST box/api/shares/session {session, signature}`
+→ `{token, expiresAt, level, unlockAtBoot, seeAppData}`. `403 not-shared` = the
+owner hasn't confirmed yet; `403 share-ended` = gone. Re-sign-in on a 401.
+
+**B's "Shared with me":** sign #9 `list` → entries → open each. For each, sign
+in (above) to learn the level; on `share-ended` (or `.com` state `ended`)
+delete the inbox entry (#9 `delete`) and drop it.
+
+**B's server page:** `GET box/api/shares/me`, `server-detail`, `apps-list`,
+`server-metrics/:podId`; at manage the access lists (B signs `app-access/v1`
+with the member key) and the AI builder; with app data the Database section;
+**Leave** → #4 → `POST box/api/shares/leave {leave, signature}` and
+`POST apex/api/server-shares/:id/leave {leave, signature}` (share token header),
+then delete the inbox entry.
+
+**B approves a start-up** (unlock at boot on, the server's card says it's waiting):
+the boot gate header is the usual `Authorization: Flagship-Boot-v1 <b64url JSON>` with
+`role: "share"`, signed by the member key over
+`flagship/boot-auth/v1|share|<S>|<METHOD>|<path>|<memberPubHex>|<nonceHex>|<issuedAt>`.
+`GET boot/api/boot/share/pending/<S>` → `{requests:[{request:{serverDomain, stkPub, purpose, nonce, issuedAt}, signature}]}`;
+check `stkPub` equals the offer's `stkPubHex` and the request signature;
+`GET boot/api/boot/share/key/<S>` → `{sealedKey}`; open it with the member key,
+`buildSealedSecretResponse(diskKey, request)`, and
+`POST boot/api/boot/response {response:{serverDomain, requestNonceHex, purpose:"unlock-key", sealed, issuedAt}}`.
+
+## 10. Open questions for the owner
 
 1. **Push for B's boot approvals.** v1 sends none (a push token would let
    `.com` link B's account to the share). Option: an opt-in "notify me" that

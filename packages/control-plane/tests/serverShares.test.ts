@@ -215,3 +215,18 @@ describe("inbox", () => {
     expect(SHARE_INBOX_CAP).toBeGreaterThan(10);
   });
 });
+
+describe("owner list with an admin root pinned", () => {
+  it("still takes the IRK, since it only reads ciphertext", async () => {
+    const storage = new InMemoryStorage();
+    const adminRoot = deriveIRK({ seed: new Uint8Array(32).fill(12) });
+    await storage.usernames.put({ username: "alice", irkPubHex: hex(owner.publicKey), adminRootPubHex: hex(adminRoot.publicKey), claimedAt: 1 });
+    await storage.servers.put({ serverDomain: S, username: "alice", identityPubKeyHex: "cd".repeat(32), registeredAt: 1 });
+    const d = { shares: storage.serverShares, usernames: storage.usernames, servers: storage.servers, now: () => NOW };
+    const list = { username: "alice", issuedAt: NOW };
+    expect((await handleListServerShares(d, "alice", { list, signature: hex(signServerShareList(list, owner)) })).status).toBe(200);
+    // Creating a share still needs the admin root.
+    expect((await handleCreateServerShare(d, "alice", offerBody())).status).toBe(403);
+    expect((await handleCreateServerShare(d, "alice", offerBody({}, adminRoot))).status).toBe(200);
+  });
+});
