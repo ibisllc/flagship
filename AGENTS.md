@@ -272,10 +272,26 @@ account can view or co-manage a server, never destroy it) is in the MVP
   `network.egress` `{host, why}`. Knock sign-in signs with the invite's contact
   AID (own boxes: global AID; a record naming the user's own AID is ignored;
   unknown boxes refused). Needs the `85d3e911` endorsement on boxes. Open: the
-  app-detail members list is stale (the IRK-keyed store no longer gates) and
-  there's no live endpoint to assign per-member roles; app roles can count the
-  box's databases via pg_database (names are opaque); v1 invite links (no `a=`)
-  need re-inviting; boxes without `ownerAidPub` can't recognise their owner.
+  app-detail members list is stale (the IRK-keyed store no longer gates); app
+  roles can count the box's databases via pg_database (names are opaque); v1
+  invite links (no `a=`) need re-inviting; boxes without `ownerAidPub` can't
+  recognise their owner.
+- **Access control + ranks (2026-10-13).** `docs/service-access-gating.md`
+  "Open mode + members". Collaborators is gone from all three apps (and the
+  box's `/api/screens/app-invite/*`; `inviteHandler.ts`/`serviceAccessGate.ts`
+  remain as unwired library code). The service page's "Access control": Open
+  to all | Members only (independent of the list) and Members (n) with a rank
+  each. Ranks are member < manager < master (+ owner), cumulative; apps
+  enforce them, the box never blocks by rank; manifests carry one line per
+  rank (`access.role_descriptions`, the AI must write them). Every invite
+  redemption is its own grant; effective rank = highest live grant; the
+  owner's signed `flagship/app-member-role/v1` order (targets `invite:`,
+  `grant:<invite>/<aid>`, `aid:`) via `GET/POST
+  /api/screens/services/:id/members[/role]`. Open apps get
+  `/__flagship/sign-in?next=` / `sign-out` on the app's host. Box changes need
+  the next endorsed release. Open: removing ONE person's join from a group
+  (needs a grant-revoke order; today it's per AID or per invite);
+  anonymous-as-Member on open apps awaits the owner.
 - **App runtimes (2026-10-12, phase 1 in `8ddf19a9`).** `docs/app-runtimes.md`.
   Apps name `runtime.base` (`node-24`, `python-3.13`, `static`, pinned by
   digest in `runtimes/catalog.ts`); the box writes the build and runs the app
