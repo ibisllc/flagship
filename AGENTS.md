@@ -178,6 +178,15 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   passkey recovery on a sideloaded APK.
 - **Throwaway demo `drill-1010`** (UpCloud) exists for update-server testing.
   Tear it down with `node scripts/sample-user.mjs cleanup drill-1010` when done.
+- **New boxes start current (2026-10-13).** A box that has never been updated
+  and holds no apps moves once, on first boot, to the newest endorsed
+  descendant of its commit (`firstBootUpdate.ts`, marker
+  `first-boot-update.json`; owner decision: the release signature is the
+  consent, no phone order). Same gate and code swap as an ordered update
+  (`applyEndorsedUpdate`), so a bad release rolls back. `vm-appliance.yml`
+  now installs the newest endorsed release (`scripts/latest-endorsed-release.mjs`,
+  the box's own verifier) under the `main` label recipes name; the manifest
+  records the `commit`.
 - **VM appliances published 2026-10-10 (both arches)**, built by `vm-appliance.yml`
   from `9873b83e` (amd64 under KVM, arm64 on `ubuntu-24.04-arm` under TCG) and
   uploaded to R2 `flagship-iso/` with their manifests in

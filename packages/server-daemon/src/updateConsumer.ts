@@ -518,6 +518,31 @@ export async function runUpdateConsumer(
     log(`[self-update] could not persist used nonce (${(e as Error).message}); continuing`);
   }
 
+  return applyEndorsedUpdate(opts, currentCommit, order.targetCommit, "admin-authorized, maintainer-endorsed");
+}
+
+export interface ApplyEndorsedUpdateOptions {
+  repoPath: string;
+  releaseGate: ReleaseGate;
+  runner: UpdateCommandRunner;
+  pendingStore: PendingVerifyStore;
+  requestExit: () => void;
+  onLog?: (m: string) => void;
+}
+
+/**
+ * Fetch, prove the target maintainer-endorsed, then swap the code and restart
+ * into it under the boot health gate. Shared by the owner's update order and a
+ * new box's first-boot update (firstBootUpdate.ts); whatever authorized the
+ * move, only an endorsed commit is ever checked out.
+ */
+export async function applyEndorsedUpdate(
+  opts: ApplyEndorsedUpdateOptions,
+  currentCommit: string,
+  targetCommit: string,
+  why: string,
+): Promise<UpdateConsumeOutcome> {
+  const log = opts.onLog ?? (() => {});
   // 9. Fetch the objects, then run the AUTHENTICITY gate (2-of-2 half #2).
   //    Fetch first is deliberate: the gate's endorsement lineage walk needs the
   //    target's objects locally, and a fetch only downloads into .git — nothing
@@ -550,7 +575,7 @@ export async function runUpdateConsumer(
     log(`[self-update] shallow-deepen skipped (${(e as Error).message}); continuing`);
   }
   try {
-    opts.releaseGate.assertCommitEndorsed(order.targetCommit);
+    opts.releaseGate.assertCommitEndorsed(targetCommit);
   } catch (e) {
     log(`[self-update] REFUSED: ${(e as Error).message}`);
     return { applied: false, reason: "unendorsed" };
@@ -558,15 +583,12 @@ export async function runUpdateConsumer(
 
   // 10. Apply: checkout + rebuild + stage the pending-verify marker + restart.
   //     CODE SWAP ONLY — /var/flagship (keys/data) is never touched.
-  log(
-    `[self-update] applying admin-authorized, maintainer-endorsed update ` +
-      `${currentCommit} → ${order.targetCommit}`,
-  );
+  log(`[self-update] applying ${why} update ${currentCommit} → ${targetCommit}`);
   // The marker goes down BEFORE the tree changes: if the box dies anywhere in
   // the checkout or rebuild, the next start finds `applying` and rolls back
   // (updateGuard.ts before the daemon runs, the boot gate inside it). Without
   // it an interrupted apply left half-built code and nothing to undo it.
-  const marker = { previousCommit: currentCommit, targetCommit: order.targetCommit, bootAttempts: 0 };
+  const marker = { previousCommit: currentCommit, targetCommit, bootAttempts: 0 };
   try {
     await opts.pendingStore.write({ ...marker, stage: "applying" });
   } catch (e) {
@@ -585,7 +607,7 @@ export async function runUpdateConsumer(
     }
   };
   try {
-    await opts.runner("git", ["-C", opts.repoPath, "checkout", order.targetCommit]);
+    await opts.runner("git", ["-C", opts.repoPath, "checkout", targetCommit]);
   } catch (e) {
     // git refuses a checkout before touching the tree, so nothing to undo.
     log(`[self-update] checkout failed: ${(e as Error).message}`);
@@ -608,7 +630,7 @@ export async function runUpdateConsumer(
 
   log("[self-update] staged; restarting into the new code (health gate will verify)");
   opts.requestExit();
-  return { applied: true, previousCommit: currentCommit, targetCommit: order.targetCommit };
+  return { applied: true, previousCommit: currentCommit, targetCommit };
 }
 
 // ──────────────────────────────────────────────────────────────────────

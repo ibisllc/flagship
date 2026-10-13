@@ -230,6 +230,7 @@ import {
 } from "./pairingDepositConsumer.js";
 import {
   buildCurrentCommitProvider,
+  applyEndorsedUpdate,
   buildUpdateConsumerPoller,
   filePendingVerifyStore,
   fileUsedNonceStore,
@@ -242,6 +243,7 @@ import {
 } from "./updateHealthGate.js";
 import { fileUpdateOutcomeStore } from "./updateOutcome.js";
 import { buildReleaseCatalog } from "./updateReleases.js";
+import { runFirstBootUpdate } from "./firstBootUpdate.js";
 import { installHealthReporter } from "./healthReporter.js";
 import { installUpdateGuard } from "./updateGuard.js";
 import { daemonRestarts as restarts } from "./restartCoordinator.js";
@@ -3173,6 +3175,45 @@ async function wireOwnerHandlers(deps: {
       process.once("SIGTERM", () => updatePoller.stop());
       process.once("SIGINT", () => updatePoller.stop());
       console.log("[daemon] self-update consumer armed");
+      // A new box starts on whatever its image baked in; it moves to the
+      // newest endorsed release once, before it holds any apps.
+      const firstBootGate = buildMaintainersReleaseGate({
+        repoPath,
+        ...(process.env.FLAGSHIP_MAINTAINER_PIN_OVERRIDE ? { pinnedMandateHash: process.env.FLAGSHIP_MAINTAINER_PIN_OVERRIDE } : {}),
+        onLog: (m) => console.log(m),
+      });
+      const firstBootPending = filePendingVerifyStore(`${dataDir}/update-pending.json`);
+      setTimeout(() => {
+        void runFirstBootUpdate({
+          markerPath: `${dataDir}/first-boot-update.json`,
+          hasUpdateHistory: async () =>
+            existsSync(`${dataDir}/update-outcome.json`) || (await firstBootPending.read().catch(() => null)) !== null,
+          appCount: () => runtime.servicePlatform?.list().length ?? 0,
+          catalog: buildReleaseCatalog({
+            repoPath,
+            ...(process.env.FLAGSHIP_MAINTAINER_PIN_OVERRIDE ? { pinnedMandateHash: process.env.FLAGSHIP_MAINTAINER_PIN_OVERRIDE } : {}),
+            onLog: (m) => console.log(m),
+          }),
+          apply: (from, target) =>
+            applyEndorsedUpdate(
+              {
+                repoPath,
+                releaseGate: firstBootGate,
+                runner: realUpdateCommandRunner,
+                pendingStore: firstBootPending,
+                requestExit: () => {
+                  console.log("[first-boot-update] restarting into the newest release");
+                  process.exit(0);
+                },
+                onLog: (m) => console.log(m),
+              },
+              from,
+              target,
+              "first-boot, maintainer-endorsed",
+            ),
+          log: (m) => console.log(m),
+        }).catch((e: Error) => console.warn(`[first-boot-update] ${e.message}`));
+      }, 30_000).unref?.();
     } else {
       console.log(
         `[daemon] self-update consumer NOT armed (no git checkout at ${repoPath})`,
