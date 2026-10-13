@@ -35,6 +35,8 @@ function rig(
     unit?: string;
     /** The stores turn healthy on their own after this many polls (a unit at work). */
     healAfterPolls?: number;
+    /** dockerd answers only after this many polls (`docker info` prints no version until then). */
+    dockerUpAfterPolls?: number;
     sleep?: (ms: number) => Promise<void>;
   } = {},
 ) {
@@ -47,6 +49,7 @@ function rig(
   let t = 0;
   let polls = 0;
   const reply = (args: string[]): { stdout: string; stderr: string } => {
+    if (args[0] === "info") return { stdout: polls >= (over.dockerUpAfterPolls ?? 0) ? "26.1.5\n" : "\n", stderr: "" };
     if (args[0] === "inspect" && over.healAfterPolls !== undefined && polls >= over.healAfterPolls) {
       for (const k of Object.keys(health)) health[k] = "healthy";
     }
@@ -154,6 +157,13 @@ describe("DataStack at boot", () => {
     const r = rig({ health: { "flagship-postgres": "starting" } });
     expect(await r.stack.ensure()).toBe("down");
     expect(r.stack.status().reason).toMatch(/postgres starting/);
+  });
+
+  it("wakes a dockerd that is down even though `docker info --format` exits 0 without it", async () => {
+    const r = rig({ dockerUpAfterPolls: 1 });
+    expect(await r.stack.ensure()).toBe("healthy");
+    expect(r.calls).toContainEqual(["systemctl", "reset-failed", "docker.service", "docker.socket"]);
+    expect(r.calls).toContainEqual(["systemctl", "start", "--no-block", "docker.socket", "docker.service"]);
   });
 
   it("is never in the way on a host without the compose stack", async () => {

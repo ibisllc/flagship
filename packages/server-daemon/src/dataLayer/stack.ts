@@ -360,8 +360,11 @@ export class DataStack {
     let woken = false;
     for (;;) {
       try {
-        if (this.cmd.capture) await this.cmd.capture("docker", ["info", "--format", "{{.ServerVersion}}"], { timeoutMs: 15_000 });
-        else await this.cmd.run("docker", ["info"], { timeoutMs: 15_000 });
+        if (this.cmd.capture) {
+          // With a custom format, `docker info` exits 0 when dockerd is down.
+          const { stdout } = await this.cmd.capture("docker", ["info", "--format", "{{.ServerVersion}}"], { timeoutMs: 15_000 });
+          if (stdout.trim() === "") throw new Error("docker didn't answer");
+        } else await this.cmd.run("docker", ["info"], { timeoutMs: 15_000 });
         return true;
       } catch {
         if (this.now() >= deadline) return false;

@@ -110,10 +110,10 @@ async function execToFile(cmd: string, args: string[], outPath: string, env?: Re
   }
 }
 
+/** With a custom format, `docker info` exits 0 when dockerd is down; only a version says it answered. */
 async function dockerAnswers(): Promise<boolean> {
   try {
-    await exec("docker", ["info", "--format", "{{.ServerVersion}}"]);
-    return true;
+    return (await exec("docker", ["info", "--format", "{{.ServerVersion}}"])).trim() !== "";
   } catch {
     return false;
   }
@@ -121,12 +121,12 @@ async function dockerAnswers(): Promise<boolean> {
 
 async function dockerState(): Promise<string> {
   const show = await exec("systemctl", [
-    "show", "docker.service", "-p", "ActiveState,SubState,Result,ExecMainStatus", "--value",
+    "show", "docker.service", "-p", "ActiveState,SubState,Result,ExecMainStatus,NRestarts", "--value",
   ]).catch(() => "");
-  const [active, sub, result, status] = show.trim().split("\n");
+  const [active, sub, result, status, restarts] = show.trim().split("\n");
   const log = await exec("journalctl", ["-u", "docker.service", "-n", "5", "--no-pager", "-o", "cat"]).catch(() => "");
   const unit = active
-    ? `docker.service is ${active}${sub ? `/${sub}` : ""}${result && result !== "success" ? `, result ${result}` : ""}${status && status !== "0" ? `, exit ${status}` : ""}`
+    ? `docker.service is ${active}${sub ? `/${sub}` : ""}${result && result !== "success" ? `, result ${result}` : ""}${status && status !== "0" ? `, exit ${status}` : ""}${restarts && restarts !== "0" ? `, restarted ${restarts} times` : ""}`
     : "docker.service state unknown";
   return [unit, log.trim().replace(/\s*\n\s*/g, " | ")].filter(Boolean).join("; ");
 }
@@ -149,6 +149,19 @@ export async function ensureDocker(waitMs = 120_000): Promise<void> {
   throw new Error(`Docker isn't running on this server (${await dockerState()})`);
 }
 
+/** Run a docker command, saying what state dockerd is in when it couldn't be reached. */
+async function docker(run: () => Promise<unknown>): Promise<void> {
+  await ensureDocker();
+  try {
+    await run();
+  } catch (e) {
+    if (/Cannot connect to the Docker daemon|Is the docker daemon running/i.test((e as Error).message)) {
+      throw new Error(`${(e as Error).message} (${await dockerState()})`);
+    }
+    throw e;
+  }
+}
+
 function credsOf(store: PostgresStore): { role: string; password: string } {
   const u = new URL(store.url);
   return { role: decodeURIComponent(u.username) || store.role, password: decodeURIComponent(u.password) };
@@ -158,14 +171,8 @@ export function realAppCopyOps(opts: { postgresContainer?: string; helperImage?:
   const pg = opts.postgresContainer ?? "flagship-postgres";
   const pgArgs = (role: string, db: string) => ["-h", "127.0.0.1", "-U", role, "-d", db];
   return {
-    saveImage: async (image, outPath) => {
-      await ensureDocker();
-      await execToFile("docker", ["save", image], outPath);
-    },
-    loadImage: async (inPath) => {
-      await ensureDocker();
-      await exec("docker", ["load", "-q"], { stdinFrom: inPath });
-    },
+    saveImage: (image, outPath) => docker(() => execToFile("docker", ["save", image], outPath)),
+    loadImage: (inPath) => docker(() => exec("docker", ["load", "-q"], { stdinFrom: inPath })),
     imageExists: async (image) => {
       try {
         await exec("docker", ["image", "inspect", "--format", "{{.Id}}", image]);
