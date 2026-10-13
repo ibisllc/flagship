@@ -187,9 +187,6 @@ public struct ServerDetailScreen: View {
                         purpose: .entitlement
                     )
                 }
-                if let health {
-                    ServerHealthCard(health: health)
-                }
                 switch state {
                 case .idle, .loading:
                     // HONEST LIVENESS (Fix B) — an unreachable/coming-up box won't
@@ -245,8 +242,7 @@ public struct ServerDetailScreen: View {
                         }
                         ServerAppsSection(controller: apps, onOpenApp: onOpenApp, onCreate: onCreateApp)
                     }
-                    MetricsSection(state: metrics)
-                    cert(d: d, c: c)
+                    MonitoringPane(health: health, metrics: metrics, cert: certificate(d))
                     deviceRow(d: d, c: c)
                     BootUnlockCard(serverDomain: d.serverFqdn)
                     PreferredServerCard(serverDomain: d.serverFqdn)
@@ -259,6 +255,11 @@ public struct ServerDetailScreen: View {
                     ReplaceServerCard(serverDomain: d.serverFqdn, onReplaced: onDeleted)
                     UpdateServerCard(serverDomain: d.serverFqdn, currentCommit: d.currentCommit, lastUpdate: d.lastUpdate, onRefreshDetail: onRefreshDetail)
                     TransferCard(serverDomain: d.serverFqdn)
+                }
+                // The health report comes from the directory, not the box, so
+                // it still shows when the box's own detail can't load.
+                if !isLoaded, health != nil {
+                    MonitoringPane(health: health, metrics: nil, cert: nil)
                 }
                 // Outside the state switch: none of these need the box, so an
                 // offline, never-online or revoked server can still be revoked,
@@ -473,34 +474,13 @@ public struct ServerDetailScreen: View {
         }
     }
 
-    private func cert(d: ServerDetailResponse, c: FSColors) -> some View {
-        sectionWrap("TLS CERTIFICATE", c: c) {
-            FSCard {
-                if let after = d.certNotAfter ?? verifiedCertStatus?.certValidUntil {
-                    VStack(alignment: .leading, spacing: FS.space.s2) {
-                        labeled("Renews", relative(ms: after), c: c)
-                        if let before = d.certNotBefore {
-                            labeled("Issued", relative(ms: before), c: c)
-                        }
-                        if let issuer = verifiedCertStatus?.certIssuer, !issuer.isEmpty {
-                            labeled("Issuer", issuer, c: c)
-                        }
-                        let sans = d.certSans ?? verifiedCertStatus?.appsServed
-                        if let sans, !sans.isEmpty {
-                            Text("SANS").font(FS.font.caption()).foregroundColor(c.textMuted).padding(.top, FS.space.s2)
-                            VStack(alignment: .leading, spacing: FS.space.s1) {
-                                ForEach(sans, id: \.self) { san in
-                                    Text(san).font(FS.font.mono()).foregroundColor(c.text)
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    Text("No cert yet — provisioning…")
-                        .foregroundColor(c.textMuted)
-                }
-            }
-        }
+    private func certificate(_ d: ServerDetailResponse) -> MonitoringCert {
+        MonitoringCert(
+            notAfter: d.certNotAfter ?? verifiedCertStatus?.certValidUntil,
+            notBefore: d.certNotBefore,
+            issuer: verifiedCertStatus?.certIssuer,
+            sans: d.certSans ?? verifiedCertStatus?.appsServed ?? []
+        )
     }
 
     private func deviceRow(d: ServerDetailResponse, c: FSColors) -> some View {
@@ -576,14 +556,6 @@ public struct ServerDetailScreen: View {
         VStack(alignment: .leading, spacing: 0) {
             Text(value).font(.system(size: 17, weight: .semibold)).foregroundColor(c.text)
             Text(label).font(.system(size: 11)).foregroundColor(c.textMuted)
-        }
-    }
-
-    private func labeled(_ label: String, _ value: String, c: FSColors) -> some View {
-        HStack {
-            Text(label).font(FS.font.caption()).foregroundColor(c.textMuted)
-            Spacer()
-            Text(value).font(FS.font.body()).foregroundColor(c.text)
         }
     }
 
@@ -1543,30 +1515,20 @@ struct DangerZoneCard: View {
                 .tracking(1)
                 .foregroundColor(c.textMuted)
             FSCard {
-                VStack(alignment: .leading, spacing: FS.space.s2) {
+                VStack(alignment: .leading, spacing: FS.space.s3) {
                     if revoked {
-                        Text("This server is revoked: it can't connect or unlock. Un-revoke it to let the same box back in.")
-                            .font(FS.font.caption())
-                            .foregroundColor(c.textMuted)
                         FSPrimaryButton(unrevoking ? "Restoring…" : "Un-revoke server", block: true) {
                             Task { await unrevoke(toasts: toastCenter, app: appState) }
                         }
                         .disabled(unrevoking)
                         .accessibilityIdentifier("sd-unrevoke-server")
                     } else {
-                        Text("Locks this server out right away: it can't connect or unlock until you un-revoke it. Its name stays reserved. Use this if the box is lost or stolen.")
-                            .font(FS.font.caption())
-                            .foregroundColor(c.textMuted)
                         FSDangerButton("Revoke server (reversible)", block: true) {
                             showRevoke = true
                         }
                         .accessibilityIdentifier("sd-revoke-server")
                     }
-                    Divider().padding(.vertical, FS.space.s2)
-                    Text("Deletes \(name) for good. If the box is online it erases its data and powers off; if it's offline it can never come back online. The name becomes free to reuse.")
-                        .font(FS.font.caption())
-                        .foregroundColor(c.textMuted)
-                    FSDangerButton("Delete server", block: true) {
+                    FSDangerButton("Delete and wipe this server", block: true) {
                         showDelete = true
                     }
                     .accessibilityIdentifier("sd-delete-server")
@@ -1825,51 +1787,6 @@ struct DeleteServerSheet: View {
         if case .completed(let erase) = m.phase {
             dismiss()
             done(DeleteServerViewModel.completionMessage(name: name, eraseRequested: erase))
-        }
-    }
-}
-
-
-/// The box's own account of its health (`BoxHealth.verdict`), re-read every
-/// 30 s so a report that stops arriving turns into "No health report".
-struct ServerHealthCard: View {
-    @Environment(\.colorScheme) private var scheme
-    let health: BoxHealth
-
-    var body: some View {
-        let c = FSColors.scheme(scheme)
-        TimelineView(.periodic(from: .now, by: 30)) { context in
-            let v = health.verdict(nowMs: Int64(context.date.timeIntervalSince1970 * 1000))
-            if v.ok {
-                HStack(spacing: FS.space.s2) {
-                    Image(systemName: "heart.text.square")
-                        .foregroundColor(c.textMuted)
-                    Text(v.lines.first ?? "")
-                        .font(FS.font.bodySm())
-                        .foregroundColor(c.textMuted)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .accessibilityIdentifier("server-health-ok")
-            } else {
-                FSCard {
-                    VStack(alignment: .leading, spacing: FS.space.s2) {
-                        HStack(spacing: FS.space.s2) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundColor(.orange)
-                            Text("Server health")
-                                .font(.system(size: 17, weight: .semibold))
-                                .foregroundColor(c.text)
-                        }
-                        ForEach(v.lines, id: \.self) { line in
-                            Text(line)
-                                .font(FS.font.bodySm())
-                                .foregroundColor(c.text)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                }
-                .accessibilityIdentifier("server-health-issues")
-            }
         }
     }
 }
