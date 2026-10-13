@@ -196,21 +196,6 @@ public extension EnvironmentValues {
     }
 }
 
-/// P6 — owner-only invite label book. Maps `(serviceId, opaqueTag)`
-/// to a local display name + channel + sent-to memo + notes. NEVER
-/// leaves the device. The default value is the UserDefaults-backed
-/// implementation; tests + previews inject the in-memory variant.
-private struct InviteLabelBookKey: EnvironmentKey {
-    static let defaultValue: any InviteLabelBook = UserDefaultsInviteLabelBook()
-}
-
-public extension EnvironmentValues {
-    var inviteLabelBook: any InviteLabelBook {
-        get { self[InviteLabelBookKey.self] }
-        set { self[InviteLabelBookKey.self] = newValue }
-    }
-}
-
 /// Web-experience gating (docs/service-access-gating.md): the local store of
 /// browser QR-login sessions THIS phone has authorized. Drives Settings →
 /// "Open secured sessions" (list / refresh online-offline / stop). NEVER leaves

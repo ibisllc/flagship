@@ -377,22 +377,6 @@ class LiveScreensClient(
         return request("/api/screens/peer-backup/toggle", PeerBackupStatusResponse.serializer(), "POST", body)
     }
 
-    override suspend fun appInviteIssue(req: AppInviteIssueRequest): AppInviteIssueResponse {
-        val body = json.encodeToString(AppInviteIssueRequest.serializer(), req).toByteArray()
-        return request("/api/screens/app-invite/issue", AppInviteIssueResponse.serializer(), "POST", body)
-    }
-
-    override suspend fun appInviteList(serviceId: String): AppInviteListResponse =
-        request("/api/screens/app-invite/list/$serviceId", AppInviteListResponse.serializer())
-
-    override suspend fun appInviteAccess(serviceId: String): AppInviteAccessResponse =
-        request("/api/screens/app-invite/access/$serviceId", AppInviteAccessResponse.serializer())
-
-    override suspend fun appInviteRevoke(req: AppInviteRevokeRequest): AppInviteRevokeResponse {
-        val body = json.encodeToString(AppInviteRevokeRequest.serializer(), req).toByteArray()
-        return request("/api/screens/app-invite/revoke", AppInviteRevokeResponse.serializer(), "POST", body)
-    }
-
     override suspend fun companionMintTicket(req: CompanionMintTicketRequest): CompanionMintTicketResponse {
         val body = json.encodeToString(CompanionMintTicketRequest.serializer(), req).toByteArray()
         return request("/api/screens/companion/mint-ticket", CompanionMintTicketResponse.serializer(), "POST", body)

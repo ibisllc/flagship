@@ -129,8 +129,3 @@ fun canonicalSetServiceEnv(req: com.flagshipserver.app.api.ServiceEnvSetEnvelope
     return parts.joinToString("|").toByteArray(Charsets.UTF_8)
 }
 
-/** P6 — owner-only invite label book. Maps `(serviceId, opaqueTag)`
- *  to local display name + channel + sent-to memo + notes. NEVER
- *  leaves the device. Default is an in-memory book; production
- *  MainActivity installs the SharedPreferences-backed variant. */
-val LocalInviteLabelBook = staticCompositionLocalOf<InviteLabelBook> { InMemoryInviteLabelBook() }

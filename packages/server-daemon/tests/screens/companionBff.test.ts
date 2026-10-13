@@ -35,9 +35,6 @@ import {
   FilePairedSessionStore,
   defaultPairedSessionPath,
 } from "../../src/pairedSessionStore.js";
-import {
-  InMemoryAppInviteStore,
-} from "../../src/inviteHandler.js";
 import type { HttpRequest } from "../../src/runtime.js";
 
 const SERVER_FQDN = "home.alice.flagship.services";
@@ -90,14 +87,6 @@ async function buildHarness(opts?: { now?: () => number; randBytesFn?: (n: numbe
       username: USERNAME,
       now,
       randomBytes: opts?.randBytesFn,
-    },
-    // Wire app-invite so the companion-write gate test can hit a real
-    // signed-write endpoint (issue) instead of needing a separate
-    // harness for that one.
-    appInvite: {
-      store: new InMemoryAppInviteStore(),
-      serverFqdn: SERVER_FQDN,
-      now,
     },
   });
   return { handle, ticketStore, pairedSessions };
@@ -513,18 +502,13 @@ describe("Companion write-gate", () => {
     );
     const companionToken = (JSON.parse(redeem!.body as string)).companionSessionToken;
 
-    // Companion attempts a signed-write — app-invite/issue.
+    // Companion attempts a write — the peer-backup toggle.
     const r = await handle(
       req({
         method: "POST",
-        path: "/api/screens/app-invite/issue",
+        path: "/api/screens/peer-backup/toggle",
         headers: { "x-flagship-session": companionToken },
-        body: Buffer.from(JSON.stringify({
-          serviceId: "alice-habits",
-          role: "member",
-          opaqueTag: "00112233445566778899aabbccddeeff",
-          contextNote: null,
-        })),
+        body: Buffer.from(JSON.stringify({ participate: true })),
       }),
     );
     expect(r?.status).toBe(403);

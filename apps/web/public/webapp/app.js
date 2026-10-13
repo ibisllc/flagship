@@ -83,8 +83,6 @@ import { initAppDbView } from "./views/app-db.js";
 import { startAccessAlerts } from "./lib/accessAlerts.js";
 import { canSyncPushSetting, startPushSettingSync } from "./lib/pushSetting.js";
 import { unsubscribeFromWebPush } from "./lib/push.js";
-import { initInviteIssueView } from "./views/invite-issue.js";
-import { initInviteManageView } from "./views/invite-manage.js";
 import { initServiceAccessView } from "./views/service-access.js";
 import { initInviteRedeemView, enterInviteRedeem } from "./views/invite-redeem.js";
 import { inviteContextFromLocation } from "./lib/serviceInvite.js";
@@ -161,8 +159,6 @@ const SUB_VIEW_TABS = {
   "view-create-server": "home",
   "view-services-list": "apps",
   "view-service-detail": "apps",
-  "view-invite-issue": "apps",
-  "view-invite-manage": "apps",
   "view-service-access": "apps",
   "view-app-access": "apps",
   "view-app-db": "apps",
@@ -531,8 +527,6 @@ async function boot() {
   initServerDetailView();
   initServicesListView();
   initServiceDetailView();
-  initInviteIssueView();
-  initInviteManageView();
   initServiceAccessView();
   initAppAccessView();
   initAppDbView();

@@ -173,7 +173,7 @@ describe("service-access friend redeem view + deep-link", () => {
     expect(r.body).toContain('"view-service-access": "apps"');
   });
 
-  it("service-detail.js wires the 'Manage who can open this' button", async () => {
+  it("service-detail.js wires the 'Access control' row", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/webapp/views/service-detail.js" });
     expect(r.statusCode).toBe(200);

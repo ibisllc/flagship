@@ -233,10 +233,6 @@ public struct ServicesTab: View {
             BrowserTabsContainer(serviceId: serviceId, path: $path)
         case .browserViewer(_, let tabId):
             BrowserViewerContainer(tabId: tabId)
-        case .inviteManage(let serviceId):
-            InviteManageContainer(serviceId: serviceId, path: $path)
-        case .inviteIssue(let serviceId):
-            InviteIssueContainer(serviceId: serviceId, path: $path)
         case .serviceAccess(let serviceId):
             ServiceAccessContainer(serviceId: serviceId)
         case .appDatabase(let serviceId):
@@ -507,7 +503,6 @@ struct ServiceDetailContainer: View {
                     pods: app.pods,
                     onRemove: { confirmRemove = true },
                     onOpenBrowserTabs: { path.append(.browserTabs(serviceId: serviceId)) },
-                    onOpenCollaborators: { path.append(.inviteManage(serviceId: serviceId)) },
                     onOpenAccess: { path.append(.serviceAccess(serviceId: serviceId)) },
                     onOpenDatabase: { path.append(.appDatabase(serviceId: serviceId)) },
                     onEdit: { path.append(.editService(serviceId: serviceId)) },
@@ -997,54 +992,7 @@ struct BrowserViewerContainer: View {
     }
 }
 
-// P6 — Collaborator-invite manage container. Loads pending invites +
-// active access via the BFF; exposes a "+ Issue invite" entry that
-// pushes the issue screen onto the same nav stack. Labels are resolved
-// from the local-only InviteLabelBook — never via the wire.
-struct InviteManageContainer: View {
-    let serviceId: String
-    @Binding var path: [AppsRoute]
-    @Environment(\.screensClient) private var client
-    @Environment(\.inviteLabelBook) private var labelBook
-    @State private var vm: InviteManageViewModel?
-    @State private var appUrl: String = ""
-
-    var body: some View {
-        Group {
-            if let vm, !appUrl.isEmpty {
-                InviteManageScreen(
-                    vm: vm,
-                    appLabel: appLabel(for: serviceId),
-                    appUrlForShare: appUrl,
-                    onIssueTapped: { path.append(.inviteIssue(serviceId: serviceId)) }
-                )
-            } else {
-                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-        }
-        .task {
-            if appUrl.isEmpty {
-                appUrl = await resolveAppShareUrl(serviceId: serviceId, client: client)
-            }
-            if vm == nil {
-                vm = InviteManageViewModel(
-                    serviceId: serviceId,
-                    client: client,
-                    labelBook: labelBook
-                )
-            }
-        }
-    }
-
-    private func appLabel(for serviceId: String) -> String {
-        if let delim = serviceId.range(of: "--") {
-            return String(serviceId[delim.upperBound...]).capitalized
-        }
-        return serviceId
-    }
-}
-
-/// #92 — host for the per-service access-gating ("Who can open this") admin
+/// #92 — host for the per-service access-gating ("Access control") admin
 /// surface. Resolves the box this service runs on (the daemon there pins the
 /// owner IRK as `serverId`, so the set-mode + redeem envelopes target it,
 /// matching the env-editor / uninstall resolution) + the current username.
@@ -1072,58 +1020,3 @@ struct ServiceAccessContainer: View {
     }
 }
 
-/// Share-URL root for an installed app — the tier-1 canonical URL of THIS
-/// box's instance (`https://<urlLabel>.<server>.<user>.flagship.services`),
-/// the only form the box's per-box wildcard cert covers (model A′). The
-/// daemon's app-detail response carries it as `app.url`; we never derive a
-/// `<slug>.<creator>` (tier-2) form locally — that name has no valid cert
-/// until the shared service-cert phase ships. Last-resort fallback (detail
-/// fetch failed) keeps the URL syntactically valid for the share sheet.
-private func resolveAppShareUrl(serviceId: String, client: any ScreensClient) async -> String {
-    if let url = try? await client.appDetail(serviceId: serviceId).app.url {
-        return url
-    }
-    return "https://\(serviceId).\(Endpoints.dataApex)"
-}
-
-// P6 — Issue container. Owns the issue ViewModel; on success the
-// InviteIssueScreen renders the share URL + share-sheet locally and
-// the user can pop back to InviteManage manually.
-struct InviteIssueContainer: View {
-    let serviceId: String
-    @Binding var path: [AppsRoute]
-    @Environment(\.screensClient) private var client
-    @Environment(\.inviteLabelBook) private var labelBook
-    @State private var vm: InviteIssueViewModel?
-
-    var body: some View {
-        Group {
-            if let vm {
-                InviteIssueScreen(
-                    vm: vm,
-                    appLabel: appLabel(for: serviceId)
-                )
-            } else {
-                ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-        }
-        .task {
-            if vm == nil {
-                let appUrl = await resolveAppShareUrl(serviceId: serviceId, client: client)
-                vm = InviteIssueViewModel(
-                    serviceId: serviceId,
-                    appUrl: appUrl,
-                    client: client,
-                    labelBook: labelBook
-                )
-            }
-        }
-    }
-
-    private func appLabel(for serviceId: String) -> String {
-        if let delim = serviceId.range(of: "--") {
-            return String(serviceId[delim.upperBound...]).capitalized
-        }
-        return serviceId
-    }
-}

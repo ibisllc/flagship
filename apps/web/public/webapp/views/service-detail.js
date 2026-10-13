@@ -25,7 +25,7 @@ import { toast } from "../lib/toast.js";
 import { humanError } from "../lib/humanError.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
 import { controlApex } from "../lib/apex.js";
-import { pencilIcon } from "../lib/icons.js";
+import { pencilIcon, usersIcon } from "../lib/icons.js";
 import { EDIT_ROW_CAPTION, EDIT_ROW_TITLE } from "../lib/editService.js";
 import { openAdapterReport, renderReportRow } from "../lib/adapterReport.js";
 import { isCompanionProfile } from "../lib/companionGuard.js";
@@ -208,27 +208,14 @@ export async function renderServiceDetail(serviceId) {
           <button id="sd-open-browser" class="full-width">Open browser viewer</button>
         </div>
       ` : ""}
-      <h2 class="mt-4">Invites</h2>
-      <div class="card">
-        <p class="note">
-          Share access via single-use bearer links. Names you attach to an
-          invite stay on this device (encrypted user-blob synced lazily); the
-          daemon and flagshipserver.com never see them.
-        </p>
-        <div class="row-2 mt-2">
-          <button id="sd-invite-issue" class="secondary">Invite people</button>
-          <button id="sd-invite-manage" class="secondary">Manage invites</button>
-        </div>
-      </div>
-      <h2 class="mt-4">Access</h2>
-      <div class="card">
-        <p class="note">
-          Keep this service open to anyone with the link, or restrict it to an
-          allow-list of people you add by name. Their access follows their
-          account, surviving a phone change.
-        </p>
-        <button id="sd-access" class="full-width mt-2">Manage who can open this</button>
-      </div>
+      <h2 class="mt-4">Access control</h2>
+      <button class="card full-width edit-row" id="sd-access" type="button">
+        <span class="edit-row-icon" aria-hidden="true">${usersIcon}</span>
+        <span class="edit-row-body">
+          <strong>Access control</strong>
+          <span class="note">Open to all or members only, and each member's role</span>
+        </span>
+      </button>
       <h2 class="mt-4">Backup</h2>
       <div class="card">
         <p class="note">
@@ -273,14 +260,6 @@ export async function renderServiceDetail(serviceId) {
         .replace(/^https?:\/\//, "")
         .replace(/\/+$/, "");
       await enterServiceEnv(s.serviceId, s.creator, s.slug, serverFqdn);
-    });
-    $("sd-invite-issue")?.addEventListener("click", async () => {
-      const { enterInviteIssue } = await import("./invite-issue.js");
-      await enterInviteIssue(s);
-    });
-    $("sd-invite-manage")?.addEventListener("click", async () => {
-      const { enterInviteManage } = await import("./invite-manage.js");
-      await enterInviteManage(s);
     });
     $("sd-access")?.addEventListener("click", async () => {
       const { enterServiceAccess } = await import("./service-access.js");

@@ -13,7 +13,7 @@ import Foundation
 /// bearer to "poll/close THIS session" and nothing more (no account key, no
 /// content), so UserDefaults is the right floor: losing it just means the owner
 /// loses the in-app handle to a session that still expires on its own on the
-/// box. Mirrors `InviteLabelBook`'s single-blob, lock-guarded shape.
+/// box. A single lock-guarded blob.
 public struct SecuredSession: Codable, Equatable, Sendable, Identifiable {
     /// The 64-hex phone-held session handle. Rides the BODY of status/close
     /// (never a URL) so it can't land in the box's access logs.

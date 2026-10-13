@@ -29,10 +29,7 @@ public struct ServiceDetailScreen: View {
     /// detail screen shows a section that calls this to push the tabs
     /// list onto the nav stack.
     var onOpenBrowserTabs: () -> Void = {}
-    /// P6 — push the collaborator-invite manage surface onto the nav
-    /// stack. Unconditionally surfaced (independent of detail state).
-    var onOpenCollaborators: () -> Void = {}
-    /// #92 — push the per-service access-gating ("Who can open this")
+    /// #92 — push the per-service access-gating ("Access control")
     /// surface onto the nav stack.
     var onOpenAccess: () -> Void = {}
     /// Push the owner's Database section (shown only when the VM says so).
@@ -50,7 +47,6 @@ public struct ServiceDetailScreen: View {
         pods: [PodInfo],
         onRemove: @escaping () -> Void = {},
         onOpenBrowserTabs: @escaping () -> Void = {},
-        onOpenCollaborators: @escaping () -> Void = {},
         onOpenAccess: @escaping () -> Void = {},
         onOpenDatabase: @escaping () -> Void = {},
         onEdit: @escaping () -> Void = {},
@@ -61,7 +57,6 @@ public struct ServiceDetailScreen: View {
         self.pods = pods
         self.onRemove = onRemove
         self.onOpenBrowserTabs = onOpenBrowserTabs
-        self.onOpenCollaborators = onOpenCollaborators
         self.onOpenAccess = onOpenAccess
         self.onOpenDatabase = onOpenDatabase
         self.onEdit = onEdit
@@ -89,7 +84,6 @@ public struct ServiceDetailScreen: View {
                     if let runsOn = vm.runsOn { RunsOnSection(controller: runsOn) }
                     webDomains(d: d, c: c)
                     browserTabsRow(d: d, c: c)
-                    collaboratorsRow(c: c)
                     accessRow(c: c)
                     if vm.showsApiKeys, let keys = vm.apiKeys {
                         ApiKeysSection(controller: keys)
@@ -412,29 +406,6 @@ public struct ServiceDetailScreen: View {
         }
     }
 
-    @ViewBuilder
-    private func collaboratorsRow(c: FSColors) -> some View {
-        section("COLLABORATORS", c: c) {
-            Button(action: onOpenCollaborators) {
-                FSCard {
-                    HStack(spacing: FS.space.s3) {
-                        Image(systemName: "person.2.fill").foregroundColor(c.primary)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Manage collaborators").foregroundColor(c.text)
-                            Text("Issue invites + revoke active access")
-                                .font(FS.font.caption())
-                                .foregroundColor(c.textMuted)
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.right").foregroundColor(c.textMuted)
-                    }
-                }
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("service-detail-open-collaborators")
-        }
-    }
-
     private func adapterReportRow(repo: String, c: FSColors) -> some View {
         Button(action: { showAdapterReport = true }) {
             FSCard {
@@ -558,14 +529,14 @@ public struct ServiceDetailScreen: View {
     }
 
     private func accessRow(c: FSColors) -> some View {
-        section("WHO CAN OPEN THIS", c: c) {
+        section("ACCESS CONTROL", c: c) {
             Button(action: onOpenAccess) {
                 FSCard {
                     HStack(spacing: FS.space.s3) {
-                        Image(systemName: "lock.shield").foregroundColor(c.primary)
+                        Image(systemName: "person.2.fill").foregroundColor(c.primary)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Manage access").foregroundColor(c.text)
-                            Text("Open to anyone, or restrict to people you invite")
+                            Text("Access control").foregroundColor(c.text)
+                            Text("Open to all or members only, and each member's role")
                                 .font(FS.font.caption())
                                 .foregroundColor(c.textMuted)
                         }

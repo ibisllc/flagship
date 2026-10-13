@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.Feedback
 import androidx.compose.material3.AlertDialog
@@ -90,7 +91,7 @@ import kotlinx.coroutines.launch
  *      (docs/app-placement.md §4).
  *   3. WEB DOMAINS — canonical FQDN + per-pod aliases + Replace stem
  *      (RenameServiceViewModel, unchanged).
- *   4. Browser viewer (conditional), Collaborators, recent logs, last backup.
+ *   4. Browser viewer (conditional), Access control, recent logs, last backup.
  *   5. Uninstall — the owner-signed uninstall of this server's copy.
  *
  * "Configure environment" is reachable from the toolbar overflow → the
@@ -314,31 +315,9 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                     }
                 }
 
-                // ── Collaborators (unconditional) ──────────────────────
+                // ── Access control (#92) ───────────────────────────────
                 Spacer(Modifier.height(FS.space.s4))
-                SectionHeader("Collaborators")
-                FSCard(
-                    padding = PaddingValues(FS.space.s4),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { nav.navigate("invite-manage/$serviceId") },
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("Manage collaborators", color = FS.colors.text, style = TextStyle(fontSize = 16.sp))
-                            Text(
-                                "Issue invites + revoke active access",
-                                color = FS.colors.textMuted,
-                                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-                            )
-                        }
-                        Text("›", color = FS.colors.textMuted, style = TextStyle(fontSize = 24.sp))
-                    }
-                }
-
-                // ── Who can open this (#92) ────────────────────────────
-                Spacer(Modifier.height(FS.space.s4))
-                SectionHeader("Who can open this")
+                SectionHeader("Access control")
                 FSCard(
                     padding = PaddingValues(FS.space.s4),
                     modifier = Modifier
@@ -347,10 +326,12 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                         .clickable { nav.navigate("service-access/$serviceId") },
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.People, contentDescription = null, tint = FS.colors.primary)
+                        Spacer(Modifier.width(FS.space.s3))
                         Column(Modifier.weight(1f)) {
-                            Text("Manage access", color = FS.colors.text, style = TextStyle(fontSize = 16.sp))
+                            Text("Access control", color = FS.colors.text, style = TextStyle(fontSize = 16.sp))
                             Text(
-                                "Open to anyone, or restrict to people you invite",
+                                "Open to all or members only, and each member's role",
                                 color = FS.colors.textMuted,
                                 style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
                             )

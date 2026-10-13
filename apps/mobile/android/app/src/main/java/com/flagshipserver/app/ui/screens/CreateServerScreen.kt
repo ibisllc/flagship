@@ -1036,7 +1036,7 @@ private fun DeliveryCard(
 
 // Write the recipe JSON to a cache file + offer the system share sheet. The
 // FileProvider authority is "<applicationId>.fileprovider" (AndroidManifest +
-// res/xml/file_paths.xml). Mirrors InviteIssueScreen.shareViaSystemSheet.
+// res/xml/file_paths.xml).
 private fun shareRecipeFile(ctx: Context, serverName: String, json: String) {
     val dir = File(ctx.cacheDir, "recipes").apply { mkdirs() }
     val slug = ServerLabel.normalized(serverName).ifEmpty { "server" }

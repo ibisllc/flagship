@@ -37,8 +37,6 @@ import com.flagshipserver.app.ui.screens.VibeCodeChatScreen
 import com.flagshipserver.app.viewmodels.PendingBuildCredential
 import com.flagshipserver.app.ui.screens.BrowserTabsScreen
 import com.flagshipserver.app.ui.screens.BrowserViewerScreen
-import com.flagshipserver.app.ui.screens.InviteIssueScreen
-import com.flagshipserver.app.ui.screens.InviteManageScreen
 import com.flagshipserver.app.ui.screens.InviteRedeemScreen
 import com.flagshipserver.app.ui.screens.KnockAuthorizeScreen
 import com.flagshipserver.app.ui.screens.ServiceAccessScreen
@@ -280,20 +278,8 @@ fun ServicesTab() {
                 BrowserViewerScreen(nav, serviceId = sid, tabId = tid)
             }
         }
-        composable("invite-manage/{serviceId}") { entry ->
-            val sid = entry.arguments?.getString("serviceId") ?: return@composable
-            PodScoped(nav, placement, entry, creation = false) {
-                InviteManageScreen(nav, serviceId = sid)
-            }
-        }
-        composable("invite-issue/{serviceId}") { entry ->
-            val sid = entry.arguments?.getString("serviceId") ?: return@composable
-            PodScoped(nav, placement, entry, creation = false) {
-                InviteIssueScreen(nav, serviceId = sid)
-            }
-        }
-        // #92 — per-service access gating ("Who can open this"): open/restricted
-        // toggle + the bearer-invite allow-list manager.
+        // #92 — per-service access control: open to all / members only, and
+        // the members list.
         composable("service-access/{serviceId}") { entry ->
             val sid = entry.arguments?.getString("serviceId") ?: return@composable
             PodScoped(nav, placement, entry, creation = false) {

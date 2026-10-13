@@ -30,8 +30,8 @@ const DB_STORE = "keystore";
 const RECORD_KEY = "wrappedUmk";
 
 // The `flagship-webapp` IndexedDB is SHARED across keystore.js / providers.js /
-// lib/labelBook.js / lib/buildDraft.js — all four open the SAME database. Its
-// schema version is 2 (labelBook + buildDraft bumped it from keystore.js's
+// lib/buildDraft.js — all open the SAME database. Its schema version is 2
+// (the since-removed invite label book + buildDraft bumped it from keystore.js's
 // original v1 to add their stores). Every opener MUST therefore open at the
 // SAME version: opening at a LOWER version than the DB already has throws
 // `VersionError`, so once a v2 store has been created (e.g. the user touched the
@@ -43,6 +43,8 @@ const RECORD_KEY = "wrappedUmk";
 const DB_VERSION = 2;
 function upgradeFlagshipWebappDb(db) {
   if (!db.objectStoreNames.contains("keystore")) db.createObjectStore("keystore");
+  // Unused since the collaborator invites were removed; kept so the schema
+  // every opener creates stays the same.
   if (!db.objectStoreNames.contains("labelBook")) db.createObjectStore("labelBook");
   if (!db.objectStoreNames.contains("buildDrafts")) {
     db.createObjectStore("buildDrafts", { keyPath: "id" });

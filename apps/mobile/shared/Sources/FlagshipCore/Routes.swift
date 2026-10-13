@@ -61,17 +61,9 @@ public enum AppsRoute: Hashable, Sendable {
     case browserTabs(serviceId: String)
     /// P8 — the framebuffer viewer that streams a single tab.
     case browserViewer(serviceId: String, tabId: String)
-    /// P6 — per-app collaborator-invite manage surface. Lists pending
-    /// invites + active access rows + offers revoke. Reached from the
-    /// service-detail screen's "Collaborators" row.
-    case inviteManage(serviceId: String)
-    /// P6 — per-app collaborator-invite issuance form. Returns the
-    /// share secret + TTL once submitted; the client builds the share
-    /// URL + opens the share sheet locally.
-    case inviteIssue(serviceId: String)
     /// #92 — per-service access gating (docs/service-access-gating.md): the
-    /// open ⇄ restricted toggle + the bearer-invite allow-list manager.
-    /// Reached from the service-detail "Who can open this" row.
+    /// open ⇄ members-only toggle + the members list.
+    /// Reached from the service-detail "Access control" row.
     case serviceAccess(serviceId: String)
     /// The owner's Database section (docs/app-apis.md §6): each store's tables.
     case appDatabase(serviceId: String)

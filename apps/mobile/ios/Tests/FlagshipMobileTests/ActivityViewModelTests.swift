@@ -141,18 +141,6 @@ private final class FailingPostRecoveryClient: ScreensClient, @unchecked Sendabl
     func vibeCodeDeploy(sessionId: String) async throws -> BuildDeployResponse {
         try await real.vibeCodeDeploy(sessionId: sessionId)
     }
-    func appInviteIssue(_ req: AppInviteIssueRequest) async throws -> AppInviteIssueResponse {
-        try await real.appInviteIssue(req)
-    }
-    func appInviteList(serviceId: String) async throws -> AppInviteListResponse {
-        try await real.appInviteList(serviceId: serviceId)
-    }
-    func appInviteAccess(serviceId: String) async throws -> AppInviteAccessResponse {
-        try await real.appInviteAccess(serviceId: serviceId)
-    }
-    func appInviteRevoke(_ req: AppInviteRevokeRequest) async throws -> AppInviteRevokeResponse {
-        try await real.appInviteRevoke(req)
-    }
     func browserTabStream(tabId: String) -> any BrowserStream {
         real.browserTabStream(tabId: tabId)
     }

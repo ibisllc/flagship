@@ -99,7 +99,7 @@ async function importWrapped(file) {
 function openDb() {
   // Must match keystore.js's DB_NAME + VERSION exactly. The shared
   // `flagship-webapp` DB is at version 2 (keystore.js / providers.js /
-  // labelBook.js / buildDraft.js); opening at a lower version throws
+  // buildDraft.js); opening at a lower version throws
   // VersionError once a v2 store exists. Create every known store so the
   // first creator provisions them all.
   return new Promise((resolve, reject) => {

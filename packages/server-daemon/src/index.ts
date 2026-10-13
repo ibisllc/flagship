@@ -55,7 +55,6 @@ import {
   buildPbFramesRuntimeHandler,
   type PbFramesHandlerOptions,
 } from "./peerBackup/httpPeerLink.js";
-import { InMemoryAppInviteStore } from "./inviteHandler.js";
 import { InMemoryCompanionTicketStore } from "./companion/companionTicketStore.js";
 import { InMemoryCompanionDockRequestStore } from "./companion/companionDockRequestStore.js";
 import { InMemoryCompanionWriteRequestStore } from "./companion/companionWriteRequestStore.js";
@@ -735,9 +734,8 @@ async function main(): Promise<void> {
       dataDir,
     });
 
-  // BFF in-memory ledgers (collaborator invites + companion-dock).
+  // BFF in-memory ledgers (companion-dock).
   const {
-    appInviteStore,
     companionTicketStore,
     companionDockRequestStore,
     companionWriteRequestStore,
@@ -1251,7 +1249,6 @@ async function main(): Promise<void> {
       alertInbox,
       backupLoop,
       repairAccumulator,
-      appInviteStore,
       companionTicketStore,
       companionDockRequestStore,
       companionWriteRequestStore,
@@ -1659,7 +1656,6 @@ function wirePeerBackup(deps: {
 }
 
 interface BffStores {
-  appInviteStore: InMemoryAppInviteStore;
   companionTicketStore: InMemoryCompanionTicketStore;
   companionDockRequestStore: InMemoryCompanionDockRequestStore;
   companionWriteRequestStore: InMemoryCompanionWriteRequestStore;
@@ -1667,12 +1663,11 @@ interface BffStores {
 
 /**
  * The in-memory BFF ledgers that the Screens-BFF (and, when wired, the signed
- * surfaces) share: P6 collaborator invites + P14 companion-dock tickets +
+ * surfaces) share: P14 companion-dock tickets +
  * P14-Phase-2 write-relay queue. Each must be a single shared instance.
  */
 function wireBffStores(): BffStores {
   return {
-    appInviteStore: new InMemoryAppInviteStore(),
     companionTicketStore: new InMemoryCompanionTicketStore(),
     companionDockRequestStore: new InMemoryCompanionDockRequestStore(),
     companionWriteRequestStore: new InMemoryCompanionWriteRequestStore(),
@@ -2037,7 +2032,6 @@ async function wireRuntimeSurfaces(deps: {
   alertInbox: InMemoryAlertInbox;
   backupLoop: BackupLoop | null;
   repairAccumulator: RepairStatsAccumulator;
-  appInviteStore: InMemoryAppInviteStore;
   companionTicketStore: InMemoryCompanionTicketStore;
   companionDockRequestStore: InMemoryCompanionDockRequestStore;
   companionWriteRequestStore: InMemoryCompanionWriteRequestStore;
@@ -2062,7 +2056,6 @@ async function wireRuntimeSurfaces(deps: {
     alertInbox,
     backupLoop,
     repairAccumulator,
-    appInviteStore,
     companionTicketStore,
     companionDockRequestStore,
     companionWriteRequestStore,
@@ -2758,12 +2751,6 @@ async function wireRuntimeSurfaces(deps: {
     peerBackup: {
       backupLoop,
       repairStats: repairAccumulator,
-    },
-    // P6 — collaborator invites. Same store the signed-surface entry
-    // must point at when it gets wired (see construction above).
-    appInvite: {
-      store: appInviteStore,
-      serverFqdn: env.serverFqdn,
     },
     // P14 — companion-browser dock. Owner-gated mint/list/revoke +
     // public redeem. Companions land in the same `pairedSessions`
