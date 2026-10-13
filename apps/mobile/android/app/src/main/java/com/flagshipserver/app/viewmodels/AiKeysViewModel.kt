@@ -9,6 +9,10 @@ import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.core.AiCredential
 import com.flagshipserver.app.core.AiKeyStore
 import com.flagshipserver.app.core.AiRelay
+import com.flagshipserver.app.core.FreeAiCreditsInfo
+import com.flagshipserver.app.core.FreeAiMint
+import com.flagshipserver.app.core.FreeAiService
+import com.flagshipserver.app.core.FreeAiState
 import com.flagshipserver.app.core.SavedAiKey
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -52,9 +56,42 @@ class AiKeysViewModel : ViewModel() {
     private val _activeId = MutableStateFlow<String?>(null)
     val activeId: StateFlow<String?> = _activeId.asStateFlow()
 
+    /** Free AI credits: the card in Settings + the first row of the key step. */
+    private val _freeAi = MutableStateFlow<FreeAiState>(FreeAiState.Hidden)
+    val freeAi: StateFlow<FreeAiState> = _freeAi.asStateFlow()
+
     init {
         refresh()
     }
+
+    /** Read the account's free-credits balance (hidden on any failure). */
+    suspend fun loadFreeAi(service: FreeAiService): FreeAiState {
+        val s = service.status()
+        _freeAi.value = s
+        return s
+    }
+
+    /**
+     * "Use this" on the free-credits row: a fresh credential for the box the
+     * build runs on. Updates the balance from the answer; a used-up answer
+     * flips the row to the bring-your-own-key message.
+     */
+    suspend fun useFreeAi(service: FreeAiService, serverFqdn: String): FreeAiMint {
+        val r = service.mint(serverFqdn)
+        when (r) {
+            is FreeAiMint.Ok -> r.credits?.let { _freeAi.value = FreeAiState.Available(it) }
+            is FreeAiMint.UsedUp -> _freeAi.value = FreeAiState.Available(
+                (r.credits ?: (_freeAi.value as? FreeAiState.Available)?.credits ?: FreeAiCreditsInfo())
+                    .copy(remainingTokens = 0),
+            )
+            is FreeAiMint.Unavailable -> _freeAi.value = FreeAiState.Unavailable
+        }
+        if (r is FreeAiMint.Ok) AiRelay.lastUsedKeyId = null
+        return r
+    }
+
+    /** Whether the key step should pick free credits on its own (no own keys). */
+    fun shouldAutoUseFreeAi(): Boolean = FreeAiService.shouldAutoUse(_keys.value.size, _freeAi.value)
 
     fun refresh() {
         val all = AiKeyStore.list()

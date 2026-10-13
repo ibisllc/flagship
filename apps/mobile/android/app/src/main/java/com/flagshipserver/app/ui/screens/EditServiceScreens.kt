@@ -64,6 +64,7 @@ import com.flagshipserver.app.ui.shell.tabs.openBuildSessions
 import com.flagshipserver.app.ui.shell.tabs.openEditSession
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.PendingBuildCredential
+import com.flagshipserver.app.core.FreeAiSessions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -223,6 +224,7 @@ fun EditDescribeScreen(nav: NavController, serviceId: String) {
     var prompt by remember { mutableStateOf("") }
     var starting by remember { mutableStateOf(false) }
     var refusal by remember { mutableStateOf<EditStartRefusal?>(null) }
+    val freeAiServer = currentBuildServerFqdn()
 
     EditScaffold(title = EditService.title(name), onBack = { nav.popBackStack() }) {
         Text(
@@ -264,14 +266,21 @@ fun EditDescribeScreen(nav: NavController, serviceId: String) {
                 // after the call must run on the main thread.
                 scope.launch(Dispatchers.Main) {
                     try {
-                        val cred = PendingBuildCredential.peek()?.let(BuildCredential::from)
+                        val pending = PendingBuildCredential.peek()
+                        val cred = pending?.let(BuildCredential::from)
                         val resp = screens.vibeCodeStart(
-                            VibeCodeStartRequest(prompt = prompt, credential = cred, editServiceId = serviceId),
+                            VibeCodeStartRequest(
+                                prompt = prompt, credential = cred, editServiceId = serviceId,
+                                model = pending?.model?.takeIf { pending.isFreeAi },
+                            ),
                         )
                         if (resp.needsCredential) {
                             nav.navigate(EditService.keyRoute(serviceId))
                         } else {
                             PendingBuildCredential.take()
+                            if (pending?.isFreeAi == true) {
+                                FreeAiSessions.remember(resp.sessionId, freeAiServer)
+                            }
                             nav.openEditSession(resp.sessionId, serviceId)
                         }
                     } catch (t: Throwable) {

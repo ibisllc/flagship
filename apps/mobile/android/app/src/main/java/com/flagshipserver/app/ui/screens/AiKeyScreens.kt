@@ -57,6 +57,10 @@ import androidx.navigation.NavController
 import com.flagshipserver.app.core.AiCredential
 import com.flagshipserver.app.core.AiKeyStore
 import com.flagshipserver.app.core.AiRelay
+import com.flagshipserver.app.core.FreeAiMint
+import com.flagshipserver.app.core.FreeAiService
+import com.flagshipserver.app.core.FreeAiState
+import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSDangerButton
 import com.flagshipserver.app.ui.components.FSField
@@ -96,11 +100,48 @@ fun AiKeyStepScreen(
 ) {
     val keys by vm.keys.collectAsState()
     val activeId by vm.activeId.collectAsState()
-    var showForm by remember { mutableStateOf(keys.isEmpty()) }
-    LaunchedEffect(keys.isEmpty()) { if (keys.isEmpty()) showForm = true }
+    val freeAi by vm.freeAi.collectAsState()
+    // Free AI credits come first, so the form waits for the balance read.
+    var freeAiLoaded by remember { mutableStateOf(false) }
+    var showForm by remember { mutableStateOf(false) }
+    LaunchedEffect(keys.isEmpty(), freeAiLoaded, freeAi) {
+        if (freeAiLoaded && keys.isEmpty() && !FreeAiService.shouldAutoUse(0, freeAi)) showForm = true
+    }
     var confirmDelete by remember { mutableStateOf<SavedKeyRow?>(null) }
     var deleteError by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+    val freeAiService = rememberFreeAiService()
+    val server = currentBuildServerFqdn()
+    val toasts = LocalToastCenter.current
+    var minting by remember { mutableStateOf(false) }
+
+    suspend fun useFreeAi() {
+        if (minting) return
+        minting = true
+        try {
+            when (val r = runCatching { vm.useFreeAi(freeAiService, server) }
+                .getOrElse { FreeAiMint.Unavailable(com.flagshipserver.app.core.FreeAiCopy.UNAVAILABLE) }) {
+                is FreeAiMint.Ok -> onConfirm(r.credential)
+                is FreeAiMint.UsedUp -> {
+                    toasts.error(r.message)
+                    showForm = true
+                }
+                is FreeAiMint.Unavailable -> {
+                    toasts.error(r.message)
+                    showForm = true
+                }
+            }
+        } finally {
+            minting = false
+        }
+    }
+
+    // On by default: with no key of their own, a build uses free credits.
+    LaunchedEffect(Unit) {
+        vm.loadFreeAi(freeAiService)
+        freeAiLoaded = true
+        if (vm.shouldAutoUseFreeAi()) useFreeAi()
+    }
 
     val scroll = rememberScrollState()
     Column(
@@ -118,6 +159,11 @@ fun AiKeyStepScreen(
             style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
         )
         Spacer(Modifier.height(FS.space.s4))
+
+        (freeAi as? FreeAiState.Available)?.let { state ->
+            FreeAiKeyStepRow(state = state, busy = minting, onUse = { scope.launch { useFreeAi() } })
+            Spacer(Modifier.height(FS.space.s4))
+        }
 
         if (showForm) {
             AiKeyEntryForm(
@@ -438,7 +484,10 @@ private fun ProviderPickChip(
 fun AiKeysManagerScreen(nav: NavController, vm: AiKeysViewModel = viewModel()) {
     val keys by vm.keys.collectAsState()
     val activeId by vm.activeId.collectAsState()
+    val freeAi by vm.freeAi.collectAsState()
     var showForm by remember { mutableStateOf(false) }
+    val freeAiService = rememberFreeAiService()
+    LaunchedEffect(Unit) { vm.loadFreeAi(freeAiService) }
 
     val scroll = rememberScrollState()
     Column(
@@ -463,6 +512,11 @@ fun AiKeysManagerScreen(nav: NavController, vm: AiKeysViewModel = viewModel()) {
             style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
         )
         Spacer(Modifier.height(FS.space.s5))
+
+        if (freeAi !is FreeAiState.Hidden) {
+            FreeAiCreditsCard(state = freeAi, onAddOwnKey = { showForm = true })
+            Spacer(Modifier.height(FS.space.s4))
+        }
 
         if (keys.isEmpty()) {
             Text(

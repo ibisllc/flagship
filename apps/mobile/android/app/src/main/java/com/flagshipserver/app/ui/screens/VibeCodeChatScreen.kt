@@ -82,6 +82,24 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
         ?: pods.firstOrNull()?.fqdn
         ?: "unknown"
 
+    val freeAiService = rememberFreeAiService()
+
+    // A build on free AI credits gets a fresh credential with every reply
+    // (they last 12 h); false when the credits ran out and nothing was sent.
+    suspend fun reply(req: VibeCodeReplyRequest): Boolean {
+        val withCred = when (val r = freeAiService.refreshFor(sessionId)) {
+            is com.flagshipserver.app.core.FreeAiRefresh.None -> req
+            is com.flagshipserver.app.core.FreeAiRefresh.Fresh ->
+                req.copy(credential = com.flagshipserver.app.api.BuildCredential.from(r.credential))
+            is com.flagshipserver.app.core.FreeAiRefresh.Stop -> {
+                errorMessage = r.message
+                return false
+            }
+        }
+        client.vibeCodeSessionReply(sessionId, withCred)
+        return true
+    }
+
     suspend fun reload() {
         try {
             state = client.vibeCodeSessionState(sessionId)
@@ -204,12 +222,10 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                                     scope.launch(Dispatchers.Main) {
                                         submitting = true
                                         try {
-                                            client.vibeCodeSessionReply(
-                                                sessionId,
-                                                VibeCodeReplyRequest(text = replyDraft),
-                                            )
-                                            replyDraft = ""
-                                            reload()
+                                            if (reply(VibeCodeReplyRequest(text = replyDraft))) {
+                                                replyDraft = ""
+                                                reload()
+                                            }
                                         } catch (t: Throwable) {
                                             errorMessage = t.userFacing()
                                         } finally {
@@ -282,10 +298,7 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                                                     request = envelope, signature = signature,
                                                 ),
                                             )
-                                            client.vibeCodeSessionReply(
-                                                sessionId,
-                                                VibeCodeReplyRequest(envVarStatus = "set"),
-                                            )
+                                            reply(VibeCodeReplyRequest(envVarStatus = "set"))
                                             envValueDraft = ""
                                             reload()
                                         } catch (t: Throwable) {
@@ -303,10 +316,7 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                                 onClick = {
                                     scope.launch(Dispatchers.Main) {
                                         try {
-                                            client.vibeCodeSessionReply(
-                                                sessionId,
-                                                VibeCodeReplyRequest(envVarStatus = "declined"),
-                                            )
+                                            reply(VibeCodeReplyRequest(envVarStatus = "declined"))
                                             reload()
                                         } catch (t: Throwable) {
                                             errorMessage = t.userFacing()

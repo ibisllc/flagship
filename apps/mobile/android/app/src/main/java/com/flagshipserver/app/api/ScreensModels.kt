@@ -589,10 +589,13 @@ data class BuildCredential(
     /** Route the provider call through the Flagship relay. Sent explicitly on
      *  every send; a box treats an absent value as on. */
     val relay: Boolean? = null,
+    /** "promo" for free AI credits (the box pins it to its host); omitted for
+     *  the owner's own key. */
+    val source: String? = null,
 ) {
     companion object {
         fun from(c: com.flagshipserver.app.core.AiCredential): BuildCredential =
-            BuildCredential(c.provider, c.apiKey, c.baseUrl, relay = c.relay)
+            BuildCredential(c.provider, c.apiKey, c.baseUrl, relay = c.relay, source = c.source)
     }
 }
 

@@ -52,6 +52,8 @@ import com.flagshipserver.app.api.BuildCredential
 import com.flagshipserver.app.api.VibeCodeNameCheck
 import com.flagshipserver.app.api.VibeCodeStartRequest
 import com.flagshipserver.app.core.LocalActiveOperationsCenter
+import com.flagshipserver.app.core.FreeAiCopy
+import com.flagshipserver.app.core.FreeAiSessions
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalToastCenter
@@ -71,9 +73,8 @@ import kotlinx.coroutines.launch
 /**
  * D.6.1 — VibeCodeProviderPickView.
  *
- * Two cards: free-tier promo (with daily/lifetime usage display) and
- * BYOK. Picking one navigates to the describe screen; BYOK first
- * routes through APIKeyView to set up the key.
+ * Two cards: free AI credits and bring-your-own-key. Both go through the
+ * AI-key step, which lists free credits first.
  */
 @Composable
 fun VibeCodeProviderPickScreen(nav: NavController) {
@@ -97,35 +98,23 @@ fun VibeCodeProviderPickScreen(nav: NavController) {
         Spacer(Modifier.height(FS.space.s8))
 
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-            // Free-tier card
+            // Free AI credits card
             FSCard(padding = PaddingValues(FS.space.s6)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(modifier = Modifier.fillMaxWidth(0.7f)) {
-                        Text(
-                            text = "Use Flagship's credits",
-                            color = FS.colors.text,
-                            style = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
-                        )
-                        Spacer(Modifier.height(FS.space.s2))
-                        Text(
-                            text = "50 free calls a day · 200 lifetime · we cover the API bill.",
-                            color = FS.colors.textMuted,
-                            style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
-                        )
-                    }
-                    Spacer(Modifier.fillMaxWidth(0.0f))
-                    PromoUsageBadge(used = 12, cap = 50)
-                }
-                Spacer(Modifier.height(FS.space.s4))
                 Text(
-                    text = "Honest note: your prompts go directly to Anthropic, not through us.",
+                    text = FreeAiCopy.TITLE,
+                    color = FS.colors.text,
+                    style = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
+                )
+                Spacer(Modifier.height(FS.space.s2))
+                Text(
+                    text = FreeAiCopy.NOTE,
                     color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                    style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
                 )
                 Spacer(Modifier.height(FS.space.s4))
                 FSPrimaryButton(
-                    label = "Use the promo →",
-                    onClick = { nav.navigate("vibe/describe") },
+                    label = "Use free AI credits →",
+                    onClick = { nav.navigate("vibe/key") },
                     block = true,
                 )
             }
@@ -150,22 +139,6 @@ fun VibeCodeProviderPickScreen(nav: NavController) {
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun PromoUsageBadge(used: Int, cap: Int) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(FS.radius.pill))
-            .background(FS.colors.primary.copy(alpha = 0.12f))
-            .padding(horizontal = 12.dp, vertical = 4.dp),
-    ) {
-        Text(
-            text = "$used / $cap today",
-            color = FS.colors.primary,
-            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium),
-        )
     }
 }
 
@@ -426,12 +399,15 @@ fun VibeCodeDescribeScreen(nav: NavController) {
                             if (latest.kind != "invalid") conflict = latest
                             return@launch
                         }
-                        val cred = PendingBuildCredential.peek()?.let(BuildCredential::from)
+                        val pending = PendingBuildCredential.peek()
+                        val cred = pending?.let(BuildCredential::from)
                         // Keep the server it starts on for the steps after this one.
                         podScope?.let { it.choose?.invoke(it.pod.podId) }
                         val resp = screens.vibeCodeStart(
                             VibeCodeStartRequest(
                                 prompt = prompt, credential = cred,
+                                // Free AI credits name their model; own keys use the box default.
+                                model = pending?.model?.takeIf { pending.isFreeAi },
                                 name = s, visibility = visibility,
                             ),
                         )
@@ -440,6 +416,7 @@ fun VibeCodeDescribeScreen(nav: NavController) {
                             nav.navigate("vibe/key")
                         } else {
                             PendingBuildCredential.take()
+                            if (pending?.isFreeAi == true) FreeAiSessions.remember(resp.sessionId, server)
                             nav.openVibeSession("vibe/generating/${resp.sessionId}")
                         }
                     } catch (t: Throwable) {
