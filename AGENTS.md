@@ -186,25 +186,30 @@ account can view or co-manage a server, never destroy it) is in the MVP
 
 ### In flight
 
-- **Free AI credits (2026-10-13): built on `main`, not live.** Every account
-  gets `FLAGSHIP_FREE_AI_TOKENS` (default 1M) model tokens; the apps sign a
-  `flagship/llm-promo-issue/v1` request, `.com` `/api/free-ai/token` mints a
-  12-hour pass, the box calls the meter shim (`infra/inference/shim`) through
-  the relay, and the shim checks `/api/free-ai/allowance`, strips anything
-  identifying, calls any OpenAI-compatible upstream and meters usage back.
-  On by default in all three apps (Settings "820k of 1M free AI tokens left",
-  the AI-key step skipped with no saved key); `docs/build-modes.md`. Usage is
-  read through the `AiCreditsLedger` seam: wire it to the metering core's
-  "ai-tokens" when that lands. **Owner:** pick a hosted model API with
-  tool calls, no prompt retention and prepaid credit; deploy the shim with
+- **Free AI credits (2026-10-13): built on `main`, not live.** A launch
+  promotion ("for a limited time, building your apps is free"). Per account:
+  a one-time starter reserve plus a weekly top-up (ISO week, not
+  accumulating, spent first), only while the account has a server that
+  reported in the last day; one all-accounts daily cap pauses it for
+  everyone; output tokens weigh 4×. Config on `.com` (defaults):
+  `AI_PROMO_STARTER_TOKENS` 2M, `AI_PROMO_WEEKLY_TOKENS` 500k,
+  `AI_PROMO_DAILY_CAP_TOKENS` 50M, `AI_PROMO_INPUT_WEIGHT` 1,
+  `AI_PROMO_OUTPUT_WEIGHT` 4, `AI_PROMO_ENDS_AT` (unset; after it the apps
+  hide free AI). The apps sign `flagship/llm-promo-issue/v1`, `.com`
+  `/api/free-ai/token` mints a 12-hour pass, the box calls the meter shim
+  (`infra/inference/shim`) through the relay, and the shim checks
+  `/api/free-ai/allowance`, strips anything identifying, calls any
+  OpenAI-compatible upstream and reports usage, counted on the metering core
+  (`ai-promo-*`). All three apps show "This week: 340k of 500k left ·
+  Starter reserve: 1.2M" and skip the AI-key step for an owner with no key;
+  `docs/build-modes.md`. **Owner:** pick a hosted model API with tool calls,
+  no prompt retention and prepaid credit; deploy the shim with
   `UPSTREAM_CHAT_URL`/`UPSTREAM_MODEL` + secrets `UPSTREAM_API_KEY` and
   `FLAGSHIP_INFERENCE_TOKEN_SECRET`; set the same secret and
   `FLAGSHIP_INFERENCE_ENDPOINT` on `.com` and redeploy it
   (`infra/inference/README.md`). Box side ("Show free AI refusals on the box
   in the shim's words": default model, readable refusals) needs endorsing;
-  older boxes still build, as the apps send the model (git adapt excepted). Open: accounts are free to create, so the
-  provider's prepaid balance and the shim's `PAUSED` switch are the real
-  budget ceiling.
+  older boxes still build, as the apps send the model (git adapt excepted).
 - **iOS 1.0 (build 4) approved on the App Store (2026-10-13).** Reviewer login:
   demo `playstore-test-0725`, shared with Google Play review: never tear it
   down while a review is open (Studio's store review will use it too). Still to
