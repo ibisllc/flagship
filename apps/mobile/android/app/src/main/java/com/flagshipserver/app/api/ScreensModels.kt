@@ -423,7 +423,31 @@ data class ServerDetailResponse(
     val recentInstallEvents: List<RecentInstallEvent>,
     /** Verdict of the most recent update order. Absent from older daemons. */
     val lastUpdate: LastUpdate? = null,
+    /** The sandbox every app runs in (gVisor). Absent from older daemons. */
+    val appSandbox: AppSandbox? = null,
 )
+
+/** The box's app sandbox (docs/app-runtimes.md §5.1): `off`, `starting`,
+ *  `ready` (with `version`) or `unavailable` (with `reason`: no app can start). */
+@Serializable
+data class AppSandbox(
+    val state: String,
+    val version: String? = null,
+    val reason: String? = null,
+) {
+    data class Notice(val danger: Boolean, val text: String)
+
+    /** What the server page says, or null. Matches the webapp's appSandboxNotice. */
+    val notice: Notice?
+        get() = when (state) {
+            "unavailable" -> Notice(
+                danger = true,
+                text = "Apps can't start on this server: the sandbox they run in isn't working (${reason ?: "unknown reason"}). The server tries again every 10 minutes.",
+            )
+            "starting" -> Notice(danger = false, text = "Setting up the sandbox apps run in. They start once it's ready.")
+            else -> null
+        }
+}
 
 /** The box's record of the last update order: applied, rolled back after the
  *  new code failed its boot health gate, or refused with a reason. */

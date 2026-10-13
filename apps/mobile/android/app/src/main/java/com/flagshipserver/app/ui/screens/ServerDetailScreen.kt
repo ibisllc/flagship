@@ -235,6 +235,15 @@ fun ServerDetailScreen(
 
         // This server's apps (docs/app-placement.md §3).
         if (pod != null && !pod.isRevoked && podClient != null) {
+            (detail as? LoadingState.Loaded)?.value?.appSandbox?.notice?.let { n ->
+                Spacer(Modifier.height(FS.space.s6))
+                Text(
+                    n.text,
+                    color = if (n.danger) FS.colors.danger else FS.colors.textMuted,
+                    style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+                    modifier = Modifier.semantics { contentDescription = "sd-app-sandbox-notice" },
+                )
+            }
             Spacer(Modifier.height(FS.space.s6))
             ServerAppsSection(podId = podId, client = podClient)
         }
