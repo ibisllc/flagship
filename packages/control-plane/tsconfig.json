@@ -9,7 +9,8 @@
     { "path": "../iso-personalizer" },
     { "path": "../protocol" },
     { "path": "../services-zone" },
-    { "path": "../storage" }
+    { "path": "../storage" },
+    { "path": "../../billing/packages/metering" }
   ],
   "include": ["src/**/*"]
 }

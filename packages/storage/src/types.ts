@@ -8,6 +8,8 @@
  * without depending on Fastify, Workers, or any HTTP framework.
  */
 
+import type { MeterCounter, MeterStore } from "@ibisllc/billing-metering";
+
 /**
  * v1.2 security cascade — account-type discriminator. See
  * docs/v1.2-security-cascade.md. The `demo` value is included for
@@ -2142,31 +2144,14 @@ export interface TierStorage {
 // Metering core (migration 0069) — one counter per (account, resource, period)
 // ──────────────────────────────────────────────────────────────────────
 
-/** A cumulative usage counter. Holds an account and a number, never content:
- *  `resource` names what is counted (control-plane `meter.ts` owns the list,
- *  e.g. "egress" bytes through the relay, "ai-tokens" served by the in-house
- *  model) and `period` the window it resets on ("2026-10", "2026-10-13" or
- *  "all"). Monotonic within a period. */
-export interface MeterCounterRecord {
-  /** Lowercased username. */
-  account: string;
-  resource: string;
-  period: string;
-  amount: number;
-  updatedAt: number;
-}
-
-/** Standalone store (constructed on demand like D1NonceStore, not part of the
- *  `Storage` aggregate). Resource-agnostic: it never interprets `resource` or
- *  `period`, so a new metered resource needs no schema change. */
-export interface MeterStorage {
-  /** Atomically add `amount` (a non-negative delta; negatives and fractions
-   *  floor to a whole non-negative number) to the counter, creating it at 0.
-   *  Returns the new cumulative total. */
-  add(account: string, resource: string, period: string, amount: number, now: number): Promise<number>;
-  /** Read one counter. undefined → nothing recorded yet. */
-  get(account: string, resource: string, period: string): Promise<MeterCounterRecord | undefined>;
-}
+/** The metering core's counter and store contract, from
+ *  `@ibisllc/billing-metering` (billing/packages/metering). Account ids are
+ *  lowercased usernames; resources are named in control-plane `meter.ts`.
+ *  The D1 store is D1MeterStorage; InMemoryMeterStorage is the core's
+ *  in-memory store. Standalone (constructed on demand like D1NonceStore),
+ *  not part of the `Storage` aggregate. */
+export type MeterCounterRecord = MeterCounter;
+export type MeterStorage = MeterStore;
 
 // ──────────────────────────────────────────────────────────────────────
 // User-identity mandate store (#71)

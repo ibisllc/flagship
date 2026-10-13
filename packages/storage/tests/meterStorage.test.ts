@@ -2,8 +2,9 @@
  * MeterStorage contract (migration 0069) — the metering core's counters.
  *
  * Every case runs against the InMemory adapter AND the real D1 adapter over
- * a fully-migrated node:sqlite, so the two can't drift. The last block checks
- * 0069's one-time copy of the old egress counters.
+ * a fully-migrated node:sqlite, so the two can't drift. The last blocks check
+ * 0069's one-time copy of the old egress counters, and that 0069 matches the
+ * portable schema @ibisllc/billing-metering ships.
  */
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -87,5 +88,21 @@ describe("migration 0069 — copies the old egress counters", () => {
     await store.add("alice", "egress", "2026-10", 100, 9);
     sqlite.raw.exec(sql);
     expect((await store.get("alice", "egress", "2026-10"))?.amount).toBe(600);
+  });
+});
+
+describe("migration 0069 — the billing package's portable schema", () => {
+  it("has the same columns and key as billing/packages/metering/schema/meter_counters.sql", () => {
+    const { sqlite } = d1();
+    const portable = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "../../../billing/packages/metering/schema/meter_counters.sql"),
+      "utf8",
+    );
+    sqlite.raw.exec(portable.replaceAll("meter_counters", "portable_meter_counters"));
+    const shape = (table: string) =>
+      (sqlite.raw.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string; notnull: number; pk: number }>).map(
+        (c) => [c.name, c.notnull, c.pk],
+      );
+    expect(shape("meter_counters")).toEqual(shape("portable_meter_counters"));
   });
 });

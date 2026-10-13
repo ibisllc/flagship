@@ -1,6 +1,4 @@
 import type {
-  MeterCounterRecord,
-  MeterStorage,
   SchemaVersionRecord,
   SchemaVersionStorage,
   SuggestionQueueStorage,
@@ -785,22 +783,8 @@ export class InMemoryTierStorage implements TierStorage {
   async put(r: TierSubscriptionRecord): Promise<void> { this.byUser.set(r.username, { ...r }); }
 }
 
-/** Metering counters (D1 twin: D1MeterStorage). Standalone, like the D1 one. */
-export class InMemoryMeterStorage implements MeterStorage {
-  private rows = new Map<string, MeterCounterRecord>();
-  private key(a: string, r: string, p: string) { return `${a}\u0000${r}\u0000${p}`; }
-  async add(account: string, resource: string, period: string, amount: number, now: number): Promise<number> {
-    const k = this.key(account, resource, period);
-    const cur = this.rows.get(k);
-    const next = (cur?.amount ?? 0) + Math.max(0, Math.floor(amount));
-    this.rows.set(k, { account, resource, period, amount: next, updatedAt: now });
-    return next;
-  }
-  async get(account: string, resource: string, period: string) {
-    const r = this.rows.get(this.key(account, resource, period));
-    return r ? { ...r } : undefined;
-  }
-}
+/** Metering counters (D1 twin: D1MeterStorage): the core's in-memory store. */
+export { InMemoryMeterStore as InMemoryMeterStorage } from "@ibisllc/billing-metering";
 
 export class InMemoryEntitlementRevocationStorage implements EntitlementRevocationStorage {
   private byUser = new Map<string, EntitlementRevocationListRecord>();

@@ -32,9 +32,9 @@ const GB = 1024 * 1024 * 1024;
 
 /** Monthly public-egress quota by tier, in bytes (METER_RESOURCES.egress). */
 export const MONTHLY_EGRESS_QUOTA_BYTES: Record<TierName, number> = {
-  free: METER_RESOURCES.egress.tiers.free.allowance,
-  hobby: METER_RESOURCES.egress.tiers.hobby.allowance,
-  maker: METER_RESOURCES.egress.tiers.maker.allowance,
+  free: METER_RESOURCES.egress.plans.free.allowance,
+  hobby: METER_RESOURCES.egress.plans.hobby.allowance,
+  maker: METER_RESOURCES.egress.plans.maker.allowance,
 };
 
 /** Overage rate above quota, USD per GB (PAID tiers only — free is throttled
@@ -69,7 +69,7 @@ export interface QuotaStatus {
 export type MeteringDeps = MeterDeps;
 
 function statusFrom(v: MeterVerdict): QuotaStatus {
-  const billed = v.policy === "bill";
+  const billed = v.policy === "allow";
   return {
     tier: v.tier,
     period: v.period,

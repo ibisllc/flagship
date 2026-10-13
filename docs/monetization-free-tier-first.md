@@ -97,9 +97,11 @@ The free cap is the one dial that matters: max exposure per free user =
 **Do NOT gate server/box count or device profiles** — meter the bandwidth,
 not the count (a 3-low-traffic-box user costs nothing; a 1-viral-box user
 costs a lot). Egress is the "egress" resource of the metering core
-(`packages/control-plane/src/meter.ts`, counters in `meter_counters`,
-migration 0069), which also meters the AI promo's "ai-tokens";
-`metering.ts` keeps the relay's `/api/usage/*` contract on top of it.
+(`billing/packages/metering`, `@ibisllc/billing-metering`; Flagship's tier
+table and wiring in `packages/control-plane/src/meter.ts`, counters in
+`meter_counters`, migration 0069), which also meters the AI promo's
+"ai-tokens"; `metering.ts` keeps the relay's `/api/usage/*` contract on top
+of it.
 
 ### 3. Custom domains
 

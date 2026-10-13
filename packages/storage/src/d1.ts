@@ -3288,7 +3288,8 @@ export class D1TierStorage implements TierStorage {
   }
 }
 
-/** Metering counters (migration 0069). Standalone — constructed on demand
+/** Metering counters (migration 0069; @ibisllc/billing-metering's
+ *  schema/meter_counters.sql). Standalone — constructed on demand
  *  (like D1NonceStore), not part of the D1Storage aggregate. */
 export class D1MeterStorage implements MeterStorage {
   constructor(private readonly db: D1Database) {}
@@ -3300,7 +3301,7 @@ export class D1MeterStorage implements MeterStorage {
         `INSERT INTO meter_counters (account, resource, period, amount, updated_at)
          VALUES (?,?,?,?,?)
          ON CONFLICT(account, resource, period) DO UPDATE SET
-           amount     = amount + excluded.amount,
+           amount     = meter_counters.amount + excluded.amount,
            updated_at = excluded.updated_at
          RETURNING amount`,
       )

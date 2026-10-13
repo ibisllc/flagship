@@ -1,14 +1,15 @@
-// Metering core — the one place `.com` counts what an account costs us.
+// Flagship's wiring of the metering core (`@ibisllc/billing-metering`,
+// billing/packages/metering; model in billing/docs/spec/metering-v1.md).
 //
-// Every metered resource is a counter keyed by (account, resource, period),
-// held in MeterStorage (D1 `meter_counters`, migration 0069). Each resource
-// declares the window it resets on, a per-tier allowance, and what happens
-// once an account is over it. The core only counts and judges; callers
-// enforce the verdict:
+// The core counts (account, resource, period) and judges usage against a
+// plan; this file supplies what is Flagship's: the resources and the tier
+// table, the effective-tier lookup, lowercased usernames as account ids, and
+// the D1/InMemory stores from @flagship/storage (D1 `meter_counters`,
+// migration 0069).
 //
 //   resource     unit    period  over the allowance
 //   "egress"     bytes   month   free: throttle (the .services relay slows the
-//                                account to 256 kbit/s); paid: bill overage
+//                                account to 256 kbit/s); paid: allow, billed
 //   "ai-tokens"  tokens  month   stop (no new AI-promo credential until reset)
 //
 // API (runtime-agnostic; Worker and tests alike):
@@ -17,54 +18,50 @@
 //       is observed (relay byte reports, the inference shim's token reports);
 //       need = 1 asks "may it consume any more?".
 //   meterCheck(deps, account, resource, need = 0) → MeterVerdict
-//       Judge without recording: "would `need` more fit?" Use before handing
-//       out something that consumes the resource (need = 1 ⇒ is anything left).
-//   meterPeriodKey(period, nowMs), meterResetsAt(period, nowMs)
-//   METER_RESOURCES — the resource table; deps.resources overrides it (tests,
+//       Judge without recording: "would `need` more fit?". Use before handing
+//       out something that consumes the resource.
+//   METER_RESOURCES — the tier table; deps.resources overrides it (tests,
 //       future tuning).
 //   MeterVerdict.action — "allow" | "throttle" | "stop": what the caller must
 //       do right now. `over` alone is not a refusal (paid egress is over but
 //       allowed, and billed).
 //
-// Accounts are lowercased usernames. Tier is the account's effective tier (a
-// lapsed paid subscription counts as free).
-//
 // Privacy: the meter stores an account name and a number per resource and
 // period. Never content, prompts, hosts, IPs or anything else a request
 // carried.
 
+import {
+  meterCheck as coreCheck,
+  meterRecord as coreRecord,
+  type MeterCatalog,
+  type MeterDeps as CoreDeps,
+  type MeterVerdict as CoreVerdict,
+} from "@ibisllc/billing-metering";
 import type { MeterStorage, TierName, TierStorage } from "@flagship/storage";
+
+export {
+  meterPeriodKey,
+  meterResetsAt,
+  type MeterAction,
+  type MeterPeriod,
+  type MeterPlan,
+  type MeterResourceSpec,
+  type OverAllowancePolicy,
+} from "@ibisllc/billing-metering";
 
 const GB = 1024 * 1024 * 1024;
 
 export type MeterResource = "egress" | "ai-tokens";
-export type MeterPeriod = "month" | "day" | "lifetime";
-/** What an over-allowance account gets: slowed, refused new grants, or served
- *  and billed for the overage. */
-export type OverAllowancePolicy = "throttle" | "stop" | "bill";
-export type MeterAction = "allow" | "throttle" | "stop";
 
-export interface MeterPlan {
-  /** Included amount per period, in the resource's unit. */
-  allowance: number;
-  over: OverAllowancePolicy;
-}
-
-export interface MeterResourceSpec {
-  unit: "bytes" | "tokens";
-  period: MeterPeriod;
-  tiers: Record<TierName, MeterPlan>;
-}
-
-export const METER_RESOURCES: Readonly<Record<MeterResource, MeterResourceSpec>> = {
+export const METER_RESOURCES: Readonly<MeterCatalog<MeterResource, TierName>> = {
   // Free worst case = 25 GB × Fly egress (~$0.02/GB) ≈ $0.50/mo per account.
   egress: {
     unit: "bytes",
     period: "month",
-    tiers: {
+    plans: {
       free: { allowance: 25 * GB, over: "throttle" },
-      hobby: { allowance: 250 * GB, over: "bill" },
-      maker: { allowance: 500 * GB, over: "bill" },
+      hobby: { allowance: 250 * GB, over: "allow" },
+      maker: { allowance: 500 * GB, over: "allow" },
     },
   },
   // True tokens (input + output) served by the in-house model, as reported by
@@ -72,7 +69,7 @@ export const METER_RESOURCES: Readonly<Record<MeterResource, MeterResourceSpec>>
   "ai-tokens": {
     unit: "tokens",
     period: "month",
-    tiers: {
+    plans: {
       free: { allowance: 1_000_000, over: "stop" },
       hobby: { allowance: 5_000_000, over: "stop" },
       maker: { allowance: 20_000_000, over: "stop" },
@@ -84,42 +81,11 @@ export interface MeterDeps {
   meter: MeterStorage;
   tiers: TierStorage;
   now?: () => number;
-  resources?: Partial<Record<MeterResource, MeterResourceSpec>>;
+  resources?: Partial<MeterCatalog<MeterResource, TierName>>;
 }
 
-export interface MeterVerdict {
-  account: string;
-  resource: MeterResource;
-  tier: TierName;
-  /** The period key the counter lives under ("2026-10", "2026-10-13", "all"). */
-  period: string;
-  used: number;
-  allowance: number;
-  remaining: number;
-  /** used (+ need, for a check) exceeds the allowance. */
-  over: boolean;
-  policy: OverAllowancePolicy;
-  action: MeterAction;
-  /** ms since epoch when the counter resets; null for a lifetime counter. */
-  resetsAt: number | null;
-}
-
-/** The counter key for a period at `nowMs` (UTC). */
-export function meterPeriodKey(period: MeterPeriod, nowMs: number): string {
-  if (period === "lifetime") return "all";
-  const d = new Date(nowMs);
-  const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-  return period === "month" ? ym : `${ym}-${String(d.getUTCDate()).padStart(2, "0")}`;
-}
-
-/** When the period containing `nowMs` ends (UTC); null for lifetime. */
-export function meterResetsAt(period: MeterPeriod, nowMs: number): number | null {
-  if (period === "lifetime") return null;
-  const d = new Date(nowMs);
-  return period === "month"
-    ? Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1)
-    : Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1);
-}
+/** The core's verdict, with the plan also under Flagship's name for it. */
+export type MeterVerdict = CoreVerdict<MeterResource, TierName> & { tier: TierName };
 
 /** Effective tier for an account: a lapsed paid sub falls back to free. The
  *  one definition of "paid right now" — metering and custom domains share it. */
@@ -136,41 +102,17 @@ export async function effectiveTierOf(
   return rec.tier;
 }
 
-export function meterSpec(deps: Pick<MeterDeps, "resources">, resource: MeterResource): MeterResourceSpec {
-  const spec = deps.resources?.[resource] ?? METER_RESOURCES[resource];
-  if (!spec) throw new Error(`unknown metered resource: ${resource}`);
-  return spec;
-}
-
-function judge(
-  account: string,
-  resource: MeterResource,
-  spec: MeterResourceSpec,
-  tier: TierName,
-  nowMs: number,
-  used: number,
-  need: number,
-): MeterVerdict {
-  const plan = spec.tiers[tier] ?? spec.tiers.free;
-  const over = used + need > plan.allowance;
+function core(deps: MeterDeps): CoreDeps<MeterResource, TierName> {
   return {
-    account,
-    resource,
-    tier,
-    period: meterPeriodKey(spec.period, nowMs),
-    used,
-    allowance: plan.allowance,
-    remaining: Math.max(0, plan.allowance - used),
-    over,
-    policy: plan.over,
-    action: !over || plan.over === "bill" ? "allow" : plan.over,
-    resetsAt: meterResetsAt(spec.period, nowMs),
+    catalog: { ...METER_RESOURCES, ...deps.resources },
+    store: deps.meter,
+    planOf: (account, nowMs) => effectiveTierOf(deps.tiers, account, nowMs),
+    now: deps.now,
   };
 }
 
-function wholeNonNegative(n: number, what: string): number {
-  if (!Number.isFinite(n) || n < 0) throw new RangeError(`${what} must be a finite non-negative number`);
-  return Math.floor(n);
+function withTier(v: CoreVerdict<MeterResource, TierName>): MeterVerdict {
+  return { ...v, tier: v.plan };
 }
 
 /** Add `amount` to the account's counter for the current period, then judge
@@ -182,13 +124,7 @@ export async function meterRecord(
   amount: number,
   need = 0,
 ): Promise<MeterVerdict> {
-  const spec = meterSpec(deps, resource);
-  const delta = wholeNonNegative(amount, "amount");
-  const n = wholeNonNegative(need, "need");
-  const now = deps.now ? deps.now() : Date.now();
-  const a = account.toLowerCase();
-  const used = await deps.meter.add(a, resource, meterPeriodKey(spec.period, now), delta, now);
-  return judge(a, resource, spec, await effectiveTierOf(deps.tiers, a, now), now, used, n);
+  return withTier(await coreRecord(core(deps), account.toLowerCase(), resource, amount, need));
 }
 
 /** Judge the account's current usage plus `need` more, without recording. */
@@ -198,10 +134,5 @@ export async function meterCheck(
   resource: MeterResource,
   need = 0,
 ): Promise<MeterVerdict> {
-  const spec = meterSpec(deps, resource);
-  const n = wholeNonNegative(need, "need");
-  const now = deps.now ? deps.now() : Date.now();
-  const a = account.toLowerCase();
-  const rec = await deps.meter.get(a, resource, meterPeriodKey(spec.period, now));
-  return judge(a, resource, spec, await effectiveTierOf(deps.tiers, a, now), now, rec?.amount ?? 0, n);
+  return withTier(await coreCheck(core(deps), account.toLowerCase(), resource, need));
 }

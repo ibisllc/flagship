@@ -396,7 +396,7 @@ describe("/api/llm-promo/status", () => {
 
 describe("/api/llm-promo — ai-tokens through the metering core", () => {
   const SECRET = "shim-secret";
-  const FREE_TOKENS = METER_RESOURCES["ai-tokens"].tiers.free.allowance;
+  const FREE_TOKENS = METER_RESOURCES["ai-tokens"].plans.free.allowance;
   const verifyToken = async (token: string) => {
     const v = await verifyScopedInferenceToken(token, SECRET);
     return v.ok ? { ok: true as const, username: v.claims.username } : { ok: false as const };

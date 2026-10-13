@@ -29,6 +29,9 @@ packages/services-zone/    `<server>.<user>.flagship.services` validation + DNS 
 packages/bootkey-builder/  Caddyfile + per-server FQDN/SAN helpers
 packages/llm-providers/    BYOK provider adapters
 
+billing/                   Standalone sub-repo (like maintainers/, but in-tree until mirrored): metering core
+                           @ibisllc/billing-metering (npm workspace); vouchers next. No @flagship imports.
+
 installer/                 Public install scripts the apkovl curls at boot
    install.sh              First-boot installer: LUKS + git clone + register
    boot-stage.sh           Steady-state boot: contact .services for unlock-key
