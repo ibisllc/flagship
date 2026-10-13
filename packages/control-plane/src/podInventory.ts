@@ -488,6 +488,8 @@ interface DaemonStatusBody {
    * Tolerant of absence: an old daemon omits it ⇒ no leads relayed.
    */
   leadsServices?: string[];
+  /** UNSIGNED advisory: the slugs of every app this box runs (led or not). */
+  runsServices?: string[];
   /**
    * SIBLING signed envelope — the box's PER-BOX relay-trust verdict
    * (`flagship/box-trust-status/v1`). Signed independently of the daemon-status
@@ -548,6 +550,9 @@ export async function handlePostDaemonStatus(
     Array.isArray(body.leadsServices)
       ? body.leadsServices.filter((x): x is string => typeof x === "string")
       : [];
+  const runsServices: string[] | null = Array.isArray(body.runsServices)
+    ? body.runsServices.filter((x): x is string => typeof x === "string")
+    : null;
   const server = await deps.servers.get(r.serverDomain);
   if (!server) return forbidden("unknown serverDomain");
   if (server.revokedAt) return forbidden("server revoked");
@@ -606,6 +611,7 @@ export async function handlePostDaemonStatus(
   const reportForStore = {
     ...report,
     ...(leadsServices.length > 0 ? { leadsServices } : {}),
+    ...(runsServices ? { runsServices } : {}),
     ...(trustStatusForStore ? { trustStatus: trustStatusForStore } : {}),
   };
   await deps.daemonStatus.put({

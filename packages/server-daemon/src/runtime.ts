@@ -298,6 +298,8 @@ export interface DaemonRuntimeOptions {
    * `AppRunner` is built unconditionally (it just shells to docker).
    */
   servicePlatform?: {
+    /** Called when the box's apps may have changed (the heartbeat reports them). */
+    onAppsChanged?: () => void;
     dataServicesEnvFile?: string;
     hostUsername?: string;
     hostIrkPub?: Bytes;
@@ -1353,6 +1355,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       envStore = fileStore;
     }
     servicePlatformRef.current = new ServicePlatform({
+      ...(apOpts.onAppsChanged ? { onAppsChanged: apOpts.onAppsChanged } : {}),
       host: {
         username: apOpts.hostUsername,
         irkPub: apOpts.hostIrkPub,

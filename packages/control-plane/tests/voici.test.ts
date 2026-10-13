@@ -104,6 +104,23 @@ describe("handleVoiciRedirect (hostname route)", () => {
     expect(res.headers?.location).toBe("https://example.com/landing");
   });
 
+  it("sends an app's link to the box that runs the app now, and a one-off link where it was minted", async () => {
+    const s = new InMemoryStorage();
+    await s.voiciLinks.insert({ code: "app123", username: USER, serviceId: "alice--family", targetUrl: "https://family.home.alice.flagship.services", createdAt: 1 });
+    await s.voiciLinks.insert({ code: "one123", username: USER, targetUrl: "https://example.com/x", createdAt: 1 });
+    const asked: string[] = [];
+    const deps = {
+      usernames: s.usernames,
+      voiciLinks: s.voiciLinks,
+      resolveAppUrl: async (u: string, id: string) => (asked.push(`${u}/${id}`), "https://family.work.alice.flagship.services"),
+    };
+    expect((await handleVoiciRedirect(deps, "app123")).headers?.location).toBe("https://family.work.alice.flagship.services");
+    expect((await handleVoiciRedirect(deps, "one123")).headers?.location).toBe("https://example.com/x");
+    expect(asked).toEqual(["alice/alice--family"]);
+    const unknown = { ...deps, resolveAppUrl: async () => null };
+    expect((await handleVoiciRedirect(unknown, "app123")).headers?.location).toBe("https://family.home.alice.flagship.services");
+  });
+
   it("404s on miss", async () => {
     const s = new InMemoryStorage();
     const res = await handleVoiciRedirect(

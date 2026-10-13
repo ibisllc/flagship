@@ -24,10 +24,13 @@
 import {
   verifyServiceRename,
   deriveUrlFragment,
+  parseServiceId,
   type ServiceRename,
 } from "@flagship/protocol";
 import type {
   CustomDomainOrderStorage,
+  DaemonStatusStorage,
+  ServerRecord,
   ServerStorage,
   UserServiceAliasStorage,
   UsernameStorage,
@@ -52,6 +55,9 @@ export interface ServiceRenameDeps {
   voiciLinks: VoiciLinkStorage;
   servers: ServerStorage;
   auditEvents: AuditEventStorage;
+  /** The boxes' heartbeats, which say which apps each box runs and leads.
+   *  Absent: an app is taken to run on every live server. */
+  daemonStatus?: DaemonStatusStorage;
   /** #79A — when wired, handleGetAppLinks surfaces the attached
    *  custom domain + whether the Phase-4 verifier confirmed it. */
   customDomainOrders?: CustomDomainOrderStorage;
@@ -169,13 +175,7 @@ export async function handleServiceRename(
   });
   const deletedShortLinks = await deps.voiciLinks.deleteByService(u, r.serviceId);
 
-  // Pick the canonical FQDN: prefer the leader pod's serverFqdn;
-  // fall back to any registered server; if none, format against the
-  // services-zone apex so the link is at least well-formed.
-  const servers = await deps.servers.listForUser(u);
-  const leader = servers.find((s) => !s.revokedAt) ?? servers[0];
-  const serverFqdn = leader?.serverDomain ?? `${u}.flagship.services`;
-  const newCanonical = `https://${newLabel}.${serverFqdn}`;
+  const newCanonical = (await appHome(deps, u, r.serviceId, newLabel)).canonicalUrl;
   const minted = await mintShortLink(
     {
       usernames: deps.usernames,
@@ -237,6 +237,55 @@ export async function handleServiceRename(
   });
 }
 
+export interface AppHome {
+  /** `https://<label>.<box>`: the box that leads the app, else one that runs it. */
+  canonicalUrl: string;
+  /** One per box that runs the app. */
+  instances: Array<{ serverDomain: string; url: string }>;
+  hasServer: boolean;
+}
+
+/**
+ * Where an app lives, from its boxes' own heartbeats: each box reports the
+ * slugs it runs and the ones it leads (gossip elects one leader per app among
+ * the boxes running it). The canonical URL and voi.ci link point at the
+ * leader, so an app that runs only on a second box is never sent to the
+ * first. A box too old to report what it runs is taken to run everything.
+ */
+export async function appHome(
+  deps: Pick<ServiceRenameDeps, "servers" | "daemonStatus">,
+  username: string,
+  serviceId: string,
+  label: string,
+): Promise<AppHome> {
+  const live = (await deps.servers.listForUser(username)).filter((s) => !s.revokedAt);
+  const slug = parseServiceId(serviceId)?.slug ?? serviceId;
+  const reports = await Promise.all(live.map(async (server) => {
+    const row = await deps.daemonStatus?.get(server.serverDomain).catch(() => undefined);
+    let leads: string[] = [];
+    let runs: string[] | null = null;
+    try {
+      const r = row?.reportJson ? (JSON.parse(row.reportJson) as { leadsServices?: unknown; runsServices?: unknown }) : {};
+      if (Array.isArray(r.leadsServices)) leads = r.leadsServices.filter((x): x is string => typeof x === "string");
+      if (Array.isArray(r.runsServices)) runs = r.runsServices.filter((x): x is string => typeof x === "string");
+    } catch {
+      /* a corrupt row says nothing */
+    }
+    return { server, at: row?.lastReported ?? 0, leads: leads.includes(slug), runs: runs === null ? null : runs.includes(slug) };
+  }));
+  const runners = reports.filter((r) => r.leads || r.runs !== false);
+  const pool = runners.length > 0 ? runners : reports;
+  const home: ServerRecord | undefined = (
+    [...pool].sort((a, b) => Number(b.leads) - Number(a.leads) || Number(b.runs === true) - Number(a.runs === true) || b.at - a.at)[0]
+  )?.server;
+  const url = (domain: string) => `https://${label}.${domain}`;
+  return {
+    canonicalUrl: url(home?.serverDomain ?? `${username}.flagship.services`),
+    instances: pool.map((r) => ({ serverDomain: r.server.serverDomain, url: url(r.server.serverDomain) })),
+    hasServer: home !== undefined,
+  };
+}
+
 /** GET /api/users/:u/apps/:serviceId/links — surfaces { canonical, short,
  *  instances }. Public read so the apps-list BFF can fan it out
  *  without per-call auth; the canonical URL is already publishable
@@ -252,17 +301,7 @@ export async function handleGetAppLinks(
   const alias = await deps.userServiceAliases.get(u, serviceId);
   const displayLabel = alias?.displayLabel ?? deriveUrlFragment(serviceId, u);
 
-  const servers = await deps.servers.listForUser(u);
-  const liveServers = servers.filter((s) => !s.revokedAt);
-  const leader = liveServers[0]; // first non-revoked acts as canonical owner
-  const canonicalUrl = leader
-    ? `https://${displayLabel}.${leader.serverDomain}`
-    : `https://${displayLabel}.${u}.flagship.services`;
-
-  const instances = liveServers.map((s) => ({
-    serverDomain: s.serverDomain,
-    url: `https://${displayLabel}.${s.serverDomain}`,
-  }));
+  const { canonicalUrl, instances, hasServer } = await appHome(deps, u, serviceId, displayLabel);
 
   // V4 — Active app-bound short link via the new getByService index.
   // handleServiceRename cascade-deletes prior rows before minting the
@@ -272,7 +311,7 @@ export async function handleGetAppLinks(
   // a shareable voi.ci/<code>.
   let shortLink = await deps.voiciLinks.getByService(u, serviceId);
   let shortLinkError: string | undefined;
-  if (!shortLink && leader) {
+  if (!shortLink && hasServer) {
     const minted = await mintShortLink(
       {
         usernames: deps.usernames,

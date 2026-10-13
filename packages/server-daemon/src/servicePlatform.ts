@@ -104,6 +104,8 @@ export interface ServiceRedeployArgs {
 }
 
 export interface ServicePlatformDeps {
+  /** Called whenever the app set or an app's state may have changed. */
+  onAppsChanged?: () => void;
   /** Whose box this is — used for the host-vs-creator URL collapse + as IRK-mutation owner.
    *  `adminRootPub` (Slice D, D-2): when present, service-collaborator membership
    *  invite-create + mutation are admin-gated; absent ⇒ legacy owner-IRK. */
@@ -758,6 +760,7 @@ export class ServicePlatform {
 
   /** Save the installed-service list. Ordered, never throws. */
   private persist(): void {
+    this.deps.onAppsChanged?.();
     const registry = this.deps.registry;
     if (!registry) return;
     const services: PersistedService[] = [...this.apps.values()].map((a) => ({

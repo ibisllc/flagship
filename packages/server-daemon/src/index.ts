@@ -1007,6 +1007,7 @@ async function main(): Promise<void> {
     sign: (msg) => custodian.signAsBox(msg),
     controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
     readLeads: () => gossipLoopRef.current?.currentLeads() ?? [],
+    readRuns: () => servicePlatformRefForServer.current?.list().map((a) => a.slug),
     readTrustStatus: () => relayLockdownRef.current?.trustStatus() ?? null,
   });
   const liveCertInfoRef: {
@@ -1109,6 +1110,7 @@ async function main(): Promise<void> {
       },
       orders,
       servicePlatform: {
+        onAppsChanged: () => statusHeartbeat.appsChanged(),
         // Construct the ServicePlatform (the services / build / deploy / screens
         // / vibe surfaces) when the box has its owner identity AND a sealing key.
         // host{username,irkPub} come from the persisted config; the SWK from

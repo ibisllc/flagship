@@ -2690,6 +2690,7 @@ export async function tryControlPlane(
           userServiceAliases: storage.userServiceAliases,
           voiciLinks: storage.voiciLinks,
           servers: storage.servers,
+          daemonStatus: storage.daemonStatus,
           auditEvents: storage.auditEvents,
           // publishDns hook intentionally omitted in the Worker
           // wiring for now — the services-zone publisher integration
@@ -2711,6 +2712,7 @@ export async function tryControlPlane(
           userServiceAliases: storage.userServiceAliases,
           voiciLinks: storage.voiciLinks,
           servers: storage.servers,
+          daemonStatus: storage.daemonStatus,
           auditEvents: storage.auditEvents,
           customDomainOrders: storage.customDomainOrders,
         },

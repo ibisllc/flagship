@@ -386,3 +386,64 @@ describe("handleGetAppLinks", () => {
     expect(b.instances.map((i) => i.url)).toContain("https://scratch.work.alice.flagship.services");
   });
 });
+
+describe("an app's links follow the boxes that run it", () => {
+  const HOME = "home.alice.flagship.services";
+  const WORK = "work.alice.flagship.services";
+  const FAMILY = "alice--family";
+
+  async function twoBoxes(reports: Record<string, { leads?: string[]; runs?: string[]; at?: number }>) {
+    const s = new InMemoryStorage();
+    await seed(s, makeKey());
+    await s.servers.put({ serverDomain: WORK, serverId: WORK, username: USER, addedAt: 2 });
+    for (const [domain, r] of Object.entries(reports)) {
+      await s.daemonStatus.put({
+        serverDomain: domain,
+        certSha256: null,
+        certValidUntil: null,
+        certIssuer: null,
+        servicesServedJson: "[]",
+        lastReported: r.at ?? 10,
+        reportJson: JSON.stringify({
+          serverDomain: domain,
+          ...(r.leads ? { leadsServices: r.leads } : {}),
+          ...(r.runs ? { runsServices: r.runs } : {}),
+        }),
+        signatureHex: "00",
+      });
+    }
+    return { s, deps: { ...makeDeps(s), daemonStatus: s.daemonStatus } };
+  }
+
+  it("points at the only box that runs the app, not the account's first server", async () => {
+    const { deps } = await twoBoxes({ [HOME]: { runs: ["clock"] }, [WORK]: { runs: ["family"], leads: ["family"] } });
+    const body = (await handleGetAppLinks(deps, USER, FAMILY)).body as {
+      canonicalUrl: string;
+      instances: Array<{ serverDomain: string }>;
+      shortUrl: string;
+    };
+    expect(body.canonicalUrl).toBe(`https://family.${WORK}`);
+    expect(body.instances.map((i) => i.serverDomain)).toEqual([WORK]);
+    expect(body.shortUrl).toMatch(/^https:\/\/voi\.ci\//);
+  });
+
+  it("prefers the box that leads an app running on both", async () => {
+    const { deps } = await twoBoxes({ [HOME]: { runs: ["family"], at: 20 }, [WORK]: { runs: ["family"], leads: ["family"], at: 10 } });
+    const body = (await handleGetAppLinks(deps, USER, FAMILY)).body as { canonicalUrl: string; instances: unknown[] };
+    expect(body.canonicalUrl).toBe(`https://family.${WORK}`);
+    expect(body.instances).toHaveLength(2);
+  });
+
+  it("takes a box too old to say what it runs to run everything", async () => {
+    const { deps } = await twoBoxes({ [HOME]: {}, [WORK]: { runs: ["clock"] } });
+    const body = (await handleGetAppLinks(deps, USER, FAMILY)).body as { canonicalUrl: string; instances: Array<{ serverDomain: string }> };
+    expect(body.canonicalUrl).toBe(`https://family.${HOME}`);
+    expect(body.instances.map((i) => i.serverDomain)).toEqual([HOME]);
+  });
+
+  it("appHome gives the box a voi.ci link should send visitors to now", async () => {
+    const { appHome } = await import("../src/serviceRename.js");
+    const { deps } = await twoBoxes({ [HOME]: { runs: [] }, [WORK]: { runs: ["family"] } });
+    expect((await appHome(deps, USER, FAMILY, "family")).canonicalUrl).toBe(`https://family.${WORK}`);
+  });
+});

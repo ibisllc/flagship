@@ -290,6 +290,13 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   pg_dump/restore in `appCopy/ops.ts`; a digest-pinned image may load
   untagged; no bundle size cap; a source restart mid-copy fails the copy.
   `orders/send` still has other users, so it stays.
+  App links (2026-10-13): `.com` used to point an app's canonical URL,
+  instances and voi.ci link at the account's first live server, wherever the
+  app ran. Now `appHome` (`serviceRename.ts`) uses the boxes' heartbeats:
+  the gossip leader for the app's slug (`leadsServices`), else a box that
+  runs it (`runsServices`, new; sent again as soon as a box's apps change),
+  and app-bound voi.ci codes resolve their target on each visit. Boxes
+  that don't send `runsServices` yet count as running everything.
 - **Docker containers unreachable on VM appliances (fixed in `e81df698`).**
   The appliance's `Type=ether` networkd rule pulled every container's veth off
   its bridge: every app 502'd with "read ECONNRESET" after a 3 s ARP timeout

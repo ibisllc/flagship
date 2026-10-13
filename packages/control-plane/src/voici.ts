@@ -48,6 +48,9 @@ export interface VoiciDeps {
   shortHost?: string;
   /** Code length in chars. Defaults to 6. */
   codeLength?: number;
+  /** An app-bound link's current target (the box that leads the app now),
+   *  so the link follows the app between boxes. Null keeps the stored one. */
+  resolveAppUrl?: (username: string, serviceId: string) => Promise<string | null>;
 }
 
 /** voi.ci's public-facing hostname (used in the URL returned to
@@ -179,11 +182,16 @@ export async function handleVoiciRedirect(
   if (row.expiresAt !== undefined && row.expiresAt <= now) {
     return gone("this short link was rotated; ask the sender for a fresh one");
   }
+  let target = row.targetUrl;
+  if (row.serviceId && deps.resolveAppUrl) {
+    const now = await deps.resolveAppUrl(row.username, row.serviceId).catch(() => null);
+    if (now && TARGET_URL_RE.test(now)) target = now;
+  }
   return {
     status: 302,
-    body: { ok: true, target: row.targetUrl },
+    body: { ok: true, target },
     headers: {
-      location: row.targetUrl,
+      location: target,
       "cache-control": "private, no-store",
     },
   };

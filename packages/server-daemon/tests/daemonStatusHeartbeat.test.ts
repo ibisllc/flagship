@@ -190,6 +190,33 @@ describe("daemon-status heartbeat", () => {
     expect(calls[0].request.appsServed).toEqual(["home1.harry.flagship.services"]);
   });
 
+  it("reports the apps the box runs, and again as soon as they change", async () => {
+    const calls: any[] = [];
+    const fetchImpl = (async (_url: any, init: any) => {
+      calls.push(JSON.parse(init.body));
+      return new Response("ok", { status: 200 });
+    }) as unknown as typeof fetch;
+    let runs: string[] | undefined;
+    const hb = startDaemonStatusHeartbeat({
+      serverDomain: "home1.harry.flagship.services",
+      sign: makeKeypair(9),
+      controlPlaneBaseUrl: "https://flagshipserver.com",
+      intervalMs: 60_000,
+      readRuns: () => runs,
+      fetchImpl,
+    });
+    hb.update({ certPem: DUMMY_PEM, privateKeyPem: "x" }, 1_800_000_000_000, []);
+    runs = ["family"];
+    hb.appsChanged();
+    hb.appsChanged();
+    runs = ["family", "clock"];
+    hb.appsChanged();
+    await new Promise((r) => setTimeout(r, 0));
+    hb.stop();
+    // Not known yet (the app platform isn't up) is sent as nothing, never as "none".
+    expect(calls.map((c) => c.runsServices)).toEqual([undefined, ["family"], ["family", "clock"]]);
+  });
+
   it("a network failure never throws (best-effort)", async () => {
     const id = makeKeypair(3);
     const fetchImpl = (async () => {

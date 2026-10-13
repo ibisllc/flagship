@@ -1525,10 +1525,20 @@ async function serveVoiciRedirect(
     });
   }
   const { D1Storage } = await import("@flagship/storage");
-  const { handleVoiciRedirect } = await import("@flagship/control-plane");
+  const { handleVoiciRedirect, appHome } = await import("@flagship/control-plane");
   const storage = new D1Storage(env.DB);
   const res = await handleVoiciRedirect(
-    { usernames: storage.usernames, voiciLinks: storage.voiciLinks },
+    {
+      usernames: storage.usernames,
+      voiciLinks: storage.voiciLinks,
+      resolveAppUrl: async (username, serviceId) => {
+        const { deriveUrlFragment } = await import("@flagship/protocol");
+        const alias = await storage.userServiceAliases.get(username, serviceId);
+        const label = alias?.displayLabel ?? deriveUrlFragment(serviceId, username);
+        const home = await appHome({ servers: storage.servers, daemonStatus: storage.daemonStatus }, username, serviceId, label);
+        return home.hasServer ? home.canonicalUrl : null;
+      },
+    },
     path,
   );
   // The handler returns a 302 with a `location` header attached; copy
