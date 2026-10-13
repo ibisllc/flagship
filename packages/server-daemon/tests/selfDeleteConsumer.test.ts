@@ -255,9 +255,9 @@ describe("removeFilesVolumes", () => {
         },
         capture: async (_cmd, args) => {
           if (args[0] === "volume") {
-            return "flagship-files-alice-notes\nflagship-files-dev--alice-notes\nsome-other-volume\nflagship-files-bob-photos\n";
+            return "flagship-files-alice--notes\nflagship-devfiles-alice--notes\nsome-other-volume\nflagship-files-bob--photos\n";
           }
-          return args[3] === "volume=flagship-files-alice-notes" ? "abc123\n" : "";
+          return args[3] === "volume=flagship-files-alice--notes" ? "abc123\n" : "";
         },
       },
       () => {},
@@ -265,9 +265,9 @@ describe("removeFilesVolumes", () => {
     expect(left).toEqual([]);
     expect(calls).toEqual([
       "rm -f abc123",
-      "volume rm -f flagship-files-alice-notes",
-      "volume rm -f flagship-files-dev--alice-notes",
-      "volume rm -f flagship-files-bob-photos",
+      "volume rm -f flagship-files-alice--notes",
+      "volume rm -f flagship-devfiles-alice--notes",
+      "volume rm -f flagship-files-bob--photos",
     ]);
   });
 
@@ -275,13 +275,13 @@ describe("removeFilesVolumes", () => {
     const left = await removeFilesVolumes(
       {
         run: async (_cmd, args) => {
-          if (args.includes("flagship-files-alice-notes")) throw new Error("in use");
+          if (args.includes("flagship-files-alice--notes")) throw new Error("in use");
         },
         capture: async (_cmd, args) =>
-          args[0] === "volume" ? "flagship-files-alice-notes\nflagship-files-bob-photos\n" : "",
+          args[0] === "volume" ? "flagship-files-alice--notes\nflagship-files-bob--photos\n" : "",
       },
       () => {},
     );
-    expect(left).toEqual(["flagship-files-alice-notes"]);
+    expect(left).toEqual(["flagship-files-alice--notes"]);
   });
 });

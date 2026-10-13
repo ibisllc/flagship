@@ -113,10 +113,6 @@ describe("files volumes", () => {
     }
   });
 
-  it("still recognize a prod volume made before usernames could hold a dash", () => {
-    expect(isProdFilesVolume("flagship-files-harry-habit-tracker")).toBe(true);
-    expect(isFilesVolume("flagship-files-harry-habit-tracker")).toBe(true);
-  });
 
   it("are recognized by isFilesVolume, and only prod ones by isProdFilesVolume", () => {
     for (const id of identities) {
@@ -124,7 +120,7 @@ describe("files volumes", () => {
       expect(isFilesVolume(v), v).toBe(true);
       expect(isProdFilesVolume(v), v).toBe(id.space !== "dev");
     }
-    for (const bad of ["flagship-files-", "flagship-files-Harry-x", "flagship-files-harry", "flagship-files-harry-x-", "flagship-files-harry---x", "flagship-devfiles-harry", "flagship-devfiles-harry-x", "other", "flagship-postgres", "/var/flagship/data"]) {
+    for (const bad of ["flagship-files-", "flagship-files-harry-habit-tracker", "flagship-files-Harry-x", "flagship-files-harry", "flagship-files-harry-x-", "flagship-files-harry---x", "flagship-devfiles-harry", "flagship-devfiles-harry-x", "other", "flagship-postgres", "/var/flagship/data"]) {
       expect(isFilesVolume(bad), bad).toBe(false);
     }
   });

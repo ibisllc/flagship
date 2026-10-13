@@ -25,10 +25,7 @@
  * The dev dataspace (staging copies) can never collide with prod: a prod
  * database starts `app_`, a dev one `__dev_`; a prod volume starts
  * `flagship-files-`, a dev one `flagship-devfiles-`.
- *
- * Volumes made before usernames could hold a dash were
- * `flagship-files-<dashless creator>-<slug>`; they are still recognized as
- * prod volumes so those apps keep their files.
+
  *
  * Validation contract (enforced upstream by services-zone and the manifest):
  *   - creator: [a-z0-9-]{1,32}, no leading/trailing dash, no double dash
@@ -144,7 +141,6 @@ export function filesVolume(id: AppDataIdentity): string {
 const LABEL = "[a-z0-9](?:-?[a-z0-9]){0,31}";
 const PROD_FILES_VOLUME_RE = new RegExp(`^flagship-files-${LABEL}--${LABEL}$`);
 const DEV_FILES_VOLUME_RE = new RegExp(`^flagship-devfiles-${LABEL}--${LABEL}$`);
-const LEGACY_FILES_VOLUME_RE = new RegExp(`^flagship-files-[a-z0-9]{1,32}-${LABEL}$`);
 
 /** True for a name `filesVolume` could have made (prod or dev). */
 export function isFilesVolume(name: string): boolean {
@@ -153,7 +149,7 @@ export function isFilesVolume(name: string): boolean {
 
 /** True for a prod files volume (what backups carry; dev ones never are). */
 export function isProdFilesVolume(name: string): boolean {
-  return PROD_FILES_VOLUME_RE.test(name) || LEGACY_FILES_VOLUME_RE.test(name);
+  return PROD_FILES_VOLUME_RE.test(name);
 }
 
 /**
