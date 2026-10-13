@@ -48,10 +48,11 @@ fun currentBuildServerFqdn(): String {
         ?: ""
 }
 
-/** Settings → AI keys: the free-credits balance. Nothing on a failed read. */
+/** Settings → AI keys: this week's top-up and the starter reserve, or why
+ *  free AI can't be used now. Nothing on a failed read or once it has ended. */
 @Composable
 fun FreeAiCreditsCard(state: FreeAiState, onAddOwnKey: () -> Unit) {
-    if (state is FreeAiState.Hidden) return
+    val view = FreeAiCopy.view(state) ?: return
     FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.testTag("free-ai-card")) {
         Column {
             Text(
@@ -60,50 +61,41 @@ fun FreeAiCreditsCard(state: FreeAiState, onAddOwnKey: () -> Unit) {
                 style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
             )
             Spacer(Modifier.height(FS.space.s2))
-            when (state) {
-                is FreeAiState.Available -> {
-                    if (state.usedUp) {
-                        Text(
-                            FreeAiCopy.USED_UP,
-                            color = FS.colors.text,
-                            style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
-                            modifier = Modifier.testTag("free-ai-used-up"),
-                        )
-                        Spacer(Modifier.height(FS.space.s3))
-                        FSSecondaryButton(
-                            label = FreeAiCopy.ADD_OWN_KEY,
-                            onClick = onAddOwnKey,
-                            block = true,
-                            modifier = Modifier.testTag("free-ai-add-own-key"),
-                        )
-                    } else {
-                        Text(
-                            FreeAiCopy.leftLine(state.credits),
-                            color = FS.colors.text,
-                            style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
-                            modifier = Modifier.testTag("free-ai-left"),
-                        )
-                        Spacer(Modifier.height(FS.space.s1))
-                        Text(
-                            FreeAiCopy.NOTE,
-                            color = FS.colors.textMuted,
-                            style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-                        )
-                    }
-                }
-                else -> Text(
-                    FreeAiCopy.UNAVAILABLE,
+            Text(
+                view.text,
+                color = FS.colors.text,
+                style = TextStyle(
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    fontWeight = if (view.usable) FontWeight.Medium else FontWeight.Normal,
+                ),
+                modifier = Modifier.testTag(if (view.usable) "free-ai-left" else "free-ai-blocked"),
+            )
+            if (view.usable) {
+                Spacer(Modifier.height(FS.space.s1))
+                Text(
+                    FreeAiCopy.NOTE,
                     color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                )
+            }
+            if (view.offerOwnKey) {
+                Spacer(Modifier.height(FS.space.s3))
+                FSSecondaryButton(
+                    label = FreeAiCopy.ADD_OWN_KEY,
+                    onClick = onAddOwnKey,
+                    block = true,
+                    modifier = Modifier.testTag("free-ai-add-own-key"),
                 )
             }
         }
     }
 }
 
-/** The key step's first row: use free AI credits for this build. */
+/** The key step's first row: use free AI credits for this build, or why not. */
 @Composable
-fun FreeAiKeyStepRow(state: FreeAiState.Available, busy: Boolean, onUse: () -> Unit) {
+fun FreeAiKeyStepRow(state: FreeAiState, busy: Boolean, onUse: () -> Unit) {
+    val view = FreeAiCopy.view(state) ?: return
     FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.testTag("build-key-free-ai")) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             Column(Modifier.weight(1f)) {
@@ -113,12 +105,12 @@ fun FreeAiKeyStepRow(state: FreeAiState.Available, busy: Boolean, onUse: () -> U
                     style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
                 )
                 Text(
-                    if (state.usedUp) FreeAiCopy.USED_UP else FreeAiCopy.rowSubtitle(state.credits),
+                    if (view.usable && state is FreeAiState.Available) FreeAiCopy.rowSubtitle(state.credits) else view.text,
                     color = FS.colors.textMuted,
                     style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
                 )
             }
-            if (!state.usedUp) {
+            if (view.usable) {
                 FSPrimaryButton(
                     label = if (busy) "…" else "Use this",
                     onClick = { if (!busy) onUse() },

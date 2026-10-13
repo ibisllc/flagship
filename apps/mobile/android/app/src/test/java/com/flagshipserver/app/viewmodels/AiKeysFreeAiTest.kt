@@ -100,6 +100,23 @@ class AiKeysFreeAiTest {
         assertEquals(990_000L, (vm.freeAi.value as FreeAiState.Available).credits.remainingTokens)
     }
 
+    @Test fun aRefusalBlocksTheRowAndTheEndHidesIt() = runTest {
+        val vm = AiKeysViewModel()
+        val t = Canned(200, full)
+        vm.loadFreeAi(service(t))
+        t.status = 429
+        t.body = """{"error":"Free building is busy today. Try again tomorrow, or use your own AI key.","code":"free-ai-busy-today"}"""
+        assertTrue(vm.useFreeAi(service(t), "box") is FreeAiMint.Refused)
+        assertEquals(FreeAiState.Blocked("busy-today"), vm.freeAi.value)
+        assertFalse(vm.shouldAutoUseFreeAi())
+
+        t.status = 410
+        t.body = """{"code":"free-ai-ended"}"""
+        vm.useFreeAi(service(t), "box")
+        assertEquals(FreeAiState.Hidden, vm.freeAi.value)
+        assertFalse(vm.shouldAutoUseFreeAi())
+    }
+
     @Test fun anUnreadableBalanceHidesTheRow() = runTest {
         val vm = AiKeysViewModel()
         vm.loadFreeAi(service(Canned(500, "boom")))

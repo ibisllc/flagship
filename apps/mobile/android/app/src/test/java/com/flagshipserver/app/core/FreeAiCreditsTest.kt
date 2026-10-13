@@ -79,8 +79,39 @@ class FreeAiCreditsTest {
         )
     }
 
+    private val weekly = FreeAiCreditsInfo(
+        usedTokens = 960_000,
+        allowanceTokens = 2_500_000,
+        remainingTokens = 1_540_000,
+        week = FreeAiWeek(used = 160_000, allowance = 500_000, remaining = 340_000, resetsAt = 1_760_918_400_000),
+        starter = FreeAiStarter(used = 800_000, allowance = 2_000_000, remaining = 1_200_000),
+    )
+
+    @Test fun showsThisWeekAndTheStarterReserve() {
+        assertEquals("This week: 340k of 500k left · Starter reserve: 1.2M", FreeAiCopy.leftLine(weekly))
+        assertEquals("340k left this week · 1.2M reserve", FreeAiCopy.rowSubtitle(weekly))
+        // An older .com without the two parts still reads.
+        assertEquals("820k left", FreeAiCopy.rowSubtitle(FreeAiCreditsInfo(180_000, 1_000_000, 820_000)))
+    }
+
+    @Test fun viewsMirrorTheWebapp() {
+        assertNull(FreeAiCopy.view(FreeAiState.Hidden))
+        assertEquals(
+            FreeAiView(true, "This week: 340k of 500k left · Starter reserve: 1.2M", false),
+            FreeAiCopy.view(FreeAiState.Available(weekly)),
+        )
+        val spent = weekly.copy(remainingTokens = 0)
+        assertEquals(FreeAiView(false, FreeAiCopy.USED_UP, true), FreeAiCopy.view(FreeAiState.Available(spent)))
+        assertEquals(FreeAiView(false, FreeAiCopy.BUSY_TODAY, true), FreeAiCopy.view(FreeAiState.Blocked("busy-today")))
+        assertEquals(FreeAiView(false, FreeAiCopy.NO_SERVER, false), FreeAiCopy.view(FreeAiState.Blocked("no-server")))
+        assertEquals(FreeAiView(false, FreeAiCopy.UNAVAILABLE, true), FreeAiCopy.view(FreeAiState.Unavailable))
+    }
+
     @Test fun copyNeverSellsAnything() {
-        for (s in listOf(FreeAiCopy.TITLE, FreeAiCopy.NOTE, FreeAiCopy.USED_UP, FreeAiCopy.UNAVAILABLE, FreeAiCopy.ADD_OWN_KEY)) {
+        for (s in listOf(
+            FreeAiCopy.TITLE, FreeAiCopy.NOTE, FreeAiCopy.USED_UP, FreeAiCopy.UNAVAILABLE, FreeAiCopy.ADD_OWN_KEY,
+            FreeAiCopy.BUSY_TODAY, FreeAiCopy.NO_SERVER, FreeAiCopy.ENDED,
+        )) {
             val l = s.lowercase()
             assertFalse(s, l.contains("buy") || l.contains("purchase") || l.contains("upgrade") || l.contains("subscri"))
         }
@@ -124,6 +155,57 @@ class FreeAiCreditsTest {
         t.status = 503
         t.body = """{"error":"Free AI isn't available right now. You can add your own AI key.","code":"free-ai-unavailable"}"""
         assertTrue(service(t).mint("box") is FreeAiMint.Unavailable)
+    }
+
+    @Test fun mintMapsByCodeFirst() = runTest {
+        // A 429 is "busy today" when .com says so, not "used up".
+        val t = FakeTransport(429, """{"error":"Free building is busy today. Try again tomorrow, or use your own AI key.","code":"free-ai-busy-today"}""")
+        val busy = service(t).mint("box")
+        busy as FreeAiMint.Refused
+        assertEquals("free-ai-busy-today", busy.code)
+        assertEquals(FreeAiCopy.BUSY_TODAY, busy.message)
+
+        t.status = 403
+        t.body = """{"code":"free-ai-no-server"}"""
+        assertEquals(FreeAiMint.Refused("free-ai-no-server", FreeAiCopy.NO_SERVER), service(t).mint("box"))
+
+        t.status = 410
+        t.body = """{"error":"The free building period has ended — use your own AI key.","code":"free-ai-ended"}"""
+        assertEquals(FreeAiMint.Refused("free-ai-ended", FreeAiCopy.ENDED), service(t).mint("box"))
+
+        // A bare 429 from an older .com still reads as used up.
+        t.status = 429
+        t.body = "{}"
+        assertEquals(FreeAiCopy.USED_UP, (service(t).mint("box") as FreeAiMint.UsedUp).message)
+
+        FreeAiSessions.remember("vc-free", "box")
+        t.status = 410
+        t.body = """{"code":"free-ai-ended"}"""
+        assertEquals(FreeAiCopy.ENDED, (service(t).refreshFor("vc-free") as FreeAiRefresh.Stop).message)
+    }
+
+    @Test fun statusDecodesTheWeekTheReserveAndTheReasons() = runTest {
+        val t = FakeTransport(
+            200,
+            """{"available":true,"ended":false,"reason":null,"credits":{"week":{"used":160000,"allowance":500000,"remaining":340000,"resetsAt":1760918400000},"starter":{"used":800000,"allowance":2000000,"remaining":1200000},"usedTokens":960000,"allowanceTokens":2500000,"remainingTokens":1540000}}""",
+        )
+        val s = service(t).status() as FreeAiState.Available
+        assertEquals(weekly, s.credits)
+        assertTrue(FreeAiService.shouldAutoUse(0, s))
+
+        t.body = """{"available":true,"ended":false,"reason":"busy-today","message":"busy","credits":{"remainingTokens":5}}"""
+        val busy = service(t).status()
+        assertEquals(FreeAiState.Blocked("busy-today"), busy)
+        assertFalse(FreeAiService.shouldAutoUse(0, busy))
+
+        t.body = """{"available":true,"ended":false,"reason":"no-server","credits":{"remainingTokens":5}}"""
+        assertEquals(FreeAiState.Blocked("no-server"), service(t).status())
+
+        // Ended: hidden everywhere, never used on its own.
+        t.body = """{"available":false,"ended":true,"reason":null,"credits":{"remainingTokens":0}}"""
+        val ended = service(t).status()
+        assertEquals(FreeAiState.Hidden, ended)
+        assertFalse(FreeAiService.shouldAutoUse(0, ended))
     }
 
     @Test fun mintWithoutAnAccountIsUnavailable() = runTest {

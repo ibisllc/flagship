@@ -65,11 +65,31 @@ data class FreeAiSignedBody(val request: Inner, val signature: String) {
     )
 }
 
+/** This ISO week's top-up (resets Monday 00:00 UTC, doesn't carry over). */
+@Serializable
+data class FreeAiWeek(
+    val used: Long = 0,
+    val allowance: Long = 0,
+    val remaining: Long = 0,
+    val resetsAt: Long? = null,
+)
+
+/** The one-time starter reserve, spent after the week's top-up. */
+@Serializable
+data class FreeAiStarter(
+    val used: Long = 0,
+    val allowance: Long = 0,
+    val remaining: Long = 0,
+)
+
+/** Totals across both, plus the two parts (absent from an older `.com`). */
 @Serializable
 data class FreeAiCreditsInfo(
     val usedTokens: Long = 0,
     val allowanceTokens: Long = 0,
     val remainingTokens: Long = 0,
+    val week: FreeAiWeek? = null,
+    val starter: FreeAiStarter? = null,
 )
 
 @Serializable
@@ -93,6 +113,11 @@ data class FreeAiTokenResponse(
 @Serializable
 data class FreeAiStatusResponse(
     val available: Boolean = false,
+    /** The promotion has ended: the apps hide free AI. */
+    val ended: Boolean = false,
+    /** What stops free AI right now: "no-server" or "busy-today". */
+    val reason: String? = null,
+    val message: String? = null,
     val credits: FreeAiCreditsInfo? = null,
 )
 
@@ -107,6 +132,8 @@ data class FreeAiErrorBody(
 sealed class FreeAiMint {
     data class Ok(val credential: AiCredential, val credits: FreeAiCreditsInfo?) : FreeAiMint()
     data class UsedUp(val message: String, val credits: FreeAiCreditsInfo?) : FreeAiMint()
+    /** Busy today, no running server, or the promotion has ended ([code]). */
+    data class Refused(val code: String, val message: String) : FreeAiMint()
     data class Unavailable(val message: String) : FreeAiMint()
 }
 
@@ -119,23 +146,55 @@ sealed class FreeAiRefresh {
 
 /** What the free-credits card / key-step row shows. */
 sealed class FreeAiState {
-    /** Not asked yet, or the read failed: show nothing. */
+    /** Not asked yet, the read failed, or the promotion has ended: show nothing. */
     object Hidden : FreeAiState()
     object Unavailable : FreeAiState()
+    /** Free AI can't be used right now ("no-server", "busy-today"). */
+    data class Blocked(val reason: String) : FreeAiState()
     data class Available(val credits: FreeAiCreditsInfo) : FreeAiState() {
         val usedUp: Boolean get() = credits.remainingTokens <= 0
     }
 }
 
+/** What the card / key-step row shows (mirror of the webapp's freeAiView). */
+data class FreeAiView(val usable: Boolean, val text: String, val offerOwnKey: Boolean)
+
 /** Copy + number formatting, shared with the webapp and iOS. */
 object FreeAiCopy {
     const val TITLE = "Free AI credits"
     const val NOTE = "Used automatically when you build with AI and haven't added your own key."
-    const val USED_UP = "You've used your free AI credits. Add your own AI key to keep building."
+    const val USED_UP =
+        "Your free AI credits for this week are used up. More arrive on Monday, or add your own AI key to keep building."
     const val UNAVAILABLE = "Free AI credits aren't available right now. You can add your own AI key."
+    const val BUSY_TODAY = "Free building is busy today. Try again tomorrow, or use your own AI key."
+    const val NO_SERVER = "Free AI credits start once one of your servers is running."
+    const val ENDED = "The free building period has ended — use your own AI key."
     const val ADD_OWN_KEY = "Add your own key"
     const val CODE_USED_UP = "free-ai-used-up"
     const val CODE_UNAVAILABLE = "free-ai-unavailable"
+    const val CODE_BUSY_TODAY = "free-ai-busy-today"
+    const val CODE_NO_SERVER = "free-ai-no-server"
+    const val CODE_ENDED = "free-ai-ended"
+
+    /** The app's own words for a `free-ai-…` code, or null for an unknown one. */
+    fun messageFor(code: String?): String? = when (code) {
+        CODE_USED_UP -> USED_UP
+        CODE_UNAVAILABLE -> UNAVAILABLE
+        CODE_BUSY_TODAY -> BUSY_TODAY
+        CODE_NO_SERVER -> NO_SERVER
+        CODE_ENDED -> ENDED
+        else -> null
+    }
+
+    /** Null hides free AI (unreadable, or the promotion has ended). */
+    fun view(state: FreeAiState): FreeAiView? = when (state) {
+        is FreeAiState.Hidden -> null
+        is FreeAiState.Unavailable -> FreeAiView(false, UNAVAILABLE, true)
+        is FreeAiState.Blocked ->
+            FreeAiView(false, messageFor("free-ai-${state.reason}") ?: UNAVAILABLE, state.reason != "no-server")
+        is FreeAiState.Available ->
+            if (state.usedUp) FreeAiView(false, USED_UP, true) else FreeAiView(true, leftLine(state.credits), false)
+    }
 
     /** 820000 → "820k", 1000000 → "1M", 1500000 → "1.5M". */
     fun tokens(n: Long): String {
@@ -151,10 +210,21 @@ object FreeAiCopy {
         }
     }
 
-    fun leftLine(c: FreeAiCreditsInfo): String =
-        "${tokens(c.remainingTokens)} of ${tokens(c.allowanceTokens)} free AI tokens left"
+    /** "This week: 340k of 500k left · Starter reserve: 1.2M". */
+    fun leftLine(c: FreeAiCreditsInfo): String {
+        val w = c.week
+        val st = c.starter
+        if (w == null || st == null) return "${tokens(c.remainingTokens)} of ${tokens(c.allowanceTokens)} free AI tokens left"
+        return "This week: ${tokens(w.remaining)} of ${tokens(w.allowance)} left · Starter reserve: ${tokens(st.remaining)}"
+    }
 
-    fun rowSubtitle(c: FreeAiCreditsInfo): String = "${tokens(c.remainingTokens)} left"
+    /** "340k left this week · 1.2M reserve". */
+    fun rowSubtitle(c: FreeAiCreditsInfo): String {
+        val w = c.week
+        val st = c.starter
+        if (w == null || st == null) return "${tokens(c.remainingTokens)} left"
+        return "${tokens(w.remaining)} left this week · ${tokens(st.remaining)} reserve"
+    }
 }
 
 /** HTTP client for the two `.com` free-AI endpoints. */
@@ -175,11 +245,18 @@ class FreeAiClient(
             )
         } catch (e: HttpException) {
             val err = runCatching { json.decodeFromString(FreeAiErrorBody.serializer(), e.body) }.getOrNull()
-            return when {
-                e.status == 429 || err?.code == FreeAiCopy.CODE_USED_UP ->
-                    FreeAiMint.UsedUp(err?.error ?: FreeAiCopy.USED_UP, err?.credits)
-                e.status == 503 || err?.code == FreeAiCopy.CODE_UNAVAILABLE ->
-                    FreeAiMint.Unavailable(err?.error ?: FreeAiCopy.UNAVAILABLE)
+            // By code first: a 429 is also "busy today", not only "used up".
+            val code = err?.code ?: when (e.status) {
+                429 -> FreeAiCopy.CODE_USED_UP
+                503 -> FreeAiCopy.CODE_UNAVAILABLE
+                else -> null
+            }
+            val message = err?.error ?: FreeAiCopy.messageFor(code)
+            return when (code) {
+                FreeAiCopy.CODE_USED_UP -> FreeAiMint.UsedUp(message ?: FreeAiCopy.USED_UP, err?.credits)
+                FreeAiCopy.CODE_UNAVAILABLE -> FreeAiMint.Unavailable(message ?: FreeAiCopy.UNAVAILABLE)
+                FreeAiCopy.CODE_BUSY_TODAY, FreeAiCopy.CODE_NO_SERVER, FreeAiCopy.CODE_ENDED ->
+                    FreeAiMint.Refused(code, message ?: FreeAiCopy.UNAVAILABLE)
                 else -> throw e
             }
         }
@@ -238,7 +315,9 @@ class FreeAiService(
         return try {
             val r = client.status(FreeAiRequest.sign(signer(), user, "", now()))
             when {
+                r.ended -> FreeAiState.Hidden
                 !r.available -> FreeAiState.Unavailable
+                r.reason != null -> FreeAiState.Blocked(r.reason)
                 r.credits != null -> FreeAiState.Available(r.credits)
                 else -> FreeAiState.Hidden
             }
@@ -259,12 +338,14 @@ class FreeAiService(
         return when (val r = runCatching { mint(server) }.getOrElse { FreeAiMint.Unavailable(FreeAiCopy.UNAVAILABLE) }) {
             is FreeAiMint.Ok -> FreeAiRefresh.Fresh(r.credential)
             is FreeAiMint.UsedUp -> FreeAiRefresh.Stop(r.message)
+            is FreeAiMint.Refused -> FreeAiRefresh.Stop(r.message)
             is FreeAiMint.Unavailable -> FreeAiRefresh.Stop(r.message)
         }
     }
 
     companion object {
-        /** On by default: no saved key of their own and credits left. */
+        /** On by default: no saved key of their own, and free AI usable now
+         *  (not ended, unavailable or blocked, with credits left). */
         fun shouldAutoUse(savedKeyCount: Int, state: FreeAiState): Boolean =
             savedKeyCount == 0 && state is FreeAiState.Available && !state.usedUp
     }

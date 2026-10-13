@@ -126,6 +126,10 @@ fun AiKeyStepScreen(
                     toasts.error(r.message)
                     showForm = true
                 }
+                is FreeAiMint.Refused -> {
+                    toasts.error(r.message)
+                    showForm = true
+                }
                 is FreeAiMint.Unavailable -> {
                     toasts.error(r.message)
                     showForm = true
@@ -160,8 +164,8 @@ fun AiKeyStepScreen(
         )
         Spacer(Modifier.height(FS.space.s4))
 
-        (freeAi as? FreeAiState.Available)?.let { state ->
-            FreeAiKeyStepRow(state = state, busy = minting, onUse = { scope.launch { useFreeAi() } })
+        if (freeAi !is FreeAiState.Hidden) {
+            FreeAiKeyStepRow(state = freeAi, busy = minting, onUse = { scope.launch { useFreeAi() } })
             Spacer(Modifier.height(FS.space.s4))
         }
 

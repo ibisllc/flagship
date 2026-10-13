@@ -10,6 +10,7 @@ import com.flagshipserver.app.core.AiCredential
 import com.flagshipserver.app.core.AiKeyStore
 import com.flagshipserver.app.core.AiRelay
 import com.flagshipserver.app.core.FreeAiCreditsInfo
+import com.flagshipserver.app.core.FreeAiCopy
 import com.flagshipserver.app.core.FreeAiMint
 import com.flagshipserver.app.core.FreeAiService
 import com.flagshipserver.app.core.FreeAiState
@@ -73,8 +74,8 @@ class AiKeysViewModel : ViewModel() {
 
     /**
      * "Use this" on the free-credits row: a fresh credential for the box the
-     * build runs on. Updates the balance from the answer; a used-up answer
-     * flips the row to the bring-your-own-key message.
+     * build runs on. Updates the balance from the answer; a refusal flips
+     * the row to its message (or hides it once the promotion has ended).
      */
     suspend fun useFreeAi(service: FreeAiService, serverFqdn: String): FreeAiMint {
         val r = service.mint(serverFqdn)
@@ -84,6 +85,9 @@ class AiKeysViewModel : ViewModel() {
                 (r.credits ?: (_freeAi.value as? FreeAiState.Available)?.credits ?: FreeAiCreditsInfo())
                     .copy(remainingTokens = 0),
             )
+            is FreeAiMint.Refused -> _freeAi.value =
+                if (r.code == FreeAiCopy.CODE_ENDED) FreeAiState.Hidden
+                else FreeAiState.Blocked(r.code.removePrefix("free-ai-"))
             is FreeAiMint.Unavailable -> _freeAi.value = FreeAiState.Unavailable
         }
         if (r is FreeAiMint.Ok) AiRelay.lastUsedKeyId = null
