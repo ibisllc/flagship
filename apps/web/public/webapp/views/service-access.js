@@ -1,12 +1,14 @@
-// Service access gating — admin UI (docs/service-access-gating.md).
+// Access control — admin UI (docs/service-access-gating.md, "Open mode +
+// members").
 //
-// Per-service open ⇄ restricted toggle + (when restricted) an allow-list
-// manager: ADD a person/group via a capability invite (one of THREE tiers —
-// personal auto-approve, personal manual-approve, or group/multi-use), the list
-// of added people/groups (decrypted from the household-key-sealed bundle .com
-// stores as ciphertext), and remove (revoke on .com AND prune the bound AID on
-// the box — the .com revoke alone doesn't reach the box, whose allow-list is
-// add-only, so the box prune is what enforces).
+// A two-way toggle (Open to all | Members only) and, in both modes, the
+// members list with each person's and group's role (Flagship's fixed ladder
+// viewer < editor < admin, set by signed orders the box verifies). The toggle
+// never changes the list. Add a person (or one you approve first: the friend
+// replies an acceptance the author finalizes here) or a group link (maxN,
+// optional expiry), each with its role; names and photos are sealed under the
+// household key (.com stores ciphertext). Remove = revoke on .com AND prune on
+// the box the AIDs for whom it was their last grant.
 //
 // Identity model (v2 box-as-authority): create/revoke/list are now AID-signed —
 // the box verifies them against the owner's STABLE AID (the IRK rotates). The
@@ -14,22 +16,13 @@
 // pinned pipe. The bound principal is the friend's per-author CONTACT AID. See
 // lib/serviceInvite.js for the wire + canonical bytes.
 //
-// THREE invite tiers (the create-time picker):
-//   - personal auto-approve  — first-bind (the casual-share default).
-//   - personal manual-approve — the friend's redeem is held {pending}; the
-//     friend replies an acceptance the AUTHOR finalizes here ("Finalize an
-//     acceptance"). Closes the link-theft race without learning the friend's id.
-//   - group / multi-use — one link, maxN (0=unlimited) + optional expiry,
-//     auto-approve, LOWER-TRUST. The guest list shows ONE "<label> — k/N" entry
-//     with a one-tap group-revoke (per-member removal kept as a bonus).
-//
 // The consumer's USERNAME is never disclosed to the author in ANY tier — the
 // author sees only the private label they themselves assigned (personal) or the
 // group label (group).
 
 import { $, registerView, show } from "../lib/router.js";
 import { getSession } from "../lib/state.js";
-import { getPodBaseUrl } from "../lib/api.js";
+import { getPodBaseUrl, screensFetch } from "../lib/api.js";
 import { controlApex } from "../lib/apex.js";
 import {
   deriveAccountIdFromSeed,
@@ -47,6 +40,19 @@ import {
   submitAccept,
   parseAcceptReply,
 } from "../lib/serviceInvite.js";
+import { usersIcon } from "../lib/icons.js";
+import {
+  MEMBER_ROLES,
+  aidsToPrune,
+  alsoInText,
+  fetchMembers,
+  inviteTarget,
+  otherGrants,
+  roleLabel,
+  roleTargetFor,
+  rowRole,
+  setMemberRole,
+} from "../lib/memberRoles.js";
 import { toast } from "../lib/toast.js";
 import { humanError } from "../lib/humanError.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
@@ -56,7 +62,7 @@ registerView("view-service-access");
 
 let currentService = null;
 
-// localStorage key for the last-known access mode (the daemon has no GET).
+// localStorage key for the last-known access mode (shown until the box answers).
 const MODE_KEY_PREFIX = "flagship.serviceAccessMode.";
 
 function modeKey(serviceRef) {
@@ -83,6 +89,17 @@ function podBaseUrl() {
   return getPodBaseUrl() ?? "";
 }
 
+/** The paired box's FQDN — the server a signed role order names. */
+function podServerDomain() {
+  try {
+    return new URL(podBaseUrl()).host;
+  } catch {
+    return "";
+  }
+}
+
+const screensJson = (path, init) => screensFetch(path, init);
+
 export async function enterServiceAccess(service) {
   currentService = service;
   show("view-service-access");
@@ -101,7 +118,6 @@ export async function renderServiceAccess(service) {
   }
 
   const mode = lastKnownMode(serviceRef) ?? "open";
-  const restricted = mode === "restricted";
 
   root.innerHTML = `
     <div class="card">
@@ -109,145 +125,183 @@ export async function renderServiceAccess(service) {
       <div class="muted-sm text-xs mt-1">id: ${escapeHtml(serviceRef)}</div>
     </div>
 
-    <h2 class="mt-4">Who can open this</h2>
-    <div class="card">
-      <p class="note">
-        <strong>Open</strong> — anyone with the link can open it.
-        <strong>Restricted</strong> — only people you add below.
-      </p>
-      <label class="inline-check mt-2">
-        <input type="checkbox" id="sa-restricted-toggle" ${restricted ? "checked" : ""} />
-        Restrict to an allow-list
-      </label>
-      <div id="sa-mode-status" class="mt-2 text-xs muted-sm">
-        ${lastKnownMode(serviceRef) ? `Current: ${restricted ? "restricted" : "open"}` : "Set the mode to confirm it on your server."}
+    <div class="card mt-3">
+      <div class="fs-segmented" id="sa-mode" role="radiogroup" aria-label="Who can open it">
+        <button type="button" role="radio" data-mode="open" aria-checked="${mode === "open"}">${MODE_LABEL.open}</button>
+        <button type="button" role="radio" data-mode="restricted" aria-checked="${mode === "restricted"}">${MODE_LABEL.restricted}</button>
       </div>
+      <div id="sa-mode-status" class="mt-2 text-xs muted-sm">${escapeHtml(modeNote(mode))}</div>
     </div>
 
-    <div id="sa-allow-section" class="${restricted ? "" : "hidden"}">
-      <h2 class="mt-4">Add a person or group</h2>
-      <div class="card">
-        <p class="note">
-          Names &amp; photos stay encrypted to your account — flagshipserver.com
-          stores only ciphertext and never sees them. Their Flagship username is
-          never shown to you. Send the link over a private channel.
-        </p>
-
-        <label class="mt-1">How they get access</label>
-        <div id="sa-tier" class="mt-1">
-          <label class="inline-check"><input type="radio" name="sa-tier" value="auto" checked /> Personal — anyone with the link gets in (fastest)</label>
-          <label class="inline-check mt-1"><input type="radio" name="sa-tier" value="manual" /> Personal — you approve each one (sensitive)</label>
-          <label class="inline-check mt-1"><input type="radio" name="sa-tier" value="group" /> Group link — one link, many people <span class="faint-sm">(lower trust)</span></label>
-        </div>
-
-        <label class="mt-2">Name / label <span class="faint-sm">(only you and your servers see it)</span></label>
-        <input id="sa-name" type="text" placeholder="Alex" autocomplete="off" maxlength="120" />
-
-        <div id="sa-group-opts" class="hidden mt-2">
-          <label>Max uses <span class="faint-sm">(0 = unlimited)</span></label>
-          <input id="sa-maxn" type="number" min="0" step="1" value="10" />
-          <label class="mt-2">Expires in days <span class="faint-sm">(optional — a forever link is a liability)</span></label>
-          <input id="sa-expiry-days" type="number" min="0" step="1" placeholder="30" />
-        </div>
-
+    <h2 class="mt-4" id="sa-members-title">Members</h2>
+    <div class="row-2">
+      <button id="sa-add-person" class="secondary" type="button">+ Add person</button>
+      <button id="sa-add-group" class="secondary" type="button">+ Add group</button>
+    </div>
+    <div id="sa-add-card" class="card mt-2 hidden">
+      <div class="card-title" id="sa-add-title">Add a person</div>
+      <p class="note mt-1">
+        Names &amp; photos stay encrypted to your account — flagshipserver.com
+        stores only ciphertext and never sees them. Send the link over a private channel.
+      </p>
+      <label class="mt-2" id="sa-name-label">Name <span class="faint-sm">(only you and your servers see it)</span></label>
+      <input id="sa-name" type="text" placeholder="Alex" autocomplete="off" maxlength="120" />
+      <label class="mt-2" for="sa-new-role">Role</label>
+      <select id="sa-new-role">${roleOptionsHtml("editor")}</select>
+      <div id="sa-person-opts">
         <label class="mt-2">Photo <span class="faint-sm">(optional)</span></label>
         <input id="sa-photo" type="file" accept="image/*" />
         <div id="sa-photo-preview" class="mt-2"></div>
-        <button id="sa-add-go" class="full-width mt-2">Create invite link</button>
-        <div id="sa-add-status" class="mt-2 text-sm"></div>
-        <div id="sa-add-result" class="mt-2 hidden">
-          <label>Shareable link</label>
-          <input id="sa-link" type="text" readonly class="mt-1" />
-          <div id="sa-qr" class="mt-2" style="text-align:center;"></div>
-          <div class="row-2 mt-2">
-            <button id="sa-share" class="secondary">Share…</button>
-            <button id="sa-copy" class="secondary">Copy link</button>
-          </div>
-          <p id="sa-manual-hint" class="note mt-2 hidden">
-            This is approve-each. After they open the link, they'll send you back
-            an acceptance code — paste it under &ldquo;Finalize an acceptance&rdquo;
-            below to let them in.
-          </p>
+        <label class="inline-check mt-2"><input type="checkbox" id="sa-approve" /> I approve them before they get in (most secure)</label>
+      </div>
+      <div id="sa-group-opts" class="hidden mt-2">
+        <p class="note">Anyone the link reaches (up to the limit) joins with this role. Set a limit and an expiry.</p>
+        <label>Max uses <span class="faint-sm">(0 = unlimited)</span></label>
+        <input id="sa-maxn" type="number" min="0" step="1" value="10" />
+        <label class="mt-2">Expires in days <span class="faint-sm">(optional — a forever link is a liability)</span></label>
+        <input id="sa-expiry-days" type="number" min="0" step="1" placeholder="30" />
+      </div>
+      <button id="sa-add-go" class="full-width mt-3">Create invite link</button>
+      <div id="sa-add-status" class="mt-2 text-sm"></div>
+      <div id="sa-add-result" class="mt-2 hidden">
+        <label>Shareable link</label>
+        <input id="sa-link" type="text" readonly class="mt-1" />
+        <div id="sa-qr" class="mt-2" style="text-align:center;"></div>
+        <div class="row-2 mt-2">
+          <button id="sa-share" class="secondary">Share…</button>
+          <button id="sa-copy" class="secondary">Copy link</button>
         </div>
-      </div>
-
-      <h2 class="mt-4">Finalize an acceptance</h2>
-      <div class="card">
-        <p class="note">
-          For an <strong>approve-each</strong> invite: paste the acceptance code
-          (or link) your friend sent back. It never reveals who they are — you're
-          just confirming it really came from them.
+        <p id="sa-manual-hint" class="note mt-2 hidden">
+          You approve this one. After they open the link, they'll send you back
+          an acceptance code — paste it under &ldquo;Finalize an acceptance&rdquo;
+          below to let them in.
         </p>
-        <textarea id="sa-accept-input" rows="2" placeholder="flagship-accept:…" class="mt-1"></textarea>
-        <button id="sa-accept-go" class="full-width mt-2">Finalize &amp; grant access</button>
-        <div id="sa-accept-status" class="mt-2 text-sm"></div>
       </div>
+    </div>
+    <div id="sa-people" class="mt-2"><div class="card placeholder">loading…</div></div>
 
-      <h2 class="mt-4">People with access</h2>
-      <div id="sa-people" class="mt-2"><div class="card placeholder">loading…</div></div>
+    <h2 class="mt-4">Finalize an acceptance</h2>
+    <div class="card">
+      <p class="note">
+        For an invite you approve: paste the acceptance code (or link) your
+        friend sent back. It never reveals who they are — you're just
+        confirming it really came from them.
+      </p>
+      <textarea id="sa-accept-input" rows="2" placeholder="flagship-accept:…" class="mt-1"></textarea>
+      <button id="sa-accept-go" class="full-width mt-2">Finalize &amp; grant access</button>
+      <div id="sa-accept-status" class="mt-2 text-sm"></div>
     </div>
   `;
 
-  $("sa-restricted-toggle")?.addEventListener("change", (ev) => {
-    onToggleMode(serviceRef, !!ev.currentTarget.checked).catch((e) => {
-      console.error(e);
-      toast(humanError(e), "err");
-    });
-  });
-  // Tier radios: reveal/hide the group caps.
-  for (const r of root.querySelectorAll('input[name="sa-tier"]')) {
-    r.addEventListener("change", () => {
-      $("sa-group-opts")?.classList.toggle("hidden", selectedTier() !== "group");
+  for (const b of root.querySelectorAll("#sa-mode [data-mode]")) {
+    b.addEventListener("click", () => {
+      onPickMode(serviceRef, b.getAttribute("data-mode")).catch((e) => {
+        console.error(e);
+        toast(humanError(e), "err");
+      });
     });
   }
+  $("sa-add-person")?.addEventListener("click", () => openAddCard("person"));
+  $("sa-add-group")?.addEventListener("click", () => openAddCard("group"));
   $("sa-photo")?.addEventListener("change", onPhotoPicked);
   $("sa-add-go")?.addEventListener("click", () => {
-    onAddPerson(serviceRef).catch((e) => { console.error(e); toast(humanError(e), "err"); });
+    onAdd(serviceRef).catch((e) => { console.error(e); toast(humanError(e), "err"); });
   });
   $("sa-accept-go")?.addEventListener("click", () => {
     onFinalizeAccept(serviceRef).catch((e) => { console.error(e); toast(humanError(e), "err"); });
   });
 
-  if (restricted) await renderPeople(serviceRef);
+  await renderPeople(serviceRef);
 }
 
-/** The currently-selected invite tier ("auto" | "manual" | "group"). */
-function selectedTier() {
-  const el = document.querySelector('input[name="sa-tier"]:checked');
-  const v = el?.value;
-  return v === "manual" || v === "group" ? v : "auto";
+const MODE_LABEL = { open: "Open to all", restricted: "Members only" };
+
+/** The line under the toggle. */
+function modeNote(mode) {
+  return mode === "restricted"
+    ? "Only members and you can open it. Anyone else is asked to sign in."
+    : "Anyone can open it. Members who sign in get their role.";
 }
 
-/** OWNER-IRK-sign + POST the access-mode change to the box. */
-async function onToggleMode(serviceRef, wantRestricted) {
-  const session = getSession();
-  const status = $("sa-mode-status");
-  const toggle = $("sa-restricted-toggle");
-  const mode = wantRestricted ? "restricted" : "open";
-  if (status) status.textContent = "saving…";
-  if (toggle) toggle.disabled = true;
-  try {
-    await setServiceAccessMode({
-      baseUrl: podBaseUrl(),
-      serviceRef,
-      mode,
-      umk: session.umk,
-      signWithIrk,
+function roleOptionsHtml(selected) {
+  return MEMBER_ROLES.map(
+    (r) => `<option value="${r}"${r === selected ? " selected" : ""}>${escapeHtml(roleLabel(r))}</option>`,
+  ).join("");
+}
+
+/** Which form the add card shows: "person" | "group". */
+let addKind = "person";
+
+function openAddCard(kind) {
+  addKind = kind;
+  const card = $("sa-add-card");
+  if (!card) return;
+  card.classList.remove("hidden");
+  $("sa-add-result")?.classList.add("hidden");
+  const status = $("sa-add-status");
+  if (status) status.textContent = "";
+  const group = kind === "group";
+  $("sa-add-title").textContent = group ? "Add a group" : "Add a person";
+  $("sa-name-label").innerHTML = group
+    ? 'Group name <span class="faint-sm">(only you and your servers see it)</span>'
+    : 'Name <span class="faint-sm">(only you and your servers see it)</span>';
+  $("sa-name").placeholder = group ? "Chess club" : "Alex";
+  $("sa-person-opts")?.classList.toggle("hidden", group);
+  $("sa-group-opts")?.classList.toggle("hidden", !group);
+  const roleSel = $("sa-new-role");
+  if (roleSel) roleSel.value = group ? "viewer" : (lastMembers?.defaultRole ?? "editor");
+  $("sa-name")?.focus();
+}
+
+function setModeUi(mode) {
+  for (const b of document.querySelectorAll("#sa-mode [data-mode]")) {
+    b.setAttribute("aria-checked", String(b.getAttribute("data-mode") === mode));
+  }
+}
+
+/**
+ * The toggle: OWNER-IRK-sign + POST the mode to the box. The members list is
+ * never touched. Going members-only asks once how many people that leaves.
+ */
+async function onPickMode(serviceRef, mode) {
+  const group = $("sa-mode");
+  if (!group || group.getAttribute("aria-disabled") === "true") return;
+  const current = group.querySelector('[aria-checked="true"]')?.getAttribute("data-mode") ?? "open";
+  if (mode === current) return;
+  if (mode === "restricted") {
+    const n = lastMembers?.members?.length ?? 0;
+    const { inlineConfirm } = await import("../lib/modal.js");
+    const ok = await inlineConfirm({
+      title: "Members only?",
+      message: n === 1
+        ? "Only this 1 person will be able to open it."
+        : `Only these ${n} people will be able to open it.`,
+      okLabel: "Members only",
     });
+    if (!ok) return;
+  }
+  const status = $("sa-mode-status");
+  const session = getSession();
+  setModeUi(mode);
+  group.setAttribute("aria-disabled", "true");
+  if (status) {
+    status.className = "mt-2 text-xs muted-sm";
+    status.textContent = "Saving…";
+  }
+  try {
+    await setServiceAccessMode({ baseUrl: podBaseUrl(), serviceRef, mode, umk: session.umk, signWithIrk });
     rememberMode(serviceRef, mode);
-    if (status) status.textContent = `Current: ${mode}`;
-    // Reveal/hide the allow-list section without a full re-render.
-    const section = $("sa-allow-section");
-    if (section) section.classList.toggle("hidden", mode !== "restricted");
-    if (mode === "restricted") await renderPeople(serviceRef);
-    toast(mode === "restricted" ? "Now restricted to your allow-list." : "Now open to anyone with the link.");
+    if (status) status.textContent = modeNote(mode);
+    toast(mode === "restricted" ? "Now members only." : "Now open to all.");
   } catch (e) {
-    // Revert the toggle to its prior state on failure.
-    if (toggle) toggle.checked = !wantRestricted;
-    if (status) status.textContent = "Couldn't change the mode.";
+    setModeUi(current);
+    if (status) {
+      status.className = "mt-2 text-xs err-text";
+      status.textContent = "Couldn't change access. Try again in a moment.";
+    }
     throw e;
   } finally {
-    if (toggle) toggle.disabled = false;
+    group.removeAttribute("aria-disabled");
   }
 }
 
@@ -288,12 +342,17 @@ async function renderQrInto(box, link) {
   }
 }
 
-/** Mint a capability invite (per the selected tier) and surface the share-link + QR. */
-async function onAddPerson(serviceRef) {
+/**
+ * Mint a capability invite (a person, approve-each person, or a group) with
+ * its role, and surface the share-link + QR. The role rides a signed order to
+ * the box right after the create; the app's default role needs none.
+ */
+async function onAdd(serviceRef) {
   const session = getSession();
   const status = $("sa-add-status");
   const goBtn = $("sa-add-go");
   if (goBtn?.disabled) return;
+  const isGroup = addKind === "group";
   const name = ($("sa-name")?.value || "").trim();
   if (!name) {
     if (status) {
@@ -302,11 +361,10 @@ async function onAddPerson(serviceRef) {
     }
     return;
   }
-  const tier = selectedTier();
-  // Group caps.
+  const role = $("sa-new-role")?.value || "viewer";
   let maxRedemptions;
   let expiresAt;
-  if (tier === "group") {
+  if (isGroup) {
     const maxN = Number($("sa-maxn")?.value);
     maxRedemptions = Number.isInteger(maxN) && maxN >= 0 ? maxN : 0;
     const days = Number($("sa-expiry-days")?.value);
@@ -314,7 +372,7 @@ async function onAddPerson(serviceRef) {
       expiresAt = Date.now() + Math.round(days) * 86_400_000;
     }
   }
-  const approvalMode = tier === "manual" ? "manual" : "auto";
+  const manual = !isGroup && !!$("sa-approve")?.checked;
 
   if (status) {
     status.className = "mt-2 text-sm";
@@ -329,7 +387,7 @@ async function onAddPerson(serviceRef) {
       deriveAccountIdFromSeed(session.umk),
       deriveHouseholdKeyFromSeed(session.umk),
     ]);
-    const bundle = pickedPhotoDataUri ? { name, photo: pickedPhotoDataUri } : { name };
+    const bundle = !isGroup && pickedPhotoDataUri ? { name, photo: pickedPhotoDataUri } : { name };
     const r = await createInvite({
       comBase: controlApex(),
       username: session.username,
@@ -338,7 +396,7 @@ async function onAddPerson(serviceRef) {
       serviceRef,
       bundle,
       householdKey,
-      approvalMode,
+      approvalMode: manual ? "manual" : "auto",
       ...(maxRedemptions !== undefined ? { maxRedemptions } : {}),
       ...(expiresAt !== undefined ? { expiresAt } : {}),
       umk: session.umk,
@@ -347,23 +405,37 @@ async function onAddPerson(serviceRef) {
       // account AID (legacy — `.com` dual-accepts AID-or-IRK on the closed gate).
       signWithAccountId: sensitiveSigner(signWithAccountId),
     });
-    // No local create cache: the author's box fetches the signed create from
-    // .com at manual-finalize, so an invite can be finalized from ANY device.
+    let roleNote = "";
+    if (role !== (lastMembers?.defaultRole ?? null)) {
+      try {
+        await setMemberRole({
+          serverDomain: podServerDomain(),
+          serviceId: serviceRef,
+          target: inviteTarget(r.inviteId),
+          role,
+          umk: session.umk,
+          signWithIrk: sensitiveSigner(),
+          fetchJson: screensJson,
+        });
+      } catch (e) {
+        roleNote = ` Couldn't set the role (${humanError(e)}): change it in the list.`;
+      }
+    }
     if (status) {
-      status.className = "mt-2 text-sm ok-text";
-      status.textContent = `Invite for ${name} created.`;
+      status.className = roleNote ? "mt-2 text-sm err-text" : "mt-2 text-sm ok-text";
+      status.textContent = `${isGroup ? "Group" : "Invite for"} ${name} created.${roleNote}`;
     }
     const result = $("sa-add-result");
     const linkEl = $("sa-link");
     if (result) result.classList.remove("hidden");
     if (linkEl) linkEl.value = r.link;
-    $("sa-manual-hint")?.classList.toggle("hidden", tier !== "manual");
+    $("sa-manual-hint")?.classList.toggle("hidden", !manual);
     await renderQrInto($("sa-qr"), r.link);
     $("sa-share")?.addEventListener("click", () => shareIt(r.link));
     $("sa-copy")?.addEventListener("click", () => copyIt(r.link));
-    // Clear the composer + refresh the people list (it now shows an unbound row).
     if ($("sa-name")) $("sa-name").value = "";
     if ($("sa-photo")) $("sa-photo").value = "";
+    if ($("sa-approve")) $("sa-approve").checked = false;
     pickedPhotoDataUri = null;
     if ($("sa-photo-preview")) $("sa-photo-preview").innerHTML = "";
     await renderPeople(serviceRef);
@@ -426,52 +498,121 @@ async function onFinalizeAccept(serviceRef) {
   }
 }
 
-/** Render the allow-list from .com (bundles decrypted locally). */
+/** The box's members + roles, last loaded (null when it couldn't be read). */
+let lastMembers = null;
+/** The live .com rows, last loaded. */
+let lastInvites = [];
+
+async function loadInvites(serviceRef) {
+  const session = getSession();
+  const [aid, householdKey] = await Promise.all([
+    deriveAccountIdFromSeed(session.umk),
+    deriveHouseholdKeyFromSeed(session.umk),
+  ]);
+  const invites = await listInvites({
+    comBase: controlApex(),
+    username: session.username,
+    authorAID: aid.publicKey,
+    householdKey,
+    serviceRef,
+    umk: session.umk,
+    signWithAccountId,
+  });
+  return invites.filter((i) => !i.revokedAt);
+}
+
+/** Render the members list: .com's invites (bundles decrypted locally) + the box's roles. */
 async function renderPeople(serviceRef) {
   const root = $("sa-people");
   if (!root) return;
-  const session = getSession();
-  try {
-    const [aid, householdKey] = await Promise.all([
-      deriveAccountIdFromSeed(session.umk),
-      deriveHouseholdKeyFromSeed(session.umk),
-    ]);
-    const invites = await listInvites({
-      comBase: controlApex(),
-      username: session.username,
-      authorAID: aid.publicKey,
-      householdKey,
-      serviceRef,
-      umk: session.umk,
-      signWithAccountId,
-    });
-    const live = invites.filter((i) => !i.revokedAt);
-    if (live.length === 0) {
-      root.innerHTML = '<div class="card placeholder">No one added yet. Create an invite link above.</div>';
-      return;
+  const [invites, members] = await Promise.allSettled([
+    loadInvites(serviceRef),
+    fetchMembers(serviceRef, { fetchJson: screensJson }),
+  ]);
+  if (members.status === "fulfilled") {
+    lastMembers = members.value;
+    if (lastMembers.mode === "open" || lastMembers.mode === "restricted") {
+      rememberMode(serviceRef, lastMembers.mode);
+      if (!$("sa-mode")?.getAttribute("aria-disabled")) {
+        setModeUi(lastMembers.mode);
+        const status = $("sa-mode-status");
+        if (status && status.className.indexOf("err-text") === -1) status.textContent = modeNote(lastMembers.mode);
+      }
     }
-    root.innerHTML = live.map((i) => peopleRowHtml(i)).join("");
-    root.querySelectorAll('[data-action="sa-remove"]').forEach((b) => {
-      b.addEventListener("click", () =>
-        onRemovePerson(
-          serviceRef,
-          b.getAttribute("data-id"),
-          b.getAttribute("data-name"),
-          b.getAttribute("data-aid") || null,
-          b.getAttribute("data-group") === "1",
-        ).catch((e) => {
-          console.error(e);
-          toast(humanError(e), "err");
-        }),
-      );
+  } else {
+    lastMembers = null;
+  }
+  if (invites.status === "rejected") {
+    root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(humanError(invites.reason))}</p></div>`;
+    return;
+  }
+  lastInvites = invites.value;
+  const title = $("sa-members-title");
+  if (title) title.textContent = `Members (${lastInvites.length})`;
+  if (lastInvites.length === 0) {
+    root.innerHTML = '<div class="card placeholder">No members yet. Add a person or a group.</div>';
+    return;
+  }
+  const labelOf = (id) => {
+    const row = lastInvites.find((i) => i.inviteId === id);
+    return row ? (row.bundle?.name ?? "") : "";
+  };
+  root.innerHTML =
+    (lastMembers ? "" : '<div class="card"><p class="err-text">Couldn\'t load roles from your server.</p></div>') +
+    lastInvites.map((i) => peopleRowHtml(i, lastMembers, labelOf)).join("");
+  root.querySelectorAll('[data-action="sa-remove"]').forEach((b) => {
+    b.addEventListener("click", () =>
+      onRemovePerson(
+        serviceRef,
+        b.getAttribute("data-id"),
+        b.getAttribute("data-name"),
+        b.getAttribute("data-aid") || null,
+        b.getAttribute("data-group") === "1",
+      ).catch((e) => {
+        console.error(e);
+        toast(humanError(e), "err");
+      }),
+    );
+  });
+  root.querySelectorAll('select[data-action="sa-role"]').forEach((sel) => {
+    sel.addEventListener("change", () => {
+      onPickRole(serviceRef, sel).catch((e) => {
+        console.error(e);
+        toast(humanError(e), "err");
+      });
     });
+  });
+}
+
+/** Sign + send one row's role change; roll the picker back on failure. */
+async function onPickRole(serviceRef, sel) {
+  const before = sel.getAttribute("data-current");
+  const role = sel.value;
+  if (role === before) return;
+  const session = getSession();
+  sel.disabled = true;
+  try {
+    await setMemberRole({
+      serverDomain: podServerDomain(),
+      serviceId: serviceRef,
+      target: sel.getAttribute("data-target"),
+      role,
+      umk: session.umk,
+      signWithIrk: sensitiveSigner(),
+      fetchJson: screensJson,
+    });
+    toast(`Now ${roleLabel(role)}.`);
+    await renderPeople(serviceRef);
   } catch (e) {
-    root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(humanError(e))}</p></div>`;
+    sel.value = before;
+    throw e;
+  } finally {
+    sel.disabled = false;
   }
 }
 
-/** One allow-list row — a person (single bind) OR a group ("<label> — k/N"). */
-function peopleRowHtml(i) {
+/** One member row — a person (single bind) OR a group ("k of N joined"), each with a role picker. */
+function peopleRowHtml(i, members, labelOf) {
   const name = i.bundle?.name ?? "unknown";
   const photo = i.bundle?.photo;
   const isGroup = i.maxRedemptions !== null && i.maxRedemptions !== undefined;
@@ -479,30 +620,40 @@ function peopleRowHtml(i) {
   if (isGroup) {
     const used = typeof i.redemptions === "number" ? i.redemptions : (Array.isArray(i.boundAIDs) ? i.boundAIDs.length : 0);
     const cap = i.maxRedemptions === 0 ? "∞" : i.maxRedemptions;
-    statusText = `group — ${used}/${cap} joined`;
+    statusText = `${used} of ${cap} joined`;
     if (i.expiresAt) {
       statusText += i.expiresAt <= Date.now() ? " · expired" : ` · expires ${formatWhen(i.expiresAt)}`;
     }
   } else if (i.approvalMode === "manual" && !i.boundAID) {
-    statusText = "approve-each — waiting for their acceptance";
+    statusText = "you approve — waiting for their acceptance";
   } else {
     statusText = i.boundAID ? "active" : "invite sent — not opened yet";
   }
-  const avatar = photo
-    ? `<img src="${escapeHtml(photo)}" alt="" style="width:36px;height:36px;border-radius:50%;object-fit:cover;" />`
-    : `<div class="avatar-mono" style="width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--surface-elev);">${escapeHtml((name[0] || (isGroup ? "#" : "?")).toUpperCase())}</div>`;
-  const removeLabel = isGroup ? "Revoke group" : "Remove";
+  const also = isGroup ? "" : alsoInText(otherGrants(i, members, labelOf));
+  const avatar = isGroup
+    ? `<div class="sa-avatar" aria-hidden="true">${usersIcon}</div>`
+    : photo
+      ? `<img class="sa-avatar" src="${escapeHtml(photo)}" alt="" />`
+      : `<div class="sa-avatar" aria-hidden="true">${escapeHtml((name[0] || "?").toUpperCase())}</div>`;
+  const role = members ? rowRole(i, members) : null;
+  const target = roleTargetFor(i, members);
+  const picker = role
+    ? `<select data-action="sa-role" data-target="${escapeHtml(target)}" data-current="${escapeHtml(role)}" aria-label="Role for ${escapeHtml(name)}">${roleOptionsHtml(role)}</select>`
+    : "";
+  const removeLabel = isGroup ? "Revoke" : "Remove";
   return `
     <div class="card">
-      <div class="row row-top">
-        <div class="row" style="gap:10px;align-items:center;">
-          ${avatar}
-          <div>
-            <div class="weight-600">${escapeHtml(name)}</div>
-            <div class="muted-sm text-xs">${escapeHtml(statusText)}</div>
-          </div>
+      <div class="sa-member">
+        ${avatar}
+        <div class="sa-member-body">
+          <div class="weight-600">${escapeHtml(name)}</div>
+          <div class="muted-sm text-xs">${escapeHtml(statusText)}</div>
+          ${also ? `<div class="muted-sm text-xs">${escapeHtml(also)}</div>` : ""}
         </div>
-        <button class="danger small" data-action="sa-remove" data-id="${escapeHtml(i.inviteId)}" data-aid="${escapeHtml(i.boundAID ?? "")}" data-name="${escapeHtml(name)}" data-group="${isGroup ? "1" : "0"}">${removeLabel}</button>
+        <div class="sa-member-actions">
+          ${picker}
+          <button class="danger small" data-action="sa-remove" data-id="${escapeHtml(i.inviteId)}" data-aid="${escapeHtml(i.boundAID ?? "")}" data-name="${escapeHtml(name)}" data-group="${isGroup ? "1" : "0"}">${removeLabel}</button>
+        </div>
       </div>
     </div>`;
 }
@@ -518,7 +669,7 @@ function peopleRowHtml(i) {
  * must know access may persist).
  */
 export async function runRemovePerson(
-  { serviceRef, inviteId, boundAID, boundAIDs, isGroup },
+  { serviceRef, inviteId, boundAID, boundAIDs, isGroup, members },
   { getSession, controlApex, podBaseUrl, signWithIrk, signWithAccountId, humanError, revokeInvite, removeServiceAllow },
 ) {
   const session = getSession();
@@ -531,8 +682,12 @@ export async function runRemovePerson(
     // (admin-only) op — admin master root when present, else the account AID.
     signWithAccountId: sensitiveSigner(signWithAccountId),
   });
-  // The AIDs to prune on the box: the whole group set, else the single bound AID.
-  const aids = isGroup && Array.isArray(boundAIDs) ? boundAIDs : boundAID ? [boundAID] : [];
+  // The AIDs to prune on the box: the whole group set, else the single bound
+  // AID — but only those for whom this was their last grant. Someone who also
+  // holds another invite keeps it: the box drops just this grant when its
+  // revocation poller sees the .com revoke.
+  const bound = isGroup && Array.isArray(boundAIDs) ? boundAIDs : boundAID ? [boundAID] : [];
+  const aids = members === undefined ? bound : aidsToPrune(inviteId, bound, members);
   if (aids.length === 0) return { ok: true, prunedBox: false };
   for (const aid of aids) {
     try {
@@ -554,42 +709,26 @@ export async function runRemovePerson(
 }
 
 async function onRemovePerson(serviceRef, inviteId, name, boundAID, isGroup) {
-  // For a group we don't carry boundAIDs in the click attrs (it can be many) —
-  // re-fetch the row's bound set from the list so leg 2 prunes everyone.
-  let boundAIDs = null;
-  if (isGroup) {
-    try {
-      const session = getSession();
-      const aid = await deriveAccountIdFromSeed(session.umk);
-      const householdKey = await deriveHouseholdKeyFromSeed(session.umk);
-      const invites = await listInvites({
-        comBase: controlApex(),
-        username: session.username,
-        authorAID: aid.publicKey,
-        householdKey,
-        serviceRef,
-        umk: session.umk,
-        signWithAccountId,
-      });
-      const row = invites.find((i) => i.inviteId === inviteId);
-      boundAIDs = row && Array.isArray(row.boundAIDs) ? row.boundAIDs : [];
-    } catch {
-      boundAIDs = [];
-    }
-  }
+  const row = lastInvites.find((i) => i.inviteId === inviteId);
+  const boundAIDs = isGroup ? (row && Array.isArray(row.boundAIDs) ? row.boundAIDs : []) : null;
+  const restricted = (lastMembers?.mode ?? lastKnownMode(serviceRef)) === "restricted";
   const { inlineConfirm } = await import("../lib/modal.js");
   const ok = await inlineConfirm({
     title: isGroup ? `Revoke the "${name}" group?` : `Remove ${name || "this person"}?`,
     message: isGroup
-      ? "Everyone who joined through this link loses access the next time they try to open it."
-      : "They'll lose access the next time they try to open it. You can re-add them later with a new link.",
-    okLabel: isGroup ? "Revoke group" : "Remove",
+      ? (restricted
+          ? "Everyone who joined through this link loses access, unless they were also invited another way."
+          : "Everyone who joined through this link loses their role and can still visit as anyone can.")
+      : (restricted
+          ? "They're signed out and kept out. You can invite them again later."
+          : "They lose their role and can still visit as anyone can. You can invite them again later."),
+    okLabel: isGroup ? "Revoke" : "Remove",
     danger: true,
   });
   if (!ok) return;
   try {
     await runRemovePerson(
-      { serviceRef, inviteId, boundAID, boundAIDs, isGroup },
+      { serviceRef, inviteId, boundAID, boundAIDs, isGroup, members: lastMembers ?? undefined },
       { getSession, controlApex, podBaseUrl, signWithIrk, signWithAccountId, humanError, revokeInvite, removeServiceAllow },
     );
   } catch (e) {

@@ -124,7 +124,11 @@
 //  v64: a server's page groups Health, CPU, Memory, Disk, Network and
 //       Certificate in one Monitoring pane of rows that expand in place, and
 //       its Danger zone is just the buttons; precaches lib/serverMonitoring.js.
-const SHELL_VERSION = "v64";
+//  v65: Access control replaces Collaborators and "Who can open this": an
+//       Open to all | Members only toggle and the members list with each
+//       person's and group's role (signed role orders); drops the invite
+//       issue/manage views + lib/labelBook.js, precaches lib/memberRoles.js.
+const SHELL_VERSION = "v65";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -193,6 +197,7 @@ const OPTIONAL_SHELL = [
   "/lib/knockIdentity.js",
   "/lib/appPlacement.js",
   "/lib/serverMonitoring.js",
+  "/lib/memberRoles.js",
   "/views/bootstrap.js",
   "/views/wizard.js",
   "/views/unlock.js",

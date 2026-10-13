@@ -25,9 +25,17 @@ describe("service-access admin view", () => {
     const r = await app.inject({ method: "GET", url: "/webapp/views/service-access.js" });
     expect(r.statusCode).toBe(200);
     expect(r.body).toContain('registerView("view-service-access")');
-    // The open ⇄ restricted toggle is the access-mode control.
-    expect(r.body).toContain("sa-restricted-toggle");
+    // The two-way Open to all | Members only toggle is the access-mode control.
+    expect(r.body).toContain('id="sa-mode" role="radiogroup"');
+    expect(r.body).toContain('const MODE_LABEL = { open: "Open to all", restricted: "Members only" }');
     expect(r.body).toContain("setServiceAccessMode");
+    // Going members-only confirms how many people that leaves; a failure rolls the toggle back.
+    expect(r.body).toContain("will be able to open it.");
+    expect(r.body).toContain("setModeUi(current)");
+    // Each member row has a role picker that sends a signed role order.
+    expect(r.body).toContain('data-action="sa-role"');
+    expect(r.body).toContain("setMemberRole");
+    expect(r.body).toContain("fetchMembers");
     // Allow-list manager: add a person → mint an invite → show the link.
     expect(r.body).toContain("createInvite");
     expect(r.body).toContain("listInvites");
@@ -50,15 +58,15 @@ describe("service-access admin view", () => {
     expect(r.body).toContain("renderQrSvg");
   });
 
-  it("/views/service-access.js offers the THREE v2 invite tiers + the manual accept loop + group entry", async () => {
+  it("/views/service-access.js adds a person (or one you approve) or a group, each with a role, + the manual accept loop", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/webapp/views/service-access.js" });
     expect(r.statusCode).toBe(200);
-    // The create-time tier picker (auto / manual / group).
-    expect(r.body).toContain('name="sa-tier"');
-    expect(r.body).toContain('value="auto"');
-    expect(r.body).toContain('value="manual"');
-    expect(r.body).toContain('value="group"');
+    expect(r.body).toContain("+ Add person");
+    expect(r.body).toContain("+ Add group");
+    expect(r.body).toContain('id="sa-approve"');
+    expect(r.body).toContain('id="sa-new-role"');
+    expect(r.body).toContain("inviteTarget(r.inviteId)");
     // Group caps surfaced + threaded onto the create.
     expect(r.body).toContain("sa-maxn");
     expect(r.body).toContain("maxRedemptions");
@@ -68,9 +76,9 @@ describe("service-access admin view", () => {
     expect(r.body).toContain("submitAccept");
     expect(r.body).toContain("parseAcceptReply");
     expect(r.body).toContain("runFinalizeAccept");
-    // The group guest-list entry shows one "k/N joined" line with a group-revoke.
-    expect(r.body).toContain("joined");
-    expect(r.body).toContain("Revoke group");
+    // The group entry shows one "k of N joined" line with a revoke.
+    expect(r.body).toContain("of ${cap} joined");
+    expect(r.body).toContain('isGroup ? "Revoke" : "Remove"');
     expect(r.body).toContain("boundAIDs");
   });
 
@@ -247,6 +255,34 @@ describe("service-access — runRemovePerson (revoke .com + prune box)", () => {
     // One prune per bound member.
     expect(removeServiceAllow).toHaveBeenCalledTimes(3);
     expect(removeServiceAllow.mock.calls.map((c) => (c[0] as { aid: string }).aid)).toEqual(aids);
+  });
+
+  it("prunes on the box only the AIDs for whom this was their last grant", async () => {
+    const mod = await loadServiceAccessModule();
+    const revokeInvite = vi.fn(async () => ({ revoked: true }));
+    const removeServiceAllow = vi.fn(async () => ({ ok: true, removed: true }));
+    const [a, b, c] = ["aa".repeat(32), "bb".repeat(32), "cc".repeat(32)];
+    const members = {
+      members: [
+        { aid: a, role: "viewer", grants: [{ inviteId: "grp-1", role: "viewer" }], direct: null },
+        { aid: b, role: "admin", grants: [{ inviteId: "grp-1", role: "viewer" }, { inviteId: "sam", role: "admin" }], direct: null },
+      ],
+    };
+    const out = await mod.runRemovePerson(
+      { serviceRef: SERVICE, inviteId: "grp-1", boundAID: null, boundAIDs: [a, b, c], isGroup: true, members },
+      { ...baseDeps(), revokeInvite, removeServiceAllow },
+    );
+    expect(out).toEqual({ ok: true, prunedBox: true });
+    // b keeps their personal invite; c isn't listed by the box (nothing to keep).
+    expect(removeServiceAllow.mock.calls.map((x) => (x[0] as { aid: string }).aid)).toEqual([a, c]);
+    // A person whose only other grant is elsewhere: no box prune at all.
+    removeServiceAllow.mockClear();
+    const solo = await mod.runRemovePerson(
+      { serviceRef: SERVICE, inviteId: "sam", boundAID: b, members },
+      { ...baseDeps(), revokeInvite, removeServiceAllow },
+    );
+    expect(solo).toEqual({ ok: true, prunedBox: false });
+    expect(removeServiceAllow).not.toHaveBeenCalled();
   });
 
   it("an UNREDEEMED invite (no boundAID) → only the .com revoke, no box prune", async () => {
