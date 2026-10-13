@@ -194,12 +194,12 @@ after. Windows/Linux Studio ship as "preview".
   now installs the newest endorsed release (`scripts/latest-endorsed-release.mjs`,
   the box's own verifier) under the `main` label recipes name; the manifest
   records the `commit`.
-- **VM appliances published 2026-10-10 (both arches)**, built by `vm-appliance.yml`
-  from `9873b83e` (amd64 under KVM, arm64 on `ubuntu-24.04-arm` under TCG) and
-  uploaded to R2 `flagship-iso/` with their manifests in
-  `apps/web/public/downloads/`. They include the one-approval restart fix and
-  per-provider AI model defaults. The July hand-built arm64 image is retired.
-
+- **VM appliances published 2026-10-13 (both arches)**, built by `vm-appliance.yml`
+  from the newest endorsed release `52d0b375` (amd64 under KVM, arm64 on
+  `ubuntu-24.04-arm` under TCG), uploaded to R2 `flagship-iso/` with
+  `scripts/publish-vm-appliance.sh <run-id>…` (one image at a time, checked
+  against its manifest), manifests in `apps/web/public/downloads/`. A new
+  server's first boot moves it to the newest endorsed release.
 - **AI privacy, staging and egress (2026-10-12): built, endorsed as
   `37ba277d`; apps on `main`.** Follows the rule in Conventions. The AI works
   on a fenced staging copy (neutral identity, placeholder secrets, sample
