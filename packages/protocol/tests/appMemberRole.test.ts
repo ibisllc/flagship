@@ -62,7 +62,7 @@ describe("app-member-role beyond the vectors", () => {
     serverDomain: "home.harry.flagship.services",
     serviceId: "harry-weather",
     target: appMemberRoleTargetAid("AB".repeat(32)),
-    role: "admin",
+    role: "master",
     issuedAt: 1_700_000_000_000,
   };
 
@@ -85,7 +85,7 @@ describe("app-member-role beyond the vectors", () => {
     expect(verifyAppMemberRole({ ...base, serverDomain: "media.harry.flagship.services" }, sig, irk.publicKey)).toBe(false);
     expect(verifyAppMemberRole({ ...base, serviceId: "harry-notes" }, sig, irk.publicKey)).toBe(false);
     expect(verifyAppMemberRole({ ...base, target: `aid:${"cd".repeat(32)}` }, sig, irk.publicKey)).toBe(false);
-    expect(verifyAppMemberRole({ ...base, role: "viewer" }, sig, irk.publicKey)).toBe(false);
+    expect(verifyAppMemberRole({ ...base, role: "member" }, sig, irk.publicKey)).toBe(false);
     expect(verifyAppMemberRole({ ...base, issuedAt: base.issuedAt + 1 }, sig, irk.publicKey)).toBe(false);
     expect(verifyAppMemberRole(base, sig, deriveIRK({ seed: new Uint8Array(32).fill(0xff) }).publicKey)).toBe(false);
   });

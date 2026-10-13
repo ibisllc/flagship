@@ -36,6 +36,9 @@ describe("service-access admin view", () => {
     expect(r.body).toContain('data-action="sa-role"');
     expect(r.body).toContain("setMemberRole");
     expect(r.body).toContain("fetchMembers");
+    // Master wears the crown; the add card shows the app's one line per rank.
+    expect(r.body).toContain("crownHtml(role)");
+    expect(r.body).toContain("roleOptionsHtml(\"member\", true)");
     // Allow-list manager: add a person → mint an invite → show the link.
     expect(r.body).toContain("createInvite");
     expect(r.body).toContain("listInvites");
@@ -264,8 +267,8 @@ describe("service-access — runRemovePerson (revoke .com + prune box)", () => {
     const [a, b, c] = ["aa".repeat(32), "bb".repeat(32), "cc".repeat(32)];
     const members = {
       members: [
-        { aid: a, role: "viewer", grants: [{ inviteId: "grp-1", role: "viewer" }], direct: null },
-        { aid: b, role: "admin", grants: [{ inviteId: "grp-1", role: "viewer" }, { inviteId: "sam", role: "admin" }], direct: null },
+        { aid: a, role: "member", grants: [{ inviteId: "grp-1", role: "member" }], direct: null },
+        { aid: b, role: "master", grants: [{ inviteId: "grp-1", role: "member" }, { inviteId: "sam", role: "master" }], direct: null },
       ],
     };
     const out = await mod.runRemovePerson(

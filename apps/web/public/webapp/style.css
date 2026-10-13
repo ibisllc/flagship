@@ -2263,3 +2263,5 @@ button[data-device-restricted] {
   .sa-member { flex-wrap: wrap; }
   .sa-member-actions { width: 100%; justify-content: flex-end; }
 }
+.sa-crown { display: inline-flex; color: #C9A227; }
+.sa-crown svg { width: 18px; height: 18px; }

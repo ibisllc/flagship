@@ -109,19 +109,25 @@ role is chosen at creation). The toggle never changes the list.
 - **Removing someone:** on an open app they lose their role and visit
   anonymously; on a members-only app they are signed out and kept out.
 
-**Roles** are three ordered ranks Flagship imposes, never app-defined (the
-manifest's `custom_roles` are ignored for members), plus the implicit `owner`
-(the box owner only, never given). Lowest: uses the app as its members do
-(apps decide what that allows: in a game it still saves games). Middle: more.
-Highest: changes or deletes anyone's things and the app's settings. Owner:
-the highest + Flagship-level control (access control, delete). The box only
-delivers identity and rank honestly; apps enforce. **The rank names are not
-final** (proposed: Member < Moderator < Admin, each with an optional per-app
-one-line description from the manifest). Until the owner confirms, the wire
-names are `viewer` < `editor` < `admin`, the manifest's `default_role` maps
-onto them (`member` → editor, `owner` → admin), and each client keeps the
-display names in one place (webapp `lib/memberRoles.js` ROLE_LABELS, iOS
-`AppMemberRole.label`, Android `AppMemberRole.label`).
+**Ranks** (owner, final 2026-10-13) are Flagship's, never app-defined: three
+ordered, cumulative ranks plus the box owner.
+
+| rank (wire) | shown as | notes |
+|---|---|---|
+| `member` | Member | the base rank; must still be able to use the app (in a game, save games) |
+| `manager` | Manager | Member + more |
+| `master` | Master 👑 | Manager + more; shown with a crown in all three apps |
+| `owner` | Owner | the box owner only, never given; Master + Flagship-level control (access control, delete) |
+
+What each rank may do is the app's call: the manifest's
+`access.role_descriptions` gives one line per rank (written by the AI for
+every app it builds), shown in the rank picker, and the app enforces it. The
+box only delivers identity and rank honestly (`X-Flagship-Role`); it never
+blocks a request by rank. The manifest's `default_role` is the rank of a grant
+the owner gave none (older names map: viewer → member, editor → manager,
+admin/owner → master); its `custom_roles` are ignored for members. Each client
+keeps the display names in one place (webapp `lib/memberRoles.js`, iOS
+`AppMemberRole`, Android `AppMemberRole`).
 
 **Grants.** Every redemption of an invite is its own grant, with its own role
 (its own, else the invite's, else the app's default) and revocation: a group
@@ -153,10 +159,9 @@ phone approves, the browser returns to `next` (a same-origin path). Apps link
 there; private routes still show the knock page themselves.
 
 **Not built yet:** removing one person's join from a group link on its own
-(the order to name a single grant for revocation; today a person is removed
-from the box entirely, or a whole invite is revoked), the per-app rank
-descriptions, and treating anonymous visitors of an open app as the lowest
-rank (owner to confirm). The proxy never enforces a rank: apps do.
+(an order naming a single grant for revocation; today a person is removed from
+the box entirely, or a whole invite is revoked), and treating anonymous
+visitors of an open app as Members (owner to confirm).
 
 ## Notes
 - AID is a NEW UMK-derived key (parallel to the versioned IRK). Add `deriveAccountId` to

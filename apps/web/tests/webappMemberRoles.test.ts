@@ -51,7 +51,7 @@ describe("app-member-role (webapp) vs test-vectors/app-member-role", () => {
       serverDomain: "home.harry.flagship.services",
       serviceId: "harry-weather",
       target: "invite:abc",
-      role: "editor",
+      role: "manager",
       umk: new Uint8Array(32),
       signWithIrk: async (_u: Uint8Array, bytes: Uint8Array) => ed.sign(bytes, irk.privateKey),
       fetchJson,
@@ -65,7 +65,7 @@ describe("app-member-role (webapp) vs test-vectors/app-member-role", () => {
       serverDomain: "home.harry.flagship.services",
       serviceId: "harry-weather",
       target: "invite:abc",
-      role: "editor",
+      role: "manager",
       issuedAt: 1_700_000_000_000,
     });
     expect(ed.verify(fromHex(sent.signature), m.canonicalAppMemberRoleBytes(sent.order), irk.publicKey)).toBe(true);
@@ -77,31 +77,35 @@ describe("members-list helpers", () => {
   const SAM = "ab".repeat(32);
   const OLD = "cd".repeat(32);
   const members = {
-    defaultRole: "editor",
+    defaultRole: "member",
+    descriptions: { manager: "Runs tournaments" },
     members: [
-      { aid: SAM, role: "editor", grants: [{ inviteId: "sam", role: "editor" }, { inviteId: "family", role: "viewer" }], direct: null },
-      { aid: OLD, role: "admin", grants: [], direct: "admin" },
+      { aid: SAM, role: "manager", grants: [{ inviteId: "sam", role: "manager" }, { inviteId: "family", role: "member" }], direct: null },
+      { aid: OLD, role: "master", grants: [], direct: "master" },
     ],
     invites: [
-      { inviteId: "sam", role: "editor", set: true },
-      { inviteId: "family", role: "viewer", set: true },
+      { inviteId: "sam", role: "manager", set: true },
+      { inviteId: "family", role: "member", set: true },
     ],
   };
 
   it("a person's role is their invite's, and an untracked member is addressed by their id", async () => {
     const m = await lib();
-    expect(m.rowRole({ inviteId: "sam", boundAID: SAM }, members)).toBe("editor");
+    expect(m.rowRole({ inviteId: "sam", boundAID: SAM }, members)).toBe("manager");
     expect(m.roleTargetFor({ inviteId: "sam", boundAID: SAM }, members)).toBe("invite:sam");
-    expect(m.rowRole({ inviteId: "old", boundAID: OLD }, members)).toBe("admin");
+    expect(m.rowRole({ inviteId: "old", boundAID: OLD }, members)).toBe("master");
     expect(m.roleTargetFor({ inviteId: "old", boundAID: OLD }, members)).toBe(`aid:${OLD}`);
     // Unused invite: the default until the owner picks one.
-    expect(m.rowRole({ inviteId: "new", boundAID: null }, members)).toBe("editor");
+    expect(m.rowRole({ inviteId: "new", boundAID: null }, members)).toBe("member");
+    expect(m.roleDescription("manager", members)).toBe("Runs tournaments");
+    expect(m.roleDescription("master", members)).toBe("");
+    expect(m.MEMBER_ROLES.map(m.roleLabel)).toEqual(["Member", "Manager", "Master"]);
   });
 
-  it("reads 'Sam: Editor (also in Family: Viewer)'", async () => {
+  it("reads 'Sam: Manager (also in Family: Member)'", async () => {
     const m = await lib();
     const others = m.otherGrants({ inviteId: "sam", boundAID: SAM }, members, (id: string) => (id === "family" ? "Family" : ""));
-    expect(m.alsoInText(others)).toBe("also in Family: Viewer");
+    expect(m.alsoInText(others)).toBe("also in Family: Member");
     expect(m.alsoInText([])).toBe("");
   });
 });

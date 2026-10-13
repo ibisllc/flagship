@@ -249,6 +249,26 @@ describe("parseManifest — access (the platform-mandated piece)", () => {
     expect(r.ok).toBe(false);
   });
 
+  it("accepts the ranks and their one-line descriptions", () => {
+    const m = valid() as unknown as { access: Record<string, unknown> };
+    m.access.default_role = "manager";
+    m.access.role_descriptions = { member: "Plays and saves games", master: " Changes the club's settings " };
+    const r = parseManifest(m);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.manifest.access.default_role).toBe("manager");
+      expect(r.manifest.access.role_descriptions).toEqual({ member: "Plays and saves games", master: "Changes the club's settings" });
+    }
+  });
+
+  it("refuses a description for something that isn't a rank, or longer than one line", () => {
+    for (const d of [{ admin: "x" }, { member: "a\nb" }, { member: "x".repeat(121) }, { member: "" }, ["member"]]) {
+      const m = valid() as unknown as { access: Record<string, unknown> };
+      m.access.role_descriptions = d;
+      expect(parseManifest(m).ok).toBe(false);
+    }
+  });
+
   it("rejects malformed custom_roles entries", () => {
     const m = valid();
     m.access.custom_roles = ["BadCase"];

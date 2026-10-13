@@ -1,6 +1,6 @@
 // Members' roles in an app (docs/service-access-gating.md, "Open mode +
-// members"). Roles are Flagship's three ordered ranks (the box owner is always
-// owner). Every invite is a grant with a role; a person
+// members"). Ranks are Flagship's member < manager < master, ordered and
+// cumulative (the box owner is always owner); apps enforce them. Every invite is a grant with a role; a person
 // holding several has the highest. The owner changes a role with a signed
 // order the box verifies under its sensitive-order key:
 //
@@ -9,19 +9,25 @@
 // target = `invite:<inviteId>` (an invite: everyone who joins through it),
 // `grant:<inviteId>/<aid>` (one person's join: every redemption is its own
 // grant) or `aid:<hex>` (a member who joined before grants were tracked).
-// The wire names are the three ranks; their display names live in ROLE_LABELS
-// only, so a rename is one line here.
+// The display names live in ROLE_LABELS only.
 //
 // Must pass packages/protocol/test-vectors/app-member-role/vectors.json.
 
 export const TAG_APP_MEMBER_ROLE = "flagship/app-member-role/v1";
-export const MEMBER_ROLES = ["viewer", "editor", "admin"];
+export const MEMBER_ROLES = ["member", "manager", "master"];
 
-const ROLE_LABELS = { viewer: "Viewer", editor: "Editor", admin: "Admin", owner: "Owner" };
+// The ONE place the webapp names the ranks. Master is shown with a crown.
+const ROLE_LABELS = { member: "Member", manager: "Manager", master: "Master", owner: "Owner" };
+export const CROWNED_ROLE = "master";
 
-/** "Viewer" / "Editor" / "Admin" (anything else as given). */
+/** "Member" / "Manager" / "Master" (anything else as given). */
 export function roleLabel(role) {
   return ROLE_LABELS[role] ?? String(role ?? "");
+}
+
+/** The app's one line for a rank (its manifest's role_descriptions), or "". */
+export function roleDescription(role, members) {
+  return members?.descriptions?.[role] ?? "";
 }
 
 const AID_TARGET_RE = /^aid:[0-9a-f]{64}$/;
@@ -69,7 +75,7 @@ export async function signAppMemberRole({ serverDomain, serviceId, target, role,
 
 const membersPath = (serviceId) => `/api/screens/services/${encodeURIComponent(serviceId)}/members`;
 
-/** `{mode, roles, defaultRole, members:[{aid, role, grants:[{inviteId, role}], direct}], invites:[{inviteId, role, set}]}`. */
+/** `{mode, roles, defaultRole, descriptions, members:[{aid, role, grants:[{inviteId, role}], direct}], invites:[{inviteId, role, set}]}`. */
 export async function fetchMembers(serviceId, { fetchJson }) {
   return fetchJson(membersPath(serviceId));
 }

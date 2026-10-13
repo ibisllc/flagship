@@ -244,11 +244,18 @@ export interface AppAccess {
   /** Mandatory true. Apps cannot opt out of identity injection. */
   enabled: true;
   /**
-   * The role a member has until the owner gives them another, on Flagship's
-   * fixed ladder viewer < editor < admin. `member` is the older name for
-   * editor; `owner` gives members admin (only the box owner is owner).
+   * The rank a member has until the owner gives them another, on Flagship's
+   * ordered ranks member < manager < master (only the box owner is owner).
+   * Older manifests' names map onto them: viewer → member, editor →
+   * manager, admin and owner → master.
    */
-  default_role: "owner" | "admin" | "editor" | "member" | "viewer";
+  default_role: "member" | "manager" | "master" | "owner" | "admin" | "editor" | "viewer";
+  /**
+   * One line per rank telling the owner what it can do in THIS app, shown in
+   * the rank picker (e.g. `{ member: "Plays and saves games", manager:
+   * "Runs tournaments", master: "Changes the club's settings" }`).
+   */
+  role_descriptions?: Partial<Record<"member" | "manager" | "master", string>>;
   /** Older manifests' app-defined role labels; members' roles are the fixed ladder. */
   custom_roles?: string[];
   /**
@@ -333,7 +340,8 @@ export type ManifestParseResult =
   | { ok: false; errors: string[] };
 
 const RESERVED_ENV_PREFIX = "FLAGSHIP_";
-const VALID_ROLES = new Set(["owner", "admin", "editor", "member", "viewer"]);
+const VALID_ROLES = new Set(["member", "manager", "master", "owner", "admin", "editor", "viewer"]);
+const RANKS = ["member", "manager", "master"] as const;
 const NAME_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
 const SUBDOMAIN_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
 const VERSION_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
@@ -663,12 +671,30 @@ function parseAccess(v: unknown, e: (m: string) => void): AppAccess | undefined 
   if (a.enabled !== true) {
     e("access.enabled must be exactly true (apps cannot opt out of platform identity)");
   }
-  let defaultRole: AppAccess["default_role"] = "viewer";
+  let defaultRole: AppAccess["default_role"] = "member";
   if (a.default_role !== undefined) {
     if (typeof a.default_role !== "string" || !VALID_ROLES.has(a.default_role)) {
-      e("access.default_role must be one of viewer, editor, admin (or the older owner, member)");
+      e("access.default_role must be one of member, manager, master");
     } else {
       defaultRole = a.default_role as AppAccess["default_role"];
+    }
+  }
+  let roleDescriptions: AppAccess["role_descriptions"];
+  if (a.role_descriptions !== undefined) {
+    const d = a.role_descriptions;
+    if (typeof d !== "object" || d === null || Array.isArray(d)) {
+      e("access.role_descriptions must be an object of rank → one line");
+    } else {
+      roleDescriptions = {};
+      for (const [k, v] of Object.entries(d as Record<string, unknown>)) {
+        if (!(RANKS as readonly string[]).includes(k)) {
+          e(`access.role_descriptions: "${k}" isn't a rank (member, manager, master)`);
+        } else if (typeof v !== "string" || v.trim().length === 0 || v.length > 120 || /[\r\n]/.test(v)) {
+          e(`access.role_descriptions.${k} must be one line of at most 120 characters`);
+        } else {
+          roleDescriptions[k as (typeof RANKS)[number]] = v.trim();
+        }
+      }
     }
   }
   let customRoles: string[] | undefined;
@@ -732,6 +758,7 @@ function parseAccess(v: unknown, e: (m: string) => void): AppAccess | undefined 
   return {
     enabled: true,
     default_role: defaultRole,
+    ...(roleDescriptions ? { role_descriptions: roleDescriptions } : {}),
     custom_roles: customRoles,
     public_routes: publicRoutes,
     queryable_by: queryableBy,

@@ -14,9 +14,9 @@
  * and has no role of their own), `grant:<inviteId>/<64 lowercase hex>` (one
  * person's join through that invite: every redemption is its own grant) or
  * `aid:<64 lowercase hex>` (a member who joined before grants were tracked).
- * `role` is one of Flagship's three ordered ranks, on the wire `viewer` <
- * `editor` < `admin` (the display names live in each client, in one place);
- * `owner` is the box owner only and never given.
+ * `role` is one of Flagship's three ordered, cumulative ranks, `member` <
+ * `manager` < `master`; `owner` is the box owner only and never given. Apps
+ * enforce what a rank may do; the box never blocks a request by rank.
  *
  * `test-vectors/app-member-role/vectors.json` is the cross-platform reference.
  */
@@ -38,8 +38,9 @@ export interface AppMemberRoleOrder {
   issuedAt: number;
 }
 
-/** The roles an owner can give, lowest first. */
-export const APP_MEMBER_ROLES = ["viewer", "editor", "admin"] as const;
+/** The ranks an owner can give, lowest first. */
+export const APP_MEMBER_ROLES = ["member", "manager", "master"] as const;
+export type AppMemberRank = (typeof APP_MEMBER_ROLES)[number];
 const AID_TARGET_RE = /^aid:[0-9a-f]{64}$/;
 const INVITE_TARGET_RE = /^invite:[A-Za-z0-9._-]{1,128}$/;
 const GRANT_TARGET_RE = /^grant:([A-Za-z0-9._-]{1,128})\/([0-9a-f]{64})$/;

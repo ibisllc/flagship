@@ -23,7 +23,14 @@ const ownerIrk = deriveIRK({ seed: new Uint8Array(32).fill(0x2a) });
 const strangerIrk = deriveIRK({ seed: new Uint8Array(32).fill(0x55) });
 const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
 
-const manifest = { access: { enabled: true as const, default_role: "member" as const, custom_roles: ["coach"] } };
+const manifest = {
+  access: {
+    enabled: true as const,
+    default_role: "manager" as const,
+    custom_roles: ["coach"],
+    role_descriptions: { member: "Plays", master: "Runs the club" },
+  },
+};
 const noGrants = { grants: [], direct: null };
 
 async function harness(opts: { installed?: boolean; now?: number } = {}) {
@@ -43,7 +50,7 @@ async function harness(opts: { installed?: boolean; now?: number } = {}) {
 }
 
 function order(over: Partial<AppMemberRoleOrder> = {}): AppMemberRoleOrder {
-  return { serverDomain: FQDN, serviceId: SERVICE, target: `aid:${FRIEND}`, role: "admin", issuedAt: NOW, ...over };
+  return { serverDomain: FQDN, serviceId: SERVICE, target: `aid:${FRIEND}`, role: "master", issuedAt: NOW, ...over };
 }
 
 function post(o: AppMemberRoleOrder, sig: Uint8Array, service = SERVICE): HttpRequest {
@@ -65,19 +72,21 @@ describe("members list", () => {
     expect(JSON.parse(String(r!.body))).toEqual({
       serviceId: SERVICE,
       mode: "open",
-      roles: ["viewer", "editor", "admin"],
-      defaultRole: "editor",
-      members: [{ aid: FRIEND, role: "editor", ...noGrants }],
+      roles: ["member", "manager", "master"],
+      defaultRole: "manager",
+      descriptions: { member: "Plays", master: "Runs the club" },
+      members: [{ aid: FRIEND, role: "manager", ...noGrants }],
       invites: [],
     });
   });
 
-  it("offers the fixed ladder only (never owner or app-made roles), and gives an owner default as admin", () => {
+  it("offers the three ranks only (never owner or app-made roles), and gives an owner default as master", () => {
     expect(offeredRoles({ access: { enabled: true, default_role: "owner", custom_roles: ["owner", "dj"] } })).toEqual({
-      roles: ["viewer", "editor", "admin"],
-      defaultRole: "admin",
+      roles: ["member", "manager", "master"],
+      defaultRole: "master",
+      descriptions: {},
     });
-    expect(offeredRoles(null)).toEqual({ roles: ["viewer", "editor", "admin"], defaultRole: "viewer" });
+    expect(offeredRoles(null)).toEqual({ roles: ["member", "manager", "master"], defaultRole: "member", descriptions: {} });
   });
 
   it("404s an app that isn't installed here", async () => {
@@ -92,9 +101,9 @@ describe("setting a role", () => {
     const o = order();
     const r = await handle(post(o, signAppMemberRole(o, ownerIrk)).path, "POST", post(o, signAppMemberRole(o, ownerIrk)));
     expect(r?.status).toBe(200);
-    expect(store.roleOf(SERVICE, FRIEND, "member")).toBe("admin");
+    expect(store.roleOf(SERVICE, FRIEND, "member")).toBe("master");
     const list = JSON.parse(String((await handle(get.path, "GET", get))!.body));
-    expect(list.members).toEqual([{ aid: FRIEND, role: "admin", grants: [], direct: "admin" }]);
+    expect(list.members).toEqual([{ aid: FRIEND, role: "master", grants: [], direct: "master" }]);
   });
 
   it("refuses anyone but the owner, another order's signature, another box or app, and stale orders", async () => {
@@ -126,9 +135,9 @@ describe("setting a role", () => {
     // A role off the ladder can't even be signed; a forged body is refused.
     expect(() => signAppMemberRole(order({ role: "coach" }), ownerIrk)).toThrow();
     const forged = post(order(), signAppMemberRole(order(), ownerIrk));
-    forged.body = Buffer.from(String(forged.body).replace('"admin"', '"coach"'));
+    forged.body = Buffer.from(String(forged.body).replace('"master"', '"coach"'));
     expect((await handle(forged.path, "POST", forged))?.status).toBe(400);
-    expect((await send(order({ role: "editor" })))?.status).toBe(200);
+    expect((await send(order({ role: "manager" })))?.status).toBe(200);
     expect((await send(order({ target: `aid:${OTHER}`, issuedAt: NOW + 1 })))?.status).toBe(422);
     expect((await send(order({ target: `aid:${OWNER_AID}`, issuedAt: NOW + 2 })))?.status).toBe(422);
   });
@@ -139,10 +148,10 @@ describe("setting a role", () => {
       const sig = signAppMemberRole(oo, ownerIrk);
       return handle(post(oo, sig).path, "POST", post(oo, sig));
     };
-    expect((await send(order({ role: "viewer", issuedAt: NOW + 5 })))?.status).toBe(200);
-    expect((await send(order({ role: "viewer", issuedAt: NOW + 5 })))?.status).toBe(409);
-    expect((await send(order({ role: "admin", issuedAt: NOW + 4 })))?.status).toBe(409);
-    expect(store.roleOf(SERVICE, FRIEND, "member")).toBe("viewer");
+    expect((await send(order({ role: "member", issuedAt: NOW + 5 })))?.status).toBe(200);
+    expect((await send(order({ role: "member", issuedAt: NOW + 5 })))?.status).toBe(409);
+    expect((await send(order({ role: "master", issuedAt: NOW + 4 })))?.status).toBe(409);
+    expect(store.roleOf(SERVICE, FRIEND, "member")).toBe("member");
   });
 
   it("every invite is a grant; a person has the highest of their grants, and losing one leaves the others", async () => {
@@ -152,44 +161,44 @@ describe("setting a role", () => {
       return handle(post(oo, sig).path, "POST", post(oo, sig));
     };
     // A group link at viewer, a personal invite at admin, both for OTHER.
-    expect((await send(order({ target: "invite:family", role: "viewer" })))?.status).toBe(200);
+    expect((await send(order({ target: "invite:family", role: "member" })))?.status).toBe(200);
     await store.addAllowed(SERVICE, OTHER, "family");
-    expect(store.roleOf(SERVICE, OTHER, "member")).toBe("viewer");
-    expect((await send(order({ target: "invite:sam-1", role: "admin", issuedAt: NOW + 1 })))?.status).toBe(200);
+    expect(store.roleOf(SERVICE, OTHER, "member")).toBe("member");
+    expect((await send(order({ target: "invite:sam-1", role: "master", issuedAt: NOW + 1 })))?.status).toBe(200);
     await store.addAllowed(SERVICE, OTHER, "sam-1");
-    expect(store.roleOf(SERVICE, OTHER, "member")).toBe("admin");
+    expect(store.roleOf(SERVICE, OTHER, "member")).toBe("master");
     const list = JSON.parse(String((await handle(get.path, "GET", get))!.body));
     expect(list.members.find((m: { aid: string }) => m.aid === OTHER)).toEqual({
       aid: OTHER,
-      role: "admin",
+      role: "master",
       grants: [
-        { inviteId: "family", role: "viewer" },
-        { inviteId: "sam-1", role: "admin" },
+        { inviteId: "family", role: "member" },
+        { inviteId: "sam-1", role: "master" },
       ],
       direct: null,
     });
     // Persisted, and reloaded the same.
     const again = new ServiceAccessStore(join(dir, "service-access.json"), { ownerAidHex: OWNER_AID });
     await again.load();
-    expect(again.roleOf(SERVICE, OTHER, "member")).toBe("admin");
+    expect(again.roleOf(SERVICE, OTHER, "member")).toBe("master");
     expect(JSON.parse(readFileSync(join(dir, "service-access.json"), "utf8"))[SERVICE].roles.invites).toEqual({
-      family: "viewer",
-      "sam-1": "admin",
+      family: "member",
+      "sam-1": "master",
     });
     // One person's join through the group is its own grant with its own role.
-    expect((await send(order({ target: `grant:family/${OTHER}`, role: "editor", issuedAt: NOW + 2 })))?.status).toBe(200);
-    expect(store.grantRole(SERVICE, "family", OTHER, "member")).toBe("editor");
-    expect(store.inviteRole(SERVICE, "family", "member")).toBe("viewer");
+    expect((await send(order({ target: `grant:family/${OTHER}`, role: "manager", issuedAt: NOW + 2 })))?.status).toBe(200);
+    expect(store.grantRole(SERVICE, "family", OTHER, "member")).toBe("manager");
+    expect(store.inviteRole(SERVICE, "family", "member")).toBe("member");
     // A grant someone doesn't hold is refused.
-    expect((await send(order({ target: `grant:other-link/${OTHER}`, role: "editor", issuedAt: NOW + 3 })))?.status).toBe(422);
-    expect((await send(order({ target: `grant:family/${OTHER}`, role: "viewer", issuedAt: NOW + 4 })))?.status).toBe(200);
+    expect((await send(order({ target: `grant:other-link/${OTHER}`, role: "manager", issuedAt: NOW + 3 })))?.status).toBe(422);
+    expect((await send(order({ target: `grant:family/${OTHER}`, role: "member", issuedAt: NOW + 4 })))?.status).toBe(200);
     // Revoking the personal invite leaves the group: still a member, now viewer.
     await store.revokeGroup("sam-1", SERVICE);
     expect(store.isAllowed(SERVICE, OTHER)).toBe(true);
-    expect(store.roleOf(SERVICE, OTHER, "member")).toBe("viewer");
+    expect(store.roleOf(SERVICE, OTHER, "member")).toBe("member");
     // An unset grant counts as the app's default.
     await store.addAllowed(SERVICE, OTHER, "unset-link");
-    expect(store.roleOf(SERVICE, OTHER, "member")).toBe("editor");
+    expect(store.roleOf(SERVICE, OTHER, "manager")).toBe("manager");
     // Revoking the last grants ends membership.
     await store.revokeGroup("family", SERVICE);
     await store.revokeGroup("unset-link", SERVICE);
@@ -202,10 +211,10 @@ describe("setting a role", () => {
       const sig = signAppMemberRole(oo, ownerIrk);
       return handle(post(oo, sig).path, "POST", post(oo, sig));
     };
-    await send(order({ role: "admin" }));
+    await send(order({ role: "master" }));
     await store.removeAllowed(SERVICE, FRIEND);
     expect(store.roleOf(SERVICE, FRIEND, "viewer")).toBeNull();
-    await send(order({ target: "invite:grp-2", role: "viewer", issuedAt: NOW + 1 }));
+    await send(order({ target: "invite:grp-2", role: "member", issuedAt: NOW + 1 }));
     await store.addAllowed(SERVICE, OTHER, "grp-2");
     await store.revokeGroup("grp-2", SERVICE);
     expect(store.roleOf(SERVICE, OTHER, "viewer")).toBeNull();
@@ -223,7 +232,7 @@ describe("setting a role", () => {
     const exported = store.exportEntry(SERVICE)!;
     const target = new ServiceAccessStore(join(mkdtempSync(join(tmpdir(), "roles-t-")), "s.json"));
     await target.importEntry(SERVICE, { ...exported, roles: { ...exported.roles, aids: { ...exported.roles.aids, [OTHER]: "viewer" } } });
-    expect(target.roleOf(SERVICE, FRIEND, "viewer")).toBe("admin");
+    expect(target.roleOf(SERVICE, FRIEND, "viewer")).toBe("master");
     expect(target.roleOf(SERVICE, OTHER, "viewer")).toBeNull();
     // A copy from a box without roles still imports.
     const plain = new ServiceAccessStore(join(mkdtempSync(join(tmpdir(), "roles-p-")), "s.json"));

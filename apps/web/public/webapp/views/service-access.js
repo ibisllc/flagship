@@ -2,8 +2,8 @@
 // members").
 //
 // A two-way toggle (Open to all | Members only) and, in both modes, the
-// members list with each person's and group's role (Flagship's fixed ladder
-// viewer < editor < admin, set by signed orders the box verifies). The toggle
+// members list with each person's and group's rank (member < manager <
+// master, set by signed orders the box verifies; apps enforce them). The toggle
 // never changes the list. Add a person (or one you approve first: the friend
 // replies an acceptance the author finalizes here) or a group link (maxN,
 // optional expiry), each with its role; names and photos are sealed under the
@@ -40,14 +40,16 @@ import {
   submitAccept,
   parseAcceptReply,
 } from "../lib/serviceInvite.js";
-import { usersIcon } from "../lib/icons.js";
+import { crownIcon, usersIcon } from "../lib/icons.js";
 import {
+  CROWNED_ROLE,
   MEMBER_ROLES,
   aidsToPrune,
   alsoInText,
   fetchMembers,
   inviteTarget,
   otherGrants,
+  roleDescription,
   roleLabel,
   roleTargetFor,
   rowRole,
@@ -146,8 +148,8 @@ export async function renderServiceAccess(service) {
       </p>
       <label class="mt-2" id="sa-name-label">Name <span class="faint-sm">(only you and your servers see it)</span></label>
       <input id="sa-name" type="text" placeholder="Alex" autocomplete="off" maxlength="120" />
-      <label class="mt-2" for="sa-new-role">Role</label>
-      <select id="sa-new-role">${roleOptionsHtml("editor")}</select>
+      <label class="mt-2" for="sa-new-role">Rank</label>
+      <select id="sa-new-role">${roleOptionsHtml("member", true)}</select>
       <div id="sa-person-opts">
         <label class="mt-2">Photo <span class="faint-sm">(optional)</span></label>
         <input id="sa-photo" type="file" accept="image/*" />
@@ -155,7 +157,7 @@ export async function renderServiceAccess(service) {
         <label class="inline-check mt-2"><input type="checkbox" id="sa-approve" /> I approve them before they get in (most secure)</label>
       </div>
       <div id="sa-group-opts" class="hidden mt-2">
-        <p class="note">Anyone the link reaches (up to the limit) joins with this role. Set a limit and an expiry.</p>
+        <p class="note">Anyone the link reaches (up to the limit) joins with this rank. Set a limit and an expiry.</p>
         <label>Max uses <span class="faint-sm">(0 = unlimited)</span></label>
         <input id="sa-maxn" type="number" min="0" step="1" value="10" />
         <label class="mt-2">Expires in days <span class="faint-sm">(optional — a forever link is a liability)</span></label>
@@ -220,13 +222,21 @@ const MODE_LABEL = { open: "Open to all", restricted: "Members only" };
 function modeNote(mode) {
   return mode === "restricted"
     ? "Only members and you can open it. Anyone else is asked to sign in."
-    : "Anyone can open it. Members who sign in get their role.";
+    : "Anyone can open it. Members who sign in get their rank.";
 }
 
-function roleOptionsHtml(selected) {
-  return MEMBER_ROLES.map(
-    (r) => `<option value="${r}"${r === selected ? " selected" : ""}>${escapeHtml(roleLabel(r))}</option>`,
-  ).join("");
+/** Rank options; `withDescriptions` adds the app's one line per rank (the add card has room). */
+function roleOptionsHtml(selected, withDescriptions = false) {
+  return MEMBER_ROLES.map((r) => {
+    const desc = roleDescription(r, lastMembers);
+    const text = withDescriptions && desc ? `${roleLabel(r)} — ${desc}` : roleLabel(r);
+    return `<option value="${r}"${r === selected ? " selected" : ""}${desc ? ` title="${escapeHtml(desc)}"` : ""}>${escapeHtml(text)}</option>`;
+  }).join("");
+}
+
+/** The crown Master carries, wherever a rank is shown. */
+function crownHtml(role) {
+  return role === CROWNED_ROLE ? `<span class="sa-crown" title="${escapeHtml(roleLabel(role))}" aria-hidden="true">${crownIcon}</span>` : "";
 }
 
 /** Which form the add card shows: "person" | "group". */
@@ -249,7 +259,10 @@ function openAddCard(kind) {
   $("sa-person-opts")?.classList.toggle("hidden", group);
   $("sa-group-opts")?.classList.toggle("hidden", !group);
   const roleSel = $("sa-new-role");
-  if (roleSel) roleSel.value = group ? "viewer" : (lastMembers?.defaultRole ?? "editor");
+  if (roleSel) {
+    roleSel.innerHTML = roleOptionsHtml("member", true);
+    roleSel.value = lastMembers?.defaultRole ?? "member";
+  }
   $("sa-name")?.focus();
 }
 
@@ -418,7 +431,7 @@ async function onAdd(serviceRef) {
           fetchJson: screensJson,
         });
       } catch (e) {
-        roleNote = ` Couldn't set the role (${humanError(e)}): change it in the list.`;
+        roleNote = ` Couldn't set the rank (${humanError(e)}): change it in the list.`;
       }
     }
     if (status) {
@@ -638,7 +651,7 @@ function peopleRowHtml(i, members, labelOf) {
   const role = members ? rowRole(i, members) : null;
   const target = roleTargetFor(i, members);
   const picker = role
-    ? `<select data-action="sa-role" data-target="${escapeHtml(target)}" data-current="${escapeHtml(role)}" aria-label="Role for ${escapeHtml(name)}">${roleOptionsHtml(role)}</select>`
+    ? `${crownHtml(role)}<select data-action="sa-role" data-target="${escapeHtml(target)}" data-current="${escapeHtml(role)}" aria-label="Rank for ${escapeHtml(name)}">${roleOptionsHtml(role)}</select>`
     : "";
   const removeLabel = isGroup ? "Revoke" : "Remove";
   return `
@@ -718,10 +731,10 @@ async function onRemovePerson(serviceRef, inviteId, name, boundAID, isGroup) {
     message: isGroup
       ? (restricted
           ? "Everyone who joined through this link loses access, unless they were also invited another way."
-          : "Everyone who joined through this link loses their role and can still visit as anyone can.")
+          : "Everyone who joined through this link loses their rank and can still visit as anyone can.")
       : (restricted
           ? "They're signed out and kept out. You can invite them again later."
-          : "They lose their role and can still visit as anyone can. You can invite them again later."),
+          : "They lose their rank and can still visit as anyone can. You can invite them again later."),
     okLabel: isGroup ? "Revoke" : "Remove",
     danger: true,
   });

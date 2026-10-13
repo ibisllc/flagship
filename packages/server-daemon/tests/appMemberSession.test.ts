@@ -239,14 +239,13 @@ describe("invited members", () => {
     const cookie = await cookieOf(b, memberAid);
     expect((await send(b.port, "/private", { cookie })).status).toBe(200);
     const h = up.seen();
-    // The manifest's older "member" default is the ladder's editor.
-    expect(h["x-flagship-role"]).toBe("editor");
+    expect(h["x-flagship-role"]).toBe("member");
     expect(h["x-flagship-user"]).toBe(app.membership.stableIdFor(memberAid.publicKey));
     expect(h["x-flagship-user"]).not.toBe(app.membership.stableIdFor(ownerAid.publicKey));
     expect(verifyInjected(h)).toBe(true);
-    app.membership.members.internalAdd(memberAid.publicKey, "viewer");
+    app.membership.members.internalAdd(memberAid.publicKey, "manager");
     await send(b.port, "/private", { cookie });
-    expect(up.seen()["x-flagship-role"]).toBe("viewer");
+    expect(up.seen()["x-flagship-role"]).toBe("manager");
   });
 
   it("an invited person never gets the owner role", async () => {
@@ -256,10 +255,10 @@ describe("invited members", () => {
     const b = await box(app);
     const cookie = await cookieOf(b, memberAid);
     await send(b.port, "/private", { cookie });
-    expect(up.seen()["x-flagship-role"]).toBe("admin");
+    expect(up.seen()["x-flagship-role"]).toBe("master");
     app.membership.members.internalAdd(memberAid.publicKey, "owner");
     await send(b.port, "/private", { cookie });
-    expect(up.seen()["x-flagship-role"]).toBe("admin");
+    expect(up.seen()["x-flagship-role"]).toBe("master");
   });
 
   it("removing someone signs them out on their next request", async () => {
@@ -391,7 +390,7 @@ describe("open apps: members sign in on purpose (docs/service-access-gating.md, 
     const up = await container();
     const app = makeApp(up.port);
     await access.addAllowed(SVC, hex(memberAid.publicKey));
-    await access.setRole(SVC, { kind: "aid", aid: hex(memberAid.publicKey) }, `aid:${hex(memberAid.publicKey)}`, "viewer", 1);
+    await access.setRole(SVC, { kind: "aid", aid: hex(memberAid.publicKey) }, `aid:${hex(memberAid.publicKey)}`, "member", 1);
     const b = await box(app);
     // Anonymous on the public page until they sign in.
     await send(b.port, "/pub");
@@ -403,11 +402,11 @@ describe("open apps: members sign in on purpose (docs/service-access-gating.md, 
     const r = await approveKnock(b, page, memberAid);
     if (!("cookie" in r)) throw new Error(`refused ${r.refused}`);
     await send(b.port, "/pub", { cookie: r.cookie });
-    expect(up.seen()["x-flagship-role"]).toBe("viewer");
-    // The owner's role beats the legacy membership store.
-    app.membership.members.internalAdd(memberAid.publicKey, "admin");
+    expect(up.seen()["x-flagship-role"]).toBe("member");
+    // The owner's rank beats the legacy membership store.
+    app.membership.members.internalAdd(memberAid.publicKey, "master");
     await send(b.port, "/pub", { cookie: r.cookie });
-    expect(up.seen()["x-flagship-role"]).toBe("viewer");
+    expect(up.seen()["x-flagship-role"]).toBe("member");
     // Already signed in: the link goes straight back.
     const again = await send(b.port, "/__flagship/sign-in?next=/pub", { cookie: r.cookie });
     expect(again.status).toBe(302);

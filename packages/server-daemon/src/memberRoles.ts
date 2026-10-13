@@ -3,7 +3,7 @@
  * members"), over the owner's paired session only:
  *
  *   GET  /api/screens/services/:id/members
- *        → { mode, roles, defaultRole, members:[{aid, role, grants:[{inviteId, role}], direct}], invites:[{inviteId, role, set}] }
+ *        → { mode, roles, defaultRole, descriptions, members:[{aid, role, grants:[{inviteId, role}], direct}], invites:[{inviteId, role, set}] }
  *          (a member's grants are their joins, one per invite redeemed; an invite's role is the one new joins get)
  *   POST /api/screens/services/:id/members/role   { order, signature } → { ok, target, role }
  *
@@ -12,8 +12,9 @@
  * role, on a members-only app only members get in. Every redemption of an
  * invite is its own grant with a role (its own, else the invite's, else the
  * app's default); a person may hold several (a personal invite and group
- * links) and has the highest. Roles are Flagship's three ordered ranks;
- * `owner` is the box owner only.
+ * links) and has the highest. Ranks are Flagship's member < manager <
+ * master, ordered and cumulative; `owner` is the box owner only. Apps enforce
+ * them: the box never blocks a request by rank.
  *
  * A role change is the owner's signed `flagship/app-member-role/v1` order,
  * checked under the box's sensitive-order authority, at most 10 minutes old
@@ -41,9 +42,20 @@ export function isMemberRolesPath(path: string): boolean {
   return LIST_RE.test(path) || ROLE_RE.test(path);
 }
 
-/** The roles an owner can give (lowest first), and the role of a member they gave none. */
-export function offeredRoles(manifest: Pick<AppManifest, "access"> | null): { roles: string[]; defaultRole: string } {
-  return { roles: [...MEMBER_ROLE_LADDER], defaultRole: ladderRole(manifest?.access?.default_role) ?? "viewer" };
+/**
+ * The ranks an owner can give (lowest first), the rank of a member they gave
+ * none, and the app's one-line description of each rank (from its manifest).
+ */
+export function offeredRoles(manifest: Pick<AppManifest, "access"> | null): {
+  roles: string[];
+  defaultRole: string;
+  descriptions: Record<string, string>;
+} {
+  return {
+    roles: [...MEMBER_ROLE_LADDER],
+    defaultRole: ladderRole(manifest?.access?.default_role) ?? "member",
+    descriptions: { ...(manifest?.access?.role_descriptions ?? {}) },
+  };
 }
 
 export interface MemberRolesHttpOptions extends SensitiveAuthority {
@@ -81,7 +93,7 @@ export function buildMemberRolesHttp(
   };
 
   function list(serviceId: string, manifest: Pick<AppManifest, "access">): HttpResponse {
-    const { roles, defaultRole } = offeredRoles(manifest);
+    const { roles, defaultRole, descriptions } = offeredRoles(manifest);
     const set = opts.store.roles(serviceId);
     const known = new Set(Object.keys(set.invites));
     const members = opts.store
@@ -104,7 +116,7 @@ export function buildMemberRolesHttp(
       role: opts.store.inviteRole(serviceId, inviteId, defaultRole),
       set: inviteId in set.invites,
     }));
-    return json(200, { serviceId, mode: opts.store.mode(serviceId), roles, defaultRole, members, invites });
+    return json(200, { serviceId, mode: opts.store.mode(serviceId), roles, defaultRole, descriptions, members, invites });
   }
 
   async function setRole(serviceId: string, req: HttpRequest): Promise<HttpResponse> {
@@ -127,7 +139,7 @@ export function buildMemberRolesHttp(
       return err(403, "invalid signature");
     }
     const role = (MEMBER_ROLE_LADDER as readonly string[]).includes(order.role) ? ladderRole(order.role) : null;
-    if (!role) return err(422, `"${order.role}" isn't a role: use viewer, editor or admin`);
+    if (!role) return err(422, `"${order.role}" isn't a rank: use member, manager or master`);
     const target = parseAppMemberRoleTarget(order.target)!;
     if (target.kind !== "invite") {
       if (opts.store.isOwner(target.aid)) return err(422, "the owner is always the owner");

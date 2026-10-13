@@ -101,19 +101,22 @@ export const MEMBER_ROLE_LADDER = APP_MEMBER_ROLES;
 export type MemberRole = (typeof MEMBER_ROLE_LADDER)[number];
 
 /**
- * A role on the ladder: an older name maps to its rung (`member` → editor),
- * `owner` is never given to a member (→ admin), anything else is null.
+ * A rank: older role names map onto it (viewer → member, editor → manager,
+ * admin → master), `owner` is never given to a member (→ master), anything
+ * else is null.
  */
 export function ladderRole(role: string | null | undefined): MemberRole | null {
   switch (role) {
-    case "viewer":
-    case "editor":
-    case "admin":
-      return role;
     case "member":
-      return "editor";
+    case "viewer":
+      return "member";
+    case "manager":
+    case "editor":
+      return "manager";
+    case "master":
+    case "admin":
     case "owner":
-      return "admin";
+      return "master";
     default:
       return null;
   }
@@ -422,7 +425,7 @@ export class ServiceAccessStore {
   /** The role an invite gives (unset: the app's default). */
   inviteRole(serviceRef: string, inviteId: string, defaultRole: string): MemberRole {
     const set = ladderRole(this.byService.get(serviceRef)?.roles.invites[inviteId]);
-    return set ?? ladderRole(defaultRole) ?? "viewer";
+    return set ?? ladderRole(defaultRole) ?? "member";
   }
 
   /** The role of one person's join through an invite: its own, else the invite's. */
@@ -445,7 +448,7 @@ export class ServiceAccessStore {
     for (const id of this.grantsOf(e, aid)) {
       const set = ladderRole(e.roles.grants[`${id}/${aid}`]) ?? ladderRole(e.roles.invites[id]);
       if (set !== null) anySet = true;
-      best = higher(best, set ?? ladderRole(defaultRole) ?? "viewer");
+      best = higher(best, set ?? ladderRole(defaultRole) ?? "member");
     }
     return anySet ? best : null;
   }

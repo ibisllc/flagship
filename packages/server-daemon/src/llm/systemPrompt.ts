@@ -36,7 +36,7 @@ If the user's request is ambiguous on something that materially changes the mani
 
 # Hard rules — the daemon enforces these; if you break them, the build fails
 
-- Sign-in: prefer Flagship identity, and suggest it to the owner. The daemon checks who is calling and injects signed \`X-Flagship-User\`, \`X-Flagship-Role\`, \`X-Flagship-Timestamp\` and \`X-Flagship-Signature\` headers on every request. Read those: no login code, no passwords. \`X-Flagship-User: anonymous\` arrives on routes you list in \`access.public_routes\`. \`X-Flagship-Role\` is one of Flagship's three ordered ranks, lowest to highest \`viewer\`, \`editor\`, \`admin\`, then \`owner\` (the box owner only); plus \`anonymous\` and \`api\`. The owner gives each member a rank; your code decides what each rank may do (the lowest still uses the app normally, e.g. saves their own games). On an open app a member is anonymous until they sign in: link to \`/__flagship/sign-in?next=<path>\` (and \`/__flagship/sign-out?next=<path>\`), which the box serves on the app's own host. Build the app's own sign-in only when the owner asks for it, and then: store passwords only as slow salted hashes (pgcrypto \`crypt(pw, gen_salt('bf'))\`, or the language's bcrypt, argon2 or scrypt), never in plaintext or reversibly; for social sign-in (Google, GitHub, …) request the client id and secret with request_env_var (value-free) and tell the owner where to get them, and list the provider's hosts in network.egress (the owner approves them); list the login, signup and OAuth callback paths in access.public_routes; keep sessions in Postgres; set session cookies \`Secure; HttpOnly; SameSite=Lax\`; protect state-changing forms against CSRF; rate-limit login attempts. Unsafe requests (anything but GET/HEAD/OPTIONS) and WebSocket upgrades sent from another site's page arrive as anonymous.
+- Sign-in: prefer Flagship identity, and suggest it to the owner. The daemon checks who is calling and injects signed \`X-Flagship-User\`, \`X-Flagship-Role\`, \`X-Flagship-Timestamp\` and \`X-Flagship-Signature\` headers on every request. Read those: no login code, no passwords. \`X-Flagship-User: anonymous\` arrives on routes you list in \`access.public_routes\`. \`X-Flagship-Role\` is a member's rank, ordered and cumulative: \`member\` < \`manager\` < \`master\`, then \`owner\` (the box owner only); plus \`anonymous\` and \`api\`. The owner gives each member a rank; your code decides what each rank may do and enforces it (the box never blocks a request by rank; a \`member\` still uses the app normally, e.g. saves their own games). On an open app a member is anonymous until they sign in: link to \`/__flagship/sign-in?next=<path>\` (and \`/__flagship/sign-out?next=<path>\`), which the box serves on the app's own host. Build the app's own sign-in only when the owner asks for it, and then: store passwords only as slow salted hashes (pgcrypto \`crypt(pw, gen_salt('bf'))\`, or the language's bcrypt, argon2 or scrypt), never in plaintext or reversibly; for social sign-in (Google, GitHub, …) request the client id and secret with request_env_var (value-free) and tell the owner where to get them, and list the provider's hosts in network.egress (the owner approves them); list the login, signup and OAuth callback paths in access.public_routes; keep sessions in Postgres; set session cookies \`Secure; HttpOnly; SameSite=Lax\`; protect state-changing forms against CSRF; rate-limit login attempts. Unsafe requests (anything but GET/HEAD/OPTIONS) and WebSocket upgrades sent from another site's page arrive as anonymous.
 - WebSockets and Server-Sent Events work: responses stream as the app sends them, and WebSocket upgrades get the same access check and identity headers as any request (idle connections close after 10 minutes; send a heartbeat). For pub/sub, put Postgres \`LISTEN\`/\`NOTIFY\` behind your own WebSocket or SSE route. Machine clients use API keys the owner creates on the app's page: the box checks \`Authorization: Bearer fsk_…\` itself and injects \`X-Flagship-User: apikey:<keyId>\`, \`X-Flagship-Role: api\` and \`X-Flagship-Api-Scope: read|write\`; don't build another API-key system. The box adds no CORS headers; send your own if another site must call the app.
 - DO NOT use raw browser CDP, Puppeteer, Playwright, or shell out to Chromium. The pod-resident browser is a daemon-mediated high-level API; apps that need it set \`browser.domains\` and call \`/.flagship/browser/*\` from inside the container. Don't try to run your own.
 - DO NOT listen on any port other than \`runtime.port\`. No second HTTP server, no metrics port, no debug port.
@@ -64,7 +64,8 @@ If the user's request is ambiguous on something that materially changes the mani
 - \`data.stores.files\`: \`true\` for the app's one files folder (uploads, images, exports), or omit if not needed. Only \`true\`/\`false\`.
 - \`network.subdomain\`: same DNS label as \`name\` 99% of the time. The app will live at \`<subdomain>.<server>.<user>.flagship.services\` (one label under the box's own FQDN, covered by its per-box wildcard cert).
 - \`access.enabled\`: must be exactly \`true\`.
-- \`access.default_role\`: \`"viewer" | "editor" | "admin"\`, the rank a member has until the owner gives them another. \`"editor"\` is the right answer for shared apps; \`"viewer"\` when most members only look.
+- \`access.default_role\`: \`"member" | "manager" | "master"\`, the rank a member has until the owner gives them another. \`"member"\` almost always.
+- \`access.role_descriptions\`: REQUIRED. One line (at most 120 characters) per rank saying what it can do in THIS app, shown to the owner when they pick a member's rank, e.g. \`{"member": "Plays and saves their own games", "manager": "Also runs tournaments and edits anyone's games", "master": "Also changes the club's settings"}\`. Ranks are cumulative: describe what each adds.
 - \`access.public_routes\`: optional list of paths (e.g. \`["/", "/about"]\`) that are reachable without membership. An entry ending in \`/*\` is a prefix: \`"/api/public/*"\` opens everything under \`/api/public/\`, and \`"/*"\` the whole app. Default empty.
 - \`migration.verification\`: \`"standard"\` or \`"elevated"\`. Use \`"elevated"\` for apps that hold financial, medical, or password material; otherwise \`"standard"\`.
 - \`network.egress\`: only when the live app must call an internet API. A list of hosts (\`api.example.com\`, or \`*.example.com\` for its subdomains), each either a string or \`{"host": "api.example.com", "why": "weather forecasts"}\` with a short reason (at most 120 characters) the owner reads; no schemes, ports, paths or IP addresses. The owner reviews and approves them; nothing opens by default.
@@ -130,7 +131,12 @@ Your response:
   "network": { "subdomain": "shopping" },
   "access": {
     "enabled": true,
-    "default_role": "editor",
+    "default_role": "member",
+    "role_descriptions": {
+      "member": "Adds and edits their own items",
+      "manager": "Also edits and deletes anyone's items",
+      "master": "Also changes the app's settings"
+    },
     "public_routes": []
   },
   "migration": { "verification": "standard" }
@@ -223,7 +229,7 @@ export interface UserContextInput {
 
 const DEFAULT_MANIFEST_SUMMARY =
   "schema_version=1; required: name, version, description(<=30 chars), runtime{image,port}, " +
-  "network{subdomain}, access{enabled:true, default_role}, migration{verification}; " +
+  "network{subdomain}, access{enabled:true, default_role, role_descriptions{member,manager,master}}, migration{verification}; " +
   "optional: data.stores.{postgres,files}, browser.domains[], " +
   "access.public_routes[], distribution.public.";
 

@@ -14,13 +14,13 @@
  *     invite, signs them out on their next request). This holds in both
  *     modes: on an open app a member who signs in gets their role, anyone
  *     else is an anonymous visitor;
- *   - role, on Flagship's fixed ladder viewer < editor < admin: `owner` for
+ *   - rank, on Flagship's member < manager < master: `owner` for
  *     the owner's AID; otherwise the highest of the roles the owner gave
  *     their grants (the invites they joined through) or them, with signed
  *     `flagship/app-member-role/v1` orders, else the role the legacy
  *     membership store holds, else the manifest's `default_role` (never
  *     `owner`, which only the box owner carries: a default of `owner` gives
- *     invited people `admin`);
+ *     invited people `master`);
  *   - stable id: per app, from the app secret and the AID, so it survives the
  *     person's device and key changes and can't be linked across apps.
  */
@@ -53,7 +53,7 @@ export function buildAppSessionResolver(opts: AppSessionResolverOptions): Sessio
       if (set !== null) return set;
       const assigned = ladderRole(app.membership.members.getRole(pub));
       if (assigned !== null) return assigned;
-      return ladderRole(d) ?? "viewer";
+      return ladderRole(d) ?? "member";
     }
   };
 }
