@@ -13,9 +13,12 @@ owner runs it from a phone: no cash envelopes, no matching emails by hand.
 
 ## The voucher
 
-- **One unit: $10.** Pro = 1 voucher/month, Pro Max = 2, name change = 1,
-  dibs claim = 2. Every voucher looks the same at redemption, whatever paid
-  for it, so App Store, Play, Monero and card buyers all hide in one crowd.
+- **One unit: $1** (owner, 2026-10-13), the unit of everything. Pro = 10
+  vouchers/month, Pro Max = 20, name change = 10, dibs claim = 20, a
+  marketplace app = its price in dollars. Every voucher looks the same at
+  redemption, whatever paid for it, so App Store, Play, Monero and card
+  buyers all hide in one crowd. A year of Pro is a 120-voucher stash: one
+  blind signature each, trivial to issue and store.
 - **Blind-signed** (RFC 9474 RSA blind signatures). The buyer's device makes
   random tokens, blinds them, we sign them blind after payment, the device
   unblinds. At redemption we can check our signature but can't tell which
@@ -30,19 +33,19 @@ owner runs it from a phone: no cash envelopes, no matching emails by hand.
 
 ## Buying in bulk, spending monthly
 
-People buy a stash (e.g. 12) once and spend one a month. This replaces an
+People buy a stash (e.g. 120 = a year of Pro) once and spend 10 a month. This replaces an
 auto-renewing subscription (one long-lived record per Apple ID, every
 renewal and cancellation reported to us, so it can't be made private), and
 it breaks the timing link: one purchase, redemptions spread over a year.
 
 **The box holds the stash and pays its own bill.** The stash is imported on
 the web or in Studio, stored encrypted on the box, included in its backup,
-and the box spends one voucher per period (two for Pro Max). The phone apps
+and the box spends 10 vouchers per month (20 for Pro Max). The phone apps
 only show the balance ("11 months left").
 
 ## Paying through the App Store / Play
 
-- One-time (consumable) products: 1, 3 and 12 vouchers. Apple 3.1.1
+- One-time (consumable) products: packs of 10, 30 and 120 vouchers. Apple 3.1.1
   explicitly routes vouchers for digital services through In-App Purchase.
 - After purchase the app sends the receipt plus blinded tokens; we verify the
   receipt with Apple/Google, sign the tokens, and the app hands the stash to
@@ -95,5 +98,5 @@ dropped, or kept as an unadvertised last resort.
   balances; this may set the minimum validity.
 - Small anonymity set early on: with few buyers, timing and amounts can still
   single someone out. Improves with volume.
-- Marketplace app prices in vouchers: whole $10 units, or a smaller unit for
-  cheap apps. See `services-marketplace.md`.
+- Odd totals (a 7-voucher app) make a spend slightly more distinctive than
+  a round 10; acceptable.
