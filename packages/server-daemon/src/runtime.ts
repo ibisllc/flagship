@@ -18,7 +18,10 @@ import {
   type AppApiKeysHttp,
 } from "./appApiKeys.js";
 import { FileAppEnvStore, type AppEnvStore } from "./serviceEnvStore.js";
-import { AppRunner, buildStartCheck, realCommandRunner } from "./serviceRunner.js";
+import { AppRunner, buildStartCheck, realCommandRunner, type CommandRunner } from "./serviceRunner.js";
+import { ensureGvisor } from "./appSandbox/gvisor.js";
+import { keepAppSandbox } from "./appSandbox/state.js";
+import { FILES_HELPER_IMAGE } from "./volumeDump.js";
 import { ServiceActivity } from "./serviceActivity.js";
 import { ensureContainerLinksUnmanaged } from "./containerLinks.js";
 import { CertManager, type CertMaterial } from "./certManager.js";
@@ -193,6 +196,12 @@ export interface DaemonRuntimeOptions {
    * server the tunnel feeds. Omit to leave the box relay-only.
    */
   lanDirect?: { port: number };
+  /**
+   * Run every app and staging container in gVisor (docs/app-runtimes.md §5.1):
+   * set it up at boot, keep retrying, and start no app without it. The
+   * production entry turns it on; tools and demos that run the runtime don't.
+   */
+  appSandbox?: boolean;
   /**
    * Resolve the owner-signed relay TrustExceptions that may cover a failing
    * relay cert-hash, verified against the IRK-anchored device set (never a
@@ -1234,6 +1243,14 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   // The sandbox bridges (build, staging, apps) and the egress gateway that
   // fences them (egress/, docs/ai-privacy-and-staging.md §3). Before any
   // container starts, so every app, staging copy and build gets its args.
+  if (opts.appSandbox) {
+    keepAppSandbox({
+      setup: () => ensureGvisor({ cmd: realCommandRunner as Required<CommandRunner>, probeImage: FILES_HELPER_IMAGE, log: (m) => console.log(m) }),
+      // Apps that couldn't start while it was down start now.
+      onRecovered: () => void servicePlatformRef.current?.restore().catch(() => {}),
+      log: (m) => console.warn(m),
+    });
+  }
   const egress = await bootEgress({
     cmd: realCommandRunner,
     ...(opts.dataDir ? { dataDir: opts.dataDir } : {}),

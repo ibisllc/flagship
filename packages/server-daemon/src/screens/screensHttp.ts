@@ -11,6 +11,7 @@
  * (browser bundle, backups, vibe-code, Forgejo, ...).
  */
 
+import { appSandboxStatus } from "../appSandbox/state.js";
 import type { PairedSessionGate } from "../alertInboxHttp.js";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
 import type { ServicePlatform, InstalledService } from "../servicePlatform.js";
@@ -1555,6 +1556,7 @@ function serverDetail(deps: ScreensHttpDeps, now: () => number): ServerDetailRes
     daemonVersion: deps.daemonVersion,
     currentCommit: deps.currentCommit?.() ?? null,
     lastUpdate: deps.lastUpdate?.() ?? null,
+    appSandbox: appSandboxStatus(),
     startedAt: deps.startedAt,
     uptimeMs: now() - deps.startedAt,
     certNotAfter: cert?.notAfter,

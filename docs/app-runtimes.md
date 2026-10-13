@@ -232,7 +232,18 @@ refused with "update this server first" (no compatibility needed yet).
    Dockerfiles, and AI writes of build files refused; runtime apps run as the
    runtime's unprivileged `USER` (baked into the box's build; `--user` for
    tier 3 comes with phase 7); `enable_icc=false` on every sandbox bridge.
-2. gVisor for every app (`runsc` install + `--runtime=runsc`, fail closed).
+2. **Built 2026-10-12**: gVisor for every app and staging copy
+   (`appSandbox/`). Release `20260921.0`'s `gvisor.tar.zstd` (both arches) is
+   pinned by SHA-512, downloaded once into `/usr/local/lib/flagship-gvisor/`
+   (zstd installed when missing), re-hashed every boot, registered in
+   `/etc/docker/daemon.json` (other settings kept) with a `systemctl reload
+   docker`, and proved with a locked-down `--runtime=runsc` container of the
+   pinned helper image. Boot doesn't wait for it; `docker run` of an app does,
+   and refuses without it (retried every 10 minutes; apps restart once it
+   works). Server detail reports `appSandbox`; the server page warns while
+   apps can't start. Helper containers (files archive, staging listing) and
+   the data services stay on runc: pinned images that run no app code.
+   Build `RUN` steps still use runc until phase 3.
 3. Install in a locked-down container; COPY-only assembly; bundle hashing.
 4. Copies send bundles (§8); runtime prefetch and pruning.
 5. Disk quotas and Postgres role limits (§5.3).

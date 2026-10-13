@@ -699,3 +699,20 @@ export function mergeAppsAcrossServers(lists, leader = "") {
     };
   });
 }
+
+/**
+ * What the server page says about the sandbox apps run in (gVisor,
+ * docs/app-runtimes.md §5.1), or null when there's nothing to say.
+ */
+export function appSandboxNotice(sandbox) {
+  if (sandbox?.state === "unavailable") {
+    return {
+      tone: "danger",
+      text: `Apps can't start on this server: the sandbox they run in isn't working (${sandbox.reason}). The server tries again every 10 minutes.`,
+    };
+  }
+  if (sandbox?.state === "starting") {
+    return { tone: "muted", text: "Setting up the sandbox apps run in. They start once it's ready." };
+  }
+  return null;
+}

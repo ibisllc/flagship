@@ -4,7 +4,7 @@
 
 import { $, registerView, show } from "../lib/router.js";
 import { ScreensError, boxClient } from "../lib/api.js";
-import { fetchServerApps, serverAppsHtml, anyCopying, watchWhileCopying } from "../lib/appPlacement.js";
+import { appSandboxNotice, fetchServerApps, serverAppsHtml, anyCopying, watchWhileCopying } from "../lib/appPlacement.js";
 import { isCompanionProfile } from "../lib/companionGuard.js";
 import {
   enableLongLived,
@@ -270,6 +270,13 @@ export async function renderServerDetail() {
         <div class="row"><span class="label">Apps installed</span><span class="value">${body.serviceCount}</span></div>
         <div class="row"><span class="label">Paired sessions</span><span class="value">${body.pairedSessionCount}</span></div>
       </div>
+      ${(() => {
+        const n = appSandboxNotice(body.appSandbox);
+        if (!n) return "";
+        return n.tone === "danger"
+          ? `<div class="card warning mt-4" id="app-sandbox-notice"><p class="warn-text">${escapeHtml(n.text)}</p></div>`
+          : `<p class="note mt-4" id="app-sandbox-notice">${escapeHtml(n.text)}</p>`;
+      })()}
       <div id="server-apps">${serverAppsHtml([], { loading: true, canCreate: !isCompanionProfile() })}</div>
       <h2 class="mt-4">Auto-unlock</h2>
       <div class="card" id="auto-unlock-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">

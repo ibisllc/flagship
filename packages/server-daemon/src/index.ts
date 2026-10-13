@@ -1032,6 +1032,8 @@ async function main(): Promise<void> {
       ...(process.env.FLAGSHIP_LAN_DIRECT === "0"
         ? {}
         : { lanDirect: { port: Number(process.env.FLAGSHIP_LAN_PORT ?? 443) } }),
+      // Every app in its own gVisor sandbox (docs/app-runtimes.md §5.1).
+      appSandbox: true,
       // Owner-override resolution for relay-trust: reads the owner-signed
       // relay TrustExceptions from `.com` + verifies them against the box's
       // IRK-anchored roster (anchor = the provisioned owner IRK). ONE

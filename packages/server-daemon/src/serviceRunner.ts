@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { checkBuildContextDockerfile } from "./buildmodes/dockerfilePolicy.js";
 import { prepareRuntimeContext } from "./runtimes/buildContext.js";
+import { appSandboxRunArgs } from "./appSandbox/state.js";
 import { networkCreateArgs } from "./egress/networks.js";
 import { notifyContainersChanged, sandboxBuildArgs, sandboxRunArgs } from "./egress/sandboxNetworking.js";
 import { FILES_MOUNT, isFilesVolume } from "./dataLayer/naming.js";
@@ -506,6 +507,8 @@ export class AppRunner {
       "-d",
       "--name",
       this.containerName(spec.serviceId),
+      // gVisor (docs/app-runtimes.md §5.1); throws while it isn't usable.
+      ...(await appSandboxRunArgs()),
       ...this.hardeningArgs(),
       ...this.envArgs(spec.env),
       ...this.portArgs(spec.port, spec.containerPort),

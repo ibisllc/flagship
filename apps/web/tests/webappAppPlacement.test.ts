@@ -529,7 +529,7 @@ describe("§3 a server's apps", () => {
     expect(page).toContain('enterServiceDetail(btn.getAttribute("data-open-app"), { server: fqdn, from: "server" })');
     const sw = await asset("/webapp/service-worker.js");
     expect(sw).toContain('"/lib/appPlacement.js"');
-    expect(sw).toContain('SHELL_VERSION = "v58"');
+    expect(sw).toContain('SHELL_VERSION = "v59"');
   });
 });
 
@@ -714,5 +714,20 @@ describe("§6 an app's status pill", () => {
     expect(list).toContain("appStatusPillHtml(s.appStatus ?? combineAppStatus([appServerState(s)]))");
     const detail = await asset("/webapp/views/service-detail.js");
     expect(detail).toContain("appStatePillHtml(appServerState(s))");
+  });
+});
+
+describe("the sandbox apps run in (docs/app-runtimes.md §5.1)", () => {
+  it("warns on the server page only when apps can't start, or while it's being set up", async () => {
+    const { appSandboxNotice } = await loadPlacement();
+    expect(appSandboxNotice({ state: "unavailable", reason: "no network" })).toEqual({
+      tone: "danger",
+      text: "Apps can't start on this server: the sandbox they run in isn't working (no network). The server tries again every 10 minutes.",
+    });
+    expect(appSandboxNotice({ state: "starting" })?.tone).toBe("muted");
+    expect(appSandboxNotice({ state: "ready", version: "runsc" })).toBeNull();
+    expect(appSandboxNotice({ state: "off" })).toBeNull();
+    // An older server sends nothing.
+    expect(appSandboxNotice(undefined)).toBeNull();
   });
 });

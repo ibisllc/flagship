@@ -100,6 +100,12 @@ export interface ServerDetailResponse {
    * when the box has never received one. Older daemons omit the field.
    */
   lastUpdate?: UpdateOutcomeRecord | null;
+  /**
+   * The sandbox every app runs in (gVisor, docs/app-runtimes.md §5.1):
+   * `unavailable` means no app can start here, and says why. Older daemons
+   * omit the field.
+   */
+  appSandbox?: { state: "off" | "starting" } | { state: "ready"; version: string } | { state: "unavailable"; reason: string };
   /** Unix-ms; when this daemon process started. */
   startedAt: number;
   uptimeMs: number;
