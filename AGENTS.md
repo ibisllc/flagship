@@ -166,12 +166,12 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 
 ### In flight
 
-- **iOS 1.0 (build 4) is in App Review.** Apple asked a 2.1 business-model
-  question; it was answered (no paid features; Terms §3/§4 and Privacy §2.4 now
-  say nothing is sold) and build 4 resubmitted 2026-10-10. Reviewer login: demo
-  `playstore-test-0725`, shared with Google Play review: never tear it down
-  while either review is open. Still to confirm: the export-compliance answer
-  (the app does its own X25519/AES-GCM/Ed25519 sealing).
+- **iOS 1.0 (build 4) approved on the App Store (2026-10-13).** Reviewer login:
+  demo `playstore-test-0725`, shared with Google Play review: never tear it
+  down while a review is open (Studio's store review will use it too). Still to
+  confirm: the export-compliance answer (the app does its own
+  X25519/AES-GCM/Ed25519 sealing), and whether "iPhone and iPad Apps on Apple
+  Silicon Macs" is on in App Store Connect (untried on a Mac).
 - **Google Play:** reviewer build `versionCode 8`. Version codes are burned by
   any upload, so always take one above the highest in App bundle explorer. The
   upload cert is not in `assetlinks.json`, which is right for Play but breaks
@@ -394,6 +394,11 @@ error says why.
   v0.0.1 wasn't signed either). Linux is an x86-64 AppImage that needs Node.js
   20+ and pkexec. Neither has been run on a real Windows PC or Linux desktop:
   see "Validating on Windows and Linux" below.
+- **Mac App Store plan (proposed 2026-10-13):** `docs/studio-mac-app-store.md`.
+  Studio becomes sandboxed and hosting-only (store + the same build on the
+  site, its own App Store Connect record); USB burning moves to a separate
+  direct-download "Flagship USB Writer" with the root helper, opened from Studio
+  by URL with the secret-free recipe. Not started.
 - Studio's VM networking is NAT on every host, so a hosted VM can never be
   reached directly from a phone on the same Wi-Fi (LAN-direct can't help a
   phone there; two VMs on one Mac do reach each other).
@@ -540,7 +545,7 @@ spec in `docs/`, the runbooks in `docs/runbooks/`, or — for architecture —
 - **Cert & addressing** — `per-user-cert-and-addressing.md`, `per-user-cert-worklist.md`, `multiplexing.md`, `service-addressing-double-dash.md`
 - **Recovery / multi-device / security** — `multi-device.md`, `lifecycle-spec.md`, `security-phone-as-unlock-endpoint.md`, `box-request-inbox.md`, `v1.2-security-cascade.md`, `revocation-ui.md`, `wipe-restart.md`, `watch-delegate-key-design.md`, `v2-device-addressing-and-real-ticket.md`, `account-deletion-and-name-reclaim.md`, `server-replacement-graceful-decommission.md`, `box-recipe-persistence-and-restore.md`, `multi-pod-liveness-session-leadership.md`
 - **Login / accounts / demo** — `login-and-account-redesign.md`, `naming-recovery-and-name-change.md`, `username-suggestion-queue.md`, `sample-users.md`
-- **Install / ISO / builder** — `recipe-schema-v2.md`, `installer-tiny.md`, `installer-netboot.md`, `cloud-init-direct-provisioning.md`, `installation-real-usb.md`, `reproducible-iso-build.md`, `recipe-delivery-and-remote-install.md`
+- **Install / ISO / builder** — `studio-mac-app-store.md`, `recipe-schema-v2.md`, `installer-tiny.md`, `installer-netboot.md`, `cloud-init-direct-provisioning.md`, `installation-real-usb.md`, `reproducible-iso-build.md`, `recipe-delivery-and-remote-install.md`
 - **NFC retail box** — `nfc-box-pairing.md`, `v1-operational-tasks.md § N`, `n-cloud-2-design-discussion.md`
 - **CA / maintainers** — `ca-operations.md`, `maintainer-ca-endorsement.md`, `maintainers-checkpoints-spec-v0.1.md`, `maintainers-deployment.md`
 - **Marketplace / apps / monetization** — `app-developer-guide.md`, `manifest.md`, `repo-adapters.md`, `monetization-free-tier-first.md`, `multi-device-monetization.md`, `vibe-code-experience.md`
