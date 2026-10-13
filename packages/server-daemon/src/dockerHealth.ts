@@ -72,7 +72,8 @@ async function wake(o: WakeDockerOptions): Promise<DockerHealth> {
     await startUnits(o.cmd);
     if (await waitUp(o)) return { ok: true, repaired: `Docker's network database was damaged; it was moved aside (${aside}) and rebuilt` };
   }
-  if (BINARY_BROKEN.test(failure.errors.join("\n"))) {
+  // dockerd's own load error, or systemctl (which starts it) crashing.
+  if (BINARY_BROKEN.test([...failure.errors, failure.docker.error ?? ""].join("\n"))) {
     log("[docker] dockerd can't load; checking the system's files for damage");
     const r = await (o.repairSystem ?? repairSystemPackages)({ cmd: o.cmd, log });
     if (!r.ok) return { ok: false, reason: `${describe(await dockerFailure(o.cmd))}. ${capitalize(r.reason)}` };
@@ -133,7 +134,7 @@ const SYSTEMD_LINE = /^(docker|containerd)\.(service|socket)[: ]|^(Failed to sta
 const NOISE_LINE = /failed to load cni during init|cni config load failed/i;
 const ERROR_LINE = /level=(error|fatal)|failed to start daemon|Error starting daemon|panic:|unable to configure|failed to (load|initialize|create|mount|register)|error initializing|no such file|permission denied|address already in use/i;
 
-async function journalErrors(cmd: Required<CommandRunner>, unit: string, n: number): Promise<string[]> {
+async function journalErrors(cmd: Required<CommandRunner>, unit: string, n: number, errorsOnly = false): Promise<string[]> {
   const r = await cmd
     .capture("journalctl", ["-u", unit, "-b", "--no-pager", "-o", "cat", "-n", "300"], { timeoutMs: 15_000 })
     .catch(() => ({ stdout: "" }));
@@ -142,7 +143,7 @@ async function journalErrors(cmd: Required<CommandRunner>, unit: string, n: numb
     .map((l) => l.trim())
     .filter((l) => l !== "" && !SYSTEMD_LINE.test(l) && !NOISE_LINE.test(l));
   const errors = own.filter((l) => ERROR_LINE.test(l));
-  const pick = (errors.length > 0 ? errors : own).slice(-n);
+  const pick = (errors.length > 0 || errorsOnly ? errors : own).slice(-n);
   return [...new Set(pick)].map((l) => (l.length > 300 ? `${l.slice(0, 300)}…` : l));
 }
 
@@ -151,7 +152,7 @@ export async function dockerFailure(cmd: Required<CommandRunner>): Promise<Docke
   const c = await show(cmd, "containerd.service", ["ActiveState"]);
   const containerd = c.ActiveState ?? "unknown";
   const errors = await journalErrors(cmd, "docker.service", 3);
-  if (containerd !== "active") errors.push(...(await journalErrors(cmd, "containerd.service", 2)).map((l) => `containerd: ${l}`));
+  if (containerd !== "active") errors.push(...(await journalErrors(cmd, "containerd.service", 2, true)).map((l) => `containerd: ${l}`));
   return { docker, containerd, errors };
 }
 

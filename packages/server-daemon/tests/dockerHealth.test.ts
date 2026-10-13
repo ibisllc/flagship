@@ -114,6 +114,20 @@ describe("waking dockerd", () => {
     );
   });
 
+  it("repairs when systemctl itself crashes, before dockerd ever ran", async () => {
+    const b = box({ journal: [], startsWhen: (n) => n >= 2 });
+    let starts = 0;
+    const cmd = {
+      ...b.cmd,
+      capture: async (c: string, a: string[]) => {
+        if (c === "systemctl" && starts < 1) throw Object.assign(new Error("systemctl was killed by SIGILL"), { stdout: "" });
+        return b.cmd.capture(c, a);
+      },
+    };
+    const h = await wakeDocker({ cmd, ...fast, repairSystem: async () => (starts++, { ok: true, packages: ["systemd"] }) });
+    expect(h).toEqual({ ok: true, repaired: "Damaged system files were reinstalled (systemd)" });
+  });
+
   it("says why systemctl couldn't report the unit", async () => {
     const b = box({ journal: [] });
     const cmd = {

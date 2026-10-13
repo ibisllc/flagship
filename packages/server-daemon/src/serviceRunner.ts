@@ -224,9 +224,9 @@ export const realCommandRunner: CommandRunner = {
         if (timer) clearTimeout(timer);
         reject(e);
       });
-      p.on("exit", (code) => {
+      p.on("exit", (code, signal) => {
         if (timer) clearTimeout(timer);
-        code === 0 ? resolve() : reject(new Error(`${cmd} exited with code ${code}`));
+        code === 0 ? resolve() : reject(new Error(`${cmd} ${code === null ? `was killed by ${signal ?? "a signal"}` : `exited with code ${code}`}`));
       });
     });
   },
@@ -242,16 +242,17 @@ export const realCommandRunner: CommandRunner = {
       });
       p.stdout?.on("data", (d) => (stdout += d.toString()));
       p.stderr?.on("data", (d) => (stderr += d.toString()));
-      p.on("exit", (code) => {
+      p.on("exit", (code, signal) => {
         if (timer) clearTimeout(timer);
         if (code === 0) return resolve({ stdout, stderr });
+        const how = code === null ? `was killed by ${signal ?? "a signal"}` : `exited with code ${code}`;
         // Carry the tail of the process output in the message — a bare
         // "exited with code 1" is undiagnosable from a remote client (the
         // gating live-e2e's vibe-deploy 502 was exactly this).
         const tail = (stderr || stdout).trim().split("\n").slice(-8).join("\n").slice(-800);
         reject(
           Object.assign(
-            new Error(`${cmd} exited with code ${code}${tail ? `: ${tail}` : ""}`),
+            new Error(`${cmd} ${how}${tail ? `: ${tail}` : ""}`),
             { stdout, stderr },
           ),
         );

@@ -372,15 +372,18 @@ no such signal. home3 (same image) had no pstore dumps after ~6 h. Box journals 
 (`/run/log/journal`), so a crash loop leaves no daemon log on disk.
 
 **leticia's Docker won't start (2026-10-13):** dockerd dies at load with
-`symbol lookup error: …/libsystemd.so.0` (a damaged system library, same
-pattern as home2). `dockerHealth.ts` now reports dockerd's own error and, for a
-library/exec failure, `systemRepair.ts` reinstalls every package `dpkg
---verify` flags, at the installed version, from a .deb checked against apt's
-lists (mirror files expanded), through dpkg alone because apt links
-libsystemd too. Drilled on a Debian 13 arm64 VM (damaged libsystemd →
-Docker back up in ~35 s). Only package files are covered: damage elsewhere
-(node_modules, images) isn't. leticia's `systemctl show` also fails; the next
-error says why.
+`symbol lookup error: …/libsystemd.so.0`, and 7 packages have damaged files
+(apt, docker.io, libbrotli1, libstdc++6, libsystemd0, systemd, util-linux;
+`systemctl` crashes). Same pattern as home2. `dockerHealth.ts` reports
+dockerd's own error, and on a library/exec failure (or a crashing
+`systemctl`) `systemRepair.ts` reinstalls every package `dpkg --verify`
+flags, at the installed version, through dpkg alone (apt links libsystemd).
+Appliances ship without apt's lists (`appliance.ts` deletes them), so it
+fetches each suite's `Release` + `Release.gpg`, verifies them with `sqv` (or
+`gpgv`) against the source's keyring, and checks each `Packages.gz` and .deb
+against the signed SHA-256s. Drilled on a Debian 13 arm64 VM damaged like
+leticia (lists gone, apt and systemctl broken): fixed in ~40 s. Only package
+files are covered (not node_modules or images).
 
 ### Desktop Studio
 

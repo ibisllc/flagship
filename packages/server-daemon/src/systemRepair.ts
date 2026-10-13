@@ -12,6 +12,7 @@ import { createReadStream, createWriteStream } from "node:fs";
 import { mkdir, readFile, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
+import { createGunzip } from "node:zlib";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReadableStream as WebReadableStream } from "node:stream/web";
@@ -91,20 +92,16 @@ async function lines(path: string): Promise<string[]> {
   return (await readFile(path, "utf8").catch(() => "")).split("\n").map((l) => l.trim()).filter((l) => l !== "" && !l.startsWith("#"));
 }
 
-/** Every archive URL apt is configured with, `mirror+file:` lists expanded (Debian's cloud images use them). */
-export async function aptArchives(aptDir: string): Promise<string[]> {
-  const uris: string[] = [];
-  const d = join(aptDir, "sources.list.d");
-  const files = [join(aptDir, "sources.list"), ...(await readdir(d).catch(() => [] as string[])).map((f) => join(d, f))];
-  for (const f of files) {
-    for (const l of await lines(f)) {
-      if (f.endsWith(".sources") && l.startsWith("URIs:")) uris.push(...l.slice(5).trim().split(/\s+/));
-      else if (f.endsWith(".list") && /^deb\s/.test(l)) {
-        const u = l.replace(/^deb\s+(\[[^\]]*\]\s+)?/, "").split(/\s+/)[0];
-        if (u) uris.push(u);
-      }
-    }
-  }
+export interface AptSource {
+  /** Archive base URLs, `mirror+file:` lists expanded (Debian's cloud images use them). */
+  uris: string[];
+  suites: string[];
+  components: string[];
+  /** Keyring files the archive must be signed by; empty = apt's default keyrings. */
+  signedBy: string[];
+}
+
+async function expandUris(uris: string[]): Promise<string[]> {
   const out: string[] = [];
   for (const u of uris) {
     const mirror = /^mirror\+file:(?:\/\/)?(\/.+)$/.exec(u);
@@ -113,6 +110,143 @@ export async function aptArchives(aptDir: string): Promise<string[]> {
     }
   }
   return [...new Set(out)];
+}
+
+const paths = (v: string | undefined) => (v ?? "").split(/[\s,]+/).filter((x) => x.startsWith("/"));
+
+/** apt's binary-package sources, from `sources.list` and `sources.list.d/` (one-line and deb822). */
+export async function aptSources(aptDir: string): Promise<AptSource[]> {
+  const out: AptSource[] = [];
+  const d = join(aptDir, "sources.list.d");
+  const files = [join(aptDir, "sources.list"), ...(await readdir(d).catch(() => [] as string[])).sort().map((f) => join(d, f))];
+  for (const f of files) {
+    if (f.endsWith(".sources")) {
+      const text = await readFile(f, "utf8").catch(() => "");
+      for (const block of text.split(/\n\s*\n/)) {
+        const fields: Record<string, string> = {};
+        let last = "";
+        for (const raw of block.split("\n")) {
+          if (raw.startsWith("#")) continue;
+          if (/^\s/.test(raw)) {
+            if (last) fields[last] += `\n${raw.trim()}`;
+            continue;
+          }
+          const i = raw.indexOf(":");
+          if (i > 0) fields[(last = raw.slice(0, i).trim().toLowerCase())] = raw.slice(i + 1).trim();
+        }
+        if (!(fields.types ?? "").split(/\s+/).includes("deb") || /^(no|false)$/i.test(fields.enabled ?? "")) continue;
+        out.push({
+          uris: await expandUris((fields.uris ?? "").split(/\s+/).filter(Boolean)),
+          suites: (fields.suites ?? "").split(/\s+/).filter(Boolean),
+          components: (fields.components ?? "").split(/\s+/).filter(Boolean),
+          signedBy: paths(fields["signed-by"]),
+        });
+      }
+    } else if (f.endsWith(".list")) {
+      for (const l of await lines(f)) {
+        const m = /^deb\s+(?:\[([^\]]*)\]\s+)?(\S+)\s+(\S+)\s*(.*)$/.exec(l);
+        if (!m) continue;
+        const signed = /signed-by=(\S+)/.exec(m[1] ?? "");
+        out.push({ uris: await expandUris([m[2]!]), suites: [m[3]!], components: m[4]!.split(/\s+/).filter(Boolean), signedBy: paths(signed?.[1]) });
+      }
+    }
+  }
+  return out.filter((x) => x.uris.length > 0 && x.suites.length > 0);
+}
+
+export async function aptArchives(aptDir: string): Promise<string[]> {
+  return [...new Set((await aptSources(aptDir)).flatMap((x) => x.uris))];
+}
+
+async function defaultKeyrings(): Promise<string[]> {
+  const out: string[] = [];
+  for (const dir of ["/usr/share/keyrings", "/etc/apt/trusted.gpg.d"]) {
+    for (const f of (await readdir(dir).catch(() => [] as string[])).sort()) {
+      if ((dir.endsWith("trusted.gpg.d") || f.startsWith("debian-archive-")) && /\.(gpg|pgp)$/.test(f) && !f.includes("removed")) out.push(join(dir, f));
+    }
+  }
+  return out;
+}
+
+/** sqv (apt's verifier on Debian 13) or gpgv; either checks a detached signature without apt. */
+async function verifySignature(cmd: Required<CommandRunner>, keyrings: string[], sig: string, file: string): Promise<void> {
+  const keys = keyrings.flatMap((k) => ["--keyring", k]);
+  const hasSqv = await cmd.capture("sqv", ["--version"], { timeoutMs: 10_000 }).then(
+    () => true,
+    () => false,
+  );
+  await cmd.capture(hasSqv ? "sqv" : "gpgv", [...keys, sig, file], { timeoutMs: 60_000 });
+}
+
+/** The SHA-256 section of a Release file: path → {sha256, size}. */
+export function parseReleaseSha256(text: string): Map<string, string> {
+  const out = new Map<string, string>();
+  let inSha = false;
+  for (const line of text.split("\n")) {
+    if (/^\S/.test(line)) {
+      inSha = line.startsWith("SHA256:");
+      continue;
+    }
+    if (!inSha) continue;
+    const m = /^\s+([0-9a-f]{64})\s+\d+\s+(\S+)$/.exec(line);
+    if (m) out.set(m[2]!, m[1]!);
+  }
+  return out;
+}
+
+/**
+ * Package lists fetched and verified without apt (boxes ship with apt's lists
+ * removed, and apt may be among the damaged packages): each suite's Release is
+ * checked against its detached signature with the source's keyring, and each
+ * Packages.gz against the SHA-256 that Release names.
+ */
+async function fetchVerifiedLists(o: SystemRepairOptions, sources: AptSource[], archs: string[], into: string, done: () => Promise<boolean>): Promise<string[]> {
+  const get = o.fetch ?? ((u: string) => fetch(u, { signal: AbortSignal.timeout(10 * 60_000) }));
+  const problems: string[] = [];
+  await mkdir(into, { recursive: true, mode: 0o700 });
+  const download = async (url: string, dest: string): Promise<boolean> => {
+    const res = await get(url).catch(() => null);
+    if (!res?.ok || !res.body) return false;
+    await pipeline(Readable.fromWeb(res.body as unknown as WebReadableStream), createWriteStream(dest, { mode: 0o600 }));
+    return true;
+  };
+  for (const src of sources) {
+    const keyrings = src.signedBy.length > 0 ? src.signedBy : await defaultKeyrings();
+    for (const suite of src.suites) {
+      for (const base of src.uris) {
+        const name = `${base.replace(/^https?:\/\//, "").replace(/\//g, "_")}_dists_${suite.replace(/\//g, "_")}`;
+        const release = join(into, `${name}_Release`);
+        if (!(await download(`${base}/dists/${suite}/Release`, release)) || !(await download(`${base}/dists/${suite}/Release.gpg`, `${release}.gpg`))) {
+          problems.push(`${base} ${suite}: couldn't download its Release`);
+          continue;
+        }
+        try {
+          await verifySignature(o.cmd, keyrings, `${release}.gpg`, release);
+        } catch (e) {
+          problems.push(`${base} ${suite}: its signature didn't verify (${(e as Error).message.slice(0, 160)})`);
+          continue;
+        }
+        const index = parseReleaseSha256(await readFile(release, "utf8"));
+        for (const comp of src.components) {
+          for (const arch of archs) {
+            const path = `${comp}/binary-${arch}/Packages.gz`;
+            const want = index.get(path);
+            if (!want) continue;
+            const gz = join(into, `${name}_${comp}_binary-${arch}_Packages.gz`);
+            if (!(await download(`${base}/dists/${suite}/${path}`, gz)) || (await sha256(gz)) !== want) {
+              problems.push(`${base} ${suite} ${path}: download didn't match its Release`);
+              continue;
+            }
+            await pipeline(createReadStream(gz), createGunzip(), createWriteStream(gz.replace(/\.gz$/, ""), { mode: 0o600 }));
+            await rm(gz, { force: true });
+          }
+        }
+        if (await done()) return problems;
+        break;
+      }
+    }
+  }
+  return problems;
 }
 
 /**
@@ -203,22 +337,34 @@ export async function repairSystemPackages(o: SystemRepairOptions): Promise<Syst
     const [pkg, version, arch] = line.split("\t");
     if (pkg && version && arch) wanted.push({ pkg, version, arch });
   }
-  const archives = await aptArchives(o.aptDir ?? "/etc/apt");
-  let sources = await findInLists(listsDir, wanted, archives);
-  if (sources.size < wanted.length) {
-    // The lists may be missing (images often drop them) or older than the install.
-    await o.cmd.run("apt-get", ["update", "-qq"], { timeoutMs: 10 * 60_000 }).catch((e: Error) => log(`[system-repair] apt-get update failed: ${e.message}`));
-    sources = await findInLists(listsDir, wanted, archives);
-  }
+  const sourcesList = await aptSources(o.aptDir ?? "/etc/apt");
+  const archives = [...new Set(sourcesList.flatMap((x) => x.uris))];
   const key = (w: Wanted) => `${w.pkg} ${w.version} ${w.arch}`;
-  const unlisted = wanted.filter((w) => !sources.has(key(w))).map((w) => `${w.pkg} ${w.version}`);
-  if (wanted.length === 0 || unlisted.length > 0) {
-    return { ok: false, packages: pkgs, reason: `damaged system packages couldn't be found in the archive to repair them (${unlisted.join(", ") || pkgs.join(", ")})` };
-  }
+  const unlisted = (found: Map<string, Source>) => wanted.filter((w) => !found.has(key(w))).map((w) => `${w.pkg} ${w.version}`);
 
   await rm(workDir, { recursive: true, force: true });
   await mkdir(workDir, { recursive: true, mode: 0o700 });
   try {
+    let sources = await findInLists(listsDir, wanted, archives);
+    if (unlisted(sources).length > 0) {
+      // Boxes ship without apt's lists, and apt may be among the damaged packages.
+      const fetched = join(workDir, "lists");
+      const archs = [...new Set(wanted.map((w) => w.arch))];
+      log(`[system-repair] fetching Debian's signed package lists`);
+      const problems = await fetchVerifiedLists(o, sourcesList, archs, fetched, async () => {
+        sources = new Map([...(await findInLists(listsDir, wanted, archives)), ...(await findInLists(fetched, wanted, archives))]);
+        return unlisted(sources).length === 0;
+      });
+      for (const p of problems) log(`[system-repair] ${p}`);
+      if (unlisted(sources).length > 0 && problems.length > 0) {
+        return { ok: false, packages: pkgs, reason: `damaged system packages couldn't be repaired: Debian's package lists couldn't be fetched (${problems.slice(0, 2).join("; ")})` };
+      }
+    }
+    const left = unlisted(sources);
+    if (wanted.length === 0 || left.length > 0) {
+      return { ok: false, packages: pkgs, reason: `damaged system packages couldn't be found in the archive to repair them (${left.join(", ") || pkgs.join(", ")})` };
+    }
+
     const debs: string[] = [];
     const missing: string[] = [];
     for (const w of wanted) {
@@ -245,8 +391,10 @@ export async function repairSystemPackages(o: SystemRepairOptions): Promise<Syst
       await dpkg(["--configure", "-a"]).catch((e2: Error) => log(`[system-repair] dpkg --configure -a: ${e2.message}`));
     });
     await o.cmd.run("sync", [], { timeoutMs: 120_000 }).catch(() => {});
-    const left = await damagedPackages(o.cmd, pkgs);
-    if (left.length > 0) return { ok: false, packages: pkgs, reason: `reinstalling didn't fix ${left.join(", ")}; this server's disk may be failing` };
+    const still = await damagedPackages(o.cmd, pkgs);
+    if (still.length > 0) return { ok: false, packages: pkgs, reason: `reinstalling didn't fix ${still.join(", ")}; this server's disk may be failing` };
+    // PID 1 keeps running the binary it started with until it re-executes.
+    if (pkgs.includes("systemd")) await o.cmd.run("systemctl", ["daemon-reexec"], { timeoutMs: 120_000 }).catch((e: Error) => log(`[system-repair] systemctl daemon-reexec: ${e.message}`));
     return { ok: true, packages: pkgs };
   } catch (e) {
     return { ok: false, packages: pkgs, reason: `reinstalling the damaged system packages failed: ${(e as Error).message}` };

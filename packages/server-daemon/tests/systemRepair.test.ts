@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { gzipSync } from "node:zlib";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { parseDpkgSearch, parseDpkgVerify, repairSystemPackages } from "../src/systemRepair.js";
+import { aptSources, parseDpkgSearch, parseDpkgVerify, repairSystemPackages } from "../src/systemRepair.js";
 import type { CommandRunner } from "../src/serviceRunner.js";
 
 const LIB = "/usr/lib/aarch64-linux-gnu/libsystemd.so.0.40.0";
@@ -108,11 +109,82 @@ describe("repairing damaged system files", () => {
     expect(tampered).toEqual({ ok: false, packages: ["libsystemd0"], reason: "damaged system packages couldn't be downloaded to repair them (libsystemd0 257.9-1~deb13u1)" });
   });
 
-  it("refreshes apt's lists when the installed version isn't in them", async () => {
+  async function aptDir(): Promise<string> {
+    const dir = await mkdtemp(join(tmpdir(), "apt-"));
+    await mkdir(join(dir, "sources.list.d"));
+    await mkdir(join(dir, "mirrors"));
+    await writeFile(join(dir, "mirrors", "debian.list"), "https://deb.debian.org/debian\n");
+    await writeFile(
+      join(dir, "sources.list.d", "debian.sources"),
+      `Types: deb deb-src\nURIs: mirror+file://${join(dir, "mirrors", "debian.list")}\nSuites: trixie trixie-updates\nComponents: main\nSigned-By: /usr/share/keyrings/debian-archive-keyring.gpg\n`,
+    );
+    return dir;
+  }
+
+  function archive(o: { packages: string }) {
+    const gz = gzipSync(Buffer.from(o.packages));
+    const release = ["Origin: Debian", "Suite: stable", "SHA256:", ` ${"ab".repeat(32)} 10 main/binary-arm64/Packages`, ` ${sha(gz)} ${gz.length} main/binary-arm64/Packages.gz`, ""].join("\n");
+    const fetched: string[] = [];
+    const fetch = async (u: string) => {
+      fetched.push(u);
+      if (u.endsWith("/dists/trixie/Release")) return new Response(release);
+      if (u.endsWith("/dists/trixie/Release.gpg")) return new Response("sig");
+      if (u.endsWith("/dists/trixie/main/binary-arm64/Packages.gz")) return new Response(gz);
+      if (u.endsWith(".deb")) return new Response(DEB);
+      return new Response("", { status: 404 });
+    };
+    return { fetch, fetched };
+  }
+
+  it("fetches Debian's signed lists itself when the box has none (apt may be the damaged one)", async () => {
     const b = box({ damaged: () => true });
-    const r = await repairSystemPackages({ cmd: b.cmd, listsDir: await lists(""), fetch: async () => new Response(DEB) });
-    expect(b.calls).toContain("apt-get update -qq");
-    expect(r).toEqual({ ok: false, packages: ["libsystemd0"], reason: "damaged system packages couldn't be found in the archive to repair them (libsystemd0 257.9-1~deb13u1)" });
+    const a = archive({ packages: stanza("libsystemd0", "257.9-1~deb13u1", "arm64", "pool/main/s/systemd/libsystemd0_257.9-1~deb13u1_arm64.deb", sha(DEB)) });
+    const work = await mkdtemp(join(tmpdir(), "work-"));
+    const r = await repairSystemPackages({ cmd: b.cmd, listsDir: join(work, "none"), aptDir: await aptDir(), archivesDir: join(work, "none"), workDir: join(work, "w"), fetch: a.fetch });
+    expect(r).toEqual({ ok: true, packages: ["libsystemd0"] });
+    expect(b.calls.some((c) => c.startsWith("apt-get"))).toBe(false);
+    expect(b.calls.find((c) => c.startsWith("sqv --keyring"))).toMatch(/^sqv --keyring \/usr\/share\/keyrings\/debian-archive-keyring\.gpg \S+_Release\.gpg \S+_Release$/);
+    expect(a.fetched).toEqual([
+      "https://deb.debian.org/debian/dists/trixie/Release",
+      "https://deb.debian.org/debian/dists/trixie/Release.gpg",
+      "https://deb.debian.org/debian/dists/trixie/main/binary-arm64/Packages.gz",
+      "https://deb.debian.org/debian/pool/main/s/systemd/libsystemd0_257.9-1~deb13u1_arm64.deb",
+    ]);
+  });
+
+  it("refuses lists whose signature doesn't verify", async () => {
+    const b = box({ damaged: () => true });
+    const cmd = {
+      ...b.cmd,
+      capture: async (c: string, a: string[]) => {
+        if (c === "sqv" && a[0] === "--keyring") throw new Error("sqv exited with code 1: Error: Verification failed");
+        return b.cmd.capture(c, a);
+      },
+    };
+    const a = archive({ packages: stanza("libsystemd0", "257.9-1~deb13u1", "arm64", "pool/x.deb", sha(DEB)) });
+    const work = await mkdtemp(join(tmpdir(), "work-"));
+    const r = await repairSystemPackages({ cmd, listsDir: join(work, "none"), aptDir: await aptDir(), archivesDir: join(work, "none"), workDir: join(work, "w"), fetch: a.fetch });
+    expect(r.ok).toBe(false);
+    expect(!r.ok && r.reason).toMatch(/^damaged system packages couldn't be repaired: Debian's package lists couldn't be fetched \(https:\/\/deb\.debian\.org\/debian trixie: its signature didn't verify/);
+    expect(a.fetched.some((u) => u.endsWith(".gz") || u.endsWith(".deb"))).toBe(false);
+  });
+
+  it("refuses a package list that doesn't match its signed Release", async () => {
+    const b = box({ damaged: () => true });
+    const a = archive({ packages: stanza("libsystemd0", "257.9-1~deb13u1", "arm64", "pool/x.deb", sha(DEB)) });
+    const work = await mkdtemp(join(tmpdir(), "work-"));
+    const tampered = async (u: string) => (u.endsWith("Packages.gz") ? new Response(gzipSync(Buffer.from("Package: evil\n"))) : a.fetch(u));
+    const r = await repairSystemPackages({ cmd: b.cmd, listsDir: join(work, "none"), aptDir: await aptDir(), archivesDir: join(work, "none"), workDir: join(work, "w"), fetch: tampered });
+    expect(!r.ok && r.reason).toMatch(/Packages\.gz: download didn't match its Release/);
+  });
+
+  it("reads one-line and deb822 sources, mirror files expanded", async () => {
+    const dir = await aptDir();
+    await writeFile(join(dir, "sources.list"), "# comment\ndeb [arch=arm64 signed-by=/k.gpg] http://security.debian.org/debian-security trixie-security main\ndeb-src http://x/ trixie main\n");
+    expect(await aptSources(dir)).toEqual([
+      { uris: ["http://security.debian.org/debian-security"], suites: ["trixie-security"], components: ["main"], signedBy: ["/k.gpg"] },
+      { uris: ["https://deb.debian.org/debian"], suites: ["trixie", "trixie-updates"], components: ["main"], signedBy: ["/usr/share/keyrings/debian-archive-keyring.gpg"] },
+    ]);
   });
 
   it("finishes a configure a maintainer script broke, and judges by the files", async () => {
