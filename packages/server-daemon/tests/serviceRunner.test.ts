@@ -389,6 +389,8 @@ describe("AppRunner", () => {
         "bridge",
         "-o",
         "com.docker.network.bridge.name=fs-apps",
+        "-o",
+        "com.docker.network.bridge.enable_icc=false",
         "flagship-apps",
       ]);
 

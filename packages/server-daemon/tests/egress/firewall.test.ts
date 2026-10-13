@@ -108,8 +108,8 @@ describe("sandbox networks", () => {
     JSON.stringify({ Id: "0123456789abcdef", Name: "flagship-apps", Internal: false, Options: {}, IPAM: { Config: [{ Subnet: "172.22.0.0/16", Gateway: "172.22.0.1" }] }, Containers: { x: { Name: "flagship-harry-weather", IPv4Address: "172.22.0.2/16" } }, ...o });
 
   it("creates each with its fixed bridge name; only the build bridge is internal", () => {
-    expect(networkCreateArgs("flagship-build")).toEqual(["network", "create", "--driver", "bridge", "--internal", "-o", "com.docker.network.bridge.name=fs-build", "flagship-build"]);
-    expect(networkCreateArgs("flagship-staging")).toEqual(["network", "create", "--driver", "bridge", "-o", "com.docker.network.bridge.name=fs-staging", "flagship-staging"]);
+    expect(networkCreateArgs("flagship-build")).toEqual(["network", "create", "--driver", "bridge", "--internal", "-o", "com.docker.network.bridge.name=fs-build", "-o", "com.docker.network.bridge.enable_icc=false", "flagship-build"]);
+    expect(networkCreateArgs("flagship-staging")).toEqual(["network", "create", "--driver", "bridge", "-o", "com.docker.network.bridge.name=fs-staging", "-o", "com.docker.network.bridge.enable_icc=false", "flagship-staging"]);
     expect(networkCreateArgs("other")).toEqual(["network", "create", "other"]);
     expect(EGRESS_NETWORKS.map((n) => n.bridge.length <= 15)).toEqual([true, true, true]);
   });
@@ -120,6 +120,7 @@ describe("sandbox networks", () => {
       name: "flagship-apps",
       bridge: "br-0123456789ab",
       internal: false,
+      icc: true,
       subnets: ["172.22.0.0/16"],
       gateways: ["172.22.0.1"],
       containers: [{ name: "flagship-harry-weather", ipv4: "172.22.0.2" }],
@@ -143,6 +144,23 @@ describe("sandbox networks", () => {
     expect(info.bridge).toBe("fs-apps");
     const runs = rec.calls.filter((c) => c.args[0] === "network" && c.args[1] !== "inspect").map((c) => c.args.slice(0, 3).join(" "));
     expect(runs).toEqual(["network disconnect -f", "network rm flagship-apps", "network create --driver"]);
+  });
+
+  it("recreates a bridge whose containers can still reach each other", async () => {
+    let created = false;
+    const fixed = { "com.docker.network.bridge.name": "fs-apps" };
+    const rec = new Rec(
+      () => false,
+      () => inspect({ Options: created ? { ...fixed, "com.docker.network.bridge.enable_icc": "false" } : fixed, Containers: {} }),
+    );
+    const origRun = rec.run.bind(rec);
+    rec.run = async (cmd, args) => {
+      await origRun(cmd, args);
+      if (args[1] === "create") created = true;
+    };
+    const info = await ensureSandboxNetwork(rec, EGRESS_NETWORKS.find((n) => n.kind === "apps")!);
+    expect(info.icc).toBe(false);
+    expect(rec.calls.filter((c) => c.args[0] === "network" && c.args[1] !== "inspect").map((c) => c.args[1])).toEqual(["rm", "create"]);
   });
 
   it("keeps the existing bridge when it can't be removed", async () => {
@@ -200,7 +218,7 @@ describe("without the gateway", () => {
           Id: `${args[2]}-0000000000`,
           Name: args[2],
           Internal: args[2] === "flagship-build" ? buildInternal : false,
-          Options: { "com.docker.network.bridge.name": EGRESS_NETWORKS.find((n) => n.network === args[2])!.bridge },
+          Options: { "com.docker.network.bridge.name": EGRESS_NETWORKS.find((n) => n.network === args[2])!.bridge, "com.docker.network.bridge.enable_icc": "false" },
           IPAM: { Config: [] },
           Containers: {},
         }),
@@ -212,6 +230,9 @@ describe("without the gateway", () => {
     };
     await ensureUnfencedNetworks(rec);
     const mutations = rec.calls.filter((c) => c.args[0] === "network" && c.args[1] !== "inspect").map((c) => c.args.join(" "));
-    expect(mutations).toEqual(["network rm flagship-build", "network create --driver bridge -o com.docker.network.bridge.name=fs-build flagship-build"]);
+    expect(mutations).toEqual([
+      "network rm flagship-build",
+      "network create --driver bridge -o com.docker.network.bridge.name=fs-build -o com.docker.network.bridge.enable_icc=false flagship-build",
+    ]);
   });
 });

@@ -4,13 +4,15 @@
  * left over from before (created without the option, bridge `br-<id>`) is
  * recreated: its containers are disconnected first, which is harmless at boot
  * because ServicePlatform.restore recreates every app container anyway. The
- * build bridge is also recreated when it isn't `--internal`. When recreating
+ * build bridge is also recreated when it isn't `--internal`, and any bridge
+ * that still lets its containers reach each other (`enable_icc`). When recreating
  * fails, the existing bridge's real name is used instead.
  */
 import type { CommandRunner } from "../serviceRunner.js";
 import { EGRESS_NETWORKS, type EgressNetworkSpec } from "./policy.js";
 
 export const BRIDGE_NAME_OPTION = "com.docker.network.bridge.name";
+export const ICC_OPTION = "com.docker.network.bridge.enable_icc";
 
 export interface NetworkInfo {
   id: string;
@@ -18,6 +20,8 @@ export interface NetworkInfo {
   /** The Linux bridge interface carrying it. */
   bridge: string;
   internal: boolean;
+  /** Containers on it can reach each other (docker's default). */
+  icc: boolean;
   subnets: string[];
   gateways: string[];
   containers: Array<{ name: string; ipv4: string }>;
@@ -37,6 +41,7 @@ export function networkCreateArgs(
     ...(spec.internal ? ["--internal"] : []),
     "-o",
     `${BRIDGE_NAME_OPTION}=${spec.bridge}`,
+    ...(spec.icc ? [] : ["-o", `${ICC_OPTION}=false`]),
     network,
   ];
 }
@@ -65,6 +70,7 @@ export function parseNetworkInspect(json: string): NetworkInfo | null {
     name: n.Name,
     bridge: n.Options?.[BRIDGE_NAME_OPTION] ?? `br-${n.Id.slice(0, 12)}`,
     internal: n.Internal === true,
+    icc: n.Options?.[ICC_OPTION] !== "false",
     subnets: configs.map((c) => c.Subnet ?? "").filter((s) => /^\d+\.\d+\.\d+\.\d+\/\d+$/.test(s)),
     gateways: configs.map((c) => c.Gateway ?? "").filter((g) => /^\d+\.\d+\.\d+\.\d+$/.test(g)),
     containers: Object.values(n.Containers ?? {}).map((c) => ({
@@ -91,10 +97,10 @@ export async function ensureSandboxNetwork(
   log: (m: string) => void = () => {},
 ): Promise<NetworkInfo> {
   let info = await inspectNetwork(cmd, spec.network);
-  if (info && (info.bridge !== spec.bridge || info.internal !== spec.internal)) {
+  if (info && (info.bridge !== spec.bridge || info.internal !== spec.internal || info.icc !== spec.icc)) {
     const old = info;
     log(
-      `[egress] recreating ${spec.network} on bridge ${spec.bridge}${spec.internal ? " (internal)" : ""} (was ${old.bridge}${old.internal ? ", internal" : ""})`,
+      `[egress] recreating ${spec.network} on bridge ${spec.bridge}${spec.internal ? " (internal)" : ""}${spec.icc ? "" : " (containers isolated)"} (was ${old.bridge}${old.internal ? ", internal" : ""}${old.icc ? ", containers connected" : ""})`,
     );
     try {
       for (const c of old.containers) {

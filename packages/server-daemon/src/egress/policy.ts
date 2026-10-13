@@ -25,12 +25,18 @@ export interface EgressNetworkSpec {
    * staging and live apps through published loopback ports.
    */
   internal: boolean;
+  /**
+   * Containers on the bridge may reach each other. Always false: one app
+   * must never reach another app's container (docs/app-runtimes.md §5), and
+   * docker's own rule drops it whatever the host's br_netfilter state.
+   */
+  icc: boolean;
 }
 
 export const EGRESS_NETWORKS: readonly EgressNetworkSpec[] = [
-  { kind: "build", network: "flagship-build", bridge: "fs-build", internal: true },
-  { kind: "staging", network: "flagship-staging", bridge: "fs-staging", internal: false },
-  { kind: "apps", network: "flagship-apps", bridge: "fs-apps", internal: false },
+  { kind: "build", network: "flagship-build", bridge: "fs-build", internal: true, icc: false },
+  { kind: "staging", network: "flagship-staging", bridge: "fs-staging", internal: false, icc: false },
+  { kind: "apps", network: "flagship-apps", bridge: "fs-apps", internal: false, icc: false },
 ];
 
 /**
