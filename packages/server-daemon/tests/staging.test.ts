@@ -277,6 +277,16 @@ describe("StagingRunner", () => {
     });
     expect(calls.some((c) => c.includes("build") || c.includes("run"))).toBe(false);
   });
+
+  it("calls a fence that's down because dockerd is a Docker failure, not a fence one", async () => {
+    const { cmd } = recordingCmd();
+    const runner = new StagingRunner({ cmd, workingDir: mkdtempSync(join(tmpdir(), "staging-")), fenced: () => false, unfencedBecause: () => "docker is not available" });
+    expect(await runner.stage({ buildId: "b8", files: FILES, slug: "notes" })).toEqual({
+      ok: false,
+      reason: `${UNFENCED_REASON}: docker is not available`,
+      environment: environmentFailure("docker"),
+    });
+  });
 });
 
 /** A docker whose `build` fails with `msg()`. */

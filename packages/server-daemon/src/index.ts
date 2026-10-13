@@ -2208,6 +2208,7 @@ async function wireRuntimeSurfaces(deps: {
     sql: runtime.dataProvisioner ? appSqlRunner() : null,
     startCheck: serviceRunnerMod.buildStartCheck(serviceRunnerMod.realCommandRunner),
     fenced: () => runtime.egress.status().enforced,
+    unfencedBecause: () => runtime.egress.status().reason,
   });
   void stagingRunner.sweep();
   const ownerEnvNames = async (serviceId: string): Promise<string[]> =>

@@ -63,6 +63,8 @@ export interface BootEgressOptions {
   log?: (m: string) => void;
   /** How long to wait for dockerd. Default 60 s. */
   dockerWaitMs?: number;
+  /** How often to retry a gateway that couldn't start. Default 30 s. */
+  retryMs?: number;
 }
 
 async function waitForDocker(cmd: CommandRunner, ms: number): Promise<boolean> {
@@ -127,15 +129,35 @@ export async function bootEgress(opts: BootEgressOptions): Promise<EgressRuntime
     onUnmatched: (id, host) => recorder.onUnmatched(id, host),
     log,
   });
-  if (await waitForDocker(opts.cmd, opts.dockerWaitMs ?? 60_000)) {
-    await gateway.start();
-  } else {
-    log("[egress] NOT ENFORCED: docker is not available");
-  }
-  if (gateway.status().enforced) {
+  let dockerDown = false;
+  const onEnforced = () => {
     setContainersChangedHook(() => gateway.refreshApps());
     const t = setInterval(() => void gateway.refreshApps(), 10_000);
     t.unref?.();
+  };
+  const attempt = async (waitMs: number): Promise<boolean> => {
+    dockerDown = !(await waitForDocker(opts.cmd, waitMs));
+    if (!dockerDown) await gateway.start();
+    return gateway.status().enforced;
+  };
+  if (await attempt(opts.dockerWaitMs ?? 60_000)) {
+    onEnforced();
+  } else {
+    if (dockerDown) log("[egress] NOT ENFORCED: docker is not available");
+    // dockerd may come up later (a slow start, a repair); until the fence
+    // does, AI test copies and builds stay refused, so keep trying.
+    let trying = false;
+    const retry = setInterval(() => {
+      if (trying) return;
+      trying = true;
+      void attempt(0).finally(() => (trying = false)).then((ok) => {
+        if (!ok) return;
+        clearInterval(retry);
+        log("[egress] gateway up after a retry");
+        onEnforced();
+      }, () => {});
+    }, opts.retryMs ?? 30_000);
+    retry.unref?.();
   }
 
   const appEgress = authority
@@ -157,7 +179,7 @@ export async function bootEgress(opts: BootEgressOptions): Promise<EgressRuntime
     : null;
 
   return {
-    status: () => gateway.status(),
+    status: () => (dockerDown && !gateway.status().enforced ? { enforced: false, reason: "docker is not available" } : gateway.status()),
     appEgress,
     pruneUninstalled: async () => {
       for (const id of store.serviceIds()) {

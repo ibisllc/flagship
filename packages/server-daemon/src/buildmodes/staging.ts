@@ -154,6 +154,8 @@ export interface StagingRunnerDeps {
    * fenced (tests).
    */
   fenced?: () => boolean;
+  /** Why it's down; a fence down because dockerd is reads as a Docker failure. */
+  unfencedBecause?: () => string | undefined;
   /** Wait before the one retry of a registry outage. Default 15 s. */
   registryRetryMs?: number;
   sleep?: (ms: number) => Promise<void>;
@@ -173,6 +175,8 @@ const DATA_FILES_DEPTH = 4;
 const DATA_FILE_READ_BYTES = 16 * 1024;
 const DATA_PATH_RE = /^[A-Za-z0-9._@+=, -]+(\/[A-Za-z0-9._@+=, -]+)*$/;
 export const NOT_STAGED_REASON = "there's no test copy yet: call deploy first, and these tools answer once its data is set up";
+
+const DOCKER_DOWN = /docker is not available|Cannot connect to the Docker daemon|Is the docker daemon running/i;
 
 export const UNFENCED_REASON =
   "this server can't wall off the test copy's network right now, so the AI's test copy wasn't started";
@@ -267,6 +271,8 @@ export class StagingRunner implements StagingHost {
     const { buildId, files } = a;
     if (!BUILD_ID_RE.test(buildId)) return { ok: false, reason: "invalid build id" };
     if (this.deps.fenced && !this.deps.fenced()) {
+      const why = this.deps.unfencedBecause?.();
+      if (why && DOCKER_DOWN.test(why)) return { ok: false, reason: `${UNFENCED_REASON}: ${why}`, environment: environmentFailure("docker") };
       return { ok: false, reason: UNFENCED_REASON, environment: environmentFailure("fence") };
     }
     this.stagedCopies.delete(buildId);
