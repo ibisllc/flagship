@@ -4,6 +4,7 @@
 # The Dockerfile only COPYs:
 #   - root: package.json, package-lock.json, tsconfig*.json, vitest.config.ts
 #   - packages/                  (selectively via tsc -b references in root tsconfig.json)
+#   - billing/                   (the billing sub-repo's workspace packages)
 #   - services/                  (referenced from root tsconfig.json)
 #   - apps/web/{package.json,tsconfig.json,src,public}
 #   - apps/com/package.json      (workspace resolution only; never the Worker code)
@@ -73,6 +74,8 @@ apps/*/tests
 apps/*/test
 apps/*/Tests
 packages/*/tests
+billing/packages/*/tests
+billing/docs
 packages/*/test
 services/*/tests
 tools/*/tests

@@ -16,6 +16,9 @@ WORKDIR /app
 # is good-enough for a small monorepo.)
 COPY package.json package-lock.json tsconfig.base.json tsconfig.json vitest.config.ts ./
 COPY packages packages/
+# The billing sub-repo (metering core) is an npm workspace until it is
+# published as @ibisllc/billing-*; control-plane and storage import it.
+COPY billing billing/
 # The maintainers protocol is the published npm package
 # `@ibisllc/maintainers` (exact pin in packages/server-daemon/package.json).
 # It is fetched from the registry by `npm ci` below — no git clone or
@@ -49,7 +52,7 @@ RUN rm -rf apps/com/node_modules apps/boot/node_modules \
            apps/dns-broker/node_modules apps/web/e2e/node_modules \
            2>/dev/null || true
 RUN npm prune --omit=dev
-RUN find packages -type d \( -name src -o -name tests \) -prune -exec rm -rf {} + \
+RUN find packages billing -type d \( -name src -o -name tests \) -prune -exec rm -rf {} + \
  && find apps/web -type d \( -name src -o -name tests -o -name e2e \) -prune -exec rm -rf {} +
 
 ################################################################################
@@ -67,6 +70,7 @@ ENV TUNNEL_TCP_PORT=8443
 # Need only the slimmed runtime tree.
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/packages ./packages
+COPY --from=builder /app/billing ./billing
 COPY --from=builder /app/apps/web ./apps/web
 COPY --from=builder /app/apps/com/package.json ./apps/com/package.json
 COPY --from=builder /app/package.json ./package.json

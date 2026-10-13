@@ -103,7 +103,8 @@ describe("predeploy-com.sh — build-freshness gate (dist vs src)", () => {
     }
   });
 
-  // Build a throwaway packages/<pkg>/{src,dist} fixture tree the script
+  // Build a throwaway packages/<pkg>/{src,dist} fixture tree (or <path>/…
+  // when the name is a repo-relative path like billing/packages/metering) the script
   // can point at via FLAGSHIP_DIST_CHECK_ROOT. mtimes are set explicitly
   // so the comparison is deterministic.
   function makeFixture(
@@ -116,13 +117,14 @@ describe("predeploy-com.sh — build-freshness gate (dist vs src)", () => {
     const root = mkdtempSync(join(tmpdir(), "predeploy-fixture-"));
     fixtureRoot = root;
     for (const pkg of pkgs) {
-      const srcDir = join(root, "packages", pkg.name, "src");
+      const base = pkg.name.includes("/") ? join(root, pkg.name) : join(root, "packages", pkg.name);
+      const srcDir = join(base, "src");
       mkdirSync(srcDir, { recursive: true });
       const srcFile = join(srcDir, "index.ts");
       writeFileSync(srcFile, "export const x = 1;\n");
       utimesSync(srcFile, pkg.srcMtime, pkg.srcMtime);
       if (pkg.distMtime !== null) {
-        const distDir = join(root, "packages", pkg.name, "dist");
+        const distDir = join(base, "dist");
         mkdirSync(distDir, { recursive: true });
         const distFile = join(distDir, "index.js");
         writeFileSync(distFile, "export const x = 1;\n");
@@ -192,6 +194,23 @@ describe("predeploy-com.sh — build-freshness gate (dist vs src)", () => {
     expect(r.stderr).toContain("compiled output with no source");
     expect(r.stderr).toContain("control-plane/dist/usernameHandover.js");
     expect(r.stderr).toContain("clean-build-com.sh");
+  });
+
+  it("gates the billing sub-repo's metering package too", () => {
+    const stale = makeFixture([
+      { name: "control-plane", srcMtime: 1000, distMtime: 2000 },
+      { name: "billing/packages/metering", srcMtime: 3000, distMtime: 2000 },
+    ]);
+    const r = run(["deploy"], { FLAGSHIP_DIST_CHECK_ROOT: stale });
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("billing/packages/metering");
+    rmSync(stale, { recursive: true, force: true });
+
+    const orphan = makeFixture([{ name: "billing/packages/metering", srcMtime: 1000, distMtime: 2000 }]);
+    writeFileSync(join(orphan, "billing", "packages", "metering", "dist", "gone.js"), "");
+    const o = run(["deploy"], { FLAGSHIP_DIST_CHECK_ROOT: orphan });
+    expect(o.code).toBe(1);
+    expect(o.stderr).toContain("billing/packages/metering/dist/gone.js");
   });
 
   it("matches nested dist files to nested sources", () => {

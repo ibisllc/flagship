@@ -20,6 +20,7 @@
     "@flagship/protocol": "*",
     "@flagship/services-zone": "*",
     "@flagship/storage": "*",
+    "@ibisllc/billing-metering": "0.1.0",
     "@noble/hashes": "1.8.0",
     "otpauth": "9.5.1",
     "qrcode-generator": "^2.0.4"

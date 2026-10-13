@@ -114,8 +114,8 @@ newest_mtime() {
 if [ "${FLAGSHIP_SKIP_DIST_FRESHNESS:-0}" != "1" ]; then
   STALE=""
   for pkg in $BUNDLED_PKGS; do
-    src_dir="$REPO_ROOT/packages/$pkg/src"
-    dist_dir="$REPO_ROOT/packages/$pkg/dist"
+    src_dir="$REPO_ROOT/$pkg/src"
+    dist_dir="$REPO_ROOT/$pkg/dist"
     [ -d "$src_dir" ] || continue
     src_m="$(newest_mtime "$src_dir")"
     dist_m="$(newest_mtime "$dist_dir")"
@@ -132,8 +132,8 @@ if [ "${FLAGSHIP_SKIP_DIST_FRESHNESS:-0}" != "1" ]; then
   # never removes these; they stay one stray export away from the bundle.
   ORPHANS=""
   for pkg in $BUNDLED_PKGS; do
-    src_dir="$REPO_ROOT/packages/$pkg/src"
-    dist_dir="$REPO_ROOT/packages/$pkg/dist"
+    src_dir="$REPO_ROOT/$pkg/src"
+    dist_dir="$REPO_ROOT/$pkg/dist"
     [ -d "$src_dir" ] && [ -d "$dist_dir" ] || continue
     while IFS= read -r js; do
       rel="${js#"$dist_dir"/}"

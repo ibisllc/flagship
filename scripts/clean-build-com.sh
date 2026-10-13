@@ -15,7 +15,7 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 targets=()
 for pkg in $BUNDLED_PKGS; do
-  rm -rf "$REPO_ROOT/packages/$pkg/dist" "$REPO_ROOT/packages/$pkg/tsconfig.tsbuildinfo"
-  targets+=("$REPO_ROOT/packages/$pkg")
+  rm -rf "$REPO_ROOT/$pkg/dist" "$REPO_ROOT/$pkg/tsconfig.tsbuildinfo"
+  targets+=("$REPO_ROOT/$pkg")
 done
 npx --prefix "$REPO_ROOT" tsc -b "${targets[@]}"

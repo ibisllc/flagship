@@ -1,6 +1,7 @@
 {
   "files": [],
   "references": [
+    { "path": "./billing/packages/metering" },
     { "path": "./packages/protocol" },
     { "path": "./packages/tunnel-protocol" },
     { "path": "./packages/llm-providers" },
