@@ -124,8 +124,8 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   **`feat/phone-usb-burn`** (Android burns a USB stick on its own),
   **`feat/custom-names`** (dibs + paid name change) and **`feat/custom-domains`**
   (custom domains as a Pro feature) — the last two branch OFF `feat/marketplace`
-  (they need its payment rail), so rebase them onto it after it moves —
-  and **`feat/free-tier-throttle`** (off `main`). **No marketplace/retail code may sit on `main` until
+  (they need its payment rail), so rebase them onto it after it moves.
+  **No marketplace/retail code may sit on `main` until
   that feature launches** — branching IS the gate, there is NO gating/flag code
   in `main`.
   - **`feat/transfer-a-box` was a *develop-then-MERGE* branch — DONE.** Merged to
@@ -323,6 +323,18 @@ account can view or co-manage a server, never destroy it) is in the MVP
   and build RUN steps had no network. New appliances ship
   `10-flagship-containers.network`; the daemon writes it on older boxes at
   boot. Republish both appliances so new boxes start fixed.
+
+### Metering (2026-10-13, live)
+
+One metering core for data and AI tokens lives in `billing/`, a standalone
+sub-repo like `maintainers/` (`@ibisllc/billing-metering`, consumed as a
+workspace; publishing it and mirroring to github.com/ibisllc/billing wait for
+the owner). Flagship's plans are in `packages/control-plane/src/meter.ts`;
+counters in D1 `meter_counters` (migration 0069, applied; `usage_counters` is
+no longer read and can be dropped later). Free over 25 GB is now slowed to
+256 kbit/s instead of cut (`.com` f33230d4, `.services` v37). AI-token
+allowances (1M / 5M / 20M a month) are placeholders. `feat/custom-names`'
+`accountRename.ts` must move `meter_counters` rows too.
 
 ### Built, waiting on deploys or rebuilds
 
@@ -543,8 +555,6 @@ metal), plus the Debian 13.7.0 check. Record results under "Desktop Studio".
   orders with "Custom domains aren't available yet" and has no custom-domain
   UI in any app (removed 2026-10-13; the branch holds it all); keep the
   branch's Pro wording at launch. Remaining: live e2e, Stripe price ids.
-- **`feat/free-tier-throttle`:** 256 kbit/s over quota instead of a hard stop;
-  needs a `.services` deploy once merged.
 - **`feat/phone-usb-burn`:** validate the OTG write on a real phone + stick,
   publish the seed and set `FLAGSHIP_ISO_SEED`.
 - **`feat/retail`** (NFC box), **`feat/browser-extension`**, **`alpine`** (parked
