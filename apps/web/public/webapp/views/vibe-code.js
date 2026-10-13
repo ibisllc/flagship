@@ -466,8 +466,9 @@ async function startBuild(text) {
     await poll();
   } catch (e) {
     toast(errorText(e), "err");
-    if (e?.code === "free-ai-used-up") {
-      // Out of free credits before the build started: straight to adding a key.
+    if (typeof e?.code === "string" && e.code.startsWith("free-ai") && e.code !== "free-ai-unavailable") {
+      // Free AI can't start this build (used up, busy today, no running
+      // server, ended): straight to adding a key.
       buildCredential = null;
       enterBuildKey({
         back: "view-vibe-code",

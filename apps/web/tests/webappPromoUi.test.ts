@@ -7,17 +7,31 @@ import { buildServer } from "../src/server.js";
 const webapp = (...p: string[]) => resolve(__dirname, "..", "public", "webapp", ...p);
 const load = (...p: string[]) => import(pathToFileURL(webapp(...p)).href);
 
+const CREDITS = {
+  week: { used: 160_000, allowance: 500_000, remaining: 340_000, resetsAt: 0 },
+  starter: { used: 800_000, allowance: 2_000_000, remaining: 1_200_000 },
+  usedTokens: 960_000,
+  allowanceTokens: 2_500_000,
+  remainingTokens: 1_540_000,
+};
+const SPENT = {
+  week: { used: 500_000, allowance: 500_000, remaining: 0, resetsAt: 0 },
+  starter: { used: 2_000_000, allowance: 2_000_000, remaining: 0 },
+  usedTokens: 2_500_000,
+  allowanceTokens: 2_500_000,
+  remainingTokens: 0,
+};
+const ok = (credits = CREDITS) => ({ available: true, ended: false, reason: null, credits });
+
 describe("webapp free AI credits", () => {
-  it("formats token counts the way all three apps do", async () => {
+  it("formats token counts and the weekly / starter line the way all three apps do", async () => {
     const { formatTokens, creditsLine } = await load("lib", "freeAi.js");
     expect(formatTokens(0)).toBe("0");
     expect(formatTokens(999)).toBe("999");
     expect(formatTokens(820_000)).toBe("820k");
     expect(formatTokens(1_000_000)).toBe("1M");
     expect(formatTokens(1_500_000)).toBe("1.5M");
-    expect(creditsLine({ remainingTokens: 820_000, allowanceTokens: 1_000_000 })).toBe(
-      "820k of 1M free AI tokens left",
-    );
+    expect(creditsLine(CREDITS)).toBe("This week: 340k of 500k left · Starter reserve: 1.2M");
   });
 
   it("signs the same canonical bytes as the protocol vectors", async () => {
@@ -36,33 +50,39 @@ describe("webapp free AI credits", () => {
     expect(await freeAi.freshCredential(byok, "box")).toBe(byok);
   });
 
-  it("the settings card shows what's left, or the way to your own key", async () => {
+  it("the settings card shows the week and the reserve, why it's blocked, or nothing once it has ended", async () => {
     const { freeAiCardHtml } = await load("views", "settings.js");
     expect(freeAiCardHtml(null)).toBeNull();
-    const left = freeAiCardHtml({ available: true, credits: { remainingTokens: 820_000, allowanceTokens: 1_000_000 } });
-    expect(left).toContain("820k of 1M free AI tokens left");
+    expect(freeAiCardHtml({ ...ok(), available: false, ended: true })).toBeNull();
+    const left = freeAiCardHtml(ok());
+    expect(left).toContain("This week: 340k of 500k left · Starter reserve: 1.2M");
     expect(left).toMatch(/Used automatically when you build with AI and haven.{1,6}t added your own key\./);
     expect(left).not.toContain("free-ai-add-key");
-    const spent = freeAiCardHtml({ available: true, credits: { remainingTokens: 0, allowanceTokens: 1_000_000 } });
-    expect(spent).toMatch(/used your free AI credits\. Add your own AI key to keep building\./);
+    const spent = freeAiCardHtml(ok(SPENT));
+    expect(spent).toContain("More arrive on Monday, or add your own AI key to keep building.");
     expect(spent).toContain('id="free-ai-add-key"');
-    const off = freeAiCardHtml({ available: false, credits: { remainingTokens: 0, allowanceTokens: 0 } });
+    const busy = freeAiCardHtml({ ...ok(), reason: "busy-today" });
+    expect(busy).toContain("Free building is busy today. Try again tomorrow, or use your own AI key.");
+    const noServer = freeAiCardHtml({ ...ok(), reason: "no-server" });
+    expect(noServer).toContain("start once one of your servers is running");
+    expect(noServer).not.toContain("free-ai-add-key");
+    const off = freeAiCardHtml({ ...ok(), available: false });
     expect(off).toMatch(/available right now/);
-    expect(off).toContain('id="free-ai-add-key"');
-    for (const html of [left, spent, off]) expect(html).not.toMatch(/\b(buy|purchase|upgrade|subscribe)\b/i);
+    for (const html of [left, spent, busy, noServer, off]) expect(html).not.toMatch(/\b(buy|purchase|upgrade|subscribe)\b/i);
   });
 
   it("the key step offers free AI first and skips itself for an owner with no saved key", async () => {
     const { freeAiRowState, shouldAutoUseFreeAi } = await load("views", "build-key.js");
-    const some = { available: true, credits: { remainingTokens: 5000, allowanceTokens: 10_000 } };
-    const none = { available: true, credits: { remainingTokens: 0, allowanceTokens: 10_000 } };
-    expect(freeAiRowState(some)).toEqual({ kind: "use", text: "5k left" });
-    expect(freeAiRowState(none)?.kind).toBe("spent");
-    expect(freeAiRowState({ available: false, credits: some.credits })?.kind).toBe("unavailable");
+    expect(freeAiRowState(ok())).toEqual({ kind: "use", text: "340k left this week · 1.2M reserve" });
+    expect(freeAiRowState(ok(SPENT))?.kind).toBe("blocked");
+    expect(freeAiRowState({ ...ok(), reason: "busy-today" })?.kind).toBe("blocked");
+    expect(freeAiRowState({ ...ok(), available: false })?.kind).toBe("blocked");
+    expect(freeAiRowState({ ...ok(), available: false, ended: true })).toBeNull();
     expect(freeAiRowState(null)).toBeNull();
-    expect(shouldAutoUseFreeAi([], some)).toBe(true);
-    expect(shouldAutoUseFreeAi([{ id: "a" }], some)).toBe(false);
-    expect(shouldAutoUseFreeAi([], none)).toBe(false);
+    expect(shouldAutoUseFreeAi([], ok())).toBe(true);
+    expect(shouldAutoUseFreeAi([{ id: "a" }], ok())).toBe(false);
+    expect(shouldAutoUseFreeAi([], ok(SPENT))).toBe(false);
+    expect(shouldAutoUseFreeAi([], { ...ok(), reason: "no-server" })).toBe(false);
     expect(shouldAutoUseFreeAi([], null)).toBe(false);
   });
 

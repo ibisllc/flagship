@@ -12,7 +12,7 @@ import { toast } from "../lib/toast.js";
 import { humanError } from "../lib/humanError.js";
 import { loadProviders, addProvider, removeProvider, setActive, setRelay } from "../providers.js";
 import { relayCaption } from "../lib/aiRelay.js";
-import { CARD_NOTE, UNAVAILABLE_MESSAGE, USED_UP_MESSAGE, creditsLine, fetchFreeAiStatus } from "../lib/freeAi.js";
+import { CARD_NOTE, fetchFreeAiStatus, freeAiView } from "../lib/freeAi.js";
 import { renderActiveProviderChip, stopRenewals } from "./home.js";
 import { handleReset } from "./unlock.js";
 import { enterRecovery } from "./recovery.js";
@@ -161,19 +161,19 @@ export async function renderProviders() {
 
 /** The settings view's free AI card body for a status read (null = hide). Exported for tests. */
 export function freeAiCardHtml(status) {
-  if (!status) return null;
-  const spent = status.available && (status.credits?.remainingTokens ?? 0) <= 0;
-  const line = !status.available ? UNAVAILABLE_MESSAGE : spent ? USED_UP_MESSAGE : creditsLine(status.credits);
+  const view = freeAiView(status);
+  if (!view) return null;
   return `
     <div class="weight-600">Free AI credits</div>
-    <div class="note mt-2${spent ? " warn" : ""}" id="free-ai-line">${escapeHtml(line)}</div>
-    ${status.available && !spent ? `<div class="faint-sm mt-1">${escapeHtml(CARD_NOTE)}</div>` : ""}
-    ${!status.available || spent ? '<button id="free-ai-add-key" class="full-width mt-2">Add your own key</button>' : ""}
+    <div class="note mt-2${view.usable ? "" : " warn"}" id="free-ai-line">${escapeHtml(view.text)}</div>
+    ${view.usable ? `<div class="faint-sm mt-1">${escapeHtml(CARD_NOTE)}</div>` : ""}
+    ${view.offerOwnKey ? '<button id="free-ai-add-key" class="full-width mt-2">Add your own key</button>' : ""}
   `;
 }
 
-// The free AI credits card: what's left, and the way to your own key when
-// they're used up or unavailable. Hidden when the status can't be read.
+// The free AI credits card: what's left this week and in the starter
+// reserve, or why free AI can't be used now and the way to your own key.
+// Hidden when the status can't be read or the promotion has ended.
 async function renderFreeAiCard() {
   const el = $("free-ai-card");
   if (!el) return;

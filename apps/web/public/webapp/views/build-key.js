@@ -39,7 +39,7 @@ import {
   PROMO_ID,
 } from "../providers.js";
 import { relayCaption } from "../lib/aiRelay.js";
-import { UNAVAILABLE_MESSAGE, USED_UP_MESSAGE, fetchFreeAiStatus, formatTokens, mintFreeAiCredential } from "../lib/freeAi.js";
+import { UNAVAILABLE_MESSAGE, fetchFreeAiStatus, formatTokens, freeAiView, mintFreeAiCredential } from "../lib/freeAi.js";
 
 registerView("view-build-key");
 
@@ -90,15 +90,17 @@ async function chooseEntry(e) {
 }
 
 /**
- * What the free AI row shows for a status read: "use" (with the tokens
- * left), "spent", "unavailable", or null (no row). Exported for tests.
+ * What the free AI row shows for a status read: "use" (with what's left),
+ * "blocked" (used up, busy today, no running server, unavailable), or null
+ * (no row: unreadable, or the promotion has ended). Exported for tests.
  */
 export function freeAiRowState(status) {
-  if (!status) return null;
-  if (!status.available) return { kind: "unavailable", text: UNAVAILABLE_MESSAGE };
-  const left = status.credits?.remainingTokens ?? 0;
-  if (left <= 0) return { kind: "spent", text: USED_UP_MESSAGE };
-  return { kind: "use", text: `${formatTokens(left)} left` };
+  const view = freeAiView(status);
+  if (!view) return null;
+  if (!view.usable) return { kind: "blocked", text: view.text };
+  const c = status.credits;
+  const left = c?.week ? `${formatTokens(c.week.remaining)} left this week · ${formatTokens(c.starter.remaining)} reserve` : `${formatTokens(c?.remainingTokens)} left`;
+  return { kind: "use", text: left };
 }
 
 /** Skip the step and build on free AI: no saved keys, and some credits left. */

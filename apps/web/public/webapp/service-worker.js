@@ -128,7 +128,10 @@
 //       Open to all | Members only toggle and the members list with each
 //       person's and group's role (signed role orders); drops the invite
 //       issue/manage views + lib/labelBook.js, precaches lib/memberRoles.js.
-const SHELL_VERSION = "v65";
+//  v66: free AI credits show this week's top-up and the starter reserve,
+//       and say why they can't be used (busy today, no running server);
+//       they disappear once the promotion has ended.
+const SHELL_VERSION = "v66";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

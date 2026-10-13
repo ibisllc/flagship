@@ -1,4 +1,6 @@
-// Free AI credits — build with AI without your own key (docs/build-modes.md).
+// Free AI credits — for a limited time, building your apps is free on
+// Flagship (docs/build-modes.md). A weekly top-up is spent first, then a
+// one-time starter reserve; only accounts with a running server get them.
 //
 // The account signs a `flagship/llm-promo-issue/v1` request (provider
 // "flagship") and flagshipserver.com answers with a short-lived pass for
@@ -16,9 +18,21 @@ import { ensureUsername, getSession } from "./state.js";
 
 export const FREE_AI_TAG = "flagship/llm-promo-issue/v1";
 
-export const USED_UP_MESSAGE = "You've used your free AI credits. Add your own AI key to keep building.";
+export const USED_UP_MESSAGE =
+  "Your free AI credits for this week are used up. More arrive on Monday, or add your own AI key to keep building.";
 export const UNAVAILABLE_MESSAGE = "Free AI credits aren't available right now. You can add your own AI key.";
+export const BUSY_TODAY_MESSAGE = "Free building is busy today. Try again tomorrow, or use your own AI key.";
+export const NO_SERVER_MESSAGE = "Free AI credits start once one of your servers is running.";
+export const ENDED_MESSAGE = "The free building period has ended — use your own AI key.";
 export const CARD_NOTE = "Used automatically when you build with AI and haven't added your own key.";
+
+const MESSAGE_BY_CODE = {
+  "free-ai-used-up": USED_UP_MESSAGE,
+  "free-ai-busy-today": BUSY_TODAY_MESSAGE,
+  "free-ai-no-server": NO_SERVER_MESSAGE,
+  "free-ai-ended": ENDED_MESSAGE,
+  "free-ai-unavailable": UNAVAILABLE_MESSAGE,
+};
 
 /** 820000 → "820k", 1000000 → "1M", 1500000 → "1.5M". */
 export function formatTokens(n) {
@@ -28,9 +42,27 @@ export function formatTokens(n) {
   return `${(v / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
 }
 
-/** "820k of 1M free AI tokens left". */
+/** "This week: 340k of 500k left · Starter reserve: 1.2M". */
 export function creditsLine(credits) {
-  return `${formatTokens(credits?.remainingTokens)} of ${formatTokens(credits?.allowanceTokens)} free AI tokens left`;
+  if (!credits?.week || !credits?.starter) {
+    return `${formatTokens(credits?.remainingTokens)} of ${formatTokens(credits?.allowanceTokens)} free AI tokens left`;
+  }
+  return `This week: ${formatTokens(credits.week.remaining)} of ${formatTokens(credits.week.allowance)} left · Starter reserve: ${formatTokens(credits.starter.remaining)}`;
+}
+
+/**
+ * What to show for a status read: null when free AI is hidden (the status
+ * couldn't be read, or the promotion has ended); else `{ usable, text,
+ * offerOwnKey }`.
+ */
+export function freeAiView(status) {
+  if (!status || status.ended) return null;
+  if (!status.available) return { usable: false, text: UNAVAILABLE_MESSAGE, offerOwnKey: true };
+  if (status.reason) {
+    return { usable: false, text: MESSAGE_BY_CODE[`free-ai-${status.reason}`] ?? status.message ?? UNAVAILABLE_MESSAGE, offerOwnKey: status.reason !== "no-server" };
+  }
+  if ((status.credits?.remainingTokens ?? 0) <= 0) return { usable: false, text: USED_UP_MESSAGE, offerOwnKey: true };
+  return { usable: true, text: creditsLine(status.credits), offerOwnKey: false };
 }
 
 /** The canonical bytes the account signs (vectors: packages/protocol/test-vectors/llm-promo-issue). */
@@ -82,7 +114,13 @@ export async function fetchFreeAiStatus() {
   try {
     const r = await post("/api/free-ai/status", await signedBody(""));
     if (!r.ok || !r.body?.credits) return null;
-    return { available: r.body.available === true, credits: r.body.credits };
+    return {
+      available: r.body.available === true,
+      ended: r.body.ended === true,
+      reason: r.body.reason ?? null,
+      message: r.body.message ?? null,
+      credits: r.body.credits,
+    };
   } catch {
     return null;
   }
@@ -92,7 +130,8 @@ export async function fetchFreeAiStatus() {
  * Mint a pass for a build on `serverFqdn`. Resolves to the credential the
  * box takes (with `model` alongside, which the box ignores inside the
  * credential and the start request carries) and the account's credits.
- * Rejects with `.code` "free-ai-used-up" / "free-ai-unavailable" and the
+ * Rejects with `.code` ("free-ai-used-up", "free-ai-busy-today",
+ * "free-ai-no-server", "free-ai-ended" or "free-ai-unavailable") and the
  * message to show.
  */
 export async function mintFreeAiCredential(serverFqdn) {
@@ -101,7 +140,7 @@ export async function mintFreeAiCredential(serverFqdn) {
     return { credential: { ...r.body.credential, model: r.body.model }, credits: r.body.credits };
   }
   const code = r.body?.code || (r.status === 429 ? "free-ai-used-up" : "free-ai-unavailable");
-  const message = code === "free-ai-used-up" ? USED_UP_MESSAGE : UNAVAILABLE_MESSAGE;
+  const message = MESSAGE_BY_CODE[code] ?? UNAVAILABLE_MESSAGE;
   throw Object.assign(new Error(message), { code, status: r.status, credits: r.body?.credits ?? null });
 }
 
