@@ -57,6 +57,40 @@ describe("periods", () => {
   });
 });
 
+describe("ISO weeks", () => {
+  it("keys a week by its ISO year and number, starting Monday 00:00 UTC", () => {
+    expect(meterPeriodKey("week", NOW)).toBe("2026-W42"); // Tue 2026-10-13
+    expect(meterPeriodKey("week", Date.UTC(2026, 9, 12))).toBe("2026-W42"); // Monday 00:00
+    expect(meterPeriodKey("week", Date.UTC(2026, 9, 11, 23, 59, 59))).toBe("2026-W41"); // Sunday night
+  });
+
+  it("puts year-end days in the ISO year of their week", () => {
+    expect(meterPeriodKey("week", Date.UTC(2026, 11, 31))).toBe("2026-W53"); // Thursday
+    expect(meterPeriodKey("week", Date.UTC(2027, 0, 1))).toBe("2026-W53");
+    expect(meterPeriodKey("week", Date.UTC(2027, 0, 4))).toBe("2027-W01");
+    expect(meterPeriodKey("week", Date.UTC(2024, 11, 30))).toBe("2025-W01"); // Monday
+    expect(meterPeriodKey("week", Date.UTC(2021, 0, 3))).toBe("2020-W53"); // Sunday
+  });
+
+  it("resets at the next Monday 00:00 UTC", () => {
+    expect(meterResetsAt("week", NOW)).toBe(Date.UTC(2026, 9, 19));
+    expect(meterResetsAt("week", Date.UTC(2026, 9, 18, 23, 59))).toBe(Date.UTC(2026, 9, 19));
+    expect(meterResetsAt("week", Date.UTC(2026, 9, 19))).toBe(Date.UTC(2026, 9, 26));
+    expect(meterResetsAt("week", Date.UTC(2026, 11, 31))).toBe(Date.UTC(2027, 0, 4));
+  });
+
+  it("starts a weekly counter at zero each week and does not carry the rest over", async () => {
+    const catalog: MeterCatalog<"weekly", "basic"> = {
+      weekly: { unit: "tokens", period: "week", plans: { basic: { allowance: 100, over: "stop" } } },
+    };
+    const store = new InMemoryMeterStore();
+    const at = (now: number) => ({ catalog, store, planOf: async () => "basic" as const, now: () => now });
+    expect((await meterRecord(at(NOW), "a", "weekly", 30)).remaining).toBe(70);
+    const next = await meterCheck(at(Date.UTC(2026, 9, 19, 1)), "a", "weekly");
+    expect(next).toMatchObject({ period: "2026-W43", used: 0, remaining: 100, resetsAt: Date.UTC(2026, 9, 26) });
+  });
+});
+
 describe("record and check", () => {
   it("accumulates per (account, resource, period) and leaves the account id alone", async () => {
     const d = deps();

@@ -25,7 +25,7 @@
 
 import type { MeterStore } from "./store.js";
 
-export type MeterPeriod = "month" | "day" | "lifetime";
+export type MeterPeriod = "month" | "week" | "day" | "lifetime";
 export type OverAllowancePolicy = "allow" | "throttle" | "stop";
 export type MeterAction = OverAllowancePolicy;
 
@@ -59,7 +59,7 @@ export interface MeterVerdict<Resource extends string = string, Plan extends str
   account: string;
   resource: Resource;
   plan: Plan;
-  /** The counter's period key ("2026-10", "2026-10-13" or "all"). */
+  /** The counter's period key ("2026-10", "2026-W42", "2026-10-13" or "all"). */
   period: string;
   used: number;
   allowance: number;
@@ -73,9 +73,29 @@ export interface MeterVerdict<Resource extends string = string, Plan extends str
   resetsAt: number | null;
 }
 
+const DAY_MS = 86_400_000;
+
+/** 00:00 UTC on the Monday of the ISO week containing `nowMs`. */
+function isoWeekStart(nowMs: number): number {
+  const d = new Date(nowMs);
+  const day = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  return day - ((d.getUTCDay() + 6) % 7) * DAY_MS;
+}
+
+/** ISO 8601 week key, e.g. "2026-W42": weeks start on Monday and belong to
+ *  the year that holds their Thursday. */
+function isoWeekKey(nowMs: number): string {
+  const thursday = new Date(isoWeekStart(nowMs) + 3 * DAY_MS);
+  const year = thursday.getUTCFullYear();
+  const week1Monday = isoWeekStart(Date.UTC(year, 0, 4));
+  const week = 1 + Math.round((thursday.getTime() - 3 * DAY_MS - week1Monday) / (7 * DAY_MS));
+  return `${year}-W${String(week).padStart(2, "0")}`;
+}
+
 /** The counter key for a period at `nowMs` (UTC). */
 export function meterPeriodKey(period: MeterPeriod, nowMs: number): string {
   if (period === "lifetime") return "all";
+  if (period === "week") return isoWeekKey(nowMs);
   const d = new Date(nowMs);
   const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
   return period === "month" ? ym : `${ym}-${String(d.getUTCDate()).padStart(2, "0")}`;
@@ -84,6 +104,7 @@ export function meterPeriodKey(period: MeterPeriod, nowMs: number): string {
 /** When the period containing `nowMs` ends (UTC); null for lifetime. */
 export function meterResetsAt(period: MeterPeriod, nowMs: number): number | null {
   if (period === "lifetime") return null;
+  if (period === "week") return isoWeekStart(nowMs) + 7 * DAY_MS;
   const d = new Date(nowMs);
   return period === "month"
     ? Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1)

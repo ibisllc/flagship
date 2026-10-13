@@ -17,8 +17,13 @@ A **counter** is a whole, non-negative number keyed by
   | kind       | key          | resets               |
   | ---------- | ------------ | -------------------- |
   | `month`    | `YYYY-MM`    | 00:00 on the 1st     |
+  | `week`     | `YYYY-Www`   | 00:00 Monday         |
   | `day`      | `YYYY-MM-DD` | 00:00 the next day   |
   | `lifetime` | `all`        | never                |
+
+  A `week` is an ISO 8601 week: it starts on Monday and is numbered in the
+  year that holds its Thursday, so 2026-12-31 (a Thursday) is `2026-W53`
+  and 2027-01-01 is too.
 
 Counters only grow within a period. A new period starts a new counter at
 zero; old counters stay as history.
