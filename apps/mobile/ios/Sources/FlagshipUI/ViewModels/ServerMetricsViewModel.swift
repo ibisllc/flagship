@@ -10,6 +10,7 @@ public final class ServerMetricsViewModel {
 
     private let client: any ScreensClient
     private var pollTask: Task<Void, Never>?
+    public var isPolling: Bool { pollTask != nil }
 
     public init(podId: String, client: any ScreensClient) {
         self.podId = podId

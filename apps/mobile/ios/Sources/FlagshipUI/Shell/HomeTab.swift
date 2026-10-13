@@ -696,7 +696,6 @@ struct ServerDetailContainer: View {
     /// Pop the nav stack back to Home — fired after the decommission/free-the-name
     /// action succeeds (the pod is gone, so this page now points at nothing).
     var onDeleted: () -> Void = {}
-    @Environment(\.screensClient) private var client
     @Environment(\.secretMailboxClient) private var mailbox
     @Environment(\.lockPowerClient) private var lockPower
     @Environment(\.flagshipServerClient) private var server
@@ -708,6 +707,10 @@ struct ServerDetailContainer: View {
     @Environment(DeepLinker.self) private var linker
     @State private var detailVm: HomeViewModel?
     @State private var metricsVm: ServerMetricsViewModel?
+    /// Bound to this server alone. The shell's `screensClient` follows the
+    /// shared session store, which the shell repoints at its current server on
+    /// every `/pods` change, so this page would load that server's detail.
+    @State private var boxClient: (any ScreensClient)?
     /// This server's own apps, over a client bound to it.
     @State private var serverApps: ServerAppsController?
     /// The directory still calls the box live (its heartbeat isn't stale yet)
@@ -722,6 +725,14 @@ struct ServerDetailContainer: View {
     /// page pops, and the danger zone must not vanish mid-flow.
     @State private var lastPod: PodInfo?
     private var shownPod: PodInfo? { pod ?? lastPod }
+    private var boxFqdn: String { Self.boxFqdn(podId: podId, pod: shownPod) }
+
+    /// The box a server page talks to: its pod's FQDN, else the one its id
+    /// names (`pod-<fqdn>`) while the pod is momentarily absent.
+    static func boxFqdn(podId: String, pod: PodInfo?) -> String {
+        if let fqdn = pod?.fqdn, !fqdn.isEmpty { return fqdn.lowercased() }
+        return podId.hasPrefix("pod-") ? String(podId.dropFirst(4)) : podId
+    }
 
     /// FQDN to pair against — the current pod's. The session store's base URL
     /// is already pointed here by `PodSessionSync`; the pairing order's
@@ -742,7 +753,7 @@ struct ServerDetailContainer: View {
         let c = FSColors.scheme(scheme)
         ZStack {
             c.bg.ignoresSafeArea()
-            if let detailVm, let metricsVm {
+            if let detailVm, let metricsVm, let boxClient {
                 ServerDetailScreen(
                     state: detailVm.detail,
                     metrics: metricsVm.state,
@@ -798,9 +809,10 @@ struct ServerDetailContainer: View {
                         await serverApps?.load()
                     },
                     onRefreshDetail: { await detailVm.load() },
-                    onPair: { Task { await pairThenReload(detailVm: detailVm) } },
+                    onPair: { Task { await pairThenReload() } },
                     onDeleted: onDeleted
                 )
+                .environment(\.screensClient, boxClient)
             } else {
                 ProgressView()
             }
@@ -815,21 +827,13 @@ struct ServerDetailContainer: View {
         // box goes live while this page is open it must run again, or the page
         // sits on "Connecting to your server…" until the user leaves and returns.
         .task(id: pod.map { "\($0.status)|\(String(describing: app.liveness(for: $0)))" }) {
-            // Point the box session at THIS pod so per-pod detail targets the
-            // tapped pod — not the global leader/sessionPod. Without this,
-            // opening pod B while pod A is the session anchor loads A's data.
-            // Sync for any registered (non-pending) pod with an fqdn — including
-            // an offline/coming-up one — so its honest state renders from a real
-            // load attempt against ITS base URL + ITS per-pod token (Fix B),
-            // never the global anchor's.
+            // Pairing still mirrors its token into the shared store's active
+            // slot, so keep that slot on this box while its page is open.
             if let p = pod, p.status != .pending, !p.fqdn.isEmpty {
                 await PodSessionSync.sync(currentPod: p, store: sessionStore)
             }
-            if detailVm == nil {
-                detailVm = HomeViewModel(client: client, podContext: podId)
-            }
-            if metricsVm == nil {
-                metricsVm = ServerMetricsViewModel(podId: podId, client: client)
+            if boxClient == nil || detailVm == nil || metricsVm == nil {
+                await bindToBox()
             }
             if serverApps == nil, let fqdn = pod?.fqdn, !fqdn.isEmpty, pod?.status != .pending {
                 serverApps = ServerAppsController(serverFqdn: fqdn, clients: podClients)
@@ -881,6 +885,20 @@ struct ServerDetailContainer: View {
         }
     }
 
+    /// (Re)build this page's client and view models over this server's own
+    /// base URL and its current token. Re-run after pairing: the bound client
+    /// keeps the token it was built with.
+    @MainActor
+    private func bindToBox() async {
+        let bound = await podClients.client(forFqdn: boxFqdn)
+        let polling = metricsVm?.isPolling ?? false
+        metricsVm?.stopPolling()
+        boxClient = bound
+        detailVm = HomeViewModel(client: bound, podContext: podId)
+        metricsVm = ServerMetricsViewModel(podId: podId, client: bound)
+        if polling { metricsVm?.startPolling(every: 15) }
+    }
+
     @MainActor
     private func refreshDirectoryAndRepairAppKey(allowAuthentication: Bool) async {
         guard let username = app.currentUser, !username.isEmpty else { return }
@@ -925,7 +943,7 @@ struct ServerDetailContainer: View {
     /// tap from the "Pair this server" button — never auto-fired. Idempotent in
     /// the VM (a present token no-ops without a biometric).
     @MainActor
-    private func pairThenReload(detailVm: HomeViewModel) async {
+    private func pairThenReload() async {
         guard let fqdn = pairFqdn else { return }
         guard !isPairing else { return }
         if let demo = pod?.demoServer, let username = app.currentUser {
@@ -939,7 +957,8 @@ struct ServerDetailContainer: View {
                     store: sessionStore,
                     replacingExistingToken: true
                 )
-                await detailVm.load()
+                await bindToBox()
+                await detailVm?.load()
             } catch {
                 toasts.error("The demo server is online, but this device couldn't create a paired session. Try again.")
             }
@@ -957,7 +976,8 @@ struct ServerDetailContainer: View {
         await vm.pair(replacingExistingToken: true)
         switch vm.phase {
         case .paired, .alreadyPaired:
-            await detailVm.load()
+            await bindToBox()
+            await detailVm?.load()
         case .failed(let msg):
             toasts.error(msg)
         default:

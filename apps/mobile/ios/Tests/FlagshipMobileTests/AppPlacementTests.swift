@@ -524,3 +524,49 @@ final class AppRunsOnTests: XCTestCase {
         XCTAssertEqual(leticia.serviceCopiesCalls, before, "no copy underway: no polling")
     }
 }
+
+/// A server page reads its own box even after the shell moves the shared
+/// session to its current server (which it does on every `/pods` change).
+@MainActor
+final class ServerPageBindingTests: XCTestCase {
+    private let leticia = "leticia.plucky-avocet.flagship.services"
+    private let home3 = "home3.plucky-avocet.flagship.services"
+
+    override func tearDown() {
+        StubURLProtocol.handler = nil
+        super.tearDown()
+    }
+
+    func test_theBoxComesFromThePodElseItsId() {
+        let id = PodInfo.podId(forFqdn: leticia)
+        XCTAssertEqual(ServerDetailContainer.boxFqdn(podId: id, pod: nil), leticia)
+        let pod = PodInfo(podId: id, name: "leticia", fqdn: "Leticia.plucky-avocet.flagship.services", status: .online)
+        XCTAssertEqual(ServerDetailContainer.boxFqdn(podId: id, pod: pod), leticia)
+    }
+
+    func test_detailStaysOnThePagesBoxWhenTheShellMovesTheSession() async {
+        let store = SessionStore(defaults: UserDefaults(suiteName: "server-page-\(UUID().uuidString)")!)
+        await store.setSessionToken("tok-leticia", forPodId: PodInfo.podId(forFqdn: leticia))
+        await store.setSessionToken("tok-home3", forPodId: PodInfo.podId(forFqdn: home3))
+        await store.activatePod(PodInfo.podId(forFqdn: leticia), baseUrl: CompanionTicketURL.podBaseUrl(forFqdn: leticia))
+
+        var seen: [(host: String?, token: String?)] = []
+        StubURLProtocol.handler = { req in
+            seen.append((req.url?.host, req.value(forHTTPHeaderField: "x-flagship-session")))
+            return (HTTPURLResponse(url: req.url!, statusCode: 503, httpVersion: "HTTP/1.1", headerFields: nil)!, Data())
+        }
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [StubURLProtocol.self]
+        let factory = PodScreensClientFactory.live(urlSession: URLSession(configuration: config), store: store)
+        let podId = PodInfo.podId(forFqdn: leticia)
+        let page = await factory.client(forFqdn: ServerDetailContainer.boxFqdn(podId: podId, pod: nil))
+        let vm = HomeViewModel(client: page, podContext: podId)
+
+        await store.activatePod(PodInfo.podId(forFqdn: home3), baseUrl: CompanionTicketURL.podBaseUrl(forFqdn: home3))
+        await vm.load()
+
+        XCTAssertEqual(seen.count, 1)
+        XCTAssertEqual(seen.first?.host, leticia)
+        XCTAssertEqual(seen.first?.token, "tok-leticia")
+    }
+}
