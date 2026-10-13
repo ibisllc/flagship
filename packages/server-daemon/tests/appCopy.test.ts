@@ -5,6 +5,7 @@
  * data restored before first start, and that a failure or a restart leaves
  * nothing behind.
  */
+import { randomBytes } from "node:crypto";
 import { mkdtempSync, readdirSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -23,7 +24,7 @@ import { buildAppCopySource } from "../src/appCopy/source.js";
 import { AppCopyStore, INTERRUPTED_REASON } from "../src/appCopy/store.js";
 import { buildAppCopyTarget, COPIES_PATH, COPY_PATH } from "../src/appCopy/target.js";
 import type { AppCopyOps } from "../src/appCopy/ops.js";
-import { APP_COPY_EXPORT_PATH, copyEnvKeyFromCgk, fetchEnvelopeBytes } from "../src/appCopy/wire.js";
+import { APP_COPY_CHUNK_BYTES, APP_COPY_EXPORT_PATH, APP_COPY_PARALLEL, copyEnvKeyFromCgk, fetchEnvelopeBytes } from "../src/appCopy/wire.js";
 import { DbWriteLedger } from "../src/dataLayer/ownerDb.js";
 import { DataProvisioner, InMemoryFilesAdmin, InMemoryPostgresAdmin } from "../src/dataLayer/index.js";
 import { AppAccessStore } from "../src/egress/accessStore.js";
@@ -353,8 +354,48 @@ describe("the owner's order on the target (POST /api/screens/services/copy)", ()
     expect(Object.keys(metas[0] as object).sort()).toEqual(
       ["v", "serviceId", "creator", "slug", "manifestJson", "appliedMigrations", "parts", "access", "membership", "env", "accessList"].sort(),
     );
+    // A current target gets everything but the (already compressed) database dumps gzipped.
+    expect((metas[0] as { parts: Array<{ name: string; encoding?: string }> }).parts.map((p) => [p.name, p.encoding])).toEqual([
+      ["image", "gzip"],
+      ["db:default", undefined],
+      ["files", "gzip"],
+      ["source", "gzip"],
+    ]);
     expect(JSON.stringify(metas[0])).not.toMatch(/api-?key|fsk_/i);
     expect(JSON.stringify(metas[0])).not.toContain("sk-secret");
+  });
+
+  it("fetches a big part several chunks at a time and puts it back byte for byte", async () => {
+    const big = randomBytes(APP_COPY_CHUNK_BYTES * 2 + 12345);
+    let loaded: Buffer | null = null;
+    const w = await world({
+      sourceOps: { saveImage: async (_i, out) => writeFile(out, big) },
+      targetOps: {
+        loadImage: async (p) => {
+          loaded = await readFile(p);
+        },
+        imageExists: async () => loaded !== null,
+      },
+    });
+    let inFlight = 0;
+    let most = 0;
+    const orig = w.source.handle;
+    (w.source as { handle: typeof orig }).handle = async (r) => {
+      inFlight++;
+      most = Math.max(most, inFlight);
+      await new Promise((res) => setTimeout(res, 5));
+      try {
+        return await orig(r);
+      } finally {
+        inFlight--;
+      }
+    };
+    await call(w, "POST", COPY_PATH, grant());
+    await w.target.settle();
+    expect((await call(w, "GET", COPIES_PATH)).json.copies[0].state).toBe("done");
+    expect(loaded!.equals(big)).toBe(true);
+    expect(most).toBeGreaterThan(1);
+    expect(most).toBeLessThanOrEqual(APP_COPY_PARALLEL);
   });
 
   it("without the account's shared key on the target, env names wait as pendingEnv", async () => {
@@ -580,6 +621,8 @@ describe("the source's export endpoint (POST /api/app-copy/export)", () => {
       const r = await exportCall(w, { g });
       if (r.status === 200) {
         expect(r.json!.parts.map((p: { name: string }) => p.name)).toEqual(["image", "db:default", "files", "source"]);
+        // A target that didn't ask for gzip (an older box) gets the parts as they are.
+        expect(r.json!.parts.some((p: { encoding?: string }) => p.encoding)).toBe(false);
         expect(r.json!.env.names).toEqual(["MODE", "OPENAI_KEY"]);
         expect(r.json!.env.sealed).toBeTruthy();
         return;

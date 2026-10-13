@@ -20,8 +20,11 @@
  * copy removes the image it loaded, the env it wrote and its downloads.
  */
 import { createHash, randomBytes } from "node:crypto";
+import { createReadStream, createWriteStream } from "node:fs";
 import { mkdir, open, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { pipeline } from "node:stream/promises";
+import { createGunzip } from "node:zlib";
 import {
   egressSuggestions,
   parseAppCopyGrant,
@@ -43,7 +46,10 @@ import { writeSourceTree } from "../llm/serviceSource.js";
 import type { AppCopyOps } from "./ops.js";
 import { AppCopyStore, type CopyHeld, type CopyRecord } from "./store.js";
 import {
+  APP_COPY_CHUNK_BYTES,
   APP_COPY_EXPORT_PATH,
+  APP_COPY_PARALLEL,
+  COPY_ENCODINGS,
   PART_RE,
   fetchEnvelopeBytes,
   fromHex,
@@ -138,7 +144,7 @@ export function buildAppCopyTarget(opts: AppCopyTargetOptions) {
     return fetchImpl(`${baseUrl(grant.sourceServer)}${APP_COPY_EXPORT_PATH}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ from: opts.serverFqdn, grant, signature, part, offset, issuedAt, auth: toHex(auth) }),
+      body: JSON.stringify({ from: opts.serverFqdn, grant, signature, part, offset, issuedAt, auth: toHex(auth), accept: COPY_ENCODINGS }),
       signal: AbortSignal.timeout(5 * 60_000),
     });
   }
@@ -190,6 +196,7 @@ export function buildAppCopyTarget(opts: AppCopyTargetOptions) {
       if (typeof p?.name !== "string" || !PART_RE.test(p.name) || ["meta", "done"].includes(p.name) || seen.has(p.name)) bad("part name");
       if (!Number.isSafeInteger(p.bytes) || p.bytes < 0) bad("part size");
       if (typeof p.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(p.sha256)) bad("part hash");
+      if (p.encoding !== undefined && !COPY_ENCODINGS.includes(p.encoding)) bad("part encoding");
       seen.add(p.name);
     }
     if (!seen.has("image")) bad("no image");
@@ -199,6 +206,7 @@ export function buildAppCopyTarget(opts: AppCopyTargetOptions) {
     return m as CopyMeta;
   }
 
+  /** Fetch a part into `path`, APP_COPY_PARALLEL chunks at a time, and check it whole. */
   async function download(
     grant: AppCopyGrant,
     signature: string,
@@ -206,24 +214,52 @@ export function buildAppCopyTarget(opts: AppCopyTargetOptions) {
     path: string,
     onBytes: (n: number) => void,
   ): Promise<void> {
-    const h = createHash("sha256");
     const fh = await open(path, "w", 0o600);
     try {
-      let offset = 0;
-      while (offset < part.bytes) {
-        const res = await post(grant, signature, part.name, offset);
-        if (res.status !== 200) throw new CopyFailed(await refusal(res));
-        const buf = Buffer.from(await res.arrayBuffer());
-        if (buf.length === 0 || offset + buf.length > part.bytes) throw new CopyFailed(`the source server sent a bad piece of ${part.name}`);
-        await fh.write(buf, 0, buf.length, offset);
-        h.update(buf);
-        offset += buf.length;
-        onBytes(buf.length);
-      }
+      const starts: number[] = [];
+      for (let o = 0; o < part.bytes; o += APP_COPY_CHUNK_BYTES) starts.push(o);
+      const fetchRange = async (start: number): Promise<void> => {
+        const end = Math.min(start + APP_COPY_CHUNK_BYTES, part.bytes);
+        for (let offset = start; offset < end; ) {
+          const res = await post(grant, signature, part.name, offset);
+          if (res.status !== 200) throw new CopyFailed(await refusal(res));
+          const buf = Buffer.from(await res.arrayBuffer());
+          if (buf.length === 0 || offset + buf.length > end) throw new CopyFailed(`the source server sent a bad piece of ${part.name}`);
+          await fh.write(buf, 0, buf.length, offset);
+          offset += buf.length;
+          onBytes(buf.length);
+        }
+      };
+      let failed: unknown = null;
+      const worker = async () => {
+        while (failed === null && starts.length > 0) {
+          try {
+            await fetchRange(starts.shift()!);
+          } catch (e) {
+            failed ??= e;
+          }
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(APP_COPY_PARALLEL, starts.length) }, worker));
+      if (failed !== null) throw failed;
     } finally {
       await fh.close();
     }
-    if (h.digest("hex") !== part.sha256) throw new CopyFailed(`${part.name} arrived damaged`);
+    if ((await sha256File(path)) !== part.sha256) throw new CopyFailed(`${part.name} arrived damaged`);
+  }
+
+  /** A part as the box uses it: unzipped next to the download when it came gzipped. */
+  async function decoded(part: CopyMeta["parts"][number], path: string): Promise<string> {
+    if (part.encoding !== "gzip") return path;
+    const out = `${path}.raw`;
+    try {
+      await pipeline(createReadStream(path), createGunzip(), createWriteStream(out, { mode: 0o600 }));
+    } catch {
+      throw new CopyFailed(`${part.name} arrived damaged (it doesn't unzip)`);
+    } finally {
+      await rm(path, { force: true });
+    }
+    return out;
   }
 
   async function holdNames(rec: CopyRecord, held: CopyHeld): Promise<void> {
@@ -252,7 +288,7 @@ export function buildAppCopyTarget(opts: AppCopyTargetOptions) {
           got += n;
           opts.store.setProgress(rec.copyId, P.fetchStart + (P.fetchEnd - P.fetchStart) * (total > 0 ? got / total : 1));
         });
-        files.set(part.name, path);
+        files.set(part.name, await decoded(part, path));
       }
       void post(grant, signature, "done", 0).then(
         (r) => r.body?.cancel().catch(() => {}),
@@ -515,3 +551,11 @@ export function buildAppCopyTarget(opts: AppCopyTargetOptions) {
 }
 
 export type AppCopyTarget = ReturnType<typeof buildAppCopyTarget>;
+
+async function sha256File(path: string): Promise<string> {
+  const h = createHash("sha256");
+  await pipeline(createReadStream(path), async function* (src: AsyncIterable<Buffer>) {
+    for await (const d of src) h.update(d);
+  });
+  return h.digest("hex");
+}

@@ -17,9 +17,11 @@
  * `done`, after 30 idle minutes, and at every start of the daemon.
  */
 import { createHash } from "node:crypto";
-import { createReadStream } from "node:fs";
+import { createReadStream, createWriteStream } from "node:fs";
 import { mkdir, open, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { pipeline } from "node:stream/promises";
+import { constants as zlibConstants, createGzip } from "node:zlib";
 import { ed, parseAppCopyGrant, verifyAppCopyGrant, type AppCopyGrant, type Bytes } from "@flagship/protocol";
 import { authorizeSensitiveOrder } from "../adminAuthorityLocal.js";
 import type { SensitiveAuthority } from "../egress/approvals.js";
@@ -78,6 +80,8 @@ interface ExportSession {
   error?: string;
   files: Map<string, string>;
   lastUsed: number;
+  /** The target can open gzipped parts. */
+  gzip: boolean;
 }
 
 const J = { "content-type": "application/json" } as const;
@@ -110,8 +114,10 @@ export function buildAppCopySource(opts: AppCopySourceOptions) {
   async function prepare(s: ExportSession, app: InstalledService, grant: AppCopyGrant): Promise<void> {
     await mkdir(s.dir, { recursive: true, mode: 0o700 });
     const parts: CopyMeta["parts"] = [];
-    const add = async (name: string, path: string) => {
-      parts.push({ name, bytes: (await stat(path)).size, sha256: await sha256File(path) });
+    const add = async (name: string, raw: string, compressible = true) => {
+      const gz = s.gzip && compressible;
+      const path = gz ? await gzipFile(raw) : raw;
+      parts.push({ name, bytes: (await stat(path)).size, sha256: await sha256File(path), ...(gz ? { encoding: "gzip" as const } : {}) });
       s.files.set(name, path);
     };
     const image = join(s.dir, "image.tar");
@@ -120,7 +126,7 @@ export function buildAppCopySource(opts: AppCopySourceOptions) {
     for (const [store, cred] of Object.entries(app.data?.postgres ?? {})) {
       const out = join(s.dir, `db-${parts.length}.dump`);
       await opts.ops.dumpDatabase(cred, out);
-      await add(`db:${store}`, out);
+      await add(`db:${store}`, out, false);
     }
     if (app.data?.files) {
       const out = join(s.dir, "files.tar");
@@ -205,7 +211,7 @@ export function buildAppCopySource(opts: AppCopySourceOptions) {
       return err(400, "invalid json");
     }
     const grant = parseAppCopyGrant(body?.grant);
-    const { from, part, offset, issuedAt, signature, auth } = body ?? {};
+    const { from, part, offset, issuedAt, signature, auth, accept } = body ?? {};
     if (
       !grant ||
       typeof from !== "string" ||
@@ -268,6 +274,7 @@ export function buildAppCopySource(opts: AppCopySourceOptions) {
         state: "preparing",
         files: new Map(),
         lastUsed: now(),
+        gzip: Array.isArray(accept) && accept.includes("gzip"),
       };
       sessions.set(key, s);
       const session = s;
@@ -309,6 +316,14 @@ export function buildAppCopySource(opts: AppCopySourceOptions) {
     /** Open exports (tests). */
     openExports: () => sessions.size,
   };
+}
+
+/** `path` → `path.gz` (fast level: the link, not the CPU, is what's short), dropping `path`. */
+async function gzipFile(path: string): Promise<string> {
+  const out = `${path}.gz`;
+  await pipeline(createReadStream(path), createGzip({ level: zlibConstants.Z_BEST_SPEED }), createWriteStream(out, { mode: 0o600 }));
+  await rm(path, { force: true });
+  return out;
 }
 
 async function sha256File(path: string): Promise<string> {

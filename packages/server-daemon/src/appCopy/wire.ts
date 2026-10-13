@@ -18,6 +18,11 @@
  * `db:<store>`, `files`, and `source`: the working tree of an app built on the
  * source, as `{files, binaries}` JSON) read in chunks from `offset`, or `done`.
  *
+ * A target that sends `accept: ["gzip"]` with its first `meta` gets the image,
+ * the files folder and the working tree gzipped (the part's `encoding`; its
+ * size and SHA-256 are of the bytes sent), and asks for up to
+ * APP_COPY_PARALLEL chunks at once. Older boxes on either side ignore both.
+ *
  * Owner env values ride only sealed under a key both boxes derive from the
  * account's shared gossip key (CGK); a box without it sends the names alone.
  */
@@ -31,6 +36,12 @@ const TAG_APP_COPY_ENV = "flagship/app-copy-env/v1";
 
 /** Bytes a data-part response carries at most. */
 export const APP_COPY_CHUNK_BYTES = 8 * 1024 * 1024;
+
+/** Chunk requests a target keeps in flight. */
+export const APP_COPY_PARALLEL = 4;
+
+export type CopyEncoding = "gzip";
+export const COPY_ENCODINGS: readonly CopyEncoding[] = ["gzip"];
 
 export const PART_RE = /^(meta|done|image|files|source|db:[A-Za-z0-9_-]{1,63})$/;
 
@@ -69,6 +80,8 @@ export interface ExportRequestBody {
   offset: number;
   issuedAt: number;
   auth: string;
+  /** Encodings the target can open (read from the first `meta`). */
+  accept?: string[];
 }
 
 export interface CopyAccessEntry {
@@ -90,7 +103,8 @@ export interface CopyMeta {
   slug: string;
   manifestJson: string;
   appliedMigrations: string[];
-  parts: Array<{ name: string; bytes: number; sha256: string }>;
+  /** `bytes` and `sha256` are of the bytes sent (after `encoding`). */
+  parts: Array<{ name: string; bytes: number; sha256: string; encoding?: CopyEncoding }>;
   /** Who may reach the app (mode + allow-list); null when it has no entry. */
   access: CopyAccessEntry | null;
   membership: AppMembershipSnapshot | null;

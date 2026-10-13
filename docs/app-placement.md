@@ -81,7 +81,11 @@ data), like any sibling.
   `pg_dump` of each of the app's databases as the app's own role, `files` the
   backups' archive of its files folder, the app paused meanwhile; `source` its
   working tree when it was built there, so it stays editable) are read in
-  8 MiB chunks and checked against their SHA-256 on arrival; `part:"done"`
+  8 MiB chunks, up to 4 at once, and checked against their SHA-256 on
+  arrival. A target that sends `accept:["gzip"]` with its first `meta` gets
+  `image`, `files` and `source` gzipped (the part's `encoding`; size and hash
+  are of the bytes sent; the dumps are already compressed), and older boxes
+  on either side ignore it; `part:"done"`
   lets the source delete it. The description also carries the members (the
   membership list and the service-access mode + allow-list), the source's
   signed access list, and the owner env: its values only sealed under a key
