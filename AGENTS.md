@@ -394,6 +394,21 @@ account can view or co-manage a server, never destroy it) is in the MVP
   `openssl rand -hex 32 | wrangler secret put ACCOUNT_READ_TOKEN_SECRET`.
   Breaks live status on store builds for real accounts until new builds,
   and boxes' alias sync until the next endorsed release.
+- **Server order (2026-10-14, `docs/server-order.md`).** The owner drags
+  servers into order on Home (all three apps); the first one up leads, the
+  role passes down the list and back up. A signed
+  `flagship/server-order/v1` (sensitive-order key: admin root, else IRK;
+  each reorder asks Face ID once on admin-root accounts) is posted to
+  `POST /api/accounts/<u>/server-order`, stored in D1 `server_orders`
+  (migration 0096), returned on `/pods`, `/stream` and the daemon-status
+  reply; boxes verify it, keep `server-order.json`, pass it on gossip v2 and
+  rank by it. "Set as preferred server" is now "Make leader"; the set-leader
+  vote, lane and consumer are gone. Same commits: phones keep their account
+  device key after the first unlock (silent read tokens) and Home offers
+  "Show my servers" instead of an empty list; the co-manage entry moved to
+  the Add-a-server page. Needs: migration 0096 before the `.com` deploy
+  (webapp shell v74), an endorsed box release, iOS/Android builds. Not yet
+  run on a device.
 - **Docker containers unreachable on VM appliances (fixed in `e81df698`).**
   The appliance's `Type=ether` networkd rule pulled every container's veth off
   its bridge: every app 502'd with "read ECONNRESET" after a 3 s ARP timeout

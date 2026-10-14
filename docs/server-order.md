@@ -37,9 +37,11 @@ listed one, oldest first (birth certificate date), then by domain
 The leader receives the traffic of every app it runs and gets every new app.
 Someone who could reorder could pull apps onto the box they can reach. Boxes
 already treat the old vote as a sensitive order, and a box can only check an
-order signed by the account key, so the order is signed. That costs no extra
-prompt when the app already holds the account key in this unlocked session;
-otherwise the app asks once (Face ID / Touch ID / fingerprint, with the device
+order signed by the account key, so the order is signed. On an account
+without an admin root that costs no extra prompt when the app already holds
+the account key in this unlocked session. The admin root is never kept
+unlocked between actions, so on accounts that have one (every new account)
+each reorder asks once (Face ID / Touch ID / fingerprint, with the device
 passcode as fallback) with "Confirm the new server order".
 
 ## `.com`
@@ -67,8 +69,9 @@ passcode as fallback) with "Confirm the new server order".
   carries the signed order beside it, so a box that missed the heartbeat (or
   `.com` is down) still learns the order from a sibling.
 - Election (`compareClout`): position in the order, then birth date, then
-  domain, among live runners of the app. `/api/leads` adds `order` (the domains
-  in effective rank) and `leader` (the first live one).
+  domain, among live runners of the app. `/api/leads` adds `leader` (the first
+  live one) but never the order: that endpoint is public, and the full list
+  would name every server of the account.
 
 ## Apps (webapp, iOS, Android)
 
@@ -83,6 +86,8 @@ passcode as fallback) with "Confirm the new server order".
   reason. Make the leader the current server afterwards (new apps follow it,
   `docs/app-placement.md`).
 - Server detail's "Set as preferred server" becomes **Make leader**: moves the
-  server to the top of the order and signs it the same way.
+  server to the top of the order and signs it the same way. Home and server
+  detail share one order state, so back on Home the server is already first
+  with the Leader badge (and moves back if the signature or post fails).
 - Demo accounts: reorder locally only (no keys, no post), and never prompt.
 - Drop the old preferred-server memory and the set-leader deposit code.
