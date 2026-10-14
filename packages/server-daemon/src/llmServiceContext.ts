@@ -91,8 +91,11 @@ export async function buildLlmAppContext(
   md.push("## Identity contract");
   md.push("");
   md.push(
-    "Every inbound HTTP request carries `X-Flagship-User`, `X-Flagship-Role`, " +
-      "`X-Flagship-Member`, and `X-Flagship-Signature`. Don't implement your own " +
+    "Every inbound HTTP request carries `X-Flagship-Visitor` (`member`, `api` or " +
+      "`anonymous`), `X-Flagship-Timestamp` and `X-Flagship-Signature`; a member or " +
+      "API-key request also carries `X-Flagship-User` and `X-Flagship-Role`, an " +
+      "anonymous one carries neither (no id, no rank: read-only by default unless " +
+      "the owner asked otherwise). Don't implement your own " +
       "auth — verify the signature against `/.flagship/runtime-pubkey` if you " +
       "need to gate sensitive operations, and use `X-Flagship-User` / `Role` " +
       "for authorization. **Never** read user identity from any other header, " +
@@ -157,7 +160,7 @@ export async function buildLlmAppContext(
   md.push("  Take everything from headers + `FLAGSHIP_*` env. Apps that hardcode");
   md.push("  break on transfer between users.");
   md.push("- Public routes (`access.public_routes` in the manifest) receive");
-  md.push("  `X-Flagship-User: anonymous`. Anything not in that list 403s before");
+  md.push("  `X-Flagship-Visitor: anonymous` with no user or role. Anything not in that list 403s before");
   md.push("  reaching the container.");
   md.push("- Schema migrations are commits in `migrations/NNNN_*.sql|.ts`.");
   md.push("  Forward-only; the daemon applies them in numeric order before");

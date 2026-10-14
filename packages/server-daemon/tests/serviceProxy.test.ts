@@ -145,6 +145,8 @@ describe("handleAppRequest — full flow", () => {
       fakeReq("/", {
         "x-flagship-user": "evil-injection",
         "x-flagship-role": "owner",
+        "X-Flagship-Visitor": "member",
+        x_flagship_role: "owner",
         cookie: "session=abc",
       }),
       {
@@ -160,9 +162,13 @@ describe("handleAppRequest — full flow", () => {
     );
     expect(r.status).toBe(200);
     expect(captured).not.toBeNull();
-    // Client-supplied X-Flagship-* are stripped
-    expect(captured!.headers["x-flagship-user"]).toBe("anonymous");
-    expect(captured!.headers["x-flagship-role"]).toBe("anonymous");
+    // Client-supplied X-Flagship-* (any case, or with underscores) are
+    // stripped; an anonymous visitor gets the marker and no id or rank.
+    expect(captured!.headers["x-flagship-visitor"]).toBe("anonymous");
+    expect(captured!.headers["x-flagship-user"]).toBeUndefined();
+    expect(captured!.headers["x-flagship-role"]).toBeUndefined();
+    expect(captured!.headers["X-Flagship-Visitor"]).toBeUndefined();
+    expect(captured!.headers["x_flagship_role"]).toBeUndefined();
     expect(captured!.headers["x-flagship-app-id"]).toBe(app.serviceId);
     expect(captured!.headers["x-flagship-timestamp"]).toBe("12345");
     expect(captured!.headers["x-flagship-signature"]).toMatch(/^[0-9a-f]{128}$/);
@@ -381,9 +387,12 @@ describe("sibling-app guard (docs/app-apis.md §4)", () => {
     };
     const r = await handleAppRequest(app, req("POST", { origin: "https://notes.home.alice.flagship.services", cookie: "s=1" }), deps);
     expect(r.status).toBe(200);
-    expect(seen["x-flagship-user"]).toBe("anonymous");
+    expect(seen["x-flagship-visitor"]).toBe("anonymous");
+    expect(seen["x-flagship-user"]).toBeUndefined();
+    expect(seen["x-flagship-role"]).toBeUndefined();
     expect(seen["cookie"]).toBe("s=1");
     await handleAppRequest(app, req("POST", { origin: `https://${HOSTNAME}` }), deps);
+    expect(seen["x-flagship-visitor"]).toBe("member");
     expect(seen["x-flagship-user"]).toBe("member-1");
   });
 });

@@ -100,8 +100,12 @@ and, below it in both modes, **Members (n)**: people (name, role) and groups
 (label, role, "k of N joined"), with **+ Add person** and **+ Add group** (the
 role is chosen at creation). The toggle never changes the list.
 
-- **Open to all:** anyone gets in. Someone who isn't a member is an anonymous
-  visitor with no role. A member who signs in with their phone gets their role.
+- **Open to all:** anyone gets in. Someone who hasn't signed in is an anonymous
+  visitor with **no rank** (owner decision 2026-10-14): the box forwards their
+  requests to the app with `X-Flagship-Visitor: anonymous` and no
+  `X-Flagship-User` / `X-Flagship-Role` (docs/app-apis.md §5, the header
+  contract), and the app decides what an anonymous visitor may do. A member
+  who signs in with their phone gets their rank.
 - **Members only:** only members and the owner get in; anyone else gets the
   knock page. Switching to it asks once: "Only these N people will be able to
   open it."
@@ -160,8 +164,8 @@ there; private routes still show the knock page themselves.
 
 **Not built yet:** removing one person's join from a group link on its own
 (an order naming a single grant for revocation; today a person is removed from
-the box entirely, or a whole invite is revoked), and treating anonymous
-visitors of an open app as Members (owner to confirm).
+the box entirely, or a whole invite is revoked). Anonymous visitors are never
+given a rank (decided 2026-10-14, above).
 
 ## Per-app identity (owner rule, 2026-10-13)
 

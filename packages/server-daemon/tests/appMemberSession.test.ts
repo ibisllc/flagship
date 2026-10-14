@@ -192,7 +192,11 @@ async function cookieOf(b: Awaited<ReturnType<typeof box>>, aid: Keypair): Promi
 }
 
 function verifyInjected(h: IncomingHttpHeaders, extra: string[] = []): boolean {
-  const fields = ["flagship/inject/v1", h["x-flagship-app-id"], h["x-flagship-user"], h["x-flagship-role"], h["x-flagship-timestamp"], ...extra];
+  const anon = h["x-flagship-visitor"] === "anonymous";
+  if (anon !== (h["x-flagship-user"] === undefined && h["x-flagship-role"] === undefined)) return false;
+  const user = anon ? "anonymous" : h["x-flagship-user"];
+  const role = anon ? "anonymous" : h["x-flagship-role"];
+  const fields = ["flagship/inject/v1", h["x-flagship-app-id"], user, role, h["x-flagship-timestamp"], ...extra];
   const sig = Buffer.from(String(h["x-flagship-signature"]), "hex");
   return ed.verify(new Uint8Array(sig), new TextEncoder().encode(fields.join("|")), injectorKey.publicKey);
 }
@@ -210,6 +214,7 @@ describe("the owner opens their own app", () => {
     expect(h["x-flagship-user"]).toBe(app.membership.stableIdFor(ownerAid.publicKey));
     expect(h["x-flagship-user"]).toMatch(/^[0-9a-f]{32}$/);
     expect(h["x-flagship-role"]).toBe("owner");
+    expect(h["x-flagship-visitor"]).toBe("member");
     expect(h["x-flagship-app-id"]).toBe(SVC);
     expect(verifyInjected(h)).toBe(true);
     // Same-origin writes keep the identity.
@@ -285,11 +290,30 @@ describe("everyone else is anonymous", () => {
     expect(api.body).toContain("game1 is private");
     expect(await signIn(b, strangerAid)).toEqual({ refused: 401 });
     // Forged identity headers never reach the app.
-    const pub = await send(b.port, "/pub", { "x-flagship-user": "owner-id", "x-flagship-role": "owner" });
+    const pub = await send(b.port, "/pub", {
+      "x-flagship-user": "owner-id",
+      "x-flagship-role": "owner",
+      "x-flagship-visitor": "member",
+      "x_flagship_role": "owner",
+    });
     expect(pub.status).toBe(200);
-    expect(up.seen()["x-flagship-user"]).toBe("anonymous");
-    expect(up.seen()["x-flagship-role"]).toBe("anonymous");
+    expect(up.seen()["x-flagship-visitor"]).toBe("anonymous");
+    expect(up.seen()["x-flagship-user"]).toBeUndefined();
+    expect(up.seen()["x-flagship-role"]).toBeUndefined();
+    expect(up.seen()["x_flagship_role"]).toBeUndefined();
+    expect(verifyInjected(up.seen())).toBe(true);
     expect(up.hits()).toBe(1);
+  });
+
+  it("on a members-only app an anonymous visitor never reaches the app, not even a public route", async () => {
+    const up = await container();
+    const b = await box(makeApp(up.port));
+    await access.setMode(SVC, "restricted");
+    for (const path of ["/pub", "/private"]) {
+      const r = await send(b.port, path, { "x-flagship-visitor": "member", "x-flagship-role": "owner" });
+      expect(r.status).toBe(403);
+    }
+    expect(up.hits()).toBe(0);
   });
 
   it("a session for another app, an expired one or a made-up one is anonymous", async () => {
@@ -301,7 +325,8 @@ describe("everyone else is anonymous", () => {
       const r = await send(b.port, "/private", { cookie: `Flagship-App-Session=${token}` });
       expect(r.status).toBe(403);
       await send(b.port, "/pub", { cookie: `Flagship-App-Session=${token}` });
-      expect(up.seen()["x-flagship-user"]).toBe("anonymous");
+      expect(up.seen()["x-flagship-visitor"]).toBe("anonymous");
+      expect(up.seen()["x-flagship-user"]).toBeUndefined();
     }
   });
 
@@ -314,7 +339,8 @@ describe("everyone else is anonymous", () => {
     expect(priv.status).toBe(403);
     const pub = await send(b.port, "/pub", { cookie, origin: sibling, "content-type": "application/json" }, "POST", "{}");
     expect(pub.status).toBe(200);
-    expect(up.seen()["x-flagship-user"]).toBe("anonymous");
+    expect(up.seen()["x-flagship-visitor"]).toBe("anonymous");
+    expect(up.seen()["x-flagship-user"]).toBeUndefined();
     const ws = await send(b.port, "/private", {
       cookie,
       origin: sibling,
@@ -350,9 +376,13 @@ describe("API keys", () => {
     const up = await container();
     const { store, key: k } = await key();
     const b = await box(makeApp(up.port), store);
-    expect((await send(b.port, "/private", { authorization: `Bearer ${k}` })).status).toBe(200);
+    const forged = { "x-flagship-user": "owner-id", "x-flagship-api-scope": "write", "x-flagship-visitor": "member" };
+    expect((await send(b.port, "/private", { authorization: `Bearer ${k}`, ...forged })).status).toBe(200);
     expect(up.seen()["x-flagship-user"]).toBe("apikey:00000000000000aa");
     expect(up.seen()["x-flagship-role"]).toBe("api");
+    expect(up.seen()["x-flagship-visitor"]).toBe("api");
+    expect(up.seen()["x-flagship-api-scope"]).toBe("write");
+    expect(up.seen()["authorization"]).toBeUndefined();
     expect(verifyInjected(up.seen(), ["write"])).toBe(true);
     await access.setMode(SVC, "restricted");
     expect((await send(b.port, "/private", { authorization: `Bearer ${k}` })).status).toBe(200);
@@ -394,15 +424,18 @@ describe("open apps: members sign in on purpose (docs/service-access-gating.md, 
     const b = await box(app);
     // Anonymous on the public page until they sign in.
     await send(b.port, "/pub");
-    expect(up.seen()["x-flagship-role"]).toBe("anonymous");
+    expect(up.seen()["x-flagship-visitor"]).toBe("anonymous");
+    expect(up.seen()["x-flagship-role"]).toBeUndefined();
     const page = await send(b.port, "/__flagship/sign-in?next=/pub?tab=2");
     expect(page.status).toBe(200);
     expect(page.body).toContain("<h1>Sign in</h1>");
     expect(page.body).toContain('var NEXT = "/pub?tab=2"');
     const r = await approveKnock(b, page, memberAid);
     if (!("cookie" in r)) throw new Error(`refused ${r.refused}`);
-    await send(b.port, "/pub", { cookie: r.cookie });
+    await send(b.port, "/pub", { cookie: r.cookie, "x-flagship-role": "master", "x-flagship-visitor": "anonymous" });
     expect(up.seen()["x-flagship-role"]).toBe("member");
+    expect(up.seen()["x-flagship-visitor"]).toBe("member");
+    expect(verifyInjected(up.seen())).toBe(true);
     // The owner's rank beats the legacy membership store.
     app.membership.members.internalAdd(memberAid.publicKey, "master");
     await send(b.port, "/pub", { cookie: r.cookie });
@@ -415,7 +448,8 @@ describe("open apps: members sign in on purpose (docs/service-access-gating.md, 
     await access.removeAllowed(SVC, hex(memberAid.publicKey));
     const after = await send(b.port, "/pub", { cookie: r.cookie });
     expect(after.status).toBe(200);
-    expect(up.seen()["x-flagship-role"]).toBe("anonymous");
+    expect(up.seen()["x-flagship-visitor"]).toBe("anonymous");
+    expect(up.seen()["x-flagship-role"]).toBeUndefined();
   });
 
   it("someone who isn't a member can't sign in on an open app", async () => {
@@ -434,7 +468,8 @@ describe("open apps: members sign in on purpose (docs/service-access-gating.md, 
     expect(out.headers.location).toBe("/");
     expect(String(out.headers["set-cookie"])).toContain("Flagship-App-Session=;");
     await send(b.port, "/pub", { cookie });
-    expect(up.seen()["x-flagship-role"]).toBe("anonymous");
+    expect(up.seen()["x-flagship-visitor"]).toBe("anonymous");
+    expect(up.seen()["x-flagship-role"]).toBeUndefined();
     const page = await send(b.port, "/__flagship/sign-in?next=https://evil.example/");
     expect(page.body).toContain('var NEXT = "/"');
   });

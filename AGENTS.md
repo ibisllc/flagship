@@ -296,8 +296,12 @@ account can view or co-manage a server, never destroy it) is in the MVP
   /api/screens/services/:id/members[/role]`. Open apps get
   `/__flagship/sign-in?next=` / `sign-out` on the app's host. Box changes need
   the next endorsed release. Open: removing ONE person's join from a group
-  (needs a grant-revoke order; today it's per AID or per invite);
-  anonymous-as-Member on open apps awaits the owner.
+  (needs a grant-revoke order; today it's per AID or per invite).
+  Anonymous visitors get NO rank (owner, 2026-10-14): the proxy strips every
+  client `X-Flagship-*` header (also `_` spellings) and sends
+  `X-Flagship-Visitor: member|api|anonymous`, with no user/role headers for
+  anonymous (docs/app-apis.md §5); the app decides, AI-built apps default to
+  read-only. Needs the next endorsed box release.
 - **Per-app visitor identity (2026-10-13).** A visitor signs redeem / visit /
   knock / acceptance with `deriveAppAccountId(UMK, serviceRef)`
   (`flagship/app-aid/v1|<serviceRef>`), replacing the per-author contact AID;

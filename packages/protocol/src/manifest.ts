@@ -259,7 +259,7 @@ export interface AppAccess {
   /** Older manifests' app-defined role labels; members' roles are the fixed ladder. */
   custom_roles?: string[];
   /**
-   * Paths the app exposes to anonymous visitors (X-Flagship-User: anonymous).
+   * Paths the app exposes to anonymous visitors (X-Flagship-Visitor: anonymous, no user or role).
    * Default: empty — all routes require membership. Adding entries explicitly
    * opens them for public access (e.g. "/", "/about"). An entry ending in
    * `/*` is a segment-aware prefix: "/api/public/*" opens `/api/public/` and

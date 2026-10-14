@@ -8,8 +8,8 @@ flexible services — the owner's machine, the owner's rules.
 The box's app proxy streams responses as the app produces them (Server-Sent
 Events, long downloads, chunked replies) and passes WebSocket upgrades through
 to the app. The access decision (public route, member, API key) is made on the
-upgrade request; the identity headers (`X-Flagship-User`, `-Role`, `-Signature`
-…) are injected on it like on any request; then bytes flow both ways until
+upgrade request; the identity headers (`X-Flagship-Visitor`, `-User`, `-Role`,
+`-Signature` …, §5) are injected on it like on any request; then bytes flow both ways until
 either side closes. Idle and per-app connection limits apply. Postgres stays
 inside the box: an app exposes pub/sub to the world through its own WebSocket or
 SSE routes, with `LISTEN`/`NOTIFY` behind them.
@@ -51,7 +51,8 @@ app's page:
   says which check failed in plain words (stale / other server / signature /
   companion).
 - The box checks the key before the app sees the request, strips the
-  `Authorization` header, and injects `X-Flagship-User: apikey:<keyId>`,
+  `Authorization` header, and injects `X-Flagship-Visitor: api`,
+  `X-Flagship-User: apikey:<keyId>`,
   `X-Flagship-Role: api`, `X-Flagship-Api-Scope: read|write` (signed like the
   other identity headers). Wrong, revoked or expired keys get 401; a `read` key
   on a write method gets 403. Per-key rate limits.
@@ -66,8 +67,8 @@ browser treats apps on the same server as the same *site*: app B's page could
 make the browser send a form or API call to app A with the owner's Flagship
 session attached. So the box treats an unsafe request (anything but
 GET/HEAD/OPTIONS) whose `Origin` (or `Sec-Fetch-Site`) shows another origin as
-**anonymous for Flagship identity**. It doesn't block the request, and an app's
-own sign-in is unaffected.
+**anonymous for Flagship identity** (`X-Flagship-Visitor: anonymous`, §5). It
+doesn't block the request, and an app's own sign-in is unaffected.
 
 ## 5. Sign-in
 
@@ -102,6 +103,33 @@ that AID, else the manifest's `default_role`. Only the box owner is ever
 `owner`: a default (or assigned) role of `owner` gives an invited person
 `master`.
 
+**The header contract.** On every request it forwards (plain, streamed or a
+WebSocket upgrade) the box first drops every header the client sent whose name
+starts with `X-Flagship-` (any case, and also spelled with underscores,
+`x_flagship_role`, which CGI/WSGI servers fold into the same name), then sets:
+
+| header | member | API key | anonymous |
+|---|---|---|---|
+| `X-Flagship-Visitor` | `member` | `api` | `anonymous` |
+| `X-Flagship-User` | per-app stable id | `apikey:<keyId>` | *absent* |
+| `X-Flagship-Role` | `member` / `manager` / `master` / `owner` | `api` | *absent* |
+| `X-Flagship-Api-Scope` | *absent* | `read` / `write` | *absent* |
+| `X-Flagship-App-Id`, `-Timestamp`, `-Signature` | set | set | set |
+
+`X-Flagship-Signature` is hex Ed25519 by the box key
+(`GET /.flagship/runtime-pubkey`) over
+`flagship/inject/v1|<appId>|<user>|<role>|<timestamp>`, with `|<scope>`
+appended for an API key; for an anonymous visitor `user` and `role` are the
+literal `anonymous` (no member id or rank is ever that string), so a verifier
+uses `anonymous` for both exactly when `X-Flagship-Visitor` is `anonymous`.
+
+**Anonymous visitors (owner decision 2026-10-14).** Someone who hasn't signed
+in has no rank: not `member`, nothing. On an open app the box forwards their
+requests to public routes and says only that they are anonymous; the app
+decides what they may do (an AI-built app makes them read-only unless the owner
+asked otherwise). On a members-only app they never reach the app. An app must
+never treat a missing `X-Flagship-User` or `X-Flagship-Role` as a member.
+
 Ranks are Flagship's, ordered and cumulative (docs/service-access-gating.md,
 "Open mode + members"): `member` < `manager` < `master`, plus `owner` for the
 box owner. The owner gives each member a rank; a person holding several
@@ -110,7 +138,7 @@ invites has the highest. The manifest says what each rank can do in this app
 picker) and the app enforces it: the box delivers the rank and never blocks a
 request by it, so the base `member` rank must still be able to use the app.
 
-On an open app a member is an anonymous visitor until they sign in: link to
+On an open app a member is an anonymous visitor (no rank) until they sign in: link to
 `/__flagship/sign-in?next=<path>` (and `/__flagship/sign-out?next=<path>`),
 which the box serves on the app's own host. A box with no owner AID pinned can't recognise its owner, so its
 private pages are reachable only with API keys.

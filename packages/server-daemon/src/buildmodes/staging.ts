@@ -734,6 +734,7 @@ export class StagingRunner implements StagingHost {
       "user-agent": "flagship-check",
       accept: "*/*",
       "x-flagship-app-id": appId,
+      "x-flagship-visitor": "member",
       "x-flagship-user": STAGING_USER,
       "x-flagship-role": STAGING_ROLE,
       "x-flagship-timestamp": ts,

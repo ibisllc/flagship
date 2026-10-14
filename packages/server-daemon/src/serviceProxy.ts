@@ -8,11 +8,13 @@
  *      otherwise membership-gated). WebSocket upgrades are decided the same.
  *   2. Strip any `X-Flagship-*` headers the client supplied (they have
  *      no business arriving uninjected).
- *   3. Inject signed identity headers the app trusts:
- *        X-Flagship-User       : "anonymous" or member id
- *        X-Flagship-Role       : "anonymous" / role
+ *   3. Inject signed identity headers the app trusts (docs/app-apis.md §5):
+ *        X-Flagship-Visitor    : "member" | "api" | "anonymous", always
+ *        X-Flagship-User       : member id or apikey:<keyId>; absent when anonymous
+ *        X-Flagship-Role       : rank or "api"; absent when anonymous
  *        X-Flagship-Signature  : Ed25519 over the canonical-bytes of
- *                                {serviceId, user, role, timestamp}
+ *                                {serviceId, user, role, timestamp}, with
+ *                                user = role = "anonymous" for an anonymous visitor
  *   4. Forward the request to `127.0.0.1:<containerPort>` and stream the
  *      response back (`appConnection.ts`; `handleAppRequest` buffers).
  *
@@ -82,6 +84,14 @@ export interface AppProxyDeps {
 }
 
 const STRIP_PREFIX = "x-flagship-";
+const ANONYMOUS = "anonymous";
+
+/**
+ * Who a forwarded request is, in `X-Flagship-Visitor`: a signed-in `member`
+ * (the owner included), an owner's API key (`api`), or `anonymous` (no id,
+ * no rank: the app decides what such a visitor may do).
+ */
+export type VisitorKind = "member" | "api" | "anonymous";
 
 const REQUEST_ACCESS_TEMPLATE = (appName: string, urlLabel: string): string =>
   `<!doctype html>
@@ -191,15 +201,22 @@ export async function prepareAppRequest(
   const forwardHeaders = stripIdentityHeaders(req.headers);
   if (apiKey) delete forwardHeaders["authorization"];
   const ts = String((deps.now ?? Date.now)());
-  const user = apiKey ? `apikey:${apiKey.keyId}` : session ? session.stableId : "anonymous";
-  const role = apiKey ? "api" : session ? session.role : "anonymous";
+  const visitor: VisitorKind = apiKey ? "api" : session ? "member" : "anonymous";
+  // An anonymous visitor has no id and no rank: the signature's user and role
+  // slots carry the literal `anonymous` (no member id is ever that string),
+  // and neither header is sent (docs/app-apis.md §5).
+  const user = apiKey ? `apikey:${apiKey.keyId}` : session ? session.stableId : ANONYMOUS;
+  const role = apiKey ? "api" : session ? session.role : ANONYMOUS;
   const fields = [`flagship/inject/v1`, app.serviceId, user, role, ts];
   // An API-key request's scope is signed too, as a sixth field.
   if (apiKey) fields.push(apiKey.scope);
   const sig = deps.injector.signAsBox(new TextEncoder().encode(fields.join("|")));
   forwardHeaders["x-flagship-app-id"] = app.serviceId;
-  forwardHeaders["x-flagship-user"] = user;
-  forwardHeaders["x-flagship-role"] = role;
+  forwardHeaders["x-flagship-visitor"] = visitor;
+  if (visitor !== "anonymous") {
+    forwardHeaders["x-flagship-user"] = user;
+    forwardHeaders["x-flagship-role"] = role;
+  }
   if (apiKey) forwardHeaders["x-flagship-api-scope"] = apiKey.scope;
   forwardHeaders["x-flagship-timestamp"] = ts;
   forwardHeaders["x-flagship-signature"] = bytesToHex(sig);
@@ -342,11 +359,16 @@ function normalizeOrigin(raw: string): string | null {
   }
 }
 
-/** Drop any inbound header whose name starts with `x-flagship-`. */
+/**
+ * Drop any inbound header whose name starts with `x-flagship-`, also when
+ * spelled with underscores (`x_flagship_role`): CGI/WSGI-style servers fold
+ * `_` and `-` into one name, so that spelling would reach a Python app as the
+ * real header.
+ */
 export function stripIdentityHeaders(headers: Record<string, string>): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(headers)) {
-    if (!k.toLowerCase().startsWith(STRIP_PREFIX)) out[k] = v;
+    if (!k.toLowerCase().replace(/_/g, "-").startsWith(STRIP_PREFIX)) out[k] = v;
   }
   return out;
 }

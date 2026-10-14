@@ -105,7 +105,11 @@ function get(
 }
 
 function verifyInjected(h: IncomingHttpHeaders, extra: string[] = []): boolean {
-  const fields = ["flagship/inject/v1", h["x-flagship-app-id"], h["x-flagship-user"], h["x-flagship-role"], h["x-flagship-timestamp"], ...extra];
+  const anon = h["x-flagship-visitor"] === "anonymous";
+  if (anon !== (h["x-flagship-user"] === undefined && h["x-flagship-role"] === undefined)) return false;
+  const user = anon ? "anonymous" : h["x-flagship-user"];
+  const role = anon ? "anonymous" : h["x-flagship-role"];
+  const fields = ["flagship/inject/v1", h["x-flagship-app-id"], user, role, h["x-flagship-timestamp"], ...extra];
   const sig = Buffer.from(String(h["x-flagship-signature"]), "hex");
   return ed.verify(new Uint8Array(sig), new TextEncoder().encode(fields.join("|")), injectorKey.publicKey);
 }
@@ -143,7 +147,8 @@ describe("streaming responses", () => {
     expect(headers["content-type"]).toBe("text/event-stream");
     expect(headers["transfer-encoding"]).toBe("chunked");
     expect(headers["connection"]).toBe("close");
-    expect(seen["x-flagship-user"]).toBe("anonymous");
+    expect(seen["x-flagship-visitor"]).toBe("anonymous");
+    expect(seen["x-flagship-user"]).toBeUndefined();
     expect(verifyInjected(seen)).toBe(true);
   });
 
@@ -265,12 +270,19 @@ describe("WebSocket upgrades", () => {
   it("passes an upgrade through with signed member identity and echoes both ways", async () => {
     const app = await wsEchoApp();
     const port = await proxy(fakeApp(app.port));
-    const ws = await openWs(port, "/ws", { cookie: "member=1", origin: OWN, "x-flagship-user": "forged" });
+    const ws = await openWs(port, "/ws", {
+      cookie: "member=1",
+      origin: OWN,
+      "x-flagship-user": "forged",
+      "x-flagship-role": "owner",
+      "x-flagship-visitor": "anonymous",
+    });
     expect(await echo(ws, "hello")).toBe("hello");
     expect(await echo(ws, "x".repeat(100_000))).toHaveLength(100_000);
     const h = app.seen[0]!;
     expect(h["x-flagship-user"]).toBe("member-1");
     expect(h["x-flagship-role"]).toBe("member");
+    expect(h["x-flagship-visitor"]).toBe("member");
     expect(h["x-flagship-app-id"]).toBe(SVC);
     expect(verifyInjected(h)).toBe(true);
     ws.close();
@@ -288,7 +300,10 @@ describe("WebSocket upgrades", () => {
     const port = await proxy(fakeApp(app.port, ["/ws"]));
     const ws = await openWs(port, "/ws", { cookie: "member=1", origin: "https://notes.home.alice.flagship.services" });
     expect(await echo(ws, "hi")).toBe("hi");
-    expect(app.seen[0]!["x-flagship-user"]).toBe("anonymous");
+    expect(app.seen[0]!["x-flagship-visitor"]).toBe("anonymous");
+    expect(app.seen[0]!["x-flagship-user"]).toBeUndefined();
+    expect(app.seen[0]!["x-flagship-role"]).toBeUndefined();
+    expect(verifyInjected(app.seen[0]!)).toBe(true);
     // Off a private path the same cross-origin upgrade is simply anonymous, so denied.
     const priv = await proxy(fakeApp(app.port));
     await expect(

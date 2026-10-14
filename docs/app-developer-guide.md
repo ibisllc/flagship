@@ -65,11 +65,12 @@ forwarding the request to your container:
 | Header | Meaning |
 |---|---|
 | `X-Flagship-App-Id` | Your service id. |
-| `X-Flagship-User` | The visitor's stable id: 32 hex chars for a signed-in member (per app: the same person has unrelated ids in two apps), `anonymous` for anyone else, `apikey:<keyId>` for an owner's API key. |
-| `X-Flagship-Role` | `owner` for the box owner (only them); for an invited person the role assigned to them or your `default_role` (`admin` if that is `owner`), or a `custom_roles[]` value; `anonymous`; `api` for an API key. |
+| `X-Flagship-Visitor` | Always set: `member` (a signed-in member, the owner included), `api` (an owner's API key) or `anonymous` (no id, no rank: the next two headers are absent). |
+| `X-Flagship-User` | The visitor's stable id: 32 hex chars for a signed-in member (per app: the same person has unrelated ids in two apps), `apikey:<keyId>` for an owner's API key; absent for an anonymous visitor. |
+| `X-Flagship-Role` | `owner` for the box owner (only them); for an invited person the role assigned to them or your `default_role` (`admin` if that is `owner`), or a `custom_roles[]` value; `api` for an API key; absent for an anonymous visitor. |
 | `X-Flagship-Api-Scope` | API-key requests only: `read` (GET/HEAD/OPTIONS) or `write`. |
 | `X-Flagship-Timestamp` | ms since epoch — bind your reads + writes to this if you care about freshness. |
-| `X-Flagship-Signature` | hex Ed25519 signature over `flagship/inject/v1|<serviceId>|<user>|<role>|<timestamp>`, with `|<scope>` appended on API-key requests. |
+| `X-Flagship-Signature` | hex Ed25519 signature over `flagship/inject/v1|<serviceId>|<user>|<role>|<timestamp>`, with `|<scope>` appended on API-key requests; `user` and `role` are the literal `anonymous` for an anonymous visitor. |
 
 Members are the owner and the people the owner invited; they sign in to
 your app in a browser by approving its knock page with their phone, and every

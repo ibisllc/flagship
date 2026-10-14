@@ -146,7 +146,7 @@ a phone-issued capability). See [docs/multiplexing.md](multiplexing.md).
 | `enabled` | yes | Must be `true`. Services cannot opt out of identity injection. |
 | `default_role` | yes | One of `owner` / `admin` / `member` / `viewer`. |
 | `custom_roles` | no | Service-specific role labels. The platform passes them through unchanged in `X-Flagship-Role`. |
-| `public_routes` | no | Routes anonymous visitors can hit (`X-Flagship-User: anonymous`). Default empty — every route is membership-gated. |
+| `public_routes` | no | Routes anonymous visitors can hit on an open app (`X-Flagship-Visitor: anonymous`, no user or role header). Default empty — every route is membership-gated. |
 | `queryable_by` | no | Sister-service allowlist. Listed service ids may call `GET /.flagship/peers/<this-service-id>/installed` and learn whether this service is installed. Services NOT listed always see `installed: false`. |
 
 ## `migration`
