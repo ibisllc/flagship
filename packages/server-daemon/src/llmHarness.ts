@@ -10,6 +10,8 @@ import {
   ProviderError,
   ProviderRegistry,
   StreamingProviderRegistry,
+  listProviderModels,
+  type ModelListResult,
   UnsafeBaseUrlError,
   type BaseUrlGuardOptions,
   type ChatRequest,
@@ -329,6 +331,24 @@ export class LlmHarness {
       return this.baseUrlGuard;
     }
     return { ...this.baseUrlGuard, exclusiveHost: host };
+  }
+
+  /**
+   * The models the credential's key can use, read live from its provider
+   * (through the relay like any other call for that key). Same baseUrl guard
+   * as a chat; the key is held only for this call.
+   */
+  async listModels(credential: LlmCredential): Promise<ModelListResult> {
+    const cfg: ProviderConfig = { apiKey: credential.apiKey };
+    if (typeof credential.baseUrl === "string" && credential.baseUrl.length > 0) {
+      try {
+        assertSafeProviderBaseUrl(credential.baseUrl, this.guardFor(credential));
+      } catch {
+        return { ok: false, reason: "failed" };
+      }
+      cfg.baseUrl = credential.baseUrl;
+    }
+    return listProviderModels(credential.provider, cfg, this.fetchForCredential(credential));
   }
 
   listProviders(): string[] {

@@ -366,6 +366,8 @@ export function buildStagedChatDeploy(deps: StagedChatDeployDeps) {
         repoFiles: ws.list(),
         mode: "scratch",
         initialMessage: chatFixMessage(redact(first.reason), ws.list()),
+        contextTokens: await agentRunner.contextTokens?.(id).catch(() => undefined),
+        redact,
         ...(deps.agentMaxTurns != null ? { options: { maxTurns: deps.agentMaxTurns } } : {}),
       });
       if (result.stopReason === "environment" && result.environment) {

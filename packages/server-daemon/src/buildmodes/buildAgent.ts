@@ -31,6 +31,8 @@ import type { BuildJournal, BuildMode } from "./buildJournal.js";
 import type { BuildToolHost } from "./buildToolHost.js";
 import { BUILD_TOOL_SPECS } from "./buildToolHost.js";
 import type { EnvironmentFailure } from "./environmentFailure.js";
+import { compactIfNeeded } from "../llm/contextCompaction.js";
+import type { ModelRedactor } from "../llm/modelPrivacy.js";
 
 /**
  * The model call the agent makes each turn. Provider-agnostic: the caller
@@ -47,7 +49,10 @@ export type ChatRunner = (req: ChatRequest) => Promise<ChatResponse>;
  * credential just-in-time. The orchestrator binds the buildId into a
  * `ChatRunner` closure before handing it to the loop.
  */
-export type AgentRunner = (buildId: string, req: ChatRequest) => Promise<ChatResponse>;
+export type AgentRunner = ((buildId: string, req: ChatRequest) => Promise<ChatResponse>) & {
+  /** The context window of the model this build's key will use, when known. */
+  contextTokens?: (buildId: string) => Promise<number | undefined>;
+};
 
 export interface BuildAgentResult {
   /** The model called finish and the box accepted it. */
@@ -177,6 +182,10 @@ export async function runBuildAgent(args: {
   initialMessage?: string;
   /** Journal mode for the loop's own entries (default "git"). */
   mode?: BuildMode;
+  /** The active model's context window; older turns are summarised before it fills. */
+  contextTokens?: number;
+  /** Applied to what the summariser reads (and to its summary). */
+  redact?: ModelRedactor;
 }): Promise<BuildAgentResult> {
   const opts = { ...DEFAULTS, ...(args.options ?? {}) };
   const mode: BuildMode = args.mode ?? "git";
@@ -196,6 +205,24 @@ export async function runBuildAgent(args: {
 
   for (let i = 0; i < opts.maxTurns; i++) {
     turns = i + 1;
+    const compacted = await compactIfNeeded({
+      messages,
+      tools: specs,
+      ...(args.options?.maxTokens != null ? { maxTokens: args.options.maxTokens } : {}),
+      ...(args.contextTokens ? { contextTokens: args.contextTokens } : {}),
+      model: opts.model ?? "",
+      ...(args.redact ? { redact: args.redact } : {}),
+      summarise: async (req) => (await args.runner(req)).content,
+    });
+    if (compacted.replaced > 0) {
+      messages.splice(0, messages.length, ...compacted.messages);
+      await args.journal.append(args.buildId, {
+        mode,
+        kind: "adapt-step",
+        actor: "system",
+        summary: `earlier conversation summarised (${compacted.replaced} messages)`,
+      });
+    }
     let resp: ChatResponse;
     try {
       const req: ChatRequest = {

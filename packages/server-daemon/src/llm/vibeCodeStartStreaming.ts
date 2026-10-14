@@ -30,7 +30,10 @@ import type {
   ChatRequest,
   ChatStreamEvent,
 } from "@flagship/llm-providers";
-import type { LlmHarness } from "../llmHarness.js";
+import type { LlmCredential, LlmHarness } from "../llmHarness.js";
+import { alternateTurns, compactIfNeeded } from "./contextCompaction.js";
+import type { ModelRedactor } from "./modelPrivacy.js";
+import type { VibeCodeSession } from "./vibeCodeSession.js";
 import type { BuildCredentialStore } from "./buildCredentialStore.js";
 import type { AppEnvStore } from "../serviceEnvStore.js";
 import type { VibeCodeSessionRegistry } from "./vibeCodeSession.js";
@@ -111,15 +114,20 @@ export interface BuildVibeCodeStartStreamingArgs {
   appEnvStore: AppEnvStore;
   /** Static fields the BFF would otherwise have to thread per-call. */
   context?: Omit<UserContextInput, "appEnvNames">;
-  /** Default model when the caller didn't specify one. */
   /** Per-provider fallback models (defaultModelsFromEnv). */
   defaultModels: Readonly<Record<string, string>>;
+  /** The active model's context window (for compaction), when known. */
+  contextTokens?: (provider: string, model: string) => Promise<number | undefined>;
+  /** Applied to what the compaction summariser reads and writes. */
+  redact?: ModelRedactor;
 }
 
 export interface StartStreamingArgs {
   sessionId: string;
   prompt: string;
   model?: string;
+  /** Reasoning effort in the provider's own words; absent ⇒ its default. */
+  effort?: string;
   /**
    * Multimodal attachments on the user turn (image / text). Already
    * validated by the caller (caps/kinds/sizes). They ride on the
@@ -209,9 +217,10 @@ export function buildVibeCodeStartStreaming(
       session.fail("no AI credential set for this session", true);
       return;
     }
+    if (s.model || s.effort) session.setModel(s.model, s.effort);
     let model: string;
     try {
-      model = modelForProvider(credential.provider, s.model, args.defaultModels);
+      model = modelForProvider(credential.provider, session.meta.model, args.defaultModels);
     } catch (e) {
       session.fail((e as Error).message, true);
       return;
@@ -243,26 +252,38 @@ export function buildVibeCodeStartStreaming(
         },
       ],
       tools: VIBE_CODE_TOOLS.map((t) => ({ ...t })),
+      ...(session.meta.effort ? { reasoningEffort: session.meta.effort } : {}),
     };
 
-    await args.harness.chatStream(credential, request, (e: ChatStreamEvent) => {
-      if (e.kind === "delta") {
-        session.feedAssistant(e.text);
-        return;
-      }
-      if (e.kind === "tool_use") {
-        session.receiveToolUse({ id: e.id, name: e.name, input: e.input });
-        return;
-      }
-      if (e.kind === "end") {
-        session.endAssistant();
-        return;
-      }
-      if (e.kind === "error") {
-        session.fail(e.message, true);
-      }
-    });
+    await streamTurn(args.harness, credential, request, session);
   };
+}
+
+/** Stream one model turn into the session, charging its credits to the reply. */
+async function streamTurn(
+  harness: LlmHarness,
+  credential: LlmCredential,
+  request: ChatRequest,
+  session: VibeCodeSession,
+): Promise<void> {
+  await harness.chatStream(credential, request, (e: ChatStreamEvent) => {
+    if (e.kind === "delta") {
+      session.feedAssistant(e.text);
+      return;
+    }
+    if (e.kind === "tool_use") {
+      session.receiveToolUse({ id: e.id, name: e.name, input: e.input });
+      return;
+    }
+    if (e.kind === "end") {
+      if (e.credits) session.recordCredits(e.credits);
+      session.endAssistant();
+      return;
+    }
+    if (e.kind === "error") {
+      session.fail(e.message, true);
+    }
+  });
 }
 
 /**
@@ -297,9 +318,10 @@ export function buildVibeCodeResumeStreaming(
       session.fail("no AI credential set for this session", true);
       return;
     }
+    if (model) session.setModel(model);
     let resolvedModel: string;
     try {
-      resolvedModel = modelForProvider(credential.provider, model, args.defaultModels);
+      resolvedModel = modelForProvider(credential.provider, session.meta.model, args.defaultModels);
     } catch (e) {
       session.fail((e as Error).message, true);
       return;
@@ -326,39 +348,53 @@ export function buildVibeCodeResumeStreaming(
     // (incl. the question it asked, narrated as assistant text) followed by the
     // owner's answer, and continues. Synthetic `[tool_result:…]` env-var-ack
     // entries are value-free by construction (see vibeCodeSession).
-    const history = session.conversation();
+    const history = session.modelConversation();
+    const acks = new Set<object>();
     const messages: ChatRequest["messages"] = [
       { role: "system", content: systemMessage },
-      ...history.map((h) => ({
-        role: h.role,
-        content: h.content,
-        ...(h.attachments && h.attachments.length > 0
-          ? { attachments: h.attachments }
-          : {}),
-      })),
+      ...alternateTurns(
+        history.map((h) => ({
+          role: h.role,
+          content: h.content,
+          ...(h.attachments && h.attachments.length > 0
+            ? { attachments: h.attachments }
+            : {}),
+        })),
+        () => {
+          const ack = { role: "assistant" as const, content: "Noted." };
+          acks.add(ack);
+          return ack;
+        },
+      ),
     ];
+    const tools = VIBE_CODE_TOOLS.map((t) => ({ ...t }));
+
+    // A long conversation is summarised before it outgrows the model's context.
+    const contextTokens = await args.contextTokens?.(credential.provider, resolvedModel).catch(() => undefined);
+    const compacted = await compactIfNeeded({
+      messages,
+      tools,
+      ...(contextTokens ? { contextTokens } : {}),
+      model: resolvedModel,
+      ...(args.redact ? { redact: args.redact } : {}),
+      summarise: async (req) => {
+        const r = await args.harness.chatWithCredential(credential, req);
+        if (r.credits) session.recordCredits(r.credits);
+        return r.content;
+      },
+    });
+    if (compacted.replaced > 0 && compacted.summary) {
+      const keptHistory = messages.slice(messages.length - compacted.kept).filter((m) => !acks.has(m)).length;
+      session.setCompaction(session.historyLength() - keptHistory, compacted.summary);
+    }
+
     const request: ChatRequest = {
       model: resolvedModel,
-      messages,
-      tools: VIBE_CODE_TOOLS.map((t) => ({ ...t })),
+      messages: compacted.messages,
+      tools,
+      ...(session.meta.effort ? { reasoningEffort: session.meta.effort } : {}),
     };
 
-    await args.harness.chatStream(credential, request, (e: ChatStreamEvent) => {
-      if (e.kind === "delta") {
-        session.feedAssistant(e.text);
-        return;
-      }
-      if (e.kind === "tool_use") {
-        session.receiveToolUse({ id: e.id, name: e.name, input: e.input });
-        return;
-      }
-      if (e.kind === "end") {
-        session.endAssistant();
-        return;
-      }
-      if (e.kind === "error") {
-        session.fail(e.message, true);
-      }
-    });
+    await streamTurn(args.harness, credential, request, session);
   };
 }

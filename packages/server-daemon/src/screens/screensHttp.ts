@@ -74,6 +74,7 @@ import type {
   VibeCodeSessionPublicState,
   VibeCodeStartRequest,
   VibeCodeStartResponse,
+  AiModelsResponse,
   VibeCodeStatusResponse,
 } from "./types.js";
 import {
@@ -365,8 +366,15 @@ export interface VibeCodeRuntime {
     sessionId: string;
     prompt: string;
     model?: string;
+    effort?: string;
     attachments?: Attachment[];
   }) => Promise<void>;
+  /**
+   * The model menu for a key: Flagship Inference's catalog, or the key's
+   * live model list joined with `.com`'s capability table. The key is used
+   * for this one call and never stored.
+   */
+  aiModels?: (credential: LlmCredential) => Promise<AiModelsResponse>;
   /**
    * Re-invoke the model after the owner answered a `talkToUser` question or
    * acked a `requestEnvVar`. Without this, a reply appends to the session and
@@ -914,7 +922,8 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
         void deps.vibeCode.startStreaming({
           sessionId: session.meta.sessionId,
           prompt: body.prompt,
-          model: body.model,
+          model: typeof body.model === "string" && body.model.length > 0 ? body.model.slice(0, 200) : undefined,
+          ...(typeof body.effort === "string" && /^[a-z]{1,16}$/.test(body.effort) ? { effort: body.effort } : {}),
           ...(attach.attachments.length > 0 ? { attachments: attach.attachments } : {}),
           ...(preferredName && !edit ? { preferredName } : {}),
           ...(visibility && !edit ? { visibility } : {}),
@@ -932,6 +941,16 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
         needsCredential: true,
       };
       return jok(out);
+    }
+
+    // The model menu for a key (the chat header and Settings). The key is
+    // used for this one call, never stored or logged.
+    if (path === "/api/screens/ai/models" && method === "POST") {
+      if (!deps.vibeCode?.aiModels) return jerr(503, "AI models aren't available on this server");
+      const body = parseJson(req.body) as { credential?: unknown } | null;
+      const cred = parseCredential(body?.credential);
+      if (!cred || cred === "invalid") return jerr(400, "credential required");
+      return jok(await deps.vibeCode.aiModels(cred));
     }
 
     if (path === "/api/screens/vibe-code/name-check" && method === "GET") {
@@ -1276,6 +1295,18 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       }
       const pending = session.pendingRequest();
       if (!pending) return jerr(409, "no pending tool to reply to");
+      // The owner may switch model or effort between messages.
+      const effortRaw = (body as { effort?: unknown }).effort;
+      const modelRaw = (body as { model?: unknown }).model;
+      if (
+        (modelRaw !== undefined && (typeof modelRaw !== "string" || modelRaw.length > 200)) ||
+        (effortRaw !== undefined && effortRaw !== null && (typeof effortRaw !== "string" || !/^[a-z]{0,16}$/.test(effortRaw)))
+      ) {
+        return jerr(400, "malformed model or effort");
+      }
+      if (modelRaw !== undefined || effortRaw !== undefined) {
+        session.setModel(modelRaw as string | undefined, effortRaw as string | null | undefined);
+      }
       if (pending.kind === "talkToUser") {
         if (typeof body.text !== "string") return jerr(400, "text required");
         const attach = validateAttachments(body.attachments);
@@ -1663,6 +1694,9 @@ function toVibeCodePublicState(
     status: session.meta.status,
     ...(session.meta.deployPhase ? { deployPhase: session.meta.deployPhase } : {}),
     messages: session.messages(),
+    ...(session.meta.model ? { model: session.meta.model } : {}),
+    ...(session.meta.effort ? { effort: session.meta.effort } : {}),
+    ...(session.isCompacted() ? { summarised: true } : {}),
   };
   if (pending) {
     if (pending.kind === "talkToUser") {

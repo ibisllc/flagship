@@ -47,6 +47,7 @@ import { randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Attachment } from "@flagship/llm-providers";
+import { SUMMARY_PREFIX } from "./contextCompaction.js";
 
 export type VibeCodeEvent =
   | { kind: "thinking"; text: string }
@@ -171,6 +172,30 @@ export interface VibeCodeSessionMeta {
    * the box is putting it live ("going-live").
    */
   deployPhase?: "staging" | "fixing" | "going-live";
+  /**
+   * The model the owner chose for this conversation (a Flagship Inference
+   * catalog id, or the provider's own model id) and its reasoning effort.
+   * Either can change between messages; absent ⇒ the provider's default.
+   */
+  model?: string;
+  effort?: string;
+}
+
+/** One turn of the conversation as the box keeps it. */
+export interface HistoryEntry {
+  role: "user" | "assistant";
+  content: string;
+  /** Multimodal attachments on a user turn (image / text). */
+  attachments?: Attachment[];
+  /** Flagship Inference: credits the model calls behind this reply cost. */
+  credits?: number;
+}
+
+/** The older turns a summary replaced (automatic context compaction). */
+export interface SessionCompaction {
+  /** History entries before this index (after the first request) are summarised. */
+  upTo: number;
+  summary: string;
 }
 
 const FILE_BOUNDARY = /^===\s+(.+?)\s+===\s*$/;
@@ -333,8 +358,9 @@ export type NotifyOwnerCallback = (args: {
 export interface VibeCodeSessionSnapshot {
   v: 1;
   meta: VibeCodeSessionMeta;
-  history: Array<{ role: "user" | "assistant"; content: string; attachments?: Attachment[] }>;
+  history: HistoryEntry[];
   historyTimestamps: number[];
+  compaction?: SessionCompaction;
   files: Record<string, string>;
   pendingTools: PendingToolUse[];
   cancelled: boolean;
@@ -355,12 +381,10 @@ export class VibeCodeSession extends EventEmitter {
   // resumed file output would never be parsed (the session would reach
   // ready-to-deploy with NO files → deploy 502).
   parser = new VibeCodeStreamParser();
-  private readonly history: Array<{
-    role: "user" | "assistant";
-    content: string;
-    /** Multimodal attachments on a user turn (image / text). */
-    attachments?: Attachment[];
-  }> = [];
+  private readonly history: HistoryEntry[] = [];
+  private compaction: SessionCompaction | null = null;
+  /** Credits spent before this turn's reply text arrived (a tool-only turn). */
+  private pendingCredits = 0;
   /** Unix-ms per history entry — parallel to `history`. */
   private readonly historyTimestamps: number[] = [];
   private cancelled = false;
@@ -425,10 +449,62 @@ export class VibeCodeSession extends EventEmitter {
     if (last?.role === "assistant") {
       last.content += chunk;
     } else {
-      this.history.push({ role: "assistant", content: chunk });
+      this.history.push({
+        role: "assistant",
+        content: chunk,
+        ...(this.pendingCredits > 0 ? { credits: this.pendingCredits } : {}),
+      });
+      this.pendingCredits = 0;
       this.historyTimestamps.push(Date.now());
     }
     this.parser.feed(chunk);
+  }
+
+  /** The owner's model and effort for the next turns (absent ⇒ unchanged). */
+  setModel(model?: string, effort?: string | null): void {
+    if (typeof model === "string" && model.length > 0) this.meta.model = model;
+    if (effort === null || effort === "") delete this.meta.effort;
+    else if (typeof effort === "string") this.meta.effort = effort;
+    this.emit("persist");
+  }
+
+  /** Charge a Flagship Inference call's credits to the latest reply. */
+  recordCredits(credits: number): void {
+    if (!(credits > 0)) return;
+    const last = this.history[this.history.length - 1];
+    if (last?.role === "assistant") last.credits = round1((last.credits ?? 0) + credits);
+    else this.pendingCredits = round1(this.pendingCredits + credits);
+    this.emit("persist");
+  }
+
+  /**
+   * The conversation as the model is sent it: the first request, then (after
+   * a compaction) the summary of the older turns, then the rest.
+   */
+  modelConversation(): HistoryEntry[] {
+    if (!this.compaction || this.history.length === 0) return this.history.map((h) => ({ ...h }));
+    const c = this.compaction;
+    return [
+      { ...this.history[0]! },
+      { role: "user", content: `${SUMMARY_PREFIX}\n\n${c.summary}` },
+      ...this.history.slice(Math.max(1, c.upTo)).map((h) => ({ ...h })),
+    ];
+  }
+
+  /** Older turns were summarised: everything before `upTo` (but the first request). */
+  setCompaction(upTo: number, summary: string): void {
+    this.compaction = { upTo: Math.min(Math.max(1, upTo), this.history.length), summary };
+    this.emit("persist");
+  }
+
+  /** Whether part of this conversation has been summarised. */
+  isCompacted(): boolean {
+    return this.compaction !== null;
+  }
+
+  /** How many history entries there are (for compaction bookkeeping). */
+  historyLength(): number {
+    return this.history.length;
   }
 
   /**
@@ -633,6 +709,7 @@ export class VibeCodeSession extends EventEmitter {
       meta: { ...this.meta },
       history: this.history.map((h) => ({ ...h })),
       historyTimestamps: [...this.historyTimestamps],
+      ...(this.compaction ? { compaction: { ...this.compaction } } : {}),
       files: this.parser.snapshot(),
       pendingTools: [...this.pendingTools.values()],
       cancelled: this.cancelled,
@@ -656,6 +733,7 @@ export class VibeCodeSession extends EventEmitter {
       s.history.push({ ...snap.history[i]! });
       s.historyTimestamps.push(snap.historyTimestamps[i] ?? snap.meta.startedAt);
     }
+    if (snap.compaction) s.compaction = { ...snap.compaction };
     s.parser.seed(snap.files);
     for (const t of snap.pendingTools) s.pendingTools.set(t.id, t);
     s.cancelled = snap.cancelled;
@@ -722,11 +800,7 @@ export class VibeCodeSession extends EventEmitter {
   manifestJson(): string | undefined {
     return this.parser.snapshot()["flagship.app.json"];
   }
-  conversation(): ReadonlyArray<{
-    role: "user" | "assistant";
-    content: string;
-    attachments?: Attachment[];
-  }> {
+  conversation(): ReadonlyArray<HistoryEntry> {
     return [...this.history];
   }
 
@@ -741,12 +815,14 @@ export class VibeCodeSession extends EventEmitter {
     text: string;
     timestamp: number;
     attachments?: Attachment[];
+    credits?: number;
   }> {
     const out: Array<{
       role: "user" | "assistant";
       text: string;
       timestamp: number;
       attachments?: Attachment[];
+      credits?: number;
     }> = [];
     for (let i = 0; i < this.history.length; i++) {
       const h = this.history[i];
@@ -757,6 +833,7 @@ export class VibeCodeSession extends EventEmitter {
         text: h.content,
         timestamp: this.historyTimestamps[i] ?? this.meta.startedAt,
         ...(h.attachments && h.attachments.length > 0 ? { attachments: h.attachments } : {}),
+        ...(h.credits ? { credits: h.credits } : {}),
       });
     }
     return out;
@@ -781,6 +858,10 @@ export class VibeCodeSession extends EventEmitter {
     }
     return null;
   }
+}
+
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
 }
 
 function generateSessionId(): string {

@@ -783,6 +783,8 @@ export class BuildOrchestrator {
         journal: this.deps.journal,
         repoFiles,
         binaryFiles: Object.keys(this.binaries.get(buildId) ?? {}).sort(),
+        contextTokens: await agentRunner.contextTokens?.(buildId).catch(() => undefined),
+        ...(this.deps.modelRedactor ? { redact: this.deps.modelRedactor } : {}),
         ...(opts.instructions != null ? { instructions: opts.instructions } : {}),
         ...(this.deps.agentMaxTurns != null ? { options: { maxTurns: this.deps.agentMaxTurns } } : {}),
       });

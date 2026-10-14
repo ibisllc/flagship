@@ -162,8 +162,13 @@ export interface AppDetailResponse {
 
 export interface VibeCodeStartRequest {
   prompt: string;
-  /** Optional model identifier; daemon picks a default if omitted. */
+  /**
+   * The model: a Flagship Inference catalog id ("low", "medium", …) or the
+   * provider's own model id. The daemon picks a default if omitted.
+   */
   model?: string;
+  /** Reasoning effort in the provider's own words ("low", "high", …); absent ⇒ its default. */
+  effort?: string;
   /**
    * Optional multimodal attachments on the opening user turn (a
    * screenshot/mockup or a text file the app should use). Inlined as
@@ -641,6 +646,8 @@ export interface VibeCodeSessionMessage {
    * are value-free w.r.t. secrets by contract.
    */
   attachments?: VibeCodeAttachment[];
+  /** Flagship Inference: credits this reply cost (assistant messages only). */
+  credits?: number;
 }
 
 export interface VibeCodePendingTalkToUser {
@@ -689,9 +696,18 @@ export interface VibeCodeSessionPublicState {
    * in memory only, so a restart drops them): the reply must carry one.
    */
   needsCredential?: boolean;
+  /** The model and effort the conversation uses now (the owner can change them per message). */
+  model?: string;
+  effort?: string;
+  /** Older turns were summarised to fit the model's context (show a muted marker). */
+  summarised?: boolean;
 }
 
 export interface VibeCodeReplyRequest {
+  /** Switch the model for this and later turns (same values as on start). */
+  model?: string;
+  /** Switch the reasoning effort; null or "" goes back to the provider's default. */
+  effort?: string | null;
   /** Free-form text — relayed verbatim for talkToUser; ignored when
    *  the pending tool is requestEnvVar (the value flows through /env/set). */
   text?: string;
@@ -806,3 +822,12 @@ export interface PeerBackupToggleRequest {
   participate: boolean;
 }
 
+
+// ---------- /api/screens/ai/models -------------------------------------
+
+/** Ask which models a key can use. The key is used for this one call. */
+export interface AiModelsRequest {
+  credential: LlmProviderCredential;
+}
+
+export type { AiModelsResponse } from "../llm/modelCatalog.js";

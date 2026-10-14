@@ -115,7 +115,9 @@ import type { EditableService } from "./buildmodes/buildOrchestrator.js";
 import { VibeCodeSessionRegistry, fileVibeCodeSessionStore, type VibeCodeSession } from "./llm/vibeCodeSession.js";
 import { buildVibeCodeHttpHandlers } from "./llm/vibeCodeHttp.js";
 import { buildDeploySession, buildStagedChatDeploy } from "./llm/deploySession.js";
-import { LlmHarness } from "./llmHarness.js";
+import { LlmHarness, type LlmCredential } from "./llmHarness.js";
+import { ModelCatalog } from "./llm/modelCatalog.js";
+import type { ChatRequest } from "@flagship/llm-providers";
 import { FileBuildCredentialStore } from "./llm/buildCredentialStore.js";
 import {
   buildVibeCodeStartStreaming,
@@ -2187,14 +2189,34 @@ async function wireRuntimeSurfaces(deps: {
   }));
   // The tool-calling model call an AI build's staged loop drives, with the
   // build's (or chat session's) transient BYOK key opened just-in-time.
-  const buildAgentRunner: AgentRunner = async (buildId, req) => {
-    const credential = await llmCredentials.get(buildId);
-    if (!credential) throw new Error("AI adapt not configured");
-    return llmHarness.chatWithCredential(credential, {
-      ...req,
-      model: modelForProvider(credential.provider, req.model && req.model.length > 0 ? req.model : undefined, defaultLlmModels),
-    });
+  // Model names, context sizes and capabilities, from .com's public catalog.
+  const modelCatalog = new ModelCatalog({ baseUrl: env.controlPlaneBaseUrl ?? "https://flagshipserver.com" });
+  // A chat session's chosen model and effort carry into its staged fix loop.
+  const sessionChoice = (buildId: string): { model?: string; effort?: string } => {
+    const meta = vibeRegistry.get(buildId)?.meta;
+    return { ...(meta?.model ? { model: meta.model } : {}), ...(meta?.effort ? { effort: meta.effort } : {}) };
   };
+  const agentModel = (provider: string, buildId: string, requested?: string): string =>
+    modelForProvider(provider, requested && requested.length > 0 ? requested : sessionChoice(buildId).model, defaultLlmModels);
+  const buildAgentRunner: AgentRunner = Object.assign(
+    async (buildId: string, req: ChatRequest) => {
+      const credential = await llmCredentials.get(buildId);
+      if (!credential) throw new Error("AI adapt not configured");
+      const effort = req.reasoningEffort ?? sessionChoice(buildId).effort;
+      return llmHarness.chatWithCredential(credential, {
+        ...req,
+        model: agentModel(credential.provider, buildId, req.model),
+        ...(effort ? { reasoningEffort: effort } : {}),
+      });
+    },
+    {
+      contextTokens: async (buildId: string) => {
+        const credential = await llmCredentials.get(buildId);
+        if (!credential) return undefined;
+        return modelCatalog.contextTokens(credential.provider, agentModel(credential.provider, buildId));
+      },
+    },
+  );
   // The private copy every AI build deploys to and tests before it goes
   // live (docs/ai-privacy-and-staging.md §2). Never routed from the internet.
   const serviceRunnerMod = await import("./serviceRunner.js");
@@ -2530,6 +2552,8 @@ async function wireRuntimeSurfaces(deps: {
         resolveAppId: resolveSessionServiceId,
         appEnvStore: runtime.envStore,
         defaultModels: defaultLlmModels,
+        contextTokens: (provider: string, model: string) => modelCatalog.contextTokens(provider, model),
+        redact: modelRedactor,
       }
     : undefined;
   const vibeStartStreaming = vibeStreamArgs
@@ -2760,6 +2784,12 @@ async function wireRuntimeSurfaces(deps: {
             existsSync(join(vibeAppDir, serviceId, "flagship.app.json")),
           ...(vibeStartStreaming ? { startStreaming: vibeStartStreaming } : {}),
           ...(vibeResumeStreaming ? { resumeStreaming: vibeResumeStreaming } : {}),
+          aiModels: (credential: LlmCredential) =>
+            modelCatalog.menu(
+              credential.provider,
+              () => llmHarness.listModels(credential),
+              defaultLlmModels[credential.provider],
+            ),
         }
       : null,
     controlPlaneBaseUrl: env.controlPlaneBaseUrl ?? null,
