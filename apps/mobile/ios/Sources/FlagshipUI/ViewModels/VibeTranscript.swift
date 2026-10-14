@@ -14,6 +14,10 @@ public enum VibeTranscript {
     public struct Line: Equatable, Sendable {
         public let role: String
         public let text: String
+        /// What the owner attached (user lines).
+        public var attachments: [VibeCodeAttachment]? = nil
+        /// Flagship Inference credits the reply used (assistant lines).
+        public var credits: Double? = nil
     }
 
     private static func boundary(_ line: Substring) -> String? {
@@ -64,6 +68,7 @@ public enum VibeTranscript {
     public static func lines(_ messages: [VibeCodeSessionMessage]) -> (hidden: Int, lines: [Line]) {
         let shown = messages.suffix(maxMessages)
         return (messages.count - shown.count,
-                shown.map { Line(role: $0.role, text: $0.role == "assistant" ? compact($0.text) : $0.text) })
+                shown.map { Line(role: $0.role, text: $0.role == "assistant" ? compact($0.text) : $0.text,
+                          attachments: $0.attachments, credits: $0.credits) })
     }
 }

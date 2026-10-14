@@ -14,9 +14,14 @@ public struct AiKeysScreen: View {
     /// The "Flagship Inference" entry, always first. Held in @State so a
     /// parent re-render doesn't reset the loaded balance.
     @State private var freeAi: FreeAiCreditsCardModel
+    @Environment(\.screensClient) private var client
+    /// Flagship Inference's catalog from `.com` (nil hides its default-model row).
+    private let catalog: (@MainActor () async -> InferenceCatalogResponse?)?
 
-    public init(vm: AiKeysViewModel, freeAiService: FreeAiCreditsService? = nil) {
+    public init(vm: AiKeysViewModel, freeAiService: FreeAiCreditsService? = nil,
+                catalog: (@MainActor () async -> InferenceCatalogResponse?)? = nil) {
         self.vm = vm
+        self.catalog = catalog
         _freeAi = State(initialValue: FreeAiCreditsCardModel(service: freeAiService))
     }
 
@@ -37,6 +42,9 @@ public struct AiKeysScreen: View {
                         onAddKey: {
                             vm.resetForm()
                             vm.showingForm = true
+                        },
+                        defaultModel: catalog.map { load in
+                            DefaultModelRow(keyId: SavedKeyStore.flagshipInferenceId) { .flagship(await load()) }
                         }
                     )
 
@@ -66,6 +74,11 @@ public struct AiKeysScreen: View {
                                     relay: Binding(get: { e.relay }, set: { vm.setRelay(id: e.id, on: $0) }),
                                     identifier: "ai-key-relay"
                                 )
+                                DefaultModelRow(keyId: e.id) { [client] in
+                                    let cred = VibeCodeCredentialSelection.compatible(with: e.credential).credential ?? e.credential
+                                    let r = await ModelMenuCache.models(for: cred) { try await client.aiModels($0) }
+                                    return r.kind == "flagship" ? .flagship(r.catalog) : .own(r)
+                                }
                                 if e.id != vm.activeId {
                                     Button(action: { vm.setActive(id: e.id) }) {
                                         Text("Make default").font(FS.font.bodySm()).foregroundColor(c.primary)
@@ -129,6 +142,7 @@ struct FlagshipInferenceEntry: View {
     let isDefault: Bool
     let onMakeDefault: () -> Void
     let onAddKey: () -> Void
+    var defaultModel: DefaultModelRow? = nil
 
     var body: some View {
         let c = FSColors.scheme(scheme)
@@ -146,6 +160,7 @@ struct FlagshipInferenceEntry: View {
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("free-ai-make-default")
             }
+            if state.isUsable, let defaultModel { defaultModel }
             if case .disabled(_, true) = state {
                 FSPrimaryButton(FreeAiCopy.addOwnKey, block: true, action: onAddKey)
                     .accessibilityIdentifier("free-ai-add-key")
@@ -162,6 +177,27 @@ struct FlagshipInferenceEntry: View {
         case .loading: return nil
         case .usable(let c): return FreeAiCopy.balance(c)
         case .disabled(let m, _): return m
+        }
+    }
+}
+
+/// Settings: the model a chat with this key starts with. Saved per key.
+struct DefaultModelRow: View {
+    @Environment(\.colorScheme) private var scheme
+    @State private var menu: ModelMenuModel
+
+    init(keyId: String, loader: @escaping @MainActor () async -> ModelMenuModel.Source) {
+        let m = ModelMenuModel(initial: DefaultModelStore.choice(for: keyId), loader: loader)
+        m.onChange = { DefaultModelStore.set($0, for: keyId) }
+        _menu = State(initialValue: m)
+    }
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        HStack(spacing: FS.space.s2) {
+            Text("Default model").font(FS.font.bodySm()).foregroundColor(c.textMuted)
+            Spacer(minLength: 0)
+            ModelMenuButton(menu: menu, identifier: "ai-key-default-model")
         }
     }
 }

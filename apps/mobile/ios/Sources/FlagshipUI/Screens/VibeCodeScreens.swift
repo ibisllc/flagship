@@ -81,16 +81,25 @@ public struct VibeCodeDescribeScreen: View {
     @State private var checkedSlug: String = ""
     @State private var conflict: VibeCodeNameCheck?
     @State private var starting = false
+    @State private var visionAlert: VisionDecision?
     @FocusState private var promptFocused: Bool
 
     /// Continuation — (prompt, chosen service name/slug, visibility raw value).
     /// Returns the box's refusal when the name turned out to be taken.
     var onBuild: (String, String, String) async -> VibeCodeNameCheck?
     var onOpenSessions: () -> Void
+    /// The model the chat starts with (nil hides the row).
+    var menu: ModelMenuModel?
+    /// Files for the opening message (nil hides the attach control).
+    var stager: ChatAttachmentStager?
     public init(onBuild: @escaping (String, String, String) async -> VibeCodeNameCheck? = { _, _, _ in nil },
-                onOpenSessions: @escaping () -> Void = {}) {
+                onOpenSessions: @escaping () -> Void = {},
+                menu: ModelMenuModel? = nil,
+                stager: ChatAttachmentStager? = nil) {
         self.onBuild = onBuild
         self.onOpenSessions = onOpenSessions
+        self.menu = menu
+        self.stager = stager
     }
 
     /// The address label the box will serve at. Lowercased; only the safe slug
@@ -125,9 +134,7 @@ public struct VibeCodeDescribeScreen: View {
                         .autocorrectionDisabled(true)
                         .accessibilityIdentifier("describe-name-field")
                         FSColorReader { c in
-                            (Text("https://").foregroundColor(c.textMuted)
-                             + Text(slug.isEmpty ? "<name>" : slug).foregroundColor(c.primary).fontWeight(.semibold)
-                             + Text(".\(server)").foregroundColor(c.textMuted))
+                            addressText(c: c, server: server)
                                 .font(FS.font.bodySm())
                                 .lineLimit(2)
                                 .accessibilityIdentifier("describe-address")
@@ -140,6 +147,7 @@ public struct VibeCodeDescribeScreen: View {
                             Text("What should it do?").font(FS.font.bodySm()).foregroundColor(c.textMuted)
                         }
                         PromptArea(prompt: $prompt, focused: $promptFocused)
+                        if let stager { DescribeAttachRow(stager: stager) }
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: FS.space.s2) {
                                 ForEach(Self.examples, id: \.0) { ex in
@@ -166,7 +174,11 @@ public struct VibeCodeDescribeScreen: View {
                         }
                     }
 
-                    FSPrimaryButton(starting ? "Starting…" : "Build it", enabled: canBuild, block: true, large: true, action: build)
+                    if let menu {
+                        ModelRow(menu: menu)
+                    }
+
+                    FSPrimaryButton(starting ? "Starting…" : "Build it", enabled: canBuild, block: true, large: true) { build() }
                         .accessibilityIdentifier("describe-build")
                     FSColorReader { c in
                         Text("about 90 seconds")
@@ -198,6 +210,10 @@ public struct VibeCodeDescribeScreen: View {
             guard !Task.isCancelled else { return }
             await runCheck(slug)
         }
+        .visionSwitchAlert($visionAlert) { to in
+            menu?.select(to)
+            build(checkedVision: true)
+        }
         .alert(conflictTitle, isPresented: Binding(get: { conflict != nil }, set: { if !$0 { conflict = nil } }),
                presenting: conflict) { c in
             if c.kind == "session" {
@@ -209,6 +225,13 @@ public struct VibeCodeDescribeScreen: View {
         } message: { c in
             Text(Self.conflictMessage(c, name: slug))
         }
+    }
+
+    private func addressText(c: FSColors, server: String) -> Text {
+        let scheme = Text("https://").foregroundColor(c.textMuted)
+        let label = Text(slug.isEmpty ? "<name>" : slug).foregroundColor(c.primary).fontWeight(.semibold)
+        let rest = Text(".\(server)").foregroundColor(c.textMuted)
+        return scheme + label + rest
     }
 
     private var conflictTitle: String { "That name is taken" }
@@ -256,8 +279,15 @@ public struct VibeCodeDescribeScreen: View {
         }
     }
 
-    private func build() {
+    private func build(checkedVision: Bool = false) {
         promptFocused = false
+        if !checkedVision, let menu {
+            let decision = menu.visionDecision(hasImage: stager?.hasImage == true)
+            if decision != .send {
+                visionAlert = decision
+                return
+            }
+        }
         let s = slug
         starting = true
         Task {
@@ -271,6 +301,38 @@ public struct VibeCodeDescribeScreen: View {
                 check = refused
                 checkedSlug = s
                 conflict = refused
+            }
+        }
+    }
+}
+
+private struct DescribeAttachRow: View {
+    let stager: ChatAttachmentStager
+    var body: some View {
+        VStack(alignment: .leading, spacing: FS.space.s2) {
+            HStack(spacing: FS.space.s1) {
+                AttachButton(stager: stager)
+                FSColorReader { c in
+                    Text(ChatAttachmentCopy.notice).font(.system(size: 12)).foregroundColor(c.textMuted)
+                }
+            }
+            StagedAttachmentsBar(stager: stager)
+        }
+    }
+}
+
+/// "AI model" on the Describe form: the same menu as the chat header.
+private struct ModelRow: View {
+    @Bindable var menu: ModelMenuModel
+    var body: some View {
+        FSColorReader { c in
+            HStack(spacing: FS.space.s2) {
+                Text("AI model").font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                ModelMenuButton(menu: menu, identifier: "describe-model-menu")
+                Spacer(minLength: 0)
+                if menu.offersThinkHarder {
+                    ThinkHarderChip(isOn: $menu.thinkHarder)
+                }
             }
         }
     }

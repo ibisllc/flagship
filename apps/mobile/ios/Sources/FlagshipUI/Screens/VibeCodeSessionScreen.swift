@@ -40,6 +40,9 @@ public struct VibeCodeSessionScreen: View {
     /// Follow new output only while the owner is at the bottom; scrolling up to
     /// read stops the box from jumping away under their finger.
     @State private var followTail = true
+    @State private var menu: ModelMenuModel
+    @State private var stager: ChatAttachmentStager
+    @State private var visionAlert: VisionDecision?
 
     public let serverFqdn: String
     public let client: any ScreensClient
@@ -49,6 +52,8 @@ public struct VibeCodeSessionScreen: View {
     public let savedCredential: () -> LlmProviderCredential?
     /// Mints a fresh free-AI credential for this box (nil ⇒ not offered).
     public let freeAiCredential: (@MainActor () async throws -> LlmProviderCredential)?
+    /// The Flagship Inference catalog from `.com` (nil ⇒ not offered).
+    public let inferenceCatalog: (@MainActor () async -> InferenceCatalogResponse?)?
 
     public init(
         stream: VibeCodeStreamViewModel,
@@ -56,14 +61,20 @@ public struct VibeCodeSessionScreen: View {
         client: any ScreensClient,
         signEnvelope: @escaping @MainActor (ServiceEnvSetEnvelope) async throws -> String,
         savedCredential: @escaping () -> LlmProviderCredential? = { nil },
-        freeAiCredential: (@MainActor () async throws -> LlmProviderCredential)? = nil
+        freeAiCredential: (@MainActor () async throws -> LlmProviderCredential)? = nil,
+        inferenceCatalog: (@MainActor () async -> InferenceCatalogResponse?)? = nil,
+        menu: ModelMenuModel? = nil,
+        attachments: ChatAttachmentStager? = nil
     ) {
+        _menu = State(initialValue: menu ?? ModelMenuModel())
+        _stager = State(initialValue: attachments ?? ChatAttachmentStager())
         self.stream = stream
         self.serverFqdn = serverFqdn
         self.client = client
         self.signEnvelope = signEnvelope
         self.savedCredential = savedCredential
         self.freeAiCredential = freeAiCredential
+        self.inferenceCatalog = inferenceCatalog
     }
 
     /// The key a reply carries: a fresh free-AI credential when the session
@@ -139,6 +150,17 @@ public struct VibeCodeSessionScreen: View {
         .background(c.bg.ignoresSafeArea())
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if menu.isActive {
+                ToolbarItem(placement: .topBarTrailing) {
+                    ModelMenuButton(menu: menu, identifier: "vibecode-model-menu")
+                }
+            }
+        }
+        .visionSwitchAlert($visionAlert) { to in
+            menu.select(to)
+            Task { await submitReply(checkedVision: true) }
+        }
         .task {
             stream.start()
             await reload()
@@ -179,8 +201,11 @@ public struct VibeCodeSessionScreen: View {
             Text("… \(hiddenMessages) earlier message\(hiddenMessages == 1 ? "" : "s") not shown")
                 .font(FS.font.caption()).foregroundColor(c.textMuted)
         }
+        if state?.summarised == true {
+            Text(ModelMenuText.summarised).font(FS.font.caption()).foregroundColor(c.textMuted)
+        }
         ForEach(Array(shownLines.enumerated()), id: \.offset) { _, msg in
-            line(role: msg.role, text: msg.text, c: c)
+            line(msg, c: c)
         }
         if status == "streaming", !stream.transcript.isEmpty {
             Text(VibeTranscript.compact(stream.transcript, live: true) + " ▍")
@@ -214,16 +239,27 @@ public struct VibeCodeSessionScreen: View {
         }
     }
 
-    private func line(role: String, text: String, c: FSColors) -> some View {
+    func line(_ msg: VibeTranscript.Line, c: FSColors) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: FS.space.s2) {
-            Text(role == "user" ? "›" : " ")
+            Text(msg.role == "user" ? "›" : " ")
                 .font(FS.font.mono().weight(.bold))
                 .foregroundColor(c.primary)
-            Text(text)
-                .font(FS.font.mono())
-                .foregroundColor(role == "user" ? c.primary : c.text)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .textSelection(.enabled)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(msg.text)
+                    .font(FS.font.mono())
+                    .foregroundColor(msg.role == "user" ? c.primary : c.text)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+                if let a = msg.attachments, !a.isEmpty {
+                    SentAttachments(attachments: a)
+                }
+                if msg.role == "assistant", let credits = msg.credits {
+                    Text(ModelMenuText.creditsUsed(credits))
+                        .font(.system(size: 11))
+                        .foregroundColor(c.textMuted)
+                        .accessibilityIdentifier("vibecode-credits")
+                }
+            }
         }
     }
 
@@ -266,20 +302,26 @@ public struct VibeCodeSessionScreen: View {
         } else if let pending = state?.pendingRequest {
             switch pending {
             case .talkToUser:
-                HStack(spacing: FS.space.s2) {
-                    Text("›").font(FS.font.mono().weight(.bold)).foregroundColor(c.primary)
-                    TextField("Reply to the AI", text: $replyDraft, axis: .vertical)
-                        .font(FS.font.mono())
-                        .lineLimit(1...4)
-                        .submitLabel(.send)
-                        .onSubmit { Task { await submitReply() } }
-                        .accessibilityIdentifier("vibecode-reply-field")
-                    Button { Task { await submitReply() } } label: {
-                        Image(systemName: submitting ? "ellipsis.circle" : "arrow.up.circle.fill")
-                            .font(.system(size: 26)).foregroundColor(c.primary)
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    StagedAttachmentsBar(stager: stager)
+                    HStack(spacing: FS.space.s2) {
+                        AttachButton(stager: stager)
+                        TextField("Reply to the AI", text: $replyDraft, axis: .vertical)
+                            .font(FS.font.mono())
+                            .lineLimit(1...4)
+                            .submitLabel(.send)
+                            .onSubmit { Task { await submitReply() } }
+                            .accessibilityIdentifier("vibecode-reply-field")
+                        Button { Task { await submitReply() } } label: {
+                            Image(systemName: submitting ? "ellipsis.circle" : "arrow.up.circle.fill")
+                                .font(.system(size: 26)).foregroundColor(c.primary)
+                        }
+                        .disabled(submitting || replyDraft.isEmpty)
+                        .accessibilityIdentifier("vibecode-reply-send-btn")
                     }
-                    .disabled(submitting || replyDraft.isEmpty)
-                    .accessibilityIdentifier("vibecode-reply-send-btn")
+                    if menu.offersThinkHarder {
+                        ThinkHarderChip(isOn: $menu.thinkHarder)
+                    }
                 }
             case .requestEnvVar(_, let name, _, _, _, _):
                 VStack(alignment: .leading, spacing: FS.space.s2) {
@@ -380,6 +422,7 @@ public struct VibeCodeSessionScreen: View {
             let wasEmpty = state == nil
             let before = state?.status
             state = next
+            if wasEmpty { configureMenu(next) }
             let shown = VibeTranscript.lines(next.messages)
             hiddenMessages = shown.hidden
             shownLines = shown.lines
@@ -460,15 +503,43 @@ public struct VibeCodeSessionScreen: View {
         return String(e.prefix(600))
     }
 
-    private func submitReply() async {
+    /// Where the menu reads its models: Flagship Inference's catalog for a
+    /// free-AI session, else the models the saved key can use (asked of the box).
+    private func configureMenu(_ s: VibeCodeSessionPublicState) {
+        guard !menu.isActive else { return }
+        let initial = ModelChoice(model: s.model, effort: s.effort)
+        if FreeAiSessions.isFreeAi(sessionId) {
+            guard let inferenceCatalog else { return }
+            menu.setLoader({ .flagship(await inferenceCatalog()) }, initial: initial)
+        } else if let cred = savedCredential() {
+            menu.setLoader({ [client] in
+                let r = await ModelMenuCache.models(for: cred) { try await client.aiModels($0) }
+                return r.kind == "flagship" ? .flagship(r.catalog) : .own(r)
+            }, initial: initial)
+        }
+    }
+
+    private func submitReply(checkedVision: Bool = false) async {
         guard !replyDraft.isEmpty, !submitting else { return }
+        if !checkedVision {
+            let decision = menu.visionDecision(hasImage: stager.hasImage)
+            if decision != .send {
+                visionAlert = decision
+                return
+            }
+        }
         submitting = true
         defer { submitting = false }
         do {
             let credential = try await replyCredential()
+            let model = menu.isActive ? menu.wireModel : nil
             _ = try await client.vibeCodeSessionReply(
-                sessionId: sessionId, VibeCodeReplyRequest(text: replyDraft, envVarStatus: nil, credential: credential))
+                sessionId: sessionId,
+                VibeCodeReplyRequest(text: replyDraft, envVarStatus: nil, credential: credential,
+                                     model: model, effort: model == nil ? nil : menu.wireEffort,
+                                     attachments: stager.wire))
             replyDraft = ""
+            stager.clear()
             followTail = true
             await reload()
         } catch {

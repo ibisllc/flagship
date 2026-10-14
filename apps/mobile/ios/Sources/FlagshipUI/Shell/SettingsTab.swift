@@ -363,7 +363,8 @@ public struct SettingsTab: View {
         case .aiKeys:
             AiKeysScreen(
                 vm: AiKeysViewModel(),
-                freeAiService: FreeAiCreditsService(client: server, username: { [app] in app.currentUser })
+                freeAiService: FreeAiCreditsService(client: server, username: { [app] in app.currentUser }),
+                catalog: { [server] in await ModelMenuCache.catalog { try await server.inferenceModels() } }
             )
         case .recovery:
             RecoveryContainer(onShowPostRecoveryProgress: { path.append(.postRecoveryProgress) })

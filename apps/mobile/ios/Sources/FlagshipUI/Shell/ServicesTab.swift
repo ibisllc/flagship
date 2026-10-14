@@ -619,6 +619,9 @@ struct VibeCodeSessionContainer: View {
                         return try await FreeAiCreditsService(
                             client: server, username: { [app] in app.currentUser }
                         ).mint(serverFqdn: fqdn).credential
+                    },
+                    inferenceCatalog: { [server] in
+                        await ModelMenuCache.catalog { try await server.inferenceModels() }
                     }
                 )
             } else {
@@ -677,9 +680,13 @@ struct EditDescribeContainer: View {
                 do {
                     let selection = VibeCodeCredentialSelection.compatible(
                         with: holder.credential, freeAiModel: holder.model)
+                    let chosen = DefaultModelStore.choice(for: DefaultModelStore.keyId(for: holder.credential))
                     let resp = try await client.vibeCodeStart(VibeCodeStartRequest(
-                        prompt: prompt, model: selection.model, credential: selection.credential,
-                        editServiceId: serviceId
+                        prompt: prompt,
+                        model: chosen?.model ?? (selection.credential?.isFreeAi == true ? nil : selection.model),
+                        credential: selection.credential,
+                        editServiceId: serviceId,
+                        effort: chosen?.effort
                     ))
                     if resp.needsCredential == true {
                         path.append(.buildKey(purpose: .edit(serviceId: serviceId)))
@@ -706,6 +713,9 @@ struct VibeCodeDescribeContainer: View {
     @Environment(ToastCenter.self) private var toasts
     @Environment(AppState.self) private var app
     @Environment(\.screensServerFqdn) private var bound
+    @Environment(\.flagshipServerClient) private var server
+    @State private var menu = ModelMenuModel()
+    @State private var stager = ChatAttachmentStager()
     var body: some View {
         VibeCodeDescribeScreen(onBuild: { prompt, name, visibility in
             do {
@@ -715,10 +725,17 @@ struct VibeCodeDescribeContainer: View {
                 // the owner's choices on the form (no longer fixed).
                 let selection = VibeCodeCredentialSelection.compatible(
                     with: holder.credential, freeAiModel: holder.model)
+                // Flagship Inference: the chosen catalog id, or none for the default.
+                let model = (menu.isActive ? menu.wireModel : nil)
+                    ?? (selection.credential?.isFreeAi == true ? nil : selection.model)
                 let resp = try await client.vibeCodeStart(
                     VibeCodeStartRequest(
-                        prompt: prompt, model: selection.model, credential: selection.credential,
-                        name: name, visibility: visibility
+                        prompt: prompt,
+                        model: model,
+                        credential: selection.credential,
+                        name: name, visibility: visibility,
+                        effort: menu.isActive ? menu.wireEffort : nil,
+                        attachments: stager.wire
                     )
                 )
                 if resp.needsCredential == true {
@@ -728,6 +745,7 @@ struct VibeCodeDescribeContainer: View {
                     return nil
                 }
                 if selection.credential?.isFreeAi == true { FreeAiSessions.mark(resp.sessionId) }
+                stager.clear()
                 path.openVibeSession(resp.sessionId)
             } catch {
                 if let taken = VibeCodeNameCheck.conflict(in: error) { return taken }
@@ -747,7 +765,26 @@ struct VibeCodeDescribeContainer: View {
                 toasts.error("Couldn't start the build: \(HumanError.humanize(error))")
             }
             return nil
-        }, onOpenSessions: { path.openBuildSessions() })
+        }, onOpenSessions: { path.openBuildSessions() }, menu: menu, stager: stager)
+        .onAppear(perform: configureMenu)
+    }
+
+    /// The chat starts with the key's default model (Settings): Flagship
+    /// Inference's catalog, or the models the key can use (asked of the box).
+    private func configureMenu() {
+        guard !menu.isActive, let cred = holder.credential else { return }
+        let initial = DefaultModelStore.choice(for: DefaultModelStore.keyId(for: cred))
+        if cred.isFreeAi {
+            menu.setLoader({ [server] in
+                .flagship(await ModelMenuCache.catalog { try await server.inferenceModels() })
+            }, initial: initial)
+        } else {
+            let compatible = VibeCodeCredentialSelection.compatible(with: cred).credential ?? cred
+            menu.setLoader({ [client] in
+                let r = await ModelMenuCache.models(for: compatible) { try await client.aiModels($0) }
+                return r.kind == "flagship" ? .flagship(r.catalog) : .own(r)
+            }, initial: initial)
+        }
     }
 
     private enum ServicePlatformRepair {
