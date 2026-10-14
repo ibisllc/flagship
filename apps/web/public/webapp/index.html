@@ -578,9 +578,10 @@
           <h2>New Service</h2>
           <span class="value vc-chat-status" id="vc-status">idle</span>
         </div>
+        <div id="vc-model-bar" class="vc-model-bar hidden" aria-label="AI model"></div>
         <p class="note">
           Describe the service you want. The AI writes and deploys it on your box.
-          Drop a screenshot or a file the app should use — it stays on your server.
+          Drop a screenshot or a file the app should use.
         </p>
 
         <div id="vc-messages" class="vc-chat-log" aria-live="polite">
@@ -605,6 +606,7 @@
         <!-- Composer: textarea + attach affordance + attachment chips -->
         <div class="vc-composer card mt-2">
           <div id="vc-attach-chips" class="vc-chips hidden" aria-label="Attached files"></div>
+          <p id="vc-attach-error" class="err-text vc-attach-error hidden" role="alert"></p>
           <textarea id="vc-prompt" rows="3" placeholder="A simple habit tracker — checkboxes per day, last 30 days visible."></textarea>
           <div class="vc-first-turn-extras" id="vc-first-turn-extras">
             <div class="vc-examples" id="vc-examples"></div>
@@ -618,14 +620,15 @@
             </label>
           </div>
           <div class="vc-composer-actions">
-            <label class="secondary btn-attach" for="vc-attach-input" title="Attach an image or text file">
+            <label class="secondary btn-attach" for="vc-attach-input" title="Attach an image, text, CSV, JSON or PDF file">
               <span aria-hidden="true">＋</span> Attach
             </label>
             <input id="vc-attach-input" type="file" class="hidden" multiple
-                   accept="image/*,.txt,.md,.sql,.json,.csv">
+                   accept="image/png,image/jpeg,image/gif,image/webp,.csv,.json,.pdf,.txt,.md,.markdown,.sql,.log,.js,.mjs,.cjs,.ts,.tsx,.jsx,.py,.rb,.go,.rs,.java,.kt,.swift,.php,.c,.h,.cpp,.cs,.sh,.html,.css,.scss,.vue,.svelte,.yaml,.yml,.toml,.ini,.xml,.conf,.dockerfile">
             <button id="vc-send" class="vc-send">Send</button>
           </div>
-          <p class="note vc-caps-note">Up to 6 files per message · images ≤ 4 MB · text ≤ 256 KB. Not a place for passwords or keys.</p>
+          <p class="note vc-attach-notice" id="vc-attach-notice">The AI will see what you attach.</p>
+          <p class="note vc-caps-note">Up to 6 files per message · images ≤ 4 MB · text ≤ 256 KB · CSV and JSON ≤ 2 MB · PDF ≤ 10 MB. Not a place for passwords or keys.</p>
         </div>
 
         <details class="card mt-2" id="vc-files-box">

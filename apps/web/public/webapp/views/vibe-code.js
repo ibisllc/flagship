@@ -17,9 +17,14 @@
 //      which (lib/chatDeploy.js). After a deploy the session's AI key is gone,
 //      so a later turn meets the usual needsCredential prompt.
 //
-// Attachments are inlined as base64 (no upload endpoint). The client
-// mirrors the server caps so a violation is a friendly toast, not a 400.
-// The chat is NOT a secret channel — the composer note says so.
+// Attachments are inlined as base64 or text (no upload endpoint): images,
+// text/code, CSV/JSON sample data and PDFs. The client mirrors the server
+// caps so a violation is a friendly inline error, not a 400. The chat is NOT
+// a secret channel, and the AI sees what's attached; the composer says so.
+//
+// The header's model menu (lib/modelMenu.js) picks the model and effort;
+// both ride start and every reply, so the owner can change them between
+// messages. A chat starts on the default model saved in Settings.
 
 import { $, registerView, show } from "../lib/router.js";
 import { ScreensError, boxClient } from "../lib/api.js";
@@ -46,18 +51,29 @@ import { deployPhaseText, deployRequestBody, startAndFollowChatDeploy } from "..
 import { RELAY_TURNED_OFF, TURN_RELAY_OFF, isRelayFailure } from "../lib/aiRelay.js";
 import { turnRelayOffForCredential } from "../providers.js";
 import { getSession } from "../lib/state.js";
-import { freshCredential, isFreeAiCredential } from "../lib/freeAi.js";
+import { freshCredential } from "../lib/freeAi.js";
+import { defaultModelFor, loadProviders } from "../providers.js";
+import {
+  MAX_ATTACHMENTS,
+  attachNotice,
+  attachmentIcon,
+  classifyFile,
+  creditsUsedText,
+  dataTextError,
+  initialChoice,
+  loadModelMenu,
+  mountModelMenu,
+  visionCheck,
+  wireChoice,
+  withModel,
+} from "../lib/modelMenu.js";
 
 registerView("view-vibe-code");
 
 const POLL_INTERVAL_MS = 800;
 const TERMINAL_STATUSES = new Set(["deployed", "failed", "cancelled"]);
 
-// Caps — mirror packages/server-daemon/src/llm/vibeCodeAttachments.ts.
-const MAX_ATTACHMENTS = 6;
-const MAX_IMAGE_BYTES = 4 * 1024 * 1024; // 4 MB
-const MAX_TEXT_BYTES = 256 * 1024; // 256 KB
-const TEXT_EXTENSIONS = /\.(txt|md|sql|json|csv)$/i;
+export const SUMMARISED_NOTE = "Earlier conversation summarised";
 
 let activeSessionId = null;
 let pollTimer = null;
@@ -92,6 +108,14 @@ let backTo = null;
 // The box this build runs on (docs/app-placement.md §2): the server picked
 // for a new app, or the box holding a reopened session. Every call goes there.
 let box = null;
+// The model menu for this build's key, the owner's choice in it, and whether
+// the owner changed it here (else a reopened session shows what it uses).
+let modelMenu = null;
+let modelChoice = { model: null, effort: null, thinkHarder: false };
+let choiceTouched = false;
+let sessionModel = null;
+let menuHandle = null;
+let menuLoad = 0;
 
 const client = () => box ?? boxClient();
 const boxFetch = (path, init) => client().fetch(path, init);
@@ -162,48 +186,56 @@ function readFileAsText(file) {
   });
 }
 
+function showAttachError(message) {
+  const el = $("vc-attach-error");
+  if (!el) return;
+  el.textContent = message || "";
+  el.classList.toggle("hidden", !message);
+}
+
 async function stageFiles(fileList) {
   const files = Array.from(fileList || []);
+  const errors = [];
   for (const file of files) {
     if (staged.length >= MAX_ATTACHMENTS) {
-      toast(`Up to ${MAX_ATTACHMENTS} files per message.`, "err");
+      errors.push(`Up to ${MAX_ATTACHMENTS} files per message.`);
       break;
     }
-    const isImage = file.type.startsWith("image/");
-    const isText = file.type.startsWith("text/") || TEXT_EXTENSIONS.test(file.name);
+    const c = classifyFile(file);
+    if (c.error) {
+      errors.push(c.error);
+      continue;
+    }
     try {
-      if (isImage) {
-        if (file.size > MAX_IMAGE_BYTES) {
-          toast(`"${file.name}" is too large (images ≤ 4 MB).`, "err");
-          continue;
-        }
-        const dataBase64 = await readFileAsBase64(file);
-        staged.push({ kind: "image", mediaType: file.type, dataBase64, name: file.name });
-      } else if (isText) {
-        if (file.size > MAX_TEXT_BYTES) {
-          toast(`"${file.name}" is too large (text ≤ 256 KB).`, "err");
-          continue;
-        }
+      if (c.kind === "image" || c.kind === "document") {
+        staged.push({ kind: c.kind, mediaType: c.mediaType, dataBase64: await readFileAsBase64(file), name: file.name });
+      } else if (c.kind === "data") {
         const text = await readFileAsText(file);
-        staged.push({ kind: "text", text, name: file.name });
+        const bad = dataTextError(file.name, c.mediaType, text);
+        if (bad) errors.push(bad);
+        else staged.push({ kind: "data", name: file.name, mediaType: c.mediaType, text });
       } else {
-        toast(`"${file.name}" isn't a supported type (image or text).`, "err");
+        staged.push({ kind: "text", text: await readFileAsText(file), name: file.name });
       }
-    } catch (e) {
-      toast(`Couldn't attach "${file.name}".`, "err");
+    } catch {
+      errors.push(`Couldn't attach "${file.name}".`);
     }
   }
+  showAttachError(errors.join(" "));
   renderChips();
 }
 
 function removeStaged(idx) {
   staged.splice(idx, 1);
+  showAttachError("");
   renderChips();
 }
 
 function renderChips() {
   const box = $("vc-attach-chips");
   if (!box) return;
+  const notice = $("vc-attach-notice");
+  if (notice) notice.innerHTML = attachNotice(staged).map((l) => escapeHtml(l)).join("<br>");
   if (staged.length === 0) {
     box.classList.add("hidden");
     box.innerHTML = "";
@@ -215,8 +247,8 @@ function renderChips() {
       const thumb =
         a.kind === "image"
           ? `<img class="vc-chip-thumb" alt="" src="data:${escapeHtml(a.mediaType)};base64,${a.dataBase64}">`
-          : `<span class="vc-chip-icon" aria-hidden="true">📄</span>`;
-      const label = escapeHtml(a.name || (a.kind === "image" ? "image" : "text"));
+          : `<span class="vc-chip-icon" aria-hidden="true">${attachmentIcon(a.kind)}</span>`;
+      const label = escapeHtml(a.name || a.kind);
       return `
         <span class="vc-chip" data-idx="${i}">
           ${thumb}
@@ -238,6 +270,7 @@ async function send() {
   if (!activeSessionId) return startBuild(text);
   if (!text && staged.length === 0) return toast("Type a message first.", "err");
   const attachments = staged.slice();
+  if (!(await checkVision(attachments))) return;
   const sendBtn = $("vc-send");
   sendBtn.disabled = true;
   sendBtn.textContent = "Sending…";
@@ -248,6 +281,7 @@ async function send() {
       // A free AI pass is swapped for a fresh one on every reply.
       buildCredential = await freshCredential(buildCredential, client().fqdn);
       if (buildCredential) replyBody.credential = buildCredential;
+      Object.assign(replyBody, wireChoice(modelMenu, modelChoice, { reply: true }));
       await boxFetch(
         `/api/screens/llm/sessions/${encodeURIComponent(activeSessionId)}/reply`,
         { method: "POST", body: JSON.stringify(replyBody) },
@@ -278,7 +312,87 @@ export function errorText(e) {
 function clearComposer() {
   $("vc-prompt").value = "";
   staged = [];
+  showAttachError("");
   renderChips();
+}
+
+// ---- model menu ----------------------------------------------------------
+
+/** Use `credential` for this build and load its model menu. */
+function setBuildCredential(credential) {
+  buildCredential = credential;
+  return refreshModelMenu();
+}
+
+async function refreshModelMenu() {
+  const bar = $("vc-model-bar");
+  const load = ++menuLoad;
+  if (!buildCredential) {
+    modelMenu = null;
+    bar?.classList.add("hidden");
+    return;
+  }
+  const menu = await loadModelMenu(buildCredential, boxFetch);
+  let saved = {};
+  const session = getSession();
+  if (session?.umk) {
+    try {
+      saved = defaultModelFor(await loadProviders(session.umk), buildCredential);
+    } catch {
+      saved = {};
+    }
+  }
+  if (load !== menuLoad) return;
+  modelMenu = menu;
+  modelChoice = initialChoice(menu, sessionModel ?? saved);
+  renderModelBar();
+}
+
+function renderModelBar() {
+  const bar = $("vc-model-bar");
+  if (!bar) return;
+  bar.classList.toggle("hidden", !modelMenu);
+  if (!modelMenu) return;
+  if (menuHandle && bar.firstElementChild) {
+    menuHandle.update(modelMenu, modelChoice);
+    return;
+  }
+  menuHandle = mountModelMenu(bar, {
+    menu: modelMenu,
+    choice: modelChoice,
+    onChange: (next) => {
+      modelChoice = next;
+      choiceTouched = true;
+    },
+  });
+}
+
+/** The session says which model it uses: show that until the owner picks. */
+function adoptSessionModel(state) {
+  if (!state?.model) return;
+  sessionModel = { model: state.model, effort: state.effort };
+  if (choiceTouched || !modelMenu || state.model === modelChoice.model) return;
+  modelChoice = initialChoice(modelMenu, sessionModel);
+  renderModelBar();
+}
+
+/**
+ * Images for a model that can't see them: offer the switch (or say so).
+ * Resolves whether to send.
+ */
+async function checkVision(attachments) {
+  const check = visionCheck(modelMenu, modelChoice, attachments);
+  if (check.kind === "ok") return true;
+  if (check.kind === "blocked") {
+    await inlineAlert({ message: check.message, okLabel: "OK" });
+    return false;
+  }
+  const ok = await inlineConfirm({ message: check.message, okLabel: "Switch", cancelLabel: "Cancel" });
+  if (!ok) return false;
+  modelChoice = withModel(modelMenu, modelChoice, check.to);
+  choiceTouched = true;
+  renderModelBar();
+  return true;
 }
 
 // ---- describe form (first turn) ------------------------------------------
@@ -400,6 +514,7 @@ async function startBuild(text) {
   const slug = currentSlug();
   if (!canBuild({ slug, prompt: text, check: currentCheck(), starting })) return;
   const attachments = staged.slice();
+  if (!(await checkVision(attachments))) return;
   starting = true;
   updateBuildButton();
   try {
@@ -414,8 +529,7 @@ async function startBuild(text) {
     const startBody = { prompt: text, attachments, name: slug };
     buildCredential = await freshCredential(buildCredential, client().fqdn);
     if (buildCredential) startBody.credential = buildCredential;
-    // Free AI names its model: boxes from before the free AI default need it.
-    if (isFreeAiCredential(buildCredential) && buildCredential.model) startBody.model = buildCredential.model;
+    Object.assign(startBody, wireChoice(modelMenu, modelChoice));
     const visEl = $("vc-visibility");
     if (visEl && (visEl.value === "just-me" || visEl.value === "link")) {
       startBody.visibility = visEl.value;
@@ -446,9 +560,8 @@ async function startBuild(text) {
         back: "view-vibe-code",
         serverFqdn: client().fqdn,
         onChosen: (credential) => {
-          buildCredential = credential;
           show("view-vibe-code");
-          void send();
+          void setBuildCredential(credential).then(send);
         },
       });
       return;
@@ -474,9 +587,8 @@ async function startBuild(text) {
         back: "view-vibe-code",
         serverFqdn: client().fqdn,
         onChosen: (credential) => {
-          buildCredential = credential;
           show("view-vibe-code");
-          void send();
+          void setBuildCredential(credential).then(send);
         },
       });
     }
@@ -556,13 +668,20 @@ function attachmentMarkup(att) {
       if (a.kind === "image" && a.dataBase64) {
         return `<img class="vc-msg-thumb" alt="${escapeHtml(a.name || "image")}" src="data:${escapeHtml(a.mediaType || "image/png")};base64,${a.dataBase64}">`;
       }
-      return `<span class="vc-msg-file">📄 ${escapeHtml(a.name || "text")}</span>`;
+      return `<span class="vc-msg-file">${attachmentIcon(a.kind)} ${escapeHtml(a.name || a.kind || "file")}</span>`;
     })
     .join("")}</div>`;
 }
 
+/** The muted line under a Flagship Inference reply, else "". */
+export function creditsMarkup(m) {
+  if (m?.role !== "assistant" || typeof m.credits !== "number" || !Number.isFinite(m.credits)) return "";
+  return `<div class="vc-msg-credits">${escapeHtml(creditsUsedText(m.credits))}</div>`;
+}
+
 function render(state) {
   $("vc-status").textContent = statusLabel(state.status, state.deployPhase);
+  adoptSessionModel(state);
 
   // Message list — user right, assistant left.
   const log = $("vc-messages");
@@ -579,7 +698,8 @@ function render(state) {
   if (all.length === 0) {
     log.innerHTML = '<div class="card placeholder">Say what you\'d like to build to get started.</div>';
   } else {
-    log.innerHTML = all
+    const summarised = state.summarised ? `<div class="vc-summarised">${escapeHtml(SUMMARISED_NOTE)}</div>` : "";
+    log.innerHTML = summarised + all
       .map((m) => {
         const side = m.role === "user" ? "vc-msg-user" : "vc-msg-ai";
         const who = m.role === "user" ? "You" : "AI";
@@ -588,7 +708,7 @@ function render(state) {
             <div class="vc-msg-role">${who}</div>
             <div class="vc-msg-text">${escapeHtml(m.text || "")}</div>
             ${attachmentMarkup(m.attachments)}
-          </div>`;
+          </div>${creditsMarkup(m)}`;
       })
       .join("");
     log.scrollTop = log.scrollHeight;
@@ -739,6 +859,18 @@ function reset() {
   staged = [];
   pendingTalkToolId = null;
   buildCredential = null;
+  modelMenu = null;
+  modelChoice = { model: null, effort: null, thinkHarder: false };
+  choiceTouched = false;
+  sessionModel = null;
+  menuHandle = null;
+  menuLoad++;
+  const bar = $("vc-model-bar");
+  if (bar) {
+    bar.innerHTML = "";
+    bar.classList.add("hidden");
+  }
+  showAttachError("");
   buildSubject = null;
   leftOpen = false;
   deployedUrl = null;
@@ -812,7 +944,7 @@ export async function enterVibeCode(opts = {}) {
   reset();
   // The AI-key step hands the chosen credential in here; reset() clears it,
   // so apply it after.
-  if (opts.credential) buildCredential = opts.credential;
+  if (opts.credential) void setBuildCredential(opts.credential);
 }
 
 // The owner picked another server: names are per server, so check again.
@@ -855,8 +987,8 @@ export async function openVibeCodeSession(sessionId, { back = null, credential =
   // A reopened session lives on the box that listed it (the current server
   // unless named).
   box = boxClient(server);
-  if (credential) buildCredential = credential;
   activeSessionId = sessionId;
+  if (credential) void setBuildCredential(credential);
   setFirstTurnVisible(false);
   const sendBtn = $("vc-send");
   if (sendBtn) sendBtn.textContent = "Send";

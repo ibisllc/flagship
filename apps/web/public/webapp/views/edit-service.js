@@ -30,7 +30,9 @@ import { enterBuildMcp } from "./build-mcp.js";
 import { enterBuildJournal } from "./build-journal.js";
 import { openVibeCodeSession } from "./vibe-code.js";
 import { toast } from "../lib/toast.js";
-import { freshCredential, isFreeAiCredential } from "../lib/freeAi.js";
+import { freshCredential } from "../lib/freeAi.js";
+import { getSession } from "../lib/state.js";
+import { defaultModelFor, loadProviders } from "../providers.js";
 
 registerView("view-edit-service");
 registerView("view-edit-describe");
@@ -91,6 +93,18 @@ async function showRefusal(r, name) {
   }
 }
 
+// The default model saved in Settings for this key; the chat's menu changes it after.
+async function savedDefaultModel(credential) {
+  const umk = getSession()?.umk;
+  if (!umk || !credential) return {};
+  try {
+    const { model, effort } = defaultModelFor(await loadProviders(umk), credential);
+    return model ? { model, ...(effort ? { effort } : {}) } : {};
+  } catch {
+    return {};
+  }
+}
+
 async function start() {
   const promptEl = $("edit-describe-prompt");
   const prompt = promptEl.value;
@@ -107,7 +121,7 @@ async function start() {
       return;
     }
     if (credential) body.credential = credential;
-    if (isFreeAiCredential(credential) && credential.model) body.model = credential.model;
+    Object.assign(body, await savedDefaultModel(credential));
     let r;
     try {
       r = await screensFetch("/api/screens/vibe-code/start", {

@@ -157,11 +157,12 @@ describe("webapp Flagship Inference", () => {
     expect(shouldAutoUseFreeAi([], null)).toBe(false);
   });
 
-  it("builds refresh a free AI pass on every send and pass its model on start", async () => {
+  it("builds refresh a free AI pass on every send and send the chosen model, not the pass's", async () => {
     const app = buildServer();
     const vibe = (await app.inject({ method: "GET", url: "/webapp/views/vibe-code.js" })).body;
     expect(vibe).toContain("buildCredential = await freshCredential(buildCredential, client().fqdn)");
-    expect(vibe).toMatch(/isFreeAiCredential\(buildCredential\) && buildCredential\.model\) startBody\.model/);
+    expect(vibe).not.toMatch(/buildCredential\.model/);
+    expect(vibe).toContain("Object.assign(startBody, wireChoice(modelMenu, modelChoice))");
     const { errorText } = await load("views", "vibe-code.js");
     expect(errorText(Object.assign(new Error("Your free AI credits are used up."), { code: "free-ai-used-up" }))).toBe(
       "Your free AI credits are used up.",

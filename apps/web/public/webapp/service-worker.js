@@ -145,7 +145,7 @@
 //       the accept view; home lists "Shared with me" with a page limited to
 //       the share's level; precaches lib/serverShare.js, lib/serverShares.js
 //       and the server-sharing / share-accept / shared-server views.
-const SHELL_VERSION = "v70";
+const SHELL_VERSION = "v71";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -210,6 +210,7 @@ const OPTIONAL_SHELL = [
   "/lib/pushSetting.js",
   "/lib/appApiKeys.js",
   "/lib/freeAi.js",
+  "/lib/modelMenu.js",
   "/lib/appDb.js",
   "/lib/knockIdentity.js",
   "/lib/appPlacement.js",

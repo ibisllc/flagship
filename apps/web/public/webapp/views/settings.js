@@ -10,7 +10,18 @@ import { getSession, ensureUsername, lockSession } from "../lib/state.js";
 import { escapeHtml } from "../lib/util.js";
 import { toast } from "../lib/toast.js";
 import { humanError } from "../lib/humanError.js";
-import { loadProviders, addProvider, removeProvider, setActive, setRelay, PROMO_ID } from "../providers.js";
+import {
+  loadProviders,
+  addProvider,
+  removeProvider,
+  setActive,
+  setRelay,
+  setDefaultModel,
+  credentialFor,
+  PROMO_ID,
+} from "../providers.js";
+import { boxClient } from "../lib/api.js";
+import { fetchInferenceCatalog, initialChoice, loadModelMenu, mountModelMenu } from "../lib/modelMenu.js";
 import { relayCaption } from "../lib/aiRelay.js";
 import {
   BUILT_IN_LABEL,
@@ -97,7 +108,10 @@ export async function renderProviders() {
     return;
   }
   const stored = await loadProviders(session.umk);
-  void renderFreeAiCard(stored.activeId === PROMO_ID || !stored.entries.some((e) => e.id === stored.activeId));
+  void renderFreeAiCard(
+    stored.activeId === PROMO_ID || !stored.entries.some((e) => e.id === stored.activeId),
+    stored.flagshipDefaultModel,
+  );
 
   for (const e of stored.entries) {
     const isActive = stored.activeId === e.id;
@@ -108,7 +122,7 @@ export async function renderProviders() {
         <div>
           <div class="weight-600">${escapeHtml(e.label)} <span class="pill">${escapeHtml(e.provider)}</span></div>
           <div class="value text-xs mt-1">${escapeHtml(maskKey(e.apiKey))}</div>
-          ${e.defaultModel ? `<div class="faint-sm">default: ${escapeHtml(e.defaultModel)}</div>` : ""}
+          ${defaultModelSlot(`data-default-model-for="${escapeHtml(e.id)}"`)}
           <label class="inline-check mt-1">
             <input type="checkbox" role="switch" data-action="relay" data-id="${escapeHtml(e.id)}"${e.relay !== false ? " checked" : ""} />
             <span class="faint-sm">${escapeHtml(relayCaption(e.relay !== false))}</span>
@@ -121,6 +135,7 @@ export async function renderProviders() {
       </div>
     `;
     list.appendChild(card);
+    mountEntryDefaultModel(card.querySelector("[data-default-model-for]"), e);
   }
 
   list.querySelectorAll('[data-action="set-active"]').forEach((b) => {
@@ -166,6 +181,52 @@ export async function renderProviders() {
   });
 }
 
+export const DEFAULT_MODEL_LABEL = "Default model";
+
+/** Where a provider's default-model menu goes. Exported for tests. */
+export function defaultModelSlot(attrs) {
+  return `<div class="settings-default-model"><span class="faint-sm">${DEFAULT_MODEL_LABEL}</span><div ${attrs}></div></div>`;
+}
+
+const saveDefault = (id) => async (choice) => {
+  const session = getSession();
+  if (!session.umk) return toast("Unlock first", "err");
+  try {
+    await setDefaultModel(session.umk, id, { model: choice.model, effort: choice.effort });
+  } catch (e) {
+    toast(humanError(e), "err");
+  }
+};
+
+// A saved key's list comes from the current box (the key is used for that one
+// call), so it's read only when the menu is opened.
+function mountEntryDefaultModel(host, entry) {
+  if (!host) return;
+  mountModelMenu(host, {
+    load: () => loadModelMenu(credentialFor(entry), (path, init) => boxClient().fetch(path, init)),
+    choice: { model: entry.defaultModel ?? null, effort: entry.defaultEffort ?? null },
+    thinkHarder: false,
+    onChange: saveDefault(entry.id),
+  });
+}
+
+async function mountFlagshipDefaultModel(saved) {
+  const host = $("free-ai-default-model");
+  if (!host) return;
+  const catalog = await fetchInferenceCatalog();
+  if (!catalog) {
+    host.closest(".settings-default-model")?.classList.add("hidden");
+    return;
+  }
+  const menu = { kind: "flagship", catalog };
+  mountModelMenu(host, {
+    menu,
+    choice: initialChoice(menu, { model: saved }),
+    thinkHarder: false,
+    onChange: saveDefault(PROMO_ID),
+  });
+}
+
 /**
  * The built-in Flagship Inference entry, always first in the providers list:
  * no remove; "use" makes it the default when it can be used; otherwise the
@@ -180,6 +241,7 @@ export function freeAiCardHtml(status, { isActive = false } = {}) {
         <div class="faint-sm mt-1">${escapeHtml(PROVIDER_SUBTITLE)}</div>
         <div class="note mt-1${view.usable ? "" : " warn"}" id="free-ai-line">${escapeHtml(view.text)}</div>
         ${view.usable && isActive ? `<div class="faint-sm mt-1">${escapeHtml(CARD_NOTE)}</div>` : ""}
+        ${view.usable ? defaultModelSlot('id="free-ai-default-model"') : ""}
       </div>
       ${
         view.usable
@@ -193,7 +255,7 @@ export function freeAiCardHtml(status, { isActive = false } = {}) {
 
 // The Flagship Inference entry: what's left this week and in the starter
 // reserve, or why it can't be used now. Always shown, ended included.
-async function renderFreeAiCard(isActive) {
+async function renderFreeAiCard(isActive, savedDefault) {
   const el = $("free-ai-card");
   if (!el) return;
   const status = await fetchFreeAiStatus();
@@ -201,6 +263,7 @@ async function renderFreeAiCard(isActive) {
   const html = freeAiCardHtml(status, { isActive: shownActive });
   el.className = `card mt-2 provider-entry${shownActive ? " is-active" : ""}`;
   el.innerHTML = html;
+  void mountFlagshipDefaultModel(savedDefault);
   $("free-ai-add-key")?.addEventListener("click", () => handleAddProvider());
   $("free-ai-use")?.addEventListener("click", async () => {
     try {

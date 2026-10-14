@@ -27,13 +27,15 @@ describe("webapp scratch (vibe-code) chat with attachments", () => {
     const body = await asset("/webapp/views/vibe-code.js");
     expect(body).toContain("FileReader");
     expect(body).toContain("readAsDataURL");
-    // Caps mirror the server.
+    // Caps mirror the server (lib/modelMenu.js holds them).
     expect(body).toContain("MAX_ATTACHMENTS");
-    expect(body).toMatch(/4 \* 1024 \* 1024/); // 4 MB image cap
-    expect(body).toMatch(/256 \* 1024/); // 256 KB text cap
-    // base64 image attachment shape sent to the server.
+    expect(body).toContain("classifyFile(file)");
+    const lib = await asset("/webapp/lib/modelMenu.js");
+    expect(lib).toMatch(/4 \* MB/); // 4 MB image cap
+    expect(lib).toMatch(/256 \* 1024/); // 256 KB text cap
+    // base64 image/PDF and text/data attachment shapes sent to the server.
     expect(body).toContain("dataBase64");
-    expect(body).toMatch(/kind: "image"/);
+    expect(body).toMatch(/kind: "data"/);
     expect(body).toMatch(/kind: "text"/);
   });
 
@@ -52,8 +54,8 @@ describe("webapp scratch (vibe-code) chat with attachments", () => {
     expect(body).toContain('id="view-vibe-code"');
     expect(body).toContain('id="vc-messages"');
     expect(body).toContain('id="vc-attach-input"');
-    // The attach input accepts images + common text files.
-    expect(body).toMatch(/accept="image\/\*,\.txt,\.md,\.sql,\.json,\.csv"/);
+    // The attach input accepts images, text/code, CSV/JSON and PDF.
+    expect(body).toMatch(/accept="image\/png,image\/jpeg,image\/gif,image\/webp,\.csv,\.json,\.pdf,\.txt,\.md/);
     expect(body).toContain('id="vc-send"');
     // Caps + "not a secret channel" reassurance is visible to the user.
     expect(body).toMatch(/6 files per message/);

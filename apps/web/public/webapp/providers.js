@@ -1,7 +1,8 @@
 // Webapp provider entries — multi-key, single-active.
 //
 // Each entry is a `{ id, provider, label, apiKey, baseUrl?, defaultModel?,
-// relay }` shape. `relay` (send the key's calls through the Flagship relay so
+// defaultEffort?, relay }` shape; the list's `flagshipDefaultModel` is
+// Flagship Inference's default (a catalog id). `relay` (send the key's calls through the Flagship relay so
 // the provider sees Flagship's address, not the box's) is on unless the owner
 // turned it off; entries saved before it existed read as on. The full list is JSON-serialized and AES-GCM-wrapped under a key
 // derived from the UMK seed (`flagship.providers.v1`), then stored in the
@@ -123,6 +124,9 @@ function isValidEntry(e) {
   if (e.defaultModel !== undefined && (typeof e.defaultModel !== "string" || e.defaultModel.length > 128)) {
     return false;
   }
+  if (e.defaultEffort !== undefined && (typeof e.defaultEffort !== "string" || e.defaultEffort.length > 32)) {
+    return false;
+  }
   if (e.source !== undefined && (typeof e.source !== "string" || !VALID_SOURCES.has(e.source))) return false;
   if (e.relay !== undefined && typeof e.relay !== "boolean") return false;
   return true;
@@ -202,6 +206,7 @@ export async function addProvider(umkSeed, partial) {
     apiKey: partial.apiKey,
     baseUrl: partial.baseUrl || undefined,
     defaultModel: partial.defaultModel || undefined,
+    defaultEffort: partial.defaultEffort || undefined,
     source: partial.source || undefined,
     relay: partial.relay !== false,
   };
@@ -255,6 +260,33 @@ export async function turnRelayOffForCredential(umkSeed, credential) {
   await setRelay(umkSeed, entry.id, false);
   credential.relay = false;
   return true;
+}
+
+/**
+ * The default model (and effort) a chat starts with: on a saved key, or,
+ * for `PROMO_ID`, Flagship Inference's catalog id. An empty model clears it.
+ */
+export async function setDefaultModel(umkSeed, id, { model, effort } = {}) {
+  const list = await loadProviders(umkSeed);
+  const m = typeof model === "string" && model.trim() ? model.trim().slice(0, 128) : undefined;
+  const ef = m && typeof effort === "string" && effort ? effort.slice(0, 32) : undefined;
+  if (id === PROMO_PROVIDER_ID) {
+    list.flagshipDefaultModel = m;
+  } else {
+    const entry = list.entries.find((e) => e.id === id);
+    if (!entry) throw new Error("unknown provider id");
+    entry.defaultModel = m;
+    entry.defaultEffort = ef;
+  }
+  await saveProviders(umkSeed, list);
+}
+
+/** The saved default `{ model, effort }` for a credential (a Flagship pass or a saved key). */
+export function defaultModelFor(list, credential) {
+  if (!credential) return {};
+  if (credential.provider === "flagship") return { model: list?.flagshipDefaultModel };
+  const entry = entryForCredential(list?.entries, credential);
+  return entry ? { model: entry.defaultModel, effort: entry.defaultEffort } : {};
 }
 
 export const PROMO_ID = PROMO_PROVIDER_ID;
