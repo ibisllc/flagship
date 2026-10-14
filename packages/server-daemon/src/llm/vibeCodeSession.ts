@@ -48,6 +48,7 @@ import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync
 import { join } from "node:path";
 import type { Attachment } from "@flagship/llm-providers";
 import { SUMMARY_PREFIX } from "./contextCompaction.js";
+import type { SampleFile } from "./vibeCodeAttachments.js";
 
 export type VibeCodeEvent =
   | { kind: "thinking"; text: string }
@@ -361,6 +362,8 @@ export interface VibeCodeSessionSnapshot {
   history: HistoryEntry[];
   historyTimestamps: number[];
   compaction?: SessionCompaction;
+  /** Sample data files the owner attached, for the private test copy only. */
+  samples?: SampleFile[];
   files: Record<string, string>;
   pendingTools: PendingToolUse[];
   cancelled: boolean;
@@ -383,6 +386,8 @@ export class VibeCodeSession extends EventEmitter {
   parser = new VibeCodeStreamParser();
   private readonly history: HistoryEntry[] = [];
   private compaction: SessionCompaction | null = null;
+  /** Sample data for the private test copy, by file name (a later file of the same name replaces it). */
+  private readonly samples = new Map<string, SampleFile>();
   /** Credits spent before this turn's reply text arrived (a tool-only turn). */
   private pendingCredits = 0;
   /** Unix-ms per history entry — parallel to `history`. */
@@ -495,6 +500,18 @@ export class VibeCodeSession extends EventEmitter {
   setCompaction(upTo: number, summary: string): void {
     this.compaction = { upTo: Math.min(Math.max(1, upTo), this.history.length), summary };
     this.emit("persist");
+  }
+
+  /** Keep sample data the owner attached; it goes only into the test copy. */
+  addSamples(files: readonly SampleFile[]): void {
+    if (files.length === 0) return;
+    for (const f of files) this.samples.set(f.name, { ...f });
+    this.emit("persist");
+  }
+
+  /** The sample data files, name → text, for the private test copy. */
+  sampleFiles(): Record<string, string> {
+    return Object.fromEntries([...this.samples.values()].map((f) => [f.name, f.text]));
   }
 
   /** Whether part of this conversation has been summarised. */
@@ -710,6 +727,7 @@ export class VibeCodeSession extends EventEmitter {
       history: this.history.map((h) => ({ ...h })),
       historyTimestamps: [...this.historyTimestamps],
       ...(this.compaction ? { compaction: { ...this.compaction } } : {}),
+      ...(this.samples.size > 0 ? { samples: [...this.samples.values()].map((f) => ({ ...f })) } : {}),
       files: this.parser.snapshot(),
       pendingTools: [...this.pendingTools.values()],
       cancelled: this.cancelled,
@@ -734,6 +752,7 @@ export class VibeCodeSession extends EventEmitter {
       s.historyTimestamps.push(snap.historyTimestamps[i] ?? snap.meta.startedAt);
     }
     if (snap.compaction) s.compaction = { ...snap.compaction };
+    for (const f of snap.samples ?? []) s.samples.set(f.name, { ...f });
     s.parser.seed(snap.files);
     for (const t of snap.pendingTools) s.pendingTools.set(t.id, t);
     s.cancelled = snap.cancelled;

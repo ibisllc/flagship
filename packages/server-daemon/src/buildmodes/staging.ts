@@ -50,6 +50,8 @@ import {
   type EnvironmentFailure,
 } from "./environmentFailure.js";
 
+const SAMPLE_FILE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
+
 /** The docker network staging copies join. The egress gateway locks it down. */
 export const STAGING_NETWORK = "flagship-staging";
 /** The neutral identity a staging copy runs under. */
@@ -85,6 +87,12 @@ export interface StageArgs {
   slug: string;
   /** Owner env var NAMES; each gets the placeholder value. */
   envNames?: string[];
+  /**
+   * Sample data the owner attached in the chat, name → text: written to the
+   * copy's own files volume at /data/sample/<name> before it starts. Never
+   * reaches the live app.
+   */
+  sampleFiles?: Record<string, string>;
 }
 
 /**
@@ -388,6 +396,11 @@ export class StagingRunner implements StagingHost {
       }
     }
 
+    // The owner's sample data, into this copy's files volume only.
+    if (a.sampleFiles && Object.keys(a.sampleFiles).length > 0) {
+      await this.seedSamples(filesVolumeOf(data), a.sampleFiles);
+    }
+
     const placeholders: Record<string, string> = {};
     for (const name of a.envNames ?? []) {
       if (ENV_NAME_RE.test(name) && !name.startsWith("FLAGSHIP_")) placeholders[name] = STAGING_ENV_PLACEHOLDER;
@@ -543,6 +556,50 @@ export class StagingRunner implements StagingHost {
       };
     } catch (e) {
       return { ok: false, reason: `couldn't list the tables: ${(e as Error).message}` };
+    }
+  }
+
+  /**
+   * Write sample files to /data/sample/ in the copy's dev files volume, one
+   * throwaway container per file with no network and the content on stdin.
+   * Best-effort: an app without a files folder, or a write that fails, just
+   * runs without them.
+   */
+  private async seedSamples(volume: string | undefined, files: Record<string, string>): Promise<void> {
+    const capture = this.deps.cmd.capture;
+    if (!volume || !capture || !isFilesVolume(volume) || isProdFilesVolume(volume)) return;
+    for (const [name, text] of Object.entries(files)) {
+      if (!SAMPLE_FILE_RE.test(name)) continue;
+      const args = [
+        "run",
+        "--rm",
+        "-i",
+        "--network",
+        "none",
+        "--cap-drop",
+        "ALL",
+        "--cap-add",
+        "DAC_OVERRIDE",
+        "--security-opt",
+        "no-new-privileges",
+        "--read-only",
+        "--user",
+        "0:0",
+        "--memory",
+        "64m",
+        "--pids-limit",
+        "32",
+        "--mount",
+        `type=volume,src=${volume},dst=/data`,
+        "--entrypoint",
+        "sh",
+        this.deps.filesHelperImage ?? FILES_HELPER_IMAGE,
+        "-c",
+        'mkdir -p /data/sample && cat > "/data/sample/$1"',
+        "sh",
+        name,
+      ];
+      await capture.call(this.deps.cmd, "docker", args, { timeoutMs: 60_000, input: text }).catch(() => {});
     }
   }
 

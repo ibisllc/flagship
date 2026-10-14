@@ -232,7 +232,15 @@ export interface LlmProviderCredential {
 
 export type VibeCodeAttachment =
   | { kind: "image"; mediaType: string; dataBase64: string; name?: string }
-  | { kind: "text"; text: string; name?: string };
+  | { kind: "text"; text: string; name?: string }
+  /**
+   * Sample data (CSV or JSON, ≤ 2 MB): the model reads a preview, the whole
+   * file goes into the app's private test copy only. Sent only; a session's
+   * messages show it as a text attachment with the preview.
+   */
+  | { kind: "data"; name: string; mediaType: "text/csv" | "application/json"; text: string }
+  /** A PDF (≤ 10 MB): the box extracts its text; messages show that text. */
+  | { kind: "document"; name: string; mediaType: "application/pdf"; dataBase64: string };
 
 /**
  * `GET /api/screens/vibe-code/name-check?name=…`, and the body of a 409 from

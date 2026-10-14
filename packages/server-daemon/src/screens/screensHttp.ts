@@ -31,7 +31,8 @@ import { isAppApiKeysPath, type AppApiKeysHttp } from "../appApiKeys.js";
 import { ACCESS_ALERTS_PATH, buildAccessAlertSettingHttp, type AccessAlertSetting } from "../egress/accessAlertSetting.js";
 import {
   summarizeAttachment,
-  validateAttachments,
+  prepareAttachments,
+  type PdfText,
 } from "../llm/vibeCodeAttachments.js";
 import type { Attachment, FetchLike } from "@flagship/llm-providers";
 import { parseServiceId, verifySetServiceEnv } from "@flagship/protocol";
@@ -377,6 +378,8 @@ export interface VibeCodeRuntime {
    * for this one call and never stored.
    */
   aiModels?: (credential: LlmCredential) => Promise<AiModelsResponse>;
+  /** PDF text extraction for document attachments (tests inject one). */
+  pdfText?: PdfText;
   /**
    * Re-invoke the model after the owner answered a `talkToUser` question or
    * acked a `requestEnvVar`. Without this, a reply appends to the session and
@@ -848,7 +851,7 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       if (!body || typeof body.prompt !== "string" || body.prompt.length === 0) {
         return jerr(400, "prompt required");
       }
-      const attach = validateAttachments(body.attachments);
+      const attach = await prepareAttachments(body.attachments, deps.vibeCode.pdfText ? { pdfText: deps.vibeCode.pdfText } : {});
       if (!attach.ok) return jerr(400, attach.reason);
       const cred = parseCredential((body as { credential?: unknown }).credential);
       if (cred === "invalid") return jerr(400, "malformed credential");
@@ -905,6 +908,7 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
             }),
       });
       session.pushUserMessage(body.prompt, attach.attachments);
+      session.addSamples(attach.samples);
       // Value-free journal: a short text preview + per-attachment
       // name/kind/size summaries (NEVER the content/base64). The
       // credential is NEVER journalled — at most the provider NAME, below.
@@ -1323,8 +1327,9 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       }
       if (pending.kind === "talkToUser") {
         if (typeof body.text !== "string") return jerr(400, "text required");
-        const attach = validateAttachments(body.attachments);
+        const attach = await prepareAttachments(body.attachments, deps.vibeCode.pdfText ? { pdfText: deps.vibeCode.pdfText } : {});
         if (!attach.ok) return jerr(400, attach.reason);
+        session.addSamples(attach.samples);
         const r = session.pushUserReply({
           toolUseId: pending.toolUseId,
           text: body.text,

@@ -42,6 +42,8 @@ export interface CommandRunnerOpts {
    * so an attacker-authored Dockerfile can't spin forever. 0/absent ⇒ no bound.
    */
   timeoutMs?: number;
+  /** Written to the child's stdin (then closed). `capture` only. */
+  input?: Buffer | string;
 }
 
 export interface CommandRunner {
@@ -232,7 +234,11 @@ export const realCommandRunner: CommandRunner = {
   },
   capture(cmd, args, opts) {
     return new Promise((resolve, reject) => {
-      const p = spawn(cmd, args, { stdio: ["ignore", "pipe", "pipe"] });
+      const p = spawn(cmd, args, { stdio: [opts?.input !== undefined ? "pipe" : "ignore", "pipe", "pipe"] });
+      if (opts?.input !== undefined) {
+        p.stdin?.on("error", () => {});
+        p.stdin?.end(opts.input);
+      }
       let stdout = "";
       let stderr = "";
       const timer = armTimeout(p, opts, reject);

@@ -309,8 +309,16 @@ export function buildStagedChatDeploy(deps: StagedChatDeployDeps) {
     const serviceId = session.meta.editsServiceId ?? `${deps.hostUsername}--${slug}`;
     const envNames = deps.envNames ? await deps.envNames(serviceId).catch(() => []) : [];
     const edits = session.meta.editsServiceId;
+    const samples = session.sampleFiles();
     const stage = () =>
-      deps.staging.stage({ buildId: id, files: ws.snapshot(), slug, envNames, ...(edits ? { carryBinariesFrom: edits } : {}) });
+      deps.staging.stage({
+        buildId: id,
+        files: ws.snapshot(),
+        slug,
+        envNames,
+        ...(edits ? { carryBinariesFrom: edits } : {}),
+        ...(Object.keys(samples).length > 0 ? { sampleFiles: samples } : {}),
+      });
     const matches = () => deps.staging.staged(id)?.filesDigest === filesDigest(ws.snapshot());
     const note = (kind: "build-phase" | "sealed" | "error", summary: string) =>
       deps.journal?.append(id, { mode: "scratch", kind, actor: "system", summary }).catch(() => {});

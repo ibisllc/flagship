@@ -12,6 +12,15 @@
  *   - image ≤ 4 MB decoded
  *   - text ≤ 256 KB
  *   - only common image/* media types + text
+ *
+ * Two more kinds arrive on the wire and become text before any model sees
+ * them (`prepareAttachments`):
+ *   - `data`: a CSV or JSON file of sample data, ≤ 2 MB. The model reads a
+ *     preview; the whole file goes into the app's private test copy only
+ *     (`$FLAGSHIP_FILES_DIR/sample/<name>`), never the live app — sample
+ *     data follows the staging-only rule (docs/ai-privacy-and-staging.md).
+ *   - `document`: a PDF, ≤ 10 MB. Its text is extracted on the box (≤ 256 KB
+ *     kept); the PDF itself goes nowhere.
  */
 
 import type { Attachment } from "@flagship/llm-providers";
@@ -20,6 +29,14 @@ export const MAX_ATTACHMENTS_PER_TURN = 6;
 /** Decoded byte ceilings. Base64 inflates ~4/3, so we check the decoded size. */
 export const MAX_IMAGE_BYTES = 4 * 1024 * 1024; // 4 MB
 export const MAX_TEXT_BYTES = 256 * 1024; // 256 KB
+export const MAX_DATA_BYTES = 2 * 1024 * 1024; // 2 MB
+export const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024; // 10 MB
+/** What the model reads of a sample data file. */
+export const DATA_PREVIEW_CHARS = 16 * 1024;
+const DATA_PREVIEW_LINES = 200;
+const DATA_MEDIA_TYPES = new Set(["text/csv", "application/json"]);
+/** A sample file's name inside the test copy: plain, no paths. */
+const SAMPLE_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
 
 /** Image media types we accept. Mirrors the client's `accept="image/*"`. */
 const ALLOWED_IMAGE_MEDIA_TYPES = new Set([
@@ -107,4 +124,125 @@ export function summarizeAttachment(a: Attachment): string {
   }
   const bytes = Buffer.byteLength(a.text, "utf8");
   return `text ${name} (${bytes} bytes)`;
+}
+
+/** A sample data file for the app's private test copy. */
+export interface SampleFile {
+  name: string;
+  mediaType: string;
+  text: string;
+}
+
+export type PreparedAttachments =
+  | { ok: true; attachments: Attachment[]; samples: SampleFile[] }
+  | { ok: false; reason: string };
+
+/** Turns a PDF's bytes into its text. */
+export type PdfText = (pdf: Uint8Array) => Promise<string>;
+
+/** The box's PDF text extraction (unpdf: pdf.js, no native code, nothing leaves the box). */
+export const extractPdfText: PdfText = async (pdf) => {
+  const { extractText, getDocumentProxy } = await import("unpdf");
+  const doc = await getDocumentProxy(pdf);
+  const { text } = await extractText(doc, { mergePages: true });
+  return Array.isArray(text) ? text.join("\n\n") : text;
+};
+
+/** A file name made safe for the test copy's folder. */
+export function sampleFileName(raw: string | undefined, mediaType: string): string {
+  const ext = mediaType === "application/json" ? ".json" : ".csv";
+  const base = (raw ?? "").split(/[\\/]/).pop()!.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[^A-Za-z0-9]+/, "");
+  const name = base.length > 0 ? base.slice(0, 100) : `sample${ext}`;
+  return SAMPLE_NAME_RE.test(name) ? name : `sample${ext}`;
+}
+
+function preview(text: string): { shown: string; lines: number; cut: boolean } {
+  const lines = text.split("\n");
+  let shown = lines.slice(0, DATA_PREVIEW_LINES).join("\n");
+  if (shown.length > DATA_PREVIEW_CHARS) shown = shown.slice(0, DATA_PREVIEW_CHARS);
+  return { shown, lines: lines.length, cut: shown.length < text.length };
+}
+
+/**
+ * Validate a turn's attachments and turn every kind into what a model may
+ * read: images and text as they are, sample data as a preview (the file
+ * itself kept for the test copy), a PDF as its extracted text.
+ */
+export async function prepareAttachments(raw: unknown, opts: { pdfText?: PdfText } = {}): Promise<PreparedAttachments> {
+  if (raw == null) return { ok: true, attachments: [], samples: [] };
+  if (!Array.isArray(raw)) return { ok: false, reason: "attachments must be an array" };
+  if (raw.length > MAX_ATTACHMENTS_PER_TURN) {
+    return { ok: false, reason: `too many attachments (max ${MAX_ATTACHMENTS_PER_TURN})` };
+  }
+  const plain: unknown[] = [];
+  const extra: Array<{ index: number; item: Record<string, unknown> }> = [];
+  raw.forEach((item, index) => {
+    const kind = (item as { kind?: unknown } | null)?.kind;
+    if (kind === "data" || kind === "document") extra.push({ index, item: item as Record<string, unknown> });
+    else plain.push(item);
+  });
+  const base = validateAttachments(plain);
+  if (!base.ok) return base;
+  const converted = new Map<number, Attachment>();
+  const samples: SampleFile[] = [];
+  for (const { index, item } of extra) {
+    const name = typeof item.name === "string" ? item.name : undefined;
+    if (item.kind === "data") {
+      const mediaType = typeof item.mediaType === "string" ? item.mediaType.toLowerCase() : "";
+      if (!DATA_MEDIA_TYPES.has(mediaType)) return { ok: false, reason: "sample data must be CSV or JSON" };
+      if (typeof item.text !== "string") return { ok: false, reason: "sample data needs text" };
+      if (Buffer.byteLength(item.text, "utf8") > MAX_DATA_BYTES) {
+        return { ok: false, reason: "sample data too large (max 2 MB)" };
+      }
+      if (mediaType === "application/json") {
+        try {
+          JSON.parse(item.text);
+        } catch {
+          return { ok: false, reason: `${name ?? "the JSON file"} isn't valid JSON` };
+        }
+      }
+      const file = sampleFileName(name, mediaType);
+      samples.push({ name: file, mediaType, text: item.text });
+      const p = preview(item.text);
+      converted.set(index, {
+        kind: "text",
+        name: file,
+        text:
+          `Sample data the owner attached (${mediaType}, ${p.lines} lines). The whole file is copied into the app's private ` +
+          `test copy at $FLAGSHIP_FILES_DIR/sample/${file} when the app declares data.stores.files; the live app starts ` +
+          `without it. Use it to shape the schema and to try the app; never write it into a migration.\n` +
+          `${p.cut ? "The first lines" : "The file"}:\n${p.shown}`,
+      });
+    } else {
+      if (item.mediaType !== "application/pdf" || typeof item.dataBase64 !== "string") {
+        return { ok: false, reason: "a document must be a PDF" };
+      }
+      if (base64DecodedBytes(item.dataBase64) > MAX_DOCUMENT_BYTES) {
+        return { ok: false, reason: "document too large (max 10 MB)" };
+      }
+      let text: string;
+      try {
+        text = (await (opts.pdfText ?? extractPdfText)(new Uint8Array(Buffer.from(item.dataBase64, "base64")))).trim();
+      } catch {
+        return { ok: false, reason: `couldn't read the text in ${name ?? "the PDF"}` };
+      }
+      if (text.length === 0) return { ok: false, reason: `${name ?? "the PDF"} has no text to read (a scan?)` };
+      let kept = text;
+      while (Buffer.byteLength(kept, "utf8") > MAX_TEXT_BYTES) kept = kept.slice(0, Math.floor(kept.length * 0.9));
+      converted.set(index, {
+        kind: "text",
+        name: `${name ?? "document.pdf"} (text)`,
+        text: kept.length < text.length ? `${kept}\n… [the rest of the document was cut]` : kept,
+      });
+    }
+  }
+  // Back in the owner's order.
+  const out: Attachment[] = [];
+  let next = 0;
+  for (let i = 0; i < raw.length; i++) {
+    const c = converted.get(i);
+    if (c) out.push(c);
+    else out.push(base.attachments[next++]!);
+  }
+  return { ok: true, attachments: out, samples };
 }
