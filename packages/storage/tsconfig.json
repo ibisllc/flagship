@@ -5,6 +5,6 @@
     "outDir": "./dist",
     "composite": true
   },
-  "references": [{ "path": "../../billing/packages/metering" }],
+  "references": [{ "path": "../../billing/packages/metering" }, { "path": "../../billing/packages/store-d1" }],
   "include": ["src/**/*"]
 }

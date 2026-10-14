@@ -16,7 +16,8 @@
     "test": "vitest run --dir tests"
   },
   "dependencies": {
-    "@ibisllc/billing-metering": "0.1.0"
+    "@ibisllc/billing-metering": "0.1.0",
+    "@ibisllc/billing-store-d1": "0.1.0"
   },
   "license": "BUSL-1.1"
 }

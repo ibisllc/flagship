@@ -76,6 +76,8 @@ apps/*/Tests
 packages/*/tests
 billing/packages/*/tests
 billing/docs
+billing/examples
+billing/bench
 packages/*/test
 services/*/tests
 tools/*/tests

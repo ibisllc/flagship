@@ -10,6 +10,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
+import { meterStoreConformance } from "@ibisllc/billing-metering/conformance";
 import {
   D1MeterStorage,
   D1TierStorage,
@@ -134,6 +135,10 @@ describe.each(adapters)("MeterStorage.addBatch (%s)", (_name, make) => {
     expect((await s.get("alice", "egress", "2026-10"))?.amount).toBe(10);
     expect(await s.addBatch!(id, [e("alice", 10)], 101, 200)).toEqual({ duplicate: false, totals: [20] });
   });
+});
+
+describe("D1MeterStorage on every migration — the billing conformance suite", () => {
+  for (const c of meterStoreConformance({ make: () => d1().store })) it(c.name, c.run);
 });
 
 describe("migration 0070 — meter_batches", () => {

@@ -16,8 +16,9 @@ WORKDIR /app
 # is good-enough for a small monorepo.)
 COPY package.json package-lock.json tsconfig.base.json tsconfig.json vitest.config.ts ./
 COPY packages packages/
-# The billing sub-repo (metering core) is an npm workspace until it is
-# published as @ibisllc/billing-*; control-plane and storage import it.
+# The billing sub-repo is its own project (billing/README.md); Flagship
+# consumes its metering core and D1 store as npm workspaces until they are
+# published as @ibisllc/billing-*. control-plane and storage import them.
 COPY billing billing/
 # The maintainers protocol is the published npm package
 # `@ibisllc/maintainers` (exact pin in packages/server-daemon/package.json).

@@ -59,10 +59,6 @@ import type {
   Storage,
   TierStorage,
   TierSubscriptionRecord,
-  MeterStorage,
-  MeterCounterRecord,
-  MeterBatchEntry,
-  MeterBatchResult,
   UserIdentityRecord,
   UserIdentityRecordStorage,
   UsernameRecord,
@@ -3315,83 +3311,11 @@ export class D1TierStorage implements TierStorage {
   }
 }
 
-/** Metering counters (migration 0069; @ibisllc/billing-metering's
- *  schema/meter_counters.sql) and batch ids (0070, schema/meter_batches.sql). Standalone — constructed on demand
+/** Metering counters (migration 0069) and batch ids (0070): the billing
+ *  repo's D1 store, `@ibisllc/billing-store-d1`, on its default tables
+ *  (`meter_counters`, `meter_batches`). Standalone — constructed on demand
  *  (like D1NonceStore), not part of the D1Storage aggregate. */
-export class D1MeterStorage implements MeterStorage {
-  constructor(private readonly db: D1Database) {}
-
-  async add(account: string, resource: string, period: string, amount: number, now: number): Promise<number> {
-    const delta = Math.max(0, Math.floor(amount));
-    const r = await this.db
-      .prepare(
-        `INSERT INTO meter_counters (account, resource, period, amount, updated_at)
-         VALUES (?,?,?,?,?)
-         ON CONFLICT(account, resource, period) DO UPDATE SET
-           amount     = meter_counters.amount + excluded.amount,
-           updated_at = excluded.updated_at
-         RETURNING amount`,
-      )
-      .bind(account, resource, period, delta, now)
-      .first<{ amount: number }>();
-    return r?.amount ?? 0;
-  }
-
-  /** Idempotent batch (migration 0070 `meter_batches`): one D1 batch, i.e.
-   *  one transaction — prune a few expired ids, claim this id with a fresh
-   *  token, then add each entry only if this call holds the claim. A retried
-   *  id finds the earlier claim, so its adds change nothing. */
-  async addBatch(
-    batchId: string,
-    entries: MeterBatchEntry[],
-    now: number,
-    keepUntil: number,
-  ): Promise<MeterBatchResult> {
-    const claim = crypto.randomUUID();
-    const res = await this.db.batch([
-      this.db
-        .prepare(
-          `DELETE FROM meter_batches WHERE batch_id IN
-             (SELECT batch_id FROM meter_batches WHERE keep_until < ? LIMIT 32)`,
-        )
-        .bind(now),
-      this.db
-        .prepare(
-          `INSERT INTO meter_batches (batch_id, claim, keep_until) VALUES (?,?,?)
-           ON CONFLICT(batch_id) DO NOTHING RETURNING batch_id`,
-        )
-        .bind(batchId, claim, keepUntil),
-      ...entries.map((e) =>
-        this.db
-          .prepare(
-            `INSERT INTO meter_counters (account, resource, period, amount, updated_at)
-             SELECT ?,?,?,?,?
-             WHERE EXISTS (SELECT 1 FROM meter_batches WHERE batch_id = ? AND claim = ?)
-             ON CONFLICT(account, resource, period) DO UPDATE SET
-               amount     = meter_counters.amount + excluded.amount,
-               updated_at = excluded.updated_at
-             RETURNING amount`,
-          )
-          .bind(e.account, e.resource, e.period, Math.max(0, Math.floor(e.amount)), now, batchId, claim),
-      ),
-    ]);
-    if ((res[1]?.results?.length ?? 0) === 0) return { duplicate: true };
-    return {
-      duplicate: false,
-      totals: entries.map((_, i) => (res[i + 2]?.results?.[0] as { amount: number } | undefined)?.amount ?? 0),
-    };
-  }
-
-  async get(account: string, resource: string, period: string): Promise<MeterCounterRecord | undefined> {
-    const r = await this.db
-      .prepare(`SELECT * FROM meter_counters WHERE account = ? AND resource = ? AND period = ?`)
-      .bind(account, resource, period)
-      .first<{ account: string; resource: string; period: string; amount: number; updated_at: number }>();
-    return r
-      ? { account: r.account, resource: r.resource, period: r.period, amount: r.amount, updatedAt: r.updated_at }
-      : undefined;
-  }
-}
+export { D1MeterStore as D1MeterStorage } from "@ibisllc/billing-store-d1";
 
 export class D1EntitlementRevocationStorage implements EntitlementRevocationStorage {
   constructor(private readonly db: D1Database) {}
