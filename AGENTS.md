@@ -386,6 +386,12 @@ allowances (1M / 5M / 20M a month) are placeholders. `feat/custom-names`'
 
 - **`.com` Worker:** current with `main` as of 2026-10-13 (webapp shell **v60**).
   Always `npx tsc -b` first and apply pending D1 migrations before deploying.
+- **Flagship Inference entry (2026-10-14):** free AI is a built-in provider,
+  "Flagship Inference", first in every AI-key list, never removable, shown
+  disabled (not hidden) once ended; the shim answers a context overflow with
+  `free-ai-too-long`. Needs a `.com` deploy (webapp shell v68 + privacy page),
+  a shim deploy, and iOS/Android store builds. privacy.html names the hosted
+  model provider as a placeholder: fill it in before launch.
 - **Delete / reversible Revoke / Un-revoke (2026-10-12):** live on `.com` +
   webapp (shell v44); iOS dev build installed on the owner's iPhone; Android
   only as a CI/debug APK. Delete deposits a `wipe-now` decommission order
