@@ -84,6 +84,7 @@ import {
 import { buildServiceAccessWeb } from "./serviceAccessWeb.js";
 import { buildMemberRolesHttp } from "./memberRoles.js";
 import { buildAppSessionResolver } from "./appMemberSession.js";
+import { matchesPublicRoute } from "./serviceProxy.js";
 import { buildDaemonHttp, type DaemonContext } from "./httpApi.js";
 import {
   buildIdentityRotateHandlers,
@@ -3378,8 +3379,14 @@ async function wireOwnerHandlers(deps: {
       return svc ? svc.serviceId : null;
     },
     accessWeb.maybeServeKnock,
-    // An owner's API key reaches a restricted app; the proxy checks it.
-    carriesAppApiKey,
+    // An owner's API key reaches a restricted app, and so does an anonymous
+    // visitor on the app's declared public routes; the proxy decides both.
+    (req, serviceRef) =>
+      carriesAppApiKey(req) ||
+      matchesPublicRoute(
+        req.path,
+        deps.servicePlatformRef.current?.byServiceId(serviceRef)?.manifest.access.public_routes ?? [],
+      ),
   );
   runtime.addHandler(accessEnforcement);
   // The SNI-routed per-app proxy path does NOT run the daemon handler chain
@@ -3396,6 +3403,10 @@ async function wireOwnerHandlers(deps: {
   runtime.setAppIdentity({
     resolveSession: buildAppSessionResolver({ sessions: sessionStore, access: accessStore }),
     deniedPage: accessWeb.maybeServeKnock,
+    // Fail closed: a state file that couldn't be read leaves every mode
+    // unknown, and an unknown app is members-only.
+    accessMode: (serviceId) =>
+      accessStore.failedOpen() ? null : accessStore.mode(serviceId) === "open" ? "open" : "members-only",
   });
   process.once("SIGTERM", () => deadMan.stop());
   process.once("SIGINT", () => deadMan.stop());

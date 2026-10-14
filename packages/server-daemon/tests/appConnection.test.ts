@@ -311,6 +311,35 @@ describe("WebSocket upgrades", () => {
     ).rejects.toThrow(/status 403/);
   });
 
+  it("open app: an anonymous upgrade on any path reaches the app, marked anonymous", async () => {
+    const app = await wsEchoApp();
+    const port = await proxy(fakeApp(app.port), { deps: { accessMode: () => "open" } });
+    const ws = await openWs(port, "/live/private", { "x-flagship-user": "forged", "x-flagship-role": "owner", "x-flagship-visitor": "member" });
+    expect(await echo(ws, "hi")).toBe("hi");
+    const h = app.seen[0]!;
+    expect(h["x-flagship-visitor"]).toBe("anonymous");
+    expect(h["x-flagship-user"]).toBeUndefined();
+    expect(h["x-flagship-role"]).toBeUndefined();
+    expect(verifyInjected(h)).toBe(true);
+    ws.close();
+  });
+
+  it("members-only app: an anonymous upgrade reaches only a declared public route", async () => {
+    const app = await wsEchoApp();
+    const port = await proxy(fakeApp(app.port, ["/hooks/*"]), { deps: { accessMode: () => "members-only" } });
+    const ws = await openWs(port, "/hooks/live", {});
+    expect(await echo(ws, "hi")).toBe("hi");
+    expect(app.seen[0]!["x-flagship-visitor"]).toBe("anonymous");
+    for (const path of ["/ws", "/hook", "/hookslive"]) {
+      await expect(openWs(port, path, {})).rejects.toThrow(/status 403/);
+    }
+    // An unknown mode is members-only.
+    const unknown = await proxy(fakeApp(app.port, ["/hooks/*"]), { deps: { accessMode: () => null } });
+    await expect(openWs(unknown, "/ws", {})).rejects.toThrow(/status 403/);
+    expect(app.seen).toHaveLength(1);
+    ws.close();
+  });
+
   it("closes an idle upgraded connection", async () => {
     const app = await wsEchoApp();
     const port = await proxy(fakeApp(app.port, ["/ws"]), { limits: { idleTimeoutMs: 150 } });

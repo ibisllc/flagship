@@ -24,6 +24,7 @@ import {
   decideServiceAccess,
 } from "../src/serviceAccess.js";
 import { buildServiceAccessWeb } from "../src/serviceAccessWeb.js";
+import { matchesPublicRoute } from "../src/serviceProxy.js";
 import type { InstalledService } from "../src/servicePlatform.js";
 import type { HttpRequest } from "../src/runtime.js";
 import { boxSigner, swkOps } from "./helpers/keyCustody.js";
@@ -98,11 +99,13 @@ async function box(app: InstalledService, apiKeys: AppApiKeyStore | null = null)
     { decide: (ref, req) => decideServiceAccess({ serverId: SERVER, store: access, sessions }, ref, req), store: access },
     (_req, appServiceRef) => appServiceRef ?? null,
     accessWeb.maybeServeKnock,
-    carriesAppApiKey,
+    (req, ref) => carriesAppApiKey(req) || (ref === SVC && matchesPublicRoute(req.path, app.manifest.access.public_routes ?? [])),
   );
   const identity = {
     resolveSession: buildAppSessionResolver({ sessions, access }),
     deniedPage: accessWeb.maybeServeKnock,
+    accessMode: (id: string) =>
+      access.failedOpen() ? null : access.mode(id) === "open" ? ("open" as const) : ("members-only" as const),
   };
   const sockets = new Set<Socket>();
   const server = createNetServer((sock) => {
@@ -153,18 +156,17 @@ function cookieValue(setCookie: string[] | undefined, name: string): string {
 }
 
 /**
- * Sign in the way a person does: open a private page in the browser, get the
- * knock page, approve it with the phone (AID-signed), and let the page's poll
- * pick up the session cookie. Returns the browser's cookie, or the phone's
- * error status when the box refuses the approval.
+ * Sign in the way a person does: open the app's sign-in link in the browser
+ * (in either mode), approve the knock page with the phone (AID-signed), and
+ * let the page's poll pick up the session cookie. Returns the browser's
+ * cookie, or the phone's error status when the box refuses the approval.
  */
 async function signIn(
   b: Awaited<ReturnType<typeof box>>,
   aid: Keypair,
 ): Promise<{ cookie: string } | { refused: number }> {
-  const knock = await send(b.port, "/private", NAV);
+  const knock = await send(b.port, "/__flagship/sign-in", NAV);
   expect(knock.status).toBe(200);
-  expect(knock.body).toContain("Access is restricted");
   const holder = cookieValue(knock.headers["set-cookie"], "Flagship-Knock");
   const pageId = /var PAGE = "([0-9a-f]{32})"/.exec(knock.body)![1]!;
   const authorization = { serverId: SERVER, serviceRef: SVC, pageId, visitorAID: aid.publicKey, issuedAt: Date.now() };
@@ -269,6 +271,7 @@ describe("invited members", () => {
   it("removing someone signs them out on their next request", async () => {
     const up = await container();
     const app = makeApp(up.port);
+    await access.setMode(SVC, "restricted");
     await access.addAllowed(SVC, hex(memberAid.publicKey));
     const b = await box(app);
     const cookie = await cookieOf(b, memberAid);
@@ -276,18 +279,25 @@ describe("invited members", () => {
     await access.removeAllowed(SVC, hex(memberAid.publicKey));
     const r = await send(b.port, "/private", { cookie });
     expect(r.status).toBe(403);
-    expect(r.body).toContain("game1 is private");
+    expect(up.hits()).toBe(1);
+    // A browser gets the knock page again.
+    const nav = await send(b.port, "/private", { ...NAV, cookie });
+    expect(nav.body).toContain("Access is restricted");
     expect(up.hits()).toBe(1);
   });
 });
 
 describe("everyone else is anonymous", () => {
-  it("a stranger gets the private page (the knock page in a browser) and can't get a session", async () => {
+  it("on a members-only app a stranger gets the knock page off the public routes and can't get a session", async () => {
     const up = await container();
     const b = await box(makeApp(up.port));
+    await access.setMode(SVC, "restricted");
     const api = await send(b.port, "/private");
     expect(api.status).toBe(403);
-    expect(api.body).toContain("game1 is private");
+    const nav = await send(b.port, "/private", NAV);
+    expect(nav.status).toBe(200);
+    expect(nav.body).toContain("Access is restricted");
+    expect(up.hits()).toBe(0);
     expect(await signIn(b, strangerAid)).toEqual({ refused: 401 });
     // Forged identity headers never reach the app.
     const pub = await send(b.port, "/pub", {
@@ -305,15 +315,75 @@ describe("everyone else is anonymous", () => {
     expect(up.hits()).toBe(1);
   });
 
-  it("on a members-only app an anonymous visitor never reaches the app, not even a public route", async () => {
+  it("on a members-only app an anonymous visitor reaches only the declared public routes", async () => {
     const up = await container();
     const b = await box(makeApp(up.port));
     await access.setMode(SVC, "restricted");
-    for (const path of ["/pub", "/private"]) {
-      const r = await send(b.port, path, { "x-flagship-visitor": "member", "x-flagship-role": "owner" });
-      expect(r.status).toBe(403);
+    const forged = { "x-flagship-visitor": "member", "x-flagship-role": "owner", x_flagship_user: "owner-id" };
+    for (const [method, path] of [["GET", "/pub"], ["POST", "/pub"], ["GET", "/pub/"], ["GET", "/pub?x=1"]] as const) {
+      const r = await send(b.port, path, forged, method, method === "POST" ? "{}" : undefined);
+      expect(r.status).toBe(200);
+      expect(up.seen()["x-flagship-visitor"]).toBe("anonymous");
+      expect(up.seen()["x-flagship-user"]).toBeUndefined();
+      expect(up.seen()["x-flagship-role"]).toBeUndefined();
+      expect(up.seen()["x_flagship_user"]).toBeUndefined();
+      expect(verifyInjected(up.seen())).toBe(true);
     }
+    const hits = up.hits();
+    for (const path of [
+      "/private",
+      "/pub/../private",
+      "/pub/%2e%2e/private",
+      "/pub/..;/private",
+      "/pub%2f..%2fprivate",
+      "/pub/x",
+      "/PUB",
+      "/pubx",
+    ]) {
+      const r = await send(b.port, path, forged);
+      expect(r.status, path).toBe(403);
+      const ws = await send(b.port, path, {
+        connection: "Upgrade",
+        upgrade: "websocket",
+        "sec-websocket-version": "13",
+        "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
+      });
+      expect(ws.status, `upgrade ${path}`).toBe(403);
+    }
+    expect(up.hits()).toBe(hits);
+  });
+
+  it("on an open app every anonymous request reaches the app, marked anonymous", async () => {
+    const up = await container();
+    const b = await box(makeApp(up.port));
+    const forged = { "x-flagship-visitor": "member", "x-flagship-role": "owner", "x-flagship-user": "owner-id", x_flagship_role: "owner" };
+    for (const [method, path] of [["GET", "/private"], ["POST", "/admin/delete"], ["PUT", "/pub"], ["DELETE", "/x/y?z=1"]] as const) {
+      const r = await send(b.port, path, forged, method, method === "GET" ? undefined : "{}");
+      expect(r.status, `${method} ${path}`).toBe(200);
+      expect(r.body).toBe("from the app");
+      expect(up.seen()["x-flagship-visitor"]).toBe("anonymous");
+      expect(up.seen()["x-flagship-user"]).toBeUndefined();
+      expect(up.seen()["x-flagship-role"]).toBeUndefined();
+      expect(up.seen()["x_flagship_role"]).toBeUndefined();
+      expect(verifyInjected(up.seen())).toBe(true);
+    }
+    // A browser navigation is forwarded too: no knock page on an open app.
+    const nav = await send(b.port, "/private", NAV);
+    expect(nav.body).toBe("from the app");
+  });
+
+  it("an app whose mode can't be read is members-only", async () => {
+    const { writeFile } = await import("node:fs/promises");
+    await writeFile(join(dir, "access.json"), "{not json");
+    await access.load();
+    expect(access.failedOpen()).toBe(true);
+    const up = await container();
+    const b = await box(makeApp(up.port));
+    expect((await send(b.port, "/private")).status).toBe(403);
+    expect((await send(b.port, "/private", NAV)).body).toContain("Access is restricted");
     expect(up.hits()).toBe(0);
+    expect((await send(b.port, "/pub")).status).toBe(200);
+    expect(up.seen()["x-flagship-visitor"]).toBe("anonymous");
   });
 
   it("a session for another app, an expired one or a made-up one is anonymous", async () => {
@@ -323,16 +393,32 @@ describe("everyone else is anonymous", () => {
     const expired = await sessions.issue(SVC, hex(ownerAid.publicKey), Date.now() - 120_000, 60_000);
     for (const token of [other, expired, "f".repeat(64)]) {
       const r = await send(b.port, "/private", { cookie: `Flagship-App-Session=${token}` });
-      expect(r.status).toBe(403);
-      await send(b.port, "/pub", { cookie: `Flagship-App-Session=${token}` });
+      expect(r.status).toBe(200);
       expect(up.seen()["x-flagship-visitor"]).toBe("anonymous");
       expect(up.seen()["x-flagship-user"]).toBeUndefined();
     }
+    await access.setMode(SVC, "restricted");
+    for (const token of [other, expired, "f".repeat(64)]) {
+      expect((await send(b.port, "/private", { cookie: `Flagship-App-Session=${token}` })).status).toBe(403);
+      await send(b.port, "/pub", { cookie: `Flagship-App-Session=${token}` });
+      expect(up.seen()["x-flagship-visitor"]).toBe("anonymous");
+    }
   });
 
-  it("a cross-origin write or WebSocket upgrade from a sibling app loses the member session", async () => {
+  it("on an open app a cross-origin write from a sibling app arrives anonymous", async () => {
     const up = await container();
     const b = await box(makeApp(up.port));
+    const cookie = await cookieOf(b, ownerAid);
+    const priv = await send(b.port, "/private", { cookie, origin: `https://notes.${SERVER}`, "content-type": "application/json" }, "POST", "{}");
+    expect(priv.status).toBe(200);
+    expect(up.seen()["x-flagship-visitor"]).toBe("anonymous");
+    expect(up.seen()["x-flagship-user"]).toBeUndefined();
+  });
+
+  it("on a members-only app a cross-origin write or WebSocket upgrade from a sibling app loses the member session", async () => {
+    const up = await container();
+    const b = await box(makeApp(up.port));
+    await access.setMode(SVC, "restricted");
     const cookie = await cookieOf(b, ownerAid);
     const sibling = `https://notes.${SERVER}`;
     const priv = await send(b.port, "/private", { cookie, origin: sibling, "content-type": "application/json" }, "POST", "{}");

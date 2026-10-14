@@ -159,9 +159,11 @@ export async function buildLlmAppContext(
   md.push("- Do NOT hardcode user IDs, server IDs, hostnames, or DB names.");
   md.push("  Take everything from headers + `FLAGSHIP_*` env. Apps that hardcode");
   md.push("  break on transfer between users.");
-  md.push("- Public routes (`access.public_routes` in the manifest) receive");
-  md.push("  `X-Flagship-Visitor: anonymous` with no user or role. Anything not in that list 403s before");
-  md.push("  reaching the container.");
+  md.push("- Anonymous visitors arrive with `X-Flagship-Visitor: anonymous` and no user or role.");
+  md.push("  On an open app they reach every route, method and WebSocket, so every route must");
+  md.push("  handle them on purpose. On a members-only app they reach only the paths in");
+  md.push("  `access.public_routes` (a landing page, a webhook); anything else gets the knock");
+  md.push("  page before reaching the container. Declare those paths either way.");
   md.push("- Schema migrations are commits in `migrations/NNNN_*.sql|.ts`.");
   md.push("  Forward-only; the daemon applies them in numeric order before");
   md.push("  restarting the container.");

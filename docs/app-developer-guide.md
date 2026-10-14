@@ -67,16 +67,20 @@ forwarding the request to your container:
 | `X-Flagship-App-Id` | Your service id. |
 | `X-Flagship-Visitor` | Always set: `member` (a signed-in member, the owner included), `api` (an owner's API key) or `anonymous` (no id, no rank: the next two headers are absent). |
 | `X-Flagship-User` | The visitor's stable id: 32 hex chars for a signed-in member (per app: the same person has unrelated ids in two apps), `apikey:<keyId>` for an owner's API key; absent for an anonymous visitor. |
-| `X-Flagship-Role` | `owner` for the box owner (only them); for an invited person the role assigned to them or your `default_role` (`admin` if that is `owner`), or a `custom_roles[]` value; `api` for an API key; absent for an anonymous visitor. |
+| `X-Flagship-Role` | A Flagship rank: `owner` for the box owner (only them); `member`, `manager` or `master` for an invited person (the rank the owner gave them, else your `default_role`; a default of `owner` gives `master`); `api` for an API key; absent for an anonymous visitor. |
 | `X-Flagship-Api-Scope` | API-key requests only: `read` (GET/HEAD/OPTIONS) or `write`. |
 | `X-Flagship-Timestamp` | ms since epoch — bind your reads + writes to this if you care about freshness. |
 | `X-Flagship-Signature` | hex Ed25519 signature over `flagship/inject/v1|<serviceId>|<user>|<role>|<timestamp>`, with `|<scope>` appended on API-key requests; `user` and `role` are the literal `anonymous` for an anonymous visitor. |
 
 Members are the owner and the people the owner invited; they sign in to
-your app in a browser by approving its knock page with their phone, and every
-path outside `access.public_routes` reaches your container only for them
-(details: [app APIs §5](app-apis.md#5-sign-in)). Key per-user data on
-`X-Flagship-User`, gate admin features on `X-Flagship-Role`.
+your app in a browser by approving its knock page with their phone (details:
+[app APIs §5](app-apis.md#5-sign-in)). Who else reaches your container depends
+on the owner's choice: on an **open** app every anonymous request arrives
+(any path, any method, WebSockets), so every route must handle
+`X-Flagship-Visitor: anonymous` on purpose; on a **members-only** app anonymous
+visitors reach only `access.public_routes`, so declare your landing page and
+any webhook paths there (they keep working if the owner switches modes). Key
+per-user data on `X-Flagship-User`, gate admin features on `X-Flagship-Role`.
 
 Verifying the signature is optional but recommended in production. The
 daemon's pubkey is at `GET /.flagship/runtime-pubkey` (relative to
@@ -186,7 +190,7 @@ otherwise the canonical-home's subscriber list is the gate.
 |---|---|
 | `X-Flagship-Signature` verify | Confirm the request really came from the daemon. |
 | `X-Flagship-User` | Stable per-user id; key your data on this. |
-| Anonymous `public_routes` | Add a route to `access.public_routes` to expose it without membership. |
+| Anonymous `public_routes` | Paths (landing page, webhooks) anonymous visitors still reach when the owner makes the app members-only. |
 | `queryable_by` allowlist | Let a sibling service discover whether you're installed. Direction is target-controlled. |
 | Browser API | High-level Puppeteer-style only — no raw CDP, no cookies, no localStorage. |
 | Sibling API | Frame routing for service-defined replication strategies. |

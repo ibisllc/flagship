@@ -1538,15 +1538,16 @@ export function buildAccessEnforcementHandler(
    * the restricted-mode check, because the app proxy decides it instead. Used
    * for the owner's API keys (docs/app-apis.md §3): the proxy lets a valid key
    * through and answers any other `fsk_` key 401, so the container never sees
-   * an unchecked request.
+   * an unchecked request. Also for a members-only app's declared
+   * `access.public_routes`, which the proxy forwards as anonymous.
    */
-  proxyDecides?: (req: HttpRequest) => boolean,
+  proxyDecides?: (req: HttpRequest, serviceRef: string) => boolean,
 ): (req: HttpRequest, appServiceRef?: string | null) => Promise<HttpResponse | null> {
   return async (req: HttpRequest, appServiceRef?: string | null): Promise<HttpResponse | null> => {
     const serviceRef = resolveServiceRef(req, appServiceRef);
     if (!serviceRef) return null;
     if (access.store.mode(serviceRef) === "open") return null;
-    if (appServiceRef && proxyDecides?.(req)) return null;
+    if (appServiceRef && proxyDecides?.(req, serviceRef)) return null;
     const decision = access.decide(serviceRef, req);
     if (decision.allow) return null;
     const knock = maybeServeKnock?.(serviceRef, req);

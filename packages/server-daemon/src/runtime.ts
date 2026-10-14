@@ -8,7 +8,7 @@ import type { BoxSigner, SwkOps } from "./keyCustodian.js";
 import { ServicePlatform, buildServiceHttpHandlers, type InstalledService } from "./servicePlatform.js";
 import { AliasReconciler } from "./aliasReconciler.js";
 import { BoxReadToken } from "./boxReadToken.js";
-import { prepareAppRequest, type SessionResolver } from "./serviceProxy.js";
+import { prepareAppRequest, type AppAccessMode, type SessionResolver } from "./serviceProxy.js";
 import { AppConnectionLimiter, handleAppConnection, type AppConnectionOptions } from "./appConnection.js";
 import {
   AppApiKeyStore,
@@ -399,6 +399,8 @@ export interface AppIdentity {
   resolveSession: SessionResolver;
   /** For a denied browser navigation: the knock page, or null for the "is private" page. */
   deniedPage?: (serviceRef: string, req: HttpRequest) => HttpResponse | null;
+  /** The app's open / members-only mode; null when it can't be determined (⇒ members-only). */
+  accessMode?: (serviceId: string) => AppAccessMode | null;
 }
 
 /**
@@ -431,6 +433,7 @@ export function appConnectionOptions(
           apiKeys: deps.apiKeys,
           ...(deps.identity ? { resolveSession: deps.identity.resolveSession } : {}),
           ...(deps.identity?.deniedPage ? { deniedPage: deps.identity.deniedPage } : {}),
+          ...(deps.identity?.accessMode ? { accessMode: deps.identity.accessMode } : {}),
         },
         info,
       ),

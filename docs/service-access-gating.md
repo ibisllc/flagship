@@ -104,11 +104,17 @@ role is chosen at creation). The toggle never changes the list.
   visitor with **no rank** (owner decision 2026-10-14): the box forwards their
   requests to the app with `X-Flagship-Visitor: anonymous` and no
   `X-Flagship-User` / `X-Flagship-Role` (docs/app-apis.md §5, the header
-  contract), and the app decides what an anonymous visitor may do. A member
-  who signs in with their phone gets their rank.
+  contract) on every path, method and WebSocket upgrade, and the app decides
+  what an anonymous visitor may do (`access.public_routes` changes nothing). A
+  member who signs in with their phone gets their rank.
 - **Members only:** only members and the owner get in; anyone else gets the
-  knock page. Switching to it asks once: "Only these N people will be able to
-  open it."
+  knock page, except on the paths the manifest declares in
+  `access.public_routes` (a landing page, a webhook another service calls),
+  which are forwarded marked anonymous. Switching to it asks once: "Only these N
+  people will be able to open it."
+- **Unknown mode:** if the box can't read its access state, every app is
+  members-only (fail closed). Decision table and path matching:
+  docs/app-apis.md §2.
 - **The owner** is always `owner`.
 - **Removing someone:** on an open app they lose their role and visit
   anonymously; on a members-only app they are signed out and kept out.

@@ -3,9 +3,10 @@
  * inbound HTTPS; this module is what fires after termination when the
  * SNI maps to an installed app:
  *
- *   1. Decide if the request can reach the container at all
- *      (public route ⇒ anonymous OK; an owner's `fsk_` API key ⇒ any path;
- *      otherwise membership-gated). WebSocket upgrades are decided the same.
+ *   1. Decide if the request can reach the container at all: an owner's
+ *      `fsk_` API key or a member ⇒ any path; an anonymous visitor ⇒ any path
+ *      on an "open to all" app, only `access.public_routes` on a members-only
+ *      one (else the knock page). WebSocket upgrades are decided the same.
  *   2. Strip any `X-Flagship-*` headers the client supplied (they have
  *      no business arriving uninjected).
  *   3. Inject signed identity headers the app trusts (docs/app-apis.md §5):
@@ -64,6 +65,11 @@ export interface AppProxyDeps {
   injector: BoxSigner;
   /** Resolves a request to a paired-session member, or null for anonymous. */
   resolveSession?: SessionResolver;
+  /**
+   * The app's access mode as the owner set it (`ServiceAccessStore`). Absent,
+   * or null because it can't be determined, ⇒ members-only (fail closed).
+   */
+  accessMode?: (serviceId: string) => AppAccessMode | null;
   /** Override fetch implementation for tests. */
   forward?: (host: string, port: number, req: HttpRequest) => Promise<HttpResponse>;
   now?: () => number;
@@ -92,6 +98,13 @@ const ANONYMOUS = "anonymous";
  * no rank: the app decides what such a visitor may do).
  */
 export type VisitorKind = "member" | "api" | "anonymous";
+
+/**
+ * Who may reach an app without signing in (docs/service-access-gating.md):
+ * `open` ("Open to all") forwards every anonymous request and the app decides;
+ * `members-only` forwards anonymous visitors only on `access.public_routes`.
+ */
+export type AppAccessMode = "open" | "members-only";
 
 const REQUEST_ACCESS_TEMPLATE = (appName: string, urlLabel: string): string =>
   `<!doctype html>
@@ -131,8 +144,9 @@ export type PreparedAppRequest =
  *      key's rate ⇒ 429. A valid key reaches every path as `apikey:<keyId>`.
  *   2. Otherwise the member session, unless the request is an unsafe method
  *      or an upgrade from another origin (§4): that one is anonymous for
- *      Flagship identity (never blocked; the app's own auth is untouched).
- *   3. Public routes (exact or `/*` prefix, §2) are open to anonymous.
+ *      Flagship identity (the app's own auth is untouched).
+ *   3. An anonymous visitor reaches every path of an "open to all" app, and
+ *      only the public routes (exact or `/*` prefix, §2) of a members-only one.
  */
 export async function prepareAppRequest(
   app: InstalledService,
@@ -155,7 +169,8 @@ export async function prepareAppRequest(
   let session = !apiKey && deps.resolveSession ? deps.resolveSession(req, app) : null;
   if (session && isCrossOriginUnsafe(req, opts.upgrade === true)) session = null;
 
-  if (decideAccess(app, req, session, apiKey) === "deny") {
+  const mode = deps.accessMode?.(app.serviceId) ?? null;
+  if (decideAccess(app, req, session, apiKey, mode) === "deny") {
     const page = opts.upgrade ? null : deps.deniedPage?.(app.serviceId, req);
     if (page) return { kind: "respond", response: page };
     return {
@@ -249,70 +264,86 @@ function respond(status: number, body: unknown, headers: Record<string, string> 
 /**
  * Pure access-decision function. Returns `"allow"` if the request can
  * reach the container; `"deny"` otherwise. Tested independently of
- * the network plumbing.
+ * the network plumbing. `mode` null (unknown) is members-only.
  */
 export function decideAccess(
   app: InstalledService,
   req: HttpRequest,
   session: SessionInfo | null,
   apiKey: { keyId: string } | null = null,
+  mode: AppAccessMode | null = null,
 ): "allow" | "deny" {
-  const access = app.manifest.access;
-
-  // 1. If the path matches a public route, anyone can reach it.
-  const publicRoutes = access.public_routes ?? [];
-  if (matchesPublicRoute(req.path, publicRoutes)) return "allow";
-
-  // 2. A valid API key (checked by the caller) reaches every path: the owner
+  // 1. A valid API key (checked by the caller) reaches every path: the owner
   //    issued it for this app.
   if (apiKey) return "allow";
 
-  // 3. A member session reaches any path (the resolver returns one only for
-  //    someone this app lets in). Anonymous reaches only public routes.
-  return session ? "allow" : "deny";
+  // 2. A member session reaches any path (the resolver returns one only for
+  //    someone this app lets in).
+  if (session) return "allow";
+
+  // 3. Anonymous: every path of an open app (the app decides what such a
+  //    visitor may do); on a members-only app, only its declared public routes.
+  if (mode === "open") return "allow";
+  return matchesPublicRoute(req.path, app.manifest.access.public_routes ?? []) ? "allow" : "deny";
 }
 
 /**
  * Whether a request path (query ignored) is public under `access.public_routes`
- * (docs/app-apis.md §2). An entry is an exact path, or a prefix ending in
- * `/*`: `/api/public/*` covers `/api/public/` and everything under it, never
- * `/api/publicity`; `/*` covers the whole app. A path with a dot segment
- * (`/api/public/../admin`, also percent-encoded or with `;params`), an
- * encoded slash or a backslash never matches a prefix (the app might resolve
- * it outside the prefix); it can still match an exact entry, or `/*`.
+ * (docs/app-apis.md §2). Both sides are normalised first (`normalizePublicPath`):
+ * percent-decoded once, `//` collapsed, a trailing `/` dropped. An entry is an
+ * exact path (`/webhook` covers `/webhook` and `/webhook/`), or a prefix ending
+ * in `/*`: `/api/public/*` covers `/api/public` and everything under it, never
+ * `/api/publicity`; `/*` covers the whole app. Matching is case-sensitive. A
+ * path that doesn't normalise (a dot segment, an encoded slash, backslash or
+ * percent, a control character) matches nothing, `/*` included.
  */
 export function matchesPublicRoute(rawPath: string, publicRoutes: readonly string[]): boolean {
-  const path = stripQuery(rawPath);
+  const path = normalizePublicPath(stripQuery(rawPath));
+  if (path === null) return false;
   for (const r of publicRoutes) {
-    if (r === "/*") return true;
-    if (r === path) return true;
     if (r.endsWith("/*")) {
-      const prefix = r.slice(0, -1);
-      if (path.startsWith(prefix) && isPlainPath(path)) return true;
+      const prefix = normalizePublicPath(r.slice(0, -2) || "/");
+      if (prefix === null) continue;
+      if (prefix === "/" || path === prefix || path.startsWith(`${prefix}/`)) return true;
+    } else if (normalizePublicPath(r) === path) {
+      return true;
     }
   }
   return false;
 }
 
-function stripQuery(path: string): string {
-  const q = path.search(/[?#]/);
-  return q === -1 ? path : path.slice(0, q);
-}
-
-function isPlainPath(path: string): boolean {
-  if (path.includes("\\")) return false;
-  if (/%(2f|5c)/i.test(path)) return false;
+/**
+ * The form a path is compared in for `public_routes`, or null when it can't
+ * be compared safely. Decoded once; `//` collapsed; a trailing `/` dropped
+ * (`/` stays). Refused, so never public: a dot segment (`.` or `..`, also
+ * percent-encoded or as `..;x`), which the app might resolve outside the
+ * route or not resolve at all (browsers never send one); an encoded `/`, `\`
+ * or `%`, which the app might decode again into something else; a backslash,
+ * a control character, or a malformed escape.
+ */
+export function normalizePublicPath(path: string): string | null {
+  if (!path.startsWith("/")) return null;
+  if (path.includes("\\")) return null;
+  if (/%(2f|5c|25)/i.test(path)) return null;
   let decoded: string;
   try {
     decoded = decodeURIComponent(path);
   } catch {
-    return false;
+    return null;
   }
+  if (/[\u0000-\u001f\u007f\\]/.test(decoded)) return null;
+  const out: string[] = [];
   for (const seg of decoded.split("/")) {
     const bare = seg.split(";")[0]!;
-    if (bare === "." || bare === "..") return false;
+    if (bare === "." || bare === "..") return null;
+    if (seg !== "") out.push(seg);
   }
-  return true;
+  return `/${out.join("/")}`;
+}
+
+function stripQuery(path: string): string {
+  const q = path.search(/[?#]/);
+  return q === -1 ? path : path.slice(0, q);
 }
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);

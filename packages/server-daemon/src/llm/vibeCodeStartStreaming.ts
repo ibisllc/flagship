@@ -63,11 +63,11 @@ export function ownerChoiceSupplement(
   }
   if (visibility === "just-me") {
     lines.push(
-      "The owner chose INVITE ONLY: the box itself lets in only the owner and the people they invite on Flagship, so every visitor arrives signed in with Flagship (`X-Flagship-User` is a real member). Do not add public pages, sign-up or any login of your own; use the identity headers for who is who.",
+      "The owner chose INVITE ONLY: the box itself lets in only the owner and the people they invite on Flagship, so every visitor outside `access.public_routes` arrives signed in with Flagship (`X-Flagship-User` is a real member). Do not add sign-up or any login of your own; use the identity headers for who is who. Strangers reach only the paths in `access.public_routes`: list there only what must work for them (a webhook another service calls, a landing page if the owner wants one), and they arrive anonymous.",
     );
   } else if (visibility === "link") {
     lines.push(
-      "The owner chose OPEN: anyone with the link can reach it. List the pages strangers may see in `access.public_routes` and make them safe for unauthenticated visitors. Wherever the app needs to know who the visitor is (their own data, posting, settings), rely on Flagship sign-in: keep those routes out of `public_routes` and read the identity headers, instead of building accounts, passwords or a third-party login. Flagship sign-in shares nothing about the visitor beyond who they are on Flagship, which keeps them private.",
+      "The owner chose OPEN: anyone with the link can reach it, and visitors who haven't signed in reach EVERY route as anonymous (`X-Flagship-Visitor: anonymous`), so make every route handle them on purpose (read-only public content by default). Also list the pages and webhooks strangers must reach in `access.public_routes`, so they keep working if the owner later makes the app members-only. Wherever the app needs to know who the visitor is (their own data, posting, settings), rely on Flagship sign-in: keep those routes out of `public_routes` and read the identity headers, instead of building accounts, passwords or a third-party login. Flagship sign-in shares nothing about the visitor beyond who they are on Flagship, which keeps them private.",
     );
   }
   return lines.length > 0 ? "\n\n" + lines.join("\n") : "";

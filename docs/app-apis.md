@@ -7,20 +7,44 @@ flexible services — the owner's machine, the owner's rules.
 
 The box's app proxy streams responses as the app produces them (Server-Sent
 Events, long downloads, chunked replies) and passes WebSocket upgrades through
-to the app. The access decision (public route, member, API key) is made on the
-upgrade request; the identity headers (`X-Flagship-Visitor`, `-User`, `-Role`,
+to the app. The access decision (open or members-only, public route, member,
+API key) is made on the upgrade request exactly as on any request; the identity headers (`X-Flagship-Visitor`, `-User`, `-Role`,
 `-Signature` …, §5) are injected on it like on any request; then bytes flow both ways until
 either side closes. Idle and per-app connection limits apply. Postgres stays
 inside the box: an app exposes pub/sub to the world through its own WebSocket or
 SSE routes, with `LISTEN`/`NOTIFY` behind them.
 
-## 2. Public routes
+## 2. Who reaches the app without signing in (owner decision 2026-10-14)
 
-The AI chooses every URL; the manifest only says which are public.
-`access.public_routes` entries are exact paths as before, or an explicit
-prefix ending in `/*`: `"/api/public/*"` makes `/api/public/` and everything
-under it public (segment-aware: not `/api/publicity`). `"/*"` makes the whole
-app public. Nothing is public unless the manifest says so.
+| visitor | Open to all | Members only |
+|---|---|---|
+| anonymous, any path | forwarded, `X-Flagship-Visitor: anonymous` | knock page (browser) / 403 |
+| anonymous, a `public_routes` path | forwarded, anonymous | forwarded, anonymous |
+| member or owner (signed in) | forwarded with id + rank | forwarded with id + rank |
+| owner's API key | forwarded as `api` | forwarded as `api` |
+
+The same table holds for every method and for WebSocket upgrades. On an open app
+`public_routes` changes nothing: every anonymous request reaches the app, which
+decides what an anonymous visitor may do. On a members-only app
+`access.public_routes` lists the only paths an anonymous visitor may reach: a
+landing page, or a webhook another service calls (`"/hooks/stripe"`). If the
+box can't tell which mode an app is in (its access state file is unreadable),
+the app is members-only.
+
+The AI chooses every URL; the manifest only says which are public. An entry is
+an exact path or a prefix ending in `/*`: `"/api/public/*"` covers
+`/api/public` and everything under it (segment-aware: not `/api/publicity`);
+`"/*"` covers the whole app. Matching (`matchesPublicRoute`, `serviceProxy.ts`):
+
+- the query and fragment are ignored; the path is percent-decoded once, `//`
+  collapses to `/`, and a trailing `/` doesn't matter (`/webhook` covers
+  `/webhook/`). Declared entries are normalised the same way;
+- matching is case-sensitive (`/Webhook` is not `/webhook`);
+- a path that could resolve somewhere else matches nothing, `/*` included: any
+  `.` or `..` segment (also as `%2e%2e` or `..;x`), an encoded `/`, `\` or `%`
+  (`%2f`, `%5c`, `%25`: double decoding), a backslash, a control character or a
+  malformed escape. Browsers never send these, so on a members-only app such a
+  request gets the knock page.
 
 ## 3. API keys (machine clients)
 
@@ -68,22 +92,23 @@ make the browser send a form or API call to app A with the owner's Flagship
 session attached. So the box treats an unsafe request (anything but
 GET/HEAD/OPTIONS) whose `Origin` (or `Sec-Fetch-Site`) shows another origin as
 **anonymous for Flagship identity** (`X-Flagship-Visitor: anonymous`, §5). It
-doesn't block the request, and an app's own sign-in is unaffected.
+is then decided like any anonymous request (§2: forwarded on an open app, only
+on public routes on a members-only one), and an app's own sign-in is unaffected.
 
 ## 5. Sign-in
 
 Default and recommended: **Flagship identity**. The app reads the injected
 headers; no login code, no passwords. The AI suggests this first.
 
-**Who the app sees (members).** Every path not in `public_routes` is for
-members only: the owner, and the people the owner let in (the service's
-allow-list, filled by invites, docs/service-access-gating.md). A browser can't
-sign, so a person signs in with their phone:
+**Who the app sees (members).** Members are the owner and the people the owner
+let in (the service's allow-list, filled by invites,
+docs/service-access-gating.md). A browser can't sign, so a person signs in with
+their phone:
 
-1. They open a private page. A browser navigation (GET with `Accept:
-   text/html`) gets the knock page (QR, "Access site" deeplink, "Get link"),
-   on an open app as on a restricted one; an API call or asset gets the 403
-   "is private" page.
+1. They open the app's sign-in link (`/__flagship/sign-in`, either mode), or,
+   on a members-only app, any path outside `public_routes`. A browser
+   navigation (GET with `Accept: text/html`) gets the knock page (QR, "Access
+   site" deeplink, "Get link"); an API call or asset gets a 403.
 2. Their phone signs the knock with their account id (AID) and posts it to
    the box (`POST /api/service-access/knock/authorize`). The box accepts the
    owner's AID (`ownerAidPub` in the box config) and allow-listed AIDs, and
@@ -124,11 +149,12 @@ literal `anonymous` (no member id or rank is ever that string), so a verifier
 uses `anonymous` for both exactly when `X-Flagship-Visitor` is `anonymous`.
 
 **Anonymous visitors (owner decision 2026-10-14).** Someone who hasn't signed
-in has no rank: not `member`, nothing. On an open app the box forwards their
-requests to public routes and says only that they are anonymous; the app
-decides what they may do (an AI-built app makes them read-only unless the owner
-asked otherwise). On a members-only app they never reach the app. An app must
-never treat a missing `X-Flagship-User` or `X-Flagship-Role` as a member.
+in has no rank: not `member`, nothing. On an open app the box forwards all
+their requests (every path and method, WebSocket upgrades too) and says only
+that they are anonymous; the app decides what they may do (an AI-built app makes
+them read-only unless the owner asked otherwise). On a members-only app they
+reach only `public_routes` (§2). An app must never treat a missing
+`X-Flagship-User` or `X-Flagship-Role` as a member.
 
 Ranks are Flagship's, ordered and cumulative (docs/service-access-gating.md,
 "Open mode + members"): `member` < `manager` < `master`, plus `owner` for the
@@ -140,8 +166,9 @@ request by it, so the base `member` rank must still be able to use the app.
 
 On an open app a member is an anonymous visitor (no rank) until they sign in: link to
 `/__flagship/sign-in?next=<path>` (and `/__flagship/sign-out?next=<path>`),
-which the box serves on the app's own host. A box with no owner AID pinned can't recognise its owner, so its
-private pages are reachable only with API keys.
+which the box serves on the app's own host. A box with no owner AID pinned can't
+recognise its owner, so a members-only app's private pages are reachable only
+with API keys.
 
 If the owner asks for their own sign-in, the AI may build it:
 - passwords: only slow salted hashes (pgcrypto `crypt()` with bcrypt, or the

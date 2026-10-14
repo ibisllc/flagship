@@ -304,6 +304,10 @@ account can view or co-manage a server, never destroy it) is in the MVP
   `X-Flagship-Visitor: member|api|anonymous`, with no user/role headers for
   anonymous (docs/app-apis.md §5); the app decides, AI-built apps default to
   read-only. Needs the next endorsed box release.
+  Open apps forward every anonymous request; members-only apps forward
+  anonymous visitors only on `access.public_routes` (normalised, dot segments
+  refused), knock elsewhere; unknown mode = members-only (docs/app-apis.md §2,
+  2026-10-14; needs an endorsed box release).
 - **Per-app visitor identity (2026-10-13).** A visitor signs redeem / visit /
   knock / acceptance with `deriveAppAccountId(UMK, serviceRef)`
   (`flagship/app-aid/v1|<serviceRef>`), replacing the per-author contact AID;

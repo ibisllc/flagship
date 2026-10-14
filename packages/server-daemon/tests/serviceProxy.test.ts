@@ -107,6 +107,71 @@ describe("decideAccess — public_routes vs membership", () => {
   });
 });
 
+describe("decideAccess — open vs members-only (owner decision 2026-10-14)", () => {
+  const req = (method: string, path: string) => ({ ...fakeReq(path), method });
+
+  it("open: an anonymous visitor reaches every path and method; public_routes don't matter", async () => {
+    const { app } = await makeApp({ publicRoutes: ["/pub"] });
+    for (const m of ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]) {
+      for (const p of ["/", "/pub", "/private", "/admin/x?y=1", "/pub/../admin"]) {
+        expect(decideAccess(app, req(m, p), null, null, "open"), `${m} ${p}`).toBe("allow");
+      }
+    }
+  });
+
+  it("members-only: an anonymous visitor reaches only the declared public routes, any method", async () => {
+    const { app } = await makeApp({ publicRoutes: ["/", "/hooks/*"] });
+    for (const m of ["GET", "POST", "DELETE"]) {
+      expect(decideAccess(app, req(m, "/"), null, null, "members-only")).toBe("allow");
+      expect(decideAccess(app, req(m, "/hooks/stripe"), null, null, "members-only")).toBe("allow");
+      expect(decideAccess(app, req(m, "/admin"), null, null, "members-only")).toBe("deny");
+      expect(decideAccess(app, req(m, "/hooks/../admin"), null, null, "members-only")).toBe("deny");
+      expect(decideAccess(app, req(m, "/hooks/%2e%2e/admin"), null, null, "members-only")).toBe("deny");
+    }
+  });
+
+  it("an unknown mode is members-only", async () => {
+    const { app } = await makeApp({ publicRoutes: ["/pub"] });
+    expect(decideAccess(app, fakeReq("/private"), null, null, null)).toBe("deny");
+    expect(decideAccess(app, fakeReq("/private"), null)).toBe("deny");
+    expect(decideAccess(app, fakeReq("/pub"), null, null, null)).toBe("allow");
+  });
+
+  it("members and API keys reach every path in both modes", async () => {
+    const { app, hostIrk } = await makeApp({ publicRoutes: [] });
+    const session: SessionInfo = { memberPub: hostIrk.publicKey, stableId: "m", role: "member" };
+    for (const mode of ["open", "members-only", null] as const) {
+      expect(decideAccess(app, fakeReq("/private"), session, null, mode)).toBe("allow");
+      expect(decideAccess(app, fakeReq("/private"), null, { keyId: "00000000000000aa" }, mode)).toBe("allow");
+    }
+  });
+
+  it("handleAppRequest: open forwards anonymous anywhere with the marker; no accessMode is members-only", async () => {
+    const { app } = await makeApp({ publicRoutes: [] });
+    let seen: Record<string, string> | null = null;
+    const deps = {
+      injector: boxSigner(makeKey()),
+      forward: async (_h: string, _p: number, r: { headers: Record<string, string> }) => {
+        seen = r.headers;
+        return { status: 200, body: "ok" };
+      },
+    };
+    const forged = { "x-flagship-user": "owner-id", "x-flagship-role": "owner", "X-Flagship-Visitor": "member", x_flagship_user: "x" };
+    const r = await handleAppRequest(app, { ...req("DELETE", "/admin"), headers: forged }, { ...deps, accessMode: () => "open" });
+    expect(r.status).toBe(200);
+    expect(seen!["x-flagship-visitor"]).toBe("anonymous");
+    expect(seen!["x-flagship-user"]).toBeUndefined();
+    expect(seen!["x-flagship-role"]).toBeUndefined();
+    expect(seen!["X-Flagship-Visitor"]).toBeUndefined();
+    expect(seen!["x_flagship_user"]).toBeUndefined();
+    seen = null;
+    expect((await handleAppRequest(app, req("GET", "/admin"), { ...deps, accessMode: () => null })).status).toBe(403);
+    expect((await handleAppRequest(app, req("GET", "/admin"), deps)).status).toBe(403);
+    expect((await handleAppRequest(app, req("GET", "/admin"), { ...deps, accessMode: () => "members-only" })).status).toBe(403);
+    expect(seen).toBeNull();
+  });
+});
+
 describe("stripIdentityHeaders", () => {
   it("removes any header whose name starts with x-flagship-", () => {
     const out = stripIdentityHeaders({
@@ -296,8 +361,29 @@ describe("public routes — exact paths and /* prefixes (docs/app-apis.md §2)",
     const { matchesPublicRoute } = await import("../src/serviceProxy.js");
     expect(matchesPublicRoute("/about", ["/about"])).toBe(true);
     expect(matchesPublicRoute("/about?x=1", ["/about"])).toBe(true);
-    expect(matchesPublicRoute("/about/", ["/about"])).toBe(false);
+    expect(matchesPublicRoute("/about#top", ["/about"])).toBe(true);
     expect(matchesPublicRoute("/aboutMe", ["/about"])).toBe(false);
+    expect(matchesPublicRoute("/About", ["/about"])).toBe(false);
+  });
+
+  it("treats a trailing slash and doubled slashes the same on both sides", async () => {
+    const { matchesPublicRoute } = await import("../src/serviceProxy.js");
+    expect(matchesPublicRoute("/about/", ["/about"])).toBe(true);
+    expect(matchesPublicRoute("/about", ["/about/"])).toBe(true);
+    expect(matchesPublicRoute("//about", ["/about"])).toBe(true);
+    expect(matchesPublicRoute("/hooks//stripe", ["/hooks/stripe"])).toBe(true);
+    expect(matchesPublicRoute("/", ["/"])).toBe(true);
+    expect(matchesPublicRoute("//", ["/"])).toBe(true);
+    expect(matchesPublicRoute("/x", ["/"])).toBe(false);
+  });
+
+  it("decodes percent-encoding once before comparing", async () => {
+    const { matchesPublicRoute } = await import("../src/serviceProxy.js");
+    expect(matchesPublicRoute("/%77ebhook", ["/webhook"])).toBe(true);
+    expect(matchesPublicRoute("/caf%C3%A9", ["/café"])).toBe(true);
+    // A double-encoded path is refused: the app might decode it again.
+    expect(matchesPublicRoute("/%2577ebhook", ["/webhook"])).toBe(false);
+    expect(matchesPublicRoute("/webhook%2fx", ["/webhook/*"])).toBe(false);
   });
 
   it("a /* prefix is segment-aware", async () => {
@@ -305,15 +391,32 @@ describe("public routes — exact paths and /* prefixes (docs/app-apis.md §2)",
     const routes = ["/api/public/*"];
     expect(matchesPublicRoute("/api/public/", routes)).toBe(true);
     expect(matchesPublicRoute("/api/public/x/y?z=1", routes)).toBe(true);
-    expect(matchesPublicRoute("/api/public", routes)).toBe(false);
+    expect(matchesPublicRoute("/api/public", routes)).toBe(true);
+    expect(matchesPublicRoute("/api//public/x", routes)).toBe(true);
     expect(matchesPublicRoute("/api/publicity", routes)).toBe(false);
     expect(matchesPublicRoute("/api/private/x", routes)).toBe(false);
   });
 
-  it("a prefix never matches a path that could resolve outside it", async () => {
+  it("never matches a path that could resolve outside a route (exact, prefix or /*)", async () => {
     const { matchesPublicRoute } = await import("../src/serviceProxy.js");
-    const routes = ["/api/public/*"];
+    const routes = ["/api/public/*", "/webhook", "/*"];
     for (const p of [
+      "/webhook/../admin",
+      "/%2e%2e/admin",
+      "/%2E%2E/webhook",
+      "/./webhook",
+      "/%2e/webhook",
+      "/admin/../webhook",
+      "/webhook/..",
+      "/webhook/..%3B/admin",
+      "/webhook/%2e%2e%2fadmin",
+      "/webhook%00",
+      "/webhook%0a",
+      "/webhook\\",
+      "/webhook%5c..%5cadmin",
+      "/%252e%252e/admin",
+      "webhook",
+      "",
       "/api/public/../admin",
       "/api/public/%2e%2e/admin",
       "/api/public/%2E%2E/admin",
@@ -323,14 +426,20 @@ describe("public routes — exact paths and /* prefixes (docs/app-apis.md §2)",
       "/api/public/x\\..\\admin",
       "/api/public/%zz",
     ]) {
-      expect(matchesPublicRoute(p, routes)).toBe(false);
+      expect(matchesPublicRoute(p, routes), p).toBe(false);
     }
+  });
+
+  it("ignores a declared route that doesn't normalise", async () => {
+    const { matchesPublicRoute } = await import("../src/serviceProxy.js");
+    expect(matchesPublicRoute("/admin", ["/pub/../admin"])).toBe(false);
+    expect(matchesPublicRoute("/admin/x", ["/pub/../admin/*"])).toBe(false);
   });
 
   it("/* makes the whole app public", async () => {
     const { matchesPublicRoute } = await import("../src/serviceProxy.js");
     expect(matchesPublicRoute("/", ["/*"])).toBe(true);
-    expect(matchesPublicRoute("/deep/../x", ["/*"])).toBe(true);
+    expect(matchesPublicRoute("/deep/x?y", ["/*"])).toBe(true);
   });
 
   it("decideAccess uses prefixes and admits a checked API key anywhere", async () => {
@@ -338,6 +447,7 @@ describe("public routes — exact paths and /* prefixes (docs/app-apis.md §2)",
     expect(decideAccess(app, fakeReq("/api/public/feed"), null)).toBe("allow");
     expect(decideAccess(app, fakeReq("/api/publicity"), null)).toBe("deny");
     expect(decideAccess(app, fakeReq("/admin"), null, { keyId: "00000000000000aa" })).toBe("allow");
+    expect(decideAccess(app, fakeReq("/admin"), null, { keyId: "00000000000000aa" }, "members-only")).toBe("allow");
   });
 });
 
