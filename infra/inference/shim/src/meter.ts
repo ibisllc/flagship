@@ -227,3 +227,18 @@ export class SseUsageScanner {
     }
   }
 }
+
+const CONTEXT_TOO_LONG =
+  /context[_ -]?(length|window)|maximum context|max(imum)?_?tokens? .*exceed|too many (input )?tokens|(prompt|input|request) is too long|reduce the length|exceeds? the (model'?s? )?(max|maximum|context)/i;
+
+/**
+ * Whether an upstream refusal means the request didn't fit the model's
+ * context window. Providers word it differently (OpenAI-style
+ * `context_length_exceeded`, vLLM's "maximum context length is …", others'
+ * "prompt is too long"), so a 413 or a 400 whose body says so counts.
+ */
+export function isContextTooLong(status: number, body: string): boolean {
+  if (status === 413) return true;
+  if (status !== 400) return false;
+  return CONTEXT_TOO_LONG.test(body.slice(0, 4096));
+}

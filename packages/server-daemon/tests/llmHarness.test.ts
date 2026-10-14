@@ -416,6 +416,15 @@ describe("LlmHarness — free AI refusals read as the shim words them", () => {
     expect(freeAiMessage(usedUp)).toMatch(/free AI credits are used up/);
     expect(freeAiMessage(JSON.stringify({ error: { message: "rate limited", code: "rate_limit" } }))).toBeNull();
     expect(freeAiMessage("not json")).toBeNull();
+    const tooLong = JSON.stringify({
+      error: {
+        message: "This build is too big for Flagship Inference. Try a smaller change, or use your own AI key.",
+        code: "free-ai-too-long",
+      },
+    });
+    expect(freeAiMessage(tooLong)).toBe(
+      "This build is too big for Flagship Inference. Try a smaller change, or use your own AI key.",
+    );
   });
 
   it("chatStream hands the owner the shim's message for a promo credential", async () => {

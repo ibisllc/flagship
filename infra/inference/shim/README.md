@@ -39,7 +39,10 @@ Then set `.com`'s `FLAGSHIP_INFERENCE_ENDPOINT` to
 - The pass format must match `packages/control-plane/src/inferenceToken.ts`
   (`inferenceShimContract.test.ts` fails otherwise).
 - Refusals are OpenAI-shaped `{"error":{"message","code":"free-ai-…"}}`; the
-  box shows `message` to the owner.
+  box shows `message` to the owner. An upstream refusal is never passed on:
+  429/5xx ⇒ `free-ai-busy`; 413, or a 400 saying the prompt overflowed the
+  context window ⇒ 400 `free-ai-too-long` ("This build is too big for
+  Flagship Inference…"); any other ⇒ `free-ai-upstream`.
 - Usage: the upstream's `usage` (non-streaming body or the `include_usage`
   stream chunk), else an estimate of 4 characters per token. A report the
   shim couldn't send under-counts; a `.com` that can't answer the allowance

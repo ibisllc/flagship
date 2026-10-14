@@ -5,12 +5,15 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mintScopedInferenceToken } from "@flagship/control-plane";
+import { FREE_AI_MESSAGES } from "@flagship/control-plane";
 import shim, {
   EXPIRED_MESSAGE,
+  TOO_LONG_MESSAGE,
+  UNAVAILABLE_MESSAGE,
   USED_UP_MESSAGE,
   type Env,
 } from "../../../infra/inference/shim/src/index.js";
-import { SseUsageScanner, sanitizeChatRequest } from "../../../infra/inference/shim/src/meter.js";
+import { SseUsageScanner, isContextTooLong, sanitizeChatRequest } from "../../../infra/inference/shim/src/meter.js";
 import { openaiStreaming, type ChatStreamEvent } from "../src/index.js";
 
 const SECRET = "shim-secret";
@@ -166,6 +169,49 @@ describe("free-AI shim", () => {
     const { res } = await call({ messages: [{ role: "user", content: "x" }] }, await token());
     expect(res.status).toBe(503);
     expect(await res.text()).not.toContain("provider internals");
+  });
+
+  it("says a build is too big when the upstream refuses it for context length, without its body", async () => {
+    upstreamResponse = () =>
+      new Response(
+        JSON.stringify({
+          error: { message: "This model's maximum context length is 32768 tokens. However, you requested 40000 tokens.", code: "context_length_exceeded" },
+        }),
+        { status: 400 },
+      );
+    const { res } = await call({ messages: [{ role: "user", content: "x" }] }, await token());
+    expect(res.status).toBe(400);
+    const text = await res.text();
+    expect(JSON.parse(text)).toEqual({ error: { message: TOO_LONG_MESSAGE, code: "free-ai-too-long" } });
+    expect(text).not.toContain("32768");
+    expect(TOO_LONG_MESSAGE).toBe(FREE_AI_MESSAGES.tooLong);
+    expect(TOO_LONG_MESSAGE).toBe(
+      "This build is too big for Flagship Inference. Try a smaller change, or use your own AI key.",
+    );
+  });
+
+  it("keeps any other upstream 400 as 'unavailable'", async () => {
+    upstreamResponse = () => new Response(JSON.stringify({ error: { message: "invalid tool schema" } }), { status: 400 });
+    const { res } = await call({ messages: [{ role: "user", content: "x" }] }, await token());
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: { message: UNAVAILABLE_MESSAGE, code: "free-ai-upstream" } });
+  });
+
+  it("recognises the ways providers word a context overflow", () => {
+    for (const body of [
+      '{"error":{"code":"context_length_exceeded"}}',
+      "This model's maximum context length is 131072 tokens",
+      '{"detail":"Input is too long for requested model."}',
+      '{"error":"prompt is too long: 210000 tokens > 200000 maximum"}',
+      "Please reduce the length of the messages or completion.",
+      "The input exceeds the context window of this model",
+      "Requested token count exceeds the model's maximum context length",
+    ]) {
+      expect(isContextTooLong(400, body), body).toBe(true);
+    }
+    expect(isContextTooLong(413, "")).toBe(true);
+    expect(isContextTooLong(400, '{"error":"model not found"}')).toBe(false);
+    expect(isContextTooLong(401, "maximum context length")).toBe(false);
   });
 
   it("is paused by the kill switch", async () => {

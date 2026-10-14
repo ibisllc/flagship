@@ -24,6 +24,7 @@ import {
   buildUsageReport,
   estimateTokens,
   extractUsage,
+  isContextTooLong,
   sanitizeChatRequest,
   verifyScopedInferenceToken,
 } from "./meter.js";
@@ -58,6 +59,8 @@ export const USED_UP_MESSAGE =
 export const UNAVAILABLE_MESSAGE = "Free AI isn't available right now. You can add your own AI key.";
 export const EXPIRED_MESSAGE = "This free AI pass has expired. Send your message again to continue.";
 export const BUSY_MESSAGE = "Free AI is busy right now. Try again in a minute.";
+export const TOO_LONG_MESSAGE =
+  "This build is too big for Flagship Inference. Try a smaller change, or use your own AI key.";
 
 export default {
   async fetch(request: Request, env: Env, ctx: Ctx): Promise<Response> {
@@ -109,9 +112,14 @@ export default {
       return aiError(502, UNAVAILABLE_MESSAGE, "free-ai-upstream");
     }
     if (!res.ok) {
-      await res.body?.cancel();
-      return res.status === 429 || res.status >= 500
-        ? aiError(503, BUSY_MESSAGE, "free-ai-busy")
+      if (res.status === 429 || res.status >= 500) {
+        await res.body?.cancel();
+        return aiError(503, BUSY_MESSAGE, "free-ai-busy");
+      }
+      // Only read to classify: the upstream's words never reach the box.
+      const detail = await res.text().catch(() => "");
+      return isContextTooLong(res.status, detail)
+        ? aiError(400, TOO_LONG_MESSAGE, "free-ai-too-long")
         : aiError(502, UNAVAILABLE_MESSAGE, "free-ai-upstream");
     }
 

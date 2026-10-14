@@ -54,6 +54,8 @@ export const FREE_AI_MESSAGES = {
   ended: "The free building period has ended — use your own AI key.",
   noServer: "Free AI credits start once one of your servers is running.",
   unavailable: "Free AI isn't available right now. You can add your own AI key.",
+  /** The shim's `free-ai-too-long`: the request didn't fit the model's context. */
+  tooLong: "This build is too big for Flagship Inference. Try a smaller change, or use your own AI key.",
 } as const;
 
 export interface FreeAiConfig {
