@@ -3,7 +3,7 @@
  *
  * Each round builds the member list (self + live siblings) and, for every
  * service THIS box runs, elects the leader via `electLeadForService`
- * (@flagship/protocol — highest clout among the live runners). Then applies the
+ * (@flagship/protocol — the live runner highest in the owner's server order). Then applies the
  * claim/yield rule against the injected `RouteClaimer`.
  *
  * This is the pure DECISION layer: it takes a snapshot of members + the local
@@ -11,7 +11,7 @@
  * testable with a mock RouteClaimer and a synthetic member list — independent of
  * any transport, timers, or the live UrlController.
  */
-import { type CloutMember, electLeadForService } from "@flagship/protocol";
+import { type CloutMember, compareClout, electLeadForService } from "@flagship/protocol";
 import type { RouteClaimer } from "./routeClaimer.js";
 import type { ViewMember } from "./siblingView.js";
 
@@ -21,7 +21,8 @@ export interface SelfMember {
   /** This box's STK pub hex (its birth-cert authority hex), lowercased. */
   stkHex: string;
   birthDate: number;
-  voteIssuedAt: number | null;
+  /** Position in the owner's server order (0 = first), or null when unlisted. */
+  orderRank: number | null;
   /** The slugs THIS box runs (drives both eligibility and which services to elect). */
   services: string[];
 }
@@ -54,7 +55,7 @@ export function leadsSnapshot(deps: {
     id: self.id,
     domain: self.domain,
     birthDate: self.birthDate,
-    voteIssuedAt: self.voteIssuedAt,
+    orderRank: self.orderRank,
     liveness: "live",
     services: self.services,
   };
@@ -64,7 +65,7 @@ export function leadsSnapshot(deps: {
       id: s.id,
       domain: s.domain,
       birthDate: s.birthDate,
-      voteIssuedAt: s.voteIssuedAt,
+      orderRank: s.orderRank,
       liveness: s.liveness,
       services: s.services,
     })),
@@ -94,6 +95,27 @@ export function leadsSnapshot(deps: {
   return out;
 }
 
+/**
+ * The account's leader (docs/server-order.md): the live member highest in the
+ * server order, whatever it runs. Self is always live in its own round.
+ */
+export function accountLeader(deps: { self: SelfMember; liveSiblings: ViewMember[] }): string {
+  let best: CloutMember = {
+    id: deps.self.id,
+    domain: deps.self.domain,
+    birthDate: deps.self.birthDate,
+    orderRank: deps.self.orderRank,
+    liveness: "live",
+    services: [],
+  };
+  for (const s of deps.liveSiblings) {
+    if (s.liveness !== "live") continue;
+    const m: CloutMember = { ...s, services: [] };
+    if (compareClout(m, best) < 0) best = m;
+  }
+  return best.domain;
+}
+
 export type ClaimAction =
   | { kind: "claim"; service: string }
   | { kind: "release"; service: string };
@@ -112,7 +134,7 @@ export function selfLeadsForRound(deps: {
     id: self.id,
     domain: self.domain,
     birthDate: self.birthDate,
-    voteIssuedAt: self.voteIssuedAt,
+    orderRank: self.orderRank,
     liveness: "live",
     services: self.services,
   };
@@ -122,7 +144,7 @@ export function selfLeadsForRound(deps: {
       id: s.id,
       domain: s.domain,
       birthDate: s.birthDate,
-      voteIssuedAt: s.voteIssuedAt,
+      orderRank: s.orderRank,
       liveness: s.liveness,
       services: s.services,
     })),
@@ -158,7 +180,7 @@ export function decideClaimActions(deps: {
     id: self.id,
     domain: self.domain,
     birthDate: self.birthDate,
-    voteIssuedAt: self.voteIssuedAt,
+    orderRank: self.orderRank,
     liveness: "live",
     services: self.services,
   };
@@ -166,7 +188,7 @@ export function decideClaimActions(deps: {
     id: s.id,
     domain: s.domain,
     birthDate: s.birthDate,
-    voteIssuedAt: s.voteIssuedAt,
+    orderRank: s.orderRank,
     liveness: s.liveness,
     services: s.services,
   }));

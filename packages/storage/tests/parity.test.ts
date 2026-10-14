@@ -1068,10 +1068,38 @@ describe("D1 ↔ InMemory parity", () => {
   });
 
   // ────────────────────────────────────────────────────────────────────
-  // secretMailbox cgk + set-leader lanes (Phase 6) — same consume-once + dedup
+  // secretMailbox cgk lane (Phase 6) — same consume-once + dedup
   // + GC + lane-isolation semantics as the swk lane.
   // ────────────────────────────────────────────────────────────────────
-  describe("secretMailbox (cgk + set-leader lanes)", () => {
+  describe("serverOrders", () => {
+    it("keeps only the newest order per account", async () => {
+      const r = await bothAdapters(async (s) => {
+        const rec = (issuedAt: number, orderJson: string) => ({
+          username: "Alice", orderJson, signatureHex: "ab".repeat(64), issuedAt,
+        });
+        const first = await s.serverOrders.putIfNewer(rec(10, "a"));
+        const same = await s.serverOrders.putIfNewer(rec(10, "b"));
+        const older = await s.serverOrders.putIfNewer(rec(5, "c"));
+        const newer = await s.serverOrders.putIfNewer(rec(20, "d"));
+        const got = await s.serverOrders.get("alice");
+        const deleted = await s.serverOrders.delete("ALICE");
+        const gone = await s.serverOrders.get("alice");
+        return { first: first.ok, same: same.ok, older: older.ok, newer: newer.ok, got, deleted, gone };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({
+        first: true,
+        same: false,
+        older: false,
+        newer: true,
+        got: { username: "alice", orderJson: "d", signatureHex: "ab".repeat(64), issuedAt: 20 },
+        deleted: true,
+        gone: null,
+      });
+    });
+  });
+
+  describe("secretMailbox (cgk lane)", () => {
     const mk = (nonce: string, sealed: string, expiresAt = 1000) => ({
       serverDomain: "home.alice.flagship.services",
       username: "alice",
@@ -1107,48 +1135,6 @@ describe("D1 ↔ InMemory parity", () => {
         secondDefined: false,
         crossDefined: false,
       });
-    });
-
-    it("set-leader deposit → consume-once → second consume undefined; expired never served", async () => {
-      const r = await bothAdapters(async (s) => {
-        const put = await s.secretMailbox.putSetLeaderDeposit(mk("cc".repeat(16), "voteblob"));
-        const first = await s.secretMailbox.consumeSetLeaderDeposit("home.alice.flagship.services", 10);
-        const second = await s.secretMailbox.consumeSetLeaderDeposit("home.alice.flagship.services", 11);
-        await s.secretMailbox.putSetLeaderDeposit({
-          ...mk("dd".repeat(16), "stale", 5),
-          serverDomain: "old.alice.flagship.services",
-        });
-        const expired = await s.secretMailbox.consumeSetLeaderDeposit("old.alice.flagship.services", 100);
-        return {
-          putOk: put.ok,
-          firstSealed: first?.sealedHex,
-          secondDefined: second !== undefined,
-          expiredDefined: expired !== undefined,
-        };
-      });
-      expectParity(r);
-      expect(r.d1).toEqual({
-        putOk: true,
-        firstSealed: "voteblob",
-        secondDefined: false,
-        expiredDefined: false,
-      });
-    });
-  });
-
-  // ────────────────────────────────────────────────────────────────────
-  // secretMailbox update lane (server-update) — same consume-once + dedup + GC
-  // + lane-isolation semantics as the other deposit lanes.
-  // ────────────────────────────────────────────────────────────────────
-  describe("secretMailbox (update lane)", () => {
-    const mk = (nonce: string, sealed: string, expiresAt = 1000) => ({
-      serverDomain: "home.alice.flagship.services",
-      username: "alice",
-      requestNonceHex: nonce,
-      stkPubHex: "ab".repeat(32),
-      sealedHex: sealed,
-      issuedAt: 1,
-      expiresAt,
     });
 
     it("consuming the newest update order retires the ones it superseded", async () => {

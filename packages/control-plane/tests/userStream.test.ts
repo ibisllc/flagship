@@ -65,6 +65,7 @@ function baseInventory(): PodInventory {
         state: "pending",
       },
     ],
+    serverOrder: null,
     fetchedAt: NOW,
   };
 }
@@ -93,6 +94,19 @@ describe("computePodInventoryCursor", () => {
     const b = clone(a);
     b.pods[0]!.appsServed = ["photos", "blog"]; // reversed
     expect(computePodInventoryCursor(b)).toBe(computePodInventoryCursor(a));
+  });
+
+  it("a new server order → DIFFERENT cursor (a reorder shows at once)", () => {
+    const a = baseInventory();
+    const b = clone(a);
+    b.serverOrder = {
+      order: { user: "harry", stks: ["22".repeat(32)], issuedAt: NOW, nonce: "ab".repeat(32) },
+      signature: "cd".repeat(64),
+    };
+    expect(computePodInventoryCursor(b)).not.toBe(computePodInventoryCursor(a));
+    const c = clone(b);
+    c.serverOrder!.signature = "ef".repeat(64);
+    expect(computePodInventoryCursor(c)).not.toBe(computePodInventoryCursor(b));
   });
 
   it("lastReported change → DIFFERENT cursor", () => {

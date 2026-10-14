@@ -26,7 +26,6 @@ import {
   signServerDecommission,
   signServersSelfDelete,
   signSetDeadManPolicy,
-  signSetLeader,
   type InviteAcceptance,
   type InviteToken,
   type Keypair,
@@ -35,12 +34,10 @@ import {
   type ServerDecommission,
   type ServersSelfDelete,
   type SetDeadManPolicy,
-  type SetLeaderVote,
 } from "@flagship/protocol";
 import { authorizeSensitiveOrder } from "../src/adminAuthorityLocal.js";
 import { decodeAndVerifySelfDeleteCarrier } from "../src/selfDeleteConsumer.js";
 import { decodeAndVerifyDecommissionOrder } from "../src/decommissionConsumer.js";
-import { decodeAndVerifySetLeaderCarrier } from "../src/setLeaderConsumer.js";
 import { decodeAndVerifyEntitlementCarrier } from "../src/entitlementRelay.js";
 import { DeadManController, type AutoUnlockSuppressor, type HostPowerRunner } from "../src/deadMan.js";
 import { buildPowerHttp } from "../src/deadManHttp.js";
@@ -195,47 +192,6 @@ describe("decommissionConsumer — admin-gated eviction", () => {
   });
   it("(b) admin absent: legacy owner-IRK still works", () => {
     expect(decode(OWNER_IRK).podCanonical).toBe(DOMAIN);
-  });
-});
-
-// ── setLeader ────────────────────────────────────────────────────────────────
-describe("setLeaderConsumer — admin-gated preferred-server vote", () => {
-  const prefStk = hex(key(0x55).publicKey);
-  function carrier(irk: Keypair): string {
-    const vote: SetLeaderVote = {
-      user: USERNAME,
-      preferredStkPubHex: prefStk,
-      issuedAt: 3_000,
-      nonce: "n1",
-    };
-    return utf8ToHex(JSON.stringify({ vote, signature: hex(signSetLeader(vote, irk)) }));
-  }
-  it("(a) admin present: admin-root ACCEPTED, owner-IRK REJECTED", () => {
-    expect(
-      decodeAndVerifySetLeaderCarrier({
-        sealedHex: carrier(ADMIN_ROOT),
-        ownerIrkPub: OWNER_IRK.publicKey,
-        adminRootPub: ADMIN_ROOT.publicKey,
-        user: USERNAME,
-      }),
-    ).not.toBeNull();
-    expect(
-      decodeAndVerifySetLeaderCarrier({
-        sealedHex: carrier(OWNER_IRK),
-        ownerIrkPub: OWNER_IRK.publicKey,
-        adminRootPub: ADMIN_ROOT.publicKey,
-        user: USERNAME,
-      }),
-    ).toBeNull();
-  });
-  it("(b) admin absent: legacy owner-IRK still works", () => {
-    expect(
-      decodeAndVerifySetLeaderCarrier({
-        sealedHex: carrier(OWNER_IRK),
-        ownerIrkPub: OWNER_IRK.publicKey,
-        user: USERNAME,
-      }),
-    ).not.toBeNull();
   });
 });
 

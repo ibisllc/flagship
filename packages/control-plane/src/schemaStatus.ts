@@ -57,6 +57,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0087",
   // The capability table behind own-key AI model menus.
   "0095",
+  // The owner's server order (who leads, who's next).
+  "0096",
 ];
 
 export interface SchemaStatusDeps {

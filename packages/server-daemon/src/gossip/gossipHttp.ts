@@ -23,10 +23,12 @@ import {
 import type { HttpRequest, HttpResponse } from "../runtime.js";
 import type { SiblingView } from "./siblingView.js";
 
-/** The wire shape we expect inside the sealed blob: the announcement + its MAC. */
+/** The wire shape inside the sealed blob: the announcement, its MAC, and the
+ *  sender's signed server order (verified by its own signature, not the MAC). */
 interface SealedGossipFrame {
   announcement: GossipAnnouncement;
   mac: string;
+  serverOrder?: unknown;
 }
 
 const EMPTY_204: HttpResponse = { status: 204, body: "" };
@@ -38,6 +40,8 @@ export function buildGossipIngestHandler(deps: {
   user: string;
   /** This box's own id (name) — ignore our own echoed frame if the hub loops it back. */
   selfId: string;
+  /** Offer a sibling's server order to the holder (which verifies it). */
+  onServerOrder?: (raw: unknown, from: string) => Promise<unknown> | void;
   now?: () => number;
   onLog?: (m: string) => void;
 }) {
@@ -76,6 +80,12 @@ export function buildGossipIngestHandler(deps: {
       // 5. Upsert into the live view.
       deps.view.upsert(a, now());
       deps.onLog?.(`[gossip] ingested frame from ${a.name} (${a.services.length} services)`);
+
+      // 6. A sibling holding an order passes it on; the holder adopts it only
+      //    if it verifies and is newer than ours.
+      if (parsed.serverOrder && deps.onServerOrder) {
+        await deps.onServerOrder(parsed.serverOrder, `gossip from ${a.name}`);
+      }
     } catch {
       // Undecryptable / malformed — swallow. Never reveal the failure.
     }

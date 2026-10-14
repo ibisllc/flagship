@@ -1,4 +1,5 @@
 import { D1ServerShareStorage, type ServerShareStorage } from "./serverShares.js";
+import { D1ServerOrderStorage, type ServerOrderStorage } from "./serverOrders.js";
 import type {
   AccountType,
   AuditEventRecord,
@@ -1738,15 +1739,6 @@ export class D1SecretMailboxStorage implements SecretMailboxStorage {
     return this.consumeGenericDeposit(serverDomain, now, "cgk");
   }
 
-  // ── Owner preferred-server vote lane (purpose:"set-leader") — Phase 6 ──
-  async putSetLeaderDeposit(rec: PairingDepositRecord) {
-    return this.putGenericDeposit(rec, "set-leader");
-  }
-
-  async consumeSetLeaderDeposit(serverDomain: string, now: number) {
-    return this.consumeGenericDeposit(serverDomain, now, "set-leader");
-  }
-
   // ── Admin-authorized server-update order lane (purpose:"update") ───────
   async putUpdateDeposit(rec: PairingDepositRecord) {
     return this.putGenericDeposit(rec, "update");
@@ -1756,13 +1748,13 @@ export class D1SecretMailboxStorage implements SecretMailboxStorage {
     return this.consumeGenericDeposit(serverDomain, now, "update");
   }
 
-  // Shared deposit-lane helpers — the SWK/cgk/set-leader lanes are identical
+  // Shared deposit-lane helpers — the SWK/cgk/update lanes are identical
   // store-and-forward shapes on `secret_mailbox`, distinguished only by purpose
   // (no migration — the column is plain TEXT, the SWK lane already inserts a
   // literal). Parameterized so a new lane is one purpose string.
   private async putGenericDeposit(
     rec: PairingDepositRecord,
-    purpose: "cgk" | "set-leader" | "update",
+    purpose: "cgk" | "update",
   ) {
     try {
       await this.db
@@ -1800,7 +1792,7 @@ export class D1SecretMailboxStorage implements SecretMailboxStorage {
   private async consumeGenericDeposit(
     serverDomain: string,
     now: number,
-    purpose: "cgk" | "set-leader" | "update",
+    purpose: "cgk" | "update",
   ) {
     await this.db
       .prepare(
@@ -4381,6 +4373,7 @@ export class D1Storage implements Storage {
   namespace: NamespaceStorage;
   peerBackupManifests: PeerBackupManifestStorage;
   serverShares: ServerShareStorage;
+  serverOrders: ServerOrderStorage;
   constructor(db: D1Database) {
     this.usernames = new D1UsernameStorage(db);
     this.schemaVersion = new D1SchemaVersionStorage(db);
@@ -4435,6 +4428,7 @@ export class D1Storage implements Storage {
     this.namespace = new D1NamespaceStorage(db);
     this.peerBackupManifests = new D1PeerBackupManifestStorage(db);
     this.serverShares = new D1ServerShareStorage(db);
+    this.serverOrders = new D1ServerOrderStorage(db);
   }
 }
 

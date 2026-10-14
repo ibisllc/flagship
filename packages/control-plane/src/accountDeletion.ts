@@ -34,6 +34,7 @@ import type {
   DeviceCapabilityGrantStorage,
   LuksKeyStorage,
   PushTokenStorage,
+  ServerOrderStorage,
   RoutingStorage,
   SecretMailboxStorage,
   ServerRecord,
@@ -71,6 +72,7 @@ export interface AccountDeletionDeps {
   luksKeys?: LuksKeyStorage;
   webauthnRecovery?: WebauthnRecoveryStorage;
   pushTokens?: PushTokenStorage;
+  serverOrders?: ServerOrderStorage;
   /** Mailbox the §5 content-wipe order is DEPOSITED into (one row per owned
    *  server), so an online box consumes it on its heartbeat and wipes. Absent
    *  ⇒ the content-wipe is recorded as an audit row only (no box-side delivery).
@@ -260,6 +262,14 @@ async function commitAccountHardDelete(
     }
   } catch {
     /* swallow */
+  }
+
+  if (deps.serverOrders) {
+    try {
+      await deps.serverOrders.delete(username);
+    } catch {
+      /* swallow */
+    }
   }
 
   // The row delete is the irreversible act — name is claimable again at once.

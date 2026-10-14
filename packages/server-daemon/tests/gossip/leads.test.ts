@@ -43,7 +43,7 @@ function sibling(over: Partial<ViewMember>): ViewMember {
     domain: "old.harry.flagship.services",
     stkHex: "ee".repeat(32),
     birthDate: 1,
-    voteIssuedAt: null,
+    orderRank: null,
     liveness: "live",
     services: ["blog"],
     ...over,
@@ -57,7 +57,7 @@ describe("selfLeadsForRound", () => {
       domain: "self.harry.flagship.services",
       stkHex: "aa".repeat(32),
       birthDate: 100,
-      voteIssuedAt: null,
+      orderRank: null,
       services: ["blog", "wiki"],
     };
     expect(selfLeadsForRound({ self, liveSiblings: [] })).toEqual(["blog", "wiki"]);
@@ -69,7 +69,7 @@ describe("selfLeadsForRound", () => {
       domain: "self.harry.flagship.services",
       stkHex: "aa".repeat(32),
       birthDate: 500, // younger
-      voteIssuedAt: null,
+      orderRank: null,
       services: ["blog", "wiki"],
     };
     const older = sibling({ id: "old", domain: "old.harry.flagship.services", birthDate: 1, services: ["blog"] });
@@ -84,7 +84,7 @@ describe("leadsSnapshot (the FULL map)", () => {
     domain: "self.harry.flagship.services",
     stkHex: "aa".repeat(32),
     birthDate: 100,
-    voteIssuedAt: null,
+    orderRank: null,
     services: ["blog"],
     ...over,
   });
@@ -129,13 +129,13 @@ describe("leadsSnapshot (the FULL map)", () => {
     });
   });
 
-  it("an owner VOTE makes the voted pod the leader (outranks seniority)", () => {
+  it("the first pod in the owner's order leads (outranks seniority)", () => {
     const voted = sibling({
       id: "v.harry.flagship.services",
       domain: "v.harry.flagship.services",
       stkHex: "dd".repeat(32),
-      birthDate: 999, // youngest, but voted
-      voteIssuedAt: 5000,
+      birthDate: 999, // youngest, but first in the order
+      orderRank: 0,
       services: ["blog"],
     });
     const map = leadsSnapshot({ self: self({ birthDate: 1, services: ["blog"] }), liveSiblings: [voted] });
@@ -174,7 +174,7 @@ describe("GossipLoop.currentLeads / leadsSnapshot", () => {
         name: "self.harry.flagship.services",
         birthAuthHex: "aa".repeat(32),
         birthDate: 100,
-        vote: null,
+        order: null,
         services: ["blog", "wiki"],
       }),
     });
@@ -194,8 +194,7 @@ describe("GossipLoop.currentLeads / leadsSnapshot", () => {
       name: "b.harry.flagship.services",
       birthAuthHex: "bb".repeat(32),
       birthDate: 50,
-      voteStkHex: "none",
-      voteDate: 0,
+      orderDate: 0,
       services: ["chat"],
       liveness: "live",
       issuedAt: 999,
@@ -228,7 +227,7 @@ describe("wireGossip leadsSnapshot — gossip DISABLED", () => {
       // cgk omitted → resolveCgk() finds none in tests → disabled.
     });
     expect(res.enabled).toBe(false);
-    expect(res.leadsSnapshot()).toEqual({ gossipActive: false, leads: {} });
+    expect(res.leadsSnapshot()).toEqual({ gossipActive: false, leads: {}, leader: null });
   });
 });
 
@@ -274,7 +273,7 @@ describe("GET /api/leads handler (response shape)", () => {
     const handler = buildLeadsHttpHandler({
       serverFqdn: "self.harry.flagship.services",
       now: () => 1,
-      snapshot: () => ({ gossipActive: false, leads: {} }),
+      snapshot: () => ({ gossipActive: false, leads: {}, leader: null }),
       commit: () => sha,
     });
     const res = await handler({ method: "GET", path: "/api/leads", headers: {}, body: Buffer.alloc(0) });
@@ -285,7 +284,7 @@ describe("GET /api/leads handler (response shape)", () => {
     const handler = buildLeadsHttpHandler({
       serverFqdn: "self.harry.flagship.services",
       now: () => 42,
-      snapshot: () => ({ gossipActive: false, leads: {} }),
+      snapshot: () => ({ gossipActive: false, leads: {}, leader: null }),
     });
     const res = await handler({ method: "GET", path: "/api/leads", headers: {}, body: Buffer.alloc(0) });
     expect(JSON.parse(res!.body as string)).toEqual({
@@ -293,6 +292,7 @@ describe("GET /api/leads handler (response shape)", () => {
       self: "self.harry.flagship.services",
       gossipActive: false,
       leads: {},
+      leader: null,
       commit: null,
     });
   });

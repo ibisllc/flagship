@@ -32,15 +32,12 @@ import {
   verifyDeviceEndpointClaim,
   verifyLeaseRevocation,
   verifySecretRequest,
-  verifySetLeader,
   verifyUpdateOrder,
-  SET_LEADER_NONE,
   type AutoUnlockLeaseV2,
   type DeviceEndpointClaim,
   type LeaseRevocation,
   type SecretPurpose,
   type SecretRequest,
-  type SetLeaderVote,
   type UpdateOrder,
 } from "@flagship/protocol";
 import type {
@@ -61,8 +58,8 @@ export interface SecretMailboxDeps {
   secretMailbox: SecretMailboxStorage;
   boxSealedLeases: BoxSealedLeaseStorage;
   /** Slice D — device-grant store for the master-admin authority gate (the
-   *  set-leader vote deposit, §2 row 9). Optional: absent ⇒ only the bare admin
-   *  root satisfies the open gate. */
+   *  update order deposit). Optional: absent ⇒ only the bare admin root
+   *  satisfies the open gate. */
   grants?: DeviceCapabilityGrantStorage;
   /**
    * Push fan-out for the "your box is finishing setup — open the app"
@@ -111,10 +108,6 @@ const DEFAULT_SWK_DEPOSIT_TTL = 14 * 24 * 60 * 60_000; // 14 days
 // steady-state boot — minutes-to-days later on real hardware. Same generous claim
 // window as the SWK/pairing deposit.
 const DEFAULT_CGK_DEPOSIT_TTL = 14 * 24 * 60 * 60_000; // 14 days
-// The owner preferred-server vote is a STANDING preference: a box re-fetches it
-// each time it boots / re-asserts. It is deposited once and should outlive long
-// box downtime, so give it a long window too. (`"none"` clears via a fresh vote.)
-const DEFAULT_SET_LEADER_DEPOSIT_TTL = 90 * 24 * 60 * 60_000; // 90 days
 // The admin-authorized update order is deposited by the phone and CLAIMED by the
 // box on its next heartbeat — seconds-to-minutes when online, but a box may have
 // been offline (the hali case), so give the order a generous claim window like the
@@ -1122,179 +1115,7 @@ export async function handleConsumeCgkDeposit(
   };
 }
 
-// ──────────────────────────────────────────────────────────────────────
-// 6c-quater. POST /api/server/:domain/set-leader  (phone, IRK mailbox-auth)
-//            GET  /api/server/:domain/set-leader  (box, public consume-once)
-//
-// Owner preferred-server vote delivery (Phase 6). The phone signs an owner-IRK
-// `set-leader` vote (`flagship/set-leader/v1`) naming a `preferredStkPubHex` and
-// deposits it ADDRESSED TO a box domain. `.com` verifies the vote signature under
-// the account IRK BEFORE storing — unlike the sealed deposits this carrier is the
-// PUBLIC vote envelope (no secret), so the box re-verifies under the owner IRK on
-// consume and a public read is harmless. The box fetches the vote addressed to it,
-// stores it, and rides it on its gossip frame (clout). `preferredStkPubHex="none"`
-// clears the vote.
-//
-// The carrier hex is the UTF-8 JSON `{vote, signature}` so the existing single-hex
-// deposit lane transports it unchanged (mirrors the swk/cgk carriers).
-// ──────────────────────────────────────────────────────────────────────
-
 const HEX_SIG = /^[0-9a-f]{128}$/;
-
-export async function handlePostSetLeaderDeposit(
-  deps: SecretMailboxDeps,
-  host: string,
-  body: unknown,
-): Promise<HandlerResponse> {
-  const auth = await authPhoneMailbox(deps, body);
-  if (!auth.ok) return auth.response;
-
-  const now = deps.now ?? (() => Date.now());
-  const ttlMs = deps.mailboxTtlMs ?? DEFAULT_SET_LEADER_DEPOSIT_TTL;
-
-  const b = body as {
-    deposit?: { serverDomain?: unknown; requestNonceHex?: unknown };
-    vote?: {
-      user?: unknown;
-      preferredStkPubHex?: unknown;
-      issuedAt?: unknown;
-      nonce?: unknown;
-    };
-    signature?: unknown;
-  };
-  const dep = b?.deposit ?? {};
-  const v = b?.vote ?? {};
-  if (
-    typeof dep.serverDomain !== "string" ||
-    typeof dep.requestNonceHex !== "string" ||
-    typeof v.user !== "string" ||
-    typeof v.preferredStkPubHex !== "string" ||
-    typeof v.issuedAt !== "number" ||
-    typeof v.nonce !== "string" ||
-    typeof b?.signature !== "string"
-  ) {
-    return malformed("malformed body");
-  }
-  if (dep.serverDomain !== host) {
-    return forbidden("serverDomain / host mismatch");
-  }
-  if (!HEX_NONCE.test(dep.requestNonceHex.toLowerCase())) {
-    return malformed("requestNonceHex must be 32 bytes hex");
-  }
-  // The preferred STK is either a 32-byte hex pub or the "none" sentinel.
-  const prefLower = v.preferredStkPubHex.toLowerCase();
-  if (prefLower !== SET_LEADER_NONE && !HEX64.test(prefLower)) {
-    return malformed("preferredStkPubHex must be 32 bytes hex or 'none'");
-  }
-  if (!HEX_SIG.test(b.signature.toLowerCase())) {
-    return malformed("signature must be 64 bytes hex");
-  }
-  if (Math.abs(now() - v.issuedAt) > (deps.maxAgeMs ?? DEFAULT_MAX_AGE)) {
-    return forbidden("stale request");
-  }
-
-  // The box must be registered + owned by the authed account (I2). The vote is
-  // ADDRESSED to a box domain so the box can fetch only votes meant for it.
-  const reg = await deps.servers.get(host);
-  if (!reg) return forbidden("server not registered");
-  if (reg.revokedAt) return forbidden("server is revoked");
-  if (reg.username.toLowerCase() !== auth.username) {
-    return forbidden("server belongs to a different account");
-  }
-  // The vote must bind to the authed account.
-  if (v.user.toLowerCase() !== auth.username) {
-    return forbidden("vote user does not match the authed account");
-  }
-
-  // VERIFY the owner-IRK set-leader signature BEFORE storing — `.com` never stores
-  // an unverified vote (the box re-verifies too, but a verified-at-rest row is the
-  // contract the lane promises).
-  const userRec = await deps.usernames.get(auth.username);
-  if (!userRec) return notFound("unknown user");
-  const vote: SetLeaderVote = {
-    user: v.user,
-    preferredStkPubHex: v.preferredStkPubHex,
-    issuedAt: v.issuedAt,
-    nonce: v.nonce,
-  };
-  let sig: Uint8Array;
-  try {
-    sig = hexToBytes(b.signature);
-  } catch {
-    return malformed("invalid hex");
-  }
-  // Slice D §2 row 9 — SENSITIVE: the set-leader (preferred-server) vote is
-  // master-admin authority (legacy owner-IRK when no admin root is pinned).
-  const authz = await authorizeSensitiveComOp(
-    { grants: deps.grants, now: deps.now },
-    {
-      username: auth.username,
-      userRec,
-      verifyWith: (pub) => verifySetLeader(vote, sig, hexToBytes(pub)),
-    },
-  );
-  if (!authz.ok) {
-    return forbidden("invalid set-leader signature");
-  }
-
-  // The deposit carrier is the UTF-8 JSON `{vote, signature}` hex-encoded, so the
-  // single-hex deposit lane transports the PUBLIC vote unchanged.
-  const carrierHex = bytesToHexLocal(
-    new TextEncoder().encode(
-      JSON.stringify({
-        vote: {
-          user: vote.user,
-          preferredStkPubHex: vote.preferredStkPubHex,
-          issuedAt: vote.issuedAt,
-          nonce: vote.nonce,
-        },
-        signature: b.signature.toLowerCase(),
-      }),
-    ),
-  );
-
-  const put = await deps.secretMailbox.putSetLeaderDeposit({
-    serverDomain: host,
-    username: reg.username,
-    requestNonceHex: dep.requestNonceHex.toLowerCase(),
-    // The vote names the PREFERRED box; we store the authed account's identity STK
-    // hint here only for shape-compat (stkPubHex is a non-load-bearing field in
-    // this lane — the vote's preferredStkPubHex is the payload).
-    stkPubHex: reg.identityPubKeyHex.toLowerCase(),
-    sealedHex: carrierHex,
-    issuedAt: vote.issuedAt,
-    expiresAt: now() + ttlMs,
-  });
-  if (!put.ok) {
-    return conflict(put.reason);
-  }
-  return { status: 200, body: { ok: true, expiresAt: now() + ttlMs } };
-}
-
-export async function handleConsumeSetLeaderDeposit(
-  deps: SecretMailboxDeps,
-  host: string,
-): Promise<HandlerResponse> {
-  const now = deps.now ?? (() => Date.now());
-  const reg = await deps.servers.get(host);
-  if (!reg) return notFound("unknown server");
-  if (reg.revokedAt) return forbidden("server is revoked");
-
-  const row = await deps.secretMailbox.consumeSetLeaderDeposit(host, now());
-  if (!row) return notFound("no set-leader vote ready");
-  return {
-    status: 200,
-    body: {
-      serverDomain: row.serverDomain,
-      requestNonceHex: row.requestNonceHex,
-      stkPub: row.stkPubHex,
-      // PUBLIC owner-IRK-signed set-leader vote carrier — the box re-verifies it
-      // under the owner IRK before riding it on its gossip frame.
-      sealed: row.sealedHex,
-      issuedAt: row.issuedAt,
-    },
-  };
-}
 
 // ──────────────────────────────────────────────────────────────────────
 // 6c-quinquies. POST /api/server/:domain/update  (phone, IRK mailbox-auth +
@@ -1313,7 +1134,7 @@ export async function handleConsumeSetLeaderDeposit(
 // deposits (owner-IRK mailbox-auth only) — the deposit POST is authorized through
 // the Slice-D admin gate (`authorizeSensitiveComOp`): with an admin master root
 // pinned, ONLY the admin root / an admin-root-signed `admin` grant can authorize;
-// the bare membership IRK cannot. The order is PUBLIC (like set-leader), verified
+// the bare membership IRK cannot. The order is PUBLIC (like the server order), verified
 // at deposit AND re-verified box-side, so the consume GET is a public consume-once
 // read (mirrors the other deposits).
 // ──────────────────────────────────────────────────────────────────────

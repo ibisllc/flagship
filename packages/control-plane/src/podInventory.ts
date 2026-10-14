@@ -27,6 +27,7 @@ import {
   verifyBoxTrustStatusReport,
   type BoxTrustStatusReport,
   type DaemonStatusReport,
+  type SignedServerOrder,
 } from "@flagship/protocol";
 import { sha256 } from "@noble/hashes/sha256";
 import type {
@@ -38,10 +39,12 @@ import type {
   ProvisionStatusStorage,
   SecretMailboxStorage,
   SecretMailboxPurpose,
+  ServerOrderStorage,
   UsernameStorage,
 } from "@flagship/storage";
 import { HEX64, HEX128, bytesToHex, hexToBytes } from "./hex.js";
 import { healthForPods, type BoxHealthReport } from "./serverHealth.js";
+import { readServerOrder } from "./serverOrder.js";
 import {
   forbidden,
   malformed,
@@ -79,6 +82,9 @@ export interface PodInventoryDeps {
    * knower-of-a-username and must not keep a name "active").
    */
   usernames?: UsernameStorage;
+  /** The owner's server order (docs/server-order.md): relayed on `/pods` and
+   *  in the daemon-status reply; the apps and boxes verify it themselves. */
+  serverOrders?: ServerOrderStorage;
   now?: () => number;
 }
 
@@ -213,6 +219,8 @@ export interface PodInventory {
   username: string;
   pods: OnlinePodEntry[];
   pending: PendingPodEntry[];
+  /** The owner's signed server order, or null when none (docs/server-order.md). */
+  serverOrder: SignedServerOrder | null;
   fetchedAt: number;
 }
 
@@ -466,7 +474,10 @@ export async function buildPodInventory(
     }
   }
 
-  return { username, pods, pending, fetchedAt: now };
+  const serverOrder = deps.serverOrders
+    ? await readServerOrder(deps.serverOrders, username).catch(() => null)
+    : null;
+  return { username, pods, pending, serverOrder, fetchedAt: now };
 }
 
 export async function handleGetUserPods(
@@ -652,5 +663,10 @@ export async function handlePostDaemonStatus(
     }
   }
 
-  return ok({ ok: true });
+  // The owner's server order rides back to the box (docs/server-order.md); the
+  // box re-verifies it under its pinned authority before using it.
+  const serverOrder = deps.serverOrders
+    ? await readServerOrder(deps.serverOrders, server.username).catch(() => null)
+    : null;
+  return ok({ ok: true, serverOrder });
 }

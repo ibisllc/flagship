@@ -56,6 +56,7 @@ export function buildLeadsHttpHandler(
       self: deps.serverFqdn,
       gossipActive: snap.gossipActive,
       leads: snap.leads,
+      leader: snap.leader,
       commit: deps.commit ? deps.commit() : null,
     };
     return {

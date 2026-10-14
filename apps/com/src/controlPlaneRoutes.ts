@@ -68,8 +68,6 @@ import {
   handleConsumeSwkDeposit,
   handlePostCgkDeposit,
   handleConsumeCgkDeposit,
-  handlePostSetLeaderDeposit,
-  handleConsumeSetLeaderDeposit,
   handlePostUpdateDeposit,
   handleConsumeUpdateDeposit,
   handleConsumeSelfDeleteDeposit,
@@ -135,6 +133,7 @@ import {
   handleUnrevokeServer,
   handleServerReleaseName,
   handleAccountDeletionBundle,
+  handlePostServerOrder,
   handleAdminUsernameReclaim,
   handleServerRevokeBySelf,
   handleSetRoutingTarget,
@@ -598,9 +597,6 @@ const ROUTE_RE = {
   // Post-boot CGK delivery (Phase 6): POST phone deposit (IRK mailbox-auth, the
   // SEALED CGK-delivery carrier) / GET box consume-once read (sealed only).
   CGK_DEPOSIT: /^\/api\/server\/([^/]+)\/cgk-deposit$/,
-  // Owner preferred-server vote (Phase 6): POST phone deposit (IRK mailbox-auth,
-  // owner-IRK set-leader vote, verified before storing) / GET box consume-once read.
-  SET_LEADER_DEPOSIT: /^\/api\/server\/([^/]+)\/set-leader$/,
   // Admin-authorized in-place server-update order (docs/server-update-mechanism.md):
   //   POST  phone deposits the admin-signed UpdateOrder (mailbox-auth + Slice-D
   //         admin-authority gate — the sensitive-op check)
@@ -757,6 +753,8 @@ const ROUTE_RE = {
   DEVICE_GRANTS_REVOKE: /^\/api\/users\/([^/]+)\/device-grants\/revoke$/,
   ACCOUNT_PROFILE: /^\/api\/accounts\/([^/]+)\/profile$/,
   ACCOUNT_READ_TOKEN: /^\/api\/accounts\/([^/]+)\/read-token$/,
+  // The owner's server order (docs/server-order.md): POST the signed order.
+  SERVER_ORDER: /^\/api\/accounts\/([^/]+)\/server-order$/,
   ACCOUNT_DIRECTORY: /^\/api\/accounts\/([^/]+)\/directory$/,
   DEVICE_SELF_PROFILE: /^\/api\/accounts\/([^/]+)\/devices\/([^/]+)\/profile$/,
   DEVICE_MANAGED_PROFILE: /^\/api\/accounts\/([^/]+)\/devices\/([^/]+)\/managed-profile$/,
@@ -1201,6 +1199,7 @@ export async function tryControlPlane(
           luksKeys: storage.luksKeys,
           webauthnRecovery: storage.webauthnRecovery,
           pushTokens: storage.pushTokens,
+          serverOrders: storage.serverOrders,
           // §5 box-side delivery: deposit the content-wipe order for each owned
           // server so an online box consumes it on its heartbeat and wipes.
           secretMailbox: storage.secretMailbox,
@@ -1242,6 +1241,7 @@ export async function tryControlPlane(
           luksKeys: storage.luksKeys,
           webauthnRecovery: storage.webauthnRecovery,
           pushTokens: storage.pushTokens,
+          serverOrders: storage.serverOrders,
           ...(reclaimDns ? { dns: reclaimDns } : {}),
         },
         decodeURIComponent(m[1]!),
@@ -1794,23 +1794,6 @@ export async function tryControlPlane(
         await handleConsumeCgkDeposit(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
       );
     }
-    // Owner preferred-server vote (Phase 6) — phone deposit (IRK mailbox-auth, the
-    // owner-IRK set-leader vote, signature-verified before storing) + box
-    // consume-once read (the box re-verifies under the owner IRK).
-    if (method === "POST" && (m = path.match(ROUTE_RE.SET_LEADER_DEPOSIT))) {
-      return finishPlain(
-        await handlePostSetLeaderDeposit(
-          buildSecretMailboxDeps(),
-          decodeURIComponent(m[1]!),
-          await readJson(request),
-        ),
-      );
-    }
-    if (method === "GET" && (m = path.match(ROUTE_RE.SET_LEADER_DEPOSIT))) {
-      return finishPlain(
-        await handleConsumeSetLeaderDeposit(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
-      );
-    }
     // Admin-authorized in-place server-update order — phone deposit (IRK mailbox-
     // auth + the Slice-D admin-authority gate, the sensitive-op check) + box
     // consume-once read (the box re-verifies the order under its pinned admin root).
@@ -2323,6 +2306,7 @@ export async function tryControlPlane(
           authCodes: storage.authCodes,
           provisionStatus: storage.provisionStatus,
           secretMailbox: storage.secretMailbox,
+          serverOrders: storage.serverOrders,
         },
         decodeURIComponent(m[1]!),
       ),
@@ -2341,6 +2325,7 @@ export async function tryControlPlane(
           authCodes: storage.authCodes,
           provisionStatus: storage.provisionStatus,
           secretMailbox: storage.secretMailbox,
+          serverOrders: storage.serverOrders,
         },
         decodeURIComponent(m[1]!),
         url.searchParams.get("cursor"),
@@ -2384,6 +2369,18 @@ export async function tryControlPlane(
       accountReadTokenDeps(storage, env),
       accountId,
       { device: directoryAuthorization(request, accountId, path), body: await readJson(request) },
+    ));
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.SERVER_ORDER))) {
+    return finish(await handlePostServerOrder(
+      {
+        usernames: storage.usernames,
+        servers: storage.servers,
+        serverOrders: storage.serverOrders,
+        grants: storage.deviceCapabilityGrants,
+      },
+      decodeURIComponent(m[1]!),
+      await readJson(request),
     ));
   }
   if (method === "GET" && (m = path.match(ROUTE_RE.ACCOUNT_PROFILE))) {
@@ -2648,6 +2645,7 @@ export async function tryControlPlane(
           routing: storage.routing,
           // 0058 — coarse "account in use" bump for the username-reclaim tool.
           usernames: storage.usernames,
+          serverOrders: storage.serverOrders,
         },
         await readJson(request),
       ),

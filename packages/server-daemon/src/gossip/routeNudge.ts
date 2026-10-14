@@ -68,8 +68,8 @@ export interface RouteNudgeDeps {
   listServiceSlugs: () => string[];
   /** Live siblings, projected for the elector (re-read per nudge). */
   liveSiblings: () => ViewMember[];
-  /** This box's standing owner set-leader vote issuedAt (ms), or null. */
-  selfVoteIssuedAt?: () => number | null;
+  /** This box's position in the owner's server order, or null when unlisted. */
+  selfOrderRank?: () => number | null;
   /** The route-claim seam (→ urlController.claim/release). */
   claimer: RouteClaimer;
   /** Maps a service slug → its tier-2 `<slug>.<user>.<apex>` FQDN. */
@@ -122,7 +122,7 @@ export function buildRouteNudgeHandler(deps: RouteNudgeDeps) {
         // `/api/leads`/leadsSnapshot consumes it. Empty placeholder.
         stkHex: "",
         birthDate: deps.birthDate,
-        voteIssuedAt: deps.selfVoteIssuedAt?.() ?? null,
+        orderRank: deps.selfOrderRank?.() ?? null,
         services: myServices,
       };
       const members: CloutMember[] = [
@@ -130,7 +130,7 @@ export function buildRouteNudgeHandler(deps: RouteNudgeDeps) {
           id: self.id,
           domain: self.domain,
           birthDate: self.birthDate,
-          voteIssuedAt: self.voteIssuedAt,
+          orderRank: self.orderRank,
           liveness: "live",
           services: self.services,
         },
@@ -138,7 +138,7 @@ export function buildRouteNudgeHandler(deps: RouteNudgeDeps) {
           id: s.id,
           domain: s.domain,
           birthDate: s.birthDate,
-          voteIssuedAt: s.voteIssuedAt,
+          orderRank: s.orderRank,
           liveness: s.liveness,
           services: s.services,
         })),
@@ -148,7 +148,7 @@ export function buildRouteNudgeHandler(deps: RouteNudgeDeps) {
       // defensive: if the elector returns null, claim (single-box semantics).
       const selfIsLead = lead === null || lead.id === self.id;
       if (!selfIsLead) {
-        log(`[route-nudge] ${slug}: a higher-clout sibling leads — not claiming`);
+        log(`[route-nudge] ${slug}: a sibling higher in the server order leads — not claiming`);
         return EMPTY_204;
       }
 

@@ -117,6 +117,7 @@ describe("admin-authority-guard.sh — against fixtures (a violation trips the g
 // The allowlisted sensitive-handler FILES (used to seed the fixture tree). Kept
 // in sync with SENSITIVE_HANDLERS in admin-authority-guard.sh.
 const ALLOWLIST_FILES = [
+  "packages/control-plane/src/serverOrder.ts",
   "packages/control-plane/src/customDomain.ts",
   "packages/control-plane/src/certRevocation.ts",
   "packages/control-plane/src/accountDeletion.ts",
@@ -155,7 +156,7 @@ describe("admin-authority-guard.sh — the allowlist matches the §2 sensitive .
       "luksKeys.ts|handleRevokeAutoUnlockLease",
       "serviceInvites.ts|handleCreateServiceInvite",
       "serviceInvites.ts|handleRevokeServiceInvite",
-      "secretMailbox.ts|handlePostSetLeaderDeposit",
+      "serverOrder.ts|handlePostServerOrder",
       "secretMailbox.ts|handlePostUpdateDeposit",
       "deviceCapabilityGrants.ts|handleMintDeviceGrant",
       "routing.ts|handleRegisterRck",

@@ -2,22 +2,32 @@
  * Route wiring for account read tokens (docs/account-read-token.md) over a
  * real D1-over-sqlite binding: the private reads refuse without a token,
  * the IRK mints one at /api/accounts/<u>/read-token, and it opens /pods.
+ * The owner's server order (docs/server-order.md) posts at
+ * /api/accounts/<u>/server-order and comes back on /pods.
  */
 import { describe, expect, it } from "vitest";
 import { tryControlPlane, type ControlPlaneEnv } from "../src/controlPlaneRoutes.js";
 import { D1Storage, type D1Database } from "@flagship/storage";
 import { createSqliteD1 } from "../../../packages/storage/tests/support/sqliteD1.js";
-import { ACCOUNT_READ_TOKEN_LABEL, deriveIRK, signDeviceEndpointClaim } from "@flagship/protocol";
+import {
+  ACCOUNT_READ_TOKEN_LABEL,
+  deriveIRK,
+  ed,
+  signDeviceEndpointClaim,
+  signServerOrder,
+  type ServerOrder,
+} from "@flagship/protocol";
 
 const ORIGIN = "https://flagshipserver.com";
 const irk = deriveIRK({ seed: new Uint8Array(32).fill(5) });
 const hex = (b: Uint8Array) => [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
+const stk = hex(ed.getPublicKey(new Uint8Array(32).fill(9)));
 
 async function setup() {
   const sqlite = createSqliteD1();
   const storage = new D1Storage(sqlite as unknown as D1Database);
   await storage.usernames.put({ username: "alice", irkPubHex: hex(irk.publicKey), claimedAt: 1 });
-  await storage.servers.put({ serverDomain: "home.alice.flagship.services", username: "alice", identityPubKeyHex: "00", registeredAt: 1 });
+  await storage.servers.put({ serverDomain: "home.alice.flagship.services", username: "alice", identityPubKeyHex: stk, registeredAt: 1 });
   const env: ControlPlaneEnv = { DB: sqlite as unknown as D1Database, ACCOUNT_READ_TOKEN_SECRET: "route-secret" };
   return { env, close: () => sqlite.close() };
 }
@@ -61,6 +71,39 @@ describe("account read token routes", () => {
       expect(pods!.status).toBe(200);
       expect(pods!.headers.get("cache-control")).toBe("private, no-store");
       expect(((await pods!.json()) as { pods: unknown[] }).pods).toHaveLength(1);
+    } finally {
+      close();
+    }
+  });
+
+  it("stores the owner's server order and returns it on /pods", async () => {
+    const { env, close } = await setup();
+    try {
+      const order: ServerOrder = { user: "alice", stks: [stk], issuedAt: Date.now(), nonce: "ab".repeat(32) };
+      const posted = await tryControlPlane(
+        new Request(`${ORIGIN}/api/accounts/alice/server-order`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ order, signature: signServerOrder(order, irk) }),
+        }),
+        env,
+      );
+      expect(posted!.status).toBe(200);
+      const minted = await tryControlPlane(
+        new Request(`${ORIGIN}/api/accounts/alice/read-token`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(irkBody()),
+        }),
+        env,
+      );
+      const { token } = (await minted!.json()) as { token: string };
+      const pods = await tryControlPlane(
+        new Request(`${ORIGIN}/api/users/alice/pods`, { headers: { authorization: `Bearer ${token}` } }),
+        env,
+      );
+      const body = (await pods!.json()) as { serverOrder: { order: ServerOrder } | null };
+      expect(body.serverOrder?.order.stks).toEqual([stk]);
     } finally {
       close();
     }

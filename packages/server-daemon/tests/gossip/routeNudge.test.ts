@@ -58,7 +58,7 @@ const liveSibling = (over: Partial<ViewMember> & { id: string }): ViewMember => 
   domain: over.id,
   stkHex: "cc".repeat(32),
   birthDate: 1000,
-  voteIssuedAt: null,
+  orderRank: null,
   liveness: "live",
   services: ["blog"],
   ...over,
@@ -70,7 +70,7 @@ function buildHandler(opts: {
   liveSiblings?: ViewMember[];
   birthDate?: number;
   certPrewarm?: CertPrewarm;
-  selfVoteIssuedAt?: number | null;
+  selfOrderRank?: number | null;
 }) {
   return buildRouteNudgeHandler({
     user: USER,
@@ -78,7 +78,7 @@ function buildHandler(opts: {
     birthDate: opts.birthDate ?? 100,
     listServiceSlugs: () => opts.services ?? ["blog"],
     liveSiblings: () => opts.liveSiblings ?? [],
-    selfVoteIssuedAt: () => opts.selfVoteIssuedAt ?? null,
+    selfOrderRank: () => opts.selfOrderRank ?? null,
     claimer: opts.claimer,
     fqdnForService: tier2FqdnFor(USER, "flagship.services"),
     ...(opts.certPrewarm ? { certPrewarm: opts.certPrewarm } : {}),
@@ -151,13 +151,13 @@ describe("route-nudge: claim when self leads", () => {
 
 // ─────────────────────────────────────────────────────────────────────────
 describe("route-nudge: do NOT claim", () => {
-  it("a higher-clout (voted) sibling leads → no claim, 204", async () => {
+  it("a sibling higher in the order leads → no claim, 204", async () => {
     const claimer = new MockClaimer();
     const handle = buildHandler({
       claimer,
       birthDate: 100, // oldest, but the sibling is VOTED → sibling leads
       liveSiblings: [
-        liveSibling({ id: "b.harry.flagship.services", birthDate: 999, voteIssuedAt: 5000 }),
+        liveSibling({ id: "b.harry.flagship.services", birthDate: 999, orderRank: 0 }),
       ],
     });
     const res = await handle(nudgeReq("blog.harry.flagship.services"));

@@ -42,8 +42,7 @@ function ann(over: Partial<GossipAnnouncement>): GossipAnnouncement {
     name: "a.harry.flagship.services",
     birthAuthHex: "aa".repeat(32),
     birthDate: 1000,
-    voteStkHex: "none",
-    voteDate: 0,
+    orderDate: 0,
     services: ["blog"],
     liveness: "live",
     issuedAt: 1,
@@ -195,13 +194,13 @@ describe("SiblingView liveness expiry", () => {
 describe("per-service election", () => {
   it("self claims when it is the highest-clout live runner", () => {
     // Self is OLDER (lower birthDate) than the sibling → self leads on the
-    // birthDate tie-break (no votes).
+    // birthDate tie-break (no order).
     const self: SelfMember = {
       id: "self.harry.flagship.services",
       domain: "self.harry.flagship.services",
       stkHex: "aa".repeat(32),
       birthDate: 100,
-      voteIssuedAt: null,
+      orderRank: null,
       services: ["blog"],
     };
     const claimer = new MockClaimer();
@@ -213,7 +212,7 @@ describe("per-service election", () => {
           domain: "b.harry.flagship.services",
           stkHex: "bb".repeat(32),
           birthDate: 200,
-          voteIssuedAt: null,
+          orderRank: null,
           liveness: "live",
           services: ["blog"],
         },
@@ -229,7 +228,7 @@ describe("per-service election", () => {
       domain: "self.harry.flagship.services",
       stkHex: "aa".repeat(32),
       birthDate: 300, // younger → loses to the older sibling
-      voteIssuedAt: null,
+      orderRank: null,
       services: ["blog"],
     };
     const claimer = new MockClaimer();
@@ -242,7 +241,7 @@ describe("per-service election", () => {
           domain: "b.harry.flagship.services",
           stkHex: "bb".repeat(32),
           birthDate: 100, // older → leads
-          voteIssuedAt: null,
+          orderRank: null,
           liveness: "live",
           services: ["blog"],
         },
@@ -252,13 +251,13 @@ describe("per-service election", () => {
     expect(actions).toEqual([{ kind: "release", service: "blog" }]);
   });
 
-  it("an owner VOTE outranks seniority (a younger voted pod leads)", () => {
+  it("the owner's order outranks seniority (a younger first-listed pod leads)", () => {
     const self: SelfMember = {
       id: "self.harry.flagship.services",
       domain: "self.harry.flagship.services",
       stkHex: "aa".repeat(32),
-      birthDate: 100, // oldest, but unvoted
-      voteIssuedAt: null,
+      birthDate: 100, // oldest, but unlisted
+      orderRank: null,
       services: ["blog"],
     };
     const claimer = new MockClaimer();
@@ -271,7 +270,7 @@ describe("per-service election", () => {
           domain: "b.harry.flagship.services",
           stkHex: "bb".repeat(32),
           birthDate: 999,
-          voteIssuedAt: 5000, // owner voted for b → b leads
+          orderRank: 0, // b is first in the owner's order → b leads
           liveness: "live",
           services: ["blog"],
         },
@@ -287,7 +286,7 @@ describe("per-service election", () => {
       domain: "self.harry.flagship.services",
       stkHex: "aa".repeat(32),
       birthDate: 100,
-      voteIssuedAt: null,
+      orderRank: null,
       services: ["blog"],
     };
     const claimer = new MockClaimer();
@@ -302,7 +301,7 @@ describe("per-service election", () => {
       domain: "self.harry.flagship.services",
       stkHex: "aa".repeat(32),
       birthDate: 300,
-      voteIssuedAt: null,
+      orderRank: null,
       services: ["blog"],
     };
     const claimer = new MockClaimer();
@@ -314,7 +313,7 @@ describe("per-service election", () => {
           domain: "b.harry.flagship.services",
           stkHex: "bb".repeat(32),
           birthDate: 100, // would outrank, but…
-          voteIssuedAt: null,
+          orderRank: null,
           liveness: "unreachable", // …not live ⇒ excluded
           services: ["blog"],
         },
@@ -336,7 +335,7 @@ describe("runElectionRound application", () => {
       domain: "self.harry.flagship.services",
       stkHex: "aa".repeat(32),
       birthDate: 100,
-      voteIssuedAt: null,
+      orderRank: null,
       services: ["blog", "chat"],
     };
     const claimer = new MockClaimer();
@@ -354,7 +353,7 @@ describe("runElectionRound application", () => {
       domain: "self.harry.flagship.services",
       stkHex: "aa".repeat(32),
       birthDate: 100,
-      voteIssuedAt: null,
+      orderRank: null,
       services: ["blog", "chat"],
     };
     const claimer = new MockClaimer();
@@ -379,7 +378,7 @@ describe("runElectionRound application", () => {
       domain: "self.harry.flagship.services",
       stkHex: "aa".repeat(32),
       birthDate: 100,
-      voteIssuedAt: null,
+      orderRank: null,
       services: ["blog"],
     };
     const claimer = new MockClaimer();
@@ -467,7 +466,7 @@ describe("gossip loop convergence", () => {
         name: "self.harry.flagship.services",
         birthAuthHex: "bb".repeat(32),
         birthDate: 500, // younger than the sibling (birthDate 1)
-        vote: null,
+        order: null,
         services: ["blog"],
       }),
     });
@@ -499,7 +498,7 @@ describe("gossip loop convergence", () => {
         name: "self.harry.flagship.services",
         birthAuthHex: "bb".repeat(32),
         birthDate: 500,
-        vote: null,
+        order: null,
         services: ["blog"],
       }),
     });

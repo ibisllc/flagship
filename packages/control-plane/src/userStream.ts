@@ -66,10 +66,13 @@ export function computePodInventoryCursor(inv: PodInventory): string {
     .map((o) => [o.orderRef, o.phase ?? "", o.createdAt].join("|"))
     .sort();
 
+  // A reorder moves the cursor at once (docs/server-order.md); the order's
+  // signature already commits to its servers and date.
   const projection = JSON.stringify({
     username: inv.username,
     pods,
     pending,
+    serverOrder: inv.serverOrder?.signature ?? "",
   });
 
   return bytesToHex(sha256(new TextEncoder().encode(`flagship/pod-cursor/v1|${projection}`)));

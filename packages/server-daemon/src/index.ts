@@ -221,12 +221,7 @@ import {
   fileAdminRootPinStore,
   resolvePinnedAdminRoot,
 } from "./adminRootRotationConsumer.js";
-import {
-  buildSetLeaderConsumer,
-  buildReadSelfVote,
-  fileSetLeaderVoteStore,
-  type SetLeaderConsumer,
-} from "./setLeaderConsumer.js";
+import { buildServerOrderHolder } from "./serverOrderHolder.js";
 import {
   readAuthCodeBirthDate,
   wireGossip,
@@ -996,7 +991,7 @@ async function main(): Promise<void> {
   // false until/unless gossip enables) — mirroring /api/services' always-present
   // route (which 503s rather than 404s when its platform is absent).
   const leadsSnapshotRef: { current: () => LeadsSnapshot } = {
-    current: () => ({ gossipActive: false, leads: {} }),
+    current: () => ({ gossipActive: false, leads: {}, leader: null }),
   };
   // Late-binding cell for the on-service-delete teardown: ServicePlatform is
   // built inside startDaemonRuntime (below), but the route claimer + gossip loop
@@ -1013,10 +1008,25 @@ async function main(): Promise<void> {
   const relayLockdownRef: { current: RelayLockdownController | null } = {
     current: null,
   };
+  // The owner's server order (docs/server-order.md): who leads and who's next.
+  // It arrives on the heartbeat reply and on siblings' gossip frames; the
+  // holder adopts only a verified, newer order and keeps it across restarts.
+  const serverOrder = cfg
+    ? buildServerOrderHolder({
+        path: `${dataDir}/server-order.json`,
+        user: cfg.userId,
+        ownerIrkPub: cfg.irkPublicKey,
+        ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+        onAdopt: () => void gossipLoopRef.current?.tick().catch(() => {}),
+        onLog: (m) => console.log(m),
+      })
+    : null;
+  await serverOrder?.load();
   const statusHeartbeat = startDaemonStatusHeartbeat({
     serverDomain: env.serverFqdn!,
     sign: (msg) => custodian.signAsBox(msg),
     controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
+    ...(serverOrder ? { onServerOrder: (raw: unknown) => void serverOrder.offer(raw, ".com") } : {}),
     readLeads: () => gossipLoopRef.current?.currentLeads() ?? [],
     readRuns: () => servicePlatformRefForServer.current?.list().map((a) => a.slug),
     readTrustStatus: () => relayLockdownRef.current?.trustStatus() ?? null,
@@ -1450,29 +1460,6 @@ async function main(): Promise<void> {
   // mounts on the live runtime; the announce+elect loop starts here. The route
   // claim/release is LIVE-wired to runtime.urlController (claim/release push a
   // tunnel HELLO update). Never throws / never bricks the daemon.
-  // Owner preferred-server vote consumer (Phase 6) — polls the `.com` set-leader
-  // lane for THIS box, verifies under the owner IRK, stores the standing vote, and
-  // feeds the gossip loop's `readSelfVote` getter (so a vote for THIS box rides its
-  // own announcement; a vote for a sibling → no self-vote, the sibling carries it
-  // via gossip; "none" clears). Best-effort + never bricks. Armed only with a cfg
-  // (owner IRK) + control plane. It runs independently of CGK presence: a box may
-  // hold a stored vote even before gossip is enabled, ready the moment it is.
-  let setLeaderConsumer: SetLeaderConsumer | null = null;
-  if (cfg && env.controlPlaneBaseUrl) {
-    setLeaderConsumer = buildSetLeaderConsumer({
-      serverDomain: env.serverFqdn!,
-      user: cfg.userId,
-      ownerIrkPub: cfg.irkPublicKey,
-      ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
-      controlPlaneBaseUrl: env.controlPlaneBaseUrl,
-      store: fileSetLeaderVoteStore(`${dataDir}/set-leader.json`),
-      onLog: (m) => console.log(m),
-    });
-    setLeaderConsumer.start();
-    process.once("SIGTERM", () => setLeaderConsumer?.stop());
-    process.once("SIGINT", () => setLeaderConsumer?.stop());
-  }
-
   const gossipLoop = await (async () => {
     if (!cfg) return null;
     try {
@@ -1495,17 +1482,7 @@ async function main(): Promise<void> {
         ...(certPrewarm ? { certPrewarm } : {}),
         listServiceSlugs: () =>
           servicePlatformRefForServer.current?.list().map((a) => a.slug) ?? [],
-        // The owner's set-leader vote rides THIS box's gossip frame only when it
-        // names this box's STK (Phase 5 left this returning null). When the consumer
-        // is absent (no cfg/control plane) the getter is omitted ⇒ no self-vote.
-        ...(setLeaderConsumer
-          ? {
-              readSelfVote: buildReadSelfVote({
-                currentVote: () => setLeaderConsumer!.currentVote(),
-                selfStkHex,
-              }),
-            }
-          : {}),
+        ...(serverOrder ? { serverOrder } : {}),
         onLog: (m) => console.log(m),
       });
       if (result.enabled && result.handler && result.loop) {

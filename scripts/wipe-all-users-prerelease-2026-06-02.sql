@@ -74,6 +74,7 @@ DELETE FROM service_invite_bindings;
 DELETE FROM server_shares;
 DELETE FROM server_share_unlocks;
 DELETE FROM share_inbox;
+DELETE FROM server_orders;
 DELETE FROM server_transfers;
 DELETE FROM server_evictions;
 DELETE FROM server_migrations;

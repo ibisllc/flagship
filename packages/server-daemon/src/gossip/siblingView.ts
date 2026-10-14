@@ -4,7 +4,7 @@
  * learns siblings from its own broadcast POST, whose reply is empty/ignored).
  *
  * Keyed by sibling id (the announcement's `name` = podCanonical/fqdn). Each
- * record stores the clout-relevant fields (birthDate / vote / services) plus the
+ * record stores the clout-relevant fields (birthDate / order date / services) plus the
  * box's own liveness self-report and a LOCAL received-at timestamp. A sibling not
  * heard from within the liveness window is treated as not-live, so a dead sibling
  * drops out of elections quickly — this is what makes failover fast.
@@ -19,10 +19,8 @@ export interface SiblingRecord {
   /** The sibling's STK pub hex (its birth-cert authority hex), lowercased. */
   stkHex: string;
   birthDate: number;
-  /** STK pubkey hex the owner's latest set-leader vote points at, or "none". */
-  voteStkHex: string;
-  /** The vote's issuedAt (ms), or 0 when there is no vote. */
-  voteDate: number;
+  /** The issuedAt (ms) of the newest server order the sibling holds, or 0. */
+  orderDate: number;
   services: string[];
   /** The sibling's OWN liveness self-report from the frame. */
   liveness: "live" | "unreachable" | "never";
@@ -39,7 +37,8 @@ export interface ViewMember {
   /** The member's STK pub hex (its birth-cert authority hex), lowercased. */
   stkHex: string;
   birthDate: number;
-  voteIssuedAt: number | null;
+  /** Position in the owner's server order (0 = first), or null when unlisted. */
+  orderRank: number | null;
   liveness: "live" | "unreachable" | "never";
   services: string[];
 }
@@ -73,8 +72,7 @@ export class SiblingView {
       domain: a.name.toLowerCase(),
       stkHex: a.birthAuthHex.toLowerCase(),
       birthDate: a.birthDate,
-      voteStkHex: a.voteStkHex,
-      voteDate: a.voteDate,
+      orderDate: a.orderDate,
       services: [...a.services],
       liveness: a.liveness,
       issuedAt: a.issuedAt,
@@ -95,15 +93,16 @@ export class SiblingView {
    * Live siblings projected into ViewMembers for the elector. A sibling that
    * self-reports `unreachable`/`never` is carried through with that liveness so
    * the elector excludes it — but a sibling whose receivedAt has aged out of the
-   * window is dropped entirely (it can no longer vouch for itself).
+   * window is dropped entirely (it can no longer vouch for itself). `rankOf`
+   * places each sibling in the server order this box holds.
    */
-  liveMembers(now: number): ViewMember[] {
+  liveMembers(now: number, rankOf: (stkHex: string) => number | null = () => null): ViewMember[] {
     return this.liveSiblings(now).map((r) => ({
       id: r.id,
       domain: r.domain,
       stkHex: r.stkHex,
       birthDate: r.birthDate,
-      voteIssuedAt: r.voteStkHex !== "none" && r.voteDate > 0 ? r.voteDate : null,
+      orderRank: rankOf(r.stkHex),
       liveness: r.liveness,
       services: r.services,
     }));

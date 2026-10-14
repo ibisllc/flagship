@@ -62,6 +62,7 @@ export * from "./totp.js";
 export * from "./deviceCapabilityGrants.js";
 export * from "./accountDirectory.js";
 export * from "./accountReadToken.js";
+export * from "./serverOrder.js";
 export * from "./accountBootstrap.js";
 export * from "./watchDelegates.js";
 export * from "./acmeAccountKeys.js";

@@ -1,4 +1,5 @@
 import { InMemoryServerShareStorage } from "./serverShares.js";
+import { InMemoryServerOrderStorage } from "./serverOrders.js";
 import type {
   SchemaVersionRecord,
   SchemaVersionStorage,
@@ -1186,15 +1187,6 @@ export class InMemorySecretMailboxStorage implements SecretMailboxStorage {
     return this.consumeGenericDeposit(serverDomain, now, "cgk");
   }
 
-  // ── Owner preferred-server vote lane (purpose:"set-leader") — Phase 6 ──
-  async putSetLeaderDeposit(rec: PairingDepositRecord) {
-    return this.putGenericDeposit(rec, "set-leader");
-  }
-
-  async consumeSetLeaderDeposit(serverDomain: string, now: number) {
-    return this.consumeGenericDeposit(serverDomain, now, "set-leader");
-  }
-
   // ── Admin-authorized server-update order lane (purpose:"update") ───────
   async putUpdateDeposit(rec: PairingDepositRecord) {
     return this.putGenericDeposit(rec, "update");
@@ -1204,7 +1196,7 @@ export class InMemorySecretMailboxStorage implements SecretMailboxStorage {
     return this.consumeGenericDeposit(serverDomain, now, "update");
   }
 
-  // Shared deposit-lane helpers (the SWK/cgk/set-leader lanes are identical
+  // Shared deposit-lane helpers (the SWK/cgk/update lanes are identical
   // store-and-forward shapes; factored so a new lane is one purpose string).
   private putGenericDeposit(rec: PairingDepositRecord, purpose: SecretMailboxPurpose) {
     const key = this.k(rec.serverDomain, rec.requestNonceHex);
@@ -2168,6 +2160,7 @@ export class InMemoryStorage implements Storage {
   namespace = new InMemoryNamespaceStorage();
   peerBackupManifests = new InMemoryPeerBackupManifestStorage();
   serverShares = new InMemoryServerShareStorage();
+  serverOrders = new InMemoryServerOrderStorage();
   demoAccountProvisioning = new InMemoryDemoAccountProvisioningStorage(
     this.usernames,
     this.deviceIdentities,

@@ -18,10 +18,12 @@
  */
 import {
   type GossipAnnouncement,
+  type SignedServerOrder,
   macGossip,
   sealGossip,
 } from "@flagship/protocol";
 import {
+  accountLeader,
   leadsSnapshot as computeLeadsSnapshot,
   runElectionRound,
   selfLeadsForRound,
@@ -46,12 +48,8 @@ export interface SelfAnnounceState {
   birthAuthHex: string;
   /** Birth date (ms) from birthDateFromAuthCode. */
   birthDate: number;
-  /**
-   * The owner's latest set-leader vote this box has seen for ITSELF, if any:
-   * `{ stkHex, date }`. The vote points at a preferred pod's STK; we only carry
-   * it on our own frame when it points at us (else "none"/0).
-   */
-  vote: { stkHex: string; date: number } | null;
+  /** The owner's server order this box holds (rides the frame), or null. */
+  order: SignedServerOrder | null;
   /** Service slugs this box currently runs. */
   services: string[];
 }
@@ -70,6 +68,8 @@ export interface GossipLoopDeps {
   fqdnForService?: (service: string) => string;
   /** Re-read THIS box's announce state each tick (services change over time). */
   readSelf: () => SelfAnnounceState;
+  /** Position of a box (by STK hex) in the held server order, or null. */
+  rankOf?: (stkHex: string) => number | null;
   /** Broadcast endpoint, e.g. https://broadcast--harry.flagship.services . */
   broadcastUrl: string;
   intervalMs?: number;
@@ -101,6 +101,8 @@ export interface GossipLoop {
    * a slug with no live runner is absent.
    */
   leadsSnapshot(): Record<string, ServiceLead>;
+  /** The account's leader right now: the live box highest in the server order. */
+  leader(): string;
 }
 
 export function buildGossipLoop(deps: GossipLoopDeps): GossipLoop {
@@ -108,6 +110,7 @@ export function buildGossipLoop(deps: GossipLoopDeps): GossipLoop {
   const fetchImpl = deps.fetchImpl ?? fetch;
   const now = deps.now ?? (() => Date.now());
   const log = deps.onLog ?? (() => {});
+  const rankOf = deps.rankOf ?? (() => null);
   let timer: ReturnType<typeof setInterval> | null = null;
   // The services this box led on the most recent election round (Phase 6 Part 3).
   let leads: string[] = [];
@@ -118,8 +121,7 @@ export function buildGossipLoop(deps: GossipLoopDeps): GossipLoop {
       name: s.name,
       birthAuthHex: s.birthAuthHex,
       birthDate: s.birthDate,
-      voteStkHex: s.vote ? s.vote.stkHex : "none",
-      voteDate: s.vote ? s.vote.date : 0,
+      orderDate: s.order ? s.order.order.issuedAt : 0,
       services: [...s.services],
       liveness: "live",
       issuedAt: now(),
@@ -129,7 +131,11 @@ export function buildGossipLoop(deps: GossipLoopDeps): GossipLoop {
   async function announce(s: SelfAnnounceState): Promise<void> {
     const a = buildAnnouncement(s);
     const mac = macGossip(a, deps.cgk);
-    const plaintext = new TextEncoder().encode(JSON.stringify({ announcement: a, mac }));
+    // The signed order rides beside the MAC'd announcement (it carries its own
+    // signature) so a sibling that missed it learns it from us.
+    const plaintext = new TextEncoder().encode(
+      JSON.stringify({ announcement: a, mac, ...(s.order ? { serverOrder: s.order } : {}) }),
+    );
     const sealed = sealGossip(plaintext, deps.cgk);
     try {
       await fetchImpl(deps.broadcastUrl, {
@@ -150,7 +156,7 @@ export function buildGossipLoop(deps: GossipLoopDeps): GossipLoop {
       domain: s.name.toLowerCase(),
       stkHex: s.birthAuthHex.toLowerCase(),
       birthDate: s.birthDate,
-      voteIssuedAt: s.vote && s.vote.date > 0 ? s.vote.date : null,
+      orderRank: rankOf(s.birthAuthHex),
       services: s.services,
     };
   }
@@ -159,7 +165,7 @@ export function buildGossipLoop(deps: GossipLoopDeps): GossipLoop {
     const t = now();
     deps.view.prune(t);
     const self: SelfMember = selfMember(s);
-    const liveSiblings = deps.view.liveMembers(t);
+    const liveSiblings = deps.view.liveMembers(t, rankOf);
     // Record the leads BEFORE applying claim/release so the heartbeat reports the
     // election outcome even if a claim apply throws (the route is soft, the
     // election is the source of truth for "lead").
@@ -210,8 +216,13 @@ export function buildGossipLoop(deps: GossipLoopDeps): GossipLoop {
       const t = now();
       deps.view.prune(t);
       const self = selfMember(deps.readSelf());
-      const liveSiblings = deps.view.liveMembers(t);
+      const liveSiblings = deps.view.liveMembers(t, rankOf);
       return computeLeadsSnapshot({ self, liveSiblings });
+    },
+    leader: () => {
+      const t = now();
+      deps.view.prune(t);
+      return accountLeader({ self: selfMember(deps.readSelf()), liveSiblings: deps.view.liveMembers(t, rankOf) });
     },
   };
 }

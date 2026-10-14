@@ -11,7 +11,7 @@
  * is up.
  */
 import { readFile } from "node:fs/promises";
-import { birthDateFromAuthCode } from "@flagship/protocol";
+import { birthDateFromAuthCode, type SignedServerOrder } from "@flagship/protocol";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
 import { resolveCgk } from "./cgk.js";
 import { buildGossipIngestHandler } from "./gossipHttp.js";
@@ -40,6 +40,15 @@ export interface LeadsSnapshot {
    * SAME identifier the gossip + route-nudge use (ServicePlatform's app slug).
    */
   leads: Record<string, { leaderFqdn: string; leaderStkHex: string; live: boolean }>;
+  /** The account's leader: the live box highest in the server order (null when gossip is off). */
+  leader: string | null;
+}
+
+/** The box's held server order, as the gossip system uses it (serverOrderHolder.ts). */
+export interface GossipServerOrder {
+  current(): SignedServerOrder | null;
+  rankOf(stkHex: string): number | null;
+  offer(raw: unknown, source: string): Promise<boolean>;
 }
 
 export interface WireGossipResult {
@@ -88,8 +97,8 @@ export interface WireGossipDeps {
   };
   /** Snapshot the slugs this box currently runs (re-read each tick). */
   listServiceSlugs: () => string[];
-  /** The latest owner set-leader vote for THIS box, if any. */
-  readSelfVote?: () => { stkHex: string; date: number } | null;
+  /** The owner's server order this box holds (docs/server-order.md). */
+  serverOrder?: GossipServerOrder;
   /** Services-zone apex (default flagship.services). */
   servicesApex?: string;
   /** Broadcast base host (default broadcast--<user>.flagship.services). */
@@ -155,7 +164,7 @@ export async function wireGossip(deps: WireGossipDeps): Promise<WireGossipResult
       loop: null,
       view: null,
       releaseRouteForRemovedService: null,
-      leadsSnapshot: () => ({ gossipActive: false, leads: {} }),
+      leadsSnapshot: () => ({ gossipActive: false, leads: {}, leader: null }),
     };
   }
 
@@ -166,9 +175,13 @@ export async function wireGossip(deps: WireGossipDeps): Promise<WireGossipResult
     view,
     user: deps.user,
     selfId: deps.serverFqdn,
+    ...(deps.serverOrder
+      ? { onServerOrder: (raw: unknown, from: string) => deps.serverOrder!.offer(raw, from) }
+      : {}),
     ...(deps.now ? { now: deps.now } : {}),
     onLog: log,
   });
+  const rankOf = (stkHex: string) => deps.serverOrder?.rankOf(stkHex) ?? null;
 
   const apex = deps.servicesApex ?? "flagship.services";
   const fqdnForService = tier2FqdnFor(deps.user, apex);
@@ -185,7 +198,7 @@ export async function wireGossip(deps: WireGossipDeps): Promise<WireGossipResult
     name: deps.serverFqdn,
     birthAuthHex: deps.identityPubHex.toLowerCase(),
     birthDate: deps.birthDate,
-    vote: deps.readSelfVote?.() ?? null,
+    order: deps.serverOrder?.current() ?? null,
     services: deps.listServiceSlugs(),
   });
 
@@ -196,6 +209,7 @@ export async function wireGossip(deps: WireGossipDeps): Promise<WireGossipResult
     fqdnForService,
     ...(deps.certPrewarm ? { certPrewarm: deps.certPrewarm } : {}),
     readSelf,
+    rankOf,
     broadcastUrl,
     intervalMs: deps.intervalMs ?? ANNOUNCE_INTERVAL_MS,
     livenessWindowMs: deps.livenessWindowMs ?? LIVENESS_WINDOW_MS,
@@ -212,11 +226,8 @@ export async function wireGossip(deps: WireGossipDeps): Promise<WireGossipResult
     serverFqdn: deps.serverFqdn,
     birthDate: deps.birthDate,
     listServiceSlugs: deps.listServiceSlugs,
-    liveSiblings: () => view.liveMembers((deps.now ?? (() => Date.now()))()),
-    selfVoteIssuedAt: () => {
-      const v = deps.readSelfVote?.();
-      return v && v.date > 0 ? v.date : null;
-    },
+    liveSiblings: () => view.liveMembers((deps.now ?? (() => Date.now()))(), rankOf),
+    selfOrderRank: () => rankOf(deps.identityPubHex),
     claimer,
     fqdnForService,
     ...(deps.certPrewarm ? { certPrewarm: deps.certPrewarm } : {}),
@@ -251,7 +262,7 @@ export async function wireGossip(deps: WireGossipDeps): Promise<WireGossipResult
     loop,
     view,
     releaseRouteForRemovedService,
-    leadsSnapshot: () => ({ gossipActive: true, leads: loop.leadsSnapshot() }),
+    leadsSnapshot: () => ({ gossipActive: true, leads: loop.leadsSnapshot(), leader: loop.leader() }),
   };
 }
 
@@ -259,6 +270,7 @@ export { SiblingView } from "./siblingView.js";
 export { buildGossipIngestHandler } from "./gossipHttp.js";
 export { buildGossipLoop, ANNOUNCE_INTERVAL_MS, LIVENESS_WINDOW_MS } from "./gossipLoop.js";
 export {
+  accountLeader,
   decideClaimActions,
   leadsSnapshot,
   runElectionRound,
