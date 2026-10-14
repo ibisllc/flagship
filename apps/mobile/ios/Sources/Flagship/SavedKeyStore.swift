@@ -118,9 +118,18 @@ public struct SavedKeyStore {
     /// All saved entries, in insertion order.
     public func list() -> [Entry] { load().entries }
 
-    /// The active entry (pre-selected for Confirm), if any.
+    /// `activeId` for the built-in Flagship Inference provider: builds use
+    /// free AI instead of a saved key. MIRRORS the webapp's PROMO_ID.
+    public static let flagshipInferenceId = "flagship-inference"
+
+    /// Flagship Inference is the default for new builds.
+    public var isFlagshipInferenceActive: Bool { load().activeId == Self.flagshipInferenceId }
+
+    /// The active entry (pre-selected for Confirm), if any. Nil when
+    /// Flagship Inference is the default.
     public func active() -> Entry? {
         let s = load()
+        if s.activeId == Self.flagshipInferenceId { return nil }
         guard let id = s.activeId else { return s.entries.first }
         return s.entries.first { $0.id == id } ?? s.entries.first
     }
@@ -176,7 +185,7 @@ public struct SavedKeyStore {
     /// Make `id` the active (pre-selected) entry.
     public func setActive(id: String) throws {
         var s = load()
-        guard s.entries.contains(where: { $0.id == id }) else { return }
+        guard id == Self.flagshipInferenceId || s.entries.contains(where: { $0.id == id }) else { return }
         s.activeId = id
         try save(s)
     }

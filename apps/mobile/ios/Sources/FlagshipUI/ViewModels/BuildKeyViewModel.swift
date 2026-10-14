@@ -18,6 +18,8 @@ public final class BuildKeyViewModel {
     public private(set) var saved: [SavedKeyStore.Entry] = []
     /// The active (pre-selected for Confirm) entry, if any.
     public private(set) var active: SavedKeyStore.Entry?
+    /// Flagship Inference was the last one used (the store's active pointer).
+    public private(set) var flagshipInferenceIsDefault = false
 
     /// True ⇒ the "use a different key" form is showing.
     public var showingForm = false
@@ -43,19 +45,10 @@ public final class BuildKeyViewModel {
 
     // MARK: Free AI credits
 
-    public enum FreeAiRow: Equatable {
-        /// Not asked yet, no free AI on this client, or the promotion has
-        /// ended: no row.
-        case none
-        case loading
-        case available(FreeAiCredits)
-        /// Can't be used now (used up, busy today, no running server,
-        /// unavailable): the message, no Use button.
-        case blocked(String)
-    }
-
-    /// The "Free AI credits" row at the top of the step.
-    public private(set) var freeAi: FreeAiRow = .none
+    /// The built-in "Flagship Inference" row, always first in the step.
+    /// Disabled (with the reason) when free AI can't be used: unreadable,
+    /// used up, busy today, no running server, or the promotion has ended.
+    public private(set) var freeAi: FreeAiEntryState = .loading
     /// A mint is in flight (the row's button shows progress).
     public private(set) var freeAiBusy = false
     /// The model the box should ask for with the chosen credential: set when
@@ -73,6 +66,7 @@ public final class BuildKeyViewModel {
     public func reload() {
         saved = store.list()
         active = store.active()
+        flagshipInferenceIsDefault = store.isFlagshipInferenceActive
         if saved.isEmpty && !freeAiOffered { showingForm = true }
     }
 
@@ -80,9 +74,9 @@ public final class BuildKeyViewModel {
 
     private var freeAiOffered: Bool {
         switch freeAi {
-        case .loading, .available: return true
-        case .none: return freeAiService != nil && !freeAiChecked
-        default: return false
+        case .usable: return true
+        case .loading: return freeAiService != nil && !freeAiChecked
+        case .disabled: return false
         }
     }
 
@@ -92,7 +86,7 @@ public final class BuildKeyViewModel {
     @discardableResult
     public func loadFreeAi() async -> Bool {
         guard let service = freeAiService else {
-            freeAi = .none
+            freeAi = .disabled(message: FreeAiCopy.unavailable, offerOwnKey: true)
             freeAiChecked = true
             if saved.isEmpty { showingForm = true }
             return false
@@ -101,25 +95,21 @@ public final class BuildKeyViewModel {
         do {
             freeAi = Self.row(for: try await service.status())
         } catch let e as FreeAiError {
-            if case .ended = e { freeAi = .none } else { freeAi = .blocked(e.message) }
+            freeAi = FreeAiEntryState.of(e)
         } catch {
-            freeAi = .none
+            freeAi = FreeAiEntryState.of(nil as FreeAiStatusResponse?)
         }
         freeAiChecked = true
         if saved.isEmpty {
-            if case .available = freeAi { showingForm = false; return true }
+            if freeAi.isUsable { showingForm = false; return true }
             showingForm = true
         }
         return false
     }
 
     /// The row for a status read. MIRRORS the webapp `freeAiRowState`.
-    static func row(for s: FreeAiStatusResponse) -> FreeAiRow {
-        switch FreeAiDisplay.of(s) {
-        case .hidden: return .none
-        case .usable(let c): return .available(c)
-        case .blocked(let m, _): return .blocked(m)
-        }
+    static func row(for s: FreeAiStatusResponse?) -> FreeAiEntryState {
+        FreeAiEntryState.of(s)
     }
 
     /// Use free AI for the box `serverFqdn`: mint a fresh credential. Nil +
@@ -133,10 +123,12 @@ public final class BuildKeyViewModel {
         do {
             let r = try await service.mint(serverFqdn: serverFqdn)
             chosenModel = r.model
-            if let c = r.credits { freeAi = .available(c) }
+            if let c = r.credits { freeAi = .usable(c) }
+            try? store.setActive(id: SavedKeyStore.flagshipInferenceId)
+            reload()
             return r.credential
         } catch let e as FreeAiError {
-            if case .ended = e { freeAi = .none } else { freeAi = .blocked(e.message) }
+            freeAi = FreeAiEntryState.of(e)
             errorMessage = e.message
             if e.opensAddKey || saved.isEmpty { resetFormKeepingError(); showingForm = true }
         } catch {

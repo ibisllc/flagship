@@ -11,13 +11,13 @@ import FlagshipAPI
 public struct AiKeysScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Bindable var vm: AiKeysViewModel
-    /// The "Free AI credits" card (nil ⇒ not shown). Held in @State so a
+    /// The "Flagship Inference" entry, always first. Held in @State so a
     /// parent re-render doesn't reset the loaded balance.
-    @State private var freeAi: FreeAiCreditsCardModel?
+    @State private var freeAi: FreeAiCreditsCardModel
 
     public init(vm: AiKeysViewModel, freeAiService: FreeAiCreditsService? = nil) {
         self.vm = vm
-        _freeAi = State(initialValue: freeAiService.map { FreeAiCreditsCardModel(service: $0) })
+        _freeAi = State(initialValue: FreeAiCreditsCardModel(service: freeAiService))
     }
 
     public var body: some View {
@@ -30,19 +30,17 @@ public struct AiKeysScreen: View {
                         .font(FS.font.bodySm()).foregroundColor(c.textMuted)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    if let freeAi {
-                        FreeAiCreditsCard(model: freeAi) {
+                    FlagshipInferenceEntry(
+                        state: freeAi.state,
+                        isDefault: vm.flagshipInferenceIsDefault,
+                        onMakeDefault: { vm.makeFlagshipInferenceDefault() },
+                        onAddKey: {
                             vm.resetForm()
                             vm.showingForm = true
                         }
-                    }
+                    )
 
-                    if vm.entries.isEmpty {
-                        FSCard {
-                            Text("No AI keys saved on this device yet.")
-                                .font(FS.font.body()).foregroundColor(c.textMuted)
-                        }
-                    } else {
+                    if !vm.entries.isEmpty {
                         ForEach(vm.entries) { e in
                             FSCard {
                                 HStack(spacing: FS.space.s2) {
@@ -116,45 +114,54 @@ public struct AiKeysScreen: View {
         .navigationTitle("AI keys")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { vm.reload() }
-        .task { await freeAi?.load() }
+        .task { await freeAi.load() }
     }
 }
 
-/// Settings → AI keys: this week's free AI top-up and the starter reserve, or
-/// why free AI can't be used now. Hidden when `.com` can't be asked or the
-/// promotion has ended. MIRRORS the webapp settings card and Android's
-/// `FreeAiCreditsCard`.
-struct FreeAiCreditsCard: View {
+/// Settings → AI keys: the built-in "Flagship Inference" provider. Always
+/// listed first and never deletable; this week's top-up and the starter
+/// reserve, or why free AI can't be used now (disabled, but still listed once
+/// the promotion has ended). MIRRORS the webapp settings entry and Android's
+/// `FlagshipInferenceEntry`.
+struct FlagshipInferenceEntry: View {
     @Environment(\.colorScheme) private var scheme
-    let model: FreeAiCreditsCardModel
+    let state: FreeAiEntryState
+    let isDefault: Bool
+    let onMakeDefault: () -> Void
     let onAddKey: () -> Void
 
     var body: some View {
         let c = FSColors.scheme(scheme)
-        switch model.state {
-        case .loading, .hidden:
-            EmptyView()
-        case .available(let credits):
-            FSCard {
-                Text(FreeAiCopy.title).font(.system(size: 15, weight: .semibold)).foregroundColor(c.text)
-                Text(FreeAiCopy.balance(credits)).font(FS.font.body()).foregroundColor(c.text)
-                    .accessibilityIdentifier("free-ai-balance")
-                Text(FreeAiCopy.note).font(FS.font.bodySm()).foregroundColor(c.textMuted)
-                    .fixedSize(horizontal: false, vertical: true)
+        FSCard {
+            HStack(spacing: FS.space.s2) {
+                FlagshipInferenceLabel(status: status, lastUsed: isDefault,
+                                       lastUsedText: "Default for new builds", usable: state.isUsable)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if case .loading = state { ProgressView() }
             }
-            .accessibilityIdentifier("free-ai-card")
-        case .blocked(let message, let offerOwnKey):
-            FSCard {
-                Text(FreeAiCopy.title).font(.system(size: 15, weight: .semibold)).foregroundColor(c.text)
-                Text(message).font(FS.font.bodySm()).foregroundColor(c.textMuted)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("free-ai-message")
-                if offerOwnKey {
-                    FSPrimaryButton(FreeAiCopy.addOwnKey, block: true, action: onAddKey)
-                        .accessibilityIdentifier("free-ai-add-key")
+            if state.isUsable && !isDefault {
+                Button(action: onMakeDefault) {
+                    Text("Make default").font(FS.font.bodySm()).foregroundColor(c.primary)
                 }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("free-ai-make-default")
             }
-            .accessibilityIdentifier("free-ai-card")
+            if case .disabled(_, true) = state {
+                FSPrimaryButton(FreeAiCopy.addOwnKey, block: true, action: onAddKey)
+                    .accessibilityIdentifier("free-ai-add-key")
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(FreeAiCopy.providerTitle)
+        .accessibilityHint(FreeAiCopy.builtInAccessibility)
+        .accessibilityIdentifier("free-ai-card")
+    }
+
+    private var status: String? {
+        switch state {
+        case .loading: return nil
+        case .usable(let c): return FreeAiCopy.balance(c)
+        case .disabled(let m, _): return m
         }
     }
 }

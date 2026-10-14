@@ -154,12 +154,15 @@ public enum FreeAiError: Error, Equatable, LocalizedError {
     case ended(message: String)
     /// 503 `free-ai-unavailable` (or not offered by this client).
     case unavailable(message: String)
+    /// 400 `free-ai-too-long`: the build is bigger than the model's context.
+    case tooLong(message: String)
 
     public var errorDescription: String? { message }
 
     public var message: String {
         switch self {
-        case .usedUp(let m, _), .busyToday(let m), .noServer(let m), .ended(let m), .unavailable(let m): return m
+        case .usedUp(let m, _), .busyToday(let m), .noServer(let m), .ended(let m), .unavailable(let m),
+             .tooLong(let m): return m
         }
     }
 
@@ -181,6 +184,7 @@ public enum FreeAiError: Error, Equatable, LocalizedError {
         case "free-ai-no-server": return .noServer(message: parsed?.error ?? FreeAiCopy.noServer)
         case "free-ai-ended": return .ended(message: parsed?.error ?? FreeAiCopy.ended)
         case "free-ai-unavailable": return .unavailable(message: parsed?.error ?? FreeAiCopy.unavailable)
+        case "free-ai-too-long": return .tooLong(message: parsed?.error ?? FreeAiCopy.tooLong)
         default: break
         }
         switch status {
@@ -215,10 +219,49 @@ public enum FreeAiDisplay: Equatable, Sendable {
     }
 }
 
+/// The Flagship Inference entry in the key lists: always present, never
+/// deletable. Unlike `FreeAiDisplay`, an unreadable status or an ended
+/// promotion still shows the entry, disabled, with the reason.
+/// MIRRORS the webapp `freeAiEntryState` and Android `FreeAiCopy.entry`.
+public enum FreeAiEntryState: Equatable, Sendable {
+    case loading
+    case usable(FreeAiCredits)
+    case disabled(message: String, offerOwnKey: Bool)
+
+    public var isUsable: Bool {
+        if case .usable = self { return true }
+        return false
+    }
+
+    public static func of(_ s: FreeAiStatusResponse?) -> FreeAiEntryState {
+        guard let s else { return .disabled(message: FreeAiCopy.unavailable, offerOwnKey: true) }
+        if s.ended == true { return .disabled(message: FreeAiCopy.ended, offerOwnKey: true) }
+        switch FreeAiDisplay.of(s) {
+        case .usable(let c): return .usable(c)
+        case .blocked(let m, let offer): return .disabled(message: m, offerOwnKey: offer)
+        case .hidden: return .disabled(message: FreeAiCopy.unavailable, offerOwnKey: true)
+        }
+    }
+
+    /// A refusal from `.com` while reading or minting.
+    public static func of(_ e: FreeAiError) -> FreeAiEntryState {
+        switch e {
+        case .ended: return .disabled(message: FreeAiCopy.ended, offerOwnKey: true)
+        case .noServer(let m): return .disabled(message: m, offerOwnKey: false)
+        default: return .disabled(message: e.message, offerOwnKey: true)
+        }
+    }
+}
+
 /// The words, shared with the webapp and Android. Nothing here is sold, so
 /// none of it says buy, upgrade or purchase.
 public enum FreeAiCopy {
     public static let title = "Free AI credits"
+    /// The built-in provider entry, first in every key list.
+    public static let providerTitle = "Flagship Inference"
+    public static let providerSubtitle = "We use third-party providers and anonymize your requests."
+    public static let builtInAccessibility = "Built-in provider. It can't be removed."
+    public static let tooLong = "This build is too big for Flagship Inference. Try a smaller change, or use your own AI key."
     public static let note = "Used automatically when you build with AI and haven't added your own key."
     public static let usedUp = "Your free AI credits for this week are used up. More arrive on Monday, or add your own AI key to keep building."
     public static let busyToday = "Free building is busy today. Try again tomorrow, or use your own AI key."

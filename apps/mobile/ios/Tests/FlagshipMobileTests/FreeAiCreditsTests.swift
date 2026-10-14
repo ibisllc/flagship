@@ -87,7 +87,7 @@ final class FreeAiCreditsTests: XCTestCase {
     }
 
     func test_copyNeverSellsAnything() {
-        let all = [FreeAiCopy.title, FreeAiCopy.note, FreeAiCopy.usedUp, FreeAiCopy.busyToday,
+        let all = [FreeAiCopy.title, FreeAiCopy.providerTitle, FreeAiCopy.providerSubtitle, FreeAiCopy.tooLong, FreeAiCopy.note, FreeAiCopy.usedUp, FreeAiCopy.busyToday,
                    FreeAiCopy.noServer, FreeAiCopy.ended, FreeAiCopy.unavailable,
                    FreeAiCopy.addOwnKey].joined(separator: " ").lowercased()
         for word in ["buy", "upgrade", "purchase", "subscribe", "pay"] {
@@ -114,6 +114,10 @@ final class FreeAiCreditsTests: XCTestCase {
         XCTAssertEqual(FreeAiError.from(status: 410, body: body("free-ai-ended")), .ended(message: "from .com"))
         XCTAssertEqual(FreeAiError.from(status: 410, body: Data()), .ended(message: FreeAiCopy.ended))
         XCTAssertEqual(FreeAiError.from(status: 503, body: body("free-ai-unavailable")), .unavailable(message: "from .com"))
+        XCTAssertEqual(FreeAiError.from(status: 400, body: body("free-ai-too-long")), .tooLong(message: "from .com"))
+        XCTAssertEqual(FreeAiError.from(status: 400, body: Data(#"{"code":"free-ai-too-long"}"#.utf8)),
+                       .tooLong(message: FreeAiCopy.tooLong))
+        XCTAssertTrue(FreeAiError.tooLong(message: "").opensAddKey)
         XCTAssertFalse(FreeAiError.unavailable(message: "").opensAddKey)
         for e in [FreeAiError.usedUp(message: "", credits: nil), .busyToday(message: ""), .noServer(message: ""),
                   .ended(message: "")] {
@@ -177,7 +181,7 @@ final class FreeAiCreditsTests: XCTestCase {
         vm.reload()
         let auto = await vm.loadFreeAi()
         XCTAssertFalse(auto)
-        guard case .available(let c) = vm.freeAi else { return XCTFail("row offered") }
+        guard case .usable(let c) = vm.freeAi else { return XCTFail("row offered") }
         XCTAssertEqual(c.remainingTokens, 1_540_000)
         _ = vm.credential(for: try XCTUnwrap(vm.saved.first))
         XCTAssertNil(vm.chosenModel, "a saved key carries no free-AI model")
@@ -189,7 +193,7 @@ final class FreeAiCreditsTests: XCTestCase {
         vm.reload()
         let auto = await vm.loadFreeAi()
         XCTAssertFalse(auto)
-        XCTAssertEqual(vm.freeAi, .blocked(FreeAiCopy.usedUp))
+        XCTAssertEqual(vm.freeAi, .disabled(message: FreeAiCopy.usedUp, offerOwnKey: true))
         XCTAssertTrue(vm.showingForm)
         let cred = await vm.useFreeAi(serverFqdn: "home.harry.flagship.services")
         XCTAssertNil(cred)
@@ -202,7 +206,7 @@ final class FreeAiCreditsTests: XCTestCase {
         let vm = BuildKeyViewModel(store: store, freeAiService: service())
         vm.reload()
         _ = await vm.loadFreeAi()
-        XCTAssertEqual(vm.freeAi, .blocked(FreeAiCopy.unavailable))
+        XCTAssertEqual(vm.freeAi, .disabled(message: FreeAiCopy.unavailable, offerOwnKey: true))
         XCTAssertTrue(vm.showingForm)
     }
 
@@ -220,16 +224,17 @@ final class FreeAiCreditsTests: XCTestCase {
         }
     }
 
-    func test_keyStep_ended_hidesTheRow_andNeverAutoChooses() async {
+    func test_keyStep_ended_keepsTheRowDisabled_andNeverAutoChooses() async {
         server.freeAiEnded = true
         let vm = BuildKeyViewModel(store: store, freeAiService: service())
         vm.reload()
         let auto = await vm.loadFreeAi()
         XCTAssertFalse(auto)
-        XCTAssertEqual(vm.freeAi, .none)
+        XCTAssertEqual(vm.freeAi, .disabled(message: FreeAiCopy.ended, offerOwnKey: true))
         XCTAssertTrue(vm.showingForm)
         _ = await vm.useFreeAi(serverFqdn: "home.harry.flagship.services")
-        XCTAssertEqual(vm.freeAi, .none, "a refused mint after the end keeps the row hidden")
+        XCTAssertEqual(vm.freeAi, .disabled(message: FreeAiCopy.ended, offerOwnKey: true),
+                       "a refused mint after the end keeps the row, disabled")
         XCTAssertEqual(vm.errorMessage, FreeAiCopy.ended)
     }
 
@@ -239,7 +244,8 @@ final class FreeAiCreditsTests: XCTestCase {
         XCTAssertTrue(vm.showingForm)
         let auto = await vm.loadFreeAi()
         XCTAssertFalse(auto)
-        XCTAssertEqual(vm.freeAi, .none)
+        XCTAssertEqual(vm.freeAi, .disabled(message: FreeAiCopy.unavailable, offerOwnKey: true),
+                       "Flagship Inference is always listed, disabled when this client can't use it")
     }
 
     // MARK: settings card
@@ -247,37 +253,113 @@ final class FreeAiCreditsTests: XCTestCase {
     func test_card_states() async {
         let card = FreeAiCreditsCardModel(service: service())
         await card.load()
-        XCTAssertEqual(card.state, .available(server.freeAiCredits))
+        XCTAssertEqual(card.state, .usable(server.freeAiCredits))
 
         server.freeAiReason = "busy-today"
         await card.load()
-        XCTAssertEqual(card.state, .blocked(message: FreeAiCopy.busyToday, offerOwnKey: true))
+        XCTAssertEqual(card.state, .disabled(message: FreeAiCopy.busyToday, offerOwnKey: true))
 
         server.freeAiReason = "no-server"
         await card.load()
-        XCTAssertEqual(card.state, .blocked(message: FreeAiCopy.noServer, offerOwnKey: false))
+        XCTAssertEqual(card.state, .disabled(message: FreeAiCopy.noServer, offerOwnKey: false))
         server.freeAiReason = nil
 
         server.freeAiCredits = FreeAiCredits(usedTokens: 10, allowanceTokens: 10, remainingTokens: 0)
         await card.load()
-        XCTAssertEqual(card.state, .blocked(message: FreeAiCopy.usedUp, offerOwnKey: true))
+        XCTAssertEqual(card.state, .disabled(message: FreeAiCopy.usedUp, offerOwnKey: true))
 
         server.freeAiEnded = true
         await card.load()
-        XCTAssertEqual(card.state, .hidden, "an ended promotion hides the card")
+        XCTAssertEqual(card.state, .disabled(message: FreeAiCopy.ended, offerOwnKey: true),
+                       "an ended promotion keeps the entry, disabled")
         server.freeAiEnded = false
 
         server.freeAiAvailable = false
         await card.load()
-        XCTAssertEqual(card.state, .blocked(message: FreeAiCopy.unavailable, offerOwnKey: true))
+        XCTAssertEqual(card.state, .disabled(message: FreeAiCopy.unavailable, offerOwnKey: true))
 
         server.shouldFail = true
         await card.load()
-        XCTAssertEqual(card.state, .hidden, "a failed fetch hides the card")
+        XCTAssertEqual(card.state, .disabled(message: FreeAiCopy.unavailable, offerOwnKey: true),
+                       "a failed fetch keeps the entry, disabled")
 
         let none = FreeAiCreditsCardModel(service: nil)
         await none.load()
-        XCTAssertEqual(none.state, .hidden)
+        XCTAssertEqual(none.state, .disabled(message: FreeAiCopy.unavailable, offerOwnKey: true))
+    }
+
+    // MARK: Flagship Inference entry
+
+    func test_flagshipInference_copyIsExact() {
+        XCTAssertEqual(FreeAiCopy.providerTitle, "Flagship Inference")
+        XCTAssertEqual(FreeAiCopy.providerSubtitle, "We use third-party providers and anonymize your requests.")
+        XCTAssertEqual(FreeAiCopy.tooLong,
+                       "This build is too big for Flagship Inference. Try a smaller change, or use your own AI key.")
+        XCTAssertTrue(FreeAiCopy.builtInAccessibility.contains("can't be removed"))
+    }
+
+    func test_flagshipInference_entryStates() {
+        let c = FreeAiCredits(usedTokens: 1, allowanceTokens: 10, remainingTokens: 9)
+        let spent = FreeAiCredits(usedTokens: 10, allowanceTokens: 10, remainingTokens: 0)
+        XCTAssertEqual(FreeAiEntryState.of(nil as FreeAiStatusResponse?),
+                       .disabled(message: FreeAiCopy.unavailable, offerOwnKey: true))
+        XCTAssertEqual(FreeAiEntryState.of(FreeAiStatusResponse(available: false, credits: c, ended: true)),
+                       .disabled(message: FreeAiCopy.ended, offerOwnKey: true))
+        XCTAssertEqual(FreeAiEntryState.of(FreeAiStatusResponse(available: true, credits: c)), .usable(c))
+        XCTAssertEqual(FreeAiEntryState.of(FreeAiStatusResponse(available: true, credits: spent)),
+                       .disabled(message: FreeAiCopy.usedUp, offerOwnKey: true))
+        XCTAssertEqual(FreeAiEntryState.of(FreeAiStatusResponse(available: true, credits: c, reason: "busy-today")),
+                       .disabled(message: FreeAiCopy.busyToday, offerOwnKey: true))
+        XCTAssertEqual(FreeAiEntryState.of(FreeAiStatusResponse(available: true, credits: c, reason: "no-server")),
+                       .disabled(message: FreeAiCopy.noServer, offerOwnKey: false))
+        XCTAssertEqual(FreeAiEntryState.of(FreeAiError.ended(message: "x")),
+                       .disabled(message: FreeAiCopy.ended, offerOwnKey: true))
+        XCTAssertTrue(FreeAiEntryState.usable(c).isUsable)
+        XCTAssertFalse(FreeAiEntryState.loading.isUsable)
+    }
+
+    func test_flagshipInference_isASelectableDefault() throws {
+        let a = try store.add(provider: "anthropic", label: "A", apiKey: "sk-anthropic-1111aaaa")
+        XCTAssertFalse(store.isFlagshipInferenceActive)
+        try store.setActive(id: SavedKeyStore.flagshipInferenceId)
+        XCTAssertTrue(store.isFlagshipInferenceActive)
+        XCTAssertNil(store.active(), "builds fall back to free AI, not a saved key")
+        let b = try store.add(provider: "openai", label: "B", apiKey: "sk-openai-2222bbbb")
+        XCTAssertTrue(store.isFlagshipInferenceActive, "adding a key doesn't steal the default")
+        try store.remove(id: a.id)
+        XCTAssertTrue(store.isFlagshipInferenceActive)
+        XCTAssertEqual(store.list().map(\.id), [b.id])
+        try store.setActive(id: b.id)
+        XCTAssertFalse(store.isFlagshipInferenceActive)
+        XCTAssertEqual(store.active()?.id, b.id)
+    }
+
+    func test_flagshipInference_settingsCanMakeItDefault_butNeverDeleteIt() throws {
+        _ = try store.add(provider: "anthropic", label: "A", apiKey: "sk-anthropic-1111aaaa")
+        let vm = AiKeysViewModel(store: store)
+        vm.reload()
+        XCTAssertFalse(vm.flagshipInferenceIsDefault)
+        vm.makeFlagshipInferenceDefault()
+        XCTAssertTrue(vm.flagshipInferenceIsDefault)
+        vm.delete(id: SavedKeyStore.flagshipInferenceId)
+        XCTAssertTrue(vm.flagshipInferenceIsDefault)
+        XCTAssertEqual(vm.entries.count, 1)
+    }
+
+    func test_keyStep_choosingFlagshipInference_marksItLastUsed() async throws {
+        _ = try store.add(provider: "anthropic", label: "A", apiKey: "sk-anthropic-1111aaaa")
+        let vm = BuildKeyViewModel(store: store, freeAiService: service())
+        vm.reload()
+        _ = await vm.loadFreeAi()
+        XCTAssertFalse(vm.flagshipInferenceIsDefault)
+        let cred = await vm.useFreeAi(serverFqdn: "home.harry.flagship.services")
+        XCTAssertEqual(cred?.source, "promo")
+        XCTAssertTrue(vm.flagshipInferenceIsDefault)
+        XCTAssertNil(vm.active)
+        XCTAssertEqual(vm.orderedEntries.count, 1, "saved keys stay listed below")
+        _ = vm.credential(for: try XCTUnwrap(vm.saved.first))
+        vm.reload()
+        XCTAssertFalse(vm.flagshipInferenceIsDefault)
     }
 
     // MARK: reply credential

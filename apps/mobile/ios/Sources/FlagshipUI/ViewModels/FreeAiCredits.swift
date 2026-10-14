@@ -79,21 +79,13 @@ public enum FreeAiSessions {
     public static func clear() { defaults.removeObject(forKey: key) }
 }
 
-/// The Settings "Free AI credits" card. MIRRORS the webapp `freeAiCardHtml`.
+/// The Settings → AI keys "Flagship Inference" entry: always shown, disabled
+/// with the reason when free AI can't be used. MIRRORS the webapp
+/// `freeAiEntryHtml`.
 @MainActor
 @Observable
 public final class FreeAiCreditsCardModel {
-    public enum State: Equatable {
-        case loading
-        /// Fetch failed, or the promotion has ended: the card hides.
-        case hidden
-        /// "This week: … · Starter reserve: …" + the note.
-        case available(FreeAiCredits)
-        /// Why free AI can't be used now, and whether to offer your own key.
-        case blocked(message: String, offerOwnKey: Bool)
-    }
-
-    public private(set) var state: State = .loading
+    public private(set) var state: FreeAiEntryState = .loading
     private let service: FreeAiCreditsService?
 
     public init(service: FreeAiCreditsService?) {
@@ -101,25 +93,15 @@ public final class FreeAiCreditsCardModel {
     }
 
     public func load() async {
-        guard let service else { state = .hidden; return }
+        guard let service else { state = .of(nil as FreeAiStatusResponse?); return }
         do {
             state = Self.state(for: try await service.status())
         } catch let e as FreeAiError {
-            switch e {
-            case .ended: state = .hidden
-            case .noServer(let m): state = .blocked(message: m, offerOwnKey: false)
-            default: state = .blocked(message: e.message, offerOwnKey: true)
-            }
+            state = .of(e)
         } catch {
-            state = .hidden
+            state = .of(nil as FreeAiStatusResponse?)
         }
     }
 
-    static func state(for s: FreeAiStatusResponse) -> State {
-        switch FreeAiDisplay.of(s) {
-        case .hidden: return .hidden
-        case .usable(let c): return .available(c)
-        case .blocked(let m, let offer): return .blocked(message: m, offerOwnKey: offer)
-        }
-    }
+    static func state(for s: FreeAiStatusResponse?) -> FreeAiEntryState { .of(s) }
 }

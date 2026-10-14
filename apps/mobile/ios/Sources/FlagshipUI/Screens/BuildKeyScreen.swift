@@ -150,19 +150,18 @@ public struct BuildKeyScreen: View {
         if let cred = await vm.useFreeAi(serverFqdn: serverFqdn) { onChosen(cred) }
     }
 
-    /// "Free AI credits": first in the list; when they can't be used now, the
-    /// reason instead of a Use button; gone once the promotion has ended.
-    @ViewBuilder
+    /// "Flagship Inference": always first, never deletable. When free AI
+    /// can't be used now (or the promotion has ended) it stays, disabled,
+    /// with the reason instead of a Use button.
     private func freeAiRow(c: FSColors) -> some View {
-        switch vm.freeAi {
-        case .available(let credits):
-            FSCard {
-                HStack(spacing: FS.space.s3) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(FreeAiCopy.title).font(.system(size: 15, weight: .semibold)).foregroundColor(c.text)
-                        Text(FreeAiCopy.left(credits)).font(FS.font.bodySm()).foregroundColor(c.textMuted)
-                    }
+        FSCard {
+            HStack(spacing: FS.space.s3) {
+                FlagshipInferenceLabel(status: freeAiStatusLine, lastUsed: vm.flagshipInferenceIsDefault,
+                                       usable: vm.freeAi.isUsable)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                if case .loading = vm.freeAi {
+                    ProgressView()
+                } else if vm.freeAi.isUsable {
                     if vm.freeAiBusy {
                         ProgressView()
                     } else {
@@ -171,22 +170,18 @@ public struct BuildKeyScreen: View {
                     }
                 }
             }
-            .accessibilityIdentifier("build-key-free-ai")
-        case .loading:
-            if vm.saved.isEmpty {
-                ProgressView().frame(maxWidth: .infinity)
-            }
-        case .blocked(let message):
-            if vm.errorMessage != message {
-                FSCard {
-                    Text(FreeAiCopy.title).font(.system(size: 15, weight: .semibold)).foregroundColor(c.text)
-                    Text(message).font(FS.font.bodySm()).foregroundColor(c.textMuted)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .accessibilityIdentifier("build-key-free-ai-blocked")
-            }
-        case .none:
-            EmptyView()
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(FreeAiCopy.providerTitle)
+        .accessibilityHint(FreeAiCopy.builtInAccessibility)
+        .accessibilityIdentifier(vm.freeAi.isUsable ? "build-key-free-ai" : "build-key-free-ai-blocked")
+    }
+
+    private var freeAiStatusLine: String? {
+        switch vm.freeAi {
+        case .loading: return nil
+        case .usable(let credits): return FreeAiCopy.left(credits)
+        case .disabled(let message, _): return message
         }
     }
 
@@ -225,6 +220,34 @@ public struct BuildKeyScreen: View {
             }
             if let err = deleteError {
                 Text(err).font(FS.font.bodySm()).foregroundColor(c.danger)
+            }
+        }
+    }
+}
+
+/// The built-in provider's title, subtitle and status, shared by the key
+/// step and Settings → AI keys.
+struct FlagshipInferenceLabel: View {
+    @Environment(\.colorScheme) private var scheme
+    let status: String?
+    var lastUsed: Bool = false
+    var lastUsedText: String = "Last used"
+    var usable: Bool = true
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        VStack(alignment: .leading, spacing: 2) {
+            Text(FreeAiCopy.providerTitle).font(.system(size: 15, weight: .semibold))
+                .foregroundColor(usable ? c.text : c.textMuted)
+            Text(FreeAiCopy.providerSubtitle).font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
+            if let status {
+                Text(status).font(FS.font.caption()).foregroundColor(c.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("free-ai-status")
+            }
+            if lastUsed {
+                Text(lastUsedText).font(FS.font.caption()).foregroundColor(usable ? c.primary : c.textMuted)
             }
         }
     }

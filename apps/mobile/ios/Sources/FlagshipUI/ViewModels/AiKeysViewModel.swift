@@ -14,6 +14,8 @@ import Flagship
 public final class AiKeysViewModel {
     public private(set) var entries: [SavedKeyStore.Entry] = []
     public private(set) var activeId: String?
+    /// The built-in Flagship Inference is the default for new builds.
+    public var flagshipInferenceIsDefault: Bool { activeId == SavedKeyStore.flagshipInferenceId }
 
     /// True ⇒ the add form is showing.
     public var showingForm = false
@@ -71,10 +73,15 @@ public final class AiKeysViewModel {
         return true
     }
 
+    /// Delete a saved key. The built-in Flagship Inference can't be removed.
     public func delete(id: String) {
+        guard id != SavedKeyStore.flagshipInferenceId else { return }
         try? store.remove(id: id)
         reload()
     }
+
+    /// Make Flagship Inference the default for new builds.
+    public func makeFlagshipInferenceDefault() { setActive(id: SavedKeyStore.flagshipInferenceId) }
 
     public func setActive(id: String) {
         try? store.setActive(id: id)
