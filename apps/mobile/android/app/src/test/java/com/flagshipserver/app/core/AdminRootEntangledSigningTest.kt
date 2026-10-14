@@ -32,47 +32,6 @@ class AdminRootEntangledSigningTest {
     private val irkPubHex get() = HexUtil.encode(irkKp.publicKey)
     private val adminPubHex get() = HexUtil.encode(adminKp.publicKey)
 
-    // ── set-leader vote ───────────────────────────────────────────────────────
-
-    @Test
-    fun setLeader_orderSignsWithAdminRoot_authStaysIrk() {
-        val body = SetLeaderDeposit.buildDeposit(
-            username = user, serverDomain = serverDomain, preferredStkPubHex = stkHex,
-            irk = irk, irkPubHex = irkPubHex, now = issuedAt, orderKey = admin,
-        )
-        val canonical = CloudGossip.setLeaderCanonicalBytes(
-            body.vote.user, body.vote.preferredStkPubHex, body.vote.issuedAt, body.vote.nonce,
-        )
-        // The VOTE verifies under the admin root...
-        Ed25519Verify(adminKp.publicKey).verify(HexUtil.decode(body.signature)!!, canonical)
-        // ...and NOT under the membership IRK.
-        assertThrows(GeneralSecurityException::class.java) {
-            Ed25519Verify(irkKp.publicKey).verify(HexUtil.decode(body.signature)!!, canonical)
-        }
-        // The mailbox AUTH envelope stays the membership IRK (deposit credential).
-        assertEquals(irkPubHex, body.auth.phoneIrkPub)
-    }
-
-    @Test
-    fun setLeader_noOrderKey_isByteIdenticalIrkSigned() {
-        val withNull = SetLeaderDeposit.buildDeposit(
-            username = user, serverDomain = serverDomain, preferredStkPubHex = stkHex,
-            irk = irk, irkPubHex = irkPubHex, now = issuedAt,
-            mailboxNonceHex = "aa".repeat(32), depositNonceHex = "bb".repeat(32), voteNonceHex = "cc".repeat(32),
-        )
-        val explicitIrk = SetLeaderDeposit.buildDeposit(
-            username = user, serverDomain = serverDomain, preferredStkPubHex = stkHex,
-            irk = irk, irkPubHex = irkPubHex, now = issuedAt, orderKey = irk,
-            mailboxNonceHex = "aa".repeat(32), depositNonceHex = "bb".repeat(32), voteNonceHex = "cc".repeat(32),
-        )
-        // Passing the IRK as the orderKey is identical to the legacy (null) path.
-        assertEquals(withNull.signature, explicitIrk.signature)
-        Ed25519Verify(irkKp.publicKey).verify(
-            HexUtil.decode(withNull.signature)!!,
-            CloudGossip.setLeaderCanonicalBytes(user, stkHex, issuedAt, "cc".repeat(32)),
-        )
-    }
-
     // ── decommission / replace ────────────────────────────────────────────────
 
     @Test

@@ -171,6 +171,30 @@ class AccountReadTokensTest {
         assertEquals(2, t.deviceMints) // backing off: no second refresh within a minute
     }
 
+    @Test fun unlockingForShowMyServers_mintsAtOnceDespiteTheBackoff() = runBlocking {
+        val t = MintTransport()
+        var available = emptyList<ReadTokenSigner>()
+        val p = AccountReadTokens(
+            transport = t,
+            store = MemoryStore(),
+            signers = { available },
+            isDemo = { false },
+            baseUrl = "https://flagshipserver.com",
+            now = { now },
+        )
+        val read: suspend (Map<String, String>) -> Unit = { h ->
+            if (h["Authorization"] == null) throw HttpException(401, "")
+        }
+        runCatching { p.authorized(user, read) }
+        assertTrue(p.statusPaused.value)
+        available = listOf(irkSigner)
+        assertTrue(runCatching { p.authorized(user, read) }.isFailure) // still backing off
+        p.keysUnlocked()
+        p.authorized(user, read)
+        assertEquals(1, t.irkMints)
+        assertFalse(p.statusPaused.value)
+    }
+
     @Test fun clearDropsTheProfilesTokens() = runBlocking {
         val store = MemoryStore()
         val p = tokens(MintTransport(), store)

@@ -64,7 +64,21 @@ fun HomeTab() {
     val server = LocalFlagshipServerClient.current
     val toasts = LocalToastCenter.current
     val pods by app.pods.collectAsState()
+    val orderedPods by app.orderedPods.collectAsState()
     val scope = rememberCoroutineScope()
+    val orderSaver = com.flagshipserver.app.core.rememberServerOrderSaver()
+    // Run a reorder: UNDISPATCHED so the new order is on screen in the same
+    // frame the drag ends (the saver sets it before it first suspends).
+    val saveOrder: (suspend () -> com.flagshipserver.app.core.ServerOrderSaver.Outcome) -> Unit = { block ->
+        scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+            when (val outcome = block()) {
+                is com.flagshipserver.app.core.ServerOrderSaver.Outcome.Failed -> toasts.warning(outcome.message)
+                com.flagshipserver.app.core.ServerOrderSaver.Outcome.Superseded ->
+                    toasts.info("Another device changed the order. Showing the newest one.")
+                else -> {}
+            }
+        }
+    }
     val vm = remember { HomeViewModel(client) }
     val mailbox = LocalSecretMailboxClient.current
     // #56 — reconcile the server list against ONE unauthenticated `/pods`
@@ -267,7 +281,7 @@ fun HomeTab() {
                 username = app.currentUser.collectAsState().value ?: "",
                 accountDisplayName = app.activeProfile?.accountDisplayName,
                 deviceDisplayName = app.activeProfile?.deviceDisplayName,
-                pods = pods,
+                pods = orderedPods,
                 leaderPodId = app.leaderPodId.collectAsState().value,
                 onOpenPod = { pod ->
                     nav.navigate("server-detail/${pod.podId}")
@@ -277,7 +291,8 @@ fun HomeTab() {
                 // (Slice B); taking over a transferred box is a link/QR
                 // ingestion (Slice C, via the deep link / "Process a link").
                 onAddServer = { nav.navigate("create-server") },
-                onSetLeader = { app.setLeader(it.podId) },
+                onMakeLeader = { pod -> saveOrder { orderSaver.makeLeader(pod.podId) } },
+                onReorder = { ids -> saveOrder { orderSaver.reorder(ids) } },
                 onDeleteServer = { pod ->
                     // The row's DeleteServerDialog already confirmed. On failure
                     // the pod is kept so the name never strands.
@@ -310,10 +325,24 @@ fun HomeTab() {
                 awaitingApproval = awaitingApproval,
                 awaitingEntitlement = awaitingEntitlement,
                 statusPaused = statusPaused,
+                onShowServers = {
+                    scope.launch {
+                        // One prompt (biometric or the device's screen lock)
+                        // opens the account key for this session; the read
+                        // token then mints with it (docs/account-read-token.md).
+                        val unlocked = runCatching {
+                            com.flagshipserver.app.keystore.BiometricAuthority.current()
+                                ?.ensureFresh("Show your servers", "Confirm it's you to load your servers")
+                        }.isSuccess
+                        if (!unlocked) return@launch
+                        com.flagshipserver.app.core.AccountReadTokens.shared?.keysUnlocked()
+                        reconciler.reconcile()
+                        vm.load()
+                    }
+                },
                 sharedWithMe = {
                     SharedWithMeSection(
                         onOpen = { shareId -> nav.navigate("shared-server/$shareId") },
-                        onOpenLink = { nav.navigate("share-accept") },
                     )
                 },
             )
@@ -438,6 +467,7 @@ fun HomeTab() {
                     nav.navigate("install-progress/$serial?name=$encoded&fqdn=${URLEncoder.encode(serverDomain, "UTF-8")}")
                 },
                 onCancel = { nav.popBackStack() },
+                onCoManage = { nav.navigate("share-accept") },
             )
         }
         composable("install-progress/{serial}") { entry ->

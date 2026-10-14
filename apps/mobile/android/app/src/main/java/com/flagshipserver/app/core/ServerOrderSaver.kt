@@ -1,0 +1,91 @@
+// Saves the owner's server order (docs/server-order.md). Home's drag and a
+// server page's "Make leader" both come through here, so both read and write
+// the same AppState order: the new order shows at once, is signed (silently
+// when the session already holds the key, else one prompt), posted, and put
+// back if anything fails.
+
+package com.flagshipserver.app.core
+
+import com.google.crypto.tink.subtle.Ed25519Sign
+import java.security.SecureRandom
+
+class ServerOrderSaver(
+    private val app: AppState,
+    private val post: suspend (username: String, wire: ServerOrderWire) -> Unit,
+    /** The account's current order from `.com`, after a 409. */
+    private val fetchOrder: suspend (username: String) -> ServerOrderWire?,
+    /** The sensitive-order key (admin root when held, else the IRK). */
+    private val signer: suspend (reason: String) -> Ed25519Sign,
+    private val isDemo: () -> Boolean,
+    private val now: () -> Long = { System.currentTimeMillis() },
+    private val randomBytes: (Int) -> ByteArray = { n -> ByteArray(n).also(SecureRandom()::nextBytes) },
+) {
+    sealed interface Outcome {
+        data object Saved : Outcome
+        /** Demo accounts hold no keys: the order changes on this device only. */
+        data object Local : Outcome
+        data object Unchanged : Outcome
+        /** Another device saved a newer order; it is on screen now. */
+        data object Superseded : Outcome
+        data class Failed(val message: String) : Outcome
+    }
+
+    companion object {
+        const val REASON = "Confirm the new server order"
+    }
+
+    /** Make [podId] the first server in the order. */
+    suspend fun makeLeader(podId: String): Outcome {
+        val ranked = app.orderedPods.value
+        val pod = ranked.firstOrNull { it.podId == podId } ?: return Outcome.Unchanged
+        return reorder(listOf(pod.podId) + ranked.filter { it.podId != podId }.map { it.podId })
+    }
+
+    /** Save the servers in [podIds] order (pods it leaves out keep their rank after them). */
+    suspend fun reorder(podIds: List<String>): Outcome {
+        val username = app.currentUser.value?.lowercase() ?: return Outcome.Unchanged
+        val byId = app.pods.value.associateBy { it.podId }
+        val named = podIds.mapNotNull { byId[it] } +
+            app.orderedPods.value.filter { it.podId !in podIds }
+        val stks = named.filter(ServerOrderProtocol::orderable)
+            .map { it.identityPubKeyHex.lowercase() }
+            .distinct()
+            .take(ServerOrderProtocol.MAX)
+        if (stks.isEmpty()) return Outcome.Unchanged
+        val current = app.orderedPods.value.filter(ServerOrderProtocol::orderable).map { it.identityPubKeyHex.lowercase() }
+        if (stks == current) return Outcome.Unchanged
+
+        val (previous, previousIssuedAt) = app.serverOrderSnapshot()
+        val order = ServerOrder(username, stks, now(), HexUtil.encode(randomBytes(32)))
+        app.setServerOrder(stks, order.issuedAt)
+        if (isDemo()) {
+            app.makeLeaderCurrent()
+            return Outcome.Local
+        }
+        return try {
+            val signature = ServerOrderProtocol.sign(order, signer(REASON))
+            post(username, ServerOrderWire(order, signature))
+            app.makeLeaderCurrent()
+            Outcome.Saved
+        } catch (e: HttpException) {
+            if (e.status == 409) {
+                val latest = runCatching { fetchOrder(username) }.getOrNull()
+                app.setServerOrder(previous, previousIssuedAt)
+                app.applyDirectoryServerOrder(latest)
+                Outcome.Superseded
+            } else {
+                app.setServerOrder(previous, previousIssuedAt)
+                Outcome.Failed("Couldn't save the new order (${e.status}). Your servers are back in their old order.")
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            app.setServerOrder(previous, previousIssuedAt)
+            throw e
+        } catch (e: Throwable) {
+            app.setServerOrder(previous, previousIssuedAt)
+            Outcome.Failed(
+                if (e is com.flagshipserver.app.keystore.BiometricCancelled) "Order not changed: you didn't confirm it."
+                else "Couldn't save the new order. Your servers are back in their old order.",
+            )
+        }
+    }
+}

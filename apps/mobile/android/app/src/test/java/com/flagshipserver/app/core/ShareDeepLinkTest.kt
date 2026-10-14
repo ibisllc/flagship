@@ -3,10 +3,13 @@
 
 package com.flagshipserver.app.core
 
+import android.content.Intent
 import android.net.Uri
+import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -44,5 +47,18 @@ class ShareDeepLinkTest {
 
     @Test fun theSecretStaysOutOfToString() {
         assertFalse(DeepLink.ShareOffer(id, k).toString().contains(k))
+    }
+
+    @Test fun aShareUrlScannedWithTheCameraOpensTheAcceptFlow() {
+        // The camera hands the URL over as an ACTION_VIEW intent; the manifest's
+        // https /share app link routes it to MainActivity, whose handleIntent
+        // resolves intent.data (fragment included) to the accept flow.
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://flagshipserver.com/share#s=$id&k=$k"))
+            .addCategory(Intent.CATEGORY_BROWSABLE)
+            .setPackage(context.packageName)
+        val handlers = context.packageManager.queryIntentActivities(intent, 0)
+        assertTrue(handlers.any { it.activityInfo.name.endsWith(".MainActivity") })
+        assertEquals(DeepLink.ShareOffer(id, k), AppLink.resolve(intent.data!!))
     }
 }

@@ -110,6 +110,9 @@ fun CreateServerScreen(
     // the builder-pair flow, which keeps its screen open to answer consent
     // prompts. Mirrors iOS CreateServerStubScreen.onDeliveredVisible.
     onDeliveredVisible: (serverDomain: String, serial: String, name: String, description: String) -> Unit = { _, _, _, _ -> },
+    /** Accept a server another account shares (docs/share-a-server.md):
+     *  opens the paste/scan screen. Null hides the button. */
+    onCoManage: (() -> Unit)? = null,
 ) {
     val app = LocalAppState.current
     val flagshipServer = LocalFlagshipServerClient.current
@@ -338,6 +341,7 @@ fun CreateServerScreen(
                     phase = Phase.DeliveryChooser
                 },
                 onCancel = onCancel,
+                onCoManage = onCoManage,
             )
             Phase.DeliveryChooser -> DeliveryChooserPhase(
                 busy = working,
@@ -563,6 +567,7 @@ private fun DesignPhase(
     onNext: () -> Unit,
     onContinue: () -> Unit,
     onCancel: () -> Unit,
+    onCoManage: (() -> Unit)? = null,
 ) {
     Text(
         "Step ${step + 1} of $stepCount",
@@ -646,6 +651,15 @@ private fun DesignPhase(
         FSGhostButton(label = "Back", onClick = onBack, block = true)
     } else {
         FSGhostButton(label = "Cancel", onClick = onCancel, block = true)
+        if (onCoManage != null) {
+            Spacer(Modifier.height(FS.space.s4))
+            FSGhostButton(
+                label = "Co-manage a server from another user",
+                onClick = onCoManage,
+                block = true,
+                modifier = Modifier.testTag("cs-co-manage"),
+            )
+        }
     }
 }
 

@@ -143,8 +143,9 @@ class MultipodLivenessTest {
         val app = signedInApp()
         app.upsertRegisteredPod(fqdn = "old.harry.flagship.services", name = "Old", liveness = PodInfo.Liveness.UNREACHABLE)
         app.upsertRegisteredPod(fqdn = "new.harry.flagship.services", name = "New", liveness = PodInfo.Liveness.LIVE)
-        // Leader (oldest) is the unreachable one, but sessionPod lands on the live box.
-        assertEquals("pod-old.harry.flagship.services", app.leaderPodId.value)
+        // The oldest box is unreachable, so the lead passes to the live one
+        // (docs/server-order.md), and so does the session.
+        assertEquals("pod-new.harry.flagship.services", app.leaderPodId.value)
         assertEquals("pod-new.harry.flagship.services", app.sessionPod?.podId)
     }
 
@@ -221,8 +222,7 @@ class MultipodLivenessTest {
         PodInfo(podId = id, name = id, fqdn = "$id.harry.flagship.services")
 
     @Test fun addPod_newBoxNeverSeizesLeadership() {
-        val s = AppState(isPaired = true, currentUser = "u", pods = listOf(pod("a")),
-            leaderPodId = "a", currentPodId = "a")
+        val s = AppState(isPaired = true, currentUser = "u", pods = listOf(pod("a")), currentPodId = "a")
         s.addPod(pod("b")) // a brand-new box arrives
         // The leader / default pod is UNCHANGED — the new box is just selectable.
         assertEquals("a", s.leaderPodId.value)
@@ -232,8 +232,7 @@ class MultipodLivenessTest {
     @Test fun removePod_danglingLeaderReanchorsToOldest() {
         // .com returns oldest-first, so pods.first() is the oldest.
         val s = AppState(isPaired = true, currentUser = "u",
-            pods = listOf(pod("oldest"), pod("middle"), pod("newest")),
-            leaderPodId = "oldest", currentPodId = "oldest")
+            pods = listOf(pod("oldest"), pod("middle"), pod("newest")), currentPodId = "oldest")
         s.removePod("oldest") // the leader is removed -> dangles
         // Re-anchors to the OLDEST remaining ("middle"), never the newest.
         assertEquals("middle", s.leaderPodId.value)
@@ -242,8 +241,7 @@ class MultipodLivenessTest {
 
     @Test fun removePod_nonLeaderRemoval_leavesLeaderUntouched() {
         val s = AppState(isPaired = true, currentUser = "u",
-            pods = listOf(pod("a"), pod("b"), pod("c")),
-            leaderPodId = "a", currentPodId = "a")
+            pods = listOf(pod("a"), pod("b"), pod("c")), currentPodId = "a")
         s.removePod("c") // a non-leader box
         assertEquals("a", s.leaderPodId.value)
         assertEquals("a", s.currentPodId.value)
@@ -253,8 +251,7 @@ class MultipodLivenessTest {
         // currentPodId dangles (points at nothing); resolution must land on the
         // leader, and a missing leader on the OLDEST pod — never the newest.
         val s = AppState(isPaired = true, currentUser = "u",
-            pods = listOf(pod("oldest"), pod("newest")),
-            leaderPodId = null, currentPodId = "ghost")
+            pods = listOf(pod("oldest"), pod("newest")), currentPodId = "ghost")
         assertEquals("oldest", s.currentPod?.podId)
     }
 }

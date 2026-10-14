@@ -9,6 +9,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import com.flagshipserver.app.api.RecentInstallEvent
 import com.flagshipserver.app.api.ServerDetailResponse
 import com.flagshipserver.app.core.PodInfo
@@ -37,7 +38,7 @@ class HomeScreenComposeTest {
                     leaderPodId = null,
                     onOpenPod = {},
                     onAddServer = {},
-                    onSetLeader = {},
+                    onMakeLeader = {},
                     onRefresh = {},
                 )
             }
@@ -74,7 +75,7 @@ class HomeScreenComposeTest {
                     leaderPodId = "pod-x",
                     onOpenPod = {},
                     onAddServer = {},
-                    onSetLeader = {},
+                    onMakeLeader = {},
                     onRefresh = {},
                 )
             }
@@ -100,11 +101,65 @@ class HomeScreenComposeTest {
                     leaderPodId = null,
                     onOpenPod = {},
                     onAddServer = {},
-                    onSetLeader = {},
+                    onMakeLeader = {},
                     onRefresh = {},
                 )
             }
         }
         composeRule.onNodeWithText("backend ate the request").assertIsDisplayed()
+    }
+
+    @Test fun aRefusedServerList_isLockedNotEmpty() {
+        var asked = 0
+        composeRule.setContent {
+            FlagshipTheme {
+                HomeScreen(
+                    state = LoadingState.Loading,
+                    username = "harry",
+                    pods = emptyList(),
+                    leaderPodId = null,
+                    onOpenPod = {},
+                    onAddServer = {},
+                    onMakeLeader = {},
+                    onRefresh = {},
+                    statusPaused = true,
+                    onShowServers = { asked++ },
+                )
+            }
+        }
+        composeRule.onNodeWithText("Your server list is locked").assertIsDisplayed()
+        composeRule.onNodeWithText("Add your first server").assertDoesNotExist()
+        composeRule.onNodeWithText("Show my servers").performClick()
+        org.junit.Assert.assertEquals(1, asked)
+    }
+
+    @Test fun orderedServers_showTheLeaderAndThePlaceInLine() {
+        fun stk(n: Int) = com.flagshipserver.app.core.HexUtil.encode(
+            com.google.crypto.tink.subtle.Ed25519Sign.KeyPair.newKeyPairFromSeed(ByteArray(32) { n.toByte() }).publicKey,
+        )
+        val pods = listOf(
+            PodInfo(podId = "a", name = "home3", fqdn = "home3.harry.flagship.services",
+                status = PodInfo.Status.OFFLINE, registeredAt = 1, identityPubKeyHex = stk(1)),
+            PodInfo(podId = "b", name = "leticia", fqdn = "leticia.harry.flagship.services",
+                status = PodInfo.Status.ONLINE, registeredAt = 2, identityPubKeyHex = stk(2)),
+        )
+        composeRule.setContent {
+            FlagshipTheme {
+                HomeScreen(
+                    state = LoadingState.Loading,
+                    username = "harry",
+                    pods = pods,
+                    leaderPodId = "b",
+                    onOpenPod = {},
+                    onAddServer = {},
+                    onMakeLeader = {},
+                    onRefresh = {},
+                )
+            }
+        }
+        composeRule.onNodeWithText("Leader").assertIsDisplayed()
+        composeRule.onNodeWithText("#1").assertIsDisplayed()
+        composeRule.onNodeWithText("Standing in for home3 while it's down").assertIsDisplayed()
+        composeRule.onNodeWithText("Touch and hold a server", substring = true).assertExists()
     }
 }

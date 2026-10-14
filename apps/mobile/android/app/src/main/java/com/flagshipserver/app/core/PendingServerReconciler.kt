@@ -78,6 +78,7 @@ class PendingServerReconciler(
         // raw entries to the aggregation seam BEFORE mapping, since it verifies
         // each box's STK-signed `trustStatus` under `identityPubKey`.
         onDirectory(directory.pods)
+        app.applyDirectoryServerOrder(directory.serverOrder)
 
         // Surface every registered server as ONLINE — REGARDLESS of any
         // heartbeat/cert side-channel. A registered fqdn matching a pending pod

@@ -54,7 +54,8 @@ class AppState(
     isPaired: Boolean = false,
     currentUser: String? = null,
     pods: List<PodInfo> = emptyList(),
-    leaderPodId: String? = null,
+    /** The owner's server order (STK hex, first = leader); null ⇒ oldest first. */
+    serverOrder: List<String>? = null,
     currentPodId: String? = null,
     hasCloudRecovery: Boolean = true,
     recoveryNudgeDismissedThisSession: Boolean = false,
@@ -66,11 +67,6 @@ class AppState(
     activeCloudName: String? = null,
 ) {
     var onSignedOut: (() -> Unit)? = null
-
-    /** Where the owner's leader choice is remembered per account across
-     *  launches. MainActivity wires the prefs store; null (tests, previews)
-     *  remembers nothing. */
-    var leaderMemory: LeaderMemory? = null
     private val _isPaired = MutableStateFlow(isPaired)
     val isPaired: StateFlow<Boolean> = _isPaired.asStateFlow()
 
@@ -80,7 +76,21 @@ class AppState(
     private val _pods = MutableStateFlow(pods)
     val pods: StateFlow<List<PodInfo>> = _pods.asStateFlow()
 
-    private val _leaderPodId = MutableStateFlow(leaderPodId ?: pods.firstOrNull()?.podId)
+    /** The owner's server order (docs/server-order.md): STK hex, first =
+     *  leader. Null until `/pods` carries one or the owner reorders. */
+    private val _serverOrder = MutableStateFlow(serverOrder)
+    val serverOrder: StateFlow<List<String>?> = _serverOrder.asStateFlow()
+    /** issuedAt of the order held in [serverOrder]; a `/pods` copy that isn't
+     *  newer never replaces it (a reorder in flight stays on screen). */
+    private var serverOrderIssuedAt: Long = 0
+
+    /** [pods] ranked by the server order: what Home lists. */
+    private val _orderedPods = MutableStateFlow(ServerOrderProtocol.rank(pods, serverOrder))
+    val orderedPods: StateFlow<List<PodInfo>> = _orderedPods.asStateFlow()
+
+    /** The first server in the order that is up (else the first one). Derived
+     *  from [orderedPods]; never set directly. */
+    private val _leaderPodId = MutableStateFlow(ServerOrderProtocol.leader(_orderedPods.value)?.podId)
     val leaderPodId: StateFlow<String?> = _leaderPodId.asStateFlow()
 
     private val _currentPodId = MutableStateFlow(currentPodId ?: _leaderPodId.value)
@@ -366,10 +376,8 @@ class AppState(
         demoServer: DemoServerBlock? = null,
     ) {
         _currentUser.value = username
-        _pods.value = pods
-        _leaderPodId.value = pods.firstOrNull()?.podId
-        _currentPodId.value = pods.firstOrNull()?.podId
-        applyRememberedLeader()
+        setPods(pods)
+        _currentPodId.value = _leaderPodId.value
         _isPaired.value = true
         // W3 — record the cloud in the durable profile list and mark
         // it active. Idempotent for re-onboarding the same cloud.
@@ -419,8 +427,8 @@ class AppState(
         _activeCloudName.value = cloudName
         _currentUser.value = p.cloudName
         _deviceCapability.value = p.deviceCapability
-        _pods.value = emptyList()
-        _leaderPodId.value = null
+        clearServerOrder()
+        setPods(emptyList())
         _currentPodId.value = null
         _isPaired.value = true
         // W3 multi-profile keystore — point the Keystore at THIS
@@ -450,30 +458,55 @@ class AppState(
     }
 
     fun addPod(pod: PodInfo) {
-        _pods.value = _pods.value + pod
-        // STICKY LEADERSHIP (Fix C) — a newly-added box must NEVER change the
-        // leader / default pod. A new server auto-seizing leadership was the
-        // reported bug. Seed leader/current ONLY when none is set yet (the genuine
-        // first-pod / cold-restore case); an existing leader is left exactly as it
-        // is, so the new box is just another selectable pod — not the new default.
-        if (_leaderPodId.value == null) _leaderPodId.value = pod.podId
-        if (_currentPodId.value == null) _currentPodId.value = pod.podId
-        applyRememberedLeader()
+        setPods(_pods.value + pod)
+        // A new box ranks after every server the order lists and after older
+        // ones, so it only leads when nothing above it is up. Seed current only
+        // when none is set yet (the first-pod / cold-restore case).
+        if (_currentPodId.value == null) _currentPodId.value = _leaderPodId.value
     }
 
-    /** Put back the leader the owner chose on this device for this account,
-     *  once that pod is known and not revoked. Until then (or when it's gone)
-     *  the oldest-pod fallback stands. The restored leader becomes current
-     *  unless another pod was picked explicitly this session. */
-    private fun applyRememberedLeader() {
-        val account = _currentUser.value ?: return
-        val id = leaderMemory?.leaderPodId(account) ?: return
-        if (id == _leaderPodId.value) return
-        val pod = _pods.value.firstOrNull { it.podId == id } ?: return
-        if (pod.isRevoked) return
-        val previous = _leaderPodId.value
-        _leaderPodId.value = id
-        if (_currentPodId.value == null || _currentPodId.value == previous) _currentPodId.value = id
+    private fun setPods(next: List<PodInfo>) {
+        _pods.value = next
+        refreshOrder()
+    }
+
+    /** Re-rank [pods] by the order and re-derive the leader. */
+    private fun refreshOrder() {
+        val ranked = ServerOrderProtocol.rank(_pods.value, _serverOrder.value)
+        _orderedPods.value = ranked
+        _leaderPodId.value = ServerOrderProtocol.leader(ranked)?.podId
+    }
+
+    /** Show [stks] as the order now (a reorder on this device, signed or
+     *  about to be). [issuedAt] is the signed order's; a later `/pods` copy
+     *  only replaces it when newer. */
+    fun setServerOrder(stks: List<String>?, issuedAt: Long) {
+        _serverOrder.value = stks?.map { it.lowercase() }
+        serverOrderIssuedAt = issuedAt
+        refreshOrder()
+    }
+
+    /** The order and its issuedAt as held now, to put back after a failed save. */
+    fun serverOrderSnapshot(): Pair<List<String>?, Long> = _serverOrder.value to serverOrderIssuedAt
+
+    /** Take `/pods`' order when it is newer than the one held. A missing
+     *  order never clears one (the owner's reorder may not have landed yet). */
+    fun applyDirectoryServerOrder(wire: ServerOrderWire?) {
+        val order = wire?.order ?: return
+        if (!order.user.equals(_currentUser.value, ignoreCase = true)) return
+        if (order.issuedAt <= serverOrderIssuedAt) return
+        setServerOrder(order.stks, order.issuedAt)
+    }
+
+    /** New apps follow the current server (docs/app-placement.md §1), so a
+     *  reorder makes the new leader current. */
+    fun makeLeaderCurrent() {
+        _leaderPodId.value?.let { _currentPodId.value = it }
+    }
+
+    private fun clearServerOrder() {
+        _serverOrder.value = null
+        serverOrderIssuedAt = 0
     }
 
     /** #56 — registration is AUTHORITATIVE for online. A server present in the
@@ -552,7 +585,7 @@ class AppState(
                     revocationReason = revocationReason,
                 )
             }
-            applyRememberedLeader()
+            refreshOrder()
             return old.podId
         }
         val id = PodInfo.podId(fqdn)
@@ -612,6 +645,7 @@ class AppState(
                         pendingAuthCodeSerial = newSerial ?: old.pendingAuthCodeSerial,
                     )
                 }
+                refreshOrder()
                 return old.podId
             }
         }
@@ -655,17 +689,7 @@ class AppState(
             changed = true
             pod.copy(leadsServices = slugs)
         }
-        if (changed) _pods.value = next
-    }
-
-    /** Make [podId] the preferred server. It also becomes the current one, so
-     *  new apps (which go to the current server unless another is chosen)
-     *  land on it (docs/app-placement.md §1). */
-    fun setLeader(podId: String) {
-        if (_pods.value.none { it.podId == podId }) return
-        _leaderPodId.value = podId
-        _currentPodId.value = podId
-        _currentUser.value?.let { leaderMemory?.setLeaderPodId(it, podId) }
+        if (changed) setPods(next)
     }
 
     fun setCurrentPod(podId: String) {
@@ -678,40 +702,28 @@ class AppState(
      *  session-eligible; an un-revoked one reads UNKNOWN until its next
      *  heartbeat. */
     fun setPodRevocation(podId: String, revokedAt: Long?, reason: String?) {
-        _pods.value = _pods.value.map { pod ->
+        setPods(_pods.value.map { pod ->
             if (pod.podId != podId) pod
             else pod.copy(
                 revokedAt = revokedAt,
                 revocationReason = if (revokedAt != null) reason else null,
                 status = if (revokedAt != null) PodInfo.Status.OFFLINE else PodInfo.Status.UNKNOWN,
             )
-        }
+        })
     }
 
     fun removePod(podId: String) {
-        _pods.value = _pods.value.filter { it.podId != podId }
-        // A removed server was deleted, transferred or retired: forget it as the
-        // remembered leader so a new server reusing its name doesn't inherit it.
-        val account = _currentUser.value
-        val memory = leaderMemory
-        if (account != null && memory != null && memory.leaderPodId(account) == podId) {
-            memory.setLeaderPodId(account, null)
-        }
-        // DETERMINISTIC RE-ANCHOR (Fix C) — when the removed pod WAS the leader,
-        // the leader dangles. Re-anchor explicitly to the OLDEST remaining pod
-        // (`oldestPod`, = `pods.first()` since `.com` returns oldest-first) rather
-        // than letting `currentPod` silently float to whatever happens to be
-        // first. A non-leader removal leaves the leader untouched (sticky).
-        if (_leaderPodId.value == podId) _leaderPodId.value = oldestPod?.podId
+        setPods(_pods.value.filter { it.podId != podId })
+        // The leader re-derives from the order; a removed current pod hands
+        // over to it.
         if (_currentPodId.value == podId) _currentPodId.value = _leaderPodId.value ?: oldestPod?.podId
     }
 
     fun signOut() {
-        _currentUser.value?.let { leaderMemory?.setLeaderPodId(it, null) }
         _isPaired.value = false
         _currentUser.value = null
-        _pods.value = emptyList()
-        _leaderPodId.value = null
+        clearServerOrder()
+        setPods(emptyList())
         _currentPodId.value = null
         _deviceCapability.value = null
         _activeCloudName.value = null

@@ -5,6 +5,7 @@
 package com.flagshipserver.app.ui.screens
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,15 +17,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Dns
+import androidx.compose.material.icons.outlined.DragHandle
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -50,6 +54,7 @@ import com.flagshipserver.app.api.DeviceScope
 import com.flagshipserver.app.api.ServerDetailResponse
 import com.flagshipserver.app.core.PodInfo
 import com.flagshipserver.app.core.ProvisionProgress
+import com.flagshipserver.app.core.ServerOrderProtocol
 import com.flagshipserver.app.ui.components.FSAnnouncementCard
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSChipItem
@@ -75,12 +80,16 @@ fun HomeScreen(
     accountDisplayName: String? = null,
     /** Locally-decrypted name THIS device chose for itself. */
     deviceDisplayName: String? = null,
+    /** The servers in the owner's order (AppState.orderedPods). */
     pods: List<PodInfo>,
     leaderPodId: String?,
     onOpenPod: (PodInfo) -> Unit,
     onAddServer: () -> Unit,
-    onSetLeader: (PodInfo) -> Unit,
+    /** Move a server to the top of the order (docs/server-order.md). */
+    onMakeLeader: (PodInfo) -> Unit,
     onRefresh: () -> Unit,
+    /** The owner dropped a server somewhere new: the pod ids in their new order. */
+    onReorder: (List<String>) -> Unit = {},
     /** Delete a server after [DeleteServerDialog] confirms: a pending order
      *  is cancelled, a registered server deleted. No-op default. */
     onDeleteServer: (PodInfo) -> Unit = {},
@@ -128,6 +137,9 @@ fun HomeScreen(
      *  without a prompt (docs/account-read-token.md): the list shows its
      *  last state, and a quiet line says so. */
     statusPaused: Boolean = false,
+    /** Unlock the account key once, mint a read token and reload
+     *  (docs/account-read-token.md "A refused read is never no servers"). */
+    onShowServers: () -> Unit = {},
 ) {
     val scroll = rememberScrollState()
     // Search text over the server list (name / fqdn / description). Pure
@@ -196,14 +208,23 @@ fun HomeScreen(
             DeviceCapabilityChip(cap = deviceCapability)
         }
 
-        if (statusPaused) {
+        val listLocked = statusPaused && pods.none { it.status != PodInfo.Status.PENDING }
+        if (statusPaused && !listLocked) {
             Spacer(Modifier.height(FS.space.s2))
-            Text(
-                text = "Status paused — unlock to refresh",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-                modifier = Modifier.testTag("home-status-paused"),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Status paused",
+                    color = FS.colors.textMuted,
+                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                    modifier = Modifier.testTag("home-status-paused"),
+                )
+                Spacer(Modifier.width(FS.space.s2))
+                FSGhostButton(
+                    label = "Refresh status",
+                    onClick = onShowServers,
+                    modifier = Modifier.testTag("home-status-paused-unlock"),
+                )
+            }
         }
 
         // One announcement at a time, highest priority first: an account-reset
@@ -221,7 +242,9 @@ fun HomeScreen(
 
         Spacer(Modifier.height(FS.space.s8))
 
-        if (pods.isEmpty()) {
+        if (listLocked) {
+            LockedServerListCard(onShowServers = onShowServers)
+        } else if (pods.isEmpty()) {
             EmptyServerCard(onAddServer = onAddServer)
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
@@ -246,14 +269,35 @@ fun HomeScreen(
                         )
                     }
                 } else {
-                    visiblePods.forEach { pod ->
+                    val roles = remember(pods, leaderPodId) { serverRoles(pods, leaderPodId) }
+                    val reorderable = q.isEmpty() && statusFilter == HomeStatusFilter.ALL &&
+                        pods.count(ServerOrderProtocol::orderable) >= 2
+                    ReorderableServerList(
+                        pods = visiblePods,
+                        enabled = reorderable,
+                        onReorder = onReorder,
+                    ) { pod, rowModifier, dragging, menuOpen, onMenuOpenChange, clickAllowed ->
                         ServerRow(
                             pod = pod,
                             isLeader = pod.podId == leaderPodId,
                             liveness = livenessOf(pod),
-                            onTap = { onOpenPod(pod) },
-                            onSetLeader = { onSetLeader(pod) },
+                            onTap = { if (clickAllowed()) onOpenPod(pod) },
+                            onSetLeader = { onMakeLeader(pod) },
                             onDelete = { onDeleteServer(pod) },
+                            role = roles[pod.podId],
+                            rowModifier = rowModifier,
+                            longPressOpensMenu = !reorderable,
+                            dragging = dragging,
+                            menuOpen = menuOpen,
+                            onMenuOpenChange = onMenuOpenChange,
+                        )
+                    }
+                    if (reorderable) {
+                        Text(
+                            "Touch and hold a server, then drag it to change who leads. The first server that's up is the leader; the next one takes over while it's down.",
+                            color = FS.colors.textMuted,
+                            style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                            modifier = Modifier.testTag("home-reorder-hint"),
                         )
                     }
                 }
@@ -372,6 +416,31 @@ private fun DeviceCapabilityChip(cap: DeviceCapabilityBlock) {
 }
 
 @Composable
+private fun LockedServerListCard(onShowServers: () -> Unit) {
+    FSCard(padding = PaddingValues(FS.space.s6), modifier = Modifier.testTag("home-servers-locked")) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            Text(
+                "Your server list is locked",
+                color = FS.colors.text,
+                style = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
+            )
+            Text(
+                "Flagship only shows your servers to this device once it has proved it's yours. Confirm it's you once and your servers will appear.",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
+            )
+            Spacer(Modifier.height(FS.space.s2))
+            FSPrimaryButton(
+                label = "Show my servers",
+                onClick = onShowServers,
+                block = true,
+                modifier = Modifier.testTag("home-show-servers"),
+            )
+        }
+    }
+}
+
+@Composable
 private fun EmptyServerCard(onAddServer: () -> Unit) {
     FSCard(padding = PaddingValues(FS.space.s6)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
@@ -381,7 +450,7 @@ private fun EmptyServerCard(onAddServer: () -> Unit) {
                 style = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
             )
             Text(
-                "You don't have any servers yet. Add your first server to start running your own services.",
+                "Add your first server to start running your own services.",
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
             )
@@ -438,10 +507,23 @@ fun ServerRow(
     onTap: () -> Unit,
     onSetLeader: () -> Unit,
     onDelete: () -> Unit = {},
+    /** Its place in the owner's order (docs/server-order.md); null shows none. */
+    role: ServerRole? = null,
+    rowModifier: Modifier = Modifier,
+    /** False when touch-and-hold drags the row instead (the list opens the
+     *  menu itself on a hold without a drag). */
+    longPressOpensMenu: Boolean = true,
+    dragging: Boolean = false,
+    menuOpen: Boolean? = null,
+    onMenuOpenChange: ((Boolean) -> Unit)? = null,
 ) {
-    val canMakeLeader = !isLeader && pod.status == PodInfo.Status.ONLINE && pod.cameOnline && !pod.isRevoked
+    // "Make leader" moves the server to the top of the order; any registered
+    // server can be first, up or not (the next one up stands in meanwhile).
+    val canMakeLeader = ServerOrderProtocol.orderable(pod) && (role?.position ?: 1) != 1
 
-    var menuOpen by remember { mutableStateOf(false) }
+    var ownMenuOpen by remember { mutableStateOf(false) }
+    val isMenuOpen = menuOpen ?: ownMenuOpen
+    val setMenuOpen: (Boolean) -> Unit = onMenuOpenChange ?: { ownMenuOpen = it }
     var confirming by remember { mutableStateOf(false) }
 
     val pillTag: String? = when (liveness) {
@@ -459,54 +541,82 @@ fun ServerRow(
             leading = FSListLeading.Icon(Icons.Outlined.Dns, statusIconColor(liveness, pod.status)),
             title = pod.name,
             subtitle = serverSubtitle(pod, liveness),
-            modifier = Modifier.combinedClickable(
-                onClick = onTap,
-                onLongClick = { menuOpen = true },
+            modifier = rowModifier.then(
+                if (longPressOpensMenu) {
+                    Modifier.combinedClickable(onClick = onTap, onLongClick = { setMenuOpen(true) })
+                } else {
+                    Modifier.clickable(onClick = onTap)
+                },
             ),
             below = {
-                // Status pill (+ Leader badge) stacks UNDER the text on its own
-                // line — a long label like "Never came online" would be crushed
-                // in the right-floated trailing slot against the server name.
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
-                ) {
-                    // Leader = the daemon the screens point at; only badge a
-                    // server that actually came online.
-                    if (isLeader && pod.cameOnline && pod.status != PodInfo.Status.PENDING) FSPill("Leader", kind = FSPillKind.Online)
-                    // Per-service leadership (Phase 6): the services this box leads
-                    // (from /pods `leadsServices`). Tolerant of absence.
-                    LeadServicesPill(pod)
-                    FSPill(
-                        label = PodStatusStyle.label(pod, liveness),
-                        kind = PodStatusStyle.pillKind(liveness, pod.status),
-                        modifier = if (pillTag != null) Modifier.testTag(pillTag) else Modifier,
-                    )
+                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
+                    // Status pill (+ Leader badge) stacks UNDER the text on its own
+                    // line — a long label like "Never came online" would be crushed
+                    // in the right-floated trailing slot against the server name.
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
+                    ) {
+                        // Leader = the first server in the order that is up; the
+                        // rest show their place in line.
+                        if (isLeader && pod.cameOnline && pod.status != PodInfo.Status.PENDING) {
+                            FSPill("Leader", kind = FSPillKind.Online, modifier = Modifier.testTag("pod-leader-badge"))
+                        } else if (role?.position != null) {
+                            FSPill(
+                                "#${role.position}",
+                                kind = FSPillKind.Idle,
+                                modifier = Modifier
+                                    .testTag("pod-order-position")
+                                    .semantics { contentDescription = "Number ${role.position} in line to lead" },
+                            )
+                        }
+                        // Per-service leadership (Phase 6): the services this box leads
+                        // (from /pods `leadsServices`). Tolerant of absence.
+                        LeadServicesPill(pod)
+                        FSPill(
+                            label = PodStatusStyle.label(pod, liveness),
+                            kind = PodStatusStyle.pillKind(liveness, pod.status),
+                            modifier = if (pillTag != null) Modifier.testTag(pillTag) else Modifier,
+                        )
+                    }
+                    role?.standingInFor?.let { name ->
+                        Text(
+                            "Standing in for $name while it's down",
+                            color = FS.colors.textMuted,
+                            style = TextStyle(fontSize = 12.sp),
+                            modifier = Modifier.testTag("pod-standing-in"),
+                        )
+                    }
                 }
             },
             trailing = {
-                // Navigation chevron stays right, vertically centered.
-                Text("›", color = FS.colors.textMuted, style = TextStyle(fontSize = 18.sp))
+                if (dragging) {
+                    Icon(Icons.Outlined.DragHandle, contentDescription = null, tint = FS.colors.textMuted)
+                } else {
+                    // Navigation chevron stays right, vertically centered.
+                    Text("›", color = FS.colors.textMuted, style = TextStyle(fontSize = 18.sp))
+                }
             },
         )
 
-        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+        DropdownMenu(expanded = isMenuOpen, onDismissRequest = { setMenuOpen(false) }) {
             if (canMakeLeader) {
                 DropdownMenuItem(
                     text = { Text("Make leader") },
-                    onClick = { menuOpen = false; onSetLeader() },
+                    modifier = Modifier.testTag("pod-card-make-leader"),
+                    onClick = { setMenuOpen(false); onSetLeader() },
                 )
             }
             DropdownMenuItem(
                 text = { Text("Open") },
-                onClick = { menuOpen = false; onTap() },
+                onClick = { setMenuOpen(false); onTap() },
             )
             DropdownMenuItem(
                 text = {
                     Text(if (pod.status == PodInfo.Status.PENDING) "Delete server (free name)" else "Delete server")
                 },
                 modifier = Modifier.testTag("pod-card-delete"),
-                onClick = { menuOpen = false; confirming = true },
+                onClick = { setMenuOpen(false); confirming = true },
             )
         }
 

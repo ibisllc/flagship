@@ -163,7 +163,7 @@ class ShareScreenshotsTest {
             username = "sam",
             pods = listOf(PodInfo(podId = "p1", name = "Lab", fqdn = "lab.sam.flagship.services", status = PodInfo.Status.ONLINE)),
             leaderPodId = "p1",
-            onOpenPod = {}, onAddServer = {}, onSetLeader = {}, onRefresh = {},
+            onOpenPod = {}, onAddServer = {}, onMakeLeader = {}, onRefresh = {},
             sharedWithMe = {
                 SharedWithMeContent(
                     ui = SharedWithMeUi(
@@ -173,7 +173,7 @@ class ShareScreenshotsTest {
                             SharedItem(entry.copy(shareId = "3".repeat(32), serverName = "Cabin", serverDomain = "cabin.jo.flagship.services"), SharedItem.Status.Waiting),
                         ),
                     ),
-                    onOpen = {}, onOpenLink = {},
+                    onOpen = {},
                 )
             },
         )

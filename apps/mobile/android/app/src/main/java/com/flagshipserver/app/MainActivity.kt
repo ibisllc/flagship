@@ -151,14 +151,6 @@ class MainActivity : FragmentActivity() {
         appState = AppState(
             requireBiometricAtLaunch = privacy.requireBiometricAtLaunch.value,
         )
-        // Gym smoke runs start from fixtures every launch, so they don't carry
-        // a leader choice from an earlier run.
-        val smokeLaunch =
-            (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0 &&
-                com.flagshipserver.app.core.SmokeModeConfig.from(intent) != null
-        if (!smokeLaunch) {
-            appState.leaderMemory = com.flagshipserver.app.core.PrefsLeaderMemory.fromContext(applicationContext)
-        }
         // Restore a previously paired session: if the Keystore still holds
         // a UMK seed (a real identity that survives process death) and we
         // know which cloud was active, land on the gated shell instead of

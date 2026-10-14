@@ -90,13 +90,10 @@ interface SecretMailboxClient {
      *  holds ciphertext only. Reuses [PairingDepositBody]. */
     suspend fun depositCgk(serverDomain: String, body: PairingDepositBody)
 
-    /** POST /api/server/:domain/set-leader — phone, IRK mailbox-auth. Deposits the
-     *  owner's PUBLIC preferred-server vote (`flagship/set-leader/v1`) addressed to
-     *  a box domain. `.com` verifies the owner-IRK signature before storing; the
-     *  box fetches the vote meant for it and rides it on its gossip frame (clout).
-     *  Uses its own [SetLeaderDepositBody] (the `{auth, deposit, vote, signature}`
-     *  shape from the TS rail). */
-    suspend fun depositSetLeader(serverDomain: String, body: SetLeaderDepositBody)
+    /** POST /api/accounts/:u/server-order — the owner's signed server order
+     *  (docs/server-order.md). `.com` checks the signature and keeps the newest;
+     *  an order no newer than the stored one is a 409. */
+    suspend fun postServerOrder(username: String, wire: com.flagshipserver.app.core.ServerOrderWire)
 
     suspend fun depositDecommission(serverDomain: String, body: DecommissionDepositBody)
 
@@ -239,36 +236,6 @@ data class MigrationSession(
     /** Derived by the Worker: taken over AND the old box closed out. */
     val done: Boolean = false,
 )
-
-/** The set-leader deposit body. `auth`/`authSignature` are the SAME IRK
- *  mailbox-auth shape as the other phone-mailbox calls; `deposit` addresses the
- *  vote to a box domain; `vote` is the set-leader vote field set and `signature`
- *  is the owner-IRK signature over its canonical bytes. Field names match the
- *  Worker handler (`handlePostSetLeaderDeposit`) exactly:
- *  `{ auth, authSignature, deposit:{serverDomain,requestNonceHex}, vote:{user,
- *  preferredStkPubHex,issuedAt,nonce}, signature }`. */
-@Serializable
-data class SetLeaderDepositBody(
-    val auth: MailboxAuthEnvelope.Auth,
-    val authSignature: String,
-    val deposit: Deposit,
-    val vote: Vote,
-    val signature: String,   // hex (64 bytes) — owner IRK over the vote canonical bytes
-) {
-    @Serializable
-    data class Deposit(
-        val serverDomain: String,
-        val requestNonceHex: String,   // hex (32 bytes)
-    )
-
-    @Serializable
-    data class Vote(
-        val user: String,
-        val preferredStkPubHex: String,   // hex (32 bytes) or "none"
-        val issuedAt: Long,
-        val nonce: String,
-    )
-}
 
 /** The decommission deposit body. `auth`/`authSignature` are the SAME IRK
  *  mailbox-auth shape as the other phone-mailbox calls; `order` is the
@@ -616,6 +583,8 @@ data class PodsDirectoryResponse(
     /** #56 — active outstanding orders, merged into the same fetch. Has a
      *  default so a pre-#56 Worker response (no `pending` key) still decodes. */
     val pending: List<PendingPodEntry> = emptyList(),
+    /** The owner's signed server order (docs/server-order.md), or null. */
+    val serverOrder: com.flagshipserver.app.core.ServerOrderWire? = null,
 ) {
     /** The STK registered for `serverDomain` (case-insensitive, non-
      *  revoked). Null when the directory can't vouch for the box. */
@@ -639,12 +608,13 @@ data class LiveSyncResponse(
     val username: String,
     val pods: List<PodDirectoryEntry> = emptyList(),
     val pending: List<PendingPodEntry> = emptyList(),
+    val serverOrder: com.flagshipserver.app.core.ServerOrderWire? = null,
 ) {
     /** Project to the `/pods`-shaped directory the reconciler consumes (it
      *  doesn't need the cursor). Lets the same reconcile path serve both the
      *  live stream and the fallback fetch with no branching. */
     val directory: PodsDirectoryResponse
-        get() = PodsDirectoryResponse(username, pods, pending)
+        get() = PodsDirectoryResponse(username, pods, pending, serverOrder)
 }
 
 // MARK: - Live
@@ -821,14 +791,14 @@ class LiveSecretMailboxClient(
         )
     }
 
-    override suspend fun depositSetLeader(serverDomain: String, body: SetLeaderDepositBody) {
-        val encoded = java.net.URLEncoder.encode(serverDomain, "UTF-8")
+    override suspend fun postServerOrder(username: String, wire: com.flagshipserver.app.core.ServerOrderWire) {
+        val encoded = java.net.URLEncoder.encode(username.lowercase(), "UTF-8")
         val bytes = transport.json
-            .encodeToString(SetLeaderDepositBody.serializer(), body)
+            .encodeToString(com.flagshipserver.app.core.ServerOrderWire.serializer(), wire)
             .toByteArray(Charsets.UTF_8)
         transport.execute(
             method = "POST",
-            url = "$base/api/server/$encoded/set-leader",
+            url = "$base/api/accounts/$encoded/server-order",
             body = bytes,
             contentType = "application/json",
             accept = setOf(200),
@@ -974,7 +944,7 @@ class MockSecretMailboxClient : SecretMailboxClient {
     }
 
     override suspend fun fetchPods(username: String): PodsDirectoryResponse =
-        PodsDirectoryResponse(username, directory, pendingOrders)
+        PodsDirectoryResponse(username, directory, pendingOrders, directoryServerOrder)
 
     /** Scripted live-sync responses for tests: each [fetchLiveSync] call pops the
      *  next entry; once exhausted it returns a DETERMINISTIC snapshot built from
@@ -1032,12 +1002,14 @@ class MockSecretMailboxClient : SecretMailboxClient {
         cgkDeposits.add(serverDomain to body)
     }
 
-    val setLeaderDeposits: MutableList<Pair<String, SetLeaderDepositBody>> = mutableListOf()
-    /** When set, the next [depositSetLeader] throws this, then clears it. */
-    var setLeaderError: Throwable? = null
-    override suspend fun depositSetLeader(serverDomain: String, body: SetLeaderDepositBody) {
-        setLeaderError?.let { setLeaderError = null; throw it }
-        setLeaderDeposits.add(serverDomain to body)
+    val serverOrders: MutableList<Pair<String, com.flagshipserver.app.core.ServerOrderWire>> = mutableListOf()
+    /** When set, the next [postServerOrder] throws this, then clears it. */
+    var serverOrderError: Throwable? = null
+    /** What [fetchPods] returns as `serverOrder`. */
+    var directoryServerOrder: com.flagshipserver.app.core.ServerOrderWire? = null
+    override suspend fun postServerOrder(username: String, wire: com.flagshipserver.app.core.ServerOrderWire) {
+        serverOrderError?.let { serverOrderError = null; throw it }
+        serverOrders.add(username to wire)
     }
 
     /** When set, the next [depositDecommission] throws this, then clears it. */

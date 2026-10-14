@@ -119,6 +119,12 @@ class AccountReadTokens(
         _statusPaused.value = false
     }
 
+    /** The owner just unlocked the account key ("Show my servers"): the next
+     *  read mints straight away instead of waiting out the backoff. */
+    fun keysUnlocked() {
+        lastFailedMintAt = null
+    }
+
     /** The active profile changed: its tokens live under its own keys, so
      *  only the paused banner and the mint backoff start over. */
     fun profileChanged() {

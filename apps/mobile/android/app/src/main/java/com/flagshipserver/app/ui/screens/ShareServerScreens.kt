@@ -525,21 +525,21 @@ fun ShareSheetContent(
 // ── The other account: "Shared with me" on Home ───────────────────────────
 
 @Composable
-fun SharedWithMeSection(onOpen: (String) -> Unit, onOpenLink: () -> Unit) {
+fun SharedWithMeSection(onOpen: (String) -> Unit) {
     val runtime = LocalServerShares.current ?: return
     val model = runtime.sharedWithMe
     val ui by model.ui.collectAsState()
     LaunchedEffect(model) { model.refresh() }
-    SharedWithMeContent(ui = ui, onOpen = onOpen, onOpenLink = onOpenLink)
+    SharedWithMeContent(ui = ui, onOpen = onOpen)
 }
 
 @Composable
-fun SharedWithMeContent(ui: SharedWithMeUi, onOpen: (String) -> Unit, onOpenLink: () -> Unit) {
+fun SharedWithMeContent(ui: SharedWithMeUi, onOpen: (String) -> Unit) {
+    // Nothing shared with this account: no section at all. Accepting a link
+    // starts from the create-server screen or a scanned link.
+    if (ui.items.isEmpty()) return
     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3), modifier = Modifier.testTag("shared-with-me")) {
         SectionTitle("Shared with me")
-        if (ui.items.isEmpty()) {
-            Muted("Servers other people share with you show up here.")
-        }
         ui.items.forEach { item ->
             val (status, kind) = when (val s = item.status) {
                 is SharedItem.Status.Active -> ShareCopy.level(s.level) to FSPillKind.Online
@@ -556,7 +556,6 @@ fun SharedWithMeContent(ui: SharedWithMeUi, onOpen: (String) -> Unit, onOpenLink
                 modifier = Modifier.testTag("shared-row-${item.entry.shareId}"),
             )
         }
-        FSGhostButton(label = "Open a share link", onClick = onOpenLink, block = true, modifier = Modifier.testTag("shared-open-link"))
     }
 }
 

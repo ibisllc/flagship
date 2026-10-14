@@ -54,62 +54,41 @@ class AppStateTest {
         assertEquals("first", s.currentPodId.value)
     }
 
-    @Test fun setLeader_alsoMovesCurrent() {
-        // docs/app-placement.md §1: new apps follow the current server, so
-        // making a server leader makes it current too.
-        val s = AppState(isPaired = true, currentUser = "u",
-            pods = listOf(pod("a"), pod("b")),
-            leaderPodId = "a", currentPodId = "a")
-        s.setLeader("b")
-        assertEquals("b", s.leaderPodId.value)
-        assertEquals("b", s.currentPodId.value)
-        assertEquals("b", s.currentPod?.podId)
-    }
-
-    @Test fun setLeader_unknownPodChangesNothing() {
-        val s = AppState(isPaired = true, currentUser = "u",
-            pods = listOf(pod("a")), leaderPodId = "a", currentPodId = "a")
-        s.setLeader("ghost")
-        assertEquals("a", s.leaderPodId.value)
-        assertEquals("a", s.currentPodId.value)
-    }
-
     private fun online(id: String) = pod(id).copy(status = PodInfo.Status.ONLINE)
 
     @Test fun currentPod_prefersAnOnlineLeaderWithASession() {
         val s = AppState(isPaired = true, currentUser = "u",
-            pods = listOf(online("a"), online("b")),
-            leaderPodId = "b", currentPodId = "a")
-        assertEquals("b", s.currentPod?.podId)
+            pods = listOf(online("a"), online("b")), currentPodId = "b")
+        assertEquals("a", s.leaderPodId.value)
+        assertEquals("a", s.currentPod?.podId)
     }
 
     @Test fun currentPod_keepsTheSelectionWhenTheLeaderHasNoSession() {
         val s = AppState(isPaired = true, currentUser = "u",
-            pods = listOf(online("a"), online("b")),
-            leaderPodId = "b", currentPodId = "a")
-        s.hasSession = { it != "b" }
-        assertEquals("a", s.currentPod?.podId)
+            pods = listOf(online("a"), online("b")), currentPodId = "b")
+        s.hasSession = { it != "a" }
+        assertEquals("b", s.currentPod?.podId)
     }
 
-    @Test fun currentPod_keepsTheSelectionWhenTheLeaderIsOffline() {
+    @Test fun leader_isTheFirstServerThatIsUp() {
+        // docs/server-order.md: an offline first server hands the lead down.
         val s = AppState(isPaired = true, currentUser = "u",
-            pods = listOf(online("a"), pod("b").copy(status = PodInfo.Status.OFFLINE)),
-            leaderPodId = "b", currentPodId = "a")
-        assertEquals("a", s.currentPod?.podId)
-        assertEquals("a", s.sessionPod?.podId)
+            pods = listOf(pod("a").copy(status = PodInfo.Status.OFFLINE), online("b")), currentPodId = "a")
+        assertEquals("b", s.leaderPodId.value)
+        assertEquals("b", s.currentPod?.podId)
+        assertEquals("b", s.sessionPod?.podId)
     }
 
     @Test fun setCurrentPod_rejectsUnknown() {
         val s = AppState(isPaired = true, currentUser = "u",
-            pods = listOf(pod("a")), leaderPodId = "a", currentPodId = "a")
+            pods = listOf(pod("a")), currentPodId = "a")
         s.setCurrentPod("nope")
         assertEquals("a", s.currentPodId.value)
     }
 
     @Test fun removePod_reassignsLeaderAndCurrent() {
         val s = AppState(isPaired = true, currentUser = "u",
-            pods = listOf(pod("a"), pod("b")),
-            leaderPodId = "a", currentPodId = "a")
+            pods = listOf(pod("a"), pod("b")), currentPodId = "a")
         s.removePod("a")
         assertEquals("b", s.leaderPodId.value)
         assertEquals("b", s.currentPodId.value)
@@ -117,7 +96,7 @@ class AppStateTest {
 
     @Test fun signOut_clearsEverything() {
         val s = AppState(isPaired = true, currentUser = "u",
-            pods = listOf(pod("a")), leaderPodId = "a")
+            pods = listOf(pod("a")))
         s.signOut()
         assertFalse(s.isPaired.value)
         assertNull(s.currentUser.value)

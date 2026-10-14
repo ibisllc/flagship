@@ -129,3 +129,21 @@ fun canonicalSetServiceEnv(req: com.flagshipserver.app.api.ServiceEnvSetEnvelope
     return parts.joinToString("|").toByteArray(Charsets.UTF_8)
 }
 
+
+/** The one server-order saver for this composition (docs/server-order.md):
+ *  Home's drag and a server page's "Make leader" share it and AppState's
+ *  order, so either change shows in both at once. */
+@androidx.compose.runtime.Composable
+fun rememberServerOrderSaver(): ServerOrderSaver {
+    val app = LocalAppState.current
+    val mailbox = LocalSecretMailboxClient.current
+    return androidx.compose.runtime.remember(app, mailbox) {
+        ServerOrderSaver(
+            app = app,
+            post = { u, wire -> mailbox.postServerOrder(u, wire) },
+            fetchOrder = { u -> mailbox.fetchPods(u).serverOrder },
+            signer = { reason -> com.flagshipserver.app.keystore.Keystore.adminSigningKey(reason) },
+            isDemo = { app.isDemoAccountNow() },
+        )
+    }
+}

@@ -124,7 +124,6 @@ import com.flagshipserver.app.viewmodels.RevokeServerReason
 import com.flagshipserver.app.viewmodels.ReplaceServerViewModel
 import com.flagshipserver.app.viewmodels.RevokeServerViewModel
 import com.flagshipserver.app.viewmodels.ServerMetricsViewModel
-import com.flagshipserver.app.viewmodels.SetPreferredServerViewModel
 import com.flagshipserver.app.viewmodels.UnrevokeServerPhase
 import com.flagshipserver.app.viewmodels.UnrevokeServerViewModel
 import com.flagshipserver.app.core.FlagshipDateFormat
@@ -269,7 +268,7 @@ fun ServerDetailScreen(
             Spacer(Modifier.height(FS.space.s6))
             BootUnlockCard(serverDomain = d.value.serverFqdn)
             Spacer(Modifier.height(FS.space.s6))
-            PreferredServerCard(serverDomain = d.value.serverFqdn)
+            LeaderCard(serverDomain = d.value.serverFqdn)
             Spacer(Modifier.height(FS.space.s6))
             ShareServerCard(serverDomain = d.value.serverFqdn, podId = podId)
             Spacer(Modifier.height(FS.space.s6))
@@ -769,88 +768,68 @@ private fun FrontPageCard(serverDomain: String) {
     }
 }
 
-// "Set as preferred server" — the owner's per-service-leadership default vote
-// (Phase 6, docs/multi-pod-liveness-session-leadership.md). Mirror of the iOS
-// PreferredServerCard. Reads the mailbox + AppState from the composition;
-// behind the standard biometric (via SetPreferredServerViewModel) it signs the
-// existing set-leader vote for THIS box's STK and deposits it, then marks the
-// pod preferred IMMEDIATELY (app.setLeader) independent of gossip catch-up.
-//
-// Only meaningful with more than one server (a preferred default among peers),
-// and only once the box has a registered identity to vote for.
+// "Make leader" — moves this server to the top of the owner's server order
+// (docs/server-order.md) through the same saver and AppState order as Home's
+// drag, so Home already lists it first with the Leader badge on the way back,
+// and puts the old order back everywhere if signing or saving fails.
 @Composable
-private fun PreferredServerCard(serverDomain: String) {
-    val mailbox = LocalSecretMailboxClient.current
+private fun LeaderCard(serverDomain: String) {
     val app = LocalAppState.current
     val toasts = LocalToastCenter.current
     val scope = rememberCoroutineScope()
+    val saver = com.flagshipserver.app.core.rememberServerOrderSaver()
 
-    val pods by app.pods.collectAsState()
+    val ordered by app.orderedPods.collectAsState()
     val leaderPodId by app.leaderPodId.collectAsState()
-    val username by app.currentUser.collectAsState()
 
-    val pod = pods.firstOrNull { it.fqdn.lowercase() == serverDomain.lowercase() }
-    val isPreferred = pod != null && leaderPodId == pod.podId
-    val hasStk = (com.flagshipserver.app.core.HexUtil.decode(pod?.identityPubKeyHex ?: "")?.size ?: 0) == 32
-    val multiPod = pods.count { it.status != com.flagshipserver.app.core.PodInfo.Status.PENDING } > 1
-
-    // Gate: >1 non-pending server AND this box has a registered STK to vote for.
-    if (!multiPod || !hasStk || pod == null) return
+    val orderable = ordered.filter(com.flagshipserver.app.core.ServerOrderProtocol::orderable)
+    val pod = orderable.firstOrNull { it.fqdn.equals(serverDomain, ignoreCase = true) }
+    // Only meaningful among two or more servers this one can be ranked against.
+    if (pod == null || orderable.size < 2) return
+    val position = orderable.indexOf(pod) + 1
+    val isLeader = leaderPodId == pod.podId
 
     var working by remember(serverDomain) { mutableStateOf(false) }
 
     Text(
-        "Preferred server",
+        "Leader",
         color = FS.colors.text,
         style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
     )
     Spacer(Modifier.height(FS.space.s2))
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            if (isPreferred) {
-                Text(
-                    "This is your preferred server",
-                    color = FS.colors.text,
-                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
-                )
-                Text(
-                    "New apps are created here unless you pick another server when you create them. To change this, set another server as preferred from its page.",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp),
-                )
-            } else {
-                Text(
-                    "Make this the server new apps are created on by default, and the one your other servers prefer to lead a service.",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp),
-                )
+            Text(
+                when {
+                    position == 1 && isLeader -> "This server leads. New apps are created here, and it serves each app it runs."
+                    position == 1 -> "This server is first in line. While it's down, the next server that's up leads."
+                    isLeader -> "This server is #$position in line and leads while the servers above it are down."
+                    else -> "This server is #$position in line to lead. Make it the leader to move it to the top of your server list."
+                },
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 13.sp),
+                modifier = Modifier.testTag("sd-leader-status"),
+            )
+            if (position != 1) {
                 FSPrimaryButton(
-                    label = if (working) "Setting…" else "Set as preferred server",
+                    label = if (working) "Saving…" else "Make leader",
                     onClick = {
                         if (working) return@FSPrimaryButton
                         working = true
-                        scope.launch {
-                            val vm = SetPreferredServerViewModel(
-                                username = username ?: "",
-                                serverDomain = serverDomain,
-                                preferredStkPubHex = pod.identityPubKeyHex,
-                                mailbox = mailbox,
-                            )
-                            val ok = vm.setPreferred()
-                            if (ok) {
-                                // Reflect the choice immediately, independent of
-                                // gossip catch-up.
-                                app.setLeader(pod.podId)
-                                toasts.success("Preferred server set.")
-                            } else {
-                                toasts.warning("Couldn't set the preferred server — try again.")
+                        scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+                            when (val outcome = saver.makeLeader(pod.podId)) {
+                                is com.flagshipserver.app.core.ServerOrderSaver.Outcome.Failed ->
+                                    toasts.warning(outcome.message)
+                                com.flagshipserver.app.core.ServerOrderSaver.Outcome.Superseded ->
+                                    toasts.info("Another device changed the order. Showing the newest one.")
+                                else -> toasts.success("${pod.name} is now first in your server list.")
                             }
                             working = false
                         }
                     },
                     enabled = !working,
                     block = true,
-                    modifier = Modifier.semantics { contentDescription = "sd-set-preferred" },
+                    modifier = Modifier.testTag("sd-make-leader"),
                 )
             }
         }
