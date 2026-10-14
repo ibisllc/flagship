@@ -364,6 +364,18 @@ account can view or co-manage a server, never destroy it) is in the MVP
   runs it (`runsServices`, new; sent again as soon as a box's apps change),
   and app-bound voi.ci codes resolve their target on each visit. Boxes
   that don't send `runsServices` yet count as running everything.
+- **Remote is QR-first (2026-10-14).** remote.flagshipserver.com shows a QR
+  at once (`flagship://remote?s=<sid>&k=<browser X25519>`, the `/qr-pipe`
+  relay); the phone shows the same 6-digit code, the owner picks a server
+  and approves (biometric), and the phone mints a one-use companion ticket
+  on that box and seals `flagship/remote-ticket/v1` to the browser, which
+  redeems it there. The page no longer asks for a username or reads `/pods`;
+  the old box-side `/api/companion/dock/*` endpoints are gone. Both apps
+  only routed `flagship://dock`, so the old page's QR did nothing. Needs a
+  `.com` deploy (shell v72) and new iOS/Android builds; not yet run live.
+  `/pods` now leaves out servers their owner deleted. Still open:
+  `/api/users/<u>/pods` and `/stream` are unauthenticated, so anyone can
+  read any account's servers, liveness, health and apps.
 - **Docker containers unreachable on VM appliances (fixed in `e81df698`).**
   The appliance's `Type=ether` networkd rule pulled every container's veth off
   its bridge: every app 502'd with "read ECONNRESET" after a 3 s ARP timeout

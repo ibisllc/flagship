@@ -558,8 +558,10 @@ public struct CreateServerStubScreen: View {
                     validate: { payload in
                         // Only accept QRs that parse cleanly as a v2
                         // relay URL. Anything else keeps the scanner
-                        // live so the user can re-aim.
+                        // live so the user can re-aim. A remote-browser
+                        // QR is a relay URL too, but never a recipe target.
                         (try? QrRelay.parseQrUrl(payload)) != nil
+                            && RemoteApprovalLink.parse(payload) == nil
                     }
                 )
                 .frame(height: 300)

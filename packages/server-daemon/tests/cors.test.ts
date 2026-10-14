@@ -35,7 +35,7 @@ describe("isWebappOrigin", () => {
   });
 
   it("allows the remote origins — without them the remote ceremony can't start", () => {
-    // /api/companion/dock/begin is called cross-origin from remote.<apex>
+    // /api/companion/redeem is called cross-origin from remote.<apex>
     // BEFORE any session exists; a missing ACAO blocks the whole flow.
     expect(isWebappOrigin(REMOTE)).toBe(true);
     expect(isWebappOrigin(REMOTE_GYM)).toBe(true);

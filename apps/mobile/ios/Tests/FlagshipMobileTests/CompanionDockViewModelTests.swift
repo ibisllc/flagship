@@ -1,10 +1,12 @@
 import XCTest
+import CryptoKit
 @testable import FlagshipAPI
+@testable import FlagshipCore
 @testable import FlagshipUI
 
-/// P14 — CompanionDockViewModel state machine + the wire shape it renders.
-/// Mirrors the daemon's desktop-begin → phone-approve contract plus active
-/// companion listing and revocation.
+/// CompanionDockViewModel: the phone side of the QR-first remote ceremony
+/// (join the browser's relay session, match the code, mint a ticket on the
+/// picked server, seal it to the browser) plus listing and revocation.
 @MainActor
 final class CompanionDockViewModelTests: XCTestCase {
 
@@ -12,6 +14,25 @@ final class CompanionDockViewModelTests: XCTestCase {
         let c = MockScreensClient()
         c.simulatedLatency = 0
         return c
+    }
+
+    private let home = CompanionDockViewModel.ServerChoice(fqdn: "home.alice.flagship.services", name: "home", online: true)
+    private let lab = CompanionDockViewModel.ServerChoice(fqdn: "lab.alice.flagship.services", name: "lab", online: true)
+
+    private func makeVM(
+        _ client: MockScreensClient,
+        relay: MockQrRelayClient = MockQrRelayClient(),
+        authenticate: @escaping @MainActor @Sendable (String) async throws -> Void = { _ in }
+    ) -> CompanionDockViewModel {
+        CompanionDockViewModel(
+            clients: .shared(client),
+            relay: relay,
+            servers: [home],
+            defaultFqdn: home.fqdn,
+            username: "alice",
+            authenticate: authenticate,
+            confirmGateNanos: 0
+        )
     }
 
     // MARK: - Default mock fixtures
@@ -26,7 +47,7 @@ final class CompanionDockViewModelTests: XCTestCase {
 
     func test_load_idle_toLoaded_emptyDefault() async {
         let client = makeClient()
-        let vm = CompanionDockViewModel(client: client)
+        let vm = makeVM(client)
         await vm.load()
         guard case .loaded(let s) = vm.state else {
             XCTFail("expected loaded, got \(vm.state)"); return
@@ -52,7 +73,7 @@ final class CompanionDockViewModelTests: XCTestCase {
                 userAgent: nil
             )
         ])
-        let vm = CompanionDockViewModel(client: client)
+        let vm = makeVM(client)
         await vm.load()
         guard case .loaded(let s) = vm.state else {
             XCTFail("expected loaded, got \(vm.state)"); return
@@ -66,7 +87,7 @@ final class CompanionDockViewModelTests: XCTestCase {
     func test_load_failure_surfacesAsFailed() async {
         let client = makeClient()
         client.shouldFail = true
-        let vm = CompanionDockViewModel(client: client)
+        let vm = makeVM(client)
         await vm.load()
         if case .failed = vm.state {
             // expected
@@ -75,52 +96,113 @@ final class CompanionDockViewModelTests: XCTestCase {
         }
     }
 
-    // MARK: - desktop-initiated approval
+    // MARK: - remote approval
 
-    private var approvalLink: String {
-        "flagship://dock?server=home.alice.flagship.services&request=\("ab".repeated(16))&code=\("cd".repeated(32))"
+    private func remoteLink(browserKey: Curve25519.KeyAgreement.PrivateKey = .init()) -> String {
+        let sid = Base64URL.encode(Data((0..<16).map { _ in UInt8.random(in: 0...255) }))
+        return "flagship://remote?s=\(sid)&k=\(Base64URL.encode(browserKey.publicKey.rawRepresentation))"
     }
 
-    func test_stageApproval_rejectsUnrelatedLink() {
-        let vm = CompanionDockViewModel(client: makeClient(), authenticate: { _ in })
-        XCTAssertFalse(vm.stageApproval(link: "https://example.com/not-dock"))
-        XCTAssertNil(vm.stagedApproval)
-        XCTAssertNotNil(vm.approvalError)
+    func test_begin_rejectsUnrelatedLink() async {
+        let relay = MockQrRelayClient()
+        let vm = makeVM(makeClient(), relay: relay)
+        await vm.begin(link: "https://example.com/not-remote")
+        guard case .failed = vm.phase else { return XCTFail("expected failed, got \(vm.phase)") }
+        XCTAssertNil(relay.lastHello)
     }
 
-    func test_stageApproval_requiresSelectedServer() {
+    func test_begin_rejectsCreateServerRelayLink() {
+        let k = Base64URL.encode(Curve25519.KeyAgreement.PrivateKey().publicKey.rawRepresentation)
+        let sid = Base64URL.encode(Data(repeating: 1, count: 16))
+        XCTAssertFalse(CompanionDockViewModel.isRemoteLink("https://flagshipserver.com/qr?s=\(sid)&k=\(k)"))
+        XCTAssertTrue(CompanionDockViewModel.isRemoteLink("flagship://remote?s=\(sid)&k=\(k)"))
+    }
+
+    func test_begin_joinsRelayAndShowsMatchCode() async throws {
+        let relay = MockQrRelayClient()
+        let browser = Curve25519.KeyAgreement.PrivateKey()
+        let vm = makeVM(makeClient(), relay: relay)
+        await vm.begin(link: remoteLink(browserKey: browser))
+        guard case .matching(let code, true) = vm.phase else { return XCTFail("expected matching, got \(vm.phase)") }
+        let phonePk = try XCTUnwrap(Base64URL.decode(try XCTUnwrap(relay.lastHello).phonePk))
+        let browserSide = try QrRelay.deriveMaterial(phonePrivateKey: browser, browserPublicKey: phonePk)
+        XCTAssertEqual(code, browserSide.matchCode)
+    }
+
+    func test_approve_mintsOnPickedServer_andSealsTicketToBrowser() async throws {
+        let relay = MockQrRelayClient()
+        let homeClient = makeClient()
+        let labClient = makeClient()
+        let browser = Curve25519.KeyAgreement.PrivateKey()
+        var reasons: [String] = []
         let vm = CompanionDockViewModel(
-            client: makeClient(),
-            expectedServerDomain: "other.alice.flagship.services",
-            authenticate: { _ in }
+            clients: PodScreensClientFactory { fqdn in fqdn == "lab.alice.flagship.services" ? labClient : homeClient },
+            relay: relay,
+            servers: [home, lab],
+            defaultFqdn: home.fqdn,
+            username: "alice",
+            authenticate: { reasons.append($0) },
+            confirmGateNanos: 0
         )
-        XCTAssertFalse(vm.stageApproval(link: approvalLink))
-        XCTAssertNil(vm.stagedApproval)
-        XCTAssertTrue(vm.approvalError?.contains("Switch to") == true)
-    }
-
-    func test_approve_faceGatesThenPostsAndRefreshes() async {
-        let client = makeClient()
-        var biometricCount = 0
-        let vm = CompanionDockViewModel(client: client, authenticate: { _ in biometricCount += 1 })
-        XCTAssertTrue(vm.stageApproval(link: approvalLink))
+        await vm.begin(link: remoteLink(browserKey: browser))
+        await vm.select(fqdn: lab.fqdn)
         await vm.approve()
-        XCTAssertEqual(biometricCount, 1)
-        XCTAssertEqual(client.companionApproveDockCalls.count, 1)
-        XCTAssertEqual(client.companionApproveDockCalls[0].requestId, "ab".repeated(16))
-        XCTAssertTrue(vm.approvalComplete)
-        XCTAssertNil(vm.stagedApproval)
+
+        XCTAssertEqual(vm.phase, .connected(serverName: "lab"))
+        XCTAssertEqual(reasons.count, 1)
+        XCTAssertEqual(labClient.companionMintCalls.count, 1)
+        XCTAssertTrue(homeClient.companionMintCalls.isEmpty)
+
+        let phonePk = try XCTUnwrap(Base64URL.decode(try XCTUnwrap(relay.lastHello).phonePk))
+        let key = try QrRelay.deriveMaterial(phonePrivateKey: browser, browserPublicKey: phonePk).aeadKey
+        let deliver = try XCTUnwrap(relay.lastDeliver)
+        let ct = try XCTUnwrap(Base64URL.decode(deliver.ciphertext))
+        let box = try AES.GCM.SealedBox(
+            nonce: AES.GCM.Nonce(data: try XCTUnwrap(Base64URL.decode(deliver.nonce))),
+            ciphertext: ct.dropLast(16),
+            tag: ct.suffix(16)
+        )
+        let plain = try AES.GCM.open(box, using: key)
+        let obj = try XCTUnwrap(JSONSerialization.jsonObject(with: plain) as? [String: String])
+        XCTAssertEqual(obj["kind"], "flagship/remote-ticket/v1")
+        XCTAssertEqual(obj["podBaseUrl"], "https://lab.alice.flagship.services")
+        XCTAssertEqual(obj["username"], "alice")
+        XCTAssertNotNil(obj["ticketId"]?.range(of: "^[0-9a-f]{32}$", options: .regularExpression))
+        XCTAssertNotNil(obj["ticketSecret"]?.range(of: "^[0-9a-f]{64}$", options: .regularExpression))
+        XCTAssertEqual(Set(obj.keys), ["kind", "ticketId", "ticketSecret", "podBaseUrl", "username"])
     }
 
-    func test_approve_biometricFailureNeverPosts() async {
+    func test_approve_biometricFailureNeverMintsOrDelivers() async {
         struct Cancelled: Error {}
+        let relay = MockQrRelayClient()
         let client = makeClient()
-        let vm = CompanionDockViewModel(client: client, authenticate: { _ in throw Cancelled() })
-        XCTAssertTrue(vm.stageApproval(link: approvalLink))
+        let vm = makeVM(client, relay: relay, authenticate: { _ in throw Cancelled() })
+        await vm.begin(link: remoteLink())
         await vm.approve()
-        XCTAssertTrue(client.companionApproveDockCalls.isEmpty)
-        XCTAssertFalse(vm.approvalComplete)
-        XCTAssertNotNil(vm.approvalError)
+        XCTAssertTrue(client.companionMintCalls.isEmpty)
+        XCTAssertNil(relay.lastDeliver)
+        guard case .failed = vm.phase else { return XCTFail("expected failed, got \(vm.phase)") }
+    }
+
+    func test_begin_relayFailureSurfaces() async {
+        let relay = MockQrRelayClient()
+        relay.behavior = .peerMissing
+        let vm = makeVM(makeClient(), relay: relay)
+        await vm.begin(link: remoteLink())
+        guard case .failed = vm.phase else { return XCTFail("expected failed, got \(vm.phase)") }
+    }
+
+    func test_servers_onlineFirst_defaultsToCurrent() {
+        let offline = CompanionDockViewModel.ServerChoice(fqdn: "old.alice.flagship.services", name: "old", online: false)
+        let vm = CompanionDockViewModel(
+            clients: .shared(makeClient()),
+            relay: MockQrRelayClient(),
+            servers: [offline, home, lab],
+            defaultFqdn: lab.fqdn,
+            username: "alice"
+        )
+        XCTAssertEqual(vm.servers.map(\.name), ["home", "lab", "old"])
+        XCTAssertEqual(vm.selectedFqdn, lab.fqdn)
     }
 
     // MARK: - revoke()
@@ -137,7 +219,7 @@ final class CompanionDockViewModelTests: XCTestCase {
                 redeemedAt: 1, lastSeenMs: 2, expiresAt: 3, userAgent: nil
             )
         ])
-        let vm = CompanionDockViewModel(client: client)
+        let vm = makeVM(client)
         await vm.load()
         await vm.revoke(tokenPrefix: "deadbe")
         XCTAssertEqual(client.companionRevokeCalls, ["deadbe"])
@@ -150,7 +232,7 @@ final class CompanionDockViewModelTests: XCTestCase {
 
     func test_revoke_failure_surfacesAsFailed_andClearsPending() async {
         let client = makeClient()
-        let vm = CompanionDockViewModel(client: client)
+        let vm = makeVM(client)
         await vm.load()
         client.shouldFail = true
         await vm.revoke(tokenPrefix: "deadbe")

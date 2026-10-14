@@ -104,41 +104,37 @@ public enum CompanionTicketURL {
     }
 }
 
-public enum CompanionDockApprovalLink {
-    public struct Payload: Equatable, Sendable {
-        public let serverDomain: String
-        public let requestId: String
-        public let approvalSecret: String
-
-        public init(serverDomain: String, requestId: String, approvalSecret: String) {
-            self.serverDomain = serverDomain
-            self.requestId = requestId
-            self.approvalSecret = approvalSecret
-        }
+/// The QR the remote page (`remote.flagshipserver.com`) shows:
+/// `flagship://remote?s=<sid>&k=<browser X25519 key>`. It names only a QR-relay
+/// session and the browser's ephemeral key, never an account or a server; the
+/// phone picks the server and seals a single-use ticket to the browser.
+public enum RemoteApprovalLink {
+    public static func parse(_ raw: String) -> QrRelay.QrSession? {
+        let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: text), url.scheme == "flagship", url.host == "remote",
+              let session = try? QrRelay.parseQrUrl(text),
+              let sid = Base64URL.decode(session.sid), sid.count == 16
+        else { return nil }
+        return session
     }
+}
 
-    /// Accepted deep-link hosts. `remote` is the current label (the feature
-    /// was renamed from "dock" on 2026-07-23); `dock` stays accepted so a
-    /// browser still serving the pre-rename webapp keeps working against a
-    /// freshly built app. The payload is identical either way.
-    static let acceptedHosts: Set<String> = ["remote", "dock"]
+/// The payload the phone seals to the remote browser: a single-use companion
+/// ticket for the server the owner picked. Field names match the webapp's
+/// `parseRemoteTicket` (`lib/companionDockStart.js`).
+public struct RemoteTicketPayload: Codable, Equatable, Sendable {
+    public static let kindTag = "flagship/remote-ticket/v1"
+    public let kind: String
+    public let ticketId: String
+    public let ticketSecret: String
+    public let podBaseUrl: String
+    public let username: String
 
-    public static func parse(_ raw: String) -> Payload? {
-        guard let url = URL(string: raw.trimmingCharacters(in: .whitespacesAndNewlines)),
-              url.scheme == "flagship",
-              let host = url.host, acceptedHosts.contains(host),
-              let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        else { return nil }
-        let params = (components.queryItems ?? []).reduce(into: [String: String]()) { out, item in
-            if let value = item.value { out[item.name] = value }
-        }
-        guard let server = params["server"]?.lowercased(),
-              server.hasSuffix(".\(Endpoints.dataApex)"),
-              let requestId = params["request"]?.lowercased(),
-              requestId.range(of: "^[0-9a-f]{32}$", options: .regularExpression) != nil,
-              let secret = params["code"]?.lowercased(),
-              secret.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil
-        else { return nil }
-        return Payload(serverDomain: server, requestId: requestId, approvalSecret: secret)
+    public init(ticketId: String, ticketSecret: String, podBaseUrl: String, username: String) {
+        self.kind = Self.kindTag
+        self.ticketId = ticketId
+        self.ticketSecret = ticketSecret
+        self.podBaseUrl = podBaseUrl
+        self.username = username
     }
 }

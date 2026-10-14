@@ -59,7 +59,6 @@ import {
   type PbFramesHandlerOptions,
 } from "./peerBackup/httpPeerLink.js";
 import { InMemoryCompanionTicketStore } from "./companion/companionTicketStore.js";
-import { InMemoryCompanionDockRequestStore } from "./companion/companionDockRequestStore.js";
 import { InMemoryCompanionWriteRequestStore } from "./companion/companionWriteRequestStore.js";
 import { bootstrapBrowserBundle, type BrowserBundle } from "./browser/bootstrap.js";
 import { buildCloneApp } from "./cloneService.js";
@@ -751,7 +750,6 @@ async function main(): Promise<void> {
   // BFF in-memory ledgers (companion-dock).
   const {
     companionTicketStore,
-    companionDockRequestStore,
     companionWriteRequestStore,
   } = wireBffStores();
 
@@ -1264,7 +1262,6 @@ async function main(): Promise<void> {
       backupLoop,
       repairAccumulator,
       companionTicketStore,
-      companionDockRequestStore,
       companionWriteRequestStore,
       pullStateStore,
       updateClient,
@@ -1671,7 +1668,6 @@ function wirePeerBackup(deps: {
 
 interface BffStores {
   companionTicketStore: InMemoryCompanionTicketStore;
-  companionDockRequestStore: InMemoryCompanionDockRequestStore;
   companionWriteRequestStore: InMemoryCompanionWriteRequestStore;
 }
 
@@ -1683,7 +1679,6 @@ interface BffStores {
 function wireBffStores(): BffStores {
   return {
     companionTicketStore: new InMemoryCompanionTicketStore(),
-    companionDockRequestStore: new InMemoryCompanionDockRequestStore(),
     companionWriteRequestStore: new InMemoryCompanionWriteRequestStore(),
   };
 }
@@ -2047,7 +2042,6 @@ async function wireRuntimeSurfaces(deps: {
   backupLoop: BackupLoop | null;
   repairAccumulator: RepairStatsAccumulator;
   companionTicketStore: InMemoryCompanionTicketStore;
-  companionDockRequestStore: InMemoryCompanionDockRequestStore;
   companionWriteRequestStore: InMemoryCompanionWriteRequestStore;
   pullStateStore: FileAppPullStateStore;
   updateClient: UpdateClient;
@@ -2071,7 +2065,6 @@ async function wireRuntimeSurfaces(deps: {
     backupLoop,
     repairAccumulator,
     companionTicketStore,
-    companionDockRequestStore,
     companionWriteRequestStore,
     pullStateStore,
     updateClient,
@@ -2874,7 +2867,6 @@ async function wireRuntimeSurfaces(deps: {
     // guard returns 403 for companion-initiated mutations.
     companion: {
       ticketStore: companionTicketStore,
-      dockRequestStore: companionDockRequestStore,
       pairedSessions,
       serverFqdn: env.serverFqdn,
       username,
@@ -3995,11 +3987,6 @@ export type {
   CompanionTicketRow,
   CompanionTicketStore,
 } from "./companion/companionTicketStore.js";
-export { InMemoryCompanionDockRequestStore } from "./companion/companionDockRequestStore.js";
-export type {
-  CompanionDockRequestRow,
-  CompanionDockRequestStore,
-} from "./companion/companionDockRequestStore.js";
 export {
   COMPANION_WRITE_REQUEST_KINDS,
   InMemoryCompanionWriteRequestStore,

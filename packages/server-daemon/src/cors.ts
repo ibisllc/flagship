@@ -13,9 +13,9 @@ import type { HttpRequest, HttpResponse } from "./runtime.js";
  *
  * `remote.<control-apex>` is the SAME shell on its own origin (the
  * phone-approved browser-remote session, split out of `web.` on 2026-07-23),
- * and it talks to the box on the same paths — including the two unauthenticated
- * `/api/companion/dock/*` endpoints that BEGIN the ceremony. It must be allowed
- * here or the remote flow cannot start at all.
+ * and it talks to the box on the same paths — starting with the unauthenticated
+ * `/api/companion/redeem` that turns the phone's sealed ticket into a session.
+ * It must be allowed here or the remote flow cannot start at all.
  *
  * The data/services apex (`flagship.services`) has no structural relationship
  * to the control apex (`flagshipserver.com` — a different registrable

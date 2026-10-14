@@ -7,8 +7,6 @@ package com.flagshipserver.app.viewmodels
 import com.flagshipserver.app.api.BuildDeployResponse
 import com.flagshipserver.app.api.AppsListResponse
 import com.flagshipserver.app.api.CompanionListResponse
-import com.flagshipserver.app.api.CompanionDockApproveRequest
-import com.flagshipserver.app.api.CompanionDockApproveResponse
 import com.flagshipserver.app.api.CompanionMintTicketRequest
 import com.flagshipserver.app.api.CompanionMintTicketResponse
 import com.flagshipserver.app.api.CompanionPendingWritesResponse
@@ -103,7 +101,6 @@ private class StubScreensClient(
     override suspend fun vibeCodeSessionReply(sessionId: String, req: VibeCodeReplyRequest): VibeCodeReplyResponse = error("unused")
     override suspend fun vibeCodeDeploy(sessionId: String): BuildDeployResponse = error("unused")
     override suspend fun companionMintTicket(req: CompanionMintTicketRequest): CompanionMintTicketResponse = error("unused")
-    override suspend fun companionApproveDock(req: CompanionDockApproveRequest): CompanionDockApproveResponse = error("unused")
     override suspend fun companionList(): CompanionListResponse = error("unused")
     override suspend fun companionRevoke(req: CompanionRevokeRequest): CompanionRevokeResponse = error("unused")
     override suspend fun companionPendingWrites(): CompanionPendingWritesResponse = error("unused")

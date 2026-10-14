@@ -91,8 +91,8 @@ sealed interface DeepLink {
         val pageId: String,
     ) : DeepLink
 
-    /** Desktop-initiated companion dock approval. The QR contains only the
-     * phone approval capability; the browser keeps a separate polling secret. */
+    /** A browser asking to become a remote: the QR on remote.<apex>, naming
+     *  only a relay session and the browser's key (see [RemoteApprovalLink]). */
     data class CompanionDockApproval(val rawLink: String) : DeepLink
 
     /** Transfer-a-box take-over (docs/device-admin-entitlements.md Slice C). The
@@ -195,8 +195,9 @@ sealed interface DeepLink {
                     if (server.isEmpty() || ref.isEmpty() || page.isEmpty()) null
                     else AuthorizeKnock(serverId = server, svc = svc, serviceRef = ref, pageId = page)
                 }
-                "dock" -> {
-                    if (CompanionDockApprovalLink.parse(uri.toString()) != null) CompanionDockApproval(uri.toString()) else null
+                // flagship://remote?s=<sid>&k=<pk> — the QR on remote.<apex>.
+                "remote" -> {
+                    if (RemoteApprovalLink.parse(uri.toString()) != null) CompanionDockApproval(uri.toString()) else null
                 }
                 "vibecode" -> {
                     // Accept either path form `flagship://vibecode/<id>`

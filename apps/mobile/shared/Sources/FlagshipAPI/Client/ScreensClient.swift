@@ -187,7 +187,6 @@ public protocol ScreensClient: Sendable {
     // browser scans → 4-hour read-only companion session. iOS owns
     // mint / list / revoke; the browser hits a separate `/redeem`.
     func companionMintTicket(_ req: CompanionMintTicketRequest) async throws -> CompanionMintTicketResponse
-    func companionApproveDock(_ req: CompanionDockApproveRequest) async throws -> CompanionDockApproveResponse
     func companionList() async throws -> CompanionListResponse
     func companionRevoke(_ req: CompanionRevokeRequest) async throws -> CompanionRevokeResponse
 

@@ -132,38 +132,29 @@ final class CompanionTicketURLTests: XCTestCase {
         )
     }
 
-    func test_dockApprovalLink_parsesPhoneCapability() {
-        let request = String(repeating: "ab", count: 16)
-        let code = String(repeating: "cd", count: 32)
-        let parsed = CompanionDockApprovalLink.parse(
-            "flagship://dock?server=home.alice.flagship.services&request=\(request)&code=\(code)"
-        )
-        XCTAssertEqual(parsed?.serverDomain, "home.alice.flagship.services")
-        XCTAssertEqual(parsed?.requestId, request)
-        XCTAssertEqual(parsed?.approvalSecret, code)
+    func test_remoteApprovalLink_parsesRelaySessionAndBrowserKey() {
+        let sid = Base64URL.encode(Data(repeating: 7, count: 16))
+        let key = Data(repeating: 9, count: 32)
+        let parsed = RemoteApprovalLink.parse("flagship://remote?s=\(sid)&k=\(Base64URL.encode(key))")
+        XCTAssertEqual(parsed?.sid, sid)
+        XCTAssertEqual(parsed?.browserPublicKey, key)
     }
 
-    /// The feature was renamed dock → remote on 2026-07-23. The webapp now
-    /// emits `flagship://remote`; `flagship://dock` stays parseable so a
-    /// browser still serving the pre-rename shell keeps working.
-    func test_remoteApprovalLink_parsesTheRenamedHostIdentically() {
-        let request = String(repeating: "ab", count: 16)
-        let code = String(repeating: "cd", count: 32)
-        let query = "server=home.alice.flagship.services&request=\(request)&code=\(code)"
-        let viaRemote = CompanionDockApprovalLink.parse("flagship://remote?\(query)")
-        let viaDock = CompanionDockApprovalLink.parse("flagship://dock?\(query)")
-        XCTAssertNotNil(viaRemote)
-        XCTAssertEqual(viaRemote, viaDock)
-    }
-
-    func test_dockApprovalLink_rejectsWrongHostAndWidths() {
-        XCTAssertNil(CompanionDockApprovalLink.parse("flagship://dock?server=evil.example&request=x&code=y"))
-        XCTAssertNil(CompanionDockApprovalLink.parse("https://webapp.flagshipserver.com/dock"))
-        // Only the two sanctioned labels — a third host is not a remote link.
-        let request = String(repeating: "ab", count: 16)
-        let code = String(repeating: "cd", count: 32)
-        XCTAssertNil(CompanionDockApprovalLink.parse(
-            "flagship://companion?server=home.alice.flagship.services&request=\(request)&code=\(code)"
+    func test_remoteApprovalLink_rejectsOtherShapes() {
+        let sid = Base64URL.encode(Data(repeating: 7, count: 16))
+        let k = Base64URL.encode(Data(repeating: 9, count: 32))
+        XCTAssertNil(RemoteApprovalLink.parse("flagship://dock?s=\(sid)&k=\(k)"))
+        XCTAssertNil(RemoteApprovalLink.parse("https://flagshipserver.com/qr?s=\(sid)&k=\(k)"))
+        XCTAssertNil(RemoteApprovalLink.parse("flagship://remote?s=\(sid)&k=\(Base64URL.encode(Data(repeating: 9, count: 31)))"))
+        XCTAssertNil(RemoteApprovalLink.parse("flagship://remote?s=short&k=\(k)"))
+        XCTAssertNil(RemoteApprovalLink.parse(
+            "flagship://remote?server=home.alice.flagship.services&request=\(String(repeating: "ab", count: 16))&code=\(String(repeating: "cd", count: 32))"
         ))
+    }
+
+    func test_remoteTicketPayload_wireShape() throws {
+        let payload = RemoteTicketPayload(ticketId: "a", ticketSecret: "b", podBaseUrl: "https://h", username: "u")
+        let obj = try JSONSerialization.jsonObject(with: JSONEncoder().encode(payload)) as? [String: String]
+        XCTAssertEqual(obj, ["kind": "flagship/remote-ticket/v1", "ticketId": "a", "ticketSecret": "b", "podBaseUrl": "https://h", "username": "u"])
     }
 }

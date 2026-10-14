@@ -1,10 +1,10 @@
 // P14 — Settings → Remote.
 //
-// Phone-side browser-remote surface. The desktop starts the ceremony at
-// remote.<apex> and displays a QR; this keyholder phone scans/pastes it,
-// biometric-gates the approval, and grants a 4-hour keyless remote
-// session. Connected browsers are listed below; each row has a single-tap
-// disconnect with a confirm dialog.
+// Phone-side browser-remote surface. remote.<apex> shows a QR naming only a
+// relay session and the browser's key; this phone scans it, both screens show
+// the same code, the owner picks a server and approves with biometrics, and
+// the browser gets a 4-hour keyless session on that server. The browsers
+// connected to the picked server are listed below, each with a disconnect.
 //
 // Mirrors FlagshipUI/Screens/CompanionDockScreen.swift + the canonical
 // webapp `views/companion-dock.js`.
@@ -33,6 +33,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,15 +44,23 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.flagshipserver.app.api.CompanionSummary
+import com.flagshipserver.app.core.CreationPlacement
+import com.flagshipserver.app.core.LiveQrRelayClient
+import com.flagshipserver.app.core.LocalPodClients
+import com.flagshipserver.app.core.LocalQrRelayClient
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.Endpoints
+import com.flagshipserver.app.core.MockQrRelayClient
+import com.flagshipserver.app.core.PodInfo
+import com.flagshipserver.app.core.QrRelay
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.CompanionDockViewModel
+import com.flagshipserver.app.viewmodels.RemoteServer
 import com.flagshipserver.app.viewmodels.LoadingState
 import kotlinx.coroutines.delay
 import com.flagshipserver.app.core.FlagshipDateFormat
@@ -61,15 +70,37 @@ import java.util.Locale
 fun CompanionDockScreen(nav: NavController, initialLink: String = "") {
     val client = LocalScreensClient.current
     val app = LocalAppState.current
+    val podClients = LocalPodClients.current
+    val sharedRelay = LocalQrRelayClient.current
     val toasts = LocalToastCenter.current
-    val vm = remember(client, app.currentPod?.fqdn) {
-        CompanionDockViewModel(client, expectedServerDomain = app.currentPod?.fqdn)
+    val pods by app.pods.collectAsState()
+    val user by app.currentUser.collectAsState()
+    val latestPods by rememberUpdatedState(pods)
+    val latestUser by rememberUpdatedState(user)
+    val latestCurrentPodId by rememberUpdatedState(app.currentPod?.podId)
+    val vm = remember(client, podClients) {
+        CompanionDockViewModel(
+            serversProvider = {
+                val currentPodId = latestCurrentPodId
+                CreationPlacement.options(latestPods) { true }
+                    .mapNotNull { option ->
+                        val bound = podClients.screens(option.pod)
+                            ?: client.takeIf { option.pod.podId == currentPodId }
+                        bound?.let { RemoteServer(option.pod, it) }
+                    }
+                    .sortedWith(
+                        compareByDescending<RemoteServer> { it.pod.podId == currentPodId }
+                            .thenByDescending { app.liveness(it.pod) == PodInfo.LivenessState.ONLINE },
+                    )
+            },
+            username = { latestUser },
+            relayFactory = { if (sharedRelay is MockQrRelayClient) sharedRelay else LiveQrRelayClient() },
+        )
     }
     val state by vm.state.collectAsState()
-    val stagedApproval by vm.stagedApproval.collectAsState()
-    val approvalPending by vm.approvalPending.collectAsState()
+    val phase by vm.phase.collectAsState()
+    val selectedPodId by vm.selectedPodId.collectAsState()
     val approvalError by vm.approvalError.collectAsState()
-    val approvalComplete by vm.approvalComplete.collectAsState()
     val revokePending by vm.revokePending.collectAsState()
     var pendingRevoke by remember { mutableStateOf<CompanionSummary?>(null) }
     var pastedLink by remember { mutableStateOf(initialLink) }
@@ -96,7 +127,8 @@ fun CompanionDockScreen(nav: NavController, initialLink: String = "") {
             style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
         )
         Text(
-            "Let a desktop browser drive this cloud for four hours without a key. Disconnect it anytime.",
+            "Open ${Endpoints.remoteHost} on your computer and scan the code it shows. " +
+                "The browser gets four hours on the server you pick, without a key. Disconnect it anytime.",
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 13.sp),
         )
@@ -106,7 +138,7 @@ fun CompanionDockScreen(nav: NavController, initialLink: String = "") {
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                 FSPrimaryButton(
-                    label = if (scanning) "Close scanner" else "Scan pairing QR",
+                    label = if (scanning) "Close scanner" else "Scan the browser's code",
                     onClick = { scanning = !scanning },
                     block = true,
                 )
@@ -121,7 +153,7 @@ fun CompanionDockScreen(nav: NavController, initialLink: String = "") {
                 OutlinedTextField(
                     value = pastedLink,
                     onValueChange = { pastedLink = it },
-                    label = { Text("Paste pairing link") },
+                    label = { Text("Or paste its link") },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 2,
                     maxLines = 4,
@@ -135,32 +167,64 @@ fun CompanionDockScreen(nav: NavController, initialLink: String = "") {
             }
         }
 
-        stagedApproval?.let { approval ->
-            Spacer(Modifier.height(FS.space.s3))
-            FSCard(padding = PaddingValues(FS.space.s4)) {
-                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                    Text("Approve this browser?", color = FS.colors.text, fontWeight = FontWeight.SemiBold)
-                    Text(approval.serverDomain, color = FS.colors.textMuted, fontFamily = FontFamily.Monospace)
-                    Text(
-                        "It will receive a keyless remote session for four hours. Protected actions still require approval from this phone.",
-                        color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 13.sp),
-                    )
-                    FSPrimaryButton(
-                        label = if (approvalPending) "Approving…" else "Approve with biometrics",
-                        onClick = { vm.approve() },
-                        enabled = !approvalPending,
-                        block = true,
-                    )
-                    FSGhostButton(label = "Cancel", onClick = { vm.clearApproval() }, block = true)
+        when (val p = phase) {
+            is CompanionDockViewModel.Phase.Connecting -> {
+                Spacer(Modifier.height(FS.space.s3))
+                FSCard(padding = PaddingValues(FS.space.s4)) {
+                    Text("Connecting to the browser…", color = FS.colors.textMuted)
                 }
             }
-        }
-        if (approvalComplete) {
-            Spacer(Modifier.height(FS.space.s3))
-            FSCard(padding = PaddingValues(FS.space.s4)) {
-                Text("Browser connected", color = FS.colors.text, fontWeight = FontWeight.SemiBold)
+            is CompanionDockViewModel.Phase.Matching, CompanionDockViewModel.Phase.Approving -> {
+                val code = (p as? CompanionDockViewModel.Phase.Matching)?.matchCode
+                val gateOpen = (p as? CompanionDockViewModel.Phase.Matching)?.gateOpen == true
+                Spacer(Modifier.height(FS.space.s3))
+                FSCard(padding = PaddingValues(FS.space.s4)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                        Text("Let this browser in?", color = FS.colors.text, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "Check the browser shows this code:",
+                            color = FS.colors.textMuted,
+                            style = TextStyle(fontSize = 13.sp),
+                        )
+                        if (code != null) {
+                            Text(
+                                QrRelay.formatMatchCode(code),
+                                color = FS.colors.text,
+                                style = TextStyle(fontSize = 32.sp, fontFamily = FontFamily.Monospace, letterSpacing = 4.sp),
+                            )
+                        }
+                        Text("SERVER", color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold))
+                        vm.servers.forEach { server ->
+                            val picked = server.pod.podId == selectedPodId
+                            FSGhostButton(
+                                label = (if (picked) "● " else "○ ") + server.pod.name,
+                                onClick = { vm.selectServer(server.pod.podId) },
+                                enabled = p !is CompanionDockViewModel.Phase.Approving,
+                                block = true,
+                            )
+                        }
+                        Text(
+                            "It gets a keyless session for four hours. Protected actions still need this phone.",
+                            color = FS.colors.textMuted,
+                            style = TextStyle(fontSize = 13.sp),
+                        )
+                        FSPrimaryButton(
+                            label = if (p is CompanionDockViewModel.Phase.Approving) "Approving…" else "Codes match: approve",
+                            onClick = { vm.approve() },
+                            enabled = gateOpen && selectedPodId != null,
+                            block = true,
+                        )
+                        FSGhostButton(label = "Cancel", onClick = { vm.cancel() }, block = true)
+                    }
+                }
             }
+            is CompanionDockViewModel.Phase.Connected -> {
+                Spacer(Modifier.height(FS.space.s3))
+                FSCard(padding = PaddingValues(FS.space.s4)) {
+                    Text("Browser connected to ${p.serverName}", color = FS.colors.text, fontWeight = FontWeight.SemiBold)
+                }
+            }
+            CompanionDockViewModel.Phase.Idle -> Unit
         }
         approvalError?.let {
             Spacer(Modifier.height(FS.space.s2))
@@ -169,7 +233,8 @@ fun CompanionDockScreen(nav: NavController, initialLink: String = "") {
 
         Spacer(Modifier.height(FS.space.s6))
         Text(
-            "CONNECTED BROWSERS",
+            "CONNECTED BROWSERS" +
+                (vm.servers.firstOrNull { it.pod.podId == selectedPodId }?.let { " · ${it.pod.name.uppercase()}" } ?: ""),
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp),
         )

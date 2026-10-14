@@ -11,46 +11,42 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CompanionTicketUrlTest {
 
-    @Test fun desktopDockLinkParses() {
-        val request = "ab".repeat(16)
-        val code = "cd".repeat(32)
-        val parsed = CompanionDockApprovalLink.parse(
-            "flagship://dock?server=demo.alice.flagship.services&request=$request&code=$code",
-        )
+    private val sid = Base64URL.encode(ByteArray(16) { it.toByte() })
+    private val pk = Base64URL.encode(ByteArray(32) { 7 })
+
+    @Test fun remotePageCodeParses() {
+        val parsed = RemoteApprovalLink.parse("flagship://remote?s=$sid&k=$pk")
         assertNotNull(parsed)
-        assertEquals("demo.alice.flagship.services", parsed!!.serverDomain)
-        assertEquals(request, parsed.requestId)
-        assertEquals(code, parsed.approvalSecret)
+        assertEquals(sid, parsed!!.sid)
+        assertEquals(32, parsed.browserPublicKey.size)
     }
 
-    /** The feature was renamed dock -> remote on 2026-07-23. The webapp now
-     *  emits `flagship://remote`; `flagship://dock` stays parseable so a
-     *  browser still serving the pre-rename shell keeps working. */
-    @Test fun remoteLinkParsesIdenticallyToTheLegacyDockLink() {
+    @Test fun remotePageCodeRejectsOtherShapes() {
+        // The old desktop-begin link (server/request/code) is gone.
         val request = "ab".repeat(16)
         val code = "cd".repeat(32)
-        val query = "server=demo.alice.flagship.services&request=$request&code=$code"
-        val viaRemote = CompanionDockApprovalLink.parse("flagship://remote?$query")
-        val viaDock = CompanionDockApprovalLink.parse("flagship://dock?$query")
-        assertNotNull(viaRemote)
-        assertEquals(viaDock, viaRemote)
+        assertNull(RemoteApprovalLink.parse("flagship://remote?server=demo.alice.flagship.services&request=$request&code=$code"))
+        assertNull(RemoteApprovalLink.parse("flagship://dock?s=$sid&k=$pk"))
+        // A create-server QR carries the same s/k shape under another host.
+        assertNull(RemoteApprovalLink.parse("https://flagshipserver.com/qr?s=$sid&k=$pk"))
+        assertNull(RemoteApprovalLink.parse("flagship://remote?s=$sid&k=${Base64URL.encode(ByteArray(31))}"))
+        assertNull(RemoteApprovalLink.parse("flagship://remote?s=short&k=$pk"))
     }
 
-    @Test fun desktopDockLinkRejectsWrongShape() {
-        assertEquals(null, CompanionDockApprovalLink.parse("flagship://dock?server=evil.example&request=x&code=y"))
-        // Only the two sanctioned labels — a third host is not a remote link.
-        val request = "ab".repeat(16)
-        val code = "cd".repeat(32)
+    @Test fun remoteTicketCarriesItsKind() {
+        val json = Json { encodeDefaults = true }.encodeToString(
+            RemoteTicketPayload.serializer(),
+            RemoteTicketPayload(ticketId = "T", ticketSecret = "S", podBaseUrl = "U", username = "N"),
+        )
         assertEquals(
-            null,
-            CompanionDockApprovalLink.parse(
-                "flagship://companion?server=demo.alice.flagship.services&request=$request&code=$code",
-            ),
+            """{"kind":"flagship/remote-ticket/v1","ticketId":"T","ticketSecret":"S","podBaseUrl":"U","username":"N"}""",
+            json,
         )
     }
 

@@ -92,6 +92,15 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="flagship" android:host="access" />
             </intent-filter>
+            <!-- The remote page's QR (flagship://remote?s=<sid>&k=<pk>): a
+                 browser at remote.flagshipserver.com asking this phone to let
+                 it in as a keyless remote. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="flagship" android:host="remote" />
+            </intent-filter>
         </activity>
 
         <!-- App-icon switcher (Settings → App icon). Two launcher aliases, one

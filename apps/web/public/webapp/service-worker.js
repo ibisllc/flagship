@@ -145,7 +145,9 @@
 //       the accept view; home lists "Shared with me" with a page limited to
 //       the share's level; precaches lib/serverShare.js, lib/serverShares.js
 //       and the server-sharing / share-accept / shared-server views.
-const SHELL_VERSION = "v71";
+//  v72: the remote page shows its QR at once (no account name, no server
+//       list): the phone picks the server and seals it a one-use ticket.
+const SHELL_VERSION = "v72";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

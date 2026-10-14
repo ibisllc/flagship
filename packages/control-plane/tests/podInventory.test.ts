@@ -958,3 +958,27 @@ describe("GET /api/users/:u/pods — deterministic oldest-first order", () => {
     expect((r.body as PodsResponse).pods).toEqual([]);
   });
 });
+
+describe("revoked servers", () => {
+  async function listed(reason: string) {
+    const storage = new InMemoryStorage();
+    await withServer(storage);
+    await storage.servers.put({
+      serverDomain: "home2.harry.flagship.services",
+      username: "harry",
+      identityPubKeyHex: "33".repeat(32),
+      registeredAt: NOW - 40_000,
+    });
+    await storage.servers.revoke("home2.harry.flagship.services", reason, NOW - 1_000);
+    const r = await handleGetUserPods(deps(storage), "harry");
+    return (r.body as PodsResponse).pods.map((p) => p.serverDomain);
+  }
+
+  it("drops a server its owner deleted", async () => {
+    expect(await listed("released-by-owner")).toEqual(["home1.harry.flagship.services"]);
+  });
+
+  it.each(["lost", "stolen", "decommissioned"])("keeps a %s server the owner can un-revoke", async (reason) => {
+    expect(await listed(reason)).toContain("home2.harry.flagship.services");
+  });
+});

@@ -72,7 +72,7 @@ function b64urlDecode(b64u) {
   return out;
 }
 
-async function deriveMaterial(mySk, peerPkB64u) {
+export async function deriveMaterial(mySk, peerPkB64u) {
   const peerPkBytes = b64urlDecode(peerPkB64u);
   if (peerPkBytes.length !== 32) throw new Error("peerPk must be 32 bytes");
   const peerPk = await crypto.subtle.importKey("raw", peerPkBytes, { name: "X25519" }, false, []);
@@ -98,18 +98,18 @@ async function aeadSeal(kEnc, plaintextBytes) {
   const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, kEnc, plaintextBytes));
   return { ciphertext: b64urlEncode(ct), nonce: b64urlEncode(nonce) };
 }
-async function aeadOpen(kEnc, ciphertextB64u, nonceB64u) {
+export async function aeadOpen(kEnc, ciphertextB64u, nonceB64u) {
   const ct = b64urlDecode(ciphertextB64u);
   const nonce = b64urlDecode(nonceB64u);
   const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce }, kEnc, ct);
   return new Uint8Array(plain);
 }
 
-function freshSid() {
+export function freshSid() {
   return b64urlEncode(crypto.getRandomValues(new Uint8Array(16)));
 }
 
-async function freshKeypair() {
+export async function freshKeypair() {
   const kp = await crypto.subtle.generateKey({ name: "X25519" }, true, ["deriveBits"]);
   const pkRaw = new Uint8Array(await crypto.subtle.exportKey("raw", kp.publicKey));
   return { sk: kp.privateKey, pkB64u: b64urlEncode(pkRaw) };

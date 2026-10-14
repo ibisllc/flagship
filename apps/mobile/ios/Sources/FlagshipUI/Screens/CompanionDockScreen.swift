@@ -23,7 +23,7 @@ public struct CompanionDockScreen: View {
         let c = FSColors.scheme(scheme)
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s6) {
-                Text("Open \(Endpoints.remoteHost) on your computer, then approve its pairing code here.")
+                Text("Open \(Endpoints.remoteHost) on your computer and scan the code it shows.")
                     .font(FS.font.bodySm())
                     .foregroundColor(c.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -43,7 +43,7 @@ public struct CompanionDockScreen: View {
             if case .idle = vm.state { await vm.load() }
             if let initialApprovalLink {
                 pastedLink = initialApprovalLink
-                _ = vm.stageApproval(link: initialApprovalLink)
+                await vm.begin(link: initialApprovalLink)
             }
         }
         .task {
@@ -56,9 +56,8 @@ public struct CompanionDockScreen: View {
             CompanionDockScannerSheet(
                 onScan: { raw in
                     pastedLink = raw
-                    if vm.stageApproval(link: raw) {
-                        showScanner = false
-                    }
+                    showScanner = false
+                    Task { await vm.begin(link: raw) }
                 },
                 onError: { scanError = $0 },
                 onPasteInstead: { showScanner = false }
@@ -91,19 +90,19 @@ public struct CompanionDockScreen: View {
                 Text("Connect a browser")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(c.text)
-                FSPrimaryButton("Scan pairing QR", block: true) {
+                FSPrimaryButton("Scan the computer's code", block: true) {
                     scanError = nil
                     showScanner = true
                 }
                 .accessibilityIdentifier("companion-dock-scan")
-                TextField("Paste pairing link", text: $pastedLink, axis: .vertical)
+                TextField("Or paste its link", text: $pastedLink, axis: .vertical)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .lineLimit(2...4)
                     .textFieldStyle(.roundedBorder)
                     .accessibilityIdentifier("companion-dock-link")
                 FSSecondaryButton("Use pasted link", block: true) {
-                    _ = vm.stageApproval(link: pastedLink)
+                    Task { await vm.begin(link: pastedLink) }
                 }
                 .disabled(pastedLink.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 if let scanError {
@@ -117,40 +116,81 @@ public struct CompanionDockScreen: View {
 
     @ViewBuilder
     private func approvalCard(c: FSColors) -> some View {
-        if let approval = vm.stagedApproval {
+        switch vm.phase {
+        case .idle:
+            EmptyView()
+        case .connecting:
             FSCard {
-                VStack(alignment: .leading, spacing: FS.space.s3) {
-                    Text("Approve this browser?")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(c.text)
-                    Text(approval.serverDomain)
-                        .font(FS.font.mono())
-                        .foregroundColor(c.textMuted)
-                        .textSelection(.enabled)
-                    Text("It will receive a keyless remote session for four hours. Protected actions still require approval from this phone.")
-                        .font(FS.font.caption())
-                        .foregroundColor(c.textMuted)
-                    FSPrimaryButton(vm.approvalPending ? "Approving…" : "Approve", enabled: !vm.approvalPending, block: true) {
-                        Task { await vm.approve() }
-                    }
-                    .accessibilityIdentifier("companion-dock-approve")
-                    FSGhostButton("Cancel", block: true) { vm.clearApproval() }
+                HStack(spacing: FS.space.s2) {
+                    ProgressView()
+                    Text("Connecting to the computer…").font(FS.font.bodySm()).foregroundColor(c.text)
                 }
             }
-        }
-        if vm.approvalComplete {
+        case .matching(let code, let gateExpired):
+            matchingCard(code: code, gateExpired: gateExpired, approving: false, c: c)
+        case .approving:
+            matchingCard(code: nil, gateExpired: false, approving: true, c: c)
+        case .connected(let serverName):
             FSCard {
                 HStack(spacing: FS.space.s2) {
                     Image(systemName: "checkmark.circle.fill").foregroundColor(c.success)
-                    Text("Browser connected").font(FS.font.bodySm()).foregroundColor(c.text)
+                    Text("Browser connected to \(serverName)").font(FS.font.bodySm()).foregroundColor(c.text)
                 }
             }
-        }
-        if let error = vm.approvalError {
+            .accessibilityIdentifier("companion-dock-connected")
+        case .failed(let error):
             Text(error)
                 .font(FS.font.caption())
                 .foregroundColor(c.danger)
                 .accessibilityIdentifier("companion-dock-approval-error")
+        }
+    }
+
+    private func matchingCard(code: String?, gateExpired: Bool, approving: Bool, c: FSColors) -> some View {
+        FSCard {
+            VStack(alignment: .leading, spacing: FS.space.s3) {
+                Text("Let this browser in?")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(c.text)
+                if let code {
+                    Text("Check the computer shows the same code:")
+                        .font(FS.font.caption())
+                        .foregroundColor(c.textMuted)
+                    Text(QrRelay.formatMatchCode(code))
+                        .font(.system(size: 34, weight: .semibold, design: .monospaced))
+                        .foregroundColor(c.text)
+                        .frame(maxWidth: .infinity)
+                        .accessibilityIdentifier("companion-dock-match-code")
+                }
+                if vm.servers.count > 1 {
+                    Picker("Server", selection: Binding(
+                        get: { vm.selectedFqdn ?? "" },
+                        set: { fqdn in Task { await vm.select(fqdn: fqdn) } }
+                    )) {
+                        ForEach(vm.servers) { server in
+                            Text(server.online ? server.name : "\(server.name) (offline)").tag(server.fqdn)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .disabled(approving)
+                    .accessibilityIdentifier("companion-dock-server")
+                } else if let server = vm.selectedServer {
+                    Text("Server: \(server.name)")
+                        .font(FS.font.caption())
+                        .foregroundColor(c.textMuted)
+                }
+                Text("It gets a keyless, read-only session for four hours. Protected actions still need this phone.")
+                    .font(FS.font.caption())
+                    .foregroundColor(c.textMuted)
+                FSPrimaryButton(approving ? "Approving…" : "Approve",
+                                enabled: gateExpired && !approving && vm.selectedServer != nil,
+                                block: true) {
+                    Task { await vm.approve() }
+                }
+                .accessibilityIdentifier("companion-dock-approve")
+                FSGhostButton("Cancel", block: true) { Task { await vm.cancel() } }
+                    .disabled(approving)
+            }
         }
     }
 
@@ -270,7 +310,7 @@ private struct CompanionDockScannerSheet: View {
                 QRScannerView(
                     onScan: onScan,
                     onError: onError,
-                    validate: { CompanionDockApprovalLink.parse($0) != nil }
+                    validate: { CompanionDockViewModel.isRemoteLink($0) }
                 )
                 .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
                 Button("Paste link instead") {
@@ -279,7 +319,7 @@ private struct CompanionDockScannerSheet: View {
                 }
             }
             .padding(FS.space.s4)
-            .navigationTitle("Scan pairing QR")
+            .navigationTitle("Scan the computer's code")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

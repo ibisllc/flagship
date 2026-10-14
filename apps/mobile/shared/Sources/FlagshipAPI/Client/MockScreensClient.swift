@@ -1174,8 +1174,6 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     /// can assert the label flowed through.
     public private(set) var companionMintCalls: [CompanionMintTicketRequest] = []
 
-    public private(set) var companionApproveDockCalls: [CompanionDockApproveRequest] = []
-
     /// Records each `companionRevoke(_:)` call's `tokenPrefix` so
     /// tests can assert the right session was killed.
     public private(set) var companionRevokeCalls: [String] = []
@@ -1184,7 +1182,9 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         try await tick()
         companionMintCalls.append(req)
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
-        let ticketId = "tk-\(UUID().uuidString.prefix(8).lowercased())"
+        let ticketId = (0..<16).map { _ in
+            String(format: "%02x", UInt8.random(in: 0...255))
+        }.joined()
         let secret = (0..<32).map { _ in
             String(format: "%02x", UInt8.random(in: 0...255))
         }.joined()
@@ -1192,15 +1192,6 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             ticketId: ticketId,
             ticketSecret: secret,
             expiresAt: nowMs + 60 * 1000
-        )
-    }
-
-    public func companionApproveDock(_ req: CompanionDockApproveRequest) async throws -> CompanionDockApproveResponse {
-        try await tick()
-        companionApproveDockCalls.append(req)
-        return CompanionDockApproveResponse(
-            ok: true,
-            expiresAt: Int64(Date().timeIntervalSince1970 * 1000) + 4 * 60 * 60 * 1000
         )
     }
 

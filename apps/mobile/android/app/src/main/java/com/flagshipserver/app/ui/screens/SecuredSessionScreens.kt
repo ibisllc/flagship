@@ -238,6 +238,8 @@ fun ProcessUrlScreen(nav: NavController) {
                         deepLinker.enqueue(link)
                     }
                     is DeepLink.ShareOffer -> deepLinker.enqueue(link)
+                    // A remote page's code: Settings → Remote approves it.
+                    is DeepLink.CompanionDockApproval -> deepLinker.enqueue(link)
                     else -> error = "That doesn't look like a Flagship link."
                 }
             },

@@ -467,14 +467,9 @@ public struct SettingsTab: View {
         case .peerBackup:
             PeerBackupScreen(vm: PeerBackupViewModel(client: client))
         case .companionDock:
-            CompanionDockScreen(
-                vm: CompanionDockViewModel(client: client, expectedServerDomain: app.currentPod?.fqdn)
-            )
+            CompanionDockContainer(initialLink: nil)
         case .companionDockApproval(let link):
-            CompanionDockScreen(
-                vm: CompanionDockViewModel(client: client, expectedServerDomain: app.currentPod?.fqdn),
-                initialApprovalLink: link
-            )
+            CompanionDockContainer(initialLink: link)
         case .companionRequests:
             CompanionRequestsContainer(
                 vm: $companionRequestsVm,
@@ -516,6 +511,42 @@ struct SecuredSessionsContainer: View {
 /// P14 Phase 2 — container that owns the CompanionRequestsViewModel
 /// lifecycle so the SettingsTab can navigate to it without keeping the
 /// VM alive after pop. Mirrors PostRecoveryContainer's shape.
+/// Owns the remote-approval view model for the life of the screen: it holds a
+/// live relay session, so it must not be rebuilt when Settings re-renders.
+struct CompanionDockContainer: View {
+    @Environment(\.podScreensClients) private var podClients
+    @Environment(\.qrRelayClient) private var relay
+    @Environment(AppState.self) private var app
+    let initialLink: String?
+    @State private var vm: CompanionDockViewModel?
+
+    var body: some View {
+        Group {
+            if let vm {
+                CompanionDockScreen(vm: vm, initialApprovalLink: initialLink)
+            } else {
+                ProgressView()
+            }
+        }
+        .task {
+            guard vm == nil else { return }
+            let servers = app.pods
+                .filter { $0.status != .pending && !$0.fqdn.isEmpty }
+                .map { CompanionDockViewModel.ServerChoice(fqdn: $0.fqdn, name: $0.name, online: app.hasLiveSession($0)) }
+            vm = CompanionDockViewModel(
+                clients: podClients,
+                // A relay of its own: the shared live one also carries the
+                // create-server delivery.
+                relay: relay is MockQrRelayClient ? relay : LiveQrRelayClient(),
+                servers: servers,
+                defaultFqdn: app.currentPod?.fqdn,
+                username: app.currentUser ?? ""
+            )
+        }
+        .onDisappear { Task { await vm?.cancel() } }
+    }
+}
+
 struct CompanionRequestsContainer: View {
     @Environment(\.screensClient) private var client
     @Environment(\.flagshipServerClient) private var server

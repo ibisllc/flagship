@@ -52,37 +52,32 @@ object CompanionTicketUrl {
     }
 }
 
-data class CompanionDockApprovalPayload(
-    val serverDomain: String,
-    val requestId: String,
-    val approvalSecret: String,
-)
+/** The remote page's QR (remote.<apex>): `flagship://remote?s=<sid>&k=<pk>`,
+ *  a QR-relay session and the browser's ephemeral X25519 key. Nothing in it
+ *  names an account or a server; the phone picks the server. */
+object RemoteApprovalLink {
+    private val sidPattern = Regex("^[A-Za-z0-9_-]{16,64}$")
 
-object CompanionDockApprovalLink {
-    private val hex32 = Regex("^[0-9a-fA-F]{32}$")
-    private val hex64 = Regex("^[0-9a-fA-F]{64}$")
-
-    /** Accepted deep-link hosts. `remote` is the current label (the feature
-     *  was renamed from "dock" on 2026-07-23); `dock` stays accepted so a
-     *  browser still serving the pre-rename webapp keeps working against a
-     *  freshly built app. The payload is identical either way. */
-    private val ACCEPTED_HOSTS = setOf("remote", "dock")
-
-    fun parse(raw: String): CompanionDockApprovalPayload? {
+    fun parse(raw: String): QrRelay.QrSession? {
         val uri = runCatching { java.net.URI(raw.trim()) }.getOrNull() ?: return null
-        if (uri.scheme != "flagship" || uri.host !in ACCEPTED_HOSTS) return null
-        val params = uri.rawQuery.orEmpty().split('&').mapNotNull { pair ->
-            val index = pair.indexOf('=')
-            if (index < 1) null else {
-                val key = java.net.URLDecoder.decode(pair.substring(0, index), "UTF-8")
-                val value = java.net.URLDecoder.decode(pair.substring(index + 1), "UTF-8")
-                key to value
-            }
-        }.toMap()
-        val server = params["server"]?.lowercase().orEmpty()
-        val request = params["request"].orEmpty()
-        val code = params["code"].orEmpty()
-        if (!server.endsWith(".${Endpoints.dataApex}") || !hex32.matches(request) || !hex64.matches(code)) return null
-        return CompanionDockApprovalPayload(server, request.lowercase(), code.lowercase())
+        if (uri.scheme != "flagship" || uri.host != "remote") return null
+        val session = runCatching { QrRelay.parseQrUrl(raw) }.getOrNull() ?: return null
+        return session.takeIf { sidPattern.matches(it.sid) }
+    }
+}
+
+/** What the phone seals to the browser: a single-use companion ticket for the
+ *  server the owner picked. The browser redeems it on that server.
+ *  MIRRORS apps/web/public/webapp/lib/companionDockStart.js parseRemoteTicket. */
+@Serializable
+data class RemoteTicketPayload(
+    val kind: String = KIND,
+    val ticketId: String,
+    val ticketSecret: String,
+    val podBaseUrl: String,
+    val username: String,
+) {
+    companion object {
+        const val KIND = "flagship/remote-ticket/v1"
     }
 }

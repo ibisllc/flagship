@@ -42,9 +42,8 @@ public enum DeepLink: Equatable, Sendable {
     /// (also the `flagship://join?…` custom-scheme form).
     case joinAccount(sid: String, pk: String)
 
-    /// Desktop-initiated companion docking approval. The QR contains the
-    /// daemon request id + phone-only approval capability, never the browser's
-    /// polling secret or eventual session token.
+    /// The remote page's QR, `flagship://remote?s=<sid>&k=<browser key>`: a
+    /// QR-relay session the phone joins to seal a ticket to that browser.
     case companionDockApproval(link: String)
 
     /// #92 — friend redeem of a service-access capability invite
@@ -237,8 +236,8 @@ public enum DeepLink: Equatable, Sendable {
                 return .joinAccount(sid: sid, pk: pk)
             }
             return nil
-        case "dock":
-            if CompanionDockApprovalLink.parse(url.absoluteString) != nil {
+        case "remote":
+            if RemoteApprovalLink.parse(url.absoluteString) != nil {
                 return .companionDockApproval(link: url.absoluteString)
             }
             return nil

@@ -1223,18 +1223,6 @@ data class CompanionMintTicketResponse(
 )
 
 @Serializable
-data class CompanionDockApproveRequest(
-    val requestId: String,
-    val approvalSecret: String,
-)
-
-@Serializable
-data class CompanionDockApproveResponse(
-    val ok: Boolean,
-    val expiresAt: Long,
-)
-
-@Serializable
 data class CompanionSummary(
     val tokenPrefix: String,
     val redeemedAt: Long,

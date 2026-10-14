@@ -222,11 +222,18 @@ export interface PodInventory {
  * and `handleUserStream` (the long-poll) call it, so they never drift. Cheap
  * to re-call in a loop: a handful of indexed storage reads, no external I/O.
  */
+const UNREVOKABLE_REASONS: ReadonlySet<string> = new Set(["lost", "stolen", "decommissioned"]);
+
 export async function buildPodInventory(
   deps: PodInventoryDeps,
   username: string,
 ): Promise<PodInventory> {
-  const servers = await deps.servers.listForUser(username);
+  // A revoked server stays listed only while the owner can un-revoke it
+  // (lost / stolen / decommissioned). A deleted one (released by its owner,
+  // moved, deleted with the account) is gone for good, so it isn't listed.
+  const servers = (await deps.servers.listForUser(username)).filter(
+    (s) => !s.revokedAt || UNREVOKABLE_REASONS.has(s.revocationReason ?? ""),
+  );
   const statuses = await deps.daemonStatus.listForUser(username);
   const statusByDomain = new Map<string, (typeof statuses)[number]>();
   for (const s of statuses) {
