@@ -645,7 +645,7 @@ struct SharedServerScreen: View {
                 }
             case .loaded(let d):
                 status(d, c: c)
-                if let metrics = model.metrics { MetricsSection(state: metrics.state) }
+                if let metrics = model.metrics { MonitoringPane(health: nil, metrics: metrics.state, cert: nil) }
                 appsSection(model, c: c)
             }
             whatYouCanDo(model, c: c)
