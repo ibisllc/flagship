@@ -72,6 +72,13 @@ object AiKeyStore {
     // webapp's `activeId` + iOS SavedKeyStore.activeId.
     private const val ACTIVE_KEY = "activeId"
 
+    /**
+     * The built-in Flagship Inference entry's id. It is never a saved key:
+     * pinning it as active makes builds default to Flagship Inference
+     * (mirrors the webapp's PROMO_ID and iOS SavedKeyStore.flagshipInferenceId).
+     */
+    const val FLAGSHIP_INFERENCE_ID = "flagship-inference"
+
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val rng = SecureRandom()
 
@@ -133,6 +140,7 @@ object AiKeyStore {
     }
 
     fun delete(id: String) {
+        if (id == FLAGSHIP_INFERENCE_ID) return
         persist(list().filterNot { it.id == id })
         // Drop a dangling explicit-active pointer so active() cleanly falls
         // back to the most-recently-added entry.
@@ -153,19 +161,25 @@ object AiKeyStore {
     fun active(): SavedAiKey? {
         val all = list()
         val explicit = store().getString(ACTIVE_KEY, null)
+        if (explicit == FLAGSHIP_INFERENCE_ID) return null
         if (explicit != null) {
             all.firstOrNull { it.id == explicit }?.let { return it }
         }
         return all.lastOrNull()
     }
 
-    /** The active entry's id (resolved like [active]), or null when none. */
-    fun activeId(): String? = active()?.id
+    /** The active entry's id (resolved like [active]), [FLAGSHIP_INFERENCE_ID]
+     *  when Flagship Inference is pinned, or null when none. */
+    fun activeId(): String? {
+        if (store().getString(ACTIVE_KEY, null) == FLAGSHIP_INFERENCE_ID) return FLAGSHIP_INFERENCE_ID
+        return active()?.id
+    }
 
-    /** Pin a saved entry as the active (confirm-default) one. No-op for an
-     *  unknown id, so a stale tap can't orphan the pointer. */
+    /** Pin a saved entry (or [FLAGSHIP_INFERENCE_ID]) as the active
+     *  (confirm-default) one. No-op for an unknown id, so a stale tap can't
+     *  orphan the pointer. */
     fun setActive(id: String) {
-        if (list().any { it.id == id }) {
+        if (id == FLAGSHIP_INFERENCE_ID || list().any { it.id == id }) {
             store().edit().putString(ACTIVE_KEY, id).apply()
         }
     }

@@ -1,6 +1,7 @@
 // The key step's free-credits row: on by default for an owner with no key of
 // their own, flips to the bring-your-own-key message when the credits run out,
-// and hides itself when the balance can't be read.
+// and stays listed (disabled) when the balance can't be read or the promotion
+// has ended.
 
 package com.flagshipserver.app.viewmodels
 
@@ -100,7 +101,7 @@ class AiKeysFreeAiTest {
         assertEquals(990_000L, (vm.freeAi.value as FreeAiState.Available).credits.remainingTokens)
     }
 
-    @Test fun aRefusalBlocksTheRowAndTheEndHidesIt() = runTest {
+    @Test fun aRefusalBlocksTheRowAndTheEndDisablesIt() = runTest {
         val vm = AiKeysViewModel()
         val t = Canned(200, full)
         vm.loadFreeAi(service(t))
@@ -113,14 +114,31 @@ class AiKeysFreeAiTest {
         t.status = 410
         t.body = """{"code":"free-ai-ended"}"""
         vm.useFreeAi(service(t), "box")
-        assertEquals(FreeAiState.Hidden, vm.freeAi.value)
+        assertEquals(FreeAiState.Ended, vm.freeAi.value)
         assertFalse(vm.shouldAutoUseFreeAi())
     }
 
-    @Test fun anUnreadableBalanceHidesTheRow() = runTest {
+    @Test fun anUnreadableBalanceDisablesTheRow() = runTest {
         val vm = AiKeysViewModel()
         vm.loadFreeAi(service(Canned(500, "boom")))
-        assertEquals(FreeAiState.Hidden, vm.freeAi.value)
+        assertEquals(FreeAiState.Unavailable, vm.freeAi.value)
         assertFalse(vm.shouldAutoUseFreeAi())
+    }
+
+    @Test fun choosingFlagshipInferenceMakesItTheLastUsedAndItCantBeDeleted() = runTest {
+        val vm = AiKeysViewModel()
+        vm.add("anthropic", "sk-ant-abc123456789", "Personal", null)
+        val t = Canned(
+            200,
+            """{"ok":true,"credential":{"provider":"flagship","apiKey":"v1.a.b","baseUrl":"https://inference.flagshipserver.com","source":"promo","relay":true},"model":"flagship-free","expiresAt":1,"credits":{"usedTokens":0,"allowanceTokens":1000000,"remainingTokens":1000000}}""",
+        )
+        assertTrue(vm.useFreeAi(service(t), "box") is FreeAiMint.Ok)
+        assertEquals(AiKeyStore.FLAGSHIP_INFERENCE_ID, vm.activeId.value)
+        vm.delete(AiKeyStore.FLAGSHIP_INFERENCE_ID)
+        assertEquals(AiKeyStore.FLAGSHIP_INFERENCE_ID, vm.activeId.value)
+        assertEquals(1, vm.keys.value.size)
+        // A saved key chosen afterwards takes over.
+        vm.choose(vm.keys.value.single().id)
+        assertEquals(vm.keys.value.single().id, vm.activeId.value)
     }
 }

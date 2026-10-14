@@ -1,5 +1,6 @@
-// Free AI credits UI: the Settings card and the key step's first row. Mirrors
-// the webapp settings.js / build-key.js and iOS FreeAiCreditsCard.
+// Flagship Inference: the built-in provider entry listed first in Settings →
+// AI keys and in the key step. Mirrors the webapp settings.js / build-key.js
+// and iOS FlagshipInferenceRow.
 
 package com.flagshipserver.app.ui.screens
 
@@ -15,16 +16,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.flagshipserver.app.core.AppState
+import com.flagshipserver.app.core.FlagshipInferenceEntry
 import com.flagshipserver.app.core.FreeAiCopy
 import com.flagshipserver.app.core.FreeAiService
 import com.flagshipserver.app.core.FreeAiState
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalPodScope
 import com.flagshipserver.app.ui.components.FSCard
+import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.theme.FS
@@ -48,38 +53,78 @@ fun currentBuildServerFqdn(): String {
         ?: ""
 }
 
-/** Settings → AI keys: this week's top-up and the starter reserve, or why
- *  free AI can't be used now. Nothing on a failed read or once it has ended. */
+/** The entry's title, subtitle and muted status line, read out as one
+ *  built-in provider that can't be removed. */
 @Composable
-fun FreeAiCreditsCard(state: FreeAiState, onAddOwnKey: () -> Unit) {
-    val view = FreeAiCopy.view(state) ?: return
+private fun FlagshipInferenceText(
+    entry: FlagshipInferenceEntry,
+    default: String?,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier.semantics(mergeDescendants = true) {
+            contentDescription = listOfNotNull(
+                FreeAiCopy.A11Y_LABEL,
+                FreeAiCopy.PROVIDER_SUBTITLE,
+                entry.status,
+                default,
+            ).joinToString(" ")
+        },
+    ) {
+        Text(
+            FreeAiCopy.PROVIDER_TITLE,
+            color = FS.colors.text,
+            style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+        )
+        Text(
+            FreeAiCopy.PROVIDER_SUBTITLE,
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+        )
+        Spacer(Modifier.height(FS.space.s1))
+        Text(
+            entry.status,
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp),
+            modifier = Modifier.testTag(
+                when {
+                    entry.loading -> "free-ai-checking"
+                    entry.usable -> "free-ai-left"
+                    else -> "free-ai-blocked"
+                },
+            ),
+        )
+        if (default != null) {
+            Text(default, color = FS.colors.primary, style = TextStyle(fontSize = 12.sp))
+        }
+    }
+}
+
+/**
+ * Settings → AI keys: the built-in Flagship Inference entry, always first.
+ * It has no Delete; "Make default" when it can be used and isn't the default,
+ * "Add your own key" when it can't be used and a key would help.
+ */
+@Composable
+fun FlagshipInferenceSettingsRow(
+    state: FreeAiState,
+    isDefault: Boolean,
+    onMakeDefault: () -> Unit,
+    onAddOwnKey: () -> Unit,
+) {
+    val entry = FreeAiCopy.entry(state)
     FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.testTag("free-ai-card")) {
         Column {
-            Text(
-                FreeAiCopy.TITLE,
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
-            )
-            Spacer(Modifier.height(FS.space.s2))
-            Text(
-                view.text,
-                color = FS.colors.text,
-                style = TextStyle(
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
-                    fontWeight = if (view.usable) FontWeight.Medium else FontWeight.Normal,
-                ),
-                modifier = Modifier.testTag(if (view.usable) "free-ai-left" else "free-ai-blocked"),
-            )
-            if (view.usable) {
-                Spacer(Modifier.height(FS.space.s1))
-                Text(
-                    FreeAiCopy.NOTE,
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+            FlagshipInferenceText(entry, if (isDefault && entry.usable) "Default for new builds" else null)
+            if (entry.usable && !isDefault) {
+                Spacer(Modifier.height(FS.space.s2))
+                FSGhostButton(
+                    label = "Make default",
+                    onClick = onMakeDefault,
+                    modifier = Modifier.testTag("free-ai-make-default"),
                 )
             }
-            if (view.offerOwnKey) {
+            if (!entry.usable && entry.offerOwnKey) {
                 Spacer(Modifier.height(FS.space.s3))
                 FSSecondaryButton(
                     label = FreeAiCopy.ADD_OWN_KEY,
@@ -92,25 +137,14 @@ fun FreeAiCreditsCard(state: FreeAiState, onAddOwnKey: () -> Unit) {
     }
 }
 
-/** The key step's first row: use free AI credits for this build, or why not. */
+/** The key step's first entry: use Flagship Inference for this build, or why not. */
 @Composable
-fun FreeAiKeyStepRow(state: FreeAiState, busy: Boolean, onUse: () -> Unit) {
-    val view = FreeAiCopy.view(state) ?: return
+fun FlagshipInferenceStepRow(state: FreeAiState, busy: Boolean, lastUsed: Boolean, onUse: () -> Unit) {
+    val entry = FreeAiCopy.entry(state, compact = true)
     FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.testTag("build-key-free-ai")) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    FreeAiCopy.TITLE,
-                    color = FS.colors.text,
-                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
-                )
-                Text(
-                    if (view.usable && state is FreeAiState.Available) FreeAiCopy.rowSubtitle(state.credits) else view.text,
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-                )
-            }
-            if (view.usable) {
+            FlagshipInferenceText(entry, if (lastUsed && entry.usable) "Last used" else null, Modifier.weight(1f))
+            if (entry.usable) {
                 FSPrimaryButton(
                     label = if (busy) "…" else "Use this",
                     onClick = { if (!busy) onUse() },

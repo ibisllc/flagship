@@ -159,4 +159,22 @@ class AiKeyStoreTest {
         AiKeyStore.clear()
         assertTrue(AiKeyStore.list().isEmpty())
     }
+
+    @Test
+    fun flagshipInferenceCanBeTheDefaultButNeverDeleted() {
+        val a = AiKeyStore.add("anthropic", "sk-ant-abc123456789", "Personal")
+        AiKeyStore.setActive(AiKeyStore.FLAGSHIP_INFERENCE_ID)
+        assertEquals(AiKeyStore.FLAGSHIP_INFERENCE_ID, AiKeyStore.activeId())
+        // Not a saved key: no credential, and builds fall back to Flagship Inference.
+        assertNull(AiKeyStore.active())
+        AiKeyStore.delete(AiKeyStore.FLAGSHIP_INFERENCE_ID)
+        assertEquals(AiKeyStore.FLAGSHIP_INFERENCE_ID, AiKeyStore.activeId())
+        assertEquals(listOf(a.id), AiKeyStore.list().map { it.id })
+        // The user's own keys stay deletable, and the built-in default stays put.
+        AiKeyStore.delete(a.id)
+        assertTrue(AiKeyStore.list().isEmpty())
+        assertEquals(AiKeyStore.FLAGSHIP_INFERENCE_ID, AiKeyStore.activeId())
+        AiKeyStore.setActive("not-a-key")
+        assertEquals(AiKeyStore.FLAGSHIP_INFERENCE_ID, AiKeyStore.activeId())
+    }
 }

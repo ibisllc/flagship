@@ -105,12 +105,44 @@ class FreeAiCreditsTest {
         assertEquals(FreeAiView(false, FreeAiCopy.BUSY_TODAY, true), FreeAiCopy.view(FreeAiState.Blocked("busy-today")))
         assertEquals(FreeAiView(false, FreeAiCopy.NO_SERVER, false), FreeAiCopy.view(FreeAiState.Blocked("no-server")))
         assertEquals(FreeAiView(false, FreeAiCopy.UNAVAILABLE, true), FreeAiCopy.view(FreeAiState.Unavailable))
+        assertEquals(FreeAiView(false, FreeAiCopy.ENDED, true), FreeAiCopy.view(FreeAiState.Ended))
+    }
+
+    @Test fun flagshipInferenceCopyIsExact() {
+        assertEquals("Flagship Inference", FreeAiCopy.PROVIDER_TITLE)
+        assertEquals("We use third-party providers and anonymize your requests.", FreeAiCopy.PROVIDER_SUBTITLE)
+        assertEquals("Flagship Inference. Built-in provider. It can't be removed.", FreeAiCopy.A11Y_LABEL)
+        assertEquals(
+            "This build is too big for Flagship Inference. Try a smaller change, or use your own AI key.",
+            FreeAiCopy.TOO_LONG,
+        )
+        assertEquals(FreeAiCopy.TOO_LONG, FreeAiCopy.messageFor("free-ai-too-long"))
+    }
+
+    @Test fun theFlagshipInferenceEntryIsAlwaysListed() {
+        assertEquals(FlagshipInferenceEntry(false, FreeAiCopy.CHECKING, false, loading = true), FreeAiCopy.entry(FreeAiState.Hidden))
+        assertEquals(
+            FlagshipInferenceEntry(true, "This week: 340k of 500k left · Starter reserve: 1.2M", false),
+            FreeAiCopy.entry(FreeAiState.Available(weekly)),
+        )
+        assertEquals(
+            FlagshipInferenceEntry(true, "340k left this week · 1.2M reserve", false),
+            FreeAiCopy.entry(FreeAiState.Available(weekly), compact = true),
+        )
+        val spent = weekly.copy(remainingTokens = 0)
+        assertEquals(FlagshipInferenceEntry(false, FreeAiCopy.USED_UP, true), FreeAiCopy.entry(FreeAiState.Available(spent)))
+        assertEquals(FlagshipInferenceEntry(false, FreeAiCopy.BUSY_TODAY, true), FreeAiCopy.entry(FreeAiState.Blocked("busy-today")))
+        assertEquals(FlagshipInferenceEntry(false, FreeAiCopy.NO_SERVER, false), FreeAiCopy.entry(FreeAiState.Blocked("no-server")))
+        assertEquals(FlagshipInferenceEntry(false, FreeAiCopy.TOO_LONG, true), FreeAiCopy.entry(FreeAiState.Blocked("too-long")))
+        assertEquals(FlagshipInferenceEntry(false, FreeAiCopy.UNAVAILABLE, true), FreeAiCopy.entry(FreeAiState.Unavailable))
+        assertEquals(FlagshipInferenceEntry(false, FreeAiCopy.ENDED, true), FreeAiCopy.entry(FreeAiState.Ended))
     }
 
     @Test fun copyNeverSellsAnything() {
         for (s in listOf(
             FreeAiCopy.TITLE, FreeAiCopy.NOTE, FreeAiCopy.USED_UP, FreeAiCopy.UNAVAILABLE, FreeAiCopy.ADD_OWN_KEY,
             FreeAiCopy.BUSY_TODAY, FreeAiCopy.NO_SERVER, FreeAiCopy.ENDED,
+            FreeAiCopy.PROVIDER_TITLE, FreeAiCopy.PROVIDER_SUBTITLE, FreeAiCopy.TOO_LONG,
         )) {
             val l = s.lowercase()
             assertFalse(s, l.contains("buy") || l.contains("purchase") || l.contains("upgrade") || l.contains("subscri"))
@@ -173,6 +205,10 @@ class FreeAiCreditsTest {
         t.body = """{"error":"The free building period has ended — use your own AI key.","code":"free-ai-ended"}"""
         assertEquals(FreeAiMint.Refused("free-ai-ended", FreeAiCopy.ENDED), service(t).mint("box"))
 
+        t.status = 400
+        t.body = """{"code":"free-ai-too-long"}"""
+        assertEquals(FreeAiMint.Refused("free-ai-too-long", FreeAiCopy.TOO_LONG), service(t).mint("box"))
+
         // A bare 429 from an older .com still reads as used up.
         t.status = 429
         t.body = "{}"
@@ -201,10 +237,10 @@ class FreeAiCreditsTest {
         t.body = """{"available":true,"ended":false,"reason":"no-server","credits":{"remainingTokens":5}}"""
         assertEquals(FreeAiState.Blocked("no-server"), service(t).status())
 
-        // Ended: hidden everywhere, never used on its own.
+        // Ended: still listed but disabled, never used on its own.
         t.body = """{"available":false,"ended":true,"reason":null,"credits":{"remainingTokens":0}}"""
         val ended = service(t).status()
-        assertEquals(FreeAiState.Hidden, ended)
+        assertEquals(FreeAiState.Ended, ended)
         assertFalse(FreeAiService.shouldAutoUse(0, ended))
     }
 
@@ -230,7 +266,7 @@ class FreeAiCreditsTest {
         assertEquals(FreeAiState.Unavailable, service(t).status())
 
         t.status = 500
-        assertEquals(FreeAiState.Hidden, service(t).status())
+        assertEquals(FreeAiState.Unavailable, service(t).status())
     }
 
     @Test fun onByDefaultOnlyWithoutOwnKeysAndWithCreditsLeft() {
@@ -241,6 +277,7 @@ class FreeAiCreditsTest {
         assertFalse(FreeAiService.shouldAutoUse(0, none))
         assertFalse(FreeAiService.shouldAutoUse(0, FreeAiState.Unavailable))
         assertFalse(FreeAiService.shouldAutoUse(0, FreeAiState.Hidden))
+        assertFalse(FreeAiService.shouldAutoUse(0, FreeAiState.Ended))
     }
 
     @Test fun refreshesOnlyForBuildsOnFreeCredits() = runTest {

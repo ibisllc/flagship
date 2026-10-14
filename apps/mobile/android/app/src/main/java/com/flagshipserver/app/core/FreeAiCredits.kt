@@ -132,7 +132,7 @@ data class FreeAiErrorBody(
 sealed class FreeAiMint {
     data class Ok(val credential: AiCredential, val credits: FreeAiCreditsInfo?) : FreeAiMint()
     data class UsedUp(val message: String, val credits: FreeAiCreditsInfo?) : FreeAiMint()
-    /** Busy today, no running server, or the promotion has ended ([code]). */
+    /** Busy today, no running server, too big, or the promotion has ended ([code]). */
     data class Refused(val code: String, val message: String) : FreeAiMint()
     data class Unavailable(val message: String) : FreeAiMint()
 }
@@ -144,11 +144,14 @@ sealed class FreeAiRefresh {
     data class Stop(val message: String) : FreeAiRefresh()
 }
 
-/** What the free-credits card / key-step row shows. */
+/** What the Flagship Inference entry shows. */
 sealed class FreeAiState {
-    /** Not asked yet, the read failed, or the promotion has ended: show nothing. */
+    /** Not asked yet (the entry shows that it's checking). */
     object Hidden : FreeAiState()
+    /** The read failed, or `.com` says free AI is off right now. */
     object Unavailable : FreeAiState()
+    /** The promotion has ended: the entry stays, disabled. */
+    object Ended : FreeAiState()
     /** Free AI can't be used right now ("no-server", "busy-today"). */
     data class Blocked(val reason: String) : FreeAiState()
     data class Available(val credits: FreeAiCreditsInfo) : FreeAiState() {
@@ -159,8 +162,25 @@ sealed class FreeAiState {
 /** What the card / key-step row shows (mirror of the webapp's freeAiView). */
 data class FreeAiView(val usable: Boolean, val text: String, val offerOwnKey: Boolean)
 
+/**
+ * The always-present Flagship Inference entry: [status] is the muted line
+ * under the subtitle; [loading] while the balance is being read. Mirror of the
+ * webapp `flagshipInferenceEntry` and iOS `FlagshipInferenceEntry`.
+ */
+data class FlagshipInferenceEntry(
+    val usable: Boolean,
+    val status: String,
+    val offerOwnKey: Boolean,
+    val loading: Boolean = false,
+)
+
 /** Copy + number formatting, shared with the webapp and iOS. */
 object FreeAiCopy {
+    /** The built-in provider entry, listed first in every key list. */
+    const val PROVIDER_TITLE = "Flagship Inference"
+    const val PROVIDER_SUBTITLE = "We use third-party providers and anonymize your requests."
+    const val BUILT_IN_A11Y = "Built-in provider. It can't be removed."
+    const val CHECKING = "Checking…"
     const val TITLE = "Free AI credits"
     const val NOTE = "Used automatically when you build with AI and haven't added your own key."
     const val USED_UP =
@@ -169,12 +189,14 @@ object FreeAiCopy {
     const val BUSY_TODAY = "Free building is busy today. Try again tomorrow, or use your own AI key."
     const val NO_SERVER = "Free AI credits start once one of your servers is running."
     const val ENDED = "The free building period has ended — use your own AI key."
+    const val TOO_LONG = "This build is too big for Flagship Inference. Try a smaller change, or use your own AI key."
     const val ADD_OWN_KEY = "Add your own key"
     const val CODE_USED_UP = "free-ai-used-up"
     const val CODE_UNAVAILABLE = "free-ai-unavailable"
     const val CODE_BUSY_TODAY = "free-ai-busy-today"
     const val CODE_NO_SERVER = "free-ai-no-server"
     const val CODE_ENDED = "free-ai-ended"
+    const val CODE_TOO_LONG = "free-ai-too-long"
 
     /** The app's own words for a `free-ai-…` code, or null for an unknown one. */
     fun messageFor(code: String?): String? = when (code) {
@@ -183,17 +205,34 @@ object FreeAiCopy {
         CODE_BUSY_TODAY -> BUSY_TODAY
         CODE_NO_SERVER -> NO_SERVER
         CODE_ENDED -> ENDED
+        CODE_TOO_LONG -> TOO_LONG
         else -> null
     }
 
-    /** Null hides free AI (unreadable, or the promotion has ended). */
+    /** What the screen reader says for the Flagship Inference entry. */
+    const val A11Y_LABEL = "$PROVIDER_TITLE. $BUILT_IN_A11Y"
+
+    /** Null before the first read. */
     fun view(state: FreeAiState): FreeAiView? = when (state) {
         is FreeAiState.Hidden -> null
         is FreeAiState.Unavailable -> FreeAiView(false, UNAVAILABLE, true)
+        is FreeAiState.Ended -> FreeAiView(false, ENDED, true)
         is FreeAiState.Blocked ->
             FreeAiView(false, messageFor("free-ai-${state.reason}") ?: UNAVAILABLE, state.reason != "no-server")
         is FreeAiState.Available ->
             if (state.usedUp) FreeAiView(false, USED_UP, true) else FreeAiView(true, leftLine(state.credits), false)
+    }
+
+    /**
+     * The Flagship Inference entry for [state]; never null, so the entry is
+     * always listed. [compact] uses the key step's short balance line.
+     */
+    fun entry(state: FreeAiState, compact: Boolean = false): FlagshipInferenceEntry {
+        val v = view(state) ?: return FlagshipInferenceEntry(false, CHECKING, false, loading = true)
+        if (v.usable && state is FreeAiState.Available) {
+            return FlagshipInferenceEntry(true, if (compact) rowSubtitle(state.credits) else leftLine(state.credits), false)
+        }
+        return FlagshipInferenceEntry(v.usable, v.text, v.offerOwnKey)
     }
 
     /** 820000 → "820k", 1000000 → "1M", 1500000 → "1.5M". */
@@ -255,7 +294,7 @@ class FreeAiClient(
             return when (code) {
                 FreeAiCopy.CODE_USED_UP -> FreeAiMint.UsedUp(message ?: FreeAiCopy.USED_UP, err?.credits)
                 FreeAiCopy.CODE_UNAVAILABLE -> FreeAiMint.Unavailable(message ?: FreeAiCopy.UNAVAILABLE)
-                FreeAiCopy.CODE_BUSY_TODAY, FreeAiCopy.CODE_NO_SERVER, FreeAiCopy.CODE_ENDED ->
+                FreeAiCopy.CODE_BUSY_TODAY, FreeAiCopy.CODE_NO_SERVER, FreeAiCopy.CODE_ENDED, FreeAiCopy.CODE_TOO_LONG ->
                     FreeAiMint.Refused(code, message ?: FreeAiCopy.UNAVAILABLE)
                 else -> throw e
             }
@@ -309,22 +348,22 @@ class FreeAiService(
         return client.token(FreeAiRequest.sign(signer(), user, serverFqdn, now()))
     }
 
-    /** The card's state; [FreeAiState.Hidden] on any failure. */
+    /** The entry's state; [FreeAiState.Unavailable] on any failure. */
     suspend fun status(): FreeAiState {
-        val user = username()?.takeIf { it.isNotEmpty() } ?: return FreeAiState.Hidden
+        val user = username()?.takeIf { it.isNotEmpty() } ?: return FreeAiState.Unavailable
         return try {
             val r = client.status(FreeAiRequest.sign(signer(), user, "", now()))
             when {
-                r.ended -> FreeAiState.Hidden
+                r.ended -> FreeAiState.Ended
                 !r.available -> FreeAiState.Unavailable
                 r.reason != null -> FreeAiState.Blocked(r.reason)
                 r.credits != null -> FreeAiState.Available(r.credits)
-                else -> FreeAiState.Hidden
+                else -> FreeAiState.Unavailable
             }
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (_: Throwable) {
-            FreeAiState.Hidden
+            FreeAiState.Unavailable
         }
     }
 

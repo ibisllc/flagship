@@ -59,7 +59,6 @@ import com.flagshipserver.app.core.AiKeyStore
 import com.flagshipserver.app.core.AiRelay
 import com.flagshipserver.app.core.FreeAiMint
 import com.flagshipserver.app.core.FreeAiService
-import com.flagshipserver.app.core.FreeAiState
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSDangerButton
@@ -97,6 +96,7 @@ fun AiKeyStepScreen(
     onConfirm: (AiCredential) -> Unit,
     onBack: () -> Unit,
     vm: AiKeysViewModel = viewModel(),
+    freeAiService: FreeAiService = rememberFreeAiService(),
 ) {
     val keys by vm.keys.collectAsState()
     val activeId by vm.activeId.collectAsState()
@@ -110,7 +110,6 @@ fun AiKeyStepScreen(
     var confirmDelete by remember { mutableStateOf<SavedKeyRow?>(null) }
     var deleteError by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
-    val freeAiService = rememberFreeAiService()
     val server = currentBuildServerFqdn()
     val toasts = LocalToastCenter.current
     var minting by remember { mutableStateOf(false) }
@@ -164,10 +163,13 @@ fun AiKeyStepScreen(
         )
         Spacer(Modifier.height(FS.space.s4))
 
-        if (freeAi !is FreeAiState.Hidden) {
-            FreeAiKeyStepRow(state = freeAi, busy = minting, onUse = { scope.launch { useFreeAi() } })
-            Spacer(Modifier.height(FS.space.s4))
-        }
+        FlagshipInferenceStepRow(
+            state = freeAi,
+            busy = minting,
+            lastUsed = activeId == AiKeyStore.FLAGSHIP_INFERENCE_ID,
+            onUse = { scope.launch { useFreeAi() } },
+        )
+        Spacer(Modifier.height(FS.space.s4))
 
         if (showForm) {
             AiKeyEntryForm(
@@ -485,12 +487,15 @@ private fun ProviderPickChip(
  * full key is ever shown. Reuses the same entry form as the build step.
  */
 @Composable
-fun AiKeysManagerScreen(nav: NavController, vm: AiKeysViewModel = viewModel()) {
+fun AiKeysManagerScreen(
+    nav: NavController,
+    vm: AiKeysViewModel = viewModel(),
+    freeAiService: FreeAiService = rememberFreeAiService(),
+) {
     val keys by vm.keys.collectAsState()
     val activeId by vm.activeId.collectAsState()
     val freeAi by vm.freeAi.collectAsState()
     var showForm by remember { mutableStateOf(false) }
-    val freeAiService = rememberFreeAiService()
     LaunchedEffect(Unit) { vm.loadFreeAi(freeAiService) }
 
     val scroll = rememberScrollState()
@@ -517,10 +522,13 @@ fun AiKeysManagerScreen(nav: NavController, vm: AiKeysViewModel = viewModel()) {
         )
         Spacer(Modifier.height(FS.space.s5))
 
-        if (freeAi !is FreeAiState.Hidden) {
-            FreeAiCreditsCard(state = freeAi, onAddOwnKey = { showForm = true })
-            Spacer(Modifier.height(FS.space.s4))
-        }
+        FlagshipInferenceSettingsRow(
+            state = freeAi,
+            isDefault = activeId == AiKeyStore.FLAGSHIP_INFERENCE_ID,
+            onMakeDefault = { vm.setActive(AiKeyStore.FLAGSHIP_INFERENCE_ID) },
+            onAddOwnKey = { showForm = true },
+        )
+        Spacer(Modifier.height(FS.space.s4))
 
         if (keys.isEmpty()) {
             Text(

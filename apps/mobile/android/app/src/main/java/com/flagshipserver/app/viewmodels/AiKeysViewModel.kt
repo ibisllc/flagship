@@ -57,7 +57,7 @@ class AiKeysViewModel : ViewModel() {
     private val _activeId = MutableStateFlow<String?>(null)
     val activeId: StateFlow<String?> = _activeId.asStateFlow()
 
-    /** Free AI credits: the card in Settings + the first row of the key step. */
+    /** Flagship Inference: the first entry in Settings and in the key step. */
     private val _freeAi = MutableStateFlow<FreeAiState>(FreeAiState.Hidden)
     val freeAi: StateFlow<FreeAiState> = _freeAi.asStateFlow()
 
@@ -65,7 +65,7 @@ class AiKeysViewModel : ViewModel() {
         refresh()
     }
 
-    /** Read the account's free-credits balance (hidden on any failure). */
+    /** Read the account's free-credits balance (unavailable on any failure). */
     suspend fun loadFreeAi(service: FreeAiService): FreeAiState {
         val s = service.status()
         _freeAi.value = s
@@ -75,7 +75,7 @@ class AiKeysViewModel : ViewModel() {
     /**
      * "Use this" on the free-credits row: a fresh credential for the box the
      * build runs on. Updates the balance from the answer; a refusal flips
-     * the row to its message (or hides it once the promotion has ended).
+     * the row to its message (disabled, still listed, once the promotion has ended).
      */
     suspend fun useFreeAi(service: FreeAiService, serverFqdn: String): FreeAiMint {
         val r = service.mint(serverFqdn)
@@ -86,11 +86,15 @@ class AiKeysViewModel : ViewModel() {
                     .copy(remainingTokens = 0),
             )
             is FreeAiMint.Refused -> _freeAi.value =
-                if (r.code == FreeAiCopy.CODE_ENDED) FreeAiState.Hidden
+                if (r.code == FreeAiCopy.CODE_ENDED) FreeAiState.Ended
                 else FreeAiState.Blocked(r.code.removePrefix("free-ai-"))
             is FreeAiMint.Unavailable -> _freeAi.value = FreeAiState.Unavailable
         }
-        if (r is FreeAiMint.Ok) AiRelay.lastUsedKeyId = null
+        if (r is FreeAiMint.Ok) {
+            AiRelay.lastUsedKeyId = null
+            AiKeyStore.setActive(AiKeyStore.FLAGSHIP_INFERENCE_ID)
+            refresh()
+        }
         return r
     }
 
@@ -103,7 +107,7 @@ class AiKeysViewModel : ViewModel() {
         _activeId.value = AiKeyStore.activeId()
     }
 
-    /** Pin a saved entry as the active (confirm-default) key. */
+    /** Pin a saved entry (or [AiKeyStore.FLAGSHIP_INFERENCE_ID]) as the active (confirm-default) key. */
     fun setActive(id: String) {
         AiKeyStore.setActive(id)
         refresh()
@@ -164,7 +168,9 @@ class AiKeysViewModel : ViewModel() {
         return cred
     }
 
+    /** Flagship Inference is built in: it can't be removed. */
     fun delete(id: String) {
+        if (id == AiKeyStore.FLAGSHIP_INFERENCE_ID) return
         AiKeyStore.delete(id)
         refresh()
     }
