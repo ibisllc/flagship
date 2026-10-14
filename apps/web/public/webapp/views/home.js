@@ -540,7 +540,7 @@ function renderEmptyServersList(root, { reason, username } = {}) {
     ? "Your account is ready"
     : "Your first server is one tap away";
   const hint = accountOpen
-    ? "You don't have any servers yet. Add your first server to start running your own services."
+    ? "Add your first server to start running your own services."
     : reason === "unpaired"
       ? "Pair the webapp to your phone or pod first, or jump straight in and build a fresh server."
       : "Mint a recipe, write it to a USB drive with the Flagship builder, and boot a spare machine — you're a few taps from your own cloud.";

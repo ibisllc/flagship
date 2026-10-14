@@ -773,6 +773,10 @@ export function initCreateServerView() {
   wireServerNameValidation();
   $("cs-advanced")?.addEventListener("change", syncAdvancedVisibility);
   syncAdvancedVisibility();
+  $("cs-co-manage")?.addEventListener("click", async () => {
+    const { promptShareLink } = await import("./share-accept.js");
+    await promptShareLink();
+  });
   $("cs-save-draft")?.addEventListener("click", () => handleSaveDraft());
   $("cs-download-recipe")?.addEventListener("click", () => handleRecipeDownload().catch((e) => { console.error(e); toast(humanError(e), "err"); }));
   $("cs-new")?.addEventListener("click", () => {

@@ -890,6 +890,7 @@ section:not(.hidden) {
 .mt-2 { margin-top: var(--space-2); }
 .mt-3 { margin-top: var(--space-3); }
 .mt-4 { margin-top: var(--space-4); }
+.mb-2 { margin-bottom: var(--space-2); }
 .mt-5 { margin-top: var(--space-5); }
 .full-width { width: 100%; }
 

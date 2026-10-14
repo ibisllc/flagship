@@ -293,7 +293,6 @@ test.describe("gym webapp share", () => {
     await expect(section).toContainText("Shared with me", { timeout: 10_000 });
     await expect(section.locator('[data-open-share]', { hasText: "home" })).toContainText("Online");
     await expect(section.locator('[data-open-share]', { hasText: "media" })).toContainText("Waiting for the owner");
-    await expect(section.locator("#shared-paste-link")).toBeVisible();
     await section.evaluate((el) => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 240));
     await shot(page, testInfo, "member-home");
 

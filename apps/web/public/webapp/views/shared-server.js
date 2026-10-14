@@ -75,12 +75,10 @@ function homeRowHtml(row) {
 
 /** The section's HTML for resolved rows. Pure, for tests and screenshots. */
 export function sharedWithMeHtml(rows) {
-  const paste = `<button class="linklike mt-1" id="shared-paste-link">Someone shared a server with you? Paste the link →</button>`;
-  if (!rows.length) return paste;
+  if (!rows.length) return "";
   return `
       <h2 class="mt-4">Shared with me</h2>
-      ${rows.map(homeRowHtml).join("")}
-      ${paste}`;
+      ${rows.map(homeRowHtml).join("")}`;
 }
 
 export async function renderSharedWithMe() {
@@ -91,8 +89,6 @@ export async function renderSharedWithMe() {
     slot.innerHTML = "";
     return;
   }
-  if (!slot.innerHTML.trim()) slot.innerHTML = sharedWithMeHtml([]);
-  wireHome(slot, []);
   let rows;
   try {
     rows = await loadSharedWithMe();
@@ -110,10 +106,6 @@ export async function renderSharedWithMe() {
 }
 
 function wireHome(slot, rows) {
-  slot.querySelector("#shared-paste-link")?.addEventListener("click", async () => {
-    const { promptShareLink } = await import("./share-accept.js");
-    await promptShareLink();
-  });
   slot.querySelectorAll("[data-open-share]").forEach((card) => {
     card.addEventListener("click", (ev) => {
       if (ev.target.closest("button")) return;
