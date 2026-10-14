@@ -188,8 +188,15 @@
         <li>Web analytics, ad pixels, session-replay, or browser fingerprints on any of our public pages.</li>
       </ul>
 
-      <h3 id="flagship-inference">2.8 Flagship Inference (free AI)</h3>
-      <p>Flagship Inference is the built-in AI your server can use to build apps when you haven't added your own AI key. Your server sends each request to our metering service, which removes your account, server and IP address and forwards the anonymized request to a third-party hosted model provider (listed in §3). The provider receives the prompt text, which includes what you asked for and the code being built, and returns the reply; it never receives your account, your server or your IP address, and sees only our address and our account. We count the tokens each account uses against its free allowance; we don't log or store prompts or replies. You can add your own AI key at any time, and your server uses that instead.</p>
+      <h3 id="flagship-inference">2.8 Flagship Inference</h3>
+      <p>Flagship Inference is the built-in AI your server can use to build apps when you haven't added your own AI key. It forwards your build requests to a third-party hosted model provider chosen by us, which may change.</p>
+      <ul>
+        <li><strong>We don't keep anything.</strong> No prompts and no replies. Our gateway passes each request through and only counts how much each account uses, to track its credits.</li>
+        <li><strong>We anonymize requests.</strong> Your account, your server and your IP address never reach the provider. It receives the request text (what you asked for and the code being built) from our address, under our account, and returns the reply.</li>
+        <li><strong>The provider is a third party.</strong> It handles what it receives under its own terms. We do our best to safeguard you, but we don't control the provider and aren't responsible for how it behaves.</li>
+        <li><strong>We may change provider at any time</strong>, based on the best offer available.</li>
+      </ul>
+      <p>You can add your own AI key at any time, and your server uses that instead.</p>
     </section>
 
     <section id="processors">
@@ -205,7 +212,7 @@
           <tr><td>Apple (APNs)</td><td>iOS push delivery</td><td>US</td></tr>
           <tr><td>Google (FCM)</td><td>Android push delivery</td><td>US</td></tr>
           <tr><td>Let's Encrypt (ISRG)</td><td>TLS certificate issuance</td><td>US</td></tr>
-          <tr><td>Hosted model provider (to be named before launch)</td><td>Flagship Inference only: receives anonymized prompt text (no account, server or IP address) and returns the reply (§2.8)</td><td>To be confirmed</td></tr>
+          <tr><td>A third-party hosted model provider chosen by us, which may change</td><td>Flagship Inference only: receives anonymized request text (no account, server or IP address) and returns the reply (§2.8)</td><td>Depends on the provider</td></tr>
           <tr><td>Anthropic</td><td>Checks shared repo adaptations, and summarizes retired ones, when that review is on (§2.6)</td><td>US</td></tr>
         </tbody>
       </table>

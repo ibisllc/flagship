@@ -266,6 +266,19 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     }
   });
 
+  it("privacy §2.8 describes Flagship Inference plainly, with no provider placeholder", async () => {
+    const app = buildServer();
+    const priv = (await app.inject({ method: "GET", url: "/privacy.html" })).body;
+    expect(priv).toContain('<h3 id="flagship-inference">2.8 Flagship Inference</h3>');
+    expect(priv).toContain("a third-party hosted model provider chosen by us, which may change");
+    expect(priv).toContain("We don't keep anything.");
+    expect(priv).toContain("We anonymize requests.");
+    expect(priv).toContain("aren't responsible for how it behaves");
+    expect(priv).toContain("We may change provider at any time");
+    expect(priv).not.toMatch(/to be named|to be confirmed|free AI/i);
+    expect(priv).toContain("Last updated: 2026-10-14");
+  });
+
   it("privacy + terms include real contact addresses", async () => {
     const app = buildServer();
     const priv = await app.inject({ method: "GET", url: "/privacy.html" });
