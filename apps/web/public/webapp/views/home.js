@@ -1346,8 +1346,8 @@ export async function renderActiveProviderChip() {
     chip.innerHTML = `
       <div class="row">
         <div>
-          <div class="weight-600">Free AI credits</div>
-          <div class="muted-sm">used when you build with AI; add your own key any time</div>
+          <div class="weight-600">Flagship Inference</div>
+          <div class="muted-sm">We use third-party providers and anonymize your requests.</div>
         </div>
         <button class="secondary" id="chip-settings">settings</button>
       </div>

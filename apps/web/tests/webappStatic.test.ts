@@ -390,7 +390,7 @@ describe("/webapp PWA static surface", () => {
     // v56 picks each new app's server, lists a server's apps and copies apps between servers.
     // v57 titles a server's page with its name.
     // v58 shows one status pill per app across its servers, and each server's state on the app page.
-    expect(r.body).toContain('SHELL_VERSION = "v67"');
+    expect(r.body).toContain('SHELL_VERSION = "v68"');
     expect(r.body).toContain("event.data?.json");
     // Must keep the empty-payload fallback (some pushes have no body).
     expect(r.body).toContain("Flagship has an update for you");

@@ -134,7 +134,10 @@
 //  v67: a visitor's id is per app: invites, knocks and acceptances sign with
 //       deriveAppAccountId(UMK, serviceRef), invite links carry `s=`, and a
 //       link without it asks for a new one.
-const SHELL_VERSION = "v67";
+//  v68: free AI is the built-in "Flagship Inference" provider: always first
+//       in Settings and the AI-key step, never removable, selectable as the
+//       default, shown disabled (with why) instead of hidden once it ended.
+const SHELL_VERSION = "v68";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

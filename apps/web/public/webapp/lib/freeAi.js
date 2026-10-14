@@ -25,6 +25,13 @@ export const BUSY_TODAY_MESSAGE = "Free building is busy today. Try again tomorr
 export const NO_SERVER_MESSAGE = "Free AI credits start once one of your servers is running.";
 export const ENDED_MESSAGE = "The free building period has ended — use your own AI key.";
 export const CARD_NOTE = "Used automatically when you build with AI and haven't added your own key.";
+export const TOO_LONG_MESSAGE =
+  "This build is too big for Flagship Inference. Try a smaller change, or use your own AI key.";
+
+// Free AI is listed as a built-in provider: always first, never removable.
+export const PROVIDER_TITLE = "Flagship Inference";
+export const PROVIDER_SUBTITLE = "We use third-party providers and anonymize your requests.";
+export const BUILT_IN_LABEL = "Flagship Inference, built-in provider. It can't be removed.";
 
 const MESSAGE_BY_CODE = {
   "free-ai-used-up": USED_UP_MESSAGE,
@@ -32,6 +39,7 @@ const MESSAGE_BY_CODE = {
   "free-ai-no-server": NO_SERVER_MESSAGE,
   "free-ai-ended": ENDED_MESSAGE,
   "free-ai-unavailable": UNAVAILABLE_MESSAGE,
+  "free-ai-too-long": TOO_LONG_MESSAGE,
 };
 
 /** 820000 → "820k", 1000000 → "1M", 1500000 → "1.5M". */
@@ -63,6 +71,17 @@ export function freeAiView(status) {
   }
   if ((status.credits?.remainingTokens ?? 0) <= 0) return { usable: false, text: USED_UP_MESSAGE, offerOwnKey: true };
   return { usable: true, text: creditsLine(status.credits), offerOwnKey: false };
+}
+
+/**
+ * The Flagship Inference entry for a status read. Never null: the entry is
+ * always listed, disabled with the reason when it can't be used (unreadable
+ * status, or the promotion has ended).
+ */
+export function freeAiEntryView(status) {
+  if (!status) return { usable: false, text: UNAVAILABLE_MESSAGE, offerOwnKey: true };
+  if (status.ended) return { usable: false, text: ENDED_MESSAGE, offerOwnKey: true };
+  return freeAiView(status);
 }
 
 /** The canonical bytes the account signs (vectors: packages/protocol/test-vectors/llm-promo-issue). */

@@ -6,9 +6,10 @@
 // box's model (marketplace install, IDE/MCP — which uses the user's own
 // editor AI) skip this entirely.
 //
-// Free AI credits come first: a new owner with no saved key builds on them
-// straight away (the step is skipped), and anyone else sees them as the
-// first row while any are left. Adding and choosing are separate: "Add an API key" opens a form that saves
+// Flagship Inference (free AI credits) is a built-in provider: always the
+// first row, never deletable, disabled with the reason when it can't be used.
+// A new owner with no saved key builds on it straight away (the step is
+// skipped). Adding and choosing are separate: "Add an API key" opens a form that saves
 // the key to this device's list (and makes it the last-used one); each saved
 // key has "Use this", which hands the credential back IN MEMORY via onChosen
 // and moves the flow on, and a confirmed delete. The raw key never touches
@@ -39,7 +40,16 @@ import {
   PROMO_ID,
 } from "../providers.js";
 import { relayCaption } from "../lib/aiRelay.js";
-import { UNAVAILABLE_MESSAGE, fetchFreeAiStatus, formatTokens, freeAiView, mintFreeAiCredential } from "../lib/freeAi.js";
+import {
+  BUILT_IN_LABEL,
+  PROVIDER_SUBTITLE,
+  PROVIDER_TITLE,
+  UNAVAILABLE_MESSAGE,
+  fetchFreeAiStatus,
+  formatTokens,
+  freeAiEntryView,
+  mintFreeAiCredential,
+} from "../lib/freeAi.js";
 
 registerView("view-build-key");
 
@@ -90,13 +100,12 @@ async function chooseEntry(e) {
 }
 
 /**
- * What the free AI row shows for a status read: "use" (with what's left),
- * "blocked" (used up, busy today, no running server, unavailable), or null
- * (no row: unreadable, or the promotion has ended). Exported for tests.
+ * What the Flagship Inference row shows for a status read: "use" (with
+ * what's left) or "blocked" (used up, busy today, no running server,
+ * unavailable, ended) with the reason. Exported for tests.
  */
 export function freeAiRowState(status) {
-  const view = freeAiView(status);
-  if (!view) return null;
+  const view = freeAiEntryView(status);
   if (!view.usable) return { kind: "blocked", text: view.text };
   const c = status.credits;
   const left = c?.week ? `${formatTokens(c.week.remaining)} left this week · ${formatTokens(c.starter.remaining)} reserve` : `${formatTokens(c?.remainingTokens)} left`;
@@ -105,13 +114,21 @@ export function freeAiRowState(status) {
 
 /** Skip the step and build on free AI: no saved keys, and some credits left. */
 export function shouldAutoUseFreeAi(savedEntries, status) {
-  return (savedEntries || []).length === 0 && freeAiRowState(status)?.kind === "use";
+  return (savedEntries || []).length === 0 && freeAiRowState(status).kind === "use";
 }
 
 async function chooseFreeAi() {
   if (typeof onChosenCb !== "function") return;
   try {
     const { credential } = await mintFreeAiCredential(targetFqdn);
+    const session = getSession();
+    if (session.umk) {
+      try {
+        await setActive(session.umk, PROMO_ID);
+      } catch {
+        // the last-used marker is a convenience; the choice still stands
+      }
+    }
     onChosenCb(credential);
   } catch (e) {
     toast(e.message || UNAVAILABLE_MESSAGE, "err");
@@ -120,16 +137,18 @@ async function chooseFreeAi() {
   }
 }
 
-function freeAiRowHtml(state) {
-  if (!state) return "";
+/** The built-in Flagship Inference row: no delete, "Use this" only when usable. Exported for tests. */
+export function freeAiRowHtml(state, { lastUsed = false } = {}) {
   const use = state.kind === "use";
   return `
-      <div class="card mt-2 build-key-row" id="build-key-free-ai">
+      <div class="card mt-2 build-key-row${use ? "" : " is-disabled"}" id="build-key-free-ai" role="group" aria-label="${escapeHtml(BUILT_IN_LABEL)}">
         <div class="build-key-row-body">
-          <strong>Free AI credits</strong>
-          <span class="${use ? "value text-sm" : "note"}">${escapeHtml(state.text)}</span>
+          <strong>${escapeHtml(PROVIDER_TITLE)}</strong>
+          <span class="note">${escapeHtml(PROVIDER_SUBTITLE)}</span>
+          <span class="note" id="build-key-free-ai-status">${escapeHtml(state.text)}</span>
+          ${lastUsed ? '<span class="note">Last used</span>' : ""}
         </div>
-        ${use ? '<button class="build-key-use" id="build-key-free-ai-use">Use this</button>' : ""}
+        ${use ? `<button class="build-key-use" id="build-key-free-ai-use" aria-label="Use ${escapeHtml(PROVIDER_TITLE)}">Use this</button>` : ""}
       </div>`;
 }
 
@@ -174,12 +193,14 @@ async function renderSaved({ autoFreeAi = false } = {}) {
     await chooseFreeAi();
     return;
   }
-  const freeRow = freeAiRowHtml(freeAiRowState(status));
+  const freeRow = freeAiRowHtml(freeAiRowState(status), {
+    lastUsed: entries.length > 0 && stored.activeId === PROMO_ID,
+  });
   $("bk-cancel")?.classList.toggle("hidden", savedCount === 0);
   if (entries.length === 0) {
     box.innerHTML = freeRow;
     $("build-key-free-ai-use")?.addEventListener("click", () => void chooseFreeAi());
-    if (freeAiRowState(status)?.kind !== "use") showForm(true);
+    if (freeAiRowState(status).kind !== "use") showForm(true);
     return;
   }
 

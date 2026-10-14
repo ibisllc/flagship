@@ -50,39 +50,87 @@ describe("webapp free AI credits", () => {
     expect(await freeAi.freshCredential(byok, "box")).toBe(byok);
   });
 
-  it("the settings card shows the week and the reserve, why it's blocked, or nothing once it has ended", async () => {
-    const { freeAiCardHtml } = await load("views", "settings.js");
-    expect(freeAiCardHtml(null)).toBeNull();
-    expect(freeAiCardHtml({ ...ok(), available: false, ended: true })).toBeNull();
-    const left = freeAiCardHtml(ok());
-    expect(left).toContain("This week: 340k of 500k left · Starter reserve: 1.2M");
-    expect(left).toMatch(/Used automatically when you build with AI and haven.{1,6}t added your own key\./);
-    expect(left).not.toContain("free-ai-add-key");
-    const spent = freeAiCardHtml(ok(SPENT));
-    expect(spent).toContain("More arrive on Monday, or add your own AI key to keep building.");
-    expect(spent).toContain('id="free-ai-add-key"');
-    const busy = freeAiCardHtml({ ...ok(), reason: "busy-today" });
-    expect(busy).toContain("Free building is busy today. Try again tomorrow, or use your own AI key.");
-    const noServer = freeAiCardHtml({ ...ok(), reason: "no-server" });
-    expect(noServer).toContain("start once one of your servers is running");
-    expect(noServer).not.toContain("free-ai-add-key");
-    const off = freeAiCardHtml({ ...ok(), available: false });
-    expect(off).toMatch(/available right now/);
-    for (const html of [left, spent, busy, noServer, off]) expect(html).not.toMatch(/\b(buy|purchase|upgrade|subscribe)\b/i);
+  it("names free AI as the built-in Flagship Inference provider, word for word", async () => {
+    const f = await load("lib", "freeAi.js");
+    expect(f.PROVIDER_TITLE).toBe("Flagship Inference");
+    expect(f.PROVIDER_SUBTITLE).toBe("We use third-party providers and anonymize your requests.");
+    expect(f.BUILT_IN_LABEL).toMatch(/built-in provider\. It can.t be removed\./);
+    expect(f.TOO_LONG_MESSAGE).toBe(
+      "This build is too big for Flagship Inference. Try a smaller change, or use your own AI key.",
+    );
   });
 
-  it("the key step offers free AI first and skips itself for an owner with no saved key", async () => {
-    const { freeAiRowState, shouldAutoUseFreeAi } = await load("views", "build-key.js");
+  it("maps the shim's too-long refusal to its own message, not 'unavailable'", () => {
+    const lib = readFileSync(webapp("lib", "freeAi.js"), "utf8");
+    expect(lib).toMatch(/"free-ai-too-long": TOO_LONG_MESSAGE/);
+  });
+
+  it("the settings entry is always listed, first, never removable, and says why it can't be used", async () => {
+    const { freeAiCardHtml } = await load("views", "settings.js");
+    const all = [
+      freeAiCardHtml(null),
+      freeAiCardHtml({ ...ok(), available: false, ended: true }),
+      freeAiCardHtml(ok()),
+      freeAiCardHtml(ok(), { isActive: true }),
+      freeAiCardHtml(ok(SPENT)),
+      freeAiCardHtml({ ...ok(), reason: "busy-today" }),
+      freeAiCardHtml({ ...ok(), reason: "no-server" }),
+      freeAiCardHtml({ ...ok(), available: false }),
+    ];
+    for (const html of all) {
+      expect(html).toContain("Flagship Inference");
+      expect(html).toContain("We use third-party providers and anonymize your requests.");
+      expect(html).toMatch(/aria-label="Flagship Inference, built-in provider\. It can.{1,6}t be removed\."/);
+      expect(html).not.toMatch(/data-action="remove"|>remove</);
+      expect(html).not.toMatch(/\b(buy|purchase|upgrade|subscribe)\b/i);
+    }
+    const [unread, ended, left, active, spent, busy, noServer, off] = all as string[];
+    expect(unread).toMatch(/available right now/);
+    expect(unread).not.toContain('id="free-ai-use"');
+    expect(ended).toContain("The free building period has ended");
+    expect(ended).not.toContain('id="free-ai-use"');
+    expect(left).toContain("This week: 340k of 500k left · Starter reserve: 1.2M");
+    expect(left).toContain('id="free-ai-use"');
+    expect(left).toContain(">use<");
+    expect(left).not.toContain("free-ai-add-key");
+    expect(active).toContain(">active<");
+    expect(active).toMatch(/Used automatically when you build with AI and haven.{1,6}t added your own key\./);
+    expect(spent).toContain("More arrive on Monday, or add your own AI key to keep building.");
+    expect(spent).toContain('id="free-ai-add-key"');
+    expect(spent).not.toContain('id="free-ai-use"');
+    expect(busy).toContain("Free building is busy today. Try again tomorrow, or use your own AI key.");
+    expect(noServer).toContain("start once one of your servers is running");
+    expect(noServer).not.toContain("free-ai-add-key");
+    expect(off).toMatch(/available right now/);
+  });
+
+  it("the key step lists Flagship Inference first, disabled with the reason, and skips itself for an owner with no saved key", async () => {
+    const { freeAiRowState, freeAiRowHtml, shouldAutoUseFreeAi } = await load("views", "build-key.js");
     expect(freeAiRowState(ok())).toEqual({ kind: "use", text: "340k left this week · 1.2M reserve" });
     expect(freeAiRowState(ok(SPENT))?.kind).toBe("blocked");
     expect(freeAiRowState({ ...ok(), reason: "busy-today" })?.kind).toBe("blocked");
     expect(freeAiRowState({ ...ok(), available: false })?.kind).toBe("blocked");
-    expect(freeAiRowState({ ...ok(), available: false, ended: true })).toBeNull();
-    expect(freeAiRowState(null)).toBeNull();
+    expect(freeAiRowState({ ...ok(), available: false, ended: true })).toEqual({
+      kind: "blocked",
+      text: "The free building period has ended — use your own AI key.",
+    });
+    expect(freeAiRowState(null)?.kind).toBe("blocked");
+    const usable = freeAiRowHtml(freeAiRowState(ok()));
+    expect(usable).toContain("<strong>Flagship Inference</strong>");
+    expect(usable).toContain("We use third-party providers and anonymize your requests.");
+    expect(usable).toContain('id="build-key-free-ai-use"');
+    expect(usable).not.toContain("build-key-delete");
+    expect(usable).not.toContain("Last used");
+    expect(freeAiRowHtml(freeAiRowState(ok()), { lastUsed: true })).toContain("Last used");
+    const ended = freeAiRowHtml(freeAiRowState({ ...ok(), ended: true }));
+    expect(ended).toContain("The free building period has ended");
+    expect(ended).not.toContain("build-key-free-ai-use");
+    expect(ended).toMatch(/aria-label="Flagship Inference, built-in provider\. It can.{1,6}t be removed\."/);
     expect(shouldAutoUseFreeAi([], ok())).toBe(true);
     expect(shouldAutoUseFreeAi([{ id: "a" }], ok())).toBe(false);
     expect(shouldAutoUseFreeAi([], ok(SPENT))).toBe(false);
     expect(shouldAutoUseFreeAi([], { ...ok(), reason: "no-server" })).toBe(false);
+    expect(shouldAutoUseFreeAi([], { ...ok(), ended: true })).toBe(false);
     expect(shouldAutoUseFreeAi([], null)).toBe(false);
   });
 

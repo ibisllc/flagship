@@ -10,9 +10,16 @@ import { getSession, ensureUsername, lockSession } from "../lib/state.js";
 import { escapeHtml } from "../lib/util.js";
 import { toast } from "../lib/toast.js";
 import { humanError } from "../lib/humanError.js";
-import { loadProviders, addProvider, removeProvider, setActive, setRelay } from "../providers.js";
+import { loadProviders, addProvider, removeProvider, setActive, setRelay, PROMO_ID } from "../providers.js";
 import { relayCaption } from "../lib/aiRelay.js";
-import { CARD_NOTE, fetchFreeAiStatus, freeAiView } from "../lib/freeAi.js";
+import {
+  BUILT_IN_LABEL,
+  CARD_NOTE,
+  PROVIDER_SUBTITLE,
+  PROVIDER_TITLE,
+  fetchFreeAiStatus,
+  freeAiEntryView,
+} from "../lib/freeAi.js";
 import { renderActiveProviderChip, stopRenewals } from "./home.js";
 import { handleReset } from "./unlock.js";
 import { enterRecovery } from "./recovery.js";
@@ -90,7 +97,7 @@ export async function renderProviders() {
     return;
   }
   const stored = await loadProviders(session.umk);
-  void renderFreeAiCard();
+  void renderFreeAiCard(stored.activeId === PROMO_ID || !stored.entries.some((e) => e.id === stored.activeId));
 
   for (const e of stored.entries) {
     const isActive = stored.activeId === e.id;
@@ -159,32 +166,52 @@ export async function renderProviders() {
   });
 }
 
-/** The settings view's free AI card body for a status read (null = hide). Exported for tests. */
-export function freeAiCardHtml(status) {
-  const view = freeAiView(status);
-  if (!view) return null;
+/**
+ * The built-in Flagship Inference entry, always first in the providers list:
+ * no remove; "use" makes it the default when it can be used; otherwise the
+ * reason and, where it helps, the way to your own key. Exported for tests.
+ */
+export function freeAiCardHtml(status, { isActive = false } = {}) {
+  const view = freeAiEntryView(status);
   return `
-    <div class="weight-600">Free AI credits</div>
-    <div class="note mt-2${view.usable ? "" : " warn"}" id="free-ai-line">${escapeHtml(view.text)}</div>
-    ${view.usable ? `<div class="faint-sm mt-1">${escapeHtml(CARD_NOTE)}</div>` : ""}
-    ${view.offerOwnKey ? '<button id="free-ai-add-key" class="full-width mt-2">Add your own key</button>' : ""}
+    <div class="row row-top" role="group" aria-label="${escapeHtml(BUILT_IN_LABEL)}">
+      <div>
+        <div class="weight-600">${escapeHtml(PROVIDER_TITLE)} <span class="pill">built-in</span></div>
+        <div class="faint-sm mt-1">${escapeHtml(PROVIDER_SUBTITLE)}</div>
+        <div class="note mt-1${view.usable ? "" : " warn"}" id="free-ai-line">${escapeHtml(view.text)}</div>
+        ${view.usable && isActive ? `<div class="faint-sm mt-1">${escapeHtml(CARD_NOTE)}</div>` : ""}
+      </div>
+      ${
+        view.usable
+          ? `<div class="btn-row-sm"><button class="${isActive ? "" : "secondary"}" id="free-ai-use" aria-label="Use ${escapeHtml(PROVIDER_TITLE)}">${isActive ? "active" : "use"}</button></div>`
+          : ""
+      }
+    </div>
+    ${!view.usable && view.offerOwnKey ? '<button id="free-ai-add-key" class="full-width mt-2">Add your own key</button>' : ""}
   `;
 }
 
-// The free AI credits card: what's left this week and in the starter
-// reserve, or why free AI can't be used now and the way to your own key.
-// Hidden when the status can't be read or the promotion has ended.
-async function renderFreeAiCard() {
+// The Flagship Inference entry: what's left this week and in the starter
+// reserve, or why it can't be used now. Always shown, ended included.
+async function renderFreeAiCard(isActive) {
   const el = $("free-ai-card");
   if (!el) return;
-  const html = freeAiCardHtml(await fetchFreeAiStatus());
-  if (!html) {
-    el.classList.add("hidden");
-    return;
-  }
-  el.className = "card mt-2";
+  const status = await fetchFreeAiStatus();
+  const shownActive = isActive && freeAiEntryView(status).usable;
+  const html = freeAiCardHtml(status, { isActive: shownActive });
+  el.className = `card mt-2 provider-entry${shownActive ? " is-active" : ""}`;
   el.innerHTML = html;
   $("free-ai-add-key")?.addEventListener("click", () => handleAddProvider());
+  $("free-ai-use")?.addEventListener("click", async () => {
+    try {
+      await setActive(getSession().umk, PROMO_ID);
+      await renderProviders();
+      await renderActiveProviderChip();
+      toast("Active provider updated");
+    } catch (e) {
+      toast(e.message, "err");
+    }
+  });
 }
 
 async function handleAddProvider() {

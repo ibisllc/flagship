@@ -81,11 +81,17 @@ artifact from *any* author (internal AI, external IDE, a git repo, a human)
 is contained by the same walls; the contract/prompt is a courtesy that lets a
 well-behaved author avoid building something the harness would reject.
 
-## Free AI credits
+## Free AI credits (Flagship Inference)
 
 "For a limited time, building your apps is free on Flagship." Free AI is a
 launch promotion, not forever (later, tokens are bought from us). An owner
-can build with AI before bringing a key of their own.
+can build with AI before bringing a key of their own. The apps list it as a
+built-in provider, **Flagship Inference** ("We use third-party providers and
+anonymize your requests."): the cheapest good-quality tokens from a hosted
+open-model provider (e.g. Qwen3.6-35B-A3B; the provider is named before
+launch), always behind the shim below. The provider receives the prompt text
+and returns the reply; it never receives the owner's account, server or IP
+address.
 
 **The allowance** (all `.com` vars, each optional; numbers are *weighted*
 tokens, input × `AI_PROMO_INPUT_WEIGHT` + output × `AI_PROMO_OUTPUT_WEIGHT`,
@@ -97,7 +103,7 @@ default 1 and 4, since output costs more to serve):
 | `AI_PROMO_STARTER_TOKENS` | 2,000,000 | one-time reserve per account, spent after the week's |
 | `AI_PROMO_DAILY_CAP_TOKENS` | 50,000,000 | every account together per UTC day; past it nobody gets new passes or calls until tomorrow ("Free building is busy today…") |
 | `AI_PROMO_INPUT_WEIGHT` / `AI_PROMO_OUTPUT_WEIGHT` | 1 / 4 | the weights |
-| `AI_PROMO_ENDS_AT` | none | ISO 8601 or epoch ms; after it nothing is issued ("The free building period has ended — use your own AI key") and the apps hide free AI |
+| `AI_PROMO_ENDS_AT` | none | ISO 8601 or epoch ms; after it nothing is issued ("The free building period has ended — use your own AI key") and the apps show Flagship Inference disabled with that message |
 
 Only an account with a registered, unrevoked server that reported to `.com`
 in the last 24 hours gets free AI ("Free AI credits start once one of your
@@ -120,10 +126,16 @@ Counted on the metering core (`packages/control-plane/src/meter.ts`):
   Minting records nothing (`packages/control-plane/src/freeAiCredits.ts`), so
   apps mint a fresh 12-hour pass (never past the end date) for every build
   start and every reply.
-- **On by default.** The AI-key step lists "Free AI credits" first and is
-  skipped for an owner with no saved key; Settings shows "This week: 340k of
-  500k left · Starter reserve: 1.2M", or why free AI can't be used now with a
-  way to add your own key. Nothing is sold, so there is no purchase wording.
+- **On by default.** The AI-key step and Settings list "Flagship Inference"
+  first, as a built-in provider that can't be deleted or renamed (and is
+  announced that way to screen readers); it is selectable like a saved key,
+  and the step is skipped for an owner with no saved key. Its status line
+  reads "This week: 340k of 500k left · Starter reserve: 1.2M" (compact on
+  the step), or why it can't be used now (unavailable, busy today, no running
+  server, used up, ended) with a way to add your own key; it stays listed,
+  disabled, once the promotion has ended or the status can't be read. The
+  owner's own keys follow and stay deletable. Nothing is sold, so there is no
+  purchase wording.
 - **The box** treats the pass as any credential: sealed per session, sent
   through the hub relay, its SSRF guard pinned to the pass's host. Its default
   model for `flagship` is a placeholder the shim replaces, and a refusal from
@@ -136,7 +148,12 @@ Counted on the metering core (`packages/control-plane/src/meter.ts`):
   reports true input and output (or an estimate) to
   `POST /api/llm-promo/usage`, which charges the promotion too. The upstream
   sees Cloudflare's address and our account, never the box, the owner or
-  their account name.
+  their account name. Its refusals carry only our words: a 429/5xx is
+  `free-ai-busy`, a 413 or a 400 that says the prompt overflowed the context
+  window is `free-ai-too-long` ("This build is too big for Flagship
+  Inference. Try a smaller change, or use your own AI key."), any other is
+  `free-ai-upstream` ("isn't available right now"). Prompts and replies are
+  neither logged nor stored.
 - Anthropic, OpenAI and Google can't mint per-user keys with a hard token
   cap, so `/api/llm-promo/issue` refuses them (410) instead of handing out a
   placeholder key; the phone-OTP claim (`apps/web/src/routes/llmPromo.ts`)

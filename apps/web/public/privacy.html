@@ -88,7 +88,7 @@
   <section class="page-hero">
     <h1>Privacy policy.</h1>
     <p class="lede">Flagship is built so we can't read your data. This page is the formal version of that promise — what we collect, what we don't, why, and how to ask for it back.</p>
-    <div class="meta">Last updated: 2026-10-11 · Effective: 2026-10-11</div>
+    <div class="meta">Last updated: 2026-10-14 · Effective: 2026-10-14</div>
   </section>
 
   <div class="summary-card">
@@ -111,7 +111,7 @@
         <ul>
           <li><span class="no">App data</span></li>
           <li><span class="no">Files, photos, messages</span></li>
-          <li><span class="no">LLM prompts or completions</span></li>
+          <li><span class="no">Stored LLM prompts or completions</span></li>
           <li><span class="no">Web traffic content</span></li>
           <li><span class="no">Browsing history</span></li>
           <li><span class="no">Telemetry, analytics, fingerprints</span></li>
@@ -183,10 +183,13 @@
       <ul>
         <li>The content of your TLS-encrypted traffic. <code>flagship.services</code> sees only encrypted bytes; the cert lives on your box.</li>
         <li>Files, photos, messages, or any application data stored on your Flagship server.</li>
-        <li>LLM prompts, completions, or any data you send through the BYOK provider path.</li>
+        <li>LLM prompts, completions, or any data you send through the BYOK provider path. Flagship Inference passes prompts through without keeping them (§2.8).</li>
         <li>Browsing history from the pod-resident browser feature.</li>
         <li>Web analytics, ad pixels, session-replay, or browser fingerprints on any of our public pages.</li>
       </ul>
+
+      <h3 id="flagship-inference">2.8 Flagship Inference (free AI)</h3>
+      <p>Flagship Inference is the built-in AI your server can use to build apps when you haven't added your own AI key. Your server sends each request to our metering service, which removes your account, server and IP address and forwards the anonymized request to a third-party hosted model provider (listed in §3). The provider receives the prompt text, which includes what you asked for and the code being built, and returns the reply; it never receives your account, your server or your IP address, and sees only our address and our account. We count the tokens each account uses against its free allowance; we don't log or store prompts or replies. You can add your own AI key at any time, and your server uses that instead.</p>
     </section>
 
     <section id="processors">
@@ -202,7 +205,8 @@
           <tr><td>Apple (APNs)</td><td>iOS push delivery</td><td>US</td></tr>
           <tr><td>Google (FCM)</td><td>Android push delivery</td><td>US</td></tr>
           <tr><td>Let's Encrypt (ISRG)</td><td>TLS certificate issuance</td><td>US</td></tr>
-          <tr><td>Anthropic, OpenAI, others</td><td>Only on the optional AI promo path; routed for one-shot key issuance, not proxied. Anthropic also checks shared repo adaptations, and summarizes retired ones, when that review is on (§2.6)</td><td>US</td></tr>
+          <tr><td>Hosted model provider (to be named before launch)</td><td>Flagship Inference only: receives anonymized prompt text (no account, server or IP address) and returns the reply (§2.8)</td><td>To be confirmed</td></tr>
+          <tr><td>Anthropic</td><td>Checks shared repo adaptations, and summarizes retired ones, when that review is on (§2.6)</td><td>US</td></tr>
         </tbody>
       </table>
       <p>If you BYOK (bring your own key), prompts go directly from your daemon to the provider you chose. We are not a sub-processor in that flow.</p>
