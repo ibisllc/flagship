@@ -1,0 +1,52 @@
+{
+  "name": "@ibisllc/billing-store-d1",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Cloudflare D1 MeterStore for @ibisllc/billing-metering: counters and idempotent batches in two tables, one round trip per batch.",
+  "keywords": [
+    "metering",
+    "cloudflare",
+    "d1",
+    "workers",
+    "usage",
+    "quota"
+  ],
+  "license": "BUSL-1.1",
+  "author": "Ibis LLC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ibisllc/billing.git",
+    "directory": "packages/store-d1"
+  },
+  "homepage": "https://github.com/ibisllc/billing/tree/main/packages/store-d1#readme",
+  "bugs": "https://github.com/ibisllc/billing/issues",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@ibisllc/billing-metering": "^0.1.0"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --dir tests"
+  }
+}

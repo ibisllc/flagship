@@ -1,6 +1,9 @@
 {
   "files": [],
   "references": [
-    { "path": "./packages/metering" }
+    { "path": "./packages/metering" },
+    { "path": "./packages/store-sqlite" },
+    { "path": "./packages/store-postgres" },
+    { "path": "./packages/store-d1" }
   ]
 }

@@ -1,0 +1,55 @@
+{
+  "name": "@ibisllc/billing-store-sqlite",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "SQLite MeterStore for @ibisllc/billing-metering, on node:sqlite, better-sqlite3 or any driver with the same synchronous surface.",
+  "keywords": [
+    "metering",
+    "sqlite",
+    "better-sqlite3",
+    "node:sqlite",
+    "usage",
+    "quota"
+  ],
+  "license": "BUSL-1.1",
+  "author": "Ibis LLC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ibisllc/billing.git",
+    "directory": "packages/store-sqlite"
+  },
+  "homepage": "https://github.com/ibisllc/billing/tree/main/packages/store-sqlite#readme",
+  "bugs": "https://github.com/ibisllc/billing/issues",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@ibisllc/billing-metering": "^0.1.0"
+  },
+  "devDependencies": {
+    "better-sqlite3": "13.0.3"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --dir tests"
+  }
+}

@@ -2,7 +2,7 @@
   "name": "billing",
   "private": true,
   "version": "0.1.0",
-  "description": "Account metering and (next) anonymous vouchers you can drop into any service",
+  "description": "Usage metering (and, next, anonymous vouchers) you can drop into any service",
   "license": "BUSL-1.1",
   "type": "module",
   "workspaces": [
@@ -10,15 +10,19 @@
   ],
   "scripts": {
     "build": "tsc -b",
+    "clean": "rm -rf packages/*/dist packages/*/tsconfig.tsbuildinfo",
     "test": "vitest run",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "examples": "node examples/edge-simulation.mjs && node examples/node-http-server.mjs --self-test",
+    "pack:check": "npm pack --dry-run --workspaces",
+    "bench": "node bench/report-load.mjs"
   },
   "devDependencies": {
-    "@types/node": "^20.14.0",
+    "@types/node": "^22.10.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   }
 }

@@ -1,0 +1,58 @@
+{
+  "name": "@ibisllc/billing-store-postgres",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "PostgreSQL MeterStore for @ibisllc/billing-metering, on pg, PGlite or any client with a query(text, values) method. Every operation is one statement.",
+  "keywords": [
+    "metering",
+    "postgres",
+    "postgresql",
+    "pg",
+    "pglite",
+    "usage",
+    "quota"
+  ],
+  "license": "BUSL-1.1",
+  "author": "Ibis LLC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ibisllc/billing.git",
+    "directory": "packages/store-postgres"
+  },
+  "homepage": "https://github.com/ibisllc/billing/tree/main/packages/store-postgres#readme",
+  "bugs": "https://github.com/ibisllc/billing/issues",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@ibisllc/billing-metering": "^0.1.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
+    "@types/pg": "8.23.1",
+    "pg": "8.23.1"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --dir tests"
+  }
+}
