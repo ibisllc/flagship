@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  ed,
   deriveCGK,
-  signSetLeader,
-  verifySetLeader,
   canonicalGossip,
   macGossip,
   verifyGossipMac,
@@ -14,8 +11,6 @@ import {
   birthDateFromAuthCode,
   type CloutMember,
   type GossipAnnouncement,
-  type Keypair,
-  type SetLeaderVote,
 } from "../src/index.js";
 
 /**
@@ -25,11 +20,6 @@ import {
  * and the Kotlin mirror
  * (`apps/mobile/android/app/src/test/java/com/flagshipserver/app/core/CloudGossipVectorTest.kt`).
  */
-function makeKey(seed: number): Keypair {
-  const priv = new Uint8Array(32).fill(seed);
-  return { privateKey: priv, publicKey: ed.getPublicKey(priv) };
-}
-
 const toHex = (b: Uint8Array) =>
   Array.from(b)
     .map((x) => x.toString(16).padStart(2, "0"))
@@ -51,63 +41,6 @@ describe("CGK derivation", () => {
   });
 });
 
-// ── 2. set-leader ──────────────────────────────────────────────────────
-describe("set-leader vote", () => {
-  const VOTE: SetLeaderVote = {
-    user: "alice",
-    preferredStkPubHex: "aa".repeat(32),
-    issuedAt: 1700,
-    nonce: "deadbeef",
-  };
-  const VOTE_CANONICAL =
-    "flagship/set-leader/v1|alice|" + "aa".repeat(32) + "|1700|deadbeef";
-
-  it("canonical bytes match the pinned cross-platform string", () => {
-    const irk = makeKey(7);
-    const sig = signSetLeader(VOTE, irk);
-    expect(ed.verify(sig, new TextEncoder().encode(VOTE_CANONICAL), irk.publicKey)).toBe(true);
-    expect(verifySetLeader(VOTE, sig, irk.publicKey)).toBe(true);
-  });
-
-  it("signature for the 0x07 IRK matches the pinned hex", () => {
-    const irk = makeKey(7);
-    expect(toHex(irk.publicKey)).toBe(
-      "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
-    );
-    expect(toHex(signSetLeader(VOTE, irk))).toBe(
-      "f08aa5168903b8b214e4ca867e1d2588eb060238c8ba88eb421a202af5077db7" +
-        "c9ecc09b58c3fade22ee12a9fa638549a8508cfdfe05485cd9e7ea774fe54200",
-    );
-  });
-
-  it("lowercases user + preferredStk + nonce into the canonical bytes", () => {
-    const irk = makeKey(8);
-    const upper: SetLeaderVote = {
-      ...VOTE,
-      user: "Alice",
-      preferredStkPubHex: "AA".repeat(32),
-      nonce: "DEADBEEF",
-    };
-    const sig = signSetLeader(upper, irk);
-    expect(ed.verify(sig, new TextEncoder().encode(VOTE_CANONICAL), irk.publicKey)).toBe(true);
-  });
-
-  it("'none' clears the vote (carried verbatim in the bytes)", () => {
-    const irk = makeKey(9);
-    const clear: SetLeaderVote = { ...VOTE, preferredStkPubHex: "none" };
-    const sig = signSetLeader(clear, irk);
-    const expected =
-      "flagship/set-leader/v1|alice|none|1700|deadbeef";
-    expect(ed.verify(sig, new TextEncoder().encode(expected), irk.publicKey)).toBe(true);
-  });
-
-  it("verify never throws on a forged/junk signature", () => {
-    const irk = makeKey(10);
-    expect(verifySetLeader(VOTE, new Uint8Array(64), irk.publicKey)).toBe(false);
-    expect(verifySetLeader(VOTE, new Uint8Array(3), irk.publicKey)).toBe(false);
-  });
-});
-
 // ── 3. gossip ──────────────────────────────────────────────────────────
 describe("gossip announcement", () => {
   const CGK = deriveCGK(new Uint8Array(32).fill(0x07));
@@ -116,18 +49,17 @@ describe("gossip announcement", () => {
     name: "bb".repeat(32),
     birthAuthHex: "cc".repeat(32),
     birthDate: 1000,
-    voteStkHex: "none",
-    voteDate: 0,
+    orderDate: 1500,
     services: ["photos", "notes", "chat"], // unsorted on purpose
     liveness: "live",
     issuedAt: 1700,
   };
   const ANN_CANONICAL =
-    "flagship/gossip/v1|alice|" +
+    "flagship/gossip/v2|alice|" +
     "bb".repeat(32) +
     "|" +
     "cc".repeat(32) +
-    "|1000|none|0|chat,notes,photos|live|1700";
+    "|1000|1500|chat,notes,photos|live|1700";
 
   it("canonical bytes sort services and match the pinned string", () => {
     expect(new TextDecoder().decode(canonicalGossip(ANN))).toBe(ANN_CANONICAL);
@@ -135,7 +67,7 @@ describe("gossip announcement", () => {
 
   it("HMAC under the CGK matches the pinned hex", () => {
     expect(macGossip(ANN, CGK)).toBe(
-      "2454b8b48b4e560e4613e32cb46c0df1161dfb934dd0c3f550a7507ff4a1647e",
+      "a1e8167791f338e0f2f066fdae5432965239d9f4d7585fc685c75429a28e588f",
     );
   });
 
@@ -163,12 +95,12 @@ describe("clout ranking", () => {
     id: string,
     domain: string,
     birthDate: number,
-    voteIssuedAt: number | null,
+    orderRank: number | null,
     liveness: CloutMember["liveness"],
     services: string[],
-  ): CloutMember => ({ id, domain, birthDate, voteIssuedAt, liveness, services });
+  ): CloutMember => ({ id, domain, birthDate, orderRank, liveness, services });
 
-  it("scenario A — a vote outranks an older birth", () => {
+  it("scenario A — a place in the order outranks an older birth", () => {
     const members = [
       mk("p1", "home.alice.flagship.services", 1000, null, "live", ["photos"]),
       mk("p2", "work.alice.flagship.services", 2000, 5000, "live", ["photos"]),
@@ -176,7 +108,7 @@ describe("clout ranking", () => {
     expect(electLeadForService(members, "photos")?.id).toBe("p2");
   });
 
-  it("scenario B — no votes ⇒ the oldest birth certificate wins", () => {
+  it("scenario B — no order ⇒ the oldest birth certificate wins", () => {
     const members = [
       mk("p1", "home.alice.flagship.services", 2000, null, "live", ["notes"]),
       mk("p2", "work.alice.flagship.services", 1000, null, "live", ["notes"]),
@@ -184,7 +116,7 @@ describe("clout ranking", () => {
     expect(electLeadForService(members, "notes")?.id).toBe("p2");
   });
 
-  it("scenario C — equal vote + equal birth ⇒ lowest domain wins", () => {
+  it("scenario C — equal rank + equal birth ⇒ lowest domain wins", () => {
     const members = [
       mk("pz", "zeta.alice.flagship.services", 1000, 3000, "live", ["chat"]),
       mk("pa", "alpha.alice.flagship.services", 1000, 3000, "live", ["chat"]),
@@ -206,8 +138,19 @@ describe("clout ranking", () => {
     expect(electLeadForService(mixed, "notes")?.id).toBe("p2");
   });
 
+  it("the role passes down the order while the first is down", () => {
+    const members = [
+      mk("p1", "a.alice.flagship.services", 1000, 0, "unreachable", ["photos"]),
+      mk("p2", "b.alice.flagship.services", 3000, 1, "live", ["photos"]),
+      mk("p3", "c.alice.flagship.services", 2000, 2, "live", ["photos"]),
+    ];
+    expect(electLeadForService(members, "photos")?.id).toBe("p2");
+    members[0] = { ...members[0]!, liveness: "live" };
+    expect(electLeadForService(members, "photos")?.id).toBe("p1");
+  });
+
   it("compareClout is a total order (negative = a leads)", () => {
-    const voted = mk("v", "z.a", 5000, 9000, "live", []);
+    const voted = mk("v", "z.a", 5000, 0, "live", []);
     const old = mk("o", "a.a", 1000, null, "live", []);
     expect(compareClout(voted, old)).toBeLessThan(0);
     expect(compareClout(old, voted)).toBeGreaterThan(0);

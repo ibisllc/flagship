@@ -12,10 +12,8 @@
  *      `umk.seed` with an empty salt — only the info differs and there is NO
  *      serverId (it is per-cloud, not per-server).
  *
- *   2. `flagship/set-leader/v1` — an owner-IRK-signed preferred-server vote.
- *      Mirrors the server-decommission envelope's conventions exactly (tag,
- *      `|` separator, lowercased hex, `legacyFieldGuard` on free-text fields,
- *      never-throwing verify).
+ *   2. The owner's server order (`flagship/server-order/v1`, serverOrder.ts)
+ *      decides who leads; frames carry its date and the signed order itself.
  *
  *   3. Gossip announcement — canonical bytes + an HMAC-SHA256 tag keyed by the
  *      CGK (every pod can mint AND check it; no Ed25519 key exchange needed for
@@ -23,9 +21,9 @@
  *      transport helper (nonce-prefixed) keyed by the CGK.
  *
  *   4. Clout ranking — the pure comparator + elector at the heart of
- *      leadership. Among the LIVE pods that run a service, the highest-clout
- *      member leads it; ties break to the oldest birth certificate, then the
- *      lowest domain.
+ *      leadership. Among the LIVE pods that run a service, the one highest in
+ *      the owner's server order leads it; unlisted pods follow, oldest birth
+ *      certificate first, then the lowest domain.
  *
  *   5. `birthDateFromAuthCode` — the seniority source. The create-time,
  *      owner-IRK-signed `AuthCode` is immutable, so its `issuedAt` is a stable
@@ -35,10 +33,9 @@ import { hkdf } from "@noble/hashes/hkdf";
 import { sha256 } from "@noble/hashes/sha256";
 import { hmac } from "@noble/hashes/hmac";
 import { gcm } from "@noble/ciphers/aes";
-import { ed } from "./edSync.js";
 import { hex, legacyFieldGuard } from "./canonicalBase.js";
 import type { AuthCode } from "./installBlob.js";
-import type { Bytes, Keypair, UserId } from "./types.js";
+import type { Bytes, UserId } from "./types.js";
 
 // ──────────────────────────────────────────────────────────────────────
 // 1. CGK — Cloud Gossip Key (per-cloud / per-account)
@@ -66,72 +63,20 @@ export function deriveCGK(umkSeed: Bytes): Bytes {
 }
 
 // ──────────────────────────────────────────────────────────────────────
-// 2. flagship/set-leader/v1 — owner-IRK-signed preferred-server vote
-// ──────────────────────────────────────────────────────────────────────
-
-const TAG_SET_LEADER = "flagship/set-leader/v1";
-
-/** Sentinel `preferredStkPubHex` that CLEARS the vote (no preferred server). */
-export const SET_LEADER_NONE = "none";
-
-/**
- * Owner-IRK-signed "this is my preferred server" vote. The owner picks which
- * pod SHOULD lead (when it's live) regardless of clout; the vote's `issuedAt`
- * is what gives a voted pod the highest clout in the ranking (newest vote
- * wins). `preferredStkPubHex = "none"` clears the vote.
- *
- * Commits to (user, preferredStkPubHex, issuedAt, nonce). The nonce makes two
- * votes at the same `issuedAt` distinct; `user` binds the vote to one account.
- */
-export interface SetLeaderVote {
-  user: UserId;
-  /** Lowercased STK pubkey hex of the preferred pod, or "none" to clear. */
-  preferredStkPubHex: string;
-  issuedAt: number;
-  /** Per-vote nonce (replay distinctness within the same account). */
-  nonce: string;
-}
-
-function canonicalSetLeader(v: SetLeaderVote): Bytes {
-  legacyFieldGuard("user", v.user);
-  legacyFieldGuard("preferredStkPubHex", v.preferredStkPubHex);
-  legacyFieldGuard("nonce", v.nonce);
-  return new TextEncoder().encode(
-    [
-      TAG_SET_LEADER,
-      v.user.toLowerCase(),
-      v.preferredStkPubHex.toLowerCase(),
-      v.issuedAt,
-      v.nonce.toLowerCase(),
-    ].join("|"),
-  );
-}
-
-export function signSetLeader(v: SetLeaderVote, irk: Keypair): Bytes {
-  return ed.sign(canonicalSetLeader(v), irk.privateKey);
-}
-
-export function verifySetLeader(v: SetLeaderVote, sig: Bytes, irkPub: Bytes): boolean {
-  try {
-    return ed.verify(sig, canonicalSetLeader(v), irkPub);
-  } catch {
-    return false;
-  }
-}
-
-// ──────────────────────────────────────────────────────────────────────
 // 3. Gossip announcement — canonical bytes + HMAC + AES-256-GCM transport
 // ──────────────────────────────────────────────────────────────────────
 
-const TAG_GOSSIP = "flagship/gossip/v1";
+const TAG_GOSSIP = "flagship/gossip/v2";
 
 /**
- * One pod's per-tick gossip frame: who it is, when it was born, the owner's
- * latest vote it has seen, which services it runs, and its own liveness.
+ * One pod's per-tick gossip frame: who it is, when it was born, the date of
+ * the newest server order it holds, which services it runs, and its own
+ * liveness. The signed order itself rides beside the frame (it carries its
+ * own signature).
  *
  * The whole frame is authenticated by an HMAC-SHA256 tag keyed by the CGK
  * (every sibling pod can both mint and check it), so a peer can't forge a
- * frame attributing services/votes to another pod without the cloud's CGK.
+ * frame attributing services or an order date to another pod without the cloud's CGK.
  */
 export interface GossipAnnouncement {
   user: UserId;
@@ -141,10 +86,8 @@ export interface GossipAnnouncement {
   birthAuthHex: string;
   /** Birth-certificate date (ms) — from `birthDateFromAuthCode`. */
   birthDate: number;
-  /** STK pubkey hex the owner's latest set-leader vote points at, or "none". */
-  voteStkHex: string;
-  /** The vote's issuedAt (ms), or 0 when there is no vote. */
-  voteDate: number;
+  /** The issuedAt (ms) of the newest server order this pod holds, or 0. */
+  orderDate: number;
   /** Service slugs this pod runs. Sorted + `,`-joined for determinism. */
   services: string[];
   /** This pod's liveness self-report. */
@@ -153,26 +96,20 @@ export interface GossipAnnouncement {
   issuedAt: number;
 }
 
-/** Sentinels for the absent vote, matching the comparator's null handling. */
-export const GOSSIP_VOTE_NONE = "none";
-export const GOSSIP_VOTE_DATE_NONE = "0";
-
 /**
  * Canonical gossip bytes:
  *
- *   flagship/gossip/v1|<user>|<name>|<birthAuthHex>|<birthDate>|<voteStkHex>|<voteDate>|<services>|<liveness>|<issuedAt>
+ *   flagship/gossip/v2|<user>|<name>|<birthAuthHex>|<birthDate>|<orderDate>|<services>|<liveness>|<issuedAt>
  *
  * `services` = the pod's slugs SORTED and `,`-joined (deterministic regardless
- * of input order, like the tunnel-HELLO controlledDomains list). `voteStkHex`/
- * `voteDate` collapse to "none"/"0" when absent. `name`/`birthAuthHex`/
- * `voteStkHex` are lowercased; `birthDate`/`voteDate`/`issuedAt` are integer-ms
- * strings (template-literal `${number}` stringification).
+ * of input order, like the tunnel-HELLO controlledDomains list). `orderDate` is
+ * 0 when the pod holds no order. `name`/`birthAuthHex` are lowercased;
+ * `birthDate`/`orderDate`/`issuedAt` are integer-ms strings.
  */
 export function canonicalGossip(a: GossipAnnouncement): Bytes {
   legacyFieldGuard("user", a.user);
   legacyFieldGuard("name", a.name);
   legacyFieldGuard("birthAuthHex", a.birthAuthHex);
-  legacyFieldGuard("voteStkHex", a.voteStkHex);
   legacyFieldGuard("liveness", a.liveness);
   for (const s of a.services) legacyFieldGuard("service", s);
   const services = [...a.services].sort().join(",");
@@ -183,8 +120,7 @@ export function canonicalGossip(a: GossipAnnouncement): Bytes {
       a.name.toLowerCase(),
       a.birthAuthHex.toLowerCase(),
       a.birthDate,
-      a.voteStkHex.toLowerCase(),
-      a.voteDate,
+      a.orderDate,
       services,
       a.liveness,
       a.issuedAt,
@@ -258,8 +194,8 @@ export interface CloutMember {
   domain: string;
   /** Birth-certificate date (ms) — the seniority source. */
   birthDate: number;
-  /** The owner's set-leader vote issuedAt (ms), or null when not voted. */
-  voteIssuedAt: number | null;
+  /** The pod's position in the owner's server order (0 = first), or null when unlisted. */
+  orderRank: number | null;
   liveness: "live" | "unreachable" | "never";
   /** Service slugs this pod runs. */
   services: string[];
@@ -271,15 +207,14 @@ export interface CloutMember {
  * when `b` outranks `a`, 0 only when fully tied. Total order — deterministic
  * for any two members:
  *
- *   1. highest `voteIssuedAt` wins (null treated as -Infinity);
+ *   1. lowest `orderRank` wins (unlisted pods come after every listed one);
  *   2. tie → lowest `birthDate` (the OLDEST birth certificate) wins;
  *   3. tie → lowest `domain` lexicographically.
  */
 export function compareClout(a: CloutMember, b: CloutMember): number {
-  const av = a.voteIssuedAt ?? -Infinity;
-  const bv = b.voteIssuedAt ?? -Infinity;
-  // Higher vote first → descending, so b - a.
-  if (av !== bv) return bv - av;
+  const ar = a.orderRank ?? Number.MAX_SAFE_INTEGER;
+  const br = b.orderRank ?? Number.MAX_SAFE_INTEGER;
+  if (ar !== br) return ar - br;
   // Lower birthDate first → ascending.
   if (a.birthDate !== b.birthDate) return a.birthDate - b.birthDate;
   // Lower domain first → ascending lexicographic.

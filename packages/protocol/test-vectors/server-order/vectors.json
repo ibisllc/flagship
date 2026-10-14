@@ -1,0 +1,102 @@
+{
+  "about": "The owner's server order (docs/server-order.md). Every platform must derive `keys.irkPubHex` from `keys.umkSeedHex`, build `order.canonical` from `order.fields` byte for byte (stks in list order, comma-joined), and reproduce `order.signatureHex` with the IRK; `order.reject` must fail to verify; every `refuse` case must be refused before signing. `gossip` is TS-only (boxes).",
+  "keys": {
+    "umkSeedHex": "2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a",
+    "irkPubHex": "c49775473bf9dcf5ad1608c8e66823d55dc6889be27e42a029fd9de195c8d7e4",
+    "cgkHex": "b4285812eab6fc0d92345a805c8ceef96872e1a5db67c125d018790556a4c0ca"
+  },
+  "order": {
+    "fields": {
+      "user": "plucky-avocet",
+      "stks": [
+        "48075a597e721a156e2e0799de5cc0c5324dc6e7eaf1cdd46250868ec53215dd",
+        "5e212c0980e4b39fc09721134aa02109374edfd260c0d3d03cb501c8d65457a9",
+        "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce"
+      ],
+      "issuedAt": 1760000000000,
+      "nonce": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc"
+    },
+    "canonical": "flagship/server-order/v1|plucky-avocet|48075a597e721a156e2e0799de5cc0c5324dc6e7eaf1cdd46250868ec53215dd,5e212c0980e4b39fc09721134aa02109374edfd260c0d3d03cb501c8d65457a9,17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce|1760000000000|030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc",
+    "signatureHex": "74537c14a8226936db2a0bc451aa4d3ac073f64ccd2d32b2c61ecc1dd8aee7c5afaeb2643db3d8e6e7d45df05a20311464b8aeefa40830ed61f48bb5b0db5902",
+    "wire": {
+      "order": {
+        "user": "plucky-avocet",
+        "stks": [
+          "48075a597e721a156e2e0799de5cc0c5324dc6e7eaf1cdd46250868ec53215dd",
+          "5e212c0980e4b39fc09721134aa02109374edfd260c0d3d03cb501c8d65457a9",
+          "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce"
+        ],
+        "issuedAt": 1760000000000,
+        "nonce": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc"
+      },
+      "signature": "74537c14a8226936db2a0bc451aa4d3ac073f64ccd2d32b2c61ecc1dd8aee7c5afaeb2643db3d8e6e7d45df05a20311464b8aeefa40830ed61f48bb5b0db5902"
+    },
+    "reject": {
+      "signatureHex": "04537c14a8226936db2a0bc451aa4d3ac073f64ccd2d32b2c61ecc1dd8aee7c5afaeb2643db3d8e6e7d45df05a20311464b8aeefa40830ed61f48bb5b0db5902"
+    }
+  },
+  "refuse": [
+    {
+      "why": "empty list",
+      "fields": {
+        "user": "plucky-avocet",
+        "stks": [],
+        "issuedAt": 1760000000000,
+        "nonce": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc"
+      }
+    },
+    {
+      "why": "a server listed twice",
+      "fields": {
+        "user": "plucky-avocet",
+        "stks": [
+          "48075a597e721a156e2e0799de5cc0c5324dc6e7eaf1cdd46250868ec53215dd",
+          "48075a597e721a156e2e0799de5cc0c5324dc6e7eaf1cdd46250868ec53215dd"
+        ],
+        "issuedAt": 1760000000000,
+        "nonce": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc"
+      }
+    },
+    {
+      "why": "uppercase stk",
+      "fields": {
+        "user": "plucky-avocet",
+        "stks": [
+          "48075A597E721A156E2E0799DE5CC0C5324DC6E7EAF1CDD46250868EC53215DD"
+        ],
+        "issuedAt": 1760000000000,
+        "nonce": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc"
+      }
+    },
+    {
+      "why": "short nonce",
+      "fields": {
+        "user": "plucky-avocet",
+        "stks": [
+          "48075a597e721a156e2e0799de5cc0c5324dc6e7eaf1cdd46250868ec53215dd",
+          "5e212c0980e4b39fc09721134aa02109374edfd260c0d3d03cb501c8d65457a9",
+          "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce"
+        ],
+        "issuedAt": 1760000000000,
+        "nonce": "ab"
+      }
+    }
+  ],
+  "gossip": {
+    "fields": {
+      "user": "plucky-avocet",
+      "name": "5e212c0980e4b39fc09721134aa02109374edfd260c0d3d03cb501c8d65457a9",
+      "birthAuthHex": "5e212c0980e4b39fc09721134aa02109374edfd260c0d3d03cb501c8d65457a9",
+      "birthDate": 1750000000000,
+      "orderDate": 1760000000000,
+      "services": [
+        "notes",
+        "chess"
+      ],
+      "liveness": "live",
+      "issuedAt": 1760000100000
+    },
+    "canonical": "flagship/gossip/v2|plucky-avocet|5e212c0980e4b39fc09721134aa02109374edfd260c0d3d03cb501c8d65457a9|5e212c0980e4b39fc09721134aa02109374edfd260c0d3d03cb501c8d65457a9|1750000000000|1760000000000|chess,notes|live|1760000100000",
+    "macHex": "4adac15206f43976874c1d28b72a0670c0b630b93c9c1f1152e8282f0cc9cd06"
+  }
+}

@@ -65,9 +65,19 @@ Without a token:
   the token device-local and outside biometrics, and wipe it with the
   profile. Prefer the device path (30 days); use the IRK path when the
   device has no account device identity.
+- **Keep the device key at hand.** The first time a session unwraps the UMK
+  (any unlock or signing operation), store this device's account device key
+  on the device (device-local, outside biometrics, as joined devices already
+  do), so later mints use the device path without the UMK. It only signs
+  account-directory requests (the sealed profile and read tokens).
 - **On a 401**, mint again once if the keys are at hand; otherwise keep the
   last state on screen, mark status as paused until the next unlock, and
   never raise a prompt from a background poll.
+- **A refused read is never "no servers".** With no token and nothing on
+  screen yet, Home says the server list is locked and offers one button
+  ("Show my servers") that unlocks the account key (one biometric or
+  passcode prompt), mints, and reloads. The app's own lock is optional, so
+  this button is how a phone with the lock off gets its first token.
 - **Servers** mint with their STK whenever they need one (they read
   `/apps/aliases`).
 
