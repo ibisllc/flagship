@@ -1,8 +1,9 @@
 # Reports and leases v1
 
 Status: implemented by `@ibisllc/billing-metering` after 0.1.0 (unreleased:
-`meterReport`, `meterLease`, `LeaseBook`, the optional `MeterStore.addBatch`). Builds on
-[metering-v1](./metering-v1.md).
+`meterReport`, `meterLease`, `LeaseBook`, the optional `MeterStore.addBatch`).
+Builds on [metering-v1](./metering-v1.md); [http-v1](./http-v1.md) is an
+optional HTTP binding.
 
 An **edge** is whatever observes usage: a relay counting bytes, a proxy
 counting requests, a model server counting tokens. **Central** holds the
@@ -42,10 +43,14 @@ amount**, so the dedupe record says nothing about who used what.
   that (the reference edge stops after 10 minutes).
 - Each `addBatch` prunes up to 32 expired ids, so the table holds about
   `reports per keepMs` rows (one edge reporting every 500 ms: at most 7,200).
+- An id whose record has expired may be claimed again in the same step
+  (an upsert that only replaces an expired row), so expiry never depends on
+  pruning having reached it.
 - The SQL form (`schema/meter_batches.sql`) runs in one transaction: prune,
-  claim with `INSERT … ON CONFLICT DO NOTHING RETURNING`, then each counter
-  add as `INSERT … SELECT … WHERE EXISTS (the claim row with this request's
-  token)`. A crash commits the whole batch or none of it.
+  claim with `INSERT … ON CONFLICT … RETURNING`, then each counter add,
+  only if the claim succeeded. A crash commits the whole batch or none of
+  it. The SQLite, PostgreSQL and D1 stores in this repository each
+  implement it this way (PostgreSQL as a single statement).
 
 ## 2. Leases
 
@@ -132,20 +137,17 @@ record carries no account at all. Nothing about what was metered (content,
 hosts, addresses, prompts) belongs in a batch, a lease or a store, and the
 scheme keeps **aggregates only**: no per-request event log exists anywhere.
 
-## 4. A host's HTTP binding (Flagship's, as the reference)
+## 4. Transport
 
-```
-POST /api/usage/report        x-usage-secret: <shared secret>
-  { "batchId": "9f…(32 hex)", "items": [ { "username": "ann", "bytes": 1234 } ] }
-→ 200 { "ok": true, "duplicate": false,
-        "results": [ { "username": "ann", "admit": true,
-                       "usedBytes": 5368709120, "quotaBytes": 26843545600,
-                       "lease": { "action": "allow", "grantBytes": 268435456,
-                                  "policy": "throttle", "ttlMs": 600000 } } ] }
-```
+This spec defines what a report and a lease contain, not how they travel.
+[http-v1](./http-v1.md) is a ready-made HTTP binding (`createReportHandler`
+on central, `sendBatch` at the edge). A host that already has a wire can
+carry the same fields in its own shapes.
 
-`admit` is the old wire's verdict, kept so edges that predate leases keep
-working. A lease-aware edge talking to a central that sends no `lease`
-treats `admit: true` as an unlimited lease and `admit: false` as a throttle,
-which is the old behaviour. With both forms accepted on both sides, edge and
-central deploy in either order.
+### Moving from per-report verdicts to leases
+
+A host whose edges used to act on a plain verdict per account (an
+"admit: true/false" answer) can roll leases out in either order if central
+keeps sending the old verdict next to the lease for a while: a lease-aware
+edge that gets no lease treats "admit" as an unlimited lease and "deny" as
+a throttle, which is the old behaviour.

@@ -79,11 +79,14 @@ host bug and throws.
 ## Storage
 
 A store implements `add` (atomic increment returning the new total) and
-`get`, and optionally `addBatch` for idempotent batches
-(`schema/meter_batches.sql`; see report-and-lease-v1). The reference SQL (`packages/metering/schema/meter_counters.sql`)
-is one table keyed by `(account, resource, period)` with a single-statement
-upsert, portable across SQLite 3.35+ (including Cloudflare D1) and
-PostgreSQL. Amounts are 64-bit (a month of bytes exceeds 32).
+`get`, and optionally `addBatch` for idempotent batches (see
+report-and-lease-v1). The reference SQL (`packages/metering/schema/`, also
+`meterSchemaSql()`) is two tables, counters keyed by
+`(account, resource, period)` with a single-statement upsert, portable
+across SQLite 3.35+ (including Cloudflare D1) and PostgreSQL. Amounts are
+64-bit (a month of bytes exceeds 32). The repository ships stores for
+SQLite, PostgreSQL and D1; any store must pass the conformance suite
+(`@ibisllc/billing-metering/conformance`).
 
 ## Accuracy and failure
 

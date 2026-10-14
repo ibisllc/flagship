@@ -29,8 +29,10 @@ packages/services-zone/    `<server>.<user>.flagship.services` validation + DNS 
 packages/bootkey-builder/  Caddyfile + per-server FQDN/SAN helpers
 packages/llm-providers/    BYOK provider adapters
 
-billing/                   Standalone sub-repo (like maintainers/, but in-tree until mirrored): metering core
-                           @ibisllc/billing-metering (npm workspace); vouchers next. No @flagship imports.
+billing/                   Standalone, reusable repo-in-a-folder (own lockfile, CI billing.yml; mirror +
+                           npm publish await the owner): @ibisllc/billing-metering (core, /conformance, /http)
+                           + store-sqlite / store-postgres / store-d1. Flagship uses metering + store-d1 as
+                           workspaces. Generic only: no Flagship names or imports. Vouchers next.
 
 installer/                 Public install scripts the apkovl curls at boot
    install.sh              First-boot installer: LUKS + git clone + register
@@ -398,9 +400,11 @@ account can view or co-manage a server, never destroy it) is in the MVP
 ### Metering (2026-10-13, live)
 
 One metering core for data and AI tokens lives in `billing/`, a standalone
-sub-repo like `maintainers/` (`@ibisllc/billing-metering`, consumed as a
-workspace; publishing it and mirroring to github.com/ibisllc/billing wait for
-the owner). Flagship's plans are in `packages/control-plane/src/meter.ts`;
+reusable project (`@ibisllc/billing-metering` + `billing-store-d1`, consumed
+as workspaces; it builds and tests standalone in CI, and publishing to npm
+and mirroring to github.com/ibisllc/billing wait for the owner:
+`billing/docs/publishing.md`, `.github/workflows/billing-mirror.yml` is
+disabled). Flagship's plans are in `packages/control-plane/src/meter.ts`;
 counters in D1 `meter_counters` (migration 0069, applied; `usage_counters` is
 no longer read and can be dropped later). Free over 25 GB is now slowed to
 256 kbit/s instead of cut (`.com` f33230d4, `.services` v37). AI-token

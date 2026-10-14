@@ -8,7 +8,7 @@
 // with every migration applied (packages/storage/tests/support/sqliteD1.ts),
 // with tier lookups in the same database. Real D1 adds a network hop and
 // durable commits per batch, so the sqlite numbers are the CPU/SQL ceiling of
-// our code, not D1's: billing/docs/scaling.md reads them that way.
+// our code, not D1's: docs/metering.md (Scaling) reads them that way.
 // Edge: LeaseBook.use + action per buffer, the relay's per-chunk cost.
 //
 // Numbers and an account pool only; nothing here touches the network.

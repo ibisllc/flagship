@@ -1,0 +1,81 @@
+name: billing (standalone)
+
+# billing/ is its own project (see billing/README.md): it must build and
+# test with nothing of the host repository around it. This job copies
+# billing/ to an empty directory first, so a stray relative path, a missing
+# devDependency or a reliance on the host's node_modules fails here.
+
+on:
+  pull_request:
+    paths:
+      - "billing/**"
+      - ".github/workflows/billing.yml"
+  push:
+    branches: [main]
+    paths:
+      - "billing/**"
+      - ".github/workflows/billing.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - node: "22"
+            postgres: "16"
+          - node: "24"
+            postgres: "18"
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgres }}
+        env:
+          POSTGRES_PASSWORD: billing
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      BILLING_TEST_PG_URL: postgres://postgres:billing@localhost:5432/postgres
+      BILLING_REQUIRE_ALL_DRIVERS: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Copy billing/ out of the repository
+        run: |
+          cp -R billing "$RUNNER_TEMP/billing"
+          echo "BILLING_DIR=$RUNNER_TEMP/billing" >> "$GITHUB_ENV"
+
+      - name: Install
+        working-directory: ${{ env.BILLING_DIR }}
+        run: npm ci
+
+      - name: Build
+        working-directory: ${{ env.BILLING_DIR }}
+        run: npm run build
+
+      - name: Test
+        working-directory: ${{ env.BILLING_DIR }}
+        run: npm test
+
+      - name: Run the examples
+        working-directory: ${{ env.BILLING_DIR }}
+        run: npm run examples
+
+      - name: Check the npm tarballs
+        working-directory: ${{ env.BILLING_DIR }}
+        run: npm run pack:check
