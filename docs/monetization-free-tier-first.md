@@ -101,7 +101,7 @@ costs a lot). Egress is the "egress" resource of the metering core
 table and wiring in `packages/control-plane/src/meter.ts`, counters in
 `meter_counters`, migration 0069), which also meters the AI promo's
 "ai-tokens"; `metering.ts` keeps the relay's `/api/usage/*` contract on top
-of it.
+of it (batch ids + budget leases: `docs/metering.md`).
 
 ### 3. Custom domains
 

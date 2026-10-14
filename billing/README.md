@@ -18,8 +18,10 @@ here imports Flagship code.
 ```
 billing/
 ├── docs/
-│   └── spec/
-│       └── metering-v1.md     Metering model (canonical)
+│   ├── spec/
+│   │   ├── metering-v1.md         Metering model (canonical)
+│   │   └── report-and-lease-v1.md Idempotent batches + budget leases
+│   └── scaling.md             When the counter store stops scaling, and what next
 ├── packages/
 │   └── metering/              @ibisllc/billing-metering: counters, plans, verdicts
 │       └── schema/            Portable SQL (SQLite/D1 + PostgreSQL)
@@ -50,6 +52,22 @@ const deps = {
 
 const v = await meterRecord(deps, "ann", "bandwidth", 4096);
 if (v.action === "throttle") slowDown("ann");
+```
+
+At scale an edge (a relay, a proxy) doesn't ask about every byte. It keeps a
+`LeaseBook`, reports batches with ids, and enforces the budget lease central
+answers with ([report-and-lease-v1](./docs/spec/report-and-lease-v1.md)):
+
+```ts
+// central
+const { verdicts } = await meterReport(deps, { batchId, items });
+const leases = verdicts.map((v) => meterLease(v, policy, Date.now()));
+
+// edge
+const book = new LeaseBook({ initialGrant: 32 * 2 ** 20, unknownPolicy: "throttle" });
+book.use("ann", bytes, Date.now());            // hot path, no I/O
+if (book.action("ann") !== "allow") slowDown("ann");
+const batch = book.takeBatch(Date.now(), "due"); // send it, then book.settle(...)
 ```
 
 ## Next: vouchers
