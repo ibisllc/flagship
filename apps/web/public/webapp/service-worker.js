@@ -137,7 +137,10 @@
 //  v68: free AI is the built-in "Flagship Inference" provider: always first
 //       in Settings and the AI-key step, never removable, selectable as the
 //       default, shown disabled (with why) instead of hidden once it ended.
-const SHELL_VERSION = "v68";
+//  v69: Flagship Inference everywhere (no more "free AI credits"), and its
+//       allowance in credits: "1,840 free credits left · 500 added each
+//       week", the same line in Settings and the AI-key step.
+const SHELL_VERSION = "v69";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

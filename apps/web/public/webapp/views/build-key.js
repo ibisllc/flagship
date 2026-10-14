@@ -6,7 +6,7 @@
 // box's model (marketplace install, IDE/MCP — which uses the user's own
 // editor AI) skip this entirely.
 //
-// Flagship Inference (free AI credits) is a built-in provider: always the
+// Flagship Inference (free while the promotion runs) is a built-in provider: always the
 // first row, never deletable, disabled with the reason when it can't be used.
 // A new owner with no saved key builds on it straight away (the step is
 // skipped). Adding and choosing are separate: "Add an API key" opens a form that saves
@@ -46,7 +46,6 @@ import {
   PROVIDER_TITLE,
   UNAVAILABLE_MESSAGE,
   fetchFreeAiStatus,
-  formatTokens,
   freeAiEntryView,
   mintFreeAiCredential,
 } from "../lib/freeAi.js";
@@ -106,10 +105,7 @@ async function chooseEntry(e) {
  */
 export function freeAiRowState(status) {
   const view = freeAiEntryView(status);
-  if (!view.usable) return { kind: "blocked", text: view.text };
-  const c = status.credits;
-  const left = c?.week ? `${formatTokens(c.week.remaining)} left this week · ${formatTokens(c.starter.remaining)} reserve` : `${formatTokens(c?.remainingTokens)} left`;
-  return { kind: "use", text: left };
+  return { kind: view.usable ? "use" : "blocked", text: view.text };
 }
 
 /** Skip the step and build on free AI: no saved keys, and some credits left. */
@@ -189,7 +185,7 @@ async function renderSaved({ autoFreeAi = false } = {}) {
   savedCount = entries.length;
   const status = await fetchFreeAiStatus();
   if (autoFreeAi && shouldAutoUseFreeAi(entries, status)) {
-    toast("Using your free AI credits", "info");
+    toast("Using Flagship Inference", "info");
     await chooseFreeAi();
     return;
   }

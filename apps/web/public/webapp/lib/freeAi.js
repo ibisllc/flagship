@@ -1,4 +1,4 @@
-// Free AI credits — for a limited time, building your apps is free on
+// Flagship Inference — for a limited time, building your apps is free on
 // Flagship (docs/build-modes.md). A weekly top-up is spent first, then a
 // one-time starter reserve; only accounts with a running server get them.
 //
@@ -19,10 +19,10 @@ import { ensureUsername, getSession } from "./state.js";
 export const FREE_AI_TAG = "flagship/llm-promo-issue/v1";
 
 export const USED_UP_MESSAGE =
-  "Your free AI credits for this week are used up. More arrive on Monday, or add your own AI key to keep building.";
-export const UNAVAILABLE_MESSAGE = "Free AI credits aren't available right now. You can add your own AI key.";
-export const BUSY_TODAY_MESSAGE = "Free building is busy today. Try again tomorrow, or use your own AI key.";
-export const NO_SERVER_MESSAGE = "Free AI credits start once one of your servers is running.";
+  "You've used this week's Flagship Inference credits. More arrive on Monday, or add your own AI key to keep building.";
+export const UNAVAILABLE_MESSAGE = "Flagship Inference isn't available right now. You can add your own AI key.";
+export const BUSY_TODAY_MESSAGE = "Flagship Inference is busy today. Try again tomorrow, or use your own AI key.";
+export const NO_SERVER_MESSAGE = "Flagship Inference starts once one of your servers is running.";
 export const ENDED_MESSAGE = "The free building period has ended — use your own AI key.";
 export const CARD_NOTE = "Used automatically when you build with AI and haven't added your own key.";
 export const TOO_LONG_MESSAGE =
@@ -42,20 +42,39 @@ const MESSAGE_BY_CODE = {
   "free-ai-too-long": TOO_LONG_MESSAGE,
 };
 
-/** 820000 → "820k", 1000000 → "1M", 1500000 → "1.5M". */
-export function formatTokens(n) {
-  const v = Math.max(0, Math.floor(Number(n) || 0));
-  if (v < 1000) return String(v);
-  if (v < 1_000_000) return `${Math.round(v / 1000)}k`;
-  return `${(v / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+// One credit is 1,000 weighted tokens (input × 1 + output × 4). `.com` sends
+// the credit numbers; an older `.com` sends only tokens, converted here.
+export const TOKENS_PER_CREDIT = 1000;
+
+const whole = (n) => Math.max(0, Math.floor(Number(n) || 0));
+const perCredit = (c) => (Number(c?.tokensPerCredit) > 0 ? Number(c.tokensPerCredit) : TOKENS_PER_CREDIT);
+
+/** This week's and the starter reserve's credits left, together. */
+export function creditsLeft(c) {
+  if (Number.isFinite(c?.remainingCredits)) return whole(c.remainingCredits);
+  return whole(whole(c?.remainingTokens) / perCredit(c));
 }
 
-/** "This week: 340k of 500k left · Starter reserve: 1.2M". */
-export function creditsLine(credits) {
-  if (!credits?.week || !credits?.starter) {
-    return `${formatTokens(credits?.remainingTokens)} of ${formatTokens(credits?.allowanceTokens)} free AI tokens left`;
-  }
-  return `This week: ${formatTokens(credits.week.remaining)} of ${formatTokens(credits.week.allowance)} left · Starter reserve: ${formatTokens(credits.starter.remaining)}`;
+/** The weekly top-up in credits, or null when `.com` doesn't say. */
+export function weeklyCredits(c) {
+  if (Number.isFinite(c?.weeklyCredits)) return whole(c.weeklyCredits);
+  if (c?.week) return whole(whole(c.week.allowance) / perCredit(c));
+  return null;
+}
+
+/** A whole number with the locale's thousands separators: 1840 → "1,840". */
+export function formatCredits(n, locale) {
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(whole(n));
+}
+
+/**
+ * "1,840 free credits left · 500 added each week". The only place that says
+ * "free", so it can go when the promotion ends.
+ */
+export function creditsLine(credits, locale) {
+  const left = `${formatCredits(creditsLeft(credits), locale)} free credits left`;
+  const weekly = weeklyCredits(credits);
+  return weekly === null ? left : `${left} · ${formatCredits(weekly, locale)} added each week`;
 }
 
 /**

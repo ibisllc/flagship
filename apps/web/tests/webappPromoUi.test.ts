@@ -9,11 +9,15 @@ const load = (...p: string[]) => import(pathToFileURL(webapp(...p)).href);
 
 const CREDITS = {
   week: { used: 160_000, allowance: 500_000, remaining: 340_000, resetsAt: 0 },
-  starter: { used: 800_000, allowance: 2_000_000, remaining: 1_200_000 },
-  usedTokens: 960_000,
+  starter: { used: 500_000, allowance: 2_000_000, remaining: 1_500_000 },
+  usedTokens: 660_000,
   allowanceTokens: 2_500_000,
-  remainingTokens: 1_540_000,
+  remainingTokens: 1_840_000,
+  remainingCredits: 1_840,
+  weeklyCredits: 500,
+  tokensPerCredit: 1000,
 };
+const LINE = "1,840 free credits left · 500 added each week";
 const SPENT = {
   week: { used: 500_000, allowance: 500_000, remaining: 0, resetsAt: 0 },
   starter: { used: 2_000_000, allowance: 2_000_000, remaining: 0 },
@@ -23,15 +27,34 @@ const SPENT = {
 };
 const ok = (credits = CREDITS) => ({ available: true, ended: false, reason: null, credits });
 
-describe("webapp free AI credits", () => {
-  it("formats token counts and the weekly / starter line the way all three apps do", async () => {
-    const { formatTokens, creditsLine } = await load("lib", "freeAi.js");
-    expect(formatTokens(0)).toBe("0");
-    expect(formatTokens(999)).toBe("999");
-    expect(formatTokens(820_000)).toBe("820k");
-    expect(formatTokens(1_000_000)).toBe("1M");
-    expect(formatTokens(1_500_000)).toBe("1.5M");
-    expect(creditsLine(CREDITS)).toBe("This week: 340k of 500k left · Starter reserve: 1.2M");
+describe("webapp Flagship Inference", () => {
+  it("shows the allowance in credits (1 credit = 1,000 weighted tokens) the way all three apps do", async () => {
+    const { formatCredits, creditsLine, creditsLeft, weeklyCredits } = await load("lib", "freeAi.js");
+    expect(formatCredits(0, "en-US")).toBe("0");
+    expect(formatCredits(1840, "en-US")).toBe("1,840");
+    expect(formatCredits(1_234_567, "de-DE")).toBe("1.234.567");
+    expect(formatCredits(-3, "en-US")).toBe("0");
+    expect(creditsLine(CREDITS, "en-US")).toBe(LINE);
+    expect(creditsLine(CREDITS, "de-DE")).toBe("1.840 free credits left · 500 added each week");
+    // An older .com sends only tokens: the apps convert.
+    const tokensOnly = { ...CREDITS, remainingCredits: undefined, weeklyCredits: undefined, tokensPerCredit: undefined };
+    expect(creditsLine(tokensOnly, "en-US")).toBe(LINE);
+    expect(creditsLine({ remainingTokens: 820_999, allowanceTokens: 1_000_000 }, "en-US")).toBe("820 free credits left");
+    expect(creditsLeft({ remainingTokens: 999 })).toBe(0);
+    expect(weeklyCredits({ remainingTokens: 1 })).toBeNull();
+  });
+
+  it("says Flagship Inference, never 'free AI credits' or tokens, in every message", async () => {
+    const f = await load("lib", "freeAi.js");
+    const msgs = [f.USED_UP_MESSAGE, f.UNAVAILABLE_MESSAGE, f.BUSY_TODAY_MESSAGE, f.NO_SERVER_MESSAGE, f.TOO_LONG_MESSAGE];
+    for (const m of msgs) {
+      expect(m).toContain("Flagship Inference");
+      expect(m).not.toMatch(/free AI|tokens?\b/i);
+    }
+    expect(f.UNAVAILABLE_MESSAGE).toBe("Flagship Inference isn't available right now. You can add your own AI key.");
+    const buildKey = readFileSync(webapp("views", "build-key.js"), "utf8");
+    expect(buildKey).toContain('toast("Using Flagship Inference", "info")');
+    expect(buildKey).not.toMatch(/free AI credits/i);
   });
 
   it("signs the same canonical bytes as the protocol vectors", async () => {
@@ -89,7 +112,7 @@ describe("webapp free AI credits", () => {
     expect(unread).not.toContain('id="free-ai-use"');
     expect(ended).toContain("The free building period has ended");
     expect(ended).not.toContain('id="free-ai-use"');
-    expect(left).toContain("This week: 340k of 500k left · Starter reserve: 1.2M");
+    expect(left).toContain(LINE);
     expect(left).toContain('id="free-ai-use"');
     expect(left).toContain(">use<");
     expect(left).not.toContain("free-ai-add-key");
@@ -98,15 +121,15 @@ describe("webapp free AI credits", () => {
     expect(spent).toContain("More arrive on Monday, or add your own AI key to keep building.");
     expect(spent).toContain('id="free-ai-add-key"');
     expect(spent).not.toContain('id="free-ai-use"');
-    expect(busy).toContain("Free building is busy today. Try again tomorrow, or use your own AI key.");
-    expect(noServer).toContain("start once one of your servers is running");
+    expect(busy).toContain("Flagship Inference is busy today. Try again tomorrow, or use your own AI key.");
+    expect(noServer).toContain("Flagship Inference starts once one of your servers is running.");
     expect(noServer).not.toContain("free-ai-add-key");
     expect(off).toMatch(/available right now/);
   });
 
   it("the key step lists Flagship Inference first, disabled with the reason, and skips itself for an owner with no saved key", async () => {
     const { freeAiRowState, freeAiRowHtml, shouldAutoUseFreeAi } = await load("views", "build-key.js");
-    expect(freeAiRowState(ok())).toEqual({ kind: "use", text: "340k left this week · 1.2M reserve" });
+    expect(freeAiRowState(ok())).toEqual({ kind: "use", text: LINE });
     expect(freeAiRowState(ok(SPENT))?.kind).toBe("blocked");
     expect(freeAiRowState({ ...ok(), reason: "busy-today" })?.kind).toBe("blocked");
     expect(freeAiRowState({ ...ok(), available: false })?.kind).toBe("blocked");
