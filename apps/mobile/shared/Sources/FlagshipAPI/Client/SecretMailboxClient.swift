@@ -91,13 +91,10 @@ public protocol SecretMailboxClient: Sendable {
     /// holds ciphertext only. Reuses `PairingDepositBody`.
     func depositCgk(serverDomain: String, body: PairingDepositBody) async throws
 
-    /// POST /api/server/:domain/set-leader — phone, IRK mailbox-auth. Deposits the
-    /// owner's PUBLIC preferred-server vote (`flagship/set-leader/v1`) addressed to
-    /// a box domain. `.com` verifies the owner-IRK signature before storing; the
-    /// box fetches the vote meant for it and rides it on its gossip frame (clout).
-    /// Uses its own `SetLeaderDepositBody` (the `{auth, deposit, vote, signature}`
-    /// shape from the TS rail).
-    func depositSetLeader(serverDomain: String, body: SetLeaderDepositBody) async throws
+    /// POST /api/accounts/:u/server-order — the owner's signed server order
+    /// (docs/server-order.md). `.com` verifies it under the sensitive-order
+    /// authority and keeps the newest; 409 when a newer one is already stored.
+    func postServerOrder(username: String, body: SignedServerOrderWire) async throws
 
     /// POST /api/server/:domain/update — phone, IRK mailbox-auth + ADMIN-authority
     /// order signature (docs/server-update-mechanism.md). Deposits the PUBLIC
@@ -163,42 +160,23 @@ public struct UpdateDepositBody: Encodable, Equatable, Sendable {
     }
 }
 
-/// The set-leader deposit body. `auth`/`authSignature` are the SAME IRK
-/// mailbox-auth shape as the other phone-mailbox calls; `deposit` addresses the
-/// vote to a box domain; `vote` is the `SetLeaderVote` field set and `signature`
-/// is the owner-IRK signature over its canonical bytes. Field names match the
-/// Worker handler (`handlePostSetLeaderDeposit`) exactly:
-/// `{ auth, authSignature, deposit:{serverDomain,requestNonceHex}, vote:{user,
-/// preferredStkPubHex,issuedAt,nonce}, signature }`.
-public struct SetLeaderDepositBody: Encodable, Equatable, Sendable {
-    public struct Deposit: Encodable, Equatable, Sendable {
-        public let serverDomain: String
-        public let requestNonceHex: String   // hex (32 bytes)
-        public init(serverDomain: String, requestNonceHex: String) {
-            self.serverDomain = serverDomain; self.requestNonceHex = requestNonceHex
-        }
-    }
-    public struct Vote: Encodable, Equatable, Sendable {
+/// The owner's signed server order as it travels (docs/server-order.md):
+/// `{order:{user,stks,issuedAt,nonce}, signature}`. `/pods` returns the newest
+/// one `.com` holds as `serverOrder`.
+public struct SignedServerOrderWire: Codable, Equatable, Sendable {
+    public struct Order: Codable, Equatable, Sendable {
         public let user: String
-        public let preferredStkPubHex: String   // hex (32 bytes) or "none"
+        public let stks: [String]
         public let issuedAt: Int64
         public let nonce: String
-        public init(user: String, preferredStkPubHex: String, issuedAt: Int64, nonce: String) {
-            self.user = user; self.preferredStkPubHex = preferredStkPubHex
-            self.issuedAt = issuedAt; self.nonce = nonce
+        public init(user: String, stks: [String], issuedAt: Int64, nonce: String) {
+            self.user = user; self.stks = stks; self.issuedAt = issuedAt; self.nonce = nonce
         }
     }
-    public let auth: MailboxAuthEnvelope.Auth
-    public let authSignature: String
-    public let deposit: Deposit
-    public let vote: Vote
-    public let signature: String   // hex (64 bytes) — owner IRK over the vote canonical bytes
-    public init(
-        auth: MailboxAuthEnvelope.Auth, authSignature: String,
-        deposit: Deposit, vote: Vote, signature: String
-    ) {
-        self.auth = auth; self.authSignature = authSignature
-        self.deposit = deposit; self.vote = vote; self.signature = signature
+    public let order: Order
+    public let signature: String
+    public init(order: Order, signature: String) {
+        self.order = order; self.signature = signature
     }
 }
 
@@ -653,8 +631,15 @@ public struct PodsDirectoryResponse: Codable, Equatable, Sendable {
     /// #56 — active outstanding orders, merged into the same fetch. Optional on
     /// the wire so a pre-#56 Worker response (no `pending` key) still decodes.
     public let pending: [PendingPodEntry]
-    public init(username: String, pods: [PodDirectoryEntry], pending: [PendingPodEntry] = []) {
-        self.username = username; self.pods = pods; self.pending = pending
+    /// The owner's newest server order (docs/server-order.md), or nil.
+    public let serverOrder: SignedServerOrderWire?
+    public init(
+        username: String,
+        pods: [PodDirectoryEntry],
+        pending: [PendingPodEntry] = [],
+        serverOrder: SignedServerOrderWire? = nil
+    ) {
+        self.username = username; self.pods = pods; self.pending = pending; self.serverOrder = serverOrder
     }
 
     public init(from decoder: Decoder) throws {
@@ -662,10 +647,11 @@ public struct PodsDirectoryResponse: Codable, Equatable, Sendable {
         self.username = try c.decode(String.self, forKey: .username)
         self.pods = try c.decode([PodDirectoryEntry].self, forKey: .pods)
         self.pending = try c.decodeIfPresent([PendingPodEntry].self, forKey: .pending) ?? []
+        self.serverOrder = try? c.decodeIfPresent(SignedServerOrderWire.self, forKey: .serverOrder)
     }
 
     private enum CodingKeys: String, CodingKey {
-        case username, pods, pending
+        case username, pods, pending, serverOrder
     }
 
     /// The STK registered for `serverDomain`, lowercased-domain match.
@@ -690,8 +676,16 @@ public struct LiveSyncResponse: Codable, Equatable, Sendable {
     public let username: String
     public let pods: [PodDirectoryEntry]
     public let pending: [PendingPodEntry]
-    public init(cursor: String, username: String, pods: [PodDirectoryEntry], pending: [PendingPodEntry] = []) {
+    public let serverOrder: SignedServerOrderWire?
+    public init(
+        cursor: String,
+        username: String,
+        pods: [PodDirectoryEntry],
+        pending: [PendingPodEntry] = [],
+        serverOrder: SignedServerOrderWire? = nil
+    ) {
         self.cursor = cursor; self.username = username; self.pods = pods; self.pending = pending
+        self.serverOrder = serverOrder
     }
 
     public init(from decoder: Decoder) throws {
@@ -700,17 +694,18 @@ public struct LiveSyncResponse: Codable, Equatable, Sendable {
         self.username = try c.decode(String.self, forKey: .username)
         self.pods = try c.decode([PodDirectoryEntry].self, forKey: .pods)
         self.pending = try c.decodeIfPresent([PendingPodEntry].self, forKey: .pending) ?? []
+        self.serverOrder = try? c.decodeIfPresent(SignedServerOrderWire.self, forKey: .serverOrder)
     }
 
     private enum CodingKeys: String, CodingKey {
-        case cursor, username, pods, pending
+        case cursor, username, pods, pending, serverOrder
     }
 
     /// Project to the `/pods`-shaped directory response the reconciler consumes
     /// (it doesn't need the cursor). Lets the same reconcile path serve both the
     /// live stream and the fallback fetch with no branching.
     public var directory: PodsDirectoryResponse {
-        PodsDirectoryResponse(username: username, pods: pods, pending: pending)
+        PodsDirectoryResponse(username: username, pods: pods, pending: pending, serverOrder: serverOrder)
     }
 }
 
@@ -923,10 +918,10 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
     }
 
-    public func depositSetLeader(serverDomain: String, body: SetLeaderDepositBody) async throws {
-        let encoded = serverDomain.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serverDomain
-        guard let url = URL(string: baseUrl.absoluteString + "/api/server/\(encoded)/set-leader") else {
-            throw ScreensClientError.http(status: 0, message: "bad set-leader URL")
+    public func postServerOrder(username: String, body: SignedServerOrderWire) async throws {
+        let encoded = username.lowercased().addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        guard let url = URL(string: baseUrl.absoluteString + "/api/accounts/\(encoded)/server-order") else {
+            throw ScreensClientError.http(status: 0, message: "bad server-order URL")
         }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -1068,6 +1063,8 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
     public var directory: [PodDirectoryEntry] = []
     /// #56 — active outstanding orders the merged `/pods` fetch returns.
     public var directoryPending: [PendingPodEntry] = []
+    /// The `serverOrder` `fetchPods` returns.
+    public var directoryServerOrder: SignedServerOrderWire?
     public var sealedLuksKeyHex: String?
     public private(set) var deposited: [(lease: BoxSealedLeaseWire, signatureHex: String, bootAuth: String)] = []
     public private(set) var revoked: [(request: LeaseRevokeWire, bootAuth: String)] = []
@@ -1087,7 +1084,7 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
         return SealedLuksKeyResponse(serverDomain: serverDomain, sealedKey: hex, sealedAt: 1)
     }
     public func fetchPods(username: String) async throws -> PodsDirectoryResponse {
-        PodsDirectoryResponse(username: username, pods: directory, pending: directoryPending)
+        PodsDirectoryResponse(username: username, pods: directory, pending: directoryPending, serverOrder: directoryServerOrder)
     }
 
     /// Scripted live-sync responses for tests: each `fetchLiveSync` call pops the
@@ -1152,15 +1149,15 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
         }
         cgkDeposits.append((serverDomain, body))
     }
-    public private(set) var setLeaderDeposits: [(serverDomain: String, body: SetLeaderDepositBody)] = []
-    /// When set, `depositSetLeader` throws it once.
-    public var setLeaderDepositError: Error?
-    public func depositSetLeader(serverDomain: String, body: SetLeaderDepositBody) async throws {
-        if let e = setLeaderDepositError {
-            setLeaderDepositError = nil
+    public private(set) var serverOrders: [(username: String, body: SignedServerOrderWire)] = []
+    /// When set, `postServerOrder` throws it once.
+    public var serverOrderError: Error?
+    public func postServerOrder(username: String, body: SignedServerOrderWire) async throws {
+        if let e = serverOrderError {
+            serverOrderError = nil
             throw e
         }
-        setLeaderDeposits.append((serverDomain, body))
+        serverOrders.append((username, body))
     }
     public private(set) var updateDeposits: [(serverDomain: String, body: UpdateDepositBody)] = []
     /// When set, `depositUpdate` throws it once.

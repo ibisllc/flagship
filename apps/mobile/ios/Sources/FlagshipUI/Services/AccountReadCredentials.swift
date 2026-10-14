@@ -6,32 +6,48 @@ import FlagshipCore
 
 /// Builds account read-token mint requests (docs/account-read-token.md) from
 /// key material already at hand, and never prompts: the device's stored
-/// account key (joined devices), or the UMK this unlocked session already
-/// holds (the device key derived from it, then the IRK). With neither, it
-/// returns nothing and the read waits for the next unlock.
+/// account key, or the UMK this unlocked session already holds (the device
+/// key derived from it, then the IRK). A key derived from the UMK is kept on
+/// the device (device-local, outside biometrics, like a joined device's), so
+/// later mints need no unlock. With neither, it returns nothing and the read
+/// waits for the next unlock.
 public struct AccountReadCredentials: Sendable {
     public var storedDeviceKey: @Sendable (_ accountId: String, _ deviceId: String) -> Curve25519.Signing.PrivateKey?
     public var sessionUMK: @Sendable () -> Data?
     public var sessionIRK: @Sendable () -> Curve25519.Signing.PrivateKey?
+    public var storeDeviceKey: @Sendable (_ key: Curve25519.Signing.PrivateKey, _ accountId: String, _ deviceId: String) -> Void
     public var now: @Sendable () -> Int64
 
     public init(
         storedDeviceKey: @escaping @Sendable (String, String) -> Curve25519.Signing.PrivateKey?,
         sessionUMK: @escaping @Sendable () -> Data?,
         sessionIRK: @escaping @Sendable () -> Curve25519.Signing.PrivateKey?,
+        storeDeviceKey: @escaping @Sendable (Curve25519.Signing.PrivateKey, String, String) -> Void = { _, _, _ in },
         now: @escaping @Sendable () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }
     ) {
         self.storedDeviceKey = storedDeviceKey
         self.sessionUMK = sessionUMK
         self.sessionIRK = sessionIRK
+        self.storeDeviceKey = storeDeviceKey
         self.now = now
     }
 
     public static let keystore = AccountReadCredentials(
         storedDeviceKey: { Keystore.storedAccountDeviceSigningKey(accountId: $0, deviceId: $1) },
         sessionUMK: { Keystore.sessionUMKIfCached() },
-        sessionIRK: { Keystore.sessionIRKIfCached() }
+        sessionIRK: { Keystore.sessionIRKIfCached() },
+        storeDeviceKey: { try? Keystore.storeAccountDeviceSigningKey($0, accountId: $1, deviceId: $2) }
     )
+
+    /// Keep this device's account key at hand once the session unwrapped the
+    /// UMK, so the next mint signs without it. No-op when one is stored.
+    public func keepDeviceKey(umk: Data, username: String, deviceId: String) {
+        let u = username.lowercased()
+        guard !u.isEmpty, !deviceId.isEmpty, storedDeviceKey(u, deviceId) == nil,
+              let key = try? AccountMetadata.deriveAccountDeviceKey(umk: umk, accountId: u, deviceId: deviceId)
+        else { return }
+        storeDeviceKey(key, u, deviceId)
+    }
 
     /// Mint requests for `username`, device first. `deviceId` is this
     /// device's account device id ("" when it has none, e.g. a recovered
@@ -50,8 +66,11 @@ public struct AccountReadCredentials: Sendable {
 
     private func deviceKey(_ u: String, _ deviceId: String) -> Curve25519.Signing.PrivateKey? {
         if let stored = storedDeviceKey(u, deviceId) { return stored }
-        guard let umk = sessionUMK() else { return nil }
-        return try? AccountMetadata.deriveAccountDeviceKey(umk: umk, accountId: u, deviceId: deviceId)
+        guard let umk = sessionUMK(),
+              let key = try? AccountMetadata.deriveAccountDeviceKey(umk: umk, accountId: u, deviceId: deviceId)
+        else { return nil }
+        storeDeviceKey(key, u, deviceId)
+        return key
     }
 
     private func deviceAuthorization(

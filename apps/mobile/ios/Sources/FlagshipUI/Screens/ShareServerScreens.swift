@@ -380,16 +380,17 @@ struct ShareServerSheet: View {
 
 // MARK: - Home: "Shared with me"
 
+/// Servers other accounts shared with this one. Absent when there are none:
+/// accepting a share starts from "Add a server" (docs/share-a-server.md §8).
 struct SharedWithMeSection: View {
     @Environment(\.colorScheme) private var scheme
     let rows: [SharedServerRow]
     var onOpen: (String) -> Void = { _ in }
-    var onOpenLink: () -> Void = {}
 
     var body: some View {
         let c = FSColors.scheme(scheme)
-        VStack(alignment: .leading, spacing: FS.space.s3) {
-            if !rows.isEmpty {
+        if !rows.isEmpty {
+            VStack(alignment: .leading, spacing: FS.space.s3) {
                 HStack {
                     sectionHeader("SHARED WITH ME", c: c)
                     Spacer()
@@ -414,14 +415,9 @@ struct SharedWithMeSection: View {
                     }
                 }
             }
-            Button(action: onOpenLink) {
-                Label("Open a link to someone else's server", systemImage: "link")
-                    .font(FS.font.bodySm()).foregroundColor(c.primary)
-            }
-            .accessibilityIdentifier("home-open-share-link")
+            .accessibilityIdentifier("home-shared-with-me")
+            .background(ServerShareDemo.route == "home" ? DemoScrollIntoView() : nil)
         }
-        .accessibilityIdentifier("home-shared-with-me")
-        .background(ServerShareDemo.route == "home" ? DemoScrollIntoView() : nil)
     }
 }
 

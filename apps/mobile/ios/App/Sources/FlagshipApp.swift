@@ -140,10 +140,19 @@ struct FlagshipApp: App {
                 await readTokens.clearAll()
             }
         }
-        // Gym smoke runs start from fixtures every launch, so they don't
-        // carry a leader choice from an earlier run.
-        if !ProcessInfo.processInfo.arguments.contains("-smoke-mode") {
-            appState.leaderMemory = UserDefaultsLeaderMemory()
+        // The first unwrap of the UMK in a session keeps this device's
+        // account key at hand, so read tokens mint without it from then on
+        // (the app lock is optional, docs/account-read-token.md).
+        Keystore.setSessionUmkObserver { umk in
+            Task { @MainActor in
+                guard !state.isDemoAccount, let user = state.currentUser,
+                      let deviceId = state.activeProfile?.deviceId else { return }
+                AccountReadCredentials.keystore.keepDeviceKey(umk: umk, username: user, deviceId: deviceId)
+            }
+        }
+        appState.retryAccountRead = {
+            guard let user = await MainActor.run(body: { state.currentUser }) else { return }
+            await readTokens.retryNow(for: user)
         }
     }
 

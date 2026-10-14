@@ -245,7 +245,7 @@ public struct ServerDetailScreen: View {
                     MonitoringPane(health: health, metrics: metrics, cert: certificate(d))
                     deviceRow(d: d, c: c)
                     BootUnlockCard(serverDomain: d.serverFqdn)
-                    PreferredServerCard(serverDomain: d.serverFqdn)
+                    ServerOrderCard(serverDomain: d.serverFqdn)
                     ShareServerCard(serverDomain: d.serverFqdn)
                     FrontPageCard(serverDomain: d.serverFqdn)
                     LockPowerCard(serverDomain: d.serverFqdn)

@@ -581,6 +581,39 @@ final class ServerShareFlowTests: XCTestCase {
         XCTAssertNil(DeepLink.parse(URL(string: "flagship://share?s=xyz&k=\(k)")!))
     }
 
+    /// The phone camera opens `https://flagshipserver.com/share#s=…&k=…` as a
+    /// universal link (AASA lists `/share`): the app gets a browsing-web user
+    /// activity, parses it, and the shell puts it on the Home tab, which
+    /// opens the accept screen with the link filled in. On a cold start the
+    /// link waits in the linker until the shell reads it; while the app is
+    /// open a second scan replaces the waiting one.
+    @MainActor
+    func test_cameraScannedShareLink_opensAcceptShare_fromColdStartAndWhileOpen() throws {
+        let s = String(repeating: "ab", count: 16)
+        let k = String(repeating: "cd", count: 32)
+        let activity = NSUserActivity(activityType: NSUserActivityTypeBrowsingWeb)
+        activity.webpageURL = URL(string: "https://flagshipserver.com/share#s=\(s)&k=\(k)")
+        let link = try XCTUnwrap(DeepLink.parse(try XCTUnwrap(activity.webpageURL)))
+        XCTAssertEqual(link, .shareServer(shareId: s, secretHex: k))
+
+        // Cold start: enqueued before any tab exists, still waiting after.
+        let linker = DeepLinker()
+        linker.enqueue(link)
+        XCTAssertEqual(linker.pending, link)
+        XCTAssertEqual(RootShell.tab(for: link, selected: .settings), .home)
+        XCTAssertEqual(HomeTab.route(for: link), .acceptShare(shareId: s, secretHex: k))
+
+        // While open, from another tab: the newer scan wins and lands on Home.
+        let s2 = String(repeating: "ef", count: 16)
+        let again = try XCTUnwrap(DeepLink.parse(URL(string: "https://flagshipserver.com/share#s=\(s2)&k=\(k)")!))
+        linker.enqueue(again)
+        XCTAssertEqual(linker.pending, .shareServer(shareId: s2, secretHex: k))
+        XCTAssertEqual(RootShell.tab(for: again, selected: .apps), .home)
+        XCTAssertEqual(HomeTab.route(for: again), .acceptShare(shareId: s2, secretHex: k))
+        XCTAssertEqual(linker.consume(), again)
+        XCTAssertNil(linker.pending)
+    }
+
     // MARK: - View models
 
     @MainActor

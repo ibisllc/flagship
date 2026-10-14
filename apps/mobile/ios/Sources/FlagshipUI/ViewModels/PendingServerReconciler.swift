@@ -250,6 +250,12 @@ public struct PendingServerReconciler {
                 createdAt: Double(order.createdAt) / 1000.0
             ))
         }
+        // The owner's order ranks the list and picks the leader
+        // (docs/server-order.md). Boxes verify its signature; here it only
+        // decides what Home shows first.
+        if let order = directory.serverOrder {
+            app.applyRemoteServerOrder(stks: order.order.stks, issuedAt: order.order.issuedAt)
+        }
     }
 
     /// The directory entries the server list shows, in directory order: every

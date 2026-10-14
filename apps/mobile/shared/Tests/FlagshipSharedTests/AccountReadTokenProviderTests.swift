@@ -134,6 +134,31 @@ final class AccountReadTokenProviderTests: XCTestCase {
         XCTAssertEqual(token, "art1.t1")
     }
 
+    func testRetryNowSkipsTheBackoffAfterTheOwnerUnlocks() async {
+        let (provider, minter, _, _, _, paused) = make()
+        minter.refuseAll = true
+        _ = await provider.tokenAfterRejection(for: "alice")
+        XCTAssertEqual(paused.values, [true])
+        minter.refuseAll = false
+        // Still inside the refusal's backoff: a background read doesn't sign.
+        let callsBefore = minter.calls.count
+        let backedOff = await provider.tokenAfterRejection(for: "alice")
+        XCTAssertNil(backedOff)
+        XCTAssertEqual(minter.calls.count, callsBefore)
+        // The owner taps "Show my servers": mint at once and unpause.
+        let ok = await provider.retryNow(for: "alice")
+        XCTAssertTrue(ok)
+        XCTAssertEqual(paused.values, [true, false])
+    }
+
+    func testRetryNowNeverSignsForADemoAccount() async {
+        let (provider, minter, keys, _, _, _) = make(keyless: true)
+        let ok = await provider.retryNow(for: "alice")
+        XCTAssertTrue(ok)
+        XCTAssertEqual(keys.asked, 0)
+        XCTAssertTrue(minter.calls.isEmpty)
+    }
+
     func testRenewsPastHalfLifeAndKeepsTheOldTokenIfItCant() async {
         let (provider, minter, keys, _, clock, _) = make()
         _ = await provider.token(for: "alice")

@@ -292,6 +292,10 @@ public struct RootShell: View {
     /// (NavigationStack push) is handled by the tab itself when it
     /// reads the same `linker.pending` value.
     private func tab(for link: DeepLink) -> RootDestination {
+        Self.tab(for: link, selected: selected)
+    }
+
+    static func tab(for link: DeepLink, selected: RootDestination) -> RootDestination {
         switch link {
         case .secretRequests:                         return .activity
         case .serverDetail, .createServer:            return .home

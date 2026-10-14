@@ -60,6 +60,49 @@ final class AccountReadCredentialsTests: XCTestCase {
         XCTAssertEqual(envelope.auth.phoneIrkPub, HexUtil.encode(irk.publicKey.rawRepresentation))
     }
 
+    func testADeviceKeyDerivedFromTheSessionIsKeptForLaterMints() throws {
+        final class Slot: @unchecked Sendable { var key: Curve25519.Signing.PrivateKey?; var writes = 0 }
+        let slot = Slot()
+        let umk = Data(repeating: 0x2a, count: 32)
+        let builder = AccountReadCredentials(
+            storedDeviceKey: { _, _ in slot.key },
+            sessionUMK: { umk },
+            sessionIRK: { nil },
+            storeDeviceKey: { key, account, device in
+                XCTAssertEqual(account, "plucky-avocet")
+                XCTAssertEqual(device, self.deviceId)
+                slot.key = key; slot.writes += 1
+            }
+        )
+        _ = builder.credentials(username: "Plucky-Avocet", deviceId: deviceId)
+        let expected = try AccountMetadata.deriveAccountDeviceKey(umk: umk, accountId: "plucky-avocet", deviceId: deviceId)
+        XCTAssertEqual(slot.key?.publicKey.rawRepresentation, expected.publicKey.rawRepresentation)
+        // Once stored, the session isn't needed and nothing is rewritten.
+        let later = AccountReadCredentials(
+            storedDeviceKey: { _, _ in slot.key },
+            sessionUMK: { nil },
+            sessionIRK: { nil },
+            storeDeviceKey: { _, _, _ in slot.writes += 1 }
+        )
+        XCTAssertEqual(later.credentials(username: "plucky-avocet", deviceId: deviceId).count, 1)
+        later.keepDeviceKey(umk: umk, username: "plucky-avocet", deviceId: deviceId)
+        XCTAssertEqual(slot.writes, 1)
+    }
+
+    func testKeepDeviceKeyStoresOnUnlockAndSkipsAPhoneWithoutADeviceId() {
+        final class Slot: @unchecked Sendable { var writes: [String] = [] }
+        let slot = Slot()
+        let builder = AccountReadCredentials(
+            storedDeviceKey: { _, _ in nil },
+            sessionUMK: { nil },
+            sessionIRK: { nil },
+            storeDeviceKey: { _, account, device in slot.writes.append("\(account)/\(device)") }
+        )
+        builder.keepDeviceKey(umk: Data(repeating: 1, count: 32), username: "Alice", deviceId: deviceId)
+        builder.keepDeviceKey(umk: Data(repeating: 1, count: 32), username: "alice", deviceId: "")
+        XCTAssertEqual(slot.writes, ["alice/\(deviceId)"])
+    }
+
     func testARecoveredPhoneWithoutADeviceIdUsesTheIrk() {
         let builder = AccountReadCredentials(
             storedDeviceKey: { _, _ in Curve25519.Signing.PrivateKey() },

@@ -35,17 +35,22 @@ public struct CreateServerStubScreen: View {
     var onDeliveredVisible: (_ serverDomain: String, _ name: String, _ description: String) -> Void = { _, _, _ in }
     var onDelivered: (_ serverDomain: String, _ name: String, _ description: String) -> Void = { _, _, _ in }
     var onCancel: () -> Void = {}
+    /// Accept another account's share link instead of creating a server
+    /// (docs/share-a-server.md). Nil hides the button.
+    var onCoManage: (() -> Void)?
 
     public init(
         vm: CreateServerViewModel,
         onDeliveredVisible: @escaping (_ serverDomain: String, _ name: String, _ description: String) -> Void = { _, _, _ in },
         onDelivered: @escaping (_ serverDomain: String, _ name: String, _ description: String) -> Void = { _, _, _ in },
-        onCancel: @escaping () -> Void = {}
+        onCancel: @escaping () -> Void = {},
+        onCoManage: (() -> Void)? = nil
     ) {
         self.vm = vm
         self.onDeliveredVisible = onDeliveredVisible
         self.onDelivered = onDelivered
         self.onCancel = onCancel
+        self.onCoManage = onCoManage
     }
 
     public var body: some View {
@@ -295,6 +300,9 @@ public struct CreateServerStubScreen: View {
             if designStep > 0 {
                 FSGhostButton("Back", block: true) { designStep -= 1 }
                     .accessibilityIdentifier("cs-back-button")
+            } else if let onCoManage {
+                FSSecondaryButton("Co-manage a server from another user", block: true, action: onCoManage)
+                    .accessibilityIdentifier("cs-co-manage-button")
             }
         }
     }

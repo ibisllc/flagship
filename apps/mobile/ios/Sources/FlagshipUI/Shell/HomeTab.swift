@@ -49,6 +49,15 @@ public struct HomeTab: View {
         .task(id: linker.pending) { consume(linker.pending) }
     }
 
+    /// The Home page a scanned or tapped share link opens: the accept
+    /// screen with the link filled in.
+    static func route(for link: DeepLink) -> HomeRoute? {
+        if case .shareServer(let shareId, let secretHex) = link {
+            return .acceptShare(shareId: shareId, secretHex: secretHex)
+        }
+        return nil
+    }
+
     /// Pop or push onto the home stack when a DeepLink lands on this
     /// tab. RootShell already switches the tab to .home for these
     /// cases; we just resolve the route inside the stack.
@@ -79,9 +88,8 @@ public struct HomeTab: View {
                 path.append(route)
             }
             _ = linker.consume()
-        case .shareServer(let shareId, let secretHex):
-            let route = HomeRoute.acceptShare(shareId: shareId, secretHex: secretHex)
-            if path.last != route { path.append(route) }
+        case .shareServer:
+            if let route = Self.route(for: link), path.last != route { path.append(route) }
             _ = linker.consume()
         default:
             break
@@ -110,6 +118,7 @@ public struct HomeTab: View {
                     awaitingApproval: app.serversAwaiting(.unlockKey),
                     awaitingEntitlement: app.serversAwaiting(.entitlement),
                     statusPaused: app.accountStatusPaused,
+                    serverListLocked: app.isServerListLocked,
                     onOpenPod: { pod in path.append(.serverDetail(podId: pod.podId)) },
                     onCancelServer: { pod in
                         Task { await cancelPendingServer(pod: pod, server: server, app: app, toasts: toasts) }
@@ -120,7 +129,13 @@ public struct HomeTab: View {
                         pendingDeletePod = pod
                     },
                     onAddServer: { path.append(.provisionServer) },
-                    onSetLeader: { pod in app.setLeader(pod.podId) },
+                    onMakeLeader: { pod in
+                        Task { await saveServerOrder { await $0.makeLeader(podId: pod.podId) } }
+                    },
+                    onReorder: { ids in
+                        Task { await saveServerOrder { await $0.save(podIds: ids) } }
+                    },
+                    onShowMyServers: { await showMyServers() },
                     onVibeCode: {
                         // Building a service needs a server to build + run
                         // it. With none, nudge the user to add one. The
@@ -142,6 +157,7 @@ public struct HomeTab: View {
                         // user's own gesture, so the prompt belongs here.
                         if app.accountStatusPaused, !app.isDemoAccount {
                             _ = try? await Keystore.currentUMK(reason: "Refresh your servers' status")
+                            await app.retryAccountRead?()
                         }
                         await reconcileServerTruth()
                         // Prefer a fresher box-direct leadership read over the
@@ -171,8 +187,7 @@ public struct HomeTab: View {
                         app.signOut()
                     },
                     sharedServers: SharedWithMeStore.shared.rows,
-                    onOpenShared: { path.append(.sharedServer(shareId: $0)) },
-                    onOpenShareLink: { path.append(.acceptShare(shareId: nil, secretHex: nil)) }
+                    onOpenShared: { path.append(.sharedServer(shareId: $0)) }
                 )
             } else {
                 ProgressView()
@@ -294,7 +309,8 @@ public struct HomeTab: View {
                     // User backed out before delivering — drop any
                     // pending state and head home.
                     path.removeAll()
-                }
+                },
+                onCoManage: { path.append(.acceptShare(shareId: nil, secretHex: nil)) }
             )
         case .installProgress(let serial, let name, let description):
             // Provisioning now renders the SINGLE canonical timeline
@@ -367,6 +383,36 @@ public struct HomeTab: View {
             ))
         }
         if navigateHome { path.removeAll() }
+    }
+
+    /// Save a new server order (docs/server-order.md). The list already
+    /// shows it; on failure `ServerOrderSaver` puts the old one back.
+    private func saveServerOrder(_ run: (ServerOrderSaver) async -> ServerOrderSaver.Outcome) async {
+        switch await run(ServerOrderSaver(app: app, mailbox: mailbox)) {
+        case .saved, .local:
+            break
+        case .superseded:
+            toasts.warning("Another device changed the order. Showing the latest one.")
+            await reconcileServerTruth()
+        case .failed(let reason):
+            toasts.warning(reason)
+        }
+    }
+
+    /// The server list is locked (no read token and nothing cached): unlock
+    /// the account key with one prompt, which also keeps this device's key
+    /// for later, then mint and load.
+    private func showMyServers() async {
+        guard let context = try? await BiometricGate().evaluateReturningContext(reason: "Show your servers") else { return }
+        Keystore.cacheSessionUMK(authenticatedBy: context)
+        await app.retryAccountRead?()
+        await reconcileServerTruth()
+        await preferDirectLeads()
+        await approvalWatcher?.pollOnce()
+        await vm?.load()
+        if app.accountStatusPaused {
+            toasts.warning("Couldn't load your servers. Pull down to try again.")
+        }
     }
 
     /// Account-level "what is each box asking me to approve?" poll for the
@@ -526,6 +572,7 @@ struct CreateServerContainer: View {
     let onDeliveredVisible: (_ serverDomain: String, _ serial: String, _ name: String, _ description: String) -> Void
     let onDelivered: (_ serverDomain: String, _ serial: String, _ name: String, _ description: String) -> Void
     let onCancel: () -> Void
+    let onCoManage: (() -> Void)?
     @Environment(\.flagshipServerClient) private var serverClient
     @Environment(\.qrRelayClient) private var qrRelay
     @Environment(\.secretMailboxClient) private var mailbox
@@ -536,11 +583,13 @@ struct CreateServerContainer: View {
     init(
         onDeliveredVisible: @escaping (_ serverDomain: String, _ serial: String, _ name: String, _ description: String) -> Void = { _, _, _, _ in },
         onDelivered: @escaping (_ serverDomain: String, _ serial: String, _ name: String, _ description: String) -> Void,
-        onCancel: @escaping () -> Void = {}
+        onCancel: @escaping () -> Void = {},
+        onCoManage: (() -> Void)? = nil
     ) {
         self.onDeliveredVisible = onDeliveredVisible
         self.onDelivered = onDelivered
         self.onCancel = onCancel
+        self.onCoManage = onCoManage
     }
 
     var body: some View {
@@ -560,7 +609,8 @@ struct CreateServerContainer: View {
                         let serial = vm.lastDeliveredSerial ?? ""
                         onDelivered(serverDomain, serial, name, description)
                     },
-                    onCancel: onCancel
+                    onCancel: onCancel,
+                    onCoManage: onCoManage
                 )
             } else {
                 ProgressView()

@@ -63,10 +63,7 @@ final class SecretRequestCoordinatorTests: XCTestCase {
         func depositCgk(serverDomain: String, body: PairingDepositBody) async throws {
             cgkDeposits.append((serverDomain, body))
         }
-        var setLeaderDeposits: [(serverDomain: String, body: SetLeaderDepositBody)] = []
-        func depositSetLeader(serverDomain: String, body: SetLeaderDepositBody) async throws {
-            setLeaderDeposits.append((serverDomain, body))
-        }
+        func postServerOrder(username: String, body: SignedServerOrderWire) async throws {}
         func depositUpdate(serverDomain: String, body: UpdateDepositBody) async throws {}
     }
 

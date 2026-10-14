@@ -86,6 +86,11 @@ public final class AppState {
     /// (docs/account-read-token.md): Home keeps the last state and says
     /// status is paused until the next unlock.
     public var accountStatusPaused: Bool = false
+    /// `.com` refused the server list and there is nothing to show: Home
+    /// says the list is locked and offers to unlock, never "no servers yet".
+    public var isServerListLocked: Bool {
+        accountStatusPaused && pods.isEmpty && !isDemoAccount
+    }
     /// True once the user has tapped "Dismiss" on the recovery nudge
     /// in this app session. Banner re-appears next launch — this is
     /// not "permanent" dismiss; recovery is important enough that we
@@ -249,10 +254,21 @@ public final class AppState {
     /// Platform shell hook for clearing persisted session-only state (notably
     /// the passwordless demo marker) on an explicit sign-out.
     public var onSignedOut: (() -> Void)?
-    /// Where the owner's leader choice is remembered per account across
-    /// launches. The iOS shell wires the UserDefaults store; nil (tests,
-    /// previews, the watch) remembers nothing.
-    @ObservationIgnored public var leaderMemory: (any LeaderMemory)?
+    /// Asks for a fresh account read token now (after the owner unlocked
+    /// the account key on purpose) and returns once one was tried. The iOS
+    /// shell wires the token provider; nil does nothing.
+    @ObservationIgnored public var retryAccountRead: (() async -> Void)?
+
+    /// The owner's server order (docs/server-order.md) as ranking keys
+    /// (`orderKey(for:)`), first = leader. Home and every other screen read
+    /// it from here, so a reorder or "Make leader" shows everywhere at once.
+    public private(set) var serverOrder: [String] = []
+    /// `issuedAt` of `serverOrder` (0 when none): an older order from a
+    /// stale `/pods` snapshot never replaces a newer local one.
+    public private(set) var serverOrderIssuedAt: Int64 = 0
+    /// True while this device is signing and posting a new order: `/pods`
+    /// snapshots taken before it landed don't move the list back.
+    public private(set) var isSavingServerOrder = false
 
     public init(
         isPaired: Bool = false,
@@ -340,13 +356,103 @@ public final class AppState {
         return pods.first(where: { $0.podId == id })
     }
 
-    /// DETERMINISTIC FALLBACK (Fix C) — the OLDEST pod. `.com` returns `/pods`
-    /// oldest-first, so `pods.first` IS the oldest. The UI default pod / leader
-    /// must NEVER silently float to a brand-new box (= whatever appeared first in
-    /// some other ordering); when an explicit anchor is missing or dangling, it
-    /// re-anchors HERE — the stable, oldest pod — so adding a server can't seize
-    /// the default. nil only when there are no pods.
+    /// The first pod in the owner's order (`pods` is kept ranked), which
+    /// without an order is the oldest: a new box never seizes the default.
     private var oldestPod: PodInfo? { pods.first }
+
+    /// The key a pod is ranked by: its STK, or its fqdn until it has one.
+    public static func orderKey(for pod: PodInfo) -> String {
+        let stk = pod.identityPubKeyHex.lowercased()
+        return stk.isEmpty ? "fqdn:\(pod.fqdn.lowercased())" : stk
+    }
+
+    /// Adopt the order `/pods` returned. Ignored while this device is saving
+    /// one, when `.com` holds none, or when it is older than the one shown.
+    public func applyRemoteServerOrder(stks: [String]?, issuedAt: Int64) {
+        guard !isSavingServerOrder, let stks, issuedAt >= serverOrderIssuedAt else { return }
+        serverOrder = stks.map { $0.lowercased() }
+        serverOrderIssuedAt = issuedAt
+        rankPods()
+    }
+
+    /// Show `podIds` (first = leader) as the order at once; the leader
+    /// becomes the current pod. Returns what to pass to `restoreServerOrder`
+    /// if saving fails.
+    @discardableResult
+    public func beginServerOrderChange(podIds: [String], issuedAt: Int64) -> ServerOrderSnapshot {
+        let snapshot = ServerOrderSnapshot(
+            order: serverOrder, issuedAt: serverOrderIssuedAt, currentPodId: currentPodId
+        )
+        var keys: [String] = []
+        for id in podIds {
+            if let pod = pods.first(where: { $0.podId == id }) { keys.append(Self.orderKey(for: pod)) }
+        }
+        serverOrder = keys
+        serverOrderIssuedAt = issuedAt
+        isSavingServerOrder = true
+        rankPods()
+        if let leader = leaderPodId { currentPodId = leader }
+        return snapshot
+    }
+
+    /// The new order was saved (or kept local, for a demo account).
+    public func finishServerOrderChange() {
+        isSavingServerOrder = false
+    }
+
+    /// Saving failed: put the previous order (and current pod) back.
+    public func restoreServerOrder(_ snapshot: ServerOrderSnapshot) {
+        serverOrder = snapshot.order
+        serverOrderIssuedAt = snapshot.issuedAt
+        isSavingServerOrder = false
+        rankPods()
+        if let id = snapshot.currentPodId, pods.contains(where: { $0.podId == id }) { currentPodId = id }
+    }
+
+    /// The pod ids in rank order with `podId` moved to the top.
+    public func orderWithLeader(_ podId: String) -> [String] {
+        var ids = pods.map(\.podId)
+        guard let i = ids.firstIndex(of: podId) else { return ids }
+        ids.insert(ids.remove(at: i), at: 0)
+        return ids
+    }
+
+    /// Keep `pods` in the owner's order: listed pods first, in order; then
+    /// the rest oldest first (pending orders last), else in arrival order.
+    /// Then the leader is the first pod that is up.
+    private func rankPods() {
+        let position = Dictionary(serverOrder.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
+        let ranked = pods.enumerated().sorted { l, r in
+            let a = l.element, b = r.element
+            let ra = position[Self.orderKey(for: a)] ?? Int.max
+            let rb = position[Self.orderKey(for: b)] ?? Int.max
+            if ra != rb { return ra < rb }
+            let ba = a.registeredAt > 0 ? a.registeredAt : Int64.max
+            let bb = b.registeredAt > 0 ? b.registeredAt : Int64.max
+            if ba != bb { return ba < bb }
+            return l.offset < r.offset
+        }.map(\.element)
+        if ranked.map(\.podId) != pods.map(\.podId) { pods = ranked }
+        electLeader()
+    }
+
+    /// The leader is the first pod in the order that is up; while none is,
+    /// the first one that is registered. The current pod follows the leader
+    /// unless another pod was picked on purpose.
+    private func electLeader() {
+        let previous = leaderPodId
+        let usable = pods.filter { $0.status != .pending && !$0.isRevoked }
+        let next = usable.first(where: { $0.status == .online })?.podId
+            ?? usable.first?.podId
+            ?? (leaderPodId.flatMap { id in pods.contains(where: { $0.podId == id }) ? id : nil })
+            ?? pods.first?.podId
+        guard next != previous else { return }
+        leaderPodId = next
+        if currentPodId == nil || currentPodId == previous
+            || !pods.contains(where: { $0.podId == currentPodId }) {
+            currentPodId = next
+        }
+    }
 
     /// The session-store pod ids (`PodInfo.podId(forFqdn:)`) this device holds
     /// a paired-session token for. Nil until the shell has read the store:
@@ -403,7 +509,7 @@ public final class AppState {
         // so a later box can't seize the default.
         self.leaderPodId = pods.first?.podId
         self.currentPodId = pods.first?.podId
-        applyRememberedLeader()
+        rankPods()
         self.isPaired = true
         // W3 — record the cloud in the durable profile list and mark
         // it active. Idempotent: re-running onboarding for an already
@@ -463,6 +569,9 @@ public final class AppState {
         self.currentUser = p.cloudName
         self.deviceCapability = p.deviceCapability
         self.pods = []
+        self.serverOrder = []
+        self.serverOrderIssuedAt = 0
+        self.isSavingServerOrder = false
         self.leaderPodId = nil
         self.currentPodId = nil
         self.sessionPodIds = nil
@@ -498,31 +607,13 @@ public final class AppState {
         ))
     }
 
+    /// A new box ranks after every server in the owner's order and after the
+    /// older ones, so it never seizes the leader ("frank seized leadership").
     public func addPod(_ pod: PodInfo) {
         pods.append(pod)
-        // STICKY LEADERSHIP (Fix C) — a newly-added box must NEVER change the
-        // leader / default pod. A new server auto-seizing leadership was the
-        // reported bug ("frank seized leadership"). We seed leader/current ONLY
-        // when none is set yet (the genuine first-pod / cold-restore case); an
-        // existing leader is left exactly as it is, so the new box is just
-        // another selectable pod — not the new default.
         if leaderPodId == nil { leaderPodId = pod.podId }
         if currentPodId == nil { currentPodId = pod.podId }
-        applyRememberedLeader()
-    }
-
-    /// Put back the leader the owner chose on this device for this account,
-    /// once that pod is known and not revoked. Until then (or when it's gone)
-    /// the oldest-pod fallback stands. The restored leader becomes current
-    /// unless another pod was picked explicitly this session.
-    private func applyRememberedLeader() {
-        guard let account = currentUser, let memory = leaderMemory,
-              let id = memory.leaderPodId(forAccount: account), id != leaderPodId,
-              let pod = pods.first(where: { $0.podId == id }), !pod.isRevoked
-        else { return }
-        let previous = leaderPodId
-        leaderPodId = id
-        if currentPodId == nil || currentPodId == previous { currentPodId = id }
+        rankPods()
     }
 
     /// Idempotent insert of a pending pod, keyed on the fqdn (the same
@@ -646,7 +737,7 @@ public final class AppState {
                 revokedAt: revokedAt,
                 revocationReason: revocationReason
             )
-            applyRememberedLeader()
+            rankPods()
             return old.podId
         }
         let id = PodInfo.podId(forFqdn: fqdn)
@@ -698,14 +789,6 @@ public final class AppState {
         )
     }
 
-    /// Making a server leader also makes it the current server, so new apps
-    /// and the screens client follow it at once (docs/app-placement.md §1).
-    public func setLeader(_ podId: String) {
-        guard pods.contains(where: { $0.podId == podId }) else { return }
-        leaderPodId = podId
-        currentPodId = podId
-        if let account = currentUser { leaderMemory?.setLeaderPodId(podId, forAccount: account) }
-    }
 
     public func setCurrentPod(_ podId: String) {
         guard pods.contains(where: { $0.podId == podId }) else { return }
@@ -754,27 +837,18 @@ public final class AppState {
 
     public func removePod(_ podId: String) {
         pods.removeAll { $0.podId == podId }
-        // A removed server was deleted, transferred or retired: forget it as
-        // the remembered leader so a new server reusing its name doesn't
-        // inherit the choice.
-        if let account = currentUser, let memory = leaderMemory,
-           memory.leaderPodId(forAccount: account) == podId {
-            memory.setLeaderPodId(nil, forAccount: account)
-        }
-        // DETERMINISTIC RE-ANCHOR (Fix C) — when the removed pod WAS the leader,
-        // the leader dangles. Re-anchor explicitly to the OLDEST remaining pod
-        // (`oldestPod`, = `pods.first` since `.com` returns oldest-first) rather
-        // than letting `currentPod` silently float to whatever happens to be
-        // first. A non-leader removal leaves the leader untouched (sticky).
-        if leaderPodId == podId { leaderPodId = oldestPod?.podId }
-        if currentPodId == podId { currentPodId = leaderPodId ?? oldestPod?.podId }
+        if leaderPodId == podId { leaderPodId = nil }
+        if currentPodId == podId { currentPodId = nil }
+        rankPods()
     }
 
     public func signOut() {
-        if let account = currentUser { leaderMemory?.setLeaderPodId(nil, forAccount: account) }
         self.isPaired = false
         self.currentUser = nil
         self.pods = []
+        self.serverOrder = []
+        self.serverOrderIssuedAt = 0
+        self.isSavingServerOrder = false
         self.leaderPodId = nil
         self.currentPodId = nil
         self.sessionPodIds = nil
@@ -1070,4 +1144,11 @@ public struct PodInfo: Identifiable, Hashable, Sendable {
         let day = hr / 24
         return "\(day) day\(day == 1 ? "" : "s") ago"
     }
+}
+
+/// What `beginServerOrderChange` replaced, to put back if saving fails.
+public struct ServerOrderSnapshot: Equatable, Sendable {
+    public let order: [String]
+    public let issuedAt: Int64
+    public let currentPodId: String?
 }

@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import FlagshipAPI
 import FlagshipCore
 
@@ -56,9 +57,17 @@ public struct HomeScreen: View {
     /// `.com` refuses this device's status reads until the next unlock
     /// (docs/account-read-token.md); the list shows the last state.
     let statusPaused: Bool
+    /// `.com` refused the server list and nothing is cached: say it's locked
+    /// and offer to unlock, never "no servers yet".
+    let serverListLocked: Bool
     var onOpenPod: (PodInfo) -> Void = { _ in }
     var onAddServer: () -> Void = {}
-    var onSetLeader: (PodInfo) -> Void = { _ in }
+    /// Move a server to the top of the owner's order (docs/server-order.md).
+    var onMakeLeader: (PodInfo) -> Void = { _ in }
+    /// The owner dropped a server elsewhere in the list: the new order, by pod id.
+    var onReorder: ([String]) -> Void = { _ in }
+    /// Unlock the account key (one prompt) and load the server list.
+    var onShowMyServers: () async -> Void = {}
     /// Cancel/delete a pending (in-flight) server straight from the list.
     var onCancelServer: (PodInfo) -> Void = { _ in }
     /// Delete a registered server straight from the list (opens the
@@ -73,7 +82,6 @@ public struct HomeScreen: View {
     /// Servers other accounts shared with this one (docs/share-a-server.md §8).
     var sharedServers: [SharedServerRow] = []
     var onOpenShared: (String) -> Void = { _ in }
-    var onOpenShareLink: () -> Void = {}
 
     /// Search text over the server list (name / description / fqdn). Bound to
     /// the native `.searchable` field so the large title collapses on scroll.
@@ -82,6 +90,10 @@ public struct HomeScreen: View {
     /// the list by derived liveness. Pure presentation — the underlying pods
     /// (and every action on them) are untouched.
     @State private var statusFilter: HomeStatusFilter = .all
+    /// The order while a row is being dragged, by pod id; nil otherwise.
+    @State private var draftOrder: [String]?
+    @State private var draggingPodId: String?
+    @State private var unlocking = false
 
     public init(
         state: LoadingState<ServerDetailResponse>,
@@ -97,11 +109,14 @@ public struct HomeScreen: View {
         awaitingApproval: Set<String> = [],
         awaitingEntitlement: Set<String> = [],
         statusPaused: Bool = false,
+        serverListLocked: Bool = false,
         onOpenPod: @escaping (PodInfo) -> Void = { _ in },
         onCancelServer: @escaping (PodInfo) -> Void = { _ in },
         onDeleteServer: @escaping (PodInfo) -> Void = { _ in },
         onAddServer: @escaping () -> Void = {},
-        onSetLeader: @escaping (PodInfo) -> Void = { _ in },
+        onMakeLeader: @escaping (PodInfo) -> Void = { _ in },
+        onReorder: @escaping ([String]) -> Void = { _ in },
+        onShowMyServers: @escaping () async -> Void = {},
         onVibeCode: @escaping () -> Void = {},
         onRefresh: @escaping () async -> Void = {},
         onSetUpRecovery: @escaping () -> Void = {},
@@ -109,8 +124,7 @@ public struct HomeScreen: View {
         onDismissRecoveryBackupBanner: @escaping () -> Void = {},
         onSignInAgain: @escaping () -> Void = {},
         sharedServers: [SharedServerRow] = [],
-        onOpenShared: @escaping (String) -> Void = { _ in },
-        onOpenShareLink: @escaping () -> Void = {}
+        onOpenShared: @escaping (String) -> Void = { _ in }
     ) {
         self.state = state
         self.username = username
@@ -125,9 +139,12 @@ public struct HomeScreen: View {
         self.awaitingApproval = awaitingApproval
         self.awaitingEntitlement = awaitingEntitlement
         self.statusPaused = statusPaused
+        self.serverListLocked = serverListLocked
         self.onOpenPod = onOpenPod
         self.onAddServer = onAddServer
-        self.onSetLeader = onSetLeader
+        self.onMakeLeader = onMakeLeader
+        self.onReorder = onReorder
+        self.onShowMyServers = onShowMyServers
         self.onCancelServer = onCancelServer
         self.onDeleteServer = onDeleteServer
         self.onVibeCode = onVibeCode
@@ -138,7 +155,6 @@ public struct HomeScreen: View {
         self.onSignInAgain = onSignInAgain
         self.sharedServers = sharedServers
         self.onOpenShared = onOpenShared
-        self.onOpenShareLink = onOpenShareLink
     }
 
     /// The Home dashboard NEVER renders a "couldn't load" card. When there's
@@ -162,16 +178,23 @@ public struct HomeScreen: View {
                 // backup banner, then the recovery nudge.
                 topAnnouncement(c: c)
                 if statusPaused && !pods.isEmpty {
-                    Label("Status paused — pull down to refresh", systemImage: "pause.circle")
-                        .font(FS.font.caption())
-                        .foregroundColor(c.textMuted)
-                        .accessibilityIdentifier("status-paused")
+                    HStack(spacing: FS.space.s2) {
+                        Label("Status paused", systemImage: "pause.circle")
+                            .font(FS.font.caption())
+                            .foregroundColor(c.textMuted)
+                        Spacer()
+                        Button(unlocking ? "Unlocking…" : "Unlock") { showMyServers() }
+                            .font(FS.font.caption())
+                            .disabled(unlocking)
+                            .accessibilityIdentifier("status-paused-unlock")
+                    }
+                    .accessibilityIdentifier("status-paused")
                 }
                 if !pods.isEmpty {
                     quickActions(c: c)
                 }
                 serversSection(c: c)
-                SharedWithMeSection(rows: sharedServers, onOpen: onOpenShared, onOpenLink: onOpenShareLink)
+                SharedWithMeSection(rows: sharedServers, onOpen: onOpenShared)
                 switch state {
                 case .loaded(let d):
                     recentActivity(events: d.recentInstallEvents, c: c)
@@ -384,9 +407,69 @@ public struct HomeScreen: View {
         .modifier(OptionalAccessibilityId(id: accessibilityId))
     }
 
+    private func showMyServers() {
+        guard !unlocking else { return }
+        unlocking = true
+        Task {
+            await onShowMyServers()
+            unlocking = false
+        }
+    }
+
+    private func lockedCard(c: FSColors) -> some View {
+        FSCard {
+            VStack(alignment: .leading, spacing: FS.space.s3) {
+                HStack(alignment: .top, spacing: FS.space.s3) {
+                    Image(systemName: "lock.fill")
+                        .imageScale(.large)
+                        .foregroundColor(c.textMuted)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Your server list is locked")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(c.text)
+                        Text("Flagship only shows your servers to your own devices. Unlock once on this phone to show them.")
+                            .font(FS.font.bodySm())
+                            .foregroundColor(c.textMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                FSPrimaryButton(unlocking ? "Unlocking…" : "Show my servers", enabled: !unlocking, block: true) {
+                    showMyServers()
+                }
+                .accessibilityIdentifier("home-show-my-servers")
+            }
+        }
+        .accessibilityIdentifier("home-locked-state")
+    }
+
+    /// The rows in the order the list shows them: the drag's draft while
+    /// one is in progress, else `pods` (already in the owner's order).
+    private func ordered(_ rows: [PodInfo]) -> [PodInfo] {
+        guard let draft = draftOrder else { return rows }
+        let byId = Dictionary(rows.map { ($0.podId, $0) }, uniquingKeysWith: { a, _ in a })
+        return draft.compactMap { byId[$0] } + rows.filter { !draft.contains($0.podId) }
+    }
+
+    /// Reordering only makes sense over the whole list.
+    private var canReorder: Bool {
+        statusFilter == .all && search.trimmingCharacters(in: .whitespaces).isEmpty
+            && pods.filter({ $0.status != .pending && !$0.isRevoked }).count > 1
+    }
+
+    private func move(_ podId: String, by offset: Int) {
+        var ids = pods.map(\.podId)
+        guard let i = ids.firstIndex(of: podId) else { return }
+        let j = i + offset
+        guard ids.indices.contains(j) else { return }
+        ids.swapAt(i, j)
+        onReorder(ids)
+    }
+
     private func serversSection(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            if pods.isEmpty {
+            if serverListLocked {
+                lockedCard(c: c)
+            } else if pods.isEmpty {
                 FSCard {
                     VStack(alignment: .leading, spacing: FS.space.s3) {
                         HStack(alignment: .top, spacing: FS.space.s3) {
@@ -397,7 +480,7 @@ public struct HomeScreen: View {
                                 Text("Your account is ready")
                                     .font(.system(size: 17, weight: .semibold))
                                     .foregroundColor(c.text)
-                                Text("You don't have any servers yet. Add your first server to start running your own services.")
+                                Text("Add your first server to start running your own services.")
                                     .font(FS.font.bodySm())
                                     .foregroundColor(c.textMuted)
                                     .fixedSize(horizontal: false, vertical: true)
@@ -424,7 +507,8 @@ public struct HomeScreen: View {
                     },
                     selection: $statusFilter
                 )
-                let rows = visiblePods
+                let rows = ordered(visiblePods)
+                let labels = Self.orderLabels(pods: pods, leaderPodId: leaderPodId)
                 if rows.isEmpty {
                     FSCard {
                         Text("No servers match “\(search.isEmpty ? statusFilter.label.lowercased() : search)”.")
@@ -434,15 +518,43 @@ public struct HomeScreen: View {
                 } else {
                     LazyVStack(spacing: FS.space.s3) {
                         ForEach(rows) { pod in
-                            serverRow(pod: pod, c: c)
+                            if canReorder && pod.status != .pending {
+                                serverRow(pod: pod, label: labels[pod.podId], c: c)
+                                    .onDrag {
+                                        draggingPodId = pod.podId
+                                        draftOrder = pods.map(\.podId)
+                                        return NSItemProvider(object: pod.podId as NSString)
+                                    }
+                                    .onDrop(of: [.text], delegate: ServerRowDropDelegate(
+                                        target: pod.podId,
+                                        draft: $draftOrder,
+                                        dragging: $draggingPodId,
+                                        committed: pods.map(\.podId),
+                                        commit: onReorder
+                                    ))
+                                    .accessibilityAction(named: "Move up") { move(pod.podId, by: -1) }
+                                    .accessibilityAction(named: "Move down") { move(pod.podId, by: 1) }
+                            } else {
+                                serverRow(pod: pod, label: labels[pod.podId], c: c)
+                            }
                         }
+                    }
+                    .onChange(of: pods.map(\.podId)) { _, _ in
+                        draftOrder = nil
+                        draggingPodId = nil
+                    }
+                    if canReorder {
+                        Text("Touch and hold a server, then drag it to change the order. The first server that's up leads.")
+                            .font(FS.font.caption())
+                            .foregroundColor(c.textMuted)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }
             // The empty state already carries a primary "Add your first
             // server" CTA; only show the secondary dashed "Add a server"
             // affordance once at least one server exists.
-            if !pods.isEmpty {
+            if !pods.isEmpty && !serverListLocked {
                 Button(action: onAddServer) {
                     HStack(spacing: 8) {
                         Image(systemName: "plus.circle.fill").foregroundColor(c.primary)
@@ -466,11 +578,10 @@ public struct HomeScreen: View {
     /// A single server list row (FSListRow) with the leading status-tinted
     /// icon, a status/cert subtitle, a trailing status pill + optional Leader
     /// badge, and the full long-press context menu preserved verbatim.
-    private func serverRow(pod: PodInfo, c: FSColors) -> some View {
+    private func serverRow(pod: PodInfo, label: OrderLabel?, c: FSColors) -> some View {
         let liveness = pod.livenessState(
             hasLiveUnlockRequest: pod.awaitingUnlock || awaitingApproval.contains(pod.fqdn.lowercased()) || awaitingEntitlement.contains(pod.fqdn.lowercased())
         )
-        let isLeader = pod.podId == leaderPodId
         return Button(action: { onOpenPod(pod) }) {
             FSListRow(
                 leading: .icon("server.rack", color: PodStatusStyle.iconColor(liveness: liveness, status: pod.status, c: c)),
@@ -481,7 +592,23 @@ public struct HomeScreen: View {
                     // own line — a long label like "Never came online" would be
                     // crushed in the right-floated trailing slot against the name.
                     HStack(spacing: FS.space.s2) {
-                        if isLeader && pod.cameOnline && pod.status != .pending { LeaderBadge() }
+                        switch label {
+                        case .leader(let standingInFor)?:
+                            LeaderBadge()
+                            if let standingInFor {
+                                Text("Standing in for \(standingInFor)")
+                                    .font(FS.font.caption())
+                                    .foregroundColor(c.textMuted)
+                                    .accessibilityIdentifier("home-standing-in")
+                            }
+                        case .inLine(let n)?:
+                            Text("No. \(n)")
+                                .font(FS.font.caption())
+                                .foregroundColor(c.textMuted)
+                                .accessibilityLabel("Number \(n) in line to lead")
+                        case nil:
+                            EmptyView()
+                        }
                         FSPill(
                             PodStatusStyle.label(liveness: liveness, status: pod.status),
                             kind: PodStatusStyle.pillKind(liveness: liveness, status: pod.status)
@@ -498,9 +625,9 @@ public struct HomeScreen: View {
         .contextMenu {
             // Leader = the daemon the screens point at; only a
             // server that came online can be one.
-            if pod.status != .pending && pod.cameOnline && !pod.isRevoked && pod.podId != leaderPodId {
+            if pod.status != .pending && !pod.isRevoked && pods.first(where: { $0.status != .pending && !$0.isRevoked })?.podId != pod.podId {
                 Button {
-                    onSetLeader(pod)
+                    onMakeLeader(pod)
                 } label: {
                     // System contextMenu only renders SF Symbols for icons, so
                     // the custom LeaderFlag can't be used here — use the closest
@@ -863,5 +990,62 @@ public struct LeadServicesBadge: View {
             .clipShape(Capsule())
             .accessibilityIdentifier("pod-leads-badge")
         }
+    }
+}
+
+extension HomeScreen {
+    /// What a server row says about its place in the owner's order.
+    enum OrderLabel: Equatable {
+        /// The first server in the order that is up; names the higher
+        /// servers it stands in for while they are down.
+        case leader(standingInFor: String?)
+        /// Its position in the order (1 = top), for every other server.
+        case inLine(Int)
+    }
+
+    /// Labels for the registered servers in `pods` (already in the owner's
+    /// order). Only a leader that is up wears the badge; a lone server gets
+    /// no number; pending and revoked servers get none.
+    static func orderLabels(pods: [PodInfo], leaderPodId: String?) -> [String: OrderLabel] {
+        let ranked = pods.filter { $0.status != .pending && !$0.isRevoked }
+        let leader = ranked.first(where: { $0.podId == leaderPodId && $0.status == .online })?.podId
+        var out: [String: OrderLabel] = [:]
+        for (i, pod) in ranked.enumerated() {
+            if pod.podId == leader {
+                let above = ranked.prefix(i).map(\.name)
+                out[pod.podId] = .leader(standingInFor: above.isEmpty ? nil : above.joined(separator: ", "))
+            } else if ranked.count > 1 {
+                out[pod.podId] = .inLine(i + 1)
+            }
+        }
+        return out
+    }
+}
+
+/// Live reordering while a server row is dragged over the others; dropping
+/// hands the new order to Home.
+private struct ServerRowDropDelegate: DropDelegate {
+    let target: String
+    @Binding var draft: [String]?
+    @Binding var dragging: String?
+    let committed: [String]
+    let commit: ([String]) -> Void
+
+    func dropEntered(info: DropInfo) {
+        guard let dragging, dragging != target else { return }
+        var ids = draft ?? committed
+        guard let from = ids.firstIndex(of: dragging), let to = ids.firstIndex(of: target) else { return }
+        withAnimation(.easeInOut(duration: 0.15)) {
+            ids.move(fromOffsets: IndexSet(integer: from), toOffset: to > from ? to + 1 : to)
+            draft = ids
+        }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? { DropProposal(operation: .move) }
+
+    func performDrop(info: DropInfo) -> Bool {
+        if let ids = draft, ids != committed { commit(ids) } else { draft = nil }
+        dragging = nil
+        return true
     }
 }

@@ -69,9 +69,9 @@ final class AppStateTests: XCTestCase {
             ],
             leaderPodId: "a"
         )
-        s.setLeader("b")
+        s.makeLeaderLocally("b")
         XCTAssertEqual(s.leaderPodId, "b")
-        s.setLeader("nonexistent")
+        s.makeLeaderLocally("nonexistent")
         XCTAssertEqual(s.leaderPodId, "b", "Unknown podIds should be ignored.")
     }
 
@@ -120,7 +120,7 @@ final class AppStateTests: XCTestCase {
             PodInfo(podId: "pending-id", name: "My Home", description: "desc",
                     fqdn: fqdn, status: .pending, pendingAuthCodeSerial: "SER")
         ])
-        s.setLeader("pending-id")
+        s.makeLeaderLocally("pending-id")
         let id = s.upsertRegisteredPod(fqdn: fqdn, name: "ignored")
         XCTAssertEqual(s.pods.count, 1, "no duplicate")
         XCTAssertEqual(id, "pending-id", "flipped in place, podId preserved")
@@ -228,5 +228,13 @@ final class AppStateTests: XCTestCase {
         s.markUnlocked()
         XCTAssertTrue(s.isUnlocked)
         XCTAssertFalse(s.awaitingManualUnlock, "a successful unlock re-enables auto-prompt for next time")
+    }
+}
+
+extension AppState {
+    /// "Make leader" without signing: what the saver does to the shared state.
+    func makeLeaderLocally(_ podId: String) {
+        beginServerOrderChange(podIds: orderWithLeader(podId), issuedAt: 1)
+        finishServerOrderChange()
     }
 }

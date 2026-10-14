@@ -47,7 +47,7 @@ final class AppStateCurrentPodTests: XCTestCase {
             ],
             leaderPodId: "a", currentPodId: "a"
         )
-        s.setLeader("b")
+        s.makeLeaderLocally("b")
         XCTAssertEqual(s.leaderPodId, "b")
         XCTAssertEqual(s.currentPodId, "b",
                        "The leader is the default target: making a server leader makes it current (docs/app-placement.md §1).")

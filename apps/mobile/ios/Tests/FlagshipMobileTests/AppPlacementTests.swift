@@ -102,7 +102,7 @@ final class AppPlacementLeaderTests: XCTestCase {
 
     func test_setLeader_alsoMakesItCurrent() {
         let s = AppState(isPaired: true, currentUser: "u", pods: pods(), leaderPodId: "a", currentPodId: "a")
-        s.setLeader("b")
+        s.makeLeaderLocally("b")
         XCTAssertEqual(s.leaderPodId, "b")
         XCTAssertEqual(s.currentPodId, "b")
         XCTAssertEqual(s.currentPod?.podId, "b")

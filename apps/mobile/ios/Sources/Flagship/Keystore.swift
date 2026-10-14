@@ -112,8 +112,21 @@ public struct Keystore {
         return _sessionUmk[profile]
     }
     private static func storeSessionUmk(_ umk: SymmetricKey, for profile: String) {
-        sessionUmkLock.lock(); defer { sessionUmkLock.unlock() }
+        sessionUmkLock.lock()
         _sessionUmk[profile] = umk
+        let observer = _sessionUmkObserver
+        sessionUmkLock.unlock()
+        observer?(umk.withUnsafeBytes { Data($0) })
+    }
+
+    private static var _sessionUmkObserver: (@Sendable (Data) -> Void)?
+
+    /// Called with the UMK each time this session unwraps it, for work that
+    /// needs it once (keeping the account device key at hand for read
+    /// tokens, docs/account-read-token.md). Never prompts by itself.
+    public static func setSessionUmkObserver(_ observer: (@Sendable (Data) -> Void)?) {
+        sessionUmkLock.lock(); defer { sessionUmkLock.unlock() }
+        _sessionUmkObserver = observer
     }
     /// A key replacement must never leave the OLD key behind in the session
     /// cache: every later derive would hand back the pre-replacement IRK, so the
@@ -672,6 +685,16 @@ public struct Keystore {
     public static func adminRootKey(
         reason: String = "Authorize an admin action"
     ) async throws -> Curve25519.Signing.PrivateKey {
+        try unwrapAdminRoot(wrapper: try await WrappingKeypair.createOrLoad(reason: reason))
+    }
+
+    /// The admin master root, unwrapped with a context the owner has just
+    /// authenticated (no second prompt).
+    public static func adminRootKey(authenticatedBy context: LAContext) throws -> Curve25519.Signing.PrivateKey {
+        try unwrapAdminRoot(wrapper: try WrappingKeypair.load(context: context))
+    }
+
+    private static func unwrapAdminRoot(wrapper: WrappingKeypair) throws -> Curve25519.Signing.PrivateKey {
         guard
             let wrapped = keychainRead(account: account(KCKey.adminRootWrapped)),
             let ephemeralRaw = keychainRead(account: account(KCKey.adminRootEphemeralPub))
@@ -684,7 +707,6 @@ public struct Keystore {
         } catch {
             throw KeystoreError.unwrapFailed("admin-root: bad ephemeral pubkey: \(error)")
         }
-        let wrapper = try await WrappingKeypair.createOrLoad(reason: reason)
         let ecdhBytes = try wrapper.ecdh(ephemeralPublic: ephemeralPub)
         let unwrapKey = hkdf(from: ecdhBytes, info: adminRootWrapInfo)
         do {

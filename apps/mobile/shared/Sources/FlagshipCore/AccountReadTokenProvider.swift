@@ -113,6 +113,16 @@ public actor AccountReadTokenProvider: AccountReadTokenSource {
         setPaused(false)
     }
 
+    /// The owner just unlocked the account key on purpose: mint now, without
+    /// waiting out a refusal's backoff. Returns whether a token is at hand.
+    @discardableResult
+    public func retryNow(for username: String) async -> Bool {
+        let u = username.lowercased()
+        if await isKeyless(u) { return true }
+        lastAttempt[u] = nil
+        return await mint(u) != nil
+    }
+
     public func clear(username: String) {
         store.remove(username: username.lowercased())
         lastAttempt[username.lowercased()] = nil

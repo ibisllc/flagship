@@ -1,4 +1,5 @@
 import XCTest
+import LocalAuthentication
 import CryptoKit
 @testable import Flagship
 @testable import FlagshipCore
@@ -168,53 +169,22 @@ final class AdminRootTests: XCTestCase {
                        "with no admin root the gate signs sensitive orders with the legacy owner IRK")
     }
 
-    // MARK: - A real sensitive order (set-leader vote) verifies under the gate
+    // MARK: - A real sensitive order (the server order) verifies under the gate
 
-    /// Mirrors the ViewModel gate: the SENSITIVE set-leader vote is signed by the
-    /// admin root when this device holds one (verifies under the admin root, NOT
-    /// the IRK), and by the IRK when it doesn't — while the byte content of the
-    /// vote is identical either way (only the signing key changes).
-    func test_setLeaderVote_signsUnderAdminRoot_whenPresent_elseIRK() async throws {
-        let user = "alice"
-        let stk = String(repeating: "ab", count: 32)   // 32-byte hex STK
-        let domain = "home.alice.flagship.services"
-
-        // (a) Present: admin root signs the vote.
+    /// The server order is a sensitive order (docs/server-order.md): the admin
+    /// root signs it when present, unwrapped with the one context the owner
+    /// just authenticated, and the IRK signature must not stand in for it.
+    func test_serverOrder_signsUnderAdminRoot_unwrappedWithTheAuthenticatedContext() async throws {
         _ = try await Keystore.openAccountRoots(reason: "test")
         let irk = try await Keystore.deriveIRK(reason: "test")
         let adminKey = try await Keystore.adminRootKey(reason: "test")
-        let orderKey = Keystore.hasAdminRoot ? adminKey : irk
+        let viaContext = try Keystore.adminRootKey(authenticatedBy: LAContext())
+        XCTAssertEqual(viaContext.publicKey.rawRepresentation, adminKey.publicKey.rawRepresentation)
 
-        let body = try SetLeaderDeposit.buildDeposit(
-            username: user, serverDomain: domain, preferredStkPubHex: stk,
-            irk: irk, orderKey: orderKey)
-        let vote = CloudGossip.SetLeaderVote(
-            user: body.vote.user, preferredStkPubHex: body.vote.preferredStkPubHex,
-            issuedAt: body.vote.issuedAt, nonce: body.vote.nonce)
-        let sig = HexUtil.decode(body.signature)!
-        XCTAssertTrue(vote.verify(sig, with: adminKey.publicKey),
-                      "with an admin root, the vote MUST verify under the admin root")
-        XCTAssertFalse(vote.verify(sig, with: irk.publicKey),
-                       "…and MUST NOT verify under the membership IRK (the authority split)")
-        // The mailbox-auth envelope STAYS the IRK (deposit credential).
-        XCTAssertEqual(body.auth.phoneIrkPub.lowercased(),
-                       HexUtil.encode(irk.publicKey.rawRepresentation).lowercased())
-
-        // (b) Absent: no admin root ⇒ the vote is IRK-signed.
-        Keystore.wipe()
-        try await Keystore.generateUMK(reason: "test")
-        let irk2 = try await Keystore.deriveIRK(reason: "test")
-        let orderKey2: Curve25519.Signing.PrivateKey? = Keystore.hasAdminRoot
-            ? try await Keystore.adminRootKey(reason: "test") : nil
-        let body2 = try SetLeaderDeposit.buildDeposit(
-            username: user, serverDomain: domain, preferredStkPubHex: stk,
-            irk: irk2, orderKey: orderKey2)
-        let vote2 = CloudGossip.SetLeaderVote(
-            user: body2.vote.user, preferredStkPubHex: body2.vote.preferredStkPubHex,
-            issuedAt: body2.vote.issuedAt, nonce: body2.vote.nonce)
-        let sig2 = HexUtil.decode(body2.signature)!
-        XCTAssertTrue(vote2.verify(sig2, with: irk2.publicKey),
-                      "with no admin root, the vote is signed by the legacy owner IRK")
+        let order = ServerOrder.make(user: "alice", stks: [String(repeating: "ab", count: 32)], now: 1_760_000_000_000)
+        let sig = try order.sign(with: viaContext)
+        XCTAssertTrue(order.verify(signatureHex: sig, publicKey: adminKey.publicKey))
+        XCTAssertFalse(order.verify(signatureHex: sig, publicKey: irk.publicKey))
     }
 
     // MARK: - AuthCode admin-root pinning (D-1) canonical bytes
