@@ -9,7 +9,7 @@ import type {
   StreamingLLMProvider,
 } from "../types.js";
 import { ProviderError } from "../types.js";
-import { openaiStreaming, toOpenAiMessages } from "./openai.js";
+import { openAiChatBody, streamOpenAiCompatible } from "./openai.js";
 import { sendAdapting } from "../requestShape.js";
 
 const DEFAULT_BASE = "https://openrouter.ai/api";
@@ -19,22 +19,7 @@ export const openrouter: LLMProvider = {
   async chat(req: ChatRequest, cfg: ProviderConfig, fetchImpl?: FetchLike): Promise<ChatResponse> {
     const f = fetchImpl ?? (globalThis.fetch as unknown as FetchLike);
     const base = cfg.baseUrl ?? DEFAULT_BASE;
-    const body: Record<string, unknown> = {
-      model: req.model,
-      messages: toOpenAiMessages(req.messages),
-      max_tokens: req.maxTokens,
-      temperature: req.temperature,
-    };
-    if (req.tools && req.tools.length > 0) {
-      body.tools = req.tools.map((t) => ({
-        type: "function",
-        function: {
-          name: t.name,
-          description: t.description,
-          parameters: t.inputSchema,
-        },
-      }));
-    }
+    const body = openAiChatBody(req, "max_tokens", { effortStyle: "openrouter" });
     const { res, errorText } = await sendAdapting(`${base}|${req.model}`, body, (b) =>
       f(`${base}/v1/chat/completions`, {
         method: "POST",
@@ -101,11 +86,12 @@ export const openrouterStreaming: StreamingLLMProvider = {
     onEvent: (e: ChatStreamEvent) => void,
     fetchImpl?: StreamingFetchLike,
   ): Promise<void> {
-    return openaiStreaming.chatStream(
+    return streamOpenAiCompatible(
       req,
       { ...cfg, baseUrl: cfg.baseUrl ?? DEFAULT_BASE },
       onEvent,
       fetchImpl,
+      "openrouter",
     );
   },
 };

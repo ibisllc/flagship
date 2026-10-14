@@ -56,6 +56,16 @@ function toAnthropicContent(m: ChatRequest["messages"][number]): unknown {
   return blocks;
 }
 
+/**
+ * Effort on Anthropic: adaptive thinking with `output_config.effort` (the
+ * levels the model's capability entry lists). Nothing when no effort is set,
+ * so the model keeps its own default.
+ */
+function anthropicEffort(req: ChatRequest): Record<string, unknown> {
+  if (!req.reasoningEffort) return {};
+  return { thinking: { type: "adaptive" }, output_config: { effort: req.reasoningEffort } };
+}
+
 function splitSystem(messages: ChatRequest["messages"]) {
   const system = messages.filter((m) => m.role === "system").map((m) => m.content).join("\n\n");
   const conv = messages
@@ -92,6 +102,7 @@ export const anthropic: LLMProvider = {
       temperature: req.temperature,
       system: system.length > 0 ? system : undefined,
       messages: conv,
+      ...anthropicEffort(req),
     };
     if (req.tools && req.tools.length > 0) {
       body.tools = req.tools.map((t) => ({
@@ -176,6 +187,7 @@ export const anthropicStreaming: StreamingLLMProvider = {
       system: system.length > 0 ? system : undefined,
       messages: conv,
       stream: true,
+      ...anthropicEffort(req),
     };
     if (req.tools && req.tools.length > 0) {
       body.tools = req.tools.map((t) => ({

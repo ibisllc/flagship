@@ -9,3 +9,4 @@ export { openrouter, openrouterStreaming } from "./providers/openrouter.js";
 export { ollama } from "./providers/ollama.js";
 export { flagship, flagshipStreaming } from "./providers/flagship.js";
 export * from "./requestShape.js";
+export * from "./modelList.js";

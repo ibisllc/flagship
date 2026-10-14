@@ -70,6 +70,14 @@ export interface ChatRequest {
    * values. The orchestrator enforces this at construction time.
    */
   tools?: ToolSpec[];
+  /**
+   * How hard a reasoning model should think, in the provider's own terms
+   * ("low", "high", "xhigh", …), as the model's capability entry lists them.
+   * Each adapter sends it in its native parameter (OpenAI `reasoning_effort`,
+   * OpenRouter `reasoning.effort`, Anthropic `output_config.effort`, Gemini
+   * `thinkingConfig.thinkingLevel`). Absent ⇒ the provider's default.
+   */
+  reasoningEffort?: string;
 }
 
 /**
@@ -103,6 +111,8 @@ export interface ChatResponse {
    * user messages). Empty / omitted ⇒ pure-text response.
    */
   toolUses?: ToolUseBlock[];
+  /** Flagship Inference only: the credits this call cost (the shim reports it). */
+  credits?: number;
 }
 
 /**
@@ -182,6 +192,8 @@ export type ChatStreamEvent =
       kind: "end";
       stopReason?: string;
       usage?: { inputTokens?: number; outputTokens?: number };
+      /** Flagship Inference only: the credits this call cost (the shim reports it). */
+      credits?: number;
     }
   | { kind: "error"; message: string; status?: number };
 

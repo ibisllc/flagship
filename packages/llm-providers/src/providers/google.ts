@@ -45,12 +45,23 @@ function toGeminiContents(messages: ChatRequest["messages"]) {
           })),
         };
       }
-      return {
-        role: m.role === "assistant" ? "model" : "user",
-        parts: [{ text: m.content }],
-      };
+      const parts: unknown[] = [{ text: m.content }];
+      for (const a of m.attachments ?? []) {
+        if (a.kind === "image") parts.push({ inline_data: { mime_type: a.mediaType, data: a.dataBase64 } });
+        else parts.push({ text: `${a.name ? `${a.name}:\n` : ""}${a.text}` });
+      }
+      return { role: m.role === "assistant" ? "model" : "user", parts };
     });
   return { contents, systemInstruction };
+}
+
+/** Effort on Gemini: `thinkingConfig.thinkingLevel` in Gemini's own levels. */
+function geminiGenerationConfig(req: ChatRequest): Record<string, unknown> {
+  return {
+    maxOutputTokens: req.maxTokens,
+    temperature: req.temperature,
+    ...(req.reasoningEffort ? { thinkingConfig: { thinkingLevel: req.reasoningEffort } } : {}),
+  };
 }
 
 function toolsToGemini(tools?: ChatRequest["tools"]) {
@@ -82,10 +93,7 @@ export const google: LLMProvider = {
     const body: Record<string, unknown> = {
       contents,
       systemInstruction,
-      generationConfig: {
-        maxOutputTokens: req.maxTokens,
-        temperature: req.temperature,
-      },
+      generationConfig: geminiGenerationConfig(req),
     };
     const tools = toolsToGemini(req.tools);
     if (tools) body.tools = tools;
@@ -157,10 +165,7 @@ export const googleStreaming: StreamingLLMProvider = {
     const body: Record<string, unknown> = {
       contents,
       systemInstruction,
-      generationConfig: {
-        maxOutputTokens: req.maxTokens,
-        temperature: req.temperature,
-      },
+      generationConfig: geminiGenerationConfig(req),
     };
     const tools = toolsToGemini(req.tools);
     if (tools) body.tools = tools;
