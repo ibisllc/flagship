@@ -1,4 +1,4 @@
--- @ibisllc/billing-metering — counter table for a SQL-backed MeterStore.
+-- @ibisllc/billing-metering: counter table for a SQL-backed MeterStore.
 --
 -- Portable across SQLite (3.35+, incl. Cloudflare D1) and PostgreSQL. One
 -- row per (account, resource, period); `amount` only ever grows within a

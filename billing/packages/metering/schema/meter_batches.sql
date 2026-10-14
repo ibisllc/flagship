@@ -1,4 +1,4 @@
--- @ibisllc/billing-metering — batch ids for a SQL store's idempotent
+-- @ibisllc/billing-metering: batch ids for a SQL store's idempotent
 -- addBatch (docs/spec/report-and-lease-v1.md).
 --
 -- Portable across SQLite (3.35+, incl. Cloudflare D1) and PostgreSQL. One
@@ -21,10 +21,13 @@ CREATE INDEX IF NOT EXISTS meter_batches_keep_until ON meter_batches (keep_until
 --      DELETE FROM meter_batches WHERE batch_id IN
 --        (SELECT batch_id FROM meter_batches WHERE keep_until < :now LIMIT 32);
 --
---   2. claim the id; a duplicate leaves the earlier row (and its claim):
+--   2. claim the id, or re-claim it if its record has expired; a live
+--      duplicate leaves the earlier row (and its claim) alone:
 --      INSERT INTO meter_batches (batch_id, claim, keep_until)
 --      VALUES (:batch_id, :claim, :keep_until)
---      ON CONFLICT (batch_id) DO NOTHING
+--      ON CONFLICT (batch_id) DO UPDATE SET
+--        claim = excluded.claim, keep_until = excluded.keep_until
+--        WHERE meter_batches.keep_until < :now
 --      RETURNING batch_id;
 --
 --   3. per entry, add only if THIS call holds the claim:

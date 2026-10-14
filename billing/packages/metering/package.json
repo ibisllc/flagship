@@ -2,8 +2,17 @@
   "name": "@ibisllc/billing-metering",
   "version": "0.1.0",
   "type": "module",
-  "description": "Per-account usage metering: resources, periods, per-plan allowances and over-allowance policies, with a pluggable counter store.",
+  "description": "Usage metering for any service: per-account counters, plans with allowances and allow/throttle/stop policies, idempotent edge reports and budget leases, with pluggable stores.",
+  "keywords": [
+    "metering",
+    "usage",
+    "quota",
+    "billing",
+    "rate-limit",
+    "leases"
+  ],
   "license": "BUSL-1.1",
+  "author": "Ibis LLC",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ibisllc/billing.git",
@@ -11,24 +20,38 @@
   },
   "homepage": "https://github.com/ibisllc/billing/tree/main/packages/metering#readme",
   "bugs": "https://github.com/ibisllc/billing/issues",
+  "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
       "default": "./dist/index.js"
-    }
-  },
-  "publishConfig": {
-    "access": "public"
+    },
+    "./conformance": {
+      "types": "./dist/conformance.d.ts",
+      "default": "./dist/conformance.js"
+    },
+    "./http": {
+      "types": "./dist/http.d.ts",
+      "default": "./dist/http.js"
+    },
+    "./schema/*.sql": "./schema/*.sql",
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",
+    "src",
     "schema",
     "README.md",
     "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "tsc -b",
     "test": "vitest run --dir tests"
