@@ -1,20 +1,21 @@
 // Service access gating — friend deep-link redeem (docs/service-access-gating.md).
 //
-// The owner shares `https://<server>.<user>/invite#<secret>&a=<authorAID>&i=<inviteId>`.
+// The owner shares `https://<server>.<user>/invite#<secret>&a=<authorAID>&i=<inviteId>&s=<serviceRef>`.
 // The friend opens it; the webapp is served from the BOX origin, so this view
 // redeems against the SAME origin (location.origin = the box's pinned pipe):
 //
 //   1. parse #k=<secret>&a=<authorAID>&i=<inviteId> from the URL fragment,
 //   2. ensure the friend is unlocked (their OWN UMK),
-//   3. derive their PER-AUTHOR CONTACT AID (deriveContactAccountId(UMK,authorAID))
-//      so the binding is unlinkable across authors — NOT the global AID,
-//   4. CONTACT-AID-sign the redeem + POST it to <box>/api/service-invites/redeem,
+//   3. derive their id for THAT app (deriveAppAccountId(UMK, serviceRef), the
+//      link's `s=`): nothing they present is shared between apps, and it is the
+//      same whoever invited them — NEVER the global AID,
+//   4. sign the redeem with it + POST it to <box>/api/service-invites/redeem,
 //   5a. AUTO-approve → bound; the friend can open the restricted service.
-//   5b. MANUAL-approve {pending} → the friend EMITS a contact-AID-signed
-//       acceptance (link/code/QR) to send back to the author, who finalizes it.
+//   5b. MANUAL-approve {pending} → the friend EMITS an acceptance signed with
+//       the same id (link/code/QR) to send back to the author, who finalizes it.
 //
-// Back-compat: a v1 bare `#<secret>` link (no author AID) falls back to the
-// GLOBAL AID and has no manual loop (the author can't have asked for one).
+// A link without `s=` (made before per-app ids) can't be redeemed: the friend
+// is asked for a new one.
 //
 // Boot hook (lib/inviteRedeem.js → boot() / app.js): when this load IS a
 // /invite#… landing, boot routes here BEFORE the normal unlock/first-run
@@ -24,12 +25,7 @@
 import { $, registerView, show, setSubtitle } from "../lib/router.js";
 import { getSession } from "../lib/state.js";
 import { hasWrappedUmk } from "../keystore.js";
-import {
-  deriveAccountIdFromSeed,
-  deriveContactAccountIdFromSeed,
-  signWithAccountId,
-  signWithContactAccountId,
-} from "../keystore.js";
+import { deriveAppAccountIdFromSeed, signWithAppAccountId } from "../keystore.js";
 import { redeemInvite, signAcceptServiceInvite, buildAcceptReply } from "../lib/serviceInvite.js";
 import { rememberInviteOwner } from "../lib/knockIdentity.js";
 import { toast } from "../lib/toast.js";
@@ -45,12 +41,9 @@ let boxOrigin = null;
 // v2 context from the link fragment: the author's AID (hex) + the inviteId (hex).
 let pendingAuthorAidHex = null;
 let pendingInviteId = null;
+// The app the invite is for (the link's `s=`): selects the friend's id.
+let pendingServiceRef = null;
 
-function hexToBytes(hex) {
-  const out = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  return out;
-}
 function bytesToHex(b) {
   let s = "";
   for (const x of b) s += x.toString(16).padStart(2, "0");
@@ -60,7 +53,7 @@ function bytesToHex(b) {
 /**
  * Enter the redeem flow with a parsed secret. `boxBaseUrl` is the origin the
  * /invite page was served from (defaults to the live location.origin). `ctx`
- * carries the v2 `{ authorAID, inviteId }` from the link fragment (when present).
+ * carries `{ authorAID, inviteId, serviceRef }` from the link fragment (when present).
  */
 export async function enterInviteRedeem(secretHex, boxBaseUrl, ctx = {}) {
   pendingSecretHex = secretHex;
@@ -69,6 +62,8 @@ export async function enterInviteRedeem(secretHex, boxBaseUrl, ctx = {}) {
     typeof ctx.authorAID === "string" && /^[0-9a-f]{64}$/i.test(ctx.authorAID) ? ctx.authorAID.toLowerCase() : null;
   pendingInviteId =
     typeof ctx.inviteId === "string" && /^[0-9a-f]{64}$/i.test(ctx.inviteId) ? ctx.inviteId.toLowerCase() : null;
+  pendingServiceRef =
+    typeof ctx.serviceRef === "string" && /^[a-z0-9](?:[a-z0-9-]{0,126}[a-z0-9])?$/.test(ctx.serviceRef) ? ctx.serviceRef : null;
   setSubtitle("invite");
   show("view-invite-redeem");
   await renderInviteRedeem();
@@ -138,23 +133,22 @@ async function renderInviteRedeem() {
   $("ir-accept")?.addEventListener("click", () => onAccept().catch((e) => { console.error(e); toast(humanError(e), "err"); }));
 }
 
+/** Shown for a link made before per-app ids (no `s=`). */
+export const OLD_INVITE_LINK = "This invite link is from an older version of Flagship. Ask the owner for a new link.";
+
 /**
- * Derive the identity the friend redeems with: the PER-AUTHOR contact AID when
- * the link carried the author's AID (v2), else the GLOBAL AID (v1 back-compat).
+ * The identity the friend redeems with: their id for the invite's app.
  * Returns `{ visitorAID, sign }` where `sign(umk, bytes)` is the matching signer.
  */
 async function redemptionIdentity(umk) {
-  if (pendingAuthorAidHex) {
-    const authorAidPub = hexToBytes(pendingAuthorAidHex);
-    const contact = await deriveContactAccountIdFromSeed(umk, authorAidPub);
-    return {
-      visitorAID: contact.publicKey,
-      // A contact-bound signer in the `(umk, bytes)` shape redeemInvite expects.
-      sign: (u, bytes) => signWithContactAccountId(u, authorAidPub, bytes),
-    };
+  if (!pendingServiceRef) {
+    const e = new Error(OLD_INVITE_LINK);
+    e.code = "old-link";
+    throw e;
   }
-  const aid = await deriveAccountIdFromSeed(umk);
-  return { visitorAID: aid.publicKey, sign: signWithAccountId };
+  const ref = pendingServiceRef;
+  const app = await deriveAppAccountIdFromSeed(umk, ref);
+  return { visitorAID: app.publicKey, sign: (u, bytes) => signWithAppAccountId(u, ref, bytes) };
 }
 
 async function onAccept() {
@@ -183,7 +177,7 @@ async function onAccept() {
       umk: session.umk,
       signWithAccountId: ident.sign,
     });
-    // Knocks on this box must sign with the same contact AID the invite bound.
+    // Remember the box: later knocks on it sign with our id for the app.
     if (pendingAuthorAidHex) {
       rememberInviteOwner({ serverId: boxHost(), ownerAidHex: pendingAuthorAidHex, serviceRef: r.serviceRef });
     }
@@ -254,17 +248,9 @@ async function renderPendingAcceptance(serviceRef, contactAID, umk) {
     finishRedeem();
     return;
   }
-  const authorAidPub = hexToBytes(pendingAuthorAidHex);
   const acceptedAt = Date.now();
-  const accept = {
-    inviteId: pendingInviteId,
-    serviceRef,
-    contactAID,
-    authorAID: authorAidPub,
-    acceptedAt,
-    umk,
-  };
-  const sig = await signAcceptServiceInvite(accept, signWithContactAccountId);
+  const accept = { inviteId: pendingInviteId, serviceRef, contactAID, acceptedAt, umk };
+  const sig = await signAcceptServiceInvite(accept, signWithAppAccountId);
   // Canonical deep-link reply carrying ONLY {accept, acceptSig} (the author's box
   // fetches the owner's create from .com). The box host is this /invite's origin.
   const replyHost = boxHost() || location.host;

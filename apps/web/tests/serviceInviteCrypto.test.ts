@@ -37,7 +37,7 @@ import {
   verifyServiceVisitProof,
   signKnockAuthorization,
   verifyKnockAuthorization,
-  deriveContactAccountId,
+  deriveAppAccountId,
   signAcceptServiceInvite,
   verifyAcceptServiceInvite,
   randomServiceInviteId,
@@ -148,23 +148,23 @@ describe("webapp keystore — AID + household interop with @flagship/protocol", 
     expect(hh.length).toBe(32);
   });
 
-  it("deriveContactAccountIdFromSeed (v2) matches @flagship/protocol + the pinned contactAid vector", async () => {
+  it("deriveAppAccountIdFromSeed matches @flagship/protocol + test-vectors/app-account-id", async () => {
     const k = await loadKeystore();
-    const authorAidPub = hexToBytes(VECTORS.contactAid.authorAidPubHex);
-    // The friend's PER-AUTHOR pseudonym over the AUTHOR's AID.
-    const contact = await k.deriveContactAccountIdFromSeed(friendUmk.seed, authorAidPub);
-    expect(bytesToHex(contact.publicKey)).toBe(
-      bytesToHex(deriveContactAccountId(friendUmk, authorAidPub).publicKey),
-    );
-    expect(bytesToHex(contact.publicKey)).toBe(VECTORS.contactAid.contactAidPubHex);
-    // It is DISTINCT from the friend's GLOBAL AID (the whole privacy point).
+    const V = JSON.parse(
+      readFileSync(resolve(__dirname, "../../../packages/protocol/test-vectors/app-account-id/vectors.json"), "utf8"),
+    ) as { cases: Array<{ umkSeedHex: string; appRef: string; pubHex: string }>; invalidAppRefs: string[] };
+    for (const c of V.cases) {
+      const app = await k.deriveAppAccountIdFromSeed(hexToBytes(c.umkSeedHex), c.appRef);
+      expect(bytesToHex(app.publicKey)).toBe(c.pubHex);
+      expect(bytesToHex(deriveAppAccountId({ seed: hexToBytes(c.umkSeedHex) }, c.appRef).publicKey)).toBe(c.pubHex);
+    }
+    // Never the global AID.
+    const app = await k.deriveAppAccountIdFromSeed(friendUmk.seed, "alice-notes");
     const globalAid = await k.deriveAccountIdFromSeed(friendUmk.seed);
-    expect(bytesToHex(contact.publicKey)).not.toBe(bytesToHex(globalAid.publicKey));
-    // UNLINKABLE: a different author → a different contact id for the SAME friend.
-    const otherAuthor = await k.deriveAccountIdFromSeed(authorUmk.seed); // same vector author here, so use friend-as-author for a 2nd
-    const otherContact = await k.deriveContactAccountIdFromSeed(friendUmk.seed, globalAid.publicKey);
-    expect(bytesToHex(otherContact.publicKey)).not.toBe(bytesToHex(contact.publicKey));
-    void otherAuthor;
+    expect(bytesToHex(app.publicKey)).not.toBe(bytesToHex(globalAid.publicKey));
+    for (const bad of V.invalidAppRefs) {
+      await expect(k.deriveAppAccountIdFromSeed(friendUmk.seed, bad)).rejects.toThrow();
+    }
   });
 });
 
@@ -386,32 +386,29 @@ describe("webapp serviceInvite — canonical bytes + cross-platform signatures",
     expect(bytesToHex(ed.sign(v1Bytes, authorIrk.privateKey))).toBe(VECTORS.create.sigHex);
   });
 
-  it("accept: the friend's CONTACT-AID acceptance reproduces the pinned accept sig", async () => {
+  it("accept: the friend's per-app acceptance reproduces the pinned acceptApp sig", async () => {
     const si = await loadServiceInvite();
     const k = await loadKeystore();
-    const authorAidPub = hexToBytes(VECTORS.contactAid.authorAidPubHex);
-    const contact = await k.deriveContactAccountIdFromSeed(friendUmk.seed, authorAidPub);
-    expect(bytesToHex(contact.publicKey)).toBe(VECTORS.contactAid.contactAidPubHex);
+    const app = await k.deriveAppAccountIdFromSeed(friendUmk.seed, VECTORS.appAid.serviceRef);
+    expect(bytesToHex(app.publicKey)).toBe(VECTORS.appAid.appAidPubHex);
+    // The protocol derives the same id (and none from who invited).
+    const protoApp = deriveAppAccountId(friendUmk, VECTORS.appAid.serviceRef);
+    expect(bytesToHex(protoApp.publicKey)).toBe(VECTORS.appAid.appAidPubHex);
     const accept: AcceptServiceInvite = {
-      inviteId: VECTORS.accept.inviteId,
-      serviceRef: VECTORS.accept.serviceRef,
-      contactAID: contact.publicKey,
-      acceptedAt: VECTORS.accept.acceptedAt,
+      inviteId: VECTORS.acceptApp.inviteId,
+      serviceRef: VECTORS.acceptApp.serviceRef,
+      contactAID: app.publicKey,
+      acceptedAt: VECTORS.acceptApp.acceptedAt,
     };
     const bytes = si.canonicalAcceptBytes(accept);
-    // 1) protocol signs, webapp bytes verify under the contact AID pub
-    const protoContact = deriveContactAccountId(friendUmk, authorAidPub);
-    expect(ed.verify(signAcceptServiceInvite(accept, protoContact), bytes, contact.publicKey)).toBe(true);
-    // 2) webapp bytes signed with the contact AID reproduce the PINNED sig
-    expect(bytesToHex(ed.sign(bytes, protoContact.privateKey))).toBe(VECTORS.accept.sigHex);
-    // 3) protocol's verifier accepts the webapp-produced signature
-    expect(verifyAcceptServiceInvite(accept, ed.sign(bytes, protoContact.privateKey), contact.publicKey)).toBe(true);
-    // 4) the webapp's signAcceptServiceInvite helper (injected contact signer) emits the SAME pinned sig
-    const sig = await si.signAcceptServiceInvite(
-      { ...accept, authorAID: authorAidPub, umk: friendUmk.seed },
-      k.signWithContactAccountId,
-    );
-    expect(bytesToHex(sig)).toBe(VECTORS.accept.sigHex);
+    expect(bytesToHex(ed.sign(bytes, protoApp.privateKey))).toBe(VECTORS.acceptApp.sigHex);
+    expect(verifyAcceptServiceInvite(accept, hexToBytes(VECTORS.acceptApp.sigHex), app.publicKey)).toBe(true);
+    // The webapp helper signs with the id for the acceptance's app.
+    const sig = await si.signAcceptServiceInvite({ ...accept, umk: friendUmk.seed }, k.signWithAppAccountId);
+    expect(bytesToHex(sig)).toBe(VECTORS.acceptApp.sigHex);
+    // A different app gives a different id.
+    const other = await k.deriveAppAccountIdFromSeed(friendUmk.seed, "alice-chess");
+    expect(bytesToHex(other.publicKey)).not.toBe(VECTORS.appAid.appAidPubHex);
   });
 
   it("randomServiceInviteId is a fresh 64-hex id each call", async () => {
@@ -479,7 +476,9 @@ describe("webapp serviceInvite — wire helpers", () => {
     expect(r.secretHex).toBe(VECTORS.secretHex);
     // The v2 share-link carries the author AID + inviteId in the canonical
     // (bare-secret) fragment.
-    expect(r.link).toBe(`${POD}/invite#${VECTORS.secretHex}&a=${VECTORS.derived.authorAidPubHex}&i=${VECTORS.inviteId}`);
+    expect(r.link).toBe(
+      `${POD}/invite#${VECTORS.secretHex}&a=${VECTORS.derived.authorAidPubHex}&i=${VECTORS.inviteId}&s=${VECTORS.serviceRef}`,
+    );
     // The author RETAINS the signed create (to finalize a manual acceptance later).
     expect(r.create.inviteId).toBe(VECTORS.inviteId);
     expect(r.createSig).toMatch(/^[0-9a-f]{128}$/);
@@ -850,17 +849,16 @@ describe("webapp serviceInvite — wire helpers", () => {
     expect(rows[0]!.approvalMode).toBe("auto");
   });
 
-  it("MANUAL accept loop: friend emits the contact-AID acceptance reply; author parses + submits it", async () => {
+  it("MANUAL accept loop: friend emits the per-app acceptance reply; author parses + submits it", async () => {
     const si = await loadServiceInvite();
     const k = await loadKeystore();
-    const authorAidPub = hexToBytes(VECTORS.contactAid.authorAidPubHex);
-    const contact = await k.deriveContactAccountIdFromSeed(friendUmk.seed, authorAidPub);
-    // FRIEND emits the acceptance reply (contact-AID signed) — symmetric link/code.
+    const contact = await k.deriveAppAccountIdFromSeed(friendUmk.seed, VECTORS.acceptApp.serviceRef);
+    // FRIEND emits the acceptance reply (signed with their id for the app).
     const acceptSig = await si.signAcceptServiceInvite(
-      { inviteId: VECTORS.accept.inviteId, serviceRef: VECTORS.accept.serviceRef, contactAID: contact.publicKey, authorAID: authorAidPub, acceptedAt: VECTORS.accept.acceptedAt, umk: friendUmk.seed },
-      k.signWithContactAccountId,
+      { inviteId: VECTORS.acceptApp.inviteId, serviceRef: VECTORS.acceptApp.serviceRef, contactAID: contact.publicKey, acceptedAt: VECTORS.acceptApp.acceptedAt, umk: friendUmk.seed },
+      k.signWithAppAccountId,
     );
-    expect(bytesToHex(acceptSig)).toBe(VECTORS.accept.sigHex);
+    expect(bytesToHex(acceptSig)).toBe(VECTORS.acceptApp.sigHex);
     // Canonical reply = the `flagship://invite-accept?…` deep-link carrying ONLY
     // {accept, acceptSig} (no create — the box fetches it from .com).
     const reply = si.buildAcceptReply(
@@ -873,8 +871,8 @@ describe("webapp serviceInvite — wire helpers", () => {
     const parsed = si.parseAcceptReply(`  \n${reply}\t `);
     expect(parsed.serverDomain).toBe("home.alice.flagship.services");
     expect(parsed.accept.inviteId).toBe(VECTORS.accept.inviteId);
-    expect(parsed.accept.contactAID).toBe(VECTORS.contactAid.contactAidPubHex);
-    expect(parsed.acceptSig).toBe(VECTORS.accept.sigHex);
+    expect(parsed.accept.contactAID).toBe(VECTORS.appAid.appAidPubHex);
+    expect(parsed.acceptSig).toBe(VECTORS.acceptApp.sigHex);
     // The acceptance verifies under the contact AID (what the box re-checks).
     const accept: AcceptServiceInvite = {
       inviteId: parsed.accept.inviteId,
@@ -888,30 +886,30 @@ describe("webapp serviceInvite — wire helpers", () => {
     let captured: { url: string; body: any } | null = null;
     const f = async (url: string, init: RequestInit) => {
       captured = { url, body: JSON.parse(String(init.body)) };
-      return { ok: true, status: 200, json: async () => ({ bound: true, serviceRef: VECTORS.serviceRef, boundAID: VECTORS.contactAid.contactAidPubHex }) } as Response;
+      return { ok: true, status: 200, json: async () => ({ bound: true, serviceRef: VECTORS.serviceRef, boundAID: VECTORS.appAid.appAidPubHex }) } as Response;
     };
     const r = await si.submitAccept(
       { baseUrl: POD, accept: parsed.accept, acceptSig: parsed.acceptSig },
       { fetch: f as unknown as typeof fetch },
     );
     expect(captured!.url).toBe(`${POD}/api/service-access/accept`);
-    expect(captured!.body.accept.contactAID).toBe(VECTORS.contactAid.contactAidPubHex);
-    expect(captured!.body.acceptSig).toBe(VECTORS.accept.sigHex);
+    expect(captured!.body.accept.contactAID).toBe(VECTORS.appAid.appAidPubHex);
+    expect(captured!.body.acceptSig).toBe(VECTORS.acceptApp.sigHex);
     // The body carries NO create / createSig (the box fetches it).
     expect(captured!.body.create).toBeUndefined();
     expect(captured!.body.createSig).toBeUndefined();
     expect(r.bound).toBe(true);
-    expect(r.boundAID).toBe(VECTORS.contactAid.contactAidPubHex);
+    expect(r.boundAID).toBe(VECTORS.appAid.appAidPubHex);
     // A bad / non-acceptance reply parses to null.
     expect(si.parseAcceptReply("flagship://invite-accept?iid=zzz")).toBeNull();
     expect(si.parseAcceptReply("nonsense")).toBeNull();
     // Legacy base64url form still parses (back-compat; no server host).
-    const legacyJson = JSON.stringify({ v: 1, accept: { inviteId: VECTORS.accept.inviteId, serviceRef: VECTORS.serviceRef, contactAID: VECTORS.contactAid.contactAidPubHex, acceptedAt: VECTORS.accept.acceptedAt }, acceptSig: VECTORS.accept.sigHex });
+    const legacyJson = JSON.stringify({ v: 1, accept: { inviteId: VECTORS.accept.inviteId, serviceRef: VECTORS.serviceRef, contactAID: VECTORS.appAid.appAidPubHex, acceptedAt: VECTORS.accept.acceptedAt }, acceptSig: VECTORS.acceptApp.sigHex });
     const legacyB64 = Buffer.from(legacyJson, "utf8").toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
     const lp = si.parseAcceptReply(`flagship-accept:${legacyB64}`);
     expect(lp.serverDomain).toBeNull();
     expect(lp.accept.inviteId).toBe(VECTORS.accept.inviteId);
-    expect(lp.acceptSig).toBe(VECTORS.accept.sigHex);
+    expect(lp.acceptSig).toBe(VECTORS.acceptApp.sigHex);
   });
 
   it("inviteSecretFromLocation + inviteContextFromLocation parse v1 + v2 /invite landings", async () => {
@@ -926,6 +924,7 @@ describe("webapp serviceInvite — wire helpers", () => {
       secret: VECTORS.secretHex,
       authorAID: null,
       inviteId: null,
+      serviceRef: null,
     });
     // v2 context — carries the author AID + inviteId from the CANONICAL
     // (bare-secret) fragment `#<secret>&a=…&i=…`.
@@ -934,6 +933,7 @@ describe("webapp serviceInvite — wire helpers", () => {
       secret: VECTORS.secretHex,
       authorAID: VECTORS.derived.authorAidPubHex,
       inviteId: VECTORS.inviteId,
+      serviceRef: null,
     });
     // Backward-compat: a legacy `k=<secret>` fragment still parses (old
     // webapp-minted links + the mobile custom-scheme hand-off).
@@ -946,6 +946,16 @@ describe("webapp serviceInvite — wire helpers", () => {
       secret: VECTORS.secretHex,
       authorAID: VECTORS.derived.authorAidPubHex,
       inviteId: VECTORS.inviteId,
+      serviceRef: null,
+    });
+    // With the app (`s=`), the friend's id for it can be derived.
+    expect(
+      si.inviteContextFromLocation({ pathname: "/invite", hash: `${v2Hash}&s=${VECTORS.serviceRef}` }),
+    ).toEqual({
+      secret: VECTORS.secretHex,
+      authorAID: VECTORS.derived.authorAidPubHex,
+      inviteId: VECTORS.inviteId,
+      serviceRef: VECTORS.serviceRef,
     });
     // buildInviteLink round-trips both forms (v2 now BARE-secret, no k=).
     expect(si.buildInviteLink("https://home.alice.flagship.services", VECTORS.secretHex)).toBe(
@@ -969,6 +979,7 @@ describe("webapp serviceInvite — wire helpers", () => {
       si.buildInviteLink("https://home.alice.flagship.services", FROZEN_SECRET, {
         authorAID: FROZEN_AUTHOR,
         inviteId: FROZEN_INVITE,
+        serviceRef: null,
       }),
     ).toBe(`https://home.alice.flagship.services/invite#${FROZEN_FRAG}`);
     // parse(frozen) === { secret, a, i }.
@@ -976,12 +987,29 @@ describe("webapp serviceInvite — wire helpers", () => {
       secret: FROZEN_SECRET,
       authorAID: FROZEN_AUTHOR,
       inviteId: FROZEN_INVITE,
+      serviceRef: null,
+    });
+    // The current form also names the app; frozen the same on iOS + Android.
+    const FROZEN_FRAG_APP = `${FROZEN_FRAG}&s=alice-notes`;
+    expect(
+      si.buildInviteLink("https://home.alice.flagship.services", FROZEN_SECRET, {
+        authorAID: FROZEN_AUTHOR,
+        inviteId: FROZEN_INVITE,
+        serviceRef: "alice-notes",
+      }),
+    ).toBe(`https://home.alice.flagship.services/invite#${FROZEN_FRAG_APP}`);
+    expect(si.inviteContextFromLocation({ pathname: "/invite", hash: `#${FROZEN_FRAG_APP}` })).toEqual({
+      secret: FROZEN_SECRET,
+      authorAID: FROZEN_AUTHOR,
+      inviteId: FROZEN_INVITE,
+      serviceRef: "alice-notes",
     });
     // parse(bare secret) === { secret only }.
     expect(si.inviteContextFromLocation({ pathname: "/invite", hash: `#${FROZEN_SECRET}` })).toEqual({
       secret: FROZEN_SECRET,
       authorAID: null,
       inviteId: null,
+      serviceRef: null,
     });
   });
 

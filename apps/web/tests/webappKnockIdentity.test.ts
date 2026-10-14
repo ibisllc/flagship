@@ -1,15 +1,15 @@
 // Knock authorize identity (docs/app-apis.md §5): on a box the user was invited
-// to, the webapp signs the knock with its PER-OWNER contact AID (what the
+// to, the webapp signs the knock with its id for the knock's app (what the
 // invite put on the allow-list), on its own boxes with the global AID. Checks
-// the derivation against @flagship/protocol + the pinned vector, the owner-AID
-// record, and the real box handler (allowed contact AID → 200, global → 401).
+// the derivation against @flagship/protocol + the pinned vector, the invited-box
+// record, and the real box handler (allowed per-app id → 200, global → 401).
 
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
-import { deriveAccountId, deriveContactAccountId, ed } from "@flagship/protocol";
+import { deriveAccountId, deriveAppAccountId, ed } from "@flagship/protocol";
 import { buildServiceAccessWeb, ServiceAccessStore, ServiceSessionStore } from "@flagship/server-daemon";
 
 function webappPath(...p: string[]) {
@@ -27,6 +27,7 @@ const VECTORS = JSON.parse(
   seeds: { authorUmkSeedHex: string; friendUmkSeedHex: string };
   derived: { authorAidPubHex: string; friendAidPubHex: string };
   contactAid: { authorAidPubHex: string; contactAidPubHex: string };
+  appAid: { serviceRef: string; appAidPubHex: string };
 };
 
 class MemStorage implements Storage {
@@ -53,29 +54,38 @@ const friendUmk = { seed: hexToBytes(VECTORS.seeds.friendUmkSeedHex) };
 const ownerAidHex = hex(deriveAccountId(ownerUmk).publicKey);
 
 describe("knock identity — derivation matches @flagship/protocol", () => {
-  it("an invited box signs with deriveContactAccountId(UMK, ownerAID), byte-for-byte", async () => {
+  it("an invited box signs with deriveAppAccountId(UMK, serviceRef), byte-for-byte", async () => {
     const ki = await loadKnockIdentity();
     const storage = new MemStorage();
     expect(ki.rememberInviteOwner({ serverId: FQDN, ownerAidHex: VECTORS.contactAid.authorAidPubHex, serviceRef: SERVICE }, storage)).toBe(true);
-    const ident = await ki.knockIdentity(friendUmk.seed, FQDN, { storage, ownServers: ["mine.friend.flagship.services"] });
-    expect(ident.kind).toBe("contact");
-    const proto = deriveContactAccountId(friendUmk, hexToBytes(VECTORS.contactAid.authorAidPubHex));
+    const ident = await ki.knockIdentity(friendUmk.seed, FQDN, {
+      storage,
+      ownServers: ["mine.friend.flagship.services"],
+      serviceRef: VECTORS.appAid.serviceRef,
+    });
+    expect(ident.kind).toBe("app");
+    const proto = deriveAppAccountId(friendUmk, VECTORS.appAid.serviceRef);
     expect(hex(ident.visitorAID)).toBe(hex(proto.publicKey));
-    expect(hex(ident.visitorAID)).toBe(VECTORS.contactAid.contactAidPubHex);
-    // Its signer is the contact key: a protocol verify under the contact pub passes.
+    expect(hex(ident.visitorAID)).toBe(VECTORS.appAid.appAidPubHex);
     const bytes = new TextEncoder().encode("flagship/test/v1|x");
     expect(ed.verify(await ident.sign(friendUmk.seed, bytes), bytes, proto.publicKey)).toBe(true);
   });
 
-  it("a fixed UMK/author pair matches the protocol (not just the pinned vector)", async () => {
+  it("each app gets its own id, whoever the box's owner is; no app ⇒ no id", async () => {
     const ki = await loadKnockIdentity();
     const storage = new MemStorage();
     const umk = { seed: new Uint8Array(32).fill(0x16) };
-    const author = deriveAccountId({ seed: new Uint8Array(32).fill(0x42) }).publicKey;
-    ki.rememberInviteOwner({ serverId: FQDN, ownerAidHex: hex(author) }, storage);
-    const ident = await ki.knockIdentity(umk.seed, FQDN, { storage });
-    expect(hex(ident.visitorAID)).toBe(hex(deriveContactAccountId(umk, author).publicKey));
-    expect(hex(ident.visitorAID)).not.toBe(hex(deriveAccountId(umk).publicKey));
+    ki.rememberInviteOwner({ serverId: FQDN, ownerAidHex: hex(deriveAccountId({ seed: new Uint8Array(32).fill(0x42) }).publicKey) }, storage);
+    const a = await ki.knockIdentity(umk.seed, FQDN, { storage, serviceRef: "alice-notes" });
+    const b = await ki.knockIdentity(umk.seed, FQDN, { storage, serviceRef: "alice-chess" });
+    expect(hex(a.visitorAID)).toBe(hex(deriveAppAccountId(umk, "alice-notes").publicKey));
+    expect(hex(b.visitorAID)).not.toBe(hex(a.visitorAID));
+    expect(hex(a.visitorAID)).not.toBe(hex(deriveAccountId(umk).publicKey));
+    // A different owner record for the box doesn't change the id for the app.
+    ki.rememberInviteOwner({ serverId: FQDN, ownerAidHex: "ab".repeat(32) }, storage);
+    const a2 = await ki.knockIdentity(umk.seed, FQDN, { storage, serviceRef: "alice-notes" });
+    expect(hex(a2.visitorAID)).toBe(hex(a.visitorAID));
+    expect(await ki.knockIdentity(umk.seed, FQDN, { storage })).toBeNull();
   });
 });
 
@@ -178,11 +188,11 @@ describe("knock identity — against the box's knock handler", () => {
     return { link, fetchVia, calls };
   }
 
-  it("an invited friend gets in with the contact AID; the global AID would have been refused", async () => {
+  it("an invited friend gets in with their id for the app; the global AID would have been refused", async () => {
     const ki = await loadKnockIdentity();
     const storage = new MemStorage();
-    const contactHex = hex(deriveContactAccountId(friendUmk, hexToBytes(ownerAidHex)).publicKey);
-    // The invite bound the contact AID; the webapp remembered the owner from `a=`.
+    const contactHex = hex(deriveAppAccountId(friendUmk, SERVICE).publicKey);
+    // The invite bound the per-app id; the webapp remembered the box (and owner from `a=`).
     ki.rememberInviteOwner({ serverId: FQDN, ownerAidHex, serviceRef: SERVICE }, storage);
     const b = await box(contactHex);
     const ok = await ki.authorizeKnockFor(b.link, friendUmk.seed, { storage, ownServers: [], fetch: b.fetchVia });

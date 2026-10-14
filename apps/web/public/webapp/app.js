@@ -742,6 +742,7 @@ async function boot() {
     await enterInviteRedeem(inviteCtx.secret, undefined, {
       authorAID: inviteCtx.authorAID,
       inviteId: inviteCtx.inviteId,
+      serviceRef: inviteCtx.serviceRef,
     });
     return;
   }

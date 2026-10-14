@@ -455,40 +455,28 @@ function accountDeviceInfo(accountId, deviceId) {
 }
 
 /**
- * Contact Account Id (per-author pseudonym) — the v2 redemption identity the
- * CONSUMER (friend) presents to a given author's services, mirroring
- * `deriveContactAccountId` in @flagship/protocol byte-for-byte: HKDF-SHA256 over
- * the consumer's UMK seed under the info `flagship/contact-aid/v1|<hex(authorAID)>`.
+ * App Account Id — the identity a visitor presents to ONE app (redeem, visit,
+ * sign-in, acceptance), mirroring `deriveAppAccountId` in @flagship/protocol
+ * byte-for-byte: HKDF-SHA256 over the UMK seed under
+ * `flagship/app-aid/v1|<appRef>`, appRef = the app's service id. It depends on
+ * the visitor's account and the app only: two apps see unrelated ids, and the
+ * owner's invite and a co-manager's invite to one app bind the same id
+ * (docs/service-access-gating.md, "Per-app identity").
  *
- * Stable with that author (survives the consumer's IRK rotations + new devices,
- * re-redeem idempotent), but UNLINKABLE across authors (each author's id is an
- * independent pseudonym), so neither the authors nor flagshipserver.com can
- * cross-link the same person across hosts (docs/service-access-gating.md v2 §H3).
- * The friend signs the redeem / visit / knock / acceptance for THIS author with
- * this key instead of the global AID.
- *
- * @param {Uint8Array} umkSeed        the consumer's 32-byte UMK seed
- * @param {Uint8Array} authorAidPub   the AUTHOR's stable AID pubkey (32 B)
- * @returns {Promise<{privateKey: CryptoKey, publicKey: Uint8Array}>}
+ * @param {Uint8Array} umkSeed
+ * @param {string} appRef   the app's service id (`<creator>--<slug>`)
  */
-export async function deriveContactAccountIdFromSeed(umkSeed, authorAidPub) {
-  if (!(authorAidPub instanceof Uint8Array) || authorAidPub.length !== 32) {
-    throw new Error("authorAID pub must be a 32-byte Uint8Array");
+export async function deriveAppAccountIdFromSeed(umkSeed, appRef) {
+  if (typeof appRef !== "string" || !/^[a-z0-9](?:[a-z0-9-]{0,126}[a-z0-9])?$/.test(appRef)) {
+    throw new Error("app ref must be a service id");
   }
-  return irkFromInfoSeed(umkSeed, `flagship/contact-aid/v1|${bytesToHex(authorAidPub)}`);
+  return irkFromInfoSeed(umkSeed, `flagship/app-aid/v1|${appRef}`);
 }
 
-/**
- * Sign canonical-bytes with the PER-AUTHOR contact AID (v2). Mirrors
- * {@link signWithAccountId} but derives the per-author pseudonym via
- * {@link deriveContactAccountIdFromSeed}, so the consumer's redemption / visit /
- * acceptance is unlinkable across authors.
- */
-export async function signWithContactAccountId(umkSeed, authorAidPub, canonicalBytes) {
-  const contact = await deriveContactAccountIdFromSeed(umkSeed, authorAidPub);
-  return new Uint8Array(
-    await crypto.subtle.sign({ name: "Ed25519" }, contact.privateKey, canonicalBytes),
-  );
+/** Sign canonical-bytes with the visitor's id for one app ({@link deriveAppAccountIdFromSeed}). */
+export async function signWithAppAccountId(umkSeed, appRef, canonicalBytes) {
+  const app = await deriveAppAccountIdFromSeed(umkSeed, appRef);
+  return new Uint8Array(await crypto.subtle.sign({ name: "Ed25519" }, app.privateKey, canonicalBytes));
 }
 
 /**

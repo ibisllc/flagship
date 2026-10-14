@@ -131,7 +131,10 @@
 //  v66: free AI credits show this week's top-up and the starter reserve,
 //       and say why they can't be used (busy today, no running server);
 //       they disappear once the promotion has ended.
-const SHELL_VERSION = "v66";
+//  v67: a visitor's id is per app: invites, knocks and acceptances sign with
+//       deriveAppAccountId(UMK, serviceRef), invite links carry `s=`, and a
+//       link without it asks for a new one.
+const SHELL_VERSION = "v67";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

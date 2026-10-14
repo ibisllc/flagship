@@ -46,12 +46,12 @@ export const TAG_LIST_QUERY = "flagship/service-invite-list/v1";
 /** Allowed per-service access modes (canonical literals). */
 export const ACCESS_MODES = ["open", "restricted"];
 
-// v2 per-author redemption identity. Re-exported from the keystore (where the
-// WebCrypto Ed25519 seed→keypair derivation lives) so the gating crypto surface
-// is complete in one import. `deriveContactAccountId(umkSeed, authorAidPub)` is
-// the consumer's PER-AUTHOR pseudonym — unlinkable across authors — used to sign
-// redeem / accept / visit for a given author's services (docs §v2 hardening H3).
-export { deriveContactAccountIdFromSeed as deriveContactAccountId } from "../keystore.js";
+// The visitor's identity toward one app. Re-exported from the keystore (where
+// the WebCrypto Ed25519 seed→keypair derivation lives) so the gating crypto
+// surface is complete in one import. `deriveAppAccountId(umkSeed, serviceRef)`
+// signs redeem / accept / visit / knock for that app only (docs "Per-app
+// identity"): nothing is shared between apps, nothing depends on the inviter.
+export { deriveAppAccountIdFromSeed as deriveAppAccountId } from "../keystore.js";
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -296,7 +296,7 @@ export function canonicalRevokeBytes(r) {
  * flagship/service-invite/accept/v1 | inviteId | serviceRef | hex(contactAID) | acceptedAt
  *
  * The MANUAL-approve acceptance (v2 Phase 3 tier 2): the FRIEND signs this with
- * their PER-AUTHOR contact AID (`deriveContactAccountIdFromSeed`) and replies it
+ * their id for that app (`deriveAppAccountIdFromSeed`) and replies it
  * to the author, who submits it to their own box to finalize the bind. Mirrors
  * @flagship/protocol's `canonicalAccept` byte-for-byte.
  */
@@ -307,25 +307,24 @@ export function canonicalAcceptBytes(a) {
 }
 
 /**
- * Contact-AID-sign an `AcceptServiceInvite`. Byte-exact mirror of
- * @flagship/protocol's `signAcceptServiceInvite`. `signWithContactAccountId` is
- * the injected `(umk, authorAID, bytes) => Promise<Uint8Array>` signer
- * (keystore.js provides it) so the friend signs with the per-author pseudonym.
+ * Sign an `AcceptServiceInvite` with the friend's id for the app. Byte-exact
+ * mirror of @flagship/protocol's `signAcceptServiceInvite`. `signWithAppAccountId`
+ * is the injected `(umk, serviceRef, bytes) => Promise<Uint8Array>` signer
+ * (keystore.js provides it).
  *
  * @param {object} args
  * @param {string} args.inviteId
  * @param {string} args.serviceRef
- * @param {Uint8Array} args.contactAID   the friend's per-author contact AID pub (32 B)
- * @param {Uint8Array} args.authorAID    the AUTHOR's stable AID pub (32 B) — selects the contact key
+ * @param {Uint8Array} args.contactAID   the friend's id for this app (32 B pub)
  * @param {number} args.acceptedAt
  * @param {Uint8Array} args.umk
- * @param {(umk, authorAID, bytes) => Promise<Uint8Array>} signWithContactAccountId
+ * @param {(umk, serviceRef, bytes) => Promise<Uint8Array>} signWithAppAccountId
  * @returns {Promise<Uint8Array>} the 64-byte Ed25519 signature
  */
-export async function signAcceptServiceInvite(args, signWithContactAccountId) {
-  const { inviteId, serviceRef, contactAID, authorAID, acceptedAt, umk } = args;
-  if (!umk || typeof signWithContactAccountId !== "function") throw err("unlock the webapp first", "400");
-  return signWithContactAccountId(umk, authorAID, canonicalAcceptBytes({ inviteId, serviceRef, contactAID, acceptedAt }));
+export async function signAcceptServiceInvite(args, signWithAppAccountId) {
+  const { inviteId, serviceRef, contactAID, acceptedAt, umk } = args;
+  if (!umk || typeof signWithAppAccountId !== "function") throw err("unlock the webapp first", "400");
+  return signWithAppAccountId(umk, serviceRef, canonicalAcceptBytes({ inviteId, serviceRef, contactAID, acceptedAt }));
 }
 
 /**
@@ -406,7 +405,11 @@ function podBase(baseUrl) {
 }
 
 /**
- * Build the friend share-link `https://<server>.<user>/invite#<secret>&a=<authorAID>&i=<inviteId>`.
+ * Build the friend share-link `https://<server>.<user>/invite#<secret>&a=<authorAID>&i=<inviteId>&s=<serviceRef>`.
+ *
+ * `s` names the app: the friend redeems with their id for THAT app
+ * (`deriveAppAccountId(UMK, serviceRef)`, docs "Per-app identity"); a link
+ * without it can't be redeemed any more (ask for a new one).
  *
  * Everything rides the FRAGMENT (never sent to .com): the `secret` is the bearer
  * capability — the BARE leading token (canonical cross-client format, no `k=`
@@ -419,14 +422,14 @@ function podBase(baseUrl) {
  *
  * @param {string} podBaseUrl
  * @param {string} secretHex             64-hex capability secret
- * @param {{ authorAID?: Uint8Array|string, inviteId?: string }} [ctx]
+ * @param {{ authorAID?: Uint8Array|string, inviteId?: string, serviceRef?: string }} [ctx]
  */
 export function buildInviteLink(podBaseUrl, secretHex, ctx = {}) {
   const base = podBase(podBaseUrl);
   const sec = String(secretHex || "").toLowerCase();
   const authorHex =
     ctx.authorAID instanceof Uint8Array ? bytesToHex(ctx.authorAID) : (ctx.authorAID || "");
-  if (!authorHex && !ctx.inviteId) {
+  if (!authorHex && !ctx.inviteId && !ctx.serviceRef) {
     // v1 bare form — keep it exactly as before.
     return `${base}/invite#${sec}`;
   }
@@ -434,6 +437,7 @@ export function buildInviteLink(podBaseUrl, secretHex, ctx = {}) {
   const parts = [sec];
   if (authorHex) parts.push(`a=${authorHex.toLowerCase()}`);
   if (ctx.inviteId) parts.push(`i=${String(ctx.inviteId).toLowerCase()}`);
+  if (ctx.serviceRef) parts.push(`s=${encodeURIComponent(String(ctx.serviceRef))}`);
   return `${base}/invite#${parts.join("&")}`;
 }
 
@@ -466,10 +470,12 @@ export function inviteContextFromLocation(loc = typeof window !== "undefined" ? 
   const secret = m[1].toLowerCase();
   const a = hash.match(/(?:^|[?&])a=([0-9a-f]{64})/i);
   const i = hash.match(/(?:^|[?&])i=([0-9a-f]{64})/i);
+  const sv = hash.match(/(?:^|[?&])s=([a-z0-9-]{1,128})(?:&|$)/);
   return {
     secret,
     authorAID: a ? a[1].toLowerCase() : null,
     inviteId: i ? i[1].toLowerCase() : null,
+    serviceRef: sv ? sv[1] : null,
   };
 }
 
@@ -580,7 +586,7 @@ export async function createInvite(args, deps = {}) {
     // The v2 link carries the author AID + inviteId in the fragment so the friend
     // can redeem under their per-author contact identity + (manual) reply an
     // acceptance. (Off-`.com`: fragments aren't sent in requests.)
-    link: buildInviteLink(podBaseUrl, bytesToHex(secret), { authorAID, inviteId }),
+    link: buildInviteLink(podBaseUrl, bytesToHex(secret), { authorAID, inviteId, serviceRef }),
     // The signed create — the AUTHOR retains this so it can FINALIZE a manual
     // acceptance later (the box verifies the owner's authority from it). The
     // wire shape mirrors what `.com` relays + `/api/service-access/accept` expects.
@@ -786,10 +792,9 @@ export async function removeServiceAllow(args, deps = {}) {
  * The box re-verifies the AID sig, delegates the first-bind decision to .com,
  * then adds the bound AID to the service allow-list.
  *
- * `visitorAID` should be the friend's PER-AUTHOR contact AID
- * (`deriveContactAccountId(friendUMK, authorAID)`) for a v2 invite (the link
- * carries the author's AID), so redemptions are unlinkable across authors; the
- * caller supplies the matching contact-bound `signWithAccountId` closure.
+ * `visitorAID` is the friend's id for the app (`deriveAppAccountId(friendUMK,
+ * serviceRef)`, the link's `s=`), so nothing they present is shared between
+ * apps; the caller supplies the matching app-bound `signWithAccountId` closure.
  *
  * Returns `{ approvalMode, pending, serviceRef, boundAID, firstBind, body }`:
  *  - AUTO-approve → `{ approvalMode:"auto", pending:false, boundAID, firstBind }`.

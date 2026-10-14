@@ -2,22 +2,20 @@
 //
 // A box lets a browser into an app's private pages when the knock is signed by
 // the box owner's AID or by an AID on that app's allow-list. Invites bind the
-// friend's PER-AUTHOR contact AID, `deriveContactAccountId(UMK, ownerAID)`, not
-// their global AID, so knocking on a friend's box has to sign with that same
-// contact AID or the box answers 401. The knock link carries no owner AID (the
-// knock page discloses nothing about the owner), so we remember the owner AID
-// from the invite link's `a=` param when it is redeemed, keyed by the box.
-// Our own servers sign with the global AID; any other box is refused rather
-// than shown the global AID.
+// friend's id for THAT app, `deriveAppAccountId(UMK, serviceRef)`, never their
+// global AID, so a knock on someone else's box signs with our id for the app
+// the knock link names (`ref=`). We remember which boxes we redeemed invites
+// on (and their owner's AID, from the link's `a=`); our own servers sign with
+// the global AID; any other box is refused rather than shown any id.
 //
 // The record holds only public keys + box names: plain localStorage, like the
 // secured-sessions handles.
 
 import {
   deriveAccountIdFromSeed,
-  deriveContactAccountIdFromSeed,
+  deriveAppAccountIdFromSeed,
   signWithAccountId,
-  signWithContactAccountId,
+  signWithAppAccountId,
 } from "../keystore.js";
 import { authorizeKnock } from "./serviceInvite.js";
 
@@ -76,12 +74,6 @@ export function inviteOwnerFor(serverId, storage = defaultStorage()) {
   return HEX64.test(aid) ? aid : null;
 }
 
-function hexToBytes(hex) {
-  const out = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  return out;
-}
-
 function bytesToHex(b) {
   let s = "";
   for (const x of b) s += x.toString(16).padStart(2, "0");
@@ -106,17 +98,17 @@ export function hostsFromPods(pods) {
 }
 
 /**
- * The identity to sign a knock on `serverId` with, or null to refuse:
+ * The identity to sign a knock on `serverId`'s app `serviceRef` with, or null to refuse:
  *  - one of our own servers (`ownServers`) → the global AID;
- *  - a box we redeemed a v2 invite for → the contact AID for its owner (a
- *    record naming our own AID is ignored: only `ownServers` makes a box ours);
+ *  - a box we redeemed an invite on → our id for that app (a record naming our
+ *    own AID is ignored: only `ownServers` makes a box ours);
  *  - anything else → null. The global AID is never offered to someone else's
  *    box: it would link us across owners, and it isn't on their list anyway.
  *
  * @param {Uint8Array} umk
  * @param {string} serverId
- * @param {{ storage?: Storage, ownServers?: Iterable<string> }} [opts]
- * @returns {Promise<null|{kind:"contact"|"account", visitorAID:Uint8Array,
+ * @param {{ storage?: Storage, ownServers?: Iterable<string>, serviceRef?: string }} [opts]
+ * @returns {Promise<null|{kind:"app"|"account", visitorAID:Uint8Array,
  *   sign:(umk:Uint8Array, bytes:Uint8Array)=>Promise<Uint8Array>}>}
  */
 export async function knockIdentity(umk, serverId, opts = {}) {
@@ -131,12 +123,13 @@ export async function knockIdentity(umk, serverId, opts = {}) {
   // `a=` is written by whoever made the invite link: a record naming our own
   // AID must never unlock the global AID (a hostile owner could plant it).
   if (!ownerHex || ownerHex === bytesToHex(global.publicKey)) return null;
-  const ownerAid = hexToBytes(ownerHex);
-  const contact = await deriveContactAccountIdFromSeed(umk, ownerAid);
+  const ref = opts.serviceRef;
+  if (typeof ref !== "string" || !/^[a-z0-9](?:[a-z0-9-]{0,126}[a-z0-9])?$/.test(ref)) return null;
+  const app = await deriveAppAccountIdFromSeed(umk, ref);
   return {
-    kind: "contact",
-    visitorAID: contact.publicKey,
-    sign: (u, bytes) => signWithContactAccountId(u, ownerAid, bytes),
+    kind: "app",
+    visitorAID: app.publicKey,
+    sign: (u, bytes) => signWithAppAccountId(u, ref, bytes),
   };
 }
 
@@ -150,7 +143,7 @@ export async function knockIdentity(umk, serverId, opts = {}) {
  * @param {{ storage?: Storage, ownServers?: Iterable<string>, fetch?: typeof fetch, now?: () => number }} [opts]
  */
 export async function authorizeKnockFor(link, umk, opts = {}) {
-  const ident = await knockIdentity(umk, link?.serverId, opts);
+  const ident = await knockIdentity(umk, link?.serverId, { ...opts, serviceRef: link?.serviceRef });
   if (!ident) {
     const e = new Error(NOT_YOUR_SERVER);
     e.code = "not-own";

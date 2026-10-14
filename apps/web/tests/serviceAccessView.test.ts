@@ -107,7 +107,7 @@ describe("service-access admin view", () => {
     expect(r.body).toContain("inviteSecretFromLocation");
     expect(r.body).toContain("inviteContextFromLocation");
     // v2 crypto surface: contact AID (re-export), accept loop, group caps.
-    expect(r.body).toContain("deriveContactAccountId");
+    expect(r.body).toContain("deriveAppAccountId");
     expect(r.body).toContain("canonicalAcceptBytes");
     expect(r.body).toContain("signAcceptServiceInvite");
     expect(r.body).toContain("buildAcceptReply");
@@ -131,13 +131,13 @@ describe("service-access admin view", () => {
     expect(r.body).toContain("deriveAccountIdFromSeed");
     expect(r.body).toContain("deriveHouseholdKeyFromSeed");
     expect(r.body).toContain("signWithAccountId");
-    // v2 per-author contact identity + its signer.
-    expect(r.body).toContain("deriveContactAccountIdFromSeed");
-    expect(r.body).toContain("signWithContactAccountId");
+    // The per-app identity + its signer.
+    expect(r.body).toContain("deriveAppAccountIdFromSeed");
+    expect(r.body).toContain("signWithAppAccountId");
     // The fixed HKDF infos (byte-identical to @flagship/protocol).
     expect(r.body).toContain("flagship/account-id/v1");
     expect(r.body).toContain("flagship/household-key/v1");
-    expect(r.body).toContain("flagship/contact-aid/v1");
+    expect(r.body).toContain("flagship/app-aid/v1");
   });
 });
 
@@ -148,14 +148,14 @@ describe("service-access friend redeem view + deep-link", () => {
     expect(r.statusCode).toBe(200);
     expect(r.body).toContain('registerView("view-invite-redeem")');
     expect(r.body).toContain("redeemInvite");
-    expect(r.body).toContain("deriveAccountIdFromSeed");
-    expect(r.body).toContain("signWithAccountId");
-    // v2: redeem under the PER-AUTHOR contact AID (not the global AID).
-    expect(r.body).toContain("deriveContactAccountIdFromSeed");
-    expect(r.body).toContain("signWithContactAccountId");
-    // The owner AID from `a=` is kept per box so later knocks sign with the same contact AID.
+    // Redeem under the per-app id (never the global AID); a link without the app is refused.
+    expect(r.body).not.toContain("deriveAccountIdFromSeed");
+    expect(r.body).toContain("OLD_INVITE_LINK");
+    expect(r.body).toContain("deriveAppAccountIdFromSeed");
+    expect(r.body).toContain("signWithAppAccountId");
+    // The box (and owner AID from `a=`) is remembered so later knocks can sign with the per-app id.
     expect(r.body).toContain("rememberInviteOwner({ serverId: boxHost(), ownerAidHex: pendingAuthorAidHex");
-    // Manual-approve: the friend emits a contact-AID-signed acceptance reply (+ QR).
+    // Manual-approve: the friend emits an acceptance reply signed with the per-app id (+ QR).
     expect(r.body).toContain("signAcceptServiceInvite");
     expect(r.body).toContain("buildAcceptReply");
     expect(r.body).toContain("renderQrSvg");
