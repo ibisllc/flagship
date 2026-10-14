@@ -274,8 +274,8 @@ account can view or co-manage a server, never destroy it) is in the MVP
   tools (`query_db`, `list_tables`, `list_data_files`, `read_data_file`); the
   owner's live Database section (read-only; writes need a signed
   `flagship/app-db-write/v1`); access-list drafts from the manifest's
-  `network.egress` `{host, why}`. Knock sign-in signs with the invite's contact
-  AID (own boxes: global AID; a record naming the user's own AID is ignored;
+  `network.egress` `{host, why}`. Knock sign-in signs with the visitor's per-app
+  id (own boxes: global AID; a record naming the user's own AID is ignored;
   unknown boxes refused). Needs the `85d3e911` endorsement on boxes. Open: the
   app-detail members list is stale (the IRK-keyed store no longer gates); app
   roles can count the box's databases via pg_database (names are opaque); v1
@@ -297,6 +297,12 @@ account can view or co-manage a server, never destroy it) is in the MVP
   the next endorsed release. Open: removing ONE person's join from a group
   (needs a grant-revoke order; today it's per AID or per invite);
   anonymous-as-Member on open apps awaits the owner.
+- **Per-app visitor identity (2026-10-13).** A visitor signs redeem / visit /
+  knock / acceptance with `deriveAppAccountId(UMK, serviceRef)`
+  (`flagship/app-aid/v1|<serviceRef>`), replacing the per-author contact AID;
+  invite links carry `&s=<serviceRef>` (links without it are refused). Client
+  change only (webapp, iOS, Android); the box is unchanged. Existing invites
+  bound to old contact AIDs need re-inviting (acceptable before launch).
 - **App runtimes (2026-10-12, phase 1 in `8ddf19a9`).** `docs/app-runtimes.md`.
   Apps name `runtime.base` (`node-24`, `python-3.13`, `static`, pinned by
   digest in `runtimes/catalog.ts`); the box writes the build and runs the app

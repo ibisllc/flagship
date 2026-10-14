@@ -1,0 +1,49 @@
+{
+  "about": "Per-app account id (docs/service-access-gating.md, Per-app identity): seed = HKDF-SHA256(UMK, salt empty, info 'flagship/app-aid/v1|<appRef>'), Ed25519 from that seed. appRef = the app's service id. Depends on the visitor's UMK and the app only: a different app gives a different id; who invited them doesn't enter it.",
+  "info": "flagship/app-aid/v1",
+  "cases": [
+    {
+      "umkSeedHex": "1616161616161616161616161616161616161616161616161616161616161616",
+      "appRef": "bright-maple--plants",
+      "pubHex": "1feffb40bcef5e16f378ec69f0929466fb7ec24788c0ad225e4570ac1678aae9"
+    },
+    {
+      "umkSeedHex": "1616161616161616161616161616161616161616161616161616161616161616",
+      "appRef": "bright-maple--chess-club",
+      "pubHex": "f7d015c316e73cacea5d66bcd1e1539c6a980fbc517fb7d32ffa74914886d803"
+    },
+    {
+      "umkSeedHex": "1616161616161616161616161616161616161616161616161616161616161616",
+      "appRef": "alice-notes",
+      "pubHex": "6b95f7a720fe5f255567bf38f642194d1a84ad36124207e51afa86aa3450ed74"
+    },
+    {
+      "umkSeedHex": "3333333333333333333333333333333333333333333333333333333333333333",
+      "appRef": "bright-maple--plants",
+      "pubHex": "81656ecb53a34fd6fb6be7d87e95a9a82aad407dafa4a8880101633bc9908bc7"
+    }
+  ],
+  "sameAppAnyInviter": {
+    "note": "The owner's invite and a co-manager's invite to the same app bind the same id: the inviter is not an input. The old per-author contact ids for these two inviters differ, for contrast.",
+    "umkSeedHex": "1616161616161616161616161616161616161616161616161616161616161616",
+    "appRef": "bright-maple--plants",
+    "inviterAidHexes": [
+      "b4b357bf622c86ea3b6c3e2440e2bf9e344ac3cf5f61236da8e6f280f93db640",
+      "3d87eede8ed65dd9e9eea8e1325d594a8f635fdec9369fa8e4cfb8a8a28180ba"
+    ],
+    "pubHex": "1feffb40bcef5e16f378ec69f0929466fb7ec24788c0ad225e4570ac1678aae9",
+    "oldContactAidHexes": [
+      "086abb1c191c86e7cb68d4736f73c68f8b0c55c2a3fafa6a2c770fc308ab242a",
+      "32c908c9f406be1550ec930e9caaf6f4029ca9633cb65f1a80a683d674fb9c8d"
+    ]
+  },
+  "invalidAppRefs": [
+    "",
+    "Bright-Maple--plants",
+    "a|b",
+    "-plants",
+    "plants-",
+    "a b",
+    "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  ]
+}

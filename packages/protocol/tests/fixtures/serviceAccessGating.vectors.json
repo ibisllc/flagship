@@ -94,5 +94,17 @@
   "bundle": {
     "name": "Alex",
     "photo": "data:image/png;base64,AAAA"
+  },
+  "_app_aid_comment": "Per-app identity (docs/service-access-gating.md, 'Per-app identity'; owner rule 2026-10-13): a visitor's id toward an app is deriveAppAccountId(friendUmk, serviceRef), replacing the per-author contactAid for redeem / visit / knock / acceptance. acceptApp = the same acceptance as `accept`, with contactAID = that per-app id and signed by it. friendUmk = 32 bytes of 0x16.",
+  "appAid": {
+    "serviceRef": "alice-notes",
+    "appAidPubHex": "6b95f7a720fe5f255567bf38f642194d1a84ad36124207e51afa86aa3450ed74"
+  },
+  "acceptApp": {
+    "inviteId": "ea4ab8be66710610842cf6ef0d7e56bd91a4f03c7a5633fde4a66482cc292890",
+    "serviceRef": "alice-notes",
+    "acceptedAt": 1700006000000,
+    "signerKey": "friendAppAid",
+    "sigHex": "58da7bb9c9efc46bfe0d740d9bad3a1498dc22d8606c6d250e894dc97ee51c892316b1ec84d8c6aa8836c92fe30308ad9b77b4412a322f718bb73d010f59a902"
   }
 }

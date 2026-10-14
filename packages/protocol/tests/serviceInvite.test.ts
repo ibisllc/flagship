@@ -1,6 +1,10 @@
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   deriveAccountId,
+  deriveAppAccountId,
   deriveContactAccountId,
   deriveHouseholdKey,
   deriveIRK,
@@ -388,6 +392,25 @@ describe("v2 — pairwise contact AID (deriveContactAccountId)", () => {
   it("differs from the friend's global AID (the consumer presents a pseudonym, not their account id)", () => {
     const contact = deriveContactAccountId(friendUmk, authorAid.publicKey);
     expect(hexOf(contact.publicKey)).not.toBe(hexOf(friendAid.publicKey));
+  });
+});
+
+describe("per-app identity — the acceptance is signed by the friend's id for the app", () => {
+  const V = JSON.parse(
+    readFileSync(join(dirname(fileURLToPath(import.meta.url)), "fixtures/serviceAccessGating.vectors.json"), "utf8"),
+  ) as { appAid: { serviceRef: string; appAidPubHex: string }; acceptApp: { inviteId: string; serviceRef: string; acceptedAt: number; sigHex: string } };
+  it("reproduces the pinned appAid + acceptApp vectors", () => {
+    const app = deriveAppAccountId(friendUmk, V.appAid.serviceRef);
+    expect(hexOf(app.publicKey)).toBe(V.appAid.appAidPubHex);
+    const accept: AcceptServiceInvite = {
+      inviteId: V.acceptApp.inviteId,
+      serviceRef: V.acceptApp.serviceRef,
+      contactAID: app.publicKey,
+      acceptedAt: V.acceptApp.acceptedAt,
+    };
+    expect(hexOf(signAcceptServiceInvite(accept, app))).toBe(V.acceptApp.sigHex);
+    // Not the old per-author contact id.
+    expect(hexOf(app.publicKey)).not.toBe(hexOf(deriveContactAccountId(friendUmk, authorAid.publicKey).publicKey));
   });
 });
 

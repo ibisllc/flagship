@@ -163,6 +163,41 @@ there; private routes still show the knock page themselves.
 the box entirely, or a whole invite is revoked), and treating anonymous
 visitors of an open app as Members (owner to confirm).
 
+## Per-app identity (owner rule, 2026-10-13)
+
+A visitor's identity toward an app is derived from their account root and that
+app only:
+
+    seed = HKDF-SHA256(UMK, salt = "", info = "flagship/app-aid/v1|<appRef>")
+
+`appRef` is the app's **service id** (`<creator>--<slug>`). It is the same on
+every one of the owner's servers (a copy or a move keeps it, and the box's
+allow-list state travels with the copy), and it is the same whoever sends the
+invite, so the owner's invite and a co-manager's invite to one app bind the
+same id. Consequences:
+
+- The owner can tell that two grants of the SAME app ("John" and the "Chess
+  Club" group) are one person — acceptable — but never link a visitor across
+  two apps or servers: no long-lived id is shared between apps, and none
+  depends on who invited them. It replaces the per-author contact AID
+  (`flagship/contact-aid/v1`), which linked a visitor across all of one
+  owner's apps.
+- `.com`'s invite records hold per-app ids only (`boundAID` is whatever the
+  redeemer signs with). The owner is still recognised by the owner AID.
+- Invite links name the app: `…/invite#<secret>&a=<ownerAID>[&i=<inviteId>]&s=<serviceRef>`
+  (`flagship://invite?…&s=` for the app hand-off). A link without `s=` (made
+  before this rule) can't be redeemed: the friend is asked for a new one.
+- Redeem, visit proofs, knock sign-in and manual-approve acceptances all sign
+  with the id for the app in question (the knock deeplink's `ref=`); the box
+  is unchanged (it verifies whatever AID is on the allow-list).
+- Existing grants bound to old contact AIDs keep working only until the
+  person's next sign-in from an updated app (which presents the per-app id the
+  box doesn't know): re-invite them. Fine before launch.
+- Vectors: `packages/protocol/test-vectors/app-account-id/` (a different app ⇒
+  a different id; a different inviter, same app ⇒ the same id; refused app
+  refs) and `appAid`/`acceptApp` in
+  `packages/protocol/tests/fixtures/serviceAccessGating.vectors.json`.
+
 ## Notes
 - AID is a NEW UMK-derived key (parallel to the versioned IRK). Add `deriveAccountId` to
   `@flagship/protocol` (`keys.ts`) + the Swift/Kotlin/webapp keystores (follow-up for clients).

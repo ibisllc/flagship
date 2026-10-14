@@ -11,6 +11,7 @@ const INFO_APP_SECRET = "flagship.app-secret.v1";
 const INFO_APP_MEMBER = "flagship.app-member.v1";
 const INFO_ACCOUNT_ID = "flagship/account-id/v1";
 const INFO_CONTACT_ID = "flagship/contact-aid/v1";
+const INFO_APP_ACCOUNT_ID = "flagship/app-aid/v1";
 const INFO_HOUSEHOLD_KEY = "flagship/household-key/v1";
 
 export function generateUMK(rng: () => Bytes = randomBytes): UserMasterKey {
@@ -58,6 +59,9 @@ export function deriveAccountId(umk: UserMasterKey): Keypair {
 }
 
 /**
+ * Superseded for everything a visitor does by {@link deriveAppAccountId} (owner
+ * rule, 2026-10-13): kept only so older vectors and tests stay reproducible.
+ *
  * Contact Account Id — a PER-AUTHOR pseudonymous identity the consumer (friend)
  * presents when redeeming / visiting / authorizing a given author's services.
  * Derived from the consumer's UMK + the AUTHOR's AID pubkey, so:
@@ -76,6 +80,30 @@ export function deriveAccountId(umk: UserMasterKey): Keypair {
 export function deriveContactAccountId(umk: UserMasterKey, authorAidPub: Bytes): Keypair {
   return seedToKeypair(derive(umk, `${INFO_CONTACT_ID}|${hexOf(authorAidPub)}`));
 }
+
+/**
+ * App Account Id — the identity a visitor presents to ONE app (redeeming its
+ * invites, visiting it, signing in to it), derived from their UMK and that
+ * app's stable id only:
+ *
+ *   seed = HKDF-SHA256(UMK, salt = "", info = "flagship/app-aid/v1|<appRef>")
+ *
+ * `appRef` is the app's service id, `<creator>--<slug>`: the same on every one
+ * of the owner's servers (a copy or a move keeps it) and whoever sends the
+ * invite. So a co-manager's invite and the owner's invite to the same app
+ * bind the same identity (the owner may link two grants of ONE app), while two
+ * apps see unrelated ids: nothing a visitor presents is shared between apps,
+ * and nothing depends on who invited them. Replaces the per-author contact
+ * AID for everything a visitor does (docs/service-access-gating.md, "Per-app
+ * identity"). The owner is still recognised by their own AID.
+ */
+export function deriveAppAccountId(umk: UserMasterKey, appRef: string): Keypair {
+  if (!APP_REF_RE.test(appRef)) throw new Error("app ref must be a service id (lowercase, digits, dashes)");
+  return seedToKeypair(derive(umk, `${INFO_APP_ACCOUNT_ID}|${appRef}`));
+}
+
+/** A service id as apps are named (`<creator>--<slug>`; dashes, lowercase, digits). */
+const APP_REF_RE = /^[a-z0-9](?:[a-z0-9-]{0,126}[a-z0-9])?$/;
 
 function hexOf(b: Bytes): string {
   let s = "";
