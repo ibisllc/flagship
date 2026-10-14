@@ -299,7 +299,8 @@ public final class ServiceAccessViewModel {
             let link = ServiceInviteLinks.inviteLink(
                 serverDomain: serverDomain, secretHex: HexUtil.encode(secret),
                 authorAidHex: HexUtil.encode(aidPub),
-                inviteId: tier.isManual ? inviteId : nil)
+                inviteId: tier.isManual ? inviteId : nil,
+                serviceRef: serviceRef)
             lastInviteLink = link
             lastInviteTier = tier
             roleNotice = nil

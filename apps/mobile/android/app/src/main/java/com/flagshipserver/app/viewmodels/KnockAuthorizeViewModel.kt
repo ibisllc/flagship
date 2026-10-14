@@ -5,11 +5,11 @@
 // user can later see / refresh / stop the browser session from Settings.
 //
 // The box accepts its owner's AID and the AIDs on the app's allow-list
-// (docs/app-apis.md §5). Invites put the friend's PER-AUTHOR contact AID on that
-// list, so the identity depends on the box: one of our own servers gets the
-// global AID; a box we were invited to (its owner AID was remembered at redeem,
-// InviteOwnerBook) gets deriveContactAccountId(UMK, ownerAID). A record naming
-// our own AID is ignored: the invite's author wrote it. A box that is neither in
+// (docs/app-apis.md §5). Invites put the friend's id for THAT app on the list,
+// so the identity depends on the box: one of our own servers gets the global
+// AID; a box we were invited to (remembered at redeem, InviteOwnerBook) gets
+// deriveAppAccountId(UMK, serviceRef) for the knock's app. A record naming our
+// own AID is ignored: the invite's author wrote it. A box that is neither in
 // the loaded pods nor remembered triggers one fresh pods load (a cold start from
 // a deep link may not have loaded them yet); still unknown, nothing is signed or
 // sent, so a stranger's box never learns an AID of ours. On success the box
@@ -22,6 +22,7 @@ import com.flagshipserver.app.api.KnockAuthorizeError
 import com.flagshipserver.app.api.KnockAuthorizeResult
 import com.flagshipserver.app.api.ServiceAccessClient
 import com.flagshipserver.app.core.HexUtil
+import com.flagshipserver.app.core.ServerKeys
 import com.flagshipserver.app.core.InviteOwnerBook
 import com.flagshipserver.app.core.InviteOwners
 import com.flagshipserver.app.core.SecuredSession
@@ -52,11 +53,11 @@ class KnockAuthorizeViewModel(
     /** The user's GLOBAL AID signer + pub (biometric-gated by default). */
     private val aidSigner: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.deriveAccountId(r) },
     private val aidPubHex: suspend (reason: String) -> String = { r -> Keystore.accountIdPubHex(r) },
-    /** The user's per-owner CONTACT AID signer + pub (biometric-gated by default). */
-    private val contactAidSigner: suspend (ownerAid: ByteArray, reason: String) -> Ed25519Sign =
-        { a, r -> Keystore.deriveContactAccountId(a, r) },
-    private val contactAidPubHex: suspend (ownerAid: ByteArray, reason: String) -> String =
-        { a, r -> Keystore.contactAccountIdPubHex(a, r) },
+    /** The user's id for an app, signer + pub (biometric-gated by default). */
+    private val appAidSigner: suspend (serviceRef: String, reason: String) -> Ed25519Sign =
+        { s, r -> Keystore.deriveAppAccountId(s, r) },
+    private val appAidPubHex: suspend (serviceRef: String, reason: String) -> String =
+        { s, r -> Keystore.appAccountIdPubHex(s, r) },
     /** FQDNs of the user's own servers (the app's pods). */
     private val ownServers: () -> List<String> = { emptyList() },
     /** Load the user's servers afresh (the `.com` pods directory); used once,
@@ -94,15 +95,14 @@ class KnockAuthorizeViewModel(
             val key: Ed25519Sign
             val aidPub: ByteArray
             // A record's owner AID is whatever the invite link's author wrote, so
-            // it can only ever pick the contact AID: a record naming our own
+            // it can only ever pick the per-app id: a record naming our own
             // global AID is ignored (a hostile owner could plant it to harvest
             // that AID). "Own box" comes only from our pods directory.
             val ownerHex = if (ownServers().hasBox()) null else owners.ownerFor(serverId)
                 ?.takeIf { it != aidPubHex(reason).lowercase() }
-            if (ownerHex != null) {
-                val ownerAid = HexUtil.decode(ownerHex)!!
-                key = contactAidSigner(ownerAid, reason)
-                aidPub = HexUtil.decode(contactAidPubHex(ownerAid, reason))!!
+            if (ownerHex != null && ServerKeys.isAppRef(serviceRef)) {
+                key = appAidSigner(serviceRef, reason)
+                aidPub = HexUtil.decode(appAidPubHex(serviceRef, reason))!!
             } else {
                 val isOwnServer = ownServers().hasBox() ||
                     runCatching { reloadOwnServers() }.getOrDefault(emptyList()).hasBox()

@@ -88,7 +88,8 @@ fun ServicesTab() {
                 val k = java.net.URLEncoder.encode(link.secretHex, "UTF-8")
                 val a = java.net.URLEncoder.encode(link.authorAidHex.orEmpty(), "UTF-8")
                 val i = java.net.URLEncoder.encode(link.inviteIdHex.orEmpty(), "UTF-8")
-                nav.navigate("invite-redeem/$s/$k?a=$a&i=$i")
+                val r = java.net.URLEncoder.encode(link.serviceRef.orEmpty(), "UTF-8")
+                nav.navigate("invite-redeem/$s/$k?a=$a&i=$i&s=$r")
             }
             // Web-experience gating — authorize a browser's QR-login for a
             // restricted service's website. All four params URL-encoded into
@@ -286,27 +287,30 @@ fun ServicesTab() {
                 ServiceAccessScreen(nav, serviceId = sid)
             }
         }
-        // #92 — friend redeem of a service-access invite (deep-link target). v2:
-        // the optional `a` query carries the author AID so the friend redeems with
-        // a per-author contact AID (empty ⇒ legacy global-AID fallback).
+        // #92 — friend redeem of a service-access invite (deep-link target). `s`
+        // names the app: the friend redeems with their id for it (empty ⇒ a link
+        // made before per-app ids, refused); `a` marks the box as invited.
         composable(
-            route = "invite-redeem/{server}/{secret}?a={a}&i={i}",
+            route = "invite-redeem/{server}/{secret}?a={a}&i={i}&s={s}",
             arguments = listOf(
                 navArgument("server") { type = NavType.StringType },
                 navArgument("secret") { type = NavType.StringType },
                 navArgument("a") { type = NavType.StringType; defaultValue = "" },
                 navArgument("i") { type = NavType.StringType; defaultValue = "" },
+                navArgument("s") { type = NavType.StringType; defaultValue = "" },
             ),
         ) { entry ->
             val server = java.net.URLDecoder.decode(entry.arguments?.getString("server") ?: "", "UTF-8")
             val secret = java.net.URLDecoder.decode(entry.arguments?.getString("secret") ?: "", "UTF-8")
             val authorAid = java.net.URLDecoder.decode(entry.arguments?.getString("a") ?: "", "UTF-8").ifEmpty { null }
             val inviteId = java.net.URLDecoder.decode(entry.arguments?.getString("i") ?: "", "UTF-8").ifEmpty { null }
+            val serviceRef = java.net.URLDecoder.decode(entry.arguments?.getString("s") ?: "", "UTF-8").ifEmpty { null }
             InviteRedeemScreen(
                 serverDomain = server,
                 secretHex = secret,
                 authorAidHex = authorAid,
                 inviteIdHex = inviteId,
+                serviceRef = serviceRef,
                 onOpenService = { nav.popBackStack() },
                 onDone = { nav.popBackStack() },
             )

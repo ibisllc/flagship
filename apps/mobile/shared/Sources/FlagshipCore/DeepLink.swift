@@ -53,13 +53,13 @@ public enum DeepLink: Equatable, Sendable {
     /// secret lives ONLY in the link fragment and is NEVER sent to `.com`;
     /// it's POSTed to that box's own redeem endpoint.
     ///
-    /// v2: the link ALSO carries the author's stable AID (`a=`) so the friend
-    /// derives their PER-AUTHOR contact AID (`deriveContactAccountId`) to present
-    /// (NOT the global AID), and — for a manual-approve invite — the `inviteId`
-    /// (`i=`) so the friend can sign the out-of-band acceptance. Both are
-    /// OPTIONAL (a v1 bare-secret link still parses; the friend then falls back to
-    /// the global AID + can't manual-accept). The canonical fragment is the BARE
-    /// secret followed by `&a=`/`&i=` (identical across webapp/iOS/Android).
+    /// The link ALSO carries the author's stable AID (`a=`, which marks the box
+    /// as one we were invited to), for a manual-approve invite the `inviteId`
+    /// (`i=`, to sign the acceptance), and the app (`s=`): the friend presents
+    /// their id for THAT app (`deriveAppAccountId`), never the global AID. A link
+    /// without `s=` still parses but can't be redeemed (ask for a new one). The
+    /// canonical fragment is the BARE secret followed by `&a=`/`&i=`/`&s=`
+    /// (identical across webapp/iOS/Android).
     /// Reachable two ways:
     ///   - the UNIVERSAL LINK the owner shares,
     ///     `https://<server>.<user>.flagship.services/invite#<secret>&a=<authorAID>&i=<inviteId>`
@@ -67,7 +67,7 @@ public enum DeepLink: Equatable, Sendable {
     ///   - the `flagship://invite?server=<host>&k=<secret>&a=<authorAID>&i=<inviteId>`
     ///     custom-scheme form the box's `/invite` page offers as "open in the app"
     ///     (a custom scheme can't carry a fragment, so the secret rides `k=` there).
-    case inviteRedeem(serverDomain: String, secretHex: String, authorAidHex: String?, inviteId: String?)
+    case inviteRedeem(serverDomain: String, secretHex: String, authorAidHex: String?, inviteId: String?, serviceRef: String? = nil)
 
     /// Author-finalize of a MANUAL-approve invite (v2 tier 2). The CONSUMER's app
     /// emits this as a reply link/QR after a pending redeem; the AUTHOR opens it,
@@ -163,7 +163,8 @@ public enum DeepLink: Equatable, Sendable {
                     authorAidHex: Self.hexParamFromFragment(frag, key: "a"),
                     // Canonical `i=`; tolerate the legacy `iid=` for in-flight links.
                     inviteId: Self.hexParamFromFragment(frag, key: "i")
-                        ?? Self.hexParamFromFragment(frag, key: "iid"))
+                        ?? Self.hexParamFromFragment(frag, key: "iid"),
+                    serviceRef: Self.appRefFromFragment(frag))
             }
             return nil
         }
@@ -200,7 +201,8 @@ public enum DeepLink: Equatable, Sendable {
                     secretHex: secret,
                     authorAidHex: Self.validHex64(params["a"]),
                     // Canonical `i=`; tolerate the legacy `iid=` for in-flight links.
-                    inviteId: Self.validHex(params["i"]) ?? Self.validHex(params["iid"]))
+                    inviteId: Self.validHex(params["i"]) ?? Self.validHex(params["iid"]),
+                    serviceRef: params["s"].flatMap { ServiceInvite.isAppRef($0) ? $0 : nil })
             }
             return nil
         case "invite-accept":
@@ -303,6 +305,17 @@ public enum DeepLink: Equatable, Sendable {
         return v.count % 2 == 0 ? v : nil
     }
 
+    /// The app (`s=<service id>`) an invite link's fragment names, or nil.
+    static func appRefFromFragment(_ raw: String?) -> String? {
+        guard var s = raw, !s.isEmpty else { return nil }
+        if s.hasPrefix("#") { s.removeFirst() }
+        for part in s.split(separator: "&") where part.hasPrefix("s=") {
+            let v = String(part.dropFirst(2))
+            return ServiceInvite.isAppRef(v) ? v : nil
+        }
+        return nil
+    }
+
     /// Validate an arbitrary even-length hex param (nil/empty/odd → nil).
     static func validHex(_ raw: String?) -> String? {
         guard let s = raw, !s.isEmpty,
@@ -336,21 +349,24 @@ public enum DeepLink: Equatable, Sendable {
 /// `DeepLink.parse`). Kept here in FlagshipCore so the create screen + the
 /// redeem VM build the SAME canonical link shapes the parser accepts.
 public enum ServiceInviteLinks {
-    /// The friend share-link `https://<server>/invite#<secret>&a=<authorAID>[&i=<inviteId>]`.
+    /// The friend share-link `https://<server>/invite#<secret>&a=<authorAID>[&i=<inviteId>]&s=<serviceRef>`.
     /// The secret is the BARE leading token (canonical cross-client format — no
     /// `k=` prefix; matches webapp + Android). v2 carries the author's AID (the
     /// friend derives their per-author contact AID) and — for a manual-approve
     /// invite — the inviteId (`i=`, so the friend can sign the acceptance). For a
     /// v1 bare link pass authorAidHex/inviteId nil → `…/invite#<secret>`.
-    public static func inviteLink(serverDomain: String, secretHex: String, authorAidHex: String? = nil, inviteId: String? = nil) -> String {
+    public static func inviteLink(serverDomain: String, secretHex: String, authorAidHex: String? = nil, inviteId: String? = nil,
+                                  serviceRef: String? = nil) -> String {
         let host = serverDomain.trimmingCharacters(in: CharacterSet(charactersIn: "/ "))
         let s = secretHex.lowercased()
-        guard authorAidHex != nil || inviteId != nil else {
+        guard authorAidHex != nil || inviteId != nil || serviceRef != nil else {
             return "https://\(host)/invite#\(s)"
         }
         var frag = s
         if let a = authorAidHex { frag += "&a=\(a.lowercased())" }
         if let iid = inviteId { frag += "&i=\(iid.lowercased())" }
+        // `s=` names the app: the friend redeems with their id for it.
+        if let ref = serviceRef { frag += "&s=\(ref)" }
         return "https://\(host)/invite#\(frag)"
     }
 

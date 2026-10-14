@@ -44,6 +44,7 @@ public struct RootShell: View {
         let secretHex: String
         let authorAidHex: String?
         let inviteId: String?
+        let serviceRef: String?
         var id: String { "\(serverDomain)#\(secretHex)" }
     }
 
@@ -125,6 +126,7 @@ public struct RootShell: View {
                     secretHex: target.secretHex,
                     authorAidHex: target.authorAidHex,
                     inviteId: target.inviteId,
+                    serviceRef: target.serviceRef,
                     onOpenService: { _ in pendingRedeem = nil },
                     onDone: { pendingRedeem = nil }
                 )
@@ -241,12 +243,13 @@ public struct RootShell: View {
     /// here into a full-screen cover (account-agnostic); every other link
     /// selects the owning tab and is consumed by that tab's own router.
     private func route(_ link: DeepLink) {
-        if case let .inviteRedeem(serverDomain, secretHex, authorAidHex, inviteId) = link {
+        if case let .inviteRedeem(serverDomain, secretHex, authorAidHex, inviteId, serviceRef) = link {
             // Hold the link behind the lock screen until the friend is
-            // unlocked (they sign the redeem with their own contact AID).
+            // unlocked (they sign the redeem with their own id for the app).
             guard app.isUnlocked else { return }
             _ = linker.consume()
-            pendingRedeem = RedeemTarget(serverDomain: serverDomain, secretHex: secretHex, authorAidHex: authorAidHex, inviteId: inviteId)
+            pendingRedeem = RedeemTarget(serverDomain: serverDomain, secretHex: secretHex, authorAidHex: authorAidHex,
+                                         inviteId: inviteId, serviceRef: serviceRef)
             return
         }
         if case let .inviteAccept(serverDomain, inviteId, serviceRef, contactAidHex, acceptSigHex, acceptedAt) = link {

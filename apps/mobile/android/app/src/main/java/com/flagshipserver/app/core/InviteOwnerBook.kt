@@ -1,11 +1,10 @@
 // Which owner AID each box we were invited to belongs to (docs/app-apis.md §5,
 // "Who the app sees"). Mirror of the webapp's lib/knockIdentity.js.
 //
-// Invites bind the friend's PER-AUTHOR contact AID, deriveContactAccountId(UMK,
-// ownerAID), so a knock on a friend's box has to be signed with that same
-// contact AID or the box answers 401. The knock link carries no owner AID (the
-// knock page discloses nothing about the owner), so the redeem flow remembers
-// the owner AID from the invite link, keyed by the box host.
+// Invites bind the friend's id for the app, deriveAppAccountId(UMK,
+// serviceRef), so a knock on a box we were invited to signs with our id for the
+// knock's app. We only offer one to boxes we were invited to: the redeem flow
+// remembers the box (and its owner AID, from the invite link's `a=`).
 //
 // Holds only public keys and box names, so plain SharedPreferences.
 

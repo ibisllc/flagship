@@ -17,6 +17,7 @@ public struct InviteRedeemScreen: View {
     private let secretHex: String
     private let authorAidHex: String?
     private let inviteId: String?
+    private let serviceRef: String?
     private let onOpenService: (String) -> Void
     private let onDone: () -> Void
 
@@ -27,6 +28,7 @@ public struct InviteRedeemScreen: View {
         secretHex: String,
         authorAidHex: String? = nil,
         inviteId: String? = nil,
+        serviceRef: String? = nil,
         onOpenService: @escaping (String) -> Void = { _ in },
         onDone: @escaping () -> Void = {}
     ) {
@@ -34,6 +36,7 @@ public struct InviteRedeemScreen: View {
         self.secretHex = secretHex
         self.authorAidHex = authorAidHex
         self.inviteId = inviteId
+        self.serviceRef = serviceRef
         self.onOpenService = onOpenService
         self.onDone = onDone
     }
@@ -62,7 +65,7 @@ public struct InviteRedeemScreen: View {
             if vm == nil {
                 vm = InviteRedeemViewModel(
                     client: client, serverDomain: serverDomain, secretHex: secretHex,
-                    authorAidHex: authorAidHex, inviteId: inviteId)
+                    authorAidHex: authorAidHex, inviteId: inviteId, serviceRef: serviceRef)
             }
         }
     }

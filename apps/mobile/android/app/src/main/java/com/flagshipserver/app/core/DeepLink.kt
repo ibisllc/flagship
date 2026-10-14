@@ -74,6 +74,8 @@ sealed interface DeepLink {
         val secretHex: String,
         val authorAidHex: String? = null,
         val inviteIdHex: String? = null,
+        /** The app the invite is for (`s=`); null for a link made before per-app ids. */
+        val serviceRef: String? = null,
     ) : DeepLink
 
     /** Web-experience gating (docs/service-access-gating.md, "Web-experience
@@ -118,7 +120,8 @@ sealed interface DeepLink {
                     val secret = secretFromFragment(uri.fragment)
                     val author = InviteLink.authorAidFromFragment(uri.fragment)
                     val invite = InviteLink.inviteIdFromFragment(uri.fragment)
-                    return if (secret != null) RedeemInvite(host, secret, author, invite) else null
+                    val ref = InviteLink.serviceRefFromLink(uri.fragment)
+                    return if (secret != null) RedeemInvite(host, secret, author, invite, ref) else null
                 }
                 // Transfer take-over universal link served from the control apex:
                 // `https://flagshipserver.com/transfer?o=<b64url>`.
@@ -158,7 +161,8 @@ sealed interface DeepLink {
                     val hex64 = Regex("^[0-9a-fA-F]{64}$")
                     val author = params["a"]?.takeIf { hex64.matches(it) }?.lowercase()
                     val invite = params["i"]?.takeIf { hex64.matches(it) }?.lowercase()
-                    if (secret != null && server.isNotEmpty()) RedeemInvite(server, secret, author, invite) else null
+                    val ref = params["s"]?.takeIf { ServerKeys.isAppRef(it) }
+                    if (secret != null && server.isNotEmpty()) RedeemInvite(server, secret, author, invite, ref) else null
                 }
                 "join" -> {
                     // flagship://join?sid=<sid>&pk=<pkB64u>. Both params

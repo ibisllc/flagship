@@ -48,8 +48,8 @@ public final class KnockAuthorizeViewModel {
     public let pageId: String
     /// Visitor's global AID keypair provider (one biometric).
     private let aid: @MainActor (String) async throws -> Curve25519.Signing.PrivateKey
-    /// Per-owner contact AID provider, `deriveContactAccountId(UMK, ownerAID)`.
-    private let contactAid: @MainActor (_ ownerAidPub: Data, _ reason: String) async throws -> Curve25519.Signing.PrivateKey
+    /// The visitor's id for an app, `deriveAppAccountId(UMK, serviceRef)`.
+    private let appAid: @MainActor (_ serviceRef: String, _ reason: String) async throws -> Curve25519.Signing.PrivateKey
     private let owners: any InviteOwnerStoring
     /// FQDNs of the account's own servers (AppState pods).
     private var ownServers: Set<String>
@@ -71,7 +71,7 @@ public final class KnockAuthorizeViewModel {
         refreshOwnServers: (@MainActor () async -> [String])? = nil,
         owners: any InviteOwnerStoring = InviteOwnerStore(),
         aid: (@MainActor (String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
-        contactAid: (@MainActor (_ ownerAidPub: Data, _ reason: String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
+        appAid: (@MainActor (_ serviceRef: String, _ reason: String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
         now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }
     ) {
         self.client = client
@@ -85,8 +85,8 @@ public final class KnockAuthorizeViewModel {
         self.refreshOwnServers = refreshOwnServers
         self.owners = owners
         self.aid = aid ?? { reason in try await Keystore.deriveAccountId(reason: reason) }
-        self.contactAid = contactAid ?? { ownerAidPub, reason in
-            try await Keystore.deriveContactAccountId(authorAidPub: ownerAidPub, reason: reason)
+        self.appAid = appAid ?? { serviceRef, reason in
+            try await Keystore.deriveAppAccountId(appRef: serviceRef, reason: reason)
         }
     }
 
@@ -100,7 +100,8 @@ public final class KnockAuthorizeViewModel {
     public var title: String { Self.title(svc: svc, serverDomain: serverDomain) }
 
     /// The key to sign this knock with, or nil when the box is neither ours nor
-    /// one we hold an invite for. Our own servers win over a stored record.
+    /// one we hold an invite for. Our own servers win over a stored record; on
+    /// a box we were invited to we sign with our id for the knock's app.
     private func signingKey(reason: String) async throws -> Curve25519.Signing.PrivateKey? {
         let host = InviteOwnerStore.normalizeHost(serverDomain)
         if ownServers.contains(host) {
@@ -109,8 +110,8 @@ public final class KnockAuthorizeViewModel {
         if let ownerHex = owners.ownerAidHex(forServer: host),
            let ownerPub = HexUtil.decode(ownerHex) {
             let global = try await aid(reason)
-            if ownerPub != global.publicKey.rawRepresentation {
-                return try await contactAid(ownerPub, reason)
+            if ownerPub != global.publicKey.rawRepresentation, ServiceInvite.isAppRef(serviceRef) {
+                return try await appAid(serviceRef, reason)
             }
         }
         if let refreshOwnServers {

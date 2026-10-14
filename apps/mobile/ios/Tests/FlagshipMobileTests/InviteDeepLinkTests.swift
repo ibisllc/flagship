@@ -124,6 +124,24 @@ final class InviteDeepLinkTests: XCTestCase {
         XCTAssertEqual(
             DeepLink.parse(URL(string: "https://home.alice.flagship.services/invite#\(s)")!),
             .inviteRedeem(serverDomain: "home.alice.flagship.services", secretHex: s, authorAidHex: nil, inviteId: nil))
+        // The current form also names the app (frozen the same on webapp + Android).
+        let fragApp = "\(frag)&s=alice-notes"
+        XCTAssertEqual(
+            ServiceInviteLinks.inviteLink(serverDomain: "home.alice.flagship.services", secretHex: s, authorAidHex: a,
+                                          inviteId: i, serviceRef: "alice-notes"),
+            "https://home.alice.flagship.services/invite#\(fragApp)")
+        XCTAssertEqual(
+            DeepLink.parse(URL(string: "https://home.alice.flagship.services/invite#\(fragApp)")!),
+            .inviteRedeem(serverDomain: "home.alice.flagship.services", secretHex: s, authorAidHex: a, inviteId: i,
+                          serviceRef: "alice-notes"))
+        // The app-open hand-off carries it as `s`; a malformed one is dropped.
+        XCTAssertEqual(
+            DeepLink.parse(URL(string: "flagship://invite?server=home.alice.flagship.services&k=\(s)&a=\(a)&s=alice-notes")!),
+            .inviteRedeem(serverDomain: "home.alice.flagship.services", secretHex: s, authorAidHex: a, inviteId: nil,
+                          serviceRef: "alice-notes"))
+        XCTAssertEqual(
+            DeepLink.parse(URL(string: "https://home.alice.flagship.services/invite#\(frag)&s=Bad%20Ref")!),
+            .inviteRedeem(serverDomain: "home.alice.flagship.services", secretHex: s, authorAidHex: a, inviteId: i))
     }
 
     func testAcceptReplyLinkRoundTrips() {

@@ -1,14 +1,14 @@
 // Invite-link + acceptance-reply codecs for service-access gating v2
 // (docs/service-access-gating.md §v2 hardening). Two artifacts:
 //
-//  1. The INVITE link the author shares. v2 embeds the author's stable AID so
-//     the redeeming friend can derive their PER-AUTHOR contact AID up front
-//     (pairwise AIDs — the redemption identity is deriveContactAccountId(UMK,
-//     authorAID), not the global AID; "the author's AID comes from the invite").
-//     The capability secret stays in the URL FRAGMENT (never sent to a server);
-//     the author AID rides alongside it (`#<secret>&a=<authorAID>`). The app
-//     hand-off is `flagship://invite?server=<host>&k=<secret>&a=<authorAID>`
-//     (a custom scheme can't carry a fragment, so both are queries there).
+//  1. The INVITE link the author shares. It names the app (`s=<serviceRef>`):
+//     the friend redeems with their id for THAT app (deriveAppAccountId(UMK,
+//     serviceRef), "Per-app identity"), never the global AID; the author's AID
+//     (`a=`) marks the box as one they were invited to. The capability secret
+//     stays in the URL FRAGMENT (never sent to a server):
+//     `#<secret>&a=<authorAID>[&i=<inviteId>]&s=<serviceRef>`. The app hand-off is
+//     `flagship://invite?server=<host>&k=<secret>&a=<authorAID>&s=<serviceRef>`
+//     (a custom scheme can't carry a fragment, so they are queries there).
 //
 //  2. The ACCEPTANCE reply (MANUAL-approve, tier 2). The friend's app emits the
 //     canonical cross-client deep-link
@@ -40,6 +40,7 @@ object InviteLink {
     private val RE_HEX64 = Regex("^[0-9a-fA-F]{64}$")
     private val RE_A_PARAM = Regex("(?:^|[?&#])a=([0-9a-fA-F]{64})")
     private val RE_I_PARAM = Regex("(?:^|[?&#])i=([0-9a-fA-F]{64})")
+    private val RE_S_PARAM = Regex("(?:^|[?&#])s=([^&#]*)")
 
     /** Build the friend share-link. The capability [secretHex] is the BARE leading
      *  fragment token (canonical cross-client format — never leaves the browser);
@@ -47,18 +48,29 @@ object InviteLink {
      *  contact AID before redeeming (v2). [inviteIdHex], when present, is appended
      *  as `&i=` so a manual-approve invite's friend can sign the acceptance over
      *  the same id the author created it under. */
-    fun shareLink(serverDomain: String, secretHex: String, authorAidHex: String, inviteIdHex: String? = null): String {
+    fun shareLink(serverDomain: String, secretHex: String, authorAidHex: String, inviteIdHex: String? = null,
+                  serviceRef: String? = null): String {
         var frag = "${secretHex.lowercase()}&a=${authorAidHex.lowercase()}"
         if (inviteIdHex != null) frag += "&i=${inviteIdHex.lowercase()}"
+        if (serviceRef != null) frag += "&s=$serviceRef"
         return "https://$serverDomain/invite#$frag"
+    }
+
+    /** The app (`s=<service id>`) an invite link names, or null when absent or
+     *  malformed (a link made before per-app ids: it can't be redeemed). */
+    fun serviceRefFromLink(raw: String?): String? {
+        val v = raw?.let { RE_S_PARAM.find(it)?.groupValues?.get(1) } ?: return null
+        return v.takeIf { ServerKeys.isAppRef(it) }
     }
 
     /** The same hand-off as a `flagship://invite` app-scheme link (a custom
      *  scheme can't carry a fragment → secret + author [+ inviteId] ride as
      *  queries). Useful for the QR / "open in app" affordance. */
-    fun appLink(serverDomain: String, secretHex: String, authorAidHex: String, inviteIdHex: String? = null): String {
+    fun appLink(serverDomain: String, secretHex: String, authorAidHex: String, inviteIdHex: String? = null,
+                serviceRef: String? = null): String {
         var s = "flagship://invite?server=$serverDomain&k=${secretHex.lowercase()}&a=${authorAidHex.lowercase()}"
         if (inviteIdHex != null) s += "&i=${inviteIdHex.lowercase()}"
+        if (serviceRef != null) s += "&s=$serviceRef"
         return s
     }
 

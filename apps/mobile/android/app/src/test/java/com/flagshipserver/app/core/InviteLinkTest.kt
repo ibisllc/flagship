@@ -75,6 +75,16 @@ class InviteLinkTest {
         // parse(frozen) === { secret, a, i }.
         assertEquals(a, InviteLink.authorAidFromFragment(frag))
         assertEquals(i, InviteLink.inviteIdFromFragment(frag))
+        // The current form also names the app (frozen the same on webapp + iOS).
+        val fragApp = "$frag&s=alice-notes"
+        assertEquals("https://$server/invite#$fragApp", InviteLink.shareLink(server, s, a, i, "alice-notes"))
+        assertEquals("alice-notes", InviteLink.serviceRefFromLink(fragApp))
+        assertNull(InviteLink.serviceRefFromLink(frag))
+        assertNull(InviteLink.serviceRefFromLink("$frag&s=Bad%20Ref"))
+        assertEquals(
+            "flagship://invite?server=$server&k=$s&a=$a&s=alice-notes",
+            InviteLink.appLink(server, s, a, null, "alice-notes"),
+        )
     }
 
     @Test fun acceptanceRoundTrips() {

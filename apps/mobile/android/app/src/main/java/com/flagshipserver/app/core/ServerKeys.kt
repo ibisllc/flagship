@@ -22,7 +22,7 @@ object ServerKeys {
     private const val INFO_STK = "flagship.stk.v1"
     private const val INFO_IRK = "flagship.irk.v1"
     private const val INFO_ACCOUNT_ID = "flagship/account-id/v1"
-    private const val INFO_CONTACT_ID = "flagship/contact-aid/v1"
+    private const val INFO_APP_ID = "flagship/app-aid/v1"
     private const val INFO_HOUSEHOLD_KEY = "flagship/household-key/v1"
 
     /** Stable Account Identity Key (AID) SEED (32 bytes) — the NON-rotating
@@ -45,29 +45,31 @@ object ServerKeys {
     fun deriveAccountIdPub(umkSeed: ByteArray): ByteArray =
         Ed25519Sign.KeyPair.newKeyPairFromSeed(deriveAccountIdSeed(umkSeed)).publicKey
 
-    /** Contact Account Id (per-author pseudonym) SEED (32 bytes) — the v2
-     *  redemption identity for service-access gating (docs/service-access-gating.md
-     *  v2 §H3). HKDF-SHA256(umkSeed, salt=empty,
-     *  info="flagship/contact-aid/v1|<hex(authorAidPub)>"). Derived from the
-     *  CONSUMER's UMK + the AUTHOR's AID pubkey, so it is stable with that author
-     *  (idempotent re-redeem), unlinkable across two different authors, and
-     *  per-author (cross-app reuse works). Mirrors protocol keys.ts
-     *  `deriveContactAccountId` (the info string is the SAME `${INFO}|<hex>`). */
-    fun deriveContactAccountIdSeed(umkSeed: ByteArray, authorAidPub: ByteArray): ByteArray {
+    private val APP_REF = Regex("^[a-z0-9](?:[a-z0-9-]{0,126}[a-z0-9])?$")
+
+    /** Whether [ref] is a service id (`<creator>--<slug>`: lowercase, digits, dashes). */
+    fun isAppRef(ref: String?): Boolean = ref != null && APP_REF.matches(ref)
+
+    /** App Account Id SEED (32 bytes) — the identity a visitor presents to ONE
+     *  app (redeem, visit, knock, acceptance): HKDF-SHA256(umkSeed, salt=empty,
+     *  info="flagship/app-aid/v1|<appRef>"), appRef = the app's service id.
+     *  Depends on the account and the app only: two apps see unrelated ids, and
+     *  the owner's and a co-manager's invites to one app bind the same id
+     *  (docs/service-access-gating.md, "Per-app identity"). Mirrors protocol
+     *  keys.ts `deriveAppAccountId`. */
+    fun deriveAppAccountIdSeed(umkSeed: ByteArray, appRef: String): ByteArray {
         require(umkSeed.size == 32) { "UMK seed must be 32 bytes" }
-        val info = "$INFO_CONTACT_ID|${HexUtil.encode(authorAidPub)}"
-        return hkdfSha256(umkSeed, info.toByteArray(Charsets.UTF_8))
+        require(isAppRef(appRef)) { "app ref must be a service id" }
+        return hkdfSha256(umkSeed, "$INFO_APP_ID|$appRef".toByteArray(Charsets.UTF_8))
     }
 
-    /** A Tink Ed25519 signer over the contact-AID seed (the friend signs the
-     *  redeem / visit / knock / acceptance for THIS author with it). */
-    fun deriveContactAccountId(umkSeed: ByteArray, authorAidPub: ByteArray): Ed25519Sign =
-        Ed25519Sign(deriveContactAccountIdSeed(umkSeed, authorAidPub))
+    /** A Tink Ed25519 signer over the per-app id seed. */
+    fun deriveAppAccountId(umkSeed: ByteArray, appRef: String): Ed25519Sign =
+        Ed25519Sign(deriveAppAccountIdSeed(umkSeed, appRef))
 
-    /** The contact-AID Ed25519 PUBLIC key (32 bytes) — the per-author pseudonym
-     *  presented at redemption (NOT the global AID). */
-    fun deriveContactAccountIdPub(umkSeed: ByteArray, authorAidPub: ByteArray): ByteArray =
-        Ed25519Sign.KeyPair.newKeyPairFromSeed(deriveContactAccountIdSeed(umkSeed, authorAidPub)).publicKey
+    /** The per-app id's PUBLIC key (32 bytes) — what the app's allow-list binds. */
+    fun deriveAppAccountIdPub(umkSeed: ByteArray, appRef: String): ByteArray =
+        Ed25519Sign.KeyPair.newKeyPairFromSeed(deriveAppAccountIdSeed(umkSeed, appRef)).publicKey
 
     /** The household AEAD key (32 bytes) — HKDF-SHA256(umkSeed, salt=empty,
      *  info="flagship/household-key/v1"). Every device of the account derives

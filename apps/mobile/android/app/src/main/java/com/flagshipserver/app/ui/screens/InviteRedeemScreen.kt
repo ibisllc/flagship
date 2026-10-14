@@ -60,14 +60,18 @@ fun InviteRedeemScreen(
     secretHex: String,
     authorAidHex: String? = null,
     inviteIdHex: String? = null,
+    serviceRef: String? = null,
     onOpenService: (String) -> Unit,
     onDone: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val toasts = LocalToastCenter.current
     val ctx = LocalContext.current
-    val vm = remember(serverDomain, secretHex, authorAidHex, inviteIdHex) {
-        InviteRedeemViewModel(serverDomain = serverDomain, secretHex = secretHex, authorAidHex = authorAidHex, inviteIdHex = inviteIdHex)
+    val vm = remember(serverDomain, secretHex, authorAidHex, inviteIdHex, serviceRef) {
+        InviteRedeemViewModel(
+            serverDomain = serverDomain, secretHex = secretHex, authorAidHex = authorAidHex,
+            inviteIdHex = inviteIdHex, serviceRef = serviceRef,
+        )
     }
     val phase by vm.phase.collectAsState()
 

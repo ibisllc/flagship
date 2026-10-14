@@ -1,10 +1,10 @@
 // Friend-side redeem orchestrator (docs/service-access-gating.md §v2 hardening).
 // Mirror of iOS InviteRedeemViewModel + the webapp views/invite-redeem.js.
 //
-// v2: the friend presents a PER-AUTHOR contact AID (deriveContactAccountId(UMK,
-// authorAID)) — NOT the global AID — so two authors can't cross-link them. The
-// author's AID is carried IN the invite link; if a (legacy) link omits it, we
-// fall back to the global AID (existing global-AID bindings are grandfathered).
+// The friend presents their id for THE invite's app (deriveAppAccountId(UMK,
+// serviceRef), the link's `s=`) — never the global AID — so nothing they present
+// is shared between apps, and it is the same whoever invited them. A link
+// without `s=` (made before per-app ids) is refused: ask for a new one.
 //
 // Two outcomes:
 //   - AUTO-approve  -> Done (bound).
@@ -23,6 +23,7 @@ import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.InviteLink
 import com.flagshipserver.app.core.InviteOwnerBook
 import com.flagshipserver.app.core.InviteOwners
+import com.flagshipserver.app.core.ServerKeys
 import com.flagshipserver.app.core.ServiceInvite
 import com.flagshipserver.app.keystore.Keystore
 import com.google.crypto.tink.subtle.Ed25519Sign
@@ -55,18 +56,17 @@ class InviteRedeemViewModel(
      *  The friend signs the acceptance over THIS id; null for an auto/group or a
      *  legacy link (then the box-relayed create's inviteId is used). */
     private val inviteIdHex: String? = null,
+    /** The app the invite is for (the link's `s=`): selects the friend's id. */
+    private val serviceRef: String? = null,
     private val client: ServiceAccessClient = ServiceAccessClient(),
-    /** Friend's GLOBAL AID (fallback when a legacy link carries no author AID). */
-    private val globalAidSigner: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.deriveAccountId(r) },
-    private val globalAidPubHex: suspend (reason: String) -> String = { r -> Keystore.accountIdPubHex(r) },
-    /** Friend's PER-AUTHOR contact AID (the v2 redemption identity). */
-    private val contactAidSigner: suspend (authorAid: ByteArray, reason: String) -> Ed25519Sign =
-        { a, r -> Keystore.deriveContactAccountId(a, r) },
-    private val contactAidPubHex: suspend (authorAid: ByteArray, reason: String) -> String =
-        { a, r -> Keystore.contactAccountIdPubHex(a, r) },
+    /** The friend's id for an app (the redemption identity). */
+    private val appAidSigner: suspend (serviceRef: String, reason: String) -> Ed25519Sign =
+        { s, r -> Keystore.deriveAppAccountId(s, r) },
+    private val appAidPubHex: suspend (serviceRef: String, reason: String) -> String =
+        { s, r -> Keystore.appAccountIdPubHex(s, r) },
     private val now: () -> Long = { System.currentTimeMillis() },
-    /** Where a v2 redeem records the box's owner AID, so a later knock on that
-     *  box signs with the same contact AID the invite bound. */
+    /** Where a redeem records the box (and its owner AID), so a later knock on
+     *  it can sign with the friend's id for the knock's app. */
     private val owners: InviteOwnerBook = InviteOwners.book,
 ) : ViewModel() {
     private val _phase = MutableStateFlow<InviteRedeemPhase>(InviteRedeemPhase.Idle)
@@ -76,6 +76,7 @@ class InviteRedeemViewModel(
     private val secret = secretHex.lowercase()
     private val authorAid = authorAidHex?.lowercase()?.takeIf { Regex("^[0-9a-f]{64}$").matches(it) }
     private val linkInviteId = inviteIdHex?.lowercase()?.takeIf { Regex("^[0-9a-f]{64}$").matches(it) }
+    private val appRef = serviceRef?.takeIf { ServerKeys.isAppRef(it) }
 
     suspend fun redeem() {
         if (_phase.value is InviteRedeemPhase.Redeeming) return
@@ -83,21 +84,15 @@ class InviteRedeemViewModel(
             _phase.value = InviteRedeemPhase.Failed("This invite link is missing or malformed.")
             return
         }
+        val ref = appRef ?: run {
+            _phase.value = InviteRedeemPhase.Failed(OLD_LINK)
+            return
+        }
         _phase.value = InviteRedeemPhase.Redeeming
         try {
-            // v2: per-author contact AID when the link carries the author; else the
-            // global AID (legacy links are grandfathered).
             val reason = "Accept this invite"
-            val authorBytes = authorAid?.let { HexUtil.decode(it) }
-            val redeemPub: ByteArray
-            val redeemSigner: Ed25519Sign
-            if (authorBytes != null) {
-                redeemPub = HexUtil.decode(contactAidPubHex(authorBytes, reason))!!
-                redeemSigner = contactAidSigner(authorBytes, reason)
-            } else {
-                redeemPub = HexUtil.decode(globalAidPubHex(reason))!!
-                redeemSigner = globalAidSigner(reason)
-            }
+            val redeemPub = HexUtil.decode(appAidPubHex(ref, reason))!!
+            val redeemSigner = appAidSigner(ref, reason)
             val secretBytes = HexUtil.decode(secret) ?: run {
                 _phase.value = InviteRedeemPhase.Failed("This invite link is malformed."); return
             }
@@ -157,5 +152,10 @@ class InviteRedeemViewModel(
         }
         val reply = InviteLink.buildAcceptReply(serverDomain, accept, HexUtil.encode(acceptSig))
         _phase.value = InviteRedeemPhase.AwaitingApproval(serviceRef, reply, reply)
+    }
+
+    companion object {
+        /** Shown for a link made before per-app ids (no `s=`). */
+        const val OLD_LINK = "This invite link is from an older version of Flagship. Ask the owner for a new link."
     }
 }

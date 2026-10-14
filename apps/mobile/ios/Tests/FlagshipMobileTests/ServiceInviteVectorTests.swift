@@ -38,6 +38,8 @@ final class ServiceInviteVectorTests: XCTestCase {
         let revokeAid: [String: Any]
         let contactAid: [String: Any]
         let accept: [String: Any]
+        let appAid: [String: Any]
+        let acceptApp: [String: Any]
         let createMaxN: [String: Any]
     }
 
@@ -78,6 +80,8 @@ final class ServiceInviteVectorTests: XCTestCase {
             revokeAid: root["revokeAid"] as! [String: Any],
             contactAid: root["contactAid"] as! [String: Any],
             accept: root["accept"] as! [String: Any],
+            appAid: root["appAid"] as! [String: Any],
+            acceptApp: root["acceptApp"] as! [String: Any],
             createMaxN: root["createMaxN"] as! [String: Any]
         )
     }
@@ -102,11 +106,10 @@ final class ServiceInviteVectorTests: XCTestCase {
     private func authorAidKey(_ v: Vectors) -> Curve25519.Signing.PrivateKey {
         ServiceInvite.deriveAccountId(umkSeed: authorUmk(v))!
     }
-    /// The friend's PER-AUTHOR contact AID — `deriveContactAccountId(friendUmk,
-    /// authorAid.pub)` — the consumer's manual-approve acceptance signer.
-    private func friendContactAidKey(_ v: Vectors) -> Curve25519.Signing.PrivateKey {
-        let authorAidPub = ServiceInvite.deriveAccountIdPub(umkSeed: authorUmk(v))!
-        return ServiceInvite.deriveContactAccountId(umkSeed: friendUmk(v), authorAidPub: authorAidPub)!
+    /// The friend's id for the acceptance's app — `deriveAppAccountId(friendUmk,
+    /// serviceRef)` — the consumer's manual-approve acceptance signer.
+    private func friendAppAidKey(_ v: Vectors) -> Curve25519.Signing.PrivateKey {
+        ServiceInvite.deriveAppAccountId(umkSeed: friendUmk(v), appRef: v.appAid["serviceRef"] as! String)!
     }
 
     // MARK: derivations
@@ -351,23 +354,40 @@ final class ServiceInviteVectorTests: XCTestCase {
     // MARK: v2 (gating Wave 3) — AID-signed create/revoke, pairwise contact AID,
     // manual-approve acceptance, group/multi-use create.
 
-    /// The CONSUMER's per-author pseudonym: `deriveContactAccountId(friendUmk,
-    /// authorAid.pub)` must reproduce the pinned `contactAidPubHex` — the identity
-    /// the box binds (NOT the global friend AID). Mirrors keys.ts.
-    func testContactAccountIdMatchesFixture() throws {
+    /// The visitor's id for an app: `deriveAppAccountId(friendUmk, serviceRef)`
+    /// reproduces the pinned `appAidPubHex` (the id the box binds, never the
+    /// global AID), and every case of test-vectors/app-account-id. Mirrors keys.ts.
+    func testAppAccountIdMatchesFixtures() throws {
         let v = try load()
-        let authorAidPub = HexUtil.decode(v.contactAid["authorAidPubHex"] as! String)!
-        // The pinned author AID pub must equal the one we derive from authorUMK.
-        XCTAssertEqual(
-            HexUtil.encode(ServiceInvite.deriveAccountIdPub(umkSeed: authorUmk(v))!),
-            (v.contactAid["authorAidPubHex"] as! String),
-            "contactAid.authorAidPubHex drift"
-        )
-        XCTAssertEqual(
-            HexUtil.encode(ServiceInvite.deriveContactAccountIdPub(umkSeed: friendUmk(v), authorAidPub: authorAidPub)!),
-            (v.contactAid["contactAidPubHex"] as! String),
-            "contact AID drift"
-        )
+        let ref = v.appAid["serviceRef"] as! String
+        XCTAssertEqual(HexUtil.encode(ServiceInvite.deriveAppAccountIdPub(umkSeed: friendUmk(v), appRef: ref)!),
+                       v.appAid["appAidPubHex"] as! String)
+        var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        var url: URL?
+        for _ in 0..<14 {
+            let c = dir.appendingPathComponent("packages/protocol/test-vectors/app-account-id/vectors.json")
+            if FileManager.default.fileExists(atPath: c.path) { url = c; break }
+            dir = dir.deletingLastPathComponent()
+        }
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: XCTUnwrap(url))) as? [String: Any])
+        let cases = try XCTUnwrap(root["cases"] as? [[String: Any]])
+        XCTAssertFalse(cases.isEmpty)
+        for c in cases {
+            let pub = ServiceInvite.deriveAppAccountIdPub(umkSeed: HexUtil.decode(c["umkSeedHex"] as! String)!,
+                                                          appRef: c["appRef"] as! String)
+            XCTAssertEqual(pub.map(HexUtil.encode), c["pubHex"] as? String, c["appRef"] as? String ?? "")
+        }
+        // The same app gives the same id whoever invited them.
+        let same = try XCTUnwrap(root["sameAppAnyInviter"] as? [String: Any])
+        XCTAssertEqual(HexUtil.encode(ServiceInvite.deriveAppAccountIdPub(umkSeed: HexUtil.decode(same["umkSeedHex"] as! String)!,
+                                                                          appRef: same["appRef"] as! String)!),
+                       same["pubHex"] as! String)
+        for bad in try XCTUnwrap(root["invalidAppRefs"] as? [String]) {
+            XCTAssertNil(ServiceInvite.deriveAppAccountIdPub(umkSeed: friendUmk(v), appRef: bad), "should refuse \(bad)")
+        }
+        // Never the global AID.
+        XCTAssertNotEqual(ServiceInvite.deriveAppAccountIdPub(umkSeed: friendUmk(v), appRef: ref),
+                          ServiceInvite.deriveAccountIdPub(umkSeed: friendUmk(v)))
     }
 
     /// Wave-3 create signing SWITCHES from IRK to the author's stable AID — the
@@ -403,28 +423,27 @@ final class ServiceInviteVectorTests: XCTestCase {
         XCTAssertTrue(ServiceInvite.verify(try ServiceInvite.sign(bytes, with: authorAidKey(v)), bytes, pub: authorAid), "our revokeAid sig must verify under authorAID")
     }
 
-    /// The MANUAL-approve acceptance is signed by the friend's PER-AUTHOR contact
-    /// AID over `canonicalAccept`. The pinned sig must verify under that pseudonym.
+    /// The MANUAL-approve acceptance is signed by the friend's id for the app
+    /// over `canonicalAccept`. The pinned `acceptApp` sig must verify under it.
     func testAcceptSignatureVerifies() throws {
         let v = try load()
-        let contactAidPub = HexUtil.decode(v.contactAid["contactAidPubHex"] as! String)!
+        let appPub = HexUtil.decode(v.appAid["appAidPubHex"] as! String)!
         let bytes = try ServiceInvite.canonicalAccept(
-            inviteId: v.accept["inviteId"] as! String,
-            serviceRef: v.accept["serviceRef"] as! String,
-            contactAID: contactAidPub,
-            acceptedAt: (v.accept["acceptedAt"] as! NSNumber).int64Value
+            inviteId: v.acceptApp["inviteId"] as! String,
+            serviceRef: v.acceptApp["serviceRef"] as! String,
+            contactAID: appPub,
+            acceptedAt: (v.acceptApp["acceptedAt"] as! NSNumber).int64Value
         )
-        let sig = HexUtil.decode(v.accept["sigHex"] as! String)!
-        XCTAssertTrue(ServiceInvite.verify(sig, bytes, pub: contactAidPub), "pinned accept sig must verify under the contact AID")
-        // Our own signAcceptServiceInvite over the SAME bytes verifies too.
+        let sig = HexUtil.decode(v.acceptApp["sigHex"] as! String)!
+        XCTAssertTrue(ServiceInvite.verify(sig, bytes, pub: appPub), "pinned acceptApp sig must verify under the per-app id")
         let mine = try ServiceInvite.signAcceptServiceInvite(
-            inviteId: v.accept["inviteId"] as! String,
-            serviceRef: v.accept["serviceRef"] as! String,
-            contactAID: contactAidPub,
-            acceptedAt: (v.accept["acceptedAt"] as! NSNumber).int64Value,
-            contactAid: friendContactAidKey(v)
+            inviteId: v.acceptApp["inviteId"] as! String,
+            serviceRef: v.acceptApp["serviceRef"] as! String,
+            contactAID: appPub,
+            acceptedAt: (v.acceptApp["acceptedAt"] as! NSNumber).int64Value,
+            contactAid: friendAppAidKey(v)
         )
-        XCTAssertTrue(ServiceInvite.verify(mine, bytes, pub: contactAidPub), "our accept sig must verify under the contact AID")
+        XCTAssertTrue(ServiceInvite.verify(mine, bytes, pub: appPub), "our accept sig must verify under the per-app id")
     }
 
     /// A GROUP/multi-use create appends `maxN`+`exp` to the canonical bytes; the

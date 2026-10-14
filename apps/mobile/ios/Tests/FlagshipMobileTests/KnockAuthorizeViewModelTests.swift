@@ -42,7 +42,7 @@ final class KnockAuthorizeViewModelTests: XCTestCase {
             ownServers: [server],
             owners: ownerStore(),
             aid: { _ in k },
-            contactAid: { _, _ in XCTFail("own server must not use a contact AID"); return k },
+            appAid: { _, _ in XCTFail("own server must not use a per-app id"); return k },
             now: now)
     }
 
@@ -75,7 +75,7 @@ final class KnockAuthorizeViewModelTests: XCTestCase {
     }
 
     /// The friend's VM on a box they were invited to: real UMK derivations from
-    /// the fixture seed (global AID + per-owner contact AID).
+    /// the fixture seed (global AID + per-app id).
     private func friendVM(
         _ mock: MockServiceAccessClient,
         fx: Fixture,
@@ -96,11 +96,16 @@ final class KnockAuthorizeViewModelTests: XCTestCase {
             refreshOwnServers: refreshOwnServers,
             owners: owners,
             aid: { _ in ServiceInvite.deriveAccountId(umkSeed: umk)! },
-            contactAid: { ownerPub, _ in ServiceInvite.deriveContactAccountId(umkSeed: umk, authorAidPub: ownerPub)! },
+            appAid: { appRef, _ in ServiceInvite.deriveAppAccountId(umkSeed: umk, appRef: appRef)! },
             now: { 1_700_004_000_000 })
     }
 
-    func testInvitedServerSignsWithContactAid() async throws {
+    /// The id an invited box sees for the knock's app.
+    private func appPubHex(_ fx: Fixture) -> String {
+        HexUtil.encode(ServiceInvite.deriveAppAccountIdPub(umkSeed: fx.friendUmk, appRef: ref)!)
+    }
+
+    func testInvitedServerSignsWithTheIdForTheApp() async throws {
         let fx = try fixture()
         let owners = ownerStore()
         owners.remember(serverDomain: server, ownerAidHex: fx.authorAidPubHex.uppercased())
@@ -111,10 +116,11 @@ final class KnockAuthorizeViewModelTests: XCTestCase {
         XCTAssertEqual(vm.phase, .authorized)
         XCTAssertEqual(mock.authorizeKnockCalls.count, 1)
         let call = mock.authorizeKnockCalls[0]
-        // The contact AID the invite bound, NOT the friend's global AID.
-        XCTAssertEqual(call.authorization["visitorAID"], fx.contactAidPubHex)
+        // The id for the app the invite bound, NOT the friend's global AID.
+        XCTAssertEqual(call.authorization["visitorAID"], appPubHex(fx))
         XCTAssertNotEqual(call.authorization["visitorAID"], fx.friendAidPubHex)
-        let contactPub = HexUtil.decode(fx.contactAidPubHex)!
+        XCTAssertNotEqual(call.authorization["visitorAID"], fx.contactAidPubHex)
+        let contactPub = HexUtil.decode(appPubHex(fx))!
         let bytes = try ServiceInvite.canonicalKnock(
             serverId: server, serviceRef: ref, pageId: page,
             visitorAID: contactPub, issuedAt: 1_700_004_000_000)
@@ -129,7 +135,7 @@ final class KnockAuthorizeViewModelTests: XCTestCase {
         let vm = friendVM(mock, fx: fx, owners: owners, serverDomain: server.uppercased())
         await vm.authorize()
         XCTAssertEqual(vm.phase, .authorized)
-        XCTAssertEqual(mock.authorizeKnockCalls.first?.authorization["visitorAID"], fx.contactAidPubHex)
+        XCTAssertEqual(mock.authorizeKnockCalls.first?.authorization["visitorAID"], appPubHex(fx))
     }
 
     func testOwnServerUsesGlobalAidEvenWithAStoredRecord() async throws {
@@ -153,7 +159,7 @@ final class KnockAuthorizeViewModelTests: XCTestCase {
             ownServers: [server],
             owners: ownerStore(),
             aid: { _ in keyAsks += 1; return self.aid() },
-            contactAid: { _, _ in keyAsks += 1; return self.aid() })
+            appAid: { _, _ in keyAsks += 1; return self.aid() })
         await vm.authorize()
         XCTAssertEqual(vm.phase, .failed(KnockAuthorizeViewModel.notYourServerMessage))
         XCTAssertEqual(KnockAuthorizeViewModel.notYourServerMessage,

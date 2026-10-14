@@ -12,7 +12,9 @@ import com.google.crypto.tink.subtle.Ed25519Sign
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -63,11 +65,11 @@ class ServiceInviteVectorTest {
     private fun friendAid(r: JsonObject) = ServerKeys.deriveAccountId(friendUmk(r))
 
     // v2 Wave 3 signers: the author's STABLE AID (create/revoke move to it) and
-    // the friend's PER-AUTHOR contact AID (the redemption identity).
+    // the friend's id for the app (the redemption identity).
     private fun authorAid(r: JsonObject) = ServerKeys.deriveAccountId(authorUmk(r))
     private fun authorAidPub(r: JsonObject) = ServerKeys.deriveAccountIdPub(authorUmk(r))
-    private fun friendContactAid(r: JsonObject) =
-        ServerKeys.deriveContactAccountId(friendUmk(r), authorAidPub(r))
+    private fun friendAppAid(r: JsonObject) =
+        ServerKeys.deriveAppAccountId(friendUmk(r), r.obj("appAid").s("serviceRef"))
 
     @Test fun derivedKeysMatchFixture() {
         val r = root()
@@ -227,17 +229,26 @@ class ServiceInviteVectorTest {
 
     // ── v2 Wave 3 ─────────────────────────────────────────────────────────
 
-    @Test fun contactAccountIdMatchesFixture() {
-        // contactAid = deriveContactAccountId(friendUmk, authorAid.pub) — the
-        // friend's PER-AUTHOR pseudonym (unlinkable across authors).
+    @Test fun appAccountIdMatchesFixtures() {
+        // appAid = deriveAppAccountId(friendUmk, serviceRef) — the friend's id for
+        // one app (never the global AID), plus every test-vectors/app-account-id case.
         val r = root()
-        val ca = r.obj("contactAid")
-        // The fixture pins the author AID pub it derives the contact id from.
-        assertEquals(ca.s("authorAidPubHex"), HexUtil.encode(authorAidPub(r)))
-        assertEquals(
-            ca.s("contactAidPubHex"),
-            HexUtil.encode(ServerKeys.deriveContactAccountIdPub(friendUmk(r), authorAidPub(r))),
-        )
+        val app = r.obj("appAid")
+        assertEquals(app.s("appAidPubHex"), HexUtil.encode(ServerKeys.deriveAppAccountIdPub(friendUmk(r), app.s("serviceRef"))))
+        val f = File(vectorsFile().parentFile!!.parentFile!!.parentFile, "test-vectors/app-account-id/vectors.json")
+        val v = Json.parseToJsonElement(f.readText()).jsonObject
+        val cases = v["cases"]!!.jsonArray.map { it.jsonObject }
+        assertTrue(cases.isNotEmpty())
+        for (c in cases) {
+            assertEquals(c.s("pubHex"), HexUtil.encode(ServerKeys.deriveAppAccountIdPub(seed(c.s("umkSeedHex")), c.s("appRef"))))
+        }
+        val same = v["sameAppAnyInviter"]!!.jsonObject
+        assertEquals(same.s("pubHex"), HexUtil.encode(ServerKeys.deriveAppAccountIdPub(seed(same.s("umkSeedHex")), same.s("appRef"))))
+        for (bad in v["invalidAppRefs"]!!.jsonArray.map { it.jsonPrimitive.content }) {
+            assertTrue("should refuse $bad", runCatching { ServerKeys.deriveAppAccountIdSeed(friendUmk(r), bad) }.isFailure)
+        }
+        assertTrue(!HexUtil.encode(ServerKeys.deriveAppAccountIdPub(friendUmk(r), app.s("serviceRef")))
+            .equals(HexUtil.encode(ServerKeys.deriveAccountIdPub(friendUmk(r)))))
     }
 
     @Test fun createAidSignatureVerifies() {
@@ -262,16 +273,16 @@ class ServiceInviteVectorTest {
     }
 
     @Test fun acceptSignatureVerifies() {
-        // The MANUAL-approve acceptance is signed by the friend's contact AID over
-        // { inviteId, serviceRef, contactAID, acceptedAt }.
+        // The MANUAL-approve acceptance is signed by the friend's id for the app
+        // over { inviteId, serviceRef, contactAID, acceptedAt }.
         val r = root()
-        val a = r.obj("accept")
-        val contactPub = ServerKeys.deriveContactAccountIdPub(friendUmk(r), authorAidPub(r))
+        val a = r.obj("acceptApp")
+        val contactPub = ServerKeys.deriveAppAccountIdPub(friendUmk(r), r.obj("appAid").s("serviceRef"))
         val bytes = ServiceInvite.canonicalAccept(a.s("inviteId"), a.s("serviceRef"), contactPub, a.l("acceptedAt"))
         assertTrue(ServiceInvite.verify(HexUtil.decode(a.s("sigHex"))!!, bytes, contactPub))
         assertEquals(
             a.s("sigHex"),
-            HexUtil.encode(ServiceInvite.signAcceptServiceInvite(a.s("inviteId"), a.s("serviceRef"), contactPub, a.l("acceptedAt"), friendContactAid(r))),
+            HexUtil.encode(ServiceInvite.signAcceptServiceInvite(a.s("inviteId"), a.s("serviceRef"), contactPub, a.l("acceptedAt"), friendAppAid(r))),
         )
     }
 

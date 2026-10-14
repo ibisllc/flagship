@@ -37,10 +37,10 @@ class KnockAuthorizeViewModelTest {
     private val aidKp = Ed25519Sign.KeyPair.newKeyPairFromSeed(ServerKeys.deriveAccountIdSeed(umkSeed))
     private val aidPub = ServerKeys.deriveAccountIdPub(umkSeed)
 
-    // Pinned from packages/protocol/tests/fixtures/serviceAccessGating.vectors.json
-    // `contactAid`: the friend (UMK 0x16) invited by the author (UMK 0x0b).
+    // The author (UMK 0x0b) from packages/protocol/tests/fixtures/serviceAccessGating.vectors.json;
+    // the friend (UMK 0x16) signs with their id for the knock's app.
     private val ownerAidHex = "b4b357bf622c86ea3b6c3e2440e2bf9e344ac3cf5f61236da8e6f280f93db640"
-    private val contactAidHex = "086abb1c191c86e7cb68d4736f73c68f8b0c55c2a3fafa6a2c770fc308ab242a"
+    private val contactAidHex = HexUtil.encode(ServerKeys.deriveAppAccountIdPub(umkSeed, serviceRef))
 
     private val persisted = ArrayList<SecuredSession>()
     private val signerCalls = ArrayList<String>()
@@ -58,8 +58,8 @@ class KnockAuthorizeViewModelTest {
             client = ServiceAccessClient(boxTransport = t, comTransport = t),
             aidSigner = { signerCalls.add("global"); Ed25519Sign(aidKp.privateKey) },
             aidPubHex = { HexUtil.encode(aidPub) },
-            contactAidSigner = { a, _ -> signerCalls.add("contact"); ServerKeys.deriveContactAccountId(umkSeed, a) },
-            contactAidPubHex = { a, _ -> HexUtil.encode(ServerKeys.deriveContactAccountIdPub(umkSeed, a)) },
+            appAidSigner = { ref, _ -> signerCalls.add("app"); ServerKeys.deriveAppAccountId(umkSeed, ref) },
+            appAidPubHex = { ref, _ -> HexUtil.encode(ServerKeys.deriveAppAccountIdPub(umkSeed, ref)) },
             ownServers = { ownServers },
             reloadOwnServers = { reloads += 1; reload() },
             owners = owners,
@@ -78,7 +78,7 @@ class KnockAuthorizeViewModelTest {
         Ed25519Verify(pub).verify(sig, canonical) // throws on mismatch
     }
 
-    @Test fun invitedServer_signsWithContactAid() = runTest {
+    @Test fun invitedServer_signsWithTheIdForTheApp() = runTest {
         val owners = InMemoryInviteOwnerBook().apply { remember(serverId, ownerAidHex) }
         val t = KnockTransport(status = 200, respBody = okBody)
         val vm = makeVM(t, ownServers = emptyList(), owners = owners)
@@ -86,7 +86,9 @@ class KnockAuthorizeViewModelTest {
         assertTrue(vm.phase.value is KnockAuthorizePhase.Done)
         assertSignedBy(t, HexUtil.decode(contactAidHex)!!)
         assertFalse(t.lastBody!!.contains(HexUtil.encode(aidPub)))
-        assertEquals(listOf("contact"), signerCalls)
+        assertEquals(listOf("app"), signerCalls)
+        // Not the old per-author contact id either.
+        assertFalse(t.lastBody!!.contains("086abb1c191c86e7cb68d4736f73c68f8b0c55c2a3fafa6a2c770fc308ab242a"))
         assertEquals(1, persisted.size)
     }
 

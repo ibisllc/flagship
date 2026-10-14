@@ -417,20 +417,19 @@ public struct Keystore {
         return (aid, household)
     }
 
-    /// Gating v2 consumer path: the friend's PER-AUTHOR contact AID
-    /// (`deriveContactAccountId(UMK, authorAID)`) for a given author — the
-    /// redeem/visit/knock/accept signer they present (NOT the global AID). One
-    /// biometric. `authorAidPub` comes from the invite link.
-    public static func deriveContactAccountId(
-        authorAidPub: Data,
+    /// The visitor's id for ONE app (`deriveAppAccountId(UMK, serviceRef)`) —
+    /// the redeem/visit/knock/accept signer they present to that app (never the
+    /// global AID). One biometric. `appRef` is the app's service id.
+    public static func deriveAppAccountId(
+        appRef: String,
         reason: String
     ) async throws -> Curve25519.Signing.PrivateKey {
         let umk = try await unwrappedUMK(reason: reason)
         let umkData = umk.withUnsafeBytes { Data($0) }
-        guard let contact = ServiceInvite.deriveContactAccountId(umkSeed: umkData, authorAidPub: authorAidPub) else {
-            throw KeystoreError.derivationFailed("contact account identity key")
+        guard let app = ServiceInvite.deriveAppAccountId(umkSeed: umkData, appRef: appRef) else {
+            throw KeystoreError.derivationFailed("app account identity key")
         }
-        return contact
+        return app
     }
 
     /// Account-level Ed25519 IRK keypair. Signs identity-rotation orders.

@@ -7,18 +7,18 @@ import FlagshipCore
 
 /// Friend-side redeem orchestrator (docs/service-access-gating.md, "## v2 hardening").
 ///
-/// The owner shares `https://<server>/invite#<secret>&a=<authorAID>[&i=…]`.
+/// The owner shares `https://<server>/invite#<secret>&a=<authorAID>[&i=…]&s=<serviceRef>`.
 /// The friend opens it (deep-link → InviteRedeem screen); this VM:
-///   1. derives the friend's PER-AUTHOR contact AID
-///      (`deriveContactAccountId(UMK, authorAID)`) from the link's authorAID —
-///      a pseudonym UNLINKABLE across authors (NOT the global AID). For a v1
-///      bare link (no authorAID) it falls back to the global AID.
-///   2. AID-signs the redeem over { secretHash, visitorAID=contactAID,
-///      redeemedAt } and POSTs the raw secret to the BOX's redeem endpoint,
-///   3a. AUTO-approve → the box binds the contact AID + confirms — the friend
-///       now has access (and gets a `Flagship-App-Session` cookie),
+///   1. derives the friend's id for THAT app (`deriveAppAccountId(UMK,
+///      serviceRef)`, the link's `s=`): nothing it presents is shared between
+///      apps, and it is the same whoever invited them — never the global AID.
+///      A link without `s=` (made before per-app ids) is refused.
+///   2. signs the redeem over { secretHash, visitorAID, redeemedAt } and POSTs
+///      the raw secret to the BOX's redeem endpoint,
+///   3a. AUTO-approve → the box binds the id + confirms — the friend now has
+///       access (and gets a `Flagship-App-Session` cookie),
 ///   3b. MANUAL-approve → the box returns {pending}; the VM signs an
-///       `AcceptServiceInvite` (with the SAME contact AID + the link's inviteId)
+///       `AcceptServiceInvite` (with the SAME id + the link's inviteId)
 ///       and surfaces a REPLY link/QR the friend sends back through the same
 ///       private channel for the AUTHOR to finalize.
 @Observable
@@ -46,11 +46,12 @@ public final class InviteRedeemViewModel {
     private let authorAidHex: String?
     /// The inviteId from the link — REQUIRED to sign a manual-approve acceptance.
     private let inviteId: String?
-    /// Redemption-AID provider for a given author (one biometric): the per-author
-    /// contact AID when `authorAID` is present, else the global AID.
-    private let redeemAid: @MainActor (_ authorAidHex: String?, _ reason: String) async throws -> Curve25519.Signing.PrivateKey
-    /// Where the box's owner AID is remembered so a later knock on it signs
-    /// with the same contact AID this redeem bound (KnockAuthorizeViewModel).
+    /// The app the invite is for (the link's `s=`): selects the friend's id.
+    private let serviceRef: String?
+    /// The friend's id for an app (one biometric).
+    private let redeemAid: @MainActor (_ serviceRef: String, _ reason: String) async throws -> Curve25519.Signing.PrivateKey
+    /// Where the box is remembered so a later knock on it can sign with the
+    /// friend's id for the knock's app (KnockAuthorizeViewModel).
     private let owners: any InviteOwnerStoring
     private let now: () -> Int64
 
@@ -60,7 +61,8 @@ public final class InviteRedeemViewModel {
         secretHex: String,
         authorAidHex: String? = nil,
         inviteId: String? = nil,
-        redeemAid: (@MainActor (_ authorAidHex: String?, _ reason: String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
+        serviceRef: String? = nil,
+        redeemAid: (@MainActor (_ serviceRef: String, _ reason: String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
         owners: any InviteOwnerStoring = InviteOwnerStore(),
         now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }
     ) {
@@ -69,16 +71,16 @@ public final class InviteRedeemViewModel {
         self.secretHex = secretHex.lowercased()
         self.authorAidHex = authorAidHex?.lowercased()
         self.inviteId = inviteId?.lowercased()
+        self.serviceRef = serviceRef.flatMap { ServiceInvite.isAppRef($0) ? $0 : nil }
         self.owners = owners
         self.now = now
-        self.redeemAid = redeemAid ?? { authorAidHex, reason in
-            if let a = authorAidHex, let authorPub = HexUtil.decode(a) {
-                return try await Keystore.deriveContactAccountId(authorAidPub: authorPub, reason: reason)
-            }
-            // v1 fallback: a bare link with no authorAID ⇒ the global AID.
-            return try await Keystore.deriveAccountId(reason: reason)
+        self.redeemAid = redeemAid ?? { serviceRef, reason in
+            try await Keystore.deriveAppAccountId(appRef: serviceRef, reason: reason)
         }
     }
+
+    /// Shown for a link made before per-app ids (no `s=`).
+    public static let oldLinkMessage = "This invite link is from an older version of Flagship. Ask the owner for a new link."
 
     public var serverHost: String { serverDomain }
 
@@ -88,9 +90,13 @@ public final class InviteRedeemViewModel {
             phase = .failed("This invite link is missing or malformed.")
             return
         }
+        guard let serviceRef else {
+            phase = .failed(Self.oldLinkMessage)
+            return
+        }
         phase = .redeeming
         do {
-            let key = try await redeemAid(authorAidHex, "Accept this invite")
+            let key = try await redeemAid(serviceRef, "Accept this invite")
             let aidPub = key.publicKey.rawRepresentation
             guard let secret = HexUtil.decode(secretHex) else {
                 phase = .failed("This invite link is malformed."); return

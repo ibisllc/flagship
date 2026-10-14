@@ -59,33 +59,31 @@ public enum ServiceInvite {
         deriveAccountId(umkSeed: umkSeed)?.publicKey.rawRepresentation
     }
 
-    /// Contact Account Id SEED (32 B) — the PER-AUTHOR pseudonymous identity the
-    /// CONSUMER presents when redeeming / visiting / knock-authorizing / accepting
-    /// a given author's services. `HKDF(umkSeed, info =
-    /// "flagship/contact-aid/v1|<authorAidPubHex>")` (mirrors keys.ts
-    /// `deriveContactAccountId`, with the AUTHOR's AID pubkey lower-hex in the
-    /// info). STABLE with that author (idempotent re-redeem across the consumer's
-    /// IRK rotations + new devices); UNLINKABLE across authors (two authors can't
-    /// cross-link the same consumer, and `.com` sees unlinkable pseudonyms).
-    /// Per-AUTHOR (not per-service), so cross-app reuse within one author works.
-    public static func deriveContactAccountIdSeed(umkSeed: Data, authorAidPub: Data) -> Data? {
-        guard umkSeed.count == 32 else { return nil }
-        let info = "flagship/contact-aid/v1|" + HexUtil.encode(authorAidPub)
-        return hkdfSha256(ikm: umkSeed, info: Data(info.utf8))
+    /// Whether `ref` is a service id (`<creator>--<slug>`: lowercase, digits, dashes).
+    public static func isAppRef(_ ref: String) -> Bool {
+        ref.range(of: "^[a-z0-9](?:[a-z0-9-]{0,126}[a-z0-9])?$", options: .regularExpression) != nil
     }
 
-    /// The per-author contact AID Ed25519 PRIVATE key — the consumer's redemption
-    /// signer for THIS author's services (v2). Derived from the consumer's UMK +
-    /// the author's AID pubkey.
-    public static func deriveContactAccountId(umkSeed: Data, authorAidPub: Data) -> Curve25519.Signing.PrivateKey? {
-        guard let seed = deriveContactAccountIdSeed(umkSeed: umkSeed, authorAidPub: authorAidPub) else { return nil }
+    /// App Account Id SEED (32 B) — the identity a visitor presents to ONE app
+    /// (redeem, visit, knock, acceptance): `HKDF(umkSeed, info =
+    /// "flagship/app-aid/v1|<appRef>")`, appRef = the app's service id (mirrors
+    /// keys.ts `deriveAppAccountId`). Depends on the account and the app only:
+    /// two apps see unrelated ids, and the owner's and a co-manager's invites to
+    /// one app bind the same id (docs/service-access-gating.md, "Per-app identity").
+    public static func deriveAppAccountIdSeed(umkSeed: Data, appRef: String) -> Data? {
+        guard umkSeed.count == 32, isAppRef(appRef) else { return nil }
+        return hkdfSha256(ikm: umkSeed, info: Data("flagship/app-aid/v1|\(appRef)".utf8))
+    }
+
+    /// The per-app id's Ed25519 PRIVATE key.
+    public static func deriveAppAccountId(umkSeed: Data, appRef: String) -> Curve25519.Signing.PrivateKey? {
+        guard let seed = deriveAppAccountIdSeed(umkSeed: umkSeed, appRef: appRef) else { return nil }
         return try? Curve25519.Signing.PrivateKey(rawRepresentation: seed)
     }
 
-    /// The per-author contact AID Ed25519 PUBLIC key (32 B) — the pseudonym the
-    /// box binds in the author's service allow-list (NOT the consumer's global AID).
-    public static func deriveContactAccountIdPub(umkSeed: Data, authorAidPub: Data) -> Data? {
-        deriveContactAccountId(umkSeed: umkSeed, authorAidPub: authorAidPub)?.publicKey.rawRepresentation
+    /// The per-app id's PUBLIC key (32 B) — what the app's allow-list binds.
+    public static func deriveAppAccountIdPub(umkSeed: Data, appRef: String) -> Data? {
+        deriveAppAccountId(umkSeed: umkSeed, appRef: appRef)?.publicKey.rawRepresentation
     }
 
     /// The household symmetric AEAD key (32 B) — `HKDF(umkSeed, info =
@@ -258,10 +256,9 @@ public enum ServiceInvite {
 
     /// `tagAccept | inviteId | serviceRef | hex(contactAID) | acceptedAt` — the
     /// MANUAL-approve out-of-band acceptance the CONSUMER's app emits (signed by
-    /// the consumer's PER-AUTHOR contact AID, `deriveContactAccountId`). The
-    /// consumer replies it back through the same private channel; the AUTHOR
-    /// submits it (+ the owner's signed create) to their OWN box, which verifies
-    /// both, then binds the contact AID. Mirrors @flagship/protocol
+    /// the consumer's id for the app, `deriveAppAccountId`). The consumer replies
+    /// it back through the same private channel; the AUTHOR submits it to their
+    /// OWN box, which verifies it (and the owner's signed create), then binds it. Mirrors @flagship/protocol
     /// `canonicalAccept`.
     public static func canonicalAccept(
         inviteId: String,
@@ -277,7 +274,7 @@ public enum ServiceInvite {
     }
 
     /// Ed25519-sign an `AcceptServiceInvite` over `canonicalAccept` with the
-    /// consumer's per-author CONTACT AID. Mirrors `signAcceptServiceInvite`.
+    /// consumer's id for the app (`deriveAppAccountId`). Mirrors `signAcceptServiceInvite`.
     public static func signAcceptServiceInvite(
         inviteId: String,
         serviceRef: String,

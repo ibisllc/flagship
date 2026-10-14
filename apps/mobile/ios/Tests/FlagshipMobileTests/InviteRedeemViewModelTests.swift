@@ -11,7 +11,7 @@ final class InviteRedeemViewModelTests: XCTestCase {
     private let authorAid = String(repeating: "b4", count: 32) // 64-hex
     private let inviteId = String(repeating: "ea", count: 32)   // 64-hex
 
-    /// The friend's per-author CONTACT AID — what v2 presents (NOT the global AID).
+    /// The friend's id for the app — what the redeem presents (NOT the global AID).
     private func contactAid() -> Curve25519.Signing.PrivateKey {
         try! Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 5, count: 32))
     }
@@ -29,14 +29,34 @@ final class InviteRedeemViewModelTests: XCTestCase {
         authorAidHex: String? = nil,
         inviteId: String? = nil,
         serverDomain: String? = nil,
+        serviceRef: String? = "alice--notes",
         owners: InviteOwnerStore? = nil,
+        asked: ((String) -> Void)? = nil,
         now: @escaping () -> Int64 = { 1700 }
     ) -> InviteRedeemViewModel {
         let k = contactAid()
         return InviteRedeemViewModel(
             client: mock, serverDomain: serverDomain ?? server, secretHex: secret ?? self.secret,
-            authorAidHex: authorAidHex, inviteId: inviteId,
-            redeemAid: { _, _ in k }, owners: owners ?? ownerStore(), now: now)
+            authorAidHex: authorAidHex, inviteId: inviteId, serviceRef: serviceRef,
+            redeemAid: { ref, _ in asked?(ref); return k }, owners: owners ?? ownerStore(), now: now)
+    }
+
+    func testRedeemUsesTheIdForTheLinksApp_andRefusesALinkWithoutOne() async {
+        let mock = MockServiceAccessClient()
+        mock.redeemResult = RedeemResult(serviceRef: "alice--notes", boundAidHex: "", firstBind: true)
+        var refs: [String] = []
+        await makeVM(mock, authorAidHex: authorAid, serviceRef: "alice--chess", asked: { refs.append($0) }).redeem()
+        XCTAssertEqual(refs, ["alice--chess"])
+
+        let old = MockServiceAccessClient()
+        let vm = makeVM(old, authorAidHex: authorAid, serviceRef: nil)
+        await vm.redeem()
+        XCTAssertEqual(vm.phase, .failed(InviteRedeemViewModel.oldLinkMessage))
+        XCTAssertTrue(old.redeemCalls.isEmpty, "nothing is signed or sent")
+        // A malformed app id counts as none.
+        let bad = makeVM(MockServiceAccessClient(), authorAidHex: authorAid, serviceRef: "Alice Notes")
+        await bad.redeem()
+        XCTAssertEqual(bad.phase, .failed(InviteRedeemViewModel.oldLinkMessage))
     }
 
     func testRedeemRemembersTheBoxOwner() async {

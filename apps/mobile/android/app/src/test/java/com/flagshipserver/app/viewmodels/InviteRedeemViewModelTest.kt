@@ -34,20 +34,19 @@ class InviteRedeemViewModelTest {
     private val authorUmk = ByteArray(32) { 0x0b }
     private val authorAidPub = ServerKeys.deriveAccountIdPub(authorUmk)
     private val authorAidHex = HexUtil.encode(authorAidPub)
-    // The per-author contact AID the friend presents (v2 redemption identity).
-    private val contactPub = ServerKeys.deriveContactAccountIdPub(friendUmk, authorAidPub)
+    // The friend's id for the invite's app (the redemption identity).
+    private val contactPub = ServerKeys.deriveAppAccountIdPub(friendUmk, "alice--notes")
     private val globalPub = ServerKeys.deriveAccountIdPub(friendUmk)
 
     private val owners = InMemoryInviteOwnerBook()
 
-    private fun makeVM(t: JsonHttpTransport, authorHex: String? = authorAidHex, inviteIdHex: String? = null, secretHex: String = secret, now: () -> Long = { 1700 }, serverDomain: String = server) =
+    private fun makeVM(t: JsonHttpTransport, authorHex: String? = authorAidHex, inviteIdHex: String? = null, secretHex: String = secret, now: () -> Long = { 1700 }, serverDomain: String = server, serviceRef: String? = "alice--notes") =
         InviteRedeemViewModel(
             serverDomain = serverDomain, secretHex = secretHex, authorAidHex = authorHex, inviteIdHex = inviteIdHex,
+            serviceRef = serviceRef,
             client = ServiceAccessClient(boxTransport = t, comTransport = t),
-            globalAidSigner = { ServerKeys.deriveAccountId(friendUmk) },
-            globalAidPubHex = { HexUtil.encode(globalPub) },
-            contactAidSigner = { a, _ -> ServerKeys.deriveContactAccountId(friendUmk, a) },
-            contactAidPubHex = { a, _ -> HexUtil.encode(ServerKeys.deriveContactAccountIdPub(friendUmk, a)) },
+            appAidSigner = { ref, _ -> ServerKeys.deriveAppAccountId(friendUmk, ref) },
+            appAidPubHex = { ref, _ -> HexUtil.encode(ServerKeys.deriveAppAccountIdPub(friendUmk, ref)) },
             now = now,
             owners = owners,
         )
@@ -64,20 +63,33 @@ class InviteRedeemViewModelTest {
         assertTrue(t.lastUrl!!.endsWith("/api/service-invites/redeem"))
         val body = t.lastBodyJson()!!
         assertEquals(secret, body["secret"]!!.jsonPrimitive.content) // RAW secret
-        // v2: the PER-AUTHOR contact AID is presented as visitorAID, NOT the global AID.
+        // The friend's id for the app is presented as visitorAID, NOT the global AID.
         assertEquals(HexUtil.encode(contactPub), body["visitorAID"]!!.jsonPrimitive.content)
+        assertTrue(HexUtil.encode(globalPub) != body["visitorAID"]!!.jsonPrimitive.content)
         // and the AID sig verifies over the contact-AID redeem bytes.
         val secretHash = ServiceInvite.secretHash(HexUtil.decode(secret)!!)
         val sig = HexUtil.decode(body["aidSig"]!!.jsonPrimitive.content)!!
         assertTrue(ServiceInvite.verify(sig, ServiceInvite.canonicalRedeem(secretHash, contactPub, 1700), contactPub))
     }
 
-    @Test fun redeem_legacyLink_fallsBackToGlobalAid() = runTest {
-        val t = RedeemTransport(status = 200, respBody = """{"serviceRef":"alice--notes","boundAID":"${HexUtil.encode(globalPub)}","firstBind":true}""")
-        val vm = makeVM(t, authorHex = null) // no author AID in the link
+    @Test fun redeem_linkWithoutApp_isRefusedBeforeNetwork() = runTest {
+        val t = RedeemTransport(status = 200, respBody = """{"serviceRef":"alice--notes","firstBind":true}""")
+        val vm = makeVM(t, serviceRef = null)
         vm.redeem()
-        assertTrue(vm.phase.value is InviteRedeemPhase.Done)
-        assertEquals(HexUtil.encode(globalPub), t.lastBodyJson()!!["visitorAID"]!!.jsonPrimitive.content)
+        assertEquals(InviteRedeemPhase.Failed(InviteRedeemViewModel.OLD_LINK), vm.phase.value)
+        assertNull(t.lastUrl)
+        val bad = makeVM(t, serviceRef = "Alice Notes")
+        bad.redeem()
+        assertEquals(InviteRedeemPhase.Failed(InviteRedeemViewModel.OLD_LINK), bad.phase.value)
+    }
+
+    @Test fun redeem_usesTheIdForTheLinksApp() = runTest {
+        val t = RedeemTransport(status = 200, respBody = """{"serviceRef":"alice--chess","firstBind":true}""")
+        makeVM(t, serviceRef = "alice--chess").redeem()
+        assertEquals(
+            HexUtil.encode(ServerKeys.deriveAppAccountIdPub(friendUmk, "alice--chess")),
+            t.lastBodyJson()!!["visitorAID"]!!.jsonPrimitive.content,
+        )
     }
 
     @Test fun redeem_manualPending_emitsAcceptanceReply() = runTest {

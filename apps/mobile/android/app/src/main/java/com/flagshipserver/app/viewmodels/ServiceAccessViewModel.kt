@@ -287,7 +287,7 @@ class ServiceAccessViewModel(
             // Carry the inviteId (&i=) ONLY for a manual-approve invite — the
             // friend signs the acceptance over it. Auto/group links stay bare.
             val linkInviteId = if (tier == InviteTier.PERSONAL_MANUAL) inviteId else null
-            val link = InviteLink.shareLink(serverDomain, HexUtil.encode(secret), HexUtil.encode(aid), linkInviteId)
+            val link = InviteLink.shareLink(serverDomain, HexUtil.encode(secret), HexUtil.encode(aid), linkInviteId, serviceRef)
             _lastLink.value = link
             _roleNotice.value = null
             // The rank rides a signed order right after the create; the app's
