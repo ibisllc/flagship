@@ -81,6 +81,9 @@ public protocol ScreensClient: Sendable {
     /// Stop a build session and delete it, its files and its AI key.
     func vibeCodeDiscard(sessionId: String) async throws
     func vibeCodeSessionReply(sessionId: String, _ req: VibeCodeReplyRequest) async throws -> VibeCodeReplyResponse
+    /// The models a key can use (`POST /api/screens/ai/models`). The key is
+    /// used for this one call.
+    func aiModels(_ req: AiModelsRequest) async throws -> AiModelsResponse
     /// Deploy a `ready-to-deploy` scratch (vibe-code) session: builds the
     /// emitted manifest + files into a container and installs it on the box.
     /// Hits the daemon's legacy `POST /api/llm/sessions/<id>/deploy` (the only
@@ -354,6 +357,9 @@ public extension ScreensClient {
         VibeCodeSessionsResponse(sessions: [])
     }
     func vibeCodeNameCheck(name: String) async throws -> VibeCodeNameCheck { .unknown }
+    func aiModels(_ req: AiModelsRequest) async throws -> AiModelsResponse {
+        throw ScreensClientError.notImplemented("ai models")
+    }
     func vibeCodeDiscard(sessionId: String) async throws {
         throw ScreensClientError.notImplemented("discard")
     }

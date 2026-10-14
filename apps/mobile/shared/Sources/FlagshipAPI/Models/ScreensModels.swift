@@ -328,14 +328,21 @@ public struct VibeCodeStartRequest: Codable, Equatable, Sendable {
     /// Change this installed service (`<creator>--<slug>`) instead of building
     /// a new one. The box ignores `name` and `visibility` when it's set.
     public let editServiceId: String?
+    /// Reasoning effort in the provider's own words; absent ⇒ its default.
+    public let effort: String?
+    /// Files on the opening turn (≤ 6; the AI sees them).
+    public let attachments: [VibeCodeAttachment]?
     public init(prompt: String, model: String?, credential: LlmProviderCredential? = nil,
-                name: String? = nil, visibility: String? = nil, editServiceId: String? = nil) {
+                name: String? = nil, visibility: String? = nil, editServiceId: String? = nil,
+                effort: String? = nil, attachments: [VibeCodeAttachment]? = nil) {
         self.prompt = prompt
         self.model = model
         self.credential = credential
         self.name = name
         self.visibility = visibility
         self.editServiceId = editServiceId
+        self.effort = effort
+        self.attachments = attachments?.isEmpty == true ? nil : attachments
     }
 }
 
@@ -990,8 +997,14 @@ public struct VibeCodeSessionMessage: Codable, Equatable, Sendable {
     public let role: String          // "user" | "assistant"
     public let text: String
     public let timestamp: Int64
-    public init(role: String, text: String, timestamp: Int64) {
+    /// What the owner attached on this turn (user messages).
+    public let attachments: [VibeCodeAttachment]?
+    /// Flagship Inference: credits this reply cost (assistant messages).
+    public let credits: Double?
+    public init(role: String, text: String, timestamp: Int64,
+                attachments: [VibeCodeAttachment]? = nil, credits: Double? = nil) {
         self.role = role; self.text = text; self.timestamp = timestamp
+        self.attachments = attachments; self.credits = credits
     }
 }
 
@@ -1120,6 +1133,11 @@ public struct VibeCodeSessionPublicState: Codable, Equatable, Sendable {
     public let needsCredential: Bool?
     /// While "deploying": "staging" | "fixing" | "going-live". Older boxes omit it.
     public let deployPhase: String?
+    /// The model and effort the conversation uses now.
+    public let model: String?
+    public let effort: String?
+    /// Older turns were condensed to fit the model's context.
+    public let summarised: Bool?
     public init(
         id: String,
         appId: String?,
@@ -1128,12 +1146,16 @@ public struct VibeCodeSessionPublicState: Codable, Equatable, Sendable {
         pendingRequest: VibeCodePendingRequest?,
         failureReason: String? = nil,
         needsCredential: Bool? = nil,
-        deployPhase: String? = nil
+        deployPhase: String? = nil,
+        model: String? = nil,
+        effort: String? = nil,
+        summarised: Bool? = nil
     ) {
         self.id = id; self.appId = appId; self.status = status
         self.messages = messages; self.pendingRequest = pendingRequest
         self.failureReason = failureReason; self.needsCredential = needsCredential
         self.deployPhase = deployPhase
+        self.model = model; self.effort = effort; self.summarised = summarised
     }
 }
 
@@ -1145,8 +1167,31 @@ public struct VibeCodeReplyRequest: Codable, Equatable, Sendable {
     /// only to seed a session that started without one (the `needsCredential`
     /// case) before resuming. Same box-only, never-logged contract.
     public let credential: LlmProviderCredential?
-    public init(text: String? = nil, envVarStatus: String? = nil, credential: LlmProviderCredential? = nil) {
+    /// The model for this and later turns (same values as on start).
+    public let model: String?
+    /// The reasoning effort. Sent whenever `model` is, as `null` for the
+    /// provider's default, so turning "Think harder" off takes effect.
+    public let effort: String?
+    public let attachments: [VibeCodeAttachment]?
+    public init(text: String? = nil, envVarStatus: String? = nil, credential: LlmProviderCredential? = nil,
+                model: String? = nil, effort: String? = nil, attachments: [VibeCodeAttachment]? = nil) {
         self.text = text; self.envVarStatus = envVarStatus; self.credential = credential
+        self.model = model; self.effort = effort
+        self.attachments = attachments?.isEmpty == true ? nil : attachments
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case text, envVarStatus, credential, model, effort, attachments
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(text, forKey: .text)
+        try c.encodeIfPresent(envVarStatus, forKey: .envVarStatus)
+        try c.encodeIfPresent(credential, forKey: .credential)
+        try c.encodeIfPresent(model, forKey: .model)
+        if model != nil { try c.encode(effort, forKey: .effort) } else { try c.encodeIfPresent(effort, forKey: .effort) }
+        try c.encodeIfPresent(attachments, forKey: .attachments)
     }
 }
 

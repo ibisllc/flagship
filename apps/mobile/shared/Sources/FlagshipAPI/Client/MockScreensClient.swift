@@ -1006,8 +1006,11 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         return ServiceEnvOpResponse(ok: true)
     }
 
+    /// What `vibeCodeSessionState` answers instead of the env-var fixture.
+    public var vibeCodeSessionStateFixture: VibeCodeSessionPublicState?
     public func vibeCodeSessionState(sessionId: String) async throws -> VibeCodeSessionPublicState {
         try await tick()
+        if let vibeCodeSessionStateFixture { return vibeCodeSessionStateFixture }
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         return VibeCodeSessionPublicState(
             id: sessionId,
@@ -1027,9 +1030,25 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             )
         )
     }
+    public private(set) var vibeCodeReplies: [VibeCodeReplyRequest] = []
     public func vibeCodeSessionReply(sessionId: String, _ req: VibeCodeReplyRequest) async throws -> VibeCodeReplyResponse {
         try await tick()
+        vibeCodeReplies.append(req)
         return VibeCodeReplyResponse(ok: true)
+    }
+
+    /// What `aiModels` answers; nil ⇒ an own-key list for the credential's provider.
+    public var aiModelsFixture: AiModelsResponse?
+    public private(set) var aiModelsCalls = 0
+    public func aiModels(_ req: AiModelsRequest) async throws -> AiModelsResponse {
+        try await tick()
+        aiModelsCalls += 1
+        if let aiModelsFixture { return aiModelsFixture }
+        if req.credential.provider == "flagship" {
+            return AiModelsResponse(provider: "flagship", kind: "flagship", catalog: .mock)
+        }
+        return AiModelsResponse(provider: req.credential.provider, kind: "own", listed: true,
+                                models: ModelOption.mockOwn, defaultModel: ModelOption.mockOwn.first?.id)
     }
     public func vibeCodeDeploy(sessionId: String) async throws -> BuildDeployResponse {
         try await tick()

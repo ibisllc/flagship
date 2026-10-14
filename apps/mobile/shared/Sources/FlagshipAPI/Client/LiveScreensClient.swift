@@ -217,6 +217,10 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
         let body = try JSONEncoder().encode(req)
         return try await request("/api/screens/llm/sessions/\(sessionId)/reply", method: "POST", body: body)
     }
+    public func aiModels(_ req: AiModelsRequest) async throws -> AiModelsResponse {
+        let body = try JSONEncoder().encode(req)
+        return try await request("/api/screens/ai/models", method: "POST", body: body)
+    }
     public func vibeCodeDeploy(sessionId: String) async throws -> BuildDeployResponse {
         // The scratch deploy trigger is the daemon's legacy
         // `/api/llm/sessions/<id>/deploy` (paired-session gated, same

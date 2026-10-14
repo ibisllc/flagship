@@ -292,6 +292,9 @@ public protocol FlagshipServerClient: Sendable {
     /// Free AI credits — the account's used / remaining tokens
     /// (`POST /api/free-ai/status`).
     func freeAiStatus(_ req: FreeAiSignedRequest) async throws -> FreeAiStatusResponse
+    /// The Flagship Inference model catalog (`GET /api/inference/models`,
+    /// public, cacheable 5 min).
+    func inferenceModels() async throws -> InferenceCatalogResponse
 }
 
 public extension FlagshipServerClient {
@@ -300,6 +303,9 @@ public extension FlagshipServerClient {
     }
     func freeAiStatus(_ req: FreeAiSignedRequest) async throws -> FreeAiStatusResponse {
         FreeAiStatusResponse(available: false, credits: nil)
+    }
+    func inferenceModels() async throws -> InferenceCatalogResponse {
+        throw ScreensClientError.notImplemented("inference models")
     }
 }
 
@@ -2676,6 +2682,14 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             credits: freeAiCredits)
     }
 
+    /// What `inferenceModels` answers; nil ⇒ the call fails.
+    public var inferenceCatalog: InferenceCatalogResponse? = .mock
+    public func inferenceModels() async throws -> InferenceCatalogResponse {
+        try await tick()
+        guard let inferenceCatalog else { throw ScreensClientError.http(status: 503, message: "") }
+        return inferenceCatalog
+    }
+
     public func freeAiStatus(_ req: FreeAiSignedRequest) async throws -> FreeAiStatusResponse {
         try await tick()
         freeAiStatusRequests.append(req)
@@ -3584,6 +3598,17 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
 
     public func freeAiToken(_ req: FreeAiSignedRequest) async throws -> FreeAiTokenResponse {
         try await postFreeAi("/api/free-ai/token", req)
+    }
+
+    public func inferenceModels() async throws -> InferenceCatalogResponse {
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/inference/models"))
+        req.setValue("application/json", forHTTPHeaderField: "accept")
+        let (data, resp) = try await send(req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
+        }
+        return try JSONDecoder().decode(InferenceCatalogResponse.self, from: data)
     }
 
     public func freeAiStatus(_ req: FreeAiSignedRequest) async throws -> FreeAiStatusResponse {
