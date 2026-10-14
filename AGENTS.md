@@ -186,7 +186,7 @@ account can view or co-manage a server, never destroy it) is in the MVP
 
 ### In flight
 
-- **Free AI credits (2026-10-13): built on `main`, not live.** A launch
+- **Flagship Inference (2026-10-13): built on `main`, not live.** A launch
   promotion ("for a limited time, building your apps is free"). Per account:
   a one-time starter reserve plus a weekly top-up (ISO week, not
   accumulating, spent first), only while the account has a server that
@@ -200,8 +200,9 @@ account can view or co-manage a server, never destroy it) is in the MVP
   (`infra/inference/shim`) through the relay, and the shim checks
   `/api/free-ai/allowance`, strips anything identifying, calls any
   OpenAI-compatible upstream and reports usage, counted on the metering core
-  (`ai-promo-*`). All three apps show "This week: 340k of 500k left ·
-  Starter reserve: 1.2M" and skip the AI-key step for an owner with no key;
+  (`ai-promo-*`). All three apps show "1,840 free credits left · 500 added
+  each week" (1 credit = 1,000 weighted tokens; `.com` sends the credit
+  fields) and skip the AI-key step for an owner with no key;
   `docs/build-modes.md`. **Owner:** pick a hosted model API with tool calls,
   no prompt retention and prepaid credit; deploy the shim with
   `UPSTREAM_CHAT_URL`/`UPSTREAM_MODEL` + secrets `UPSTREAM_API_KEY` and
@@ -389,9 +390,12 @@ allowances (1M / 5M / 20M a month) are placeholders. `feat/custom-names`'
 - **Flagship Inference entry (2026-10-14):** free AI is a built-in provider,
   "Flagship Inference", first in every AI-key list, never removable, shown
   disabled (not hidden) once ended; the shim answers a context overflow with
-  `free-ai-too-long`. Needs a `.com` deploy (webapp shell v68 + privacy page),
-  a shim deploy, and iOS/Android store builds. privacy.html names the hosted
-  model provider as a placeholder: fill it in before launch.
+  `free-ai-too-long`. 2026-10-14: "Free AI credits" renamed Flagship
+  Inference in every app and message, the allowance shown in credits, and
+  privacy §2.8 rewritten (generic third-party provider that may change; no
+  placeholder left). Needs a `.com` deploy (webapp shell v69, credit fields,
+  privacy + terms pages), a shim deploy (new refusal wording), and
+  iOS/Android store builds.
 - **Delete / reversible Revoke / Un-revoke (2026-10-12):** live on `.com` +
   webapp (shell v44); iOS dev build installed on the owner's iPhone; Android
   only as a CI/debug APK. Delete deposits a `wipe-now` decommission order

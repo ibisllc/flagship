@@ -62,9 +62,9 @@ append-only **build journal** per build):
 
 | Mode | Who authors | Model key on the box? | Where the key lives |
 |---|---|---|---|
-| **scratch** | the box's daemon | yes (transient, sealed for the session) | phone BYOK / free AI credits |
+| **scratch** | the box's daemon | yes (transient, sealed for the session) | phone BYOK / Flagship Inference |
 | **git** (fit) | nobody (deterministic) | **no** | — |
-| **git** (adapt) | the box's daemon | yes (transient) | phone BYOK / free AI credits |
+| **git** (adapt) | the box's daemon | yes (transient) | phone BYOK / Flagship Inference |
 | **mcp** (connect IDE) | the user's IDE (Cursor/Cline) | **no** | the user's own IDE subscription |
 | **marketplace** | already authored | **no** | — |
 
@@ -81,17 +81,25 @@ artifact from *any* author (internal AI, external IDE, a git repo, a human)
 is contained by the same walls; the contract/prompt is a courtesy that lets a
 well-behaved author avoid building something the harness would reject.
 
-## Free AI credits (Flagship Inference)
+## Flagship Inference
 
-"For a limited time, building your apps is free on Flagship." Free AI is a
-launch promotion, not forever (later, tokens are bought from us). An owner
-can build with AI before bringing a key of their own. The apps list it as a
-built-in provider, **Flagship Inference** ("We use third-party providers and
-anonymize your requests."): the cheapest good-quality tokens from a hosted
-open-model provider (e.g. Qwen3.6-35B-A3B; the provider is named before
-launch), always behind the shim below. The provider receives the prompt text
-and returns the reply; it never receives the owner's account, server or IP
-address.
+"For a limited time, building your apps is free on Flagship." Flagship
+Inference is free as a launch promotion, not forever. An owner can build with
+AI before bringing a key of their own. The apps list it as a built-in
+provider, **Flagship Inference** ("We use third-party providers and anonymize
+your requests."), and never say "free AI credits": the word "free" appears
+only in the balance line, so it can go when the promotion ends. It runs on a
+third-party hosted model provider chosen by us, which may change (e.g.
+Qwen3.6-35B-A3B on a hosted open-model provider; the privacy policy §2.8
+describes it generically, not by name), always behind the shim below. The
+provider receives the prompt text and returns the reply; it never receives
+the owner's account, server or IP address.
+
+**Credits.** The apps show the allowance in credits: **1 credit = 1,000
+weighted tokens** (`TOKENS_PER_CREDIT`). `.com` adds `remainingCredits` (week
++ starter, rounded down), `weeklyCredits` and `tokensPerCredit` to every
+`credits` object and keeps the token fields for older apps; apps facing an
+older `.com` divide the token fields by 1,000 themselves.
 
 **The allowance** (all `.com` vars, each optional; numbers are *weighted*
 tokens, input × `AI_PROMO_INPUT_WEIGHT` + output × `AI_PROMO_OUTPUT_WEIGHT`,
@@ -101,13 +109,13 @@ default 1 and 4, since output costs more to serve):
 |---|---|---|
 | `AI_PROMO_WEEKLY_TOKENS` | 500,000 | top-up each ISO week (Monday 00:00 UTC); the rest doesn't carry over; spent first |
 | `AI_PROMO_STARTER_TOKENS` | 2,000,000 | one-time reserve per account, spent after the week's |
-| `AI_PROMO_DAILY_CAP_TOKENS` | 50,000,000 | every account together per UTC day; past it nobody gets new passes or calls until tomorrow ("Free building is busy today…") |
+| `AI_PROMO_DAILY_CAP_TOKENS` | 50,000,000 | every account together per UTC day; past it nobody gets new passes or calls until tomorrow ("Flagship Inference is busy today…") |
 | `AI_PROMO_INPUT_WEIGHT` / `AI_PROMO_OUTPUT_WEIGHT` | 1 / 4 | the weights |
 | `AI_PROMO_ENDS_AT` | none | ISO 8601 or epoch ms; after it nothing is issued ("The free building period has ended — use your own AI key") and the apps show Flagship Inference disabled with that message |
 
 Only an account with a registered, unrevoked server that reported to `.com`
-in the last 24 hours gets free AI ("Free AI credits start once one of your
-servers is running"), so creating accounts without boxes gets nothing.
+in the last 24 hours gets Flagship Inference ("Flagship Inference starts once one
+of your servers is running"), so creating accounts without boxes gets nothing.
 Counted on the metering core (`packages/control-plane/src/meter.ts`):
 `ai-promo-week` (week), `ai-promo-starter` (lifetime), `ai-promo-global`
 (day, account `*`), and raw `ai-promo-input` / `ai-promo-output` (month).
@@ -118,7 +126,8 @@ Counted on the metering core (`packages/control-plane/src/meter.ts`):
   and posts it to `.com`: `POST /api/free-ai/status` →
   `{available, ended, reason: null|"no-server"|"busy-today", message?,
   credits:{week:{used, allowance, remaining, resetsAt}, starter:{used,
-  allowance, remaining}, usedTokens, allowanceTokens, remainingTokens}}`;
+  allowance, remaining}, usedTokens, allowanceTokens, remainingTokens,
+  remainingCredits, weeklyCredits, tokensPerCredit}}`;
   `POST /api/free-ai/token` → `{credential:{provider:"flagship", apiKey,
   baseUrl, source:"promo", relay:true}, model, expiresAt, credits}`, or
   `{error, code}`: 403 `free-ai-no-server`, 410 `free-ai-ended`, 429
@@ -130,8 +139,8 @@ Counted on the metering core (`packages/control-plane/src/meter.ts`):
   first, as a built-in provider that can't be deleted or renamed (and is
   announced that way to screen readers); it is selectable like a saved key,
   and the step is skipped for an owner with no saved key. Its status line
-  reads "This week: 340k of 500k left · Starter reserve: 1.2M" (compact on
-  the step), or why it can't be used now (unavailable, busy today, no running
+  reads "1,840 free credits left · 500 added each week" (the same line in
+  Settings and on the step, with the locale's thousands separators), or why it can't be used now (unavailable, busy today, no running
   server, used up, ended) with a way to add your own key; it stays listed,
   disabled, once the promotion has ended or the status can't be read. The
   owner's own keys follow and stay deletable. Nothing is sold, so there is no
