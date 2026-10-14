@@ -36,7 +36,11 @@ rewriting them would corrupt the code the model edits.
 
 What the model still sees, by the owner's choice: the repo, the owner's own
 instructions and attachments, the app's chosen name, and the NAMES of env vars
-the app uses.
+the app uses. Sample data the owner attaches (CSV/JSON) is written only into
+the private test copy's files volume (`/data/sample/`), never the live app;
+a PDF's text is extracted on the box. When a long conversation is summarised
+to fit the model's context, the summariser reads the redacted transcript and
+its summary is redacted again.
 
 ## 2. Staging, then live (AI create and AI edit)
 

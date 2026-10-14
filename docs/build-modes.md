@@ -165,11 +165,71 @@ Counted on the metering core (`packages/control-plane/src/meter.ts`):
   window is `free-ai-too-long` ("This build is too big for Flagship
   Inference. Try a smaller change, or use your own AI key."), any other is
   `free-ai-upstream` ("isn't available right now"). Prompts and replies are
-  neither logged nor stored.
+  neither logged nor stored. It has a primary and a fallback upstream (both
+  US: DeepInfra, then OpenRouter's zero-retention hosts); a 5xx, timeout or
+  dropped connection on the primary sends the same request once to the
+  fallback before any byte reaches the box, never a 4xx
+  (`infra/inference/shim/README.md`).
 - Anthropic, OpenAI and Google can't mint per-user keys with a hard token
   cap, so `/api/llm-promo/issue` refuses them (410) instead of handing out a
   placeholder key; the phone-OTP claim (`apps/web/src/routes/llmPromo.ts`)
   only ever ran on the Fastify dev surface and no app calls it.
+
+## Choosing a model (2026-10-14)
+
+The build chat header has a compact model menu, changeable between
+messages; Settings holds a default per provider. The choice rides on every
+start and reply (`model`, `effort`) and is kept on the session
+(`VibeCodeSessionMeta.model`/`effort`), so the staged fix loop uses it too.
+
+- **Flagship Inference:** the catalog `.com` serves
+  (`GET /api/inference/models`, `packages/control-plane/src/inferenceModels.ts`):
+  Low 1× (Qwen3.6-35B-A3B), Medium 1× (DeepSeek-V4-Flash, text only),
+  Medium multimodal 2× (GLM-5.3-Flash), High 3.5× (MiniMax-M3). A call
+  costs (input × 1 + output × 4) × multiplier / 1,000 credits; how the
+  multipliers come from real cost plus a 1.25 margin is
+  `docs/ai-inference-costs.md` §15. The shim learns the chosen model from the
+  allowance check, sends each upstream its own id, and reports the model with
+  the usage; `.com` charges its own multiplier for it. After each reply the
+  apps show a muted "used N credits" (the shim's last stream chunk,
+  `{"object":"flagship.usage","credits":N}`, kept per reply on the session).
+  "Think harder" (shown when the model reasons) sends `effort: "high"`; no
+  extra multiplier, only more tokens.
+- **Own keys (every provider we support):** `POST /api/screens/ai/models` on
+  the box lists the key's models live (OpenAI-compatible and OpenRouter
+  `/v1/models`, Anthropic `/v1/models`, Google `/v1beta/models`, Ollama
+  `/api/tags`; through the relay like any call with that key; the key never
+  reaches `.com`) and joins them with `.com`'s capability table
+  (`GET /api/inference/capabilities`, rebuilt daily from OpenRouter's public
+  catalog: context, image input, tool calling, the reasoning efforts each
+  model takes). Known models without tool calling are left out; unknown ones
+  are offered with no effort control and a "capabilities unknown" note; a
+  provider with no list gets a free-text model field. The effort goes in each
+  provider's own parameter (OpenAI `reasoning_effort`, OpenRouter
+  `reasoning.effort`, Anthropic adaptive thinking + `output_config.effort`,
+  Gemini `thinkingConfig.thinkingLevel`). New models are logged by the cron
+  and listed at `GET /api/admin/model-capabilities` (admin secret).
+- **Long conversations:** before a call would come close to the model's
+  context (75% of what's left after the reply's room, from the catalog or the
+  table; 128k when unknown), the box has the same model summarise the older
+  middle of the conversation and sends the summary instead
+  (`packages/server-daemon/src/llm/contextCompaction.ts`), keeping the system
+  prompt, the first request and the recent turns. What the summariser reads,
+  and its summary, pass through the model redactor. A chat session keeps the
+  summary (`summarised: true` on its state); the staged loop compacts in
+  memory.
+
+## Attachments in the build chat
+
+Up to 6 per message, with "The AI will see what you attach." beside the
+attach control: images (PNG, JPEG, GIF, WebP, 4 MB), text and code (256 KB),
+**sample data** (CSV/JSON, 2 MB: the model reads a preview; the whole file is
+written only into the app's private test copy at `/data/sample/<name>` in its
+dev files volume, never the live app) and **PDFs** (10 MB: the text is
+extracted on the box with unpdf; the PDF goes nowhere). An image sent to a
+model that can't see images first asks "I'll have to switch to <model>
+(<multiplier>) for this." (Switch / Cancel); for own keys the suggested model
+is the provider's cheapest vision model at least as dear as the current one.
 
 ## The journal (`buildmodes/buildJournal.ts`)
 
