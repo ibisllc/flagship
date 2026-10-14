@@ -122,6 +122,8 @@ fun HomeScreen(
      *  lane, so a box waiting on entitlement reads "Waiting for approval", not
      *  "Never came online". Source: AppState.serversAwaiting(ENTITLEMENT). */
     awaitingEntitlement: Set<String> = emptySet(),
+    /** Servers other accounts share with this one (docs/share-a-server.md §8), under the server list. */
+    sharedWithMe: (@Composable () -> Unit)? = null,
 ) {
     val scroll = rememberScrollState()
     // Search text over the server list (name / fqdn / description). Pure
@@ -248,6 +250,11 @@ fun HomeScreen(
                     modifier = Modifier.testTag("home-add-server"),
                 )
             }
+        }
+
+        sharedWithMe?.let {
+            Spacer(Modifier.height(FS.space.s6))
+            it()
         }
 
         Spacer(Modifier.height(FS.space.s6))

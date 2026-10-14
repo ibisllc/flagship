@@ -269,6 +269,7 @@ class MainActivity : FragmentActivity() {
         val liveBuild = LiveBuildClient(client = okHttp, store = sessionStore)
         val mockRelay = MockQrRelayClient()
         val liveRelay = LiveQrRelayClient(client = okHttp)
+        val liveShares = com.flagshipserver.app.viewmodels.ServerShareRuntime.live(okHttp) { trustCenter.isServerTrusted }
         val mockTransfer = MockServerTransferClient()
         val liveTransfer = LiveServerTransferClient(OkHttpJsonTransport(okHttp))
         val mockMailbox = MockSecretMailboxClient()
@@ -555,6 +556,7 @@ class MainActivity : FragmentActivity() {
                     LocalServerTransferClient provides effectiveTransfer,
                     LocalSessionStore provides sessionStore,
                     com.flagshipserver.app.core.LocalPodClients provides podClients,
+                    com.flagshipserver.app.viewmodels.LocalServerShares provides (if (useLive) liveShares else null),
                     LocalToastCenter provides toasts,
                     LocalActiveOperationsCenter provides operations,
                     LocalTrustCenter provides trustCenter,

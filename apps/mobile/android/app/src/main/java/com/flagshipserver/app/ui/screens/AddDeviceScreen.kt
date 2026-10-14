@@ -101,16 +101,21 @@ fun AddDeviceScreen(
             style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
         )
         Text(
-            "Have the new phone scan this code to join your account.",
+            "This is for your own phones and tablets. Have your new device scan this code to join your account.",
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 15.sp, lineHeight = 22.sp),
+        )
+        Text(
+            "To give another person access, use Share this server on the server's page instead.",
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 15.sp, lineHeight = 22.sp),
+            modifier = Modifier.semantics { contentDescription = "add-device-share-hint" },
         )
 
         RiskWarning(
             "This shares your account keys with the scanning device. Anyone " +
-                "who scans this code can join your account — only do it for a " +
-                "device or person you intend to add. Don't screenshot or share " +
-                "this code.",
+                "who scans this code can join your account, so only scan it " +
+                "with a device of your own. Don't screenshot or share this code.",
         )
 
         when (val p = phase) {

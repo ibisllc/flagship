@@ -105,6 +105,12 @@ sealed interface DeepLink {
      *  claim biometric (it's attacker-supplied). Keep in sync with iOS + webapp. */
     data class TransferOffer(val offerJson: String) : DeepLink
 
+    /** Share this server (docs/share-a-server.md): `https://flagshipserver.com/share#s=<shareId>&k=<secret>`
+     *  or `flagship://share?s=…&k=…`. The secret opens the offer and must stay out of logs. */
+    data class ShareOffer(val shareId: String, val secretHex: String) : DeepLink {
+        override fun toString(): String = "ShareOffer(shareId=$shareId)"
+    }
+
     companion object {
         /// Parse a `flagship://...` URI OR a box `/invite#<secret>` universal
         /// link. Keep in sync with iOS DeepLink.parse and the webapp router.
@@ -131,6 +137,9 @@ sealed interface DeepLink {
                     val json = uri.getQueryParameter("o")?.let { ServerTransferFlow.decodeOfferParam(it) }
                     return if (json != null) TransferOffer(json) else null
                 }
+                if (host == Endpoints.controlHost && uri.path == "/share") {
+                    return ServerShare.parseShareLink(uri.toString())?.let { ShareOffer(it.shareId, it.secretHex) }
+                }
                 return null
             }
             if (uri.scheme != "flagship") return null
@@ -143,6 +152,7 @@ sealed interface DeepLink {
                 "server" -> params["podId"]?.let { ServerDetail(it) }
                 "app" -> params["appId"]?.let { AppDetail(it) }
                 "create-server" -> CreateServer
+                "share" -> ServerShare.parseShareLink(uri.toString())?.let { ShareOffer(it.shareId, it.secretHex) }
                 "transfer" -> {
                     // flagship://transfer?o=<b64url> — the custom-scheme twin of
                     // the /transfer universal link (Slice C take-over).

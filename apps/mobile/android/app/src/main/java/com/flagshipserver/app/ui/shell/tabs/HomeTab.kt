@@ -42,6 +42,9 @@ import com.flagshipserver.app.ui.screens.DemoInstallProgressScreen
 import com.flagshipserver.app.ui.screens.HomeScreen
 import com.flagshipserver.app.ui.screens.PendingServerScreen
 import com.flagshipserver.app.ui.screens.ServerDetailScreen
+import com.flagshipserver.app.ui.screens.ShareAcceptScreen
+import com.flagshipserver.app.ui.screens.SharedServerScreen
+import com.flagshipserver.app.ui.screens.SharedWithMeSection
 import com.flagshipserver.app.ui.screens.CreateServerScreen
 import com.flagshipserver.app.ui.screens.InstallProgressScreen
 import com.flagshipserver.app.ui.screens.TransferAcquirerScreen
@@ -214,6 +217,10 @@ fun HomeTab() {
                 deepLinker.consume()
                 nav.navigate("create-server")
             }
+            is DeepLink.ShareOffer -> {
+                deepLinker.consume()
+                nav.navigate("share-accept?s=${link.shareId}&k=${link.secretHex}")
+            }
             is DeepLink.TransferOffer -> {
                 // Slice C — a `/transfer?o=…` take-over link. Open the acquirer
                 // flow with the giver's offer JSON pre-ingested (the VM verifies
@@ -297,7 +304,35 @@ fun HomeTab() {
                 deviceCapability = capability,
                 awaitingApproval = awaitingApproval,
                 awaitingEntitlement = awaitingEntitlement,
+                sharedWithMe = {
+                    SharedWithMeSection(
+                        onOpen = { shareId -> nav.navigate("shared-server/$shareId") },
+                        onOpenLink = { nav.navigate("share-accept") },
+                    )
+                },
             )
+        }
+        composable(
+            "share-accept?s={s}&k={k}",
+            arguments = listOf(
+                navArgument("s") { type = NavType.StringType; nullable = true; defaultValue = null },
+                navArgument("k") { type = NavType.StringType; nullable = true; defaultValue = null },
+            ),
+        ) { entry ->
+            val s = entry.arguments?.getString("s")
+            val k = entry.arguments?.getString("k")
+            ShareAcceptScreen(
+                initialLink = if (s != null && k != null) "s=$s&k=$k" else null,
+                onOpenServer = { shareId ->
+                    nav.popBackStack()
+                    nav.navigate("shared-server/$shareId")
+                },
+                onDone = { nav.popBackStack() },
+            )
+        }
+        composable("shared-server/{shareId}") { entry ->
+            val shareId = entry.arguments?.getString("shareId") ?: return@composable
+            SharedServerScreen(shareId = shareId, onBack = { nav.popBackStack() })
         }
         composable("server-detail/{podId}") { entry ->
             val podId = entry.arguments?.getString("podId") ?: return@composable

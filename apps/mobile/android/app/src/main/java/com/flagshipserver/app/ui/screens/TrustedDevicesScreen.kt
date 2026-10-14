@@ -181,7 +181,7 @@ fun TrustedDevicesScreen(nav: NavController) {
             }) { Text("Edit account name") }
         }
         Text(
-            "Phones and tablets that hold your account keys.",
+            "Your own phones and tablets that hold your account keys. To give another person access, use Share this server on the server's page.",
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 14.sp),
         )

@@ -116,6 +116,35 @@ object BootAuth {
         return "$SCHEME ${base64url(jsonStr.toByteArray(Charsets.UTF_8))}"
     }
 
+    /** Build the share-role `Authorization` header, signed by another account's
+     *  per-share member key (docs/share-a-server.md §5.4). The boot worker
+     *  accepts it only on the share routes and the unlock-key response, and
+     *  only while the owner keeps an unlock deposit for that key. */
+    fun shareHeader(
+        serverDomain: String,
+        method: String,
+        path: String,
+        signer: Ed25519Sign,
+        memberPubHex: String,
+        issuedAt: Long,
+        nonce: ByteArray,
+    ): String {
+        val nonceHex = HexUtil.encode(nonce)
+        val canon = canonicalBytes("share", serverDomain, method, path, memberPubHex, nonceHex, issuedAt)
+        val env = Envelope(
+            role = "share",
+            serverDomain = serverDomain,
+            method = method.uppercase(),
+            path = path,
+            pubKeyHex = memberPubHex.lowercase(),
+            nonceHex = nonceHex,
+            issuedAt = issuedAt,
+            signatureHex = HexUtil.encode(signer.sign(canon)),
+        )
+        val jsonStr = json.encodeToString(Envelope.serializer(), env)
+        return "$SCHEME ${base64url(jsonStr.toByteArray(Charsets.UTF_8))}"
+    }
+
     /** base64url without padding — matches gate.ts b64urlDecode (re-pads). */
     private fun base64url(b: ByteArray): String =
         java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(b)

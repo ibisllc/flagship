@@ -47,6 +47,8 @@
                      acquirer claim flow in-app; when the app isn't installed the
                      control apex redirects the browser to the webapp claim view. -->
                 <data android:scheme="https" android:host="flagshipserver.com" android:path="/transfer" />
+                <!-- Share this server: /share#s=<shareId>&k=<secret> opens the accept screen. -->
+                <data android:scheme="https" android:host="flagshipserver.com" android:path="/share" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -62,6 +64,12 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="flagship" android:host="transfer" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="flagship" android:host="share" />
             </intent-filter>
             <!-- #92 — service-access invite "open in app" hand-off
                  (flagship://invite?server=<host>&k=<secret>). The box's

@@ -237,6 +237,7 @@ fun ProcessUrlScreen(nav: NavController) {
                         // acquirer flow, which verifies the offer before claiming).
                         deepLinker.enqueue(link)
                     }
+                    is DeepLink.ShareOffer -> deepLinker.enqueue(link)
                     else -> error = "That doesn't look like a Flagship link."
                 }
             },

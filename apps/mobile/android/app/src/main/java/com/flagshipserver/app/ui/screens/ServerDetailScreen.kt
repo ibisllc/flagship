@@ -271,6 +271,8 @@ fun ServerDetailScreen(
             Spacer(Modifier.height(FS.space.s6))
             PreferredServerCard(serverDomain = d.value.serverFqdn)
             Spacer(Modifier.height(FS.space.s6))
+            ShareServerCard(serverDomain = d.value.serverFqdn, podId = podId)
+            Spacer(Modifier.height(FS.space.s6))
             FrontPageCard(serverDomain = d.value.serverFqdn)
             Spacer(Modifier.height(FS.space.s6))
             PowerCard(serverDomain = d.value.serverFqdn)
