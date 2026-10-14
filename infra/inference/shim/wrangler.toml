@@ -11,11 +11,20 @@ compatibility_flags = ["global_fetch_strictly_public"]
 # routes = [{ pattern = "inference.flagshipserver.com", custom_domain = true }]
 
 [vars]
-# Any OpenAI-compatible chat-completions URL: a hosted model API at
-# launch, our own vLLM later ("http://<pod>:8000/v1/chat/completions").
-UPSTREAM_CHAT_URL = "https://REPLACE-ME/v1/chat/completions"
-# The upstream's model id (replaces whatever a box asks for).
-UPSTREAM_MODEL = "REPLACE-ME"
+# Two OpenAI-compatible upstreams, both in the US (a user-selectable US/EU
+# region is open work). The primary serves every call; the fallback gets the
+# same request once when the primary fails (5xx, timeout, dropped
+# connection), never on a 4xx about the request. The *_NAME picks each one's
+# model ids from .com's catalog (packages/control-plane/src/inference-models.json).
+UPSTREAM_NAME = "deepinfra"
+UPSTREAM_CHAT_URL = "https://api.deepinfra.com/v1/openai/chat/completions"
+FALLBACK_NAME = "openrouter"
+FALLBACK_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
+# Only for an upstream the catalog has no ids for (our own vLLM later):
+# UPSTREAM_MODEL = "..."
+# FALLBACK_MODEL = "..."
+# Give up on an upstream that hasn't answered (headers) in this long.
+UPSTREAM_TIMEOUT_MS = "60000"
 # Ceiling on output tokens per call.
 MAX_OUTPUT_TOKENS = "8192"
 # "1" pauses free AI for everyone (calls get "isn't available right now").
@@ -24,4 +33,8 @@ COM_BASE_URL = "https://flagshipserver.com"
 
 # Secrets (set with `wrangler secret put`, NOT here):
 #   FLAGSHIP_INFERENCE_TOKEN_SECRET  — SAME value as apps/com's secret.
-#   UPSTREAM_API_KEY                 — the model provider's API key.
+#   UPSTREAM_API_KEY                 — the primary's API key (DeepInfra).
+#   FALLBACK_API_KEY                 — the fallback's API key (OpenRouter;
+#                                      turn on zero data retention in its
+#                                      privacy settings and give the key a
+#                                      credit limit).

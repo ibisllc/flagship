@@ -599,6 +599,9 @@ metal), plus the Debian 13.7.0 check. Record results under "Desktop Studio".
     insights); per-IP limits on submit/complain (anyone can retire an
     adapter with 3 anonymous complaints). Git and IDE builds still live only
     in daemon memory, so a restart forgets them (journals survive).
+17. **Flagship Inference region choice:** both shim upstreams are US
+    (DeepInfra primary, OpenRouter fallback). Add a user-selectable US/EU
+    region (an EU upstream such as Scaleway, picked per account).
 
 ### Feature branches (each = `main` + one feature; rebase when `main` moves)
 

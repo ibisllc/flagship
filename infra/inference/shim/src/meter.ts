@@ -98,10 +98,139 @@ export interface UsageReport {
   token: string;
   inputTokens: number;
   outputTokens: number;
+  /** The Flagship Inference catalog id that served it (`.com` applies its multiplier). */
+  model?: string;
 }
 
-export function buildUsageReport(token: string, usage: { inputTokens: number; outputTokens: number }): UsageReport {
-  return { token, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens };
+export function buildUsageReport(
+  token: string,
+  usage: { inputTokens: number; outputTokens: number },
+  model?: string,
+): UsageReport {
+  return { token, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, ...(model ? { model } : {}) };
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// The catalog model a call runs on, and the upstreams that can serve it
+// ──────────────────────────────────────────────────────────────────────
+
+/** One provider's id (and price ceiling) for a catalog model, as `.com` sends it. */
+export interface UpstreamModel {
+  id: string;
+  /** USD per million tokens: the most this model may cost there (OpenRouter's max_price). */
+  maxPriceIn?: number;
+  maxPriceOut?: number;
+}
+
+/** What `.com`'s allowance check says about the model the box asked for. */
+export interface ResolvedModel {
+  /** Catalog id ("low", …). */
+  id: string;
+  multiplier: number;
+  modalities: string[];
+  reasoning: boolean;
+  /** Keyed by the upstream's name ("deepinfra", "openrouter"). */
+  upstream: Record<string, UpstreamModel>;
+  /** For a text-only model: the label of the model to switch to for images. */
+  visionAlternative?: string;
+}
+
+/** Turns weighted tokens into credits, as `.com` charges them. */
+export interface Pricing {
+  inputWeight: number;
+  outputWeight: number;
+  creditTokens: number;
+}
+
+export const DEFAULT_PRICING: Pricing = { inputWeight: 1, outputWeight: 4, creditTokens: 1000 };
+
+/** Credits for a call: weighted tokens × the model's multiplier, per 1,000 (one decimal). */
+export function creditsFor(usage: { inputTokens: number; outputTokens: number }, multiplier: number, p: Pricing = DEFAULT_PRICING): number {
+  const weighted = Math.ceil((Math.max(0, usage.inputTokens) * p.inputWeight + Math.max(0, usage.outputTokens) * p.outputWeight) * multiplier);
+  return Math.ceil((weighted / p.creditTokens) * 10) / 10;
+}
+
+/** One configured upstream: primary or fallback. */
+export interface Upstream {
+  /** The catalog's provider key ("deepinfra", "openrouter"). */
+  name: string;
+  url: string;
+  key?: string;
+  /** Pinned model id (legacy single-model config, or no catalog). */
+  model?: string;
+}
+
+/** The model id to send `u`, or null when it can't serve this catalog model. */
+export function upstreamModelId(u: Upstream, m: ResolvedModel | null, requested?: string): string | null {
+  const fromCatalog = m?.upstream[u.name]?.id;
+  if (fromCatalog) return fromCatalog;
+  if (m && Object.keys(m.upstream).length > 0) return null;
+  return u.model ?? requested ?? null;
+}
+
+export function isOpenRouter(url: string): boolean {
+  try {
+    const h = new URL(url).hostname;
+    return h === "openrouter.ai" || h.endsWith(".openrouter.ai");
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The body for one upstream: its own model id; reasoning effort in its own
+ * parameter (dropped for a model that doesn't reason); on OpenRouter, only
+ * zero-data-retention hosts that don't collect data, under the price we budget.
+ */
+export function upstreamBody(
+  clean: Record<string, unknown>,
+  u: Upstream,
+  modelId: string,
+  m: ResolvedModel | null,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...clean, model: modelId };
+  const effort = out.reasoning_effort;
+  delete out.reasoning_effort;
+  const reasons = m ? m.reasoning : true;
+  if (typeof effort === "string" && reasons) {
+    if (isOpenRouter(u.url)) out.reasoning = { effort };
+    else out.reasoning_effort = effort;
+  }
+  if (isOpenRouter(u.url)) {
+    const price = m?.upstream[u.name];
+    out.provider = {
+      zdr: true,
+      data_collection: "deny",
+      ...(price?.maxPriceIn !== undefined && price.maxPriceOut !== undefined
+        ? { max_price: { prompt: price.maxPriceIn, completion: price.maxPriceOut } }
+        : {}),
+    };
+  }
+  return out;
+}
+
+/** Does the request carry an image (an OpenAI `image_url` content part)? */
+export function hasImages(body: Record<string, unknown>): boolean {
+  const msgs = Array.isArray(body.messages) ? body.messages : [];
+  return msgs.some(
+    (m) =>
+      m &&
+      typeof m === "object" &&
+      Array.isArray((m as { content?: unknown }).content) &&
+      ((m as { content: unknown[] }).content).some(
+        (p) => !!p && typeof p === "object" && (p as { type?: unknown }).type === "image_url",
+      ),
+  );
+}
+
+/**
+ * Should the call be retried on the fallback? Only when the upstream itself
+ * failed (5xx, a timeout, a dropped connection), never on a 4xx about the
+ * request.
+ */
+export function shouldFallBack(outcome: { status?: number; error?: unknown }): boolean {
+  if (outcome.error !== undefined) return true;
+  return typeof outcome.status === "number" && outcome.status >= 500;
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -123,6 +252,7 @@ const REQUEST_FIELDS = new Set([
   "presence_penalty",
   "frequency_penalty",
   "stream",
+  "reasoning_effort",
 ]);
 
 /** Per-message fields passed upstream (`name` and any extras are dropped). */
