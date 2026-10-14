@@ -1,15 +1,11 @@
-name: billing mirror (disabled)
+name: billing mirror
 
 # Mirrors billing/ to github.com/ibisllc/billing as its own repository, with
 # history limited to billing/ commits (git subtree split).
 #
-# DISABLED until the owner approves the mirror. To enable (see
-# billing/docs/publishing.md):
-#   1. Create the empty public repository ibisllc/billing.
-#   2. Add an SSH deploy key with write access there and store its private
-#      half here as the secret BILLING_MIRROR_DEPLOY_KEY.
-#   3. Delete the `if: false` line below.
-# It never publishes to npm; that is a separate, manual step.
+# Pushes with the write deploy key on ibisllc/billing, whose private half is
+# the secret BILLING_MIRROR_DEPLOY_KEY here (enabled 2026-10-14). It never
+# publishes to npm; that is a separate, manual step.
 
 on:
   push:
@@ -27,7 +23,6 @@ concurrency:
 
 jobs:
   mirror:
-    if: false
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -46,6 +41,6 @@ jobs:
           install -m 700 -d ~/.ssh
           printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/billing_mirror
           chmod 600 ~/.ssh/billing_mirror
-          ssh-keyscan github.com >> ~/.ssh/known_hosts
+          echo 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' >> ~/.ssh/known_hosts
           GIT_SSH_COMMAND="ssh -i ~/.ssh/billing_mirror -o IdentitiesOnly=yes" \
             git push git@github.com:ibisllc/billing.git billing-mirror:main
