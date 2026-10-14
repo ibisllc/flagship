@@ -50,14 +50,14 @@ export interface DirectoryAuthorization {
   signature?: string;
 }
 
-type AuthorizedDevice = {
+export type AuthorizedDevice = {
   accountId: string;
   deviceId: string;
   signerPubHex: string;
 };
 
-async function authorizeActiveDevice(
-  deps: AccountDirectoryDeps,
+export async function authorizeActiveDevice(
+  deps: Pick<AccountDirectoryDeps, "identities" | "nonces" | "now" | "freshnessMs">,
   auth: DirectoryAuthorization | undefined,
   expected: { accountId: string; method: string; path: string },
 ): Promise<AuthorizedDevice | null> {

@@ -15,6 +15,10 @@ export const TAG_CLAIM = "flagship/claim-username/v1";
 export const TAG_AUTH_CODE = "flagship/auth-code/v1";
 export const TAG_INSTALL_BLOB = "flagship/install-blob/v1";
 export const TAG_RCK_REGISTER = "flagship/rck-register/v1";
+export const TAG_DEVICE_ENDPOINT_CLAIM = "flagship/device-endpoint-claim/v1";
+/** The IRK claim label that mints an account read token
+ *  (docs/account-read-token.md). */
+export const ACCOUNT_READ_TOKEN_LABEL = "account-read-token";
 
 export function bytesToHex(b: Uint8Array): string {
   let s = "";
@@ -169,3 +173,33 @@ export function installBlobCanonical(b: InstallBlobParts): Uint8Array {
 }
 
 // buildTicketIssueBody removed — QR-pipe is the only flow.
+
+/** The IRK-signed claim that mints an account read token: `.com` serves
+ *  `/api/users/<u>/pods` only with one (docs/account-read-token.md). */
+export function readTokenClaim(
+  username: string,
+  irkPubHex: string,
+  issuedAt: number,
+  nonceHex: string,
+): { auth: Record<string, unknown>; canonical: Uint8Array } {
+  const expiresAt = issuedAt + 5 * 60_000;
+  return {
+    auth: {
+      username,
+      endpointLabel: ACCOUNT_READ_TOKEN_LABEL,
+      phoneIrkPub: irkPubHex,
+      issuedAt,
+      expiresAt,
+      nonce: nonceHex,
+    },
+    canonical: canonical([
+      TAG_DEVICE_ENDPOINT_CLAIM,
+      username,
+      ACCOUNT_READ_TOKEN_LABEL,
+      irkPubHex,
+      issuedAt,
+      expiresAt,
+      nonceHex,
+    ]),
+  };
+}

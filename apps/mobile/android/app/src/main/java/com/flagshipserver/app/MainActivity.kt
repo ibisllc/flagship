@@ -299,6 +299,23 @@ class MainActivity : FragmentActivity() {
             },
         )
 
+        // Account read tokens (docs/account-read-token.md): every private read
+        // of the account's servers, devices and apps on `.com` carries one.
+        // Minted with the account device key (no prompt on Android) or the IRK
+        // when the biometric session is already fresh — never a prompt.
+        com.flagshipserver.app.core.AccountReadTokens.shared = com.flagshipserver.app.core.AccountReadTokens(
+            transport = OkHttpJsonTransport(okHttp),
+            store = com.flagshipserver.app.keystore.KeystoreReadTokenStore(),
+            signers = { username ->
+                com.flagshipserver.app.keystore.KeystoreReadTokenSigners.resolve(
+                    username = username,
+                    currentUser = appState.currentUser.value,
+                    profile = appState.activeProfile,
+                )
+            },
+            isDemo = { com.flagshipserver.app.core.AppState.isDemoAccount(appState.activeProfile, appState.pods.value) },
+        )
+
         // Push-token registration is inherently a real-backend operation
         // (registering an FCM token + X25519 push key against .com), so it
         // always uses the live client; without a session it no-ops.

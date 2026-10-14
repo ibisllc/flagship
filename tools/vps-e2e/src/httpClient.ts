@@ -33,6 +33,7 @@ function doRequest(
   method: "GET" | "POST",
   url: string,
   jsonBody?: unknown,
+  extraHeaders: Record<string, string> = {},
 ): Promise<HttpResponse> {
   const u = new URL(url);
   const isHttps = u.protocol === "https:";
@@ -46,10 +47,11 @@ function doRequest(
         method,
         headers: payload
           ? {
+              ...extraHeaders,
               "content-type": "application/json",
               "content-length": Buffer.byteLength(payload),
             }
-          : {},
+          : extraHeaders,
       },
       (res) => {
         const chunks: Buffer[] = [];
@@ -77,6 +79,6 @@ function doRequest(
 }
 
 export const nodeHttpClient: HttpClient = {
-  get: (url) => doRequest("GET", url),
+  get: (url, headers) => doRequest("GET", url, undefined, headers),
   post: (url, body) => doRequest("POST", url, body),
 };

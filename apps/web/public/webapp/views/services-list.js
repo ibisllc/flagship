@@ -19,6 +19,7 @@ import { controlApex } from "../lib/apex.js";
 import { buildPodSwitcherModel } from "../lib/podSwitcher.js";
 import { fetchPodInventory } from "./home.js";
 import { appServerState, appStatusPillHtml, combineAppStatus, leaderOf, mergeAppsAcrossServers } from "../lib/appPlacement.js";
+import { accountReadFetch } from "../lib/accountRead.js";
 
 const COM_BASE = controlApex();
 
@@ -338,7 +339,7 @@ async function hydrateServiceLinks(services) {
   if (!username) return;
   await Promise.all(services.map(async (s) => {
     try {
-      const r = await fetch(
+      const r = await accountReadFetch(
         `${COM_BASE}/api/users/${encodeURIComponent(username)}/apps/${encodeURIComponent(s.serviceId)}/links`,
         { cache: "no-store" },
       );

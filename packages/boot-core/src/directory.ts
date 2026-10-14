@@ -6,7 +6,7 @@
  * plane, over HTTP, using endpoints that already exist on the identity
  * plane (flagshipserver.com / apps/com):
  *
- *   - box STK   ← GET {IDENTITY_PLANE_URL}/api/users/:u/pods
+ *   - box STK   ← GET {IDENTITY_PLANE_URL}/api/server/by-domain/:d
  *                 (the `pods[].identityPubKey` for the matching
  *                  `serverDomain` — the directory-bound STK).
  *   - account IRK ← GET {IDENTITY_PLANE_URL}/api/users/:u/pubkey-cert
@@ -130,8 +130,11 @@ export class HttpDirectoryClient implements DirectoryClient {
   async boxStkForDomain(serverDomain: string): Promise<string | null> {
     const user = usernameFromServerDomain(serverDomain, this.apex);
     if (!user) return null;
+    // The public one-server lookup: an account's server list needs its read
+    // token (docs/account-read-token.md), which this worker doesn't hold.
+    const want = serverDomain.toLowerCase();
     const res = await this.fetchImpl(
-      `${this.base}/api/users/${encodeURIComponent(user)}/pods`,
+      `${this.base}/api/server/by-domain/${encodeURIComponent(want)}`,
       NO_STORE_INIT,
     );
     if (!res.ok) return null;
@@ -141,24 +144,15 @@ export class HttpDirectoryClient implements DirectoryClient {
     } catch {
       return null;
     }
-    const pods = (body as { pods?: unknown }).pods;
-    if (!Array.isArray(pods)) return null;
-    const want = serverDomain.toLowerCase();
-    for (const p of pods) {
-      if (
-        p &&
-        typeof p === "object" &&
-        typeof (p as { serverDomain?: unknown }).serverDomain === "string" &&
-        (p as { serverDomain: string }).serverDomain.toLowerCase() === want &&
-        typeof (p as { identityPubKey?: unknown }).identityPubKey === "string"
-      ) {
-        // A revoked pod is no longer a valid box for boot operations.
-        const revokedAt = (p as { revokedAt?: unknown }).revokedAt;
-        if (typeof revokedAt === "number") return null;
-        return (p as { identityPubKey: string }).identityPubKey.toLowerCase();
-      }
-    }
-    return null;
+    const b = body as { serverDomain?: unknown; username?: unknown; identityPubKey?: unknown; revoked?: unknown };
+    if (
+      typeof b?.serverDomain !== "string" || b.serverDomain.toLowerCase() !== want ||
+      typeof b.username !== "string" || b.username.toLowerCase() !== user ||
+      typeof b.identityPubKey !== "string"
+    ) return null;
+    // A revoked server is no longer a valid box for boot operations.
+    if (b.revoked) return null;
+    return b.identityPubKey.toLowerCase();
   }
 
   async ownerIrkForDomain(serverDomain: string): Promise<string | null> {

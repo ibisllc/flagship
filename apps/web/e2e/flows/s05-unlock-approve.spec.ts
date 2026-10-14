@@ -27,6 +27,7 @@ import {
   openSealedSecretResponse,
   type SecretRequest,
 } from "@flagship/protocol";
+import { stubAccountReadToken } from "../fixtures/accountRead.js";
 
 const PASSPHRASE = "correct-horse-battery-staple-test";
 
@@ -101,6 +102,7 @@ test("S5 — Approve a pending unlock request → webapp re-seals the disk key f
     mailboxAuth = JSON.parse(request.postData() ?? "{}");
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ requests: pending }) });
   });
+  await stubAccountReadToken(page);
   await page.route(`**/api/users/${identity.username}/pods`, (route) =>
     route.fulfill({
       status: 200,

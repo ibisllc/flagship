@@ -81,6 +81,11 @@ public final class AppState {
     /// because it's cheap to refresh on launch from .com, and we want
     /// the source of truth to be the server.
     public var hasCloudRecovery: Bool
+    /// True while `.com` refuses this device's reads of the account's
+    /// servers and no read token can be minted without a prompt
+    /// (docs/account-read-token.md): Home keeps the last state and says
+    /// status is paused until the next unlock.
+    public var accountStatusPaused: Bool = false
     /// True once the user has tapped "Dismiss" on the recovery nudge
     /// in this app session. Banner re-appears next launch — this is
     /// not "permanent" dismiss; recovery is important enough that we

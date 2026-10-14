@@ -31,6 +31,7 @@ import {
   revokeShare,
   shareErrorText,
 } from "../lib/serverShares.js";
+import { accountReadFetch } from "../lib/accountRead.js";
 
 const hasDisk = (body) => body?.diskEncryption !== "none";
 const serverNameOf = (fqdn) => String(fqdn ?? "").split(".")[0] || String(fqdn ?? "");
@@ -301,7 +302,7 @@ async function stkFor(fqdn, username) {
   if (fromSnap?.identityPubKey) return String(fromSnap.identityPubKey);
   if (!username) return "";
   try {
-    const r = await fetch(`${controlApex()}/api/users/${encodeURIComponent(username)}/pods`, { cache: "no-store" });
+    const r = await accountReadFetch(`${controlApex()}/api/users/${encodeURIComponent(username)}/pods`, { cache: "no-store" });
     const b = r.ok ? await r.json() : {};
     return String(findPod(b.pods, fqdn)?.identityPubKey ?? "");
   } catch {

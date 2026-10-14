@@ -613,6 +613,33 @@ object Keystore {
     }
 
     /** Last-registered push tokenId; null if no current registration. */
+    // ---- Account read tokens (docs/account-read-token.md) ---------------
+    //
+    // Per profile and account, device-local, never biometric-gated: a token
+    // only reads the account's server list, so a poll can use it silently.
+
+    private const val KEY_READ_TOKEN = "account.read.token"
+
+    private fun readTokenKey(username: String) = "${pkey(KEY_READ_TOKEN)}.u.${username.lowercase()}"
+
+    fun accountReadToken(username: String): String? =
+        requirePrefs().getString(readTokenKey(username), null)
+
+    fun setAccountReadToken(username: String, value: String?) {
+        val editor = requirePrefs().edit()
+        if (value == null) editor.remove(readTokenKey(username)) else editor.putString(readTokenKey(username), value)
+        editor.apply()
+    }
+
+    /** Drop every read token of the active profile. */
+    fun clearAccountReadTokens() {
+        val p = requirePrefs()
+        val prefix = "${pkey(KEY_READ_TOKEN)}.u."
+        val editor = p.edit()
+        for (key in p.all.keys) if (key.startsWith(prefix)) editor.remove(key)
+        editor.apply()
+    }
+
     fun pushTokenId(): String? = requirePrefs().getString(pkey(KEY_PUSH_TOKEN_ID), null)
 
     fun setPushTokenId(id: String?) {
@@ -650,6 +677,10 @@ object Keystore {
         // administrative authority (the security invariant: authority is
         // device-local + revoked with the device).
         editor.remove(adminRootSeedKey())
+        val readTokenPrefix = "${pkey(KEY_READ_TOKEN)}.u."
+        for (key in p.all.keys) {
+            if (key.startsWith(readTokenPrefix)) editor.remove(key)
+        }
         // Per-version IRK caches (C7) — sweep every "<irk.seed key>.vN"
         // entry the rotation primitive might have written FOR THE ACTIVE
         // PROFILE. Other profiles' caches survive.
@@ -681,7 +712,7 @@ object Keystore {
         val bases = listOf(
             KEY_UMK_SEED, KEY_IRK_SEED, KEY_PUSH_X25519_PRIV,
             KEY_PUSH_TOKEN_ID, KEY_IRK_VERSION, KEY_IRK_PENDING_VERSION,
-            KEY_ACME_ACCOUNT_SCALAR, "admin.root.seed",
+            KEY_ACME_ACCOUNT_SCALAR, "admin.root.seed", KEY_READ_TOKEN,
         )
         for (key in p.all.keys) {
             if (key == KEY_ACTIVE_PROFILE) { editor.remove(key); continue }

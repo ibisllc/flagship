@@ -39,6 +39,7 @@ import { ed25519PubToX25519 } from "./edToMont.js";
 import { sensitiveSigner } from "./adminRoot.js";
 import { controlApex, bootOrigin } from "./apex.js";
 import { importX25519Private } from "./x25519.js";
+import { accountReadFetch } from "./accountRead.js";
 
 const COM_BASE = controlApex();
 const BOOT_BASE = bootOrigin();
@@ -260,7 +261,7 @@ export async function fetchVerifiedRequests(deps = {}) {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(authBody),
     }).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`secret-requests: HTTP ${r.status}`)))),
-    f(`${comBase}/api/users/${encodeURIComponent(username)}/pods`, { cache: "no-store" })
+    accountReadFetch(`${comBase}/api/users/${encodeURIComponent(username)}/pods`, { cache: "no-store" }, { fetch: f, baseUrl: comBase })
       .then((r) => (r.ok ? r.json() : { pods: [] })),
   ]);
 

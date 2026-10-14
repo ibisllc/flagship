@@ -31,6 +31,7 @@ import {
   installBlobCanonical,
   rckRegisterBody,
   rckRegisterCanonical,
+  readTokenClaim,
   bytesToHex,
   genSerial,
   type AuthCode,
@@ -303,9 +304,10 @@ async function pollUntil(
   url: string,
   predicate: (status: number, body: string) => boolean,
   what: string,
+  headers?: () => Promise<Record<string, string>>,
 ): Promise<string> {
   for (let i = 0; i < plan.pollMaxAttempts; i++) {
-    const r = await deps.http.get(url);
+    const r = await deps.http.get(url, headers ? await headers() : undefined);
     if (predicate(r.status, r.body)) return r.body;
     await deps.sleep(plan.pollIntervalMs);
   }
@@ -315,6 +317,32 @@ async function pollUntil(
       `timed out after ${plan.pollMaxAttempts} polls waiting for ${what}`,
     ),
   );
+}
+
+/**
+ * `.com` lists an account's servers only to a bearer of its read token
+ * (docs/account-read-token.md); mint one with the IRK, once per run.
+ */
+function podsAuth(plan: E2EPlan, deps: E2EDeps): () => Promise<Record<string, string>> {
+  let token: string | null = null;
+  return async (): Promise<Record<string, string>> => {
+    if (!token) {
+      const { auth, canonical } = readTokenClaim(
+        plan.username,
+        bytesToHex(deps.identity.irk.publicKey),
+        deps.clock(),
+        bytesToHex(randBytes(32)),
+      );
+      const r = await deps.http.post(
+        `${plan.comBase}/api/accounts/${encodeURIComponent(plan.username)}/read-token`,
+        { auth, authSignature: bytesToHex(deps.identity.signWithIrk(canonical)) },
+      );
+      const minted = r.status === 200 ? (JSON.parse(r.body) as { token?: unknown }).token : null;
+      if (typeof minted !== "string") return {};
+      token = minted;
+    }
+    return { authorization: `Bearer ${token}` };
+  };
 }
 
 /** Stage 3 — wait until `.com` shows the install registered the pod. */
@@ -335,6 +363,7 @@ async function awaitInstallRegistered(
     (status, b) =>
       status === 200 && b.includes(st.serverFqdn),
     `pod ${st.serverFqdn} to appear registered on .com`,
+    podsAuth(plan, deps),
   );
   deps.logger.info("install registered", { serverFqdn: st.serverFqdn });
   return pass(
@@ -366,6 +395,7 @@ async function awaitUnlock(
       b.includes(st.serverFqdn) &&
       /"(state|status)"\s*:\s*"(unlocked|ready|online|active)"/.test(b),
     `pod ${st.serverFqdn} to report unlocked/ready on .com`,
+    podsAuth(plan, deps),
   );
   return pass(
     name,

@@ -428,6 +428,7 @@ class AppState(
         // / etc. operate on the cloud the user just switched to. The
         // profileId is the lowercased cloudName (Keystore normalizes).
         Keystore.setActiveProfile(cloudName)
+        AccountReadTokens.shared?.profileChanged()
     }
 
     private fun upsertProfile(profile: Profile) {
@@ -717,6 +718,7 @@ class AppState(
         // Welcome doesn't need the gate (passkey auth coming up); the
         // preference itself stays so a future re-pair re-arms.
         _isUnlocked.value = true
+        AccountReadTokens.shared?.clear()
         onSignedOut?.invoke()
     }
 

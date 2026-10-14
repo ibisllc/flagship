@@ -8,7 +8,7 @@ import FlagshipUI
 @main
 struct FlagshipApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @State private var appState = AppState()
+    @State private var appState: AppState
     @State private var linker = DeepLinker()
     @State private var toasts = ToastCenter()
     @State private var operations = ActiveOperationsCenter()
@@ -36,6 +36,38 @@ struct FlagshipApp: App {
         // DeveloperSettings.apexHost — applied in its own init — is the
         // fallback when no launch arg is present.)
         Self.applyApexHostArgIfPresent()
+        let state = AppState()
+        _appState = State(initialValue: state)
+        // `.com` serves the account's servers, devices and app names only
+        // with a read token (docs/account-read-token.md), minted from keys
+        // already at hand and never with a prompt.
+        let readTokens = AccountReadTokenProvider(
+            minter: LiveAccountReadTokenMinter(),
+            store: KeychainAccountReadTokenStore(),
+            credentials: { username in
+                let (user, deviceId) = await MainActor.run {
+                    (state.currentUser?.lowercased(), state.activeProfile?.deviceId ?? "")
+                }
+                guard user == username else { return [] }
+                return AccountReadCredentials.keystore.credentials(username: username, deviceId: deviceId)
+            },
+            isKeyless: { _ in await MainActor.run { state.isDemoAccount } },
+            onPausedChanged: { paused in
+                Task { @MainActor in state.accountStatusPaused = paused }
+            }
+        )
+        self.readTokens = readTokens
+        // Every LIVE /pods response feeds the cert-pin registry (verify the
+        // STK-signed daemon-status per pod → install/clear that box's
+        // fingerprint pin). Live-only by construction: the Mock never invokes
+        // onPods, so demo/mock sessions can never install pins.
+        self.liveMailbox = LiveSecretMailboxClient(
+            readTokens: readTokens,
+            onPods: { response in
+                CertPinRegistry.shared.update(pods: response.pods)
+                LanDirectRegistry.shared.refreshActive()
+            }
+        )
         // Keychain-backed token persistence: pod base URL stays in
         // UserDefaults (non-secret), the 32-byte session token lives
         // in Keychain with WhenUnlockedThisDeviceOnly access.
@@ -90,7 +122,8 @@ struct FlagshipApp: App {
         let trustCenter = TrustCenter()
         _trust = State(initialValue: trustCenter)
         self.liveServerClient = LiveFlagshipServerClient(
-            trustGate: { @Sendable in await MainActor.run { trustCenter.isServerTrusted } }
+            trustGate: { @Sendable in await MainActor.run { trustCenter.isServerTrusted } },
+            readTokens: readTokens
         )
         Self.wireInstallProgressBridge()
         Self.wireProvisionPhaseBridge()
@@ -102,7 +135,10 @@ struct FlagshipApp: App {
             Keystore.setActiveProfile(cloudName)
         }
         appState.onSignedOut = {
-            Task { await store.setDemoSession(nil) }
+            Task {
+                await store.setDemoSession(nil)
+                await readTokens.clearAll()
+            }
         }
         // Gym smoke runs start from fixtures every launch, so they don't
         // carry a leader choice from an earlier run.
@@ -406,16 +442,8 @@ struct FlagshipApp: App {
                                       serviceIds: ["bright-maple--plants", "bright-maple--wiki", "trent--scratchpad"])
         }
     }
-    // Every LIVE /pods response feeds the cert-pin registry (verify the
-    // STK-signed daemon-status per pod → install/clear that box's
-    // fingerprint pin). Live-only by construction: the Mock never invokes
-    // onPods, so demo/mock sessions can never install pins.
-    private let liveMailbox: any SecretMailboxClient = LiveSecretMailboxClient(
-        onPods: { response in
-            CertPinRegistry.shared.update(pods: response.pods)
-            LanDirectRegistry.shared.refreshActive()
-        }
-    )
+    private let liveMailbox: any SecretMailboxClient
+    private let readTokens: AccountReadTokenProvider
     private var activeClient: any ScreensClient {
         dev.useLiveClient ? liveClient : mockClient
     }

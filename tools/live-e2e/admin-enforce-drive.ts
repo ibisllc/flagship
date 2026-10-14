@@ -49,6 +49,7 @@ import {
   type RevokeDeviceCapabilityGrant,
 } from "@flagship/protocol";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils";
+import { accountReadHeaders } from "./readToken.js";
 
 const BOX_FILE = join("gym-results", "feature-screenshots", "box.json");
 const OUT_DIR = join("gym-results", "admin-enforce-proof");
@@ -199,11 +200,13 @@ function revokeServerBody(
   return body;
 }
 
-async function waitForRegistered(control: string, username: string, fqdn: string): Promise<boolean> {
+async function waitForRegistered(control: string, username: string, fqdn: string, irk: Keypair): Promise<boolean> {
   const deadline = Date.now() + 18 * 60 * 1000;
   log(`[wait — server must be REGISTERED in the directory before revoke acts on it]`);
   while (Date.now() < deadline) {
-    const r = await http(`https://${control}/api/users/${username}/pods`).catch(
+    const r = await http(`https://${control}/api/users/${username}/pods`, {
+      headers: await accountReadHeaders(control, username, irk),
+    }).catch(
       () => ({ json: null }) as any,
     );
     const pod = r.json?.pods?.find((p: any) => p.serverDomain === fqdn);
@@ -274,7 +277,7 @@ async function main(): Promise<void> {
 
   // The server must be registered before the revoke handler can act on it
   // (else every step is a 404 'unknown server' and the gate is untested).
-  const registered = await waitForRegistered(control, username, fqdn);
+  const registered = await waitForRegistered(control, username, fqdn, ownerIrk);
   if (!registered) {
     log(`\n  ✗ server never registered in 18 min — cannot drive the revocation gate`);
     process.exit(1);
@@ -432,7 +435,9 @@ async function main(): Promise<void> {
     );
 
     // Directory confirms the server is revoked.
-    const pods = await http(`https://${control}/api/users/${username}/pods`);
+    const pods = await http(`https://${control}/api/users/${username}/pods`, {
+      headers: await accountReadHeaders(control, username, ownerIrk),
+    });
     const pod = (pods.json?.pods ?? []).find((p: any) => p.serverDomain === fqdn);
     const revokedInDir = !!(pod?.revokedAt || pod?.revoked || (r.json && r.json.revokedAt));
     log(`  ${revokedInDir ? "✓" : "✗"} server shows revoked (pod.revokedAt=${pod?.revokedAt ?? "?"} / handler revokedAt=${r.json?.revokedAt ?? "?"})`);

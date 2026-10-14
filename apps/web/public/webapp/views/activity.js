@@ -21,6 +21,7 @@ import { flagIcon } from "../lib/icons.js";
 import { fetchPodInventory } from "./home.js";
 import { toast } from "../lib/toast.js";
 import { formatDateTime } from "../lib/dateFormat.js";
+import { accountReadFetch } from "../lib/accountRead.js";
 
 registerView("view-activity", { tab: "activity" });
 
@@ -97,7 +98,7 @@ async function fanOut() {
       .then((b) => b.report ?? null)
       .catch((e) => { if (e instanceof ScreensError) return null; throw e; }),
     username
-      ? fetch(`${COM_BASE}/api/users/${encodeURIComponent(username)}/audit?since=0&limit=20`, { cache: "no-store" })
+      ? accountReadFetch(`${COM_BASE}/api/users/${encodeURIComponent(username)}/audit?since=0&limit=20`, { cache: "no-store" })
           .then((r) => r.ok ? r.json() : { events: [] })
           .then((b) => b.events ?? [])
           .catch(() => [])

@@ -1,0 +1,76 @@
+{
+  "about": "Account read tokens (docs/account-read-token.md). Every client platform must reproduce `device` and `irk`: derive the keys from `keys`, build the canonical string from `fields` byte for byte, and reproduce the Ed25519 signature; `box` is TS-only (servers). The device request travels in headers to POST `fields.path`; the IRK claim travels as `{auth, authSignature}` in the body. Every `reject` signature must fail to verify.",
+  "keys": {
+    "umkSeedHex": "2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a",
+    "accountId": "plucky-avocet",
+    "deviceId": "0123456789abcdef0123456789abcdef",
+    "deviceSeedHex": "ed2f89e23c0fbae975e7520dcf30d1226f3f3e4e48fd062830e33ceec9076305",
+    "devicePubHex": "8791a4c5d266a739d4e34ab02d92cadab99e33889968cf137611ab4335e9a56c",
+    "irkPubHex": "c49775473bf9dcf5ad1608c8e66823d55dc6889be27e42a029fd9de195c8d7e4",
+    "stkSeedHex": "5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b",
+    "stkPubHex": "6b734a8eff246fe734b38d4046c148eee5f04fe87b3a0a423955a77956de066b"
+  },
+  "device": {
+    "fields": {
+      "accountId": "plucky-avocet",
+      "deviceId": "0123456789abcdef0123456789abcdef",
+      "signerPubHex": "8791a4c5d266a739d4e34ab02d92cadab99e33889968cf137611ab4335e9a56c",
+      "method": "POST",
+      "path": "/api/accounts/plucky-avocet/read-token",
+      "requestId": "00112233445566778899aabbccddeeff",
+      "issuedAt": 1760000000000
+    },
+    "headers": {
+      "x-flagship-device-id": "0123456789abcdef0123456789abcdef",
+      "x-flagship-device-pub": "8791a4c5d266a739d4e34ab02d92cadab99e33889968cf137611ab4335e9a56c",
+      "x-flagship-request-id": "00112233445566778899aabbccddeeff",
+      "x-flagship-issued-at": "1760000000000",
+      "x-flagship-signature": "8eed089ad0e7169a7c5d07d668b7e883dc255b23548b33ed6c483f08bd4d3ad5b7bc83e5346a8058f781a39d8f9e0b92ac0d6a1d73d660f60e8c6d2a709d6c0b"
+    },
+    "canonical": "flagship/account-directory-request/v1|POST|/api/accounts/plucky-avocet/read-token|plucky-avocet|0123456789abcdef0123456789abcdef|8791a4c5d266a739d4e34ab02d92cadab99e33889968cf137611ab4335e9a56c|00112233445566778899aabbccddeeff|1760000000000",
+    "signatureHex": "8eed089ad0e7169a7c5d07d668b7e883dc255b23548b33ed6c483f08bd4d3ad5b7bc83e5346a8058f781a39d8f9e0b92ac0d6a1d73d660f60e8c6d2a709d6c0b",
+    "reject": {
+      "signatureHex": "0eed089ad0e7169a7c5d07d668b7e883dc255b23548b33ed6c483f08bd4d3ad5b7bc83e5346a8058f781a39d8f9e0b92ac0d6a1d73d660f60e8c6d2a709d6c0b"
+    }
+  },
+  "irk": {
+    "fields": {
+      "username": "plucky-avocet",
+      "endpointLabel": "account-read-token",
+      "phoneIrkPub": "c49775473bf9dcf5ad1608c8e66823d55dc6889be27e42a029fd9de195c8d7e4",
+      "issuedAt": 1760000000000,
+      "expiresAt": 1760000300000,
+      "nonce": "05101b26313c47525d68737e89949faab5c0cbd6e1ecf7020d18232e39444f5a"
+    },
+    "body": {
+      "auth": {
+        "username": "plucky-avocet",
+        "endpointLabel": "account-read-token",
+        "phoneIrkPub": "c49775473bf9dcf5ad1608c8e66823d55dc6889be27e42a029fd9de195c8d7e4",
+        "issuedAt": 1760000000000,
+        "expiresAt": 1760000300000,
+        "nonce": "05101b26313c47525d68737e89949faab5c0cbd6e1ecf7020d18232e39444f5a"
+      },
+      "authSignature": "5817eac490157c35cd7a42c65deec0b78d6651fb3e27756babf23fcd22f009b2ac3f847da703e451d798cebce2095603a6db19318dd6b8fbf1253c8ad621240e"
+    },
+    "canonical": "flagship/device-endpoint-claim/v1|plucky-avocet|account-read-token|c49775473bf9dcf5ad1608c8e66823d55dc6889be27e42a029fd9de195c8d7e4|1760000000000|1760000300000|05101b26313c47525d68737e89949faab5c0cbd6e1ecf7020d18232e39444f5a",
+    "signatureHex": "5817eac490157c35cd7a42c65deec0b78d6651fb3e27756babf23fcd22f009b2ac3f847da703e451d798cebce2095603a6db19318dd6b8fbf1253c8ad621240e",
+    "reject": {
+      "signatureHex": "0817eac490157c35cd7a42c65deec0b78d6651fb3e27756babf23fcd22f009b2ac3f847da703e451d798cebce2095603a6db19318dd6b8fbf1253c8ad621240e"
+    }
+  },
+  "box": {
+    "fields": {
+      "username": "plucky-avocet",
+      "serverDomain": "home3.plucky-avocet.flagship.services",
+      "stkPubHex": "6b734a8eff246fe734b38d4046c148eee5f04fe87b3a0a423955a77956de066b",
+      "issuedAt": 1760000000000,
+      "nonceHex": "fedcba98765432100123456789abcdef"
+    },
+    "canonical": "flagship/box-read-token-request/v1|plucky-avocet|home3.plucky-avocet.flagship.services|6b734a8eff246fe734b38d4046c148eee5f04fe87b3a0a423955a77956de066b|1760000000000|fedcba98765432100123456789abcdef",
+    "signatureHex": "fe1b064ff24f1e44c2576879f78758c3488959bd1a7e36f64679d0a62bae6c8c441e18cb6e9debc3461fda659c145b7235154fa1fb61783bce4c25f011394f03",
+    "reject": {
+      "signatureHex": "0e1b064ff24f1e44c2576879f78758c3488959bd1a7e36f64679d0a62bae6c8c441e18cb6e9debc3461fda659c145b7235154fa1fb61783bce4c25f011394f03"
+    }
+  }
+}

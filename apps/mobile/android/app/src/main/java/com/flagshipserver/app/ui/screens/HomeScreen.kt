@@ -124,6 +124,10 @@ fun HomeScreen(
     awaitingEntitlement: Set<String> = emptySet(),
     /** Servers other accounts share with this one (docs/share-a-server.md §8), under the server list. */
     sharedWithMe: (@Composable () -> Unit)? = null,
+    /** `.com` refused the account read token and none could be minted
+     *  without a prompt (docs/account-read-token.md): the list shows its
+     *  last state, and a quiet line says so. */
+    statusPaused: Boolean = false,
 ) {
     val scroll = rememberScrollState()
     // Search text over the server list (name / fqdn / description). Pure
@@ -190,6 +194,16 @@ fun HomeScreen(
         if (deviceCapability != null && !deviceCapability.isFullyScoped) {
             Spacer(Modifier.height(FS.space.s2))
             DeviceCapabilityChip(cap = deviceCapability)
+        }
+
+        if (statusPaused) {
+            Spacer(Modifier.height(FS.space.s2))
+            Text(
+                text = "Status paused — unlock to refresh",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                modifier = Modifier.testTag("home-status-paused"),
+            )
         }
 
         // One announcement at a time, highest priority first: an account-reset

@@ -424,8 +424,8 @@ export async function handleServerLookup(
     username: reg.username,
     identityPubKey: reg.identityPubKeyHex,
     registeredAt: reg.registeredAt,
-    revoked: reg.revokedAt
-      ? { reason: reg.revocationReason ?? "lost", at: reg.revokedAt }
-      : null,
+    // Public, so it says only that and when a server was revoked: why
+    // (lost, stolen, deleted) is the owner's business.
+    revoked: reg.revokedAt ? { at: reg.revokedAt } : null,
   });
 }

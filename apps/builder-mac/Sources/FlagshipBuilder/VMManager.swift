@@ -362,8 +362,9 @@ final class VMManager: ObservableObject {
 
     // MARK: - Health reports
 
-    /// While a guest runs, read its signed health report from the public
-    /// directory once a minute. The report comes from a timer inside the
+    /// While a guest runs, read its signed health report from `.com` (by the
+    /// order that created it) once a minute. A VM without an order serial
+    /// shows no health line. The report comes from a timer inside the
     /// guest, so it explains a server that stopped answering.
     private func syncHealthPoll(for config: VMConfig) {
         let name = config.name
@@ -374,7 +375,8 @@ final class VMManager: ObservableObject {
             return
         }
         guard healthPolls[name] == nil,
-              let url = VMServerHealth.podsURL(username: config.username) else { return }
+              let serial = config.provisionStatusSerial,
+              let url = VMServerHealth.orderHealthURL(serial: serial) else { return }
         let domain = config.serverDomain
         healthPolls[name] = Task { [weak self] in
             let session = URLSession(configuration: {
@@ -386,7 +388,7 @@ final class VMManager: ObservableObject {
             while !Task.isCancelled {
                 if let (data, response) = try? await session.data(from: url),
                    (response as? HTTPURLResponse)?.statusCode == 200,
-                   let health = VMServerHealth.fromPods(data, serverDomain: domain) {
+                   let health = VMServerHealth.fromOrderHealth(data, serverDomain: domain) {
                     self?.healthReports[name] = health
                     let v = health.verdict(at: Date())
                     let issues = v.ok ? [] : v.lines

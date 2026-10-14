@@ -33,6 +33,7 @@
  */
 
 import { test, expect, type Page } from "@playwright/test";
+import { stubAccountReadToken } from "../fixtures/accountRead.js";
 
 /** A passphrase that satisfies the bootstrap 8+ rule. */
 const PASSPHRASE = "correct-horse-battery-staple-gym";
@@ -71,6 +72,7 @@ async function reachShell(page: Page, viewAlias: string): Promise<void> {
 
 /** Reach Home AND let dispatchInitialView settle (see gym-total.spec.ts). */
 async function reachHome(page: Page): Promise<void> {
+  await stubAccountReadToken(page);
   await reachShell(page, "home");
   await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
   await page.waitForTimeout(150);

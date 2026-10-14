@@ -24,6 +24,7 @@ import { leaderFqdnOf, podShortName } from "./podSwitcher.js";
 import { liveSync } from "./liveSync.js";
 import { controlApex } from "./apex.js";
 import { escapeHtml } from "./util.js";
+import { accountReadFetch } from "./accountRead.js";
 
 export const TAG_APP_COPY = "flagship/app-copy/v1";
 export const TAG_UNINSTALL_SERVICE = "flagship/uninstall-service/v1";
@@ -90,7 +91,7 @@ export async function loadAccountPods(username, deps = {}) {
   if (!username) return [];
   try {
     const f = deps.fetch || fetch;
-    const r = await f(`${deps.comBase || controlApex()}/api/users/${encodeURIComponent(username)}/pods`, { cache: "no-store" });
+    const r = await accountReadFetch(`${deps.comBase || controlApex()}/api/users/${encodeURIComponent(username)}/pods`, { cache: "no-store" }, { fetch: f, baseUrl: deps.comBase || controlApex() });
     if (!r.ok) return [];
     const body = await r.json().catch(() => ({}));
     return Array.isArray(body?.pods) ? body.pods : [];

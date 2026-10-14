@@ -109,6 +109,7 @@ public struct HomeTab: View {
                     deviceCapability: app.deviceCapability,
                     awaitingApproval: app.serversAwaiting(.unlockKey),
                     awaitingEntitlement: app.serversAwaiting(.entitlement),
+                    statusPaused: app.accountStatusPaused,
                     onOpenPod: { pod in path.append(.serverDetail(podId: pod.podId)) },
                     onCancelServer: { pod in
                         Task { await cancelPendingServer(pod: pod, server: server, app: app, toasts: toasts) }
@@ -136,6 +137,12 @@ public struct HomeTab: View {
                         // (the biometric prompt is expected here) alongside
                         // the screen reload + a fresh approval poll (so a box
                         // that just started waiting surfaces its Approve card).
+                        // Paused status (docs/account-read-token.md) needs the
+                        // account keys for a fresh read token: this is the
+                        // user's own gesture, so the prompt belongs here.
+                        if app.accountStatusPaused, !app.isDemoAccount {
+                            _ = try? await Keystore.currentUMK(reason: "Refresh your servers' status")
+                        }
                         await reconcileServerTruth()
                         // Prefer a fresher box-direct leadership read over the
                         // relay value the reconcile just applied (best-effort).

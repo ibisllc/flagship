@@ -15,6 +15,7 @@
 
 import { getSession } from "./state.js";
 import { controlApex } from "./apex.js";
+import { accountReadFetch } from "./accountRead.js";
 
 const COM_BASE = controlApex();
 
@@ -40,9 +41,9 @@ export async function fetchInbox(deps = {}) {
   if (!username) return [];
   const f = deps.fetch || fetch;
   const comBase = deps.comBase || COM_BASE;
-  const r = await f(`${comBase}/api/users/${encodeURIComponent(username)}/pods`, {
+  const r = await accountReadFetch(`${comBase}/api/users/${encodeURIComponent(username)}/pods`, {
     cache: "no-store",
-  });
+  }, { fetch: f, getSession: deps.getSession, baseUrl: comBase });
   if (!r.ok) return [];
   const body = await r.json().catch(() => ({ pods: [] }));
   const out = [];
@@ -83,9 +84,9 @@ export async function fetchFirstBootMap(deps = {}) {
   const comBase = deps.comBase || COM_BASE;
   let body;
   try {
-    const r = await f(`${comBase}/api/users/${encodeURIComponent(username)}/pods`, {
+    const r = await accountReadFetch(`${comBase}/api/users/${encodeURIComponent(username)}/pods`, {
       cache: "no-store",
-    });
+    }, { fetch: f, getSession: deps.getSession, baseUrl: comBase });
     if (!r.ok) return {};
     body = await r.json();
   } catch {

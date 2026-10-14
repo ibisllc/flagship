@@ -46,7 +46,18 @@ export async function unlockSession(seed, username) {
   }
 }
 
+const lockListeners = new Set();
+
+/** Run `fn` whenever the session locks (account keys leave memory). */
+export function onSessionLock(fn) {
+  lockListeners.add(fn);
+  return () => lockListeners.delete(fn);
+}
+
 export function lockSession() {
+  for (const fn of lockListeners) {
+    try { fn(); } catch { /* a listener must never block locking */ }
+  }
   _session.umk = null;
   _session.irk = null;
   _session.username = null;

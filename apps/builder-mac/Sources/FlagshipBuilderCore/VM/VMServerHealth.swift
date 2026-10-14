@@ -1,7 +1,9 @@
 import Foundation
 
-/// A hosted server's own health report, read from the public `/pods`
-/// directory (control-plane `serverHealth.ts`). The guest signs these numbers
+/// A hosted server's own health report, read from `.com` by the order that
+/// created it (`GET /api/order/<serial>/health`, control-plane
+/// `serverHealth.ts`): the account's server list needs its read token, which
+/// Studio doesn't hold, and the order serial is a capability it does. The guest signs these numbers
 /// once a minute from a timer that keeps running when the daemon doesn't, so
 /// Studio can say why a server went quiet. The verdict copy matches the phone
 /// apps (`BoxHealth.verdict` on iOS).
@@ -56,17 +58,17 @@ public struct VMServerHealth: Codable, Sendable, Equatable {
         return "\(m)m"
     }
 
-    public static func podsURL(username: String) -> URL? {
-        guard (3...30).contains(username.count),
-              username.allSatisfy({ ($0.isLetter && $0.isLowercase && $0.isASCII) || $0.isNumber || $0 == "-" })
+    public static func orderHealthURL(serial: String) -> URL? {
+        guard (8...64).contains(serial.count),
+              serial.allSatisfy({ ($0.isLetter || $0.isNumber) && $0.isASCII || $0 == "-" || $0 == "_" })
         else { return nil }
-        return URL(string: "https://flagshipserver.com/api/users/\(username)/pods")
+        return URL(string: "https://flagshipserver.com/api/order/\(serial)/health")
     }
 
-    /// The report for one server out of a `/pods` response; nil when the
-    /// server isn't listed or its box doesn't report yet.
-    public static func fromPods(_ data: Data, serverDomain: String) -> VMServerHealth? {
-        struct Entry: Decodable {
+    /// The report out of an order-health response; nil when the response
+    /// names another server or its box doesn't report yet.
+    public static func fromOrderHealth(_ data: Data, serverDomain: String) -> VMServerHealth? {
+        struct Body: Decodable {
             let serverDomain: String
             let health: VMServerHealth?
             init(from decoder: Decoder) throws {
@@ -76,9 +78,9 @@ public struct VMServerHealth: Codable, Sendable, Equatable {
             }
             enum CodingKeys: String, CodingKey { case serverDomain, health }
         }
-        struct Pods: Decodable { let pods: [Entry] }
-        guard let pods = try? JSONDecoder().decode(Pods.self, from: data) else { return nil }
-        let target = serverDomain.lowercased()
-        return pods.pods.first { $0.serverDomain.lowercased() == target }?.health
+        guard let body = try? JSONDecoder().decode(Body.self, from: data),
+              body.serverDomain.lowercased() == serverDomain.lowercased()
+        else { return nil }
+        return body.health
     }
 }

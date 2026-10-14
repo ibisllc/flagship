@@ -34,12 +34,12 @@ describe("HttpDirectoryClient — mocked identity plane (no network)", () => {
     }) as unknown as typeof fetch;
   }
 
-  it("resolves the box STK from /pods (matching serverDomain)", async () => {
+  it("resolves the box STK from the public by-domain lookup", async () => {
     const dir = new HttpDirectoryClient({
       identityPlaneUrl: base,
       apex,
       fetchImpl: fetchStub({
-        "/api/users/alice/pods": { pods: [{ serverDomain: SERVER, identityPubKey: boxStk }] },
+        "/api/server/by-domain/kitchen.alice.flagship.services": { serverDomain: SERVER, username: "alice", identityPubKey: boxStk, revoked: null },
       }),
     });
     expect(await dir.boxStkForDomain(SERVER)).toBe(boxStk);
@@ -55,7 +55,7 @@ describe("HttpDirectoryClient — mocked identity plane (no network)", () => {
     globalThis.fetch = function (this: unknown) {
       seenThis.push(this);
       return Promise.resolve(
-        new Response(JSON.stringify({ pods: [{ serverDomain: SERVER, identityPubKey: boxStk }] }), {
+        new Response(JSON.stringify({ serverDomain: SERVER, username: "alice", identityPubKey: boxStk, revoked: null }), {
           status: 200,
           headers: { "content-type": "application/json" },
         }),
@@ -74,12 +74,12 @@ describe("HttpDirectoryClient — mocked identity plane (no network)", () => {
     }
   });
 
-  it("returns null for a revoked pod", async () => {
+  it("returns null for a revoked server", async () => {
     const dir = new HttpDirectoryClient({
       identityPlaneUrl: base,
       apex,
       fetchImpl: fetchStub({
-        "/api/users/alice/pods": { pods: [{ serverDomain: SERVER, identityPubKey: boxStk, revokedAt: 123 }] },
+        "/api/server/by-domain/kitchen.alice.flagship.services": { serverDomain: SERVER, username: "alice", identityPubKey: boxStk, revoked: { at: 123 } },
       }),
     });
     expect(await dir.boxStkForDomain(SERVER)).toBeNull();
@@ -90,7 +90,7 @@ describe("HttpDirectoryClient — mocked identity plane (no network)", () => {
       identityPlaneUrl: base,
       apex,
       fetchImpl: fetchStub({
-        "/api/users/alice/pods": { pods: [{ serverDomain: SERVER, identityPubKey: boxStk }] },
+        "/api/server/by-domain/kitchen.alice.flagship.services": { serverDomain: SERVER, username: "alice", identityPubKey: boxStk, revoked: null },
         "/api/users/alice/pubkey-cert": { binding: { pubKey: ownerIrk }, signature: "00" },
       }),
     });
@@ -103,18 +103,18 @@ describe("HttpDirectoryClient — mocked identity plane (no network)", () => {
       apex,
       fetchImpl: fetchStub({
         "/api/users/alice/pubkey-cert": { binding: { pubKey: ownerIrk } },
-        // no /pods row → server unknown
+        // no by-domain row → server unknown
       }),
     });
     expect(await dir.ownerIrkForDomain(SERVER)).toBeNull();
   });
 
-  it("returns null when /pods has no matching serverDomain", async () => {
+  it("returns null when the lookup names another server or account", async () => {
     const dir = new HttpDirectoryClient({
       identityPlaneUrl: base,
       apex,
       fetchImpl: fetchStub({
-        "/api/users/alice/pods": { pods: [{ serverDomain: "other.alice.flagship.services", identityPubKey: boxStk }] },
+        "/api/server/by-domain/kitchen.alice.flagship.services": { serverDomain: SERVER, username: "mallory", identityPubKey: boxStk, revoked: null },
       }),
     });
     expect(await dir.boxStkForDomain(SERVER)).toBeNull();
@@ -126,7 +126,7 @@ describe("HttpDirectoryClient — mocked identity plane (no network)", () => {
       identityPlaneUrl: base,
       apex,
       fetchImpl: fetchStub({
-        "/api/users/alice/pods": { pods: [{ serverDomain: SERVER, identityPubKey: boxStk }] },
+        "/api/server/by-domain/kitchen.alice.flagship.services": { serverDomain: SERVER, username: "alice", identityPubKey: boxStk, revoked: null },
         "/api/users/alice/watch-delegates": {
           username: "alice",
           delegates: [
@@ -147,7 +147,7 @@ describe("HttpDirectoryClient — mocked identity plane (no network)", () => {
       apex,
       fetchImpl: fetchStub({
         "/api/users/alice/watch-delegates": { delegates: [{ delegatePubKey: "ee".repeat(32), scopes: ["boot-approval"], expiresAt: 9_000_000 }] },
-        // no /pods row → server unknown
+        // no by-domain row → server unknown
       }),
     });
     expect(await dir.activeBootDelegatesForDomain(SERVER)).toBeNull();
@@ -158,7 +158,7 @@ describe("HttpDirectoryClient — mocked identity plane (no network)", () => {
       identityPlaneUrl: base,
       apex,
       fetchImpl: fetchStub({
-        "/api/users/alice/pods": { pods: [{ serverDomain: SERVER, identityPubKey: boxStk }] },
+        "/api/server/by-domain/kitchen.alice.flagship.services": { serverDomain: SERVER, username: "alice", identityPubKey: boxStk, revoked: null },
         // no /watch-delegates route → 404 → treated as empty
       }),
     });

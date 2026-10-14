@@ -3385,15 +3385,20 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
     /// verdicts and a network-error "no verdict" all return true here (we never
     /// halt on the absence of a positive-untrusted verdict).
     private let trustGate: (@Sendable () async -> Bool)?
+    /// The account read token `/audit` and `/apps/<id>/links` require
+    /// (docs/account-read-token.md); nil sends none.
+    private let readTokens: (any AccountReadTokenSource)?
 
     public init(
         urlSession: URLSession = .shared,
         baseUrl: URL = defaultBaseUrl,
-        trustGate: (@Sendable () async -> Bool)? = nil
+        trustGate: (@Sendable () async -> Bool)? = nil,
+        readTokens: (any AccountReadTokenSource)? = nil
     ) {
         self.urlSession = urlSession
         self.baseUrl = baseUrl
         self.trustGate = trustGate
+        self.readTokens = readTokens
     }
 
     /// The single gate-checked transport every request routes through. The
@@ -3901,8 +3906,9 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         let a = serviceId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serviceId
         var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(u)/apps/\(a)/links"))
         req.httpMethod = "GET"
-        let (data, resp) = try await send(req)
-        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        let (data, status) = try await sendAccountRead(req, username: username, tokens: readTokens) {
+            try await send($0)
+        }
         guard (200..<300).contains(status) else {
             let text = String(data: data, encoding: .utf8) ?? ""
             throw ScreensClientError.http(status: status, message: text)
@@ -3919,8 +3925,9 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         ]
         var req = URLRequest(url: comps.url!)
         req.httpMethod = "GET"
-        let (data, resp) = try await send(req)
-        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        let (data, status) = try await sendAccountRead(req, username: username, tokens: readTokens) {
+            try await send($0)
+        }
         guard (200..<300).contains(status) else {
             let text = String(data: data, encoding: .utf8) ?? ""
             throw ScreensClientError.http(status: status, message: text)

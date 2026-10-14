@@ -17,6 +17,7 @@
 // 50-row cap is reached. Events are always presented newest-first.
 
 import { controlApex } from "./apex.js";
+import { accountReadFetch } from "./accountRead.js";
 
 /** Server-side per-request cap — mirror of MAX_LIMIT in
  *  packages/control-plane/src/auditEvents.ts. */
@@ -150,7 +151,7 @@ export async function fetchAuditEvents(username, opts = {}) {
   const url =
     `${baseUrl}/api/users/${encodeURIComponent(username)}/audit` +
     `?since=${since}&limit=${limit}`;
-  const r = await f(url, { cache: "no-store" });
+  const r = await accountReadFetch(url, { cache: "no-store" }, { fetch: f, baseUrl });
   if (r.status === 404) return [];
   if (!r.ok) throw new Error(`audit fetch failed: HTTP ${r.status}`);
   const body = await r.json();

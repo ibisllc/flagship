@@ -67,12 +67,18 @@ public struct BiometricGate {
     public init() {}
 
     public func evaluate(reason: String) async throws {
+        _ = try await evaluateReturningContext(reason: reason)
+    }
+
+    /// `evaluate`, handing back the context that passed so a caller can use
+    /// it for Keychain / Secure-Enclave access without a second prompt.
+    public func evaluateReturningContext(reason: String) async throws -> LAContext {
         // GYM-ONLY (`-smoke-mode` seam): the Simulator has no enrolled
         // biometric, so this UI-consent prompt would make its gated screens
         // unreachable in the no-backend gym. The bypass emits NO crypto —
         // load-bearing ceremonies (keychain unseal / SE ECDH) still require
         // the real thing. Production never sets the flag.
-        if GymSeams.bypassBiometricGates { return }
+        if GymSeams.bypassBiometricGates { return LAContext() }
         let context = LAContext()
         var error: NSError?
         // `.deviceOwnerAuthentication` = biometrics OR the device passcode, so a
@@ -96,5 +102,6 @@ public struct BiometricGate {
                 }
             }
         }
+        return context
     }
 }

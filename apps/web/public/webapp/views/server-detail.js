@@ -108,6 +108,7 @@ import {
   wireMonitoringPane,
 } from "../lib/serverMonitoring.js";
 import { serverSharingHtml, wireServerSharing } from "./server-sharing.js";
+import { accountReadFetch } from "../lib/accountRead.js";
 
 registerView("view-server-detail");
 
@@ -160,7 +161,7 @@ async function lookupPod(username, fqdn) {
   if (fromSnap) return fromSnap;
   if (!username) return null;
   try {
-    const r = await fetch(`${controlApex()}/api/users/${encodeURIComponent(username)}/pods`, { cache: "no-store" });
+    const r = await accountReadFetch(`${controlApex()}/api/users/${encodeURIComponent(username)}/pods`, { cache: "no-store" });
     if (!r.ok) return null;
     const body = await r.json().catch(() => ({}));
     return findPod(body.pods, fqdn);

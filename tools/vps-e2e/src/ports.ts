@@ -116,7 +116,7 @@ export interface HttpResponse {
  * scripted responses. The core never imports `node:http(s)` itself.
  */
 export interface HttpClient {
-  get(url: string): Promise<HttpResponse>;
+  get(url: string, headers?: Record<string, string>): Promise<HttpResponse>;
   post(url: string, jsonBody: unknown): Promise<HttpResponse>;
 }
 

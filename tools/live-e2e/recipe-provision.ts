@@ -56,6 +56,7 @@ import {
   type Keypair,
 } from "@flagship/protocol";
 import { bytesToHex } from "@noble/hashes/utils";
+import { accountReadHeaders } from "./readToken.js";
 
 const CONTROL = process.env.GYM_LIVE_CONTROL_APEX || "gym.flagshipserver.com";
 const SERVICES = process.env.GYM_LIVE_SERVICES_APEX || "gym.flagship.services";
@@ -415,7 +416,9 @@ async function main(): Promise<void> {
       const deadline = Date.now() + 16 * 60 * 1000;
       let last = "";
       while (Date.now() < deadline) {
-        const pods = await http(`https://${CONTROL}/api/users/${user}/pods`).catch(() => ({ json: null }) as any);
+        const pods = await http(`https://${CONTROL}/api/users/${user}/pods`, {
+          headers: await accountReadHeaders(CONTROL, user, irk),
+        }).catch(() => ({ json: null }) as any);
         const p = pods.json?.pods?.find((x: any) => x.serverDomain === fqdn);
         const serve = await http(`https://${fqdn}/`, {}, 12000).catch(() => ({ status: 0 }) as any);
         last = `registered=${p ? "y" : "n"} state=${p?.state ?? "-"} cert=${p?.currentCert ? "y" : "n"} hb=${p?.lastReported ? "y" : "n"} http=${serve.status}`;

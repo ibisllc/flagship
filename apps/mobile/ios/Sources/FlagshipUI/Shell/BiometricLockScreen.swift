@@ -1,5 +1,6 @@
 import SwiftUI
 import Flagship
+import LocalAuthentication
 import FlagshipCore
 
 /// B12 — full-screen overlay shown when `AppState.requireBiometricAtLaunch`
@@ -137,7 +138,11 @@ struct BiometricLockScreen: View {
     private func tryUnlock() async {
         status = .authenticating
         do {
-            try await BiometricGate().evaluate(reason: "Unlock Flagship")
+            let context = try await BiometricGate().evaluateReturningContext(reason: "Unlock Flagship")
+            // The same unlock opens the account keys for this session, so a
+            // status read token mints without a second prompt
+            // (docs/account-read-token.md). Demo accounts hold no keys.
+            if !app.isDemoAccount { Keystore.cacheSessionUMK(authenticatedBy: context) }
             app.markUnlocked()
             status = .idle
         } catch {

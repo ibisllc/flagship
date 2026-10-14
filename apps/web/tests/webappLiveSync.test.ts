@@ -10,7 +10,7 @@ import {
 } from "../public/webapp/lib/liveSync.js";
 import { createBoxInbox } from "../public/webapp/lib/boxInbox.js";
 
-const SESSION = () => ({ username: "harry", umk: new Uint8Array(32) });
+const SESSION = () => ({ username: "harry" });
 
 function streamResponse(body: unknown) {
   return { ok: true, status: 200, json: async () => body } as unknown as Response;

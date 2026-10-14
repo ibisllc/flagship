@@ -116,7 +116,7 @@ describe("AliasReconciler", () => {
       comBaseUrl: "https://flagshipserver.com",
       username: "alice",
       platform,
-      fetchImpl: makeFetch([{ serviceId: "meta-scratchpad", displayLabel: "mynotes", updatedAt: 100 }]),
+      readToken: { fetch: makeFetch([{ serviceId: "meta-scratchpad", displayLabel: "mynotes", updatedAt: 100 }]) },
       onApplied: (c) => applied.push(...c),
     });
     await reconciler.reconcileNow();
@@ -132,7 +132,7 @@ describe("AliasReconciler", () => {
       comBaseUrl: "https://flagshipserver.com",
       username: "ali-ce",
       platform,
-      fetchImpl: makeFetch([]),
+      readToken: { fetch: makeFetch([]) },
     });
     await reconciler.reconcileNow();
     expect(fetchCalls).toEqual([
@@ -148,12 +148,12 @@ describe("AliasReconciler", () => {
       comBaseUrl: "https://flagshipserver.com",
       username: "alice",
       platform,
-      fetchImpl: (async () => {
+      readToken: { fetch: (async () => {
         callCount += 1;
         return new Response(JSON.stringify({
           aliases: [{ serviceId: "meta-scratchpad", displayLabel: "mynotes", updatedAt: 100 }],
         }), { status: 200 });
-      }) as typeof fetch,
+      }) as typeof fetch },
       onApplied: (c) => applied.push(...c),
     });
     // First pass — applies.
@@ -172,13 +172,13 @@ describe("AliasReconciler", () => {
       comBaseUrl: "https://flagshipserver.com",
       username: "alice",
       platform,
-      fetchImpl: makeFetch([
+      readToken: { fetch: makeFetch([
         // .com knows about an app the daemon hasn't installed yet —
         // not an error. The next reconcile after install picks it up.
         { serviceId: "c-newly-installed", displayLabel: "shiny", updatedAt: 100 },
         // ...and an app the daemon HAS installed; this one should apply.
         { serviceId: "a-app", displayLabel: "renamed", updatedAt: 100 },
-      ]),
+      ]) },
       onError: (e) => errors.push(e),
     });
     await reconciler.reconcileNow();
@@ -193,7 +193,7 @@ describe("AliasReconciler", () => {
       comBaseUrl: "https://flagshipserver.com",
       username: "alice",
       platform,
-      fetchImpl: (async () => new Response("nope", { status: 503 })) as typeof fetch,
+      readToken: { fetch: (async () => new Response("nope", { status: 503 })) as typeof fetch },
       onError: (e) => errors.push(e),
     });
     await reconciler.reconcileNow();
@@ -210,10 +210,10 @@ describe("AliasReconciler", () => {
       username: "alice",
       platform,
       intervalMs: 100,
-      fetchImpl: (async () => {
+      readToken: { fetch: (async () => {
         fetches += 1;
         return new Response(JSON.stringify({ aliases: [] }), { status: 200 });
-      }) as typeof fetch,
+      }) as typeof fetch },
     });
     reconciler.start();
     // Initial reconcile is kicked off immediately via void.

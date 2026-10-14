@@ -144,6 +144,10 @@ import {
   handleUsersCheck,
   handleUsernameLookup,
   handleGetUserPods,
+  handleMintAccountReadToken,
+  handleGetOrderHealth,
+  requireAccountRead,
+  ACCOUNT_READ_HEADERS,
   handleUserStream,
   handleListOutstandingOrders,
   handleAccountResolve,
@@ -462,6 +466,9 @@ export interface ControlPlaneEnv {
   /** Worker-only KEK for deterministic demo key custody. Demo accounts use
    * the standard encrypted profile and account-scoped device protocols. */
   DEMO_IRK_KEK?: string;
+  /** HMAC key for account read tokens (docs/account-read-token.md). Unset ⇒
+   *  only demo accounts' servers, devices and apps can be read. */
+  ACCOUNT_READ_TOKEN_SECRET?: string;
 
   /** Base installer ISO bucket used by the build relay. */
   ISO_BUCKET?: ProvisioningBaseBucket;
@@ -552,6 +559,7 @@ const ROUTE_RE = {
   // Provisioning-status channel — per-order install progress keyed by the
   // auth-code serial. The box POSTs a named phase; the phone polls it.
   PROVISION_STATUS: /^\/api\/order\/([^/]+)\/status$/,
+  ORDER_HEALTH: /^\/api\/order\/([^/]+)\/health$/,
   DNS01_PUBLISH: /^\/api\/dns-01\/publish$/,
   DNS01_DELETE: /^\/api\/dns-01\/delete$/,
   LUKS_SEALED: /^\/api\/server\/([^/]+)\/sealed-luks-key$/,
@@ -748,6 +756,7 @@ const ROUTE_RE = {
   DEVICE_GRANTS_LIST: /^\/api\/users\/([^/]+)\/device-grants$/,
   DEVICE_GRANTS_REVOKE: /^\/api\/users\/([^/]+)\/device-grants\/revoke$/,
   ACCOUNT_PROFILE: /^\/api\/accounts\/([^/]+)\/profile$/,
+  ACCOUNT_READ_TOKEN: /^\/api\/accounts\/([^/]+)\/read-token$/,
   ACCOUNT_DIRECTORY: /^\/api\/accounts\/([^/]+)\/directory$/,
   DEVICE_SELF_PROFILE: /^\/api\/accounts\/([^/]+)\/devices\/([^/]+)\/profile$/,
   DEVICE_MANAGED_PROFILE: /^\/api\/accounts\/([^/]+)\/devices\/([^/]+)\/managed-profile$/,
@@ -2302,7 +2311,9 @@ export async function tryControlPlane(
     );
   }
   if (method === "GET" && (m = path.match(ROUTE_RE.USER_PODS))) {
-    return finish(
+    const gate = await gateAccountRead(storage, env, request, decodeURIComponent(m[1]!));
+    if (gate) return gate;
+    return finishRead(
       await handleGetUserPods(
         {
           daemonStatus: storage.daemonStatus,
@@ -2318,7 +2329,9 @@ export async function tryControlPlane(
     );
   }
   if (method === "GET" && (m = path.match(ROUTE_RE.USER_STREAM))) {
-    return finish(
+    const gate = await gateAccountRead(storage, env, request, decodeURIComponent(m[1]!));
+    if (gate) return gate;
+    return finishRead(
       await handleUserStream(
         {
           daemonStatus: storage.daemonStatus,
@@ -2364,6 +2377,14 @@ export async function tryControlPlane(
         decodeURIComponent(m[1]!),
       ),
     );
+  }
+  if (method === "POST" && (m = path.match(ROUTE_RE.ACCOUNT_READ_TOKEN))) {
+    const accountId = decodeURIComponent(m[1]!);
+    return finish(await handleMintAccountReadToken(
+      accountReadTokenDeps(storage, env),
+      accountId,
+      { device: directoryAuthorization(request, accountId, path), body: await readJson(request) },
+    ));
   }
   if (method === "GET" && (m = path.match(ROUTE_RE.ACCOUNT_PROFILE))) {
     const accountId = decodeURIComponent(m[1]!);
@@ -2596,9 +2617,11 @@ export async function tryControlPlane(
     );
   }
   if (method === "GET" && (m = path.match(ROUTE_RE.USER_AUDIT))) {
+    const gate = await gateAccountRead(storage, env, request, decodeURIComponent(m[1]!));
+    if (gate) return gate;
     const since = parseInt(url.searchParams.get("since") ?? "0", 10) || 0;
     const limit = parseInt(url.searchParams.get("limit") ?? "50", 10) || 50;
-    return finish(
+    return finishRead(
       await handleGetAuditEvents(
         { auditEvents: storage.auditEvents },
         decodeURIComponent(m[1]!),
@@ -2789,7 +2812,9 @@ export async function tryControlPlane(
     );
   }
   if (method === "GET" && (m = path.match(ROUTE_RE.APP_LINKS))) {
-    return finish(
+    const gate = await gateAccountRead(storage, env, request, decodeURIComponent(m[1]!));
+    if (gate) return gate;
+    return finishRead(
       await handleGetAppLinks(
         {
           usernames: storage.usernames,
@@ -2876,7 +2901,9 @@ export async function tryControlPlane(
     );
   }
   if (method === "GET" && (m = path.match(ROUTE_RE.APP_ALIASES))) {
-    return finish(
+    const gate = await gateAccountRead(storage, env, request, decodeURIComponent(m[1]!));
+    if (gate) return gate;
+    return finishRead(
       await handleListAppAliases(
         { userServiceAliases: storage.userServiceAliases },
         decodeURIComponent(m[1]!),
@@ -3050,6 +3077,14 @@ export async function tryControlPlane(
         },
         decodeURIComponent(m[1]!),
         await readJson(request),
+      ),
+    );
+  }
+  if (method === "GET" && (m = path.match(ROUTE_RE.ORDER_HEALTH))) {
+    return finish(
+      await handleGetOrderHealth(
+        { authCodes: storage.authCodes, servers: storage.servers, serverHealth: storage.serverHealth },
+        decodeURIComponent(m[1]!),
       ),
     );
   }
@@ -3813,6 +3848,38 @@ function finishPlain(r: HandlerResponse): Response {
     status: r.status,
     headers: { "content-type": "application/json" },
   });
+}
+
+/** Private per-account reads answer `private, no-store` so no cache keeps them. */
+function finishRead(r: HandlerResponseWithHeaders): Response {
+  return finish({ ...r, headers: { ...(r.headers ?? {}), ...ACCOUNT_READ_HEADERS } });
+}
+
+function accountReadTokenDeps(storage: D1Storage, env: ControlPlaneEnv) {
+  return {
+    secret: env.ACCOUNT_READ_TOKEN_SECRET,
+    usernames: storage.usernames,
+    identities: storage.deviceIdentities,
+    servers: storage.servers,
+    demoUsers: storage.demoUsers,
+    nonces: new D1NonceStore(env.DB),
+  };
+}
+
+/** Refuses a read of `username`'s private state without its read token
+ *  (docs/account-read-token.md); null when the read may go ahead. */
+async function gateAccountRead(
+  storage: D1Storage,
+  env: ControlPlaneEnv,
+  request: Request,
+  username: string,
+): Promise<Response | null> {
+  const check = await requireAccountRead(
+    accountReadTokenDeps(storage, env),
+    username,
+    request.headers.get("authorization"),
+  );
+  return check.ok ? null : finish(check.response);
 }
 
 function accountDirectoryDeps(storage: D1Storage, db: D1Database) {

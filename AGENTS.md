@@ -373,9 +373,17 @@ account can view or co-manage a server, never destroy it) is in the MVP
   the old box-side `/api/companion/dock/*` endpoints are gone. Both apps
   only routed `flagship://dock`, so the old page's QR did nothing. Needs a
   `.com` deploy (shell v72) and new iOS/Android builds; not yet run live.
-  `/pods` now leaves out servers their owner deleted. Still open:
-  `/api/users/<u>/pods` and `/stream` are unauthenticated, so anyone can
-  read any account's servers, liveness, health and apps.
+  `/pods` now leaves out servers their owner deleted.
+- **Account read tokens (2026-10-14, `docs/account-read-token.md`).**
+  `/pods`, `/stream`, `/audit`, `/apps/aliases` and `/apps/<id>/links` need
+  `authorization: Bearer <token>` (401 otherwise), minted at
+  `POST /api/accounts/<u>/read-token` by a device of the account (30 days),
+  its IRK (24 h) or one of its servers' STK (24 h); demo accounts read
+  without one. Studio reads a VM's health from `/api/order/<serial>/health`;
+  by-domain no longer says why a server was revoked. Before deploying `.com`:
+  `openssl rand -hex 32 | wrangler secret put ACCOUNT_READ_TOKEN_SECRET`.
+  Breaks live status on store builds for real accounts until new builds,
+  and boxes' alias sync until the next endorsed release.
 - **Docker containers unreachable on VM appliances (fixed in `e81df698`).**
   The appliance's `Type=ether` networkd rule pulled every container's veth off
   its bridge: every app 502'd with "read ECONNRESET" after a 3 s ARP timeout

@@ -1,7 +1,7 @@
 import { ed } from "@flagship/protocol";
-import type { ServerHealthStorage, ServerStorage } from "@flagship/storage";
+import type { AuthCodeStorage, ServerHealthStorage, ServerStorage } from "@flagship/storage";
 import { HEX128, hexToBytes } from "./hex.js";
-import { forbidden, malformed, ok, type HandlerResponseWithHeaders } from "./types.js";
+import { forbidden, malformed, notFound, ok, type HandlerResponseWithHeaders } from "./types.js";
 
 /**
  * Box health reports: a timer on the box (independent of the daemon, so it
@@ -122,4 +122,26 @@ export async function healthForPods(
   if (!rec) return undefined;
   const report = parseBoxHealthReport(rec.reportJson);
   return report ? { ...report, receivedAt: rec.receivedAt } : undefined;
+}
+
+/**
+ * GET /api/order/<serial>/health — the health of the server an order
+ * created, for Studio's VM list. The order serial is the capability (Studio
+ * holds it from the recipe), so this needs no account read token.
+ */
+export async function handleGetOrderHealth(
+  deps: {
+    authCodes: Pick<AuthCodeStorage, "get">;
+    servers: Pick<ServerStorage, "get">;
+    serverHealth: ServerHealthStorage;
+  },
+  serial: string,
+): Promise<HandlerResponseWithHeaders> {
+  if (!/^[A-Za-z0-9_-]{8,64}$/.test(serial)) return malformed("malformed serial");
+  const order = await deps.authCodes.get(serial);
+  if (!order) return notFound("no such order");
+  const server = await deps.servers.get(order.serverDomain.toLowerCase());
+  if (!server || server.revokedAt) return notFound("no server for this order");
+  const health = await healthForPods(deps.serverHealth, server.serverDomain);
+  return ok({ serverDomain: server.serverDomain, health: health ?? null }, { "cache-control": "no-store" });
 }

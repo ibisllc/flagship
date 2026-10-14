@@ -53,6 +53,9 @@ public struct HomeScreen: View {
     /// for the other inbox lane, so a box waiting on entitlement reads "Waiting
     /// for approval" on Home, not "Never came online".
     let awaitingEntitlement: Set<String>
+    /// `.com` refuses this device's status reads until the next unlock
+    /// (docs/account-read-token.md); the list shows the last state.
+    let statusPaused: Bool
     var onOpenPod: (PodInfo) -> Void = { _ in }
     var onAddServer: () -> Void = {}
     var onSetLeader: (PodInfo) -> Void = { _ in }
@@ -93,6 +96,7 @@ public struct HomeScreen: View {
         deviceCapability: DeviceCapabilityBlock? = nil,
         awaitingApproval: Set<String> = [],
         awaitingEntitlement: Set<String> = [],
+        statusPaused: Bool = false,
         onOpenPod: @escaping (PodInfo) -> Void = { _ in },
         onCancelServer: @escaping (PodInfo) -> Void = { _ in },
         onDeleteServer: @escaping (PodInfo) -> Void = { _ in },
@@ -120,6 +124,7 @@ public struct HomeScreen: View {
         self.deviceCapability = deviceCapability
         self.awaitingApproval = awaitingApproval
         self.awaitingEntitlement = awaitingEntitlement
+        self.statusPaused = statusPaused
         self.onOpenPod = onOpenPod
         self.onAddServer = onAddServer
         self.onSetLeader = onSetLeader
@@ -156,6 +161,12 @@ public struct HomeScreen: View {
                 // account-reset (danger) suppresses everything; otherwise the
                 // backup banner, then the recovery nudge.
                 topAnnouncement(c: c)
+                if statusPaused && !pods.isEmpty {
+                    Label("Status paused — pull down to refresh", systemImage: "pause.circle")
+                        .font(FS.font.caption())
+                        .foregroundColor(c.textMuted)
+                        .accessibilityIdentifier("status-paused")
+                }
                 if !pods.isEmpty {
                     quickActions(c: c)
                 }

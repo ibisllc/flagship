@@ -10,6 +10,7 @@
 
 package com.flagshipserver.app.api
 
+import com.flagshipserver.app.core.AccountReadTokens
 import com.flagshipserver.app.core.Endpoints
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.HttpException
@@ -2475,10 +2476,13 @@ class LiveFlagshipServerClient(
         val encoded = java.net.URLEncoder.encode(username, "UTF-8")
         val since = sinceSeq.coerceAtLeast(0)
         val capped = limit.coerceIn(1, 50)
-        return transport.getJson(
-            "$base/api/users/$encoded/audit?since=$since&limit=$capped",
-            responseSerializer = AuditEventListResponse.serializer(),
-        )
+        return AccountReadTokens.authorize(username) { auth ->
+            transport.getJson(
+                "$base/api/users/$encoded/audit?since=$since&limit=$capped",
+                responseSerializer = AuditEventListResponse.serializer(),
+                extraHeaders = auth,
+            )
+        }
     }
 
     override suspend fun hasCloudRecovery(username: String): Boolean {
@@ -2579,10 +2583,13 @@ class LiveFlagshipServerClient(
     ): AppLinksResponse {
         val u = java.net.URLEncoder.encode(username, "UTF-8")
         val a = java.net.URLEncoder.encode(serviceId, "UTF-8")
-        return transport.getJson(
-            url = "$base/api/users/$u/apps/$a/links",
-            responseSerializer = AppLinksResponse.serializer(),
-        )
+        return AccountReadTokens.authorize(username) { auth ->
+            transport.getJson(
+                url = "$base/api/users/$u/apps/$a/links",
+                responseSerializer = AppLinksResponse.serializer(),
+                extraHeaders = auth,
+            )
+        }
     }
 
     override suspend fun getUsernameRecord(username: String): UsernameLookupResponse {

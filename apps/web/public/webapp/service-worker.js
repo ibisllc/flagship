@@ -147,7 +147,9 @@
 //       and the server-sharing / share-accept / shared-server views.
 //  v72: the remote page shows its QR at once (no account name, no server
 //       list): the phone picks the server and seals it a one-use ticket.
-const SHELL_VERSION = "v72";
+//  v73: account read tokens (docs/account-read-token.md): every /pods,
+//       /stream, /audit and app-links read carries one; precaches lib/accountRead.js.
+const SHELL_VERSION = "v73";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -192,6 +194,7 @@ const OPTIONAL_SHELL = [
   "/lib/push.js",
   "/lib/icons.js",
   "/lib/auditLog.js",
+  "/lib/accountRead.js",
   "/lib/totp.js",
   "/lib/edToMont.js",
   "/lib/bootApproval.js",

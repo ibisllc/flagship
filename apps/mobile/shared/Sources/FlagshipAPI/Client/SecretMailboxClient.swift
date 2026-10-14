@@ -764,16 +764,21 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
     /// never install pins). Pin maintenance must never break the directory
     /// fetch or list rendering, so the registry side never throws.
     private let onPods: (@Sendable (PodsDirectoryResponse) -> Void)?
+    /// The account read token `/pods` and `/stream` require
+    /// (docs/account-read-token.md); nil sends none.
+    private let readTokens: (any AccountReadTokenSource)?
 
     public init(
         urlSession: URLSession = .shared,
         baseUrl: URL = defaultBaseUrl,
         bootBaseUrl: URL = defaultBootBaseUrl,
+        readTokens: (any AccountReadTokenSource)? = nil,
         onPods: (@Sendable (PodsDirectoryResponse) -> Void)? = nil
     ) {
         self.urlSession = urlSession
         self.baseUrl = baseUrl
         self.bootBaseUrl = bootBaseUrl
+        self.readTokens = readTokens
         self.onPods = onPods
     }
 
@@ -798,7 +803,16 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
 
     public func fetchPods(username: String) async throws -> PodsDirectoryResponse {
         let encoded = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
-        let response: PodsDirectoryResponse = try await getReturning("/api/users/\(encoded)/pods")
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(encoded)/pods"))
+        req.httpMethod = "GET"
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        let (data, status) = try await sendAccountRead(req, username: username, tokens: readTokens) {
+            try await urlSession.data(for: $0)
+        }
+        guard (200..<300).contains(status) else {
+            throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
+        }
+        let response = try JSONDecoder().decode(PodsDirectoryResponse.self, from: data)
         onPods?(response)
         return response
     }
@@ -821,8 +835,9 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
         req.httpMethod = "GET"
         req.timeoutInterval = 40
         req.cachePolicy = .reloadIgnoringLocalCacheData
-        let (data, resp) = try await urlSession.data(for: req)
-        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        let (data, status) = try await sendAccountRead(req, username: username, tokens: readTokens) {
+            try await urlSession.data(for: $0)
+        }
         guard (200..<300).contains(status) else {
             throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
         }

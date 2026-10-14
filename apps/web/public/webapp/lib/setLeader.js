@@ -21,6 +21,7 @@ import { getSession } from "./state.js";
 import { depositSetLeader } from "./bootApproval.js";
 import { controlApex } from "./apex.js";
 import { makeCurrentPod } from "./api.js";
+import { accountReadFetch } from "./accountRead.js";
 
 const PREFERRED_KEY = "flagship.preferredServer";
 
@@ -63,9 +64,10 @@ export async function resolvePodStk(serverDomain, deps = {}) {
   const f = deps.fetch || fetch;
   const comBase = deps.comBase || controlApex();
   const want = String(serverDomain).toLowerCase();
-  const resp = await f(
+  const resp = await accountReadFetch(
     `${comBase}/api/users/${encodeURIComponent(username)}/pods`,
     { cache: "no-store" },
+    { fetch: f, baseUrl: comBase },
   );
   if (!resp.ok) return "";
   const body = await resp.json().catch(() => ({}));

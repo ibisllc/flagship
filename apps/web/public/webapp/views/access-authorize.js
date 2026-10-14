@@ -30,6 +30,7 @@ import { saveSecuredSession } from "../lib/securedSessions.js";
 import { toast } from "../lib/toast.js";
 import { humanError } from "../lib/humanError.js";
 import { escapeHtml } from "../lib/util.js";
+import { accountReadFetch } from "../lib/accountRead.js";
 
 registerView("view-access-authorize");
 
@@ -191,7 +192,7 @@ async function ownServerHosts(serverId, username) {
   const host = String(serverId || "").toLowerCase();
   if (hosts.has(host) || !username) return hosts;
   try {
-    const r = await fetch(`${controlApex()}/api/users/${encodeURIComponent(username)}/pods`, { cache: "no-store" });
+    const r = await accountReadFetch(`${controlApex()}/api/users/${encodeURIComponent(username)}/pods`, { cache: "no-store" });
     if (r.ok) for (const h of hostsFromPods((await r.json())?.pods)) hosts.add(h);
   } catch {
     /* offline: decide with what we have */

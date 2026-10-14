@@ -88,6 +88,7 @@ import { formatWhen } from "../lib/dateFormat.js";
 import { DB_NOTE, DB_OPEN, DB_TITLE, canUseDatabase, dbErrorMessage, fetchDbStores } from "../lib/appDb.js";
 import { getActiveProfile } from "../lib/profiles.js";
 import { isDeviceFullyScoped } from "../lib/usersCheck.js";
+import { accountReadFetch } from "../lib/accountRead.js";
 
 const COM_BASE = controlApex();
 
@@ -938,7 +939,7 @@ export async function enterServiceDetail(serviceId, { server = "", from = "" } =
  *  instances }. Falls back to the daemon's urlLabel if .com is
  *  unreachable so the section still renders. */
 async function fetchServiceLinks(username, serviceId) {
-  const r = await fetch(
+  const r = await accountReadFetch(
     `${COM_BASE}/api/users/${encodeURIComponent(username)}/apps/${encodeURIComponent(serviceId)}/links`,
     { cache: "no-store" },
   );

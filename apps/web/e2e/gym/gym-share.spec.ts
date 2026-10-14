@@ -12,6 +12,7 @@
 import { test, expect, type Page, type TestInfo } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { stubAccountReadToken } from "../fixtures/accountRead.js";
 
 const PASSPHRASE = "correct-horse-battery-staple-gym";
 const OWNER_BOX = "home.smoketest.flagship.services";
@@ -30,6 +31,7 @@ async function shot(page: Page, testInfo: TestInfo, name: string, opts: Paramete
 }
 
 async function reachHome(page: Page): Promise<void> {
+  await stubAccountReadToken(page);
   await page.goto("/index.html");
   await expect(page.locator("#view-bootstrap")).toBeVisible();
   await page.click("#bootstrap-create");

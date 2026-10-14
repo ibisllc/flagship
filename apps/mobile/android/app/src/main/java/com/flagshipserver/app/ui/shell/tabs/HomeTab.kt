@@ -252,6 +252,11 @@ fun HomeTab() {
                 profiles.firstOrNull { it.cloudName == activeCloud },
                 pods,
             )
+            val pausedFlow = remember {
+                com.flagshipserver.app.core.AccountReadTokens.shared?.statusPaused
+                    ?: kotlinx.coroutines.flow.MutableStateFlow(false)
+            }
+            val statusPaused by pausedFlow.collectAsState()
             val showNudge = !isDemoAccount && !hasRecovery && !dismissed && pods.any { it.status == com.flagshipserver.app.core.PodInfo.Status.ONLINE }
             val showBackupBanner = !isDemoAccount && RecoveryBannerStore.shouldShow(
                 hasCloudRecovery = hasRecovery,
@@ -304,6 +309,7 @@ fun HomeTab() {
                 deviceCapability = capability,
                 awaitingApproval = awaitingApproval,
                 awaitingEntitlement = awaitingEntitlement,
+                statusPaused = statusPaused,
                 sharedWithMe = {
                     SharedWithMeSection(
                         onOpen = { shareId -> nav.navigate("shared-server/$shareId") },

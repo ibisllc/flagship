@@ -33,6 +33,7 @@ import {
   get as profileGet,
   set as profileSet,
 } from "./profilesStore.js";
+import { accountReadFetch } from "./accountRead.js";
 
 // ---- Canonical-bytes tags — MUST match @flagship/protocol ----
 export const TAG_SERVER_DECOMMISSION = "flagship/server-decommission/v1";
@@ -150,7 +151,7 @@ export async function buildMailboxAuth(args, deps) {
 /**
  * Resolve whether peer-backup is enrolled for this box, plus the box's current
  * STK pubkey hex (the `retiredStkPubHex` the order binds to) — both read off the
- * unauthenticated `/api/users/:u/pods` directory (the pod row carries
+ * account's `/api/users/:u/pods` directory (the pod row carries
  * `identityPubKey` = the box's registered STK).
  *
  * BACKUP-ENROLLMENT SIGNAL — KNOWN GAP. `/pods` does not yet expose a
@@ -172,7 +173,7 @@ export async function resolveReplacementContext(args, deps = {}) {
 
   let retiredStkPubHex = null;
   try {
-    const r = await f(`${origin}/api/users/${encodeURIComponent(username)}/pods`);
+    const r = await accountReadFetch(`${origin}/api/users/${encodeURIComponent(username)}/pods`, {}, { fetch: f, baseUrl: origin });
     if (r.ok) {
       const body = await r.json().catch(() => ({}));
       const pod = (body.pods ?? []).find(

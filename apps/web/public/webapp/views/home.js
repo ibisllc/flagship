@@ -43,6 +43,7 @@ import { depositPairingIfNeeded } from "../lib/pairingDeposit.js";
 import { liveSync } from "../lib/liveSync.js";
 import { fetchLeads, invertLeadsMap } from "../lib/directLeads.js";
 import { fetchDecryptedDirectory } from "../lib/accountDirectory.js";
+import { accountReadFetch, onAccountReadPausedChange } from "../lib/accountRead.js";
 
 registerView("view-home", { tab: "home" });
 
@@ -99,7 +100,7 @@ export async function fetchPodInventory(username) {
     return out;
   }
   try {
-    const r = await fetch(
+    const r = await accountReadFetch(
       `${controlApex()}/api/users/${encodeURIComponent(username)}/pods`,
     );
     if (!r.ok) return out;
@@ -1017,7 +1018,7 @@ export async function renderHome() {
       sessionStatusEl.textContent = "Paired";
     }
     sessionStatusEl.classList.add("ok");
-    // #31 / #56 — ONE unauthenticated fan-out to /api/users/:u/pods on .com
+    // #31 / #56 — ONE fan-out to /api/users/:u/pods on .com (account read token)
     // returns BOTH the registered pods (liveness/cert enrichment) AND the
     // in-flight install orders (`pending[]`). No second signed fetch — a
     // just-created, not-yet-registered server rides this same call.
@@ -1383,6 +1384,7 @@ export async function enterHome() {
 export function initHomeView({ onPair, onSettings }) {
   $("pair-with-server")?.addEventListener("click", onPair);
   $("open-settings")?.addEventListener("click", onSettings);
+  onAccountReadPausedChange((paused) => $("home-status-paused")?.classList.toggle("hidden", !paused));
 }
 
 /**

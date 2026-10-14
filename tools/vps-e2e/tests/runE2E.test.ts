@@ -529,3 +529,28 @@ describe("hetzner adapter pure helpers", () => {
     expect(() => parseCreateServerResponse({ server: {} })).toThrow(/no server\.id/);
   });
 });
+
+describe("account read token claim", () => {
+  it("is a device-endpoint claim .com verifies against the IRK", async () => {
+    const { verifyDeviceEndpointClaim, ACCOUNT_READ_TOKEN_LABEL } = await import("@flagship/protocol");
+    const { readTokenClaim, bytesToHex } = await import("../src/wire.js");
+    const identity = makeIdentity(SEEDS);
+    const nonce = "ab".repeat(32);
+    const { auth, canonical } = readTokenClaim("alice", bytesToHex(identity.irk.publicKey), 1_000, nonce);
+    expect(auth.endpointLabel).toBe(ACCOUNT_READ_TOKEN_LABEL);
+    const sig = identity.signWithIrk(canonical);
+    const ok = verifyDeviceEndpointClaim(
+      {
+        username: "alice",
+        endpointLabel: ACCOUNT_READ_TOKEN_LABEL,
+        phoneIrkPub: identity.irk.publicKey,
+        issuedAt: 1_000,
+        expiresAt: auth.expiresAt as number,
+        nonce: Uint8Array.from(Buffer.from(nonce, "hex")),
+      },
+      sig,
+      identity.irk.publicKey,
+    );
+    expect(ok).toBe(true);
+  });
+});

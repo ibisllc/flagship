@@ -18,6 +18,7 @@
 // ServicePlatform.setAlias's `unchanged` short-circuit), so the
 // reconciler is safe to retry without a separate dedup layer.
 
+import type { BoxReadToken } from "./boxReadToken.js";
 import type { ServicePlatform } from "./servicePlatform.js";
 
 /** Default poll cadence — 60 seconds. Replace is interactive but
@@ -35,9 +36,9 @@ export interface AliasReconcilerDeps {
   /** The platform owns the urlLabel → InstalledService index that the
    *  reverse proxy consults; setAlias mutates it. */
   platform: ServicePlatform;
-  /** Injection seam for tests + dev. Production: a thin wrapper
-   *  around globalThis.fetch. */
-  fetchImpl?: typeof fetch;
+  /** `.com` serves the aliases only with the account's read token; the box
+   *  mints it with its STK (docs/account-read-token.md). */
+  readToken: Pick<BoxReadToken, "fetch">;
   /** Interval between reconciles. Defaults to 60s. */
   intervalMs?: number;
   /** Optional hook — invoked with the set of (serviceId, oldLabel,
@@ -131,12 +132,11 @@ export class AliasReconciler {
   }
 
   private async fetchAliases(): Promise<AliasRow[]> {
-    const fetchImpl = this.deps.fetchImpl ?? fetch;
     const url = `${this.deps.comBaseUrl}/api/users/${encodeURIComponent(this.deps.username)}/apps/aliases`;
     // `cache` isn't typed on Node's RequestInit but browsers + Worker
     // runtimes honour it. Cast through so we still pass it at runtime
     // without losing strict TS elsewhere.
-    const r = await fetchImpl(url, { cache: "no-store" } as RequestInit);
+    const r = await this.deps.readToken.fetch(url, { cache: "no-store" } as RequestInit);
     if (!r.ok) {
       throw new Error(`alias fetch failed: status ${r.status}`);
     }

@@ -10,6 +10,7 @@
 
 package com.flagshipserver.app.api
 
+import com.flagshipserver.app.core.AccountReadTokens
 import com.flagshipserver.app.core.Endpoints
 import com.flagshipserver.app.core.HttpException
 import com.flagshipserver.app.core.JsonHttpTransport
@@ -704,10 +705,13 @@ class LiveSecretMailboxClient(
 
     override suspend fun fetchPods(username: String): PodsDirectoryResponse {
         val encoded = java.net.URLEncoder.encode(username, "UTF-8")
-        val response = transport.getJson(
-            "$base/api/users/$encoded/pods",
-            responseSerializer = PodsDirectoryResponse.serializer(),
-        )
+        val response = AccountReadTokens.authorize(username) { auth ->
+            transport.getJson(
+                "$base/api/users/$encoded/pods",
+                responseSerializer = PodsDirectoryResponse.serializer(),
+                extraHeaders = auth,
+            )
+        }
         onPods?.let { observe -> runCatching { observe(response) } }
         return response
     }
@@ -722,10 +726,13 @@ class LiveSecretMailboxClient(
         // timeout must allow that (the caller falls back to /pods on a real
         // error). The stream carries the same `signedStatus` as /pods, so reuse
         // the A′-pin observer off the projected directory.
-        val response = transport.getJson(
-            url,
-            responseSerializer = LiveSyncResponse.serializer(),
-        )
+        val response = AccountReadTokens.authorize(username) { auth ->
+            transport.getJson(
+                url,
+                responseSerializer = LiveSyncResponse.serializer(),
+                extraHeaders = auth,
+            )
+        }
         onPods?.let { observe -> runCatching { observe(response.directory) } }
         return response
     }

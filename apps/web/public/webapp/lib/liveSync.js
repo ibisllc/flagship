@@ -24,6 +24,7 @@
 
 import { getSession } from "./state.js";
 import { controlApex } from "./apex.js";
+import { accountReadFetch } from "./accountRead.js";
 
 /** Jitter (± ms) applied to every reconnect so a fleet of tabs that all time
  *  out together don't reconnect in lockstep (thundering herd). */
@@ -51,9 +52,10 @@ export async function fetchLiveSync(cursor, deps = {}) {
   const f = deps.fetch || fetch;
   const comBase = deps.comBase || controlApex();
   const q = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
-  const r = await f(
+  const r = await accountReadFetch(
     `${comBase}/api/users/${encodeURIComponent(username)}/stream${q}`,
     { cache: "no-store", signal: deps.signal },
+    { fetch: f, getSession: deps.getSession, baseUrl: comBase },
   );
   if (!r || !r.ok) throw new Error(`live-sync: status ${r ? r.status : "none"}`);
   const body = await r.json();
@@ -67,17 +69,18 @@ export async function fetchLiveSync(cursor, deps = {}) {
 }
 
 /** The fallback read when /stream is down: a plain /pods GET shaped like a
- *  stream snapshot (no cursor). Pure read, unauthenticated, exactly the
- *  pre-LiveSync home behavior. Throws on non-200 so the loop keeps retrying. */
+ *  stream snapshot (no cursor), with the same account read token. Throws on
+ *  non-200 so the loop keeps retrying. */
 async function fetchPodsFallback(deps = {}) {
   const session = deps.getSession ? deps.getSession() : getSession();
   const username = session?.username;
   if (!username) throw new Error("live-sync: no signed-in user");
   const f = deps.fetch || fetch;
   const comBase = deps.comBase || controlApex();
-  const r = await f(
+  const r = await accountReadFetch(
     `${comBase}/api/users/${encodeURIComponent(username)}/pods`,
     { cache: "no-store" },
+    { fetch: f, getSession: deps.getSession, baseUrl: comBase },
   );
   if (!r || !r.ok) throw new Error(`live-sync: pods status ${r ? r.status : "none"}`);
   const body = await r.json();

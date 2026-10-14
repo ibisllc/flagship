@@ -260,6 +260,37 @@ public struct Keystore {
         )
     }
 
+    /// This device's account device key when it is stored on the device
+    /// (joined devices), readable without a prompt; nil when it is derived
+    /// from the UMK instead.
+    public static func storedAccountDeviceSigningKey(
+        accountId: String,
+        deviceId: String
+    ) -> Curve25519.Signing.PrivateKey? {
+        guard let raw = keychainRead(account: account("com.flagship.account-device.\(deviceId)", profile: accountId)) else {
+            return nil
+        }
+        return try? Curve25519.Signing.PrivateKey(rawRepresentation: raw)
+    }
+
+    // MARK: - Account read tokens
+
+    public static func loadAccountReadTokens() -> [String: StoredAccountReadToken] {
+        guard let data = keychainRead(account: KCKey.accountReadTokens),
+              let map = try? JSONDecoder().decode([String: StoredAccountReadToken].self, from: data)
+        else { return [:] }
+        return map
+    }
+
+    public static func saveAccountReadTokens(_ map: [String: StoredAccountReadToken]) {
+        if map.isEmpty {
+            keychainDelete(account: KCKey.accountReadTokens)
+            return
+        }
+        guard let data = try? JSONEncoder().encode(map) else { return }
+        try? keychainWrite(account: KCKey.accountReadTokens, data: data, sync: .deviceLocal)
+    }
+
     public static func accountDeviceSigningKey(
         umk: Data,
         accountId: String,
@@ -441,6 +472,20 @@ public struct Keystore {
     /// any leaked-disk OLD IRK private key on a stolen peer device.
     public static func deriveIRK(reason: String) async throws -> Curve25519.Signing.PrivateKey {
         return try await deriveIRK(reason: reason, version: currentIrkVersion())
+    }
+
+    /// The UMK this unlocked session already holds, or nil. Never prompts:
+    /// background work that only rides an unlocked session reads this.
+    public static func sessionUMKIfCached() -> Data? {
+        cachedSessionUmk(activeProfileId)?.withUnsafeBytes { Data($0) }
+    }
+
+    /// The account IRK from the UMK this session already holds, or nil.
+    /// Never prompts.
+    public static func sessionIRKIfCached() -> Curve25519.Signing.PrivateKey? {
+        guard let umk = cachedSessionUmk(activeProfileId) else { return nil }
+        let seed = derive(umk: umk, info: "flagship/irk/v\(currentIrkVersion())")
+        return try? Curve25519.Signing.PrivateKey(rawRepresentation: seed.withUnsafeBytes { Data($0) })
     }
 
     /// Explicit-version variant. Used by the Replace device + Wipe
@@ -962,6 +1007,7 @@ public struct Keystore {
         for account in accounts {
             keychainDelete(account: account)
         }
+        keychainDelete(account: KCKey.accountReadTokens)
         WrappingKeypair.deleteSEKeyIfExists(profile: id)
         // The cert-pin STK-pub cache derives from this UMK — a wiped
         // account must not leave pins (or pub anchors) behind.
@@ -992,6 +1038,7 @@ public struct Keystore {
         }
         keychainDelete(account: KCKey.pushX25519Priv)
         keychainDelete(account: KCKey.pushTokenId)
+        keychainDelete(account: KCKey.accountReadTokens)
         keychainDelete(account: activeProfilePointerAccount)
         // The per-profile loop above only knows {active, default}; a profile
         // created under any OTHER id leaves a stale wrappedUMK behind (the
@@ -1050,6 +1097,30 @@ public struct Keystore {
         }
 
         let wrapper = try await WrappingKeypair.createOrLoad(reason: reason)
+        return try unwrapUMK(wrapped: wrapped, ephemeralPub: ephemeralPub, wrapper: wrapper, profile: profile)
+    }
+
+    /// Unwrap the UMK into this session's cache with a context the user has
+    /// just authenticated (the lock screen), so the account keys are at
+    /// hand without a second prompt (docs/account-read-token.md). Best
+    /// effort: on any failure the session simply has no key yet.
+    public static func cacheSessionUMK(authenticatedBy context: LAContext) {
+        let profile = activeProfileId
+        guard cachedSessionUmk(profile) == nil,
+              let wrapped = keychainRead(account: account(KCKey.wrappedUmk)),
+              let ephemeralRaw = keychainRead(account: account(KCKey.ephemeralPub)),
+              let ephemeralPub = try? P256.KeyAgreement.PublicKey(x963Representation: ephemeralRaw),
+              let wrapper = try? WrappingKeypair.load(context: context)
+        else { return }
+        _ = try? unwrapUMK(wrapped: wrapped, ephemeralPub: ephemeralPub, wrapper: wrapper, profile: profile)
+    }
+
+    private static func unwrapUMK(
+        wrapped: Data,
+        ephemeralPub: P256.KeyAgreement.PublicKey,
+        wrapper: WrappingKeypair,
+        profile: String
+    ) throws -> SymmetricKey {
         let ecdhBytes = try wrapper.ecdh(ephemeralPublic: ephemeralPub)
         let unwrapKey = hkdf(from: ecdhBytes, info: "flagship/umk-wrap/v1")
 
@@ -1105,6 +1176,10 @@ public struct Keystore {
         /// The active delegate's grantId (UUID) — needed to build the
         /// IRK-signed RevokeWatchDelegate when the toggle flips off. */
         static let watchDelegateGrantId = "com.flagship.watchdelegate.grantid"
+        /// Account read tokens (docs/account-read-token.md), a JSON map of
+        /// username → token. `.deviceLocal` and non-biometric: a token only
+        /// reads `.com`'s per-account state, and polls must never prompt.
+        static let accountReadTokens    = "com.flagship.account-read-tokens"
         /// #28 — the ACME account key's raw 32-byte P-256 private scalar.
         /// This is the authority to mint the user's TLS certs (ES256 LE
         /// account key). Stored EXPORTABLY + NON-biometric (cert issuance
@@ -1331,6 +1406,19 @@ fileprivate struct WrappingKeypair {
         return try simulatorKeypair(account: simAccount)
         #else
         return try secureEnclaveKeypair(context: ctx, tag: Data(seTag.utf8))
+        #endif
+    }
+
+    /// Load the existing wrapping keypair with an already-authenticated
+    /// context (no second prompt).
+    static func load(context: LAContext) throws -> WrappingKeypair {
+        let simAccount = Keystore.profileScopedSimWrapAccount()
+        let seTag = Keystore.profileScopedSEKeyTag()
+        #if targetEnvironment(simulator)
+        return try simulatorKeypair(account: simAccount)
+        #else
+        _ = simAccount
+        return try secureEnclaveKeypair(context: context, tag: Data(seTag.utf8))
         #endif
     }
 

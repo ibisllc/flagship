@@ -7,6 +7,7 @@ import { ed, egressSuggestions, type Bytes, type Keypair } from "@flagship/proto
 import type { BoxSigner, SwkOps } from "./keyCustodian.js";
 import { ServicePlatform, buildServiceHttpHandlers, type InstalledService } from "./servicePlatform.js";
 import { AliasReconciler } from "./aliasReconciler.js";
+import { BoxReadToken } from "./boxReadToken.js";
 import { prepareAppRequest, type SessionResolver } from "./serviceProxy.js";
 import { AppConnectionLimiter, handleAppConnection, type AppConnectionOptions } from "./appConnection.js";
 import {
@@ -1416,9 +1417,17 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     // automatically. Opt-out via opts.servicePlatform.aliasReconcilerComBase = false.
     const reconcileBase = apOpts.aliasReconcilerComBase;
     if (reconcileBase !== false) {
+      const comBaseUrl = reconcileBase ?? "https://flagshipserver.com";
       aliasReconciler = new AliasReconciler({
-        comBaseUrl: reconcileBase ?? "https://flagshipserver.com",
+        comBaseUrl,
         username: apOpts.hostUsername,
+        readToken: new BoxReadToken({
+          comBaseUrl,
+          username: apOpts.hostUsername,
+          serverFqdn: opts.serverFqdn,
+          boxPublicKey: () => opts.custodian.boxPublicKey(),
+          signAsBox: (msg) => opts.custodian.signAsBox(msg),
+        }),
         platform: servicePlatformRef.current,
         intervalMs: apOpts.aliasReconcilerIntervalMs ?? 60_000,
         onApplied: (changes) => {
