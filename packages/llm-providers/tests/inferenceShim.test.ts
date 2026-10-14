@@ -190,6 +190,15 @@ describe("free-AI shim", () => {
     );
   });
 
+  it("words its refusals as Flagship Inference, the same as .com", () => {
+    expect(USED_UP_MESSAGE).toBe(FREE_AI_MESSAGES.usedUp);
+    expect(UNAVAILABLE_MESSAGE).toBe(FREE_AI_MESSAGES.unavailable);
+    for (const m of [USED_UP_MESSAGE, UNAVAILABLE_MESSAGE, EXPIRED_MESSAGE]) {
+      expect(m).toContain("Flagship Inference");
+      expect(m).not.toMatch(/free AI|tokens?\b/i);
+    }
+  });
+
   it("keeps any other upstream 400 as 'unavailable'", async () => {
     upstreamResponse = () => new Response(JSON.stringify({ error: { message: "invalid tool schema" } }), { status: 400 });
     const { res } = await call({ messages: [{ role: "user", content: "x" }] }, await token());

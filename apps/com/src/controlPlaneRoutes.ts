@@ -3088,7 +3088,7 @@ export async function tryControlPlane(
     );
   }
 
-  // ── Free AI credits (docs/build-modes.md) ─────────────────
+  // ── Flagship Inference (docs/build-modes.md) ─────────────────
   if (
     method === "POST" &&
     (ROUTE_RE.FREE_AI_TOKEN.test(path) || ROUTE_RE.FREE_AI_STATUS.test(path) || ROUTE_RE.FREE_AI_ALLOWANCE.test(path))
@@ -3119,7 +3119,7 @@ export async function tryControlPlane(
     // hand out a placeholder key the box can't use.
     const issueProvider = (issueBody as { request?: { provider?: unknown } } | undefined)?.request?.provider;
     if (issueProvider !== undefined && issueProvider !== "flagship") {
-      return finish({ status: 410, body: { error: "only free AI credits are offered; use /api/free-ai/token" } });
+      return finish({ status: 410, body: { error: "only Flagship Inference is offered; use /api/free-ai/token" } });
     }
     return finish(
       await handleLlmPromoIssue(

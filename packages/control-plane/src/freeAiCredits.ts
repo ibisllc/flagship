@@ -1,6 +1,6 @@
 /**
- * Free AI credits — "for a limited time, building your apps is free on
- * Flagship" (docs/build-modes.md "Free AI credits").
+ * Flagship Inference — "for a limited time, building your apps is free on
+ * Flagship" (docs/build-modes.md "Flagship Inference").
  *
  * The phone or webapp signs a `flagship/llm-promo-issue/v1` request
  * (provider "flagship") and `.com` answers with a short-lived scoped pass for
@@ -19,8 +19,9 @@
  *   - a cap on every account's use together per UTC day ("ai-promo-global"),
  *     so the promotion can't cost more than a set amount a day;
  *   - until an optional end date.
- * Tokens are weighted (an output token costs more to serve); raw input and
- * output are recorded too ("ai-promo-input"/"ai-promo-output"). All numbers
+ * Tokens are weighted (an output token costs more to serve; the apps show
+ * them as credits of {@link TOKENS_PER_CREDIT}); raw input and output are
+ * recorded too ("ai-promo-input"/"ai-promo-output"). All numbers
  * are `.com` config ({@link freeAiConfigFromEnv}). Minting records nothing,
  * so the apps mint a fresh pass for every build start and reply.
  */
@@ -49,11 +50,11 @@ export const SERVER_SEEN_WINDOW_MS = 24 * 60 * 60_000;
 const GLOBAL_ACCOUNT = "*";
 
 export const FREE_AI_MESSAGES = {
-  usedUp: "Your free AI credits for this week are used up. More arrive on Monday, or add your own AI key to keep building.",
-  busyToday: "Free building is busy today. Try again tomorrow, or use your own AI key.",
+  usedUp: "You've used this week's Flagship Inference credits. More arrive on Monday, or add your own AI key to keep building.",
+  busyToday: "Flagship Inference is busy today. Try again tomorrow, or use your own AI key.",
   ended: "The free building period has ended — use your own AI key.",
-  noServer: "Free AI credits start once one of your servers is running.",
-  unavailable: "Free AI isn't available right now. You can add your own AI key.",
+  noServer: "Flagship Inference starts once one of your servers is running.",
+  unavailable: "Flagship Inference isn't available right now. You can add your own AI key.",
   /** The shim's `free-ai-too-long`: the request didn't fit the model's context. */
   tooLong: "This build is too big for Flagship Inference. Try a smaller change, or use your own AI key.",
 } as const;
@@ -127,6 +128,14 @@ export function weightedTokens(cfg: FreeAiConfig, inputTokens: number, outputTok
   return Math.ceil(Math.max(0, inputTokens) * cfg.inputWeight + Math.max(0, outputTokens) * cfg.outputWeight);
 }
 
+/** The apps show credits: one credit is this many weighted tokens. */
+export const TOKENS_PER_CREDIT = 1000;
+
+/** Whole credits in a weighted-token count (rounded down, never negative). */
+export function creditsOf(weighted: number): number {
+  return Math.max(0, Math.floor(weighted / TOKENS_PER_CREDIT));
+}
+
 export interface AiCredits {
   week: { used: number; allowance: number; remaining: number; resetsAt: number | null };
   starter: { used: number; allowance: number; remaining: number };
@@ -134,6 +143,11 @@ export interface AiCredits {
   usedTokens: number;
   allowanceTokens: number;
   remainingTokens: number;
+  /** What the apps show: the week's and the starter's credits left together. */
+  remainingCredits: number;
+  /** The weekly top-up in credits. */
+  weeklyCredits: number;
+  tokensPerCredit: number;
 }
 
 /** Why free AI can't be used right now (null: it can, while credits remain). */
@@ -193,6 +207,9 @@ export async function freeAiCredits(deps: MeterSide, username: string): Promise<
     usedTokens: week.used + starter.used,
     allowanceTokens: week.allowance + starter.allowance,
     remainingTokens: week.remaining + starter.remaining,
+    remainingCredits: creditsOf(week.remaining + starter.remaining),
+    weeklyCredits: creditsOf(week.allowance),
+    tokensPerCredit: TOKENS_PER_CREDIT,
   };
 }
 

@@ -1,7 +1,7 @@
 /**
  * Flagship free-AI meter shim — Cloudflare Worker.
  *
- * The single front door for free AI credits. `.com` hands boxes this host
+ * The single front door for Flagship Inference. `.com` hands boxes this host
  * (FLAGSHIP_INFERENCE_ENDPOINT), so a promo credential only ever reaches
  * it. Per call it:
  *   1. verifies the scoped `.com` token (Bearer);
@@ -44,7 +44,7 @@ export interface Env {
   UPSTREAM_MODEL?: string;
   /** Ceiling on output tokens per call. Default 8192. */
   MAX_OUTPUT_TOKENS?: string;
-  /** "1" answers every call with "free AI is paused" (a kill switch). */
+  /** "1" answers every call with "Flagship Inference isn't available right now" (a kill switch). */
   PAUSED?: string;
   /** .com base for the allowance check and usage reports. */
   COM_BASE_URL: string;
@@ -55,10 +55,10 @@ interface Ctx {
 }
 
 export const USED_UP_MESSAGE =
-  "Your free AI credits for this week are used up. More arrive on Monday, or add your own AI key to keep building.";
-export const UNAVAILABLE_MESSAGE = "Free AI isn't available right now. You can add your own AI key.";
-export const EXPIRED_MESSAGE = "This free AI pass has expired. Send your message again to continue.";
-export const BUSY_MESSAGE = "Free AI is busy right now. Try again in a minute.";
+  "You've used this week's Flagship Inference credits. More arrive on Monday, or add your own AI key to keep building.";
+export const UNAVAILABLE_MESSAGE = "Flagship Inference isn't available right now. You can add your own AI key.";
+export const EXPIRED_MESSAGE = "This Flagship Inference pass has expired. Send your message again to continue.";
+export const BUSY_MESSAGE = "Flagship Inference is busy right now. Try again in a minute.";
 export const TOO_LONG_MESSAGE =
   "This build is too big for Flagship Inference. Try a smaller change, or use your own AI key.";
 
@@ -74,12 +74,12 @@ export default {
     if (!upstream) return aiError(503, UNAVAILABLE_MESSAGE, "free-ai-unavailable");
 
     const token = bearer(request);
-    if (!token) return aiError(401, "Missing free AI token.", "free-ai-token-invalid");
+    if (!token) return aiError(401, "Missing Flagship Inference pass.", "free-ai-token-invalid");
     const v = await verifyScopedInferenceToken(token, env.FLAGSHIP_INFERENCE_TOKEN_SECRET);
     if (!v.ok) {
       return v.reason === "expired"
         ? aiError(401, EXPIRED_MESSAGE, "free-ai-token-expired")
-        : aiError(403, "This free AI token isn't valid.", "free-ai-token-invalid");
+        : aiError(403, "This Flagship Inference pass isn't valid.", "free-ai-token-invalid");
     }
 
     const allowance = await checkAllowance(env, token);

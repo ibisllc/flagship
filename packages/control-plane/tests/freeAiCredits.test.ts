@@ -12,6 +12,8 @@ import {
   FREE_AI_MESSAGES,
   FREE_AI_TOKEN_TTL_MS,
   SERVER_SEEN_WINDOW_MS,
+  TOKENS_PER_CREDIT,
+  creditsOf,
   freeAiConfigFromEnv,
   handleFreeAiAllowance,
   handleFreeAiStatus,
@@ -281,6 +283,32 @@ describe("free AI status", () => {
   it("needs the account's signature", async () => {
     const { deps } = await setup();
     expect((await handleFreeAiStatus(deps, signed(keypair(), { serverFqdn: "" }))).status).toBe(403);
+  });
+
+  it("adds credits (1 credit = 1,000 weighted tokens) and keeps the token fields", async () => {
+    const { deps, irk } = await setup({ config: { ...FREE_AI_DEFAULTS } });
+    await recordFreeAiUsage(deps, "alice", 100_000, 40_000); // 260,000 weighted, all from this week
+    const r = await handleFreeAiStatus(deps, signed(irk, { serverFqdn: "" }));
+    expect(r.body).toMatchObject({
+      credits: {
+        remainingTokens: 2_240_000,
+        allowanceTokens: 2_500_000,
+        remainingCredits: 2_240,
+        weeklyCredits: 500,
+        tokensPerCredit: 1000,
+      },
+    });
+  });
+});
+
+describe("credits", () => {
+  it("rounds down to whole credits and never goes negative", () => {
+    expect(TOKENS_PER_CREDIT).toBe(1000);
+    expect(creditsOf(0)).toBe(0);
+    expect(creditsOf(999)).toBe(0);
+    expect(creditsOf(1_000)).toBe(1);
+    expect(creditsOf(1_840_999)).toBe(1_840);
+    expect(creditsOf(-5)).toBe(0);
   });
 });
 

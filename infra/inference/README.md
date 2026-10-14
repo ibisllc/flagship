@@ -1,7 +1,7 @@
-# Flagship free AI (free-credits backend)
+# Flagship Inference (backend)
 
-Free AI credits let an owner build apps on their box without their own AI
-key (`docs/build-modes.md` "Free AI credits"). The phone or webapp signs a
+Flagship Inference lets an owner build apps on their box without their own AI
+key (`docs/build-modes.md` "Flagship Inference"). The phone or webapp signs a
 request, `.com` mints a 12-hour pass, the box calls the **meter shim** with
 it through the hub relay, and the shim calls the model.
 
