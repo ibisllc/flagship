@@ -18,6 +18,7 @@ reports the true usage back to `.com`.
 | `FALLBACK_NAME` | the fallback's provider key in the catalog (`openrouter`) |
 | `UPSTREAM_MODEL` / `FALLBACK_MODEL` | a pinned model id, only for an upstream the catalog names no ids for (our own vLLM) |
 | `UPSTREAM_TIMEOUT_MS` | how long to wait for an upstream's response headers before trying the fallback (default 60000) |
+| `UPSTREAM_CACHE_SALT` / `FALLBACK_CACHE_SALT` | `"per-pass"` adds a vLLM `cache_salt` derived from the pass, so the shared prefix cache can't be probed across accounts; our own vLLM only (a hosted API may reject the field) |
 | `MAX_OUTPUT_TOKENS` | ceiling on output tokens per call (default 8192) |
 | `PAUSED` | `"1"` refuses every call with "isn't available right now" |
 | `COM_BASE_URL` | `.com` for the allowance check and usage reports |
@@ -25,6 +26,34 @@ reports the true usage back to `.com`.
 Secrets: `FLAGSHIP_INFERENCE_TOKEN_SECRET` (the same value as `apps/com`'s),
 `UPSTREAM_API_KEY` and `FALLBACK_API_KEY`. `VLLM_UPSTREAM` /
 `VLLM_UPSTREAM_KEY` still work for an older config.
+
+Either upstream can be our own vLLM behind Cloudflare Access (UpCloud,
+`../upcloud/README.md`): set `UPSTREAM_ACCESS_CLIENT_ID` /
+`UPSTREAM_ACCESS_CLIENT_SECRET` (or `FALLBACK_…`) to an Access service token,
+sent as `CF-Access-Client-Id` / `-Secret`. Or bind a Workers VPC Service
+(beta) to its tunnel as `UPSTREAM_VPC` (or `FALLBACK_VPC`); the call then goes
+through the binding with no public hostname, and the chat URL's host only
+sets the Host header:
+
+```toml
+[[vpc_services]]
+binding = "UPSTREAM_VPC"
+service_id = "<VPC Service id>"
+```
+
+Our own vLLM on UpCloud as the primary, for example:
+
+```toml
+UPSTREAM_CHAT_URL = "https://vllm-upstream.flagshipserver.com/v1/chat/completions"
+UPSTREAM_NAME = "flagship-vllm"          # no catalog ids under this name, so…
+UPSTREAM_MODEL = "flagship-coder"        # …config.json vllm.servedModelName
+UPSTREAM_CACHE_SALT = "per-pass"
+```
+
+with secrets `UPSTREAM_API_KEY` (the server's `VLLM_API_KEY`),
+`UPSTREAM_ACCESS_CLIENT_ID` and `UPSTREAM_ACCESS_CLIENT_SECRET`. When the GPU
+is stopped or restarting, the tunnel answers 5xx and the call goes to the
+fallback.
 
 Both upstreams are in the US at launch: DeepInfra primary, OpenRouter
 fallback. On OpenRouter turn on zero data retention in the account's privacy

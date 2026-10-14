@@ -125,6 +125,91 @@ describe("free-AI shim", () => {
     expect(usageReport()!.body).toEqual({ token: t, inputTokens: 120, outputTokens: 30 });
   });
 
+  it("adds the Access service token for a tunnelled upstream, and only then", async () => {
+    const tunnelled: Env = {
+      ...env,
+      UPSTREAM_ACCESS_CLIENT_ID: "access-id.access",
+      UPSTREAM_ACCESS_CLIENT_SECRET: "access-secret",
+    };
+    const waits: Promise<unknown>[] = [];
+    const res = await shim.fetch(
+      new Request("https://inference.example.test/v1/chat/completions", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${await token()}` },
+        body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+      }),
+      tunnelled,
+      { waitUntil: (p) => void waits.push(p) },
+    );
+    await Promise.all(waits);
+    expect(res.status).toBe(200);
+    expect(upstreamCall()!.headers).toEqual({
+      "content-type": "application/json",
+      authorization: "Bearer upstream-key",
+      "cf-access-client-id": "access-id.access",
+      "cf-access-client-secret": "access-secret",
+    });
+
+    seen = [];
+    await call({ messages: [{ role: "user", content: "hi" }] }, await token());
+    expect(upstreamCall()!.headers["cf-access-client-id"]).toBeUndefined();
+  });
+
+  it("calls the upstream through a Workers VPC binding when one is bound", async () => {
+    const viaVpc: string[] = [];
+    const vpcEnv: Env = {
+      ...env,
+      UPSTREAM_VPC: {
+        fetch: async (input: string) => {
+          viaVpc.push(input);
+          return upstreamResponse();
+        },
+      },
+    };
+    const waits: Promise<unknown>[] = [];
+    const res = await shim.fetch(
+      new Request("https://inference.example.test/v1/chat/completions", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${await token()}` },
+        body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+      }),
+      vpcEnv,
+      { waitUntil: (p) => void waits.push(p) },
+    );
+    await Promise.all(waits);
+    expect(res.status).toBe(200);
+    expect(viaVpc).toEqual([UPSTREAM]);
+    expect(upstreamCall()).toBeUndefined(); // never over the public internet
+    expect(usageReport()!.body).toMatchObject({ inputTokens: 120, outputTokens: 30 });
+  });
+
+  it("salts the prefix cache per pass only when asked, without naming the account", async () => {
+    const send = async (e: Env, t: string) => {
+      seen = [];
+      const waits: Promise<unknown>[] = [];
+      await shim.fetch(
+        new Request("https://inference.example.test/v1/chat/completions", {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${t}` },
+          body: JSON.stringify({ messages: [{ role: "user", content: "hi" }], cache_salt: "box-chosen" }),
+        }),
+        e,
+        { waitUntil: (p) => void waits.push(p) },
+      );
+      await Promise.all(waits);
+      return (upstreamCall()!.body as { cache_salt?: string }).cache_salt;
+    };
+    const salted: Env = { ...env, UPSTREAM_CACHE_SALT: "per-pass" };
+    const a = await token();
+    const b = await token(Date.now() + 120_000);
+    expect(await send(env, a)).toBeUndefined(); // off by default, and a box can't set its own
+    const s1 = await send(salted, a);
+    expect(s1).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(await send(salted, a)).toBe(s1);
+    expect(await send(salted, b)).not.toBe(s1);
+    expect(s1).not.toContain("alice");
+  });
+
   it("stops before the upstream once the allowance is spent", async () => {
     remaining = 0;
     const { res } = await call({ messages: [{ role: "user", content: "hi" }] }, await token());

@@ -101,6 +101,9 @@ weighted tokens** (`TOKENS_PER_CREDIT`). `.com` adds `remainingCredits` (week
 `credits` object and keeps the token fields for older apps; apps facing an
 older `.com` divide the token fields by 1,000 themselves.
 
+What it costs per customer and per token, on a hosted API or our own GPU,
+and the price for later token sales: `docs/ai-inference-costs.md`.
+
 **The allowance** (all `.com` vars, each optional; numbers are *weighted*
 tokens, input × `AI_PROMO_INPUT_WEIGHT` + output × `AI_PROMO_OUTPUT_WEIGHT`,
 default 1 and 4, since output costs more to serve):

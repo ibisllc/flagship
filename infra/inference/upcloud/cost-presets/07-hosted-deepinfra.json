@@ -1,0 +1,18 @@
+{
+  "mode": "hosted",
+  "sameModelBenchmark": 0,
+  "benchmarks": [
+    {
+      "name": "DeepInfra Qwen/Qwen3.6-35B-A3B",
+      "inputPerM": 0.1,
+      "cachedInputPerM": 0.1,
+      "outputPerM": 0.95
+    }
+  ],
+  "meta": {
+    "label": "Rented: DeepInfra (Qwen/Qwen3.6-35B-A3B)",
+    "whoSeesPrompts": "DeepInfra in memory only (no storage, no training by default)",
+    "eu": "no (US)",
+    "effort": "lowest: API key in the shim"
+  }
+}

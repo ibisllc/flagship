@@ -165,6 +165,93 @@ describe("primary and fallback upstreams", () => {
   });
 });
 
+describe("our own tunnelled vLLM as the fallback", () => {
+  it("doesn't send a catalog model to an upstream the catalog lists no id for", async () => {
+    primary = () => new Response("down", { status: 500 });
+    const viaVpc: Array<{ url: string; headers: Record<string, string>; body: any }> = [];
+    const own: Env = {
+      ...env,
+      FALLBACK_NAME: "flagship-vllm",
+      FALLBACK_CHAT_URL: "https://vllm-upstream.example/v1/chat/completions",
+      FALLBACK_MODEL: "flagship-coder",
+      FALLBACK_ACCESS_CLIENT_ID: "id.access",
+      FALLBACK_ACCESS_CLIENT_SECRET: "sec",
+      FALLBACK_CACHE_SALT: "per-pass",
+      FALLBACK_VPC: {
+        fetch: async (url: string, init?: RequestInit) => {
+          viaVpc.push({ url, headers: Object.fromEntries(new Headers(init?.headers).entries()), body: JSON.parse(String(init?.body)) });
+          return ok();
+        },
+      },
+    };
+    const t = await mintScopedInferenceToken(
+      { username: "alice", keyId: "fa-1", iat: Date.now(), exp: Date.now() + 60_000, dailyInputTokenCap: 1, dailyOutputTokenCap: 1 },
+      SECRET,
+    );
+    const waits: Promise<unknown>[] = [];
+    const res = await shim.fetch(
+      new Request("https://inference.example/v1/chat/completions", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${t}` },
+        body: JSON.stringify({ model: "low", messages: [{ role: "user", content: "hi" }] }),
+      }),
+      own,
+      { waitUntil: (p) => void waits.push(p) },
+    );
+    await Promise.all(waits);
+    // The catalog names ids for deepinfra/openrouter only: a pinned model must
+    // not stand in for a catalog model (it would be charged that model's
+    // multiplier), so the vLLM is skipped and the call is "busy".
+    expect(res.status).toBe(503);
+    expect(viaVpc).toHaveLength(0);
+  });
+
+  it("serves a call the catalog has no ids for through the tunnel", async () => {
+    primary = () => new Response("down", { status: 500 });
+    const viaVpc: Array<{ headers: Record<string, string>; body: any }> = [];
+    vi.stubGlobal("fetch", async (input: string, init?: RequestInit) => {
+      const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      if (input === `${COM}/api/free-ai/allowance`) return new Response(JSON.stringify({ ok: true, remainingTokens: 10_000 }));
+      if (input === `${COM}/api/llm-promo/usage`) return new Response("{}");
+      if (input === PRIMARY) return new Response("down", { status: 500 });
+      throw new Error(`unexpected fetch ${input} ${JSON.stringify(body)}`);
+    });
+    const own: Env = {
+      ...env,
+      UPSTREAM_MODEL: "Qwen/Qwen3.6-35B-A3B",
+      FALLBACK_CHAT_URL: "https://vllm-upstream.example/v1/chat/completions",
+      FALLBACK_MODEL: "flagship-coder",
+      FALLBACK_ACCESS_CLIENT_ID: "id.access",
+      FALLBACK_ACCESS_CLIENT_SECRET: "sec",
+      FALLBACK_CACHE_SALT: "per-pass",
+      FALLBACK_VPC: {
+        fetch: async (_url: string, init?: RequestInit) => {
+          viaVpc.push({ headers: Object.fromEntries(new Headers(init?.headers).entries()), body: JSON.parse(String(init?.body)) });
+          return ok();
+        },
+      },
+    };
+    const t = await mintScopedInferenceToken(
+      { username: "alice", keyId: "fa-1", iat: Date.now(), exp: Date.now() + 60_000, dailyInputTokenCap: 1, dailyOutputTokenCap: 1 },
+      SECRET,
+    );
+    const res = await shim.fetch(
+      new Request("https://inference.example/v1/chat/completions", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${t}` },
+        body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+      }),
+      own,
+      { waitUntil: () => {} },
+    );
+    expect(res.status).toBe(200);
+    expect(viaVpc).toHaveLength(1);
+    expect(viaVpc[0]!.headers).toMatchObject({ authorization: "Bearer or-key", "cf-access-client-id": "id.access", "cf-access-client-secret": "sec" });
+    expect(viaVpc[0]!.body.model).toBe("flagship-coder");
+    expect(viaVpc[0]!.body.cache_salt).toMatch(/^[A-Za-z0-9_-]{43}$/);
+  });
+});
+
 describe("the catalog model shapes the call", () => {
   it("translates Think harder into each upstream's effort parameter", async () => {
     await call({ model: "low", reasoning_effort: "high", messages: [{ role: "user", content: "hi" }] });

@@ -1,0 +1,17 @@
+{
+  "mode": "hosted",
+  "sameModelBenchmark": 0,
+  "benchmarks": [
+    {
+      "name": "Alibaba Model Studio qwen3.6-35b-a3b (Global)",
+      "inputPerM": 0.248,
+      "outputPerM": 1.485
+    }
+  ],
+  "meta": {
+    "label": "Rented: Alibaba Model Studio (qwen3.6-35b-a3b, Global)",
+    "whoSeesPrompts": "Alibaba: kept up to 30 days; ZDR not offered for this model",
+    "eu": "Frankfurt endpoint, but Global processing scope",
+    "effort": "low; no budget cap"
+  }
+}

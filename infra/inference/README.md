@@ -9,7 +9,8 @@ it through the hub relay, and the shim calls the model.
 infra/inference/
   README.md          ← this runbook
   shim/              ← the meter shim (Cloudflare Worker): the only front door
-  vllm/              ← self-hosted upstream (later): vLLM launch + Serverless notes
+  upcloud/           ← our own GPU: provision/teardown, cloud-init, cost model
+  vllm/              ← RunPod: pod image (Dockerfile + launch.sh) + Serverless notes
 ```
 
 ## Architecture
@@ -88,12 +89,19 @@ day however it's abused.
 Pause everyone at once with `PAUSED = "1"` in the shim's vars (redeploy).
 Rotating the secret invalidates outstanding passes (≤ 12 h); set it on both.
 
-## Later: our own model
+## Our own model (UpCloud GPU)
 
-Run vLLM (`vllm/launch.sh`, or `vllm/serverless.md`), keep it private to the
-shim, and point `UPSTREAM_CHAT_URL` at `http://<pod>:8000/v1/chat/completions`
-(`UPSTREAM_NAME` = its catalog key, or `UPSTREAM_MODEL` = its
-`--served-model-name`). Nothing else changes.
+`upcloud/` runs an open coding model (Qwen3.6-35B-A3B-FP8 on one L40S by
+default) in vLLM on an UpCloud GPU server that has no inbound port: the shim
+reaches it through a Cloudflare Tunnel guarded by an Access service token and
+vLLM's own key. Runbook: `upcloud/README.md`. Costs and pricing:
+`docs/ai-inference-costs.md`. Switching to it is a shim config change
+(`UPSTREAM_CHAT_URL` or `FALLBACK_CHAT_URL`, `UPSTREAM_MODEL`, the Access
+secrets for that upstream); boxes notice nothing.
+
+`vllm/` runs the same pinned model and flags on RunPod: a pod image with the
+same tunnel (`Dockerfile`, `launch.sh`) or Serverless (`serverless.md`). The
+comparison and recommendation are in the cost doc §12.
 
 Regions: both upstreams are US-only at launch. A user-selectable US/EU region
 (an EU upstream such as Scaleway, chosen per account) is open work.

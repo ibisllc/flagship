@@ -1,0 +1,19 @@
+{
+  "mode": "hosted",
+  "sameModelBenchmark": 0,
+  "benchmarks": [
+    {
+      "name": "OpenRouter qwen/qwen3.6-35b-a3b, ZDR hosts (AkashML price)",
+      "inputPerM": 0.1,
+      "cachedInputPerM": 0.05,
+      "outputPerM": 0.9,
+      "feePct": 0.055
+    }
+  ],
+  "meta": {
+    "label": "Rented: OpenRouter, ZDR-only routing (qwen/qwen3.6-35b-a3b)",
+    "whoSeesPrompts": "OpenRouter (stores metadata only) + whichever ZDR host serves it",
+    "eu": "no (EU routing is Business plan only)",
+    "effort": "low: API key + ZDR account setting"
+  }
+}

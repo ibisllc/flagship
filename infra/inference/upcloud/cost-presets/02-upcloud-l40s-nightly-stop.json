@@ -1,0 +1,9 @@
+{
+  "onHoursPerDay": 16,
+  "meta": {
+    "whoSeesPrompts": "us only: TLS ends on our box via our tunnel; UpCloud runs the hardware",
+    "eu": "yes: Helsinki (fi-hel2)",
+    "effort": "medium + a stop/start cron; builds at night get \"busy\"",
+    "label": "UpCloud L40S, off 8 h a night"
+  }
+}

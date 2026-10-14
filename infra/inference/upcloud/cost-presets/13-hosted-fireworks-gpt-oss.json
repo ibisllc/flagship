@@ -1,0 +1,18 @@
+{
+  "mode": "hosted",
+  "sameModelBenchmark": 0,
+  "benchmarks": [
+    {
+      "name": "Fireworks gpt-oss-120b (different model)",
+      "inputPerM": 0.15,
+      "cachedInputPerM": 0.015,
+      "outputPerM": 0.6
+    }
+  ],
+  "meta": {
+    "label": "Rented, other model: Fireworks gpt-oss-120b",
+    "whoSeesPrompts": "Fireworks in memory only (zero retention by default)",
+    "eu": "no (serverless is US)",
+    "effort": "low; monthly spend limit"
+  }
+}

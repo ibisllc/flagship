@@ -1,0 +1,8 @@
+{
+  "meta": {
+    "whoSeesPrompts": "us only: TLS ends on our box via our tunnel; UpCloud runs the hardware",
+    "eu": "yes: Helsinki (fi-hel2)",
+    "effort": "medium: our cloud-init, tunnel, upgrades",
+    "label": "UpCloud L40S, always on"
+  }
+}

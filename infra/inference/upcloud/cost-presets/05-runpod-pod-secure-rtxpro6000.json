@@ -1,0 +1,24 @@
+{
+  "gpu": {
+    "label": "RunPod pod",
+    "hourly": 0,
+    "hourlyUsd": 2.49,
+    "monthlyCap": null,
+    "stoppedHourly": 0,
+    "storageGb": 0,
+    "storagePerGbMonth": 0,
+    "ipv4Monthly": 0,
+    "fixedMonthlyUsd": 8
+  },
+  "throughput": {
+    "decodeTokPerSec": 900,
+    "prefillTokPerSec": 12000,
+    "kvCacheTokens": 1150000
+  },
+  "meta": {
+    "label": "RunPod pod, Secure Cloud RTX PRO 6000 96 GB",
+    "whoSeesPrompts": "as Secure Cloud L40S",
+    "eu": "yes: EU-NL-1, EU-RO-1, EU-CZ-1, EUR-IS-*",
+    "effort": "medium"
+  }
+}

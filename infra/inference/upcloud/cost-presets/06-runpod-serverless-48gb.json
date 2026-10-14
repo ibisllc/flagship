@@ -1,0 +1,17 @@
+{
+  "mode": "serverless",
+  "serverless": {
+    "flexPerSecondUsd": 0.000486,
+    "activePerSecondUsd": 0,
+    "activeWorkers": 0,
+    "idleTimeoutSeconds": 300,
+    "coldStartSeconds": 180,
+    "storageMonthlyUsd": 3.5
+  },
+  "meta": {
+    "label": "RunPod Serverless 48 GB (L40S class), scale to zero",
+    "whoSeesPrompts": "RunPod + Cloudflare: TLS ends at their gateway, so prompts are plaintext there; logs kept 90 days only if the worker logs them",
+    "eu": "yes: endpoint pinned to EU data centres",
+    "effort": "low: worker-vllm template + env vars"
+  }
+}

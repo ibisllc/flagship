@@ -1,0 +1,230 @@
+#cloud-config
+# Flagship inference server: vLLM on one NVIDIA GPU, reachable ONLY through a
+# Cloudflare Tunnel that the meter shim calls. Rendered by provision.mjs;
+# every double-brace placeholder is filled from config.json and two env secrets.
+#
+# Nothing listens on a public address: vLLM binds 127.0.0.1:8000 and
+# cloudflared only dials out. SSH is disabled (no password, no key); the
+# UpCloud console is the break-glass path.
+#
+# Logs: vLLM request logging stays off (it is off unless --enable-log-requests
+# is passed, and we never pass it), the uvicorn access log is off, journald
+# keeps logs in RAM only (64 MB), and container output goes to journald.
+# Prompts and completions are never written to disk.
+
+package_update: true
+package_upgrade: false
+# Docker and the NVIDIA stack come from UpCloud's "Ubuntu with NVIDIA Drivers
+# and CUDA" template; the setup script installs them only if they're missing
+# (any other Ubuntu 24.04 template).
+packages:
+  - ca-certificates
+  - curl
+  - gnupg
+  - nftables
+
+write_files:
+  - path: /etc/nftables.conf
+    permissions: "0644"
+    content: |
+      #!/usr/sbin/nft -f
+      # Stateful second layer under UpCloud's stateless firewall: accept
+      # only replies to connections this box opened.
+      flush ruleset
+      table inet filter {
+        chain input {
+          type filter hook input priority 0; policy drop;
+          iif lo accept
+          ct state established,related accept
+          ct state invalid drop
+          meta l4proto { icmp, ipv6-icmp } accept
+        }
+        chain forward {
+          type filter hook forward priority 0; policy drop;
+          ct state established,related accept
+        }
+        chain output {
+          type filter hook output priority 0; policy accept;
+        }
+      }
+
+  - path: /etc/systemd/journald.conf.d/10-flagship-inference.conf
+    permissions: "0644"
+    content: |
+      [Journal]
+      Storage=volatile
+      RuntimeMaxUse=64M
+      MaxRetentionSec=2day
+
+  - path: /etc/flagship-inference/vllm.env
+    permissions: "0600"
+    content: |
+      VLLM_API_KEY={{VLLM_API_KEY}}
+      VLLM_NO_USAGE_STATS=1
+      DO_NOT_TRACK=1
+      HF_HUB_DISABLE_TELEMETRY=1
+      HF_HUB_OFFLINE=1
+
+  - path: /etc/flagship-inference/tunnel.env
+    permissions: "0600"
+    content: |
+      TUNNEL_TOKEN={{CF_TUNNEL_TOKEN}}
+
+  - path: /etc/systemd/system/flagship-vllm.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Flagship vLLM (OpenAI-compatible, loopback only)
+      After=docker.service network-online.target flagship-inference-setup.service
+      Requires=docker.service
+      ConditionPathExists=/var/lib/flagship-inference/setup-done
+
+      [Service]
+      Restart=always
+      RestartSec=15
+      TimeoutStartSec=0
+      ExecStartPre=-/usr/bin/docker rm -f flagship-vllm
+      ExecStart=/usr/bin/docker run --name flagship-vllm --rm \
+        --gpus all --ipc=host --network host \
+        --env-file /etc/flagship-inference/vllm.env \
+        -v /var/lib/flagship-inference/hf:/root/.cache/huggingface \
+        -v /var/lib/flagship-inference/vllm-cache:/root/.cache/vllm \
+        {{VLLM_IMAGE}} {{VLLM_ARGS}}
+      ExecStop=/usr/bin/docker stop -t 30 flagship-vllm
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /etc/systemd/system/flagship-tunnel.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Flagship inference tunnel (outbound-only, to Cloudflare)
+      After=docker.service network-online.target
+      Requires=docker.service
+
+      [Service]
+      Restart=always
+      RestartSec=10
+      ExecStartPre=-/usr/bin/docker rm -f flagship-tunnel
+      ExecStart=/usr/bin/docker run --name flagship-tunnel --rm --network host \
+        --env-file /etc/flagship-inference/tunnel.env \
+        {{CLOUDFLARED_IMAGE}} tunnel --no-autoupdate --loglevel warn --metrics 127.0.0.1:20241 run
+      ExecStop=/usr/bin/docker stop -t 10 flagship-tunnel
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /usr/local/sbin/flagship-vllm-watchdog
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      # Restart vLLM after 3 failed /health checks in a row, but give a
+      # fresh start 20 minutes to load the weights first.
+      set -u
+      state=/run/flagship-vllm-watchdog
+      since=$(systemctl show -p ActiveEnterTimestampMonotonic --value flagship-vllm.service)
+      now=$(awk '{print int($1*1000000)}' /proc/uptime)
+      [ "${since:-0}" -gt 0 ] && [ $(( (now - since) / 1000000 )) -lt 1200 ] && exit 0
+      if curl -fsS -m 10 -o /dev/null http://127.0.0.1:8000/health; then
+        echo 0 > "$state"; exit 0
+      fi
+      n=$(( $(cat "$state" 2>/dev/null || echo 0) + 1 ))
+      echo "$n" > "$state"
+      if [ "$n" -ge 3 ]; then
+        echo 0 > "$state"
+        logger -t flagship-vllm-watchdog "vLLM /health failed 3 times; restarting"
+        systemctl restart flagship-vllm.service
+      fi
+
+  - path: /etc/systemd/system/flagship-vllm-watchdog.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Flagship vLLM health check
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/sbin/flagship-vllm-watchdog
+
+  - path: /etc/systemd/system/flagship-vllm-watchdog.timer
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Check vLLM health every minute
+      [Timer]
+      OnBootSec=5min
+      OnUnitActiveSec=60s
+      [Install]
+      WantedBy=timers.target
+
+  - path: /usr/local/sbin/flagship-inference-setup
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      # One-time: NVIDIA driver + container toolkit, pull the pinned images,
+      # download the pinned weights, then reboot into the services.
+      set -euo pipefail
+      export DEBIAN_FRONTEND=noninteractive
+      [ -f /var/lib/flagship-inference/setup-done ] && exit 0
+      mkdir -p /var/lib/flagship-inference/hf /var/lib/flagship-inference/vllm-cache
+
+      if ! command -v docker >/dev/null; then
+        apt-get install -y docker.io
+      fi
+      if ! command -v nvidia-smi >/dev/null; then
+        apt-get install -y ubuntu-drivers-common
+        ubuntu-drivers install --gpgpu "nvidia:{{NVIDIA_DRIVER_BRANCH}}"
+        apt-get install -y "nvidia-utils-{{NVIDIA_DRIVER_BRANCH}}"
+        touch /var/lib/flagship-inference/needs-reboot
+      fi
+      if ! command -v nvidia-ctk >/dev/null; then
+        curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
+          | gpg --batch --yes --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+        echo "deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://nvidia.github.io/libnvidia-container/stable/deb/\$(ARCH) /" \
+          > /etc/apt/sources.list.d/nvidia-container-toolkit.list
+        apt-get update
+        v="{{NVIDIA_CONTAINER_TOOLKIT_VERSION}}"
+        apt-get install -y "nvidia-container-toolkit=$v" "nvidia-container-toolkit-base=$v" \
+          "libnvidia-container-tools=$v" "libnvidia-container1=$v"
+      fi
+      # Containers log to journald (RAM only, see journald.conf.d) and Docker
+      # leaves the host firewall alone: every container here uses the host
+      # network, so it needs no NAT rules.
+      nvidia-ctk runtime configure --runtime=docker
+      python3 - <<'PY'
+      import json, pathlib
+      p = pathlib.Path("/etc/docker/daemon.json")
+      d = json.loads(p.read_text()) if p.exists() and p.read_text().strip() else {}
+      d.update({"log-driver": "journald", "iptables": False, "ip6tables": False})
+      p.write_text(json.dumps(d, indent=2))
+      PY
+      systemctl restart docker
+
+      docker pull "{{VLLM_IMAGE}}"
+      docker pull "{{CLOUDFLARED_IMAGE}}"
+      # Weights at the pinned revision, so vLLM can start offline.
+      docker run --rm --network host -e HF_HUB_DISABLE_TELEMETRY=1 \
+        -v /var/lib/flagship-inference/hf:/root/.cache/huggingface \
+        --entrypoint python3 "{{VLLM_IMAGE}}" -c \
+        "from huggingface_hub import snapshot_download; snapshot_download('{{VLLM_MODEL}}', revision='{{VLLM_REVISION}}')"
+
+      touch /var/lib/flagship-inference/setup-done
+      systemctl enable flagship-vllm.service flagship-tunnel.service flagship-vllm-watchdog.timer
+      # A freshly installed driver needs the reboot below; the NVIDIA template's is already loaded.
+      if [ ! -f /var/lib/flagship-inference/needs-reboot ]; then
+        systemctl start flagship-vllm.service flagship-tunnel.service flagship-vllm-watchdog.timer
+      fi
+
+runcmd:
+  - [systemctl, enable, --now, nftables]
+  - [systemctl, disable, --now, ssh.socket, ssh.service]
+  - [systemctl, restart, systemd-journald]
+  - [systemctl, daemon-reload]
+  - [/usr/local/sbin/flagship-inference-setup]
+
+# Only when setup installed the driver itself: reboot to load it.
+power_state:
+  mode: reboot
+  delay: now
+  message: "flagship-inference: driver installed, rebooting into vLLM"
+  condition: test -f /var/lib/flagship-inference/needs-reboot

@@ -23,6 +23,10 @@ FALLBACK_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
 # Only for an upstream the catalog has no ids for (our own vLLM later):
 # UPSTREAM_MODEL = "..."
 # FALLBACK_MODEL = "..."
+# "per-pass" for our own vLLM (see ../upcloud/README.md): salts its shared
+# prefix cache per pass. Leave unset for a hosted API.
+# UPSTREAM_CACHE_SALT = "per-pass"
+# FALLBACK_CACHE_SALT = "per-pass"
 # Give up on an upstream that hasn't answered (headers) in this long.
 UPSTREAM_TIMEOUT_MS = "60000"
 # Ceiling on output tokens per call.
@@ -38,3 +42,6 @@ COM_BASE_URL = "https://flagshipserver.com"
 #                                      turn on zero data retention in its
 #                                      privacy settings and give the key a
 #                                      credit limit).
+#   UPSTREAM_ACCESS_CLIENT_ID / UPSTREAM_ACCESS_CLIENT_SECRET (or FALLBACK_…)
+#                                    — Cloudflare Access service token, when that
+#                                      upstream is our own vLLM behind a tunnel.

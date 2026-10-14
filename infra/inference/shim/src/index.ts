@@ -28,6 +28,7 @@ import {
   DEFAULT_PRICING,
   SseUsageScanner,
   buildUsageReport,
+  cacheSalt,
   creditsFor,
   estimateTokens,
   extractUsage,
@@ -58,12 +59,36 @@ export interface Env {
   UPSTREAM_NAME?: string;
   /** Pinned model id for the primary (only when .com's catalog names none). */
   UPSTREAM_MODEL?: string;
+  /**
+   * Cloudflare Access service token for a primary behind a Cloudflare Tunnel
+   * (our own vLLM, infra/inference/upcloud). Both or neither.
+   */
+  UPSTREAM_ACCESS_CLIENT_ID?: string;
+  UPSTREAM_ACCESS_CLIENT_SECRET?: string;
+  /**
+   * Workers VPC Service binding (beta) to the primary's tunnel: when bound,
+   * the call goes through it and needs no public hostname. UPSTREAM_CHAT_URL's
+   * host then only sets the Host header.
+   */
+  UPSTREAM_VPC?: { fetch(input: string, init?: RequestInit): Promise<Response> };
+  /**
+   * "per-pass": add a vLLM `cache_salt` derived from the pass, so one
+   * account's cached prefixes can't be probed by another's timing. Only for
+   * our own vLLM (a hosted API may reject the field). The salt is an HMAC of
+   * the pass: stable within a build, unlinkable across passes.
+   */
+  UPSTREAM_CACHE_SALT?: string;
   /** Fallback upstream, tried once when the primary fails (5xx, timeout, connection). */
   FALLBACK_CHAT_URL?: string;
   FALLBACK_API_KEY?: string;
   /** The fallback's name in .com's catalog ("openrouter"). */
   FALLBACK_NAME?: string;
   FALLBACK_MODEL?: string;
+  /** The same tunnel options for the fallback (our own vLLM as the fallback). */
+  FALLBACK_ACCESS_CLIENT_ID?: string;
+  FALLBACK_ACCESS_CLIENT_SECRET?: string;
+  FALLBACK_VPC?: { fetch(input: string, init?: RequestInit): Promise<Response> };
+  FALLBACK_CACHE_SALT?: string;
   /** How long to wait for an upstream's response headers before giving up on it. Default 60 s. */
   UPSTREAM_TIMEOUT_MS?: string;
   /** Ceiling on output tokens per call. Default 8192. */
@@ -149,7 +174,9 @@ export default {
     for (const u of upstreams) {
       const modelId = upstreamModelId(u, model, requested);
       if (!modelId) continue;
-      body = JSON.stringify(upstreamBody(clean.body, u, modelId, model));
+      const shaped = upstreamBody(clean.body, u, modelId, model);
+      if (u.cacheSalt) shaped.cache_salt = await cacheSalt(env.FLAGSHIP_INFERENCE_TOKEN_SECRET, token);
+      body = JSON.stringify(shaped);
       const outcome = await send(u, body, timeoutMs);
       if (outcome.res && !shouldFallBack({ status: outcome.res.status })) {
         res = outcome.res;
@@ -230,6 +257,7 @@ export function configuredUpstreams(env: Env): Upstream[] {
       url: primary,
       ...(key ? { key } : {}),
       ...(env.UPSTREAM_MODEL ? { model: env.UPSTREAM_MODEL } : {}),
+      ...tunnel(env.UPSTREAM_ACCESS_CLIENT_ID, env.UPSTREAM_ACCESS_CLIENT_SECRET, env.UPSTREAM_VPC, env.UPSTREAM_CACHE_SALT),
     });
   }
   if (env.FALLBACK_CHAT_URL) {
@@ -238,19 +266,38 @@ export function configuredUpstreams(env: Env): Upstream[] {
       url: env.FALLBACK_CHAT_URL,
       ...(env.FALLBACK_API_KEY ? { key: env.FALLBACK_API_KEY } : {}),
       ...(env.FALLBACK_MODEL ? { model: env.FALLBACK_MODEL } : {}),
+      ...tunnel(env.FALLBACK_ACCESS_CLIENT_ID, env.FALLBACK_ACCESS_CLIENT_SECRET, env.FALLBACK_VPC, env.FALLBACK_CACHE_SALT),
     });
   }
   return out;
+}
+
+function tunnel(
+  id: string | undefined,
+  secret: string | undefined,
+  vpc: Upstream["vpc"] | undefined,
+  salt: string | undefined,
+): Pick<Upstream, "access" | "vpc" | "cacheSalt"> {
+  return {
+    ...(id && secret ? { access: { id, secret } } : {}),
+    ...(vpc ? { vpc } : {}),
+    ...(salt === "per-pass" ? { cacheSalt: true } : {}),
+  };
 }
 
 /** POST to one upstream with only our key; a timeout or dropped connection is an error. */
 async function send(u: Upstream, body: string, timeoutMs: number): Promise<{ res?: Response; error?: unknown }> {
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (u.key) headers.authorization = `Bearer ${u.key}`;
+  if (u.access) {
+    headers["cf-access-client-id"] = u.access.id;
+    headers["cf-access-client-secret"] = u.access.secret;
+  }
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(new Error("upstream timeout")), timeoutMs);
   try {
-    const res = await fetch(u.url, { method: "POST", headers, body, signal: abort.signal });
+    const init = { method: "POST", headers, body, signal: abort.signal };
+    const res = u.vpc ? await u.vpc.fetch(u.url, init) : await fetch(u.url, init);
     return { res };
   } catch (error) {
     return { error: error ?? new Error("upstream failed") };

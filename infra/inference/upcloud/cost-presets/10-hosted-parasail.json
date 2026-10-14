@@ -1,0 +1,18 @@
+{
+  "mode": "hosted",
+  "sameModelBenchmark": 0,
+  "benchmarks": [
+    {
+      "name": "Parasail parasail-qwen3p6-35b-a3b",
+      "inputPerM": 0.15,
+      "cachedInputPerM": 0.05,
+      "outputPerM": 1.0
+    }
+  ],
+  "meta": {
+    "label": "Rented: Parasail (parasail-qwen3p6-35b-a3b)",
+    "whoSeesPrompts": "Parasail transiently (no storage, no training)",
+    "eu": "no (US)",
+    "effort": "low; postpaid, no cap"
+  }
+}

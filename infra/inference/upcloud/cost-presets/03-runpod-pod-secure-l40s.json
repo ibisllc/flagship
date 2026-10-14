@@ -1,0 +1,19 @@
+{
+  "gpu": {
+    "label": "RunPod pod",
+    "hourly": 0,
+    "hourlyUsd": 1.09,
+    "monthlyCap": null,
+    "stoppedHourly": 0,
+    "storageGb": 0,
+    "storagePerGbMonth": 0,
+    "ipv4Monthly": 0,
+    "fixedMonthlyUsd": 8
+  },
+  "meta": {
+    "label": "RunPod pod, Secure Cloud L40S",
+    "whoSeesPrompts": "us, plus whoever runs the vetted (SOC 2) data centre, by policy not technically; with our tunnel RunPod's proxy never sees traffic",
+    "eu": "yes: pin EU-NL-1 / EUR-IS-2 (L40S in stock 2026-10-13)",
+    "effort": "medium: our image + tunnel; a restarted pod can lose its GPU"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "name": "flagship-inference-1",
+  "zone": "fi-hel2",
+  "plan": "GPU-8xCPU-64GB-1xL4",
+  "templateTitle": "Ubuntu with NVIDIA",
+  "storageGb": 120,
+  "storageTier": "standard",
+  "weightsGb": 14,
+  "price": {
+    "currency": "EUR",
+    "hourly": 0.58,
+    "monthly": 423,
+    "source": "upcloud.com/pricing (web.archive.org snapshot 2026-10-07), excl. VAT; re-check before creating"
+  },
+  "nvidiaDriverBranch": "580-server",
+  "nvidiaContainerToolkitVersion": "1.20.1-1",
+  "vllm": {
+    "image": "vllm/vllm-openai",
+    "imageTag": "v0.30.0",
+    "imageDigest": "sha256:8a69ffad015f138d7170c4ddc429e230a3bc1c1719f67e14324749df200a4b90",
+    "model": "openai/gpt-oss-20b",
+    "revision": "6cee5e81ee83917806bbde320786a8fb61efebee",
+    "servedModelName": "flagship-coder",
+    "maxModelLen": 65536,
+    "gpuMemoryUtilization": 0.92,
+    "maxNumSeqs": 16,
+    "toolCallParser": "openai",
+    "reasoningParser": "openai_gptoss",
+    "extraArgs": []
+  },
+  "cloudflared": {
+    "image": "cloudflare/cloudflared",
+    "imageTag": "2026.9.3",
+    "imageDigest": "sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c"
+  }
+}

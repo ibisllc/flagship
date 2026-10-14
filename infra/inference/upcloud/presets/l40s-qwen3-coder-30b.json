@@ -1,0 +1,36 @@
+{
+  "name": "flagship-inference-1",
+  "zone": "fi-hel2",
+  "plan": "GPU-8xCPU-64GB-1xL40S",
+  "templateTitle": "Ubuntu with NVIDIA",
+  "storageGb": 120,
+  "storageTier": "standard",
+  "weightsGb": 32,
+  "price": {
+    "currency": "EUR",
+    "hourly": 1.11,
+    "monthly": 810,
+    "source": "upcloud.com/pricing (web.archive.org snapshot 2026-10-07), excl. VAT; re-check before creating"
+  },
+  "nvidiaDriverBranch": "580-server",
+  "nvidiaContainerToolkitVersion": "1.20.1-1",
+  "vllm": {
+    "image": "vllm/vllm-openai",
+    "imageTag": "v0.30.0",
+    "imageDigest": "sha256:8a69ffad015f138d7170c4ddc429e230a3bc1c1719f67e14324749df200a4b90",
+    "model": "Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8",
+    "revision": "dcaee4d4dfc5ee71ad501f01f530e5652438fde0",
+    "servedModelName": "flagship-coder",
+    "maxModelLen": 65536,
+    "gpuMemoryUtilization": 0.92,
+    "maxNumSeqs": 8,
+    "toolCallParser": "qwen3_coder",
+    "extraArgs": [],
+    "kvCacheDtype": "fp8"
+  },
+  "cloudflared": {
+    "image": "cloudflare/cloudflared",
+    "imageTag": "2026.9.3",
+    "imageDigest": "sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c"
+  }
+}

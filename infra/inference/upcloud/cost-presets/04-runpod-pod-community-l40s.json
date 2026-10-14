@@ -1,0 +1,19 @@
+{
+  "gpu": {
+    "label": "RunPod pod",
+    "hourly": 0,
+    "hourlyUsd": 0.79,
+    "monthlyCap": null,
+    "stoppedHourly": 0,
+    "storageGb": 0,
+    "storagePerGbMonth": 0,
+    "ipv4Monthly": 0,
+    "fixedMonthlyUsd": 8
+  },
+  "meta": {
+    "label": "RunPod pod, Community Cloud L40S",
+    "whoSeesPrompts": "us, plus an unvetted third-party host with root on the machine",
+    "eu": "maybe: some community hosts are in the EU (CZ, FR, SE, \u2026)",
+    "effort": "medium + host churn"
+  }
+}

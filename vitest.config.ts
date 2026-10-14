@@ -13,6 +13,7 @@ export default defineConfig({
       "services/*/tests/**/*.test.ts",
       "tools/*/tests/**/*.test.ts",
       "scripts/**/*.test.ts",
+      "infra/**/tests/**/*.test.ts",
     ],
     testTimeout: 30_000,
     environment: "node",

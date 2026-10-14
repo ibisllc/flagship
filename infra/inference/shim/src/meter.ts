@@ -158,6 +158,12 @@ export interface Upstream {
   key?: string;
   /** Pinned model id (legacy single-model config, or no catalog). */
   model?: string;
+  /** Cloudflare Access service token, for our own vLLM behind a tunnel. */
+  access?: { id: string; secret: string };
+  /** A Workers VPC Service binding to the upstream's tunnel (no public hostname). */
+  vpc?: { fetch(input: string, init?: RequestInit): Promise<Response> };
+  /** Add a per-pass vLLM `cache_salt` (our own vLLM only). */
+  cacheSalt?: boolean;
 }
 
 /** The model id to send `u`, or null when it can't serve this catalog model. */
@@ -297,6 +303,18 @@ export function sanitizeChatRequest(raw: unknown, opts: SanitizeOptions): Saniti
   if (stream) out.stream_options = { include_usage: true };
   else delete out.stream;
   return { ok: true, body: out, stream };
+}
+
+/**
+ * A prefix-cache salt for one pass: HMAC-SHA256 over a tagged copy of the
+ * pass, base64url. The same pass (one build's turns) always gets the same
+ * salt, so its own history stays cached; a different pass can't hit it.
+ */
+export async function cacheSalt(secret: string, token: string): Promise<string> {
+  const mac = await hmac(secret, `flagship/cache-salt/v1|${token}`);
+  let bin = "";
+  for (const b of mac) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 /** Rough token count for text when the upstream reports no usage. */

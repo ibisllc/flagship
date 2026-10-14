@@ -1,0 +1,18 @@
+{
+  "mode": "hosted",
+  "sameModelBenchmark": 0,
+  "benchmarks": [
+    {
+      "name": "Scaleway qwen3.6-35b-a3b",
+      "inputPerM": 0.25,
+      "outputPerM": 1.5,
+      "currency": "EUR"
+    }
+  ],
+  "meta": {
+    "label": "Rented: Scaleway (qwen3.6-35b-a3b)",
+    "whoSeesPrompts": "Scaleway: zero retention by default (error/abuse requests up to 2 weeks), no training",
+    "eu": "yes (Paris)",
+    "effort": "low; no hard spend cap (alerts only)"
+  }
+}
