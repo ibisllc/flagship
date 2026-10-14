@@ -12,19 +12,17 @@ LICENSE and docs. No file in it refers to anything outside it, and its CI
 copying `billing/` to an empty directory before installing, building and
 testing it.
 
-## 1. Mirror to github.com/ibisllc/billing
+## 1. Mirror to github.com/ibisllc/billing (set up 2026-10-14)
 
-1. Create the empty repository `ibisllc/billing` (public, no README).
-2. Create an SSH deploy key with write access on it; store the private half
-   as the secret `BILLING_MIRROR_DEPLOY_KEY` in the host repository.
-3. In the host repository's `.github/workflows/billing-mirror.yml`, remove
-   the `if: false` guard. Each push to `main` that touches `billing/**` then
-   runs `git subtree split --prefix=billing` and pushes the result to
-   `ibisllc/billing` `main`, so the mirror's history holds only billing
-   commits and its root is this folder.
-4. In the mirror, copy `.github/workflows/billing.yml`'s job into
-   `.github/workflows/ci.yml` with the `working-directory` and the
-   copy-to-a-temp-dir step removed. (Or keep CI in the host only.)
+The host repository's `.github/workflows/billing-mirror.yml` runs on every
+push to `main` that touches `billing/**` (or by hand): it runs
+`git subtree split --prefix=billing` and pushes the result to
+`ibisllc/billing` `main`, so the mirror's history holds only billing commits
+and its root is this folder. It pushes with a write deploy key on
+`ibisllc/billing`, whose private half is the host secret
+`BILLING_MIRROR_DEPLOY_KEY`; to rotate it, add a new deploy key, replace the
+secret, then delete the old key. The mirror runs its own CI from
+`.github/workflows/ci.yml` in this folder.
 
 The mirror is downstream: changes land here and flow out. If outside
 contributions are accepted on the mirror, apply them here (`git am` the

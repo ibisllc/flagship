@@ -1,0 +1,51 @@
+name: ci
+
+# CI for the standalone billing repository (github.com/ibisllc/billing). The
+# files arrive by mirror from the Flagship monorepo's billing/ folder, where
+# .github/workflows/billing.yml runs the same checks on a copy of the folder.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - node: "22"
+            postgres: "16"
+          - node: "24"
+            postgres: "18"
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgres }}
+        env:
+          POSTGRES_PASSWORD: billing
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      BILLING_TEST_PG_URL: postgres://postgres:billing@localhost:5432/postgres
+      BILLING_REQUIRE_ALL_DRIVERS: "1"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - run: npm run examples
+      - run: npm run pack:check
