@@ -55,6 +55,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0086",
   // Share this server: offers, the second account's boot copy, its inbox.
   "0087",
+  // The capability table behind own-key AI model menus.
+  "0095",
 ];
 
 export interface SchemaStatusDeps {

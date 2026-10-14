@@ -15,7 +15,7 @@ compatibility_flags = ["global_fetch_strictly_public"]
 # region is open work). The primary serves every call; the fallback gets the
 # same request once when the primary fails (5xx, timeout, dropped
 # connection), never on a 4xx about the request. The *_NAME picks each one's
-# model ids from .com's catalog (packages/control-plane/src/inference-models.json).
+# model ids from .com's catalog (packages/control-plane/src/inferenceModels.ts).
 UPSTREAM_NAME = "deepinfra"
 UPSTREAM_CHAT_URL = "https://api.deepinfra.com/v1/openai/chat/completions"
 FALLBACK_NAME = "openrouter"

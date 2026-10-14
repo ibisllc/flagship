@@ -60,6 +60,7 @@ import { activeCaLeaseNotAfterMs } from "./caTrustChainLoader.js";
 import { notifyCaLeaseViaGithubIssue } from "./caLeaseGithubNotifier.js";
 import { runAdapterPublish } from "./adapterPublish.js";
 import { runAdapterInsights } from "./adapterInsights.js";
+import { runModelCapabilityRefresh } from "./inferenceModelRoutes.js";
 import type { AdapterBucketLike } from "./adapterIndex.js";
 
 /** Scope of one row that the dump emits. */
@@ -387,6 +388,12 @@ export async function scheduled(
       ctx.waitUntil(
         runAdapterPublish(env, now).catch((e) => {
           console.error("[adapters] publish failed", (e as Error).message);
+        }),
+      );
+      // The own-key model menus' capability table, from OpenRouter's catalog.
+      ctx.waitUntil(
+        runModelCapabilityRefresh(env, now).catch((e) => {
+          console.error("[model-capabilities] refresh failed", (e as Error).message);
         }),
       );
       // Mondays: the private weekly insight on adapters retired since the last.

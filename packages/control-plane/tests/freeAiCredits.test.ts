@@ -321,10 +321,11 @@ describe("free AI allowance (the shim's check)", () => {
   it("answers what's left, and stops when it's spent", async () => {
     const { deps, irk } = await setup();
     const token = await pass(deps, irk);
-    expect((await handleFreeAiAllowance(deps, { token })).body).toEqual({
+    expect((await handleFreeAiAllowance(deps, { token })).body).toMatchObject({
       ok: true,
       remainingTokens: 4000,
       allowanceTokens: 4000,
+      model: { id: "low", multiplier: 1 },
     });
     await recordFreeAiUsage(deps, "alice", 4000, 0);
     expect((await handleFreeAiAllowance(deps, { token })).body).toMatchObject({

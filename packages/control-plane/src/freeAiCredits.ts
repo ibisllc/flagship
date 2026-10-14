@@ -37,6 +37,7 @@ import type {
 import { hexToBytes } from "./hex.js";
 import type { InferenceEndpoint } from "./inferenceEndpoint.js";
 import { mintScopedInferenceToken, verifyScopedInferenceToken } from "./inferenceToken.js";
+import { resolveInferenceModel } from "./inferenceModels.js";
 import { meterCheck, meterRecord, sameForEveryTier, type MeterDeps, type MeterResource } from "./meter.js";
 import { forbidden, malformed, notFound, type HandlerResponse } from "./types.js";
 
@@ -394,7 +395,7 @@ export async function handleFreeAiToken(
  */
 export async function handleFreeAiAllowance(
   deps: Pick<FreeAiDeps, "meter" | "tiers" | "tokenSecret" | "config" | "now">,
-  body: { token?: unknown } | undefined,
+  body: { token?: unknown; model?: unknown } | undefined,
 ): Promise<HandlerResponse> {
   if (!deps.tokenSecret) {
     return { status: 503, body: { error: FREE_AI_MESSAGES.unavailable, code: "free-ai-unavailable" } };
@@ -417,26 +418,35 @@ export async function handleFreeAiAllowance(
       remainingTokens: stop ? 0 : credits.remainingTokens,
       allowanceTokens: credits.allowanceTokens,
       ...(stop ?? {}),
+      // The catalog model the box asked for (unknown ⇒ the default): its
+      // multiplier, modalities and id on each upstream, and how a call's
+      // tokens become credits, so the shim routes it and tells the box its cost.
+      model: resolveInferenceModel(typeof body.model === "string" ? body.model : undefined),
+      inputWeight: cfgOf(deps).inputWeight,
+      outputWeight: cfgOf(deps).outputWeight,
+      creditTokens: TOKENS_PER_CREDIT,
     },
   };
 }
 
 /**
  * Charge a usage report from the shim: raw input and output are recorded as
- * they are; the weighted total comes out of this week's top-up first, then
- * the starter reserve, and is added to the all-accounts daily counter.
+ * they are; the weighted total, times the catalog model's multiplier, comes
+ * out of this week's top-up first, then the starter reserve, and is added to
+ * the all-accounts daily counter.
  */
 export async function recordFreeAiUsage(
   deps: MeterSide,
   username: string,
   inputTokens: number,
   outputTokens: number,
+  multiplier = 1,
 ): Promise<AiCredits> {
   const md = meterDeps(deps);
   const account = username.toLowerCase();
   await meterRecord(md, account, "ai-promo-input", Math.max(0, Math.floor(inputTokens)));
   await meterRecord(md, account, "ai-promo-output", Math.max(0, Math.floor(outputTokens)));
-  const weighted = weightedTokens(cfgOf(deps), inputTokens, outputTokens);
+  const weighted = Math.ceil(weightedTokens(cfgOf(deps), inputTokens, outputTokens) * Math.max(1, multiplier));
   const week = await meterCheck(md, account, "ai-promo-week");
   const fromWeek = Math.min(weighted, week.remaining);
   if (fromWeek > 0) await meterRecord(md, account, "ai-promo-week", fromWeek);

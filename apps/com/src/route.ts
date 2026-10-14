@@ -31,6 +31,7 @@ import {
   type AdapterBucketLike,
   type WaitUntilLike,
 } from "./adapterIndex.js";
+import { handleInferenceModelRoutes, isInferenceModelPath } from "./inferenceModelRoutes.js";
 import {
   recordRateLimited,
   recordUpgrade,
@@ -600,6 +601,12 @@ async function routeImpl(
   // here rather than reach an upstream.
   if (isAdapterIndexPath(url.pathname)) {
     return handleAdapterIndex(request, env, ctx);
+  }
+
+  // AI model menus: Flagship Inference's catalog and the capability table.
+  // Public, cacheable, keyed to nobody; the admin view checks its secret.
+  if (isInferenceModelPath(url.pathname)) {
+    return handleInferenceModelRoutes(request, env);
   }
 
   if (url.pathname === STATUS_RELAY_PATH) {

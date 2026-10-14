@@ -58,7 +58,7 @@ day however it's abused.
    account (fallback; turn on zero data retention in its privacy settings),
    add prepaid credit to each, and create an API key with a spending limit.
    The models each serves are in `.com`'s catalog
-   (`packages/control-plane/src/inference-models.json`, multipliers in
+   (`packages/control-plane/src/inferenceModels.ts`, multipliers in
    `docs/ai-inference-costs.md` §15).
 2. **Shim** (see `shim/README.md`): `shim/wrangler.toml` already names both
    upstreams (`UPSTREAM_NAME`/`UPSTREAM_CHAT_URL`, `FALLBACK_NAME`/

@@ -92,6 +92,22 @@ describe("free AI routes", () => {
     }
   });
 
+  it("charges a report at the catalog model's multiplier", async () => {
+    const { env, close } = await setup({ AI_PROMO_WEEKLY_TOKENS: "100000" });
+    try {
+      const minted = await post(env, "/api/free-ai/token", signedBody());
+      const token = (minted.body.credential as { apiKey: string }).apiKey;
+      const allowance = await post(env, "/api/free-ai/allowance", { token, model: "high" });
+      expect(allowance.body).toMatchObject({ model: { id: "high", multiplier: 3.5 }, creditTokens: 1000 });
+      // (100 + 50 × 4) × 3.5 = 1,050 weighted.
+      await post(env, "/api/llm-promo/usage", { token, inputTokens: 100, outputTokens: 50, model: "high" });
+      const status = await post(env, "/api/free-ai/status", signedBody());
+      expect(status.body).toMatchObject({ credits: { week: { used: 1050 } } });
+    } finally {
+      close();
+    }
+  });
+
   it("stops after the end date and tells the apps it has ended", async () => {
     const { env, close } = await setup({ AI_PROMO_ENDS_AT: "2020-01-01T00:00:00Z" });
     try {

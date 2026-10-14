@@ -35,6 +35,8 @@ export interface InferenceModel {
   default?: boolean;
   /** For a text-only model: the catalog id to switch to for an image. */
   visionAlternative?: string;
+  /** Its id on each upstream the shim may use ("deepinfra", "openrouter"). */
+  upstream?: Record<string, string>;
 }
 
 export interface InferenceCatalogResponse {

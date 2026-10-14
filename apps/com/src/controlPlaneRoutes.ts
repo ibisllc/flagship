@@ -178,6 +178,7 @@ import {
   handleFreeAiToken,
   freeAiConfigFromEnv,
   recordFreeAiUsage,
+  chargeMultiplier,
   type FreeAiDeps,
   parseBlessedInferenceEndpoint,
   mintScopedInferenceToken,
@@ -3247,7 +3248,9 @@ export async function tryControlPlane(
     if (!inferenceSecret) {
       return finishPlain({ status: 503, body: { error: "in-house inference not configured" } });
     }
-    const usageBody = (await readJson(request)) as { inputTokens?: number; outputTokens?: number } | undefined;
+    const usageBody = (await readJson(request)) as
+      | { inputTokens?: number; outputTokens?: number; model?: unknown }
+      | undefined;
     const meter = new D1MeterStorage(env.DB);
     let reportedFor: string | null = null;
     const res = await handleLlmPromoUsage(
@@ -3271,6 +3274,8 @@ export async function tryControlPlane(
         reportedFor,
         usageBody.inputTokens ?? 0,
         usageBody.outputTokens ?? 0,
+        // Charged at the catalog model's multiplier (.com's own table, not the shim's word).
+        chargeMultiplier(typeof usageBody.model === "string" ? usageBody.model : undefined),
       );
     }
     return finish(res);

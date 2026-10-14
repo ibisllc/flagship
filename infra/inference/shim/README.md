@@ -37,7 +37,7 @@ multiplier assumes.
 
 The box sends a catalog id (`low`, `medium`, …). `.com`'s allowance check
 answers with that model's multiplier, modalities, whether it reasons, and its
-id on each upstream (`packages/control-plane/src/inference-models.json`); an
+id on each upstream (`packages/control-plane/src/inferenceModels.ts`); an
 unknown id gets the default model. The shim sends the primary its id. When
 the primary answers 5xx, times out or drops the connection, the same request
 (with the fallback's id and key) goes to the fallback, once, before any byte
