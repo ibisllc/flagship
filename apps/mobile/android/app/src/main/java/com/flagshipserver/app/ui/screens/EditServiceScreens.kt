@@ -268,16 +268,21 @@ fun EditDescribeScreen(nav: NavController, serviceId: String) {
                     try {
                         val pending = PendingBuildCredential.peek()
                         val cred = pending?.let(BuildCredential::from)
+                        val startModel = com.flagshipserver.app.core.ModelMenus.startWire(
+                            runCatching { com.flagshipserver.app.core.AiKeyStore.defaultModelFor(pending) }.getOrNull(),
+                        )
                         val resp = screens.vibeCodeStart(
                             VibeCodeStartRequest(
                                 prompt = prompt, credential = cred, editServiceId = serviceId,
-                                model = pending?.model?.takeIf { pending.isFreeAi },
+                                // The default model chosen in Settings for this key; none ⇒ the box's.
+                                model = startModel.first, effort = startModel.second,
                             ),
                         )
                         if (resp.needsCredential) {
                             nav.navigate(EditService.keyRoute(serviceId))
                         } else {
                             PendingBuildCredential.take()
+                            com.flagshipserver.app.core.BuildSessionAi.remember(resp.sessionId, pending)
                             if (pending?.isFreeAi == true) {
                                 FreeAiSessions.remember(resp.sessionId, freeAiServer)
                             }

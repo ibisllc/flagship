@@ -527,6 +527,7 @@ fun AiKeysManagerScreen(
             isDefault = activeId == AiKeyStore.FLAGSHIP_INFERENCE_ID,
             onMakeDefault = { vm.setActive(AiKeyStore.FLAGSHIP_INFERENCE_ID) },
             onAddOwnKey = { showForm = true },
+            defaultModel = { DefaultModelRow(AiKeyStore.FLAGSHIP_INFERENCE_ID, null) },
         )
         Spacer(Modifier.height(FS.space.s4))
 
@@ -571,6 +572,8 @@ fun AiKeysManagerScreen(
                             onCheckedChange = { vm.setRelay(row.id, it) },
                             tag = "ai-key-relay-${row.id}",
                         )
+                        Spacer(Modifier.height(FS.space.s3))
+                        DefaultModelRow(row.id, remember(row.id) { vm.credentialFor(row.id) })
                         // "Make default" on every non-active row — mirrors iOS's
                         // AiKeysScreen + the webapp providers manager.
                         if (!isActive) {
@@ -604,5 +607,35 @@ fun AiKeysManagerScreen(
         }
 
         Spacer(Modifier.height(FS.space.s12))
+    }
+}
+
+/**
+ * "Default model" for one AI entry: the model (and effort) a chat on it
+ * starts with. Saved on this phone; an own key's list comes from the box.
+ */
+@Composable
+fun DefaultModelRow(keyId: String, credential: AiCredential?) {
+    val screens = com.flagshipserver.app.core.LocalScreensClient.current
+    var menu by remember(keyId) { mutableStateOf<com.flagshipserver.app.core.ModelMenu?>(null) }
+    var choice by remember(keyId) { mutableStateOf(runCatching { AiKeyStore.defaultModel(keyId) }.getOrNull()) }
+    LaunchedEffect(keyId) {
+        val m = com.flagshipserver.app.core.ModelCatalogs.menuFor(credential, screens)
+        choice = com.flagshipserver.app.core.ModelMenus.initial(m, choice)
+        menu = m
+    }
+    fun save(c: com.flagshipserver.app.core.ModelChoice?) {
+        choice = c
+        AiKeyStore.setDefaultModel(keyId, c)
+    }
+    Column(Modifier.testTag("default-model-$keyId")) {
+        Text("Default model", color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium))
+        Spacer(Modifier.height(FS.space.s1))
+        val m = menu
+        if (m == null) {
+            Text(com.flagshipserver.app.core.FreeAiCopy.CHECKING, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+        } else {
+            ChatModelBar(m, choice, onChoice = ::save)
+        }
     }
 }

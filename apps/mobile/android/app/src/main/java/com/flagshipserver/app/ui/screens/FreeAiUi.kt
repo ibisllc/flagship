@@ -111,11 +111,16 @@ fun FlagshipInferenceSettingsRow(
     isDefault: Boolean,
     onMakeDefault: () -> Unit,
     onAddOwnKey: () -> Unit,
+    defaultModel: (@Composable () -> Unit)? = null,
 ) {
     val entry = FreeAiCopy.entry(state)
     FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.testTag("free-ai-card")) {
         Column {
             FlagshipInferenceText(entry, if (isDefault && entry.usable) "Default for new builds" else null)
+            if (defaultModel != null && !entry.loading) {
+                Spacer(Modifier.height(FS.space.s3))
+                defaultModel()
+            }
             if (entry.usable && !isDefault) {
                 Spacer(Modifier.height(FS.space.s2))
                 FSGhostButton(

@@ -71,6 +71,7 @@ object AiKeyStore {
     // the active key falls back to the most-recently-added one. Mirrors the
     // webapp's `activeId` + iOS SavedKeyStore.activeId.
     private const val ACTIVE_KEY = "activeId"
+    private const val MODEL_PREFIX = "model:"
 
     /**
      * The built-in Flagship Inference entry's id. It is never a saved key:
@@ -142,6 +143,7 @@ object AiKeyStore {
     fun delete(id: String) {
         if (id == FLAGSHIP_INFERENCE_ID) return
         persist(list().filterNot { it.id == id })
+        store().edit().remove(MODEL_PREFIX + id).apply()
         // Drop a dangling explicit-active pointer so active() cleanly falls
         // back to the most-recently-added entry.
         if (store().getString(ACTIVE_KEY, null) == id) {
@@ -150,7 +152,9 @@ object AiKeyStore {
     }
 
     fun clear() {
-        store().edit().remove(RECORD_KEY).remove(ACTIVE_KEY).apply()
+        val e = store().edit().remove(RECORD_KEY).remove(ACTIVE_KEY)
+        store().all.keys.filter { it.startsWith(MODEL_PREFIX) }.forEach { e.remove(it) }
+        e.apply()
     }
 
     /**
@@ -182,6 +186,28 @@ object AiKeyStore {
         if (id == FLAGSHIP_INFERENCE_ID || list().any { it.id == id }) {
             store().edit().putString(ACTIVE_KEY, id).apply()
         }
+    }
+
+    /** The model a build on [id] (a saved key or [FLAGSHIP_INFERENCE_ID])
+     *  starts with, chosen in Settings. Null: the box's default. */
+    fun defaultModel(id: String): ModelChoice? {
+        val raw = store().getString(MODEL_PREFIX + id, null) ?: return null
+        return runCatching { json.decodeFromString(ModelChoice.serializer(), raw) }.getOrNull()
+    }
+
+    fun setDefaultModel(id: String, choice: ModelChoice?) {
+        val e = store().edit()
+        if (choice == null || choice.model.isBlank()) e.remove(MODEL_PREFIX + id)
+        else e.putString(MODEL_PREFIX + id, json.encodeToString(ModelChoice.serializer(), choice))
+        e.apply()
+    }
+
+    /** The default model for the credential a build starts with. */
+    fun defaultModelFor(c: AiCredential?): ModelChoice? = when {
+        c == null -> null
+        c.isFreeAi -> defaultModel(FLAGSHIP_INFERENCE_ID)
+        c.keyId != null -> defaultModel(c.keyId)
+        else -> null
     }
 
     /** Turn the Flagship relay on or off for a saved entry. No-op for an unknown id. */

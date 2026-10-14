@@ -602,7 +602,13 @@ data class BuildCredential(
 @Serializable
 data class VibeCodeStartRequest(
     val prompt: String,
+    /** A Flagship Inference catalog id ("low", …) or the provider's own model
+     *  id. Omitted ⇒ the box picks its default. */
     val model: String? = null,
+    /** Reasoning effort in the provider's own words; omitted ⇒ its default. */
+    val effort: String? = null,
+    /** Files and images on the opening turn (≤ 6). */
+    val attachments: List<VibeCodeAttachment>? = null,
     /** Optional BYOK credential. Omitted ⇒ box uses promo/credits. */
     val credential: BuildCredential? = null,
     /** Owner-chosen service name/slug (the web-address label) from the
@@ -968,7 +974,34 @@ data class VibeCodeSessionMessage(
     val role: String,           // "user" | "assistant"
     val text: String,
     val timestamp: Long,
+    /** What the owner attached on this turn (user messages only). */
+    val attachments: List<VibeCodeAttachment>? = null,
+    /** Flagship Inference: credits this reply cost (assistant messages only). */
+    val credits: Double? = null,
 )
+
+/**
+ * A file or image on a chat turn. Polymorphic on `kind` (the screens JSON's
+ * class discriminator). Mirror of the daemon's `VibeCodeAttachment`.
+ */
+@Serializable
+sealed class VibeCodeAttachment {
+    abstract val name: String?
+
+    @Serializable @SerialName("image")
+    data class Image(val mediaType: String, val dataBase64: String, override val name: String? = null) : VibeCodeAttachment()
+
+    @Serializable @SerialName("text")
+    data class Text(val text: String, override val name: String? = null) : VibeCodeAttachment()
+
+    /** CSV or JSON sample data (`text/csv` | `application/json`). */
+    @Serializable @SerialName("data")
+    data class Data(override val name: String? = null, val mediaType: String, val text: String) : VibeCodeAttachment()
+
+    /** A PDF (`application/pdf`). */
+    @Serializable @SerialName("document")
+    data class Document(override val name: String? = null, val mediaType: String = "application/pdf", val dataBase64: String) : VibeCodeAttachment()
+}
 
 @Serializable
 data class TalkToUserPayload(val message: String)
@@ -1075,6 +1108,11 @@ data class VibeCodeSessionPublicState(
     val deployPhase: String? = null,
     /** Why the session failed, when status is "failed". */
     val failureReason: String? = null,
+    /** The model and effort the conversation uses now. */
+    val model: String? = null,
+    val effort: String? = null,
+    /** Older turns were summarised to fit the model's context. */
+    val summarised: Boolean = false,
 )
 
 /** `POST /api/llm/sessions/:id/deploy {background:true}`: `started` from a
@@ -1091,7 +1129,14 @@ data class VibeCodeDeployReply(
 
 @Serializable
 data class VibeCodeReplyRequest(
+    /** Switch the model for this and later turns (same values as on start). */
+    val model: String? = null,
+    /** Switch the effort; "" goes back to the provider's default (null is
+     *  left off the wire and keeps the current one). */
+    val effort: String? = null,
     val text: String? = null,
+    /** Files and images on this reply (≤ 6). */
+    val attachments: List<VibeCodeAttachment>? = null,
     /** "set" | "declined" | "deferred" — only meaningful when the
      *  pending tool is `requestEnvVar`. */
     val envVarStatus: String? = null,
@@ -1331,3 +1376,69 @@ data class AppMemberRoleRequest(val order: AppMemberRoleOrderBody, val signature
 
 @Serializable
 data class AppMemberRoleResponse(val ok: Boolean, val target: String, val role: String)
+
+// ---------- AI model menus (packages/protocol/src/aiModels.ts) ----------
+
+/** One Flagship Inference model, as `.com` serves it. */
+@Serializable
+data class InferenceModel(
+    val id: String,
+    val tier: String = "",
+    val model: String = "",
+    val multiplier: Double = 1.0,
+    val label: String = "",
+    val descriptor: String = "",
+    val contextTokens: Long = 0,
+    val modalities: List<String> = emptyList(),
+    val reasoning: Boolean = false,
+    val default: Boolean? = null,
+    val visionAlternative: String? = null,
+    val upstream: Map<String, String>? = null,
+)
+
+/** `GET https://flagshipserver.com/api/inference/models`. */
+@Serializable
+data class InferenceCatalogResponse(
+    val models: List<InferenceModel> = emptyList(),
+    val defaultModel: String = "",
+    val creditTokens: Long = 1000,
+    val inputWeight: Double = 1.0,
+    val outputWeight: Double = 4.0,
+)
+
+/** A row of an own-key model menu, as the box answers it. */
+@Serializable
+data class ModelOption(
+    val id: String,
+    val label: String = id,
+    val contextTokens: Long? = null,
+    /** Takes images. Null: unknown. */
+    val vision: Boolean? = null,
+    /** Takes tool calls. Null: unknown. */
+    val tools: Boolean? = null,
+    /** Effort levels in the provider's own words; null: no control. */
+    val efforts: List<String>? = null,
+    val defaultEffort: String? = null,
+    /** False: not in the capability table ("capabilities unknown"). */
+    val known: Boolean = false,
+    val visionAlternative: String? = null,
+)
+
+/**
+ * `POST /api/screens/ai/models {credential}`. `kind` "flagship" carries
+ * [catalog]; "own" carries [listed], [models], [defaultModel] and, with no
+ * list, [reason] ("no-list" | "rejected" | "failed").
+ */
+@Serializable
+data class AiModelsResponse(
+    val provider: String,
+    val kind: String,
+    val catalog: InferenceCatalogResponse? = null,
+    val listed: Boolean = false,
+    val models: List<ModelOption> = emptyList(),
+    val defaultModel: String? = null,
+    val reason: String? = null,
+)
+
+@Serializable
+data class AiModelsRequest(val credential: BuildCredential? = null)

@@ -7,7 +7,12 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,13 +32,17 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.outlined.AttachFile
+import androidx.compose.material.icons.outlined.Image
 import androidx.navigation.NavController
 import com.flagshipserver.app.api.ServiceEnvSetEnvelope
 import com.flagshipserver.app.api.ServiceEnvSetRequest
@@ -41,6 +50,16 @@ import com.flagshipserver.app.api.userFacing
 import com.flagshipserver.app.api.VibeCodePendingRequest
 import com.flagshipserver.app.api.VibeCodeReplyRequest
 import com.flagshipserver.app.api.VibeCodeSessionPublicState
+import com.flagshipserver.app.api.VibeCodeAttachment
+import com.flagshipserver.app.core.AiKeyStore
+import com.flagshipserver.app.core.BuildSessionAi
+import com.flagshipserver.app.core.ChatAttachments
+import com.flagshipserver.app.core.FreeAiSessions
+import com.flagshipserver.app.core.ModelCatalogs
+import com.flagshipserver.app.core.ModelChoice
+import com.flagshipserver.app.core.ModelMenu
+import com.flagshipserver.app.core.ModelMenus
+import com.flagshipserver.app.core.VisionCheck
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalVibeCodeEnvelopeSigner
@@ -83,10 +102,33 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
         ?: "unknown"
 
     val freeAiService = rememberFreeAiService()
+    val context = LocalContext.current
+
+    // The model menu: the session's AI (the credential it started with), and
+    // the model + effort the next message goes with. The owner may change
+    // them between messages; every reply carries them.
+    var menu by remember { mutableStateOf<ModelMenu?>(null) }
+    var choice by remember { mutableStateOf<ModelChoice?>(null) }
+    var staged by remember { mutableStateOf<List<VibeCodeAttachment>>(emptyList()) }
+    var attachError by remember { mutableStateOf<String?>(null) }
+    var vision by remember { mutableStateOf<VisionCheck?>(null) }
+
+    fun stage(uri: android.net.Uri?) {
+        if (uri == null) return
+        scope.launch(Dispatchers.Main) {
+            val (a, problem) = kotlinx.coroutines.withContext(Dispatchers.IO) { readAttachment(context, uri, staged.size) }
+            attachError = problem
+            if (a != null) staged = staged + a
+        }
+    }
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { stage(it) }
+    val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { stage(it) }
 
     // A build on free AI credits gets a fresh credential with every reply
     // (they last 12 h); false when the credits ran out and nothing was sent.
-    suspend fun reply(req: VibeCodeReplyRequest): Boolean {
+    suspend fun reply(base: VibeCodeReplyRequest): Boolean {
+        val (model, effort) = ModelMenus.replyWire(choice)
+        val req = base.copy(model = model, effort = effort)
         val withCred = when (val r = freeAiService.refreshFor(sessionId)) {
             is com.flagshipserver.app.core.FreeAiRefresh.None -> req
             is com.flagshipserver.app.core.FreeAiRefresh.Fresh ->
@@ -110,6 +152,24 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
 
     LaunchedEffect(deployPhase) {
         if (deployPhase is VibeCodeDeployViewModel.Phase.Deployed || deployPhase is VibeCodeDeployViewModel.Phase.Failed) reload()
+    }
+
+    LaunchedEffect(sessionId, state != null) {
+        val s = state ?: return@LaunchedEffect
+        if (menu != null) return@LaunchedEffect
+        val cred = BuildSessionAi.credentialFor(sessionId)
+        val m = when {
+            cred != null -> ModelCatalogs.menuFor(cred, client)
+            FreeAiSessions.serverFor(sessionId) != null -> ModelMenu.Flagship(ModelCatalogs.inference())
+            else -> {
+                // Reopened after a restart: a catalog id means Flagship Inference.
+                val cat = ModelCatalogs.inference()
+                if (cat != null && cat.models.any { it.id == s.model }) ModelMenu.Flagship(cat) else ModelMenu.Unknown
+            }
+        }
+        val saved = runCatching { AiKeyStore.defaultModelFor(cred) }.getOrNull()
+        choice = ModelMenus.initial(m, saved, s.model?.takeIf { it.isNotBlank() }?.let { ModelChoice(it, s.effort) })
+        menu = m
     }
 
     LaunchedEffect(sessionId) {
@@ -145,6 +205,11 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
             color = FS.colors.text,
             style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
         )
+        val m = menu
+        if (m != null && !(m is ModelMenu.Unknown && choice == null)) {
+            Spacer(Modifier.height(FS.space.s2))
+            ChatModelBar(m, choice, onChoice = { choice = it })
+        }
         Spacer(Modifier.height(FS.space.s4))
 
         val s = state
@@ -181,15 +246,11 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                 if (s.messages.isEmpty()) {
                     Text("No messages yet.", color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
                 } else {
-                    s.messages.forEach { msg ->
-                        Text(
-                            if (msg.role == "user") "YOU" else "AI",
-                            color = FS.colors.textMuted,
-                            style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
-                        )
-                        Text(msg.text, color = FS.colors.text)
+                    if (s.summarised) {
+                        Text(EARLIER_SUMMARISED, color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp))
                         Spacer(Modifier.height(FS.space.s2))
                     }
+                    s.messages.forEach { msg -> ChatMessage(msg) }
                 }
             }
         }
@@ -213,27 +274,60 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                                     .fillMaxWidth()
                                     .semantics { testTag = "vibecode-reply-field" },
                             )
+                            Spacer(Modifier.height(FS.space.s2))
+                            fun sendNow() {
+                                scope.launch(Dispatchers.Main) {
+                                    submitting = true
+                                    try {
+                                        val req = VibeCodeReplyRequest(
+                                            text = replyDraft,
+                                            attachments = staged.takeIf { it.isNotEmpty() },
+                                        )
+                                        if (reply(req)) {
+                                            replyDraft = ""
+                                            staged = emptyList()
+                                            attachError = null
+                                            reload()
+                                        }
+                                    } catch (t: Throwable) {
+                                        errorMessage = t.userFacing()
+                                    } finally {
+                                        submitting = false
+                                    }
+                                }
+                            }
+                            ChatComposerAttachments(
+                                staged = staged,
+                                error = attachError,
+                                onPhoto = {
+                                    photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                                },
+                                onFile = { filePicker.launch(ChatAttachments.DOCUMENT_MIME_TYPES) },
+                                onRemove = { i -> staged = staged.filterIndexed { j, _ -> j != i } },
+                            )
                             Spacer(Modifier.height(FS.space.s3))
                             FSPrimaryButton(
                                 label = if (submitting) "Sending…" else "Send",
                                 enabled = !submitting && replyDraft.isNotEmpty(),
                                 modifier = Modifier.semantics { testTag = "vibecode-reply-send-btn" },
                                 onClick = {
-                                    scope.launch(Dispatchers.Main) {
-                                        submitting = true
-                                        try {
-                                            if (reply(VibeCodeReplyRequest(text = replyDraft))) {
-                                                replyDraft = ""
-                                                reload()
-                                            }
-                                        } catch (t: Throwable) {
-                                            errorMessage = t.userFacing()
-                                        } finally {
-                                            submitting = false
-                                        }
-                                    }
+                                    val check = ModelMenus.visionCheck(
+                                        menu ?: ModelMenu.Unknown, choice, ChatAttachments.hasImage(staged),
+                                    )
+                                    if (check is VisionCheck.Send) sendNow() else vision = check
                                 },
                             )
+                            vision?.let { check ->
+                                VisionDialog(
+                                    check = check,
+                                    onSwitch = { to ->
+                                        vision = null
+                                        choice = to
+                                        sendNow()
+                                    },
+                                    onDismiss = { vision = null },
+                                )
+                            }
                         }
                     }
                 }
@@ -433,6 +527,81 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
             ErrorCard(message = errorMessage!!)
         }
         Spacer(Modifier.height(FS.space.s10))
+    }
+}
+
+internal const val EARLIER_SUMMARISED = "Earlier conversation summarised"
+
+/** The header's model menu and, for a Flagship model that reasons, "Think harder". */
+@Composable
+internal fun ChatModelBar(menu: ModelMenu, choice: ModelChoice?, onChoice: (ModelChoice?) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        ModelMenuChip(menu, choice, onChoice)
+        if (choice != null && ModelMenus.thinkHarderOffered(menu, choice)) {
+            ThinkHarderChip(ModelMenus.thinkHarder(choice)) { on -> onChoice(ModelMenus.withThinkHarder(choice, on)) }
+        }
+    }
+}
+
+/** One turn: who said it, what, any attachments, and a Flagship reply's cost. */
+@Composable
+internal fun ChatMessage(msg: com.flagshipserver.app.api.VibeCodeSessionMessage) {
+    Text(
+        if (msg.role == "user") "YOU" else "AI",
+        color = FS.colors.textMuted,
+        style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
+    )
+    Text(msg.text, color = FS.colors.text)
+    val attached = msg.attachments.orEmpty()
+    if (attached.isNotEmpty()) {
+        Spacer(Modifier.height(FS.space.s1))
+        AttachmentChips(attached)
+    }
+    val credits = msg.credits
+    if (msg.role == "assistant" && credits != null) {
+        Spacer(Modifier.height(2.dp))
+        CreditsLine(credits)
+    }
+    Spacer(Modifier.height(FS.space.s2))
+}
+
+/** Attach buttons, the staged chips (removable) and the notice under them. */
+@Composable
+internal fun ChatComposerAttachments(
+    staged: List<VibeCodeAttachment>,
+    error: String?,
+    onPhoto: () -> Unit,
+    onFile: () -> Unit,
+    onRemove: (Int) -> Unit,
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+        Pill(
+            label = "Photo",
+            leading = androidx.compose.material.icons.Icons.Outlined.Image,
+            onClick = onPhoto,
+            modifier = Modifier.semantics { testTag = "vibecode-attach-photo" },
+        )
+        Pill(
+            label = "File",
+            leading = androidx.compose.material.icons.Icons.Outlined.AttachFile,
+            onClick = onFile,
+            modifier = Modifier.semantics { testTag = "vibecode-attach-file" },
+        )
+    }
+    if (staged.isNotEmpty()) {
+        Spacer(Modifier.height(FS.space.s2))
+        AttachmentChips(staged, onRemove)
+    }
+    Spacer(Modifier.height(FS.space.s2))
+    AttachmentNotice(staged)
+    if (error != null) {
+        Spacer(Modifier.height(FS.space.s1))
+        Text(
+            error,
+            color = FS.colors.danger,
+            style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+            modifier = Modifier.semantics { testTag = "vibecode-attach-error" },
+        )
     }
 }
 

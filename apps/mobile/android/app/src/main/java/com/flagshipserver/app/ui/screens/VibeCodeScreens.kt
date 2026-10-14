@@ -401,13 +401,16 @@ fun VibeCodeDescribeScreen(nav: NavController) {
                         }
                         val pending = PendingBuildCredential.peek()
                         val cred = pending?.let(BuildCredential::from)
+                        val startModel = com.flagshipserver.app.core.ModelMenus.startWire(
+                            runCatching { com.flagshipserver.app.core.AiKeyStore.defaultModelFor(pending) }.getOrNull(),
+                        )
                         // Keep the server it starts on for the steps after this one.
                         podScope?.let { it.choose?.invoke(it.pod.podId) }
                         val resp = screens.vibeCodeStart(
                             VibeCodeStartRequest(
                                 prompt = prompt, credential = cred,
-                                // Free AI credits name their model; own keys use the box default.
-                                model = pending?.model?.takeIf { pending.isFreeAi },
+                                // The default model chosen in Settings for this key; none ⇒ the box's.
+                                model = startModel.first, effort = startModel.second,
                                 name = s, visibility = visibility,
                             ),
                         )
@@ -416,6 +419,7 @@ fun VibeCodeDescribeScreen(nav: NavController) {
                             nav.navigate("vibe/key")
                         } else {
                             PendingBuildCredential.take()
+                            com.flagshipserver.app.core.BuildSessionAi.remember(resp.sessionId, pending)
                             if (pending?.isFreeAi == true) FreeAiSessions.remember(resp.sessionId, server)
                             nav.openVibeSession("vibe/generating/${resp.sessionId}")
                         }

@@ -100,6 +100,11 @@ interface ScreensClient {
      *  they refuse a clash at deploy instead. */
     suspend fun vibeCodeNameCheck(name: String): VibeCodeNameCheck = VibeCodeNameCheck.Unknown
 
+    /** `POST /api/screens/ai/models {credential}`: the model menu for this
+     *  credential (the key is used for this one call). */
+    suspend fun aiModels(credential: BuildCredential?): AiModelsResponse =
+        throw ScreensError.NotImplemented("model menu")
+
     /** Stop a build session and delete it, its files and its AI key, which
      *  frees its name. */
     suspend fun vibeCodeDiscard(sessionId: String): Unit =

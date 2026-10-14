@@ -177,4 +177,21 @@ class AiKeyStoreTest {
         AiKeyStore.setActive("not-a-key")
         assertEquals(AiKeyStore.FLAGSHIP_INFERENCE_ID, AiKeyStore.activeId())
     }
+
+    @Test
+    fun defaultModelPerKey() {
+        val a = AiKeyStore.add("openai", "sk-abc123456789", "Work")
+        assertNull(AiKeyStore.defaultModel(a.id))
+        AiKeyStore.setDefaultModel(a.id, ModelChoice("gpt-5.4-mini", "high"))
+        AiKeyStore.setDefaultModel(AiKeyStore.FLAGSHIP_INFERENCE_ID, ModelChoice("medium"))
+        assertEquals(ModelChoice("gpt-5.4-mini", "high"), AiKeyStore.defaultModel(a.id))
+        assertEquals(ModelChoice("gpt-5.4-mini", "high"), AiKeyStore.defaultModelFor(AiKeyStore.credentialFor(a.id)))
+        assertEquals(ModelChoice("medium"), AiKeyStore.defaultModelFor(AiCredential("flagship", "k", source = "promo")))
+        assertNull(AiKeyStore.defaultModelFor(AiCredential("openai", "unsaved")))
+        assertNull(AiKeyStore.defaultModelFor(null))
+        AiKeyStore.delete(a.id)
+        assertNull(AiKeyStore.defaultModel(a.id))
+        AiKeyStore.clear()
+        assertNull(AiKeyStore.defaultModel(AiKeyStore.FLAGSHIP_INFERENCE_ID))
+    }
 }

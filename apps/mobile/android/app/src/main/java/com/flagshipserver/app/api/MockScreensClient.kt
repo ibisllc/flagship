@@ -709,6 +709,20 @@ class MockScreensClient(
         )
     }
 
+    override suspend fun aiModels(credential: BuildCredential?): AiModelsResponse {
+        tick()
+        val provider = credential?.provider ?: "flagship"
+        if (provider == "flagship") return AiModelsResponse(provider = provider, kind = "flagship")
+        return AiModelsResponse(
+            provider = provider, kind = "own", listed = true, defaultModel = "gpt-5.4-mini",
+            models = listOf(
+                ModelOption("gpt-5.4-mini", "GPT-5.4 Mini", 400_000, vision = true, tools = true,
+                    efforts = listOf("none", "low", "medium", "high", "xhigh"), defaultEffort = "medium", known = true),
+                ModelOption("brand-new", "brand-new", known = false),
+            ),
+        )
+    }
+
     override suspend fun vibeCodeSessionReply(sessionId: String, req: VibeCodeReplyRequest): VibeCodeReplyResponse {
         tick()
         return VibeCodeReplyResponse(ok = true)

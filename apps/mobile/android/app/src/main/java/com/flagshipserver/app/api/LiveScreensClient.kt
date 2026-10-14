@@ -206,6 +206,11 @@ class LiveScreensClient(
     override suspend fun vibeCodeSessionState(sessionId: String): VibeCodeSessionPublicState =
         request("/api/screens/llm/sessions/$sessionId", VibeCodeSessionPublicState.serializer())
 
+    override suspend fun aiModels(credential: BuildCredential?): AiModelsResponse {
+        val body = json.encodeToString(AiModelsRequest.serializer(), AiModelsRequest(credential)).toByteArray()
+        return request("/api/screens/ai/models", AiModelsResponse.serializer(), "POST", body)
+    }
+
     override suspend fun vibeCodeSessionReply(sessionId: String, req: VibeCodeReplyRequest): VibeCodeReplyResponse {
         val body = json.encodeToString(VibeCodeReplyRequest.serializer(), req).toByteArray()
         return request("/api/screens/llm/sessions/$sessionId/reply", VibeCodeReplyResponse.serializer(), "POST", body)
