@@ -385,7 +385,7 @@ allowances (1M / 5M / 20M a month) are placeholders. `feat/custom-names`'
 
 ### Built, waiting on deploys or rebuilds
 
-- **`.com` Worker:** current with `main` as of 2026-10-13 (webapp shell **v60**).
+- **`.com` Worker:** current with `main` as of 2026-10-13 (webapp shell **v60**; `main` is at v71).
   Always `npx tsc -b` first and apply pending D1 migrations before deploying.
 - **Flagship Inference entry (2026-10-14):** free AI is a built-in provider,
   "Flagship Inference", first in every AI-key list, never removable, shown
@@ -396,6 +396,19 @@ allowances (1M / 5M / 20M a month) are placeholders. `feat/custom-names`'
   placeholder left). Needs a `.com` deploy (webapp shell v69, credit fields,
   privacy + terms pages), a shim deploy (new refusal wording), and
   iOS/Android store builds.
+- **Model menu, compaction, attachments (2026-10-14):** build chats pick a
+  model per message (Flagship Inference catalog: Low 1× Qwen3.6-35B-A3B,
+  Medium 1× DeepSeek-V4-Flash, Medium multimodal 2× GLM-5.3-Flash, High 3.5×
+  MiniMax-M3; multipliers from real cost × 1.25, `docs/ai-inference-costs.md`
+  §15) or an own key's live model list with efforts from a daily
+  OpenRouter-built capability table; "used N credits" per reply; long
+  conversations summarised before they outgrow the context; CSV/JSON sample
+  data (test copy only) and PDFs (text extracted on the box) as attachments.
+  The shim has a fallback upstream (DeepInfra → OpenRouter, both US) and the
+  tunnelled-vLLM options per upstream. Needs: D1 migration 0095 + a `.com`
+  deploy (webapp shell v71, catalog, capability cron, multiplier metering),
+  then the shim deploy (with `FALLBACK_API_KEY`); an endorsed box release
+  (compaction, model choice, attachments, `unpdf`); iOS/Android store builds.
 - **Delete / reversible Revoke / Un-revoke (2026-10-12):** live on `.com` +
   webapp (shell v44); iOS dev build installed on the owner's iPhone; Android
   only as a CI/debug APK. Delete deposits a `wipe-now` decommission order
