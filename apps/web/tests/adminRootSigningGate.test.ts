@@ -165,5 +165,12 @@ describe("makeSensitiveSigner — the signing gate", () => {
     // The deferred piece: RootEntitlement is now an admin-root order.
     expect(SENSITIVE_TAGS.has("flagship/root-entitlement/v1")).toBe(true);
     expect(SENSITIVE_TAGS.has("flagship/device-endpoint-claim/v1")).toBe(false);
+    // Who a server is shared with is the owner's admin decision; the owner's
+    // list read and the other account's own envelopes are not.
+    for (const t of ["server-share/v1", "server-share-revoke/v1", "server-share-offer/v1", "server-share-unlock/v1"]) {
+      expect(SENSITIVE_TAGS.has(`flagship/${t}`)).toBe(true);
+    }
+    expect(SENSITIVE_TAGS.has("flagship/server-share-list/v1")).toBe(false);
+    expect(SENSITIVE_TAGS.has("flagship/server-share-accept/v1")).toBe(false);
   });
 });

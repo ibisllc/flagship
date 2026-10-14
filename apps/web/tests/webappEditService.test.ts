@@ -145,6 +145,6 @@ describe("edit-service screens", () => {
     const sw = await asset("/webapp/service-worker.js");
     expect(sw).toContain('"/views/edit-service.js"');
     expect(sw).toContain('"/lib/editService.js"');
-    expect(sw).toContain('SHELL_VERSION = "v69"');
+    expect(sw).toContain('SHELL_VERSION = "v70"');
   });
 });

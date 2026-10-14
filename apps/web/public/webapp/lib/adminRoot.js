@@ -66,6 +66,11 @@ export const SENSITIVE_TAGS = new Set([
   "flagship/server-unrevoke/v1", //        un-revoke a lost/stolen server
   "flagship/service-invite/create/v1", //  service collaborator invite (D-2)
   "flagship/service-invite/revoke/v1", //  service collaborator revoke (D-2)
+  // Share this server (docs/share-a-server.md): who the server is shared with
+  "flagship/server-share/v1", //           grant or change a share (box)
+  "flagship/server-share-revoke/v1", //    end a share (box + .com)
+  "flagship/server-share-offer/v1", //     offer a share (.com)
+  "flagship/server-share-unlock/v1", //    a share's copy of the disk key (.com)
 ]);
 
 const _decoder = new TextDecoder();

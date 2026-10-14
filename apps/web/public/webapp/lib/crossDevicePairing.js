@@ -67,7 +67,7 @@ export const QUARANTINE_MS = 14 * 86_400_000;
 /** Risk-warning copy carried on BOTH screens (Safeguard 4). Pure exports
  *  so tests pin the exact wording and the iOS/Android surfaces can match. */
 export const ADMIN_RISK_WARNING =
-  "This shares your account keys with the new device. Anyone who scans this code can join your account — only do it for a device or person you intend to add.";
+  "This shares your account keys with the new device. Anyone who scans this code can join your account, so only use it for your own devices. To give another person access, use Share this server on the server's page.";
 export const INCOMING_RISK_WARNING =
   "Scanning this links this device to someone else's Flagship account and copies their account keys here. Only continue if you trust the person showing the code.";
 export const NO_SCREENSHOT_WARNING =

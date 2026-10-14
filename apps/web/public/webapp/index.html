@@ -120,6 +120,7 @@
              from the LOCALLY decrypted directory — never from the wire. -->
         <p class="note" id="home-welcome"></p>
         <div id="servers-list"></div>
+        <div id="shared-with-me"></div>
 
         <h2 class="mt-5">Session</h2>
         <div class="card">
@@ -383,6 +384,25 @@
           <button class="secondary" id="server-detail-refresh">Refresh</button>
           <button class="secondary" id="server-detail-back">← Back</button>
         </div>
+      </section>
+
+      <!-- A server another account shares with this one: only what the
+           share's level reaches (docs/share-a-server.md §8). -->
+      <section id="view-shared-server" class="hidden">
+        <h2 id="shared-server-title">Server</h2>
+        <p class="note" id="shared-server-sub">Shared with you</p>
+        <div id="shared-server-content"></div>
+        <div class="row-2">
+          <button class="secondary" id="shared-server-refresh">Refresh</button>
+          <button class="secondary" id="shared-server-back">← Back</button>
+        </div>
+      </section>
+
+      <!-- Opening a /share#s=…&k=… link. -->
+      <section id="view-share-accept" class="hidden">
+        <h2 id="share-accept-title">Shared server</h2>
+        <div id="share-accept-content"></div>
+        <button class="secondary full-width mt-2" id="share-accept-back">← Back</button>
       </section>
 
       <!-- View 8: Services list (P2.2) — also acts as the "Services" tab landing.
@@ -1005,6 +1025,7 @@
            and seals the account keys over the relay. -->
       <section id="view-add-device" class="hidden">
         <h2>Add a device</h2>
+        <p class="note">For your own phones and tablets. To give another person access, use <strong>Share this server</strong> on the server's page.</p>
         <p class="note">Have the new device scan this code (or open the link). Compare the match code on both screens before you confirm.</p>
         <div id="add-device-content"></div>
       </section>

@@ -107,6 +107,7 @@ import {
   renderMonitoringSection,
   wireMonitoringPane,
 } from "../lib/serverMonitoring.js";
+import { serverSharingHtml, wireServerSharing } from "./server-sharing.js";
 
 registerView("view-server-detail");
 
@@ -402,6 +403,7 @@ export async function renderServerDetail() {
         </div>
         <button id="set-preferred-btn" class="full-width mt-2"${isPreferredServer(body.serverFqdn) ? " disabled" : ""}>Set as preferred server</button>
       </div>
+      ${serverSharingHtml(body)}
 
       <h2 class="mt-4">Transfer</h2>
       <div class="card" id="transfer-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
@@ -472,6 +474,7 @@ export async function renderServerDetail() {
     wireDeadMan(body);
     wireJournal(body);
     wirePreferredServer(body);
+    wireServerSharing(body);
     wireServerApps(body.serverFqdn);
     wireTransfer(body);
     wireReplace(body);

@@ -275,7 +275,7 @@ New box routes:
 | `POST /api/shares/session` | `{session, signature}` → `{token, expiresAt, level, unlockAtBoot, seeAppData}`; 403 `not-shared` / `share-ended` |
 | `GET /api/shares/me` | → `{shareId, level, unlockAtBoot, seeAppData, serverDomain}` |
 | `POST /api/shares/leave` | `{leave, signature}` → `{ok}` |
-| `GET /api/screens/shares` | → `{shares:[{shareId, label, level, unlockAtBoot, seeAppData, issuedAt, lastSeenAt}], ended:[{shareId, label, endedAt, reason}]}` |
+| `GET /api/screens/shares` | → `{shares:[{shareId, label, level, unlockAtBoot, seeAppData, memberPubHex, issuedAt, sharedAt, lastSeenAt}], ended:[{shareId, label, endedAt, reason}]}` (`memberPubHex` lets A re-sign a change) |
 | `POST /api/screens/shares` | `{grant, signature, accept?, acceptSignature?}` → `{ok, share}`; the first grant for an id must carry B's acceptance |
 | `POST /api/screens/shares/revoke` | `{revoke, signature}` → `{ok}` |
 | `GET /api/screens/activity?limit=` | → `{entries:[{ts, actor:{kind:"owner"} \| {kind:"share", shareId, label}, action, target?, ok}]}` |
@@ -383,7 +383,7 @@ A's paired-session token, or B's share token (`fss_…`).
 **B accepts** (link, QR scan, or paste):
 1. Parse the link; `token = shareTokenFromSecret(k)`.
 2. `GET apex/api/server-shares/:id` with `x-flagship-share-token: token`
-   → `{serverDomain, state, offer, …}`; open `offer`. 404 = bad link, 410 = expired/ended.
+   → `{serverDomain, state, offer, …}`; open `offer`. 404 = bad link, 410 = an unaccepted link that expired; `state: "ended"` = the share is over.
 3. Accept → `member = deriveShareMemberKey(UMK, shareId)`; sign #3; seal
    `{v:1, accept, signature}` with `linkKey(k)`, AAD "acceptance"|shareId;
    `POST apex/api/server-shares/:id/accept {acceptance}` (409 = someone else used the link).

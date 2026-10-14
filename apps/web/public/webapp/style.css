@@ -2271,3 +2271,29 @@ button[data-device-restricted] {
 }
 .sa-crown { display: inline-flex; color: #C9A227; }
 .sa-crown svg { width: 18px; height: 18px; }
+
+/* Share this server (docs/share-a-server.md §8) */
+.share-row { padding: var(--space-3) 0; border-top: 1px solid var(--border-soft); }
+.share-row:first-child { border-top: 0; padding-top: 0; }
+.share-row-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.share-row-name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.share-row-head select { width: auto; flex: 0 0 auto; min-height: 36px; padding-top: 6px; padding-bottom: 6px; }
+.share-opt, .share-choice { font-family: var(--font-sans); text-transform: none; letter-spacing: normal; font-size: 13px; font-weight: 400; color: var(--ink); }
+.share-opt { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-2) 0 0; }
+.share-choice { display: flex; align-items: flex-start; gap: 10px; margin: var(--space-2) 0 0; cursor: pointer; }
+.share-choice input { margin-top: 3px; flex: 0 0 auto; }
+.share-choice-text { display: flex; flex-direction: column; gap: 2px; }
+.share-sas { font-size: 28px; font-weight: 600; letter-spacing: 0.08em; text-align: center; margin: var(--space-2) 0; color: var(--ink); }
+.share-qr { display: flex; justify-content: center; margin: var(--space-2) 0; }
+.share-qr svg { border-radius: 8px; }
+.share-offer { text-align: center; }
+.share-offer-icon { display: inline-flex; margin-bottom: var(--space-2); }
+.share-offer-name { font-size: 18px; font-weight: 600; margin: 0; }
+.activity-row { align-items: flex-start; gap: var(--space-2); }
+.activity-row .value { font-family: var(--font-sans); word-break: normal; }
+.activity-row .faint-sm { white-space: nowrap; }
+.shared-app { padding: var(--space-2) 0; border-top: 1px solid var(--border-soft); }
+.shared-app:first-child { border-top: 0; padding-top: 0; }
+.shared-app-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); }
+.shared-app-head button { width: auto; flex: 0 0 auto; white-space: nowrap; }
+.shared-app-name { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; }

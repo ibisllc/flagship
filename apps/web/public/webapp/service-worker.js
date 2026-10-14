@@ -140,7 +140,12 @@
 //  v69: Flagship Inference everywhere (no more "free AI credits"), and its
 //       allowance in credits: "1,840 free credits left · 500 added each
 //       week", the same line in Settings and the AI-key step.
-const SHELL_VERSION = "v69";
+//  v70: Share this server: a server's page shows who it's shared with,
+//       their level and opt-ins, and an Activity card; /share links open
+//       the accept view; home lists "Shared with me" with a page limited to
+//       the share's level; precaches lib/serverShare.js, lib/serverShares.js
+//       and the server-sharing / share-accept / shared-server views.
+const SHELL_VERSION = "v70";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -210,6 +215,8 @@ const OPTIONAL_SHELL = [
   "/lib/appPlacement.js",
   "/lib/serverMonitoring.js",
   "/lib/memberRoles.js",
+  "/lib/serverShare.js",
+  "/lib/serverShares.js",
   "/views/bootstrap.js",
   "/views/wizard.js",
   "/views/unlock.js",
@@ -218,6 +225,9 @@ const OPTIONAL_SHELL = [
   "/views/settings.js",
   "/views/pod-pair.js",
   "/views/server-detail.js",
+  "/views/server-sharing.js",
+  "/views/shared-server.js",
+  "/views/share-accept.js",
   "/views/services-list.js",
   "/views/service-detail.js",
   "/views/app-access.js",

@@ -731,6 +731,17 @@ async function routeImpl(
     });
   }
 
+  // `/share#s=…&k=…` — a "Share this server" link (docs/share-a-server.md
+  // §5.1). Same fallback as `/transfer`: the app takes it when installed;
+  // otherwise the webapp opens it. The secret is in the fragment, which never
+  // reaches this Worker and which the browser carries across the redirect.
+  if (url.pathname === "/share" || url.pathname === "/share/") {
+    return new Response(null, {
+      status: 308,
+      headers: { location: `${WEBAPP_ORIGIN}/share${url.search}` },
+    });
+  }
+
   // The standalone "how to assemble your server" explainer was folded into
   // /docs (the #certificate / #recommended-linux / #booting-process anchors
   // live there now). Both `/how-to` and `/how-to.html` 302 to /docs. We

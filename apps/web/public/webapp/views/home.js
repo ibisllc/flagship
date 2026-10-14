@@ -1,6 +1,7 @@
 import { bytesToHex, signWithIrk } from "../keystore.js";
 import { sensitiveSigner } from "../lib/adminRoot.js";
 import { decorateHomeGrid, serverIcon, alertCircleIcon, keyIcon } from "../lib/icons.js";
+import { renderSharedWithMe } from "./shared-server.js";
 import {
   chipRow,
   searchField,
@@ -982,6 +983,8 @@ export async function renderHome() {
   // as skipped (not enrolled) and the user hasn't dismissed it on this
   // device. Local-only signal; no API call.
   renderRecoveryBanner();
+
+  void renderSharedWithMe();
 
   const sid = recoveryStoreGet("sessionId");
   const serverSource = homeServerSource(sid, getActiveProfile());

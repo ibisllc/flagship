@@ -27,6 +27,19 @@ function clearTransferQuery() {
 }
 
 export async function dispatchInitialView() {
+  try {
+    const { takePendingShareLink } = await import("./serverShares.js");
+    const link = takePendingShareLink();
+    if (link) {
+      const { enterShareAccept } = await import("../views/share-accept.js");
+      await enterShareAccept(link);
+      return;
+    }
+  } catch (e) {
+    console.error(e);
+    toast(humanError(e), "err");
+  }
+
   // Take-over deep link: a `/transfer?o=<b64url>` universal link (a phone
   // Camera opening the offer in the browser, or an in-app deep link) routes
   // straight into the acquirer claim view. The offer is verified (signature +

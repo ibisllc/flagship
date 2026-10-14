@@ -76,6 +76,9 @@ import { initPairView, startPairing } from "./views/pair.js";
 import { initSettingsView, renderProviders } from "./views/settings.js";
 import { initPodPairView, enterPodPair } from "./views/pod-pair.js";
 import { initServerDetailView, enterServerDetail } from "./views/server-detail.js";
+import { initSharedServerView } from "./views/shared-server.js";
+import { initShareAcceptView } from "./views/share-accept.js";
+import { stashShareLinkFromLocation } from "./lib/serverShares.js";
 import { initServicesListView, enterServicesList } from "./views/services-list.js";
 import { initServiceDetailView } from "./views/service-detail.js";
 import { initAppAccessView } from "./views/app-access.js";
@@ -525,6 +528,8 @@ async function boot() {
   initSettingsView();
   initPodPairView();
   initServerDetailView();
+  initSharedServerView();
+  initShareAcceptView();
   initServicesListView();
   initServiceDetailView();
   initServiceAccessView();
@@ -746,6 +751,10 @@ async function boot() {
     });
     return;
   }
+
+  // A /share#s=…&k=… link waits in memory until the account is unlocked;
+  // dispatchInitialView opens it then (docs/share-a-server.md §5.1).
+  stashShareLinkFromLocation();
 
   // Phase 3b — cross-device QR pairing: a /join?sid=&pk= deep-link routes
   // straight into the add-profile pairing receiver, BEFORE the normal

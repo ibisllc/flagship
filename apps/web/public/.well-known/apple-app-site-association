@@ -23,6 +23,14 @@
             "/": "/transfer/",
             "?": { "o": "?*" },
             "comment": "Trailing-slash variant of the same transfer take-over URL."
+          },
+          {
+            "/": "/share",
+            "comment": "Share this server. /share#s=<shareId>&k=<secret> opens the accept flow in the installed app; the secret rides in the fragment."
+          },
+          {
+            "/": "/share/",
+            "comment": "Trailing-slash variant of the same share link."
           }
         ]
       }

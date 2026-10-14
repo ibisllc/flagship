@@ -1218,6 +1218,23 @@ describe("/transfer — take-over universal-link browser fallback", () => {
   });
 });
 
+describe("/share — share-a-server link browser fallback", () => {
+  it("308-redirects /share and /share/ to the webapp origin, ungated", async () => {
+    for (const path of ["/share", "/share/"]) {
+      const r = await route(new Request(`https://flagshipserver.com${path}`), makeEnv());
+      expect(r.status).toBe(308);
+      expect(r.headers.get("location")).toBe("https://webapp.flagshipserver.com/share");
+    }
+    expect(calls).toEqual([]);
+  });
+
+  it("/share on the webapp host serves the webapp shell", async () => {
+    const r = await route(new Request("https://webapp.flagshipserver.com/share"), makeEnv());
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/webapp/index.html");
+  });
+});
+
 describe("CORS — cross-origin webapp → apex /api/* calls", () => {
   it("answers OPTIONS preflight from web. with the right ACL headers", async () => {
     const r = await route(
