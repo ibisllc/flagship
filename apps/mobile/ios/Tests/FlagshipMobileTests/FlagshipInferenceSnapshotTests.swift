@@ -50,7 +50,7 @@ final class FlagshipInferenceSnapshotTests: XCTestCase {
 
         try await snapshot(
             NavigationStack { AiKeysScreen(vm: AiKeysViewModel(store: store), freeAiService: service) },
-            name: "inference-ios-settings.png", dir: dir)
+            name: "credits-ios-settings.png", dir: dir)
 
         let vm = BuildKeyViewModel(store: store, freeAiService: service)
         try await snapshot(
@@ -58,7 +58,7 @@ final class FlagshipInferenceSnapshotTests: XCTestCase {
                 BuildKeyScreen(vm: vm, contextLabel: "Start from scratch with AI", freeAiService: service,
                                serverFqdn: "home.harry.flagship.services") { _ in }
             },
-            name: "inference-ios.png", dir: dir)
+            name: "credits-ios-key-step.png", dir: dir)
 
         server.freeAiEnded = true
         let ended = BuildKeyViewModel(store: store, freeAiService: service)
@@ -67,6 +67,6 @@ final class FlagshipInferenceSnapshotTests: XCTestCase {
                 BuildKeyScreen(vm: ended, contextLabel: "Start from scratch with AI", freeAiService: service,
                                serverFqdn: "home.harry.flagship.services") { _ in }
             },
-            name: "inference-ios-ended.png", dir: dir)
+            name: "credits-ios-ended.png", dir: dir)
     }
 }

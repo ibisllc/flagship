@@ -132,7 +132,7 @@ public final class BuildKeyViewModel {
             errorMessage = e.message
             if e.opensAddKey || saved.isEmpty { resetFormKeepingError(); showingForm = true }
         } catch {
-            errorMessage = "Couldn't get free AI credits. Try again, or add your own AI key."
+            errorMessage = FreeAiCopy.couldNotMint
         }
         return nil
     }

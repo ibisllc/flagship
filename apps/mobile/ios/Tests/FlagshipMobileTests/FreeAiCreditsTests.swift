@@ -37,20 +37,41 @@ final class FreeAiCreditsTests: XCTestCase {
 
     // MARK: copy
 
-    func test_tokenFormatter() {
-        XCTAssertEqual(FreeAiCopy.tokens(0), "0")
-        XCTAssertEqual(FreeAiCopy.tokens(999), "999")
-        XCTAssertEqual(FreeAiCopy.tokens(1_000), "1k")
-        XCTAssertEqual(FreeAiCopy.tokens(820_000), "820k")
-        XCTAssertEqual(FreeAiCopy.tokens(1_000_000), "1M")
-        XCTAssertEqual(FreeAiCopy.tokens(1_500_000), "1.5M")
-        XCTAssertEqual(FreeAiCopy.tokens(-5), "0")
-        let old = FreeAiCredits(usedTokens: 180_000, allowanceTokens: 1_000_000, remainingTokens: 820_000)
-        XCTAssertEqual(FreeAiCopy.balance(old), "820k of 1M free AI tokens left", "an older .com: totals only")
-        XCTAssertEqual(FreeAiCopy.left(old), "820k left")
+    func test_creditsLine() {
+        let us = Locale(identifier: "en_US")
+        XCTAssertEqual(FreeAiCopy.credits(0, locale: us), "0")
+        XCTAssertEqual(FreeAiCopy.credits(1_840, locale: us), "1,840")
+        XCTAssertEqual(FreeAiCopy.credits(1_234_567, locale: Locale(identifier: "de_DE")), "1.234.567")
+        XCTAssertEqual(FreeAiCopy.credits(-5, locale: us), "0")
         let c = server.freeAiCredits
-        XCTAssertEqual(FreeAiCopy.balance(c), "This week: 340k of 500k left · Starter reserve: 1.2M")
-        XCTAssertEqual(FreeAiCopy.left(c), "340k left this week · 1.2M reserve")
+        XCTAssertEqual(FreeAiCopy.balance(c, locale: us), "1,840 free credits left · 500 added each week")
+        XCTAssertEqual(FreeAiCopy.balance(c, locale: Locale(identifier: "de_DE")),
+                       "1.840 free credits left · 500 added each week")
+        // An older .com sends only tokens: 1 credit = 1,000 weighted tokens.
+        let tokensOnly = FreeAiCredits(usedTokens: 660_000, allowanceTokens: 2_500_000, remainingTokens: 1_840_999,
+                                       week: c.week, starter: c.starter)
+        XCTAssertEqual(FreeAiCopy.balance(tokensOnly, locale: us), "1,840 free credits left · 500 added each week")
+        let old = FreeAiCredits(usedTokens: 180_000, allowanceTokens: 1_000_000, remainingTokens: 820_000)
+        XCTAssertEqual(FreeAiCopy.balance(old, locale: us), "820 free credits left", "an older .com: totals only")
+    }
+
+    func test_copySaysFlagshipInference() {
+        XCTAssertEqual(FreeAiCopy.title, "Flagship Inference")
+        XCTAssertEqual(FreeAiCopy.useButton, "Use Flagship Inference →")
+        XCTAssertEqual(FreeAiCopy.unavailable, "Flagship Inference isn't available right now. You can add your own AI key.")
+        for m in [FreeAiCopy.usedUp, FreeAiCopy.busyToday, FreeAiCopy.noServer, FreeAiCopy.unavailable,
+                  FreeAiCopy.tooLong, FreeAiCopy.couldNotMint] {
+            XCTAssertTrue(m.contains("Flagship Inference"), m)
+            XCTAssertFalse(m.lowercased().contains("free ai"), m)
+            XCTAssertFalse(m.lowercased().contains("token"), m)
+        }
+    }
+
+    func test_statusDecodesCreditFields() throws {
+        let body = Data(#"{"available":true,"credits":{"usedTokens":0,"allowanceTokens":2500000,"remainingTokens":2500000,"remainingCredits":2500,"weeklyCredits":500,"tokensPerCredit":1000}}"#.utf8)
+        let s = try JSONDecoder().decode(FreeAiStatusResponse.self, from: body)
+        XCTAssertEqual(s.credits?.creditsLeft, 2_500)
+        XCTAssertEqual(s.credits?.creditsPerWeek, 500)
     }
 
     func test_statusDecodes_newAndOldShapes() throws {
@@ -96,7 +117,7 @@ final class FreeAiCreditsTests: XCTestCase {
     }
 
     func test_errorMapping() {
-        let used = Data(#"{"error":"Your free AI credits for this week are used up. More arrive on Monday, or add your own AI key to keep building.","code":"free-ai-used-up","credits":{"usedTokens":5,"allowanceTokens":5,"remainingTokens":0}}"#.utf8)
+        let used = Data(#"{"error":"You've used this week's Flagship Inference credits. More arrive on Monday, or add your own AI key to keep building.","code":"free-ai-used-up","credits":{"usedTokens":5,"allowanceTokens":5,"remainingTokens":0}}"#.utf8)
         guard case .usedUp(let m, let c)? = FreeAiError.from(status: 429, body: used) else {
             return XCTFail("429 is used up")
         }
@@ -182,7 +203,7 @@ final class FreeAiCreditsTests: XCTestCase {
         let auto = await vm.loadFreeAi()
         XCTAssertFalse(auto)
         guard case .usable(let c) = vm.freeAi else { return XCTFail("row offered") }
-        XCTAssertEqual(c.remainingTokens, 1_540_000)
+        XCTAssertEqual(c.remainingTokens, 1_840_000)
         _ = vm.credential(for: try XCTUnwrap(vm.saved.first))
         XCTAssertNil(vm.chosenModel, "a saved key carries no free-AI model")
     }

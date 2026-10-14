@@ -2,20 +2,16 @@ import SwiftUI
 import FlagshipAPI
 import FlagshipCore
 
-/// D.6.1 — VibeCodeProviderPickScreen.
+/// D.6.1 — VibeCodeProviderPickScreen. Two cards: Flagship Inference and
+/// bring-your-own-key. Both go through the AI-key step, which lists Flagship
+/// Inference first. MIRRORS Android `VibeCodeProviderPickScreen`.
 public struct VibeCodeProviderPickScreen: View {
-    var promoUsed: Int = 12
-    var promoCap: Int = 50
     var onPickPromo: () -> Void = {}
     var onPickBYOK: () -> Void = {}
     public init(
-        promoUsed: Int = 12,
-        promoCap: Int = 50,
         onPickPromo: @escaping () -> Void = {},
         onPickBYOK: @escaping () -> Void = {}
     ) {
-        self.promoUsed = promoUsed
-        self.promoCap = promoCap
         self.onPickPromo = onPickPromo
         self.onPickBYOK = onPickBYOK
     }
@@ -32,22 +28,12 @@ public struct VibeCodeProviderPickScreen: View {
                     }
 
                     FSCard(padding: FS.space.s6) {
-                        HStack(alignment: .top) {
-                            VStack(alignment: .leading, spacing: FS.space.s2) {
-                                Text("Use Flagship's credits").font(FS.font.h3())
-                                FSColorReader { c in
-                                    Text("50 free calls a day · 200 lifetime · we cover the API bill.")
-                                        .font(.system(size: 14)).foregroundColor(c.textMuted)
-                                }
-                            }
-                            Spacer()
-                            PromoBadge(used: promoUsed, cap: promoCap)
-                        }
+                        Text(FreeAiCopy.title).font(FS.font.h3())
                         FSColorReader { c in
-                            Text("Honest note: your prompts go directly to Anthropic, not through us.")
-                                .font(.system(size: 13)).foregroundColor(c.textMuted)
+                            Text(FreeAiCopy.note)
+                                .font(.system(size: 14)).foregroundColor(c.textMuted)
                         }
-                        FSPrimaryButton("Use the promo →", block: true, action: onPickPromo)
+                        FSPrimaryButton(FreeAiCopy.useButton, block: true, action: onPickPromo)
                     }
 
                     FSCard(padding: FS.space.s6) {
@@ -63,21 +49,6 @@ public struct VibeCodeProviderPickScreen: View {
                 .padding(.horizontal, FS.space.s6)
             }
         }
-    }
-}
-
-private struct PromoBadge: View {
-    @Environment(\.colorScheme) private var scheme
-    let used: Int
-    let cap: Int
-    var body: some View {
-        let c = FSColors.scheme(scheme)
-        Text("\(used) / \(cap) today")
-            .font(.system(size: 13, weight: .medium))
-            .foregroundColor(c.primary)
-            .padding(.horizontal, 12).padding(.vertical, 4)
-            .background(c.primary.opacity(0.12))
-            .clipShape(Capsule())
     }
 }
 

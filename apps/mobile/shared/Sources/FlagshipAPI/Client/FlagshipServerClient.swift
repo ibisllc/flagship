@@ -2643,11 +2643,12 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         return out
     }
 
-    /// Free AI credits the mock hands out (demo mode + previews + tests).
+    /// Flagship Inference credits the mock hands out (demo mode + previews + tests).
     public var freeAiCredits = FreeAiCredits(
-        usedTokens: 960_000, allowanceTokens: 2_500_000, remainingTokens: 1_540_000,
+        usedTokens: 660_000, allowanceTokens: 2_500_000, remainingTokens: 1_840_000,
         week: .init(used: 160_000, allowance: 500_000, remaining: 340_000),
-        starter: .init(used: 800_000, allowance: 2_000_000, remaining: 1_200_000))
+        starter: .init(used: 500_000, allowance: 2_000_000, remaining: 1_500_000),
+        remainingCredits: 1_840, weeklyCredits: 500, tokensPerCredit: 1_000)
     public var freeAiAvailable = true
     /// The promotion is over: status says `ended`, minting refuses.
     public var freeAiEnded = false

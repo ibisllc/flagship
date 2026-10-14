@@ -29,7 +29,7 @@ public final class FreeAiCreditsService {
         self.client = client
         self.username = username
         self.sign = sign ?? { bytes in
-            let irk = try await Keystore.deriveIRK(reason: "Use your free AI credits")
+            let irk = try await Keystore.deriveIRK(reason: "Use Flagship Inference")
             return try irk.signature(for: bytes)
         }
         self.now = now

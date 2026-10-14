@@ -1,6 +1,6 @@
 import Foundation
 
-/// Free AI credits: tokens Flagship hosts so an owner can try building apps
+/// Flagship Inference: AI Flagship hosts so an owner can try building apps
 /// without their own AI key. `.com` mints a short-lived token for the
 /// account (`POST /api/free-ai/token`); the box calls Flagship's inference
 /// endpoint with it. MIRRORS the webapp `lib/freeAi.js` and Android
@@ -8,8 +8,9 @@ import Foundation
 
 /// The account's free AI allowance, in weighted tokens: a weekly top-up
 /// (spent first; resets Monday 00:00 UTC, the rest doesn't carry over) and a
-/// one-time starter reserve. `week` / `starter` are absent from an older
-/// `.com`; the totals are always there.
+/// one-time starter reserve. `week` / `starter` and the credit fields are
+/// absent from an older `.com`; the token totals are always there. The apps
+/// show credits: one credit is 1,000 weighted tokens.
 public struct FreeAiCredits: Codable, Equatable, Sendable {
     public struct Week: Codable, Equatable, Sendable {
         public let used: Int64
@@ -41,13 +42,43 @@ public struct FreeAiCredits: Codable, Equatable, Sendable {
     public let usedTokens: Int64
     public let allowanceTokens: Int64
     public let remainingTokens: Int64
+    /// The week's and the starter's credits left together.
+    public let remainingCredits: Int64?
+    /// The weekly top-up in credits.
+    public let weeklyCredits: Int64?
+    public let tokensPerCredit: Int64?
     public init(usedTokens: Int64, allowanceTokens: Int64, remainingTokens: Int64,
-                week: Week? = nil, starter: Starter? = nil) {
+                week: Week? = nil, starter: Starter? = nil,
+                remainingCredits: Int64? = nil, weeklyCredits: Int64? = nil, tokensPerCredit: Int64? = nil) {
         self.usedTokens = usedTokens
         self.allowanceTokens = allowanceTokens
         self.remainingTokens = remainingTokens
         self.week = week
         self.starter = starter
+        self.remainingCredits = remainingCredits
+        self.weeklyCredits = weeklyCredits
+        self.tokensPerCredit = tokensPerCredit
+    }
+
+    /// One credit is this many weighted tokens.
+    public static let defaultTokensPerCredit: Int64 = 1000
+
+    private var perCredit: Int64 {
+        if let t = tokensPerCredit, t > 0 { return t }
+        return Self.defaultTokensPerCredit
+    }
+
+    /// Credits left: `.com`'s number, or converted from tokens (older `.com`).
+    public var creditsLeft: Int64 {
+        if let r = remainingCredits { return max(0, r) }
+        return max(0, remainingTokens) / perCredit
+    }
+
+    /// The weekly top-up in credits, nil when `.com` doesn't say.
+    public var creditsPerWeek: Int64? {
+        if let w = weeklyCredits { return max(0, w) }
+        if let w = week { return max(0, w.allowance) / perCredit }
+        return nil
     }
 }
 
@@ -256,43 +287,38 @@ public enum FreeAiEntryState: Equatable, Sendable {
 /// The words, shared with the webapp and Android. Nothing here is sold, so
 /// none of it says buy, upgrade or purchase.
 public enum FreeAiCopy {
-    public static let title = "Free AI credits"
+    public static let title = "Flagship Inference"
     /// The built-in provider entry, first in every key list.
     public static let providerTitle = "Flagship Inference"
     public static let providerSubtitle = "We use third-party providers and anonymize your requests."
     public static let builtInAccessibility = "Built-in provider. It can't be removed."
+    public static let useButton = "Use Flagship Inference →"
     public static let tooLong = "This build is too big for Flagship Inference. Try a smaller change, or use your own AI key."
     public static let note = "Used automatically when you build with AI and haven't added your own key."
-    public static let usedUp = "Your free AI credits for this week are used up. More arrive on Monday, or add your own AI key to keep building."
-    public static let busyToday = "Free building is busy today. Try again tomorrow, or use your own AI key."
-    public static let noServer = "Free AI credits start once one of your servers is running."
+    public static let usedUp = "You've used this week's Flagship Inference credits. More arrive on Monday, or add your own AI key to keep building."
+    public static let busyToday = "Flagship Inference is busy today. Try again tomorrow, or use your own AI key."
+    public static let noServer = "Flagship Inference starts once one of your servers is running."
     public static let ended = "The free building period has ended — use your own AI key."
-    public static let unavailable = "Free AI credits aren't available right now. You can add your own AI key."
+    public static let unavailable = "Flagship Inference isn't available right now. You can add your own AI key."
+    public static let couldNotMint = "Couldn't reach Flagship Inference. Try again, or add your own AI key."
     public static let addOwnKey = "Add your own key"
 
-    /// 820000 → "820k", 1000000 → "1M", 1500000 → "1.5M", 999 → "999".
-    public static func tokens(_ n: Int64) -> String {
-        let v = max(0, n)
-        if v < 1_000 { return String(v) }
-        if v < 1_000_000 { return "\(Int64((Double(v) / 1_000).rounded()))k" }
-        var s = String(format: "%.1f", Double(v) / 1_000_000)
-        if s.hasSuffix(".0") { s.removeLast(2) }
-        return s + "M"
+    /// A whole number with the locale's thousands separators: 1840 → "1,840".
+    public static func credits(_ n: Int64, locale: Locale = .current) -> String {
+        let f = NumberFormatter()
+        f.locale = locale
+        f.numberStyle = .decimal
+        f.maximumFractionDigits = 0
+        return f.string(from: NSNumber(value: max(0, n))) ?? String(max(0, n))
     }
 
-    /// "This week: 340k of 500k left · Starter reserve: 1.2M"; from an
-    /// older `.com` without the split, "820k of 1M free AI tokens left".
-    public static func balance(_ c: FreeAiCredits) -> String {
-        guard let w = c.week, let st = c.starter else {
-            return "\(tokens(c.remainingTokens)) of \(tokens(c.allowanceTokens)) free AI tokens left"
-        }
-        return "This week: \(tokens(w.remaining)) of \(tokens(w.allowance)) left · Starter reserve: \(tokens(st.remaining))"
-    }
-
-    /// The key-step row's subtitle: "340k left this week · 1.2M reserve"
-    /// ("820k left" from an older `.com`).
-    public static func left(_ c: FreeAiCredits) -> String {
-        guard let w = c.week, let st = c.starter else { return "\(tokens(c.remainingTokens)) left" }
-        return "\(tokens(w.remaining)) left this week · \(tokens(st.remaining)) reserve"
+    /// "1,840 free credits left · 500 added each week" ("1,840 free credits
+    /// left" from an older `.com` without the weekly split). The only line
+    /// that says "free", so it can go when the promotion ends. Settings and
+    /// the key step show the same line.
+    public static func balance(_ c: FreeAiCredits, locale: Locale = .current) -> String {
+        let left = "\(credits(c.creditsLeft, locale: locale)) free credits left"
+        guard let weekly = c.creditsPerWeek else { return left }
+        return "\(left) · \(credits(weekly, locale: locale)) added each week"
     }
 }

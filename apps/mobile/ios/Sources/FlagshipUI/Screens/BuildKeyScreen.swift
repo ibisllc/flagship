@@ -180,7 +180,7 @@ public struct BuildKeyScreen: View {
     private var freeAiStatusLine: String? {
         switch vm.freeAi {
         case .loading: return nil
-        case .usable(let credits): return FreeAiCopy.left(credits)
+        case .usable(let credits): return FreeAiCopy.balance(credits)
         case .disabled(let message, _): return message
         }
     }
