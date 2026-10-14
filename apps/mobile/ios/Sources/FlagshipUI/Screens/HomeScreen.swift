@@ -67,6 +67,10 @@ public struct HomeScreen: View {
     var onDismissRecoveryNudge: () -> Void = {}
     var onDismissRecoveryBackupBanner: () -> Void = {}
     var onSignInAgain: () -> Void = {}
+    /// Servers other accounts shared with this one (docs/share-a-server.md §8).
+    var sharedServers: [SharedServerRow] = []
+    var onOpenShared: (String) -> Void = { _ in }
+    var onOpenShareLink: () -> Void = {}
 
     /// Search text over the server list (name / description / fqdn). Bound to
     /// the native `.searchable` field so the large title collapses on scroll.
@@ -99,7 +103,10 @@ public struct HomeScreen: View {
         onSetUpRecovery: @escaping () -> Void = {},
         onDismissRecoveryNudge: @escaping () -> Void = {},
         onDismissRecoveryBackupBanner: @escaping () -> Void = {},
-        onSignInAgain: @escaping () -> Void = {}
+        onSignInAgain: @escaping () -> Void = {},
+        sharedServers: [SharedServerRow] = [],
+        onOpenShared: @escaping (String) -> Void = { _ in },
+        onOpenShareLink: @escaping () -> Void = {}
     ) {
         self.state = state
         self.username = username
@@ -124,6 +131,9 @@ public struct HomeScreen: View {
         self.onDismissRecoveryNudge = onDismissRecoveryNudge
         self.onDismissRecoveryBackupBanner = onDismissRecoveryBackupBanner
         self.onSignInAgain = onSignInAgain
+        self.sharedServers = sharedServers
+        self.onOpenShared = onOpenShared
+        self.onOpenShareLink = onOpenShareLink
     }
 
     /// The Home dashboard NEVER renders a "couldn't load" card. When there's
@@ -150,6 +160,7 @@ public struct HomeScreen: View {
                     quickActions(c: c)
                 }
                 serversSection(c: c)
+                SharedWithMeSection(rows: sharedServers, onOpen: onOpenShared, onOpenLink: onOpenShareLink)
                 switch state {
                 case .loaded(let d):
                     recentActivity(events: d.recentInstallEvents, c: c)

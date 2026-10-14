@@ -19,6 +19,13 @@ public enum HomeRoute: Hashable, Sendable {
     /// the claim. Distinct from a top-level menu entry — take-over is always a
     /// link/QR ingestion, never a browsed action.
     case transferAcquirer(offerText: String)
+    /// Share this server (docs/share-a-server.md §8): open a share link. Nil
+    /// parts open the paste/scan entry.
+    case acceptShare(shareId: String?, secretHex: String?)
+    /// A server another account shared with this one.
+    case sharedServer(shareId: String)
+    /// One app on a shared server.
+    case sharedApp(shareId: String, serviceId: String)
 }
 
 public enum AppsRoute: Hashable, Sendable {

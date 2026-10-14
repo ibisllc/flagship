@@ -46,9 +46,9 @@ public struct AddDeviceScreen: View {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundColor(c.warning)
                 VStack(alignment: .leading, spacing: FS.space.s1) {
-                    Text("This shares your account keys")
+                    Text("Only for your own devices")
                         .font(FS.font.h4()).foregroundColor(c.text)
-                    Text("Anyone who scans this code can join your account. Only add a device for a person you trust. The code is for one device and expires shortly.")
+                    Text("Anyone who scans this code holds your whole account, so add only your own phones and tablets. To give another person access, use Share this server on the server's page. The code is for one device and expires shortly.")
                         .font(FS.font.bodySm()).foregroundColor(c.textMuted)
                 }
             }

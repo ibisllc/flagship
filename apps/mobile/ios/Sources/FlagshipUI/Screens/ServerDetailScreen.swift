@@ -246,6 +246,7 @@ public struct ServerDetailScreen: View {
                     deviceRow(d: d, c: c)
                     BootUnlockCard(serverDomain: d.serverFqdn)
                     PreferredServerCard(serverDomain: d.serverFqdn)
+                    ShareServerCard(serverDomain: d.serverFqdn)
                     FrontPageCard(serverDomain: d.serverFqdn)
                     LockPowerCard(serverDomain: d.serverFqdn)
                     DeadManCard(serverDomain: d.serverFqdn, serverName: serverName ?? d.serverFqdn)

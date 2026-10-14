@@ -523,6 +523,12 @@ public struct SettingsScreen: View {
                         .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
                     }
                     .accessibilityIdentifier("settings-add-device")
+                    Text("For your own phones and tablets. To give another person access, use Share this server on the server's page.")
+                        .font(FS.font.caption())
+                        .foregroundColor(c.textMuted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("settings-add-device-note")
                     Button(action: onScanPairingCode) {
                         HStack(spacing: FS.space.s2) {
                             Image(systemName: "qrcode.viewfinder")

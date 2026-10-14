@@ -94,7 +94,7 @@ public struct SettingsTab: View {
                         Task { @MainActor in
                             do {
                                 try await BiometricGate().evaluate(
-                                    reason: "Add a device that can hold your account key")
+                                    reason: "Add one of your own phones or tablets")
                                 path.append(.addDevice)
                             } catch {
                                 // Cancelled or failed — stay put.

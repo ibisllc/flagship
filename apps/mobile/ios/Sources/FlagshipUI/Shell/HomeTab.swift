@@ -79,6 +79,10 @@ public struct HomeTab: View {
                 path.append(route)
             }
             _ = linker.consume()
+        case .shareServer(let shareId, let secretHex):
+            let route = HomeRoute.acceptShare(shareId: shareId, secretHex: secretHex)
+            if path.last != route { path.append(route) }
+            _ = linker.consume()
         default:
             break
         }
@@ -138,6 +142,7 @@ public struct HomeTab: View {
                         await preferDirectLeads()
                         await approvalWatcher?.pollOnce()
                         await vm.load()
+                        await SharedWithMeStore.shared.load(allowAuth: true)
                     },
                     onSetUpRecovery: {
                         // Drop the user onto the Settings tab's Recovery
@@ -157,7 +162,10 @@ public struct HomeTab: View {
                         // then pulls the user's cloud-stored UMK to
                         // re-pair on this device.
                         app.signOut()
-                    }
+                    },
+                    sharedServers: SharedWithMeStore.shared.rows,
+                    onOpenShared: { path.append(.sharedServer(shareId: $0)) },
+                    onOpenShareLink: { path.append(.acceptShare(shareId: nil, secretHex: nil)) }
                 )
             } else {
                 ProgressView()
@@ -171,6 +179,8 @@ public struct HomeTab: View {
             // loading, so it's visible (and cancellable) immediately on launch.
             restorePendingServers()
             if case .idle = vm?.detail { await vm?.load() }
+            if path.isEmpty, let route = ServerShareDemo.initialRoute(pods: app.pods) { path.append(route) }
+            await SharedWithMeStore.shared.load(allowAuth: false)
             // #43 — once per session, reconcile the pod list against server
             // truth (registered /pods + the IRK-signed outstanding-orders
             // endpoint): surface orders we have no local record of, drop dead
@@ -300,6 +310,17 @@ public struct HomeTab: View {
             }
         case .transferAcquirer(let offerText):
             TransferAcquirerContainer(offerText: offerText)
+        case .acceptShare(let shareId, let secretHex):
+            ShareAcceptScreen(shareId: shareId, secretHex: secretHex) { id in
+                path.removeAll()
+                path.append(.sharedServer(shareId: id))
+            }
+        case .sharedServer(let shareId):
+            SharedServerScreen(shareId: shareId,
+                               onOpenApp: { path.append(.sharedApp(shareId: shareId, serviceId: $0)) },
+                               onLeft: { path.removeAll() })
+        case .sharedApp(let shareId, let serviceId):
+            SharedAppScreen(shareId: shareId, serviceId: serviceId)
         }
     }
 

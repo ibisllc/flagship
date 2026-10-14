@@ -105,6 +105,11 @@ public enum DeepLink: Equatable, Sendable {
     /// acquirer still MUST verify the offer signature + expiry before any claim.
     case transferOffer(offerJSON: String)
 
+    /// Share this server (docs/share-a-server.md §5.1): another account's link,
+    /// `https://<apex>/share#s=<shareId>&k=<secret>` or `flagship://share?s=&k=`.
+    /// The secret stays in the fragment, so `.com` never sees it.
+    case shareServer(shareId: String, secretHex: String)
+
     /// Parse a `flagship://...` URL (custom scheme) OR a Flagship
     /// UNIVERSAL LINK (`https://flagshipserver.com/join?…`). The custom
     /// scheme mirrors the webapp's `?view=...` router; universal links
@@ -145,6 +150,12 @@ public enum DeepLink: Equatable, Sendable {
                 return .transferOffer(offerJSON: json)
             }
             return nil
+        }
+        if url.scheme == "https",
+           (url.host == Endpoints.controlHost || url.host == "www.\(Endpoints.controlHost)"),
+           url.path == "/share" {
+            guard let parts = ServerShare.parseShareLink(url.absoluteString) else { return nil }
+            return .shareServer(shareId: parts.shareId, secretHex: parts.secretHex)
         }
         // Universal link: a service-access invite served from a BOX —
         // `https://<server>.<user>.flagship.services/invite#<secret>`. The
@@ -239,6 +250,9 @@ public enum DeepLink: Equatable, Sendable {
                 return .transferOffer(offerJSON: json)
             }
             return nil
+        case "share":
+            guard let parts = ServerShare.parseShareLink(url.absoluteString) else { return nil }
+            return .shareServer(shareId: parts.shareId, secretHex: parts.secretHex)
         case "access":
             // flagship://access?server=<fqdn>&svc=<label>&ref=<serviceRef>&page=<pageId>
             // — the web-experience-gating knock authorization (the box's knock

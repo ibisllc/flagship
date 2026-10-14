@@ -139,6 +139,42 @@ public enum BootAuth {
         return "\(scheme) \(base64url(json))"
     }
 
+    /// The share-role header (docs/share-a-server.md §5.4): another account's
+    /// per-share member key, which the gate accepts only for a server whose
+    /// owner deposited that key a sealed boot copy.
+    public static func shareHeader(
+        serverDomain: String,
+        method: String,
+        path: String,
+        memberKey: Curve25519.Signing.PrivateKey,
+        now: Int64 = Int64(Date().timeIntervalSince1970 * 1000),
+        nonce: Data? = nil
+    ) throws -> String {
+        let n = nonce ?? randomNonce()
+        let pubHex = HexUtil.encode(memberKey.publicKey.rawRepresentation)
+        let nonceHex = HexUtil.encode(n)
+        let canon = canonicalBytes(
+            role: "share",
+            serverDomain: serverDomain,
+            method: method,
+            path: path,
+            pubKeyHex: pubHex,
+            nonceHex: nonceHex,
+            issuedAt: now
+        )
+        let env = Envelope(
+            role: "share",
+            serverDomain: serverDomain,
+            method: method.uppercased(),
+            path: path,
+            pubKeyHex: pubHex,
+            nonceHex: nonceHex,
+            issuedAt: now,
+            signatureHex: HexUtil.encode(try memberKey.signature(for: canon))
+        )
+        return "\(scheme) \(base64url(try JSONEncoder().encode(env)))"
+    }
+
     /// base64url without padding — matches gate.ts `b64urlDecode` (which
     /// re-pads on the way in).
     static func base64url(_ data: Data) -> String {

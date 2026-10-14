@@ -269,6 +269,13 @@ public struct RootShell: View {
             pendingKnock = KnockTarget(serverDomain: serverDomain, svc: svc, serviceRef: serviceRef, pageId: pageId)
             return
         }
+        if case .shareServer = link {
+            // Accepting signs with this account's keys: wait for unlock, then
+            // let HomeTab push the accept screen from the same pending link.
+            guard app.isUnlocked else { return }
+            selected = .home
+            return
+        }
         if case .transferOffer = link {
             // Slice C — take over a transferred box. Hold behind the lock like
             // invite/knock (the claim rides the acquirer-IRK biometric); once
@@ -291,7 +298,7 @@ public struct RootShell: View {
         case .appDetail, .vibeCodeChat, .startVibeCode,
              .appDetailOnServer, .createAppOnServer: return .apps
         case .recoverySetup, .joinAccount, .companionDockApproval: return .settings
-        case .transferOffer:                          return .home
+        case .transferOffer, .shareServer:            return .home
         case .inviteRedeem, .inviteAccept, .knockAuthorize: return selected
         }
     }
