@@ -140,7 +140,7 @@ fun FlagshipInferenceSettingsRow(
 /** The key step's first entry: use Flagship Inference for this build, or why not. */
 @Composable
 fun FlagshipInferenceStepRow(state: FreeAiState, busy: Boolean, lastUsed: Boolean, onUse: () -> Unit) {
-    val entry = FreeAiCopy.entry(state, compact = true)
+    val entry = FreeAiCopy.entry(state)
     FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.testTag("build-key-free-ai")) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             FlagshipInferenceText(entry, if (lastUsed && entry.usable) "Last used" else null, Modifier.weight(1f))

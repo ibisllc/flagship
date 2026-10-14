@@ -73,8 +73,8 @@ import kotlinx.coroutines.launch
 /**
  * D.6.1 — VibeCodeProviderPickView.
  *
- * Two cards: free AI credits and bring-your-own-key. Both go through the
- * AI-key step, which lists free credits first.
+ * Two cards: Flagship Inference and bring-your-own-key. Both go through the
+ * AI-key step, which lists Flagship Inference first.
  */
 @Composable
 fun VibeCodeProviderPickScreen(nav: NavController) {
@@ -98,7 +98,7 @@ fun VibeCodeProviderPickScreen(nav: NavController) {
         Spacer(Modifier.height(FS.space.s8))
 
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-            // Free AI credits card
+            // Flagship Inference card
             FSCard(padding = PaddingValues(FS.space.s6)) {
                 Text(
                     text = FreeAiCopy.TITLE,
@@ -113,7 +113,7 @@ fun VibeCodeProviderPickScreen(nav: NavController) {
                 )
                 Spacer(Modifier.height(FS.space.s4))
                 FSPrimaryButton(
-                    label = "Use free AI credits →",
+                    label = FreeAiCopy.USE_BUTTON,
                     onClick = { nav.navigate("vibe/key") },
                     block = true,
                 )

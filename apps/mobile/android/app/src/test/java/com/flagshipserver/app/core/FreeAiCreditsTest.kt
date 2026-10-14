@@ -1,4 +1,4 @@
-// Free AI credits client: the token formatter shared with the webapp + iOS,
+// Flagship Inference client: the credits line shared with the webapp + iOS,
 // the .com answers (credential / used up / unavailable), the signed body,
 // on-by-default and the re-mint before a reply.
 
@@ -64,40 +64,65 @@ class FreeAiCreditsTest {
 
     @After fun tearDown() = FreeAiSessions.clear()
 
-    @Test fun formatsTokenCounts() {
-        assertEquals("0", FreeAiCopy.tokens(0))
-        assertEquals("999", FreeAiCopy.tokens(999))
-        assertEquals("1k", FreeAiCopy.tokens(1_000))
-        assertEquals("820k", FreeAiCopy.tokens(820_000))
-        assertEquals("1M", FreeAiCopy.tokens(1_000_000))
-        assertEquals("1.5M", FreeAiCopy.tokens(1_500_000))
-        assertEquals("2M", FreeAiCopy.tokens(2_000_000))
-        assertEquals("0", FreeAiCopy.tokens(-5))
-        assertEquals(
-            "820k of 1M free AI tokens left",
-            FreeAiCopy.leftLine(FreeAiCreditsInfo(180_000, 1_000_000, 820_000)),
-        )
-    }
+    private val LINE = "1,840 free credits left · 500 added each week"
 
     private val weekly = FreeAiCreditsInfo(
-        usedTokens = 960_000,
+        usedTokens = 660_000,
         allowanceTokens = 2_500_000,
-        remainingTokens = 1_540_000,
+        remainingTokens = 1_840_000,
         week = FreeAiWeek(used = 160_000, allowance = 500_000, remaining = 340_000, resetsAt = 1_760_918_400_000),
-        starter = FreeAiStarter(used = 800_000, allowance = 2_000_000, remaining = 1_200_000),
+        starter = FreeAiStarter(used = 500_000, allowance = 2_000_000, remaining = 1_500_000),
+        remainingCredits = 1_840,
+        weeklyCredits = 500,
+        tokensPerCredit = 1_000,
     )
 
-    @Test fun showsThisWeekAndTheStarterReserve() {
-        assertEquals("This week: 340k of 500k left · Starter reserve: 1.2M", FreeAiCopy.leftLine(weekly))
-        assertEquals("340k left this week · 1.2M reserve", FreeAiCopy.rowSubtitle(weekly))
-        // An older .com without the two parts still reads.
-        assertEquals("820k left", FreeAiCopy.rowSubtitle(FreeAiCreditsInfo(180_000, 1_000_000, 820_000)))
+    private var savedLocale: java.util.Locale = java.util.Locale.getDefault()
+
+    @org.junit.Before fun pinLocale() {
+        savedLocale = java.util.Locale.getDefault()
+        java.util.Locale.setDefault(java.util.Locale.US)
+    }
+
+    @After fun restoreLocale() = java.util.Locale.setDefault(savedLocale)
+
+    @Test fun showsCreditsLeftAndTheWeeklyTopUp() {
+        assertEquals("0", FreeAiCopy.credits(0, java.util.Locale.US))
+        assertEquals("1,840", FreeAiCopy.credits(1_840, java.util.Locale.US))
+        assertEquals("1.234.567", FreeAiCopy.credits(1_234_567, java.util.Locale.GERMANY))
+        assertEquals("0", FreeAiCopy.credits(-5, java.util.Locale.US))
+        assertEquals(LINE, FreeAiCopy.leftLine(weekly))
+        assertEquals("1.840 free credits left · 500 added each week", FreeAiCopy.leftLine(weekly, java.util.Locale.GERMANY))
+        // An older .com sends only tokens: 1 credit = 1,000 weighted tokens.
+        val tokensOnly = weekly.copy(remainingTokens = 1_840_999, remainingCredits = null, weeklyCredits = null, tokensPerCredit = null)
+        assertEquals(LINE, FreeAiCopy.leftLine(tokensOnly))
+        assertEquals("820 free credits left", FreeAiCopy.leftLine(FreeAiCreditsInfo(180_000, 1_000_000, 820_000)))
+    }
+
+    @Test fun decodesTheCreditFields() {
+        val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+        val c = json.decodeFromString(
+            FreeAiCreditsInfo.serializer(),
+            """{"usedTokens":0,"allowanceTokens":2500000,"remainingTokens":2500000,"remainingCredits":2500,"weeklyCredits":500,"tokensPerCredit":1000}""",
+        )
+        assertEquals(2_500L, c.creditsLeft)
+        assertEquals(500L, c.creditsPerWeek)
+    }
+
+    @Test fun saysFlagshipInferenceNotFreeAiCredits() {
+        assertEquals("Flagship Inference", FreeAiCopy.TITLE)
+        assertEquals("Use Flagship Inference →", FreeAiCopy.USE_BUTTON)
+        assertEquals("Flagship Inference isn't available right now. You can add your own AI key.", FreeAiCopy.UNAVAILABLE)
+        for (m in listOf(FreeAiCopy.USED_UP, FreeAiCopy.UNAVAILABLE, FreeAiCopy.BUSY_TODAY, FreeAiCopy.NO_SERVER, FreeAiCopy.TOO_LONG)) {
+            assertTrue(m, m.contains("Flagship Inference"))
+            assertFalse(m, m.lowercase().contains("free ai") || m.lowercase().contains("token"))
+        }
     }
 
     @Test fun viewsMirrorTheWebapp() {
         assertNull(FreeAiCopy.view(FreeAiState.Hidden))
         assertEquals(
-            FreeAiView(true, "This week: 340k of 500k left · Starter reserve: 1.2M", false),
+            FreeAiView(true, LINE, false),
             FreeAiCopy.view(FreeAiState.Available(weekly)),
         )
         val spent = weekly.copy(remainingTokens = 0)
@@ -121,14 +146,7 @@ class FreeAiCreditsTest {
 
     @Test fun theFlagshipInferenceEntryIsAlwaysListed() {
         assertEquals(FlagshipInferenceEntry(false, FreeAiCopy.CHECKING, false, loading = true), FreeAiCopy.entry(FreeAiState.Hidden))
-        assertEquals(
-            FlagshipInferenceEntry(true, "This week: 340k of 500k left · Starter reserve: 1.2M", false),
-            FreeAiCopy.entry(FreeAiState.Available(weekly)),
-        )
-        assertEquals(
-            FlagshipInferenceEntry(true, "340k left this week · 1.2M reserve", false),
-            FreeAiCopy.entry(FreeAiState.Available(weekly), compact = true),
-        )
+        assertEquals(FlagshipInferenceEntry(true, LINE, false), FreeAiCopy.entry(FreeAiState.Available(weekly)))
         val spent = weekly.copy(remainingTokens = 0)
         assertEquals(FlagshipInferenceEntry(false, FreeAiCopy.USED_UP, true), FreeAiCopy.entry(FreeAiState.Available(spent)))
         assertEquals(FlagshipInferenceEntry(false, FreeAiCopy.BUSY_TODAY, true), FreeAiCopy.entry(FreeAiState.Blocked("busy-today")))
@@ -177,21 +195,21 @@ class FreeAiCreditsTest {
     @Test fun mintMapsUsedUpAndUnavailable() = runTest {
         val t = FakeTransport(
             429,
-            """{"error":"Your free AI credits are used up. Add your own AI key to keep building.","code":"free-ai-used-up","credits":{"usedTokens":1000000,"allowanceTokens":1000000,"remainingTokens":0}}""",
+            """{"error":"You've used this week's Flagship Inference credits. More arrive on Monday, or add your own AI key to keep building.","code":"free-ai-used-up","credits":{"usedTokens":1000000,"allowanceTokens":1000000,"remainingTokens":0}}""",
         )
         val used = service(t).mint("box")
         used as FreeAiMint.UsedUp
-        assertEquals("Your free AI credits are used up. Add your own AI key to keep building.", used.message)
+        assertEquals("You've used this week's Flagship Inference credits. More arrive on Monday, or add your own AI key to keep building.", used.message)
         assertEquals(0L, used.credits?.remainingTokens)
 
         t.status = 503
-        t.body = """{"error":"Free AI isn't available right now. You can add your own AI key.","code":"free-ai-unavailable"}"""
+        t.body = """{"error":"Flagship Inference isn't available right now. You can add your own AI key.","code":"free-ai-unavailable"}"""
         assertTrue(service(t).mint("box") is FreeAiMint.Unavailable)
     }
 
     @Test fun mintMapsByCodeFirst() = runTest {
         // A 429 is "busy today" when .com says so, not "used up".
-        val t = FakeTransport(429, """{"error":"Free building is busy today. Try again tomorrow, or use your own AI key.","code":"free-ai-busy-today"}""")
+        val t = FakeTransport(429, """{"error":"Flagship Inference is busy today. Try again tomorrow, or use your own AI key.","code":"free-ai-busy-today"}""")
         val busy = service(t).mint("box")
         busy as FreeAiMint.Refused
         assertEquals("free-ai-busy-today", busy.code)
@@ -223,7 +241,7 @@ class FreeAiCreditsTest {
     @Test fun statusDecodesTheWeekTheReserveAndTheReasons() = runTest {
         val t = FakeTransport(
             200,
-            """{"available":true,"ended":false,"reason":null,"credits":{"week":{"used":160000,"allowance":500000,"remaining":340000,"resetsAt":1760918400000},"starter":{"used":800000,"allowance":2000000,"remaining":1200000},"usedTokens":960000,"allowanceTokens":2500000,"remainingTokens":1540000}}""",
+            """{"available":true,"ended":false,"reason":null,"credits":{"week":{"used":160000,"allowance":500000,"remaining":340000,"resetsAt":1760918400000},"starter":{"used":500000,"allowance":2000000,"remaining":1500000},"usedTokens":660000,"allowanceTokens":2500000,"remainingTokens":1840000,"remainingCredits":1840,"weeklyCredits":500,"tokensPerCredit":1000}}""",
         )
         val s = service(t).status() as FreeAiState.Available
         assertEquals(weekly, s.credits)
@@ -293,10 +311,10 @@ class FreeAiCreditsTest {
         assertEquals("home.harry.flagship.services", sent.request.serverFqdn)
 
         t.status = 429
-        t.body = """{"error":"Your free AI credits are used up. Add your own AI key to keep building.","code":"free-ai-used-up"}"""
+        t.body = """{"error":"You've used this week's Flagship Inference credits. More arrive on Monday, or add your own AI key to keep building.","code":"free-ai-used-up"}"""
         val stop = service(t).refreshFor("vc-free")
         stop as FreeAiRefresh.Stop
-        assertEquals("Your free AI credits are used up. Add your own AI key to keep building.", stop.message)
+        assertEquals("You've used this week's Flagship Inference credits. More arrive on Monday, or add your own AI key to keep building.", stop.message)
         // Without a message from .com the app's own copy is shown.
         t.body = "{}"
         assertEquals(FreeAiCopy.USED_UP, (service(t).refreshFor("vc-free") as FreeAiRefresh.Stop).message)

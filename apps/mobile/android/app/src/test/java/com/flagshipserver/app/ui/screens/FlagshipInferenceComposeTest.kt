@@ -72,10 +72,12 @@ class FlagshipInferenceComposeTest {
     )
 
     private val available =
-        """{"available":true,"ended":false,"credits":{"week":{"used":160000,"allowance":500000,"remaining":340000},"starter":{"used":800000,"allowance":2000000,"remaining":1200000},"usedTokens":960000,"allowanceTokens":2500000,"remainingTokens":1540000}}"""
+        """{"available":true,"ended":false,"credits":{"week":{"used":160000,"allowance":500000,"remaining":340000},"starter":{"used":500000,"allowance":2000000,"remaining":1500000},"usedTokens":660000,"allowanceTokens":2500000,"remainingTokens":1840000,"remainingCredits":1840,"weeklyCredits":500,"tokensPerCredit":1000}}"""
+    private val line = "1,840 free credits left · 500 added each week"
     private val ended = """{"available":false,"ended":true,"credits":{"usedTokens":0,"allowanceTokens":0,"remainingTokens":0}}"""
 
     @Before fun setUp() {
+        java.util.Locale.setDefault(java.util.Locale.US)
         val ctx = ApplicationProvider.getApplicationContext<Context>()
         AiKeyStore.attachForTest(ctx.getSharedPreferences("flagship-inference-compose", Context.MODE_PRIVATE))
         AiKeyStore.clear()
@@ -107,7 +109,7 @@ class FlagshipInferenceComposeTest {
         }
         composeRule.onNodeWithText(FreeAiCopy.PROVIDER_TITLE, useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNodeWithText(FreeAiCopy.PROVIDER_SUBTITLE, useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("340k left this week · 1.2M reserve", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText(line, useUnmergedTree = true).assertIsDisplayed()
         composeRule.onNode(hasContentDescription(FreeAiCopy.A11Y_LABEL, substring = true)).assertExists()
         // One delete: the saved key's, none on Flagship Inference.
         composeRule.onAllNodes(hasTestTag("build-key-delete")).fetchSemanticsNodes().size.let { check(it == 1) { "deletes: $it" } }
@@ -116,7 +118,7 @@ class FlagshipInferenceComposeTest {
         val inference = composeRule.onNodeWithTag("build-key-free-ai").fetchSemanticsNode().boundsInRoot.top
         val saved = composeRule.onAllNodes(hasText("Saved keys")).fetchSemanticsNodes().single().boundsInRoot.top
         check(inference < saved)
-        shot("inference-android")
+        shot("credits-android-key-step")
     }
 
     @Test fun settingsListsFlagshipInferenceFirstAndCanMakeItDefault() {
@@ -131,9 +133,9 @@ class FlagshipInferenceComposeTest {
             composeRule.onAllNodes(hasTestTag("free-ai-make-default")).fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithText(FreeAiCopy.PROVIDER_TITLE, useUnmergedTree = true).assertIsDisplayed()
-        composeRule.onNodeWithText("This week: 340k of 500k left · Starter reserve: 1.2M", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithText(line, useUnmergedTree = true).assertIsDisplayed()
         composeRule.onAllNodes(hasText("Delete")).fetchSemanticsNodes().size.let { check(it == 1) { "deletes: $it" } }
-        shot("inference-android-settings")
+        shot("credits-android-settings")
         composeRule.onNodeWithTag("free-ai-make-default").performClick()
         composeRule.waitForIdle()
         check(AiKeyStore.activeId() == AiKeyStore.FLAGSHIP_INFERENCE_ID)
@@ -147,5 +149,14 @@ class FlagshipInferenceComposeTest {
         }
         composeRule.onNodeWithText(FreeAiCopy.PROVIDER_TITLE, useUnmergedTree = true).assertIsDisplayed()
         check(composeRule.onAllNodes(hasTestTag("build-key-use-free-ai")).fetchSemanticsNodes().isEmpty())
+        shot("credits-android-ended")
+    }
+
+    @Test fun theBuildChooserOffersFlagshipInference() {
+        screen { VibeCodeProviderPickScreen(androidx.navigation.compose.rememberNavController()) }
+        composeRule.onNodeWithText(FreeAiCopy.TITLE).assertIsDisplayed()
+        composeRule.onNodeWithText(FreeAiCopy.USE_BUTTON).assertIsDisplayed()
+        check(composeRule.onAllNodes(hasText("free AI", substring = true, ignoreCase = true)).fetchSemanticsNodes().isEmpty())
+        shot("credits-android-chooser")
     }
 }

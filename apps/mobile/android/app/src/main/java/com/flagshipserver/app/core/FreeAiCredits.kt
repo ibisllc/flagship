@@ -1,4 +1,4 @@
-// Free AI credits: a short-lived Flagship AI credential the box uses when the
+// Flagship Inference: a short-lived Flagship AI credential the box uses when the
 // owner hasn't added their own AI key. Kotlin mirror of the webapp's
 // lib/freeAi.js and iOS FreeAiCredits.
 //
@@ -82,7 +82,10 @@ data class FreeAiStarter(
     val remaining: Long = 0,
 )
 
-/** Totals across both, plus the two parts (absent from an older `.com`). */
+/**
+ * Totals across both, plus the two parts and the credit numbers (absent from
+ * an older `.com`). The apps show credits: one credit is 1,000 weighted tokens.
+ */
 @Serializable
 data class FreeAiCreditsInfo(
     val usedTokens: Long = 0,
@@ -90,7 +93,24 @@ data class FreeAiCreditsInfo(
     val remainingTokens: Long = 0,
     val week: FreeAiWeek? = null,
     val starter: FreeAiStarter? = null,
-)
+    /** The week's and the starter's credits left together. */
+    val remainingCredits: Long? = null,
+    /** The weekly top-up in credits. */
+    val weeklyCredits: Long? = null,
+    val tokensPerCredit: Long? = null,
+) {
+    private val perCredit: Long get() = tokensPerCredit?.takeIf { it > 0 } ?: DEFAULT_TOKENS_PER_CREDIT
+
+    /** Credits left: `.com`'s number, or converted from tokens (older `.com`). */
+    val creditsLeft: Long get() = remainingCredits?.coerceAtLeast(0) ?: (remainingTokens.coerceAtLeast(0) / perCredit)
+
+    /** The weekly top-up in credits, null when `.com` doesn't say. */
+    val creditsPerWeek: Long? get() = weeklyCredits?.coerceAtLeast(0) ?: week?.let { it.allowance.coerceAtLeast(0) / perCredit }
+
+    companion object {
+        const val DEFAULT_TOKENS_PER_CREDIT = 1_000L
+    }
+}
 
 @Serializable
 data class FreeAiWireCredential(
@@ -181,13 +201,14 @@ object FreeAiCopy {
     const val PROVIDER_SUBTITLE = "We use third-party providers and anonymize your requests."
     const val BUILT_IN_A11Y = "Built-in provider. It can't be removed."
     const val CHECKING = "Checking…"
-    const val TITLE = "Free AI credits"
+    const val TITLE = "Flagship Inference"
+    const val USE_BUTTON = "Use Flagship Inference →"
     const val NOTE = "Used automatically when you build with AI and haven't added your own key."
     const val USED_UP =
-        "Your free AI credits for this week are used up. More arrive on Monday, or add your own AI key to keep building."
-    const val UNAVAILABLE = "Free AI credits aren't available right now. You can add your own AI key."
-    const val BUSY_TODAY = "Free building is busy today. Try again tomorrow, or use your own AI key."
-    const val NO_SERVER = "Free AI credits start once one of your servers is running."
+        "You've used this week's Flagship Inference credits. More arrive on Monday, or add your own AI key to keep building."
+    const val UNAVAILABLE = "Flagship Inference isn't available right now. You can add your own AI key."
+    const val BUSY_TODAY = "Flagship Inference is busy today. Try again tomorrow, or use your own AI key."
+    const val NO_SERVER = "Flagship Inference starts once one of your servers is running."
     const val ENDED = "The free building period has ended — use your own AI key."
     const val TOO_LONG = "This build is too big for Flagship Inference. Try a smaller change, or use your own AI key."
     const val ADD_OWN_KEY = "Add your own key"
@@ -225,44 +246,26 @@ object FreeAiCopy {
 
     /**
      * The Flagship Inference entry for [state]; never null, so the entry is
-     * always listed. [compact] uses the key step's short balance line.
+     * always listed. Settings and the key step show the same balance line.
      */
-    fun entry(state: FreeAiState, compact: Boolean = false): FlagshipInferenceEntry {
+    fun entry(state: FreeAiState): FlagshipInferenceEntry {
         val v = view(state) ?: return FlagshipInferenceEntry(false, CHECKING, false, loading = true)
-        if (v.usable && state is FreeAiState.Available) {
-            return FlagshipInferenceEntry(true, if (compact) rowSubtitle(state.credits) else leftLine(state.credits), false)
-        }
         return FlagshipInferenceEntry(v.usable, v.text, v.offerOwnKey)
     }
 
-    /** 820000 → "820k", 1000000 → "1M", 1500000 → "1.5M". */
-    fun tokens(n: Long): String {
-        val v = if (n < 0) 0L else n
-        return when {
-            v < 1_000 -> v.toString()
-            v < 1_000_000 -> "${Math.round(v / 1_000.0)}k"
-            else -> {
-                val m = Math.round(v / 100_000.0) / 10.0
-                val s = if (m == Math.floor(m)) m.toLong().toString() else m.toString()
-                "${s}M"
-            }
-        }
-    }
+    /** A whole number with the locale's thousands separators: 1840 → "1,840". */
+    fun credits(n: Long, locale: java.util.Locale = java.util.Locale.getDefault()): String =
+        java.text.NumberFormat.getIntegerInstance(locale).format(n.coerceAtLeast(0))
 
-    /** "This week: 340k of 500k left · Starter reserve: 1.2M". */
-    fun leftLine(c: FreeAiCreditsInfo): String {
-        val w = c.week
-        val st = c.starter
-        if (w == null || st == null) return "${tokens(c.remainingTokens)} of ${tokens(c.allowanceTokens)} free AI tokens left"
-        return "This week: ${tokens(w.remaining)} of ${tokens(w.allowance)} left · Starter reserve: ${tokens(st.remaining)}"
-    }
-
-    /** "340k left this week · 1.2M reserve". */
-    fun rowSubtitle(c: FreeAiCreditsInfo): String {
-        val w = c.week
-        val st = c.starter
-        if (w == null || st == null) return "${tokens(c.remainingTokens)} left"
-        return "${tokens(w.remaining)} left this week · ${tokens(st.remaining)} reserve"
+    /**
+     * "1,840 free credits left · 500 added each week" ("1,840 free credits
+     * left" from an older `.com` without the weekly split). The only line that
+     * says "free", so it can go when the promotion ends.
+     */
+    fun leftLine(c: FreeAiCreditsInfo, locale: java.util.Locale = java.util.Locale.getDefault()): String {
+        val left = "${credits(c.creditsLeft, locale)} free credits left"
+        val weekly = c.creditsPerWeek ?: return left
+        return "$left · ${credits(weekly, locale)} added each week"
     }
 }
 
@@ -336,7 +339,7 @@ class FreeAiClient(
 class FreeAiService(
     private val client: FreeAiClient = FreeAiClient(),
     private val signer: suspend () -> Ed25519Sign = {
-        com.flagshipserver.app.keystore.Keystore.deriveIRK(reason = "Use your free AI credits")
+        com.flagshipserver.app.keystore.Keystore.deriveIRK(reason = "Use Flagship Inference")
     },
     private val username: () -> String? = { null },
     private val now: () -> Long = { System.currentTimeMillis() },

@@ -81,7 +81,7 @@ class AiKeysFreeAiTest {
         val t = Canned(200, full)
         vm.loadFreeAi(service(t))
         t.status = 429
-        t.body = """{"error":"Your free AI credits are used up. Add your own AI key to keep building.","code":"free-ai-used-up"}"""
+        t.body = """{"error":"You've used this week's Flagship Inference credits. More arrive on Monday, or add your own AI key to keep building.","code":"free-ai-used-up"}"""
         val r = vm.useFreeAi(service(t), "home.harry.flagship.services")
         assertTrue(r is FreeAiMint.UsedUp)
         val s = vm.freeAi.value as FreeAiState.Available
