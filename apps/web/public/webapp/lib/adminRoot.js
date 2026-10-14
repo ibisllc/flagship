@@ -10,9 +10,9 @@
 // the first `|`). A tag in {@link SENSITIVE_TAGS} signs under the admin root;
 // EVERYTHING ELSE (mailbox-auth `flagship/device-endpoint-claim/v1`, pairing,
 // deposits, journal, …) signs with the legacy key. This is why a single gated
-// signer can be dropped into a mailbox-wrapped flow (decommission / transfer /
-// set-leader): the ORDER routes to the admin root while the co-signed mailbox
-// AUTH stays the membership IRK the deposit lane requires. It is fail-SAFE: an
+// signer can be dropped into a mailbox-wrapped flow (decommission / transfer):
+// the ORDER routes to the admin root while the co-signed mailbox AUTH stays
+// the membership IRK the deposit lane requires. It is fail-SAFE: an
 // unrecognised tag never accidentally admin-signs a membership credential.
 //
 // The gate keys entirely off `session.adminRootSeed` (populated by
@@ -42,7 +42,7 @@ export const SENSITIVE_TAGS = new Set([
   "flagship/root-entitlement/v1", //       authorize a box to serve (boot approval)
   "flagship/server-decommission/v1", //    replace / decommission
   "flagship/order/set-front-page/v1", //   apex front page
-  "flagship/set-leader/v1", //             preferred-server vote
+  "flagship/server-order/v1", //           the owner's server order (who leads)
   "flagship/order/power-off/v1", //        power off / restart
   "flagship/set-deadman-policy/v1", //     dead-man policy
   "flagship/deadman-affirm/v1", //         dead-man affirmation

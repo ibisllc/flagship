@@ -6,7 +6,6 @@ import {
   deriveIRK,
   carrierHexToCgkDelivery,
   openAndVerifyCgkDelivery,
-  verifySetLeader,
 } from "@flagship/protocol";
 // The browser-shipping modules — importing the SAME files we serve to clients
 // means these tests guard the exact bytes the webapp produces.
@@ -158,54 +157,7 @@ describe("webapp depositCgk — deposit body + carrier round-trip", () => {
   });
 });
 
-// ── 4. depositSetLeader builds a vote that verifies under @flagship/protocol ─
-describe("webapp depositSetLeader — set-leader vote body + signature", () => {
-  it("POSTs {auth,…,deposit,vote,signature}; the vote verifies under the owner IRK", async () => {
-    const { unlockSession } = await loadState();
-    const { depositSetLeader } = await loadBootApproval();
-
-    const seed = new Uint8Array(32).fill(0x44);
-    await unlockSession(seed, "harry");
-    const ownerIrkPub = deriveIRK({ seed } as never).publicKey;
-
-    const serverDomain = "kitchen.harry.flagship.services";
-    const preferredStkPubHex = toHex(ed25519.getPublicKey(new Uint8Array(32).fill(0x55)));
-
-    let captured: { url: string; body: Record<string, unknown> } | null = null;
-    const fetchMock = vi.fn(async (url: string, init: RequestInit) => {
-      captured = { url, body: JSON.parse(String(init.body)) };
-      return { ok: true, json: async () => ({ ok: true }) } as unknown as Response;
-    });
-
-    await depositSetLeader(
-      { serverDomain, preferredStkPubHex },
-      { fetch: fetchMock as unknown as typeof fetch, comBase: "https://com", now: () => 1_750_000_000_000 },
-    );
-
-    expect(captured).not.toBeNull();
-    expect(captured!.url).toBe(`https://com/api/server/${serverDomain}/set-leader`);
-    const body = captured!.body as {
-      deposit: { serverDomain: string; requestNonceHex: string };
-      vote: { user: string; preferredStkPubHex: string; issuedAt: number; nonce: string };
-      signature: string;
-    };
-    expect(body.deposit.serverDomain).toBe(serverDomain);
-    expect(body.vote.user).toBe("harry");
-    expect(body.vote.preferredStkPubHex).toBe(preferredStkPubHex);
-    expect(body.vote.issuedAt).toBe(1_750_000_000_000);
-
-    // The vote verifies under @flagship/protocol's verifySetLeader (byte-identical
-    // canonical bytes: flagship/set-leader/v1|user|pref|issuedAt|nonce).
-    const sig = new Uint8Array(body.signature.match(/../g)!.map((h) => parseInt(h, 16)));
-    expect(verifySetLeader(body.vote, sig, ownerIrkPub)).toBe(true);
-
-    // Negative control: a different owner IRK must NOT verify.
-    const otherPub = ed25519.getPublicKey(new Uint8Array(32).fill(0x66));
-    expect(verifySetLeader(body.vote, sig, otherPub)).toBe(false);
-  });
-});
-
-// ── 5. Lead display (leadsOf) — tolerant of absence ──────────────────
+// ── 4. Lead display (leadsOf) — tolerant of absence ──────────────────
 describe("webapp leadsOf — /pods leadsServices surfacing", () => {
   it("returns the cleaned slug list when present", () => {
     expect(leadsOf({ leadsServices: ["blog", " notes ", ""] })).toEqual(["blog", "notes"]);

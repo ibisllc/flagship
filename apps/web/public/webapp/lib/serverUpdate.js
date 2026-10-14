@@ -8,7 +8,7 @@
 // ReleaseGate — there is no maintainer envelope here, and neither half alone
 // can push code.
 //
-// TWO KEYS in the deposit body (mirrors set-leader, NOT the sealed lanes):
+// TWO KEYS in the deposit body (like the transfer deposits, NOT the sealed lanes):
 //   - the ORDER signature routes through the tag-gated sensitive signer
 //     (`flagship/server-update/v1` ∈ SENSITIVE_TAGS) — the admin master root
 //     when the account has one, legacy owner IRK otherwise;
@@ -149,7 +149,7 @@ export async function depositUpdateOrder(args, deps = {}) {
   };
   const orderSig = await signWithIrk(umk, canonicalUpdateOrderBytes(order));
 
-  // IRK mailbox-auth — same shape as the set-leader / transfer deposits. The
+  // IRK mailbox-auth — same shape as the transfer deposits. The
   // gated signer tag-routes device-endpoint-claim to the membership IRK.
   const authNonceHex = randHex(32, deps.getRandomValues);
   const auth = {

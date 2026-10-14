@@ -63,8 +63,10 @@ const OFFICE = "office.alice.flagship.services";
 const GARAGE = "garage.alice.flagship.services";
 const ATTIC = "attic.alice.flagship.services";
 const NOW = 1_760_000_000_000;
+const stkOf = (serverDomain: string) => serverDomain.charCodeAt(0).toString(16).padStart(2, "0").repeat(32);
 const pod = (serverDomain: string, extra: Record<string, unknown> = {}) => ({
   serverDomain,
+  identityPubKey: stkOf(serverDomain),
   registeredAt: 1,
   lastReported: NOW,
   liveness: "live",
@@ -78,6 +80,7 @@ beforeEach(async () => {
   const ps = await load("lib/profilesStore.js");
   ps.ensureProfile("alice", storage);
   ps.setActiveCloudName("alice", storage);
+  (await load("lib/serverOrder.js"))._resetServerOrdersForTests();
 });
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -122,37 +125,32 @@ describe("app copy — the shared vectors", () => {
 });
 
 describe("§1 the leader is the current server", () => {
-  it("making a server leader also makes it current when this device has a session for it", async () => {
+  it("making a server leader puts it first in the order and makes it current when this device has a session for it", async () => {
     const api = await load("lib/api.js");
-    const { setPreferredServer, getPreferredServer } = await load("lib/setLeader.js");
+    const { saveServerOrder, currentServerOrder } = await load("lib/serverOrder.js");
+    const { preferLeaderAsCurrent } = await loadPlacement();
     const { getSession } = await load("lib/state.js");
     Object.assign(getSession(), { username: "alice", umk: new Uint8Array(32).fill(7) });
     api.setPodBaseUrl(`https://${HOME}`);
     api.setSessionToken("tok-home");
     api.setSessionTokenForPod(HOME, "tok-home");
     api.setSessionTokenForPod(OFFICE, "tok-office");
-    const deps = { resolvePodStk: async () => "ab".repeat(32), depositSetLeader: vi.fn(async () => ({})) };
+    const fetch = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ ok: true }) }));
 
-    const out = await setPreferredServer({ serverDomain: OFFICE }, deps);
-    expect(out.current).toBe(true);
-    expect(getPreferredServer()).toBe(OFFICE);
+    await saveServerOrder({ stks: [stkOf(OFFICE), stkOf(HOME)] }, { fetch, comBase: "https://com", demo: false });
+    expect(currentServerOrder()).toEqual([stkOf(OFFICE), stkOf(HOME)]);
+    expect(preferLeaderAsCurrent([pod(HOME), pod(OFFICE, { registeredAt: 2 })], { now: () => NOW })).toBe(true);
     expect(api.getPodBaseUrl()).toBe(`https://${OFFICE}`);
     expect(api.getSessionToken()).toBe("tok-office");
     expect(api.currentPodFqdn()).toBe(OFFICE);
   });
 
-  it("without a session for it the current server stays put", async () => {
+  it("without a session for the leader the current server stays put", async () => {
     const api = await load("lib/api.js");
-    const { setPreferredServer } = await load("lib/setLeader.js");
-    const { getSession } = await load("lib/state.js");
-    Object.assign(getSession(), { username: "alice", umk: new Uint8Array(32).fill(7) });
+    const { preferLeaderAsCurrent } = await loadPlacement();
     api.setPodBaseUrl(`https://${HOME}`);
     api.setSessionToken("tok-home");
-    const out = await setPreferredServer(
-      { serverDomain: GARAGE },
-      { resolvePodStk: async () => "ab".repeat(32), depositSetLeader: async () => ({}) },
-    );
-    expect(out.current).toBe(false);
+    expect(preferLeaderAsCurrent([pod(HOME), pod(GARAGE)], { order: [stkOf(GARAGE)], now: () => NOW })).toBe(false);
     expect(api.currentPodFqdn()).toBe(HOME);
   });
 
@@ -160,15 +158,19 @@ describe("§1 the leader is the current server", () => {
     const { preferLeaderAsCurrent } = await loadPlacement();
     const pods = [pod(HOME, { registeredAt: 1 }), pod(OFFICE, { registeredAt: 2 })];
     const make = vi.fn(() => true);
-    expect(preferLeaderAsCurrent(pods, { preferred: OFFICE, hasSession: () => true, makeCurrentPod: make, now: () => NOW })).toBe(true);
+    const order = [stkOf(OFFICE)];
+    expect(preferLeaderAsCurrent(pods, { order, hasSession: () => true, makeCurrentPod: make, now: () => NOW })).toBe(true);
     expect(make).toHaveBeenCalledWith(OFFICE);
     make.mockClear();
+    // The first in the order is down: the role passes to the next one up.
     const offline = [pod(HOME), pod(OFFICE, { liveness: "unreachable" })];
-    expect(preferLeaderAsCurrent(offline, { preferred: OFFICE, hasSession: () => true, makeCurrentPod: make })).toBe(false);
-    expect(preferLeaderAsCurrent(pods, { preferred: OFFICE, hasSession: () => false, makeCurrentPod: make })).toBe(false);
+    expect(preferLeaderAsCurrent(offline, { order, hasSession: () => true, makeCurrentPod: make, now: () => NOW })).toBe(true);
+    expect(make).toHaveBeenCalledWith(HOME);
+    make.mockClear();
+    expect(preferLeaderAsCurrent(pods, { order, hasSession: () => false, makeCurrentPod: make })).toBe(false);
     expect(make).not.toHaveBeenCalled();
-    // No owner choice: the earliest-registered server that came online.
-    expect(preferLeaderAsCurrent(pods, { preferred: "", hasSession: () => true, makeCurrentPod: make, now: () => NOW })).toBe(true);
+    // No order: the oldest server that's online.
+    expect(preferLeaderAsCurrent(pods, { order: [], hasSession: () => true, makeCurrentPod: make, now: () => NOW })).toBe(true);
     expect(make).toHaveBeenCalledWith(HOME);
   });
 });
@@ -179,7 +181,7 @@ describe("§2 choosing where a new app runs", () => {
 
   it("defaults to the leader, not the current server", async () => {
     const p = await loadPlacement();
-    const servers = p.creationServers(pods, { hasSession: session, preferred: OFFICE, current: HOME, now: () => NOW });
+    const servers = p.creationServers(pods, { hasSession: session, order: [stkOf(OFFICE)], current: HOME, now: () => NOW });
     expect(servers.map((s: { fqdn: string }) => s.fqdn)).toEqual([ATTIC, HOME, OFFICE]);
     expect(p.defaultCreationServer(servers, HOME)).toBe(OFFICE);
     p.startCreation();
@@ -197,14 +199,14 @@ describe("§2 choosing where a new app runs", () => {
   it("falls back to the current server when the leader can't be built on", async () => {
     const p = await loadPlacement();
     const down = [pod(HOME), pod(OFFICE, { liveness: "unreachable" })];
-    const servers = p.creationServers(down, { hasSession: () => true, preferred: OFFICE, current: HOME, now: () => NOW });
+    const servers = p.creationServers(down, { hasSession: () => true, order: [stkOf(OFFICE)], current: HOME, now: () => NOW });
     expect(p.defaultCreationServer(servers, HOME)).toBe(HOME);
   });
 
   it("started from a server's page the server is fixed and not asked", async () => {
     const p = await loadPlacement();
     p.startCreation({ server: GARAGE.toUpperCase(), pinned: true });
-    const servers = p.creationServers(pods, { hasSession: () => true, preferred: OFFICE, current: HOME, now: () => NOW });
+    const servers = p.creationServers(pods, { hasSession: () => true, order: [stkOf(OFFICE)], current: HOME, now: () => NOW });
     expect(p.resolveCreationServer(servers, HOME)).toBe(GARAGE);
     p.chooseCreationServer(OFFICE);
     expect(p.creationTarget()).toEqual({ fqdn: GARAGE, pinned: true });
@@ -529,7 +531,7 @@ describe("§3 a server's apps", () => {
     expect(page).toContain('enterServiceDetail(btn.getAttribute("data-open-app"), { server: fqdn, from: "server" })');
     const sw = await asset("/webapp/service-worker.js");
     expect(sw).toContain('"/lib/appPlacement.js"');
-    expect(sw).toContain('SHELL_VERSION = "v73"');
+    expect(sw).toContain('SHELL_VERSION = "v74"');
   });
 });
 

@@ -25,6 +25,7 @@
 import { getSession } from "./state.js";
 import { controlApex } from "./apex.js";
 import { accountReadFetch } from "./accountRead.js";
+import { rememberServerOrder } from "./serverOrder.js";
 
 /** Jitter (± ms) applied to every reconnect so a fleet of tabs that all time
  *  out together don't reconnect in lockstep (thundering herd). */
@@ -64,6 +65,7 @@ export async function fetchLiveSync(cursor, deps = {}) {
     username: String(body?.username ?? username),
     pods: Array.isArray(body?.pods) ? body.pods : [],
     pending: Array.isArray(body?.pending) ? body.pending : [],
+    serverOrder: body?.serverOrder ?? null,
     fetchedAt: body?.fetchedAt,
   };
 }
@@ -89,6 +91,7 @@ async function fetchPodsFallback(deps = {}) {
     username,
     pods: Array.isArray(body?.pods) ? body.pods : [],
     pending: Array.isArray(body?.pending) ? body.pending : [],
+    serverOrder: body?.serverOrder ?? null,
     fetchedAt: body?.fetchedAt,
   };
 }
@@ -161,6 +164,7 @@ export function createLiveSync(deps = {}) {
       cursor = snap.cursor;
       if (changed) {
         snapshot = { pods: snap.pods, pending: snap.pending };
+        rememberServerOrder(snap.username, snap.serverOrder);
         emit();
       }
       // Long-poll: the server already held; reconnect right away (+ jitter so a
@@ -175,6 +179,7 @@ export function createLiveSync(deps = {}) {
       try {
         const snap = await fetchPodsFallback(deps);
         snapshot = { pods: snap.pods, pending: snap.pending };
+        rememberServerOrder(snap.username, snap.serverOrder);
         // /pods has no cursor; clear ours so the next /stream attempt connects
         // fresh and returns immediately with the current state.
         cursor = null;

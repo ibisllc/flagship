@@ -212,9 +212,9 @@ test.describe("gym webapp share", () => {
     await expect(card.locator("[data-share-sas]")).toHaveText(/^\d{3} \d{3}$/, { timeout: 10_000 });
     await expect(card).toContainText("Sam");
     await expect(page.locator("#server-activity-card")).toContainText("Sam · changed notes's internet access");
-    // Shared with sits after Preferred server and before Transfer.
+    // Shared with sits after Leader and before Transfer.
     const order = await page.evaluate(() =>
-      ["preferred-server-card", "shared-with-card", "server-activity-card", "transfer-card"].map((id) => {
+      ["leader-card", "shared-with-card", "server-activity-card", "transfer-card"].map((id) => {
         const el = document.getElementById(id)!;
         return el.getBoundingClientRect().top + window.scrollY;
       }),

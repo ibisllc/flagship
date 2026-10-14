@@ -149,7 +149,10 @@
 //       list): the phone picks the server and seals it a one-use ticket.
 //  v73: account read tokens (docs/account-read-token.md): every /pods,
 //       /stream, /audit and app-links read carries one; precaches lib/accountRead.js.
-const SHELL_VERSION = "v73";
+//  v74: the owner's server order (docs/server-order.md): Home lists servers
+//       in order with a Leader badge and drag/up/down to reorder; server
+//       pages say "Make leader"; precaches lib/serverOrder.js.
+const SHELL_VERSION = "v74";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -195,6 +198,7 @@ const OPTIONAL_SHELL = [
   "/lib/icons.js",
   "/lib/auditLog.js",
   "/lib/accountRead.js",
+  "/lib/serverOrder.js",
   "/lib/totp.js",
   "/lib/edToMont.js",
   "/lib/bootApproval.js",

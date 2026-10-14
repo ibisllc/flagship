@@ -431,7 +431,7 @@ const OWNER_ONLY = [
   "journal-card",
   "front-page-card",
   "auto-unlock-card",
-  "preferred-server-card",
+  "leader-card",
   "shared-with-card",
   "server-activity-card",
   "Delete server",

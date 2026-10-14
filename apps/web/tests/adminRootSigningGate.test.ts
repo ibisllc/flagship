@@ -31,7 +31,7 @@ const ROOT_ENTITLEMENT = "flagship/root-entitlement/v1|alice|abcd|foo.bar.flagsh
 const DECOMMISSION = "flagship/server-decommission/v1|foo.bar.flagship.services|00|1|keep|0|abc|1700000000000";
 const RELEASE = "flagship/release-server-name/v1|alice|foo.bar|1700000000000";
 const INVITE_CREATE = "flagship/service-invite/create/v1|iid|aidhex|svc|hash|bundle|1700000000000";
-// The mailbox-auth credential co-signed alongside decommission/transfer/set-leader.
+// The mailbox-auth credential co-signed alongside decommission/transfer.
 const MAILBOX_AUTH = "flagship/device-endpoint-claim/v1|alice|webapp|deadbeef|1|2|nonce";
 
 describe("admin master root — key model", () => {

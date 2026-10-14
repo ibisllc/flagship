@@ -563,6 +563,33 @@ button.linklike:hover, .btn.linklike:hover {
    action buttons still handle their own clicks). */
 .server-card.is-tappable { cursor: pointer; }
 
+/* The server order (docs/server-order.md): a drag handle plus up/down
+   buttons on each reorderable card. */
+.server-order-controls {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.server-order-controls button {
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0 8px;
+  background: transparent;
+  color: var(--ink-muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 16px;
+  line-height: 1;
+}
+.server-order-controls button:disabled { opacity: 0.35; }
+.server-order-handle { cursor: grab; touch-action: none; }
+.server-card.is-dragging {
+  opacity: 0.85;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  cursor: grabbing;
+}
+
 /* ── Pill / status ──────────────────────────────────────────────── */
 .pill {
   display: inline-flex;

@@ -4,7 +4,7 @@
 
 import { $, registerView, show } from "../lib/router.js";
 import { ScreensError, boxClient } from "../lib/api.js";
-import { appSandboxNotice, fetchServerApps, serverAppsHtml, anyCopying, watchWhileCopying } from "../lib/appPlacement.js";
+import { accountPods, anyCopying, appSandboxNotice, fetchServerApps, leaderOf, loadAccountPods, podFqdn, preferLeaderAsCurrent, serverAppsHtml, watchWhileCopying } from "../lib/appPlacement.js";
 import { isCompanionProfile } from "../lib/companionGuard.js";
 import {
   enableLongLived,
@@ -46,7 +46,7 @@ import {
 } from "../lib/journal.js";
 import { signWithIrk, bytesToHex } from "../keystore.js";
 import { sensitiveSigner } from "../lib/adminRoot.js";
-import { setPreferredServer, isPreferredServer } from "../lib/setLeader.js";
+import { currentServerOrder, makeLeader, rankPods } from "../lib/serverOrder.js";
 import {
   clearPendingUpdate,
   describeLastUpdate,
@@ -390,19 +390,18 @@ export async function renderServerDetail() {
         <p class="note small hidden" id="journal-status"></p>
         <pre id="journal-output" class="journal-output hidden" aria-label="journal output"></pre>
       </div>
-      <h2 class="mt-4">Preferred server</h2>
-      <div class="card" id="preferred-server-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
+      <h2 class="mt-4">Leader</h2>
+      <div class="card" id="leader-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
         <p class="note">
-          When several of your boxes run the same service, the highest-clout
-          live one leads it. Setting <strong>${escapeHtml(body.serverFqdn)}</strong>
-          as your preferred server makes it lead by default whenever it's online,
-          and new apps go to it unless you pick another server.
+          The first server in your order that's online leads: it serves your
+          apps and new apps go to it. When it's down the next one in line takes
+          over until it's back. Drag servers on Home to change the order.
         </p>
-        <div class="row" id="preferred-server-status">
+        <div class="row" id="leader-status">
           <span class="label">Status</span>
-          <span class="pill" id="preferred-server-pill">${isPreferredServer(body.serverFqdn) ? "preferred" : "not preferred"}</span>
+          <span class="pill" id="leader-pill">…</span>
         </div>
-        <button id="set-preferred-btn" class="full-width mt-2"${isPreferredServer(body.serverFqdn) ? " disabled" : ""}>Set as preferred server</button>
+        <button id="make-leader-btn" class="full-width mt-2">Make leader</button>
       </div>
       ${serverSharingHtml(body)}
 
@@ -474,7 +473,7 @@ export async function renderServerDetail() {
     wireLockPower(body);
     wireDeadMan(body);
     wireJournal(body);
-    wirePreferredServer(body);
+    wireMakeLeader(body);
     wireServerSharing(body);
     wireServerApps(body.serverFqdn);
     wireTransfer(body);
@@ -571,22 +570,55 @@ function wireServerApps(serverFqdn) {
     .catch((e) => paint([], { error: humanError(e) }));
 }
 
-function wirePreferredServer(body) {
-  const btn = $("set-preferred-btn");
-  const pill = $("preferred-server-pill");
+/** This server's place in the owner's order, from the account's `/pods`. */
+async function leaderModel(fqdn, deps = {}) {
+  const want = String(fqdn).toLowerCase();
+  const pods = accountPods(await (deps.loadAccountPods ?? loadAccountPods)(getSession().username));
+  const ranked = rankPods(pods, currentServerOrder());
+  const stks = ranked.map((p) => String(p.identityPubKey ?? "").toLowerCase()).filter(Boolean);
+  const self = ranked.find((p) => podFqdn(p) === want);
+  return {
+    stk: String(self?.identityPubKey ?? "").toLowerCase(),
+    stks,
+    position: ranked.indexOf(self) + 1,
+    isLeader: leaderOf(pods) === want,
+  };
+}
+
+/**
+ * Make leader (docs/server-order.md): move this server to the top of the
+ * order and save it. Home reads the same order, so it's already first there.
+ */
+export async function makeServerLeader(fqdn, deps = {}) {
+  const m = await leaderModel(fqdn, deps);
+  if (!m.stk) throw new Error("this server isn't registered yet — wait for it to come online");
+  return (deps.makeLeader ?? makeLeader)(m.stk, m.stks, deps);
+}
+
+function wireMakeLeader(body) {
+  const btn = $("make-leader-btn");
+  const pill = $("leader-pill");
   if (!btn) return;
+  const paint = async () => {
+    const m = await leaderModel(body.serverFqdn).catch(() => null);
+    if (!pill) return;
+    pill.className = m?.isLeader ? "pill ok" : "pill";
+    pill.textContent = !m || m.position < 1 ? "not ranked yet" : m.isLeader ? "Leader" : `#${m.position} in line`;
+    btn.disabled = !m?.stk || m.position === 1;
+  };
+  void paint();
   btn.addEventListener("click", async () => {
     btn.disabled = true;
     btn.textContent = "Signing…";
     try {
-      await setPreferredServer({ serverDomain: body.serverFqdn });
-      if (pill) pill.textContent = "preferred";
-      btn.textContent = "Set as preferred server";
-      toast(`${body.serverFqdn} is now your preferred server`, "ok");
+      await makeServerLeader(body.serverFqdn);
+      preferLeaderAsCurrent(await loadAccountPods(getSession().username));
+      toast(`${body.serverFqdn} is first in your server order`, "ok");
     } catch (e) {
-      btn.disabled = false;
-      btn.textContent = "Set as preferred server";
       toast(humanError(e), "err");
+    } finally {
+      btn.textContent = "Make leader";
+      void paint();
     }
   });
 }

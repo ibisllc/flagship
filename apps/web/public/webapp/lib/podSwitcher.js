@@ -13,6 +13,8 @@
 // the active selection) is unit-testable in isolation. The view layer
 // (views/services-list.js) renders + wires it.
 
+import { currentServerOrder, rankPods } from "./serverOrder.js";
+
 /** The pod base URL for a pod is `https://<serverDomain>`. A pod is
  *  identified, like iOS, by its FQDN; this is the only derivation the
  *  switcher needs to map a pod ↔ the active-pod slot in lib/api.js. */
@@ -58,30 +60,26 @@ export function podShortName(serverDomain) {
 export const ALL_PODS_BASE_URL = "";
 
 /**
- * Determine the LEADER pod's fqdn from a pod list, using the SAME convention
- * the control plane uses for tier-2 canonical routing (serviceRename.ts:
- * `liveServers[0]` — the earliest-registered non-revoked server). Pure +
- * DOM-free so the view layer can pass it into `buildPodSwitcherModel`.
- *
- * Returns the leader's fqdn (lower-cased) or "" if none.
+ * The LEADER pod's fqdn: the first server in the owner's order
+ * (docs/server-order.md) that is live, else the first that ever came online
+ * (a landed cert or a heartbeat). Unlisted servers follow the listed ones,
+ * oldest first. Pure + DOM-free; returns "" if none.
  *
  * @param {Map<string,object>|Array<object>} pods
+ * @param {string[]} [order]  the order's STKs (default: the signed-in account's)
  */
-export function leaderFqdnOf(pods) {
+export function leaderFqdnOf(pods, order = currentServerOrder()) {
   const list = pods instanceof Map ? [...pods.values()] : Array.isArray(pods) ? pods : [];
-  const live = list
-    .filter((p) => {
-      if (!String(p?.serverDomain ?? "").trim() || p?.revokedAt != null) return false;
-      // Parity with iOS/Android PodSwitcher: a pod that has NEVER come online
-      // (no heartbeat, no cert) is not the leader — otherwise an account whose
-      // earliest-registered box is still provisioning would wear the leader flag
-      // on a box that isn't serving. `cameOnline` uses the SAME predicate as
-      // boxInbox.js: a landed cert OR at least one heartbeat.
-      const cameOnline = p?.lastReported != null || p?.currentCert != null;
-      return cameOnline;
-    })
-    .sort((a, b) => (a?.registeredAt ?? 0) - (b?.registeredAt ?? 0));
-  return live.length ? String(live[0].serverDomain).trim().toLowerCase() : "";
+  const ranked = rankPods(
+    list.filter((p) => String(p?.serverDomain ?? "").trim() && p?.revokedAt == null),
+    order,
+  );
+  // Parity with iOS/Android PodSwitcher: a pod that has NEVER come online is
+  // not the leader, so a still-provisioning box never wears the flag.
+  const cameOnline = (p) => p?.lastReported != null || p?.currentCert != null;
+  const lead = ranked.find((p) => cameOnline(p) && (p?.liveness == null || p.liveness === "live"))
+    ?? ranked.find(cameOnline);
+  return lead ? String(lead.serverDomain).trim().toLowerCase() : "";
 }
 
 /**

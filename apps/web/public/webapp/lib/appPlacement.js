@@ -19,8 +19,8 @@
 // Must pass packages/protocol/test-vectors/app-copy/vectors.json.
 
 import { boxClient, currentPodFqdn, makeCurrentPod, sessionTokenForPod } from "./api.js";
-import { getPreferredServer } from "./setLeader.js";
-import { leaderFqdnOf, podShortName } from "./podSwitcher.js";
+import { currentServerOrder, rankPods } from "./serverOrder.js";
+import { podShortName } from "./podSwitcher.js";
 import { liveSync } from "./liveSync.js";
 import { controlApex } from "./apex.js";
 import { escapeHtml } from "./util.js";
@@ -76,12 +76,13 @@ export function accountPods(pods) {
   return out;
 }
 
-/** The leader: the server the owner made leader, when it's still one of the
- *  account's servers, else the earliest-registered one that came online. */
-export function leaderOf(pods, preferred = getPreferredServer()) {
-  const want = String(preferred ?? "").trim().toLowerCase();
-  if (want && accountPods(pods).some((p) => podFqdn(p) === want)) return want;
-  return leaderFqdnOf(accountPods(pods).map((p) => ({ ...p, serverDomain: podFqdn(p) })));
+/** The leader: the first server in the owner's order that is online
+ *  (docs/server-order.md); with none online, the first that ever came up. */
+export function leaderOf(pods, order = currentServerOrder(), now = Date.now()) {
+  const ranked = rankPods(accountPods(pods), order);
+  const up = ranked.find((p) => isPodOnline(p, now))
+    ?? ranked.find((p) => p?.lastReported != null || p?.currentCert != null);
+  return up ? podFqdn(up) : "";
 }
 
 /** The account's `/pods` rows: the live-sync snapshot, else one read. */
@@ -117,7 +118,7 @@ export function sessionServers(pods, { current = currentPodFqdn(), clientFor = b
 /** §1: when the leader is online and this device has a session for it, it is
  *  the current server. Resolves to whether the current server is the leader. */
 export function preferLeaderAsCurrent(pods, deps = {}) {
-  const leader = leaderOf(pods, deps.preferred);
+  const leader = leaderOf(pods, deps.order, deps.now?.());
   if (!leader) return false;
   const pod = accountPods(pods).find((p) => podFqdn(p) === leader);
   const hasSession = deps.hasSession || ((fqdn) => !!sessionTokenForPod(fqdn));
@@ -155,8 +156,8 @@ export function chooseCreationServer(fqdn) {
 export function creationServers(pods, deps = {}) {
   const hasSession = deps.hasSession || ((fqdn) => !!sessionTokenForPod(fqdn));
   const current = String(deps.current ?? currentPodFqdn()).toLowerCase();
-  const leader = leaderOf(pods, deps.preferred);
   const now = deps.now?.() ?? Date.now();
+  const leader = leaderOf(pods, deps.order, now);
   const rows = accountPods(pods).map((p) => ({ fqdn: podFqdn(p), online: isPodOnline(p, now) }));
   if (current && !rows.some((r) => r.fqdn === current)) rows.push({ fqdn: current, online: true });
   return rows
