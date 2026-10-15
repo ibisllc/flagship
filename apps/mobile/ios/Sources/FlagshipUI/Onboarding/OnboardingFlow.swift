@@ -79,7 +79,11 @@ public struct OnboardingFlow: View {
                                 deviceCapability: nil,
                                 demoServer: nil,
                                 createdAt: Date()
-                            ))
+                            ), setActive: false)
+                            // Not active yet: activating a profile pairs the
+                            // shell, which closes onboarding before the
+                            // backup step below. completeOnboarding (on
+                            // secure or skip) activates it.
                             // The account/identity now exists. Before
                             // landing in the app, nudge a backup via the
                             // skippable "Secure your account" step. This
