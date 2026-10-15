@@ -4,8 +4,9 @@
 > environment for the UI gym (`docs/ui-test-gym.md` §6.5 + §12-G6): a parallel
 > control plane at **`gym.flagshipserver.com`** + data plane at
 > **`gym.flagship.services`**, on the EXISTING two Cloudflare zones (no new
-> domain — rev4), with its OWN D1 / R2 / Durable Object / rate-limit namespaces /
-> Hetzner project. Test boxes are `<server>.<user>.gym.flagship.services`.
+> domain — rev4), with its OWN D1 / R2 / Durable Object / rate-limit namespaces.
+> Test boxes are UpCloud servers labelled `flagship-env=gym`, named
+> `<server>.<user>.gym.flagship.services`.
 >
 > **Isolation is by ZEROING, not secrecy** (§4): the `gym.` apex is
 > public/knowable; the env runs against its own DB and is **wiped between runs**.
@@ -29,41 +30,60 @@
 
 ---
 
-## TL;DR — one command
-
-`scripts/gym-setup-live-env.sh` wraps this entire runbook: it generates the
-gym's own test-only secrets (cached, gitignored, in `.gym-secrets.env`), creates
-the D1 + R2, **patches the `REPLACE_WITH_…` placeholders** in
-`apps/com/wrangler.gym.toml`, sets the Worker secrets, builds + deploys the gym
-Worker, then (if Fly is authed) stands up the `flagship-services-gym` app + IPs
-and re-deploys. It is **idempotent** — run it, `flyctl auth login`, run it again;
-the second pass resumes at the Fly phase.
+## Running the gym (2026-10)
 
 ```sh
-# interactive (prompts for the test Hetzner / DNS / SSH-pubkey secrets):
-bash scripts/gym-setup-live-env.sh
-# non-interactive:
-GYM_HCLOUD_TOKEN=… GYM_DNS_TOKEN=… GYM_SSH_PUBKEY="ssh-ed25519 …" bash scripts/gym-setup-live-env.sh
-# Cloudflare half only (before you've done flyctl auth login):
-GYM_SKIP_FLY=1 bash scripts/gym-setup-live-env.sh
+bash scripts/gym-refresh.sh          # bring the env current (idempotent; run before every run)
+npm run gym:weekly                   # refresh → wipe → mock matrix → live run → sweep
+# or just the live half, on one shared fleet, torn down at the end:
+set -a; . ./.gym-secrets.env; set +a
+npx tsx tools/live-e2e/shared-run.ts                          # every group
+npx tsx tools/live-e2e/shared-run.ts --groups core,gating     # a subset (--list shows them)
+npx tsx tools/live-e2e/shared-run.ts --all-boxes --keep       # leave the fleet up…
+npx tsx tools/live-e2e/shared-run.ts --reuse gym-results/<run>/fleet.json --groups runtimes   # …and reuse it
+npx tsx tools/live-e2e/fleet-cli.ts sweep [--destroy]         # list / destroy every gym server + gym DNS left
 ```
 
-The script does only the GYM-named resources (never opens prod's `wrangler.toml`
-/ root `fly.toml`). The remaining HAND steps it can't do for you: `flyctl auth
-login`, creating the test Hetzner project, and the one manual
-`gym.flagship.services` A/AAAA DNS record (step 3). The detailed, do-it-yourself
-version of every phase follows — read it to understand or to deviate.
+- **`scripts/gym-refresh.sh`** rebases the `gym` branch (main + the gym-only
+  trust pin and app adoption seams) onto `origin/main` in its own worktree
+  (`~/.cache/flagship/gym-worktree`) and pushes it, builds it, applies and
+  stamps the gym D1 migrations, gives the gym Worker its own value for every
+  secret prod has (it fails naming any it can't), deploys the gym Worker from
+  the gym branch through `npm run deploy` (migration gate pointed at the gym
+  D1), deploys and scales the gym Fly app, and health-checks both. A rebase
+  conflict stops it: resolve on the gym branch by hand (keep main's behaviour
+  plus the gym seams), then `git push --force-with-lease origin gym`.
+  `GYM_BASE_REF=<branch>` deploys the gym on unlanded work (never pushed).
+- **The fleet**: account A (`ga…`) gets `home` through the demo flow and
+  `home2` through `/api/gym/provision` (signed with A's demo keys, including the
+  admin root, since demo accounts are admin-pinned); account B (`gb…`) gets
+  `home`. Groups run in phases; each writes `gym-results/live-run-<ts>/<group>.json`
+  and the run writes `summary.json` (including any gym server still on UpCloud).
+- **Teardown** never calls a cloud API from the laptop: the demo cleanup
+  (`/api/dev/sample-user/cleanup`, force) plus the gym-only, admin-gated
+  `/api/gym/teardown` (servers carrying the `flagship-env=gym` label only, plus
+  the run's DNS: the boxes' records and each gym user's whole zone).
+- **DNS budget**: the `flagship.services` zone is shared with prod and capped at
+  200 records; a fleet uses ~20. Leftover gym records once filled it and every
+  new box (prod too) failed DNS-01 with "Record quota exceeded". Always tear down.
+- **Debugging a box** that won't come up: set the debug-only
+  `UPCLOUD_SSH_PUBLIC_KEY` secret on the gym Worker, add a box
+  (`fleet-cli.ts add-box <user> dbg`), and `tools/live-e2e/box-bringup-debug.sh <ip>`;
+  delete the secret afterwards. `tools/live-e2e/journal-cli.ts <user> <server>`
+  reads a serving box's daemon log.
+- **Costs**: STARTER-4xCPU-8GB in de-fra1 is about €0.036/h per box (plus
+  storage); a full run is three boxes for under an hour.
 
----
+## First-time stand-up
 
 ## Prerequisites (operator hand — agent cannot do these)
 
 - A shell authenticated to **Cloudflare** (`wrangler whoami` succeeds) on the
   account that owns the `flagshipserver.com` + `flagship.services` zones.
 - `flyctl auth login` (Fly is NOT authed in the agent env).
-- A **separate test Hetzner Cloud project** + a read+write API token (so test
-  boxes never count against prod's demo cap or bill). Mirrors
-  `docs/runbooks/demo-users-bootstrap.md` steps 1–2, against a NEW project.
+- The UpCloud API token at `~/.config/flagship/upcloud-token` (the same
+  account as prod's demos; the gym's servers carry `flagship-env=gym`, and the
+  account must be upgraded past the trial, which blocks the hub port 8443).
 - `node ≥ 20`, repo at `/Users/harrywinner/flagship`.
 
 ---
@@ -115,7 +135,7 @@ npx wrangler r2 bucket dev-url enable flagship-iso-temp-gym
 # 1f. Set the gym Worker's OWN secrets (NEVER reuse a prod secret). Each is set
 #     against the gym config so it lands on flagship-com-gym, not prod:
 npx wrangler secret put FLAGSHIP_ADMIN_SECRET        --config wrangler.gym.toml
-npx wrangler secret put HCLOUD_TOKEN                 --config wrangler.gym.toml   # the TEST Hetzner project token
+npx wrangler secret put UPCLOUD_TOKEN                --config wrangler.gym.toml   # < ~/.config/flagship/upcloud-token
 npx wrangler secret put DEMO_PUBLIC_SSH_KEY          --config wrangler.gym.toml
 npx wrangler secret put DEMO_PUBLIC_SSH_KEY_ID       --config wrangler.gym.toml
 npx wrangler secret put DEMO_IRK_KEK                 --config wrangler.gym.toml   # openssl rand -hex 32
@@ -124,10 +144,9 @@ npx wrangler secret put CLOUDFLARE_DNS_API_TOKEN     --config wrangler.gym.toml 
 npx wrangler secret put WEBPUSH_VAPID_PRIVATE_KEY_PEM --config wrangler.gym.toml  # mint FRESH (npx tsx scripts/generate-vapid.ts)
 npx wrangler secret put WEBPUSH_VAPID_PUBLIC_KEY_B64URL --config wrangler.gym.toml
 npx wrangler secret put WEBPUSH_CONTACT              --config wrangler.gym.toml
-# Leave CA_ENDORSEMENT_ENFORCE unset (it's commented out in wrangler.gym.toml) so
-# the #30 CA gate runs in OBSERVE for the gym — a lapsed PROD CaEndorsement never
-# gates the test directory. (To enforce a TEST CA instead, set it "true" AND wire
-# a gym-only FLAGSHIP_CA_PRIV_HEX + gym CaEndorsement bundle.)
+# CA_ENDORSEMENT_ENFORCE is "true" in wrangler.gym.toml: the gym branch serves its
+# own chain (gymTrustMaterial.ts), whose key K must be this Worker's
+# FLAGSHIP_CA_PRIV_HEX. scripts/gym-refresh.sh sets every other secret prod has.
 
 # 1g. Build the control-plane dist FIRST (the Worker bundles the BUILT
 #     @flagship/control-plane dist/ — a deploy without a rebuild ships stale
@@ -215,7 +234,7 @@ Notes:
 ## Step 4 — first gym demo user (smoke the live chain)
 
 The gym admin surface mirrors prod's `/api/dev/sample-user/*`, gated on the gym
-`FLAGSHIP_ADMIN_SECRET`, against the test Hetzner project.
+`FLAGSHIP_ADMIN_SECRET`; boxes are UpCloud servers labelled `flagship-env=gym`.
 
 ```sh
 cd /Users/harrywinner/flagship
@@ -229,11 +248,11 @@ node scripts/sample-user.mjs create gymdemo --account-name "Gym Demo"
 # → {"username":"gymdemo","ready":true,...}  (a TEST box under gym.flagship.services)
 
 curl -s https://gymdemo.gym.flagship.services/api/health 2>/dev/null || true
-node scripts/sample-user.mjs cleanup gymdemo    # tear the demo box down
+node scripts/sample-user.mjs cleanup gymdemo --force   # tear the demo box down
 ```
 
 > `sample-user.mjs` honours `FLAGSHIP_BASE_URL` (set above) — no CLI change is
-> needed to point it at the gym apex (the Worker holds HCLOUD_TOKEN + DEMO_IRK_KEK,
+> needed to point it at the gym apex (the Worker holds UPCLOUD_TOKEN + DEMO_IRK_KEK,
 > so the laptop needs only the gym admin secret). Until the env is up, the live
 > gym slice in the harness detects it and SKIPS cleanly (see "the harness live
 > slice" below) — `gym:total` stays green regardless.
@@ -340,13 +359,12 @@ npm run gym -- total --surface android      # now RUNS (was a clean skip)
 
 ## Teardown
 
-Tear the gym down when not in use (it bills Hetzner + Fly while up):
+Tear the gym down when not in use (it bills UpCloud + Fly while up):
 
 ```sh
-# Demo boxes (each run tears its own down in a finally; sweep any orphans):
-export FLAGSHIP_ADMIN_SECRET="<gym admin secret>" FLAGSHIP_BASE_URL="https://gym.flagshipserver.com"
-node scripts/sample-user.mjs list                 # any lingering gym demo users
-node scripts/sample-user.mjs delete <username>    # … delete each
+# Boxes (each run tears its own fleet down; sweep any orphans + their DNS):
+set -a; . ./.gym-secrets.env; set +a
+npx tsx tools/live-e2e/fleet-cli.ts sweep --destroy
 
 # Data plane (stop machines; the app + IPs persist for the next run):
 export PATH="$HOME/.fly/bin:$PATH"
@@ -376,19 +394,19 @@ you added them in step 3) are the only DNS to remove by hand; the four
 `gym:total` with the warm-up / wipe / simulator / cleanup ceremony this runbook
 otherwise describes by hand:
 
-1. **Phase 0** — `flyctl scale count 1 -a flagship-services-gym` + poll a
-   machine `started` (≤5 min) + verify `https://gym.flagshipserver.com/api/health`.
-   Already-scaled is a no-op.
+1. **Phase 0** — `scripts/gym-refresh.sh` (branch, build, D1, secrets, both
+   deploys, Fly scaled to 1, health). `--skip-refresh` uses the env as deployed.
 2. **Phase 0b** — re-zero `flagship-state-gym` via the guarded
    `wipe-all-users.sh` runner (step 5B above; the prod DB is hard-refused).
 3. **Phase 0c** — boot the newest available iPhone simulator (if none booted)
    and the `flagship_gym` AVD headless (if no adb device). Skippable:
    `--skip-ios-sim` / `--skip-avd` / `--skip-sims`.
-4. **Phase 1** — `scripts/gym-total.sh` (mock matrix → live e2e → gating e2e).
-   **Weekly means FULL**: gym-total's exit 3 ("mocks passed, cloud skipped —
-   no secrets") FAILS the weekly run.
-5. **Phase 2** (trap EXIT — always runs) — scale the gym Fly app back to 0
-   (`--no-scale-down` to keep it up) + shut the AVD down if the script booted it.
+4. **Phase 1** — `scripts/gym-total.sh` (mock matrix → the live run on one
+   shared fleet). **Weekly means FULL**: gym-total's exit 3 ("cloud skipped") and
+   a live run that SKIPPED a group both FAIL the weekly run.
+5. **Phase 2** (trap EXIT — always runs) — destroy every gym-labelled server and
+   gym DNS record still left, scale the gym Fly app back to 0
+   (`--no-scale-down` keeps it up), and shut the AVD down if the script booted it.
 
 It ends with a one-screen report: mock / live / gating verdicts, the
 `gym-results/<ts>/` dir, and duration. Exit 0 only when everything that must
@@ -403,8 +421,8 @@ pinned by `scripts/gym-weekly.test.ts`.
 
 ## Operator deploy checklist (the short version)
 
-1. **Cloudflare**: `wrangler whoami` ok; **Fly**: `flyctl auth login`; **Hetzner**:
-   a separate TEST project + token.
+1. **Cloudflare**: `wrangler whoami` ok; **Fly**: `flyctl auth login`; **UpCloud**:
+   the token at `~/.config/flagship/upcloud-token`.
 2. **Control plane** (from `apps/com`): `wrangler d1 create flagship-state-gym`
    → paste id into `wrangler.gym.toml` → `wrangler d1 migrations apply … --config
    wrangler.gym.toml --remote` → `wrangler r2 bucket create flagship-iso-gym`

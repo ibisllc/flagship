@@ -21,7 +21,7 @@ export type Tier = "every-merge" | "total";
 
 /**
  * Backend posture (§4). Tier-1 = demo-fixture / mock, no backend. Tier-2 = a
- * live (ephemeral Hetzner) box. The smoke scenarios in this run are all
+ * live (ephemeral UpCloud) box. The smoke scenarios in this run are all
  * `fixture`; `live` is the seam the iOS vertical slice (G5) fills in.
  */
 export type BackendPosture = "fixture" | "live";

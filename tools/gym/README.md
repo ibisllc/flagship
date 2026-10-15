@@ -58,9 +58,8 @@ frontend scenario, all surfaces, with NO backend and NO env probe. This is the
 
 **`gym:total` (overnight, real cloud)** is `scripts/gym-total.sh`: it runs the locked
 matrix first, then — if `.gym-secrets.env` has `GYM_ADMIN_SECRET` — provisions REAL
-gym Hetzner boxes and drives the live backend e2e (`tools/live-e2e/run.ts`) + the
-service-access gating e2e (`tools/live-e2e/gating-drive.ts`), each self-tearing-down
-its box. With no secrets it cleanly SKIPS the cloud half and just runs the matrix, so
+gym UpCloud boxes (one shared fleet, `tools/live-e2e/shared-run.ts`), runs every
+live scenario group on it, and tears the fleet down. With no secrets it cleanly SKIPS the cloud half and just runs the matrix, so
 it's safe to invoke anywhere.
 
 The standalone **live Tier-2 slice** (`gym:live` / `gym total` without `--mock-only`)
@@ -135,7 +134,7 @@ The one end-to-end scenario the gym runs against a REAL backend — the isolated
 `gym.` test env (`docs/ui-test-gym.md` §6.5; stand it up via
 `docs/runbooks/gym-test-env.md`):
 
-> onboarding → create a demo server (gym `.com` + the test Hetzner project) →
+> onboarding → create a demo server (gym `.com` + UpCloud) →
 > it comes online → approve the boot-unlock → install a service → assert the
 > **real** effect (the service runs / appears on the live `/pods` — D6 G8/G12).
 

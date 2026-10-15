@@ -4,7 +4,7 @@
  * (docs/ui-test-gym.md §6.5). It proves the harness drives the real app against a
  * real box and asserts the D6 action→effect for real, not a mock:
  *
- *   onboarding → create a demo server (gym `.com` + the test Hetzner project)
+ *   onboarding → create a demo server (gym `.com` + UpCloud)
  *   → it comes online → approve the boot-unlock → install a service
  *   → assert the real effect (the service runs / appears on the live `/pods`).
  *
@@ -142,7 +142,7 @@ export const LIVE_SCENARIOS: readonly Scenario[] = [
       },
       { kind: "type", describe: "Name the server.", handle: "cs-name-field" },
       { kind: "tap", describe: "Continue through create-server.", handle: "cs-next-button" },
-      { kind: "wait", describe: "Provision → online ladder advances (real Hetzner boot)." },
+      { kind: "wait", describe: "Provision → online ladder advances (real UpCloud boot)." },
       { kind: "assert", describe: "Box comes online on Home (the pod status pill).", handle: "pod-card-status" },
       {
         kind: "tap",
