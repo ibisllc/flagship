@@ -1,0 +1,336 @@
+{
+  "about": "A box's outbound proxy order (docs/outbound-proxy.md). Every platform must derive `keys.irkPubHex` from `keys.umkSeedHex`, build each case's `canonical` from its `fields` byte for byte (booleans as 1/0), and reproduce `signatureHex` with the IRK; `rejectSignatureHex` must fail to verify; every `refuse` case must be refused before signing; `normalize` maps typed input to the host that is signed; `credentials` are checked by the same rules everywhere (never signed).",
+  "keys": {
+    "umkSeedHex": "2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a",
+    "irkPubHex": "c49775473bf9dcf5ad1608c8e66823d55dc6889be27e42a029fd9de195c8d7e4"
+  },
+  "cases": [
+    {
+      "name": "socks5 with a password, may fall back",
+      "fields": {
+        "serverDomain": "home.plucky-avocet.flagship.services",
+        "kind": "socks5",
+        "host": "proxy.example.net",
+        "port": 1080,
+        "auth": true,
+        "fallbackDirect": true,
+        "issuedAt": 1760000000000,
+        "nonce": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc"
+      },
+      "canonical": "flagship/box-proxy/v1|home.plucky-avocet.flagship.services|socks5|proxy.example.net|1080|1|1|1760000000000|030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc",
+      "signatureHex": "b75ea39d08c367a36f921e8d88fbbbd34b7e585a902b0e35252e5e29230916af1e90b51d0f1ef74a862f0fbb4e953b2468a1b76eb309a7418bf3894058cc400d",
+      "wire": {
+        "proxy": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "kind": "socks5",
+          "host": "proxy.example.net",
+          "port": 1080,
+          "auth": true,
+          "fallbackDirect": true,
+          "issuedAt": 1760000000000,
+          "nonce": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc"
+        },
+        "signature": "b75ea39d08c367a36f921e8d88fbbbd34b7e585a902b0e35252e5e29230916af1e90b51d0f1ef74a862f0fbb4e953b2468a1b76eb309a7418bf3894058cc400d"
+      },
+      "rejectSignatureHex": "075ea39d08c367a36f921e8d88fbbbd34b7e585a902b0e35252e5e29230916af1e90b51d0f1ef74a862f0fbb4e953b2468a1b76eb309a7418bf3894058cc400d"
+    },
+    {
+      "name": "http on a LAN address",
+      "fields": {
+        "serverDomain": "home.plucky-avocet.flagship.services",
+        "kind": "http",
+        "host": "192.168.1.20",
+        "port": 3128,
+        "auth": false,
+        "fallbackDirect": false,
+        "issuedAt": 1760000000000,
+        "nonce": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc"
+      },
+      "canonical": "flagship/box-proxy/v1|home.plucky-avocet.flagship.services|http|192.168.1.20|3128|0|0|1760000000000|030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc",
+      "signatureHex": "2a11f8daf8930cea04e6a1e2fd897ac2063faecbda6e9c4d0a1fb0d019418951fd778679362d5991675eb7adc0e9445a9b1a9524576ab4e6186b56fc125b800d",
+      "wire": {
+        "proxy": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "kind": "http",
+          "host": "192.168.1.20",
+          "port": 3128,
+          "auth": false,
+          "fallbackDirect": false,
+          "issuedAt": 1760000000000,
+          "nonce": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc"
+        },
+        "signature": "2a11f8daf8930cea04e6a1e2fd897ac2063faecbda6e9c4d0a1fb0d019418951fd778679362d5991675eb7adc0e9445a9b1a9524576ab4e6186b56fc125b800d"
+      },
+      "rejectSignatureHex": "0a11f8daf8930cea04e6a1e2fd897ac2063faecbda6e9c4d0a1fb0d019418951fd778679362d5991675eb7adc0e9445a9b1a9524576ab4e6186b56fc125b800d"
+    },
+    {
+      "name": "socks5 on IPv6",
+      "fields": {
+        "serverDomain": "home.plucky-avocet.flagship.services",
+        "kind": "socks5",
+        "host": "2001:db8::7",
+        "port": 9050,
+        "auth": false,
+        "fallbackDirect": false,
+        "issuedAt": 1760000000000,
+        "nonce": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc"
+      },
+      "canonical": "flagship/box-proxy/v1|home.plucky-avocet.flagship.services|socks5|2001:db8::7|9050|0|0|1760000000000|030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc",
+      "signatureHex": "72bcbb593e186a7523ce23a481bd4def7e0d77d20a151b2842bf9b0460bb1f17fb303f5e7cb42f9a0a4d4e31cdbdea276bd53f32c01311ae069c47882d257409",
+      "wire": {
+        "proxy": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "kind": "socks5",
+          "host": "2001:db8::7",
+          "port": 9050,
+          "auth": false,
+          "fallbackDirect": false,
+          "issuedAt": 1760000000000,
+          "nonce": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc"
+        },
+        "signature": "72bcbb593e186a7523ce23a481bd4def7e0d77d20a151b2842bf9b0460bb1f17fb303f5e7cb42f9a0a4d4e31cdbdea276bd53f32c01311ae069c47882d257409"
+      },
+      "rejectSignatureHex": "02bcbb593e186a7523ce23a481bd4def7e0d77d20a151b2842bf9b0460bb1f17fb303f5e7cb42f9a0a4d4e31cdbdea276bd53f32c01311ae069c47882d257409"
+    },
+    {
+      "name": "no proxy",
+      "fields": {
+        "serverDomain": "home.plucky-avocet.flagship.services",
+        "kind": "none",
+        "host": "",
+        "port": 0,
+        "auth": false,
+        "fallbackDirect": false,
+        "issuedAt": 1760000000000,
+        "nonce": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc"
+      },
+      "canonical": "flagship/box-proxy/v1|home.plucky-avocet.flagship.services|none||0|0|0|1760000000000|030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc",
+      "signatureHex": "9f74c4411c6346ba745d0c3cf258221ef9cce1c03996743bde81c01f9e67d57249971f0948941a2f525d6a62061c63f2b65204bb86ef05fa1edd8d867f08a30a",
+      "wire": {
+        "proxy": {
+          "serverDomain": "home.plucky-avocet.flagship.services",
+          "kind": "none",
+          "host": "",
+          "port": 0,
+          "auth": false,
+          "fallbackDirect": false,
+          "issuedAt": 1760000000000,
+          "nonce": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc"
+        },
+        "signature": "9f74c4411c6346ba745d0c3cf258221ef9cce1c03996743bde81c01f9e67d57249971f0948941a2f525d6a62061c63f2b65204bb86ef05fa1edd8d867f08a30a"
+      },
+      "rejectSignatureHex": "0f74c4411c6346ba745d0c3cf258221ef9cce1c03996743bde81c01f9e67d57249971f0948941a2f525d6a62061c63f2b65204bb86ef05fa1edd8d867f08a30a"
+    }
+  ],
+  "refuse": [
+    {
+      "why": "uppercase host",
+      "fields": {
+        "serverDomain": "home.plucky-avocet.flagship.services",
+        "kind": "socks5",
+        "host": "Proxy.example.net",
+        "port": 1080,
+        "auth": true,
+        "fallbackDirect": true,
+        "issuedAt": 1760000000000,
+        "nonce": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc"
+      }
+    },
+    {
+      "why": "host with a scheme",
+      "fields": {
+        "serverDomain": "home.plucky-avocet.flagship.services",
+        "kind": "socks5",
+        "host": "socks5://proxy.example.net",
+        "port": 1080,
+        "auth": true,
+        "fallbackDirect": true,
+        "issuedAt": 1760000000000,
+        "nonce": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc"
+      }
+    },
+    {
+      "why": "host with a port",
+      "fields": {
+        "serverDomain": "home.plucky-avocet.flagship.services",
+        "kind": "socks5",
+        "host": "proxy.example.net:1080",
+        "port": 1080,
+        "auth": true,
+        "fallbackDirect": true,
+        "issuedAt": 1760000000000,
+        "nonce": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc"
+      }
+    },
+    {
+      "why": "bracketed IPv6",
+      "fields": {
+        "serverDomain": "home.plucky-avocet.flagship.services",
+        "kind": "socks5",
+        "host": "[2001:db8::7]",
+        "port": 1080,
+        "auth": true,
+        "fallbackDirect": true,
+        "issuedAt": 1760000000000,
+        "nonce": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc"
+      }
+    },
+    {
+      "why": "bad IPv4",
+      "fields": {
+        "serverDomain": "home.plucky-avocet.flagship.services",
+        "kind": "socks5",
+        "host": "192.168.1.300",
+        "port": 1080,
+        "auth": true,
+        "fallbackDirect": true,
+        "issuedAt": 1760000000000,
+        "nonce": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc"
+      }
+    },
+    {
+      "why": "port 0",
+      "fields": {
+        "serverDomain": "home.plucky-avocet.flagship.services",
+        "kind": "socks5",
+        "host": "proxy.example.net",
+        "port": 0,
+        "auth": true,
+        "fallbackDirect": true,
+        "issuedAt": 1760000000000,
+        "nonce": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc"
+      }
+    },
+    {
+      "why": "port too high",
+      "fields": {
+        "serverDomain": "home.plucky-avocet.flagship.services",
+        "kind": "socks5",
+        "host": "proxy.example.net",
+        "port": 65536,
+        "auth": true,
+        "fallbackDirect": true,
+        "issuedAt": 1760000000000,
+        "nonce": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc"
+      }
+    },
+    {
+      "why": "unknown kind",
+      "fields": {
+        "serverDomain": "home.plucky-avocet.flagship.services",
+        "kind": "https",
+        "host": "proxy.example.net",
+        "port": 1080,
+        "auth": true,
+        "fallbackDirect": true,
+        "issuedAt": 1760000000000,
+        "nonce": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc"
+      }
+    },
+    {
+      "why": "none with a host",
+      "fields": {
+        "serverDomain": "home.plucky-avocet.flagship.services",
+        "kind": "none",
+        "host": "proxy.example.net",
+        "port": 0,
+        "auth": false,
+        "fallbackDirect": false,
+        "issuedAt": 1760000000000,
+        "nonce": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc"
+      }
+    },
+    {
+      "why": "none with fallback",
+      "fields": {
+        "serverDomain": "home.plucky-avocet.flagship.services",
+        "kind": "none",
+        "host": "",
+        "port": 0,
+        "auth": false,
+        "fallbackDirect": true,
+        "issuedAt": 1760000000000,
+        "nonce": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc"
+      }
+    },
+    {
+      "why": "uppercase serverDomain",
+      "fields": {
+        "serverDomain": "Home.plucky-avocet.flagship.services",
+        "kind": "socks5",
+        "host": "proxy.example.net",
+        "port": 1080,
+        "auth": true,
+        "fallbackDirect": true,
+        "issuedAt": 1760000000000,
+        "nonce": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dc"
+      }
+    },
+    {
+      "why": "short nonce",
+      "fields": {
+        "serverDomain": "home.plucky-avocet.flagship.services",
+        "kind": "socks5",
+        "host": "proxy.example.net",
+        "port": 1080,
+        "auth": true,
+        "fallbackDirect": true,
+        "issuedAt": 1760000000000,
+        "nonce": "ab"
+      }
+    }
+  ],
+  "normalize": [
+    {
+      "input": "  Proxy.Example.NET  ",
+      "host": "proxy.example.net"
+    },
+    {
+      "input": "[2001:DB8::7]",
+      "host": "2001:db8::7"
+    },
+    {
+      "input": "proxy.example.net.",
+      "host": "proxy.example.net"
+    }
+  ],
+  "credentials": {
+    "accept": [
+      {
+        "username": "alice",
+        "password": "s3cret pass"
+      },
+      {
+        "username": "u",
+        "password": "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+      }
+    ],
+    "refuse": [
+      {
+        "why": "empty username",
+        "username": "",
+        "password": "x"
+      },
+      {
+        "why": "empty password",
+        "username": "alice",
+        "password": ""
+      },
+      {
+        "why": "colon in username",
+        "username": "al:ice",
+        "password": "x"
+      },
+      {
+        "why": "password over 255 bytes",
+        "username": "alice",
+        "password": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé"
+      },
+      {
+        "why": "control character",
+        "username": "alice",
+        "password": "a\nb"
+      }
+    ]
+  }
+}
