@@ -274,6 +274,13 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     public func accessRequests() async throws -> AppAccessRequestsResponse {
         try await request("/api/screens/access-requests")
     }
+    public func outboundProxy() async throws -> OutboundProxySummary {
+        try await request("/api/screens/outbound-proxy")
+    }
+    public func outboundProxySet(_ req: OutboundProxySetRequest) async throws -> OutboundProxySetResponse {
+        let body = try JSONEncoder().encode(req)
+        return try await request("/api/screens/outbound-proxy", method: "POST", body: body)
+    }
 
     private func dbPath(_ serviceId: String, _ rest: String = "") -> String {
         "/api/screens/services/\(segment(serviceId))/db\(rest)"

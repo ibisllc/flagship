@@ -128,6 +128,11 @@ public protocol ScreensClient: Sendable {
     func accessRequestEvents() -> AsyncStream<Void>
     /// `GET /api/screens/settings/access-alerts`. An older box answers 404.
     func accessAlertsSetting() async throws -> AccessAlertsSetting
+    /// `GET /api/screens/outbound-proxy` (docs/outbound-proxy.md).
+    func outboundProxy() async throws -> OutboundProxySummary
+    /// `POST /api/screens/outbound-proxy`: the owner's signed proxy order. The
+    /// box tests a new proxy before it switches and answers 422 when it fails.
+    func outboundProxySet(_ req: OutboundProxySetRequest) async throws -> OutboundProxySetResponse
     /// `POST /api/screens/settings/access-alerts {enabled}` (owner session;
     /// no signature: it can only quiet the box).
     @discardableResult
@@ -421,6 +426,12 @@ public extension ScreensClient {
     }
     func accessAlertsSetting() async throws -> AccessAlertsSetting {
         throw ScreensClientError.notImplemented("access alerts setting")
+    }
+    func outboundProxy() async throws -> OutboundProxySummary {
+        throw ScreensClientError.notImplemented("outbound proxy")
+    }
+    func outboundProxySet(_ req: OutboundProxySetRequest) async throws -> OutboundProxySetResponse {
+        throw ScreensClientError.notImplemented("outbound proxy")
     }
     func setAccessAlerts(enabled: Bool) async throws -> AccessAlertsSetting {
         throw ScreensClientError.notImplemented("access alerts setting")
