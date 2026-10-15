@@ -445,9 +445,9 @@ why it doesn't launch now. Per AGENTS.md, Pro features branch off
     carries a proxy, which the create flow allows only on Pro.
 - **At launch of paid features:** OHTTP for every box during setup, free
   for everyone (see "Launch item" above), is not built.
-- **Webapp shell version:** this branch uses **v99** (`feat/marketplace`
-  v96, `feat/custom-domains` v97, `feat/custom-names` v98, `main` v93 with
-  v94/v95 in flight at rebase time). Take the next free number whenever a parent passes it.
+- **Webapp shell version:** this branch uses **v100** (`feat/marketplace`
+  v97, `feat/custom-domains` v98, `feat/custom-names` v99, `main` v96 at
+  rebase time). Take the next free number whenever a parent passes it.
 
 ## Failure UX: the proxy stops working
 
