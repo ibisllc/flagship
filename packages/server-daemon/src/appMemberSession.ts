@@ -2,27 +2,29 @@
  * Who a browser visitor of an app is (docs/app-apis.md §5, "Members").
  *
  * A browser can't sign, so a person signs in to an app with their phone: the
- * app's knock page shows a QR / link, their phone signs the knock with their
- * account id (AID), and the box hands that browser a `Flagship-App-Session`
- * cookie for this app's host (`serviceAccessWeb.ts`). This resolver turns the
- * cookie back into the member the app sees:
+ * app's knock page shows a QR / link, their phone signs the knock, and the box
+ * hands that browser a `Flagship-App-Session` cookie for this app's host
+ * (`serviceAccessWeb.ts`). This resolver turns the cookie back into the member
+ * the app sees:
  *
  *   - the session must be live and issued for THIS app (a cookie for another
  *     app, an expired or closed one is anonymous);
- *   - its AID must still be let in: the owner's AID always is, anyone else
+ *   - its key must still be let in: a device of the account that owns the box
+ *     or a co-manager unless an admin refused them in this app, anyone else
  *     only while on the app's members list (removing them, or revoking their
  *     invite, signs them out on their next request). This holds in both
- *     modes: on an open app a member who signs in gets their role, anyone
+ *     modes: on an open app a member who signs in gets their rank, anyone
  *     else is an anonymous visitor;
- *   - rank, on Flagship's member < manager < master: `owner` for
- *     the owner's AID; otherwise the highest of the roles the owner gave
- *     their grants (the invites they joined through) or them, with signed
- *     `flagship/app-member-role/v1` orders, else the role the legacy
- *     membership store holds, else the manifest's `default_role` (never
- *     `owner`, which only the box owner carries: a default of `owner` gives
- *     invited people `master`);
- *   - stable id: per app, from the app secret and the AID, so it survives the
- *     person's device and key changes and can't be linked across apps.
+ *   - rank, on Flagship's member < manager < master (there is no owner rank;
+ *     docs/service-access-gating.md "Account members"): an admin device is
+ *     master and the account's other devices and co-managers manager unless
+ *     an admin order says otherwise; an invited person has the rank their
+ *     grants give, else the legacy membership store's, else the manifest's
+ *     `default_role` (an `owner` there reads as master);
+ *   - stable id: per app, from the app secret and a key: the owner AID for
+ *     every device of the owning account (one person, many devices), the
+ *     share key for a co-manager, the per-app id for an invited person. It
+ *     can't be linked across apps.
  */
 import type { Bytes } from "@flagship/protocol";
 import { ladderRole, readSessionCookie, type ServiceAccessStore, type ServiceSessionStore } from "./serviceAccess.js";
@@ -30,7 +32,7 @@ import type { SessionResolver } from "./serviceProxy.js";
 
 export interface AppSessionResolverOptions {
   sessions: Pick<ServiceSessionStore, "lookup">;
-  access: Pick<ServiceAccessStore, "isAllowed" | "isOwner" | "roleOf">;
+  access: Pick<ServiceAccessStore, "isAllowed" | "principal" | "accountRank" | "roleOf" | "appIdentityKey">;
   now?: () => number;
 }
 
@@ -43,11 +45,13 @@ export function buildAppSessionResolver(opts: AppSessionResolverOptions): Sessio
     if (!sess || sess.serviceRef !== app.serviceId) return null;
     if (!/^[0-9a-f]{64}$/.test(sess.aid)) return null;
     if (!opts.access.isAllowed(app.serviceId, sess.aid)) return null;
-    const memberPub = hexToBytes(sess.aid);
-    return { memberPub, stableId: app.membership.stableIdFor(memberPub), role: roleFor(sess.aid, memberPub) };
+    const p = opts.access.principal(sess.aid);
+    const identity = hexToBytes(opts.access.appIdentityKey(sess.aid));
+    const role = p ? opts.access.accountRank(app.serviceId, p) : invitedRole(sess.aid, hexToBytes(sess.aid));
+    if (!role) return null;
+    return { memberPub: identity, stableId: app.membership.stableIdFor(identity), role };
 
-    function roleFor(aidHex: string, pub: Bytes): string {
-      if (opts.access.isOwner(aidHex)) return "owner";
+    function invitedRole(aidHex: string, pub: Bytes): string {
       const d = app.manifest.access.default_role;
       const set = opts.access.roleOf(app.serviceId, aidHex, d);
       if (set !== null) return set;

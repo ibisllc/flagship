@@ -263,6 +263,8 @@ import { daemonRestarts as restarts } from "./restartCoordinator.js";
 import { buildMaintainersReleaseGate } from "./selfUpdateReleaseGate.js";
 import type { EntitlementBundle } from "./tunnel/tunnelClient.js";
 import { providerRelay } from "./tunnel/relayFetch.js";
+import { AccessPrincipals, AccountDeviceBook } from "./accessPrincipals.js";
+import { BoxReadToken } from "./boxReadToken.js";
 
 /**
  * The maintainer-endorsement gate every in-place update passes, whoever
@@ -979,6 +981,9 @@ async function main(): Promise<void> {
   };
   // Set by wireOwnerHandlers; read when a vibe-coded app deploys invite-only.
   const serviceAccessRef: { current: ServiceAccessStore | null } = { current: null };
+  // Who a signing key is on this box (account devices, co-managers): the
+  // device book is wired by wireOwnerHandlers, the shares by wireRuntimeSurfaces.
+  const accessPrincipals = new AccessPrincipals(cfg?.ownerAidPub ? bytesToHexStr(cfg.ownerAidPub) : null);
   const {
     pullStateStore,
     updateServer,
@@ -1224,7 +1229,10 @@ async function main(): Promise<void> {
         // On-service-delete teardown of the per-service route. Late-bound: the
         // gossip claimer + loop are wired below, after the runtime is up.
         onServiceRemoved: (slug) => onServiceRemovedRef.current?.(slug),
-        onAppEvent: (kind, serviceId) =>
+        onAppEvent: (kind, serviceId) => {
+          // An uninstalled app's access state goes with it, so a reinstall
+          // under the same id doesn't inherit its members or ranks.
+          if (kind === "app.removed") void serviceAccessRef.current?.forget(serviceId).catch(() => {});
           activityLog.note(
             kind,
             kind === "app.installed"
@@ -1233,7 +1241,8 @@ async function main(): Promise<void> {
                 ? `Redeployed ${serviceId}.`
                 : `Removed ${serviceId}.`,
             { target: serviceId },
-          ),
+          );
+        },
       },
       additionalHandlers,
       updateServer,
@@ -1332,6 +1341,7 @@ async function main(): Promise<void> {
       activityLog,
       serverOrder,
       serviceAccessRef,
+      accessPrincipals,
       runtime,
       cfg,
       env: env as RuntimeEnv,
@@ -1376,6 +1386,7 @@ async function main(): Promise<void> {
     frontPage,
     activityLog,
     serviceAccessRef,
+    accessPrincipals,
     runtime,
     cfg,
     env: env as RuntimeEnv,
@@ -2084,6 +2095,7 @@ async function wireRuntimeSurfaces(deps: {
   frontPage: FrontPageStore;
   activityLog: ActivityLog;
   serviceAccessRef: { current: ServiceAccessStore | null };
+  accessPrincipals: AccessPrincipals;
   serverOrder: ServerOrderHolder | null;
   runtime: DaemonRuntime;
   cfg: ServerConfig | null;
@@ -2814,6 +2826,9 @@ async function wireRuntimeSurfaces(deps: {
     });
     const { dropped } = await store.load();
     if (dropped > 0) console.warn(`[shares] dropped ${dropped} share(s) that no longer verify`);
+    // A co-manager's devices are Manager in every app by default.
+    deps.accessPrincipals.shares = () =>
+      store.list().map((h) => ({ shareId: h.grant.shareId, memberPubHex: h.grant.memberPubHex, label: h.grant.label }));
     const sessions = new ShareSessionStore(defaultShareSessionPath(dataDir));
     await sessions.load();
     const activity = deps.activityLog;
@@ -2940,6 +2955,7 @@ async function wireRuntimeSurfaces(deps: {
               ownerIrkPub: cfg.irkPublicKey,
               ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
               username: cfg.userId,
+              adminGrants: () => deps.accessPrincipals.book?.adminGrants() ?? [],
               store,
               app: (id) => {
                 const a = runtime.servicePlatform?.byServiceId(id);
@@ -3179,6 +3195,7 @@ async function wireOwnerHandlers(deps: {
   frontPage: FrontPageStore;
   activityLog: ActivityLog;
   serviceAccessRef: { current: ServiceAccessStore | null };
+  accessPrincipals: AccessPrincipals;
   runtime: DaemonRuntime;
   cfg: ServerConfig | null;
   env: RuntimeEnv;
@@ -3244,7 +3261,39 @@ async function wireOwnerHandlers(deps: {
   // M4 — fail-open alert: if the access-state file is present-but-corrupt the
   // store falls open (so an OPEN service is never bricked) but raises a visible
   // owner-facing flag instead of failing silently.
-  const accessStore = new ServiceAccessStore("/var/flagship/service-access.json", {
+  // The account's devices, verified here (docs/service-access-gating.md
+  // "Account members"): refreshed every 5 minutes, and when an unknown key signs.
+  const accessDataDir = process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship";
+  const deviceBookReader = new BoxReadToken({
+    comBaseUrl: env.controlPlaneBaseUrl,
+    username: cfg.userId,
+    serverFqdn: env.serverFqdn,
+    boxPublicKey: () => identityKeypair.publicKey,
+    signAsBox: (msg) => ed.sign(msg, identityKeypair.privateKey),
+  });
+  const deviceBook = new AccountDeviceBook({
+    path: `${accessDataDir}/account-devices.json`,
+    username: cfg.userId,
+    ownerIrkPub: () => cfg.irkPublicKey,
+    adminRootPub: () => cfg.adminRootPub,
+    ...(cfg.ownerAidPub ? { ownerAidHex: bytesToHexStr(cfg.ownerAidPub) } : {}),
+    fetchGrants: async () => {
+      const base = env.controlPlaneBaseUrl.replace(/\/+$/, "");
+      const r = await deviceBookReader.fetch(`${base}/api/users/${encodeURIComponent(cfg.userId)}/device-grants`);
+      return r.ok ? await r.json() : null;
+    },
+    log: (m) => console.warn(m),
+  });
+  await deviceBook.load();
+  deps.accessPrincipals.book = deviceBook;
+  void deviceBook.refresh();
+  {
+    const t = setInterval(() => void deviceBook.refresh(), 5 * 60_000);
+    if (typeof t.unref === "function") t.unref();
+  }
+  const accessStore = new ServiceAccessStore(`${accessDataDir}/data/flagship-access/service-access.json`, {
+    legacyPath: "/var/flagship/service-access.json",
+    principals: deps.accessPrincipals,
     ...(cfg.ownerAidPub ? { ownerAidHex: bytesToHexStr(cfg.ownerAidPub) } : {}),
     onFailOpen: ({ error }) =>
       console.error(
@@ -3267,6 +3316,7 @@ async function wireOwnerHandlers(deps: {
     // the config-pinned owner AID (preferred) OR the owner IRK (transition).
     ...(cfg.ownerAidPub ? { ownerAidPub: cfg.ownerAidPub } : {}),
     ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+    adminGrants: () => deviceBook.adminGrants(),
     store: accessStore,
     sessions: sessionStore,
     serviceInstalled: (ref) =>
@@ -3294,6 +3344,7 @@ async function wireOwnerHandlers(deps: {
       serverDomain: env.serverFqdn,
       stk: identityKeypair,
       store: accessStore,
+      verifyRevoke: access.verifyWithdraw,
     });
     poller.start();
     process.once("SIGTERM", () => poller.stop());

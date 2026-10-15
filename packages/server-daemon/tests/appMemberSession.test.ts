@@ -204,7 +204,7 @@ function verifyInjected(h: IncomingHttpHeaders, extra: string[] = []): boolean {
 }
 
 describe("the owner opens their own app", () => {
-  it("signs in through the knock page and reaches a private path as owner, on an open app", async () => {
+  it("signs in through the knock page and reaches a private path as master (no owner rank), on an open app", async () => {
     const up = await container();
     const app = makeApp(up.port);
     const b = await box(app);
@@ -215,24 +215,24 @@ describe("the owner opens their own app", () => {
     const h = up.seen();
     expect(h["x-flagship-user"]).toBe(app.membership.stableIdFor(ownerAid.publicKey));
     expect(h["x-flagship-user"]).toMatch(/^[0-9a-f]{32}$/);
-    expect(h["x-flagship-role"]).toBe("owner");
+    expect(h["x-flagship-role"]).toBe("master");
     expect(h["x-flagship-visitor"]).toBe("member");
     expect(h["x-flagship-app-id"]).toBe(SVC);
     expect(verifyInjected(h)).toBe(true);
     // Same-origin writes keep the identity.
     const post = await send(b.port, "/private", { cookie, origin: `https://${HOST}`, "content-type": "application/json" }, "POST", "{}");
     expect(post.status).toBe(200);
-    expect(up.seen()["x-flagship-role"]).toBe("owner");
+    expect(up.seen()["x-flagship-role"]).toBe("master");
   });
 
-  it("gets through a restricted app's gate too, and is owner even when the manifest's default role is owner", async () => {
+  it("gets through a restricted app's gate too, and is master even when the manifest's default role is owner", async () => {
     const up = await container();
     const app = makeApp(up.port, "owner");
     await access.setMode(SVC, "restricted");
     const b = await box(app);
     const cookie = await cookieOf(b, ownerAid);
     expect((await send(b.port, "/private", { cookie })).status).toBe(200);
-    expect(up.seen()["x-flagship-role"]).toBe("owner");
+    expect(up.seen()["x-flagship-role"]).toBe("master");
   });
 });
 

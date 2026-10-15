@@ -75,6 +75,7 @@ describe("members list", () => {
       roles: ["member", "manager", "master"],
       defaultRole: "manager",
       descriptions: { member: "Plays", master: "Runs the club" },
+      accountMembers: [],
       members: [{ aid: FRIEND, role: "manager", ...noGrants }],
       invites: [],
     });

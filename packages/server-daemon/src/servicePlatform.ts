@@ -33,6 +33,7 @@ import {
 import type { AppEnv } from "./serviceEnvStore.js";
 import type { SwkOps } from "./keyCustodian.js";
 import { AppRunner, type AppSpec, type StartCheck } from "./serviceRunner.js";
+import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 import { AppMembership, type AppMembershipSnapshot } from "./membership.js";
 import type { InstalledServicesStore, PersistedService } from "./installedServicesStore.js";
 import { pickPgUrlForApp } from "./runMigration.js";
@@ -951,8 +952,21 @@ export class ServicePlatform {
     if (Math.abs(this.now() - r.issuedAt) > this.maxAgeMs) {
       return { ok: false, reason: "stale request" };
     }
-    if (!this.verifyHostAuthority(r, signature, verify)) {
-      return { ok: false, reason: "invalid signature (must be host's IRK)" };
+    // Uninstall is admin-only (docs/service-access-gating.md "Account
+    // members"): the admin root on a box that pins one, else the owner IRK;
+    // the box's own identity still uninstalls for box-internal flows.
+    const adminSigned = authorizeSensitiveOrder({
+      order: r,
+      signature,
+      verify,
+      ownerIrkPub: this.deps.host.irkPub,
+      ...(this.deps.host.adminRootPub ? { adminRootPub: this.deps.host.adminRootPub } : {}),
+      username: this.deps.host.username,
+      activeGrants: [],
+      now: this.now(),
+    });
+    if (!adminSigned && !(this.deps.hostIdentityPub && verify(r, signature, this.deps.hostIdentityPub))) {
+      return { ok: false, reason: "invalid signature (only an admin device can uninstall an app)" };
     }
     const serviceId = ServicePlatform.serviceId(r.creator, r.slug);
     const app = this.apps.get(serviceId);

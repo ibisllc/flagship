@@ -52,9 +52,18 @@ import {
   type ServiceVisitProof,
   type SetServiceAccessMode,
   APP_MEMBER_ROLES,
+  parseServiceAccessModeV2,
+  parseServiceAllowRemoveV2,
+  verifyRevokeServiceInvite,
+  verifyServiceAccessModeV2,
+  verifyServiceAllowRemoveV2,
+  type AdminGrantView,
   type AppMemberRoleTarget,
+  type RevokeServiceInvite,
 } from "@flagship/protocol";
+import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
+import type { Principal, PrincipalResolver } from "./accessPrincipals.js";
 
 const H = { "content-type": "application/json" };
 
@@ -102,10 +111,28 @@ export interface MemberRoles {
    * Invites bound before this was recorded have no entry (uncapped).
    */
   tiers: Record<string, string>;
+  /**
+   * inviteId → the key that signed its create, as the box verified it (the
+   * admin root, an admin device's key or a non-admin device's key). Sticky:
+   * set before anyone is bound and never replaced. A non-admin creator's links
+   * let new people in only while that device is manager-class in the app, and
+   * only that device (or an admin) may withdraw them.
+   */
+  creators: Record<string, string>;
+  /**
+   * Admin overrides of the account's own people (docs/service-access-gating.md
+   * "Account members"): `device:<pub>` or `share:<shareId>` → `member`,
+   * `manager`, `master` or `refused`. An override replaces the default
+   * (admin device master, other devices and co-managers manager).
+   */
+  ranks: Record<string, string>;
 }
 
-/** Who signed an invite's create (docs/service-access-gating.md "Who can invite"). */
+/** Who signed an invite's create (docs/service-access-gating.md "Account members"). */
 export type InviteTier = "admin" | "member";
+
+/** An admin override of an account device or co-manager in one app. */
+export type AccountRank = MemberRole | "refused";
 
 /** The ranks an owner can give, lowest first (their wire names; the one place on the box). */
 export const MEMBER_ROLE_LADDER = APP_MEMBER_ROLES;
@@ -113,8 +140,8 @@ export type MemberRole = (typeof MEMBER_ROLE_LADDER)[number];
 
 /**
  * A rank: older role names map onto it (viewer → member, editor → manager,
- * admin → master), `owner` is never given to a member (→ master), anything
- * else is null.
+ * admin → master), a stored or legacy `owner` reads as master (there is no
+ * owner rank in apps), anything else is null.
  */
 export function ladderRole(role: string | null | undefined): MemberRole | null {
   switch (role) {
@@ -140,7 +167,7 @@ function higher(a: MemberRole | null, b: MemberRole | null): MemberRole | null {
 }
 
 function emptyRoles(): MemberRoles {
-  return { aids: {}, invites: {}, grants: {}, seq: {}, tiers: {} };
+  return { aids: {}, invites: {}, grants: {}, seq: {}, tiers: {}, creators: {}, ranks: {} };
 }
 
 function readRoles(v: unknown): MemberRoles {
@@ -155,6 +182,12 @@ function readRoles(v: unknown): MemberRoles {
   strMap(r.invites, out.invites);
   strMap(r.grants, out.grants);
   strMap(r.tiers, out.tiers);
+  strMap(r.creators, out.creators);
+  strMap(r.ranks, out.ranks);
+  for (const [k, v] of Object.entries(out.creators)) if (!/^[0-9a-f]{64}$/.test(v)) delete out.creators[k];
+  for (const [k, v] of Object.entries(out.ranks)) {
+    if (!/^(device:[0-9a-f]{64}|share:[0-9a-f]{32})$/.test(k) || accountRank(v) === null) delete out.ranks[k];
+  }
   if (r.seq && typeof r.seq === "object") {
     for (const [k, x] of Object.entries(r.seq)) if (typeof x === "number") out.seq[k] = x;
   }
@@ -162,7 +195,25 @@ function readRoles(v: unknown): MemberRoles {
 }
 
 function copyRoles(r: MemberRoles): MemberRoles {
-  return { aids: { ...r.aids }, invites: { ...r.invites }, grants: { ...r.grants }, seq: { ...r.seq }, tiers: { ...r.tiers } };
+  return {
+    aids: { ...r.aids },
+    invites: { ...r.invites },
+    grants: { ...r.grants },
+    seq: { ...r.seq },
+    tiers: { ...r.tiers },
+    creators: { ...r.creators },
+    ranks: { ...r.ranks },
+  };
+}
+
+function accountRank(v: string | undefined): AccountRank | null {
+  if (v === "refused") return "refused";
+  return v === "member" || v === "manager" || v === "master" ? v : null;
+}
+
+/** A rank at least Manager: the account people who may invite (at Member) and withdraw their own. */
+export function isManagerClass(rank: MemberRole | null): boolean {
+  return rank === "manager" || rank === "master";
 }
 
 type PersistShape = Record<string, Omit<ServiceAccessEntry, "roles"> & { roles?: MemberRoles }>;
@@ -171,12 +222,16 @@ type PersistShape = Record<string, Omit<ServiceAccessEntry, "roles"> & { roles?:
 export const ALLOW_LIST_CAP = 5000;
 
 /**
- * Persisted per-service access state — mode + AID allow-list. Default mode is
- * `open`, so a service with no row behaves exactly as before this feature.
+ * Persisted per-service access state — mode, allow-list, grants, ranks. Default
+ * mode is `open`, so a service with no row behaves exactly as before this
+ * feature. Who a signing key is (an account device, a co-manager) comes from
+ * the {@link PrincipalResolver}; the account's people get default ranks the
+ * admin can override per app (docs/service-access-gating.md "Account members").
  */
 export class ServiceAccessStore {
   private byService = new Map<string, ServiceAccessEntry>();
   private readonly statePath: string;
+  private readonly legacyPath: string | null;
   /**
    * M4 fail-open alert: set true when `load` hit absent/corrupt state and fell
    * open (every service back to OPEN). Surfaced to the owner so a silent revert
@@ -187,26 +242,41 @@ export class ServiceAccessStore {
   private readonly onFailOpen?: (info: { error: string }) => void;
 
   private readonly ownerAidHex: string | null;
+  private principals: PrincipalResolver | null;
 
   constructor(
-    statePath = "/var/flagship/service-access.json",
+    statePath = "/var/flagship/data/flagship-access/service-access.json",
     opts: {
       onFailOpen?: (info: { error: string }) => void;
       /**
-       * The owner's stable AID. The owner always passes the gate of their own
-       * services: restricting a service keeps others out, never its owner.
+       * The owner's stable AID. With no resolver it is the owner (an admin
+       * device, master); with one, the resolver decides (a legacy device).
        */
       ownerAidHex?: string;
+      /** Who a key is on this box (account devices, co-managers). */
+      principals?: PrincipalResolver;
+      /**
+       * Where older boxes kept the state (outside the data folder Migrate
+       * carries). Read once when `statePath` doesn't exist yet, then moved.
+       */
+      legacyPath?: string;
     } = {},
   ) {
     this.statePath = statePath;
+    this.legacyPath = opts.legacyPath ?? null;
     this.onFailOpen = opts.onFailOpen;
     this.ownerAidHex = opts.ownerAidHex?.toLowerCase() ?? null;
+    this.principals = opts.principals ?? null;
+  }
+
+  /** Wire (or replace) who-is-who on this box. */
+  setPrincipals(p: PrincipalResolver): void {
+    this.principals = p;
   }
 
   /** Whether the owner can be let through a restricted gate on this box. */
   knowsOwner(): boolean {
-    return this.ownerAidHex !== null;
+    return this.ownerAidHex !== null || (this.principals?.devices().length ?? 0) > 0;
   }
 
   /** Whether `aidHex` is the owner's stable AID (false when none is pinned). */
@@ -214,26 +284,71 @@ export class ServiceAccessStore {
     return this.ownerAidHex !== null && aidHex.toLowerCase() === this.ownerAidHex;
   }
 
+  /** Who a key is on this box: an account device, a co-manager, or null. */
+  principal(pubHex: string): Principal | null {
+    const pub = pubHex.toLowerCase();
+    const p = this.principals?.classify(pub) ?? null;
+    if (p) return p;
+    if (!this.principals && this.ownerAidHex !== null && pub === this.ownerAidHex) {
+      return { kind: "device", pub, deviceId: null, tier: "admin", legacy: true };
+    }
+    return null;
+  }
+
+  /** Learn about an unknown key before deciding (refreshes the device book; bounded). */
+  async ensureKnown(pubHex: string): Promise<void> {
+    if (this.principal(pubHex)) return;
+    await this.principals?.ensure(pubHex.toLowerCase()).catch(() => {});
+  }
+
+  /** The account devices in the book and the co-managers (for the members list). */
+  accountPeople(): Principal[] {
+    if (!this.principals) return [];
+    return [...this.principals.devices(), ...this.principals.coManagers()];
+  }
+
+  /** The id an app knows this person by: every device of the owning account is the one owner. */
+  appIdentityKey(pubHex: string): string {
+    const p = this.principal(pubHex);
+    if (p?.kind === "device") return this.principals?.ownerAidHex() ?? this.ownerAidHex ?? p.pub;
+    return pubHex.toLowerCase();
+  }
+
   async load(): Promise<void> {
     let raw: PersistShape;
+    let fromLegacy = false;
     try {
       raw = JSON.parse(await readFile(this.statePath, "utf8")) as PersistShape;
     } catch (e) {
-      // A genuinely-absent file (first boot, no restricted service yet) is the
-      // normal empty case — NOT an alert. A PRESENT-but-corrupt file is the M4
-      // case: we fall open (so an existing OPEN service is never bricked) but
-      // RAISE a visible owner flag instead of failing silently.
       const code = (e as NodeJS.ErrnoException)?.code;
-      this.byService.clear();
-      this.loadFellOpen = code !== "ENOENT";
-      this.loadError = this.loadFellOpen ? String((e as Error)?.message ?? e) : null;
-      if (this.loadFellOpen) {
-        console.error(
-          `[service-access] state file unreadable (${this.loadError}); FAILING OPEN — restricted services revert to open until repaired`,
-        );
-        this.onFailOpen?.({ error: this.loadError ?? "corrupt state" });
+      let legacy: PersistShape | null = null;
+      if (code === "ENOENT" && this.legacyPath) {
+        try {
+          legacy = JSON.parse(await readFile(this.legacyPath, "utf8")) as PersistShape;
+        } catch (le) {
+          if ((le as NodeJS.ErrnoException)?.code !== "ENOENT") e = le;
+        }
       }
-      return;
+      if (legacy) {
+        raw = legacy;
+        fromLegacy = true;
+      } else {
+        // A genuinely-absent file (first boot, no restricted service yet) is the
+        // normal empty case — NOT an alert. A PRESENT-but-corrupt file is the M4
+        // case: we fall open (so an existing OPEN service is never bricked) but
+        // RAISE a visible owner flag instead of failing silently.
+        const c = (e as NodeJS.ErrnoException)?.code;
+        this.byService.clear();
+        this.loadFellOpen = c !== "ENOENT";
+        this.loadError = this.loadFellOpen ? String((e as Error)?.message ?? e) : null;
+        if (this.loadFellOpen) {
+          console.error(
+            `[service-access] state file unreadable (${this.loadError}); FAILING OPEN — restricted services revert to open until repaired`,
+          );
+          this.onFailOpen?.({ error: this.loadError ?? "corrupt state" });
+        }
+        return;
+      }
     }
     this.byService.clear();
     this.loadFellOpen = false;
@@ -253,6 +368,11 @@ export class ServiceAccessStore {
       }
       this.byService.set(ref, { mode: e.mode, allow: [...new Set(allow)], groups, roles: readRoles(e.roles) });
     }
+    if (fromLegacy && this.legacyPath) {
+      // Into the data folder Migrate carries; the old file is set aside.
+      await this.persist();
+      await rename(this.legacyPath, `${this.legacyPath}.moved`).catch(() => {});
+    }
   }
 
   /** M4 — true iff the last load fell open because the state file was corrupt. */
@@ -269,11 +389,43 @@ export class ServiceAccessStore {
     return this.byService.get(serviceRef)?.mode ?? "open";
   }
 
+  /**
+   * Whether `visitorAidHex` is let into `serviceRef`: an account device or a
+   * co-manager unless an admin refused them there; anyone else only while on
+   * the app's allow-list.
+   */
   isAllowed(serviceRef: string, visitorAidHex: string): boolean {
-    if (this.ownerAidHex !== null && visitorAidHex.toLowerCase() === this.ownerAidHex) return true;
+    const key = visitorAidHex.toLowerCase();
+    const p = this.principal(key);
+    if (p) return this.accountRank(serviceRef, p) !== null;
     const e = this.byService.get(serviceRef);
     if (!e) return false; // only relevant when restricted; no row ⇒ no allow-list
-    return e.allow.includes(visitorAidHex.toLowerCase());
+    return e.allow.includes(key);
+  }
+
+  /** The admin override set on an account device or co-manager in an app (null: none). */
+  rankOverride(serviceRef: string, p: Principal): AccountRank | null {
+    return accountRank(this.byService.get(serviceRef)?.roles.ranks[rankKey(p)]);
+  }
+
+  /** An account device's or co-manager's rank in an app: the override, else the default; null when refused. */
+  accountRank(serviceRef: string, p: Principal): MemberRole | null {
+    const set = this.rankOverride(serviceRef, p);
+    if (set === "refused") return null;
+    if (set) return set;
+    return p.kind === "device" && p.tier === "admin" ? "master" : "manager";
+  }
+
+  /**
+   * Anyone's rank in an app: account people by {@link accountRank}, invited
+   * people by their grants ({@link roleOf}, else the app's default); null when
+   * they aren't let in.
+   */
+  effectiveRank(serviceRef: string, pubHex: string, defaultRole: string): MemberRole | null {
+    const p = this.principal(pubHex);
+    if (p) return this.accountRank(serviceRef, p);
+    if (!this.isAllowed(serviceRef, pubHex)) return null;
+    return this.roleOf(serviceRef, pubHex, defaultRole) ?? ladderRole(defaultRole) ?? "member";
   }
 
   allowList(serviceRef: string): string[] {
@@ -330,9 +482,42 @@ export class ServiceAccessStore {
     await this.persist();
   }
 
+  /** Drop everything about an app (its uninstall): a reinstall under the same id starts clean. */
+  async forget(serviceRef: string): Promise<boolean> {
+    if (!this.byService.delete(serviceRef)) return false;
+    await this.persist();
+    return true;
+  }
+
   async setMode(serviceRef: string, mode: ServiceAccessMode): Promise<void> {
     this.entry(serviceRef).mode = mode;
     await this.persist();
+  }
+
+  /**
+   * Apply a verified mode order, latest order wins: one no newer than the last
+   * applied for this app is refused (`stale`).
+   */
+  async applyModeOrder(serviceRef: string, mode: ServiceAccessMode, issuedAt: number): Promise<"ok" | "stale"> {
+    const e = this.entry(serviceRef);
+    const last = e.roles.seq.mode;
+    if (last !== undefined && issuedAt <= last) return "stale";
+    e.roles.seq.mode = issuedAt;
+    e.mode = mode;
+    await this.persist();
+    return "ok";
+  }
+
+  /** Apply a verified removal order (latest order wins per person); true when someone was removed. */
+  async applyRemoveOrder(serviceRef: string, aidHex: string, issuedAt: number): Promise<"removed" | "absent" | "stale"> {
+    const aid = aidHex.toLowerCase();
+    const e = this.entry(serviceRef);
+    const key = `remove:${aid}`;
+    const last = e.roles.seq[key];
+    if (last !== undefined && issuedAt <= last) return "stale";
+    e.roles.seq[key] = issuedAt;
+    await this.persist();
+    return (await this.removeAllowed(serviceRef, aid)) ? "removed" : "absent";
   }
 
   /**
@@ -407,6 +592,7 @@ export class ServiceAccessStore {
       delete e.groups[inviteId];
       delete e.roles.invites[inviteId];
       delete e.roles.tiers[inviteId];
+      delete e.roles.creators[inviteId];
       for (const key of Object.keys(e.roles.grants)) if (key.startsWith(`${inviteId}/`)) delete e.roles.grants[key];
       // Revoking one grant leaves a person's others: only someone left with
       // no grant at all stops being a member.
@@ -421,6 +607,13 @@ export class ServiceAccessStore {
     }
     if (changed) await this.persist();
     return pruned;
+  }
+
+  /** The apps on this box that know an invite (it was redeemed or accepted here). */
+  servicesWithInvite(inviteId: string): string[] {
+    return [...this.byService.entries()]
+      .filter(([, e]) => inviteId in e.groups || inviteId in e.roles.creators || inviteId in e.roles.tiers)
+      .map(([ref]) => ref);
   }
 
   private grantsOf(e: ServiceAccessEntry, aid: string): string[] {
@@ -455,6 +648,19 @@ export class ServiceAccessStore {
     return t === "admin" || t === "member" ? t : null;
   }
 
+  /** Record the key that signed an invite's create (first one wins). */
+  async setInviteCreator(serviceRef: string, inviteId: string, pubHex: string): Promise<void> {
+    const e = this.entry(serviceRef);
+    if (e.roles.creators[inviteId]) return;
+    e.roles.creators[inviteId] = pubHex.toLowerCase();
+    await this.persist();
+  }
+
+  /** The key that signed an invite's create here (null: unknown or recorded before creators). */
+  inviteCreator(serviceRef: string, inviteId: string): string | null {
+    return this.byService.get(serviceRef)?.roles.creators[inviteId] ?? null;
+  }
+
   /**
    * The rank a join gets when no admin-signed role order set one: the app's
    * default, except a member invite, which only ever lets people in at Member
@@ -479,16 +685,19 @@ export class ServiceAccessStore {
   }
 
   /**
-   * A member's role: the highest of their grants' roles and any role set on
-   * them directly; null when the owner set none of those (the app's default
-   * then applies, through the legacy membership store first).
+   * An invited person's role: an admin order on them (`aid:`) replaces
+   * everything; otherwise the highest of their grants' roles; null when the
+   * admin set none of those (the app's default then applies, through the
+   * legacy membership store first).
    */
   roleOf(serviceRef: string, aidHex: string, defaultRole: string): MemberRole | null {
     const e = this.byService.get(serviceRef);
     if (!e) return null;
     const aid = aidHex.toLowerCase();
-    let best = ladderRole(e.roles.aids[aid]);
-    let anySet = best !== null;
+    const direct = ladderRole(e.roles.aids[aid]);
+    if (direct !== null) return direct;
+    let best: MemberRole | null = null;
+    let anySet = false;
     for (const id of this.grantsOf(e, aid)) {
       const set = ladderRole(e.roles.grants[`${id}/${aid}`]) ?? ladderRole(e.roles.invites[id]);
       // A member invite's join counts as set (at Member), so the app's
@@ -537,6 +746,17 @@ export class ServiceAccessStore {
     return "ok";
   }
 
+  /** Apply a verified override of an account device (`device:<pub>`) or co-manager (`share:<id>`). */
+  async setAccountRank(serviceRef: string, targetKey: string, rank: AccountRank, issuedAt: number): Promise<"ok" | "stale"> {
+    const e = this.entry(serviceRef);
+    const last = e.roles.seq[targetKey];
+    if (last !== undefined && issuedAt <= last) return "stale";
+    e.roles.seq[targetKey] = issuedAt;
+    e.roles.ranks[targetKey] = rank;
+    await this.persist();
+    return "ok";
+  }
+
   private async persist(): Promise<void> {
     const out: PersistShape = {};
     for (const [ref, e] of this.byService) {
@@ -547,6 +767,11 @@ export class ServiceAccessStore {
     await writeFile(tmp, JSON.stringify(out), { mode: 0o600 });
     await rename(tmp, this.statePath);
   }
+}
+
+/** The override key of an account person. */
+export function rankKey(p: Principal): string {
+  return p.kind === "device" ? `device:${p.pub}` : `share:${p.shareId}`;
 }
 
 /**
@@ -760,6 +985,11 @@ export interface ServiceAccessHttpOptions {
    * signature too or no invite of such an account could ever be redeemed.
    */
   adminRootPub?: Uint8Array;
+  /**
+   * The admin devices' grants from the device book: a device with an
+   * admin-root-signed `admin` grant may sign admin-only orders too.
+   */
+  adminGrants?: () => readonly AdminGrantView[];
   store: ServiceAccessStore;
   /** Resolve `serviceRef` (`<creator>-<slug>`) → installed? Guards set-mode (422 if not). */
   serviceInstalled: (serviceRef: string) => boolean;
@@ -876,6 +1106,8 @@ export interface ServiceAccessHttp {
    */
   decryptBundle: (encryptedBundleHex: string, inviteId: string) => InviteBundle | null;
   store: ServiceAccessStore;
+  /** Which apps a signed invite revoke may prune here (the revocation poller uses it too). */
+  verifyWithdraw: (r: RevokeServiceInvite, sig: Uint8Array) => string[];
   /** The browser-session store, when the cookie seam is enabled (else undefined). */
   sessions?: ServiceSessionStore;
 }
@@ -950,6 +1182,28 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
   const establishNonces = new EstablishNonceStore();
   const rateLimiter = new RateLimiter(opts.rateLimitPerMin ?? 30);
 
+  const pinnedRoot = opts.adminRootPub && opts.adminRootPub.length === 32 ? opts.adminRootPub : undefined;
+  /** An admin-only order: the admin root (or an admin device) on a pinned box, the owner key otherwise. */
+  function adminSigned<T>(order: T, sig: Uint8Array, verify: (o: T, s: Uint8Array, pub: Uint8Array) => boolean): boolean {
+    return authorizeSensitiveOrder({
+      order,
+      signature: sig,
+      verify,
+      ownerIrkPub: opts.ownerIrkPub,
+      ...(pinnedRoot ? { adminRootPub: pinnedRoot } : {}),
+      username: opts.username ?? "",
+      activeGrants: opts.adminGrants?.() ?? [],
+      now: now(),
+    });
+  }
+  const withdraw = buildInviteWithdrawVerifier({
+    store: opts.store,
+    adminSigned: (r, sig) =>
+      adminSigned(r, sig, verifyRevokeServiceInvite) ||
+      // A box with no admin root: the owner's AID is the owner's key too.
+      (!pinnedRoot && !!opts.ownerAidPub && verifyRevokeServiceInvite(r, sig, opts.ownerAidPub)),
+  });
+
   const decide = (serviceRef: string, req: HttpRequest): AccessDecision =>
     decideServiceAccess(
       { serverId: opts.serverId, store: opts.store, sessions: opts.sessions, now, maxAgeMs },
@@ -975,6 +1229,12 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     // also kills any live browser cookie bound to that AID.
     if (req.path === "/api/service-access/allow-remove" && req.method === "POST") {
       return handleRemoveAllow(req);
+    }
+    // Withdraw an invite: an admin's revoke, or the creating device's own
+    // while it is still manager-class in that app. Prunes who joined through it.
+    if (req.path === "/api/service-access/invite-withdraw" && req.method === "POST") {
+      if (!rateLimiter.allow(`withdraw:${clientKey(req)}`, now())) return bad(429, "rate limited");
+      return handleWithdraw(req);
     }
     // M3 — establish-session nonce challenge: a client GETs a fresh single-use
     // nonce, then echoes it inside the signed proof body on the POST below.
@@ -1041,9 +1301,11 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     if (Math.abs(now() - proof.issuedAt) > maxAgeMs) return bad(403, "stale request");
     if (!verifyServiceVisitProof(proof, sig, proof.visitorAID)) return bad(403, "invalid signature");
     const aidHex = bytesToHex(proof.visitorAID);
-    // A cookie is only issued to someone the service lets in (the owner, or an
-    // allow-listed AID): it passes a restricted gate and, on any service, names
-    // the member to the app (`appMemberSession.ts`).
+    await opts.store.ensureKnown(aidHex);
+    // A cookie is only issued to someone the service lets in (an account
+    // device or co-manager not refused there, or an allow-listed AID): it
+    // passes a restricted gate and, on any service, names the member to the
+    // app (`appMemberSession.ts`).
     if (!opts.store.isAllowed(proof.serviceRef, aidHex)) {
       return bad(401, "not allow-listed for this service");
     }
@@ -1062,23 +1324,29 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
   async function handleSetMode(req: HttpRequest): Promise<HttpResponse> {
     const env = parseEnvelope(req);
     if (!env) return bad(400, "malformed body");
-    const order = parseSetMode(env.request);
-    if (!order) return bad(400, "malformed set-service-access-mode order");
-    if (order.serverId !== opts.serverId) return bad(403, "serverId mismatch");
-    if (Math.abs(now() - order.issuedAt) > maxAgeMs) return bad(403, "stale request");
     let sig: Uint8Array;
     try {
       sig = hexToBytes(env.signature);
     } catch {
       return bad(400, "invalid signature hex");
     }
-    if (!verifySetServiceAccessMode(order, sig, opts.ownerIrkPub)) {
-      return bad(403, "invalid signature");
-    }
+    // v2 names the app only; v1 also names this server. Both are admin-only.
+    const v2 = parseServiceAccessModeV2(env.request);
+    const v1 = v2 ? null : parseSetMode(env.request);
+    const order = v2 ?? v1;
+    if (!order) return bad(400, "malformed set-service-access-mode order");
+    if (v1 && v1.serverId !== opts.serverId) return bad(403, "serverId mismatch");
+    if (Math.abs(now() - order.issuedAt) > (v2 ? ADMIN_ORDER_MAX_SKEW_MS : maxAgeMs)) return bad(403, "stale request");
+    const signed = v2
+      ? adminSigned(v2, sig, verifyServiceAccessModeV2)
+      : adminSigned(v1!, sig, verifySetServiceAccessMode);
+    if (!signed) return bad(403, "only an admin device can change who may open this app");
     if (!opts.serviceInstalled(order.serviceRef)) {
       return bad(422, "unknown service");
     }
-    await opts.store.setMode(order.serviceRef, order.mode);
+    if ((await opts.store.applyModeOrder(order.serviceRef, order.mode, order.issuedAt)) === "stale") {
+      return bad(409, "a newer change was already made: sign it again");
+    }
     return jsonResponse(200, {
       ok: true,
       serviceRef: order.serviceRef,
@@ -1089,23 +1357,58 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
   async function handleRemoveAllow(req: HttpRequest): Promise<HttpResponse> {
     const env = parseEnvelope(req);
     if (!env) return bad(400, "malformed body");
-    const order = parseRemoveAllow(env.request);
-    if (!order) return bad(400, "malformed remove-allow order");
-    if (order.serverId !== opts.serverId) return bad(403, "serverId mismatch");
-    if (Math.abs(now() - order.issuedAt) > maxAgeMs) return bad(403, "stale request");
     let sig: Uint8Array;
     try {
       sig = hexToBytes(env.signature);
     } catch {
       return bad(400, "invalid signature hex");
     }
-    if (!verifyRemoveServiceAllow(order, sig, opts.ownerIrkPub)) {
-      return bad(403, "invalid signature");
-    }
-    const removed = await opts.store.removeAllowed(order.serviceRef, order.aid);
+    const v2 = parseServiceAllowRemoveV2(env.request);
+    const v1 = v2 ? null : parseRemoveAllow(env.request);
+    const order = v2 ?? v1;
+    if (!order) return bad(400, "malformed remove-allow order");
+    if (v1 && v1.serverId !== opts.serverId) return bad(403, "serverId mismatch");
+    if (Math.abs(now() - order.issuedAt) > (v2 ? ADMIN_ORDER_MAX_SKEW_MS : maxAgeMs)) return bad(403, "stale request");
+    const signed = v2
+      ? adminSigned(v2, sig, verifyServiceAllowRemoveV2)
+      : adminSigned(v1!, sig, verifyRemoveServiceAllow);
+    if (!signed) return bad(403, "only an admin device can remove someone");
+    const r = await opts.store.applyRemoveOrder(order.serviceRef, order.aid, order.issuedAt);
+    if (r === "stale") return bad(409, "a newer change was already made: sign it again");
     // Idempotent: a no-op prune (AID already absent) still returns ok. The next
     // request from that AID is denied regardless (decide re-checks the list).
-    return jsonResponse(200, { ok: true, removed });
+    return jsonResponse(200, { ok: true, removed: r === "removed" });
+  }
+
+  async function handleWithdraw(req: HttpRequest): Promise<HttpResponse> {
+    let body: { revoke?: { inviteId?: unknown; issuedAt?: unknown }; signature?: unknown };
+    try {
+      body = JSON.parse(req.body.toString("utf8"));
+    } catch {
+      return bad(400, "invalid json");
+    }
+    const r = body.revoke;
+    if (
+      !r ||
+      typeof r.inviteId !== "string" ||
+      !/^[A-Za-z0-9._-]{1,128}$/.test(r.inviteId) ||
+      typeof r.issuedAt !== "number" ||
+      typeof body.signature !== "string" ||
+      !/^[0-9a-f]{128}$/i.test(body.signature)
+    ) {
+      return bad(400, "malformed withdraw");
+    }
+    if (Math.abs(now() - r.issuedAt) > ADMIN_ORDER_MAX_SKEW_MS) return bad(403, "stale request");
+    const revoke: RevokeServiceInvite = { inviteId: r.inviteId, issuedAt: r.issuedAt };
+    const known = opts.store.servicesWithInvite(revoke.inviteId);
+    if (known.length === 0) return jsonResponse(200, { ok: true, pruned: 0 });
+    const refs = withdraw(revoke, hexToBytes(body.signature));
+    if (refs.length === 0) {
+      return bad(403, "only an admin, or the device that sent this invite while it may still invite here, can withdraw it");
+    }
+    let pruned = 0;
+    for (const ref of refs) pruned += await opts.store.revokeGroup(revoke.inviteId, ref);
+    return jsonResponse(200, { ok: true, pruned });
   }
 
   async function handleRedeem(req: HttpRequest): Promise<HttpResponse> {
@@ -1176,6 +1479,7 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
       firstBind?: unknown;
       create?: unknown;
       createSig?: unknown;
+      creatorPubHex?: unknown;
     };
     try {
       comBody = (await comRes.json()) as typeof comBody;
@@ -1187,7 +1491,7 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     // forge the owner's AID/IRK signature, so it cannot fabricate a binding for a
     // service the owner never invited to. The create's secretHash MUST match the
     // redeemed secret (else `.com` could substitute a DIFFERENT real create).
-    const verified = verifyComCreate(comBody.create, comBody.createSig, secretHash);
+    const verified = await verifyComCreate(comBody.create, comBody.createSig, secretHash, comBody.creatorPubHex);
     if (!verified) return bad(403, "owner create signature did not verify");
     if (!opts.serviceInstalled(verified.serviceRef)) {
       return bad(409, "invite is not for a service hosted on this box");
@@ -1210,8 +1514,11 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     // For a GROUP invite (create.maxRedemptions present) bind under the inviteId
     // so a group revoke can prune the whole set.
     const boundAID = comBody.boundAID.toLowerCase();
+    const refused = creatorRefusal(verified);
+    if (refused) return refused;
     // The tier lands before the bind, so a join is never briefly uncapped.
     await opts.store.setInviteTier(verified.serviceRef, verified.inviteId, verified.tier);
+    await opts.store.setInviteCreator(verified.serviceRef, verified.inviteId, verified.creatorPub);
     // Every invite is a grant (a personal one holds one person), so revoking it
     // or giving it a role reaches exactly the people who joined through it.
     const added = await opts.store.addAllowed(verified.serviceRef, boundAID, verified.inviteId);
@@ -1288,8 +1595,8 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     // body-supplied create (a transitional client / a row `.com` can't serve).
     const fetched = await fetchComCreate(a.inviteId);
     const verified =
-      (fetched && verifyComCreate(fetched.create, fetched.createSig, undefined)) ||
-      verifyComCreate(body.create, body.createSig, undefined);
+      (fetched && (await verifyComCreate(fetched.create, fetched.createSig, undefined, fetched.creatorPubHex))) ||
+      (await verifyComCreate(body.create, body.createSig, undefined, undefined));
     if (!verified) return bad(403, "owner create signature did not verify");
     if (verified.inviteId !== a.inviteId || verified.serviceRef !== a.serviceRef) {
       return bad(403, "acceptance does not match the create");
@@ -1313,7 +1620,10 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     if (!acceptOk) return bad(403, "invalid acceptance signature");
 
     const contactAID = a.contactAID.toLowerCase();
+    const refused = creatorRefusal(verified);
+    if (refused) return refused;
     await opts.store.setInviteTier(verified.serviceRef, verified.inviteId, verified.tier);
+    await opts.store.setInviteCreator(verified.serviceRef, verified.inviteId, verified.creatorPub);
     // Always bind under the inviteId so a later (group or single) revoke can find
     // + prune this acceptance.
     const added = await opts.store.addAllowed(verified.serviceRef, contactAID, verified.inviteId);
@@ -1332,7 +1642,7 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
    */
   async function fetchComCreate(
     inviteId: string,
-  ): Promise<{ create: unknown; createSig: unknown } | null> {
+  ): Promise<{ create: unknown; createSig: unknown; creatorPubHex?: unknown } | null> {
     if (!opts.username || !opts.serverDomain || !opts.stk) return null;
     if (typeof inviteId !== "string" || !/^[0-9a-f]+$/i.test(inviteId) || inviteId.length % 2 !== 0) {
       return null;
@@ -1359,27 +1669,40 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
       return null;
     }
     if (!res.ok) return null;
-    let json: { create?: unknown; createSig?: unknown };
+    let json: { create?: unknown; createSig?: unknown; creatorPubHex?: unknown };
     try {
       json = (await res.json()) as typeof json;
     } catch {
       return null;
     }
     if (!json.create || typeof json.createSig !== "string") return null;
-    return { create: json.create, createSig: json.createSig };
+    return { create: json.create, createSig: json.createSig, creatorPubHex: json.creatorPubHex };
   }
 
   /**
-   * Verify the `.com`-relayed signed create against the owner's AID (preferred)
-   * OR the owner's IRK (transition), and — when `expectSecretHash` is given —
-   * that the create's secretHash matches the redeemed secret. Returns the
-   * validated create fields, or null on any failure.
+   * Verify the `.com`-relayed signed create ITSELF and say who signed it
+   * (docs/service-access-gating.md "Account members"): the admin root or an
+   * admin device makes an ADMIN invite; a non-admin device of the account (its
+   * key in the device book) a MEMBER invite, whose joins are capped at Member.
+   * On a box with no admin root the owner's AID or IRK, or any device, is the
+   * owner's authority (admin). The AID and IRK create nothing on a pinned box.
+   * `.com`'s `creatorPubHex` is only a hint for which key to try first. When
+   * `expectSecretHash` is given the create's secretHash must match the redeemed
+   * secret. Returns the validated create fields, or null on any failure.
    */
-  function verifyComCreate(
+  async function verifyComCreate(
     rawCreate: unknown,
     rawSig: unknown,
     expectSecretHash: string | undefined,
-  ): { inviteId: string; serviceRef: string; secretHash: string; maxRedemptions?: number; tier: InviteTier } | null {
+    creatorHint: unknown,
+  ): Promise<{
+    inviteId: string;
+    serviceRef: string;
+    secretHash: string;
+    maxRedemptions?: number;
+    tier: InviteTier;
+    creatorPub: string;
+  } | null> {
     if (!rawCreate || typeof rawCreate !== "object") return null;
     if (typeof rawSig !== "string" || !/^[0-9a-f]{128}$/i.test(rawSig)) return null;
     const c = rawCreate as Record<string, unknown>;
@@ -1414,32 +1737,45 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     } catch {
       return null;
     }
-    // Who can invite: the admin root makes an ADMIN invite. The owner's
-    // AID or IRK (every device of the account holds them) make a MEMBER
-    // invite on a box with a pinned admin root, whose joins are capped at
-    // Member; with no admin root pinned they are the owner's authority.
-    const pinned = opts.adminRootPub && opts.adminRootPub.length === 32 ? opts.adminRootPub : undefined;
-    let tier: InviteTier;
-    if (pinned && verifyCreateServiceInvite(create, sig, pinned)) {
-      tier = "admin";
-    } else if (
-      (opts.ownerAidPub ? verifyCreateServiceInvite(create, sig, opts.ownerAidPub) : false) ||
-      verifyCreateServiceInvite(create, sig, opts.ownerIrkPub)
-    ) {
-      tier = pinned ? "member" : "admin";
-    } else {
-      return null;
+    const hint = typeof creatorHint === "string" && /^[0-9a-f]{64}$/i.test(creatorHint) ? creatorHint.toLowerCase() : null;
+    if (hint) await opts.store.ensureKnown(hint);
+    const candidates: { pub: string; tier: InviteTier }[] = [];
+    if (pinnedRoot) candidates.push({ pub: bytesToHex(pinnedRoot), tier: "admin" });
+    for (const p of opts.store.accountPeople()) {
+      if (p.kind !== "device" || p.legacy) continue;
+      candidates.push({ pub: p.pub, tier: pinnedRoot && p.tier === "member" ? "member" : "admin" });
     }
+    if (!pinnedRoot) {
+      if (opts.ownerAidPub) candidates.push({ pub: bytesToHex(opts.ownerAidPub), tier: "admin" });
+      candidates.push({ pub: bytesToHex(opts.ownerIrkPub), tier: "admin" });
+    }
+    if (hint) candidates.sort((a, b) => (a.pub === hint ? -1 : b.pub === hint ? 1 : 0));
+    const hit = candidates.find((k) => verifyCreateServiceInvite(create, sig, hexToBytes(k.pub)));
+    if (!hit) return null;
     return {
       inviteId: create.inviteId,
       serviceRef: create.serviceRef,
       secretHash: create.secretHash.toLowerCase(),
       ...(create.maxRedemptions !== undefined ? { maxRedemptions: create.maxRedemptions } : {}),
-      tier,
+      tier: hit.tier,
+      creatorPub: hit.pub,
     };
   }
 
-  return { handle, decide, decryptBundle, store: opts.store, sessions: opts.sessions };
+  /**
+   * A non-admin device's links let new people in only while that device is
+   * still manager-class in the app (a demoted or refused device's open links
+   * stop working; whoever already joined stays). Null when the join may go on.
+   */
+  function creatorRefusal(v: { serviceRef: string; inviteId: string; tier: InviteTier; creatorPub: string }): HttpResponse | null {
+    if (v.tier !== "member") return null;
+    const recorded = opts.store.inviteCreator(v.serviceRef, v.inviteId) ?? v.creatorPub;
+    const p = opts.store.principal(recorded);
+    if (p && isManagerClass(opts.store.accountRank(v.serviceRef, p))) return null;
+    return bad(403, "the device that sent this invite can no longer invite people to this app: ask for a new link");
+  }
+
+  return { handle, decide, decryptBundle, store: opts.store, sessions: opts.sessions, verifyWithdraw: withdraw };
 
   // Local: verify the AID sig over the redeem tuple (mirrors .com's check; the
   // box does it first so it never relays a forged binding request upstream).
@@ -1463,6 +1799,42 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
   }
 }
 
+/** How old an admin-only order (or a withdraw) may be when it reaches the box. */
+export const ADMIN_ORDER_MAX_SKEW_MS = 10 * 60_000;
+
+/**
+ * Which of this box's apps a signed invite revoke may prune
+ * (docs/service-access-gating.md "Account members"): every app that knows the
+ * invite when an admin signed it; otherwise only the apps where the invite's
+ * recorded creator signed it and is still manager-class there (a device
+ * demoted below manager, or refused, withdraws nobody). Empty when nothing may
+ * be pruned.
+ */
+export function buildInviteWithdrawVerifier(opts: {
+  store: Pick<ServiceAccessStore, "servicesWithInvite" | "inviteCreator" | "inviteTier" | "principal" | "accountRank">;
+  adminSigned: (r: RevokeServiceInvite, sig: Uint8Array) => boolean;
+}): (r: RevokeServiceInvite, sig: Uint8Array) => string[] {
+  return (r, sig) => {
+    const refs = opts.store.servicesWithInvite(r.inviteId);
+    if (refs.length === 0) return [];
+    if (opts.adminSigned(r, sig)) return refs;
+    return refs.filter((ref) => {
+      if (opts.store.inviteTier(ref, r.inviteId) !== "member") return false;
+      const creator = opts.store.inviteCreator(ref, r.inviteId);
+      if (!creator) return false;
+      let ok = false;
+      try {
+        ok = verifyRevokeServiceInvite(r, sig, hexToBytes(creator));
+      } catch {
+        ok = false;
+      }
+      if (!ok) return false;
+      const p = opts.store.principal(creator);
+      return p !== null && isManagerClass(opts.store.accountRank(ref, p));
+    });
+  };
+}
+
 export interface RevocationPollerOptions {
   controlPlaneBaseUrl: string;
   /** The account username (the `.com` path segment). */
@@ -1474,6 +1846,12 @@ export interface RevocationPollerOptions {
   /** The box's STK keypair — the box holds NO owner key, so it STK-signs the poll. */
   stk: Keypair;
   store: ServiceAccessStore;
+  /**
+   * Which of this box's apps a signed revoke may prune
+   * ({@link buildInviteWithdrawVerifier}). A row without a signed revoke, or
+   * one this returns nothing for, prunes nobody.
+   */
+  verifyRevoke: (r: RevokeServiceInvite, sig: Uint8Array) => string[];
   fetchImpl?: typeof fetch;
   now?: () => number;
   /** Poll cadence (ms) — reuses the daemon-status heartbeat cadence. Default 5 min. */
@@ -1533,7 +1911,13 @@ export function buildRevocationPoller(opts: RevocationPollerOptions): Revocation
     }
     if (!res.ok) return 0;
     let body: {
-      revoked?: { inviteId?: unknown; serviceRef?: unknown; boundAIDs?: unknown }[];
+      revoked?: {
+        inviteId?: unknown;
+        serviceRef?: unknown;
+        boundAIDs?: unknown;
+        revoke?: { inviteId?: unknown; issuedAt?: unknown } | null;
+        revokeSig?: unknown;
+      }[];
       cursor?: unknown;
     };
     try {
@@ -1544,14 +1928,29 @@ export function buildRevocationPoller(opts: RevocationPollerOptions): Revocation
     let pruned = 0;
     for (const r of body.revoked ?? []) {
       if (typeof r.inviteId !== "string") continue;
-      const serviceRef = typeof r.serviceRef === "string" ? r.serviceRef : undefined;
-      // Grant-prune by inviteId (covers personal + group; a personal invite is a
-      // grant of one). Falls back to per-AID removal for any AID the grant map
-      // didn't capture (an older bind), unless they still hold another grant.
-      pruned += await opts.store.revokeGroup(r.inviteId, serviceRef);
-      if (Array.isArray(r.boundAIDs) && serviceRef) {
-        for (const aid of r.boundAIDs) {
-          if (typeof aid === "string" && (await opts.store.removeIfUngranted(serviceRef, aid))) pruned++;
+      // Only a revoke the box verifies itself prunes anyone: an admin's, or
+      // the creating device's while it may still invite there. `.com`'s word
+      // that an invite is revoked is not enough.
+      const rv = r.revoke;
+      if (
+        !rv ||
+        rv.inviteId !== r.inviteId ||
+        typeof rv.issuedAt !== "number" ||
+        typeof r.revokeSig !== "string" ||
+        !/^[0-9a-f]{128}$/i.test(r.revokeSig)
+      ) {
+        continue;
+      }
+      const refs = opts.verifyRevoke({ inviteId: r.inviteId, issuedAt: rv.issuedAt }, hexToBytes(r.revokeSig));
+      for (const ref of refs) {
+        // Grant-prune by inviteId (covers personal + group; a personal invite is
+        // a grant of one). Falls back to per-AID removal for any AID the grant
+        // map didn't capture (an older bind), unless they hold another grant.
+        pruned += await opts.store.revokeGroup(r.inviteId, ref);
+        if (Array.isArray(r.boundAIDs) && r.serviceRef === ref) {
+          for (const aid of r.boundAIDs) {
+            if (typeof aid === "string" && (await opts.store.removeIfUngranted(ref, aid))) pruned++;
+          }
         }
       }
     }

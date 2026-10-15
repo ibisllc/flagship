@@ -355,6 +355,39 @@ describe("ServicePlatform.install", () => {
   });
 });
 
+describe("ServicePlatform.uninstall is admin-only (docs/service-access-gating.md, Account members)", () => {
+  it("on a box with an admin root the owner IRK can't uninstall; the admin root and the box itself can", async () => {
+    const irk = makeKey();
+    const adminRoot = makeKey();
+    const boxKey = makeKey();
+    const { runner } = fakeRunner();
+    const platform = new ServicePlatform({
+      host: { username: HOST_USERNAME, irkPub: irk.publicKey, adminRootPub: adminRoot.publicKey },
+      hostIdentityPub: boxKey.publicKey,
+      swk: fakeSwk(),
+      appRunner: runner,
+      dataProvisioner: makeProvisioner(),
+    });
+    const install = (slug: string) =>
+      platform.install({
+        request: { serverId: HOST_FQDN, creator: HOST_USERNAME, slug, manifestJson: SELF_MANIFEST, issuedAt: Date.now() },
+        signature: new Uint8Array(64),
+        verify: () => true,
+      });
+    const { verifyUninstallService } = await import("@flagship/protocol");
+    const uninstall = (slug: string, signer: Keypair) => {
+      const request = { serverId: HOST_FQDN, creator: HOST_USERNAME, slug, issuedAt: Date.now() };
+      return platform.uninstall({ request, signature: signUninstallService(request, signer), verify: verifyUninstallService });
+    };
+    await install("game1");
+    await install("game2");
+    expect((await uninstall("game1", irk)).ok).toBe(false);
+    expect(platform.byServiceId("alice--game1")).toBeDefined();
+    expect((await uninstall("game1", adminRoot)).ok).toBe(true);
+    expect((await uninstall("game2", boxKey)).ok).toBe(true);
+  });
+});
+
 describe("ServicePlatform.uninstall (idempotent)", () => {
   it("uninstalls + cleans up the URL/registry slot", async () => {
     const irk = makeKey();

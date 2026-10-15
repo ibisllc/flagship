@@ -20,7 +20,7 @@ SSE routes, with `LISTEN`/`NOTIFY` behind them.
 |---|---|---|
 | anonymous, any path | forwarded, `X-Flagship-Visitor: anonymous` | knock page (browser) / 403 |
 | anonymous, a `public_routes` path | forwarded, anonymous | forwarded, anonymous |
-| member or owner (signed in) | forwarded with id + rank | forwarded with id + rank |
+| member, account device or co-manager (signed in) | forwarded with id + rank | forwarded with id + rank |
 | owner's API key | forwarded as `api` | forwarded as `api` |
 
 The same table holds for every method and for WebSocket upgrades. On an open app
@@ -100,32 +100,36 @@ on public routes on a members-only one), and an app's own sign-in is unaffected.
 Default and recommended: **Flagship identity**. The app reads the injected
 headers; no login code, no passwords. The AI suggests this first.
 
-**Who the app sees (members).** Members are the owner and the people the owner
-let in (the service's allow-list, filled by invites,
-docs/service-access-gating.md). A browser can't sign, so a person signs in with
-their phone:
+**Who the app sees (members).** Members are the devices of the account that
+owns the box, the accounts co-managing it, and the people let in (the
+service's allow-list, filled by invites; docs/service-access-gating.md,
+"Account members"). A browser can't sign, so a person signs in with their
+phone:
 
 1. They open the app's sign-in link (`/__flagship/sign-in`, either mode), or,
    on a members-only app, any path outside `public_routes`. A browser
    navigation (GET with `Accept: text/html`) gets the knock page (QR, "Access
    site" deeplink, "Get link"); an API call or asset gets a 403.
-2. Their phone signs the knock with their account id (AID) and posts it to
-   the box (`POST /api/service-access/knock/authorize`). The box accepts the
-   owner's AID (`ownerAidPub` in the box config) and allow-listed AIDs, and
-   refuses anyone else with 401.
+2. Their phone signs the knock and posts it to the box
+   (`POST /api/service-access/knock/authorize`): a device of the owning account
+   with its account device key, a co-manager with its share key, anyone else
+   with their id for this app. The box accepts a device in its device book and
+   an active co-manager (unless an admin refused them in this app) and
+   allow-listed ids, and refuses anyone else with 401.
 3. The page's poll picks up a `Flagship-App-Session` cookie (host-only, 12 h)
    for that app, and reloads.
 
 On each request the box looks the cookie up (`appMemberSession.ts`): a live
-session for THIS app whose AID is still let in becomes the member; a cookie for
+session for THIS app whose key is still let in becomes the member; a cookie for
 another app, an expired, closed or unknown one, or one whose person was
 removed is anonymous. The app gets `X-Flagship-User` = a per-app stable id
-derived from the app secret and the AID (the same person has unrelated ids in
-two apps; it survives their device and key changes) and `X-Flagship-Role` =
-`owner` for the owner, otherwise the highest role the owner gave the person's
-invites (or them), else the role the app's membership store holds for
-that AID, else the manifest's `default_role`. Only the box owner is ever
-`owner`: a default (or assigned) role of `owner` gives an invited person
+derived from the app secret and a key (the same person has unrelated ids in
+two apps; every device of the owning account is the one id of the owner AID)
+and `X-Flagship-Role` = the rank: an admin device `master`, the account's other
+devices and co-managers `manager`, unless an admin order set another; an
+invited person the highest rank their invites give (or an admin's order on
+them), else the role the app's membership store holds, else the manifest's
+`default_role`. There is no `owner` rank: a stored or legacy `owner` reads as
 `master`.
 
 **The header contract.** On every request it forwards (plain, streamed or a
@@ -137,7 +141,7 @@ starts with `X-Flagship-` (any case, and also spelled with underscores,
 |---|---|---|---|
 | `X-Flagship-Visitor` | `member` | `api` | `anonymous` |
 | `X-Flagship-User` | per-app stable id | `apikey:<keyId>` | *absent* |
-| `X-Flagship-Role` | `member` / `manager` / `master` / `owner` | `api` | *absent* |
+| `X-Flagship-Role` | `member` / `manager` / `master` | `api` | *absent* |
 | `X-Flagship-Api-Scope` | *absent* | `read` / `write` | *absent* |
 | `X-Flagship-App-Id`, `-Timestamp`, `-Signature` | set | set | set |
 
@@ -157,18 +161,15 @@ reach only `public_routes` (§2). An app must never treat a missing
 `X-Flagship-User` or `X-Flagship-Role` as a member.
 
 Ranks are Flagship's, ordered and cumulative (docs/service-access-gating.md,
-"Open mode + members"): `member` < `manager` < `master`, plus `owner` for the
-box owner. The owner gives each member a rank; a person holding several
-invites has the highest. The manifest says what each rank can do in this app
+"Account members"): exactly `member` < `manager` < `master`. An admin device
+gives each member a rank; a person holding several invites has the highest. The manifest says what each rank can do in this app
 (`access.role_descriptions`, one line each, shown to the owner in the rank
 picker) and the app enforces it: the box delivers the rank and never blocks a
 request by it, so the base `member` rank must still be able to use the app.
 
 On an open app a member is an anonymous visitor (no rank) until they sign in: link to
 `/__flagship/sign-in?next=<path>` (and `/__flagship/sign-out?next=<path>`),
-which the box serves on the app's own host. A box with no owner AID pinned can't
-recognise its owner, so a members-only app's private pages are reachable only
-with API keys.
+which the box serves on the app's own host.
 
 If the owner asks for their own sign-in, the AI may build it:
 - passwords: only slow salted hashes (pgcrypto `crypt()` with bcrypt, or the

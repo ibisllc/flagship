@@ -43,7 +43,7 @@ export interface SessionInfo {
   memberPub: Bytes;
   /** The app-stable id derived for this member-app pair (`AppMembership.stableIdFor`). */
   stableId: string;
-  /** `owner` for the box owner, else the member's role in this app. */
+  /** The member's rank in this app: member, manager or master (there is no owner rank). */
   role: string;
 }
 

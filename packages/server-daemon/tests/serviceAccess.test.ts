@@ -1227,7 +1227,16 @@ describe("v2 — revocation poller", () => {
       polledUrl = String(url);
       return new Response(
         JSON.stringify({
-          revoked: [{ inviteId, serviceRef: SERVICE, boundAIDs: [hex(friendAid.publicKey)], revokedAt: NOW }],
+          revoked: [
+            {
+              inviteId,
+              serviceRef: SERVICE,
+              boundAIDs: [hex(friendAid.publicKey)],
+              revokedAt: NOW,
+              revoke: { inviteId, issuedAt: NOW },
+              revokeSig: "ab".repeat(64),
+            },
+          ],
           cursor: NOW,
         }),
         { status: 200, headers: { "content-type": "application/json" } },
@@ -1241,6 +1250,8 @@ describe("v2 — revocation poller", () => {
       serverDomain: FQDN,
       stk: ownerDevice, // any keypair — the box signs with its STK
       store,
+      // The box verifies each signed revoke itself (inviteTiers.test.ts covers who may).
+      verifyRevoke: (r) => (r.inviteId === inviteId ? [SERVICE] : []),
       fetchImpl,
       now: () => NOW,
     });
@@ -1264,6 +1275,7 @@ describe("v2 — revocation poller", () => {
       serverDomain: FQDN,
       stk: ownerDevice,
       store,
+      verifyRevoke: () => [],
       fetchImpl,
       now: () => NOW,
     });

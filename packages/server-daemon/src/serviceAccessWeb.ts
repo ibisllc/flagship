@@ -352,10 +352,12 @@ export function buildServiceAccessWeb(opts: ServiceAccessWebOptions): ServiceAcc
     if (knock.status !== "pending") return bad(409, "already authorized");
 
     const aidHex = bytesToHex(parsed.visitorAID);
-    // Only someone the service lets in (the owner, or an allow-listed AID) gets
-    // a session. On a restricted service it passes the gate; on any service it
-    // names the member to the app (`appMemberSession.ts`), which is how the
-    // owner and invited people sign in to an app's private pages.
+    // A device the box hasn't heard of yet may be new: refresh the book first.
+    await opts.store.ensureKnown(aidHex);
+    // Only someone the service lets in (an account device or co-manager not
+    // refused there, or an allow-listed AID) gets a session. On a restricted
+    // service it passes the gate; on any service it names the member to the
+    // app (`appMemberSession.ts`), with their rank.
     if (!opts.store.isAllowed(parsed.serviceRef, aidHex)) {
       return bad(401, "not allow-listed for this service");
     }
