@@ -9,9 +9,9 @@
 //   2. show a confirm ("Open <app> on <server>?"),
 //   3. require the webapp to be unlocked (its in-page UMK),
 //   4. sign the KnockAuthorization + POST it to the box (lib/knockIdentity.js):
-//      with the global AID on our own servers, with the per-owner contact AID
-//      on a box we redeemed an invite for (the AID the invite allow-listed),
-//      and not at all on any other box,
+//      with this device's account device key on our own servers, the share's
+//      member key on a server shared with us, our id for the app on a box we
+//      redeemed an invite for, and not at all on any other box,
 //   5. on success persist a SecuredSession + nudge the visitor back to the page,
 //      whose poll then flips to the content.
 //
@@ -20,7 +20,8 @@
 
 import { $, registerView, show, setSubtitle } from "../lib/router.js";
 import { getSession } from "../lib/state.js";
-import { authorizeKnockFor, hostsFromPods, NOT_YOUR_SERVER } from "../lib/knockIdentity.js";
+import { authorizeKnockFor, hostsFromPods, NO_DEVICE_KEY, NOT_YOUR_SERVER } from "../lib/knockIdentity.js";
+import { listSharedWithMe } from "../lib/serverShares.js";
 import { parseAccessDeepLink, serviceUrlFromDeepLink } from "../lib/serviceInvite.js";
 import { liveSync } from "../lib/liveSync.js";
 import { listPodTokenIds } from "../lib/profilesStore.js";
@@ -130,7 +131,11 @@ async function onAuthorize() {
   }
   try {
     const ownServers = await ownServerHosts(pendingLink.serverId, session.username);
-    const result = await authorizeKnockFor(pendingLink, session.umk, { ownServers });
+    const profile = getActiveProfile();
+    const device = profile?.accountId && profile?.deviceId ? { accountId: profile.accountId, deviceId: profile.deviceId } : null;
+    const host = String(pendingLink.serverId || "").toLowerCase();
+    const sharedServers = ownServers.has(host) ? [] : await listSharedWithMe().catch(() => []);
+    const result = await authorizeKnockFor(pendingLink, session.umk, { ownServers, device, sharedServers });
     saveSecuredSession(result);
     const { app, where } = describeLink(pendingLink);
     const serviceUrl = serviceUrlFromDeepLink(pendingLink) || `https://${pendingLink.serverId}`;
@@ -153,13 +158,13 @@ async function onAuthorize() {
       await enterSecuredSessions();
     });
   } catch (e) {
-    const notOwn = e?.code === "not-own";
+    const refusal = e?.code === "not-own" ? NOT_YOUR_SERVER : e?.code === "no-device" ? NO_DEVICE_KEY : "";
     if (status) {
       status.className = "mt-2 text-sm err-text";
-      status.textContent = notOwn ? NOT_YOUR_SERVER : humanError(e);
+      status.textContent = refusal || humanError(e);
     }
-    if (notOwn) {
-      toast(NOT_YOUR_SERVER, "err");
+    if (refusal) {
+      toast(refusal, "err");
       return;
     }
     throw e;

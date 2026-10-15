@@ -1,22 +1,28 @@
-// Which account id signs a knock authorization (docs/app-apis.md §5).
+// Which key signs a knock authorization (docs/app-apis.md §5;
+// docs/service-access-gating.md "Who is signing in").
 //
-// A box lets a browser into an app's private pages when the knock is signed by
-// the box owner's AID or by an AID on that app's allow-list. Invites bind the
-// friend's id for THAT app, `deriveAppAccountId(UMK, serviceRef)`, never their
-// global AID, so a knock on someone else's box signs with our id for the app
-// the knock link names (`ref=`). We remember which boxes we redeemed invites
-// on (and their owner's AID, from the link's `a=`); our own servers sign with
-// the global AID; any other box is refused rather than shown any id.
+// The box classifies the signing key itself:
+//  - on one of this account's own servers: this device's account device key
+//    (the box's device book says admin or not, and the rank follows);
+//  - on a server shared with this account: that share's member key;
+//  - on a box we redeemed an invite on: our id for THAT app,
+//    `deriveAppAccountId(UMK, serviceRef)` (the knock link's `ref=`).
+// Any other box is refused rather than shown any key. The device key and a
+// share key are never presented to anyone else's box: they would link us
+// across owners. We remember which boxes we redeemed invites on (and their
+// owner's AID, from the link's `a=`).
 //
 // The record holds only public keys + box names: plain localStorage, like the
 // secured-sessions handles.
 
 import {
+  deriveAccountDeviceKeyFromSeed,
   deriveAccountIdFromSeed,
   deriveAppAccountIdFromSeed,
-  signWithAccountId,
+  signWithAccountDeviceKey,
   signWithAppAccountId,
 } from "../keystore.js";
+import { deriveShareMemberKey, signWithShareMemberKey } from "./serverShare.js";
 import { authorizeKnock } from "./serviceInvite.js";
 
 const STORE_KEY = "flagship.inviteOwners.v1";
@@ -85,6 +91,23 @@ function bytesToHex(b) {
 export const NOT_YOUR_SERVER =
   "This isn't one of your servers. Open its invite link on this device first, then try again.";
 
+/** Shown when one of our own servers asks and this device has no account device id. */
+export const NO_DEVICE_KEY =
+  "This device isn't set up on your account yet. Sign in to your account on it again, then try again.";
+
+const DEVICE_ID_RE = /^[0-9a-f]{32}$/;
+const SHARE_ID_RE = /^[0-9a-f]{32}$/;
+
+/** The "Shared with me" entry whose server is `host` (or `host` is one of its app hosts). */
+function shareFor(host, shared) {
+  for (const e of shared ?? []) {
+    const d = normHost(e?.serverDomain);
+    if (!d || !SHARE_ID_RE.test(String(e?.shareId ?? ""))) continue;
+    if (host === d || host.endsWith(`.${d}`)) return { shareId: e.shareId, serverDomain: d };
+  }
+  return null;
+}
+
 /** Box hosts named by a `/pods` (or LiveSync) list: `serverDomain` / `fqdn`. */
 export function hostsFromPods(pods) {
   const out = [];
@@ -99,16 +122,21 @@ export function hostsFromPods(pods) {
 
 /**
  * The identity to sign a knock on `serverId`'s app `serviceRef` with, or null to refuse:
- *  - one of our own servers (`ownServers`) → the global AID;
+ *  - one of our own servers (`ownServers`) → this device's account device key
+ *    (`device`: the profile's `{accountId, deviceId}`; without one it throws
+ *    code "no-device" rather than fall back to a shared account key);
+ *  - a server shared with us (`sharedServers`: `{serverDomain, shareId}`) →
+ *    that share's member key;
  *  - a box we redeemed an invite on → our id for that app (a record naming our
  *    own AID is ignored: only `ownServers` makes a box ours);
- *  - anything else → null. The global AID is never offered to someone else's
- *    box: it would link us across owners, and it isn't on their list anyway.
+ *  - anything else → null.
  *
  * @param {Uint8Array} umk
  * @param {string} serverId
- * @param {{ storage?: Storage, ownServers?: Iterable<string>, serviceRef?: string }} [opts]
- * @returns {Promise<null|{kind:"app"|"account", visitorAID:Uint8Array,
+ * @param {{ storage?: Storage, ownServers?: Iterable<string>, serviceRef?: string,
+ *   device?: {accountId:string, deviceId:string}|null,
+ *   sharedServers?: Iterable<{serverDomain:string, shareId:string}> }} [opts]
+ * @returns {Promise<null|{kind:"device"|"share"|"app", visitorAID:Uint8Array,
  *   sign:(umk:Uint8Array, bytes:Uint8Array)=>Promise<Uint8Array>}>}
  */
 export async function knockIdentity(umk, serverId, opts = {}) {
@@ -116,9 +144,31 @@ export async function knockIdentity(umk, serverId, opts = {}) {
   const host = normHost(serverId);
   if (!host) return null;
   const own = new Set([...(opts.ownServers ?? [])].map(normHost));
+  if (own.has(host)) {
+    const accountId = opts.device?.accountId;
+    const deviceId = opts.device?.deviceId;
+    if (typeof accountId !== "string" || !accountId || typeof deviceId !== "string" || !DEVICE_ID_RE.test(deviceId)) {
+      const e = new Error(NO_DEVICE_KEY);
+      e.code = "no-device";
+      throw e;
+    }
+    const key = await deriveAccountDeviceKeyFromSeed(umk, accountId, deviceId);
+    return {
+      kind: "device",
+      visitorAID: key.publicKey,
+      sign: (u, bytes) => signWithAccountDeviceKey(u, accountId, deviceId, bytes),
+    };
+  }
+  const share = shareFor(host, opts.sharedServers);
+  if (share) {
+    const key = await deriveShareMemberKey(umk, share.shareId);
+    return {
+      kind: "share",
+      visitorAID: key.publicKey,
+      sign: (u, bytes) => signWithShareMemberKey(u, share.shareId, bytes),
+    };
+  }
   const global = await deriveAccountIdFromSeed(umk);
-  const asAccount = { kind: "account", visitorAID: global.publicKey, sign: signWithAccountId };
-  if (own.has(host)) return asAccount;
   const ownerHex = inviteOwnerFor(host, storage);
   // `a=` is written by whoever made the invite link: a record naming our own
   // AID must never unlock the global AID (a hostile owner could plant it).
@@ -140,7 +190,8 @@ export async function knockIdentity(umk, serverId, opts = {}) {
  *
  * @param {{serverId:string, serviceRef:string, pageId:string, svc?:string}} link
  * @param {Uint8Array} umk
- * @param {{ storage?: Storage, ownServers?: Iterable<string>, fetch?: typeof fetch, now?: () => number }} [opts]
+ * @param {{ storage?: Storage, ownServers?: Iterable<string>, device?: {accountId:string, deviceId:string}|null,
+ *   sharedServers?: Iterable<{serverDomain:string, shareId:string}>, fetch?: typeof fetch, now?: () => number }} [opts]
  */
 export async function authorizeKnockFor(link, umk, opts = {}) {
   const ident = await knockIdentity(umk, link?.serverId, { ...opts, serviceRef: link?.serviceRef });

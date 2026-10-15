@@ -1,15 +1,17 @@
-// Knock authorize identity (docs/app-apis.md §5): on a box the user was invited
-// to, the webapp signs the knock with its id for the knock's app (what the
-// invite put on the allow-list), on its own boxes with the global AID. Checks
-// the derivation against @flagship/protocol + the pinned vector, the invited-box
-// record, and the real box handler (allowed per-app id → 200, global → 401).
+// Knock authorize identity (docs/app-apis.md §5; docs/service-access-gating.md
+// "Who is signing in"): on its own boxes the webapp signs the knock with this
+// device's account device key, on a server shared with it with that share's
+// member key, and on a box the user was invited to with its id for the knock's
+// app (what the invite put on the allow-list). Checks the derivations against
+// @flagship/protocol + the pinned vector, the invited-box record, and the real
+// box handler (device key / share key / allowed per-app id → 200, global → 401).
 
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
-import { deriveAccountId, deriveAppAccountId, ed } from "@flagship/protocol";
+import { deriveAccountDeviceKeySeed, deriveAccountId, deriveAppAccountId, ed } from "@flagship/protocol";
 import { buildServiceAccessWeb, ServiceAccessStore, ServiceSessionStore } from "@flagship/server-daemon";
 
 function webappPath(...p: string[]) {
@@ -52,6 +54,11 @@ const SERVICE = "alice-notes";
 const ownerUmk = { seed: hexToBytes(VECTORS.seeds.authorUmkSeedHex) };
 const friendUmk = { seed: hexToBytes(VECTORS.seeds.friendUmkSeedHex) };
 const ownerAidHex = hex(deriveAccountId(ownerUmk).publicKey);
+const ACCOUNT_ID = "0f1e2d3c4b5a69788796a5b4c3d2e1f0";
+const DEVICE_ID = "a1b2c3d4e5f60718293a4b5c6d7e8f90";
+const SHARE_ID = "0123456789abcdef0123456789abcdef";
+const DEVICE = { accountId: ACCOUNT_ID, deviceId: DEVICE_ID };
+const devicePubHex = hex(ed.getPublicKey(deriveAccountDeviceKeySeed(ownerUmk.seed, ACCOUNT_ID, DEVICE_ID)));
 
 describe("knock identity — derivation matches @flagship/protocol", () => {
   it("an invited box signs with deriveAppAccountId(UMK, serviceRef), byte-for-byte", async () => {
@@ -90,14 +97,44 @@ describe("knock identity — derivation matches @flagship/protocol", () => {
 });
 
 describe("knock identity — which boxes get which id", () => {
-  it("one of our own servers signs with the global AID, even with an invite record for it", async () => {
+  it("one of our own servers signs with this device's account device key, even with an invite record for it", async () => {
     const ki = await loadKnockIdentity();
     const storage = new MemStorage();
-    const own = await ki.knockIdentity(ownerUmk.seed, FQDN, { storage, ownServers: [FQDN.toUpperCase()] });
-    expect(own.kind).toBe("account");
-    expect(hex(own.visitorAID)).toBe(VECTORS.derived.authorAidPubHex);
+    const own = await ki.knockIdentity(ownerUmk.seed, FQDN, { storage, ownServers: [FQDN.toUpperCase()], device: DEVICE });
+    expect(own.kind).toBe("device");
+    expect(hex(own.visitorAID)).toBe(devicePubHex);
+    expect(hex(own.visitorAID)).not.toBe(VECTORS.derived.authorAidPubHex);
+    const bytes = new TextEncoder().encode("flagship/test/v1|x");
+    expect(ed.verify(await own.sign(ownerUmk.seed, bytes), bytes, hexToBytes(devicePubHex))).toBe(true);
     ki.rememberInviteOwner({ serverId: FQDN, ownerAidHex: "ab".repeat(32) }, storage);
-    expect((await ki.knockIdentity(ownerUmk.seed, FQDN, { storage, ownServers: [FQDN] })).kind).toBe("account");
+    expect((await ki.knockIdentity(ownerUmk.seed, FQDN, { storage, ownServers: [FQDN], device: DEVICE })).kind).toBe("device");
+  });
+
+  it("an own server with no account device id is refused rather than shown a shared account key", async () => {
+    const ki = await loadKnockIdentity();
+    for (const device of [undefined, null, { accountId: ACCOUNT_ID, deviceId: "nope" }, { accountId: "", deviceId: DEVICE_ID }]) {
+      await expect(ki.knockIdentity(ownerUmk.seed, FQDN, { storage: new MemStorage(), ownServers: [FQDN], device })).rejects.toMatchObject({
+        code: "no-device",
+        message: ki.NO_DEVICE_KEY,
+      });
+    }
+  });
+
+  it("a server shared with us signs with that share's member key, and only there", async () => {
+    const ki = await loadKnockIdentity();
+    const ss = await import(webappPath("lib", "serverShare.js"));
+    const memberPub = hex((await ss.deriveShareMemberKey(friendUmk.seed, SHARE_ID)).publicKey);
+    const sharedServers = [{ serverDomain: FQDN.toUpperCase(), shareId: SHARE_ID }];
+    const shared = await ki.knockIdentity(friendUmk.seed, FQDN, { storage: new MemStorage(), ownServers: [], sharedServers, device: DEVICE });
+    expect(shared.kind).toBe("share");
+    expect(hex(shared.visitorAID)).toBe(memberPub);
+    const bytes = new TextEncoder().encode("flagship/test/v1|y");
+    expect(ed.verify(await shared.sign(friendUmk.seed, bytes), bytes, hexToBytes(memberPub))).toBe(true);
+    // An app host of the shared server counts; another box never gets the share key.
+    expect((await ki.knockIdentity(friendUmk.seed, `notes.${FQDN}`, { storage: new MemStorage(), sharedServers }))?.kind).toBe("share");
+    expect(await ki.knockIdentity(friendUmk.seed, "other.bob.flagship.services", { storage: new MemStorage(), sharedServers })).toBeNull();
+    // A malformed share id is ignored.
+    expect(await ki.knockIdentity(friendUmk.seed, FQDN, { storage: new MemStorage(), sharedServers: [{ serverDomain: FQDN, shareId: "xyz" }] })).toBeNull();
   });
 
   it("a record naming our own AID is ignored (an invite author could plant it to harvest our global AID)", async () => {
@@ -116,7 +153,7 @@ describe("knock identity — which boxes get which id", () => {
     ).rejects.toMatchObject({ code: "not-own" });
     expect(calls).toEqual([]);
     // Only the own-server set makes it ours.
-    expect((await ki.knockIdentity(ownerUmk.seed, FQDN, { storage, ownServers: [FQDN] }))?.kind).toBe("account");
+    expect((await ki.knockIdentity(ownerUmk.seed, FQDN, { storage, ownServers: [FQDN], device: DEVICE }))?.kind).toBe("device");
   });
 
   it("a box that is neither ours nor invited gets no identity at all", async () => {
@@ -157,9 +194,26 @@ describe("knock identity — owner-AID record", () => {
 });
 
 describe("knock identity — against the box's knock handler", () => {
+  // The box's device book and shares: this device (non-admin) and one co-manager.
+  async function sharePub() {
+    const ss = await import(webappPath("lib", "serverShare.js"));
+    return hex((await ss.deriveShareMemberKey(friendUmk.seed, SHARE_ID)).publicKey);
+  }
+  async function principals() {
+    const share = await sharePub();
+    const device = { kind: "device" as const, pub: devicePubHex, deviceId: DEVICE_ID, tier: "member" as const, legacy: false };
+    const co = { kind: "co-manager" as const, pub: share, shareId: SHARE_ID, label: "Mum" };
+    return {
+      classify: (pub: string) => (pub === devicePubHex ? device : pub === share ? co : null),
+      ensure: async () => {},
+      devices: () => [device],
+      coManagers: () => [co],
+      ownerAidHex: () => ownerAidHex,
+    };
+  }
   async function box(allowHex: string) {
     const dir = mkdtempSync(join(tmpdir(), "knock-id-"));
-    const store = new ServiceAccessStore(join(dir, "access.json"), { ownerAidHex });
+    const store = new ServiceAccessStore(join(dir, "access.json"), { ownerAidHex, principals: await principals() });
     await store.load();
     await store.addAllowed(SERVICE, allowHex);
     const sessions = new ServiceSessionStore(join(dir, "sessions.json"));
@@ -211,10 +265,30 @@ describe("knock identity — against the box's knock handler", () => {
     ).rejects.toMatchObject({ code: "401" });
   });
 
-  it("the owner gets in to their own box with the global AID", async () => {
+  it("a device of the account gets in to its own box with its account device key; the global AID is refused", async () => {
     const ki = await loadKnockIdentity();
     const b = await box("cd".repeat(32));
-    const ok = await ki.authorizeKnockFor(b.link, ownerUmk.seed, { storage: new MemStorage(), ownServers: [FQDN], fetch: b.fetchVia });
+    const ok = await ki.authorizeKnockFor(b.link, ownerUmk.seed, { storage: new MemStorage(), ownServers: [FQDN], device: DEVICE, fetch: b.fetchVia });
+    expect(ok.secretId).toMatch(/^[0-9a-f]{64}$/);
+
+    const si = await loadServiceInvite();
+    const k = await import(webappPath("keystore.js"));
+    const g = await k.deriveAccountIdFromSeed(ownerUmk.seed);
+    const b2 = await box("cd".repeat(32));
+    await expect(
+      si.authorizeKnock({ ...b2.link, visitorAID: g.publicKey, umk: ownerUmk.seed, signWithAccountId: k.signWithAccountId }, { fetch: b2.fetchVia }),
+    ).rejects.toMatchObject({ code: "401" });
+  });
+
+  it("a co-manager gets in to the shared box with the share's member key", async () => {
+    const ki = await loadKnockIdentity();
+    const b = await box("cd".repeat(32));
+    const ok = await ki.authorizeKnockFor(b.link, friendUmk.seed, {
+      storage: new MemStorage(),
+      ownServers: [],
+      sharedServers: [{ serverDomain: FQDN, shareId: SHARE_ID }],
+      fetch: b.fetchVia,
+    });
     expect(ok.secretId).toMatch(/^[0-9a-f]{64}$/);
   });
 

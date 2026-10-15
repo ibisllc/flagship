@@ -450,6 +450,12 @@ export async function deriveAccountDeviceSeedFromSeed(umkSeed, accountId, device
   return hkdf32(umkSeed, accountDeviceInfo(accountId, deviceId));
 }
 
+/** Sign canonical-bytes with this device's account device key. */
+export async function signWithAccountDeviceKey(umkSeed, accountId, deviceId, canonicalBytes) {
+  const key = await deriveAccountDeviceKeyFromSeed(umkSeed, accountId, deviceId);
+  return new Uint8Array(await crypto.subtle.sign({ name: "Ed25519" }, key.privateKey, canonicalBytes));
+}
+
 function accountDeviceInfo(accountId, deviceId) {
   return `flagship/account-device-key/v1|${accountId.toLowerCase()}|${deviceId}`;
 }

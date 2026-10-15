@@ -153,6 +153,11 @@ export async function deriveShareMemberKey(umkSeed, shareId) {
   return keypair(await hk(umkSeedOf(umkSeed), `${INFO_MEMBER}|${shareId}`));
 }
 
+/** Sign with B's member key for one share (its sign-ins to that server's apps). */
+export async function signWithShareMemberKey(umkSeed, shareId, bytes) {
+  return edSign((await deriveShareMemberKey(umkSeed, shareId)).seed, bytes);
+}
+
 /** Signs B's "Shared with me" inbox requests; its public key is the inbox id. */
 export async function deriveShareInboxKey(umkSeed) {
   return keypair(await hk(umkSeedOf(umkSeed), INFO_INBOX));

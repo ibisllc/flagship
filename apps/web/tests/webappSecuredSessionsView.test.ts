@@ -19,10 +19,13 @@ describe("web-experience gating — Process-URL authorize view", () => {
     // Parse the pasted flagship://access link, then authorize.
     expect(r.body).toContain("parseAccessDeepLink");
     expect(r.body).toContain("authorizeKnock");
-    // The signing identity (global or per-owner contact AID) comes from
-    // lib/knockIdentity.js, gated behind the in-memory UMK.
-    expect(r.body).toContain("authorizeKnockFor(pendingLink, session.umk, { ownServers })");
+    // The signing key (this device's account device key on our own servers,
+    // the share key on a shared one, the per-app id on an invited box) comes
+    // from lib/knockIdentity.js, gated behind the in-memory UMK.
+    expect(r.body).toContain("authorizeKnockFor(pendingLink, session.umk, { ownServers, device, sharedServers })");
     expect(r.body).toContain("ownServerHosts");
+    expect(r.body).toContain("listSharedWithMe()");
+    expect(r.body).toContain("NO_DEVICE_KEY");
     // A box that is neither ours nor invited is refused with a clear message.
     expect(r.body).toContain("NOT_YOUR_SERVER");
     expect(r.body).not.toContain("deriveAccountIdFromSeed");
