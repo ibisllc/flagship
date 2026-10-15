@@ -3,9 +3,9 @@
  * "## v2 hardening").
  *
  * Five surfaces over the `service_invites` directory:
- *   - create        POST /api/users/:u/service-invites           (author IRK/AID-signed)
+ *   - create        POST /api/users/:u/service-invites           (admin, or any device at Member)
  *   - redeem        POST /api/service-invites/redeem             (friend AID-signed)
- *   - revoke        POST /api/users/:u/service-invites/revoke     (author IRK/AID-signed)
+ *   - revoke        POST /api/users/:u/service-invites/revoke     (admin, or the invite's creator key)
  *   - list          GET  /api/users/:u/service-invites            (owner-SIGNED — v2 §C2)
  *   - revoked-since GET  /api/users/:u/service-invites/revoked-since (owner-SIGNED)
  *
@@ -21,6 +21,16 @@
  * create and the box verifies the owner's authority ITSELF (demoting `.com` to a
  * blind store + first-bind arbiter). `.com` still enforces maxN / expiry /
  * first-bind atomically and runs the manual-approve pending state.
+ *
+ * Who can invite (owner decision 2026-10-15, docs/service-access-gating.md):
+ * only admins grant higher access; any device of the account may let people in
+ * at Member, and admins are told. On an account with a pinned admin root a
+ * create signed by the admin root (or an admin-granted device) is an ADMIN
+ * invite; one signed by the account's membership key (AID or IRK, which every
+ * device holds) is a MEMBER invite: `.com` records the tier, pushes the admin
+ * devices a content-free notice and logs it to the account activity. The box
+ * reads the tier from the signing key itself and caps a member invite's joins
+ * at Member, so `.com`'s record is never what keeps a rank down.
  */
 
 import {
@@ -36,15 +46,20 @@ import {
   type ServiceInviteListQuery,
 } from "@flagship/protocol";
 import type {
+  AuditEventStorage,
   DeviceCapabilityGrantStorage,
+  DeviceIdentityStorage,
   ServerStorage,
   ServiceInviteApprovalMode,
+  ServiceInviteCreatorTier,
   ServiceInviteStorage,
   UsernameStorage,
   UsernameRecord,
 } from "@flagship/storage";
 import { HEX64, HEX128, hexToBytes } from "./hex.js";
 import { authorizeSensitiveComOp } from "./adminAuthorityGate.js";
+import { recordAuditEvent } from "./auditEvents.js";
+import { INVITE_CREATED_TEXT } from "./inviteNotice.js";
 import { validateUserLabel } from "./labels.js";
 import {
   conflict,
@@ -77,6 +92,16 @@ export interface ServiceInviteDeps {
    * non-sensitive — those paths are unchanged.)
    */
   grants?: DeviceCapabilityGrantStorage;
+  /**
+   * The account's devices: a create may name the device that made it
+   * (`request.deviceId`), kept only when it is a live device of the account.
+   * Absent ⇒ the named id is not recorded.
+   */
+  identities?: Pick<DeviceIdentityStorage, "get">;
+  /** Push the account's admin devices the content-free member-invite notice. */
+  notifyAdmins?: (username: string) => Promise<unknown>;
+  /** Account activity: a member invite is logged there (content-free). */
+  auditEvents?: AuditEventStorage;
   now?: () => number;
   /** Replay window for the signed create / revoke / list envelopes. Default 5 min. */
   freshnessMs?: number;
@@ -107,6 +132,27 @@ function verifyAccountSigned(
   }
 }
 
+/**
+ * MEMBER-tier invite authority (the one documented exception in
+ * scripts/admin-authority-guard.sh): on an admin-pinned account a create the
+ * admin gate refused may still be signed by the account's membership key, the
+ * AID or the IRK, which every device of the account holds. Returns the key it
+ * verified under, or null. Its joins are capped at Member by the box.
+ */
+function memberInviteSigner(userRec: UsernameRecord, verify: (pub: Uint8Array) => boolean): string | null {
+  for (const hex of [userRec.aidPubHex, userRec.irkPubHex]) {
+    if (!hex) continue;
+    try {
+      if (verify(hexToBytes(hex))) return hex.toLowerCase();
+    } catch {
+      /* next key */
+    }
+  }
+  return null;
+}
+
+const DEVICE_ID_RE = /^[0-9a-f]{32}$/;
+
 // ──────────────────────────────────────────────────────────────────────
 // create — POST /api/users/:u/service-invites
 // body { request: CreateServiceInvite(JSON, incl. optional maxRedemptions /
@@ -124,6 +170,8 @@ interface CreateBody {
     maxRedemptions?: unknown;
     expiresAt?: unknown;
     approvalMode?: unknown;
+    /** The account device id of the device that made it (attribution only, not signed). */
+    deviceId?: unknown;
   };
   signature?: unknown;
 }
@@ -185,6 +233,9 @@ export async function handleCreateServiceInvite(
   }
   const approvalMode = parseApprovalMode(r.approvalMode);
   if (typeof approvalMode === "object") return malformed(approvalMode.error);
+  if (r.deviceId !== undefined && (typeof r.deviceId !== "string" || !DEVICE_ID_RE.test(r.deviceId))) {
+    return malformed("deviceId must be 32 lowercase hex");
+  }
 
   if (Math.abs(now - r.issuedAt) > freshnessMs) return forbidden("stale request");
 
@@ -207,9 +258,10 @@ export async function handleCreateServiceInvite(
   } catch {
     return malformed("invalid signature hex");
   }
-  // Slice D — D-2: membership CREATE is SENSITIVE. Gate on master-admin
-  // authority; the legacy (no-admin-root) path keeps the DUAL-ACCEPT AID-OR-IRK
-  // verify unchanged (only THIS account's key can create invites under it).
+  // Who can invite: the admin gate first (admin root / admin-granted device;
+  // on an account with no admin root, the account's own AID or IRK, as
+  // before). On an admin-pinned account a create the gate refused may still
+  // come from the membership key: a MEMBER invite, capped at Member.
   const createAuthz = await authorizeSensitiveComOp(
     { grants: deps.grants, now: deps.now },
     {
@@ -220,8 +272,23 @@ export async function handleCreateServiceInvite(
       now,
     },
   );
-  if (!createAuthz.ok) {
-    return forbidden("invalid signature");
+  let tier: ServiceInviteCreatorTier;
+  let creatorPubHex: string;
+  if (createAuthz.ok) {
+    tier = "admin";
+    creatorPubHex = createAuthz.signerPubHex;
+  } else {
+    const member = userRec.adminRootPubHex
+      ? memberInviteSigner(userRec, (pub) => verifyCreateServiceInvite(create, sig, pub))
+      : null;
+    if (!member) return forbidden("invalid signature");
+    tier = "member";
+    creatorPubHex = member;
+  }
+  let creatorDeviceId: string | undefined;
+  if (typeof r.deviceId === "string" && deps.identities) {
+    const device = await deps.identities.get(userV.label, r.deviceId);
+    if (device && device.revokedAt === null) creatorDeviceId = device.deviceId;
   }
 
   const res = await deps.invites.create({
@@ -238,9 +305,40 @@ export async function handleCreateServiceInvite(
     ...(maxRedemptions !== undefined ? { maxRedemptions } : {}),
     ...(expiresAt !== undefined ? { expiresAt } : {}),
     ...(approvalMode !== undefined ? { approvalMode } : {}),
+    creatorTier: tier,
+    creatorPubHex,
+    ...(creatorDeviceId ? { creatorDeviceId } : {}),
   });
   if (!res.ok) return conflict(res.reason);
-  return ok({ created: true, inviteId: r.inviteId });
+  if (tier === "member") await tellAdmins(deps, userV.label, now, creatorDeviceId);
+  return ok({ created: true, inviteId: r.inviteId, tier });
+}
+
+/** A member invite: log it to the account activity and push the admin devices. Best-effort. */
+async function tellAdmins(deps: ServiceInviteDeps, username: string, now: number, deviceId?: string): Promise<void> {
+  if (deps.auditEvents) {
+    try {
+      await recordAuditEvent(
+        { auditEvents: deps.auditEvents },
+        {
+          username,
+          eventKind: "invite-created",
+          detail: INVITE_CREATED_TEXT,
+          devicePrefix: deviceId ? deviceId.slice(0, 8) : "",
+          postedAt: now,
+        },
+      );
+    } catch {
+      /* an audit write never fails the invite */
+    }
+  }
+  if (deps.notifyAdmins) {
+    try {
+      await deps.notifyAdmins(username);
+    } catch {
+      /* a failed push never fails the invite */
+    }
+  }
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -376,6 +474,27 @@ export async function handleRedeemServiceInvite(
   });
 }
 
+/**
+ * The creator-key withdraw (documented in scripts/admin-authority-guard.sh):
+ * a MEMBER invite may be revoked by the very key that created it, and only
+ * while that key is still one of the account's membership keys.
+ */
+function revokedByCreator(
+  userRec: UsernameRecord,
+  invite: { creatorTier: ServiceInviteCreatorTier | null; creatorPubHex: string | null },
+  verify: (pub: Uint8Array) => boolean,
+): boolean {
+  const creator = invite.creatorTier === "member" ? invite.creatorPubHex?.toLowerCase() : undefined;
+  if (!creator) return false;
+  const accountKeys = [userRec.aidPubHex, userRec.irkPubHex].filter((k): k is string => !!k).map((k) => k.toLowerCase());
+  if (!accountKeys.includes(creator)) return false;
+  try {
+    return verify(hexToBytes(creator));
+  } catch {
+    return false;
+  }
+}
+
 // ──────────────────────────────────────────────────────────────────────
 // revoke — POST /api/users/:u/service-invites/revoke
 // body { request: RevokeServiceInvite(JSON), signature }
@@ -425,8 +544,9 @@ export async function handleRevokeServiceInvite(
   } catch {
     return malformed("invalid signature hex");
   }
-  // Slice D — D-2: membership REVOKE is SENSITIVE. Gate on master-admin
-  // authority; the legacy (no-admin-root) path keeps the DUAL-ACCEPT verify.
+  // Revoke: an admin (the gate; on an account with no admin root, the
+  // account key as before), or the key that created this member invite (a
+  // device may withdraw its own invite), while it is still the account's.
   const revokeAuthz = await authorizeSensitiveComOp(
     { grants: deps.grants, now: deps.now },
     {
@@ -437,7 +557,7 @@ export async function handleRevokeServiceInvite(
       now,
     },
   );
-  if (!revokeAuthz.ok) {
+  if (!revokeAuthz.ok && !revokedByCreator(userRec, existing, (pub) => verifyRevokeServiceInvite(revoke, sig, pub))) {
     return forbidden("invalid signature");
   }
 
@@ -593,6 +713,8 @@ export async function handleListServiceInvites(
     expiresAt: i.expiresAt,
     redemptions: i.redemptions,
     approvalMode: i.approvalMode,
+    creatorTier: i.creatorTier,
+    creatorDeviceId: i.creatorDeviceId,
   }));
   return ok({ invites });
 }

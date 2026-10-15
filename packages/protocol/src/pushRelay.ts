@@ -41,6 +41,10 @@ export const PUSH_RELAY_CATEGORIES = [
   // either; kept for boxes that haven't updated.
   "app-access",
   "generic",
+  // A non-admin device of the account invited someone to an app. `.com`
+  // sends it to the admin devices itself (inviteNotice.ts); listed so every
+  // client handles it as a known, content-free category.
+  "invite-created",
 ] as const;
 
 export type PushRelayCategory = (typeof PUSH_RELAY_CATEGORIES)[number];

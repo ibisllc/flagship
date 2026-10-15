@@ -27,6 +27,7 @@ import {
   handleStoreTrustException,
   handleListTrustExceptions,
   handleCreateServiceInvite,
+  buildNotifyAdminDevices,
   handleCreateServerShare,
   handleListServerShares,
   handleRevokeServerShare,
@@ -1361,12 +1362,26 @@ export async function tryControlPlane(
     );
   }
   if (method === "POST" && (m = path.match(ROUTE_RE.SERVICE_INVITES))) {
+    const forwarder = buildOptionalPushForwarder(env);
     return finish(
       await handleCreateServiceInvite(
         {
           invites: storage.serviceInvites,
           usernames: storage.usernames,
           grants: storage.deviceCapabilityGrants,
+          identities: storage.deviceIdentities,
+          auditEvents: storage.auditEvents,
+          ...(forwarder
+            ? {
+                notifyAdmins: buildNotifyAdminDevices({
+                  usernames: storage.usernames,
+                  grants: storage.deviceCapabilityGrants,
+                  pushTokens: storage.pushTokens,
+                  forward: forwarder,
+                  apex: env.CONTROL_APEX,
+                }),
+              }
+            : {}),
         },
         decodeURIComponent(m[1]!),
         await readJson(request),

@@ -22,6 +22,9 @@
 #                                  | signerRoot — the mint discriminator), and
 #   2. NO sensitive `verify<Op>(…)` call passes a forbidden owner-IRK token as
 #      its trusted-key argument.
+#   3. NO membership-key authority helper (a path that accepts the account's
+#      AID/IRK, which every device holds) is called, except the documented
+#      MEMBERSHIP_KEY_EXCEPTIONS below.
 #
 # ENFORCEMENT MODE (mirrors scripts/release-guard.sh):
 #   ADMIN_AUTHORITY_ENFORCE=1 bash scripts/admin-authority-guard.sh   → fail on a violation
@@ -62,6 +65,29 @@ SENSITIVE_HANDLERS=(
   "packages/control-plane/src/deviceCapabilityGrants.ts|handleMintDeviceGrant"
   "packages/control-plane/src/routing.ts|handleRegisterRck"
 )
+
+# MEMBERSHIP-KEY EXCEPTIONS — owner decision 2026-10-15 (docs/service-access-
+# gating.md "Who can invite"): "Only admins grant higher access; any device of
+# the account may invite at Member, and admins are told." These are the ONLY
+# places a sensitive handler may accept the account's membership key after the
+# admin gate refused, each through one named helper (`<relpath>|<function>|<helper>`):
+#
+#   - invite CREATE, member tier: `memberInviteSigner` accepts a create signed
+#     by the account's AID or IRK. It grants nothing above Member: `.com` records
+#     the tier and tells the admin devices, and the BOX reads the tier from the
+#     signing key itself and caps every join through that invite at Member
+#     (serviceAccess.ts), so `.com` can't lift it either.
+#   - invite REVOKE of that member invite: `revokedByCreator` accepts the very
+#     key that created it (a device withdraws its own invite), only while that
+#     key is still one of the account's membership keys. Removing people,
+#     changing a rank or the open/members-only mode stay admin-only.
+#
+# Nothing else may call these helpers; a new entry here needs an owner decision.
+MEMBERSHIP_KEY_EXCEPTIONS=(
+  "packages/control-plane/src/serviceInvites.ts|handleCreateServiceInvite|memberInviteSigner"
+  "packages/control-plane/src/serviceInvites.ts|handleRevokeServiceInvite|revokedByCreator"
+)
+MEMBERSHIP_KEY_HELPERS='memberInviteSigner|revokedByCreator|verifyAccountSigned'
 
 # A gate token proves the handler routes authorization through the master-admin
 # path. `signerRoot` covers the admin-scope grant-mint discriminator (§3.3),
@@ -116,6 +142,19 @@ for entry in "${SENSITIVE_HANDLERS[@]}"; do
     [ -z "$hit" ] && continue
     findings+=("RAW OWNER-IRK VERIFY"$'\t'"$rel|$func: $hit")
   done < <(grep -nE "verify[A-Z][A-Za-z]*\(" <<<"$body" | grep -E "$FORBIDDEN_KEY")
+
+  # 3. a membership-key authority helper outside the documented exceptions?
+  while IFS= read -r hit; do
+    [ -z "$hit" ] && continue
+    helper="$(grep -oE "($MEMBERSHIP_KEY_HELPERS)\(" <<<"$hit" | head -1)"
+    helper="${helper%(}"
+    allowed=0
+    for ex in "${MEMBERSHIP_KEY_EXCEPTIONS[@]}"; do
+      [ "$ex" = "$rel|$func|$helper" ] && allowed=1
+    done
+    [ "$allowed" = 1 ] && continue
+    findings+=("MEMBERSHIP-KEY AUTHORITY"$'\t'"$rel|$func: $hit")
+  done < <(grep -nE "($MEMBERSHIP_KEY_HELPERS)\(" <<<"$body")
 done
 
 count="${#findings[@]}"

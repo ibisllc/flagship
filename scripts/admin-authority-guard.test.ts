@@ -95,6 +95,23 @@ describe("admin-authority-guard.sh — against fixtures (a violation trips the g
     expect(r.stderr).toContain("NO GATE");
   });
 
+  it("a membership-key helper outside the documented exceptions FAILS enforce", () => {
+    dir = makeTree(
+      [
+        "export async function handleSetCustomDomain(deps, body) {",
+        "  const authz = await authorizeSensitiveComOp(deps, { username: u, userRec, verifyWith: (pub) => verifySetCustomDomain(claim, sig, hexToBytes(pub)) });",
+        "  if (!authz.ok && !memberInviteSigner(userRec, (pub) => verifySetCustomDomain(claim, sig, pub))) {",
+        "    return forbidden('invalid signature');",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    const r = run({ ADMIN_AUTHORITY_ENFORCE: "1", ADMIN_AUTHORITY_GUARD_ROOT: dir });
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("MEMBERSHIP-KEY AUTHORITY");
+  });
+
   it("the gated form (closure through authorizeSensitiveComOp) PASSES", () => {
     dir = makeTree(
       [
@@ -160,5 +177,21 @@ describe("admin-authority-guard.sh — the allowlist matches the §2 sensitive .
       "routing.ts|handleRegisterRck",
     ];
     for (const e of expected) expect(script).toContain(e);
+  });
+
+  it("the membership-key exceptions are exactly the two invite paths (owner decision 2026-10-15)", () => {
+    const script = readFileSync(SCRIPT, "utf8");
+    const block = /MEMBERSHIP_KEY_EXCEPTIONS=\(([\s\S]*?)\)/.exec(script)?.[1] ?? "";
+    const entries = [...block.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+    expect(entries).toEqual([
+      "packages/control-plane/src/serviceInvites.ts|handleCreateServiceInvite|memberInviteSigner",
+      "packages/control-plane/src/serviceInvites.ts|handleRevokeServiceInvite|revokedByCreator",
+    ]);
+  });
+
+  it("the real invite handlers do call their documented helper (the exception is load-bearing)", () => {
+    const src = readFileSync(join(__dirname, "../packages/control-plane/src/serviceInvites.ts"), "utf8");
+    expect(src).toMatch(/memberInviteSigner\(userRec/);
+    expect(src).toMatch(/revokedByCreator\(userRec/);
   });
 });
