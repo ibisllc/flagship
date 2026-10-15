@@ -38,11 +38,14 @@ The credential rides three optional request fields (one shape everywhere):
 "credential": { "provider": "anthropic", "apiKey": "<owner key>", "baseUrl": "https://..." }
 ```
 
-- **scratch:** `POST /api/screens/vibe-code/start` (and `…/reply` to seed a
-  session that started without one). On receipt the daemon seals it for the
-  session and **reuses it on every later turn** — no re-send needed. The
-  start response carries `needsCredential: true` (200, session still exists)
-  when no model can drive the session yet.
+- **scratch:** `POST /api/screens/vibe-code/start`, and any message on
+  `…/llm/sessions/:id/reply` (to seed a session that has none, to switch
+  provider, or a fresh Flagship pass; see "Continuing a chat"). On receipt
+  the daemon seals it for the session, replacing the one it held, and
+  **reuses it on every later turn** — no re-send needed. The start response
+  carries `needsCredential: true` (200, session still exists) when no model
+  can drive the session yet; the session state says the same when a chat
+  that can continue has no key (a deploy forgets it before going live).
 - **git adapt:** `POST /api/build/git` (and `…/adapt`). Stored keyed by
   `buildId`; the `adaptRunner` opens it just-in-time.
 
@@ -178,9 +181,14 @@ Counted on the metering core (`packages/control-plane/src/meter.ts`):
 ## Choosing a model (2026-10-14)
 
 The build chat header has a compact model menu, changeable between
-messages; Settings holds a default per provider. The choice rides on every
-start and reply (`model`, `effort`) and is kept on the session
-(`VibeCodeSessionMeta.model`/`effort`), so the staged fix loop uses it too.
+messages, grouped by provider (see "Continuing a chat"); Settings holds a
+default per provider. The choice rides on every start and reply (`model`,
+`effort`) and is kept on the session (`VibeCodeSessionMeta.model`/`effort`,
+plus `provider`, the provider's name), so the staged fix loop uses it too.
+An effort control shows only when the chosen model lists effort levels
+(own keys: the capability table; Flagship Inference: the catalog's optional
+`efforts`, which it doesn't list today, so no effort is offered or assumed
+for it).
 
 - **Flagship Inference:** the catalog `.com` serves
   (`GET /api/inference/models`, `packages/control-plane/src/inferenceModels.ts`):
@@ -193,8 +201,9 @@ start and reply (`model`, `effort`) and is kept on the session
   the usage; `.com` charges its own multiplier for it. After each reply the
   apps show a muted "used N credits" (the shim's last stream chunk,
   `{"object":"flagship.usage","credits":N}`, kept per reply on the session).
-  "Think harder" (shown when the model reasons) sends `effort: "high"`; no
-  extra multiplier, only more tokens.
+  The old "Think harder" switch (it sent `effort: "high"` for any reasoning
+  model) is gone (2026-10-15): a catalog entry offers effort levels only by
+  listing them in `efforts` (with `defaultEffort`).
 - **Own keys (every provider we support):** `POST /api/screens/ai/models` on
   the box lists the key's models live (OpenAI-compatible and OpenRouter
   `/v1/models`, Anthropic `/v1/models`, Google `/v1beta/models`, Ollama
@@ -218,6 +227,63 @@ start and reply (`model`, `effort`) and is kept on the session
   and its summary, pass through the model redactor. A chat session keeps the
   summary (`summarised: true` on its state); the staged loop compacts in
   memory.
+
+## Continuing a chat (2026-10-15)
+
+An owner can carry on any recent AI build chat and switch model and
+provider in it.
+
+- **Which chats take a message.** `POST /api/screens/llm/sessions/:id/reply`
+  takes a message whenever the chat isn't running, deploying, deployed or
+  stopped: an answer to the AI's question (as before), or a new message on
+  a chat that is **ready to deploy** (it reopens: the AI changes the files,
+  the owner deploys again) or **failed** (a turn that stopped, a deploy that
+  didn't work, a restart mid-build). The session state says so
+  (`canContinue`). Otherwise 409 in plain words; a **deployed** app keeps the
+  "change this app" flow (a new chat on its live files), the two aren't
+  merged. The files written so far carry over (the parser carries them), and
+  before the owner's message the box adds a note only the model sees (a
+  `[tool_result:continue]` turn): why the chat stopped (the failure reason,
+  cut to 2,000 characters) and to write only the files it changes. Box-written
+  notes pass through the model redactor before a model reads them.
+- **Switching model and provider.** Any message may carry `model`, `effort`
+  and a new `credential` together. A key from another provider replaces the
+  session's sealed key (journalled by provider name only: "the chat switched
+  to another AI provider (openai)"); without a `model` the new provider's
+  default applies. After a switch of model or provider the box drops an
+  effort the new model doesn't list (`ModelCatalog.efforts`; kept when the
+  catalog or table can't be read). Every turn rebuilds the conversation as
+  text (`modelConversation()`), so any model can pick it up; compaction sizes
+  for the new model's context, so a smaller one summarises older turns. The
+  session state reports `provider` (name only) and `conversationTokens` (a
+  rough size of what the model is sent).
+- **The menu (all three apps).** One model menu grouped by provider:
+  Flagship Inference first (when usable, or when the chat already uses it),
+  then each AI key saved on the device, each with its models (the box lists
+  them with that key, as before). Effort sits beside it only when the chosen
+  model lists effort levels. Picking a model under another key sends that
+  key with the next message; a Flagship Inference pass is minted fresh for
+  every message; an own key is sent when it changes, when the box has none
+  (`needsCredential`) or on the first message. A reopened chat starts on the
+  group of the provider the box reports. When the chosen model's context is
+  smaller than the conversation (past the box's compaction threshold: 75% of
+  the context less the reply's room), one muted line says "Older messages
+  will be summarised to fit this model."
+- **Past builds.** The build list shows every chat the box still holds,
+  finished and failed ones included, most recently active first, with
+  Continue (waiting on the owner, ready to deploy, failed), Resume (running,
+  deploying) or Open (deployed, stopped). Opening one opens the chat on the
+  box that holds it.
+- **Retention.** A chat is saved on the box on every change (conversation,
+  files, sample data; its key separately and sealed) and survives restarts.
+  A finished one leaves memory after a day without changes and is reloaded
+  on demand; a saved chat is deleted 30 days after its last change
+  (`SESSION_RETENTION_MS`), and its key with it. Discard deletes it at once.
+
+The secret rules don't change: the key travels app → box only over the
+paired session, is sealed at rest, never echoed, logged or journalled (at
+most the provider name), never reaches `.com`, and only names of env vars
+reach a prompt.
 
 ## Attachments in the build chat
 
