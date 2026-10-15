@@ -25,7 +25,25 @@ export interface HttpInit {
   body?: string;
 }
 
+/**
+ * One request. A connection that fails before any response (the hub tunnel
+ * blipping, a box busy building) is retried twice, 5 s apart; the final error
+ * names the cause. A request that got a response is never retried.
+ */
 export async function http(url: string, init: HttpInit = {}, timeoutMs = 45_000): Promise<Resp> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await httpOnce(url, init, timeoutMs);
+    } catch (e) {
+      const cause = (e as { cause?: { code?: string; message?: string } })?.cause;
+      const why = cause?.code ?? cause?.message ?? (e instanceof Error ? e.message : String(e));
+      if (attempt >= 3) throw new Error(`fetch failed (${why}) after ${attempt} attempts: ${url}`);
+      await sleep(5000);
+    }
+  }
+}
+
+async function httpOnce(url: string, init: HttpInit, timeoutMs: number): Promise<Resp> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
