@@ -174,7 +174,8 @@
 //  v82: Settings and the AI-key step read Flagship Inference's status
 //      without asking for a username first.
 //  v83: A server order refused because another device saved a newer one
-//      says so instead of blaming the connection.
+//      says so instead of blaming the connection; a server paired by
+//      address keeps its port when a screen reaches it by name.
 const SHELL_VERSION = "v83";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
