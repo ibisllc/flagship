@@ -298,6 +298,6 @@ describe("the shell wires it", () => {
     expect(alerts).toContain("pushNotificationsEnabled()");
     const sw = await asset("/webapp/service-worker.js");
     expect(sw).toContain('"/lib/pushSetting.js"');
-    expect(sw).toContain('SHELL_VERSION = "v89"');
+    expect(sw).toContain('SHELL_VERSION = "v91"');
   });
 });

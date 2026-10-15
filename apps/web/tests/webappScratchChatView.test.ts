@@ -1,5 +1,10 @@
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import { buildServer } from "../src/server.js";
+
+const load = (...p: string[]) =>
+  import(pathToFileURL(resolve(__dirname, "..", "public", "webapp", ...p)).href);
 
 async function asset(path: string): Promise<string> {
   const app = buildServer();
@@ -64,5 +69,53 @@ describe("webapp scratch (vibe-code) chat with attachments", () => {
     expect(body).toMatch(/passwords or keys/i);
     // Friendly, reassuring prompt copy.
     expect(body).toMatch(/Drop a screenshot or a file/i);
+  });
+});
+
+describe("webapp build chat: the AI waits on the owner of a live app", () => {
+  const envVar = {
+    kind: "requestEnvVar",
+    toolUseId: "tu_1",
+    payload: {
+      name: "WEATHER_API_KEY",
+      description: "OpenWeather API key",
+      why: "to look up today's high",
+      example: "abc123",
+      secret: true,
+    },
+  };
+  const url = "https://plants.home.bright-maple.flagship.services/";
+
+  it("puts the env-var card before the live link, which stays", async () => {
+    const { resultMarkup } = await load("views", "vibe-code.js");
+    const html: string = resultMarkup(envVar, { url });
+    expect(html).toContain('id="vc-envvar-value"');
+    expect(html).toContain('type="password"');
+    expect(html).toContain("WEATHER_API_KEY");
+    expect(html).toContain('id="vc-envvar-send"');
+    expect(html).toContain('id="vc-envvar-decline"');
+    expect(html).toContain(`href="${url}"`);
+    expect(html.indexOf('id="vc-envvar-value"')).toBeLessThan(html.indexOf(url));
+  });
+
+  it("shows only the link when nothing is pending, and no card for a question", async () => {
+    const { resultMarkup } = await load("views", "vibe-code.js");
+    const live: string = resultMarkup(null, { url });
+    expect(live).toContain("Deployed ✓");
+    expect(live).not.toContain("vc-envvar");
+    const question = { kind: "talkToUser", toolUseId: "tu_2", payload: { message: "Which colour?" } };
+    // A question is answered in the composer, which stays usable on a live app.
+    expect(resultMarkup(question, { url })).not.toContain("vc-envvar");
+    expect(resultMarkup(null, {})).toBe("");
+  });
+
+  it("sends the value through the signed env path, then tells the AI it was set", async () => {
+    const body = await asset("/webapp/views/vibe-code.js");
+    expect(body).toContain("canonicalSetServiceEnv(envelope.serverId, creator, slug, envelope.env, envelope.issuedAt)");
+    expect(body).toContain("/env/set`");
+    expect(body).toContain('const body = { envVarStatus: status };');
+    expect(body).toContain('answerEnvVar("declined")');
+    // The poll must not rebuild the card under a value being typed.
+    expect(body).toContain("if (html === lastResultHtml) return;");
   });
 });

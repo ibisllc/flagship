@@ -196,7 +196,9 @@
 //      address keeps its port when a screen reaches it by name.
 //  v89: An app's "Back up now" fetches the archive with the session and
 //      saves it (lib/appBackup.js) instead of a link the box refused.
-const SHELL_VERSION = "v89";
+//  v91: The build chat answers an env var the AI asks for, ahead of the
+//      live link when the app is already live (an edit session).
+const SHELL_VERSION = "v91";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

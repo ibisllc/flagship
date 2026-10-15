@@ -11,6 +11,10 @@
 //   3. When the AI pauses to ask a question (status awaiting-tool-response
 //      with a talkToUser pending request), the composer sends the next
 //      turn to POST /api/screens/llm/sessions/<id>/reply { text, attachments }.
+//      When it asks for an env var instead, a card above the result takes the
+//      value: signed POST /api/screens/services/<appId>/env/set (the only path
+//      that carries it), then /reply { envVarStatus }. An edit session runs on
+//      an app that is already live, so that card comes before the live link.
 //   4. When status becomes ready-to-deploy, surface Deploy →
 //      /api/llm/sessions/<id>/deploy {background:true}. The box tests the app
 //      on a private copy, then installs it; the session's deployPhase says
@@ -51,6 +55,8 @@ import { deployPhaseText, deployRequestBody, startAndFollowChatDeploy } from "..
 import { RELAY_TURNED_OFF, TURN_RELAY_OFF, isRelayFailure } from "../lib/aiRelay.js";
 import { turnRelayOffForCredential } from "../providers.js";
 import { getSession } from "../lib/state.js";
+import { bytesToHex, signWithIrk } from "../keystore.js";
+import { canonicalSetServiceEnv } from "./service-env.js";
 import { freshCredential } from "../lib/freeAi.js";
 import { defaultModelFor, loadProviders } from "../providers.js";
 import {
@@ -85,6 +91,12 @@ let buildCredential = null;
 let staged = [];
 // The pending talkToUser tool the AI is waiting on, when any.
 let pendingTalkToolId = null;
+// The env var the AI is waiting on (requestEnvVar), and the app it goes to.
+let pendingEnvVar = null;
+let pendingAppId = null;
+// What #vc-result last showed: the poll re-renders often, and rebuilding the
+// card would wipe a value the owner is typing.
+let lastResultHtml = "";
 // The headline noun shown in the global operations sliver for this build —
 // seeded from the first prompt so the sliver reads "building <subject> on
 // <server>" while the AI works. Refreshed if the build's name is learned.
@@ -287,6 +299,9 @@ async function send() {
         { method: "POST", body: JSON.stringify(replyBody) },
       );
       pendingTalkToolId = null;
+    } else if (pendingEnvVar) {
+      toast(`Answer the request for ${pendingEnvVar} above first.`, "info");
+      return;
     } else {
       toast("Wait for the AI to finish this turn.", "info");
       return;
@@ -753,26 +768,123 @@ function render(state) {
   const resultBox = $("vc-result");
   const url = state.deployedUrl || (state.status === "deployed" ? deployedUrl : null);
   const failure = state.errorReason || state.failureReason || null;
+  pendingEnvVar = state.pendingRequest?.kind === "requestEnvVar" ? state.pendingRequest.payload?.name ?? null : null;
+  pendingAppId = state.appId ?? null;
+  const html = resultMarkup(state.pendingRequest, {
+    url,
+    leftOpen,
+    failure,
+    relayOff: Boolean(failure && isRelayFailure(failure) && buildCredential && !relayTurnedOff),
+  });
+  resultBox.classList.toggle("hidden", !html);
+  if (html === lastResultHtml) return;
+  lastResultHtml = html;
+  resultBox.innerHTML = html;
+  $("vc-relay-off")?.addEventListener("click", () => void relayOff());
+  $("vc-envvar-send")?.addEventListener("click", () => void sendEnvVar());
+  $("vc-envvar-decline")?.addEventListener("click", () => void answerEnvVar("declined"));
+}
+
+/**
+ * What #vc-result shows. What the AI is waiting on comes first: an edit
+ * session runs on an app that is already live, and the owner must still be
+ * able to answer it; the live link (or the failure) follows.
+ */
+export function resultMarkup(pending, { url = null, leftOpen: open = false, failure = null, relayOff = false } = {}) {
+  let html = envVarRequestMarkup(pending);
   if (url) {
-    resultBox.innerHTML = `
+    html += deployedMarkup(url, open);
+  } else if (failure) {
+    // A relay failure is shown as the box worded it, with the way out.
+    const action = relayOff
+      ? `<button id="vc-relay-off" class="secondary full-width mt-2">${escapeHtml(TURN_RELAY_OFF)}</button>`
+      : "";
+    html += `<div class="card"><p class="err-text">${escapeHtml(failure)}</p>${action}</div>`;
+  }
+  return html;
+}
+
+/** The card for an env var the AI asked for, else "". */
+export function envVarRequestMarkup(pending) {
+  if (pending?.kind !== "requestEnvVar" || !pending.payload?.name) return "";
+  const p = pending.payload;
+  return `
+      <div class="card vc-envvar" id="vc-envvar">
+        <div class="weight-600">The app needs <code>${escapeHtml(p.name)}</code></div>
+        ${p.description ? `<p class="value text-sm mt-1">${escapeHtml(p.description)}</p>` : ""}
+        ${p.why ? `<p class="note">Why: ${escapeHtml(p.why)}</p>` : ""}
+        ${p.example ? `<p class="note">Example: <code>${escapeHtml(p.example)}</code></p>` : ""}
+        <input id="vc-envvar-value" type="password" placeholder="Paste the value" aria-label="Value for ${escapeHtml(p.name)}"
+               autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+        <p class="note mt-1">Sent once to your server. Not saved in this browser.</p>
+        <button id="vc-envvar-send" class="full-width mt-2">Send value</button>
+        <button id="vc-envvar-decline" class="secondary full-width mt-2">Decline</button>
+      </div>`;
+}
+
+/** The live link a deploy answered with. */
+export function deployedMarkup(url, open) {
+  return `
       <div class="card">
         <div class="weight-600">Deployed ✓</div>
         <div class="value text-sm mt-1">
           <a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a>
         </div>
-        ${leftOpen ? `<p class="note vc-left-open mt-1">${escapeHtml(LEFT_OPEN_WARNING)}</p>` : ""}
+        ${open ? `<p class="note vc-left-open mt-1">${escapeHtml(LEFT_OPEN_WARNING)}</p>` : ""}
       </div>`;
-    resultBox.classList.remove("hidden");
-  } else if (failure) {
-    // A relay failure is shown as the box worded it, with the way out.
-    const relayAction = isRelayFailure(failure) && buildCredential && !relayTurnedOff
-      ? `<button id="vc-relay-off" class="secondary full-width mt-2">${escapeHtml(TURN_RELAY_OFF)}</button>`
-      : "";
-    resultBox.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(failure)}</p>${relayAction}</div>`;
-    resultBox.classList.remove("hidden");
-    $("vc-relay-off")?.addEventListener("click", () => void relayOff());
-  } else {
-    resultBox.classList.add("hidden");
+}
+
+// The value goes to the box's env store under the owner's signature (the
+// only path that carries it); the AI is told only that it was set.
+async function sendEnvVar() {
+  const name = pendingEnvVar;
+  const el = $("vc-envvar-value");
+  const value = el?.value ?? "";
+  if (!name || !activeSessionId) return;
+  if (!value) return toast("Paste a value first.", "err");
+  const appId = pendingAppId ?? "";
+  // appId = "<creator>--<slug>": neither half may contain "--".
+  const parts = appId.split("--");
+  if (parts.length !== 2 || !parts[0] || !parts[1]) return toast("This build has no app to set it on yet.", "err");
+  const session = getSession();
+  if (!session?.umk) return toast("Unlock first", "err");
+  const [creator, slug] = parts;
+  const envelope = { serverId: client().fqdn, creator, slug, env: { [name]: value }, issuedAt: Date.now() };
+  const btn = $("vc-envvar-send");
+  if (btn) btn.disabled = true;
+  try {
+    const canon = canonicalSetServiceEnv(envelope.serverId, creator, slug, envelope.env, envelope.issuedAt);
+    const signature = bytesToHex(await signWithIrk(session.umk, canon));
+    await boxFetch(`/api/screens/services/${encodeURIComponent(appId)}/env/set`, {
+      method: "POST",
+      body: JSON.stringify({ name, value, request: envelope, signature }),
+    });
+    if (el) el.value = "";
+    await answerEnvVar("set");
+  } catch (e) {
+    toast(errorText(e), "err");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function answerEnvVar(status) {
+  if (!activeSessionId) return;
+  try {
+    const body = { envVarStatus: status };
+    // A free AI pass is swapped for a fresh one on every reply.
+    buildCredential = await freshCredential(buildCredential, client().fqdn);
+    if (buildCredential) body.credential = buildCredential;
+    await boxFetch(`/api/screens/llm/sessions/${encodeURIComponent(activeSessionId)}/reply`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+    pendingEnvVar = null;
+    toast(status === "set" ? "Sent" : "Declined", "ok");
+    schedulePoll();
+    await poll();
+  } catch (e) {
+    toast(errorText(e), "err");
   }
 }
 
@@ -858,6 +970,9 @@ function reset() {
   activeSessionId = null;
   staged = [];
   pendingTalkToolId = null;
+  pendingEnvVar = null;
+  pendingAppId = null;
+  lastResultHtml = "";
   buildCredential = null;
   modelMenu = null;
   modelChoice = { model: null, effort: null, thinkHarder: false };
