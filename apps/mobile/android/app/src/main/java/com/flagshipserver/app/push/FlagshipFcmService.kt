@@ -65,6 +65,12 @@ class FlagshipFcmService : FirebaseMessagingService() {
             data.remove("deepLink")
         }
 
+        if (InviteCreatedPush.matches(data)) {
+            data["title"] = InviteCreatedPush.TITLE
+            data["body"] = InviteCreatedPush.BODY
+            data["deepLink"] = InviteCreatedPush.deepLink()
+        }
+
         // A `generic` push (§3a; `app-access` from an older box) names no
         // app or host: the phone asks its boxes over the paired session, and
         // a tap just opens the app, whose foreground fetch shows the request.

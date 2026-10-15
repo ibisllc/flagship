@@ -57,6 +57,7 @@ fun auditEventLabel(kind: String): String = when (kind) {
     "account-type-changed-single-to-multi" -> "Switched to multi-device"
     "account-type-changed-multi-to-single" -> "Switched to single-device"
     "ct-unexpected-cert"  -> "Unexpected certificate observed"
+    "invite-created"      -> "Someone was invited to an app"
     else -> kind.replace('-', ' ').replaceFirstChar { it.uppercaseChar() }
 }
 

@@ -41,7 +41,18 @@ class ServiceAccessViewModelTest {
     private val aidPub = ServerKeys.deriveAccountIdPub(umkSeed)
     private val household = ServerKeys.deriveHouseholdKey(umkSeed)
 
-    private fun makeVM(client: ServiceAccessClient, now: () -> Long = { 1700 }) =
+    private val adminKp = Ed25519Sign.KeyPair.newKeyPairFromSeed(ByteArray(32) { 5 })
+    private val thisDevice = "0123456789abcdef0123456789abcdef"
+    private val otherDevice = "fedcba9876543210fedcba9876543210"
+
+    private fun makeVM(
+        client: ServiceAccessClient,
+        now: () -> Long = { 1700 },
+        admin: Boolean = false,
+        screens: com.flagshipserver.app.api.ScreensClient? = null,
+        deviceNames: suspend () -> Map<String, String>? = { null },
+        roleSigner: suspend (String) -> Ed25519Sign = { Ed25519Sign(adminKp.privateKey) },
+    ) =
         ServiceAccessViewModel(
             serverDomain = server, serviceRef = serviceRef, username = username, client = client,
             irkSigner = { Ed25519Sign(irkKp.privateKey) },
@@ -49,6 +60,12 @@ class ServiceAccessViewModelTest {
             aidPubHex = { HexUtil.encode(aidPub) },
             householdKey = { household },
             now = now,
+            screens = screens,
+            roleSigner = roleSigner,
+            isAdminDevice = { admin },
+            adminSigner = { Ed25519Sign(adminKp.privateKey) },
+            deviceId = { thisDevice },
+            deviceNames = deviceNames,
         )
 
     @Test fun load_readsTrueMode() = runTest {
@@ -292,14 +309,10 @@ class ServiceAccessViewModelTest {
         val t = FakeTransport()
         val screens = com.flagshipserver.app.api.MockScreensClient()
         val roleKp = Ed25519Sign.KeyPair.newKeyPairFromSeed(ByteArray(32) { 7 })
-        val vm = ServiceAccessViewModel(
-            serverDomain = server, serviceRef = serviceRef, username = username,
-            client = ServiceAccessClient(boxTransport = t, comTransport = t),
-            irkSigner = { Ed25519Sign(irkKp.privateKey) },
-            aidSigner = { ServerKeys.deriveAccountId(umkSeed) },
-            aidPubHex = { HexUtil.encode(aidPub) },
-            householdKey = { household },
+        val vm = makeVM(
+            ServiceAccessClient(boxTransport = t, comTransport = t),
             now = { 1_700_000_000_000 },
+            admin = true,
             screens = screens,
             roleSigner = { Ed25519Sign(roleKp.privateKey) },
         )
@@ -326,6 +339,161 @@ class ServiceAccessViewModelTest {
         assertTrue(vm.phase.value is ServiceAccessPhase.Failed)
         assertTrue(vm.setRole(com.flagshipserver.app.core.AppMemberRole.MASTER, p))
         assertEquals(com.flagshipserver.app.core.AppMemberRole.MASTER, vm.roleFor(p))
+    }
+
+    // ── Who can invite (owner, 2026-10-15) ───────────────────────────────
+
+    private fun createSigVerifies(env: JsonObject, pub: ByteArray): Boolean {
+        val req = env["request"]!!.jsonObject
+        val bytes = ServiceInvite.canonicalCreate(
+            req["inviteId"]!!.jsonPrimitive.content, aidPub, serviceRef,
+            req["secretHash"]!!.jsonPrimitive.content, req["encryptedBundle"]!!.jsonPrimitive.content, 1700,
+        )
+        return ServiceInvite.verify(HexUtil.decode(env["signature"]!!.jsonPrimitive.content)!!, bytes, pub)
+    }
+
+    @Test fun create_onAnAdminDevice_signsWithTheAdminRootAndNamesTheDevice() = runTest {
+        val t = FakeTransport()
+        val vm = makeVM(ServiceAccessClient(boxTransport = t, comTransport = t), admin = true)
+        assertNotNull(vm.addPerson("Alex", null))
+        val env = t.bodyJsonFor("/service-invites")!!
+        assertTrue(createSigVerifies(env, adminKp.publicKey))
+        assertFalse(createSigVerifies(env, aidPub))
+        val req = env["request"]!!.jsonObject
+        assertEquals(thisDevice, req["deviceId"]!!.jsonPrimitive.content)
+        assertEquals("the author is still the AID", HexUtil.encode(aidPub), req["authorAID"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun create_onANonAdminDevice_signsWithTheAidAndSendsNoRank() = runTest {
+        val t = FakeTransport()
+        val screens = com.flagshipserver.app.api.MockScreensClient(simulatedLatencyMs = 0)
+        val vm = makeVM(ServiceAccessClient(boxTransport = t, comTransport = t), screens = screens)
+        vm.load()
+        assertNotNull(vm.addPerson("Club", null, InviteTier.GROUP, 5, null, com.flagshipserver.app.core.AppMemberRole.MASTER))
+        val env = t.bodyJsonFor("/service-invites")!!
+        assertEquals(thisDevice, env["request"]!!.jsonObject["deviceId"]!!.jsonPrimitive.content)
+        val req = env["request"]!!.jsonObject
+        val bytes = ServiceInvite.canonicalCreate(
+            req["inviteId"]!!.jsonPrimitive.content, aidPub, serviceRef,
+            req["secretHash"]!!.jsonPrimitive.content, req["encryptedBundle"]!!.jsonPrimitive.content, 1700, 5, null,
+        )
+        assertTrue(ServiceInvite.verify(HexUtil.decode(env["signature"]!!.jsonPrimitive.content)!!, bytes, aidPub))
+        assertTrue("a member invite needs no role order", screens.setAppMemberRoleCalls.isEmpty())
+        assertNull(vm.roleNotice.value)
+    }
+
+    @Test fun create_withoutADeviceId_omitsIt() = runTest {
+        val t = FakeTransport()
+        val vm = ServiceAccessViewModel(
+            serverDomain = server, serviceRef = serviceRef, username = username,
+            client = ServiceAccessClient(boxTransport = t, comTransport = t),
+            aidSigner = { ServerKeys.deriveAccountId(umkSeed) },
+            aidPubHex = { HexUtil.encode(aidPub) },
+            householdKey = { household },
+            now = { 1700 },
+            isAdminDevice = { false },
+            deviceId = { "" },
+        )
+        assertNotNull(vm.addPerson("Alex", null))
+        assertNull(t.bodyJsonFor("/service-invites")!!["request"]!!.jsonObject["deviceId"])
+    }
+
+    @Test fun rankChanges_onlyOnAnAdminDevice() = runTest {
+        val screens = com.flagshipserver.app.api.MockScreensClient(simulatedLatencyMs = 0)
+        val t = FakeTransport()
+        val vm = makeVM(ServiceAccessClient(boxTransport = t, comTransport = t), screens = screens)
+        vm.load()
+        val p = AccessPerson(inviteId = "inv-9", name = "Sam", photo = null, bound = false)
+        assertFalse(vm.isAdmin)
+        assertFalse(vm.setRole(com.flagshipserver.app.core.AppMemberRole.MANAGER, p))
+        assertTrue(screens.setAppMemberRoleCalls.isEmpty())
+    }
+
+    @Test fun revoke_onAnAdminDevice_signsWithTheAdminRoot() = runTest {
+        val t = FakeTransport()
+        val vm = makeVM(ServiceAccessClient(boxTransport = t, comTransport = t), admin = true)
+        assertTrue(vm.remove("deadbeef"))
+        val env = t.bodyJsonFor("/service-invites/revoke")!!
+        val sig = HexUtil.decode(env["signature"]!!.jsonPrimitive.content)!!
+        assertTrue(ServiceInvite.verify(sig, ServiceInvite.canonicalRevoke("deadbeef", 1700), adminKp.publicKey))
+        assertFalse(ServiceInvite.verify(sig, ServiceInvite.canonicalRevoke("deadbeef", 1700), aidPub))
+    }
+
+    @Test fun revokeIsOffered_toAdminsOnEveryRow_andOtherwiseOnlyOnOwnMemberInvites() = runTest {
+        val t = FakeTransport()
+        val mine = AccessPerson("a", "A", null, false, creatorTier = "member", creatorDeviceId = thisDevice)
+        val mineUpper = mine.copy(creatorDeviceId = thisDevice.uppercase())
+        val othersMember = AccessPerson("b", "B", null, false, creatorTier = "member", creatorDeviceId = otherDevice)
+        val mineAdmin = AccessPerson("c", "C", null, false, creatorTier = "admin", creatorDeviceId = thisDevice)
+        val old = AccessPerson("d", "D", null, false)
+        val admin = makeVM(ServiceAccessClient(boxTransport = t, comTransport = t), admin = true)
+        for (p in listOf(mine, othersMember, mineAdmin, old)) assertTrue(admin.canRemove(p))
+        val member = makeVM(ServiceAccessClient(boxTransport = t, comTransport = t))
+        assertTrue(member.canRemove(mine))
+        assertTrue(member.canRemove(mineUpper))
+        assertFalse(member.canRemove(othersMember))
+        assertFalse(member.canRemove(mineAdmin))
+        assertFalse(member.canRemove(old))
+    }
+
+    @Test fun invitedBy_resolvesNamesOnThePhone_withItsFallbacks() = runTest {
+        val sealed = { id: String -> ServiceInvite.sealBundle(ServiceInvite.Bundle("P-$id"), household, id) }
+        val listJson = """{"invites":[
+            {"inviteId":"own","serviceRef":"$serviceRef","encryptedBundle":"${sealed("own")}","creatorTier":"member","creatorDeviceId":"$thisDevice"},
+            {"inviteId":"named","serviceRef":"$serviceRef","encryptedBundle":"${sealed("named")}","creatorTier":"admin","creatorDeviceId":"$otherDevice"},
+            {"inviteId":"gone","serviceRef":"$serviceRef","encryptedBundle":"${sealed("gone")}","creatorTier":"member","creatorDeviceId":"${"9".repeat(32)}"},
+            {"inviteId":"anon","serviceRef":"$serviceRef","encryptedBundle":"${sealed("anon")}","creatorTier":"admin","creatorDeviceId":null},
+            {"inviteId":"old","serviceRef":"$serviceRef","encryptedBundle":"${sealed("old")}"}
+        ]}"""
+        val t = FakeTransport(getJsonByUrl = mapOf(
+            "service-access" to """{"mode":"open","allowCount":0}""",
+            "service-invites" to listJson,
+        ))
+        var lookups = 0
+        val vm = makeVM(ServiceAccessClient(boxTransport = t, comTransport = t), deviceNames = {
+            lookups++
+            mapOf(otherDevice to "Kitchen iPad")
+        })
+        vm.load()
+        val by = vm.people.value.associate { it.inviteId to vm.invitedBy(it) }
+        assertEquals("Invited by this device", by["own"])
+        assertEquals("Invited by Kitchen iPad", by["named"])
+        assertEquals("Invited by another device", by["gone"])
+        assertEquals("Invited by another device", by["anon"])
+        assertNull(by["old"])
+        assertEquals("member", vm.people.value.first { it.inviteId == "own" }.creatorTier)
+        vm.refreshPeople()
+        assertEquals("the directory is read once per screen", 1, lookups)
+    }
+
+    @Test fun invitedBy_withoutDirectoryAccess_fallsBack_andOwnRowsNeverLookUp() = runTest {
+        val sealed = ServiceInvite.sealBundle(ServiceInvite.Bundle("X"), household, "x")
+        val ownOnly = """{"invites":[{"inviteId":"x","serviceRef":"$serviceRef","encryptedBundle":"$sealed","creatorTier":"member","creatorDeviceId":"$thisDevice"}]}"""
+        var lookups = 0
+        val t1 = FakeTransport(getJsonByUrl = mapOf("service-invites" to ownOnly))
+        val vm1 = makeVM(ServiceAccessClient(boxTransport = t1, comTransport = t1), deviceNames = { lookups++; emptyMap() })
+        vm1.refreshPeople()
+        assertEquals(0, lookups)
+
+        val other = ownOnly.replace(thisDevice, otherDevice)
+        val t2 = FakeTransport(getJsonByUrl = mapOf("service-invites" to other))
+        val vm2 = makeVM(ServiceAccessClient(boxTransport = t2, comTransport = t2), deviceNames = { throw RuntimeException("403") })
+        vm2.refreshPeople()
+        assertEquals("Invited by another device", vm2.invitedBy(vm2.people.value.single()))
+    }
+
+    @Test fun boxMembers_carryTheInviteTier() {
+        val json = Json { ignoreUnknownKeys = true }
+        val r = json.decodeFromString(
+            com.flagshipserver.app.api.AppMembersResponse.serializer(),
+            """{"serviceId":"$serviceRef","mode":"open","defaultRole":"member",
+               "members":[{"aid":"aa","role":"member","grants":[{"inviteId":"i1","role":"member","tier":"member"}]}],
+               "invites":[{"inviteId":"i1","role":"member","set":false,"tier":"member"},{"inviteId":"i2","role":"manager","set":true,"tier":null}]}""",
+        )
+        assertEquals("member", r.members.single().grants.single().tier)
+        assertEquals("member", r.inviteTier("i1"))
+        assertNull(r.inviteTier("i2"))
+        assertNull(r.inviteTier("missing"))
     }
 
     @Test fun setMode_failureSurfaces() = runTest {

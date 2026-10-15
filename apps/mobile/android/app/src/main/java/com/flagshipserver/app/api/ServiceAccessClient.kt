@@ -8,9 +8,9 @@
 //   POST https://<pod>/api/service-access/accept         ({ accept, acceptSig, create, createSig })  (manual-approve finalize)
 //
 // `.com` (public CA), author AID/IRK-signed create/revoke + SIGNED metadata list:
-//   POST https://<control>/api/users/<u>/service-invites          ({ request, signature })  (v2: AID-signed)
+//   POST https://<control>/api/users/<u>/service-invites          ({ request{…, deviceId}, signature })  (admin root; a non-admin device's AID = Member tier)
 //   GET  https://<control>/api/users/<u>/service-invites?authorAID=…&scope=list&cursor=0&issuedAt=…&sig=…  (v2: owner-signed)
-//   POST https://<control>/api/users/<u>/service-invites/revoke    ({ request, signature })  (v2: AID-signed)
+//   POST https://<control>/api/users/<u>/service-invites/revoke    ({ request, signature })  (admin root, or the key that created a member invite)
 
 package com.flagshipserver.app.api
 
@@ -86,6 +86,11 @@ data class ServiceInviteRow(
     val redemptions: Int = 0,
     val boundAidsHex: List<String> = emptyList(),
     val approvalMode: String? = null,
+    /** Who signed the create: "admin" (admin gate) or "member" (any device's
+     *  membership key, capped at Member); null on rows from before tiers. */
+    val creatorTier: String? = null,
+    /** The account device id the creating device named (unsigned, attribution only). */
+    val creatorDeviceId: String? = null,
 ) {
     /** A group / multi-use invite (has a redemption cap). */
     val isGroup: Boolean get() = maxRedemptions != null
@@ -369,6 +374,8 @@ open class ServiceAccessClient(
                 redemptions = r["redemptions"]?.jsonPrimitive?.longOrNull?.toInt() ?: 0,
                 boundAidsHex = boundAids,
                 approvalMode = r["approvalMode"]?.jsonPrimitive?.contentOrNull,
+                creatorTier = r["creatorTier"]?.jsonPrimitive?.contentOrNull,
+                creatorDeviceId = r["creatorDeviceId"]?.jsonPrimitive?.contentOrNull,
             )
         }
     }
@@ -389,8 +396,9 @@ open class ServiceAccessClient(
 
 /**
  * Mock-mode box + `.com` for Access control (iOS MockServiceAccessClient's
- * twin): each app starts open to all with no invites, and a signed mode change
- * takes effect in memory. Never touches the network, so a demo or gym session
+ * twin): each app starts open to all with no invites; a signed mode change,
+ * create or revoke takes effect in memory (a create is member-tier unless the
+ * gym seeds an admin device). Never touches the network, so a demo or gym session
  * doesn't call a real box with a made-up name.
  */
 class MockServiceAccessClient : ServiceAccessClient() {
@@ -417,9 +425,29 @@ class MockServiceAccessClient : ServiceAccessClient() {
         sigHex: String,
     ): List<ServiceInviteRow> = invites.toList()
 
-    override suspend fun createInvite(username: String, request: JsonObject, signatureHex: String) {}
+    override suspend fun createInvite(username: String, request: JsonObject, signatureHex: String) {
+        fun str(k: String) = request[k]?.jsonPrimitive?.contentOrNull
+        invites += ServiceInviteRow(
+            inviteId = str("inviteId") ?: return,
+            serviceRef = str("serviceRef") ?: return,
+            encryptedBundleHex = str("encryptedBundle") ?: return,
+            boundAidHex = null,
+            boundAt = null,
+            createdAt = str("issuedAt")?.toLongOrNull(),
+            revokedAt = null,
+            maxRedemptions = str("maxRedemptions")?.toIntOrNull(),
+            expiresAt = str("expiresAt")?.toLongOrNull(),
+            approvalMode = str("approvalMode"),
+            creatorTier = if (com.flagshipserver.app.core.GymSeams.forceAdminRoot) "admin" else "member",
+            creatorDeviceId = str("deviceId"),
+        )
+    }
 
-    override suspend fun revokeInvite(username: String, request: JsonObject, signatureHex: String) {}
+    override suspend fun revokeInvite(username: String, request: JsonObject, signatureHex: String) {
+        val id = request["inviteId"]?.jsonPrimitive?.contentOrNull ?: return
+        val at = request["issuedAt"]?.jsonPrimitive?.longOrNull ?: System.currentTimeMillis()
+        invites.replaceAll { if (it.inviteId == id) it.copy(revokedAt = at) else it }
+    }
 
     companion object {
         /** One per process, so a mode change survives leaving the screen. */

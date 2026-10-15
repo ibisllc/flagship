@@ -7,7 +7,12 @@ package com.flagshipserver.app.ui.screens
 
 import android.graphics.Bitmap
 import androidx.compose.foundation.background
+import androidx.compose.ui.test.assertContentDescriptionEquals
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -49,7 +54,10 @@ class ServiceAccessComposeTest {
     private val priya = "7b".repeat(32)
     private val guest = "3c".repeat(32)
 
-    private fun row(id: String, name: String, bound: String? = null, group: List<String>? = null, max: Int? = null, manual: Boolean = false): String {
+    private val thisDevice = "0123456789abcdef0123456789abcdef"
+    private val kitchen = "fedcba9876543210fedcba9876543210"
+
+    private fun row(id: String, name: String, bound: String? = null, group: List<String>? = null, max: Int? = null, manual: Boolean = false, tier: String? = null, by: String? = null): String {
         val sealed = ServiceInvite.sealBundle(ServiceInvite.Bundle(name), household, id)
         val parts = mutableListOf(
             "\"inviteId\":\"$id\"", "\"serviceRef\":\"$ref\"", "\"encryptedBundle\":\"$sealed\"",
@@ -58,15 +66,17 @@ class ServiceAccessComposeTest {
         )
         if (group != null) parts += "\"boundAIDs\":[${group.joinToString(",") { "\"$it\"" }}]"
         if (max != null) parts += listOf("\"maxRedemptions\":$max", "\"redemptions\":${group?.size ?: 0}")
+        if (tier != null) parts += "\"creatorTier\":\"$tier\""
+        if (by != null) parts += "\"creatorDeviceId\":\"$by\""
         return "{${parts.joinToString(",")}}"
     }
 
-    private fun vm(): Pair<ServiceAccessViewModel, FakeTransport> {
+    private fun vm(admin: Boolean = true): Pair<ServiceAccessViewModel, FakeTransport> {
         val list = "{\"invites\":[" + listOf(
-            row("sam", "Sam", bound = sam),
+            row("sam", "Sam", bound = sam, tier = "admin", by = kitchen),
             row("priya", "Priya", bound = priya, manual = true),
             row("family", "Family", group = listOf(sam, guest), max = 5),
-            row("jordan", "Jordan"),
+            row("jordan", "Jordan", tier = "member", by = thisDevice),
         ).joinToString(",") + "]}"
         val t = FakeTransport(getJsonByUrl = mapOf("service-invites" to list, "service-access" to """{"mode":"open","allowCount":3}"""))
         val screens = MockScreensClient(simulatedLatencyMs = 0)
@@ -97,6 +107,10 @@ class ServiceAccessComposeTest {
             householdKey = { household },
             screens = screens,
             roleSigner = { Ed25519Sign(irk.privateKey) },
+            isAdminDevice = { admin },
+            adminSigner = { Ed25519Sign(irk.privateKey) },
+            deviceId = { thisDevice },
+            deviceNames = { mapOf(kitchen to "Kitchen iPad") },
         ) to t
     }
 
@@ -129,6 +143,12 @@ class ServiceAccessComposeTest {
         composeRule.onNodeWithText("also in Family: Member").assertIsDisplayed()
         composeRule.onNodeWithTag("service-access-role-priya").assertIsDisplayed()
         composeRule.onNodeWithText("2 of 5 joined").assertIsDisplayed()
+        composeRule.onNodeWithText("Invited by Kitchen iPad").assertIsDisplayed()
+        composeRule.onNodeWithText("Invited by this device").assertIsDisplayed()
+        composeRule.onNodeWithTag("service-access-role-sam").assertIsEnabled()
+        for (id in listOf("sam", "priya", "family", "jordan")) {
+            composeRule.onNodeWithTag("service-access-remove-$id").assertExists()
+        }
         shot("access-android-open")
 
         composeRule.onNodeWithTag("service-access-mode-members").performClick()
@@ -147,5 +167,34 @@ class ServiceAccessComposeTest {
         composeRule.onNodeWithTag("service-access-new-role").performClick()
         composeRule.onNodeWithText("Also changes the garden's settings").assertIsDisplayed()
         shot("access-android-rank-menu")
+    }
+
+    @Test fun nonAdminDevice_invitesAtMemberOnly_seesRanksReadOnly_andRevokesOnlyItsOwn() {
+        val (vm, t) = vm(admin = false)
+        composeRule.setContent {
+            FlagshipTheme { ServiceAccessContent(vm, ref, "Plants", onShare = {}, onCopy = {}, pickPhoto = null) }
+        }
+        composeRule.waitUntil(10_000) { vm.members.value != null && vm.people.value.size == 4 }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("service-access-role-sam").assertIsNotEnabled()
+        composeRule.onNodeWithTag("service-access-role-sam").performClick()
+        composeRule.onAllNodesWithText("Also changes the garden's settings").assertCountEquals(0)
+        composeRule.onNodeWithText("Invited by Kitchen iPad").assertIsDisplayed()
+        composeRule.onNodeWithTag("service-access-remove-jordan").assertExists()
+        for (id in listOf("sam", "priya", "family")) {
+            composeRule.onNodeWithTag("service-access-remove-$id").assertDoesNotExist()
+        }
+        shot("access-android-non-admin")
+
+        composeRule.onNodeWithTag("service-access-add-person").performClick()
+        composeRule.onNodeWithText("Only an admin device can give a higher rank").assertIsDisplayed()
+        composeRule.onNodeWithTag("service-access-new-role")
+            .assertIsNotEnabled()
+            .assertContentDescriptionEquals("Rank: Member")
+        shot("access-android-rank-locked")
+
+        composeRule.onNodeWithTag("service-access-remove-jordan").performClick()
+        composeRule.onNodeWithTag("service-access-remove-confirm").performClick()
+        composeRule.waitUntil(10_000) { t.posts.any { it.first.endsWith("/service-invites/revoke") } }
     }
 }

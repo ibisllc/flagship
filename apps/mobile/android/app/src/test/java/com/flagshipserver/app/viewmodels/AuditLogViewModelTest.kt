@@ -60,6 +60,9 @@ class AuditLogViewModelTest {
         assertEquals("Demo server provisioned", auditEventLabel("demo-vps-provisioned"))
         assertEquals("Turned on authenticator codes", auditEventLabel("totp-enrolled"))
         assertEquals("Refused a device replacement", auditEventLabel("re-pair-refused-no-credential"))
+        assertEquals("Someone was invited to an app", auditEventLabel("invite-created"))
+        val invite = AuditEvent(seq = 1, eventKind = "invite-created", detail = "A device on your account invited someone to one of your apps.", devicePrefix = "01234567", postedAt = 1)
+        assertEquals("A device on your account invited someone to one of your apps.", auditEventDisplayDetail(invite))
     }
 
     @Test fun displayDetail_dropsMachineDetailForDemoProvisioning() {

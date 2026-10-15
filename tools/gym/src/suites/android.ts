@@ -439,6 +439,38 @@ const OCTOBER: readonly Scenario[] = [
     },
   ),
   androidTotal(
+    "android-oct-access-rank-locked-non-admin",
+    "D3: rank picker locked on a non-admin device: Add person keeps the rank at Member with 'Only an admin device can give a higher rank'.",
+    O + "rankPickerLockedOnANonAdminDevice",
+    {
+      steps: [
+        { kind: "tap", describe: "Plants → Access control → + Add person.", handle: "service-access-add-person" },
+        { kind: "assert", describe: "The locked rank and its reason.", handle: "service-access-rank-locked" },
+      ],
+      assertions: [
+        { describe: "Why the rank is locked", handle: "service-access-rank-locked", expect: "present" },
+        { describe: "Rank picker (disabled, Member)", handle: "service-access-new-role", expect: "present" },
+      ],
+      screenshots: [shot("access-rank-locked", "Member only.")],
+      dimension: "D3",
+    },
+  ),
+  androidTotal(
+    "android-oct-access-invited-by",
+    "D3: members list shows Invited by: an invite created on this device lists the device that made it.",
+    O + "membersListShowsInvitedBy",
+    {
+      steps: [
+        { kind: "tap", describe: "Plants → Access control → + Add person.", handle: "service-access-add-person" },
+        { kind: "tap", describe: "Name them → Create invite link.", handle: "service-access-create-invite" },
+        { kind: "assert", describe: "The row's Invited by line.", handle: "service-access-invited-by-*" },
+      ],
+      assertions: [{ describe: "Invited by line", handle: "service-access-invited-by-*", expect: "present" }],
+      screenshots: [shot("access-invited-by", "Invited by.")],
+      dimension: "D3",
+    },
+  ),
+  androidTotal(
     "android-oct-api-key-create",
     "D6: Plants' API keys list its key; creating one shows the secret.",
     O + "apiKeyCreateShowsTheSecretOnce",

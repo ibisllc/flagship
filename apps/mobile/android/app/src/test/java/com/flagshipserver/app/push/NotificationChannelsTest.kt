@@ -8,7 +8,7 @@ class NotificationChannelsTest {
         assertEquals(NotificationChannels.APPROVALS, NotificationChannels.forPush("secret-request", "secret-request"))
         assertEquals(NotificationChannels.APPROVALS, NotificationChannels.forPush("secret-request", ShareStartupPush.KIND))
         assertEquals(NotificationChannels.SETUP, NotificationChannels.forPush("provision-status", "provision-status"))
-        for (c in listOf("server-registered", "cert-alert", "ct-unexpected-cert", "re-pair-initiated", "re-pair-urgent", "totp-failed-rate")) {
+        for (c in listOf("server-registered", "cert-alert", "ct-unexpected-cert", "re-pair-initiated", "re-pair-urgent", "totp-failed-rate", "invite-created")) {
             assertEquals(c, NotificationChannels.SECURITY, NotificationChannels.forPush(c, null))
         }
         assertEquals(NotificationChannels.APPS, NotificationChannels.forPush("app-access", null))

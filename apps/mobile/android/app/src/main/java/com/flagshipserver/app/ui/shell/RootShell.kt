@@ -110,6 +110,7 @@ fun RootShell(
             is com.flagshipserver.app.core.DeepLink.Deadman -> RootDestination.HOME
             com.flagshipserver.app.core.DeepLink.AccountSecurity -> RootDestination.SETTINGS
             com.flagshipserver.app.core.DeepLink.TrustedDevices -> RootDestination.SETTINGS
+            com.flagshipserver.app.core.DeepLink.AccountActivity -> RootDestination.ACTIVITY
             com.flagshipserver.app.core.DeepLink.Settings -> RootDestination.SETTINGS
         }
         // The tab's NavHost picks the link up via its own LaunchedEffect

@@ -27,6 +27,11 @@ fun ActivityTab() {
                 deepLinker.consume()
                 nav.navigate("secret-requests")
             }
+            DeepLink.AccountActivity -> {
+                deepLinker.consume()
+                nav.popBackStack("activity", inclusive = false)
+                nav.navigate("audit-log")
+            }
             else -> { /* not for this tab */ }
         }
     }

@@ -3,9 +3,11 @@
 // an Open to all | Members only toggle (reads the TRUE mode from the box; sets it
 // with an owner-IRK envelope; never changes the list) and, in both modes, the
 // members list: people and groups with a rank picker each (signed
-// flagship/app-member-role/v1 orders), + Add person (optionally one you approve
-// first) / + Add group with the rank chosen at creation, remove (AID revoke +
-// owner-IRK box prune of the AIDs for whom it was the last grant), and CONFIRM a
+// flagship/app-member-role/v1 orders; admin devices only), "Invited by
+// <device>", + Add person (optionally one you approve first) / + Add group with
+// the rank chosen at creation (Member only on a device that isn't an admin),
+// one-tap Revoke (.com revoke + owner-IRK box prune of the AIDs for whom it was
+// the last grant; non-admins only on their own member invites), and CONFIRM a
 // reply from someone you approve.
 
 package com.flagshipserver.app.ui.screens
@@ -36,13 +38,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.PersonRemove
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
@@ -112,11 +112,19 @@ fun ServiceAccessScreen(nav: NavController, serviceId: String) {
     }
 
     val live = com.flagshipserver.app.core.LocalDeveloperSettings.current?.useLiveClient?.collectAsState()?.value ?: true
+    val server = com.flagshipserver.app.core.LocalFlagshipServerClient.current
     val vm = remember(serviceId, serverDomain, live) {
+        val deviceId = { appState.activeProfile?.deviceId?.takeIf { it.length == 32 } }
         ServiceAccessViewModel(
             serverDomain = serverDomain, serviceRef = serviceId, username = username, screens = screens,
             client = if (live) com.flagshipserver.app.api.ServiceAccessClient()
             else com.flagshipserver.app.api.MockServiceAccessClient.shared,
+            deviceId = deviceId,
+            deviceNames = {
+                val id = deviceId()
+                if (id == null) null
+                else com.flagshipserver.app.viewmodels.AccountDeviceNames.load(server, username, id)
+            },
         )
     }
     ServiceAccessContent(
@@ -154,6 +162,7 @@ internal fun ServiceAccessContent(
     val busyMode by vm.busyMode.collectAsState()
     val busyAdd by vm.busyAdd.collectAsState()
     val busyFinalize by vm.busyFinalize.collectAsState()
+    val deviceNames by vm.deviceNamesState.collectAsState()
 
     var adding by remember { mutableStateOf<InviteTier?>(null) }
     var name by remember { mutableStateOf("") }
@@ -162,6 +171,7 @@ internal fun ServiceAccessContent(
     var photoDataUri by remember { mutableStateOf<String?>(null) }
     var maxRedemptionsText by remember { mutableStateOf("10") }
     var expiryDaysText by remember { mutableStateOf("7") }
+    var removing by remember { mutableStateOf<Set<String>>(emptySet()) }
     var confirmRemove by remember { mutableStateOf<AccessPerson?>(null) }
     var confirmMembersOnly by remember { mutableStateOf(false) }
     var replyText by remember { mutableStateOf("") }
@@ -321,11 +331,25 @@ internal fun ServiceAccessContent(
                             .fillMaxWidth()
                             .semantics { testTag = "service-access-name-field" },
                     )
+                    val pickedRole = if (vm.isAdmin) newRole else AppMemberRole.MEMBER
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Rank", color = FS.colors.text, modifier = Modifier.weight(1f))
-                        RolePicker(selected = newRole, tag = "service-access-new-role", descriptions = members?.descriptions.orEmpty()) { newRole = it }
+                        RolePicker(
+                            selected = pickedRole,
+                            tag = "service-access-new-role",
+                            enabled = vm.isAdmin,
+                            descriptions = members?.descriptions.orEmpty(),
+                        ) { newRole = it }
                     }
-                    members?.description(newRole.wire)?.let {
+                    if (!vm.isAdmin) {
+                        Text(
+                            RANK_LOCKED_LINE,
+                            color = FS.colors.textMuted,
+                            style = TextStyle(fontSize = 12.sp),
+                            modifier = Modifier.semantics { testTag = "service-access-rank-locked" },
+                        )
+                    }
+                    members?.description(pickedRole.wire)?.let {
                         Text(it, color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp))
                     }
                     if (isGroup) {
@@ -386,7 +410,7 @@ internal fun ServiceAccessContent(
                                 val maxN = maxRedemptionsText.toIntOrNull() ?: 0
                                 val expiresAt = expiryDaysText.toLongOrNull()?.takeIf { it > 0 }
                                     ?.let { System.currentTimeMillis() + it * 86_400_000L }
-                                val link = vm.addPerson(name, if (isGroup) null else photoDataUri, tier, maxN, expiresAt, newRole)
+                                val link = vm.addPerson(name, if (isGroup) null else photoDataUri, tier, maxN, expiresAt, pickedRole)
                                 if (link != null) {
                                     toasts.success(if (isGroup) "Group invite created." else "Invite for ${name.trim()} created.")
                                     name = ""
@@ -413,9 +437,13 @@ internal fun ServiceAccessContent(
                 PersonRow(
                     person = person,
                     role = members?.let { vm.roleFor(person) },
+                    canChangeRank = vm.isAdmin,
                     descriptions = members?.descriptions.orEmpty(),
                     alsoIn = vm.alsoIn(person),
+                    invitedBy = vm.invitedBy(person, deviceNames),
+                    canRemove = vm.canRemove(person),
                     busyRole = person.inviteId in busyRoles,
+                    busyRemove = person.inviteId in removing,
                     onRole = { r ->
                         scope.launch {
                             if (vm.setRole(r, person)) toasts.success("${person.name} is now ${r.label}.")
@@ -465,6 +493,42 @@ internal fun ServiceAccessContent(
         Spacer(Modifier.height(FS.space.s12))
     }
 
+    confirmRemove?.let { person ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmRemove = null },
+            title = { Text(if (person.isGroup) "Revoke the group \"${person.name}\"?" else "Remove ${person.name}?") },
+            text = {
+                Text(
+                    when {
+                        person.isGroup && restricted -> "Everyone who joined through this link loses access, unless they were also invited another way."
+                        person.isGroup -> "Everyone who joined through this link loses their rank and can still visit as anyone can."
+                        restricted -> "They're signed out and kept out. You can invite them again later."
+                        else -> "They lose their rank and can still visit as anyone can. You can invite them again later."
+                    },
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        val p = person
+                        confirmRemove = null
+                        removing = removing + p.inviteId
+                        scope.launch {
+                            val ok = vm.remove(p.inviteId, p.boundAidHex, p.memberAids)
+                            removing = removing - p.inviteId
+                            if (ok) toasts.success(if (p.isGroup) "Group revoked." else "Removed.")
+                            else (vm.phase.value as? ServiceAccessPhase.Failed)?.let { toasts.error(it.message) }
+                        }
+                    },
+                    modifier = Modifier.semantics { testTag = "service-access-remove-confirm" },
+                ) { Text(if (person.isGroup) "Revoke" else "Remove") }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { confirmRemove = null }) { Text("Cancel") }
+            },
+        )
+    }
+
     if (confirmMembersOnly) {
         val n = vm.memberPeopleCount
         androidx.compose.material3.AlertDialog(
@@ -482,59 +546,35 @@ internal fun ServiceAccessContent(
             },
         )
     }
-
-    confirmRemove?.let { person ->
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { confirmRemove = null },
-            title = { Text(if (person.isGroup) "Revoke the group \"${person.name}\"?" else "Remove ${person.name}?") },
-            text = {
-                Text(
-                    when {
-                        person.isGroup && restricted -> "Everyone who joined through this link loses access, unless they were also invited another way."
-                        person.isGroup -> "Everyone who joined through this link loses their rank and can still visit as anyone can."
-                        restricted -> "They're signed out and kept out. You can invite them again later."
-                        else -> "They lose their rank and can still visit as anyone can. You can invite them again later."
-                    },
-                )
-            },
-            confirmButton = {
-                androidx.compose.material3.TextButton(onClick = {
-                    val p = person
-                    confirmRemove = null
-                    scope.launch {
-                        vm.remove(p.inviteId, p.boundAidHex, p.memberAids)
-                        toasts.success(if (p.isGroup) "Group revoked." else "Removed.")
-                    }
-                }) { Text(if (person.isGroup) "Revoke" else "Remove") }
-            },
-            dismissButton = {
-                androidx.compose.material3.TextButton(onClick = { confirmRemove = null }) { Text("Cancel") }
-            },
-        )
-    }
 }
 
+internal const val RANK_LOCKED_LINE = "Only an admin device can give a higher rank"
+
 /** A rank menu; the display names come from [AppMemberRole.label] only, each
- *  item carries the app's one line for that rank, and Master its crown. */
+ *  item carries the app's one line for that rank, and Master its crown. Not
+ *  [enabled]: the rank, read-only (a device that isn't an admin). */
 @Composable
 private fun RolePicker(
     selected: AppMemberRole,
     tag: String,
     busy: Boolean = false,
+    enabled: Boolean = true,
     descriptions: Map<String, String> = emptyMap(),
     onPick: (AppMemberRole) -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
     Box {
         androidx.compose.material3.AssistChip(
-            onClick = { if (!busy) open = true },
+            onClick = { if (!busy && enabled) open = true },
+            enabled = enabled,
             label = { Text(selected.label) },
             leadingIcon = if (selected.crowned) {
                 { Icon(CrownIcon, contentDescription = null, tint = CROWN_GOLD, modifier = Modifier.size(16.dp)) }
             } else null,
-            trailingIcon = {
-                if (busy) CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 2.dp, color = FS.colors.primary)
-                else Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
+            trailingIcon = when {
+                busy -> { { CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 2.dp, color = FS.colors.primary) } }
+                enabled -> { { Icon(Icons.Filled.ArrowDropDown, contentDescription = null) } }
+                else -> null
             },
             modifier = Modifier.semantics { testTag = tag; contentDescription = "Rank: ${selected.label}" },
         )
@@ -565,9 +605,13 @@ private fun RolePicker(
 private fun PersonRow(
     person: AccessPerson,
     role: AppMemberRole?,
+    canChangeRank: Boolean,
     descriptions: Map<String, String>,
     alsoIn: String,
+    invitedBy: String?,
+    canRemove: Boolean,
     busyRole: Boolean,
+    busyRemove: Boolean,
     onRole: (AppMemberRole) -> Unit,
     onRemove: () -> Unit,
     onRemoveMember: (String) -> Unit,
@@ -604,18 +648,43 @@ private fun PersonRow(
                         Text(alsoIn, color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp))
                     }
                 }
-                role?.let { RolePicker(selected = it, tag = "service-access-role-${person.inviteId}", busy = busyRole, descriptions = descriptions, onPick = onRole) }
-                IconButton(
-                    onClick = onRemove,
-                    modifier = Modifier.semantics {
-                        testTag = "service-access-remove-${person.inviteId}"
-                        contentDescription = if (person.isGroup) "Revoke ${person.name}" else "Remove ${person.name}"
-                    },
-                ) {
-                    Icon(Icons.Filled.PersonRemove, contentDescription = null, tint = FS.colors.danger)
+                role?.let {
+                    RolePicker(
+                        selected = it,
+                        tag = "service-access-role-${person.inviteId}",
+                        busy = busyRole,
+                        enabled = canChangeRank,
+                        descriptions = descriptions,
+                        onPick = onRole,
+                    )
                 }
             }
-            if (person.isGroup && person.memberAids.isNotEmpty()) {
+            if (invitedBy != null || canRemove) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        invitedBy.orEmpty(),
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 12.sp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .semantics { testTag = "service-access-invited-by-${person.inviteId}" },
+                    )
+                    if (canRemove) {
+                        androidx.compose.material3.TextButton(
+                            onClick = onRemove,
+                            enabled = !busyRemove,
+                            modifier = Modifier.semantics {
+                                testTag = "service-access-remove-${person.inviteId}"
+                                contentDescription = "Revoke ${person.name}"
+                            },
+                        ) {
+                            if (busyRemove) CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 2.dp, color = FS.colors.danger)
+                            else Text("Revoke", color = FS.colors.danger)
+                        }
+                    }
+                }
+            }
+            if (person.isGroup && person.memberAids.isNotEmpty() && canRemove) {
                 androidx.compose.material3.TextButton(
                     onClick = { expanded = !expanded },
                     modifier = Modifier.semantics { testTag = "service-access-group-members-toggle" },

@@ -26,7 +26,7 @@ object NotificationChannels {
     )
     val SECURITY = Channel(
         "flagship.security", "Account and server alerts",
-        "New servers, certificate warnings, device changes and sign-in alerts.",
+        "New servers, certificate warnings, device changes, sign-in alerts and invites from your other devices.",
         NotificationManager.IMPORTANCE_HIGH,
     )
     val APPS = Channel(
@@ -59,6 +59,7 @@ object NotificationChannels {
         "re-pair-initiated",
         "re-pair-urgent",
         "totp-failed-rate",
+        InviteCreatedPush.CATEGORY,
     )
 
     /** The channel a push with this category (and kind) posts on. */

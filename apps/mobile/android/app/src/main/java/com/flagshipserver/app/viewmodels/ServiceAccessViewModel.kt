@@ -7,17 +7,19 @@
 //     a rank with a signed flagship/app-member-role/v1 order,
 //   - allow-list: ADD a person across THREE tiers (personal auto-approve /
 //     personal manual-approve / group multi-use) -> seal {name,photo?} under the
-//     household key -> AID-sign the create -> POST .com -> return the share-link
+//     household key -> sign the create -> POST .com -> return the share-link
 //     (+ author AID embedded so the friend derives a per-author contact AID),
 //   - LIST (owner-signed; decrypt bundle locally; a group is ONE "label — k/N"
-//     entry), REMOVE (AID-signed .com revoke + owner-IRK box allow-prune; group =
-//     prune the whole inviteId; per-member = prune one bound AID),
+//     entry, with "Invited by <device>"), REMOVE (.com revoke + owner-IRK box
+//     allow-prune; group = prune the whole inviteId; per-member = prune one AID),
 //   - FINALIZE a manual-approve acceptance the friend replied back.
 //
-// v2 signing: create / revoke / the list query move from the IRK to the STABLE
-// AID (the box-as-authority verifies the create against the owner AID, which —
-// unlike the rotatable IRK — survives device rotation). set-mode + allow-remove
-// stay owner-IRK (the box verifies its config-pinned owner IRK on those).
+// Who can invite (owner, 2026-10-15): an admin device (holds the admin root)
+// signs create + revoke with it and may change ranks; any other device of the
+// account signs with the AID, invites at Member only (.com records it as a
+// member invite and tells the admins) and may withdraw only its own member
+// invites. The list query stays AID-signed; set-mode + allow-remove use the
+// sensitive-order key the box pins.
 
 package com.flagshipserver.app.viewmodels
 
@@ -31,6 +33,7 @@ import com.flagshipserver.app.api.ServiceAccessClient
 import com.flagshipserver.app.api.ServiceInviteRow
 import com.flagshipserver.app.core.AppMemberRole
 import com.flagshipserver.app.core.AppMemberRoleOrder
+import com.flagshipserver.app.core.GymSeams
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.InviteLink
 import com.flagshipserver.app.core.ServiceInvite
@@ -77,6 +80,10 @@ data class AccessPerson(
     val maxRedemptions: Int = 0,
     /** GROUP: the bound member AIDs (for per-member removal). */
     val memberAids: List<String> = emptyList(),
+    /** "admin" | "member" | null (rows from before tiers were recorded). */
+    val creatorTier: String? = null,
+    /** The account device that created the invite, if it named itself. */
+    val creatorDeviceId: String? = null,
 )
 
 class ServiceAccessViewModel(
@@ -88,10 +95,9 @@ class ServiceAccessViewModel(
     // Slice D (D-2) — changing WHO may access a service (set-mode + allow-remove)
     // is SENSITIVE membership mutation (membership.ts / serviceInvites.ts gate it
     // on the admin master root): sign with the admin root when held, else the
-    // owner IRK (legacy). Canonical bytes unchanged. (The AID-signed create/
-    // revoke path below is a separate identity and stays on the AID.)
+    // owner IRK (legacy). Canonical bytes unchanged.
     private val irkSigner: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.adminSigningKey(r) },
-    /** Stable-AID signer (create + revoke + the owner-signed .com list — v2). */
+    /** Stable-AID signer (a non-admin device's create + revoke, and the owner-signed .com list). */
     private val aidSigner: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.deriveAccountId(r) },
     /** Stable AID pub (hex) — the author identity recorded in invites. */
     private val aidPubHex: suspend (reason: String) -> String = { r -> Keystore.accountIdPubHex(r) },
@@ -102,6 +108,14 @@ class ServiceAccessViewModel(
     private val screens: ScreensClient? = null,
     /** Sensitive-order signer for rank changes (admin root when held, else the IRK). */
     private val roleSigner: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.adminSigningKey(r) },
+    /** True when this device holds the account's admin root. */
+    private val isAdminDevice: () -> Boolean = { GymSeams.forceAdminRoot || Keystore.hasAdminRoot() },
+    /** The admin-root signer an admin device signs invite create + revoke with. */
+    private val adminSigner: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.adminSigningKey(r) },
+    /** This device's account device id (32 hex), sent with a create for attribution. */
+    private val deviceId: () -> String? = { null },
+    /** deviceId → name from the decrypted account directory; null when unreadable. */
+    private val deviceNames: suspend () -> Map<String, String>? = { null },
 ) : ViewModel() {
     private val _phase = MutableStateFlow<ServiceAccessPhase>(ServiceAccessPhase.Idle)
     val phase: StateFlow<ServiceAccessPhase> = _phase.asStateFlow()
@@ -135,6 +149,41 @@ class ServiceAccessViewModel(
     private val _roleNotice = MutableStateFlow<String?>(null)
     val roleNotice: StateFlow<String?> = _roleNotice.asStateFlow()
 
+    /** deviceId → name, once the directory was read (null: not read or unreadable). */
+    private val _deviceNames = MutableStateFlow<Map<String, String>?>(null)
+    val deviceNamesState: StateFlow<Map<String, String>?> = _deviceNames.asStateFlow()
+    private var deviceNamesTried = false
+
+    /** Only an admin device grants more than Member, changes ranks and revokes others' invites. */
+    val isAdmin: Boolean get() = isAdminDevice()
+
+    private val ownDeviceId: String? get() = deviceId()?.lowercase()?.takeIf { it.length == 32 }
+
+    /** Admin: every row. Otherwise only the member invites this device created. */
+    fun canRemove(p: AccessPerson): Boolean {
+        if (isAdmin) return true
+        val own = ownDeviceId ?: return false
+        val tier = p.creatorTier ?: _members.value?.inviteTier(p.inviteId)
+        return tier == "member" && p.creatorDeviceId?.lowercase() == own
+    }
+
+    /** "Invited by <device>", resolved on this phone; null on rows from before tiers. */
+    fun invitedBy(p: AccessPerson, names: Map<String, String>? = _deviceNames.value): String? {
+        val creator = p.creatorDeviceId?.lowercase()
+        if (p.creatorTier == null && creator == null) return null
+        if (creator != null && creator == ownDeviceId) return "Invited by this device"
+        val name = creator?.let { names?.get(it) }?.takeIf { it.isNotBlank() }
+        return if (name != null) "Invited by $name" else "Invited by another device"
+    }
+
+    private suspend fun resolveDeviceNames(rows: List<AccessPerson>) {
+        if (deviceNamesTried) return
+        val own = ownDeviceId
+        if (rows.none { it.creatorDeviceId != null && it.creatorDeviceId.lowercase() != own }) return
+        deviceNamesTried = true
+        _deviceNames.value = runCatching { deviceNames() }.getOrNull()?.mapKeys { it.key.lowercase() }
+    }
+
     /** Read the members, their grants and ranks from the box. */
     suspend fun refreshMembers() {
         val s = screens ?: return
@@ -160,6 +209,7 @@ class ServiceAccessViewModel(
 
     /** Sign + send a rank change for one row. Returns whether the box took it. */
     suspend fun setRole(role: AppMemberRole, p: AccessPerson): Boolean {
+        if (!isAdmin) return false
         val s = screens ?: return false
         val m = _members.value ?: return false
         if (p.inviteId in _busyRoles.value) return false
@@ -238,9 +288,11 @@ class ServiceAccessViewModel(
     /**
      * Mint a capability invite of the chosen [tier]; returns the share-link (also
      * in lastInviteLink). For GROUP, [maxRedemptions] (0 = unlimited) and an
-     * optional [expiresAt] are committed in the create's signed bytes. The create
-     * is AID-SIGNED (v2). The author AID is embedded in the link so the friend can
-     * derive a per-author contact AID.
+     * optional [expiresAt] are committed in the create's signed bytes. An admin
+     * device signs with the admin root and may give [role]; any other device
+     * signs with the AID and its invite stays at Member (no role order). The
+     * author AID is embedded in the link so the friend can derive a per-author
+     * contact AID.
      */
     suspend fun addPerson(
         name: String,
@@ -256,7 +308,8 @@ class ServiceAccessViewModel(
         _busyAdd.value = true
         return try {
             val reason = "Create an invite for $serviceRef"
-            val key = aidSigner(reason)
+            val admin = isAdmin
+            val key = if (admin) adminSigner(reason) else aidSigner(reason)
             val aid = HexUtil.decode(aidPubHex(reason))!!
             val hh = householdKey(reason)
             val secret = ServiceInvite.randomSecret()
@@ -282,6 +335,7 @@ class ServiceAccessViewModel(
                 put("approvalMode", JsonPrimitive(approvalMode))
                 if (groupCap != null) put("maxRedemptions", JsonPrimitive(groupCap))
                 if (groupExp != null) put("expiresAt", JsonPrimitive(groupExp))
+                ownDeviceId?.let { put("deviceId", JsonPrimitive(it)) }
             }
             client.createInvite(username, request, HexUtil.encode(sig))
             // Carry the inviteId (&i=) ONLY for a manual-approve invite — the
@@ -293,7 +347,7 @@ class ServiceAccessViewModel(
             // The rank rides a signed order right after the create; the app's
             // default rank needs none.
             val s = screens
-            if (role != null && s != null && role.wire != _members.value?.defaultRole) {
+            if (admin && role != null && s != null && role.wire != _members.value?.defaultRole) {
                 try {
                     sendRole(s, AppMemberRoleOrder.inviteTarget(inviteId), role, "Give $trimmed a rank")
                 } catch (e: Throwable) {
@@ -344,15 +398,18 @@ class ServiceAccessViewModel(
     }
 
     /** Revoke a person's (or a whole group's) access. Always records the `.com`
-     *  revoke (now AID-signed). When the person has REDEEMED (bound AID), ALSO
+     *  revoke (admin root on an admin device, else the AID that created this
+     *  member invite). When the person has REDEEMED (bound AID), ALSO
      *  owner-IRK-prunes that AID from the box's allow-list (`.com` does NOT push to
      *  the daemon, so the box call is what actually denies them). A GROUP revoke
      *  prunes EVERY bound member AID. Both legs run; a box-prune failure surfaces. */
-    suspend fun remove(inviteId: String, boundAidHex: String? = null, memberAids: List<String> = emptyList()) {
+    suspend fun remove(inviteId: String, boundAidHex: String? = null, memberAids: List<String> = emptyList()): Boolean {
+        _people.value.firstOrNull { it.inviteId == inviteId }?.let { if (!canRemove(it)) return false }
         val ts = now()
-        // 1) `.com` revoke — records the revocation (author-AID signed, v2).
+        // 1) `.com` revoke — records the revocation.
         val comOk = try {
-            val key = aidSigner("Remove this person from $serviceRef")
+            val reason = "Remove this person from $serviceRef"
+            val key = if (isAdmin) adminSigner(reason) else aidSigner(reason)
             val bytes = ServiceInvite.canonicalRevoke(inviteId, ts)
             val sig = key.sign(bytes)
             val request: JsonObject = buildJsonObject {
@@ -384,6 +441,7 @@ class ServiceAccessViewModel(
             refreshPeople()
             refreshMembers()
         }
+        return comOk && boxOk
     }
 
     /** Per-member removal from a GROUP (the group itself stays). Prunes ONE bound
@@ -427,9 +485,11 @@ class ServiceAccessViewModel(
             val ts = now()
             val sig = ServiceInvite.signServiceInviteListQuery(username, aidPub.lowercase(), "list", 0, ts, aidSigner(reason))
             val rows = client.listInvites(username, aidPub, ts, HexUtil.encode(sig))
-            _people.value = rows
+            val people = rows
                 .filter { it.serviceRef == serviceRef && it.revokedAt == null }
                 .map { row -> toPerson(row, hh) }
+            _people.value = people
+            resolveDeviceNames(people)
         } catch (e: Throwable) {
             // keep the last list; load-phase error already surfaced
         }
@@ -451,6 +511,8 @@ class ServiceAccessViewModel(
                 redemptions = if (row.redemptions > 0) row.redemptions else row.boundAidsHex.size,
                 maxRedemptions = row.maxRedemptions ?: 0,
                 memberAids = row.boundAidsHex,
+                creatorTier = row.creatorTier,
+                creatorDeviceId = row.creatorDeviceId,
             )
         } else {
             AccessPerson(
@@ -459,6 +521,8 @@ class ServiceAccessViewModel(
                 photo = photo,
                 bound = row.boundAidHex != null,
                 boundAidHex = row.boundAidHex,
+                creatorTier = row.creatorTier,
+                creatorDeviceId = row.creatorDeviceId,
             )
         }
     }

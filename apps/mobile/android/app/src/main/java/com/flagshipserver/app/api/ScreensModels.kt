@@ -1317,8 +1317,10 @@ data class CompanionResolvePendingResponse(
 // redemption of an invite is its own grant; a person holding several has the
 // highest rank.
 
+/** `tier` is who signed the invite ("admin" | "member"; null before tiers were
+ *  recorded): a member-tier invite's joins are capped at Member by the box. */
 @Serializable
-data class AppMemberGrant(val inviteId: String, val role: String)
+data class AppMemberGrant(val inviteId: String, val role: String, val tier: String? = null)
 
 @Serializable
 data class AppMember(
@@ -1329,7 +1331,7 @@ data class AppMember(
 )
 
 @Serializable
-data class AppMemberInviteRole(val inviteId: String, val role: String, val set: Boolean = false)
+data class AppMemberInviteRole(val inviteId: String, val role: String, val set: Boolean = false, val tier: String? = null)
 
 /** `GET /api/screens/services/:id/members`. */
 @Serializable
@@ -1354,6 +1356,8 @@ data class AppMembersResponse(
         if (m != null && m.grants.none { it.inviteId == inviteId }) return "aid:${m.aid}"
         return "invite:$inviteId"
     }
+
+    fun inviteTier(inviteId: String): String? = invites.firstOrNull { it.inviteId == inviteId }?.tier
 
     fun rowRole(inviteId: String, boundAID: String?): String {
         val m = member(boundAID)

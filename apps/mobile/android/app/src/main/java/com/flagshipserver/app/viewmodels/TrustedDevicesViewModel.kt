@@ -125,33 +125,15 @@ class TrustedDevicesViewModel(
                     }.getOrNull()
                 }
                 _accountDisplayName.value = accountName
-                val selfProfiles = directory.selfProfiles.associateBy { it.deviceId }
                 val managedProfiles = directory.managedProfiles.associateBy { it.deviceId }
                 val grants = directory.grants.groupBy { it.deviceId }
                 val devices = directory.devices.filter { it.revokedAt == null }.map { device ->
                     val managed = managedProfiles[device.deviceId]
-                    val own = selfProfiles[device.deviceId]
-                    val decrypted = if (managed != null) {
-                        runCatching {
-                            AccountMetadata.decrypt(
-                                AccountMetadataCiphertext(managed.nonceHex, managed.ciphertextHex),
-                                directoryKey,
-                                AccountMetadataCoordinates(user, AccountMetadataRecordType.DEVICE_MANAGED_PROFILE, managed.revision, managed.keyVersion, device.deviceId),
-                            )
-                        }.getOrNull()
-                    } else own?.let { record ->
-                        runCatching {
-                            AccountMetadata.decrypt(
-                                AccountMetadataCiphertext(record.nonceHex, record.ciphertextHex),
-                                directoryKey,
-                                AccountMetadataCoordinates(user, AccountMetadataRecordType.DEVICE_SELF_PROFILE, record.revision, record.keyVersion, device.deviceId),
-                            )
-                        }.getOrNull()
-                    }
+                    val decrypted = AccountDeviceNames.decryptedName(directory, device, user, directoryKey)
                     val scopes = grants[device.deviceId].orEmpty().flatMap { it.scopes(kotlinx.serialization.json.Json) }.toSet()
                     DirectoryDevice(
                         deviceId = device.deviceId,
-                        displayName = decrypted ?: "${platformDisplay(device.platformClass)} · Device ${device.supportCode}",
+                        displayName = decrypted ?: "${AccountDeviceNames.platformLabel(device.platformClass)} · Device ${device.supportCode}",
                         platformClass = device.platformClass,
                         supportCode = device.supportCode,
                         createdAt = device.createdAt,
@@ -337,13 +319,5 @@ class TrustedDevicesViewModel(
         return DirectoryContext(umk, AccountDirectoryAuthorization(
             active.deviceId, signerPub, requestId, issuedAt, HexUtil.encode(signature),
         ))
-    }
-
-    private fun platformDisplay(value: String?): String = when (value) {
-        "ios" -> "iPhone"
-        "android" -> "Android"
-        "web" -> "Web browser"
-        "macos" -> "Mac"
-        else -> "Device"
     }
 }

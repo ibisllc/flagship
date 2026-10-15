@@ -17,6 +17,7 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -107,6 +108,39 @@ class GymOctoberTest : GymBase() {
                 .fetchSemanticsNodes().isNotEmpty()
         }
         gymShot("access-control-members-only")
+    }
+
+    private fun openAccessControl() {
+        openPlants()
+        waitUntilExists("service-detail-access-row", timeoutMs = 20_000)
+        composeRule.onNodeWithTag("service-detail-access-row").performScrollTo().performClick()
+        waitUntilExists("service-access-add-person", timeoutMs = 15_000)
+    }
+
+    /** The demo device holds no admin root: a new invite is Member, and says why. */
+    @Test
+    fun rankPickerLockedOnANonAdminDevice() {
+        openAccessControl()
+        composeRule.onNodeWithTag("service-access-add-person").performClick()
+        waitUntilExists("service-access-rank-locked")
+        composeRule.onNodeWithText("Only an admin device can give a higher rank").assertIsDisplayed()
+        composeRule.onNodeWithTag("service-access-new-role").assertIsNotEnabled()
+        gymShot("access-rank-locked")
+    }
+
+    /** An invite made here lists who made it. */
+    @Test
+    fun membersListShowsInvitedBy() {
+        openAccessControl()
+        composeRule.onNodeWithTag("service-access-add-person").performClick()
+        waitUntilExists("service-access-name-field")
+        composeRule.onNodeWithTag("service-access-name-field").performTextInput("Gym friend")
+        composeRule.onNodeWithTag("service-access-create-invite").performScrollTo().performClick()
+        composeRule.waitUntil(15_000) {
+            composeRule.onAllNodesWithText("Invited by", substring = true).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onAllNodesWithText("Invited by", substring = true).onFirst().performScrollTo()
+        gymShot("access-invited-by")
     }
 
     // ─── API keys + Database ─────────────────────────────────────────────────

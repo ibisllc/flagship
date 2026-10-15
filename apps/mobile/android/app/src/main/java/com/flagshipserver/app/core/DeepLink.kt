@@ -142,6 +142,8 @@ sealed interface DeepLink {
     data object AccountSecurity : DeepLink
     /** Trusted devices, which also shows a pending re-pair (account recovery). */
     data object TrustedDevices : DeepLink
+    /** The account activity (audit log), from an `invite-created` push. */
+    data object AccountActivity : DeepLink
     /** An account/settings page this app has no screen for: the Settings tab. */
     data object Settings : DeepLink
 
@@ -305,6 +307,7 @@ sealed interface DeepLink {
                 "account" -> when (uri.pathSegments.firstOrNull()) {
                     "security" -> AccountSecurity
                     "devices", "re-pair" -> TrustedDevices
+                    "activity" -> AccountActivity
                     else -> Settings
                 }
                 "settings" -> when (uri.pathSegments.firstOrNull()) {

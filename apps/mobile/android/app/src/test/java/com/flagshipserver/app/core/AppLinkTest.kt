@@ -152,6 +152,15 @@ class AppLinkTest {
         assertEquals(DeepLink.Settings, AppLink.resolve(Uri.parse("$base/settings")))
     }
 
+    @Test fun inviteCreatedPush_opensTheAccountActivity() {
+        assertEquals(DeepLink.AccountActivity, AppLink.resolve(Uri.parse("https://flagshipserver.com/app/account/activity")))
+        assertEquals(DeepLink.AccountActivity, AppLink.resolve(Uri.parse("flagship://account/activity")))
+        assertEquals(
+            DeepLink.AccountActivity,
+            AppLink.resolve(Uri.parse(com.flagshipserver.app.push.InviteCreatedPush.deepLink())),
+        )
+    }
+
     @Test fun accountPushLinks_legacySchemeForms() {
         assertEquals(DeepLink.AccountSecurity, AppLink.resolve(Uri.parse("flagship://account/security?u=alice")))
         assertEquals(DeepLink.TrustedDevices, AppLink.resolve(Uri.parse("flagship://account/re-pair?u=alice")))
