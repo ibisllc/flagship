@@ -71,7 +71,7 @@ interface Call {
   body: any;
   headers: Record<string, string>;
 }
-type Answer = { status?: number; json: unknown } | null;
+type Answer = { status?: number; json: unknown } | { status?: number; raw: Buffer; contentType: string } | null;
 type Rule = { method?: string; match: (url: URL) => boolean; answer: (call: Call) => Answer };
 
 /** One router for every foreign request; returns the recorded calls. */
@@ -94,6 +94,10 @@ async function stub(page: Page, rules: Rule[]): Promise<Call[]> {
         if (!rule.match(call.url)) continue;
         const a = rule.answer(call);
         if (!a) continue;
+        if ("raw" in a) {
+          await route.fulfill({ status: a.status ?? 200, contentType: a.contentType, body: a.raw });
+          return;
+        }
         await route.fulfill({ status: a.status ?? 200, contentType: "application/json", body: JSON.stringify(a.json) });
         return;
       }
@@ -652,5 +656,72 @@ test.describe("gym webapp apps", () => {
     // Nothing was ever sent to home or to the unreachable attic.
     expect(calls.some((c) => c.method !== "GET" && c.url.host !== MEDIA && c.url.host.endsWith("flagship.services"))).toBe(false);
     await shot(page, testInfo, "runs-on-removed");
+  });
+
+  test("gym apps backup packs the app and saves the archive fetched once with the session", async ({ page }, testInfo) => {
+    await reachHome(page);
+    const ARCHIVE = Buffer.from(Array.from({ length: 2048 }, (_, i) => i % 251));
+    const ids = ["0123456789abcdef0123456789abcdef", "fedcba9876543210fedcba9876543210"];
+    let started = 0;
+    const served = new Set<string>();
+    const calls = await stub(page, [
+      ...baseRules(appDetail()),
+      {
+        method: "POST",
+        match: on(HOME, "/api/screens/app-backup/start"),
+        answer: (c) => {
+          const id = ids[started++]!;
+          return { json: { backupId: id, fetchPath: `/api/backups/${id}`, expiresAt: Date.now() + 600_000, bytes: ARCHIVE.length, encrypted: !!c.body.password } };
+        },
+      },
+      {
+        method: "GET",
+        match: (u) => u.host === HOME && u.pathname.startsWith("/api/backups/"),
+        answer: (c) => {
+          // The box hands each archive out once; the second backup's is already gone.
+          const id = c.url.pathname.split("/").pop()!;
+          if (c.headers["x-flagship-session"] !== "gym-home-token") return { status: 401, json: { error: "missing paired-session token" } };
+          if (served.has(id) || id === ids[1]) return { status: 404, json: { error: "backup not found or expired" } };
+          served.add(id);
+          return { raw: ARCHIVE, contentType: "application/octet-stream" };
+        },
+      },
+    ]);
+    await openApp(page);
+    const card = page.locator("#sd-backup");
+    await expect(card).toContainText("The app's code, and its data if you include it. It comes straight from your server to this device.");
+    await page.check("#sd-include-data");
+    await page.fill("#sd-password", "gym-backup-pw");
+    await page.click("#sd-backup-go");
+
+    await expect(card.locator("[data-backup-ready]")).toHaveText("Ready: 2 KB, encrypted", { timeout: 10_000 });
+    await expect(page.locator("#sd-password")).toHaveValue("");
+    await expect(page.locator("#sd-backup-go")).toHaveText("Back up now");
+    const start = calls.find((c) => c.method === "POST" && c.url.pathname === "/api/screens/app-backup/start")!;
+    expect(start.body).toEqual({ serviceId: SERVICE_ID, includeUserData: true, password: "gym-backup-pw" });
+    const fetches = calls.filter((c) => c.method === "GET" && c.url.pathname.startsWith("/api/backups/"));
+    expect(fetches).toHaveLength(1);
+    expect(fetches[0]!.url.host).toBe(HOME);
+    expect(fetches[0]!.headers["x-flagship-session"]).toBe("gym-home-token");
+    await card.scrollIntoViewIfNeeded();
+    await shot(page, testInfo, "app-backup-ready");
+
+    // Save hands over the bytes this page already holds; the box isn't asked again.
+    const [download] = await Promise.all([page.waitForEvent("download"), page.click("#sd-backup-save")]);
+    expect(download.suggestedFilename()).toMatch(/^notes-backup-\d{4}-\d{2}-\d{2}-\d{4}\.tar\.gz\.enc$/);
+    const saved = testInfo.outputPath("app-backup.tar.gz.enc");
+    await download.saveAs(saved);
+    const { readFileSync } = await import("node:fs");
+    expect(Buffer.compare(readFileSync(saved), ARCHIVE)).toBe(0);
+    expect(calls.filter((c) => c.method === "GET" && c.url.pathname.startsWith("/api/backups/"))).toHaveLength(1);
+
+    // A backup the box no longer holds says so, and leaves nothing to save.
+    await page.click("#sd-backup-go");
+    await expect(card.locator("[data-backup-error]")).toHaveText("The server no longer has that backup. Back up again.", { timeout: 10_000 });
+    await expect(page.locator("#sd-backup-save")).toHaveCount(0);
+    const second = calls.filter((c) => c.method === "POST" && c.url.pathname === "/api/screens/app-backup/start")[1]!;
+    expect(second.body).toEqual({ serviceId: SERVICE_ID, includeUserData: true });
+    await card.scrollIntoViewIfNeeded();
+    await shot(page, testInfo, "app-backup-gone");
   });
 });

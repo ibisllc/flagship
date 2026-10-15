@@ -194,7 +194,9 @@
 //  v88: A server order refused because another device saved a newer one
 //      says so instead of blaming the connection; a server paired by
 //      address keeps its port when a screen reaches it by name.
-const SHELL_VERSION = "v88";
+//  v89: An app's "Back up now" fetches the archive with the session and
+//      saves it (lib/appBackup.js) instead of a link the box refused.
+const SHELL_VERSION = "v89";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -270,6 +272,7 @@ const OPTIONAL_SHELL = [
   "/lib/serverShare.js",
   "/lib/serverShares.js",
   "/lib/serverArchive.js",
+  "/lib/appBackup.js",
   "/lib/activityFeed.js",
   "/lib/accountAccess.js",
   "/lib/accountDeletion.js",

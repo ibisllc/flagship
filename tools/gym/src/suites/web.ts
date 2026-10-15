@@ -1349,6 +1349,28 @@ const TOTAL: readonly Scenario[] = [
       dimension: "D6",
     },
   ),
+  webTotal(
+    "web-total-apps-backup",
+    "App Back up now (as iOS/Android since f1322d18): the start POST carries the data toggle and the password (left out when empty); the archive is fetched ONCE from /api/backups/<id> on the same box with the x-flagship-session header, held as a Blob, and Save hands over a <slug>-backup-<date>.tar.gz.enc with the exact bytes without asking the box again; an archive the box no longer holds says so and leaves nothing to save. iOS: service-detail-backup-data, service-detail-backup-now, service-detail-backup-save.",
+    "gym apps backup packs the app and saves the archive fetched once with the session",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach the app page." },
+        { kind: "tap", describe: "Include the app's data.", handle: "#sd-include-data" },
+        { kind: "type", describe: "Password to encrypt it.", handle: "#sd-password" },
+        { kind: "tap", describe: "Back up now.", handle: "#sd-backup-go" },
+        { kind: "tap", describe: "Save backup (download).", handle: "#sd-backup-save" },
+        { kind: "tap", describe: "Back up now again; the box no longer has it.", handle: "#sd-backup-go" },
+      ],
+      assertions: [
+        { describe: "Ready line", handle: "[data-backup-ready]", expect: "text", text: "Ready: 2 KB, encrypted" },
+        { describe: "Gone backup explained", handle: "[data-backup-error]", expect: "text", text: "The server no longer has that backup" },
+        { describe: "Nothing to save after a failure", handle: "#sd-backup-save", expect: "absent" },
+      ],
+      screenshots: [shot("app-backup-ready", "The archive fetched, ready to save."), shot("app-backup-gone", "A backup the box no longer holds.")],
+      dimension: "D6",
+    },
+  ),
 
   // ── Flagship Inference in Settings + the build chat (gym-inference.spec.ts) ──
   webTotal(

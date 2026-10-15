@@ -4,7 +4,8 @@
 // drives the user into views/browser-viewer.js with serviceId pre-set.
 
 import { $, registerView, show } from "../lib/router.js";
-import { screensFetch, ScreensError, getPodBaseUrl, currentPodFqdn, makeCurrentPod } from "../lib/api.js";
+import { screensFetch, ScreensError, getPodBaseUrl, currentPodFqdn, makeCurrentPod, boxClient } from "../lib/api.js";
+import { backUpApp, formatBackupSize } from "../lib/appBackup.js";
 import { inlineConfirm } from "../lib/modal.js";
 import {
   REMOVE_APP_BUSY,
@@ -213,19 +214,7 @@ export async function renderServiceDetail(serviceId) {
       </button>
       ${renderRecentLogs(body.recentLogs)}
       <h2 class="mt-4">Backup</h2>
-      <div class="card">
-        <p class="note">
-          Phone-driven backup of this service's source + (optionally) user data.
-          Bytes flow daemon → this device only — flagshipserver.com is never
-          in the path.
-        </p>
-        <label class="inline-check">
-          <input type="checkbox" id="sd-include-data" /> Include user data
-        </label>
-        <input type="password" id="sd-password" placeholder="Optional password (encrypts archive)" autocomplete="off" class="mt-2" />
-        <button id="sd-backup-go" class="full-width mt-2">Create backup</button>
-        <div id="sd-backup-status" class="mt-2 text-sm"></div>
-      </div>
+      ${renderBackupCard(body.lastBackup)}
       <h2 class="mt-4">Environment variables</h2>
       <div class="card">
         <p class="note">
@@ -791,31 +780,73 @@ function renderEditRow() {
       </button>`;
 }
 
+export const BACKUP_CARD_NOTE =
+  "The app's code, and its data if you include it. It comes straight from your server to this device.";
+export const BACKUP_GONE =
+  "The server no longer has that backup. Back up again.";
+
+export function renderBackupCard(lastBackup) {
+  const last =
+    lastBackup && Number.isFinite(lastBackup.bytes)
+      ? `<p class="note">Last backup: ${escapeHtml(formatBackupSize(lastBackup.bytes))} · ${escapeHtml(formatWhen(lastBackup.createdAt))}</p>`
+      : "";
+  return `
+      <div class="card" id="sd-backup">
+        ${last}
+        <p class="note">${escapeHtml(BACKUP_CARD_NOTE)}</p>
+        <label class="inline-check">
+          <input type="checkbox" id="sd-include-data" /> Include the app's data
+        </label>
+        <input type="password" id="sd-password" placeholder="Password to encrypt it (optional)" autocomplete="new-password" class="mt-2" />
+        <div id="sd-backup-status" class="mt-2 text-sm" aria-live="polite"></div>
+        <button id="sd-backup-go" class="secondary full-width mt-2">Back up now</button>
+      </div>`;
+}
+
+// The archive the last "Back up now" fetched, as an object URL kept until the
+// next backup, so "Save backup" can be clicked again: the box has already
+// deleted its copy.
+let backupUrl = "";
+function dropBackupUrl() {
+  if (backupUrl) URL.revokeObjectURL(backupUrl);
+  backupUrl = "";
+}
+
 async function triggerBackup(serviceId) {
   const status = $("sd-backup-status");
-  const password = $("sd-password").value;
-  const includeUserData = $("sd-include-data").checked;
-  status.textContent = "creating backup…";
+  const go = $("sd-backup-go");
+  const passwordEl = $("sd-password");
+  const dataEl = $("sd-include-data");
+  if (!status || !go || go.disabled) return;
+  dropBackupUrl();
+  const busy = (on) => {
+    go.disabled = on;
+    passwordEl.disabled = on;
+    dataEl.disabled = on;
+  };
+  busy(true);
+  status.textContent = "";
   try {
-    const body = await screensFetch("/api/screens/app-backup/start", {
-      method: "POST",
-      body: JSON.stringify({
-        serviceId,
-        includeUserData,
-        password: password || undefined,
-      }),
+    const r = await backUpApp({
+      client: boxClient(),
+      serviceId,
+      includeUserData: dataEl.checked,
+      password: passwordEl.value,
+      onPhase: (p) => { go.textContent = p === "creating" ? "Packing…" : "Downloading…"; },
     });
-    const fetchUrl = `${getPodBaseUrl()}${body.fetchPath}`;
+    if (currentServiceId !== serviceId || !status.isConnected) return;
+    passwordEl.value = "";
+    backupUrl = URL.createObjectURL(r.blob);
     status.innerHTML = `
-      ready (${(body.bytes / 1024).toFixed(1)} KB${body.encrypted ? ", encrypted" : ""})
-      — <a href="${escapeHtml(fetchUrl)}" download>download</a>
-    `;
+      <p class="ok-text" data-backup-ready>Ready: ${escapeHtml(formatBackupSize(r.bytes))}${r.encrypted ? ", encrypted" : ""}</p>
+      <a class="btn full-width mt-2" id="sd-backup-save" href="${escapeHtml(backupUrl)}" download="${escapeHtml(r.fileName)}">Save backup</a>`;
   } catch (e) {
-    if (e instanceof ScreensError) {
-      status.textContent = `failed: ${e.message}`;
-    } else {
-      status.textContent = `failed: ${e.message}`;
-    }
+    console.error("app backup failed", e);
+    const gone = e instanceof ScreensError && e.status === 404;
+    status.innerHTML = `<p class="err-text" data-backup-error>${escapeHtml(gone ? BACKUP_GONE : humanError(e))}</p>`;
+  } finally {
+    busy(false);
+    go.textContent = "Back up now";
   }
 }
 

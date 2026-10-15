@@ -943,6 +943,7 @@ section:not(.hidden) {
 /* Error-tinted body copy inside a card (replaces the common
  * `style="margin:0;color:var(--err);font-size:0.9rem;"` pattern). */
 .err-text { margin: 0; color: var(--err); font-size: 14px; }
+.ok-text { margin: 0; color: var(--ok); font-size: 14px; }
 .warn-text { margin: 0 0 12px; color: var(--warn); font-size: 14px; line-height: 1.45; }
 
 /* Two-column equal-width row of buttons / inputs (the common

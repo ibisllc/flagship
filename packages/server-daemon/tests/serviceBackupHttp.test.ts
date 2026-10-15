@@ -103,3 +103,16 @@ describe("/api/backups/<id>", () => {
     expect(r!.headers?.["x-flagship-encrypted"]).toBe("1");
   });
 });
+
+// The handler was never mounted: app-backup/start handed every client a
+// fetchPath the daemon answered 404.
+describe("the daemon mounts /api/backups/<id>", () => {
+  it("adds the handler behind the same gate as /api/screens/*", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const src = await readFile(join(__dirname, "../src/index.ts"), "utf8");
+    expect(src).toContain('import { buildAppBackupHttpHandlers } from "./serviceBackupHttp.js";');
+    expect(src).toMatch(
+      /runtime\.addHandler\(\s*buildAppBackupHttpHandlers\(\{ backups: runtime\.appBackup, gate: sharesBundle\?\.gate \?\? pairedSessions \}\)/,
+    );
+  });
+});

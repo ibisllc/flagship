@@ -109,6 +109,7 @@ import {
 } from "./postRecovery/fileJournalStore.js";
 import { buildRunMigration } from "./runMigration.js";
 import { buildScreensHttp } from "./screens/screensHttp.js";
+import { buildAppBackupHttpHandlers } from "./serviceBackupHttp.js";
 import { buildAppStatusReader } from "./appStatus.js";
 import { buildActivityResolver } from "./serviceActivity.js";
 import { buildScreensUpgradeHandler } from "./screens/screensWs.js";
@@ -3029,6 +3030,12 @@ async function wireRuntimeSurfaces(deps: {
     resolveSessionAppId: (session) => serviceIdForSession(session),
   });
   runtime.addHandler(sharesBundle ? sharesBundle.shares.withActivity(screensHandle) : screensHandle);
+  // The archive app-backup/start names; without this every client's fetch 404'd.
+  if (runtime.appBackup) {
+    runtime.addHandler(
+      buildAppBackupHttpHandlers({ backups: runtime.appBackup, gate: sharesBundle?.gate ?? pairedSessions }),
+    );
+  }
   runtime.addUpgradeHandler(
     buildScreensUpgradeHandler({
       gate: sharesBundle?.gate ?? pairedSessions,

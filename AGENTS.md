@@ -489,6 +489,10 @@ allowances (1M / 5M / 20M a month) are placeholders.
 
 - **`.com` Worker:** current with `main` as of 2026-10-13 (webapp shell **v60**; `main` is at v71).
   Always `npx tsc -b` first and apply pending D1 migrations before deploying.
+- **App "Back up now" (2026-10-15):** the box never mounted `/api/backups/<id>`,
+  so every client's archive fetch 404'd; now mounted (owner sessions only).
+  The webapp fetches it with the session and saves the Blob, like iOS/Android.
+  Needs an endorsed box release and a `.com` deploy.
 - **Flagship Inference entry (2026-10-14):** free AI is a built-in provider,
   "Flagship Inference", first in every AI-key list, never removable, shown
   disabled (not hidden) once ended; the shim answers a context overflow with
