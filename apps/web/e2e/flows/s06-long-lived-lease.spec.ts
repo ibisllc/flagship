@@ -12,9 +12,18 @@
 
 import { test, expect, bootstrapToHome, syncWebappPubkey } from "../fixtures/pod-sim.js";
 import { bytesToHex } from "../fixtures/identity.js";
+import { stubAccountReadToken } from "../fixtures/accountRead.js";
 import { openAutoUnlockLeaseV2, sealForEd25519Recipient, verifyAutoUnlockLeaseV2 } from "@flagship/protocol";
 
 const PASSPHRASE = "correct-horse-battery-staple-test";
+
+/** Give the rig's local profile the account's username, as claiming one would. */
+async function signInAs(page: import("@playwright/test").Page, username: string): Promise<void> {
+  await page.evaluate(async (u) => {
+    const store = (await import("/lib/profilesStore.js" as string)) as { set(slot: string, value: string): void };
+    store.set("username", u);
+  }, username);
+}
 
 function hexToBytes(h: string): Uint8Array {
   const out = new Uint8Array(h.length / 2);
@@ -41,15 +50,9 @@ test("S6 — enable long-lived auto-unlock + assert wire-side POST shape", async
   crypto.getRandomValues(luksKey);
   const sealedForIrk = sealForEd25519Recipient(luksKey, hexToBytes(irkPubHex));
 
-  // Home lists the account's servers from /api/me/servers (needs an apex
-  // session id); the card opens server detail.
-  await page.route("**/api/me/servers**", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ servers: [{ serverId: identity.serverFqdn, revoked: null }] }),
-    }),
-  );
+  // Home lists the account's servers from .com's /pods (behind a read
+  // token); the card opens server detail.
+  await stubAccountReadToken(page);
   await page.route("**/api/server/*/sealed-luks-key", (route) =>
     route.fulfill({
       status: 200,
@@ -57,7 +60,7 @@ test("S6 — enable long-lived auto-unlock + assert wire-side POST shape", async
       body: JSON.stringify({ serverDomain: identity.serverFqdn, sealedKey: bytesToHex(sealedForIrk), sealedAt: Date.now() }),
     }),
   );
-  // The box's STK comes from the account's directory.
+  // The account's servers and each box's STK come from /pods.
   await page.route("**/api/users/*/pods", (route) =>
     route.fulfill({
       status: 200,
@@ -80,10 +83,7 @@ test("S6 — enable long-lived auto-unlock + assert wire-side POST shape", async
     }
     return route.continue();
   });
-  await page.evaluate(() => {
-    ((globalThis as unknown) as { localStorage: { setItem(k: string, v: string): void } })
-      .localStorage.setItem("flagship.sessionId", "e2e-session-id");
-  });
+  await signInAs(page, identity.username);
   await page.reload();
   await page.fill("#unlock-passphrase", PASSPHRASE);
   await page.click("#unlock-go");
@@ -128,18 +128,17 @@ test("S7 — auto-renewer fires on home enter when a lease is close to expiry", 
   await expect.poll(() => podSim.orders.filterByType("add-paired-session").length).toBe(1);
   await page.click("#pod-pair-back");
 
-  // The renewer queries /api/me/servers (apex), then for each server
-  // queries /api/server/<fqdn>/unlock-key/leases-v2. We intercept both.
+  // The renewer reads the account's servers from /pods, then for each
+  // server queries /api/server/<fqdn>/unlock-key/leases-v2. We intercept both.
   // Return ONE lease that's 12h from expiry (within the 24h renewal
   // window) so the renewer should re-issue.
   const leasesResponses: Array<unknown> = [];
-  await page.route("**/api/me/servers**", (route) =>
+  await stubAccountReadToken(page);
+  await page.route("**/api/users/*/pods", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({
-        servers: [{ serverId: identity.serverFqdn, revoked: null }],
-      }),
+      body: JSON.stringify({ pods: [{ serverDomain: identity.serverFqdn, revokedAt: null }] }),
     }),
   );
   await page.route("**/api/server/*/unlock-key/leases-v2", (route) => {
@@ -165,15 +164,9 @@ test("S7 — auto-renewer fires on home enter when a lease is close to expiry", 
     }),
   );
 
-  // The home view's renderServers() early-returns when no
-  // flagship.sessionId is in localStorage (the webapp's apex-device-
-  // pair flow is what normally sets it, separate from pod-pair).
-  // Seed it so scheduleRenewals → /api/me/servers → /unlock-key/leases-v2
-  // actually fires under the rig.
-  await page.evaluate(() => {
-    ((globalThis as unknown) as { localStorage: { setItem(k: string, v: string): void } })
-      .localStorage.setItem("flagship.sessionId", "e2e-session-id");
-  });
+  // Home lists an account's servers only once the account has a username
+  // (the rig's bootstrap skips claiming one), so name it before reloading.
+  await signInAs(page, identity.username);
 
   // Reload home to trigger renderHome → scheduleRenewals → tickRenewals.
   await page.reload();

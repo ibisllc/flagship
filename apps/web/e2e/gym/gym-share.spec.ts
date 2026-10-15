@@ -51,7 +51,6 @@ async function reachHome(page: Page): Promise<void> {
     store.ensureProfile("smoketest");
     store.setActiveCloudName("smoketest");
     store.set("username", "smoketest");
-    store.set("sessionId", "gym-fixture-session-id");
     const { getSession } = await import("/lib/state.js");
     getSession().username = "smoketest";
     const api = await import("/lib/api.js");
@@ -279,12 +278,8 @@ test.describe("gym webapp share", () => {
       [`${SHARED_BOX}/api/screens/apps-list`, APPS],
       [`${SHARED_BOX}/api/screens/services/notes/access`, { access: { list: "allow api.github.com\n", listSha256: "", pending: [] } }],
       [`${SHARED_BOX}/api/screens/server-metrics`, METRICS],
-      ["/api/me/servers", { servers: [{ serverId: OWNER_BOX }] }],
       ["/api/users/smoketest/pods", { pods: [{ serverDomain: OWNER_BOX, liveness: "live", lastReported: Date.now(), registeredAt: Date.now() - 86_400_000, currentCert: { validUntil: Date.now() + 60 * 86_400_000 } }] }],
     ]);
-    await page.route("**/api/me/servers*", (route) =>
-      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ servers: [{ serverId: OWNER_BOX }] }) }),
-    );
     await page.evaluate(async () => {
       const { renderHome } = await import("/views/home.js");
       await renderHome();
