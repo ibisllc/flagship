@@ -745,6 +745,7 @@ async function main(): Promise<void> {
     void installHealthReporter({
       controlPlaneBaseUrl: env.controlPlaneBaseUrl,
       serverDomain: env.serverFqdn,
+      proxyCurlrcPath: `${dataDir}/outbound-proxy.curlrc`,
       run: (cmd, args) => realUpdateCommandRunner(cmd, args),
       onLog: (m) => console.log(m),
     }).catch((e) => console.log(`[health] reporter not installed: ${(e as Error).message}`));
