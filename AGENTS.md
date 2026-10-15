@@ -194,6 +194,29 @@ owners: `docs/runbooks/release-readiness.md`; feature matrix:
 
 ### In flight
 
+- **Live gym on UpCloud, all green (2026-10-15).** `bash scripts/gym-refresh.sh`
+  (rebases `gym` onto main in `~/.cache/flagship/gym-worktree` and pushes it,
+  gym D1 migrations, gym-vs-prod secret parity, deploys the gym Worker from
+  `gym` and the gym Fly app, health) is gym:weekly's phase 0; the live half is
+  `npx tsx tools/live-e2e/shared-run.ts` (one fleet: account A `home`+`home2`,
+  B `home`; groups core, gating, enforcement, server-order, runtimes,
+  access-lists, ai-staging, share, app-copy, update, lifecycle; always torn
+  down through the gym-only `/api/gym/teardown`, label `flagship-env=gym` +
+  the run's DNS). Run `live-run-2026-10-15T18-53-15-632Z`: 112 checks, 0
+  failed, ~11 min, 3 STARTER-4xCPU-8GB boxes. Fixed on `main` from what it
+  found: gym boxes never showed online (`daemon_status` matched a hard-coded
+  apex), invites of admin-pinned accounts could never be redeemed (box now
+  accepts the admin root; **the apps still sign invite creates with the AID
+  /IRK, which `.com` refuses on admin-pinned accounts: open**), gVisor apps had
+  no DNS so egress approvals never worked (resolv.conf now names the gateway),
+  app backup "include user data" always failed, concurrent pairings 500'd, and
+  the `.services` Fly image didn't build (build-eval). Leftover gym DNS had
+  filled the shared `flagship.services` zone (200-record cap), breaking DNS-01
+  for new boxes, prod included, until reaped (37 records) on 2026-10-15.
+  Open: the `update` group can only move a gym box (unendorsed main HEAD) to
+  an older endorsed release; `/api/dev/sample-user/<u>/order-update` assumes
+  the prod apex.
+
 - **Backup/clone server, Add/Import a server, Migrate wipes, Activity (2026-10-15,
   `72e889fd`, `.com` deployed with webapp shell v84):** `docs/server-backup-and-clone.md`. One
   sealed archive of all apps (`serverArchive/`), downloadable and importable
@@ -799,7 +822,8 @@ Not compiled since the rebase: the iOS and Android code on any branch.
 - **`feat/phone-usb-burn`:** validate the OTG write on a real phone + stick,
   publish the seed and set `FLAGSHIP_ISO_SEED`.
 - **`feat/retail`** (NFC box), **`feat/browser-extension`**, **`alpine`** (parked
-  installer), **`gym`** (test harness; run its live account-recovery spec).
+  installer), **`gym`** (main + the gym trust pin and app adoption seams; kept
+  current by `scripts/gym-refresh.sh`; run its live account-recovery spec).
 
 ### Pricing decisions (owner, 2026-10-09)
 
