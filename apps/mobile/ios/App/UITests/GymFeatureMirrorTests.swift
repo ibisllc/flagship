@@ -142,6 +142,7 @@ final class GymFeatureMirrorTests: XCTestCase {
         let add = app.buttons["home-add-server"]
         XCTAssertTrue(add.waitForExistence(timeout: 20), "Home should offer add-server.")
         add.tap()
+        app.chooseAddNewServer()
         let name = app.textFields["cs-name-field"]
         XCTAssertTrue(name.waitForExistence(timeout: 15), "Step 0 should show the name field.")
         name.tap()

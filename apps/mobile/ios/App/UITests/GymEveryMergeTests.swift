@@ -115,8 +115,9 @@ final class GymEveryMergeTests: XCTestCase {
         XCTAssertTrue(addServer.waitForExistence(timeout: 15), "Home should show add-server.")
         gymShot(app, "home-ready")
         addServer.tap()
+        app.chooseAddNewServer()
 
-        // Add-server goes straight into the create flow — no chooser.
+        // "Add a new server" goes straight into the create flow.
         let name = app.textFields["cs-name-field"]
         XCTAssertTrue(
             name.waitForExistence(timeout: 15),

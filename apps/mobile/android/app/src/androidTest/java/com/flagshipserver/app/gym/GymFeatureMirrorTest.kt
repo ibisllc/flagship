@@ -120,8 +120,8 @@ class GymFeatureMirrorTest : GymBase() {
     @Test
     fun createServerAdvancedTogglesResetRule() {
         launch(tab = "home")
-        composeRule.onNodeWithTag("home-add-server").performScrollTo().performClick()
-        composeRule.waitForIdle()
+        addNewServer()
+        nameServerAndNext()
         waitUntilExists("cs-advanced-toggle", timeoutMs = 15_000)
         val advanced = composeRule.onNodeWithTag("cs-advanced-toggle")
         advanced.performScrollTo().assertIsOff()

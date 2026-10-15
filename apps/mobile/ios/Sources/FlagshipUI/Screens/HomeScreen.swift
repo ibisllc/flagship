@@ -603,7 +603,9 @@ public struct HomeScreen: View {
         .accessibilityIdentifier("home-add-server")
         .confirmationDialog("Add/Import a server", isPresented: $showAddOrImport, titleVisibility: .visible) {
             Button("Add a new server") { onAddServer() }
+                .accessibilityIdentifier("home-add-new-server")
             Button("Import a backup") { onImportBackup() }
+                .accessibilityIdentifier("home-import-backup")
             Button("Cancel", role: .cancel) {}
         } message: {
             Text(ServerArchive.cloneHint)

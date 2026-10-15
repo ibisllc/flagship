@@ -78,12 +78,13 @@ const EVERY_MERGE: readonly Scenario[] = [
   ),
   ios(
     "ios-create-server-form",
-    "Home → add-server goes STRAIGHT to the create-server form (name step) — the provision-vs-pair chooser was removed — then advance to the disk-encryption control.",
+    "Home → Add/Import a server → Add a new server opens the create-server form (name step), then advance to the disk-encryption control.",
     "FlagshipAppUITests/GymEveryMergeTests/test_createServerFormReachable",
     {
       steps: [
         { kind: "launch", describe: "Launch -smoke-mode -smoke-tab home." },
-        { kind: "tap", describe: "Add a server (straight into the create flow, no chooser).", handle: "home-add-server" },
+        { kind: "tap", describe: "Add/Import a server.", handle: "home-add-server" },
+        { kind: "tap", describe: "Add a new server.", handle: "home-add-new-server" },
         { kind: "assert", describe: "Name field (step 0).", handle: "cs-name-field" },
         { kind: "type", describe: "Type a name to enable Next.", handle: "cs-name-field" },
         { kind: "tap", describe: "Next → boot-unlock / disk-encryption step.", handle: "cs-next-button" },

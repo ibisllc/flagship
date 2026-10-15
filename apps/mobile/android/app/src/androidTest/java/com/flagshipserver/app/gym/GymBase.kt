@@ -23,7 +23,14 @@ import android.app.Instrumentation
 import android.content.Intent
 import android.graphics.Bitmap
 import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.junit4.ComposeTestRule
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
@@ -76,6 +83,7 @@ abstract class GymBase {
         trustUntrusted: Boolean = false,
         podsVariant: String? = null,
         adminRoot: Boolean = false,
+        username: String? = null,
     ) {
         // A test may relaunch with different seeds (e.g. the admin/non-admin
         // state pair) — close the prior scenario so activities never stack.
@@ -89,6 +97,7 @@ abstract class GymBase {
             if (trustUntrusted) putExtra(SmokeModeConfig.EXTRA_SMOKE_TRUST_UNTRUSTED, true)
             if (podsVariant != null) putExtra(SmokeModeConfig.EXTRA_SMOKE_PODS, podsVariant)
             if (adminRoot) putExtra(SmokeModeConfig.EXTRA_SMOKE_ADMIN_ROOT, true)
+            if (username != null) putExtra(SmokeModeConfig.EXTRA_SMOKE_USERNAME, username)
         }
         scenario = ActivityScenario.launch(intent)
         composeRule.waitForIdle()
@@ -115,6 +124,24 @@ abstract class GymBase {
         composeRule.waitUntil(timeoutMillis = timeoutMs) {
             composeRule.onAllNodesWithContentDescription(desc).fetchSemanticsNodes().isNotEmpty()
         }
+    }
+
+    /** Home's "Add/Import a server" asks which; pick "Add a new server". */
+    protected fun addNewServer() {
+        composeRule.onNodeWithTag("home-add-server").performScrollTo().performClick()
+        waitUntilExists("home-add-new-server")
+        composeRule.onNodeWithTag("home-add-new-server").performClick()
+        composeRule.waitForIdle()
+    }
+
+    /** Create-server step 1 (name) → Next → step 2 (boot unlock + encryption). */
+    protected fun nameServerAndNext(name: String = "gymbox") {
+        waitUntilExists("cs-name-field")
+        // The tag sits on the field's wrapper; type into the text input inside it.
+        composeRule.onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag("cs-name-field")))
+            .performTextInput(name)
+        composeRule.onNodeWithTag("cs-next-button").performScrollTo().performClick()
+        composeRule.waitForIdle()
     }
 
     @After

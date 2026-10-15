@@ -160,6 +160,7 @@ final class GymTotalDetailTests: XCTestCase {
         let add = app.buttons["home-add-server"]
         XCTAssertTrue(add.waitForExistence(timeout: 20), "Home should offer add-server.")
         add.tap()
+        app.chooseAddNewServer()
 
         // Step 0 — identity.
         let name = app.textFields["cs-name-field"]

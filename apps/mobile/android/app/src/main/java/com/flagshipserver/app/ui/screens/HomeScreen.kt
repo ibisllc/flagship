@@ -157,12 +157,18 @@ fun HomeScreen(
             title = { androidx.compose.material3.Text("Add/Import a server") },
             text = { androidx.compose.material3.Text(com.flagshipserver.app.core.ServerArchive.CLONE_HINT) },
             confirmButton = {
-                androidx.compose.material3.TextButton(onClick = { showAddOrImport = false; onAddServer() }) {
+                androidx.compose.material3.TextButton(
+                    onClick = { showAddOrImport = false; onAddServer() },
+                    modifier = Modifier.testTag("home-add-new-server"),
+                ) {
                     androidx.compose.material3.Text("Add a new server")
                 }
             },
             dismissButton = {
-                androidx.compose.material3.TextButton(onClick = { showAddOrImport = false; onImportBackup() }) {
+                androidx.compose.material3.TextButton(
+                    onClick = { showAddOrImport = false; onImportBackup() },
+                    modifier = Modifier.testTag("home-import-backup"),
+                ) {
                     androidx.compose.material3.Text("Import a backup")
                 }
             },

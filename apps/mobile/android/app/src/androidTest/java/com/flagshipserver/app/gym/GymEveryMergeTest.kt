@@ -101,15 +101,15 @@ class GymEveryMergeTest : GymBase() {
         launch(tab = "home")
         composeRule.onNodeWithTag("home-add-server").assertIsDisplayed()
         gymShot("home-ready")
-        composeRule.onNodeWithTag("home-add-server").performClick()
-        // Add-server goes STRAIGHT to the create-server form (a NavHost push,
-        // no chooser) — wait for it.
+        addNewServer()
+        // "Add a new server" opens the create-server form (a NavHost push).
         waitUntilExists("cs-name-field")
-        // The form renders top-to-bottom; the encryption toggle sits below the
-        // fold on a phone viewport. Assert the controls RENDER (exist), not
-        // strict viewport visibility (matches the iOS `.exists` convention).
         composeRule.onNodeWithTag("cs-name-field").assertExists()
-        composeRule.onNodeWithTag("cs-encrypt-disk-toggle").assertExists()
+        gymShot("create-server-name")
+        // The design pages: name first, then boot unlock + disk encryption
+        // (as on iOS).
+        nameServerAndNext()
+        waitUntilExists("cs-encrypt-disk-toggle")
         gymShot("create-server-form")
     }
 
