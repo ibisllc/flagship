@@ -41,6 +41,7 @@ describe("UX-B — raw HTTP status codes no longer reach users", () => {
 
   it("service-detail no longer toasts a raw `(${r.status})` / raw rename text", () => {
     const src = read("views", "service-detail.js");
+    expect(src).not.toContain("Couldn't request custom domain (${r.status}).");
     expect(src).not.toContain("Couldn't rename: ${text}");
     expect(src).toContain("humanError(");
   });
