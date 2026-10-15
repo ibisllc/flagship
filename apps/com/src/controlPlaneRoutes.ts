@@ -2685,6 +2685,7 @@ export async function tryControlPlane(
           // 0058 — coarse "account in use" bump for the username-reclaim tool.
           usernames: storage.usernames,
           serverOrders: storage.serverOrders,
+          tiers: storage.tiers,
         },
         await readJson(request),
       ),
