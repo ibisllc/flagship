@@ -736,6 +736,14 @@ class WizardModel:
     def run_host_here(self) -> None:
         threading.Thread(target=self._run_host_here_sync, daemon=True).start()
 
+    def choose_host_here(self) -> None:
+        """Choosing "Host on this PC" IS the decision: the pane that follows
+        shows progress, not a second "are you sure" (the Mac's destination
+        card)."""
+        self.set_destination(ServerDestination.HOST_HERE)
+        if self.host_here_enabled:
+            self.run_host_here()
+
     def _run_host_here_sync(self) -> None:
         """"Host here" prefers the published prebuilt server image: download
         and verify it once, give the new server a thin overlay on it plus a
@@ -1577,9 +1585,7 @@ def build_window(application, model: Optional[WizardModel] = None):
     host_reason.set_visible(False)
     host_inner.append(host_reason)
     host_card.set_child(host_inner)
-    host_card.connect(
-        "clicked", lambda _b: wizard_model.set_destination(ServerDestination.HOST_HERE)
-    )
+    host_card.connect("clicked", lambda _b: wizard_model.choose_host_here())
     chooser_box.append(host_card)
     main_stack.add_named(chooser_box, "chooser")
 

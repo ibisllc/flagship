@@ -529,3 +529,22 @@ def test_cancel_pairing_cancels_the_session(tmp_path):
     m.cancel_pairing()
     assert session.cancelled
     assert not m.state.is_pairing
+
+
+def test_choosing_host_here_starts_it_at_once(tmp_path, monkeypatch):
+    m = make_model(tmp_path)
+    verified(m)
+    ran = []
+    monkeypatch.setattr(m, "run_host_here", lambda: ran.append(True))
+    m.choose_host_here()
+    assert m.show_host_here_pane
+    assert ran == [True]
+
+
+def test_choosing_host_here_when_it_cant_run_only_shows_why(tmp_path, monkeypatch):
+    vm = make_vm(tmp_path, toolchain=None, error="no qemu")
+    m = make_model(tmp_path, vm=vm)
+    verified(m)
+    monkeypatch.setattr(m, "run_host_here", lambda: pytest.fail("must not start"))
+    m.choose_host_here()
+    assert m.state.destination == ServerDestination.HOST_HERE

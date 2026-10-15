@@ -247,8 +247,8 @@ public partial class MainWindow : Window
     private void ChooseUsb_Click(object sender, RoutedEventArgs e)
         => _wizard.Destination = ServerDestination.BurnToUSB;
 
-    private void ChooseHostHere_Click(object sender, RoutedEventArgs e)
-        => _wizard.Destination = ServerDestination.HostHere;
+    private async void ChooseHostHere_Click(object sender, RoutedEventArgs e)
+        => await _wizard.ChooseHostHereAsync();
 
     private void BackToChooser_Click(object sender, RoutedEventArgs e)
         => _wizard.Destination = null;

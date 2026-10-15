@@ -288,6 +288,15 @@ public sealed class Wizard : INotifyPropertyChanged
         FireBag();
     }
 
+    /// <summary>Choosing "Host on this PC" IS the decision: the pane that
+    /// follows shows progress, not a second "are you sure" (the Mac's
+    /// destination card).</summary>
+    public async Task ChooseHostHereAsync()
+    {
+        Destination = ServerDestination.HostHere;
+        if (HostHereEnabled) await RunHostHereAsync();
+    }
+
     public void ReturnToPairingCover()
     {
         ResetToNewServer();
