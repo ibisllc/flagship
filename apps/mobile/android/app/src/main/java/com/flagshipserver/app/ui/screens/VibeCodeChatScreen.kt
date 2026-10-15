@@ -134,9 +134,18 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
         val (model, effort) = ModelMenus.replyWire(choice)
         val req = base.copy(model = model, effort = effort)
         val withCred = when (val r = freeAiService.refreshFor(sessionId)) {
-            is com.flagshipserver.app.core.FreeAiRefresh.None -> req
+            // The box lost this session's key (a restart): send the one it
+            // started with again, as iOS does.
+            is com.flagshipserver.app.core.FreeAiRefresh.None -> {
+                val saved = BuildSessionAi.credentialFor(sessionId)
+                if (state?.needsCredential == true && saved != null) {
+                    req.copy(credential = com.flagshipserver.app.api.LlmProviderCredential.from(saved))
+                } else {
+                    req
+                }
+            }
             is com.flagshipserver.app.core.FreeAiRefresh.Fresh ->
-                req.copy(credential = com.flagshipserver.app.api.BuildCredential.from(r.credential))
+                req.copy(credential = com.flagshipserver.app.api.LlmProviderCredential.from(r.credential))
             is com.flagshipserver.app.core.FreeAiRefresh.Stop -> {
                 errorMessage = r.message
                 return false

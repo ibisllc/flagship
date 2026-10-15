@@ -6,7 +6,7 @@
 package com.flagshipserver.app.core
 
 import com.flagshipserver.app.api.AiModelsResponse
-import com.flagshipserver.app.api.BuildCredential
+import com.flagshipserver.app.api.LlmProviderCredential
 import com.flagshipserver.app.api.InferenceCatalogResponse
 import com.flagshipserver.app.api.InferenceModel
 import com.flagshipserver.app.api.ModelOption
@@ -233,7 +233,7 @@ object ModelCatalogs {
         val key = keyOf(credential)
         own[key]?.let { return ModelMenus.from(it) }
         return try {
-            val r = screens.aiModels(BuildCredential.from(credential))
+            val r = screens.aiModels(LlmProviderCredential.from(credential))
             own[key] = r
             ModelMenus.from(r)
         } catch (e: kotlinx.coroutines.CancellationException) {

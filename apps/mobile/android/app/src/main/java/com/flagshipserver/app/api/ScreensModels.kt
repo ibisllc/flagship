@@ -43,6 +43,8 @@ data class AppSummary(
      *  older boxes. A co-manager of the server still needs an invite to a
      *  members-only app. */
     val accessMode: String? = null,
+    /** The app's name on a row for a copy still underway (no manifest yet). */
+    val name: String? = null,
 )
 
 /** `activity: {kind}`: "deploying" | "copying" | "editing". */
@@ -595,7 +597,7 @@ data class AppDetailResponse(
  * whether the underlying key is persisted. NEVER logged.
  */
 @Serializable
-data class BuildCredential(
+data class LlmProviderCredential(
     val provider: String,
     val apiKey: String,
     val baseUrl: String? = null,
@@ -607,10 +609,13 @@ data class BuildCredential(
     val source: String? = null,
 ) {
     companion object {
-        fun from(c: com.flagshipserver.app.core.AiCredential): BuildCredential =
-            BuildCredential(c.provider, c.apiKey, c.baseUrl, relay = c.relay, source = c.source)
+        fun from(c: com.flagshipserver.app.core.AiCredential): LlmProviderCredential =
+            LlmProviderCredential(c.provider, c.apiKey, c.baseUrl, relay = c.relay, source = c.source)
     }
 }
+
+/** The type's earlier Android name, still used by the screens client. */
+typealias BuildCredential = LlmProviderCredential
 
 @Serializable
 data class VibeCodeStartRequest(
@@ -623,7 +628,7 @@ data class VibeCodeStartRequest(
     /** Files and images on the opening turn (≤ 6). */
     val attachments: List<VibeCodeAttachment>? = null,
     /** Optional BYOK credential. Omitted ⇒ box uses promo/credits. */
-    val credential: BuildCredential? = null,
+    val credential: LlmProviderCredential? = null,
     /** Owner-chosen service name/slug (the web-address label) from the
      *  Describe form. A hint the daemon uses for the deployed slug. */
     val name: String? = null,
@@ -1121,6 +1126,9 @@ data class VibeCodeSessionPublicState(
     val deployPhase: String? = null,
     /** Why the session failed, when status is "failed". */
     val failureReason: String? = null,
+    /** The AI is waiting but the box has no key for this session: the reply
+     *  must carry one. */
+    val needsCredential: Boolean? = null,
     /** The model and effort the conversation uses now. */
     val model: String? = null,
     val effort: String? = null,
@@ -1155,7 +1163,7 @@ data class VibeCodeReplyRequest(
     val envVarStatus: String? = null,
     /** Optional BYOK credential carried on a reply (e.g. the box asked for a
      *  key mid-session, or an adapt step needs the box's model). */
-    val credential: BuildCredential? = null,
+    val credential: LlmProviderCredential? = null,
 )
 
 @Serializable
@@ -1442,4 +1450,4 @@ data class AiModelsResponse(
 )
 
 @Serializable
-data class AiModelsRequest(val credential: BuildCredential? = null)
+data class AiModelsRequest(val credential: LlmProviderCredential? = null)

@@ -18,17 +18,29 @@ class BuildCredentialWireTest {
 
     @Test
     fun credentialFieldNames() {
-        val cred = BuildCredential(provider = "anthropic", apiKey = "sk-ant-123", baseUrl = "https://x")
-        val s = json.encodeToString(BuildCredential.serializer(), cred)
+        val cred = LlmProviderCredential(provider = "anthropic", apiKey = "sk-ant-123", baseUrl = "https://x")
+        val s = json.encodeToString(LlmProviderCredential.serializer(), cred)
         assertTrue(s.contains("\"provider\":\"anthropic\""))
         assertTrue(s.contains("\"apiKey\":\"sk-ant-123\""))
         assertTrue(s.contains("\"baseUrl\":\"https://x\""))
     }
 
+    // A session whose box lost its key says so; the reply then carries one.
+    @Test
+    fun sessionStateReadsNeedsCredential() {
+        val s = json.decodeFromString(
+            VibeCodeSessionPublicState.serializer(),
+            """{"id":"s1","status":"awaiting-tool-response","messages":[],"needsCredential":true}""",
+        )
+        assertEquals(true, s.needsCredential)
+        val older = json.decodeFromString(VibeCodeSessionPublicState.serializer(), """{"id":"s1","status":"streaming","messages":[]}""")
+        assertEquals(null, older.needsCredential)
+    }
+
     @Test
     fun baseUrlOmittedWhenNull() {
-        val cred = BuildCredential(provider = "openai", apiKey = "sk-1")
-        val s = json.encodeToString(BuildCredential.serializer(), cred)
+        val cred = LlmProviderCredential(provider = "openai", apiKey = "sk-1")
+        val s = json.encodeToString(LlmProviderCredential.serializer(), cred)
         assertFalse(s.contains("baseUrl"))
     }
 
@@ -36,7 +48,7 @@ class BuildCredentialWireTest {
     fun startRequestNestsCredential() {
         val req = VibeCodeStartRequest(
             prompt = "build a thing",
-            credential = BuildCredential("anthropic", "sk-ant-9", null),
+            credential = LlmProviderCredential("anthropic", "sk-ant-9", null),
         )
         val s = json.encodeToString(VibeCodeStartRequest.serializer(), req)
         assertTrue(s.contains("\"prompt\":\"build a thing\""))
@@ -53,7 +65,7 @@ class BuildCredentialWireTest {
 
     @Test
     fun replyRequestCarriesCredential() {
-        val req = VibeCodeReplyRequest(text = "use the box model", credential = BuildCredential("google", "AIza1", null))
+        val req = VibeCodeReplyRequest(text = "use the box model", credential = LlmProviderCredential("google", "AIza1", null))
         val s = json.encodeToString(VibeCodeReplyRequest.serializer(), req)
         assertTrue(s.contains("\"credential\":{"))
         assertTrue(s.contains("\"provider\":\"google\""))
@@ -76,7 +88,7 @@ class BuildCredentialWireTest {
     fun adaptRequestNestsCredential() {
         val req = BuildAdaptRequest(
             instructions = "make it Flagship-ready",
-            credential = BuildCredential("anthropic", "sk-ant-adapt", "https://api.example"),
+            credential = LlmProviderCredential("anthropic", "sk-ant-adapt", "https://api.example"),
         )
         val s = json.encodeToString(BuildAdaptRequest.serializer(), req)
         assertTrue(s.contains("\"instructions\":\"make it Flagship-ready\""))
@@ -95,7 +107,7 @@ class BuildCredentialWireTest {
     @Test
     fun mockAdaptRecordsCredential() = runTest {
         val mock = MockBuildClient(simulatedLatencyMs = 0)
-        val cred = BuildCredential("openai", "sk-mock", null)
+        val cred = LlmProviderCredential("openai", "sk-mock", null)
         mock.adapt("b1", BuildAdaptRequest(credential = cred))
         assertEquals(1, mock.adaptCalls.size)
         assertEquals(cred, mock.adaptCalls.first().second.credential)
@@ -110,7 +122,7 @@ class BuildCredentialWireTest {
         assertEquals("", none.sessionId)
         // With a credential ⇒ a real session, no re-prompt.
         val ok = mock.vibeCodeStart(
-            VibeCodeStartRequest(prompt = "p", credential = BuildCredential("anthropic", "sk-ant", null)),
+            VibeCodeStartRequest(prompt = "p", credential = LlmProviderCredential("anthropic", "sk-ant", null)),
         )
         assertFalse(ok.needsCredential)
         assertTrue(ok.sessionId.startsWith("vc-"))
@@ -122,17 +134,17 @@ class BuildCredentialWireTest {
 
     @Test
     fun credentialCarriesTheRelayChoice() {
-        val on = BuildCredential.from(com.flagshipserver.app.core.AiCredential("anthropic", "sk-ant", null, relay = true))
-        val off = BuildCredential.from(com.flagshipserver.app.core.AiCredential("openai", "sk-oa", "https://x", relay = false))
-        assertTrue(live.encodeToString(BuildCredential.serializer(), on).contains("\"relay\":true"))
-        val offWire = live.encodeToString(BuildCredential.serializer(), off)
+        val on = LlmProviderCredential.from(com.flagshipserver.app.core.AiCredential("anthropic", "sk-ant", null, relay = true))
+        val off = LlmProviderCredential.from(com.flagshipserver.app.core.AiCredential("openai", "sk-oa", "https://x", relay = false))
+        assertTrue(live.encodeToString(LlmProviderCredential.serializer(), on).contains("\"relay\":true"))
+        val offWire = live.encodeToString(LlmProviderCredential.serializer(), off)
         assertTrue(offWire, offWire.contains("\"relay\":false"))
         assertTrue(offWire.contains("\"baseUrl\":\"https://x\""))
     }
 
     @Test
     fun everySendCarriesRelay() {
-        val cred = BuildCredential.from(com.flagshipserver.app.core.AiCredential("anthropic", "sk-ant", null, relay = false))
+        val cred = LlmProviderCredential.from(com.flagshipserver.app.core.AiCredential("anthropic", "sk-ant", null, relay = false))
         val start = live.encodeToString(VibeCodeStartRequest.serializer(), VibeCodeStartRequest(prompt = "p", credential = cred))
         val edit = live.encodeToString(
             VibeCodeStartRequest.serializer(),

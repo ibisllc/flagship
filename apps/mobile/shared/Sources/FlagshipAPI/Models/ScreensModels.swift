@@ -1299,3 +1299,9 @@ public struct PeerBackupToggleRequest: Codable, Equatable, Sendable {
     public init(participate: Bool) { self.participate = participate }
 }
 
+/// `POST /api/screens/ai/models` body. The key is used for this one call.
+public struct AiModelsRequest: Codable, Equatable, Sendable {
+    public let credential: LlmProviderCredential
+    public init(credential: LlmProviderCredential) { self.credential = credential }
+}
+

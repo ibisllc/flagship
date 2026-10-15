@@ -6,7 +6,7 @@
 
 package com.flagshipserver.app.viewmodels
 
-import com.flagshipserver.app.api.BuildCredential
+import com.flagshipserver.app.api.LlmProviderCredential
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.ScreensError
 import com.flagshipserver.app.api.boxError
@@ -33,7 +33,7 @@ class VibeCodeDeployViewModel(
     private val pollLimitMs: Long = 45 * 60 * 1_000L,
     /** The owner's current AI key, sent with every deploy so a retry after
      *  turning the relay off takes effect. Null: the box keeps the one it has. */
-    private val credential: () -> BuildCredential? = { currentCredential() },
+    private val credential: () -> LlmProviderCredential? = { currentCredential() },
 ) {
     sealed interface Phase {
         data object Idle : Phase
@@ -139,9 +139,9 @@ class VibeCodeDeployViewModel(
         }
 
         /** The saved key this chat's build was handed, as it is now. */
-        fun currentCredential(): BuildCredential? {
+        fun currentCredential(): LlmProviderCredential? {
             val id = AiRelay.lastUsedKeyId ?: return null
-            return runCatching { AiKeyStore.credentialFor(id) }.getOrNull()?.let(BuildCredential::from)
+            return runCatching { AiKeyStore.credentialFor(id) }.getOrNull()?.let(LlmProviderCredential::from)
         }
 
         fun alreadyDeploying(t: ScreensError.Http): Boolean =

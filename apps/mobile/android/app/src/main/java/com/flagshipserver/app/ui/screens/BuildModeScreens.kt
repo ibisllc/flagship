@@ -71,7 +71,7 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.flagshipserver.app.api.BuildCredential
+import com.flagshipserver.app.api.LlmProviderCredential
 import com.flagshipserver.app.api.BuildEnvRequest
 import com.flagshipserver.app.api.BuildJournalEntry
 import com.flagshipserver.app.api.BuildMcpConnection
@@ -407,7 +407,7 @@ fun BuildGitScreen(nav: NavController) {
             if (event == Lifecycle.Event.ON_RESUME) {
                 PendingBuildCredential.take()?.let { cred ->
                     vm.adapt(
-                        credential = BuildCredential.from(cred),
+                        credential = LlmProviderCredential.from(cred),
                     )
                 }
             }

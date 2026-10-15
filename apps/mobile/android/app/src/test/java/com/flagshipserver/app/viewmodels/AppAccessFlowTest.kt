@@ -300,8 +300,8 @@ class AppAccessFlowTest {
 
     @Test fun chatDeploy_sendsTheCurrentCredential() = runTest {
         val mock = MockScreensClient(simulatedLatencyMs = 0)
-        var cred: com.flagshipserver.app.api.BuildCredential? =
-            com.flagshipserver.app.api.BuildCredential("anthropic", "sk-ant-x", relay = true)
+        var cred: com.flagshipserver.app.api.LlmProviderCredential? =
+            com.flagshipserver.app.api.LlmProviderCredential("anthropic", "sk-ant-x", relay = true)
         val vm = VibeCodeDeployViewModel("s1", mock, scope = backgroundScope, pollIntervalMs = 10, credential = { cred })
         vm.deploy().join()
         cred = cred!!.copy(relay = false)
@@ -311,8 +311,8 @@ class AppAccessFlowTest {
         val wire = Json { encodeDefaults = true; explicitNulls = false }
         assertEquals(
             """{"provider":"anthropic","apiKey":"k","relay":false}""",
-            wire.encodeToString(com.flagshipserver.app.api.BuildCredential.serializer(),
-                com.flagshipserver.app.api.BuildCredential("anthropic", "k", relay = false)),
+            wire.encodeToString(com.flagshipserver.app.api.LlmProviderCredential.serializer(),
+                com.flagshipserver.app.api.LlmProviderCredential("anthropic", "k", relay = false)),
         )
     }
 

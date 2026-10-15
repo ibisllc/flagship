@@ -84,12 +84,6 @@ public struct ModelOption: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
-/// `POST /api/screens/ai/models` body. The key is used for this one call.
-public struct AiModelsRequest: Codable, Equatable, Sendable {
-    public let credential: LlmProviderCredential
-    public init(credential: LlmProviderCredential) { self.credential = credential }
-}
-
 /// `POST /api/screens/ai/models` answer: the TS union
 /// `{kind:"flagship", catalog}` | `{kind:"own", listed, models, defaultModel?, reason?}`.
 public struct AiModelsResponse: Codable, Equatable, Sendable {

@@ -234,6 +234,11 @@ export interface LlmProviderCredential {
    * always direct.
    */
   relay?: boolean;
+  /**
+   * "promo" marks a Flagship Inference pass (the box pins its calls to that
+   * pass's own endpoint); absent or "byok" is the owner's own key.
+   */
+  source?: "byok" | "promo";
 }
 
 export type VibeCodeAttachment =

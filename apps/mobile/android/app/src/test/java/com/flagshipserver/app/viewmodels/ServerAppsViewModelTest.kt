@@ -48,6 +48,13 @@ class ServerAppsViewModelTest {
         assertFalse(vm.underway)
     }
 
+    // A copy still underway has no manifest on this box yet; the row carries its name.
+    @Test fun aCopyWithoutASlugShowsTheNameTheBoxSent() = runTest {
+        val vm = ServerAppsViewModel(Box(listOf(app("harry--notes", "", AppCopying("copying", 0.1)).copy(name = "Notes"))))
+        vm.load()
+        assertEquals("Notes", loaded(vm).single().name)
+    }
+
     @Test fun aCopyArrivingIsGreyedWithItsProgress() = runTest {
         val box = Box(listOf(app("harry--notes", "notes", AppCopying("copying", 0.25))))
         val vm = ServerAppsViewModel(box)

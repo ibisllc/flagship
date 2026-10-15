@@ -80,7 +80,7 @@ class ServerAppsViewModel(private val client: ScreensClient) {
                 val copying = app.copying
                 Row(
                     serviceId = app.serviceId,
-                    name = displayName(app.slug),
+                    name = if (app.slug.isNotBlank()) displayName(app.slug) else app.name ?: app.serviceId,
                     address = app.url.removePrefix("https://").removePrefix("http://").trimEnd('/'),
                     status = when {
                         copying != null -> AppPlacementViewModel.progressText(copying.progress)

@@ -56,7 +56,7 @@ data class BuildGitResponse(
 @Serializable
 data class BuildAdaptRequest(
     val instructions: String? = null,
-    val credential: BuildCredential? = null,
+    val credential: LlmProviderCredential? = null,
     /** Answer at once and run in the background; poll [BuildClient.state] for
      *  `adapt`. Older boxes ignore it and answer when the AI is done. */
     val background: Boolean? = null,

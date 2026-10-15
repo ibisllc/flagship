@@ -4,7 +4,7 @@
 
 package com.flagshipserver.app.core
 
-import com.flagshipserver.app.api.BuildCredential
+import com.flagshipserver.app.api.LlmProviderCredential
 import com.google.crypto.tink.subtle.Ed25519Sign
 import com.google.crypto.tink.subtle.Ed25519Verify
 import kotlinx.coroutines.test.runTest
@@ -188,7 +188,7 @@ class FreeAiCreditsTest {
         )
         // The box gets the promo source on the wire.
         val wire = Json { encodeDefaults = false; explicitNulls = false }
-            .encodeToString(BuildCredential.serializer(), BuildCredential.from(r.credential))
+            .encodeToString(LlmProviderCredential.serializer(), LlmProviderCredential.from(r.credential))
         assertTrue(wire, wire.contains("\"source\":\"promo\""))
     }
 

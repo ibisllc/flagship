@@ -533,9 +533,9 @@ class MockScreensClient(
     private val deployPolls = mutableMapOf<String, Int>()
 
     /** The credential each deploy carried, in order. */
-    val deployCredentials: MutableList<BuildCredential?> = mutableListOf()
+    val deployCredentials: MutableList<LlmProviderCredential?> = mutableListOf()
 
-    override suspend fun vibeCodeDeployStart(sessionId: String, credential: BuildCredential?): VibeCodeDeployReply {
+    override suspend fun vibeCodeDeployStart(sessionId: String, credential: LlmProviderCredential?): VibeCodeDeployReply {
         tick()
         deployCredentials.add(credential)
         deployPolls[sessionId] = 0
@@ -709,7 +709,7 @@ class MockScreensClient(
         )
     }
 
-    override suspend fun aiModels(credential: BuildCredential?): AiModelsResponse {
+    override suspend fun aiModels(credential: LlmProviderCredential?): AiModelsResponse {
         tick()
         val provider = credential?.provider ?: "flagship"
         if (provider == "flagship") return AiModelsResponse(provider = provider, kind = "flagship")

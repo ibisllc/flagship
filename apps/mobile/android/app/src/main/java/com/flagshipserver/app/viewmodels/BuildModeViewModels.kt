@@ -182,7 +182,7 @@ class BuildGitViewModel(
 
     fun adapt(
         instructions: String? = null,
-        credential: com.flagshipserver.app.api.BuildCredential? = null,
+        credential: com.flagshipserver.app.api.LlmProviderCredential? = null,
     ): Job = scope.launch {
         var id = buildId ?: return@launch
         _adaptError.value = null

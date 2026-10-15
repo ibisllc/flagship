@@ -48,7 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.flagshipserver.app.api.BuildCredential
+import com.flagshipserver.app.api.LlmProviderCredential
 import com.flagshipserver.app.api.VibeCodeNameCheck
 import com.flagshipserver.app.api.VibeCodeStartRequest
 import com.flagshipserver.app.core.LocalActiveOperationsCenter
@@ -400,7 +400,7 @@ fun VibeCodeDescribeScreen(nav: NavController) {
                             return@launch
                         }
                         val pending = PendingBuildCredential.peek()
-                        val cred = pending?.let(BuildCredential::from)
+                        val cred = pending?.let(LlmProviderCredential::from)
                         val startModel = com.flagshipserver.app.core.ModelMenus.startWire(
                             runCatching { com.flagshipserver.app.core.AiKeyStore.defaultModelFor(pending) }.getOrNull(),
                         )
