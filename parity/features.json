@@ -522,6 +522,16 @@
         "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/BoxEventLabels.kt", "object BoxEventLabels"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/viewmodels/ActivityViewModel.kt", "BoxEvent"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/activityFeed.js", "BOX_EVENT_LABELS"], ["apps/web/public/webapp/views/activity.js", "mergeFeed"]] }
       }
+    },
+    {
+      "id": "rate-limited-message",
+      "title": "Rate-limited calls to flagshipserver.com say who is limited and when to try again",
+      "ref": "web",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipAPI/Client/RateLimited.swift", "Too many tries \\\\\\(who\\)"], ["apps/mobile/shared/Sources/FlagshipAPI/Client/ScreensClient.swift", "RateLimitedRefusal\\.from\\(status: s, body: body\\)"], ["apps/mobile/shared/Sources/FlagshipAPI/Models/FreeAiModels.swift", "case rateLimited\\(RateLimitedRefusal\\)"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/RateLimited.kt", "Too many tries \\$w"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/HttpTransport.kt", "RateLimitedException\\.parse\\(status, text, retryAfter\\)"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/NetworkErrorHumanizer.kt", "Kind\\.RATE_LIMITED"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/FreeAiCredits.kt", "data class Limited\\(val message: String\\)"]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/rateLimited.js", "Too many tries \\$\\{who\\}"], ["apps/web/public/webapp/lib/comFetch.js", "throwIfRateLimited"], ["apps/web/public/webapp/lib/humanError.js", "rateLimited"]] }
+      }
     }
   ]
 }

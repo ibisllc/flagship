@@ -37,6 +37,7 @@ import { addProfile } from "../lib/profiles.js";
 import { generateDeviceId } from "../lib/accountMetadata.js";
 import { dispatchInitialView } from "../lib/deepLink.js";
 import { toast } from "../lib/toast.js";
+import { failureText } from "../lib/rateLimited.js";
 import { escapeHtml } from "../lib/util.js";
 import {
   runIncomingJoin,
@@ -179,7 +180,7 @@ async function startJoin() {
     renderQuarantine(result);
     toast(`Joined ${result.username} — device under review`, "ok");
   } catch (e) {
-    setStatus("error", `couldn't join: ${String(e?.message || e)}`);
+    setStatus("error", failureText(e, "couldn't join: "));
   } finally {
     activeRelay = null;
   }

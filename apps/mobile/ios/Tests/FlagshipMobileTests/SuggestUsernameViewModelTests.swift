@@ -84,6 +84,18 @@ final class SuggestUsernameViewModelTests: XCTestCase {
         XCTAssertFalse(vm.canContinue)
     }
 
+    func test_rateLimitedShowsWhenToTryAgainAndArmsCooldown() async {
+        let body = #"{"error":"rate-limited","endpoint":"username-suggest","limit":"ip","retryAfterSec":300}"#
+        let vm = SuggestUsernameViewModel(suggest: { _ in
+            throw ScreensClientError.http(status: 429, message: body)
+        })
+        await vm.load()
+        XCTAssertNil(vm.current)
+        XCTAssertEqual(vm.errorText, "Too many tries from your network. Try again in about 5 minutes.")
+        XCTAssertEqual(vm.cooldownRemaining, 300)
+        XCTAssertFalse(vm.canRegenerate)
+    }
+
     func test_newDeviceKeyIs32HexCharsAndVaries() {
         let k = SuggestUsernameViewModel.newDeviceKey()
         XCTAssertEqual(k.count, 32)

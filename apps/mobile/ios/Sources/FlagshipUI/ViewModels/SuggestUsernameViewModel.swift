@@ -58,6 +58,11 @@ public final class SuggestUsernameViewModel {
             if let name = s.name, !s.throttled { current = name }
             armCooldown(ms: s.retryAfterMs)
         } catch {
+            if let r = RateLimitedRefusal.from(error) {
+                errorText = r.message
+                armCooldown(ms: (r.retryAfterSec ?? 60) * 1000)
+                return
+            }
             errorText = "Couldn't get a handle. Try again."
             armCooldown(ms: 2000)
         }

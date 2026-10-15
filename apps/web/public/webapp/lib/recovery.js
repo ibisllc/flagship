@@ -41,6 +41,7 @@ import {
 } from "../keystore.js";
 import { getSession } from "./state.js";
 import { controlApex, recoveryOrigin } from "./apex.js";
+import { throwIfRateLimited } from "./rateLimited.js";
 
 const APEX = controlApex();
 const RECOVERY_ORIGIN = recoveryOrigin();
@@ -207,7 +208,10 @@ export async function deleteCloudRecovery(username) {
   // the only auth needed to delete.
   const r = await fetch(`${APEX}/api/recovery/by-username/${encodeURIComponent(username)}`);
   if (r.status === 404) return { deleted: false };
-  if (!r.ok) throw new Error(`fetch recovery failed: ${r.status}`);
+  if (!r.ok) {
+    await throwIfRateLimited(r);
+    throw new Error(`fetch recovery failed: ${r.status}`);
+  }
   const body = await r.json();
   const wrappedHash = body.wrappedUmkHash;
   if (typeof wrappedHash !== "string") {
@@ -238,6 +242,7 @@ export async function deleteCloudRecovery(username) {
     },
   );
   if (!del.ok) {
+    await throwIfRateLimited(del);
     const txt = await del.text().catch(() => "");
     throw new Error(`delete failed: ${del.status} ${txt}`.trim());
   }

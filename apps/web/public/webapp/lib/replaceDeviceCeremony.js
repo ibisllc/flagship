@@ -41,6 +41,7 @@ import {
 } from "../keystore.js";
 import { requireOwnerProfile } from "./companionGuard.js";
 import { controlApex } from "./apex.js";
+import { throwIfRateLimited } from "./rateLimited.js";
 
 /** Canonical-bytes tag — MUST match @flagship/protocol TAG_RE_PAIR_INITIATE. */
 export const TAG_RE_PAIR_INITIATE = "flagship/re-pair-initiate/v1";
@@ -149,6 +150,7 @@ export async function runReplaceDeviceCeremony(args, deps = {}) {
         body: JSON.stringify(body),
       });
     } catch (e) {
+      if (e?.rateLimited) throw e;
       throw makeError(`network: ${e?.message ?? e}`, "network");
     }
   }
@@ -201,6 +203,7 @@ export async function runReplaceDeviceCeremony(args, deps = {}) {
       oldIrkPubHex,
     };
   }
+  await throwIfRateLimited(resp);
   // Map the documented error statuses to the iOS-equivalent copy.
   const text = await resp.text().catch(() => "");
   if (resp.status === 412) {

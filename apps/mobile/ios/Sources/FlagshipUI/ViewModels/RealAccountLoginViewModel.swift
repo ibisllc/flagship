@@ -533,6 +533,7 @@ public final class RealAccountLoginViewModel {
     }
 
     private func humanizedRecoveryError(_ error: Error) -> String {
+        if let r = RateLimitedRefusal.from(error) { return r.message }
         let lower = "\(error)".lowercased()
         // User dismissed the system passkey sheet (ASAuthorizationError.canceled
         // is code 1001). Don't claim their passkey is missing — it isn't.

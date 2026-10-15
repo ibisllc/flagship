@@ -23,6 +23,7 @@
 
 import { controlApex } from "./apex.js";
 import { ensureAdminRoot as defaultEnsureAdminRoot } from "./adminRoot.js";
+import { throwIfRateLimited } from "./rateLimited.js";
 import {
   canonicalAccountProfile,
   canonicalDeviceSelfProfile,
@@ -105,6 +106,7 @@ export async function claimUsername(username, irkPub, sign, deps = {}) {
     }),
   });
   if (!resp.ok && resp.status !== 409) {
+    await throwIfRateLimited(resp);
     const body = await safeText(resp);
     throw new Error(`claim failed (${resp.status}): ${body}`);
   }
@@ -250,7 +252,10 @@ export async function openAccount(username, deps) {
       deviceProfile,
     }),
   });
-  if (!response.ok) throw new Error(`account bootstrap failed (${response.status}): ${await safeText(response)}`);
+  if (!response.ok) {
+    await throwIfRateLimited(response);
+    throw new Error(`account bootstrap failed (${response.status}): ${await safeText(response)}`);
+  }
   const created = await response.json().catch(() => ({}));
 
   // Bind the identity locally: username persisted + a server-less

@@ -387,6 +387,7 @@ async function send() {
 /** What a failed send shows: the box's or free AI's own words, else the raw error. */
 export function errorText(e) {
   if (e instanceof ScreensError) return e.message;
+  if (e?.rateLimited) return e.message;
   if (typeof e?.code === "string" && e.code.startsWith("free-ai")) return e.message;
   return String(e);
 }

@@ -44,6 +44,7 @@
 //      keys; anyone who scans it can join).
 
 import { controlApex } from "./apex.js";
+import { throwIfRateLimited } from "./rateLimited.js";
 import { persistAdminRootSeed as ksPersistAdminRootSeed } from "../keystore.js";
 
 const APEX = controlApex();
@@ -316,6 +317,7 @@ export async function postDeviceAdmit(args) {
     },
   );
   if (!resp.ok) {
+    await throwIfRateLimited(resp);
     const txt = await safeText(resp);
     throw new Error(`device admit failed (${resp.status}): ${txt}`.trim());
   }

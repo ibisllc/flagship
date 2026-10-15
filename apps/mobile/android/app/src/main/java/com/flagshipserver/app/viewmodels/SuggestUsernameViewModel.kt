@@ -1,6 +1,7 @@
 package com.flagshipserver.app.viewmodels
 
 import com.flagshipserver.app.api.UsernameSuggestion
+import com.flagshipserver.app.core.RateLimitedException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -62,9 +63,10 @@ class SuggestUsernameViewModel(
         try {
             val s = suggest(deviceKey)
             if (s.name != null && !s.throttled) _current.value = s.name
+            if (s.message != null) _error.value = s.message
             _cooldown.value = ceil(max(0, s.retryAfterMs) / 1000.0).toInt()
-        } catch (_: Throwable) {
-            _error.value = "Couldn't get a handle. Try again."
+        } catch (t: Throwable) {
+            _error.value = RateLimitedException.messageOf(t) ?: "Couldn't get a handle. Try again."
             _cooldown.value = 2
         } finally {
             _loading.value = false

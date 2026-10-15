@@ -22,6 +22,14 @@ final class HumanErrorTests: XCTestCase {
         ))
     }
 
+    func testRateLimitedSaysWhenToTryAgain() {
+        let body = #"{"error":"rate-limited","endpoint":"account-resolve","limit":"irk","retryAfterSec":45}"#
+        XCTAssertEqual(
+            HumanError.humanize(ScreensClientError.http(status: 429, message: body)),
+            "Too many tries from this account. Try again in a minute."
+        )
+    }
+
     func testHttp5xxIsServerProblemAndHidesTheCode() {
         let (kind, msg) = HumanError.classify(
             ScreensClientError.http(status: 503, message: "upstream boom")

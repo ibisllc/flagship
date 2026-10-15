@@ -304,6 +304,7 @@ sealed class ScreensError(message: String) : Throwable(message) {
  */
 fun Throwable.userFacing(): String = when (this) {
     is ScreensError -> message ?: "Something went wrong. Try again."
+    is com.flagshipserver.app.core.RateLimitedException -> userMessage
     else -> "Couldn't reach the server. Check your connection and try again."
 }
 

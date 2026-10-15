@@ -15,6 +15,8 @@
 //   - a ScreensError / CompanionRelayError (carry `.status` / `.code`)
 //   - a bare number (an HTTP status)
 //   - a Response-like `{ status }`
+//   - a RateLimitedError (lib/rateLimited.js): its own sentence, which says
+//     who is limited and when to try again
 //
 // `signExpired: true` flips 401/403 to the "your session expired" copy
 // where that is the real cause; otherwise 401/403 fall through to the
@@ -70,6 +72,9 @@ function isNetwork(e) {
  * @returns {string} human-facing message — never a raw status or stack.
  */
 export function humanError(e, opts = {}) {
+  if (e && typeof e === "object" && e.rateLimited === true && typeof e.message === "string") {
+    return e.message;
+  }
   const status = statusOf(e);
 
   if (status == null && isNetwork(e)) return COPY.network;

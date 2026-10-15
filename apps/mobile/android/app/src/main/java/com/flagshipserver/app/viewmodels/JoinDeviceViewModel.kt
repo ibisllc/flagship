@@ -44,6 +44,7 @@ import com.flagshipserver.app.core.PairingBundle
 import com.flagshipserver.app.core.DeviceCapabilityGrant
 import com.flagshipserver.app.core.Profile
 import com.flagshipserver.app.core.QrSession
+import com.flagshipserver.app.core.RateLimitedException
 import com.flagshipserver.app.keystore.Keystore
 import com.google.crypto.tink.subtle.Ed25519Sign
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -328,6 +329,7 @@ class JoinDeviceViewModel(
     }
 
     private fun humanize(t: Throwable): String {
+        RateLimitedException.messageOf(t)?.let { return it }
         val m = t.message?.lowercase().orEmpty()
         return when {
             m.contains("tag mismatch") || m.contains("aead") || m.contains("bad") && m.contains("tag") ->

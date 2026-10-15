@@ -2841,6 +2841,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         case ok                        // initiate returns 200 + grace
         case staleEtag(currentEtag: String) // 412 → throws as http(412)
         case alreadyPending            // 409
+        case rateLimited(body: String) // 429 with `.com`'s rate-limit body
     }
     public var rePairBehavior: RePairBehavior = .ok
     /// Captures the last initiate call so tests can assert on the
@@ -2915,6 +2916,8 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             throw ScreensClientError.http(status: 412, message: "{\"error\":\"stale\",\"currentEtag\":\"\(etag)\"}")
         case .alreadyPending:
             throw ScreensClientError.http(status: 409, message: "already pending")
+        case .rateLimited(let body):
+            throw ScreensClientError.http(status: 429, message: body)
         case .ok:
             return RePairInitiateResponse(ok: true, completesAt: Int64(Date().timeIntervalSince1970 * 1000) + 24 * 3600 * 1000, graceMs: 24 * 3600 * 1000)
         }
@@ -3507,6 +3510,9 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         req.httpBody = body
         let (data, resp) = try await send(req)
         let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if RateLimitedRefusal.from(status: status, body: data) != nil {
+            throw ScreensClientError.http(status: status, message: String(data: data, encoding: .utf8) ?? "")
+        }
         if status == 429 {
             let w = try? JSONDecoder().decode(Wire.self, from: data)
             return .init(name: nil, retryAfterMs: w?.retryAfterMs ?? 3000, throttled: true)
@@ -3589,6 +3595,9 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
         case 409:
             throw ScreensClientError.http(status: 409, message: "this record predates the passphrase gate — re-enrol cloud recovery first")
         case 429:
+            if RateLimitedRefusal.from(status: status, body: data) != nil {
+                throw ScreensClientError.http(status: 429, message: String(data: data, encoding: .utf8) ?? "")
+            }
             throw ScreensClientError.http(status: 429, message: "too many attempts — wait 15 minutes before retrying")
         default:
             let text = String(data: data, encoding: .utf8) ?? ""

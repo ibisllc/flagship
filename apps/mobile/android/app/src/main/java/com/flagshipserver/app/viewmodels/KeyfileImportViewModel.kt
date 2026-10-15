@@ -23,6 +23,7 @@ import com.flagshipserver.app.api.RePairInitiateRequest
 import com.flagshipserver.app.core.AppState
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.HttpException
+import com.flagshipserver.app.core.RateLimitedException
 import com.flagshipserver.app.core.RePairCompleteClaim
 import com.flagshipserver.app.core.RePairInitiateClaim
 import com.flagshipserver.app.keystore.Keyfile
@@ -141,7 +142,7 @@ class KeyfileImportViewModel(
             _phase.value = KeyfileImportPhase.Grace(username = username, completesAt = resp.completesAt)
         } catch (t: Throwable) {
             _phase.value = KeyfileImportPhase.Failed(
-                if (t is HttpException && t.status == 401 && t.body.contains("totpProof"))
+                RateLimitedException.messageOf(t) ?: if (t is HttpException && t.status == 401 && t.body.contains("totpProof"))
                     // #52 — the account has a second factor enrolled, which
                     // the Worker now requires at initiate even for single-
                     // device accounts. The keyfile sheet has no second-

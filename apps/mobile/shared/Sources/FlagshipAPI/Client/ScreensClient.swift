@@ -291,7 +291,8 @@ public enum ScreensClientError: Error, LocalizedError, Sendable {
             return "This device isn't connected to a server yet."
         case .noSessionToken:
             return "Your connection to this box expired. Reconnect and try again."
-        case .http(let s, _):
+        case .http(let s, let body):
+            if let r = RateLimitedRefusal.from(status: s, body: body) { return r.message }
             return Self.plainLanguage(forStatus: s)
         case .decoding:
             return "Something came back we couldn't read. Try again in a moment."
@@ -326,6 +327,7 @@ public enum ScreensClientError: Error, LocalizedError, Sendable {
     /// the build flows whose refusals are written for the owner (a repo that
     /// won't clone, an invalid name, a failed deploy). Nil for anything else.
     public static func boxReason(_ error: Error) -> String? {
+        if let r = RateLimitedRefusal.from(error) { return r.message }
         guard case let ScreensClientError.http(status, message) = error, (400...599).contains(status),
               let obj = try? JSONSerialization.jsonObject(with: Data(message.utf8)) as? [String: Any],
               let reason = obj["error"] as? String, !reason.isEmpty else { return nil }

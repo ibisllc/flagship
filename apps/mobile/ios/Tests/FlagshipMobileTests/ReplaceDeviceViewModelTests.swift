@@ -87,6 +87,21 @@ final class ReplaceDeviceViewModelTests: XCTestCase {
         }
     }
 
+    func test_initiate_rateLimited_saysWhenToTryAgain() async throws {
+        try await makeUMK()
+        let server = MockFlagshipServerClient()
+        server.simulatedLatency = 0
+        server.rePairBehavior = .rateLimited(
+            body: #"{"error":"rate-limited","endpoint":"re-pair-initiate","limit":"usernameHash","retryAfterSec":7200}"#
+        )
+        let vm = ReplaceDeviceViewModel(server: server, username: { "alice" })
+
+        await vm.initiate(currentEtag: nil)
+
+        XCTAssertEqual(vm.phase, .failed("Too many tries for this account name. Try again in about 2 hours."))
+        XCTAssertNil(Keystore.pendingIrkRotationVersion())
+    }
+
     func test_initiate_withoutUsername_failsImmediately() async {
         let server = MockFlagshipServerClient()
         let vm = ReplaceDeviceViewModel(server: server, username: { nil })

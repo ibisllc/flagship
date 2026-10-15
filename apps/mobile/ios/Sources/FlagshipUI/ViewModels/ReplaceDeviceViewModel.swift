@@ -166,7 +166,11 @@ public final class ReplaceDeviceViewModel {
         } catch ScreensClientError.http(let status, _) where status == 409 {
             phase = .failed("A device replacement is already pending on this account.")
         } catch {
-            phase = .failed("Couldn't reach the server: \(error.localizedDescription)")
+            if let r = RateLimitedRefusal.from(error) {
+                phase = .failed(r.message)
+            } else {
+                phase = .failed("Couldn't reach the server: \(error.localizedDescription)")
+            }
         }
     }
 

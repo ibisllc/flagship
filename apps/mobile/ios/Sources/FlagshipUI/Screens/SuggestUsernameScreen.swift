@@ -69,6 +69,7 @@ public struct SuggestUsernameScreen: View {
 
     private var regenLabel: String {
         let r = vm?.cooldownRemaining ?? 0
+        if r >= 60 { return "Try again in \((r + 59) / 60) min" }
         return r > 0 ? "Try again in \(r)s" : "↻ Try another"
     }
 }

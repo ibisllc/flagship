@@ -22,6 +22,7 @@ import { buildPairingOrder } from "../lib/bootApproval.js";
 import { markSwkDepositPending, clearSwkDeposit } from "../lib/swkDeposit.js";
 import { markPairingDepositPending, clearPairingDeposit } from "../lib/pairingDeposit.js";
 import { setSessionToken } from "../lib/api.js";
+import { throwIfRateLimited } from "../lib/rateLimited.js";
 
 registerView("view-create-server");
 
@@ -552,6 +553,7 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
       }),
     });
     if (!claimResp.ok && claimResp.status !== 409) {
+      await throwIfRateLimited(claimResp);
       throw new Error(`claim failed (${claimResp.status}): ${await claimResp.text()}`);
     }
   }
@@ -602,7 +604,10 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
       signature: bytesToHex(acSig),
     }),
   });
-  if (!issueResp.ok) throw new Error(`auth-code/issue failed (${issueResp.status})`);
+  if (!issueResp.ok) {
+    await throwIfRateLimited(issueResp);
+    throw new Error(`auth-code/issue failed (${issueResp.status})`);
+  }
 
   const rck = await genEd25519();
   const rckRegIssuedAt = Date.now();

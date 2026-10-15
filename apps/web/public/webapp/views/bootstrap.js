@@ -10,6 +10,7 @@ import {
   persistSeedForProfile,
 } from "../keystore.js";
 import { humanError } from "../lib/humanError.js";
+import { failureText, rateLimitedError } from "../lib/rateLimited.js";
 import { $, registerView } from "../lib/router.js";
 import { dispatchInitialView } from "../lib/deepLink.js";
 import { inlineConfirm, inlinePrompt, inlineSuggestUsername } from "../lib/modal.js";
@@ -51,7 +52,7 @@ async function handleContinue() {
   try {
     resolution = await resolveAccount(raw);
   } catch (e) {
-    return toast(`Couldn't reach the directory: ${e.message ?? e}`, "err");
+    return toast(failureText(e, "Couldn't reach the directory: "), "err");
   }
   switch (classifyResolution(resolution)) {
     case "demo":
@@ -90,6 +91,8 @@ async function fetchSuggestion(deviceKey) {
     cache: "no-store",
   });
   const body = await r.json().catch(() => ({}));
+  const limited = rateLimitedError(r.status, body, r.headers?.get?.("retry-after"));
+  if (limited) throw limited;
   if (r.status === 429) {
     return { throttled: true, retryAfterMs: Number(body.retryAfterMs) || 3000 };
   }
@@ -137,7 +140,7 @@ async function createAccount() {
   try {
     first = await fetchSuggestion(deviceKey);
   } catch (e) {
-    return toast(e.message ?? String(e), "err");
+    return toast(failureText(e), "err");
   }
   const chosen = await inlineSuggestUsername({
     initialName: first.name,
@@ -328,7 +331,7 @@ async function recoverRealAccount(resolution) {
       toast(`Taking over ${username} — you're now the admin device`, "ok");
     }
   } catch (e) {
-    toast(`Couldn't take over ${username}: ${e.message ?? e}`, "err");
+    toast(failureText(e, `Couldn't take over ${username}: `), "err");
   }
 }
 

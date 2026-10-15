@@ -211,7 +211,10 @@
 //  v95: Any device may invite at Member (admins pick higher ranks); the
 //      members list says which device invited each person; admins get an
 //      invite-created push that opens the account activity.
-const SHELL_VERSION = "v95";
+//  v96: a call flagshipserver.com rate-limits says who is limited and when
+//      to try again (lib/rateLimited.js, precached) instead of a generic
+//      error.
+const SHELL_VERSION = "v96";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -333,6 +336,7 @@ const OPTIONAL_SHELL = [
   "/lib/profiles.js",
   "/lib/profilesStore.js",
   "/lib/provisionProgress.js",
+  "/lib/rateLimited.js",
   "/lib/relayTrust.js",
   "/lib/releaseServer.js",
   "/lib/replaceDeviceCeremony.js",

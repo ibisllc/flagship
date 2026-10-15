@@ -17,6 +17,7 @@ import com.flagshipserver.app.api.WatchDelegateMintRequest
 import com.flagshipserver.app.api.WatchDelegateRevokeRequest
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.HttpException
+import com.flagshipserver.app.core.RateLimitedException
 import com.flagshipserver.app.core.RevokeWatchDelegate
 import com.flagshipserver.app.core.WatchDelegateKey
 import com.flagshipserver.app.keystore.Keystore
@@ -133,6 +134,8 @@ class WatchDelegateViewModel(
             _isEnabled.value = true
             _expiresAt.value = res.expiresAt
             _phase.value = WatchDelegatePhase.Idle
+        } catch (e: RateLimitedException) {
+            _phase.value = WatchDelegatePhase.Failed(e.userMessage)
         } catch (e: HttpException) {
             _phase.value = WatchDelegatePhase.Failed("Server rejected the request (${e.status}): ${e.body}")
         } catch (e: Throwable) {

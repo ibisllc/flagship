@@ -14,6 +14,7 @@
 
 import { bytesToHex, signWithIrk } from "../keystore.js";
 import { controlApex } from "./apex.js";
+import { rateLimitedError } from "./rateLimited.js";
 import { ensureUsername, getSession } from "./state.js";
 
 export const FREE_AI_TAG = "flagship/llm-promo-issue/v1";
@@ -84,6 +85,7 @@ export function creditsLine(credits, locale) {
  */
 export function freeAiView(status) {
   if (!status || status.ended) return null;
+  if (status.rateLimited) return { usable: false, text: status.message, offerOwnKey: true };
   if (!status.available) return { usable: false, text: UNAVAILABLE_MESSAGE, offerOwnKey: true };
   if (status.reason) {
     return { usable: false, text: MESSAGE_BY_CODE[`free-ai-${status.reason}`] ?? status.message ?? UNAVAILABLE_MESSAGE, offerOwnKey: status.reason !== "no-server" };
@@ -145,17 +147,21 @@ async function post(path, body) {
   } catch {
     json = null;
   }
-  return { status: r.status, ok: r.ok, body: json };
+  return { status: r.status, ok: r.ok, body: json, retryAfter: r.headers?.get?.("retry-after") ?? null };
 }
 
 /**
  * `{ available, credits }`, or null when it can't be read. Settings and the
  * AI-key step read it on their own, so it never asks for a username: an
- * account without one yet sees the entry as unavailable.
+ * account without one yet sees the entry as unavailable. When
+ * flagshipserver.com rate-limits the read, `{ rateLimited: true, message }`
+ * says when to try again.
  */
 export async function fetchFreeAiStatus() {
   try {
     const r = await post("/api/free-ai/status", await signedBody("", { askForUsername: false }));
+    const limited = rateLimitedError(r.status, r.body, r.retryAfter);
+    if (limited) return rateLimitedStatus(limited);
     if (!r.ok || !r.body?.credits) return null;
     return {
       available: r.body.available === true,
@@ -164,9 +170,13 @@ export async function fetchFreeAiStatus() {
       message: r.body.message ?? null,
       credits: r.body.credits,
     };
-  } catch {
-    return null;
+  } catch (e) {
+    return e?.rateLimited ? rateLimitedStatus(e) : null;
   }
+}
+
+function rateLimitedStatus(e) {
+  return { available: false, ended: false, rateLimited: true, reason: null, message: e.message, credits: null };
 }
 
 /**
@@ -174,14 +184,16 @@ export async function fetchFreeAiStatus() {
  * box takes (with `model` alongside, which the box ignores inside the
  * credential and the start request carries) and the account's credits.
  * Rejects with `.code` ("free-ai-used-up", "free-ai-busy-today",
- * "free-ai-no-server", "free-ai-ended" or "free-ai-unavailable") and the
- * message to show.
+ * "free-ai-no-server", "free-ai-ended", "free-ai-unavailable" or
+ * "rate-limited") and the message to show.
  */
 export async function mintFreeAiCredential(serverFqdn) {
   const r = await post("/api/free-ai/token", await signedBody(serverFqdn));
   if (r.ok && r.body?.credential) {
     return { credential: { ...r.body.credential, model: r.body.model }, credits: r.body.credits };
   }
+  const limited = rateLimitedError(r.status, r.body, r.retryAfter);
+  if (limited) throw limited;
   const code = r.body?.code || (r.status === 429 ? "free-ai-used-up" : "free-ai-unavailable");
   const message = MESSAGE_BY_CODE[code] ?? UNAVAILABLE_MESSAGE;
   throw Object.assign(new Error(message), { code, status: r.status, credits: r.body?.credits ?? null });

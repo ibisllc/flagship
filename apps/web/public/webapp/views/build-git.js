@@ -467,7 +467,7 @@ async function adapt() {
       });
       return;
     }
-    failAdapt(boxReason(e) ?? (e instanceof ScreensError ? e.message : String(e)));
+    failAdapt(boxReason(e) ?? (e instanceof ScreensError || e?.rateLimited ? e.message : String(e)));
   }
 }
 

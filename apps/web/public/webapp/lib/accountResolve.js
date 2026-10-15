@@ -45,6 +45,7 @@
  */
 
 import { controlApex } from "./apex.js";
+import { throwIfRateLimited } from "./rateLimited.js";
 import { generateDeviceId } from "./accountMetadata.js";
 
 /** Login field is a bare handle: 3–30 lowercase letters/digits, interior single
@@ -101,6 +102,7 @@ export async function resolveAccount(username, opts = {}) {
   const baseUrl = opts.baseUrl || controlApex();
   const url = `${baseUrl}/api/account/resolve/${encodeURIComponent(username)}`;
   const resp = await f(url, { method: "GET" });
+  await throwIfRateLimited(resp);
   if (resp.status === 429) {
     const retry = resp.headers?.get?.("retry-after");
     throw new Error(

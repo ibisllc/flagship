@@ -15,6 +15,7 @@ import com.flagshipserver.app.api.PendingRePairSnapshot
 import com.flagshipserver.app.api.RePairCompleteRequest
 import com.flagshipserver.app.api.RePairInitiateRequest
 import com.flagshipserver.app.core.HexUtil
+import com.flagshipserver.app.core.RateLimitedException
 import com.flagshipserver.app.core.RePairCompleteClaim
 import com.flagshipserver.app.core.RePairInitiateClaim
 import com.flagshipserver.app.keystore.Keystore
@@ -140,7 +141,9 @@ class ReplaceDeviceViewModel(
             _phase.value = ReplaceDevicePhase.Pending(resp.completesAt)
         } catch (e: Throwable) {
             val msg = e.message.orEmpty()
+            val rateLimit = RateLimitedException.messageOf(e)
             val friendly = when {
+                rateLimit != null -> rateLimit
                 msg.contains("412") -> "Your device list changed in the background. Refresh and try again."
                 msg.contains("409") -> "A device replacement is already pending on this account."
                 else -> "Couldn't reach the server: $msg"

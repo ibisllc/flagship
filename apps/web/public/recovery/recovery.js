@@ -385,6 +385,7 @@ async function fetchWrappedUmk(username, fetchToken) {
     `${APEX}/api/recovery/by-username/${encodeURIComponent(username)}`,
   );
   if (meta.status === 404) return null;
+  if (meta.status === 429) throw new Error(await tooManyTries(meta));
   if (!meta.ok) throw new Error(`metadata fetch failed: ${meta.status}`);
   const metaBody = await meta.json();
   if (!metaBody.hasFetchTokenGate) {
@@ -409,7 +410,7 @@ async function fetchWrappedUmk(username, fetchToken) {
     throw new Error("wrong passphrase");
   }
   if (gated.status === 429) {
-    throw new Error("too many attempts — wait 15 minutes before retrying");
+    throw new Error(await tooManyTries(gated));
   }
   if (!gated.ok) {
     throw new Error(`fetch failed: ${gated.status}`);
@@ -492,6 +493,15 @@ async function derivePassphraseSecrets(passphrase, username) {
   // but it's not exported here, and we can't help GC otherwise.
   masterKey.fill(0);
   return { fetchToken, prfSalt };
+}
+
+/** The limiter's own sentence ("…Try again in about 12 minutes."). */
+async function tooManyTries(resp) {
+  try {
+    const body = await resp.json();
+    if (body?.error === "rate-limited" && typeof body.message === "string") return body.message;
+  } catch {}
+  return "Too many tries for this account name. Try again in about 15 minutes.";
 }
 
 function randBytes(n) {

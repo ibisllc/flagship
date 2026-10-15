@@ -48,6 +48,7 @@ import com.flagshipserver.app.core.AppState
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.HttpException
 import com.flagshipserver.app.core.NetworkErrorHumanizer
+import com.flagshipserver.app.core.RateLimitedException
 import com.flagshipserver.app.core.RePairCompleteClaim
 import com.flagshipserver.app.core.RePairInitiateClaim
 import com.flagshipserver.app.keystore.CloudRecoveryEnrollment
@@ -581,6 +582,7 @@ class LoginViewModel(
     }
 
     private fun humanizedError(t: Throwable): String {
+        RateLimitedException.messageOf(t)?.let { return it }
         val m = t.message?.lowercase().orEmpty()
         return when {
             // #52 — the completion window (7d past the grace deadline)

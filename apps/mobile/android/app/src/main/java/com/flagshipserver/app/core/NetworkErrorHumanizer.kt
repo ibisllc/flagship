@@ -9,6 +9,8 @@
 //     hard-fail). This is NOT an ordinary offline/timeout: it means someone
 //     may be intercepting the connection. We must NOT fold it into "you're
 //     offline" — it gets its own, louder copy.
+//   - RateLimited — `.com`'s rate limiter (429 `rate-limited`): who is limited
+//     and when to try again (RateLimitedException).
 //   - Offline — no network at all (UnknownHost / connect failure / timeout).
 //   - ServerProblem — a 5xx from the backend (transient; try again).
 //   - RequestProblem — a 4xx other than the cert case (check your connection /
@@ -38,6 +40,7 @@ object NetworkErrorHumanizer {
 
     enum class Kind {
         CERT_PIN_MISMATCH,
+        RATE_LIMITED,
         OFFLINE,
         SERVER_PROBLEM,
         REQUEST_PROBLEM,
@@ -51,23 +54,27 @@ object NetworkErrorHumanizer {
      *  tells an intercepted-cert failure apart from any other TLS failure. */
     private const val PIN_MARKER = "STK-signed"
 
-    fun classify(t: Throwable): Classified = when {
-        isCertPinMismatch(t) -> Classified(
-            Kind.CERT_PIN_MISMATCH,
-            "This box's certificate doesn't match — someone may be " +
-                "intercepting the connection. Reinstall the box or contact " +
-                "its admin.",
-        )
-        t is HttpException -> classifyStatus(t.status)
-        t is HasHttpStatus -> classifyStatus(t.httpStatus)
-        isOffline(t) -> Classified(
-            Kind.OFFLINE,
-            "You're offline. Check your connection and try again.",
-        )
-        else -> Classified(
-            Kind.UNKNOWN,
-            "Something went wrong. Please try again.",
-        )
+    fun classify(t: Throwable): Classified {
+        val rateLimit = RateLimitedException.from(t)
+        return when {
+            isCertPinMismatch(t) -> Classified(
+                Kind.CERT_PIN_MISMATCH,
+                "This box's certificate doesn't match — someone may be " +
+                    "intercepting the connection. Reinstall the box or contact " +
+                    "its admin.",
+            )
+            rateLimit != null -> Classified(Kind.RATE_LIMITED, rateLimit.userMessage)
+            t is HttpException -> classifyStatus(t.status)
+            t is HasHttpStatus -> classifyStatus(t.httpStatus)
+            isOffline(t) -> Classified(
+                Kind.OFFLINE,
+                "You're offline. Check your connection and try again.",
+            )
+            else -> Classified(
+                Kind.UNKNOWN,
+                "Something went wrong. Please try again.",
+            )
+        }
     }
 
     /** Convenience: just the human string (UX-B mapping). */

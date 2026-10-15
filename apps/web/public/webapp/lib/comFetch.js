@@ -9,13 +9,17 @@
 //   - prepends the .com apex to a leading-slash path (an absolute URL passes
 //     through unchanged, so existing call-sites can migrate incrementally);
 //   - refuses the call with a ServerUntrustedError when isServerTrusted() is
-//     false — BEFORE the request leaves the device.
+//     false — BEFORE the request leaves the device;
+//   - turns the edge rate limiter's 429 (`error: "rate-limited"`) into a
+//     thrown RateLimitedError (lib/rateLimited.js), whose message tells the
+//     person who is limited and when to try again.
 //
 // The blessing endpoint itself is exempt (it's how trust is (re)established,
 // so it must be reachable even while untrusted).
 
 import { serverTrust } from "./serverTrust.js";
 import { controlApex, controlHost } from "./apex.js";
+import { throwIfRateLimited } from "./rateLimited.js";
 
 // Back-compat re-export: the control apex used to be a baked literal here.
 // It is now derived (lib/apex.js — origin-driven, prod-default), so this
@@ -62,7 +66,9 @@ export async function comFetch(pathOrUrl, init = {}) {
     throw new ServerUntrustedError();
   }
   const fetchImpl = globalThis.fetch.bind(globalThis);
-  return fetchImpl(url, init);
+  const resp = await fetchImpl(url, init);
+  await throwIfRateLimited(resp);
+  return resp;
 }
 
 /** Does this URL point at the .com control server (the gated host)? The
@@ -85,7 +91,9 @@ function isComHost(url) {
  * lib made it. This is the true single chokepoint: it catches the existing
  * per-file call-sites (lib/leases.js, recovery.js, …) and any future one
  * without each having to import comFetch. The blessing probe is exempt so
- * trust can always be (re)established. Idempotent.
+ * trust can always be (re)established. A rate-limited `.com` answer rejects
+ * with a RateLimitedError, so every screen's error path shows the wait.
+ * Idempotent.
  */
 export function installComFetchGuard() {
   if (typeof globalThis.fetch !== "function") return;
@@ -98,10 +106,13 @@ export function installComFetchGuard() {
         : input && typeof input.url === "string"
           ? input.url
           : String(input);
-    if (isComHost(url) && !isBlessingUrl(url) && !serverTrust.isServerTrusted()) {
+    const com = isComHost(url);
+    if (com && !isBlessingUrl(url) && !serverTrust.isServerTrusted()) {
       throw new ServerUntrustedError();
     }
-    return real(input, init);
+    const resp = await real(input, init);
+    if (com) await throwIfRateLimited(resp);
+    return resp;
   };
   guarded.__flagshipTrustGuard = true;
   guarded.__flagshipRealFetch = real;

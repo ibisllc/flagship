@@ -42,6 +42,7 @@
 // passkey.
 
 import { controlApex } from "./apex.js";
+import { throwIfRateLimited } from "./rateLimited.js";
 
 const APEX = controlApex();
 
@@ -198,6 +199,7 @@ export async function initiateRePair(args) {
     },
   );
   if (!resp.ok) {
+    await throwIfRateLimited(resp);
     const txt = await safeText(resp);
     // #52 — surface the status + parsed body on the error so callers
     // (runTakeover) can detect the credential-required 401 and prompt

@@ -152,7 +152,7 @@ data class FreeAiErrorBody(
 sealed class FreeAiMint {
     data class Ok(val credential: AiCredential, val credits: FreeAiCreditsInfo?) : FreeAiMint()
     data class UsedUp(val message: String, val credits: FreeAiCreditsInfo?) : FreeAiMint()
-    /** Busy today, no running server, too big, or the promotion has ended ([code]). */
+    /** Busy today, no running server, too big, rate-limited, or the promotion has ended ([code]). */
     data class Refused(val code: String, val message: String) : FreeAiMint()
     data class Unavailable(val message: String) : FreeAiMint()
 }
@@ -174,6 +174,8 @@ sealed class FreeAiState {
     object Ended : FreeAiState()
     /** Free AI can't be used right now ("no-server", "busy-today"). */
     data class Blocked(val reason: String) : FreeAiState()
+    /** `.com`'s rate limiter refused the read or the pass: [message] says when to try again. */
+    data class Limited(val message: String) : FreeAiState()
     data class Available(val credits: FreeAiCreditsInfo) : FreeAiState() {
         val usedUp: Boolean get() = credits.remainingTokens <= 0
     }
@@ -218,6 +220,8 @@ object FreeAiCopy {
     const val CODE_NO_SERVER = "free-ai-no-server"
     const val CODE_ENDED = "free-ai-ended"
     const val CODE_TOO_LONG = "free-ai-too-long"
+    /** `.com`'s rate limiter, not a free-AI refusal: the message is the limiter's sentence. */
+    const val CODE_RATE_LIMITED = RateLimitedException.ERROR_CODE
 
     /** The app's own words for a `free-ai-…` code, or null for an unknown one. */
     fun messageFor(code: String?): String? = when (code) {
@@ -238,6 +242,7 @@ object FreeAiCopy {
         is FreeAiState.Hidden -> null
         is FreeAiState.Unavailable -> FreeAiView(false, UNAVAILABLE, true)
         is FreeAiState.Ended -> FreeAiView(false, ENDED, true)
+        is FreeAiState.Limited -> FreeAiView(false, state.message, true)
         is FreeAiState.Blocked ->
             FreeAiView(false, messageFor("free-ai-${state.reason}") ?: UNAVAILABLE, state.reason != "no-server")
         is FreeAiState.Available ->
@@ -286,6 +291,9 @@ open class FreeAiClient(
                 accept = setOf(200),
             )
         } catch (e: HttpException) {
+            RateLimitedException.from(e)?.let {
+                return FreeAiMint.Refused(FreeAiCopy.CODE_RATE_LIMITED, it.userMessage)
+            }
             val err = runCatching { json.decodeFromString(FreeAiErrorBody.serializer(), e.body) }.getOrNull()
             // By code first: a 429 is also "busy today", not only "used up".
             val code = err?.code ?: when (e.status) {
@@ -365,8 +373,8 @@ class FreeAiService(
             }
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
-        } catch (_: Throwable) {
-            FreeAiState.Unavailable
+        } catch (t: Throwable) {
+            RateLimitedException.messageOf(t)?.let { FreeAiState.Limited(it) } ?: FreeAiState.Unavailable
         }
     }
 

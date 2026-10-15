@@ -21,6 +21,7 @@ import {
 } from "../lib/recovery.js";
 import { ensureUsername, getSession, unlockSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
+import { failureText } from "../lib/rateLimited.js";
 import { humanError } from "../lib/humanError.js";
 import {
   KEYFILE_COPY,
@@ -201,7 +202,7 @@ async function runRemoveCloud() {
     await deleteCloudRecovery(username);
     toast("Cloud recovery removed", "ok");
   } catch (e) {
-    toast(`Remove failed: ${e.message ?? e}`, "err");
+    toast(failureText(e, "Remove failed: "), "err");
   } finally {
     if (btn) {
       btn.disabled = false;

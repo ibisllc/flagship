@@ -187,6 +187,8 @@ public enum FreeAiError: Error, Equatable, LocalizedError {
     case unavailable(message: String)
     /// 400 `free-ai-too-long`: the build is bigger than the model's context.
     case tooLong(message: String)
+    /// 429 `rate-limited`: too many tries; says when to try again.
+    case rateLimited(RateLimitedRefusal)
 
     public var errorDescription: String? { message }
 
@@ -194,6 +196,7 @@ public enum FreeAiError: Error, Equatable, LocalizedError {
         switch self {
         case .usedUp(let m, _), .busyToday(let m), .noServer(let m), .ended(let m), .unavailable(let m),
              .tooLong(let m): return m
+        case .rateLimited(let r): return r.message
         }
     }
 
@@ -208,6 +211,7 @@ public enum FreeAiError: Error, Equatable, LocalizedError {
     /// `code` (the status only when there's none), or nil when it isn't a
     /// documented refusal.
     public static func from(status: Int, body: Data) -> FreeAiError? {
+        if let r = RateLimitedRefusal.from(status: status, body: body) { return .rateLimited(r) }
         let parsed = try? JSONDecoder().decode(FreeAiErrorBody.self, from: body)
         switch parsed?.code {
         case "free-ai-used-up": return .usedUp(message: parsed?.error ?? FreeAiCopy.usedUp, credits: parsed?.credits)

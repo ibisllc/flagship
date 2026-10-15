@@ -85,9 +85,11 @@ class AiKeysViewModel : ViewModel() {
                 (r.credits ?: (_freeAi.value as? FreeAiState.Available)?.credits ?: FreeAiCreditsInfo())
                     .copy(remainingTokens = 0),
             )
-            is FreeAiMint.Refused -> _freeAi.value =
-                if (r.code == FreeAiCopy.CODE_ENDED) FreeAiState.Ended
-                else FreeAiState.Blocked(r.code.removePrefix("free-ai-"))
+            is FreeAiMint.Refused -> _freeAi.value = when (r.code) {
+                FreeAiCopy.CODE_ENDED -> FreeAiState.Ended
+                FreeAiCopy.CODE_RATE_LIMITED -> FreeAiState.Limited(r.message)
+                else -> FreeAiState.Blocked(r.code.removePrefix("free-ai-"))
+            }
             is FreeAiMint.Unavailable -> _freeAi.value = FreeAiState.Unavailable
         }
         if (r is FreeAiMint.Ok) {

@@ -203,8 +203,9 @@ export function inlineAlert({ title, message, okLabel = "OK" } = {}) {
  * button (rate-limited: disabled with a live "Try again in Ns" countdown for
  * `retryAfterMs` after each suggestion), a "you can change it later" note, and
  * Use / Cancel. `fetchNext` is injected so the modal stays network-free; it
- * resolves to `{ name, retryAfterMs }` or `{ throttled: true, retryAfterMs }`.
- * Resolves to the chosen name, or null on cancel.
+ * resolves to `{ name, retryAfterMs }` or `{ throttled: true, retryAfterMs }`,
+ * or rejects (a RateLimitedError's sentence is shown and the button waits it
+ * out). Resolves to the chosen name, or null on cancel.
  */
 export function inlineSuggestUsername({ initialName, retryAfterMs = 0, fetchNext } = {}) {
   return new Promise((resolve) => {
@@ -215,6 +216,7 @@ export function inlineSuggestUsername({ initialName, retryAfterMs = 0, fetchNext
         <h3 class="modal-title">Your handle</h3>
         <p class="modal-suggest-name" data-suggest-name></p>
         <button class="secondary full-width" data-suggest-regen>↻ Try another</button>
+        <p class="warn-text mt-2" data-suggest-error role="alert" hidden></p>
         <p class="note modal-suggest-note">You can change your username later.</p>
         <div class="row-2 mt-3">
           <button class="secondary" data-modal-cancel>Cancel</button>
@@ -231,8 +233,9 @@ export function inlineSuggestUsername({ initialName, retryAfterMs = 0, fetchNext
     const regenBtn = overlay.querySelector("[data-suggest-regen]");
     const okBtn = overlay.querySelector("[data-modal-ok]");
     const cancelBtn = overlay.querySelector("[data-modal-cancel]");
+    const errorEl = overlay.querySelector("[data-suggest-error]");
 
-    const stopTimer = () => { if (timer) { clearInterval(timer); timer = null; } };
+    const stopTimer = () => { if (timer) { clearInterval(timer); clearTimeout(timer); timer = null; } };
     const idle = () => { regenBtn.disabled = false; regenBtn.textContent = "↻ Try another"; };
     const armCooldown = (ms) => {
       stopTimer();
@@ -265,7 +268,16 @@ export function inlineSuggestUsername({ initialName, retryAfterMs = 0, fetchNext
       regenBtn.textContent = "…";
       let res;
       try { res = await fetchNext(); }
-      catch { return armCooldown(2000); }
+      catch (e) {
+        if (!e?.rateLimited) return armCooldown(2000);
+        errorEl.textContent = e.message;
+        errorEl.hidden = false;
+        stopTimer();
+        regenBtn.textContent = "↻ Try another";
+        timer = setTimeout(() => { timer = null; errorEl.hidden = true; idle(); }, (Number(e.retryAfterSec) || 60) * 1000);
+        return;
+      }
+      errorEl.hidden = true;
       if (res && res.name && !res.throttled) {
         current = res.name;
         nameEl.textContent = current;

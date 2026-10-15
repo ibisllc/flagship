@@ -7,6 +7,10 @@
 // MIRRORS: apps/com/src/route.ts (v2 relay branch). Wire shapes are
 // byte-identical to the Swift side — the Worker treats requests from
 // both clients the same.
+//
+// A call `.com`'s rate limiter refuses throws RateLimitedException (an
+// HttpException with status 429) whose message says who is limited and when
+// to try again (OkHttpJsonTransport maps the `error: "rate-limited"` body).
 
 package com.flagshipserver.app.api
 
@@ -15,6 +19,7 @@ import com.flagshipserver.app.core.Endpoints
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.HttpException
 import com.flagshipserver.app.core.JsonHttpTransport
+import com.flagshipserver.app.core.RateLimitedException
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
@@ -1034,12 +1039,14 @@ data class RckRegisterRequest(
 
 /** One sign-up handle suggestion. On a 200 `name` is set + `throttled` is false;
  *  on a 429 `name` is null + `throttled` is true. `retryAfterMs` is the cooldown
- *  until the next regenerate is allowed either way. */
+ *  until the next regenerate is allowed either way. [message] is set when `.com`'s
+ *  rate limiter (not the regenerate cooldown) refused: the sentence to show. */
 @Serializable
 data class UsernameSuggestion(
     val name: String? = null,
     val retryAfterMs: Int = 0,
     val throttled: Boolean = false,
+    val message: String? = null,
 )
 
 @Serializable
@@ -2311,7 +2318,20 @@ class LiveFlagshipServerClient(
         val wire = transport.json.decodeFromString(
             SuggestUsernameWire.serializer(), resp.body.decodeToString(),
         )
-        return if (resp.status == 429) {
+        val rateLimit = RateLimitedException.parse(
+            resp.status,
+            resp.body.decodeToString(),
+            resp.headers.entries.firstOrNull { it.key.equals("Retry-After", ignoreCase = true) }?.value,
+        )
+        return if (rateLimit != null) {
+            val ms = rateLimit.retryAfterSec?.let { (it * 1000).coerceIn(0, Int.MAX_VALUE.toLong()).toInt() }
+            UsernameSuggestion(
+                name = null,
+                retryAfterMs = wire.retryAfterMs ?: ms ?: 3000,
+                throttled = true,
+                message = rateLimit.userMessage,
+            )
+        } else if (resp.status == 429) {
             UsernameSuggestion(name = null, retryAfterMs = wire.retryAfterMs ?: 3000, throttled = true)
         } else {
             UsernameSuggestion(name = wire.name, retryAfterMs = wire.retryAfterMs ?: 2000, throttled = false)

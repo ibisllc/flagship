@@ -21,8 +21,11 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
 
-class HttpException(val status: Int, val body: String) :
-    RuntimeException("HTTP $status: $body")
+open class HttpException(
+    val status: Int,
+    val body: String,
+    message: String = "HTTP $status: $body",
+) : RuntimeException(message)
 
 interface JsonHttpTransport {
     val json: Json
@@ -114,7 +117,9 @@ class OkHttpJsonTransport(
         val headers = (0 until resp.headers.size).associate { resp.headers.name(it) to resp.headers.value(it) }
         resp.close()
         if (status !in accept) {
-            throw HttpException(status, String(bodyBytes, Charsets.UTF_8))
+            val text = String(bodyBytes, Charsets.UTF_8)
+            val retryAfter = headers.entries.firstOrNull { it.key.equals("Retry-After", ignoreCase = true) }?.value
+            throw RateLimitedException.parse(status, text, retryAfter) ?: HttpException(status, text)
         }
         HttpResponse(status, bodyBytes, headers)
     }
