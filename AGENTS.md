@@ -821,15 +821,21 @@ Not compiled since the rebase: the iOS and Android code on any branch.
   Remaining: live e2e, Stripe price ids.
 - **`feat/phone-usb-burn`:** validate the OTG write on a real phone + stick,
   publish the seed and set `FLAGSHIP_ISO_SEED`.
-- **`feat/outbound-proxy`** (2026-10-14, `docs/outbound-proxy.md`): optional
-  SOCKS5 / HTTP CONNECT proxy for a box, set in the create flow (signed
+- **`feat/outbound-proxy`** (2026-10-14/15, `docs/outbound-proxy.md`; a
+  **Pro** feature, so it belongs off `feat/marketplace`: rebase deferred
+  because marketplace is 336 commits behind `main`). Optional SOCKS5 / HTTP
+  CONNECT proxy for a box, set in the create flow (signed
   `flagship/box-proxy/v1` recipe sibling) or on the server page (Face ID,
-  `POST /api/screens/outbound-proxy`, tested before it applies). Phase 1
-  routes the daemon (tunnel, `.com`, gossip, ACME, AI, update git/npm via a
-  loopback bridge, app egress) and the health timer. Phase 1b, design only:
-  the bootstrap's register/sealed-key curls and the initramfs unlock, which
-  still go direct. Owner decisions listed in the doc (hub port 8443 vs
-  443-only proxies first).
+  `POST /api/screens/outbound-proxy`, tested before it applies). The daemon
+  (tunnel, `.com`, gossip, ACME, AI, update git/npm, app egress) and the
+  health timer use the proxy. Before the daemon, a proxy box's setup POSTs go
+  through OHTTP (RFC 9458): third-party relay (Oblivious Network planned, not
+  Cloudflare), our own gateway in the `.com` Worker
+  (`/.well-known/ohttp-keys`, `/api/ohttp/gateway`), direct fallback marked
+  and counted (migration 0098), /status/ warns "Private relay down", daily
+  probe opens an issue. Design only: the initramfs OHTTP client (unlock still
+  goes direct). Owner to provision the relay + `OHTTP_GATEWAY_KEYS`. Webapp
+  shell v80 on the branch (re-pick at rebase).
 - **`feat/retail`** (NFC box), **`feat/browser-extension`**, **`alpine`** (parked
   installer), **`gym`** (main + the gym trust pin and app adoption seams; kept
   current by `scripts/gym-refresh.sh`; run its live account-recovery spec).
