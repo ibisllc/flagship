@@ -353,11 +353,14 @@ public sealed class Wizard : INotifyPropertyChanged
     }
 
     /// <summary>
-    /// "Host here": the SAME recipe → the SAME remastered installer ISO
-    /// (through the native installer pipeline), but applied to a managed VM on this PC
-    /// instead of a USB stick. The guest boot chain (unattended install →
-    /// LUKS → phone-home unlock → register) runs unmodified inside the VM;
-    /// this app never holds a key. Mirrors WizardModel.runHostHere.
+    /// "Host here" prefers the published prebuilt server image: download and
+    /// verify it once, give the new server a thin overlay on it plus a
+    /// one-use seed carrying the recipe, and let the guest specialize itself.
+    /// Without a fitting image (none published, or built for another
+    /// installer ref) it falls back to the SAME remastered installer ISO a USB
+    /// burn uses. Either way the guest boot chain (LUKS → phone-home unlock →
+    /// register) runs unmodified inside the VM; this app never holds a key.
+    /// Mirrors WizardModel.runHostHere.
     /// </summary>
     public async Task RunHostHereAsync()
     {
@@ -375,12 +378,11 @@ public sealed class Wizard : INotifyPropertyChanged
             AppendLog(LogStream.Stderr, $"Cannot read the recipe: {e.Message}");
             return;
         }
-        var config = VMConfig.Plan(
-            _parsedRecipe, rawRecipe, VM.HostResources.Current(),
-            provisioningMode: VMProvisioningMode.InstallerISO);
+        var parsed = _parsedRecipe;
+        var recipe = _recipePath!;
 
         IsRunning = true;
-        Phase = "download";
+        Phase = null;
         Progress = null;
         BaseDownloadStarted = false;
         BaseDownloadUrl = null;
@@ -388,6 +390,64 @@ public sealed class Wizard : INotifyPropertyChanged
         FireBag();
         try
         {
+            string? applianceBase = null;
+            var forceIso = Environment.GetEnvironmentVariable("FLAGSHIP_VM_FORCE_ISO") == "1";
+            if (Mode == BuilderMode.Simple && !forceIso)
+            {
+                applianceBase = Environment.GetEnvironmentVariable("FLAGSHIP_VM_APPLIANCE_BASE");
+                if (string.IsNullOrEmpty(applianceBase))
+                {
+                    Phase = "appliance";
+                    var cache = new ApplianceCache(ApplianceHosting.Arch,
+                        inUse: () => ApplianceHosting.BasesInUse(Vm),
+                        log: m => OnUi(() => AppendLog(LogStream.Stdout, "+ " + m)));
+                    try
+                    {
+                        applianceBase = await ApplianceHosting.EnsurePublishedAsync(
+                            cache, ApplianceHosting.EffectiveInstallerGitRef(parsed),
+                            (phase, fraction) => OnUi(() =>
+                            {
+                                Phase = phase == "verify" ? "verify" : "appliance";
+                                Progress = fraction;
+                            }),
+                            m => OnUi(() => AppendLog(LogStream.Stdout, "+ " + m)),
+                            _cts.Token);
+                    }
+                    catch (ApplianceCacheException e)
+                    {
+                        AppendLog(LogStream.Stderr, e.Message);
+                        return;
+                    }
+                }
+            }
+
+            if (!string.IsNullOrEmpty(applianceBase))
+            {
+                var applianceConfig = VMConfig.Plan(parsed, rawRecipe, VM.HostResources.Current(),
+                    provisioningMode: VMProvisioningMode.PrebuiltAppliance);
+                Phase = "clone appliance";
+                Progress = null;
+                var img = Vm.Toolchain!.ImgBinary;
+                try
+                {
+                    await ApplianceHosting.CreateServerAsync(Vm, applianceConfig, applianceBase, parsed, rawRecipe,
+                        new NativePreseedEngine(),
+                        (args, ct) => ApplianceProvisioner.RunQemuImgAsync(img, args, ct), _cts.Token);
+                }
+                catch (Exception e)
+                {
+                    AppendLog(LogStream.Stderr, e.Message);
+                    return;
+                }
+                try { File.Delete(recipe); } catch { }
+                Phase = "specialize";
+                await Vm.BeginInstallAsync(applianceConfig.Name);
+                await HandOffAsync(applianceConfig.Name);
+                return;
+            }
+
+            var config = VMConfig.Plan(parsed, rawRecipe, VM.HostResources.Current(),
+                                       provisioningMode: VMProvisioningMode.InstallerISO);
             // Same Simple-mode base ISO fetch as the USB path; Advanced mode
             // may bring its own stock ISO.
             string baseIso;
@@ -397,6 +457,7 @@ public sealed class Wizard : INotifyPropertyChanged
             }
             else
             {
+                Phase = "download";
                 try
                 {
                     var ensured = await _baseCache.EnsureAsync(
@@ -431,7 +492,6 @@ public sealed class Wizard : INotifyPropertyChanged
                 return;
             }
             DidRemasterForTest = true;
-            var recipe = _recipePath!;
             var outIso = Vm.InstallerIsoPath(config.Name);
             var remastered = false;
             try { await _nativeBuild.PrepareAsync(recipe, baseIso, outIso, WifiSsid, WifiPassword, _cts.Token); remastered = true; }
@@ -445,18 +505,7 @@ public sealed class Wizard : INotifyPropertyChanged
             // Shred the single-use recipe, exactly like a successful USB burn.
             try { File.Delete(recipe); } catch { }
             await Vm.BeginInstallAsync(config.Name);
-            Phase = "handoff";
-            for (var remaining = 5; remaining > 0; remaining--)
-            {
-                HandoffCountdown = remaining;
-                await Task.Delay(1000);
-            }
-            HandoffCountdown = null;
-            SelectedServerName = null;
-            Destination = null;
-            RecipePath = null;
-            Verified = null;
-            _parsedRecipe = null;
+            await HandOffAsync(config.Name);
         }
         finally
         {
@@ -469,6 +518,25 @@ public sealed class Wizard : INotifyPropertyChanged
             _cts = null;
             FireBag();
         }
+    }
+
+    /// <summary>Count down, clear the wizard for the next server, then open
+    /// the one just created so its progress is on screen (Mac
+    /// showHostedServer).</summary>
+    private async Task HandOffAsync(string name)
+    {
+        Phase = "handoff";
+        for (var remaining = 5; remaining > 0; remaining--)
+        {
+            HandoffCountdown = remaining;
+            await Task.Delay(1000);
+        }
+        HandoffCountdown = null;
+        Destination = null;
+        RecipePath = null;
+        Verified = null;
+        _parsedRecipe = null;
+        SelectedServerName = Vm.Server(name) is null ? null : name;
     }
 
     /// <summary>Reported to the manifest endpoint. Mirrors FlagshipBuilder.csproj &lt;Version&gt;.</summary>
@@ -508,7 +576,13 @@ public sealed class Wizard : INotifyPropertyChanged
     public bool IsRunning
     {
         get => _isRunning;
-        private set { if (_isRunning != value) { _isRunning = value; FireBag(); } }
+        private set
+        {
+            if (_isRunning == value) return;
+            _isRunning = value;
+            TaskbarProgress.Show(value, _progress);
+            FireBag();
+        }
     }
 
     public bool IsFinished
@@ -566,7 +640,13 @@ public sealed class Wizard : INotifyPropertyChanged
     public double? Progress
     {
         get => _progress;
-        private set { if (_progress != value) { _progress = value; FireBag(); } }
+        private set
+        {
+            if (_progress == value) return;
+            _progress = value;
+            TaskbarProgress.Show(_isRunning, value);
+            FireBag();
+        }
     }
 
     /// <summary>Raw phase token: "download" | "remaster" | "write".</summary>
@@ -631,7 +711,9 @@ public sealed class Wizard : INotifyPropertyChanged
     public string? PhaseLabel => Phase switch
     {
         "download" => "Downloading base image…",
-        "clone appliance" => "Cloning prebuilt server…",
+        "appliance" => "Downloading the server image…",
+        "verify" => "Verifying the server image…",
+        "clone appliance" => "Preparing the server's disk…",
         "specialize" => "Securing this server…",
         "remaster" => "Building image…",
         "write" => "Writing to USB…",
@@ -655,7 +737,7 @@ public sealed class Wizard : INotifyPropertyChanged
     /// The download phase paints the warning (orange) tint to signal a one-time
     /// network fetch; the rest of the pipeline uses the accent (primary) color.
     /// </summary>
-    public Brush ProgressTint => Phase == "download"
+    public Brush ProgressTint => Phase is "download" or "appliance"
         ? FindBrush("FB.Warning")
         : FindBrush("FB.Primary");
 
