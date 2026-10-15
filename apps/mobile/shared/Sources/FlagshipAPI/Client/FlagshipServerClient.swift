@@ -295,6 +295,14 @@ public protocol FlagshipServerClient: Sendable {
     /// The Flagship Inference model catalog (`GET /api/inference/models`,
     /// public, cacheable 5 min).
     func inferenceModels() async throws -> InferenceCatalogResponse
+
+    /// The account's plan ("free", "hobby" = Pro, "maker" = Pro Max) from
+    /// `GET /api/users/:u/allowance` (account read token); nil when unknown.
+    func accountTier(username: String) async throws -> String?
+}
+
+public extension FlagshipServerClient {
+    func accountTier(username: String) async throws -> String? { nil }
 }
 
 public extension FlagshipServerClient {
@@ -2296,6 +2304,9 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     /// — a username may carry both (legacy reviewer compat) or just
     /// the new block (live demo only).
     public var demoServers: [String: DemoServerBlock] = [:]
+    /// The plan `accountTier(username:)` answers (nil = unknown).
+    public var accountTierAnswer: String?
+    public func accountTier(username: String) async throws -> String? { accountTierAnswer }
     private var recoveryStore: [String: RecoveryEnvelope] = [:]
     /// Username-keyed mirror of the Worker's `webauthn_recovery` row,
     /// holding the Task #74 passphrase-gate hashes so the gated fetch can
@@ -3913,6 +3924,18 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
             throw ScreensClientError.http(status: status, message: text)
         }
         return try JSONDecoder().decode(AppRenameResponse.self, from: data)
+    }
+
+    public func accountTier(username: String) async throws -> String? {
+        let u = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(u)/allowance"))
+        req.httpMethod = "GET"
+        let (data, status) = try await sendAccountRead(req, username: username, tokens: readTokens) {
+            try await send($0)
+        }
+        guard (200..<300).contains(status) else { return nil }
+        struct Allowance: Decodable { let tier: String? }
+        return try? JSONDecoder().decode(Allowance.self, from: data).tier
     }
 
     public func getAppLinks(

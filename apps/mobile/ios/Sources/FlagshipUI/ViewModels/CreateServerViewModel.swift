@@ -104,6 +104,15 @@ public final class CreateServerViewModel {
             }
         }
     }
+    /// The account's plan, read when the screen opens: the proxy is part of
+    /// Pro. nil while unknown, which shows the fields.
+    public var accountTier: String?
+    public var proxyAllowed: Bool { OutboundProxyCopy.allowed(tier: accountTier) }
+
+    public func loadAccountTier() async {
+        accountTier = (try? await server.accountTier(username: username)) ?? nil
+    }
+
     public var proxyHost: String = ""
     public var proxyPort: String = ""
     public var proxyUsername: String = ""
@@ -112,7 +121,8 @@ public final class CreateServerViewModel {
 
     /// What's wrong with the proxy fields, or nil (also nil when there's no proxy).
     public var proxyError: String? {
-        OutboundProxyForm.error(kind: proxyKind, host: proxyHost, port: proxyPort,
+        guard proxyAllowed else { return nil }
+        return OutboundProxyForm.error(kind: proxyKind, host: proxyHost, port: proxyPort,
                                 username: proxyUsername, password: proxyPassword)
     }
 
@@ -595,7 +605,7 @@ public final class CreateServerViewModel {
         // pinned, else the IRK), with no extra prompt.
         var proxySibling: SignedBoxProxyWire?
         var proxyCredentialsSibling: BoxProxyCredentials?
-        if proxyKind != .none {
+        if proxyKind != .none && proxyAllowed {
             if let why = proxyError { throw OutboundProxyForm.Failure(message: why) }
             let creds = proxyCredentials
             let order = BoxProxy.make(
