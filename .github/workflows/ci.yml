@@ -58,3 +58,51 @@ jobs:
       - name: Cross-client parity (report only)
         continue-on-error: true
         run: npm run parity -- --report >> "$GITHUB_STEP_SUMMARY"
+
+  # The web gym (docs/ui-test-gym.md, tools/gym/README.md): the real webapp
+  # in chromium against a static server with every .com/box call stubbed, so
+  # it needs no wrangler, pod-sim or secrets. Pull requests and pushes run
+  # the every-merge tranche; pushes to main also run the full mock tier
+  # (`gym total --mock-only`), the same set `npm run gym:locked` runs here.
+  web-gym:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install workspace deps
+        run: npm ci
+
+      - name: Build the workspace (so @flagship/* resolve)
+        run: npx tsc -b
+
+      - name: Install Chromium for Playwright
+        working-directory: apps/web/e2e
+        run: npx playwright install --with-deps chromium
+
+      - name: Web gym, every-merge tranche
+        env:
+          CI: "1"
+        run: npm run gym:every-merge -- --surface web
+
+      - name: Web gym, full mock tier
+        if: github.event_name == 'push'
+        env:
+          CI: "1"
+        run: npm run gym:locked -- --surface web
+
+      - name: Upload the gym results (always)
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: web-gym-${{ github.sha }}
+          path: gym-results
+          if-no-files-found: ignore
+          retention-days: 14
