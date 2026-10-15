@@ -18,7 +18,7 @@ import { InMemoryAlertInbox } from "./alertInbox.js";
 import {
   buildAlertInboxHandlers,
 } from "./alertInboxHttp.js";
-import { startDaemonStatusHeartbeat } from "./daemonStatusHeartbeat.js";
+import { startDaemonStatusHeartbeat, type DaemonStatusHeartbeat } from "./daemonStatusHeartbeat.js";
 import { buildSignedLanHint } from "./lanDirect.js";
 import { makeRelayTrustExceptionResolver } from "./relayTrustExceptions.js";
 import { sendPushRelay, sendRelayTrustAlert } from "./relaySos.js";
@@ -221,7 +221,7 @@ import {
   fileAdminRootPinStore,
   resolvePinnedAdminRoot,
 } from "./adminRootRotationConsumer.js";
-import { buildServerOrderHolder } from "./serverOrderHolder.js";
+import { buildServerOrderHolder, type ServerOrderHolder } from "./serverOrderHolder.js";
 import {
   readAuthCodeBirthDate,
   wireGossip,
@@ -1017,20 +1017,32 @@ async function main(): Promise<void> {
         user: cfg.userId,
         ownerIrkPub: cfg.irkPublicKey,
         ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
-        onAdopt: () => void gossipLoopRef.current?.tick().catch(() => {}),
+        // Tell the siblings, and acknowledge to `.com` at once (the beat
+        // carries `orderIssuedAt`) so the apps stop showing the leader gray.
+        onAdopt: () => {
+          void gossipLoopRef.current?.tick().catch(() => {});
+          statusHeartbeatRef.current?.orderChanged();
+        },
         onLog: (m) => console.log(m),
       })
     : null;
   await serverOrder?.load();
+  const statusHeartbeatRef: { current: DaemonStatusHeartbeat | null } = { current: null };
   const statusHeartbeat = startDaemonStatusHeartbeat({
     serverDomain: env.serverFqdn!,
     sign: (msg) => custodian.signAsBox(msg),
     controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
-    ...(serverOrder ? { onServerOrder: (raw: unknown) => void serverOrder.offer(raw, ".com") } : {}),
+    ...(serverOrder
+      ? {
+          onServerOrder: (raw: unknown) => void serverOrder.offer(raw, ".com"),
+          readOrderIssuedAt: () => serverOrder.current()?.order.issuedAt ?? 0,
+        }
+      : {}),
     readLeads: () => gossipLoopRef.current?.currentLeads() ?? [],
     readRuns: () => servicePlatformRefForServer.current?.list().map((a) => a.slug),
     readTrustStatus: () => relayLockdownRef.current?.trustStatus() ?? null,
   });
+  statusHeartbeatRef.current = statusHeartbeat;
   const liveCertInfoRef: {
     current: { notAfter?: number; notBefore?: number; sans?: string[] } | null;
   } = { current: null };
@@ -1259,6 +1271,7 @@ async function main(): Promise<void> {
     // threading ~15 values through separate builders. Also starts the
     // update-pack scheduler. Same order + side effects as before.
     await wireRuntimeSurfaces({
+      serverOrder,
       serviceAccessRef,
       runtime,
       cfg,
@@ -2007,6 +2020,7 @@ async function loadEntitlementsOrExit(deps: {
  */
 async function wireRuntimeSurfaces(deps: {
   serviceAccessRef: { current: ServiceAccessStore | null };
+  serverOrder: ServerOrderHolder | null;
   runtime: DaemonRuntime;
   cfg: ServerConfig | null;
   env: RuntimeEnv;
@@ -2746,6 +2760,7 @@ async function wireRuntimeSurfaces(deps: {
       : null,
     appApiKeys: runtime.appApiKeys,
     accessAlerts: accessAlertSetting,
+    serverOrder: deps.serverOrder,
     serverFqdn: env.serverFqdn,
     username,
     daemonVersion: process.env.FLAGSHIP_DAEMON_VERSION ?? "0.0.0",

@@ -20,6 +20,7 @@ import {
   type SignedServerOrder,
 } from "@flagship/protocol";
 import { buildServerOrderHolder } from "../src/serverOrderHolder.js";
+import { buildServerOrderHttp, SERVER_ORDER_PATH } from "../src/serverOrderHttp.js";
 import { buildGossipIngestHandler } from "../src/gossip/gossipHttp.js";
 import { buildGossipLoop } from "../src/gossip/gossipLoop.js";
 import { SiblingView } from "../src/gossip/siblingView.js";
@@ -45,6 +46,43 @@ function holder(dir = mkdtempSync(join(tmpdir(), "server-order-"))) {
   const path = join(dir, "server-order.json");
   return { path, h: buildServerOrderHolder({ path, user: USER, ownerIrkPub: irk.publicKey }) };
 }
+
+describe("phone delivers the order to the box (/api/screens/server-order)", () => {
+  const req = (method: string, body?: unknown) => ({
+    method, path: SERVER_ORDER_PATH, headers: {}, body: Buffer.from(body === undefined ? "" : JSON.stringify(body)),
+  });
+  const http = (h = holder().h, companion = false) =>
+    buildServerOrderHttp({
+      holder: h,
+      denyCompanion: () => (companion ? { status: 403, body: "companion" } : null),
+    });
+  const call = async (handle: ReturnType<typeof http>, method: string, body?: unknown) => {
+    const r = (await handle(SERVER_ORDER_PATH, method, req(method, body)))!;
+    return { status: r.status, body: JSON.parse(String(r.body)) as Record<string, unknown> };
+  };
+
+  it("adopts a signed order and answers with the one it now holds", async () => {
+    const handle = http();
+    expect(await call(handle, "GET")).toEqual({ status: 200, body: { heldIssuedAt: 0 } });
+    expect(await call(handle, "POST", signed([B, A], 100))).toEqual({
+      status: 200, body: { ok: true, adopted: true, heldIssuedAt: 100 },
+    });
+    // The same order again (it arrived through `.com` first) is still an ack.
+    expect(await call(handle, "POST", signed([B, A], 100))).toEqual({
+      status: 200, body: { ok: true, adopted: false, heldIssuedAt: 100 },
+    });
+    // An older one is answered with the newer one held: the phone refetches.
+    expect((await call(handle, "POST", signed([A, B], 50))).body.heldIssuedAt).toBe(100);
+  });
+
+  it("refuses a forged order, and a companion can't post", async () => {
+    const forged = await call(http(), "POST", signed([B, A], 100, key(2)));
+    expect(forged.status).toBe(422);
+    expect(forged.body.heldIssuedAt).toBe(0);
+    expect((await http(holder().h, true)(SERVER_ORDER_PATH, "POST", req("POST", signed([A], 1))))!.status).toBe(403);
+    expect(await http()("/api/screens/other", "GET", req("GET"))).toBeNull();
+  });
+});
 
 describe("server order holder", () => {
   it("adopts a verified order, ranks by it, and reloads it after a restart", async () => {

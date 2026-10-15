@@ -694,6 +694,20 @@ describe("POST /api/daemon-status — leadsServices relay on /pods", () => {
   });
 });
 
+describe("POST /api/daemon-status — the server-order acknowledgement on /pods", () => {
+  it("relays the order the box says it ranks by, and drops a junk value", async () => {
+    const storage = new InMemoryStorage();
+    await withStkServer(storage);
+    expect((await handlePostDaemonStatus(deps(storage), { ...signedBody(report()), orderIssuedAt: 1_760_000_000_000 })).status).toBe(200);
+    let out = (await handleGetUserPods(deps(storage), "harry")).body as PodsResponse & { pods: Array<{ orderIssuedAt?: number }> };
+    expect(out.pods[0]?.orderIssuedAt).toBe(1_760_000_000_000);
+
+    expect((await handlePostDaemonStatus(deps(storage), { ...signedBody(report()), orderIssuedAt: -1 })).status).toBe(200);
+    out = (await handleGetUserPods(deps(storage), "harry")).body as PodsResponse & { pods: Array<{ orderIssuedAt?: number }> };
+    expect(out.pods[0]?.orderIssuedAt).toBeUndefined();
+  });
+});
+
 describe("POST /api/daemon-status — box-trust-status (per-box relay verdict) relay on /pods", () => {
   function btsReport(over: Partial<BoxTrustStatusReport> = {}): BoxTrustStatusReport {
     return {

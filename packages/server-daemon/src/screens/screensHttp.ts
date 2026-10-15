@@ -29,6 +29,8 @@ import { parseRelayFlag, type LlmCredential } from "../llmHarness.js";
 import { isAppAccessPath } from "../egress/approvals.js";
 import { isAppApiKeysPath, type AppApiKeysHttp } from "../appApiKeys.js";
 import { ACCESS_ALERTS_PATH, buildAccessAlertSettingHttp, type AccessAlertSetting } from "../egress/accessAlertSetting.js";
+import { SERVER_ORDER_PATH, buildServerOrderHttp } from "../serverOrderHttp.js";
+import type { ServerOrderHolder } from "../serverOrderHolder.js";
 import {
   summarizeAttachment,
   prepareAttachments,
@@ -171,6 +173,12 @@ export interface ScreensHttpDeps {
    * Absent on a box without it: the path 404s and the apps skip it.
    */
   accessAlerts?: Pick<AccessAlertSetting, "enabled" | "set"> | null;
+  /**
+   * The owner's server order (`/api/screens/server-order`, serverOrderHttp.ts):
+   * the phone delivers a new order straight to the box and reads back which
+   * one it holds. Absent ⇒ the path 404s and the order arrives via `.com`.
+   */
+  serverOrder?: Pick<ServerOrderHolder, "current" | "offer"> | null;
   /**
    * The owner's Database section (`/services/:id/db…`, dataLayer/ownerDb.ts):
    * an app's live data, owner sessions only (companions get 403 on every
@@ -518,6 +526,14 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
     if (deps.accessAlerts && path === ACCESS_ALERTS_PATH) {
       const r = await buildAccessAlertSettingHttp({
         setting: deps.accessAlerts,
+        denyCompanion: (r) => denyCompanionWrite(deps.pairedSessions ?? null, r),
+      })(path, method, req);
+      if (r) return r;
+    }
+
+    if (deps.serverOrder && path === SERVER_ORDER_PATH) {
+      const r = await buildServerOrderHttp({
+        holder: deps.serverOrder,
         denyCompanion: (r) => denyCompanionWrite(deps.pairedSessions ?? null, r),
       })(path, method, req);
       if (r) return r;

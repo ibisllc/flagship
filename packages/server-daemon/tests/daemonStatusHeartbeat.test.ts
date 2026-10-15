@@ -217,6 +217,32 @@ describe("daemon-status heartbeat", () => {
     expect(calls.map((c) => c.runsServices)).toEqual([undefined, ["family"], ["family", "clock"]]);
   });
 
+  it("reports the held server order, and beats at once when a newer one is adopted", async () => {
+    const calls: any[] = [];
+    const fetchImpl = (async (_url: any, init: any) => {
+      calls.push(JSON.parse(init.body));
+      return new Response("ok", { status: 200 });
+    }) as unknown as typeof fetch;
+    let held = 0;
+    const hb = startDaemonStatusHeartbeat({
+      serverDomain: "home1.harry.flagship.services",
+      sign: makeKeypair(9),
+      controlPlaneBaseUrl: "https://flagshipserver.com",
+      intervalMs: 60_000,
+      readOrderIssuedAt: () => held,
+      fetchImpl,
+    });
+    hb.orderChanged();
+    hb.update({ certPem: DUMMY_PEM, privateKeyPem: "x" }, 1_800_000_000_000, []);
+    held = 1_760_000_000_000;
+    hb.orderChanged();
+    await new Promise((r) => setTimeout(r, 0));
+    hb.stop();
+    // Nothing before the first cert; then one beat per change.
+    expect(calls.map((c) => c.orderIssuedAt)).toEqual([0, 1_760_000_000_000]);
+    expect(calls[1].request.orderIssuedAt).toBeUndefined();
+  });
+
   it("a network failure never throws (best-effort)", async () => {
     const id = makeKeypair(3);
     const fetchImpl = (async () => {
