@@ -11,6 +11,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -26,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -66,6 +68,8 @@ import com.flagshipserver.app.core.LocalVibeCodeEnvelopeSigner
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
+import com.flagshipserver.app.ui.components.FSSecondaryButton
+import com.flagshipserver.app.core.VibeTranscript
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.VibeCodeDeployViewModel
 import kotlinx.coroutines.Dispatchers
@@ -191,6 +195,19 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
     }
 
     val scroll = rememberScrollState()
+    // Follow new text while the owner is at the bottom; once they scroll up,
+    // leave them there and offer "Jump to latest". Only a finished scroll
+    // decides: content growing under a still list must not stop the follow.
+    // Mirror of iOS.
+    val atBottom by remember { derivedStateOf { scroll.value >= scroll.maxValue - FOLLOW_SLACK_PX } }
+    var followTail by remember { mutableStateOf(true) }
+    LaunchedEffect(scroll.isScrollInProgress) { if (!scroll.isScrollInProgress) followTail = atBottom }
+    val transcript = remember(state?.messages) { VibeTranscript.lines(state?.messages.orEmpty()) }
+    val contentSignature = (state?.messages?.size ?: 0) to (state?.pendingRequest != null) to state?.status
+    LaunchedEffect(contentSignature, scroll.maxValue) {
+        if (followTail) scroll.scrollTo(scroll.maxValue)
+    }
+    Box(Modifier.fillMaxSize()) {
     Column(
         Modifier
             .fillMaxSize()
@@ -246,11 +263,21 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                 if (s.messages.isEmpty()) {
                     Text("No messages yet.", color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
                 } else {
+                    val (hidden, shown) = transcript
+                    if (hidden > 0) {
+                        Text(
+                            VibeTranscript.hiddenText(hidden),
+                            color = FS.colors.textMuted,
+                            style = TextStyle(fontSize = 12.sp),
+                            modifier = Modifier.semantics { testTag = "vibecode-hidden-messages" },
+                        )
+                        Spacer(Modifier.height(FS.space.s2))
+                    }
                     if (s.summarised) {
                         Text(EARLIER_SUMMARISED, color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp))
                         Spacer(Modifier.height(FS.space.s2))
                     }
-                    s.messages.forEach { msg -> ChatMessage(msg) }
+                    shown.forEach { msg -> ChatMessage(msg) }
                 }
             }
         }
@@ -528,7 +555,24 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
         }
         Spacer(Modifier.height(FS.space.s10))
     }
+    if (!followTail) {
+        FSSecondaryButton(
+            label = "↓ Jump to latest",
+            onClick = {
+                followTail = true
+                scope.launch { scroll.animateScrollTo(scroll.maxValue) }
+            },
+            modifier = Modifier
+                .align(androidx.compose.ui.Alignment.BottomEnd)
+                .padding(FS.space.s4)
+                .semantics { testTag = "vibecode-jump-latest" },
+        )
+    }
+    }
 }
+
+/** How close to the bottom still counts as following the conversation. */
+private const val FOLLOW_SLACK_PX = 120
 
 internal const val EARLIER_SUMMARISED = "Earlier conversation summarised"
 
