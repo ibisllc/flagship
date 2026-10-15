@@ -159,7 +159,11 @@
 //       order), "Add/connect a server" sits above the list; a saved order is
 //       also handed straight to each online box.
 //  v77: "Patent Pending" in About and a footer under every view.
-const SHELL_VERSION = "v77";
+//  v78: sharing for a family (docs/share-a-server.md §10): a co-manager can
+//       ask to be told when a shared server needs to start (a content-free
+//       `share-start-up` push), update it at "Can manage", and sees which
+//       apps are members-only; the owner's unlock opt-in says what it hands over.
+const SHELL_VERSION = "v78";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -509,6 +513,22 @@ self.addEventListener("push", (event) => {
         requireInteraction: false,
         icon: "/icon.svg",
         data: { kind: "app-access" },
+      }),
+    );
+    return;
+  }
+
+  // A server shared with this account waits to start (docs/share-a-server.md
+  // §5.4). The push names no server; Home shows which one and the Approve button.
+  if (data && data.kind === "share-start-up") {
+    event.waitUntil(
+      self.registration.showNotification("Flagship", {
+        body: "A server shared with you is asking you to unlock it.",
+        tag: "flagship-share-start-up",
+        renotify: true,
+        requireInteraction: true,
+        icon: "/icon.svg",
+        data: { kind: "share-start-up", deepLink: "/" },
       }),
     );
     return;

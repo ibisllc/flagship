@@ -62,6 +62,15 @@ export async function subscribeToWebPush() {
   const session = getSession();
   if (!session.umk) throw new Error("unlock first");
   if (!session.username) throw new Error("username required");
+  return registerWithCom({ session, providerToken: await webPushProviderToken() });
+}
+
+/**
+ * This browser's Web Push subscription as the opaque provider token .com
+ * stores (`{endpoint, keys}` JSON), asking for permission when needed.
+ * Must run inside a user gesture.
+ */
+export async function webPushProviderToken() {
   if (!webPushSupported()) throw new Error("Web Push not supported in this browser");
 
   const perm = await Notification.requestPermission();
@@ -86,11 +95,10 @@ export async function subscribeToWebPush() {
     applicationServerKey: vapidPubBytes,
   }));
 
-  const providerToken = JSON.stringify({
+  return JSON.stringify({
     endpoint: sub.endpoint,
     keys: subKeysToHexJson(sub),
   });
-  return registerWithCom({ session, providerToken });
 }
 
 /**

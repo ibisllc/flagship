@@ -20,6 +20,7 @@ import {
   LEVEL_TEXT,
   UNLOCK_LINE,
   UNLOCK_TITLE,
+  UNLOCK_WARNING,
   activityLine,
   cancelShareOffer,
   changeShare,
@@ -257,7 +258,7 @@ function wireRows(body, state) {
       if (key === "unlockAtBoot" && on) {
         const ok = await inlineConfirm({
           title: `Let ${s.label} approve start-up?`,
-          message: `${UNLOCK_LINE} They can unlock ${serverNameOf(fqdn)} when it starts.`,
+          message: `${UNLOCK_LINE} They can unlock ${serverNameOf(fqdn)} when it starts. ${UNLOCK_WARNING}`,
           okLabel: "Allow",
         });
         if (!ok) {
@@ -358,7 +359,7 @@ export async function openShareSheet(body) {
         <span class="share-choice-text"><strong>${LEVEL_TEXT.manage}</strong><span class="faint-sm">${escapeHtml(LEVEL_LINE.manage)}</span></span></label>
       <label class="mt-3">Also</label>
       ${disk ? `<label class="share-choice"><input type="checkbox" data-share-unlock />
-        <span class="share-choice-text"><strong>${escapeHtml(UNLOCK_TITLE)}</strong><span class="faint-sm">${escapeHtml(UNLOCK_LINE)}</span></span></label>` : ""}
+        <span class="share-choice-text"><strong>${escapeHtml(UNLOCK_TITLE)}</strong><span class="faint-sm">${escapeHtml(UNLOCK_LINE)}</span><span class="faint-sm" data-share-unlock-warning>${escapeHtml(UNLOCK_WARNING)}</span></span></label>` : ""}
       <label class="share-choice"><input type="checkbox" data-share-data />
         <span class="share-choice-text"><strong>${escapeHtml(DATA_TITLE)}</strong><span class="faint-sm">${escapeHtml(DATA_LINE)}</span></span></label>
       <p class="modal-error err-text hidden" data-share-error></p>

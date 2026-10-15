@@ -10,6 +10,7 @@ import {
   verifyAppAccessGrant,
   verifyServerShareGrant,
   verifyServerShareRevoke,
+  verifyServerShareUpdate,
 } from "@flagship/protocol";
 import { InMemoryStorage } from "@flagship/storage";
 import {
@@ -19,6 +20,7 @@ import {
   handleLeaveServerShare,
   handleListServerShares,
   handleRevokeServerShare,
+  handleServerSharePush,
   handleServerShareUnlock,
   handleShareInbox,
 } from "@flagship/control-plane";
@@ -62,12 +64,17 @@ async function world() {
     serverDomain: S,
     verifyOwnerGrant: (g, sig) => verifyServerShareGrant(g, sig, owner.publicKey),
   });
+  const updates: Array<{ level: string; memberPubHex: string; body: Record<string, any> }> = [];
   const box = buildShares({
     serverDomain: S,
     store,
     sessions: new ShareSessionStore(null),
     activity: new ActivityLog(null),
     verifyOwnerRevoke: (r, sig) => verifyServerShareRevoke(r, sig, owner.publicKey),
+    serverUpdate: async (caller, body) => {
+      updates.push({ level: caller.level, memberPubHex: caller.memberPubHex, body: body ?? {} });
+      return { status: 202, body: { ok: true, accepted: true, targetCommit: (body?.update as { targetCommit?: string })?.targetCommit } };
+    },
     log: () => {},
   });
   const gate = box.gate({ check: () => ({ status: 401, body: "owner session required" }) });
@@ -99,6 +106,7 @@ async function world() {
       else if (method === "GET" && (m = p.match(/^\/api\/server-shares\/([0-9a-f]{32})$/))) r = await handleGetServerShare(com, m[1]!, token);
       else if (method === "POST" && (m = p.match(/^\/api\/server-shares\/([0-9a-f]{32})\/accept$/))) r = await handleAcceptServerShare(com, m[1]!, token, body);
       else if (method === "POST" && (m = p.match(/^\/api\/server-shares\/([0-9a-f]{32})\/leave$/))) r = await handleLeaveServerShare(com, m[1]!, token, body);
+      else if (method === "POST" && (m = p.match(/^\/api\/server-shares\/([0-9a-f]{32})\/push$/))) r = await handleServerSharePush(com, m[1]!, token, body);
       else if (method === "POST" && p === "/api/share-inbox") r = await handleShareInbox(com, body);
       else if (method === "GET" && p === `/api/server/${S}/sealed-luks-key`) r = { status: 200, body: { sealedKey: sealedLuks } };
       return r ? reply(r.status, r.body) : reply(404, { error: "no route" });
@@ -155,7 +163,7 @@ async function world() {
 
   const depsA = { fetch: fetchImpl, apex: APEX, boot: BOOT, umk: umkA, username: "alice", boxFetch };
   const depsB = { fetch: fetchImpl, apex: APEX, boot: BOOT, umk: umkB, username: "bob" };
-  return { storage, store, box, diskKey, log, boxPosts, accessPosts, boot, fetchImpl, depsA, depsB };
+  return { storage, store, box, diskKey, log, boxPosts, accessPosts, boot, updates, fetchImpl, depsA, depsB };
 }
 
 type World = Awaited<ReturnType<typeof world>>;
@@ -398,6 +406,77 @@ describe("share this server — start-up approval", () => {
   });
 });
 
+function memoryStorage() {
+  const m = new Map<string, string>();
+  return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v), removeItem: (k: string) => void m.delete(k) };
+}
+
+describe("share this server — start-up notices", () => {
+  const TOKEN = JSON.stringify({ endpoint: "https://push.example/b", keys: { p256dh: "04", auth: "aa" } });
+
+  it("registers this browser for a share with unlock at boot, and drops it when turned off", async () => {
+    const w = await world();
+    const { entry } = await sharedWithB(w);
+    const storage = memoryStorage();
+    const deps = { ...w.depsB, storage, providerToken: async () => TOKEN };
+    expect(await shares.setSharePush(entry, true, deps)).toEqual({ ok: true, on: true });
+    const targets = await w.storage.serverShares.pushTargetsForServer(S);
+    expect(targets).toEqual([expect.objectContaining({ platform: "webpush", providerToken: TOKEN })]);
+    expect(shares.sharePushState(entry.shareId, storage)).toMatchObject({ platform: "webpush" });
+
+    expect(await shares.setSharePush(entry, false, deps)).toEqual({ ok: true, on: false });
+    expect(await w.storage.serverShares.pushTargetsForServer(S)).toEqual([]);
+    expect(shares.sharePushState(entry.shareId, storage)).toBeNull();
+  });
+
+  it("says plainly when the owner hasn't handed over start-up approval", async () => {
+    const w = await world();
+    const { entry } = await sharedWithB(w, { unlockAtBoot: false });
+    const storage = memoryStorage();
+    await expect(shares.setSharePush(entry, true, { ...w.depsB, storage, providerToken: async () => TOKEN })).rejects.toMatchObject({
+      code: "unlock-not-shared",
+      message: shares.NOTIFY_NOT_ALLOWED,
+    });
+    expect(shares.sharePushState(entry.shareId, storage)).toBeNull();
+  });
+
+  it("leaving forgets this browser's registration", async () => {
+    const w = await world();
+    const { entry } = await sharedWithB(w);
+    const storage = memoryStorage();
+    await shares.setSharePush(entry, true, { ...w.depsB, storage, providerToken: async () => TOKEN });
+    await shares.leaveShare(entry, { ...w.depsB, storage });
+    expect(shares.sharePushState(entry.shareId, storage)).toBeNull();
+    expect(await w.storage.serverShares.pushTargetsForServer(S)).toEqual([]);
+  });
+});
+
+describe("share this server — updates at manage level", () => {
+  it("signs the update with the member key and sends it over the share session", async () => {
+    const w = await world();
+    const { created, entry } = await sharedWithB(w);
+    const r = await shares.orderShareUpdate(entry, { targetCommit: "2".repeat(40), fromCommit: "1".repeat(40) }, w.depsB);
+    expect(r).toMatchObject({ accepted: true });
+    const [u] = w.updates;
+    const memberPub = deriveShareMemberKey({ seed: umkB }, created.shareId).publicKey;
+    expect(u.level).toBe("manage");
+    expect(u.body.update).toMatchObject({ serverDomain: S, shareId: created.shareId, memberPubHex: hex(memberPub), targetCommit: "2".repeat(40), fromCommit: "1".repeat(40) });
+    expect(u.body.update.nonce).toMatch(/^[0-9a-f]{64}$/);
+    expect(verifyServerShareUpdate(u.body.update, fromHex(u.body.signature), memberPub)).toBe(true);
+    expect(verifyServerShareUpdate(u.body.update, fromHex(u.body.signature), owner.publicKey)).toBe(false);
+  });
+
+  it("is refused at view level, in words", async () => {
+    const w = await world();
+    const { entry } = await sharedWithB(w, { level: "view" });
+    await expect(shares.orderShareUpdate(entry, { targetCommit: "2".repeat(40), fromCommit: "1".repeat(40) }, w.depsB)).rejects.toMatchObject({
+      code: "manage-only",
+      message: "Only someone who can manage this server can update it.",
+    });
+    expect(w.updates).toEqual([]);
+  });
+});
+
 describe("share links at boot", () => {
   const S_ID = "ab".repeat(16);
   const K = "cd".repeat(32);
@@ -454,8 +533,21 @@ describe("the shared server's page", () => {
     for (const owned of OWNER_ONLY) expect(html).not.toContain(owned);
   });
 
+  it("at manage on an updatable box: the update card, the notices switch and the members-only hint", () => {
+    const withModes = [...apps, { serviceId: "photos", slug: "photos", url: "https://photos.example", status: "running", accessMode: "members-only" }];
+    const html = sharedServerHtml({ entry, me: { level: "manage", unlockAtBoot: true, seeAppData: false, canUpdate: true }, detail, apps: withModes });
+    expect(html).toContain("shared-release-card");
+    expect(html).toContain(shares.NOTIFY_TITLE);
+    expect(html).toContain("Flagship's service know this device helps with this server");
+    expect(html.match(/data-members-only/g)).toHaveLength(1);
+    expect(html).toContain("Members only. You need an invite to use this app.");
+    for (const owned of OWNER_ONLY) expect(html).not.toContain(owned);
+  });
+
   it("at view: no access-list editor and no start-up card", () => {
-    const html = sharedServerHtml({ entry, me: { level: "view", unlockAtBoot: false, seeAppData: false }, detail, apps });
+    const html = sharedServerHtml({ entry, me: { level: "view", unlockAtBoot: false, seeAppData: false, canUpdate: false }, detail, apps });
+    expect(html).not.toContain("shared-release-card");
+    expect(html).not.toContain(shares.NOTIFY_TITLE);
     expect(html).not.toContain("Internet access");
     expect(html).not.toContain("Approve start-up");
     expect(html).toContain("Leave home");
@@ -525,5 +617,15 @@ describe("the owner's Shared with card", () => {
     expect(html).toContain("Waiting for <strong>Kim</strong> to open the link");
     expect(html).toContain('data-share-remove="' + "a".repeat(32));
     expect(html).toContain("Can approve this server's start-up");
+  });
+
+  it("warns, where unlock at boot is handed over, that a copy can't be taken back", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const src = readFileSync(resolve(__dirname, "../public/webapp/views/server-sharing.js"), "utf8");
+    expect(shares.UNLOCK_WARNING).toBe(
+      "Only give this to someone you'd give a house key. Ending the share deletes their copy, but they could have kept one.",
+    );
+    expect(src.match(/UNLOCK_WARNING/g)!.length).toBeGreaterThanOrEqual(3);
   });
 });

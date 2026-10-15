@@ -20,10 +20,17 @@ import { deriveHouseholdKeyFromSeed, signWithIrk, bytesToHex, hexToBytes } from 
 export const LEVEL_TEXT = Object.freeze({ view: "Can view", manage: "Can manage" });
 export const LEVEL_LINE = Object.freeze({
   view: "See the server's status, monitoring and apps.",
-  manage: "Also build apps with AI, accept app updates and change what apps can reach on the internet.",
+  manage: "Also build apps with AI, accept app updates, update the server and change what apps can reach on the internet.",
 });
 export const UNLOCK_TITLE = "Can approve this server's start-up";
 export const UNLOCK_LINE = "Their phone gets a copy of the disk key.";
+export const UNLOCK_WARNING =
+  "Only give this to someone you'd give a house key. Ending the share deletes their copy, but they could have kept one.";
+export const NOTIFY_TITLE = "Notify this device when it needs to start";
+export const NOTIFY_LINE =
+  "Turning this on lets Flagship's service know this device helps with this server, so it can wake you. The notice itself names no server.";
+export const NOTIFY_NOT_ALLOWED = "The owner hasn't let you approve this server's start-up.";
+export const MEMBERS_ONLY_HINT = "Members only. You need an invite to use this app.";
 export const DATA_TITLE = "Can see app data";
 export const DATA_LINE = "They can open each app's Database section.";
 
@@ -802,6 +809,7 @@ export async function leaveShare(entry, deps = {}) {
   const comOk = comSide.status === "fulfilled" && (comSide.value.ok || comSide.value.status === 404);
   if (!boxOk && !comOk) throw new ShareError("Couldn't leave right now. Check your connection and try again.", "leave-failed");
   forgetShareSession(entry.shareId);
+  forgetSharePush(entry.shareId, deps.storage === undefined ? defaultStorage() : deps.storage);
   if (entry.entryId) await deleteInboxEntry(entry.entryId, deps).catch(() => {});
   return { box: boxOk, com: comOk };
 }
@@ -923,4 +931,142 @@ export async function approveShareStartup(entry, req, deps = {}) {
   );
   if (!res.ok) throw new ShareError(errText(res, "Couldn't approve the start-up."), "approve-failed", res.status);
   return { ok: true };
+}
+
+// ── Start-up notices (B, part of unlock at boot) ──────────────────────
+
+const PUSH_KEY = (shareId) => `flagship.sharePush.v1.${shareId}`;
+
+function defaultStorage() {
+  try {
+    return globalThis.localStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** This device's registration for a share's start-up notices, or null. */
+export function sharePushState(shareId, storage = defaultStorage()) {
+  try {
+    const v = JSON.parse(storage?.getItem(PUSH_KEY(shareId)) ?? "null");
+    return v && typeof v.platform === "string" && /^[0-9a-f]{64}$/.test(v.tokenSha256 ?? "") ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function forgetSharePush(shareId, storage = defaultStorage()) {
+  try {
+    storage?.removeItem(PUSH_KEY(shareId));
+  } catch {
+    /* nothing stored */
+  }
+}
+
+/**
+ * Turn this device's start-up notices for a share on or off: #10 signed by
+ * the member key, posted to `.com` with the link token. On sends this
+ * browser's Web Push subscription; off withdraws the one sent before.
+ * `deps.providerToken()` and `deps.storage` are for tests.
+ */
+export async function setSharePush(entry, on, deps = {}) {
+  const d = ctx(deps);
+  const storage = deps.storage === undefined ? defaultStorage() : deps.storage;
+  const member = await memberKey(d, entry.shareId);
+  const prev = sharePushState(entry.shareId, storage);
+  let platform = "webpush";
+  let providerToken = null;
+  let tokenSha256;
+  if (on) {
+    const get = deps.providerToken ?? (async () => (await import("./push.js")).webPushProviderToken());
+    try {
+      providerToken = await get();
+    } catch (e) {
+      throw new ShareError(`This browser can't show notifications: ${humanError(e)}`, "no-push");
+    }
+    tokenSha256 = await ss.shareSha256Hex(providerToken);
+  } else {
+    if (!prev) return { ok: true, on: false };
+    platform = prev.platform;
+    tokenSha256 = prev.tokenSha256;
+  }
+  const push = {
+    serverDomain: lower(entry.serverDomain),
+    shareId: entry.shareId,
+    memberPubHex: member.pubHex,
+    op: on ? "put" : "delete",
+    platform,
+    tokenSha256,
+    issuedAt: d.now(),
+  };
+  const signature = await sigHex(ss.signServerSharePush(push, member.seed));
+  const token = await ss.shareTokenFromSecret(hexToBytes(entry.secretHex));
+  const res = await postJson(
+    d,
+    `${d.apex}/api/server-shares/${entry.shareId}/push`,
+    { push, signature, ...(on ? { providerToken } : {}) },
+    { "x-flagship-share-token": token },
+  );
+  if (!on) {
+    forgetSharePush(entry.shareId, storage);
+    if (!res.ok && res.status !== 404 && res.status !== 410) {
+      throw new ShareError(errText(res, "Couldn't turn notices off. Try again."), "push-failed", res.status);
+    }
+    return { ok: true, on: false };
+  }
+  if (res.status === 403 && res.body?.code === "unlock-not-shared") {
+    throw new ShareError(NOTIFY_NOT_ALLOWED, "unlock-not-shared", 403);
+  }
+  if (!res.ok) throw new ShareError(errText(res, "Couldn't turn notices on. Try again."), "push-failed", res.status);
+  try {
+    storage?.setItem(PUSH_KEY(entry.shareId), JSON.stringify({ platform, tokenSha256 }));
+  } catch {
+    /* private mode: the switch shows off next time */
+  }
+  return { ok: true, on: true };
+}
+
+// ── Server updates (B at manage level) ────────────────────────────────
+
+const UPDATE_ERRORS = {
+  busy: "An update is already underway.",
+  "pending-verify": "An update is already underway.",
+  "from-commit-mismatch": "The server changed version. Refresh and try again.",
+  "manage-only": "Only someone who can manage this server can update it.",
+  stale: "Your device's clock looks off. Check it and try again.",
+};
+
+/**
+ * Move a shared server to an endorsed release: #11 signed by the member key,
+ * straight to the box over the share session. The box checks the release's
+ * endorsement as it does for the owner; its verdict shows in server-detail's
+ * `lastUpdate`.
+ */
+export async function orderShareUpdate(entry, { targetCommit, fromCommit }, deps = {}) {
+  const d = ctx(deps);
+  const member = await memberKey(d, entry.shareId);
+  const random = deps.random ?? ((n) => crypto.getRandomValues(new Uint8Array(n)));
+  const update = {
+    serverDomain: lower(entry.serverDomain),
+    shareId: entry.shareId,
+    memberPubHex: member.pubHex,
+    targetCommit: lower(targetCommit),
+    fromCommit: lower(fromCommit),
+    nonce: bytesToHex(random(32)),
+    issuedAt: d.now(),
+  };
+  let signature;
+  try {
+    signature = await sigHex(ss.signServerShareUpdate(update, member.seed));
+  } catch {
+    throw new ShareError("This server hasn't reported its version yet. Refresh and try again.", "bad-order");
+  }
+  const client = deps.client ?? shareBoxClient(entry, deps);
+  try {
+    return await client.fetch("/api/shares/update", { method: "POST", body: JSON.stringify({ update, signature }) });
+  } catch (e) {
+    const code = e?.body?.code;
+    const text = UPDATE_ERRORS[code] ?? (typeof e?.body?.error === "string" ? e.body.error : humanError(e));
+    throw new ShareError(text, code ?? "update-failed", e?.status);
+  }
 }

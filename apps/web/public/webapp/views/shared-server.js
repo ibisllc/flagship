@@ -26,16 +26,23 @@ import {
 import {
   DATA_TITLE,
   LEVEL_TEXT,
+  MEMBERS_ONLY_HINT,
+  NOTIFY_LINE,
+  NOTIFY_TITLE,
   UNLOCK_TITLE,
   approveShareStartup,
   fetchShareStartups,
   leaveShare,
   loadSharedWithMe,
+  orderShareUpdate,
+  setSharePush,
   shareBoxClient,
   shareErrorText,
   shareMemberSigner,
+  sharePushState,
   signInToShare,
 } from "../lib/serverShares.js";
+import { describeLastUpdate, groupReleases, releaseCatalogPath } from "../lib/serverUpdate.js";
 
 registerView("view-shared-server", { tab: "home" });
 
@@ -177,8 +184,32 @@ function leaveHtml(name) {
       </div>`;
 }
 
+function notifyHtml(entry) {
+  const on = !!sharePushState(entry.shareId);
+  return `
+      <div class="card" id="shared-notify-card">
+        <label class="share-choice"><input type="checkbox" id="shared-notify-toggle" ${on ? "checked" : ""} />
+          <span class="share-choice-text"><strong>${escapeHtml(NOTIFY_TITLE)}</strong><span class="faint-sm">${escapeHtml(NOTIFY_LINE)}</span></span></label>
+      </div>`;
+}
+
+function updateCardHtml(detail) {
+  const current = typeof detail?.currentCommit === "string" ? detail.currentCommit.slice(0, 8) : "—";
+  const last = describeLastUpdate(detail?.lastUpdate);
+  return `
+      <h2 class="mt-4">Update</h2>
+      <div class="card" id="shared-release-card">
+        <div class="row"><span class="label">Running</span><span class="value mono">${escapeHtml(current)}</span></div>
+        <div id="shared-release-offer"><p class="faint-sm mt-1">Checking for releases…</p></div>
+        ${last ? `<p class="note small mt-1" data-shared-last-update>${escapeHtml(last)}</p>` : ""}
+      </div>`;
+}
+
+const releaseName = (r) => (typeof r?.tag === "string" && r.tag ? r.tag : String(r?.commit ?? "").slice(0, 8));
+
 function appRowHtml(app, raw, canManage) {
   const wants = canManage && hasPendingInternetRequest(raw) ? ` <span class="pill warn">${escapeHtml(ACCESS_PENDING_BADGE)}</span>` : "";
+  const membersOnly = raw?.accessMode === "members-only" ? `<p class="faint-sm" data-members-only>${escapeHtml(MEMBERS_ONLY_HINT)}</p>` : "";
   return `
         <div class="shared-app" data-shared-app="${escapeHtml(app.serviceId)}">
           <div class="shared-app-head">
@@ -186,6 +217,7 @@ function appRowHtml(app, raw, canManage) {
             ${canManage ? `<button class="secondary btn-xs" data-access-open="${escapeHtml(app.serviceId)}">Internet access</button>` : ""}
           </div>
           ${app.url ? `<a class="muted-sm mono text-xs truncate" href="${escapeHtml(app.url)}" target="_blank" rel="noopener">${escapeHtml(app.url.replace(/^https?:\/\//, ""))}</a>` : ""}
+          ${membersOnly}
           <div class="hidden mt-2" data-access-editor="${escapeHtml(app.serviceId)}"></div>
         </div>`;
 }
@@ -205,6 +237,7 @@ export function sharedServerHtml({ entry, me, detail, apps, startups = [] }) {
   const raw = new Map((apps ?? []).map((a) => [a?.serviceId, a]));
   return `
       ${startupCardHtml(name, startups)}
+      ${me.unlockAtBoot ? notifyHtml(entry) : ""}
       <div class="card">
         <div class="row"><span class="label">Address</span><span class="value">${escapeHtml(entry.serverDomain)}</span></div>
         <div class="row"><span class="label">Version</span><span class="value">${escapeHtml(
@@ -226,6 +259,7 @@ export function sharedServerHtml({ entry, me, detail, apps, startups = [] }) {
       <div class="card" id="shared-apps-card">
         ${rows.length ? rows.map((a) => appRowHtml(a, raw.get(a.serviceId), canManage)).join("") : `<p class="faint-sm">No apps on this server yet.</p>`}
       </div>
+      ${canManage && me.canUpdate === true ? updateCardHtml(detail) : ""}
       ${leaveHtml(name)}`;
 }
 
@@ -294,6 +328,8 @@ async function renderSharedServer() {
   if (!onPage(my)) return;
   root.innerHTML = sharedServerHtml({ entry, me, detail, apps, startups });
   wirePage(entry, my, { canManage: me.level === "manage", startups, apps });
+  wireNotify(entry);
+  if (me.level === "manage" && me.canUpdate === true) void loadUpdateOffer(entry, client, detail, my);
   startMetrics(entry, client, my);
   if (me.unlockAtBoot) pollStartups(entry, my);
 }
@@ -328,6 +364,62 @@ function wirePage(entry, my, { canManage, startups, apps = [] }) {
       const app = serverAppRows(apps, []).find((a) => a.serviceId === id);
       void toggleAccessEditor(entry, id, app?.name ?? id);
     });
+  });
+}
+
+function wireNotify(entry) {
+  const box = $("shared-notify-toggle");
+  if (!box) return;
+  box.addEventListener("change", async () => {
+    const on = box.checked;
+    box.disabled = true;
+    try {
+      await setSharePush(entry, on);
+      toast(on ? "This device will be told when it needs to start" : "Notices turned off", "ok");
+    } catch (e) {
+      box.checked = !on;
+      toast(shareErrorText(e), "err");
+    } finally {
+      box.disabled = false;
+    }
+  });
+}
+
+/** The newest newer release, with an Update button; the box checks its endorsement. */
+async function loadUpdateOffer(entry, client, detail, my) {
+  const slot = $("shared-release-offer");
+  if (!slot) return;
+  let latest = null;
+  try {
+    latest = groupReleases(await client.fetch(releaseCatalogPath())).latest;
+  } catch {
+    if (onPage(my)) slot.innerHTML = `<p class="faint-sm mt-1">Couldn't list releases right now.</p>`;
+    return;
+  }
+  if (!onPage(my)) return;
+  if (!latest || latest.commit === detail?.currentCommit) {
+    slot.innerHTML = `<p class="faint-sm mt-1">This server runs the newest release.</p>`;
+    return;
+  }
+  const name = entry.serverName || entry.serverDomain;
+  slot.innerHTML = `<button class="full-width mt-2" id="shared-release-btn">Update to ${escapeHtml(releaseName(latest))}</button>`;
+  $("shared-release-btn")?.addEventListener("click", async (ev) => {
+    const ok = await inlineConfirm({
+      title: `Update ${name}?`,
+      message: `${name} restarts on the new release. Only releases Flagship's maintainers endorsed will install.`,
+      okLabel: "Update",
+    });
+    if (!ok) return;
+    const btn = ev.currentTarget;
+    if (btn) btn.disabled = true;
+    try {
+      await orderShareUpdate(entry, { targetCommit: latest.commit, fromCommit: detail.currentCommit });
+      toast(`Updating ${name}. It restarts in a few minutes.`, "ok");
+      slot.innerHTML = `<p class="faint-sm mt-1">Updating to ${escapeHtml(releaseName(latest))}…</p>`;
+    } catch (e) {
+      toast(shareErrorText(e), "err");
+      if (btn) btn.disabled = false;
+    }
   });
 }
 
