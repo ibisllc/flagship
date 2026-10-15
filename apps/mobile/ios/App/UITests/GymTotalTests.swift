@@ -72,13 +72,13 @@ final class GymTotalTests: XCTestCase {
     }
 
     /// From the seeded Home, open the first server's ("Home") detail. Returns
-    /// once the detail's nav bar ("Server") is shown.
+    /// once the pushed server page (titled "Home", with a back button) is shown.
     private func openHomePodDetail(_ app: XCUIApplication) {
         let row = podRow(app, named: "Home")
         XCTAssertTrue(row.waitForExistence(timeout: 15), "The seeded Home pod row should be present.")
         row.tap()
         XCTAssertTrue(
-            app.navigationBars["Server"].waitForExistence(timeout: 15),
+            app.serverPageBackButton(named: "Home").waitForExistence(timeout: 15),
             "Tapping the seeded online pod should push the server-detail screen."
         )
     }
@@ -191,9 +191,11 @@ final class GymTotalTests: XCTestCase {
         gymShot(app, "build-mcp")
     }
 
-    /// chooser → scratch → the AI-key step (BuildKeyScreen) renders. With NO
-    /// saved keys it offers the "use a different key" affordance. D2-B2 +
-    /// D7-light: the AI-key step is present before the box model runs.
+    /// chooser → scratch with Flagship Inference available and no key of the
+    /// owner's own: the AI-key step picks Flagship Inference by itself and
+    /// lands on Describe with its model menu. Back on the AI-key step,
+    /// Flagship Inference is listed first and a key of one's own can be added.
+    /// D2-B2 + D7-light.
     func test_buildKeyAiStepRenders() throws {
         let app = launch(tab: "apps")
         let build = app.buttons["Build another service"]
@@ -202,12 +204,17 @@ final class GymTotalTests: XCTestCase {
         let scratch = app.buttons["build-src-scratch"]
         XCTAssertTrue(scratch.waitForExistence(timeout: 15))
         scratch.tap()
-        // The AI-key step's nav title is "AI Key". With saved keys it offers
-        // "Add an API key"; with none, the add form is already open.
         XCTAssertTrue(
-            app.navigationBars["AI Key"].waitForExistence(timeout: 15),
-            "Scratch should route through the AI-key step."
+            app.navigationBars["New Service"].waitForExistence(timeout: 15),
+            "With free AI and no key of its own, scratch goes straight to Describe."
         )
+        let menu = app.buttons["describe-model-menu"]
+        XCTAssertTrue(menu.waitForExistence(timeout: 5), "Describe offers the model menu.")
+        XCTAssertTrue(menu.label.hasPrefix("Model: "), "Got \(menu.label)")
+        app.navigationBars["New Service"].buttons["BackButton"].tap()
+        XCTAssertTrue(app.navigationBars["AI Key"].waitForExistence(timeout: 10), "Back is the AI-key step.")
+        XCTAssertTrue(app.descendants(matching: .any)["build-key-free-ai"].waitForExistence(timeout: 10),
+                      "Flagship Inference is offered on the AI-key step.")
         XCTAssertTrue(
             app.buttons["build-key-add"].exists || app.secureTextFields["ai-key-field"].exists
                 || app.otherElements["ai-key-field"].exists,

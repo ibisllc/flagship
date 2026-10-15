@@ -19,9 +19,11 @@ import XCTest
 /// DETECT-AND-SKIP (the green-today property): the gym RUNNER probes
 /// `<control-apex>/api/health` and only runs this class's scenarios when the env
 /// is reachable (tools/gym/src/runner.ts gates every `backend:"live"` scenario on
-/// `liveEnvReachable`). The iOS adapter additionally fails a 0-test run, so an
-/// absent/misnamed method can never false-pass. So there is no in-test skip here:
-/// if a method runs at all, the env was reachable and a real assertion must hold.
+/// `liveEnvReachable`) and hands the apex to the test runner as
+/// `TEST_RUNNER_GYM_LIVE_CONTROL_APEX`. A run without it (a whole-target
+/// `xcodebuild test`, the mock-only gym) SKIPS this class rather than failing
+/// against a backend nobody pointed it at. With the apex set, a real assertion
+/// must hold.
 ///
 /// SCOPE — owner side, single-device (#102). These drive the ADMIN UI of the
 /// service-access gating + web-experience (QR-login) flows
@@ -51,6 +53,9 @@ final class GymLiveTests: XCTestCase {
     }
 
     override func setUpWithError() throws {
+        let env = ProcessInfo.processInfo.environment["GYM_LIVE_CONTROL_APEX"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        try XCTSkipIf(env.isEmpty, "GYM_LIVE_CONTROL_APEX is unset: no live gym env to drive.")
         // The gym runner invokes each method as its own `-only-testing:` scenario
         // (independent verdict), and each launches the app fresh, so keep going
         // after a failure for a developer's whole-class sanity run.

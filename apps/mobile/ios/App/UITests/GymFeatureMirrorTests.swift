@@ -56,7 +56,7 @@ final class GymFeatureMirrorTests: XCTestCase {
         XCTAssertTrue(row.waitForExistence(timeout: 15), "The \(name) pod row should be present.")
         row.tap()
         XCTAssertTrue(
-            app.navigationBars["Server"].waitForExistence(timeout: 15),
+            app.serverPageBackButton(named: name).waitForExistence(timeout: 15),
             "Tapping \(name) should push the server-detail screen."
         )
     }

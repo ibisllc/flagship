@@ -206,14 +206,18 @@ const TOTAL: readonly Scenario[] = [
   ),
   iosTotal(
     "ios-total-ai-key-step",
-    "D2-B2 + D7-light: scratch routes through the AI-key step (the use-a-different-key affordance is present).",
+    "D2-B2 + D7-light: with Flagship Inference and no own key, scratch lands on Describe (model menu); the AI-key step lists Flagship Inference and a way to add a key.",
     "FlagshipAppUITests/GymTotalTests/test_buildKeyAiStepRenders",
     {
       steps: [
         { kind: "launch", describe: "Chooser → scratch." },
-        { kind: "assert", describe: "AI-key step.", handle: "build-key-different" },
+        { kind: "assert", describe: "Describe with the model menu.", handle: "describe-model-menu" },
+        { kind: "assert", describe: "Back: the AI-key step.", handle: "build-key-free-ai" },
       ],
-      assertions: [{ describe: "Use-a-different-key affordance present", handle: "build-key-different", expect: "present" }],
+      assertions: [
+        { describe: "Model menu on Describe", handle: "describe-model-menu", expect: "present" },
+        { describe: "Flagship Inference on the key step", handle: "build-key-free-ai", expect: "present" },
+      ],
       screenshots: [shot("build-key", "The AI-key step.")],
       dimension: "D2",
     },
@@ -417,16 +421,16 @@ const TOTAL_DETAIL: readonly Scenario[] = [
     },
   ),
   iosTotal(
-    "ios-total-detail-decommission",
-    "D1/D5: a dead box's detail offers the decommission (free-the-name) card.",
-    "FlagshipAppUITests/GymTotalDetailTests/test_serverDetailDeadServerDecommissionCard",
+    "ios-total-detail-delete-dead",
+    "D1/D5: a dead box's detail still offers Delete (the box never answers, the page doesn't need it to).",
+    "FlagshipAppUITests/GymTotalDetailTests/test_serverDetailDeadServerDeleteButton",
     {
       steps: [
         { kind: "launch", describe: "Open the dead box (Attic) detail (-smoke-dead)." },
-        { kind: "assert", describe: "Decommission card.", handle: "sd-decommission-dead-server" },
+        { kind: "assert", describe: "Delete button.", handle: "sd-delete-server" },
       ],
-      assertions: [{ describe: "Decommission card present", handle: "sd-decommission-dead-server", expect: "present" }],
-      screenshots: [shot("server-detail-decommission", "The decommission card.")],
+      assertions: [{ describe: "Delete offered", handle: "sd-delete-server", expect: "present" }],
+      screenshots: [shot("server-detail-delete", "The delete button.")],
       dimension: "D1",
     },
   ),
@@ -762,6 +766,233 @@ const FEATURE_MIRRORS: readonly Scenario[] = [
   ),
 ];
 
+// ───── total-gym Tier-1: the October 2026 features (GymOctoberTests) ─────
+// Handles are shared with Android (GymOctoberTest) and the webapp where the
+// surfaces name them alike; see docs/ui-test-gym.md §8.
+
+const O = "FlagshipAppUITests/GymOctoberTests/";
+
+const OCTOBER: readonly Scenario[] = [
+  iosTotal(
+    "ios-oct-onboarding-walk",
+    "D1-A1: Welcome → handle → Open account → skip backup → empty Home → Add your first server → designer → delivery chooser, against the mock clients (-smoke-onboarding).",
+    "FlagshipAppUITests/OnboardingSmokeTests/test_coldLaunchReachesDeliveryChooser",
+    {
+      steps: [
+        { kind: "tap", describe: "Create your account → Continue.", handle: "open-account-continue" },
+        { kind: "tap", describe: "Skip the backup.", handle: "secure-account-skip-anyway" },
+        { kind: "tap", describe: "Add your first server.", handle: "home-add-first-server" },
+        { kind: "assert", describe: "Delivery chooser.", handle: "cs-delivery-pair" },
+      ],
+      assertions: [{ describe: "Delivery chooser offers pairing", handle: "cs-delivery-pair", expect: "present" }],
+      screenshots: [shot("onboarding-delivery", "The delivery chooser.")],
+      dimension: "D1",
+    },
+  ),
+  iosTotal(
+    "ios-oct-access-alert-answer",
+    "D5: the app-wide '<App> wants to reach <host>' sheet (-smoke-access-alert): Allow then Deny sign the list and confirm; then nothing covers Home.",
+    O + "test_appAccessAlertAllowThenDeny",
+    {
+      steps: [
+        { kind: "assert", describe: "The sheet asks.", handle: "access-alert-title" },
+        { kind: "tap", describe: "Allow.", handle: "access-alert-allow" },
+        { kind: "assert", describe: "Answered.", handle: "access-alert-done" },
+        { kind: "tap", describe: "Deny the next host.", handle: "access-alert-deny" },
+      ],
+      assertions: [
+        { describe: "Allow confirmed", handle: "access-alert-done", expect: "present" },
+        { describe: "Home usable afterwards", handle: "home-add-server", expect: "enabled" },
+      ],
+      screenshots: [shot("access-alert-ask", "The question."), shot("access-alert-allowed", "The answer.")],
+      dimension: "D5",
+    },
+  ),
+  iosTotal(
+    "ios-oct-access-alert-not-now",
+    "D5: 'Not now' closes the access sheet and leaves the request on the box.",
+    O + "test_appAccessAlertNotNowCloses",
+    {
+      steps: [{ kind: "tap", describe: "Not now.", handle: "access-alert-not-now" }],
+      assertions: [{ describe: "Sheet closed", handle: "access-alert-title", expect: "absent" }],
+      screenshots: [shot("access-alert-closed", "Home after Not now.")],
+      dimension: "D5",
+    },
+  ),
+  iosTotal(
+    "ios-oct-access-list-service-page",
+    "D6: the service page's Internet access section answers a waiting host; the signed list then allows it.",
+    O + "test_serviceAccessPendingAllowFromServicePage",
+    {
+      steps: [
+        { kind: "tap", describe: "Services → Plants → Allow.", handle: "service-detail-access-allow" },
+        { kind: "tap", describe: "View the list.", handle: "service-detail-access-view-list" },
+        { kind: "assert", describe: "The editor holds the allow rule.", handle: "access-list-editor" },
+      ],
+      assertions: [{ describe: "List allows the host", handle: "access-list-editor", expect: "present" }],
+      screenshots: [shot("service-access-pending", "Waiting hosts."), shot("service-access-allowed", "Answered.")],
+      dimension: "D6",
+    },
+  ),
+  iosTotal(
+    "ios-oct-access-control-ranks",
+    "D3: Access control shows Open to all, Members (4) with ranks, and switching to Members only (confirmed) takes effect (-smoke-access-fixture).",
+    O + "test_accessControlModeAndRanks",
+    {
+      steps: [
+        { kind: "tap", describe: "Plants → Access control.", handle: "service-detail-open-access" },
+        { kind: "assert", describe: "Ranks listed.", handle: "service-access-members-title" },
+        { kind: "tap", describe: "Members only → confirm.", handle: "service-access-restrict-toggle" },
+      ],
+      assertions: [
+        { describe: "Members (4)", handle: "service-access-members-title", expect: "present" },
+        { describe: "Members only status", handle: "service-access-mode-status", expect: "present" },
+      ],
+      screenshots: [shot("access-control-open", "Open to all."), shot("access-control-members-only", "Members only.")],
+      dimension: "D3",
+    },
+  ),
+  iosTotal(
+    "ios-oct-server-order-leader-pending",
+    "D1: Make leader on Office's page; until the box confirms, the page and Home show the leader in gray.",
+    O + "test_makeLeaderWaitsForTheServerToConfirm",
+    {
+      steps: [
+        { kind: "tap", describe: "Office → Make leader.", handle: "sd-make-leader" },
+        { kind: "assert", describe: "Waiting to confirm.", handle: "sd-leader-pending" },
+        { kind: "assert", describe: "Gray Leader badge on Home.", handle: "leader-badge-pending" },
+      ],
+      assertions: [{ describe: "Leader pending until ack", handle: "sd-leader-pending", expect: "present" }],
+      screenshots: [shot("server-order-pending", "Waiting."), shot("server-order-home-gray", "Gray badge.")],
+      dimension: "D1",
+    },
+  ),
+  iosTotal(
+    "ios-oct-flagship-inference-credits",
+    "D3: Settings → AI keys lists Flagship Inference first with '1,840 free credits left · 500 added each week'.",
+    O + "test_flagshipInferenceCreditsInAiKeys",
+    {
+      steps: [{ kind: "assert", describe: "Credits line.", handle: "free-ai-status" }],
+      assertions: [{ describe: "Credits shown", handle: "free-ai-status", expect: "present" }],
+      screenshots: [shot("flagship-inference-credits", "The credits line.")],
+      dimension: "D3",
+    },
+  ),
+  iosTotal(
+    "ios-oct-api-key-create",
+    "D6: an app's API keys section lists its keys; creating one shows the secret once.",
+    O + "test_apiKeyCreateShowsTheSecretOnce",
+    {
+      steps: [
+        { kind: "tap", describe: "Create a key.", handle: "service-detail-api-keys-create" },
+        { kind: "assert", describe: "Secret shown once.", handle: "api-key-secret" },
+      ],
+      assertions: [{ describe: "Secret + warning", handle: "api-key-shown-once-warning", expect: "present" }],
+      screenshots: [shot("api-key-created", "The new key.")],
+      dimension: "D6",
+    },
+  ),
+  iosTotal(
+    "ios-oct-database-browse",
+    "D6: an app's Database opens a table as a paged grid.",
+    O + "test_databaseBrowsesATable",
+    {
+      steps: [
+        { kind: "tap", describe: "Open database → plants.", handle: "database-table-plants" },
+        { kind: "assert", describe: "Grid.", handle: "database-grid" },
+      ],
+      assertions: [{ describe: "Grid + page line", handle: "database-page-label", expect: "present" }],
+      screenshots: [shot("database-grid", "The grid.")],
+      dimension: "D6",
+    },
+  ),
+  iosTotal(
+    "ios-oct-runs-on",
+    "D1: an app page lists the servers it runs on; a server page lists its apps and offers Create app here.",
+    O + "test_runsOnListsServersAndServerPageListsApps",
+    {
+      steps: [
+        { kind: "assert", describe: "Runs on rows.", handle: "runs-on-home.bright-maple.flagship.services" },
+        { kind: "assert", describe: "Server's apps.", handle: "server-create-app-here" },
+      ],
+      assertions: [{ describe: "Create app here", handle: "server-create-app-here", expect: "present" }],
+      screenshots: [shot("runs-on", "Runs on."), shot("server-apps", "Server apps.")],
+      dimension: "D1",
+    },
+  ),
+  iosTotal(
+    "ios-oct-update-card",
+    "D1: the server page's update card names the new release and how the last update went.",
+    O + "test_updateCardOffersTheNewRelease",
+    {
+      steps: [{ kind: "assert", describe: "Update card.", handle: "sd-update-available" }],
+      assertions: [{ describe: "Last update line", handle: "sd-update-last-outcome", expect: "present" }],
+      screenshots: [shot("update-card", "The card.")],
+      dimension: "D1",
+    },
+  ),
+  iosTotal(
+    "ios-oct-offline-server",
+    "D5: an offline server's page (Music) says it's offline (not 'Connecting…') and still offers Revoke.",
+    O + "test_offlineServerPageSaysOffline",
+    {
+      steps: [{ kind: "assert", describe: "Offline state.", handle: "server-detail-offline" }],
+      assertions: [
+        { describe: "Offline copy", handle: "server-detail-offline", expect: "present" },
+        { describe: "Revoke still offered", handle: "sd-revoke-server", expect: "present" },
+      ],
+      screenshots: [shot("server-offline", "The offline page.")],
+      dimension: "D5",
+    },
+  ),
+  iosTotal(
+    "ios-oct-unrevoke",
+    "D1: a revoked server (-smoke-revoked) says so and Un-revoke restores it.",
+    O + "test_unrevokeRestoresARevokedServer",
+    {
+      steps: [
+        { kind: "tap", describe: "Garage → Un-revoke.", handle: "sd-unrevoke-server" },
+        { kind: "assert", describe: "Revoke offered again.", handle: "sd-revoke-server" },
+      ],
+      assertions: [{ describe: "Restored", handle: "sd-revoke-server", expect: "present" }],
+      screenshots: [shot("revoked", "Revoked."), shot("unrevoked", "Restored.")],
+      dimension: "D1",
+      destructive: { destructive: true, demoUsername: "smoketest" },
+    },
+  ),
+  iosTotal(
+    "ios-oct-share-owner",
+    "D3: the owner's Shared with card (-smoke-shares): Alex's code to compare, Sam active; the share sheet offers Can view / Can manage.",
+    O + "test_shareServerOwnerSeesSharesAndConfirmsCode",
+    {
+      steps: [
+        { kind: "assert", describe: "Shared with card.", handle: "share-server-card" },
+        { kind: "tap", describe: "Share this server.", handle: "share-server-open" },
+      ],
+      assertions: [{ describe: "Share sheet", handle: "share-create", expect: "present" }],
+      screenshots: [shot("share-owner", "The card."), shot("share-sheet", "The sheet.")],
+      dimension: "D3",
+    },
+  ),
+  iosTotal(
+    "ios-oct-share-co-manager",
+    "D3: a co-manager sees 'Shared with me' on Home and the shared server's page: approve start-up, leave, never delete or revoke.",
+    O + "test_sharedServerCoManagerView",
+    {
+      steps: [
+        { kind: "assert", describe: "Shared with me.", handle: "home-shared-with-me" },
+        { kind: "assert", describe: "Approve start-up.", handle: "shared-approve-startup" },
+      ],
+      assertions: [
+        { describe: "Approve start-up", handle: "shared-approve-startup", expect: "present" },
+        { describe: "No delete", handle: "sd-delete-server", expect: "absent" },
+      ],
+      screenshots: [shot("shared-with-me", "Home."), shot("shared-server-member", "Shared server.")],
+      dimension: "D3",
+    },
+  ),
+];
+
 /** The iOS/iPad lane of the gym registry (every-merge subset + total tranche). */
 export const IOS_GYM_SCENARIOS: readonly Scenario[] = [
   ...EVERY_MERGE,
@@ -769,4 +1000,5 @@ export const IOS_GYM_SCENARIOS: readonly Scenario[] = [
   ...IPAD,
   ...TOTAL_DETAIL,
   ...FEATURE_MIRRORS,
+  ...OCTOBER,
 ];

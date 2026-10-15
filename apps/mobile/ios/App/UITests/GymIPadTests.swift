@@ -23,6 +23,8 @@ import XCTest
 final class GymIPadTests: XCTestCase {
 
     override func setUpWithError() throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad,
+                          "iPad layout checks run on the iPad destination only.")
         // Each method relaunches a fresh app, so per-test isolation is the
         // runner's job; keep going after a failure so a whole-class local run
         // reports every method's result.

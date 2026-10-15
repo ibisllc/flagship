@@ -64,7 +64,7 @@ final class GymTotalDetailTests: XCTestCase {
         XCTAssertTrue(row.waitForExistence(timeout: 15), "The \(name) pod row should be present.")
         row.tap()
         XCTAssertTrue(
-            app.navigationBars["Server"].waitForExistence(timeout: 15),
+            app.serverPageBackButton(named: name).waitForExistence(timeout: 15),
             "Tapping \(name) should push the server-detail screen."
         )
     }
@@ -275,13 +275,16 @@ final class GymTotalDetailTests: XCTestCase {
         gymShot(app, "ops-sliver-apps")
         // Tap the sliver → deep-link to the vibe-code chat session.
         if opsBar.exists { opsBar.tap() } else { app.otherElements["global-operations-bar"].tap() }
+        // The title follows the session's state ("Your turn", "Live", …), so
+        // the landmark is the session's own header line.
         XCTAssertTrue(
-            app.navigationBars["Vibe-code session"].waitForExistence(timeout: 15),
+            app.staticTexts["session gym-smoke"].waitForExistence(timeout: 15),
             "Tapping the build operation should open the vibe-code chat session."
         )
         // The chat surfaces the seeded conversation + a composer. The mock seeds
-        // a pending requestEnvVar turn, so the env-var secret field is present;
-        // otherwise the reply field. Either composer proves the chat rendered.
+        // a pending requestEnvVar turn on an app that is already live (an edit
+        // session), so the env-var secret field must be offered: the AI is
+        // waiting on the owner and the live link must not replace the answer.
         let composer = app.textFields["vibecode-reply-field"].waitForExistence(timeout: 10)
             || app.secureTextFields["vibecode-envvar-field"].waitForExistence(timeout: 5)
             || app.buttons["vibecode-envvar-decline-btn"].waitForExistence(timeout: 3)
