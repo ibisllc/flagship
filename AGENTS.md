@@ -120,6 +120,12 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 - **Only admins grant higher access; any device of the account may invite at
   Member, and admins are told** (owner rule, 2026-10-15;
   `docs/service-access-gating.md` "Who can invite").
+- **Only `main` is deployed** (owner rule, 2026-10-15). `main` is the sole
+  source of truth: every `.com`, `.services`, shim or box release is built
+  from a commit that is already on `main`, or lands on `main` (pushed)
+  straight after a deploy that had to go first, e.g. a security fix that
+  must be live before it is public. Never leave deployed code only on a
+  branch or worktree. Feature branches deploy only to the gym.
 - **Unlaunched features live entirely on their own branch; `main` ships clean.**
   Every not-yet-launched feature — site literature, app code (iOS/Android/
   webapp), backend logic, AND tests — lives ONLY on its feature branch, so
@@ -566,7 +572,8 @@ allowances (1M / 5M / 20M a month) are placeholders.
 
 ### Built, waiting on deploys or rebuilds
 
-- **`.com` Worker:** current with `main` as of 2026-10-13 (webapp shell **v60**; `main` is at v71).
+- **`.com` Worker:** current with `main` as of 2026-10-15 (`aaed1b0b8`,
+  webapp shell **v96**, D1 through migration 0101).
   Always `npx tsc -b` first and apply pending D1 migrations before deploying.
 - **Rate limits count in Durable Objects (2026-10-15):** every budget in
   `apps/com/src/rateLimit.ts` is applied as written (any window, counted once
@@ -579,8 +586,10 @@ allowances (1M / 5M / 20M a month) are placeholders.
   about the caller; kept 90 days), read by `GET /api/admin/rate-limits` and
   `npm run rate-limits`. The 429 carries `retryAfterSec` and a sentence
   ("Too many tries from your network. Try again in about 12 minutes."),
-  which all three apps show. Needs migration 0101, a `.com` deploy (DO
-  migration `v4`) and the gym's.
+  which all three apps show. Live on `.com` 2026-10-15 (checked: the 4th
+  recovery lookup of one name in 15 min is refused with the sentence). The
+  gym Worker gets it at the next `scripts/gym-refresh.sh`; the apps' side
+  needs iOS/Android store builds.
 - **App "Back up now" (2026-10-15):** the box never mounted `/api/backups/<id>`,
   so every client's archive fetch 404'd; now mounted (owner sessions only).
   The webapp fetches it with the session and saves the Blob, like iOS/Android.
