@@ -480,8 +480,7 @@ disabled). Flagship's plans are in `packages/control-plane/src/meter.ts`;
 counters in D1 `meter_counters` (migration 0069, applied; `usage_counters` is
 no longer read and can be dropped later). Free over 25 GB is now slowed to
 256 kbit/s instead of cut (`.com` f33230d4, `.services` v37). AI-token
-allowances (1M / 5M / 20M a month) are placeholders. `feat/custom-names`'
-`accountRename.ts` must move `meter_counters` rows too.
+allowances (1M / 5M / 20M a month) are placeholders.
 
 ### Built, waiting on deploys or rebuilds
 
@@ -766,15 +765,30 @@ metal), plus the Debian 13.7.0 check. Record results under "Desktop Studio".
 
 ### Feature branches (each = `main` + one feature; rebase when `main` moves)
 
-- **`feat/marketplace`** (+ Pro payments, vouchers). **`feat/custom-names`**
+All rebased onto `main` 2026-10-15 (the Oct 9 tips are kept as
+`backup/<slug>-pre-rebase-2026-10-14`, the script's later pass as `…-2026-10-15`). `scripts/rebase-features.sh` reports
+how far each branch is behind its parent and the conflicts a rebase would hit;
+`--apply` rebases and pushes the clean ones and lists the rest. A branch that
+changes the webapp runs its own shell version above its parent's
+(marketplace v84, custom-domains v85, custom-names v86 over `main`'s v83):
+when `main` passes it, take the next unused number and move the tests' pins.
+Not compiled since the rebase: the iOS and Android code on any branch.
+
+- **`feat/marketplace`** (+ Pro payments, vouchers). Its migrations 0090–0091
+  live on the branch (`main` skips 0088–0094 for branches). The allowance and
+  purchases reads now take the account read token like `/pods`. Open: Android's
+  marketplace page has its own server picker but installs through the current
+  server's client. **`feat/custom-names`**
   (dibs + paid name change; off marketplace): server side built; remaining are
   renaming an account that has servers, the client flow on all three apps, a
   live D1 run, and owner config (`DIBS_WINDOW_START/END`, $10/$20 vouchers,
-  exempt `/dibs` from the coming-soon gate). Migrations 0092–0094 live there.
+  exempt `/dibs` from the coming-soon gate). Migrations 0092–0094 live there; a
+  rename moves `meter_counters` rows.
 - **`feat/custom-domains`** (off marketplace): Pro gate built. `main` refuses new
   orders with "Custom domains aren't available yet" and has no custom-domain
-  UI in any app (removed 2026-10-13; the branch holds it all); keep the
-  branch's Pro wording at launch. Remaining: live e2e, Stripe price ids.
+  UI in any app (removed 2026-10-13 in `209a6298`; the branch brings it all
+  back on top of marketplace); keep the branch's Pro wording at launch.
+  Remaining: live e2e, Stripe price ids.
 - **`feat/phone-usb-burn`:** validate the OTG write on a real phone + stick,
   publish the seed and set `FLAGSHIP_ISO_SEED`.
 - **`feat/retail`** (NFC box), **`feat/browser-extension`**, **`alpine`** (parked
