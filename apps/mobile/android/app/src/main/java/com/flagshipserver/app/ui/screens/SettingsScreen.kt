@@ -27,6 +27,7 @@ import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Public
+import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.ScreenShare
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.Save
@@ -281,6 +282,14 @@ fun SettingsScreen(nav: NavController) {
                     onClick = { nav.navigate("trusted-devices") },
                 ),
             )) + listOf(
+                // Phase 3b — this phone joins another account (or a second one
+                // of yours) by scanning the code that account's device shows.
+                FSSettingsRowData(
+                    icon = Icons.Outlined.QrCodeScanner,
+                    title = "Scan a pairing code",
+                    subtitle = "Add this phone to another account from a code its device shows.",
+                    onClick = { nav.navigate("join-device-scan") },
+                ),
                 FSSettingsRowData(
                     icon = Icons.Outlined.Computer,
                     title = "Browser sessions",

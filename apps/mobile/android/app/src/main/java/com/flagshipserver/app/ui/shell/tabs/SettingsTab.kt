@@ -99,6 +99,15 @@ fun SettingsTab() {
                 onCancel = { nav.popBackStack() },
             )
         }
+        // Phase 3b — incoming join from Settings' scanner while signed in
+        // (no link yet ⇒ the screen opens the camera).
+        composable("join-device-scan") {
+            JoinDeviceScreen(
+                initialLink = null,
+                onJoined = { nav.popBackStack("settings-root", inclusive = false) },
+                onCancel = { nav.popBackStack() },
+            )
+        }
         // Phase 3b — incoming join via App-Links deeplink while paired
         // (adds a 2nd profile to this phone).
         composable(
