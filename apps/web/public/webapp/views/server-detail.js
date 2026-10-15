@@ -133,6 +133,7 @@ import { isDemoProfile } from "../lib/demoAccount.js";
 import {
   PROXY_EXPLAINER,
   proxyFieldsHtml,
+  proxyProHtml,
   proxyStatusText,
   proxySummaryText,
   readProxyFields,
@@ -775,6 +776,9 @@ export function outboundProxyHtml(body, { canEdit = canEditProxy() } = {}) {
   if (!summary || typeof summary !== "object") return "";
   const status = proxyStatusText(summary);
   const on = !!summary.proxy;
+  // The box says `available: false` once .com has told it the account is on
+  // Free: no new proxy, but one already set can still be turned off.
+  const pro = summary.available !== false;
   return `
       <h2 class="mt-4">Outbound proxy</h2>
       <div class="card" id="outbound-proxy-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
@@ -786,9 +790,10 @@ export function outboundProxyHtml(body, { canEdit = canEditProxy() } = {}) {
         ${status
           ? `<p class="note small mt-1${summary.status?.state === "failing" ? " err-text" : ""}" id="outbound-proxy-status">${escapeHtml(status)}</p>`
           : ""}
-        ${canEdit
+        ${pro ? "" : proxyProHtml()}
+        ${canEdit && (pro || on)
           ? `<div class="row-2 mt-2">
-          <button id="outbound-proxy-change" class="full-width">Change</button>
+          ${pro ? `<button id="outbound-proxy-change" class="full-width">Change</button>` : ""}
           ${on ? `<button id="outbound-proxy-off" class="secondary full-width">Turn off</button>` : ""}
         </div>`
           : ""}

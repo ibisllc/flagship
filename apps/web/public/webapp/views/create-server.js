@@ -32,7 +32,16 @@ import { markPairingDepositPending, clearPairingDeposit } from "../lib/pairingDe
 import { setSessionToken, setSessionTokenForPod } from "../lib/api.js";
 import { attachRestoreOrder } from "../lib/serverBackupFormat.js";
 import { throwIfRateLimited } from "../lib/rateLimited.js";
-import { proxyFieldsHtml, readProxyFields, readProxyForm, recipeProxySiblings, wireProxyFields } from "../lib/boxProxy.js";
+import {
+  proxyAllowedForTier,
+  proxyFieldsHtml,
+  proxyProHtml,
+  readProxyFields,
+  readProxyForm,
+  recipeProxySiblings,
+  wireProxyFields,
+} from "../lib/boxProxy.js";
+import { fetchAllowance } from "../lib/allowance.js";
 
 registerView("view-create-server");
 
@@ -887,11 +896,28 @@ function syncAdvancedVisibility() {
   }
 }
 
+// The account's plan, read when the view opens: the proxy is part of Pro.
+// null until known (or when the read fails), which shows the fields.
+let accountTier = null;
+
 function resetProxyFields() {
   const block = $("cs-proxy-block");
   if (!block) return;
+  if (!proxyAllowedForTier(accountTier)) {
+    block.innerHTML = proxyProHtml();
+    return;
+  }
   block.innerHTML = proxyFieldsHtml("cs-proxy");
   wireProxyFields("cs-proxy");
+}
+
+async function refreshAccountTier() {
+  const username = getSession().username;
+  const a = username ? await fetchAllowance(username) : null;
+  const tier = a?.tier ?? null;
+  if (tier === accountTier) return;
+  accountTier = tier;
+  resetProxyFields();
 }
 
 export function initCreateServerView() {
@@ -917,5 +943,6 @@ export function initCreateServerView() {
 export async function enterCreateServer() {
   if (!canAddServers()) return refuseAddServer();
   show("view-create-server");
+  void refreshAccountTier();
   await refreshDrafts();
 }
