@@ -64,7 +64,9 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   // Erase the plaintext auto-unlock leases (v1 is gone).
   "0098",
   // Who signed each service invite (admin or member tier) and from which device.
-  "0099",
+  "0100",
+  // Hourly counts of rate-limit refusals and near-limit passes.
+  "0101",
 ];
 
 export interface SchemaStatusDeps {
