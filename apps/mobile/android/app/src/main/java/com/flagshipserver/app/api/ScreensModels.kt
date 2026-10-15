@@ -1075,6 +1075,27 @@ data class ServerMetricsResponse(
     data class IOSample(val at: Long, val read: Double, val write: Double)
 }
 
+// ---------- P1.22 custom-domain verify (extension) ---------------------
+
+@Serializable
+data class VerifyCustomDomainRequest(val fqdn: String)
+
+@Serializable
+data class VerifyCustomDomainResponse(
+    val fqdn: String,
+    val status: Status,
+    val expectedTxtRecord: String,
+    val observedTxtRecord: String? = null,
+    val reason: String? = null,
+) {
+    @Serializable
+    enum class Status {
+        @SerialName("pending")  PENDING,
+        @SerialName("verified") VERIFIED,
+        @SerialName("failed")   FAILED,
+    }
+}
+
 // ---------- P1.23 post-recovery status --------------------------------
 //
 // After the user recovers on a new device and a J.3 IRK swap completes,
