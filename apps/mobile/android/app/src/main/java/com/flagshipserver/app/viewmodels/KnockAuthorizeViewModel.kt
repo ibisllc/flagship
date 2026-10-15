@@ -1,19 +1,22 @@
 // Web-experience gating authorizer (docs/service-access-gating.md,
-// "Web-experience gating"). The visitor's phone AID-signs a KnockAuthorization
-// binding the browser's pageId, POSTs it to the BOX (over its pinned pipe —
-// .com is never in the path), and on success persists a SecuredSession so the
-// user can later see / refresh / stop the browser session from Settings.
+// "Web-experience gating" and "Who is signing in"). The visitor's phone signs a
+// KnockAuthorization binding the browser's pageId, POSTs it to the BOX (over
+// its pinned pipe — .com is never in the path), and on success persists a
+// SecuredSession so the user can later see / refresh / stop the browser
+// session from Settings.
 //
-// The box accepts its owner's AID and the AIDs on the app's allow-list
-// (docs/app-apis.md §5). Invites put the friend's id for THAT app on the list,
-// so the identity depends on the box: one of our own servers gets the global
-// AID; a box we were invited to (remembered at redeem, InviteOwnerBook) gets
-// deriveAppAccountId(UMK, serviceRef) for the knock's app. A record naming our
-// own AID is ignored: the invite's author wrote it. A box that is neither in
-// the loaded pods nor remembered triggers one fresh pods load (a cold start from
-// a deep link may not have loaded them yet); still unknown, nothing is signed or
-// sent, so a stranger's box never learns an AID of ours. On success the box
-// returns the phone-held secretId (never to the browser).
+// The signing key (the `visitorAID`) depends on the box, which classifies it
+// itself: one of this account's own servers gets this device's account device
+// key (so the box knows which device, and its rank, signed in); a server
+// shared WITH this account gets that share's member key; a box we were
+// invited to (remembered at redeem, InviteOwnerBook) gets
+// deriveAppAccountId(UMK, serviceRef) for the knock's app. Neither the device
+// key nor a share key is ever shown to any other box. A record naming our own
+// AID is ignored: the invite's author wrote it. A box found nowhere triggers
+// one fresh pods load and one share-inbox read (a cold start from a deep link
+// may not have loaded them yet); still unknown, nothing is signed or sent, so
+// a stranger's box never learns a key of ours. On success the box returns the
+// phone-held secretId (never to the browser).
 
 package com.flagshipserver.app.viewmodels
 
@@ -27,7 +30,9 @@ import com.flagshipserver.app.core.InviteOwnerBook
 import com.flagshipserver.app.core.InviteOwners
 import com.flagshipserver.app.core.SecuredSession
 import com.flagshipserver.app.core.SecuredSessionStore
+import com.flagshipserver.app.core.ServerShare
 import com.flagshipserver.app.core.ServiceInvite
+import com.flagshipserver.app.keystore.BiometricAuthority
 import com.flagshipserver.app.keystore.Keystore
 import com.google.crypto.tink.subtle.Ed25519Sign
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -58,6 +63,19 @@ class KnockAuthorizeViewModel(
         { s, r -> Keystore.deriveAppAccountId(s, r) },
     private val appAidPubHex: suspend (serviceRef: String, reason: String) -> String =
         { s, r -> Keystore.appAccountIdPubHex(s, r) },
+    /** This device's account device key (signer + pub), which signs in on the
+     *  account's own servers; null when the device has no device id yet (the
+     *  global AID signs then, which the box counts as a non-admin device). */
+    private val deviceKey: suspend (reason: String) -> Pair<Ed25519Sign, ByteArray>? = { null },
+    /** Servers shared WITH this account, (domain, shareId): the loaded "Shared
+     *  with me" list, or with `fetch` this account's share inbox. */
+    private val sharedServers: suspend (fetch: Boolean) -> List<Pair<String, String>> = { emptyList() },
+    /** The share's member key (signer + pub), shown only to that share's server. */
+    private val shareKey: suspend (shareId: String, reason: String) -> Pair<Ed25519Sign, ByteArray> = { id, r ->
+        BiometricAuthority.current()?.ensureFresh(title = "Authorize Flagship", subtitle = r)
+        val umk = Keystore.loadOrCreateUmkSeed()
+        ServerShare.deriveShareMemberKey(umk, id) to ServerShare.deriveShareMemberPub(umk, id)
+    },
     /** FQDNs of the user's own servers (the app's pods). */
     private val ownServers: () -> List<String> = { emptyList() },
     /** Load the user's servers afresh (the `.com` pods directory); used once,
@@ -92,27 +110,37 @@ class KnockAuthorizeViewModel(
         fun List<String>.hasBox() = any { InviteOwnerBook.normHost(it) == host }
         try {
             val reason = title.removeSuffix("?")
-            val key: Ed25519Sign
-            val aidPub: ByteArray
+            suspend fun ownKey(): Pair<Ed25519Sign, ByteArray> =
+                deviceKey(reason) ?: (aidSigner(reason) to HexUtil.decode(aidPubHex(reason))!!)
+            suspend fun shareFor(fetch: Boolean): String? =
+                runCatching { sharedServers(fetch) }.getOrDefault(emptyList())
+                    .firstOrNull { InviteOwnerBook.normHost(it.first) == host }?.second
+            suspend fun reloadedOwnKey(): Pair<Ed25519Sign, ByteArray>? =
+                if (runCatching { reloadOwnServers() }.getOrDefault(emptyList()).hasBox()) ownKey() else null
             // A record's owner AID is whatever the invite link's author wrote, so
             // it can only ever pick the per-app id: a record naming our own
             // global AID is ignored (a hostile owner could plant it to harvest
-            // that AID). "Own box" comes only from our pods directory.
-            val ownerHex = if (ownServers().hasBox()) null else owners.ownerFor(serverId)
-                ?.takeIf { it != aidPubHex(reason).lowercase() }
-            if (ownerHex != null && ServerKeys.isAppRef(serviceRef)) {
-                key = appAidSigner(serviceRef, reason)
-                aidPub = HexUtil.decode(appAidPubHex(serviceRef, reason))!!
-            } else {
-                val isOwnServer = ownServers().hasBox() ||
-                    runCatching { reloadOwnServers() }.getOrDefault(emptyList()).hasBox()
-                if (!isOwnServer) {
-                    _phase.value = KnockAuthorizePhase.Failed(NOT_YOURS)
-                    return
-                }
-                key = aidSigner(reason)
-                aidPub = HexUtil.decode(aidPubHex(reason))!!
+            // that AID). "Own box" comes only from our pods directory, "shared
+            // with us" only from our own share inbox.
+            suspend fun invitedKey(): Pair<Ed25519Sign, ByteArray>? {
+                if (!ServerKeys.isAppRef(serviceRef)) return null
+                owners.ownerFor(serverId)?.takeIf { it != aidPubHex(reason).lowercase() } ?: return null
+                return appAidSigner(serviceRef, reason) to HexUtil.decode(appAidPubHex(serviceRef, reason))!!
             }
+            val identity: Pair<Ed25519Sign, ByteArray>? =
+                if (ownServers().hasBox()) {
+                    ownKey()
+                } else {
+                    shareFor(fetch = false)?.let { shareKey(it, reason) }
+                        ?: invitedKey()
+                        ?: reloadedOwnKey()
+                        ?: shareFor(fetch = true)?.let { shareKey(it, reason) }
+                }
+            if (identity == null) {
+                _phase.value = KnockAuthorizePhase.Failed(NOT_YOURS)
+                return
+            }
+            val (key, aidPub) = identity
             val issuedAt = now()
             val sig = ServiceInvite.signKnockAuthorization(serverId, serviceRef, pageId, aidPub, issuedAt, key)
             val request: JsonObject = buildJsonObject {

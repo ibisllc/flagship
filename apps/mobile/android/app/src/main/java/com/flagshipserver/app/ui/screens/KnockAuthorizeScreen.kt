@@ -1,8 +1,9 @@
 // Web-experience gating authorizer screen (docs/service-access-gating.md,
 // "Web-experience gating"). Reached from the knock page's
 // https://flagshipserver.com/access?... App Link or a pasted "Get link" string. "Open" signs
-// the knock against the box (behind the biometric gate the other AID-signing
-// flows use) with the identity that box knows us by, then confirms; the
+// the knock against the box (behind the biometric gate) with the key that box
+// knows us by (this device's key on our own servers, the share's key on a
+// server shared with us, the per-app id elsewhere), then confirms; the
 // browser's poll picks up the session and reloads into the app.
 
 package com.flagshipserver.app.ui.screens
@@ -30,6 +31,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalSecretMailboxClient
+import com.flagshipserver.app.keystore.BiometricAuthority
+import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.components.FSSecondaryButton
@@ -52,12 +55,32 @@ fun KnockAuthorizeScreen(
     val scope = rememberCoroutineScope()
     val appState = LocalAppState.current
     val mailbox = LocalSecretMailboxClient.current
+    val shares = com.flagshipserver.app.viewmodels.LocalServerShares.current
     val vm = remember(serverId, svc, serviceRef, pageId) {
         KnockAuthorizeViewModel(
             serverId = serverId,
             svc = svc,
             serviceRef = serviceRef,
             pageId = pageId,
+            deviceKey = { reason ->
+                val user = appState.currentUser.value
+                val deviceId = appState.activeProfile?.deviceId?.lowercase()?.takeIf { Regex("^[0-9a-f]{32}$").matches(it) }
+                if (user.isNullOrEmpty() || deviceId == null || !Keystore.hasUmkSeed()) {
+                    null
+                } else {
+                    BiometricAuthority.current()?.ensureFresh(title = "Authorize Flagship", subtitle = reason)
+                    val umk = Keystore.currentUmkSeed()
+                    Keystore.accountDeviceSigner(umk, user, deviceId) to Keystore.accountDevicePublicKey(umk, user, deviceId)
+                }
+            },
+            sharedServers = { fetch ->
+                val rt = shares
+                when {
+                    rt == null -> emptyList()
+                    fetch -> rt.client.inbox().map { it.serverDomain to it.shareId }
+                    else -> rt.sharedWithMe.ui.value.items.map { it.entry.serverDomain to it.entry.shareId }
+                }
+            },
             ownServers = { appState.pods.value.map { it.fqdn } },
             reloadOwnServers = {
                 val user = appState.currentUser.value

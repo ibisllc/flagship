@@ -1,8 +1,9 @@
-// KnockAuthorizeViewModel — AID-signs a KnockAuthorization binding the browser's
+// KnockAuthorizeViewModel — signs a KnockAuthorization binding the browser's
 // pageId, POSTs it to the box's /api/service-access/knock/authorize, maps
 // 200/401/403/404, and persists a SecuredSession on success. Picks the signing
-// identity by box: own server -> global AID; a box we were invited to -> the
-// per-owner contact AID the invite bound; anything else -> nothing signed/sent.
+// key by box: own server -> this device's account device key (the AID when it
+// has no device id); a server shared with us -> that share's member key; a box
+// we were invited to -> the id for the app; anything else -> nothing signed/sent.
 
 package com.flagshipserver.app.viewmodels
 
@@ -13,6 +14,7 @@ import com.flagshipserver.app.core.InMemoryInviteOwnerBook
 import com.flagshipserver.app.core.JsonHttpTransport
 import com.flagshipserver.app.core.SecuredSession
 import com.flagshipserver.app.core.ServerKeys
+import com.flagshipserver.app.core.ServerShare
 import com.flagshipserver.app.core.ServiceInvite
 import com.google.crypto.tink.subtle.Ed25519Sign
 import com.google.crypto.tink.subtle.Ed25519Verify
@@ -45,6 +47,9 @@ class KnockAuthorizeViewModelTest {
     private val persisted = ArrayList<SecuredSession>()
     private val signerCalls = ArrayList<String>()
     private var reloads = 0
+    private var inboxReads = 0
+    private val deviceKp = Ed25519Sign.KeyPair.newKeyPairFromSeed(ByteArray(32) { 0x2d })
+    private val shareId = "0f1e2d3c4b5a69788796a5b4c3d2e1f0"
 
     private fun makeVM(
         t: JsonHttpTransport,
@@ -52,6 +57,9 @@ class KnockAuthorizeViewModelTest {
         ownServers: List<String> = listOf(serverId),
         owners: InMemoryInviteOwnerBook = InMemoryInviteOwnerBook(),
         reload: suspend () -> List<String> = { emptyList() },
+        withDeviceKey: Boolean = true,
+        shared: List<Pair<String, String>> = emptyList(),
+        sharedInbox: List<Pair<String, String>> = emptyList(),
     ) =
         KnockAuthorizeViewModel(
             serverId = serverId, svc = svc, serviceRef = serviceRef, pageId = pageId,
@@ -60,6 +68,15 @@ class KnockAuthorizeViewModelTest {
             aidPubHex = { HexUtil.encode(aidPub) },
             appAidSigner = { ref, _ -> signerCalls.add("app"); ServerKeys.deriveAppAccountId(umkSeed, ref) },
             appAidPubHex = { ref, _ -> HexUtil.encode(ServerKeys.deriveAppAccountIdPub(umkSeed, ref)) },
+            deviceKey = {
+                if (!withDeviceKey) null
+                else { signerCalls.add("device"); Ed25519Sign(deviceKp.privateKey) to deviceKp.publicKey }
+            },
+            sharedServers = { fetch -> if (fetch) { inboxReads += 1; sharedInbox } else shared },
+            shareKey = { id, _ ->
+                signerCalls.add("share:$id")
+                ServerShare.deriveShareMemberKey(umkSeed, id) to ServerShare.deriveShareMemberPub(umkSeed, id)
+            },
             ownServers = { ownServers },
             reloadOwnServers = { reloads += 1; reload() },
             owners = owners,
@@ -100,12 +117,55 @@ class KnockAuthorizeViewModelTest {
         assertSignedBy(t, HexUtil.decode(contactAidHex)!!)
     }
 
-    @Test fun ownServer_signsWithGlobalAid_evenWithAnInviteRecord() = runTest {
+    @Test fun ownServer_signsWithTheAccountDeviceKey_evenWithAnInviteRecord() = runTest {
         val owners = InMemoryInviteOwnerBook().apply { remember(serverId, ownerAidHex) }
         val t = KnockTransport(status = 200, respBody = okBody)
         makeVM(t, ownServers = listOf(serverId.uppercase()), owners = owners).authorize()
+        assertSignedBy(t, deviceKp.publicKey)
+        assertFalse(t.lastBody!!.contains(HexUtil.encode(aidPub)))
+        assertEquals(listOf("device"), signerCalls)
+    }
+
+    @Test fun ownServer_withoutADeviceId_fallsBackToTheAid() = runTest {
+        val t = KnockTransport(status = 200, respBody = okBody)
+        makeVM(t, withDeviceKey = false).authorize()
         assertSignedBy(t, aidPub)
         assertEquals(listOf("global"), signerCalls)
+    }
+
+    @Test fun serverSharedWithUs_signsWithThatSharesKey_fromTheLoadedList() = runTest {
+        val t = KnockTransport(status = 200, respBody = okBody)
+        val owners = InMemoryInviteOwnerBook().apply { remember(serverId, ownerAidHex) }
+        val vm = makeVM(
+            t, ownServers = emptyList(), owners = owners,
+            shared = listOf("other.bob.flagship.services" to "ff".repeat(16), serverId.uppercase() to shareId),
+        )
+        vm.authorize()
+        assertTrue(vm.phase.value is KnockAuthorizePhase.Done)
+        assertSignedBy(t, ServerShare.deriveShareMemberPub(umkSeed, shareId))
+        assertEquals(listOf("share:$shareId"), signerCalls)
+        assertFalse(t.lastBody!!.contains(HexUtil.encode(deviceKp.publicKey)))
+        assertEquals(0, reloads)
+        assertEquals(0, inboxReads)
+    }
+
+    @Test fun serverSharedWithUs_foundInTheInboxOnAColdStart() = runTest {
+        val t = KnockTransport(status = 200, respBody = okBody)
+        val vm = makeVM(t, ownServers = emptyList(), sharedInbox = listOf(serverId to shareId))
+        vm.authorize()
+        assertTrue(vm.phase.value is KnockAuthorizePhase.Done)
+        assertSignedBy(t, ServerShare.deriveShareMemberPub(umkSeed, shareId))
+        assertEquals(1, reloads)
+        assertEquals(1, inboxReads)
+    }
+
+    @Test fun invitedServer_neverSeesTheDeviceOrAShareKey() = runTest {
+        val owners = InMemoryInviteOwnerBook().apply { remember(serverId, ownerAidHex) }
+        val t = KnockTransport(status = 200, respBody = okBody)
+        makeVM(t, ownServers = emptyList(), owners = owners, shared = listOf("other.bob.flagship.services" to shareId)).authorize()
+        assertEquals(listOf("app"), signerCalls)
+        assertFalse(t.lastBody!!.contains(HexUtil.encode(deviceKp.publicKey)))
+        assertFalse(t.lastBody!!.contains(HexUtil.encode(ServerShare.deriveShareMemberPub(umkSeed, shareId))))
     }
 
     @Test fun unknownServer_refusesAndSendsNothing() = runTest {
@@ -145,8 +205,8 @@ class KnockAuthorizeViewModelTest {
         vm.authorize()
         assertTrue(vm.phase.value is KnockAuthorizePhase.Done)
         assertEquals(1, reloads)
-        assertSignedBy(t, aidPub)
-        assertEquals(listOf("global"), signerCalls)
+        assertSignedBy(t, deviceKp.publicKey)
+        assertEquals(listOf("device"), signerCalls)
     }
 
     @Test fun coldStart_podsNotLoaded_reloadsOnceAndFindsOwnBox() = runTest {
@@ -155,8 +215,8 @@ class KnockAuthorizeViewModelTest {
         vm.authorize()
         assertTrue(vm.phase.value is KnockAuthorizePhase.Done)
         assertEquals(1, reloads)
-        assertSignedBy(t, aidPub)
-        assertEquals(listOf("global"), signerCalls)
+        assertSignedBy(t, deviceKp.publicKey)
+        assertEquals(listOf("device"), signerCalls)
     }
 
     @Test fun coldStart_reloadStillUnknown_refusesAndSendsNothing() = runTest {
@@ -211,11 +271,11 @@ class KnockAuthorizeViewModelTest {
         assertEquals(serverId, auth["serverId"]!!.jsonPrimitive.content)
         assertEquals(serviceRef, auth["serviceRef"]!!.jsonPrimitive.content)
         assertEquals(pageId, auth["pageId"]!!.jsonPrimitive.content)
-        assertEquals(HexUtil.encode(aidPub), auth["visitorAID"]!!.jsonPrimitive.content)
+        assertEquals(HexUtil.encode(deviceKp.publicKey), auth["visitorAID"]!!.jsonPrimitive.content)
         // The signature verifies over the EXACT canonical knock bytes.
         val sig = HexUtil.decode(body["signature"]!!.jsonPrimitive.content)!!
-        val canonical = ServiceInvite.canonicalKnock(serverId, serviceRef, pageId, aidPub, 1700004000000L)
-        Ed25519Verify(aidPub).verify(sig, canonical) // throws on mismatch
+        val canonical = ServiceInvite.canonicalKnock(serverId, serviceRef, pageId, deviceKp.publicKey, 1700004000000L)
+        Ed25519Verify(deviceKp.publicKey).verify(sig, canonical) // throws on mismatch
         // SecuredSession persisted with the box-returned secretId + derived URL.
         assertEquals(1, persisted.size)
         assertEquals("ab".repeat(32), persisted[0].secretId)
