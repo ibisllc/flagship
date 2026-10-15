@@ -1,10 +1,10 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { accessListFromEgressHosts, parseAccessList } from "@flagship/protocol";
 import { EgressGateway } from "../../src/egress/gateway.js";
-import { sandboxGateway, setSandboxNetworking } from "../../src/egress/sandboxNetworking.js";
+import { sandboxGateway, sandboxRunArgs, setSandboxNetworking } from "../../src/egress/sandboxNetworking.js";
 import type { CommandRunner } from "../../src/serviceRunner.js";
 
 const NETS: Record<string, { subnet: string; gw: string; bridge: string; internal: boolean }> = {
@@ -50,6 +50,11 @@ describe("EgressGateway", () => {
       expect(sandboxGateway("flagship-apps")).toBe("172.22.0.1");
       expect(sandboxGateway("flagship-build")).toBe("172.24.0.1");
       expect(gw.dnsServerFor("apps")).toBe("172.22.0.1");
+      // gVisor never reaches docker's 127.0.0.11, so apps get a resolv.conf naming the gateway.
+      const runArgs = sandboxRunArgs("flagship-apps", "host.flagship.internal")!;
+      const mount = runArgs[runArgs.indexOf("-v") + 1]!;
+      expect(mount.endsWith(":/etc/resolv.conf:ro")).toBe(true);
+      expect(readFileSync(mount.split(":")[0]!, "utf8")).toBe("nameserver 172.22.0.1\noptions ndots:0\n");
 
       expect(await gw.allowSync("172.22.0.2", "api.github.com")).toBe(true);
       expect(await gw.allowSync("172.24.0.5", "registry.npmjs.org")).toBe(true);

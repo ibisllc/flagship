@@ -16,6 +16,8 @@
  * rules.
  */
 import { getServers } from "node:dns";
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { AccessRule } from "@flagship/protocol";
 import type { CommandRunner } from "../serviceRunner.js";
 import { systemDnsUpstream, startDnsServer, type DnsServerHandle } from "./dnsFilter.js";
@@ -160,7 +162,17 @@ export class EgressGateway {
       const gw = this.gateways[spec.kind];
       if (gw) byNetwork.set(spec.network, gw);
     }
-    setSandboxNetworking({ gateways: byNetwork, buildHosts: BUILD_REGISTRY_HOSTS });
+    const resolvConfs = new Map<string, string>();
+    for (const [network, gw] of byNetwork) {
+      const path = join(this.opts.rulesDir ?? "/run", `flagship-resolv-${network}.conf`);
+      try {
+        await writeFile(path, `nameserver ${gw}\noptions ndots:0\n`, { mode: 0o644 });
+        resolvConfs.set(network, path);
+      } catch (e) {
+        this.log(`[egress] resolv.conf for ${network} not written (${(e as Error).message})`);
+      }
+    }
+    setSandboxNetworking({ gateways: byNetwork, buildHosts: BUILD_REGISTRY_HOSTS, resolvConfs });
     this.log(
       `[egress] enforcing: ${infos.map(({ kind, info }) => `${kind}=${info.bridge}(${info.subnets.join(",")})`).join(" ")}`,
     );

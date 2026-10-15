@@ -9,6 +9,8 @@ export interface SandboxNetworkingState {
   gateways: ReadonlyMap<string, string>;
   /** Registry hosts a build may fetch from, pinned to the build gateway. */
   buildHosts: readonly string[];
+  /** Docker network name → a host resolv.conf naming its gateway as the only resolver. */
+  resolvConfs?: ReadonlyMap<string, string>;
 }
 
 let state: SandboxNetworkingState | null = null;
@@ -24,15 +26,28 @@ export function sandboxGateway(network: string): string | null {
 
 /**
  * `docker run` args for a container on `network`: DNS through the gateway's
- * filter (an explicit non-loopback --dns makes docker's embedded resolver
- * forward from the container's own namespace, where the firewall redirects
- * it), and the data-store alias on the gateway, which forwards the data ports
- * to the host's loopback-only services. Null when the gateway isn't enforcing.
+ * filter, and the data-store alias on the gateway, which forwards the data
+ * ports to the host's loopback-only services. Null when the gateway isn't
+ * enforcing.
+ *
+ * DNS: under runc an explicit non-loopback --dns makes docker's embedded
+ * resolver (127.0.0.11) forward from the container's own namespace, where the
+ * firewall redirects it. gVisor's netstack never sees the iptables rules that
+ * make 127.0.0.11 answer, so a runsc app had no DNS at all: every host lookup
+ * failed and no access request was ever raised. Mounting a resolv.conf that
+ * names the gateway sends both runtimes straight to the filter.
  */
 export function sandboxRunArgs(network: string, dataHostAlias: string): string[] | null {
   const gw = sandboxGateway(network);
   if (!gw) return null;
-  return ["--dns", gw, "--add-host", `${dataHostAlias}:${gw}`];
+  const resolv = state?.resolvConfs?.get(network);
+  return [
+    "--dns",
+    gw,
+    "--add-host",
+    `${dataHostAlias}:${gw}`,
+    ...(resolv ? ["-v", `${resolv}:/etc/resolv.conf:ro`] : []),
+  ];
 }
 
 /** `docker build` args: the build bridge has no DNS, so pin each registry host. */
