@@ -68,15 +68,18 @@ def main() -> int:
     out: dict = {}
 
     def gdbus(*args: str) -> str:
-        return subprocess.run(
+        done = subprocess.run(
             ["gdbus", "call", "--session", "--dest", tray._name, *args],
             capture_output=True, text=True, timeout=10,
-        ).stdout
+        )
+        if done.returncode != 0:
+            print(f"gdbus {args[3] if len(args) > 3 else args}: {done.stderr.strip()}")
+        return done.stdout
 
     def client() -> None:
         try:
             out["layout"] = gdbus("--object-path", "/MenuBar", "--method",
-                                  "com.canonical.dbusmenu.GetLayout", "0", "-1", "[]")
+                                  "com.canonical.dbusmenu.GetLayout", "0", "10", "[]")
             m = re.search(r"\((\d+), \{'label': <'Stop'>", out["layout"])
             if m:
                 gdbus("--object-path", "/MenuBar", "--method", "com.canonical.dbusmenu.Event",
