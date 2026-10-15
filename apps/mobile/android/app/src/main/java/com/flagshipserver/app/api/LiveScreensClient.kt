@@ -248,6 +248,11 @@ class LiveScreensClient(
     override suspend fun serverMetrics(podId: String): ServerMetricsResponse =
         request("/api/screens/server-metrics/$podId", ServerMetricsResponse.serializer())
 
+    override suspend fun verifyCustomDomain(req: VerifyCustomDomainRequest): VerifyCustomDomainResponse {
+        val body = json.encodeToString(VerifyCustomDomainRequest.serializer(), req).toByteArray()
+        return request("/api/screens/url-controller/verify", VerifyCustomDomainResponse.serializer(), "POST", body)
+    }
+
     override suspend fun postRecoveryStatus(): PostRecoveryStatusResponse =
         request("/api/screens/post-recovery/status", PostRecoveryStatusResponse.serializer())
 
