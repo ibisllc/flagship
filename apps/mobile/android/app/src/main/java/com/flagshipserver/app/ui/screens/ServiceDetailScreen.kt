@@ -73,6 +73,8 @@ import com.flagshipserver.app.viewmodels.AdapterReport
 import com.flagshipserver.app.viewmodels.AdapterReportViewModel
 import com.flagshipserver.app.viewmodels.AppEgressViewModel
 import com.flagshipserver.app.viewmodels.EgressCardState
+import com.flagshipserver.app.viewmodels.CustomDomainCooldownStore
+import com.flagshipserver.app.viewmodels.CustomDomainPrompt
 import com.flagshipserver.app.viewmodels.LoadingState
 import com.flagshipserver.app.viewmodels.RenameServicePhase
 import com.flagshipserver.app.viewmodels.RenameServiceViewModel
@@ -89,8 +91,8 @@ import kotlinx.coroutines.launch
  *   2. RUNS ON — every server ticked exactly where the app is (from each
  *      server's own apps list); tick copies it there, untick removes that copy
  *      (docs/app-placement.md §4).
- *   3. WEB DOMAINS — canonical FQDN + per-pod aliases + Replace stem
- *      (RenameServiceViewModel, unchanged).
+ *   3. WEB DOMAINS — canonical FQDN + per-pod aliases + custom domain +
+ *      Replace stem (RenameServiceViewModel, unchanged).
  *   4. Browser viewer (conditional), Access control, recent logs, last backup.
  *   5. Uninstall — the owner-signed uninstall of this server's copy.
  *
@@ -103,6 +105,7 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
     val client = LocalScreensClient.current
     val server = LocalFlagshipServerClient.current
     val toasts = LocalToastCenter.current
+    val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
 
     val pods = appState.pods.collectAsState().value
@@ -159,6 +162,7 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                     server = server,
                     serviceId = serviceId,
                     username = { appState.currentUser.value },
+                    cooldownStore = CustomDomainCooldownStore.fromContext(ctx),
                 )
             }
         },
@@ -278,7 +282,7 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
 
                 Spacer(Modifier.height(FS.space.s6))
 
-                // ── WEB DOMAINS (Replace) ──────────────
+                // ── WEB DOMAINS (Replace + custom-domain) ──────────────
                 val selectedPods = placementRows.filter { it.presence is com.flagshipserver.app.viewmodels.AppPlacementViewModel.Presence.Has }.map { it.pod }
                 WebDomainsSection(
                     fallbackLabel = resp.app.urlLabel,
@@ -290,6 +294,27 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                         showReplaceDialog = true
                     },
                 )
+
+                Spacer(Modifier.height(FS.space.s3))
+                SetCustomDomainSection(
+                    rootDomain = com.flagshipserver.app.core.Endpoints.userZoneHost(appState.currentUser.value ?: "you"),
+                    cooldownUntilMs = renameVm.customDomainCooldownUntilMs.collectAsState().value,
+                    onSubmit = { draft -> scope.launch { renameVm.submitCustomDomain(draft) } },
+                )
+
+                val cdPrompt by renameVm.customDomainPrompt.collectAsState()
+                cdPrompt?.let { p ->
+                    CustomDomainPromptDialog(
+                        prompt = p,
+                        onConfirm = {
+                            scope.launch {
+                                renameVm.dismissCustomDomainPrompt()
+                                p.onConfirm?.invoke()
+                            }
+                        },
+                        onDismiss = { renameVm.dismissCustomDomainPrompt() },
+                    )
+                }
 
                 // ── Browser viewer — only when the daemon reports tabs ──
                 if (resp.browserTabs.isNotEmpty()) {
@@ -895,6 +920,12 @@ private fun WebDomainsSection(
     Spacer(Modifier.height(FS.space.s3))
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            val cd = links?.customDomain
+            if (!cd.isNullOrEmpty()) {
+                UrlGroupLabel("CUSTOM DOMAIN")
+                UrlRowProminent(url = "https://$cd")
+                HorizontalRule()
+            }
             UrlGroupLabel("SHORT REDIRECT")
             val short = links?.shortUrl
             if (!short.isNullOrEmpty()) {
@@ -920,6 +951,113 @@ private fun WebDomainsSection(
             }
         }
     }
+}
+
+/** SET CUSTOM DOMAIN — section label + right-floated M:SS countdown while
+ *  cooling, input + Add (disabled during the 300s on-device cooldown), and
+ *  the CNAME guidance line. The decoupled request / apex→www /
+ *  destructive-replace logic lives in the VM (submitCustomDomain). */
+@Composable
+private fun SetCustomDomainSection(
+    rootDomain: String,
+    cooldownUntilMs: Long?,
+    onSubmit: (String) -> Unit,
+) {
+    var draft by remember { mutableStateOf("") }
+    var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(cooldownUntilMs) {
+        while (cooldownUntilMs != null && cooldownUntilMs > System.currentTimeMillis()) {
+            nowMs = System.currentTimeMillis()
+            delay(1000)
+        }
+        nowMs = System.currentTimeMillis()
+    }
+    val remainingMs = (cooldownUntilMs ?: 0L) - nowMs
+    val cooling = remainingMs > 0
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                UrlGroupLabel("SET CUSTOM DOMAIN")
+                Spacer(Modifier.weight(1f))
+                if (cooling) {
+                    Text(
+                        text = cooldownLabel(remainingMs),
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp),
+                    )
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    singleLine = true,
+                    label = { Text("www.mydomain.com") },
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.padding(start = FS.space.s2))
+                FSGhostButton(
+                    label = "Add",
+                    enabled = !cooling,
+                    onClick = {
+                        val v = draft
+                        draft = ""
+                        onSubmit(v)
+                    },
+                )
+            }
+            Text(
+                text = "Prior to claiming a FQDN, you must set a CNAME record targeting $rootDomain.",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 11.sp),
+            )
+        }
+    }
+}
+
+/** M:SS — ceil seconds, matching the iOS cooldownLabel + the webapp. */
+private fun cooldownLabel(remainingMs: Long): String {
+    val s = ((remainingMs + 999) / 1000).coerceAtLeast(0)
+    return "%d:%02d".format(s / 60, s % 60)
+}
+
+/** One-at-a-time alert mirroring the iOS .alert(presenting:). A confirm+Cancel
+ *  when [CustomDomainPrompt.confirmLabel] is set, else an informational
+ *  single-dismiss alert. */
+@Composable
+private fun CustomDomainPromptDialog(
+    prompt: CustomDomainPrompt,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(prompt.title) },
+        text = {
+            Text(
+                text = prompt.message,
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 13.sp),
+            )
+        },
+        confirmButton = {
+            if (prompt.confirmLabel != null) {
+                TextButton(onClick = onConfirm) {
+                    Text(
+                        prompt.confirmLabel,
+                        color = if (prompt.destructive) FS.colors.danger else FS.colors.text,
+                    )
+                }
+            } else {
+                TextButton(onClick = onDismiss) { Text("OK") }
+            }
+        },
+        dismissButton = {
+            if (prompt.confirmLabel != null) {
+                TextButton(onClick = onDismiss) { Text("Cancel") }
+            }
+        },
+    )
 }
 
 @Composable
