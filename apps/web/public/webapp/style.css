@@ -2333,7 +2333,7 @@ button[data-device-restricted] {
 .share-choice-text { display: flex; flex-direction: column; gap: 2px; }
 .share-sas { font-size: 28px; font-weight: 600; letter-spacing: 0.08em; text-align: center; margin: var(--space-2) 0; color: var(--ink); }
 .share-qr { display: flex; justify-content: center; margin: var(--space-2) 0; }
-.share-qr svg { border-radius: 8px; }
+.share-qr svg { border-radius: 8px; max-width: 100%; height: auto; }
 .share-offer { text-align: center; }
 .share-offer-icon { display: inline-flex; margin-bottom: var(--space-2); }
 .share-offer-name { font-size: 18px; font-weight: 600; margin: 0; }

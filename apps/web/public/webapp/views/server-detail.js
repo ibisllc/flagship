@@ -1217,6 +1217,18 @@ export const TRANSFER_ADMIN_HANDOFF_WARNING =
   "this dialog is open; a box with a pinned admin key will wait for this " +
   "hand-off before re-homing.";
 
+/** The transfer link as a QR the new owner's phone camera opens (the same
+ *  link iOS and Android show). The link text stays below it for pasting. */
+export async function renderTransferQr(slot, link, load = () => import("/qrEncoder.js")) {
+  if (!slot) return;
+  try {
+    const m = await load();
+    slot.innerHTML = m.renderQrSvg(link, { size: 280, foreground: "#0f172a", background: "#ffffff" });
+  } catch {
+    slot.innerHTML = "";
+  }
+}
+
 // Giver "Transfer to another account": full irreversible warning + type-to-
 // confirm the FQDN, then sign + deposit the offer and render the claim code the
 // acquirer pastes into "Pair an existing box". The disk-key re-seal is a later
@@ -1245,11 +1257,12 @@ async function openTransferDialog(body) {
       <button class="danger" data-transfer-go disabled>Create transfer code</button>
     </div>
     <div class="mt-3 hidden" data-transfer-result>
-      <p class="note">Share this link with the other person — it expires soon.
-      They can open it with their phone's camera, or paste it into
-      <em>Take over a box</em>. After they claim it you'll be asked to finish
-      handing over the disk key.</p>
-      <textarea class="full-width" rows="4" readonly data-transfer-qr></textarea>
+      <p class="note">Have the new owner scan this with their phone's camera,
+      or share the link below for them to paste into <em>Take over a box</em>.
+      It expires soon. Keep this open: after they claim it, this browser hands
+      over the disk key.</p>
+      <div class="share-qr" id="transfer-qr" data-transfer-qr-svg></div>
+      <textarea class="full-width mt-2" rows="3" readonly data-transfer-qr></textarea>
       <p class="note small hidden" data-transfer-handoff></p>
     </div>
   `;
@@ -1291,7 +1304,9 @@ async function openTransferDialog(body) {
         });
         // Render the universal-link form (a phone Camera opens it straight
         // into the app; it doubles as the paste-able acquirer code).
-        qrEl.value = buildTransferLink(out.qr);
+        const link = buildTransferLink(out.qr);
+        qrEl.value = link;
+        void renderTransferQr(dlg.querySelector("[data-transfer-qr-svg]"), link);
         resultEl.classList.remove("hidden");
         goBtn.classList.add("hidden");
         confirmEl.disabled = true;
