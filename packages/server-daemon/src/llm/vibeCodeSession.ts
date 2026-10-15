@@ -48,6 +48,7 @@ import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync
 import { join } from "node:path";
 import type { Attachment } from "@flagship/llm-providers";
 import { SUMMARY_PREFIX } from "./contextCompaction.js";
+import { tidyAiManifest } from "./manifestTidy.js";
 import type { SampleFile } from "./vibeCodeAttachments.js";
 
 export type VibeCodeEvent =
@@ -864,10 +865,12 @@ export class VibeCodeSession extends EventEmitter {
   }
 
   files(): Record<string, string> {
-    return this.parser.snapshot();
+    const files = this.parser.snapshot();
+    const manifest = files["flagship.app.json"];
+    return manifest === undefined ? files : { ...files, "flagship.app.json": tidyAiManifest(manifest) };
   }
   manifestJson(): string | undefined {
-    return this.parser.snapshot()["flagship.app.json"];
+    return this.files()["flagship.app.json"];
   }
   conversation(): ReadonlyArray<HistoryEntry> {
     return [...this.history];

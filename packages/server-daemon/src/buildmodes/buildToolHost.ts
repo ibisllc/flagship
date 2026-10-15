@@ -28,6 +28,7 @@
  */
 
 import { RUNTIME_BASES, parseManifest } from "@flagship/protocol";
+import { tidyAiManifest } from "../llm/manifestTidy.js";
 import type { BuildJournal, BuildMode } from "./buildJournal.js";
 import type { BuildWorkspace } from "./buildWorkspace.js";
 import { renderContractMarkdown } from "./contract.js";
@@ -335,7 +336,8 @@ export class BuildToolHost {
 
       case "write_file": {
         const path = str(args.path);
-        const content = typeof args.content === "string" ? args.content : "";
+        const written = typeof args.content === "string" ? args.content : "";
+        const content = path === "flagship.app.json" ? tidyAiManifest(written) : written;
         const w = this.ctx.workspace.write(path, content);
         if (!w.ok) return toolErr(w.reason, `write_file rejected: ${path}`);
         return {
