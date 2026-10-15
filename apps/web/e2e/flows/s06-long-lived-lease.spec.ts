@@ -10,7 +10,7 @@
  * deposit → consume roundtrip is asserted live by smoke-lease-unlock.ts.
  */
 
-import { test, expect, bootstrapToHome, syncWebappPubkey } from "../fixtures/pod-sim.js";
+import { test, expect, bootstrapToHome, routeFqdnToPodSim, syncWebappPubkey } from "../fixtures/pod-sim.js";
 import { bytesToHex } from "../fixtures/identity.js";
 import { sealForEd25519Recipient, verifyAutoUnlockLease } from "@flagship/protocol";
 
@@ -32,7 +32,8 @@ test("S6 — enable long-lived auto-unlock + assert wire-side POST shape", async
   const irkPubHex = await syncWebappPubkey(page, podSim);
   await page.locator("#view-home .advanced-disclosure").evaluate((d) => { (d as unknown as { open: boolean }).open = true; });
   await page.click("#open-pod-pair");
-  await page.fill("#pod-pair-base", podSim.baseUrl);
+  // Pair at the server's own name: server detail reaches it as https://<fqdn>.
+  await page.fill("#pod-pair-base", await routeFqdnToPodSim(page, podSim, identity.serverFqdn));
   await page.click("#pod-pair-go");
   await expect.poll(() => podSim.orders.filterByType("add-paired-session").length).toBe(1);
   await page.click("#pod-pair-back");

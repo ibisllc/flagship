@@ -42,7 +42,8 @@ APEX_BASE_URL=https://flagshipserver.com \
 # A fresh local D1 needs the migrations first (CI does the same; see
 # .github/workflows/e2e.yml for the pinned wrangler version):
 cd apps/com && npx wrangler d1 migrations apply flagship-state --local
-npx wrangler dev &
+# A throwaway read-token secret lets the private reads (/audit, /pods) mint.
+npx wrangler dev --var ACCOUNT_READ_TOKEN_SECRET:e2e-local-read-token-secret &
 # (wait for "Ready on http://localhost:8787")
 cd ../web/e2e && npm test
 ```

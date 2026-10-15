@@ -40,6 +40,14 @@ test("S13 — orders/send queued while offline + SW carries the replay patterns"
     const nav = (globalThis as unknown) as { navigator: { serviceWorker: { ready: Promise<unknown> } } };
     return nav.navigator.serviceWorker.ready;
   });
+  // The SW never claims open pages (no clients.claim(), so a bad deploy
+  // can't take over a running tab): the page that registered it is only
+  // controlled after a reload. Without one the offline fetch skips the SW.
+  const controlled = () =>
+    page.evaluate(() => !!((globalThis as unknown) as { navigator: { serviceWorker: { controller: unknown } } })
+      .navigator.serviceWorker.controller);
+  if (!(await controlled())) await page.reload();
+  await expect.poll(controlled, { timeout: 10_000 }).toBe(true);
 
   await context.setOffline(true);
 

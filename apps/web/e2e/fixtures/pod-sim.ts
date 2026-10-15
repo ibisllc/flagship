@@ -85,6 +85,25 @@ export async function syncWebappPubkey(page: Page, podSim: PodSim): Promise<stri
 }
 
 /**
+ * Serve `https://<fqdn>` from the pod-sim. The webapp reaches a server by its
+ * name (`boxClient(fqdn)` → `https://<fqdn>`), but the pod-sim listens on
+ * 127.0.0.1:<port>, so a spec that opens a server by name pairs at
+ * `https://<fqdn>` and forwards that origin here.
+ */
+export async function routeFqdnToPodSim(page: Page, podSim: PodSim, fqdn: string): Promise<string> {
+  const origin = `https://${fqdn}`;
+  await page.route(
+    (url) => url.origin === origin,
+    async (route, request) => {
+      const target = podSim.baseUrl + request.url().slice(origin.length);
+      const response = await route.fetch({ url: target });
+      await route.fulfill({ response });
+    },
+  );
+  return origin;
+}
+
+/**
  * The rig serves the webapp from wrangler dev on localhost and tells the
  * Worker which host it means with x-flagship-effective-host. The `page`
  * fixture stamps that header with page.route, which never sees requests the

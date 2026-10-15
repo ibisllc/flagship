@@ -36,6 +36,7 @@ import {
   deriveIRK,
   signWipeRestart,
   signClaimUsername,
+  signDeviceEndpointClaim,
   signUploadRecoveryRecord,
   type Keypair,
 } from "@flagship/protocol";
@@ -80,6 +81,34 @@ interface SetupResult {
  * earlier specs (or a retry) spent. In production Cloudflare overwrites
  * the header, so this is inert against live .com.
  */
+/** Mint an account read token (docs/account-read-token.md) on the IRK path:
+ *  the audit read is refused without one. */
+async function mintReadToken(
+  ctx: Awaited<ReturnType<typeof playwrightRequest.newContext>>,
+  username: string,
+  irk: Keypair,
+): Promise<string> {
+  const issuedAt = Date.now();
+  const nonce = randomBytes(32);
+  const claim = {
+    username,
+    endpointLabel: "account-read-token",
+    phoneIrkPub: irk.publicKey,
+    issuedAt,
+    expiresAt: issuedAt + 5 * 60_000,
+    nonce,
+  };
+  const resp = await ctx.post(`${APEX}/api/accounts/${username}/read-token`, {
+    data: {
+      auth: { ...claim, phoneIrkPub: bytesToHex(irk.publicKey), nonce: bytesToHex(nonce) },
+      authSignature: bytesToHex(signDeviceEndpointClaim(claim, irk)),
+    },
+    failOnStatusCode: false,
+  });
+  expect(resp.status(), "read-token mint").toBe(200);
+  return ((await resp.json()) as { token: string }).token;
+}
+
 async function newClientContext() {
   const ip = `203.0.113.${1 + Math.floor(Math.random() * 254)}`;
   return playwrightRequest.newContext({ extraHTTPHeaders: { "cf-connecting-ip": ip } });
@@ -202,8 +231,12 @@ test.describe("S11 — Wipe & restart Worker integration", () => {
     expect(body.newIrkPub.toLowerCase()).toBe(bytesToHex(newIrk.publicKey));
     expect(typeof body.auditSeq).toBe("number");
 
-    // The audit endpoint should now surface a wipe-restart row.
-    const auditResp = await ctx.get(`${APEX}/api/users/${username}/audit?since=0&limit=10`);
+    // The audit endpoint should now surface a wipe-restart row. It is a
+    // private read: the rotated IRK mints the read token for it.
+    const readToken = await mintReadToken(ctx, username, newIrk);
+    const auditResp = await ctx.get(`${APEX}/api/users/${username}/audit?since=0&limit=10`, {
+      headers: { authorization: `Bearer ${readToken}` },
+    });
     expect(auditResp.status()).toBe(200);
     const audit = await auditResp.json();
     expect(audit.events.length).toBeGreaterThan(0);
