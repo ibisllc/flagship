@@ -370,11 +370,11 @@ describe("scheduled()", () => {
   it("publishes on the 00:00 UTC run only", async () => {
     await queue({ repo: NOTES, n: 1 });
     const e = { ...env, BACKUPS_BUCKET: { put: async () => undefined, list: async () => ({ objects: [], truncated: false }), delete: async () => undefined } };
-    expect(await run(6, e)).toBe(4);
+    expect(await run(6, e)).toBe(5);
     expect(gh.calls).toHaveLength(0);
     // 2026-10-12 is a Monday: the weekly insight is scheduled too, beside the
     // daily model-capability refresh.
-    expect(await run(0, e)).toBe(7);
+    expect(await run(0, e)).toBe(8);
     expect(gh.files()[`adapters/github.com/me/notes/${sha(1)}.json`]).toBeDefined();
   });
 });

@@ -359,6 +359,8 @@ describe("rateLimit — 429 response shape", () => {
       error: "rate-limited",
       endpoint: "recovery-by-username",
       limit: "usernameHash",
+      retryAfterSec: 900,
+      message: "Too many tries for this account name. Try again in about 15 minutes.",
     });
   });
 });
@@ -502,7 +504,7 @@ describe("rateLimit — wired into route()", () => {
       expect(r.axis).toBe("ip");
       const res = rateLimitedResponse(r);
       expect(res.status).toBe(429);
-      expect(JSON.parse(await res.text())).toEqual({ error: "rate-limited", endpoint: "qr-pipe-upgrade", limit: "ip" });
+      expect(JSON.parse(await res.text())).toMatchObject({ error: "rate-limited", endpoint: "qr-pipe-upgrade", limit: "ip" });
       expect(res.headers.get("retry-after")).toBeTruthy();
       expect((await checkPipeUpgrade(env, "qr-pipe-upgrade", "2.2.2.2")).limited).toBe(false);
     });

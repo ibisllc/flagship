@@ -25,7 +25,9 @@
  * from the signed request payload before applying the per-IRK axis.
  */
 
+import type { D1Database } from "@flagship/storage";
 import { isWindowRules, type HitResult, type WindowRule } from "./rateLimitCounter.js";
+import { recordRateLimitEvents, type RateLimitEvent } from "./rateLimitLog.js";
 
 export type { WindowRule } from "./rateLimitCounter.js";
 
@@ -43,6 +45,12 @@ export interface RateLimitEnv {
    * scripted runs from one address don't spend a real user's budget.
    */
   RATE_LIMIT_SCALE?: string;
+  /** Where refusals and near-limit passes are counted for the owner. */
+  DB?: D1Database;
+}
+
+export interface WaitUntilLike {
+  waitUntil(p: Promise<unknown>): void;
 }
 
 /** Endpoint identifier — drives the per-endpoint thresholds + 429 body. */
@@ -342,9 +350,24 @@ export interface AllowedResult {
 export async function checkRateLimit(
   env: RateLimitEnv,
   input: RateLimitInput,
+  ctx?: WaitUntilLike,
 ): Promise<RateLimitedResult | AllowedResult> {
+  const { result, events } = await evaluateRateLimit(env, input);
+  if (events.length > 0 && env.DB) {
+    const recorded = recordRateLimitEvents(env.DB, events);
+    if (ctx) ctx.waitUntil(recorded);
+    else await recorded;
+  }
+  return result;
+}
+
+async function evaluateRateLimit(
+  env: RateLimitEnv,
+  input: RateLimitInput,
+): Promise<{ result: RateLimitedResult | AllowedResult; events: RateLimitEvent[] }> {
+  const allowed = { result: { limited: false } as AllowedResult, events: [] };
   const ns = env.RATE_LIMITS;
-  if (!ns) return { limited: false };
+  if (!ns) return allowed;
   const scale = limitScale(env);
   const byAxis = new Map<AxisLimit["axis"], WindowRule[]>();
   for (const rule of LIMITS[input.endpoint]) {
@@ -363,24 +386,34 @@ export async function checkRateLimit(
     outcomes = await Promise.all(checks);
   } catch (err) {
     console.error(`rate limit counter unreachable for ${input.endpoint}:`, err);
-    if (!FAIL_CLOSED.has(input.endpoint)) return { limited: false };
+    const events: RateLimitEvent[] = [{ endpoint: input.endpoint, axis: "counter", kind: "unreachable" }];
+    if (!FAIL_CLOSED.has(input.endpoint)) return { ...allowed, events };
     const axis = byAxis.keys().next().value ?? "ip";
-    return { limited: true, endpoint: input.endpoint, axis, retryAfterSec: 60 };
+    return { result: { limited: true, endpoint: input.endpoint, axis, retryAfterSec: 60 }, events };
   }
+  const events: RateLimitEvent[] = [];
   let worst: { axis: AxisLimit["axis"]; hit: HitResult } | undefined;
   for (const o of outcomes) {
-    if (!o.hit.ok && (!worst || o.hit.retryAfterSec > worst.hit.retryAfterSec)) worst = o;
+    if (o.hit.ok) {
+      if (o.hit.near) events.push({ endpoint: input.endpoint, axis: o.axis, kind: "near" });
+      continue;
+    }
+    events.push({ endpoint: input.endpoint, axis: o.axis, kind: o.hit.firstRefusal ? "first-refusal" : "refusal" });
+    if (!worst || o.hit.retryAfterSec > worst.hit.retryAfterSec) worst = o;
   }
-  if (!worst) return { limited: false };
+  if (!worst) return { result: { limited: false }, events };
   return {
-    limited: true,
-    endpoint: input.endpoint,
-    axis: worst.axis,
-    retryAfterSec: worst.hit.retryAfterSec,
+    result: {
+      limited: true,
+      endpoint: input.endpoint,
+      axis: worst.axis,
+      retryAfterSec: worst.hit.retryAfterSec,
+    },
+    events,
   };
 }
 
-function limitScale(env: RateLimitEnv): number {
+export function limitScale(env: RateLimitEnv): number {
   const n = Number(env.RATE_LIMIT_SCALE);
   return Number.isFinite(n) && n >= 1 ? n : 1;
 }
@@ -402,7 +435,12 @@ async function hitCounter(
   if (!res.ok) throw new Error(`rate-limit counter answered ${res.status}`);
   const body = (await res.json()) as Partial<HitResult>;
   if (typeof body.ok !== "boolean") throw new Error("rate-limit counter answered without a verdict");
-  return { ok: body.ok, retryAfterSec: Number(body.retryAfterSec) || 0 };
+  return {
+    ok: body.ok,
+    retryAfterSec: Number(body.retryAfterSec) || 0,
+    ...(body.near === true ? { near: true } : {}),
+    ...(body.firstRefusal === true ? { firstRefusal: true } : {}),
+  };
 }
 
 function identifierFor(input: RateLimitInput, axis: AxisLimit["axis"]): string | null {
@@ -413,12 +451,12 @@ function identifierFor(input: RateLimitInput, axis: AxisLimit["axis"]): string |
 }
 
 /**
- * Build the 429 response. Body shape matches the spec:
- *   { error: "rate-limited", endpoint: "<id>", limit: "<axis>" }
+ * Build the 429 response:
+ *   { error: "rate-limited", endpoint, limit: "<axis>", retryAfterSec, message }
  *
- * `Retry-After` is the axis's window in seconds — the most accurate
- * upper bound we can give without exposing the binding's internal
- * counter state.
+ * `retryAfterSec` (and `Retry-After`) is when the full window frees a
+ * slot. `message` is a sentence the apps may show as is; they word their
+ * own from `limit` and `retryAfterSec` where they can.
  */
 export function rateLimitedResponse(result: RateLimitedResult): Response {
   return new Response(
@@ -426,6 +464,8 @@ export function rateLimitedResponse(result: RateLimitedResult): Response {
       error: "rate-limited",
       endpoint: result.endpoint,
       limit: result.axis,
+      retryAfterSec: result.retryAfterSec,
+      message: rateLimitedMessage(result.axis, result.retryAfterSec),
     }),
     {
       status: 429,
@@ -438,6 +478,21 @@ export function rateLimitedResponse(result: RateLimitedResult): Response {
       },
     },
   );
+}
+
+/** "Too many tries from your network. Try again in about 12 minutes." */
+export function rateLimitedMessage(axis: AxisLimit["axis"], retryAfterSec: number): string {
+  const who =
+    axis === "ip" ? "from your network" : axis === "irk" ? "from this account" : "for this account name";
+  return `Too many tries ${who}. Try again ${retryAfterPhrase(retryAfterSec)}.`;
+}
+
+export function retryAfterPhrase(sec: number): string {
+  if (sec < 60) return "in a minute";
+  const min = Math.ceil(sec / 60);
+  if (min < 60) return `in about ${min} minute${min === 1 ? "" : "s"}`;
+  const h = Math.max(1, Math.round(min / 60));
+  return `in about ${h} hour${h === 1 ? "" : "s"}`;
 }
 
 /**

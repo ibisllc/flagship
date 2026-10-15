@@ -32,6 +32,7 @@ import {
   type WaitUntilLike,
 } from "./adapterIndex.js";
 import { handleInferenceModelRoutes, isInferenceModelPath } from "./inferenceModelRoutes.js";
+import { handleRateLimitReport, RATE_LIMIT_REPORT_PATH } from "./rateLimitReport.js";
 import {
   recordRateLimited,
   recordUpgrade,
@@ -607,6 +608,9 @@ async function routeImpl(
 
   // AI model menus: Flagship Inference's catalog and the capability table.
   // Public, cacheable, keyed to nobody; the admin view checks its secret.
+  if (url.pathname === RATE_LIMIT_REPORT_PATH) {
+    return handleRateLimitReport(request, env);
+  }
   if (isInferenceModelPath(url.pathname)) {
     return handleInferenceModelRoutes(request, env);
   }
@@ -818,7 +822,7 @@ async function routeImpl(
       ip: clientIp(request),
       ...(irkPub ? { irkPub } : {}),
       ...(usernameHash ? { usernameHash } : {}),
-    });
+    }, ctx);
     if (rl.limited) return rateLimitedResponse(rl);
   }
 

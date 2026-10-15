@@ -313,13 +313,13 @@ describe("scheduled — D1 → R2 backup", () => {
       cron: "0 */6 * * *",
     };
     await scheduled(controller, env, ctx);
-    // scheduled() now schedules four jobs on the 6-hourly cron: the
-    // D1→R2 backup, the custom-domain verify pass (#79B), the
-    // server-side CT-monitoring scan, AND the CA-endorsement lease
-    // lapse warning (OPS-3). The verify / CT / CA passes no-op / run
+    // scheduled() schedules five jobs on the 6-hourly cron: the D1→R2
+    // backup, the custom-domain verify pass (#79B), the server-side
+    // CT-monitoring scan, the CA-endorsement lease lapse warning (OPS-3)
+    // and the rate-limit log prune. All but the backup no-op or run
     // harmlessly here (no SERVICES_* on env, no servers in the DB, no
     // active endorsement lease) but are still waitUntil'd.
-    expect(waits).toHaveLength(4);
+    expect(waits).toHaveLength(5);
     await Promise.all(waits);
     expect(r2.puts).toHaveLength(1);
     expect(r2.puts[0]!.key).toBe("d1/hourly/2026-05-11-06.jsonl.gz");

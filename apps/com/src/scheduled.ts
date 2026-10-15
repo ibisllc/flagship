@@ -61,6 +61,7 @@ import { notifyCaLeaseViaGithubIssue } from "./caLeaseGithubNotifier.js";
 import { runAdapterPublish } from "./adapterPublish.js";
 import { runAdapterInsights } from "./adapterInsights.js";
 import { runModelCapabilityRefresh } from "./inferenceModelRoutes.js";
+import { pruneRateLimitLog } from "./rateLimitLog.js";
 import type { AdapterBucketLike } from "./adapterIndex.js";
 
 /** Scope of one row that the dump emits. */
@@ -382,6 +383,13 @@ export async function scheduled(
         console.error("[ca-lease] cron pass failed", e);
       }),
     );
+    if (env.DB) {
+      ctx.waitUntil(
+        pruneRateLimitLog(env.DB, now).catch((e) => {
+          console.error("[rate-limit-log] prune failed", (e as Error).message);
+        }),
+      );
+    }
     // Repo adapters: once a day (the 00:00 UTC run), publish the queue to the
     // public index repo in one commit. A failure leaves the queue for tomorrow.
     if (now.getUTCHours() === 0) {

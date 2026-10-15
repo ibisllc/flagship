@@ -9,6 +9,12 @@
  * retrying gets exactly `limit` per window, never a reset at a boundary.
  * The largest limit is a few hundred, so the log stays small. An alarm
  * clears the object once its longest window has passed with no traffic.
+ *
+ * Two signals feed the owner's report (rateLimitLog.ts) without anything
+ * about the caller leaving the object: `near` when a request takes a
+ * window to 80% of its budget (its last slot for budgets under 5), and
+ * `firstRefusal` on the first refusal after a pass, so a client retrying
+ * against a full window counts as one refused source.
  */
 
 export interface WindowRule {
@@ -20,14 +26,24 @@ export interface HitResult {
   ok: boolean;
   /** Seconds until the fullest window frees a slot (0 when ok). */
   retryAfterSec: number;
+  /** This pass took a window to its near-limit mark. */
+  near?: boolean;
+  /** The first refusal since this identifier last passed. */
+  firstRefusal?: boolean;
 }
 
 type Logs = Record<string, number[]>;
 
 const LOGS_KEY = "logs";
+const REFUSING_KEY = "refusing";
 
 function ruleKey(rule: WindowRule): string {
   return `${rule.limit}/${rule.windowSec}`;
+}
+
+/** The count at which a window is close to full. */
+export function nearMark(limit: number): number {
+  return limit < 5 ? limit : Math.ceil(limit * 0.8);
 }
 
 /** Pure core: prune each window, admit only if all have room. */
@@ -50,8 +66,13 @@ export function hitWindows(
   if (retryAfterMs > 0) {
     return { result: { ok: false, retryAfterSec: Math.max(1, Math.ceil(retryAfterMs / 1000)) }, logs: next };
   }
-  for (const rule of rules) next[ruleKey(rule)]!.push(now);
-  return { result: { ok: true, retryAfterSec: 0 }, logs: next };
+  let near = false;
+  for (const rule of rules) {
+    const kept = next[ruleKey(rule)]!;
+    kept.push(now);
+    if (kept.length === nearMark(rule.limit)) near = true;
+  }
+  return { result: near ? { ok: true, retryAfterSec: 0, near } : { ok: true, retryAfterSec: 0 }, logs: next };
 }
 
 export function isWindowRules(value: unknown): value is WindowRule[] {
@@ -106,12 +127,17 @@ export class RateLimitCounter {
     const now = this.now();
     const logs = (await this.state.storage.get<Logs>(LOGS_KEY)) ?? {};
     const out = hitWindows(logs, rules, now);
+    const longest = Math.max(...rules.map((r) => r.windowSec));
     if (out.result.ok) {
       await this.state.storage.put(LOGS_KEY, out.logs);
-      const longest = Math.max(...rules.map((r) => r.windowSec));
+      await this.state.storage.put(REFUSING_KEY, false);
       await this.state.storage.setAlarm(now + longest * 1000 + 1000);
+      return out.result;
     }
-    return out.result;
+    if (await this.state.storage.get<boolean>(REFUSING_KEY)) return out.result;
+    await this.state.storage.put(REFUSING_KEY, true);
+    await this.state.storage.setAlarm(now + longest * 1000 + 1000);
+    return { ...out.result, firstRefusal: true };
   }
 
   async alarm(): Promise<void> {

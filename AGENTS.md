@@ -188,6 +188,15 @@ client parity; `-- --native --live` before a release candidate). Loop and
 owners: `docs/runbooks/release-readiness.md`; feature matrix:
 `parity/features.json` (`npm run parity -- --report`).
 
+### Recurring: ask the owner to check the rate limits
+
+About once a week (and at the start of a launch-week session), ask the owner
+to run `npm run rate-limits` (needs `FLAGSHIP_ADMIN_SECRET`; `-- --days 30`
+for a month) and decide whether any budget in `apps/com/src/rateLimit.ts`
+needs moving: many distinct sources refused means real people hit it;
+many near passes with no refusals means little headroom. Record the date
+of the last check here: **not yet checked**.
+
 ### Urgent
 
 - **Renew the CA endorsement lease before 2026-11-05.** The production CA's
@@ -565,7 +574,13 @@ allowances (1M / 5M / 20M a month) are placeholders.
   the `ratelimit` bindings are gone. New `totp-verify` cap (5 per 15 min per
   account); username keys are case-folded; recovery, re-pair and TOTP refuse
   if the counter is unreachable. The gym runs with `RATE_LIMIT_SCALE` 10 and
-  local e2e with 100. Needs a `.com` deploy (DO migration `v4`) and the gym's.
+  local e2e with 100. Refusals, distinct refused callers and near-limit
+  passes are counted hourly in D1 `rate_limit_log` (migration 0101, nothing
+  about the caller; kept 90 days), read by `GET /api/admin/rate-limits` and
+  `npm run rate-limits`. The 429 carries `retryAfterSec` and a sentence
+  ("Too many tries from your network. Try again in about 12 minutes."),
+  which all three apps show. Needs migration 0101, a `.com` deploy (DO
+  migration `v4`) and the gym's.
 - **App "Back up now" (2026-10-15):** the box never mounted `/api/backups/<id>`,
   so every client's archive fetch 404'd; now mounted (owner sessions only).
   The webapp fetches it with the session and saves the Blob, like iOS/Android.

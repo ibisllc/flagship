@@ -37,6 +37,7 @@
     "judge-smoke": "tsx tools/gym/judge-smoke.ts",
     "build-eval": "npm --workspace=@flagship/build-eval run eval --",
     "parity": "node scripts/parity-check.mjs",
+    "rate-limits": "node scripts/rate-limit-report.mjs",
     "ready": "node scripts/release-readiness.mjs"
   },
   "devDependencies": {
