@@ -27,6 +27,9 @@ export interface OutboundProxySummary {
   } | null;
   hasCredentials: boolean;
   status: OutboundStatus;
+  /** False once `.com` has said the account is on Free: the proxy is part of
+   *  Pro, so the box takes no new proxy (turning one off always works). */
+  available: boolean;
 }
 
 export interface OutboundProxyHttpDeps {
@@ -37,6 +40,8 @@ export interface OutboundProxyHttpDeps {
   probeTarget: () => { host: string; port: number };
   /** Switch the box to the saved setting (connector, tunnel, bridge). */
   activate: (stored: StoredOutboundProxy) => void | Promise<void>;
+  /** The account's plan as `.com` last said in the heartbeat reply; null until it has. */
+  accountTier?: () => string | null;
   now?: () => number;
   /** How long to wait after answering before switching, so the answer leaves on the old path. */
   switchDelayMs?: number;
@@ -45,7 +50,17 @@ export interface OutboundProxyHttpDeps {
 const J = { "content-type": "application/json" };
 const jres = (status: number, body: unknown): HttpResponse => ({ status, headers: J, body: JSON.stringify(body) });
 
-export function outboundProxySummary(store: OutboundProxyStore, net: OutboundNet): OutboundProxySummary {
+/** A proxy is part of Pro. Until `.com` has answered, the box doesn't refuse:
+ *  a new box must reach `.com` through its proxy before it can learn its plan. */
+export function proxyAvailable(accountTier: (() => string | null) | undefined): boolean {
+  return accountTier?.() !== "free";
+}
+
+export function outboundProxySummary(
+  store: OutboundProxyStore,
+  net: OutboundNet,
+  accountTier?: () => string | null,
+): OutboundProxySummary {
   const held = store.current();
   const p = held?.signed.proxy;
   return {
@@ -55,6 +70,7 @@ export function outboundProxySummary(store: OutboundProxyStore, net: OutboundNet
         : null,
     hasCredentials: Boolean(p?.auth && held?.credentials),
     status: net.status(),
+    available: proxyAvailable(accountTier),
   };
 }
 
@@ -62,7 +78,7 @@ export function buildOutboundProxyHttp(deps: OutboundProxyHttpDeps) {
   const now = deps.now ?? Date.now;
   return async (path: string, method: string, req: HttpRequest, ctx: { companion: boolean }): Promise<HttpResponse | null> => {
     if (path !== OUTBOUND_PROXY_PATH) return null;
-    if (method === "GET") return jres(200, outboundProxySummary(deps.store, deps.net));
+    if (method === "GET") return jres(200, outboundProxySummary(deps.store, deps.net, deps.accountTier));
     if (method !== "POST") return jres(405, { error: "method not allowed" });
     if (ctx.companion) {
       return jres(403, { code: "companion-write-not-allowed", message: "Open your owner app to approve this" });
@@ -79,6 +95,9 @@ export function buildOutboundProxyHttp(deps: OutboundProxyHttpDeps) {
     const p = signed.proxy;
     if (Math.abs(now() - p.issuedAt) > BOX_PROXY_MAX_SKEW_MS) {
       return jres(403, { error: "This change is too old. Try again." });
+    }
+    if (p.kind !== "none" && !proxyAvailable(deps.accountTier)) {
+      return jres(403, { code: "pro-required", error: "An outbound proxy is part of Pro. You can still turn this one off." });
     }
     const held = deps.store.current();
     if (held && p.issuedAt <= held.signed.proxy.issuedAt) {
@@ -115,7 +134,7 @@ export function buildOutboundProxyHttp(deps: OutboundProxyHttpDeps) {
     setTimeout(() => {
       void Promise.resolve(deps.activate(next)).catch(() => {});
     }, deps.switchDelayMs ?? 500).unref?.();
-    const summary = outboundProxySummary(deps.store, deps.net);
+    const summary = outboundProxySummary(deps.store, deps.net, deps.accountTier);
     return jres(200, { ok: true, outboundProxy: { ...summary, status: { state: setting ? "ok" : "direct", since: now() } } });
   };
 }
