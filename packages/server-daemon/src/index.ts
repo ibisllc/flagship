@@ -177,6 +177,7 @@ import { appSqlRunner } from "./dataLayer/appSql.js";
 import { DbWriteLedger, buildOwnerDbHttp } from "./dataLayer/ownerDb.js";
 import { ActivityLog, defaultActivityLogPath } from "./shares/activityLog.js";
 import { ShareStore, defaultShareStorePath } from "./shares/shareStore.js";
+import { buildShareUpdate } from "./shares/shareUpdate.js";
 import {
   ShareSessionStore,
   buildShares,
@@ -258,6 +259,34 @@ import { daemonRestarts as restarts } from "./restartCoordinator.js";
 import { buildMaintainersReleaseGate } from "./selfUpdateReleaseGate.js";
 import type { EntitlementBundle } from "./tunnel/tunnelClient.js";
 import { providerRelay } from "./tunnel/relayFetch.js";
+
+/**
+ * The maintainer-endorsement gate every in-place update passes, whoever
+ * ordered it.
+ *
+ * BRING-UP/TEST SEAM ONLY (docs/update-server-rollout-plan.md §Phase 4): a
+ * dummy validation box can override the baked maintainer pin to a throwaway
+ * ca-track anchor so the whole update pipeline is exercisable in software
+ * without the owner's YubiKey. Absent on every real box ⇒ the hardcoded
+ * MAINTAINER_PINNED_MANDATE_HASH stands. Setting it needs root on the box
+ * (root can already do anything), so it widens no attack surface — but it is
+ * logged LOUDLY so an override can never be silent.
+ */
+function selfUpdateReleaseGate(repoPath: string) {
+  const override = process.env.FLAGSHIP_MAINTAINER_PIN_OVERRIDE;
+  if (override) {
+    console.warn(
+      "[self-update] ⚠️  MAINTAINER PIN OVERRIDDEN via " +
+        "FLAGSHIP_MAINTAINER_PIN_OVERRIDE — this box trusts a NON-production " +
+        "release authority. This must NEVER be set on a real box.",
+    );
+  }
+  return buildMaintainersReleaseGate({
+    repoPath,
+    ...(override ? { pinnedMandateHash: override } : {}),
+    onLog: (m) => console.log(m),
+  });
+}
 
 /**
  * Volume-aware backup pre-step: write CONSISTENT dumps of the data the box
@@ -2674,6 +2703,45 @@ async function wireRuntimeSurfaces(deps: {
     await activity.load();
     const verifyOwnerRevoke = (r: ServerShareRevoke, sig: Uint8Array) =>
       authorizeSensitiveOrder({ ...authority, order: r, signature: sig, verify: verifyServerShareRevoke });
+    // A co-manager's update order takes the owner's gates (shares/shareUpdate.ts).
+    const repoPath = process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship";
+    const serverUpdate = existsSync(join(repoPath, ".git"))
+      ? (() => {
+          const releaseGate = selfUpdateReleaseGate(repoPath);
+          const pendingStore = filePendingVerifyStore(`${dataDir}/update-pending.json`);
+          return buildShareUpdate({
+            gate: {
+              serverDomain: env.serverFqdn,
+              repoPath,
+              runner: realUpdateCommandRunner,
+              usedNonceStore: fileUsedNonceStore(`${dataDir}/update-used-nonces.json`),
+              onLog: (m) => console.log(m),
+            },
+            pendingStore,
+            verifyOwnerGrant: (g, sig) =>
+              authorizeSensitiveOrder({ ...authority, order: g, signature: sig, verify: verifyServerShareGrant }),
+            apply: (from, target, why) =>
+              applyEndorsedUpdate(
+                {
+                  repoPath,
+                  releaseGate,
+                  runner: realUpdateCommandRunner,
+                  pendingStore,
+                  requestExit: () => {
+                    console.log("[self-update] restarting into the update a co-manager ordered");
+                    process.exit(0);
+                  },
+                  onLog: (m) => console.log(m),
+                },
+                from,
+                target,
+                why,
+              ),
+            outcomeStore: fileUpdateOutcomeStore(`${dataDir}/update-outcome.json`),
+            activity,
+          });
+        })()
+      : null;
     const shares = buildShares({
       serverDomain: env.serverFqdn,
       store,
@@ -2681,6 +2749,7 @@ async function wireRuntimeSurfaces(deps: {
       activity,
       verifyOwnerRevoke,
       isCompanion: (req) => pairedSessions.isCompanionRequest(req),
+      serverUpdate,
     });
     runtime.addHandler(shares.handlePublic);
     if (env.controlPlaneBaseUrl) {
@@ -3227,29 +3296,7 @@ async function wireOwnerHandlers(deps: {
         username: cfg.userId,
         controlPlaneBaseUrl: env.controlPlaneBaseUrl,
         repoPath,
-        releaseGate: buildMaintainersReleaseGate({
-          repoPath,
-          // BRING-UP/TEST SEAM ONLY (docs/update-server-rollout-plan.md §Phase 4):
-          // a dummy validation box can override the baked maintainer pin to a
-          // throwaway ca-track anchor so the whole update pipeline is exercisable
-          // in software without the owner's YubiKey. Absent on every real box ⇒
-          // the hardcoded MAINTAINER_PINNED_MANDATE_HASH stands. Setting it needs
-          // root on the box (root can already do anything), so it widens no attack
-          // surface — but it is logged LOUDLY so an override can never be silent.
-          ...(process.env.FLAGSHIP_MAINTAINER_PIN_OVERRIDE
-            ? (() => {
-                console.warn(
-                  "[self-update] ⚠️  MAINTAINER PIN OVERRIDDEN via " +
-                    "FLAGSHIP_MAINTAINER_PIN_OVERRIDE — this box trusts a NON-production " +
-                    "release authority. This must NEVER be set on a real box.",
-                );
-                return {
-                  pinnedMandateHash: process.env.FLAGSHIP_MAINTAINER_PIN_OVERRIDE,
-                };
-              })()
-            : {}),
-          onLog: (m) => console.log(m),
-        }),
+        releaseGate: selfUpdateReleaseGate(repoPath),
         runner: realUpdateCommandRunner,
         usedNonceStore: fileUsedNonceStore(`${dataDir}/update-used-nonces.json`),
         pendingStore: filePendingVerifyStore(`${dataDir}/update-pending.json`),

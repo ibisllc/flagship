@@ -3,7 +3,8 @@
  *
  *  - Public: `GET /api/shares/nonce`, `POST /api/shares/session` (the other
  *    account signs in with its per-share key), `POST /api/shares/leave`, and
- *    `GET /api/shares/me` over a share session.
+ *    over a share session `GET /api/shares/me` and `POST /api/shares/update`
+ *    (a co-manager moves the box to an endorsed release, shareUpdate.ts).
  *  - Owner (behind the paired-session gate): `GET/POST /api/screens/shares`,
  *    `POST /api/screens/shares/revoke`, `GET /api/screens/activity`.
  *  - `gate(paired)`: the screens gate. An owner session passes as before; a
@@ -35,6 +36,7 @@ import type { HttpRequest, HttpResponse } from "../runtime.js";
 import { ActivityLog, type ActivityActor } from "./activityLog.js";
 import { shareRefusal, shareRouteNeed } from "./shareRoutes.js";
 import { hexBytes, type HeldShare, type ShareStore } from "./shareStore.js";
+import type { ShareUpdateOrder } from "./shareUpdate.js";
 
 export interface ShareCaller {
   shareId: string;
@@ -154,6 +156,8 @@ export interface SharesDeps {
   verifyOwnerRevoke: (r: ServerShareRevoke, sig: Uint8Array) => boolean;
   /** Is this owner session a companion (read-only browser)? */
   isCompanion?: (req: HttpRequest) => boolean;
+  /** A co-manager's update order; absent where the box can't update itself. */
+  serverUpdate?: ShareUpdateOrder | null;
   now?: () => number;
   log?: (m: string) => void;
 }
@@ -254,6 +258,15 @@ export function buildShares(deps: SharesDeps) {
       return json(200, { ok: true });
     }
 
+    if (path === "/api/shares/update" && method === "POST") {
+      const c = resolve(req);
+      if (!c) return err(401, "share session ended or expired", { code: "share-session" });
+      if (c.level !== "manage") return err(403, "manage-only", { code: "manage-only" });
+      if (!deps.serverUpdate) return err(503, "this server can't update itself", { code: "no-self-update" });
+      const r = await deps.serverUpdate(c, body(req));
+      return json(r.status, r.body);
+    }
+
     if (path === "/api/shares/me" && method === "GET") {
       const c = resolve(req);
       if (!c) return err(401, "share session required");
@@ -263,6 +276,7 @@ export function buildShares(deps: SharesDeps) {
         unlockAtBoot: c.unlockAtBoot,
         seeAppData: c.seeAppData,
         serverDomain: deps.serverDomain,
+        canUpdate: c.level === "manage" && !!deps.serverUpdate,
       });
     }
     return err(404, "share route not found");

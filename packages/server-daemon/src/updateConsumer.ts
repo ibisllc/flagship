@@ -381,7 +381,8 @@ export type UpdateConsumeOutcome =
         | "replayed-nonce"
         | "from-commit-mismatch"
         | "unendorsed"
-        | "apply-failed";
+        | "apply-failed"
+        | "busy";
     }
   | { applied: true; previousCommit: string; targetCommit: string };
 
@@ -401,7 +402,10 @@ export async function runUpdateConsumer(
   const now = opts.now ?? (() => Date.now());
 
   // 0. An update is already staged and awaiting its boot health verdict —
-  //    never stack a second one on top.
+  //    never stack a second one on top. One being applied right now (a
+  //    co-manager's order, or the first-boot move) leaves the deposit for
+  //    the next poll.
+  if (updateApplyInProgress()) return { applied: false, reason: "busy" };
   try {
     if ((await opts.pendingStore.read()) !== null) {
       return { applied: false, reason: "pending-verify" };
@@ -465,12 +469,50 @@ export async function runUpdateConsumer(
     return { applied: false, reason: "rejected" };
   }
 
+  const admitted = await admitUpdateOrder(opts, order);
+  if (!admitted.admitted) return admitted.outcome;
+  return applyEndorsedUpdate(opts, admitted.currentCommit, order.targetCommit, "admin-authorized, maintainer-endorsed");
+}
+
+export interface AdmitUpdateOrderOptions {
+  serverDomain: string;
+  repoPath: string;
+  runner: UpdateCommandRunner;
+  usedNonceStore: UsedNonceStore;
+  maxOrderAgeMs?: number;
+  futureSkewMs?: number;
+  now?: () => number;
+  onLog?: (m: string) => void;
+}
+
+export type AdmitUpdateOrderResult =
+  | { admitted: true; currentCommit: string }
+  | { admitted: false; outcome: Extract<UpdateConsumeOutcome, { applied: false }> };
+
+/**
+ * The replay and base gates every authorized update order passes before the
+ * endorsement check, whoever signed it (the owner's order from `.com`, or a
+ * co-manager's straight to the box): it names this box, it is fresh, its
+ * nonce is new, and it was made for the commit the box runs. Burns the nonce
+ * on success, before any side effect.
+ */
+export async function admitUpdateOrder(
+  opts: AdmitUpdateOrderOptions,
+  order: UpdateOrder,
+): Promise<AdmitUpdateOrderResult> {
+  const log = opts.onLog ?? (() => {});
+  const now = opts.now ?? (() => Date.now());
+  const refuse = (reason: Extract<UpdateConsumeOutcome, { applied: false }>["reason"]): AdmitUpdateOrderResult => ({
+    admitted: false,
+    outcome: { applied: false, reason },
+  });
+
   // 4. The order must name THIS box.
   if (order.serverDomain.toLowerCase() !== opts.serverDomain.toLowerCase()) {
     log(
       `[self-update] order names ${order.serverDomain}, not this box ${opts.serverDomain}; ignoring`,
     );
-    return { applied: false, reason: "wrong-domain" };
+    return refuse("wrong-domain");
   }
 
   // 5. issuedAt freshness (anti-replay of an ancient order; the `.com` lane's
@@ -478,7 +520,7 @@ export async function runUpdateConsumer(
   const age = now() - order.issuedAt;
   if (age > (opts.maxOrderAgeMs ?? DEFAULT_MAX_ORDER_AGE_MS) || age < -(opts.futureSkewMs ?? DEFAULT_FUTURE_SKEW_MS)) {
     log(`[self-update] order issuedAt out of window (age ${age}ms); ignoring`);
-    return { applied: false, reason: "stale" };
+    return refuse("stale");
   }
 
   // 6. Nonce single-use (survives rollback + redelivery — a rolled-back update
@@ -486,7 +528,7 @@ export async function runUpdateConsumer(
   try {
     if (await opts.usedNonceStore.has(order.nonce)) {
       log("[self-update] nonce already consumed; ignoring replay");
-      return { applied: false, reason: "replayed-nonce" };
+      return refuse("replayed-nonce");
     }
   } catch {
     /* an unreadable store is treated as "not used" — .com consume-once is primary */
@@ -500,13 +542,13 @@ export async function runUpdateConsumer(
     currentCommit = stdout.trim().toLowerCase();
   } catch (e) {
     log(`[self-update] cannot read current HEAD: ${(e as Error).message}`);
-    return { applied: false, reason: "error" };
+    return refuse("error");
   }
   if (order.fromCommit.toLowerCase() !== currentCommit) {
     log(
       `[self-update] order fromCommit ${order.fromCommit} != current HEAD ${currentCommit}; ignoring`,
     );
-    return { applied: false, reason: "from-commit-mismatch" };
+    return refuse("from-commit-mismatch");
   }
 
   // 8. Burn the nonce BEFORE any side effect (a crash mid-apply must not make
@@ -518,7 +560,7 @@ export async function runUpdateConsumer(
     log(`[self-update] could not persist used nonce (${(e as Error).message}); continuing`);
   }
 
-  return applyEndorsedUpdate(opts, currentCommit, order.targetCommit, "admin-authorized, maintainer-endorsed");
+  return { admitted: true, currentCommit };
 }
 
 export interface ApplyEndorsedUpdateOptions {
@@ -537,6 +579,28 @@ export interface ApplyEndorsedUpdateOptions {
  * move, only an endorsed commit is ever checked out.
  */
 export async function applyEndorsedUpdate(
+  opts: ApplyEndorsedUpdateOptions,
+  currentCommit: string,
+  targetCommit: string,
+  why: string,
+): Promise<UpdateConsumeOutcome> {
+  if (applying) return { applied: false, reason: "busy" };
+  applying = true;
+  try {
+    return await applyEndorsedUpdateNow(opts, currentCommit, targetCommit, why);
+  } finally {
+    applying = false;
+  }
+}
+
+let applying = false;
+
+/** True while this process fetches, checks or applies an update. */
+export function updateApplyInProgress(): boolean {
+  return applying;
+}
+
+async function applyEndorsedUpdateNow(
   opts: ApplyEndorsedUpdateOptions,
   currentCommit: string,
   targetCommit: string,
