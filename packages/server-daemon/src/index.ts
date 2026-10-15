@@ -222,6 +222,7 @@ import {
   resolvePinnedAdminRoot,
 } from "./adminRootRotationConsumer.js";
 import { buildServerOrderHolder } from "./serverOrderHolder.js";
+import { setUpOutboundProxy, type OutboundProxyRuntime } from "./outboundProxy/index.js";
 import {
   readAuthCodeBirthDate,
   wireGossip,
@@ -513,6 +514,17 @@ export async function persistCgkHex(path: string, cgkHex: string): Promise<void>
   }
 }
 
+/** The box's outbound proxy (docs/outbound-proxy.md); null without an owner config. */
+let outboundProxy: OutboundProxyRuntime | null = null;
+let resolvedTunnelHub = "wss://flagship-services.fly.dev:8443/tunnel";
+
+/** Host and port of a ws(s) URL, for the proxy's reachability test. */
+function hostPortOf(url: string): { host: string; port: number } {
+  const u = new URL(url);
+  const port = Number(u.port) || (u.protocol === "ws:" || u.protocol === "http:" ? 80 : 443);
+  return { host: u.hostname.replace(/^\[|\]$/g, ""), port };
+}
+
 async function main(): Promise<void> {
   let cfg = await tryLoadConfig();
   const env = envFromProcess();
@@ -609,6 +621,26 @@ async function main(): Promise<void> {
     }
   }
 
+  // ---- Outbound proxy (docs/outbound-proxy.md) ----
+  // Before the first network call (endpoint discovery, right below): a box
+  // whose recipe or owner set a proxy never reaches anything directly.
+  if (cfg) {
+    try {
+      outboundProxy = await setUpOutboundProxy({
+        dataDir,
+        installBlobPath: process.env.FLAGSHIP_INSTALL_BLOB ?? "/var/flagship/install-blob.json",
+        authority: {
+          serverDomain: env.serverFqdn,
+          username: cfg.userId,
+          ownerIrkPub: cfg.irkPublicKey,
+          ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+        },
+      });
+    } catch (e) {
+      console.error(`[outbound-proxy] setup failed: ${(e as Error).message}`);
+    }
+  }
+
   const endpoints = await resolveServicesEndpoints({
     controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
     cachePath: defaultEndpointsCachePath(dataDir),
@@ -617,6 +649,7 @@ async function main(): Promise<void> {
   console.log(
     `[daemon] services endpoints (${endpoints.source}): tunnelHub=${endpoints.endpoints.tunnelHub}`,
   );
+  resolvedTunnelHub = endpoints.endpoints.tunnelHub;
 
   // ---- Self-update boot health-gate (docs/server-update-mechanism.md) ----
   // Runs FIRST on every boot (fire-and-forget so bring-up is never blocked; the
@@ -1244,6 +1277,7 @@ async function main(): Promise<void> {
     // the caller's STK envelope against the .com directory and owner-scopes
     // reads. 503s until wirePeerBackup had identity + .com reachability.
     runtime.addHandler(pbFramesHandler);
+    outboundProxy?.onChange(() => runtime.reconnectTunnel());
     // startDaemonRuntime now resolves once the tunnel is connected and the
     // local API + TLS server are serving — BEFORE the first ACME attempt
     // (cert acquisition is async + retried so a transient ACME failure can't
@@ -2686,6 +2720,12 @@ async function wireRuntimeSurfaces(deps: {
 
   const screensHandle = buildScreensHttp({
     gate: sharesBundle?.gate ?? pairedSessions,
+    outboundProxy: outboundProxy
+      ? {
+          handle: outboundProxy.http(() => hostPortOf(resolvedTunnelHub)),
+          summary: () => outboundProxy!.summary(),
+        }
+      : null,
     shares: sharesBundle?.shares ?? null,
     appEgress: runtime.egress.appEgress,
     appCopy: appCopyTarget,

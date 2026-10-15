@@ -9,6 +9,7 @@
 
 import type { Keypair } from "@flagship/protocol";
 import { WebSocket } from "ws";
+import { outboundNet } from "../outboundProxy/outboundNet.js";
 import { SiblingConnection, wrapWsAsSiblingTransport } from "./connection.js";
 import type { SiblingPeerLookup } from "./handshake.js";
 import type { InMemorySiblingRouter } from "./router.js";
@@ -52,7 +53,8 @@ export async function openSiblingConnection(
   const scheme = args.scheme ?? "wss";
   const path = args.path ?? "/.flagship/sibling-handshake";
   const url = `${scheme}://${args.peerFqdn}${path}`;
-  const ws = new WebSocket(url);
+  const agent = outboundNet.agentFor(url);
+  const ws = new WebSocket(url, agent ? { agent } : {});
   const timeout = args.connectTimeoutMs ?? 10_000;
 
   await new Promise<void>((resolve, reject) => {

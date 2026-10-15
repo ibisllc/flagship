@@ -106,6 +106,11 @@ export interface ServerDetailResponse {
    * omit the field.
    */
   appSandbox?: { state: "off" | "starting" } | { state: "ready"; version: string } | { state: "unavailable"; reason: string };
+  /**
+   * The box's outbound proxy and whether it works (docs/outbound-proxy.md).
+   * Older daemons omit the field; the apps then hide the section.
+   */
+  outboundProxy?: import("../outboundProxy/http.js").OutboundProxySummary;
   /** Unix-ms; when this daemon process started. */
   startedAt: number;
   uptimeMs: number;
