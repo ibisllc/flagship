@@ -49,7 +49,13 @@ class FlagshipFcmService : FirebaseMessagingService() {
         // approvals surface (the phone fetches + re-verifies on open; the
         // push carries NO secret). Synthesize the deep link if the Worker
         // didn't include one.
-        val secretEvent = SecretRequestPush.parse(data)
+        val shareStartup = ShareStartupPush.matches(data)
+        if (shareStartup) {
+            data["title"] = ShareStartupPush.TITLE
+            data["body"] = ShareStartupPush.BODY
+            data.remove("deepLink")
+        }
+        val secretEvent = if (shareStartup) null else SecretRequestPush.parse(data)
         secretEvent?.let { event ->
             SecretRequestBridge.onSecretRequest?.invoke(event)
             if (data["deepLink"].isNullOrEmpty()) {

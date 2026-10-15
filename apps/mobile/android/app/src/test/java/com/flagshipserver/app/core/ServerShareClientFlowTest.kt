@@ -56,6 +56,10 @@ class ServerShareClientFlowTest {
         var unlockCopy: Pair<String, String>? = null
         var pending: List<JsonObject> = emptyList()
         var bootResponse: JsonObject? = null
+        val pushRows = HashMap<String, MutableMap<String, String>>()
+        var updates = ArrayList<ServerShare.Update>()
+        val usedUpdateNonces = HashSet<String>()
+        var boxCommit = "1".repeat(40)
 
         fun transport(): JsonHttpTransport = object : JsonHttpTransport {
             override val json: Json = ServerShareClient.json
@@ -80,7 +84,7 @@ class ServerShareClientFlowTest {
         }
 
         private fun handle(m: String, url: String, b: JsonObject?, h: Map<String, String>): Pair<Int, JsonElement> {
-            val share = Regex("$apex/api/server-shares/([0-9a-f]{32})(/accept|/leave)?").matchEntire(url)
+            val share = Regex("$apex/api/server-shares/([0-9a-f]{32})(/accept|/leave|/push)?").matchEntire(url)
             val revoke = Regex("$apex/api/users/alice/server-shares/([0-9a-f]{32})/(revoke|unlock)").matchEntire(url)
             return when {
                 url == "$apex/api/users/alice/server-shares" -> {
@@ -137,6 +141,24 @@ class ServerShareClientFlowTest {
                             put("offer", row["offer"] as String); (row["acceptance"] as String?)?.let { put("acceptance", it) }
                             put("unlock", unlockCopy?.first == share.groupValues[1])
                         })
+                        "/push" -> {
+                            if (row["ended"] == true) return err(410, "share ended")
+                            val p = ServerShare.parseServerSharePush(b!!["push"]) ?: return err(400, "malformed push")
+                            if (!ServerShare.verify(p, sig(b), HexUtil.decode(p.memberPubHex)!!)) return err(403, "invalid signature")
+                            val id = share.groupValues[1]
+                            val member = held[id]?.memberPubHex
+                            if (unlockCopy?.first != id || member != p.memberPubHex) return err(403, "unlock-not-shared")
+                            val rows = pushRows.getOrPut(id) { mutableMapOf() }
+                            if (p.op == ServerShare.OP_PUT) {
+                                val token = b["providerToken"]?.jsonPrimitive?.content ?: return err(400, "providerToken required")
+                                if (ServerShare.shareSha256Hex(token) != p.tokenSha256) return err(403, "token is not the one that was signed")
+                                rows[p.tokenSha256] = "${p.platform}|$token"
+                                ok(buildJsonObject { put("ok", true); put("push", true) })
+                            } else {
+                                rows.remove(p.tokenSha256)
+                                ok(buildJsonObject { put("ok", true); put("push", false) })
+                            }
+                        }
                         "/accept" -> if (row["acceptance"] != null) err(409, "this link was already used") else {
                             row["acceptance"] = b!!["acceptance"]!!.jsonPrimitive.content
                             ok()
@@ -213,6 +235,25 @@ class ServerShareClientFlowTest {
                         put("level", g.level); put("unlockAtBoot", g.unlockAtBoot); put("seeAppData", g.seeAppData)
                     })
                 }
+                url == "https://$domain/api/shares/me" -> {
+                    val g = held.values.firstOrNull() ?: return err(401, "share-session")
+                    ok(buildJsonObject {
+                        put("shareId", g.shareId); put("level", g.level); put("unlockAtBoot", g.unlockAtBoot)
+                        put("seeAppData", g.seeAppData); put("serverDomain", domain); put("canUpdate", g.level == ServerShare.LEVEL_MANAGE)
+                    })
+                }
+                url == "https://$domain/api/shares/update" -> {
+                    if (h[ServerShareClient.SESSION_HEADER]?.startsWith("fss_") != true) return err(401, "share-session")
+                    val u = ServerShare.parseServerShareUpdate(b!!["update"]) ?: return err(400, "malformed")
+                    val g = held[u.shareId] ?: return err(401, "share-session")
+                    if (g.level != ServerShare.LEVEL_MANAGE) return err(403, "manage-only")
+                    if (g.memberPubHex != u.memberPubHex) return err(403, "not-this-share")
+                    if (!ServerShare.verify(u, sig(b), HexUtil.decode(u.memberPubHex)!!)) return err(403, "invalid-signature")
+                    if (u.fromCommit != boxCommit) return 409 to buildJsonObject { put("error", "from-commit-mismatch"); put("code", "from-commit-mismatch") }
+                    if (!usedUpdateNonces.add(u.nonce)) return 409 to buildJsonObject { put("error", "replayed-nonce"); put("code", "replayed-nonce") }
+                    updates += u
+                    202 to buildJsonObject { put("ok", true); put("accepted", true); put("targetCommit", u.targetCommit) }
+                }
                 url == "https://$domain/api/shares/leave" -> {
                     val l = ServerShare.parseServerShareLeave(b!!["leave"])!!
                     if (!ServerShare.verify(l, sig(b), HexUtil.decode(l.memberPubHex)!!)) return err(403, "invalid signature")
@@ -236,7 +277,7 @@ class ServerShareClientFlowTest {
         }
     }
 
-    private fun client(world: World, keys: ShareKeys): ServerShareClient {
+    private fun client(world: World, keys: ShareKeys, pushToken: Pair<String, String>? = null, pushStore: SharePushStore = InMemorySharePushStore()): ServerShareClient {
         val t = world.transport()
         var n = 0
         return ServerShareClient(
@@ -244,6 +285,8 @@ class ServerShareClientFlowTest {
             apexBase = { apex }, bootBase = { boot },
             now = { clock },
             random = { size -> ByteArray(size) { (it + 31 * ++n).toByte() } },
+            pushStore = pushStore,
+            pushToken = { pushToken },
         )
     }
 
@@ -449,6 +492,119 @@ class ServerShareClientFlowTest {
             }
             assertFalse(world.bootResponse != null)
         }
+    }
+
+    @Test fun startupNoticesRegisterAndDropThisDevicesToken() {
+        val world = World()
+        val (_, _, entry) = shareAndConfirm(world, options.copy(unlockAtBoot = true))
+        val store = InMemorySharePushStore()
+        val token = "fcm-token-for-this-phone"
+        val member = client(world, memberKeys, "fcm" to token, store)
+        runBlocking {
+            assertFalse(member.startupNotices(entry.shareId))
+            member.setStartupNotices(entry, on = true)
+            val put = world.calls.last { it.url == "$apex/api/server-shares/${entry.shareId}/push" }
+            assertNotNull(put.headers[ServerShareClient.SHARE_TOKEN_HEADER])
+            assertEquals(token, put.body!!["providerToken"]!!.jsonPrimitive.content)
+            val p = ServerShare.parseServerSharePush(put.body["push"])!!
+            assertEquals(ServerShare.OP_PUT, p.op)
+            assertEquals("fcm", p.platform)
+            assertEquals(ServerShare.shareSha256Hex(token), p.tokenSha256)
+            assertEquals(HexUtil.encode(ServerShare.deriveShareMemberPub(memberKeys.umkSeed, entry.shareId)), p.memberPubHex)
+            assertTrue(member.startupNotices(entry.shareId))
+            assertEquals(1, world.pushRows.getValue(entry.shareId).size)
+
+            member.setStartupNotices(entry, on = false)
+            val del = world.calls.last { it.url == "$apex/api/server-shares/${entry.shareId}/push" }
+            val d = ServerShare.parseServerSharePush(del.body!!["push"])!!
+            assertEquals(ServerShare.OP_DELETE, d.op)
+            assertEquals(p.tokenSha256, d.tokenSha256)
+            assertEquals(null, del.body["providerToken"])
+            assertFalse(member.startupNotices(entry.shareId))
+            assertTrue(world.pushRows.getValue(entry.shareId).isEmpty())
+        }
+    }
+
+    @Test fun startupNoticesNeedTheOwnersUnlockCopyAndAToken() {
+        val world = World()
+        val (_, _, entry) = shareAndConfirm(world)
+        runBlocking {
+            try {
+                client(world, memberKeys, "fcm" to "t").setStartupNotices(entry, on = true)
+                fail("no unlock copy must refuse")
+            } catch (e: ShareException) {
+                assertEquals(ShareException.Kind.NotShared, e.kind)
+                assertEquals(ServerShareClient.NOTICES_NOT_SHARED, e.message)
+            }
+            try {
+                client(world, memberKeys, null).setStartupNotices(entry, on = true)
+                fail("no push token must refuse")
+            } catch (e: ShareException) {
+                assertEquals(ServerShareClient.NOTICES_NO_TOKEN, e.message)
+            }
+        }
+    }
+
+    @Test fun leavingForgetsTheNoticeRegistration() {
+        val world = World()
+        val (_, _, entry) = shareAndConfirm(world, options.copy(unlockAtBoot = true))
+        val store = InMemorySharePushStore()
+        val member = client(world, memberKeys, "fcm" to "t", store)
+        runBlocking {
+            member.setStartupNotices(entry, on = true)
+            assertNotNull(store.get(entry.shareId))
+            member.leave(entry)
+            assertEquals(null, store.get(entry.shareId))
+        }
+    }
+
+    @Test fun aCoManagerOrdersAnUpdateSignedWithItsMemberKey() {
+        val world = World()
+        val (_, member, entry) = shareAndConfirm(world)
+        runBlocking {
+            assertTrue(member.me(entry)!!.canUpdate)
+            val target = "2".repeat(40)
+            member.orderUpdate(entry, target, world.boxCommit)
+            val call = world.calls.last { it.url == "https://$domain/api/shares/update" }
+            assertTrue(call.headers[ServerShareClient.SESSION_HEADER]!!.startsWith("fss_"))
+            val u = world.updates.single()
+            assertEquals(target, u.targetCommit)
+            assertEquals(world.boxCommit, u.fromCommit)
+            assertEquals(64, u.nonce.length)
+            assertEquals(entry.shareId, u.shareId)
+            val memberPub = ServerShare.deriveShareMemberPub(memberKeys.umkSeed, entry.shareId)
+            assertTrue(ServerShare.verify(u, HexUtil.decode(call.body!!["signature"]!!.jsonPrimitive.content)!!, memberPub))
+            assertFalse(ServerShare.verify(u, HexUtil.decode(call.body["signature"]!!.jsonPrimitive.content)!!, ownerPub))
+
+            try {
+                member.orderUpdate(entry, target, "3".repeat(40))
+                fail("a stale base must be refused")
+            } catch (e: ShareException) {
+                assertEquals("The server changed version. Refresh and try again.", e.message)
+            }
+        }
+    }
+
+    @Test fun aViewerCantOrderAnUpdate() {
+        val world = World()
+        val (_, member, entry) = shareAndConfirm(world, options.copy(level = ServerShare.LEVEL_VIEW))
+        runBlocking {
+            assertFalse(member.me(entry)!!.canUpdate)
+            try {
+                member.orderUpdate(entry, "2".repeat(40), world.boxCommit)
+                fail("view level must be refused")
+            } catch (e: ShareException) {
+                assertEquals("Only someone who can manage this server can update it.", e.message)
+            }
+            assertTrue(world.updates.isEmpty())
+        }
+    }
+
+    @Test fun updateRefusalsReadPlainly() {
+        assertEquals("An update is already underway.", ServerShareClient.updateRefusalText("busy", "x"))
+        assertEquals("An update is already underway.", ServerShareClient.updateRefusalText("pending-verify", "x"))
+        assertEquals("Your device's clock looks off. Check it and try again.", ServerShareClient.updateRefusalText("stale", "x"))
+        assertEquals("the box said no", ServerShareClient.updateRefusalText("wrong-domain", "the box said no"))
     }
 
     @Test fun shareBootHeaderSignsTheCanonicalBytes() {

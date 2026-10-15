@@ -4,11 +4,13 @@
 
 package com.flagshipserver.app.viewmodels
 
+import android.content.Context
 import androidx.compose.runtime.staticCompositionLocalOf
 import com.flagshipserver.app.api.AccessRequest
 import com.flagshipserver.app.api.InMemorySessionStore
 import com.flagshipserver.app.api.LiveScreensClient
 import com.flagshipserver.app.api.ScreensClient
+import com.flagshipserver.app.api.ReleaseCatalogResponse
 import com.flagshipserver.app.api.ScreensError
 import com.flagshipserver.app.api.ServerDetailResponse
 import com.flagshipserver.app.api.ServerMetricsResponse
@@ -27,6 +29,7 @@ import com.flagshipserver.app.core.ShareException
 import com.flagshipserver.app.core.ShareOptions
 import com.flagshipserver.app.core.ShareSession
 import com.flagshipserver.app.core.ShareSignIn
+import com.flagshipserver.app.core.SharePushPrefs
 import com.flagshipserver.app.core.ShareStartup
 import com.flagshipserver.app.core.SharedEntry
 import com.flagshipserver.app.core.TrustGatedTransport
@@ -38,6 +41,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.tasks.await
 import okhttp3.OkHttpClient
 
 /** Everything the share screens need, provided once by the activity (live only). */
@@ -49,11 +53,21 @@ class ServerShareRuntime(
     val sharedWithMe = SharedWithMeModel(client)
 
     companion object {
-        fun live(okHttp: OkHttpClient, isTrusted: () -> Boolean): ServerShareRuntime {
+        fun live(okHttp: OkHttpClient, context: Context, isTrusted: () -> Boolean): ServerShareRuntime {
             val client = ServerShareClient(
                 apex = TrustGatedTransport(OkHttpJsonTransport(okHttp), isTrusted),
                 box = OkHttpJsonTransport(okHttp),
                 keys = KeystoreShareKeys(),
+                pushStore = SharePushPrefs.from(context),
+                pushToken = {
+                    if (!com.flagshipserver.app.core.PrivacySettings.fromContext(context).pushNotificationsEnabled.value) {
+                        null
+                    } else {
+                        runCatching {
+                            com.google.firebase.messaging.FirebaseMessaging.getInstance().token.await()
+                        }.getOrNull()?.let { "fcm" to it }
+                    }
+                },
             )
             return ServerShareRuntime(client) { domain, token ->
                 LiveScreensClient(
@@ -74,12 +88,27 @@ object ShareCopy {
     const val CAN_VIEW = "Can view"
     const val CAN_MANAGE = "Can manage"
     const val VIEW_LINE = "See the server's status, monitoring and apps."
-    const val MANAGE_LINE = "Also build apps with AI, accept app updates and answer apps' internet requests."
+    const val MANAGE_LINE = "Also build apps with AI, accept app updates, update the server and change what apps can reach on the internet."
     const val UNLOCK_TITLE = "Let them approve start-up"
     const val UNLOCK_LINE = "Their phone gets a copy of this server's disk key, which they could keep."
     const val DATA_TITLE = "Let them see app data"
     const val DATA_LINE = "They can read what your apps store, and at Can manage change it."
     const val NEVER_LINE = "They can never delete, move or turn off this server, or see who else has it."
+    const val HOUSE_KEY_LINE = "Only give this to someone you'd give a house key. Ending the share deletes their copy, but they could have kept one."
+
+    const val NOTICES_TITLE = "Notify this device when it needs to start"
+    const val NOTICES_LINE = "Turning this on lets Flagship's service know this device helps with this server, so it can wake you. The notice itself names no server."
+    const val MEMBERS_ONLY_HINT = "Members only. You need an invite to use this app."
+
+    const val UPDATE_TITLE = "Update"
+    const val UPDATE_CURRENT = "Up to date."
+
+    fun updateButton(tag: String?, commit: String): String = "Update to ${tag?.takeIf { it.isNotBlank() } ?: commit.take(8)}"
+
+    fun updateConfirm(serverName: String): String =
+        "$serverName restarts on the new release. Only releases Flagship's maintainers endorsed will install."
+
+    fun updating(serverName: String): String = "Updating $serverName. It restarts in a few minutes."
 
     fun level(level: String): String = if (level == ServerShare.LEVEL_MANAGE) CAN_MANAGE else CAN_VIEW
 
@@ -110,6 +139,7 @@ object ShareCopy {
         "app.update.accept" to "accepted an app update",
         "db.write" to "changed app data",
         "db.read" to "read app data",
+        "server.update" to "updated the server",
     )
 }
 
@@ -376,6 +406,11 @@ data class SharedServerUi(
     val startups: List<ShareStartup> = emptyList(),
     /** `.com` holds this share's start-up copy (known even while the server is off). */
     val canUnlock: Boolean = false,
+    /** This device asked `.com` to wake it when the server waits to start. */
+    val notices: Boolean = false,
+    /** The box lets this share order an endorsed update (manage level). */
+    val canUpdate: Boolean = false,
+    val releases: ReleaseCatalogResponse? = null,
     val busy: Boolean = false,
     val message: String? = null,
 ) {
@@ -419,6 +454,7 @@ class SharedServerViewModel(
 
     private suspend fun ended() {
         _ui.update { it.copy(phase = SharedServerUi.Phase.Ended, session = null) }
+        client.forgetStartupNotices(entry.shareId)
         runtime.sharedWithMe.remove(entry.shareId)
         entry.entryId?.let { id -> runCatching { client.inboxDelete(id) } }
     }
@@ -476,8 +512,40 @@ class SharedServerViewModel(
         if (reachable == false || (reachable == null && phase == SharedServerUi.Phase.Loading)) {
             _ui.update { it.copy(phase = SharedServerUi.Phase.Unreachable) }
         }
-        if (_ui.value.manage) loadAccessRequests()
+        if (_ui.value.manage) {
+            loadAccessRequests()
+            loadUpdates()
+        }
         refreshStartups()
+    }
+
+    /** The box's say on whether this share may update it, and the releases it would offer. */
+    suspend fun loadUpdates() {
+        val me = runCatching { client.me(entry) }.getOrNull()
+        val can = me?.canUpdate == true && me.level == ServerShare.LEVEL_MANAGE
+        if (!can) {
+            _ui.update { it.copy(canUpdate = false, releases = null) }
+            return
+        }
+        val catalog = runCatching { withScreens { it.serverUpdates(refresh = false) } }.getOrNull()
+        _ui.update { it.copy(canUpdate = true, releases = catalog ?: it.releases) }
+    }
+
+    /** Order the newest endorsed release; the box checks the endorsement itself. */
+    suspend fun update(): Boolean {
+        val target = _ui.value.releases?.latest?.commit ?: return false
+        val from = _ui.value.detail?.currentCommit ?: _ui.value.releases?.currentCommit
+        if (from == null) {
+            _ui.update { it.copy(message = "This server hasn't said which version it runs. Refresh and try again.") }
+            return false
+        }
+        return busy { client.orderUpdate(entry, target, from) }
+    }
+
+    /** Turn this device's start-up notices on or off (#10 to `.com`). */
+    suspend fun setNotices(on: Boolean): Boolean = busy {
+        client.setStartupNotices(entry, on)
+        _ui.update { it.copy(notices = client.startupNotices(entry.shareId)) }
     }
 
     suspend fun loadAccessRequests() {
@@ -494,7 +562,7 @@ class SharedServerViewModel(
             return
         }
         val startups = runCatching { client.pendingStartups(entry) }.getOrNull().orEmpty()
-        _ui.update { it.copy(canUnlock = true, startups = startups) }
+        _ui.update { it.copy(canUnlock = true, startups = startups, notices = client.startupNotices(entry.shareId)) }
     }
 
     suspend fun approve(startup: ShareStartup): Boolean = busy {

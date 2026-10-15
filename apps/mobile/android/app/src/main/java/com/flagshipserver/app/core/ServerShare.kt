@@ -1,6 +1,6 @@
 // Kotlin mirror of packages/protocol/src/serverShare.ts (docs/share-a-server.md):
 // sharing a server with another account. B's identity toward the server is a
-// per-share key derived from B's UMK; nine '|'-joined envelopes; the link
+// per-share key derived from B's UMK; eleven '|'-joined envelopes; the link
 // secret's derivations; the six digits both phones show; and the sealed JSON
 // payloads `.com` relays without being able to read them.
 //
@@ -37,6 +37,8 @@ object ServerShare {
     const val TAG_SERVER_SHARE_LIST = "flagship/server-share-list/v1"
     const val TAG_SERVER_SHARE_UNLOCK = "flagship/server-share-unlock/v1"
     const val TAG_SHARE_INBOX = "flagship/share-inbox/v1"
+    const val TAG_SERVER_SHARE_PUSH = "flagship/server-share-push/v1"
+    const val TAG_SERVER_SHARE_UPDATE = "flagship/server-share-update/v1"
 
     private const val INFO_MEMBER = "flagship/server-share-member/v1"
     private const val INFO_TOKEN = "flagship/server-share/token/v1"
@@ -63,8 +65,11 @@ object ServerShare {
     const val OP_LIST = "list"
     const val OP_DELETE = "delete"
 
+    val SHARE_PUSH_PLATFORMS: List<String> = listOf("apns", "fcm", "webpush")
+
     private const val MAX_SAFE_INTEGER = 9_007_199_254_740_991L
     private val HEX32 = Regex("[0-9a-f]{32}")
+    private val HEX40 = Regex("[0-9a-f]{40}")
     private val HEX64 = Regex("[0-9a-f]{64}")
     private val HEX128 = Regex("[0-9a-f]{128}")
     private val HEX_BYTES = Regex("([0-9a-f]{2})+")
@@ -523,6 +528,56 @@ object ServerShare {
         }
     }
 
+    /**
+     * #10 — signed by B's member key; registers (or drops) one device's push
+     * token for this share's start-up approvals.
+     */
+    @Serializable
+    data class Push(
+        val serverDomain: String,
+        val shareId: String,
+        val memberPubHex: String,
+        val op: String,
+        val platform: String,
+        /** SHA-256 hex of the provider token's UTF-8 bytes (the token travels beside it on `put`). */
+        val tokenSha256: String,
+        val issuedAt: Long,
+    ) : Envelope {
+        override fun canonicalBytes(): ByteArray {
+            domain(serverDomain)
+            checkShareId(shareId)
+            checkHex64("memberPubHex", memberPubHex)
+            require(op == OP_PUT || op == OP_DELETE) { "server-share: push op must be put or delete" }
+            require(platform in SHARE_PUSH_PLATFORMS) { "server-share: push platform must be apns, fcm or webpush" }
+            checkHex64("tokenSha256", tokenSha256)
+            checkTime("issuedAt", issuedAt)
+            return join(TAG_SERVER_SHARE_PUSH, serverDomain, shareId, memberPubHex, op, platform, tokenSha256, issuedAt.toString())
+        }
+    }
+
+    /** #11 — signed by B's member key at manage level; the box checks the endorsement. */
+    @Serializable
+    data class Update(
+        val serverDomain: String,
+        val shareId: String,
+        val memberPubHex: String,
+        val targetCommit: String,
+        val fromCommit: String,
+        val nonce: String,
+        val issuedAt: Long,
+    ) : Envelope {
+        override fun canonicalBytes(): ByteArray {
+            domain(serverDomain)
+            checkShareId(shareId)
+            checkHex64("memberPubHex", memberPubHex)
+            require(HEX40.matches(targetCommit)) { "server-share: targetCommit must be 40 lowercase hex" }
+            require(HEX40.matches(fromCommit)) { "server-share: fromCommit must be 40 lowercase hex" }
+            checkHex64("nonce", nonce)
+            checkTime("issuedAt", issuedAt)
+            return join(TAG_SERVER_SHARE_UPDATE, serverDomain, shareId, memberPubHex, targetCommit, fromCommit, nonce, issuedAt.toString())
+        }
+    }
+
     /** The Ed25519 signature over [envelope]'s canonical bytes. Throws on an invalid envelope. */
     fun sign(envelope: Envelope, key: Ed25519Sign): ByteArray = key.sign(envelope.canonicalBytes())
 
@@ -642,6 +697,32 @@ object ServerShare {
             op = str(o["op"])?.takeIf { it == OP_PUT || it == OP_LIST || it == OP_DELETE } ?: return@checked null,
             entryId = str(o["entryId"]) ?: return@checked null,
             ctSha256 = str(o["ctSha256"]) ?: return@checked null,
+            issuedAt = time(o["issuedAt"]) ?: return@checked null,
+        )
+    }
+
+    fun parseServerSharePush(v: JsonElement?): Push? = checked {
+        val o = obj(v) ?: return@checked null
+        Push(
+            serverDomain = str(o["serverDomain"]) ?: return@checked null,
+            shareId = str(o["shareId"]) ?: return@checked null,
+            memberPubHex = str(o["memberPubHex"]) ?: return@checked null,
+            op = str(o["op"])?.takeIf { it == OP_PUT || it == OP_DELETE } ?: return@checked null,
+            platform = str(o["platform"]) ?: return@checked null,
+            tokenSha256 = str(o["tokenSha256"]) ?: return@checked null,
+            issuedAt = time(o["issuedAt"]) ?: return@checked null,
+        )
+    }
+
+    fun parseServerShareUpdate(v: JsonElement?): Update? = checked {
+        val o = obj(v) ?: return@checked null
+        Update(
+            serverDomain = str(o["serverDomain"]) ?: return@checked null,
+            shareId = str(o["shareId"]) ?: return@checked null,
+            memberPubHex = str(o["memberPubHex"]) ?: return@checked null,
+            targetCommit = str(o["targetCommit"]) ?: return@checked null,
+            fromCommit = str(o["fromCommit"]) ?: return@checked null,
+            nonce = str(o["nonce"]) ?: return@checked null,
             issuedAt = time(o["issuedAt"]) ?: return@checked null,
         )
     }

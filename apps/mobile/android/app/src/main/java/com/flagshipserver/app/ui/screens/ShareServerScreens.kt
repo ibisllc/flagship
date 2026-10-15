@@ -358,6 +358,7 @@ private fun ActiveRow(
         Muted(s.lastSeenAt?.let { "Last signed in ${FlagshipDateFormat.format(it)}" } ?: "Hasn't signed in yet")
         LevelChoice(level = s.level, onChange = { if (it != s.level) onLevel(it) }, enabled = !busy)
         OptionSwitch(ShareCopy.UNLOCK_TITLE, ShareCopy.UNLOCK_LINE, s.unlockAtBoot, !busy, onUnlock, "share-unlock-${s.shareId}")
+        Muted(ShareCopy.HOUSE_KEY_LINE, size = 12, modifier = Modifier.testTag("share-house-key-${s.shareId}"))
         OptionSwitch(ShareCopy.DATA_TITLE, ShareCopy.DATA_LINE, s.seeAppData, !busy, onData, "share-data-${s.shareId}")
         FSDangerButton(label = "Remove", onClick = onRemove, enabled = !busy, block = true, modifier = Modifier.testTag("share-remove-${s.shareId}"))
     }
@@ -495,6 +496,7 @@ fun ShareSheetContent(
             ShareSheetStep.Options -> {
                 Muted("Both are off unless you turn them on. You can change them later.", size = 14)
                 OptionSwitch(ShareCopy.UNLOCK_TITLE, ShareCopy.UNLOCK_LINE, unlockAtBoot, !busy, onUnlock, "share-opt-unlock")
+                Muted(ShareCopy.HOUSE_KEY_LINE, size = 12, modifier = Modifier.testTag("share-house-key"))
                 OptionSwitch(ShareCopy.DATA_TITLE, ShareCopy.DATA_LINE, seeAppData, !busy, onData, "share-opt-data")
                 FSPrimaryButton(
                     label = if (busy) "Creating link…" else "Create link",
@@ -747,6 +749,12 @@ fun SharedServerScreen(shareId: String, onBack: () -> Unit) {
         onAnswer = { r, allow -> scope.launch { vm.answer(r, allow) } },
         onLeave = { scope.launch { if (vm.leave()) toasts.success("You left ${entry.serverName}.") } },
         onRetry = { scope.launch { vm.load() } },
+        onNotices = { on -> scope.launch { vm.setNotices(on) } },
+        onUpdate = {
+            scope.launch {
+                if (vm.update()) toasts.success(ShareCopy.updating(entry.serverName.ifBlank { entry.serverDomain.substringBefore('.') }))
+            }
+        },
     )
 }
 
@@ -760,8 +768,11 @@ fun SharedServerContent(
     onAnswer: (AccessRequest, Boolean) -> Unit,
     onLeave: () -> Unit,
     onRetry: () -> Unit,
+    onNotices: (Boolean) -> Unit = {},
+    onUpdate: () -> Unit = {},
 ) {
     var confirmLeave by remember { mutableStateOf(false) }
+    var confirmUpdate by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
         Column(
             Modifier.widthIn(max = FSLayout.readingMaxWidth).fillMaxWidth().padding(horizontal = FS.space.s6).testTag("shared-server"),
@@ -782,6 +793,13 @@ fun SharedServerContent(
             ui.startups.firstOrNull()?.let { s ->
                 Spacer(Modifier.height(FS.space.s6))
                 StartupCard(serverName, s, ui.busy) { onApprove(s) }
+            }
+
+            if (ui.canUnlock && ui.phase != SharedServerUi.Phase.Ended && ui.phase != SharedServerUi.Phase.Left) {
+                Spacer(Modifier.height(FS.space.s6))
+                FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.fillMaxWidth().testTag("shared-notices")) {
+                    OptionSwitch(ShareCopy.NOTICES_TITLE, ShareCopy.NOTICES_LINE, ui.notices, !ui.busy, onNotices, "shared-notices-switch")
+                }
             }
 
             when (ui.phase) {
@@ -809,7 +827,7 @@ fun SharedServerContent(
                     Spacer(Modifier.height(FS.space.s6))
                     Muted("The owner stopped sharing this server.", size = 15)
                 }
-                SharedServerUi.Phase.Ready -> ReadySections(serverDomain, ui, onAnswer)
+                SharedServerUi.Phase.Ready -> ReadySections(serverDomain, ui, onAnswer, onUpdate = { confirmUpdate = true })
             }
 
             if (ui.phase != SharedServerUi.Phase.Ended && ui.phase != SharedServerUi.Phase.Left) {
@@ -833,6 +851,21 @@ fun SharedServerContent(
             dismissButton = { TextButton(onClick = { confirmLeave = false }) { Text("Stay") } },
         )
     }
+    val latest = ui.releases?.latest
+    if (confirmUpdate && latest != null) {
+        AlertDialog(
+            onDismissRequest = { confirmUpdate = false },
+            title = { Text(ShareCopy.updateButton(latest.tag, latest.commit) + "?") },
+            text = { Text(ShareCopy.updateConfirm(serverName)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmUpdate = false
+                    onUpdate()
+                }, modifier = Modifier.testTag("shared-update-confirm")) { Text("Update") }
+            },
+            dismissButton = { TextButton(onClick = { confirmUpdate = false }) { Text("Not now") } },
+        )
+    }
 }
 
 @Composable
@@ -847,7 +880,7 @@ private fun StartupCard(serverName: String, s: ShareStartup, busy: Boolean, onAp
 }
 
 @Composable
-private fun ReadySections(serverDomain: String, ui: SharedServerUi, onAnswer: (AccessRequest, Boolean) -> Unit) {
+private fun ReadySections(serverDomain: String, ui: SharedServerUi, onAnswer: (AccessRequest, Boolean) -> Unit, onUpdate: () -> Unit) {
     Spacer(Modifier.height(FS.space.s6))
     SharedStatusCard(serverDomain, ui.detail)
     Spacer(Modifier.height(FS.space.s6))
@@ -868,9 +901,20 @@ private fun ReadySections(serverDomain: String, ui: SharedServerUi, onAnswer: (A
                     title = row.name,
                     subtitle = row.status,
                     detail = row.address.ifEmpty { null },
+                    below = if (row.membersOnly) {
+                        { Muted(ShareCopy.MEMBERS_ONLY_HINT, size = 12, modifier = Modifier.testTag("shared-members-only-${row.serviceId}")) }
+                    } else {
+                        null
+                    },
                 )
             }
         }
+    }
+    if (ui.manage && ui.canUpdate) {
+        Spacer(Modifier.height(FS.space.s6))
+        SectionTitle(ShareCopy.UPDATE_TITLE)
+        Spacer(Modifier.height(FS.space.s2))
+        SharedUpdateCard(ui, onUpdate)
     }
     if (ui.manage) {
         Spacer(Modifier.height(FS.space.s6))
@@ -890,6 +934,30 @@ private fun ReadySections(serverDomain: String, ui: SharedServerUi, onAnswer: (A
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SharedUpdateCard(ui: SharedServerUi, onUpdate: () -> Unit) {
+    FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.fillMaxWidth().testTag("shared-update")) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            val catalog = ui.releases
+            val current = catalog?.currentTag ?: (ui.detail?.currentCommit ?: catalog?.currentCommit)?.take(8)
+            current?.let { Muted("Running $it") }
+            val latest = catalog?.latest
+            when {
+                catalog == null -> Muted("Couldn't list the releases right now.")
+                latest == null -> Muted(ShareCopy.UPDATE_CURRENT)
+                else -> FSPrimaryButton(
+                    label = ShareCopy.updateButton(latest.tag, latest.commit),
+                    onClick = onUpdate,
+                    enabled = !ui.busy,
+                    block = true,
+                    modifier = Modifier.testTag("shared-update-button"),
+                )
+            }
+            ui.detail?.lastUpdate?.summary?.let { Muted(it, size = 12) }
         }
     }
 }

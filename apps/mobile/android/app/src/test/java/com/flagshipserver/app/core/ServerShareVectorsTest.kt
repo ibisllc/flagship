@@ -99,6 +99,14 @@ class ServerShareVectorsTest {
         "inbox" -> ServerShare.InboxRequest(
             f.s("inboxPubHex"), f.s("op"), f.s("entryId"), f.s("ctSha256"), f.l("issuedAt"),
         )
+        "push" -> ServerShare.Push(
+            f.s("serverDomain"), f.s("shareId"), f.s("memberPubHex"), f.s("op"), f.s("platform"),
+            f.s("tokenSha256"), f.l("issuedAt"),
+        )
+        "update" -> ServerShare.Update(
+            f.s("serverDomain"), f.s("shareId"), f.s("memberPubHex"), f.s("targetCommit"), f.s("fromCommit"),
+            f.s("nonce"), f.l("issuedAt"),
+        )
         else -> error("unknown kind $kind")
     }
 
@@ -112,6 +120,8 @@ class ServerShareVectorsTest {
         "list" -> ServerShare.parseServerShareList(f)
         "unlock" -> ServerShare.parseServerShareUnlock(f)
         "inbox" -> ServerShare.parseShareInboxRequest(f)
+        "push" -> ServerShare.parseServerSharePush(f)
+        "update" -> ServerShare.parseServerShareUpdate(f)
         else -> error("unknown kind $kind")
     }
 
@@ -157,7 +167,8 @@ class ServerShareVectorsTest {
 
     @Test fun envelopes() {
         val all = cases("envelopes")
-        assertEquals(13, all.size)
+        assertEquals(16, all.size)
+        assertEquals(setOf("push", "update"), all.map { it.s("kind") }.filter { it == "push" || it == "update" }.toSet())
         for (c in all) {
             val kind = c.s("kind")
             val f = c["fields"]!!.jsonObject
@@ -294,6 +305,21 @@ class ServerShareVectorsTest {
             ServerShare.ShareLink(shareId, keys.s("secretHex")),
             ServerShare.parseShareLink(ServerShare.buildShareLink("https://flagshipserver.com", shareId, secret)),
         )
+    }
+
+    @Test fun pushTokensHashAsTheEnvelopesSignThem() {
+        val all = cases("pushTokens")
+        assertEquals(2, all.size)
+        for (t in all) assertEquals(t.s("platform"), t.s("sha256"), ServerShare.shareSha256Hex(t.s("token")))
+    }
+
+    @Test fun memberUpdateNeverVerifiesAsAnotherShare() {
+        val u = cases("envelopes").first { it.s("kind") == "update" }
+        val env = envelope("update", u["fields"]!!.jsonObject) as ServerShare.Update
+        val sig = bytes(u.s("signature"))
+        assertTrue(ServerShare.verify(env, sig, memberPub))
+        assertFalse(ServerShare.verify(env.copy(shareId = "ffeeddccbbaa99887766554433221100"), sig, memberPub))
+        assertFalse(ServerShare.verify(env.copy(targetCommit = "f".repeat(40)), sig, memberPub))
     }
 
     @Test fun randomShareIds() {

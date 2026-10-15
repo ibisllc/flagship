@@ -176,6 +176,41 @@ data class ShareSessionBody(val session: ServerShare.Session, val signature: Str
 data class ShareLeaveBody(val leave: ServerShare.Leave, val signature: String)
 
 @Serializable
+data class SharePushBody(val push: ServerShare.Push, val signature: String, val providerToken: String? = null)
+
+@Serializable
+data class ShareUpdateBody(val update: ServerShare.Update, val signature: String)
+
+/** GET /api/shares/me: what this share may do on the box right now. */
+@Serializable
+data class ShareMe(
+    val shareId: String,
+    val level: String,
+    val unlockAtBoot: Boolean,
+    val seeAppData: Boolean,
+    val serverDomain: String = "",
+    /** Manage level on a box that can update itself; absent on older boxes. */
+    val canUpdate: Boolean = false,
+)
+
+/** One device's start-up notice registration for a share, as this phone remembers it. */
+data class SharePushRegistration(val platform: String, val tokenSha256: String)
+
+/** Where this phone keeps which shares it asked `.com` to wake it for. */
+interface SharePushStore {
+    fun get(shareId: String): SharePushRegistration?
+    fun put(shareId: String, registration: SharePushRegistration)
+    fun remove(shareId: String)
+}
+
+class InMemorySharePushStore : SharePushStore {
+    private val map = HashMap<String, SharePushRegistration>()
+    override fun get(shareId: String): SharePushRegistration? = synchronized(map) { map[shareId] }
+    override fun put(shareId: String, registration: SharePushRegistration) { synchronized(map) { map[shareId] = registration } }
+    override fun remove(shareId: String) { synchronized(map) { map.remove(shareId) } }
+}
+
+@Serializable
 data class BootShareResponse(
     val serverDomain: String,
     val requestNonceHex: String,
@@ -283,6 +318,9 @@ class ServerShareClient(
     private val boxBase: (String) -> String = { "https://$it" },
     private val now: () -> Long = { System.currentTimeMillis() },
     private val random: (Int) -> ByteArray = { n -> ByteArray(n).also(rng::nextBytes) },
+    private val pushStore: SharePushStore = InMemorySharePushStore(),
+    /** This device's push token and its platform, or null when it has none. */
+    private val pushToken: suspend () -> Pair<String, String>? = { null },
 ) {
     companion object {
         private val rng = SecureRandom()
@@ -290,6 +328,18 @@ class ServerShareClient(
         val json: Json = Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls = false }
         const val SHARE_TOKEN_HEADER = "x-flagship-share-token"
         const val SESSION_HEADER = "x-flagship-session"
+
+        const val NOTICES_NOT_SHARED = "The owner hasn't let you approve this server's start-up."
+        const val NOTICES_NO_TOKEN = "This phone can't receive notices right now. Check that notifications are allowed for Flagship."
+
+        /** What to tell the person when the box refuses a co-manager's update order. */
+        fun updateRefusalText(code: String?, error: String?): String = when (code) {
+            "busy", "pending-verify" -> "An update is already underway."
+            "from-commit-mismatch" -> "The server changed version. Refresh and try again."
+            "manage-only" -> "Only someone who can manage this server can update it."
+            "stale" -> "Your device's clock looks off. Check it and try again."
+            else -> error?.takeIf { it.isNotBlank() } ?: "The server refused the update."
+        }
     }
 
     private val sessions = HashMap<String, ShareSession>()
@@ -733,6 +783,92 @@ class ServerShareClient(
         return open(ServerShare.ShareLink(entry.shareId, entry.secretHex)).offer
     }
 
+    /** True when this phone asked `.com` to wake it for this share's start-ups. */
+    fun startupNotices(shareId: String): Boolean = pushStore.get(shareId) != null
+
+    /** Forget this share's notice registration here (`.com` drops its rows when the share ends). */
+    fun forgetStartupNotices(shareId: String) = pushStore.remove(shareId)
+
+    /**
+     * Ask `.com` to wake this device when the server waits to start (#10 put,
+     * with the token beside it), or stop (#10 delete). Turning it on tells
+     * `.com` that this device helps with this server.
+     */
+    suspend fun setStartupNotices(entry: SharedEntry, on: Boolean) {
+        val url = "${apexBase()}/api/server-shares/${entry.shareId}/push"
+        val headers = mapOf(SHARE_TOKEN_HEADER to ServerShare.shareTokenFromSecret(HexUtil.decode(entry.secretHex)!!))
+        if (!on) {
+            val reg = pushStore.get(entry.shareId) ?: return
+            val umk = keys.umk("Stop notices for ${entry.serverName}")
+            val push = ServerShare.Push(
+                entry.serverDomain, entry.shareId, HexUtil.encode(ServerShare.deriveShareMemberPub(umk, entry.shareId)),
+                ServerShare.OP_DELETE, reg.platform, reg.tokenSha256, now(),
+            )
+            val r = post(apex, url, SharePushBody(push, ServerShare.signHex(push, ServerShare.deriveShareMemberKey(umk, entry.shareId))), SharePushBody.serializer(), headers)
+            if (r.status !in 200..299 && r.status != 404 && r.status != 410 && errorCode(r) != "unlock-not-shared") expectOk(r, "stop the notices")
+            pushStore.remove(entry.shareId)
+            return
+        }
+        val (platform, token) = pushToken()?.takeIf { it.second.isNotEmpty() }
+            ?: throw ShareException(ShareException.Kind.Refused, NOTICES_NO_TOKEN)
+        val umk = keys.umk("Get notices for ${entry.serverName}")
+        val tokenSha256 = ServerShare.shareSha256Hex(token)
+        val push = ServerShare.Push(
+            entry.serverDomain, entry.shareId, HexUtil.encode(ServerShare.deriveShareMemberPub(umk, entry.shareId)),
+            ServerShare.OP_PUT, platform, tokenSha256, now(),
+        )
+        val body = SharePushBody(push, ServerShare.signHex(push, ServerShare.deriveShareMemberKey(umk, entry.shareId)), token)
+        val r = post(apex, url, body, SharePushBody.serializer(), headers)
+        if (r.status == 403 && errorCode(r) == "unlock-not-shared") throw ShareException(ShareException.Kind.NotShared, NOTICES_NOT_SHARED)
+        if (r.status == 404) throw ShareException(ShareException.Kind.BadLink, "This share's link no longer works.")
+        if (r.status == 410) throw ShareException(ShareException.Kind.Ended, "The owner stopped sharing this server.")
+        expectOk(r, "turn on the notices")
+        pushStore.put(entry.shareId, SharePushRegistration(platform, tokenSha256))
+    }
+
+    /** What this share may do on the box right now (`canUpdate` included). */
+    suspend fun me(entry: SharedEntry): ShareMe? {
+        val s = (signIn(entry) as? ShareSignIn.In)?.session ?: return null
+        var r = boxCall("GET", entry.serverDomain, "/api/shares/me", s.token)
+        if (r.status == 401) {
+            forgetSession(entry.shareId)
+            val again = (signIn(entry, reuse = false) as? ShareSignIn.In)?.session ?: return null
+            r = boxCall("GET", entry.serverDomain, "/api/shares/me", again.token)
+        }
+        return if (r.status == 200) decode(r, ShareMe.serializer()) else null
+    }
+
+    /**
+     * A co-manager moves the server to an endorsed release: #11 signed with
+     * this share's member key, straight to the box, which checks the same
+     * endorsement as for the owner. Returns once the box took the order.
+     */
+    suspend fun orderUpdate(entry: SharedEntry, targetCommit: String, fromCommit: String) {
+        val umk = keys.umk("Update ${entry.serverName}")
+        val update = ServerShare.Update(
+            serverDomain = entry.serverDomain,
+            shareId = entry.shareId,
+            memberPubHex = HexUtil.encode(ServerShare.deriveShareMemberPub(umk, entry.shareId)),
+            targetCommit = targetCommit,
+            fromCommit = fromCommit,
+            nonce = HexUtil.encode(random(32)),
+            issuedAt = now(),
+        )
+        val body = ShareUpdateBody(update, ServerShare.signHex(update, ServerShare.deriveShareMemberKey(umk, entry.shareId)))
+        suspend fun send(fresh: Boolean): HttpResponse? {
+            val s = (signIn(entry, reuse = !fresh) as? ShareSignIn.In)?.session ?: return null
+            return boxPost(entry.serverDomain, "/api/shares/update", s.token, body, ShareUpdateBody.serializer())
+        }
+        var r = send(fresh = false)
+        if (r?.status == 401) {
+            forgetSession(entry.shareId)
+            r = send(fresh = true)
+        }
+        if (r == null) throw ShareException(ShareException.Kind.NotShared, "This server isn't shared with you right now.")
+        if (r.status in 200..299) return
+        throw ShareException(ShareException.Kind.Refused, updateRefusalText(errorCode(r), (errorObject(r)?.get("error") as? JsonPrimitive)?.content))
+    }
+
     /** Leave: #4 to the box and to `.com`, then drop the inbox entry. */
     suspend fun leave(entry: SharedEntry) {
         val umk = keys.umk("Leave ${entry.serverName}")
@@ -751,6 +887,7 @@ class ServerShareClient(
         val com = post(apex, "${apexBase()}/api/server-shares/${entry.shareId}/leave", body, ShareLeaveBody.serializer(), mapOf(SHARE_TOKEN_HEADER to token))
         if (!boxOk && com.status !in 200..299 && com.status != 404) expectOk(com, "leave")
         forgetSession(entry.shareId)
+        pushStore.remove(entry.shareId)
         entry.entryId?.let { runCatching { inboxDelete(it) } }
     }
 

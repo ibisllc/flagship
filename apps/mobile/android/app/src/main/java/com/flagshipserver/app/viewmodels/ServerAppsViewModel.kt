@@ -25,6 +25,8 @@ class ServerAppsViewModel(private val client: ScreensClient) {
         val status: String,
         val copying: Boolean = false,
         val failed: Boolean = false,
+        /** Only invited members may open it (a co-manager included). */
+        val membersOnly: Boolean = false,
     ) {
         /** Only an installed app has a page to open. */
         val opens: Boolean get() = !copying && !failed
@@ -85,6 +87,7 @@ class ServerAppsViewModel(private val client: ScreensClient) {
                         else -> AppStatus.pill(app)?.label ?: "Status unknown"
                     },
                     copying = copying != null,
+                    membersOnly = app.accessMode == "members-only",
                 )
             }.toMutableList()
             val listed = apps.map { it.serviceId }.toSet()

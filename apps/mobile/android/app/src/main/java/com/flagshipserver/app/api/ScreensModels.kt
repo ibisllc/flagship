@@ -39,6 +39,10 @@ data class AppSummary(
     /** Something working on the app on this box (§6). Absent when idle, and
      *  on boxes from before app activity. */
     val activity: AppActivity? = null,
+    /** "open" | "members-only" (docs/service-access-gating.md); absent on
+     *  older boxes. A co-manager of the server still needs an invite to a
+     *  members-only app. */
+    val accessMode: String? = null,
 )
 
 /** `activity: {kind}`: "deploying" | "copying" | "editing". */
