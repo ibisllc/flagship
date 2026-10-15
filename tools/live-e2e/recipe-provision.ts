@@ -1,6 +1,6 @@
 #!/usr/bin/env -S npx tsx
 /**
- * LIVE Phase-1 e2e for the gym recipe→Hetzner pipeline (docs/gym-recipe-to-hetzner.md).
+ * LIVE Phase-1 e2e for the gym recipe→cloud pipeline (docs/gym-recipe-to-hetzner.md).
  *
  * Proves the "app owns + drives a box built from its OWN recipe" chain end to
  * end against the deployed gym env, with NO demo-IRK or trust backdoor in the
@@ -11,7 +11,7 @@
  *   3. Mint + self-sign an AuthCode (the inner IRK-signed credential).
  *   4. Build + self-sign an InstallBlob (the recipe) embedding the AuthCode.
  *   5. POST it to `POST /api/gym/provision` (the app composes the recipe; the
- *      gym provisions a Hetzner box FROM it). A 4xx here is a SHAPE bug — we
+ *      gym provisions a cloud box FROM it). A 4xx here is a SHAPE bug — we
  *      stop and print the body (no box was spent). A 200 returns the box id.
  *   6. Poll up to 16 min for the box to register + serve a real Let's Encrypt
  *      cert; if it stalls, SSH in and read the daemon journal + bootstrap log.
@@ -19,18 +19,17 @@
  *      daemon log lines (200), and a forged signature is rejected (401/403).
  *   8. BONUS: install a public service via the owner-IRK /api/services path and
  *      assert it serves 200 at its subdomain (the serve-502 fix on a recipe box).
- *   9. TEARDOWN (always): delete the Hetzner box + its CF DNS records.
+ *   9. TEARDOWN (always): the gym Worker destroys the box + this user's DNS.
  *
  * Secrets come from the environment (source .gym-secrets.env first):
- *   GYM_ADMIN_SECRET, GYM_HCLOUD_TOKEN, GYM_DNS_TOKEN.
+ *   GYM_ADMIN_SECRET (teardown goes through the gym Worker's /api/gym/teardown).
  *
  *   set -a; source .gym-secrets.env; set +a
  *   npx tsx tools/live-e2e/recipe-provision.ts
  *
  * Env overrides: GYM_LIVE_CONTROL_APEX (default gym.flagshipserver.com),
  *                GYM_LIVE_SERVICES_APEX (default gym.flagship.services),
- *                GYM_BOX_SIZE (default cpx31),
- *                GYM_CF_ZONE_ID (default the gym flagship.services zone).
+ *                GYM_BOX_SIZE / GYM_BOX_REGION (default: the gym Worker's UpCloud plan/zone),
  *
  * Exit 0 = the POST 200'd and every observed check passed; 1 = a check failed
  * (the box is still torn down); 2 = the harness crashed before teardown.
@@ -61,15 +60,9 @@ import { accountReadHeaders } from "./readToken.js";
 const CONTROL = process.env.GYM_LIVE_CONTROL_APEX || "gym.flagshipserver.com";
 const SERVICES = process.env.GYM_LIVE_SERVICES_APEX || "gym.flagship.services";
 const ADMIN = process.env.GYM_ADMIN_SECRET || process.env.FLAGSHIP_ADMIN_SECRET || "";
-const HCLOUD = process.env.GYM_HCLOUD_TOKEN || "";
-const DNS_TOKEN = process.env.GYM_DNS_TOKEN || "";
-const CF_ZONE = process.env.GYM_CF_ZONE_ID || "51f3bfe11a729db57effd70ed3cf9c77";
-const BOX_SIZE = process.env.GYM_BOX_SIZE || "cpx31";
-// The endpoint defaults to fsn1, but Hetzner's CPX line is stock-gated to
-// specific datacenters (the fsn1/EU DCs frequently report "unsupported location
-// for server type" for cpx*). Pass region explicitly so we land where the size
-// is actually available; override with GYM_BOX_REGION if stock moves.
-const BOX_REGION = process.env.GYM_BOX_REGION || "ash";
+// Size/region default to the gym Worker's UpCloud plan and zone (wrangler.gym.toml).
+const BOX_SIZE = process.env.GYM_BOX_SIZE || "";
+const BOX_REGION = process.env.GYM_BOX_REGION || "";
 const SSH_KEY = `${process.env.HOME}/.ssh/gym_flagship_ed25519`;
 
 interface Res {
@@ -179,38 +172,13 @@ function certInfo(fqdn: string): { issuer: string; subject: string; sans: string
   return { issuer, subject, sans };
 }
 
-// ── Hetzner teardown ────────────────────────────────────────────────────────
-async function hetznerFindServer(namePrefix: string): Promise<{ id: number; name: string } | null> {
-  const r = await http("https://api.hetzner.cloud/v1/servers?per_page=50", {
-    headers: { authorization: `Bearer ${HCLOUD}` },
+// ── teardown through the gym Worker (server + this user's DNS) ───────────────
+async function gymTeardown(serverId: string, fqdn: string, user: string): Promise<{ status: number; json: any; text: string }> {
+  return http(`https://${CONTROL}/api/gym/teardown`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-admin-secret": ADMIN },
+    body: JSON.stringify({ serverIds: serverId ? [serverId] : [], serverDomains: [fqdn], usernames: [user] }),
   });
-  if (r.status !== 200) throw new Error(`hetzner list ${r.status}: ${r.text.slice(0, 120)}`);
-  const srv = (r.json?.servers ?? []).find((s: any) => String(s.name).startsWith(namePrefix));
-  return srv ? { id: srv.id, name: srv.name } : null;
-}
-async function hetznerDelete(id: number): Promise<number> {
-  const r = await http(`https://api.hetzner.cloud/v1/servers/${id}`, {
-    method: "DELETE",
-    headers: { authorization: `Bearer ${HCLOUD}` },
-  });
-  return r.status;
-}
-
-// ── Cloudflare DNS teardown (delete this box's records only) ─────────────────
-async function cfListRecords(name: string): Promise<Array<{ id: string; type: string; name: string }>> {
-  const r = await http(
-    `https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records?name=${encodeURIComponent(name)}&per_page=100`,
-    { headers: { authorization: `Bearer ${DNS_TOKEN}` } },
-  );
-  if (r.status !== 200) throw new Error(`cf list ${name} ${r.status}: ${r.text.slice(0, 120)}`);
-  return (r.json?.result ?? []).map((x: any) => ({ id: x.id, type: x.type, name: x.name }));
-}
-async function cfDeleteRecord(id: string): Promise<number> {
-  const r = await http(`https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/dns_records/${id}`, {
-    method: "DELETE",
-    headers: { authorization: `Bearer ${DNS_TOKEN}` },
-  });
-  return r.status;
 }
 
 /** Best-effort SSH diagnosis when a box stalls (boxes are root-SSH-able). */
@@ -236,8 +204,6 @@ function sshDiag(ip: string): string {
 
 async function main(): Promise<void> {
   assert(ADMIN, "GYM_ADMIN_SECRET (or FLAGSHIP_ADMIN_SECRET) is required");
-  assert(HCLOUD, "GYM_HCLOUD_TOKEN is required (teardown)");
-  assert(DNS_TOKEN, "GYM_DNS_TOKEN is required (teardown)");
 
   const startedAt = new Date();
   const tsLabel = startedAt.toISOString().replace(/[:.]/g, "-");
@@ -261,7 +227,7 @@ async function main(): Promise<void> {
   const fqdn = serverDomain;
   const namePrefix = `flagship-gym-${user}-`;
 
-  log(`\nGYM recipe→Hetzner Phase-1 e2e (app owns + drives a box from its own recipe)`);
+  log(`\nGYM recipe→cloud Phase-1 e2e (app owns + drives a box from its own recipe)`);
   log(`  control = ${CONTROL}`);
   log(`  services= ${SERVICES}`);
   log(`  user    = ${user}  (FRESH app IRK ${irkPubHex.slice(0, 16)}…)`);
@@ -384,8 +350,8 @@ async function main(): Promise<void> {
             installBlob: onWireBlob,
             blobSignature: blobSigHex,
             irkPrivHex,
-            size: BOX_SIZE,
-            region: BOX_REGION,
+            ...(BOX_SIZE ? { size: BOX_SIZE } : {}),
+            ...(BOX_REGION ? { region: BOX_REGION } : {}),
           }),
         },
         60000,
@@ -592,49 +558,11 @@ async function main(): Promise<void> {
   } finally {
     // ── 9. TEARDOWN — always, even on failure ─────────────────────────────
     log("\n[teardown]");
-    await check("delete the Hetzner box (stop billing)", async () => {
-      const srv = await hetznerFindServer(namePrefix).catch(() => null);
-      if (!srv) return provisioned ? "box not found (already gone?)" : "no box was provisioned";
-      const st = await hetznerDelete(srv.id);
-      assert(st === 200 || st === 204 || st === 202 || st === 404, `delete ${st}`);
-      // Confirm it's gone.
-      await new Promise((r) => setTimeout(r, 3000));
-      const still = await hetznerFindServer(namePrefix).catch(() => null);
-      assert(!still, `box ${srv.name} still present after delete`);
-      return `deleted ${srv.name} (id ${srv.id}); 0 boxes remain for ${user}`;
-    });
-    await check("delete this box's CF DNS records (and only this box's)", async () => {
-      const names = [
-        fqdn,
-        `*.${fqdn}`,
-        `${user}.${SERVICES}`,
-        `*.${user}.${SERVICES}`,
-      ];
-      let deleted = 0;
-      const remaining: string[] = [];
-      for (const name of names) {
-        const recs = await cfListRecords(name).catch(() => []);
-        for (const rec of recs) {
-          // Safety: never touch a record that isn't under this user's subtree.
-          assert(
-            rec.name === fqdn ||
-              rec.name === `*.${fqdn}` ||
-              rec.name === `${user}.${SERVICES}` ||
-              rec.name === `*.${user}.${SERVICES}`,
-            `refusing to delete out-of-scope record ${rec.name}`,
-          );
-          const st = await cfDeleteRecord(rec.id);
-          if (st === 200) deleted++;
-          else remaining.push(`${rec.type} ${rec.name} (del ${st})`);
-        }
-      }
-      // Re-list to confirm nothing remains for this user.
-      for (const name of names) {
-        const recs = await cfListRecords(name).catch(() => []);
-        for (const rec of recs) remaining.push(`${rec.type} ${rec.name}`);
-      }
-      assert(remaining.length === 0, `${deleted} deleted; still present: ${remaining.join(", ")}`);
-      return `${deleted} records deleted; 0 remain for ${user}`;
+    await check("tear down the box and this user's DNS (gym Worker)", async () => {
+      if (!provisioned) return "no box was provisioned";
+      const r = await gymTeardown(serverId, fqdn, user);
+      assert(r.status === 200, `teardown ${r.status}: ${r.text.slice(0, 200)}`);
+      return `destroyed=${(r.json?.destroyed ?? []).length} dnsDeleted=${r.json?.dnsDeleted}`;
     });
   }
 

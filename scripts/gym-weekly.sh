@@ -5,8 +5,10 @@
 # Wraps gym:total (the overnight mock matrix + real-cloud e2e) with everything
 # an unattended run needs around it:
 #
-#   Phase 0   warm the gym Fly data plane (scale flagship-services-gym 1 machine
-#             up, poll it healthy) + verify the gym Worker health.
+#   Phase 0   scripts/gym-refresh.sh: rebase the gym branch onto main, build,
+#             apply the gym D1 migrations, check the gym Worker has every secret
+#             prod has, deploy the gym Worker (from the gym branch) and the gym
+#             Fly app (scaled to one machine), health-check both.
 #   Phase 0b  re-zero the gym D1 (flagship-state-gym) via the guarded
 #             wipe-all-users.sh runner (runbook step 5 — isolation by zeroing).
 #             The runner itself HARD-REFUSES a non-prod env pointed at prod's
@@ -14,11 +16,14 @@
 #   Phase 0c  boot the simulators the native legs need: the newest available
 #             iPhone simulator (if none is booted) and the `flagship_gym` AVD
 #             headless (if no adb device is up).
-#   Phase 1   run scripts/gym-total.sh (mock matrix → live e2e → gating e2e).
+#   Phase 1   run scripts/gym-total.sh (mock matrix → the live run on one shared
+#             UpCloud fleet, torn down at the end).
 #             WEEKLY MEANS FULL: gym-total's exit 3 ("mocks passed, cloud
 #             skipped — no secrets") is a FAILURE here, not a soft pass.
-#   Phase 2   cleanup (trap EXIT, runs even on failure): scale Fly back to 0
-#             and shut down the AVD if WE booted it.
+#   Phase 2   cleanup (trap EXIT, runs even on failure): destroy every gym-labelled
+#             UpCloud server and gym DNS record still left (the runner already
+#             tears its fleet down; this is the net), scale Fly back to 0, and
+#             shut down the AVD if WE booted it.
 #
 # Usage:
 #   npm run gym:weekly                      # the whole weekly gate
@@ -29,6 +34,7 @@
 #   --skip-avd         don't boot the Android AVD (its leg will self-skip)
 #   --skip-sims        both of the above
 #   --no-scale-down    leave the gym Fly app scaled up after the run
+#   --skip-refresh     don't run gym-refresh.sh (debugging reruns only)
 #   --skip-wipe        don't re-zero the gym D1 (debugging reruns only)
 #   --dry-run          walk every phase, execute NOTHING external (also
 #                      GYM_WEEKLY_DRY_RUN=1) — the CI-less self-test
@@ -53,7 +59,7 @@ HEALTH_URL="${GYM_HEALTH_URL:-https://gym.flagshipserver.com/api/health}"
 WIPE_D1_NAME="${GYM_WIPE_D1:-flagship-state-gym}"
 DRY="${GYM_WEEKLY_DRY_RUN:-0}"
 
-skip_ios=0 skip_avd=0 scale_down=1 do_wipe=1
+skip_ios=0 skip_avd=0 scale_down=1 do_wipe=1 do_refresh=1
 for arg in "$@"; do
   case "$arg" in
     --skip-ios-sim) skip_ios=1 ;;
@@ -61,6 +67,7 @@ for arg in "$@"; do
     --skip-sims) skip_ios=1; skip_avd=1 ;;
     --no-scale-down) scale_down=0 ;;
     --skip-wipe) do_wipe=0 ;;
+    --skip-refresh) do_refresh=0 ;;
     --dry-run) DRY=1 ;;
     -h|--help) sed -n '2,47p' "$0"; exit 0 ;;
     *) echo "unknown argument: $arg (see --help)" >&2; exit 2 ;;
@@ -76,7 +83,11 @@ run() { if [ "$DRY" = "1" ]; then echo "DRY-RUN would exec: $*"; else "$@"; fi; 
 try() { if [ "$DRY" = "1" ]; then echo "DRY-RUN would exec: $*"; else "$@" || true; fi; }
 
 # ── secrets (same contract as gym-total.sh) ─────────────────────────────────
-SECRETS="$REPO/.gym-secrets.env"
+SECRETS="${GYM_SECRETS_FILE:-$REPO/.gym-secrets.env}"
+if [ ! -f "$SECRETS" ]; then
+  common="$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+  [ -n "$common" ] && [ -f "$(dirname "$common")/.gym-secrets.env" ] && SECRETS="$(dirname "$common")/.gym-secrets.env"
+fi
 if [ -f "$SECRETS" ]; then
   set -a
   # shellcheck disable=SC1090
@@ -94,6 +105,8 @@ we_booted_avd=0
 cleanup() {
   local rc=$?
   phase "PHASE 2 — cleanup (always runs)"
+  echo "▸ destroying any gym-labelled UpCloud server + gym DNS still left"
+  try npx tsx tools/live-e2e/fleet-cli.ts sweep --destroy
   if [ "$scale_down" -eq 1 ]; then
     echo "▸ scaling $FLY_APP back to 0 machines"
     try flyctl scale count 0 -a "$FLY_APP" --yes
@@ -108,35 +121,15 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# ── Phase 0 — warm the gym Fly app + verify both planes ─────────────────────
-phase "PHASE 0 — warm up the gym data plane ($FLY_APP)"
-# Tolerant: already-at-1 is a no-op; a transient flyctl error is not fatal
-# because the health poll below is the real gate.
-try flyctl scale count 1 -a "$FLY_APP" --yes
-
-if [ "$DRY" = "1" ]; then
-  echo "DRY-RUN would poll: flyctl machines list -a $FLY_APP --json → a machine 'started' (≤5 min)"
-  echo "DRY-RUN would poll: curl -fsS $HEALTH_URL → 200 (≤2 min)"
+# ── Phase 0 — refresh the gym env (branch, build, D1, secrets, deploys, health)
+phase "PHASE 0 — refresh the gym env (gym-refresh.sh)"
+if [ "$do_refresh" -eq 0 ]; then
+  echo "▸ --skip-refresh: using the gym env as deployed"
+  try flyctl scale count 1 -a "$FLY_APP" --yes
+elif [ "$DRY" = "1" ]; then
+  bash scripts/gym-refresh.sh --dry-run
 else
-  echo "▸ polling for a started machine (up to 5 min)…"
-  machine_ok=0
-  for _ in $(seq 1 30); do
-    if flyctl machines list -a "$FLY_APP" --json 2>/dev/null | grep -q '"state":[[:space:]]*"started"'; then
-      machine_ok=1; break
-    fi
-    sleep 10
-  done
-  [ "$machine_ok" -eq 1 ] || { echo "✗ no started machine on $FLY_APP after 5 min" >&2; exit 1; }
-  echo "✓ $FLY_APP has a started machine"
-
-  echo "▸ verifying the gym Worker: $HEALTH_URL"
-  health_ok=0
-  for _ in $(seq 1 12); do
-    if curl -fsS --max-time 10 "$HEALTH_URL" >/dev/null 2>&1; then health_ok=1; break; fi
-    sleep 10
-  done
-  [ "$health_ok" -eq 1 ] || { echo "✗ gym Worker health failed: $HEALTH_URL" >&2; exit 1; }
-  echo "✓ gym Worker healthy"
+  bash scripts/gym-refresh.sh || { echo "✗ gym-refresh failed" >&2; exit 1; }
 fi
 
 # ── Phase 0b — re-zero the gym D1 (runbook step 5) ──────────────────────────
@@ -206,10 +199,12 @@ total_log="${TMPDIR:-/tmp}/gym-weekly-total-$$.log"
 total_rc=0
 if [ "$DRY" = "1" ]; then
   echo "DRY-RUN would exec: bash scripts/gym-total.sh (tee → $total_log)"
-  echo "DRY-RUN plan: gym:total runs 4 phases — (1) mock matrix, (2) live backend e2e,"
-  echo "DRY-RUN plan: (3) live gating e2e, (4) live ENFORCEMENT gates (does each security"
-  echo "DRY-RUN plan: control fire on the wire? restricted-mode bypass / admin gate /"
-  echo "DRY-RUN plan: revocation-reaches-box / debug-access authority / transfer re-home)."
+  echo "DRY-RUN plan: gym:total runs (1) the mock matrix, then (2) the live run on one"
+  echo "DRY-RUN plan: shared UpCloud fleet, every group: core backend, gating,"
+  echo "DRY-RUN plan: the live ENFORCEMENT gates (does each security control fire on the wire?"
+  echo "DRY-RUN plan: restricted-mode bypass / admin gate / revocation-reaches-box /"
+  echo "DRY-RUN plan: debug-access authority / transfer re-home), server order, runtimes,"
+  echo "DRY-RUN plan: access lists, sharing, app copy, update, revoke/delete."
   echo "DRY-RUN: exit 3 (cloud skipped) would be treated as FAILURE — weekly means full"
   echo "DRY-RUN: a BYPASSED enforcement control (red) OR a SKIPPED one (inconclusive — never"
   echo "DRY-RUN: a pass) FAILS the weekly run — a silently-skipped security check is not green"
@@ -229,24 +224,20 @@ verdict_of() { # $1=pass-marker  $2=fail-marker
   else echo "not-run"; fi
 }
 mock_v="$(verdict_of "✓ mock matrix PASSED" "✗ mock matrix FAILED")"
-live_v="$(verdict_of "✓ live backend e2e PASSED" "✗ live backend e2e FAILED")"
-gate_v="$(verdict_of "✓ live gating e2e PASSED" "✗ live gating e2e FAILED")"
-# Enforcement has THREE outcomes: PASS / FAIL (a bypass) / SKIPPED (inconclusive —
-# a control couldn't be reached). SKIPPED is NOT a pass; weekly (full) fails on it.
-enf_verdict() {
+# The live run has THREE outcomes: PASS / FAIL / SKIPPED (inconclusive — a group
+# couldn't run). SKIPPED is NOT a pass; weekly (full) fails on it.
+live_verdict() {
   if [ "$DRY" = "1" ]; then echo "dry-run"; return; fi
-  if grep -qF "✓ live enforcement PASSED" "$total_log" 2>/dev/null; then echo "PASS"
-  elif grep -qF "✗ live enforcement FAILED" "$total_log" 2>/dev/null; then echo "FAIL (bypass)"
-  elif grep -qF "· live enforcement SKIPPED" "$total_log" 2>/dev/null; then echo "SKIPPED"
+  if grep -qF "✓ live run PASSED" "$total_log" 2>/dev/null; then echo "PASS"
+  elif grep -qF "✗ live run FAILED" "$total_log" 2>/dev/null; then echo "FAIL"
+  elif grep -qF "· live run SKIPPED" "$total_log" 2>/dev/null; then echo "SKIPPED"
   else echo "not-run"; fi
 }
-enf_v="$(enf_verdict)"
-results_dir="$(ls -1dt gym-results/*/ 2>/dev/null | head -1 || true)"
+live_v="$(live_verdict)"
+results_dir="$(ls -1dt gym-results/live-run-*/ 2>/dev/null | head -1 || true)"
 elapsed=$(( $(date +%s) - started_epoch ))
 printf '  mock matrix : %s\n'  "$mock_v"
-printf '  live e2e    : %s\n'  "$live_v"
-printf '  gating e2e  : %s\n'  "$gate_v"
-printf '  enforcement : %s\n'  "$enf_v"
+printf '  live run    : %s\n'  "$live_v"
 printf '  results dir : %s\n'  "${results_dir:-<none>}"
 printf '  duration    : %dm%02ds\n' $((elapsed / 60)) $((elapsed % 60))
 
@@ -262,12 +253,10 @@ if [ "$total_rc" -ne 0 ]; then
   echo "  verdict     : FAILED (gym-total exit $total_rc) — see $total_log + gym-results/" >&2
   exit "$total_rc"
 fi
-# gym-total treats an enforcement SKIP as soft (its own exit is about the mock +
-# backend + gating phases). Weekly means FULL: an enforcement control that was
-# BYPASSED (red) or SKIPPED (inconclusive — never a pass) fails the weekly run. A
-# silently-skipped security check can never read as green.
-if [ "$enf_v" != "PASS" ]; then
-  echo "  verdict     : FAILED — enforcement gates are '$enf_v' (a bypass is red; a skip is not a pass; weekly means full)" >&2
+# gym-total treats a live SKIP as soft. Weekly means FULL: a skipped group is
+# inconclusive and never reads as green.
+if [ "$live_v" != "PASS" ]; then
+  echo "  verdict     : FAILED — the live run is '$live_v' (a skip is not a pass; weekly means full)" >&2
   exit 1
 fi
 echo "  verdict     : OK — weekly gym is green"

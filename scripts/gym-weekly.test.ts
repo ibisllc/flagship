@@ -58,7 +58,7 @@ describe("gym-weekly.sh — dry-run self-test", () => {
     const r = run([], { GYM_WEEKLY_DRY_RUN: "1" });
     expect(r.code).toBe(0);
     for (const marker of [
-      "PHASE 0 — warm up the gym data plane",
+      "PHASE 0 — refresh the gym env",
       "PHASE 0b — wipe the gym DB",
       "PHASE 0c — simulators",
       "PHASE 1 — gym:total",

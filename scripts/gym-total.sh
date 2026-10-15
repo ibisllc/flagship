@@ -5,11 +5,11 @@
 # Two halves:
 #   1. The full DETERMINISTIC mock matrix (= `gym:locked`): every fixture-backed
 #      frontend scenario across web · iOS · iPad · Android, NO cloud, NO backend.
-#   2. The REAL-CLOUD live e2e: provisions actual gym Hetzner boxes and drives the
-#      whole backend chain (provision → register → tunnel → LE cert → serve →
-#      owner-IRK API → service install/serve/manage → vibe/git BYOK) AND the
-#      service-access GATING e2e (restricted service + the three invite tiers),
-#      then TEARS DOWN every box it created. This is why it's an overnight run.
+#   2. The REAL-CLOUD live run (tools/live-e2e/shared-run.ts): provisions ONE
+#      shared fleet of UpCloud gym boxes (account A with two boxes, account B
+#      with one), runs every scenario group against it (backend chain, access
+#      gating, enforcement controls, server order, runtimes, access lists,
+#      sharing, app copy, update, revoke/delete), then TEARS the fleet DOWN.
 #
 # Secrets come from the gitignored .gym-secrets.env (GYM_ADMIN_SECRET at minimum;
 # GYM_DEMO_IRK_KEK + GYM_AI_API_KEY unlock the signed + BYOK-model checks). With
@@ -19,16 +19,18 @@
 # Verdict (exit code): 0 = everything that ran passed · 1 = a phase FAILED ·
 # 3 = mock matrix passed but the cloud half was skipped (no secrets).
 #
-# Each live driver provisions + tears down its OWN fresh box (self-cleaning, so an
-# unattended overnight run never leaks billing even if it dies mid-phase). To
-# reuse one box instead (faster, but you must delete it), export
-# LIVE_E2E_REUSE_USER=<user> before running.
+# The fleet is torn down at the end, on failure and on a signal. To keep it
+# for a rerun, call shared-run.ts --keep / --reuse <fleet.json> directly.
 
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 2
 REPO="$(pwd)"
 
-SECRETS="$REPO/.gym-secrets.env"
+SECRETS="${GYM_SECRETS_FILE:-$REPO/.gym-secrets.env}"
+if [ ! -f "$SECRETS" ]; then
+  common="$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+  [ -n "$common" ] && [ -f "$(dirname "$common")/.gym-secrets.env" ] && SECRETS="$(dirname "$common")/.gym-secrets.env"
+fi
 if [ -f "$SECRETS" ]; then
   set -a
   # shellcheck disable=SC1090
@@ -48,8 +50,10 @@ fail=0
 phase() { echo; echo "════════════════════════════════════════════════════════════"; echo "  $1"; echo "════════════════════════════════════════════════════════════"; }
 
 # ── Phase 1: the deterministic mock matrix (no cloud) ───────────────────────────
-phase "PHASE 1/4 — deterministic frontend matrix (gym:locked, no cloud)"
-if npm run --silent gym:locked; then
+phase "PHASE 1/2 — deterministic frontend matrix (gym:locked, no cloud)"
+if [ "${GYM_SKIP_MOCKS:-0}" = "1" ]; then
+  echo "▸ GYM_SKIP_MOCKS=1: mock matrix skipped"
+elif npm run --silent gym:locked; then
   echo "✓ mock matrix PASSED"
 else
   echo "✗ mock matrix FAILED"
@@ -64,40 +68,18 @@ if [ -z "${GYM_ADMIN_SECRET:-}" ]; then
   if [ "$fail" -eq 0 ]; then exit 3; else exit 1; fi
 fi
 
-# ── Phase 2: live backend e2e (real box, full chain, self-teardown) ─────────────
-phase "PHASE 2/4 — live backend e2e (provisions a REAL box → drives the chain → tears down)"
-if npx tsx tools/live-e2e/run.ts; then
-  echo "✓ live backend e2e PASSED"
+# ── Phase 2: the live run on one shared UpCloud fleet (always torn down) ────────
+# Exit 0 = every group green · 1 = a check failed (a control bypassed counts) ·
+# 3 = nothing failed but something was SKIPPED (inconclusive, never a pass).
+phase "PHASE 2/2 — live run on a shared UpCloud fleet (provision → every group → teardown)"
+npx tsx tools/live-e2e/shared-run.ts ${GYM_LIVE_GROUPS:+--groups "$GYM_LIVE_GROUPS"}
+live_rc=$?
+if [ "$live_rc" -eq 0 ]; then
+  echo "✓ live run PASSED"
+elif [ "$live_rc" -eq 3 ]; then
+  echo "· live run SKIPPED (inconclusive — a group couldn't run)"
 else
-  echo "✗ live backend e2e FAILED"
-  fail=1
-fi
-
-# ── Phase 3: live service-access GATING e2e (real box, self-teardown) ───────────
-phase "PHASE 3/4 — live gating e2e (restricted service + the 3 invite tiers, real box → tears down)"
-if npx tsx tools/live-e2e/gating-drive.ts; then
-  echo "✓ live gating e2e PASSED"
-else
-  echo "✗ live gating e2e FAILED"
-  fail=1
-fi
-
-# ── Phase 4: live ENFORCEMENT gates (real box, self-teardown) ───────────────────
-# The standing "does this security control actually fire on the wire" check
-# (restricted-mode bypass class, admin gate, revocation-reaches-box, debug-access
-# authority, transfer re-home authorization). A BYPASS (exit 1) is RED and FAILS
-# the run. A SKIP (exit 3 — a control couldn't be provisioned/reached) is
-# INCONCLUSIVE: printed as SKIPPED (never a pass) but soft here — gym:weekly (full)
-# escalates it to a failure, exactly like the cloud-half skip.
-phase "PHASE 4/4 — live enforcement gates (does each security control fire on the wire?)"
-npx tsx tools/live-e2e/enforcement-drive.ts
-enf_rc=$?
-if [ "$enf_rc" -eq 0 ]; then
-  echo "✓ live enforcement PASSED"
-elif [ "$enf_rc" -eq 3 ]; then
-  echo "· live enforcement SKIPPED (inconclusive — a control couldn't be reached/provisioned)"
-else
-  echo "✗ live enforcement FAILED (a control was BYPASSED on the wire)"
+  echo "✗ live run FAILED"
   fail=1
 fi
 
