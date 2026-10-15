@@ -110,8 +110,10 @@ Then set `.com`'s `FLAGSHIP_INFERENCE_ENDPOINT` to
   shim drops any effort or thinking field the box sends (`reasoning_effort`,
   `reasoning`, `chat_template_kwargs`, …) and sends the catalog's
   `thinkingOff` for the model on that upstream instead: on DeepInfra
-  `chat_template_kwargs.enable_thinking: false` (Qwen, GLM) or
-  `reasoning_effort: "none"` (DeepSeek, MiniMax), all probed; on OpenRouter
+  `chat_template_kwargs.enable_thinking: false` (Qwen) or
+  `reasoning_effort: "none"` (DeepSeek, MiniMax), all probed, and nothing
+  for GLM (switched off, it reasons as visible text and its builds fail;
+  as served it writes short replies, `docs/ai-inference-costs.md` §16); on OpenRouter
   `reasoning.effort: "none"`, except GLM, whose reasoning OpenRouter marks
   mandatory, at `"low"` (documented, not probed). Own keys (BYOK) never pass
   through the shim and keep their effort.

@@ -127,13 +127,10 @@ export const INFERENCE_MODELS: readonly CatalogEntry[] = [
     modalities: ["text", "image"],
     maxOutputTokens: 24_576,
     upstream: {
-      // Probed 2026-10-15: reasoning_tokens 0.
-      deepinfra: {
-        id: "zai-org/GLM-5.3-Flash",
-        inUsd: 0.15,
-        outUsd: 0.5,
-        thinkingOff: { chat_template_kwargs: { enable_thinking: false } },
-      },
+      // Sent as DeepInfra serves it. enable_thinking: false zeroed reasoning_tokens,
+      // but GLM then reasoned as visible reply text and never wrote flagship.app.json
+      // (0/9 builds, 2026-10-15); untouched it built 4/4 with replies of ~1.5k tokens.
+      deepinfra: { id: "zai-org/GLM-5.3-Flash", inUsd: 0.15, outUsd: 0.5, thinkingOff: {} },
       // OpenRouter marks its reasoning mandatory (efforts max, high, low): the lowest. Not probed (no key).
       openrouter: { id: "z-ai/glm-5.3-flash", inUsd: 0.15, outUsd: 0.5, thinkingOff: { reasoning: { effort: "low" } } },
     },

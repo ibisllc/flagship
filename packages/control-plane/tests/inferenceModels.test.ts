@@ -99,6 +99,8 @@ describe("multipliers come from real cost plus the margin", () => {
     const low = INFERENCE_MODELS.find((m) => m.id === "low")!;
     expect(low.upstream.deepinfra!.thinkingOff).toEqual({ chat_template_kwargs: { enable_thinking: false } });
     expect(low.upstream.openrouter!.thinkingOff).toEqual({ reasoning: { effort: "none" } });
+    // Switched off, GLM reasons as reply text and leaves out flagship.app.json.
+    expect(INFERENCE_MODELS.find((m) => m.id === "medium-vision")!.upstream.deepinfra!.thinkingOff).toEqual({});
   });
 
   it("resolves a call's model for the shim, unknown ids to the default", () => {
