@@ -154,7 +154,11 @@
 //       pages say "Make leader"; precaches lib/serverOrder.js.
 //  v75: app links are https (/remote, /access, /invite-accept on the control
 //       apex); the webapp opens an /access link handed over by the site.
-const SHELL_VERSION = "v75";
+//  v76: Home's server rows lose their numbers: the drag handle leads each
+//       row, only the leader wears a badge (gray until it confirms the
+//       order), "Add/connect a server" sits above the list; a saved order is
+//       also handed straight to each online box.
+const SHELL_VERSION = "v76";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

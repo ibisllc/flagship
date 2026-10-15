@@ -285,10 +285,14 @@ export function listRow({
   trailing = "",
   trailingBelow = false,
   action = null,
+  titleIcon = "",
 }) {
   const actionAttr = action ? ` data-row-action="${escapeHtml(action)}"` : "";
   let lead = "";
-  if (leading?.kind === "monogram") {
+  if (leading?.kind === "html") {
+    // Caller-built markup (e.g. a drag handle), like `trailing`.
+    lead = leading.html ?? "";
+  } else if (leading?.kind === "monogram") {
     lead = monogram(leading.name, { size: "md" });
   } else {
     const tone = leading?.tone ?? "teal";
@@ -321,7 +325,7 @@ export function listRow({
     <div class="fs-listrow${action ? " fs-listrow--tappable" : ""}${stackedClass}"${actionAttr}>
       ${lead}
       <span class="fs-listrow-body">
-        <span class="fs-listrow-title">${escapeHtml(String(title))}</span>
+        <span class="fs-listrow-title">${titleIcon ? `<span class="fs-listrow-title-icon icon" aria-hidden="true">${titleIcon}</span>` : ""}${escapeHtml(String(title))}</span>
         ${sub}
         ${det}
         ${trailBelow}

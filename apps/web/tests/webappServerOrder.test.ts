@@ -183,7 +183,7 @@ describe("the leader follows the order", () => {
     expect(leaderOf(officeDown, [C, B], NOW)).toBe(LETICIA);
   });
 
-  it("Home badges the leader, says who it stands in for, and numbers the rest", async () => {
+  it("Home badges only the leader, says who it stands in for, and numbers nothing", async () => {
     const { registeredEntries } = await load("views/home.js");
     const { rankByServerOrder } = await load("lib/serverOrder.js");
     const rows = [
@@ -198,12 +198,266 @@ describe("the leader follows the order", () => {
     }));
     const entries = registeredEntries(ranked);
     expect(entries.map((e: { fields: { fqdn: string } }) => e.fields.fqdn)).toEqual([OFFICE, LETICIA, HOME3]);
-    expect(entries[0].html).toContain("#1");
+    for (const e of entries as Array<{ html: string }>) {
+      expect(e.html).not.toMatch(/#\d/);
+      expect(e.html).not.toContain("Next in line");
+      expect(e.html).toContain("fs-listrow-title-icon");
+      expect(e.html).toContain("js-order-handle");
+      expect(e.html).toContain("js-order-up");
+      expect(e.html).toContain("js-order-down");
+      expect(e.html).not.toContain("fs-listrow-icon--");
+    }
+    expect(entries[0].html).not.toContain("data-order-leader");
     expect(entries[1].html).toContain("data-order-leader");
     expect(entries[1].html).toContain("standing in for office");
-    expect(entries[2].html).toContain("#3");
     expect(entries[2].html).not.toContain("data-order-leader");
-    expect(entries.every((e: { html: string }) => e.html.includes("js-order-handle"))).toBe(true);
+    // The handle is the row's first element, ahead of the name.
+    const html = entries[1].html as string;
+    expect(html.indexOf("js-order-handle")).toBeLessThan(html.indexOf("fs-listrow-body"));
+  });
+
+  it("skips pending and revoked servers when saying who the leader stands in for", async () => {
+    const { registeredEntries } = await load("views/home.js");
+    const rows = [
+      { server: { serverId: OFFICE, revoked: { reason: "lost", at: 1 } }, pod: { ...pod(OFFICE, C, 3, "unreachable"), revokedAt: 1 }, bucket: "offline" },
+      { server: { serverId: LETICIA }, pod: pod(LETICIA, B, 2, "never"), bucket: "pending" },
+      { server: { serverId: HOME3 }, pod: pod(HOME3, A, 1), bucket: "online" },
+    ];
+    const entries = registeredEntries(rows);
+    expect(entries[2].html).toContain("data-order-leader");
+    expect(entries[2].html).not.toContain("standing in for");
+    // A revoked server can't be dragged into the order.
+    expect(entries[0].orderStk).toBe("");
+  });
+
+  it("keeps the Leader badge gray until the leader holds the order on screen", async () => {
+    const { registeredEntries } = await load("views/home.js");
+    const rows = (acked?: number) => [
+      { server: { serverId: HOME3 }, pod: { ...pod(HOME3, A, 1), ...(acked ? { orderIssuedAt: acked } : {}) }, bucket: "online" },
+      { server: { serverId: LETICIA }, pod: pod(LETICIA, B, 2), bucket: "online" },
+    ];
+    const pending = registeredEntries(rows(), { orderIssuedAt: 50 })[0].html;
+    expect(pending).toContain("data-order-leader-pending");
+    expect(pending).toContain('title="Leader, waiting for the server to confirm"');
+    expect(pending).not.toContain("pill ok\" data-order-leader");
+    expect(registeredEntries(rows(49), { orderIssuedAt: 50 })[0].html).toContain("data-order-leader-pending");
+    const confirmed = registeredEntries(rows(50), { orderIssuedAt: 50 })[0].html;
+    expect(confirmed).toContain('class="pill ok" data-order-leader');
+    expect(confirmed).not.toContain("data-order-leader-pending");
+    expect(registeredEntries(rows(), { orderIssuedAt: 0 })[0].html).not.toContain("data-order-leader-pending");
+    expect(registeredEntries(rows(50), { orderIssuedAt: 50, dragging: true })[0].html).toContain("data-order-leader-pending");
+  });
+
+  it("isLeaderConfirmed: no drag, and no order or the leader holds it", async () => {
+    const { isLeaderConfirmed } = await load("lib/serverOrder.js");
+    expect(isLeaderConfirmed({})).toBe(true);
+    expect(isLeaderConfirmed({ orderIssuedAt: 0, leaderOrderIssuedAt: null })).toBe(true);
+    expect(isLeaderConfirmed({ dragging: true })).toBe(false);
+    expect(isLeaderConfirmed({ orderIssuedAt: 10, leaderOrderIssuedAt: null })).toBe(false);
+    expect(isLeaderConfirmed({ orderIssuedAt: 10, leaderOrderIssuedAt: 9 })).toBe(false);
+    expect(isLeaderConfirmed({ orderIssuedAt: 10, leaderOrderIssuedAt: 10 })).toBe(true);
+    expect(isLeaderConfirmed({ orderIssuedAt: 10, leaderOrderIssuedAt: 11 })).toBe(true);
+  });
+});
+
+describe("dragging on Home", () => {
+  const pods = [pod(HOME3, A, 1), pod(LETICIA, B, 2), pod(OFFICE, C, 3)];
+  const rows = pods.map((p) => ({ server: { serverId: p.serverDomain }, pod: p, bucket: "online" }));
+
+  it("shows the draft while dragging, labels included, and saves it on the drop", async () => {
+    const home = await load("views/home.js");
+    home._setHomeServersForTests(rows, { demo: true });
+    const drag = home._orderDragForTests;
+    expect(drag.start(A)).toBe(true);
+    drag.moveTo([B, C, A]);
+    expect(drag.state().draft).toEqual([B, C, A]);
+    expect(home.homeOrderView()).toEqual([
+      { fqdn: LETICIA, leader: true },
+      { fqdn: OFFICE, leader: false },
+      { fqdn: HOME3, leader: false },
+    ]);
+    drag.end(true);
+    await vi.waitFor(() => expect(drag.state().saving).toBe(false));
+    expect(drag.state()).toMatchObject({ draft: null, dragging: "" });
+    expect(home.homeOrderStks()).toEqual([B, C, A]);
+    expect(home.homeOrderView()[0]).toEqual({ fqdn: LETICIA, leader: true });
+  });
+
+  it("a cancelled drag or a drop where nothing moved leaves no draft", async () => {
+    const home = await load("views/home.js");
+    home._setHomeServersForTests(rows, { demo: true });
+    const drag = home._orderDragForTests;
+    drag.start(A);
+    drag.moveTo([B, A, C]);
+    drag.end(false);
+    expect(drag.state()).toMatchObject({ draft: null, dragging: "" });
+    expect(home.homeOrderStks()).toEqual([A, B, C]);
+    drag.start(B);
+    drag.moveTo([B, A, C]);
+    drag.moveTo([A, B, C]);
+    drag.end(true);
+    expect(drag.state()).toMatchObject({ draft: null, dragging: "", saving: false });
+    expect(home.homeOrderStks()).toEqual([A, B, C]);
+  });
+
+  it("a failed save puts the committed order back with no draft left", async () => {
+    const home = await load("views/home.js");
+    const { getSession } = await load("lib/state.js");
+    home._setHomeServersForTests(rows, { demo: false });
+    getSession().umk = null;
+    const drag = home._orderDragForTests;
+    drag.start(C);
+    drag.moveTo([C, A, B]);
+    drag.end(true);
+    await vi.waitFor(() => expect(drag.state().saving).toBe(false));
+    expect(drag.state().draft).toBeNull();
+    expect(home.homeOrderStks()).toEqual([A, B, C]);
+    expect(home.homeOrderView()[0]).toEqual({ fqdn: HOME3, leader: true });
+  });
+
+  it("only one drag runs at a time", async () => {
+    const home = await load("views/home.js");
+    home._setHomeServersForTests(rows, { demo: true });
+    const drag = home._orderDragForTests;
+    drag.start(A);
+    expect(drag.start(B)).toBe(false);
+    drag.end(false);
+  });
+});
+
+describe("handing the order to the boxes", () => {
+  const wire = { order: { user: USER, stks: [A, B, C], issuedAt: 200, nonce: "00".repeat(32) }, signature: "ab" };
+
+  const fakeClients = (answers: Record<string, (body: unknown) => Promise<unknown>>, sessions = Object.keys(answers)) => {
+    const calls: Array<{ fqdn: string; path: string; body: unknown }> = [];
+    const clientFor = (fqdn: string) => ({
+      hasSession: () => sessions.includes(fqdn),
+      fetch: async (path: string, init: RequestInit) => {
+        const body = JSON.parse(String(init.body));
+        calls.push({ fqdn, path, body });
+        return answers[fqdn]!(body);
+      },
+    });
+    return { calls, clientFor };
+  };
+
+  it("posts the signed order to every online box with a session and records what each holds", async () => {
+    const { deliverServerOrder, orderAckOf } = await load("lib/serverOrder.js");
+    const { ScreensError } = await load("lib/api.js");
+    const { calls, clientFor } = fakeClients({
+      [HOME3]: async () => ({ ok: true, adopted: true, heldIssuedAt: 200 }),
+      [LETICIA]: async () => {
+        throw new ScreensError("bad signature", 422, { error: "bad signature", heldIssuedAt: 150 });
+      },
+      [OFFICE]: async () => {
+        throw new ScreensError("HTTP 404", 404, null);
+      },
+    });
+    const pods = [
+      pod(HOME3, A, 1),
+      { ...pod(LETICIA, B, 2), orderIssuedAt: 100 },
+      pod(OFFICE, C, 3),
+      pod(`down.${USER}.flagship.services`, "dd".repeat(32), 4, "unreachable"),
+      { ...pod(`gone.${USER}.flagship.services`, "ee".repeat(32), 5), revokedAt: 1 },
+    ];
+    const out = await deliverServerOrder(wire, pods, { clientFor, now: () => NOW });
+    expect(calls.map((c) => c.fqdn).sort()).toEqual([HOME3, LETICIA, OFFICE].sort());
+    expect(calls.every((c) => c.path === "/api/screens/server-order")).toBe(true);
+    expect(calls[0].body).toEqual(wire);
+    expect(out).toEqual(expect.arrayContaining([
+      { fqdn: HOME3, heldIssuedAt: 200 },
+      { fqdn: LETICIA, heldIssuedAt: 150 },
+      { fqdn: OFFICE, heldIssuedAt: null },
+    ]));
+    expect(orderAckOf(pods[0])).toBe(200);
+    expect(orderAckOf(pods[1])).toBe(150);
+    expect(orderAckOf({ ...pods[1], orderIssuedAt: 300 })).toBe(300);
+    expect(orderAckOf(pods[2])).toBeNull();
+  });
+
+  it("skips boxes this browser has no session for, and acks only move forward", async () => {
+    const { deliverServerOrder, orderAckOf, recordServerOrderAck } = await load("lib/serverOrder.js");
+    const { calls, clientFor } = fakeClients({ [HOME3]: async () => ({ heldIssuedAt: 120 }) }, []);
+    await deliverServerOrder(wire, [pod(HOME3, A, 1)], { clientFor, now: () => NOW });
+    expect(calls).toHaveLength(0);
+    recordServerOrderAck(HOME3, 200);
+    recordServerOrderAck(HOME3, 120);
+    expect(orderAckOf(pod(HOME3, A, 1))).toBe(200);
+  });
+
+  it("a save hands the order on after `.com` takes it, without waiting, and repaints Home's badge", async () => {
+    const { saveServerOrder } = await load("lib/serverOrder.js");
+    const { signWithIrk } = await load("keystore.js");
+    const home = await load("views/home.js");
+    const pods = [pod(HOME3, A, 1), pod(LETICIA, B, 2)];
+    home._setHomeServersForTests(pods.map((p) => ({ server: { serverId: p.serverDomain }, pod: p, bucket: "online" })));
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const { calls, clientFor } = fakeClients({
+      [HOME3]: async (body) => {
+        await gate;
+        return { ok: true, adopted: true, heldIssuedAt: (body as typeof wire).order.issuedAt };
+      },
+      [LETICIA]: async () => ({ ok: true, adopted: true, heldIssuedAt: NOW }),
+    });
+    const fetch = vi.fn(async () => ok());
+    const out = await saveServerOrder(
+      { stks: [A, B] },
+      { fetch, comBase: "https://com", now: () => NOW, sign: signWithIrk, demo: false, pods, clientFor },
+    );
+    expect(out.local).toBe(false);
+    expect(calls.map((c) => c.fqdn).sort()).toEqual([HOME3, LETICIA].sort());
+    expect(home._homeLeaderConfirmedForTests()).toBe(false);
+    release();
+    await out.delivered;
+    expect(home._homeLeaderConfirmedForTests()).toBe(true);
+  });
+
+  it("a demo save or a refused save hands nothing to the boxes", async () => {
+    const { saveServerOrder } = await load("lib/serverOrder.js");
+    const { calls, clientFor } = fakeClients({ [HOME3]: async () => ({ heldIssuedAt: 1 }) });
+    await saveServerOrder({ stks: [A] }, { demo: true, pods: [pod(HOME3, A, 1)], clientFor });
+    const fetch = vi.fn(async () => fail(403, "invalid signature"));
+    await expect(
+      saveServerOrder({ stks: [A] }, { fetch, comBase: "https://com", demo: false, pods: [pod(HOME3, A, 1)], clientFor }),
+    ).rejects.toThrow();
+    expect(calls).toHaveLength(0);
+  });
+});
+
+describe("the server page's order card", () => {
+  it("says who a server takes over from, never a number", async () => {
+    const { successionLine } = await load("views/server-detail.js");
+    expect(successionLine([])).toBe("First in line to lead");
+    expect(successionLine([HOME3])).toBe("Takes over while home3 is down");
+    expect(successionLine([HOME3, LETICIA])).toBe("Takes over while home3 and leticia are down");
+    expect(successionLine([HOME3, LETICIA, OFFICE])).toBe("Takes over while home3, leticia and office are down");
+  });
+
+  it("gives each server its line and the leader a caption until it confirms", async () => {
+    const { leaderStatus } = await load("views/server-detail.js");
+    const { rememberServerOrder } = await load("lib/serverOrder.js");
+    rememberServerOrder(USER, { order: { user: USER, stks: [A, B, C], issuedAt: 500, nonce: "00".repeat(32) }, signature: "" });
+    const pods = [pod(HOME3, A, 1, "unreachable"), { ...pod(LETICIA, B, 2), orderIssuedAt: 400 }, pod(OFFICE, C, 3)];
+    const deps = { loadAccountPods: async () => pods, demo: false };
+    expect(await leaderStatus(HOME3, deps)).toMatchObject({ text: "First in line to lead", waiting: false });
+    expect(await leaderStatus(LETICIA, deps)).toMatchObject({ text: "Leader", pill: "pill", waiting: true });
+    expect(await leaderStatus(OFFICE, deps)).toMatchObject({ text: "Takes over while home3 and leticia are down", waiting: false });
+    pods[1] = { ...pods[1], orderIssuedAt: 500 };
+    expect(await leaderStatus(LETICIA, deps)).toMatchObject({ text: "Leader", pill: "pill ok", waiting: false });
+  });
+});
+
+describe("Home's layout", () => {
+  it("puts Add/connect a server under the heading, above the filters, with no reorder hint", () => {
+    const src = readFileSync(resolve(__dirname, "../public/webapp/views/home.js"), "utf8");
+    const add = src.indexOf('id="home-add-server">+ Add/connect a server');
+    expect(add).toBeGreaterThan(src.indexOf("data-home-title>Servers</h2>"));
+    expect(add).toBeLessThan(src.indexOf("${chipRow({ items: chips"));
+    expect(add).toBeLessThan(src.indexOf("${searchField({ value: homeQuery"));
+    expect(src).not.toContain("home-order-hint");
+    expect(src).not.toMatch(/Drag servers to choose|Touch and hold/);
+    expect(src).toContain("Save a passkey so you can recover your account if you get a new device.");
   });
 });
 

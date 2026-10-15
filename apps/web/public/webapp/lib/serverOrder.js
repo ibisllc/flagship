@@ -8,7 +8,10 @@
 //   flagship/server-order/v1|<user>|<stk1>,<stk2>,…|<issuedAt ms>|<nonce>
 //
 // `.com` keeps the newest per account (`POST /api/accounts/<u>/server-order`)
-// and returns it on `/pods` as `serverOrder`; boxes re-verify it.
+// and returns it on `/pods` as `serverOrder`; boxes re-verify it. After a
+// save the browser also hands it to every online box it has a session for
+// (`POST /api/screens/server-order`), and each box's `heldIssuedAt` answer,
+// like `/pods` `orderIssuedAt`, says which order that box holds.
 //
 // Must pass packages/protocol/test-vectors/server-order/vectors.json.
 
@@ -18,6 +21,7 @@ import { sensitiveSigner } from "./adminRoot.js";
 import { controlApex } from "./apex.js";
 import { getActiveProfile } from "./profiles.js";
 import { isDemoProfile } from "./demoAccount.js";
+import { boxClient } from "./api.js";
 
 export const TAG_SERVER_ORDER = "flagship/server-order/v1";
 export const SERVER_ORDER_MAX = 64;
@@ -157,6 +161,79 @@ export function currentServerOrder(deps = {}) {
 
 export function _resetServerOrdersForTests() {
   known.clear();
+  acks.clear();
+}
+
+// ── Which order each box holds ─────────────────────────────────────────
+
+/** @type {Map<string, number>} box FQDN → the newest `issuedAt` it said it holds. */
+const acks = new Map();
+
+/** Record that a box holds the order issued at `issuedAt`. Acks only move
+ *  forward; a newer one repaints whoever listens to order changes. */
+export function recordServerOrderAck(fqdn, issuedAt) {
+  const f = String(fqdn ?? "").trim().toLowerCase();
+  if (!f || !Number.isSafeInteger(issuedAt) || issuedAt <= 0) return;
+  if ((acks.get(f) ?? 0) >= issuedAt) return;
+  acks.set(f, issuedAt);
+  changed(getSession()?.username ?? "");
+}
+
+/** The `issuedAt` of the newest order a `/pods` row's box is known to hold:
+ *  the larger of its `/pods` `orderIssuedAt` and what it answered directly. */
+export function orderAckOf(pod) {
+  const fromPods = typeof pod?.orderIssuedAt === "number" ? pod.orderIssuedAt : 0;
+  const direct = acks.get(String(pod?.serverDomain ?? pod?.fqdn ?? "").trim().toLowerCase()) ?? 0;
+  const best = Math.max(fromPods, direct);
+  return best > 0 ? best : null;
+}
+
+const RECENT_REPORT_MS = 15 * 60_000;
+
+function deliveryTargets(pods, now) {
+  const seen = new Set();
+  const out = [];
+  for (const p of Array.isArray(pods) ? pods : []) {
+    const fqdn = String(p?.serverDomain ?? p?.fqdn ?? "").trim().toLowerCase();
+    if (!fqdn || p?.revokedAt != null || seen.has(fqdn)) continue;
+    const online = p?.liveness != null
+      ? p.liveness === "live"
+      : p?.lastReported != null && now - p.lastReported <= RECENT_REPORT_MS;
+    if (!online) continue;
+    seen.add(fqdn);
+    out.push(fqdn);
+  }
+  return out;
+}
+
+/**
+ * Hand a saved order to every online box this browser has a session for, so
+ * each acts on it now rather than at its next check-in with `.com` (which
+ * still delivers it to the rest). Failures are ignored; every answer that
+ * names `heldIssuedAt` (a refusal too) is recorded as that box's ack.
+ *
+ * @param {{order: object, signature: string}} wire
+ * @param {object[]} pods `/pods` rows
+ * @returns {Promise<Array<{fqdn: string, heldIssuedAt: number | null}>>}
+ */
+export async function deliverServerOrder(wire, pods, deps = {}) {
+  const clientFor = deps.clientFor ?? boxClient;
+  const now = (deps.now ?? Date.now)();
+  const sends = deliveryTargets(pods, now).map(async (fqdn) => {
+    const client = clientFor(fqdn);
+    if (!client?.hasSession?.()) return null;
+    let held = null;
+    try {
+      const body = await client.fetch("/api/screens/server-order", { method: "POST", body: JSON.stringify(wire) });
+      held = body?.heldIssuedAt;
+    } catch (e) {
+      held = e?.body?.heldIssuedAt;
+    }
+    const heldIssuedAt = Number.isSafeInteger(held) ? held : null;
+    if (heldIssuedAt != null) recordServerOrderAck(fqdn, heldIssuedAt);
+    return { fqdn, heldIssuedAt };
+  });
+  return (await Promise.all(sends)).filter(Boolean);
 }
 
 // ── Ranking ────────────────────────────────────────────────────────────
@@ -197,6 +274,20 @@ export function leadershipOf(ranked, isOnline) {
   return { leaderIndex, standingInFor: leaderIndex > 0 ? ranked.slice(0, leaderIndex) : [] };
 }
 
+/**
+ * Whether the Leader badge is confirmed: no drag is in progress, and the
+ * leader reports holding the order on screen (`/pods` `orderIssuedAt` is the
+ * `issuedAt` of the order that box last reported). With no order ever saved
+ * (`orderIssuedAt` 0) there is nothing to confirm.
+ *
+ * @param {{ dragging?: boolean, orderIssuedAt?: number, leaderOrderIssuedAt?: number | null }} args
+ */
+export function isLeaderConfirmed({ dragging = false, orderIssuedAt = 0, leaderOrderIssuedAt = null } = {}) {
+  if (dragging) return false;
+  if (!orderIssuedAt) return true;
+  return typeof leaderOrderIssuedAt === "number" && leaderOrderIssuedAt >= orderIssuedAt;
+}
+
 /** Move `stk` to the top of `stks` (adding it when absent). */
 export function moveToTop(stks, stk) {
   const s = String(stk).toLowerCase();
@@ -233,9 +324,12 @@ export class ServerOrderError extends Error {
  * failure the previous order is put back and the error says why (status 409:
  * a newer order exists, reload `/pods`).
  *
+ * Once `.com` takes it, the order goes on to the online boxes in `deps.pods`
+ * without holding up the save (`delivered` settles when they've answered).
+ *
  * @param {{ stks: string[] }} args
- * @param {{ fetch?: typeof fetch, comBase?: string, sign?: Function, now?: () => number, storage?: Storage, demo?: boolean }} [deps]
- * @returns {Promise<{ ok: true, local: boolean, stks: string[] }>}
+ * @param {{ fetch?: typeof fetch, comBase?: string, sign?: Function, now?: () => number, storage?: Storage, demo?: boolean, pods?: object[], clientFor?: Function }} [deps]
+ * @returns {Promise<{ ok: true, local: boolean, stks: string[], delivered?: Promise<unknown> }>}
  */
 export async function saveServerOrder({ stks }, deps = {}) {
   const session = getSession();
@@ -263,7 +357,8 @@ export async function saveServerOrder({ stks }, deps = {}) {
         : String(body?.error ?? `HTTP ${r.status}`);
       throw new ServerOrderError(reason, r.status);
     }
-    return { ok: true, local: false, stks: list };
+    const delivered = deliverServerOrder(wire, deps.pods ?? [], deps).catch(() => []);
+    return { ok: true, local: false, stks: list, delivered };
   } catch (e) {
     setKnownServerOrder(username, previous, deps);
     throw e;

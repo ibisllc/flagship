@@ -46,12 +46,15 @@ import { fetchDecryptedDirectory } from "../lib/accountDirectory.js";
 import { accountReadFetch, onAccountReadPausedChange } from "../lib/accountRead.js";
 import {
   currentServerOrder,
+  isLeaderConfirmed,
   leadershipOf,
   moveItem,
   onServerOrderChange,
+  orderAckOf,
   rankByServerOrder,
   rememberServerOrder,
   saveServerOrder,
+  serverOrderOf,
 } from "../lib/serverOrder.js";
 import { preferLeaderAsCurrent } from "../lib/appPlacement.js";
 
@@ -192,10 +195,11 @@ export function pendingWithoutRegisteredTwin(servers, pending) {
 export function renderPendingCard(order) {
   const label = order.serverName || order.fqdn;
   const bar = renderListProgressBar({ phase: order.phase ?? null, status: "provisioning" });
-  // Clean list row: a warning-tinted server glyph, the reserved name, the
-  // fqdn subtitle + "installing" detail, and a "pending" pill trailing.
+  // Clean list row: the server glyph and reserved name, the fqdn subtitle +
+  // "installing" detail, and a "pending" pill trailing.
   const row = listRow({
-    leading: { kind: "icon", svg: serverIcon, tone: "warning" },
+    leading: { kind: "html", html: `<span class="server-order-slot" aria-hidden="true"></span>` },
+    titleIcon: serverIcon,
     title: String(label),
     subtitle: "Installing",
     detail: String(order.fqdn),
@@ -431,10 +435,6 @@ export function renderServerCard(server, pod, opts = {}) {
     : c.kind === "revoked" || c.kind === "cert-expired" ? "pill err"
     : c.kind === "cert-expiring-soon" || c.kind === "waiting-for-approval" ? "pill warn"
     : "pill";
-  // Leading status-tinted icon — same semantic colour the dot used to carry.
-  const bucket = statusBucketForKind(c.kind);
-  const tone = bucket === "online" ? "success" : bucket === "pending" ? "warning"
-    : c.kind === "revoked" || c.kind === "cert-expired" ? "danger" : "muted";
   const apps = pod?.appsServed ?? [];
   const serviceCount = Array.isArray(apps) ? apps.length : 0;
   const certCountdown = pod?.currentCert?.validUntil
@@ -468,19 +468,20 @@ export function renderServerCard(server, pod, opts = {}) {
     ? `<div class="row mt-2"><button class="full-width js-approve-unlock">Approve unlock</button></div>`
     : "";
   const row = listRow({
-    leading: { kind: "icon", svg: serverIcon, tone },
+    // The status lives in the pill; the leading column is the drag handle.
+    leading: { kind: "html", html: orderControlsHtml(server, opts.order) },
+    titleIcon: serverIcon,
     title: String(server.serverId),
     subtitle,
     detail: certCountdown ? String(certCountdown) : "",
     // Status pill stacks UNDER the text — labels like "never came online" need a
     // full line rather than being crushed into the right margin against the title.
-    // The server order (docs/server-order.md): the leader wears "Leader", the
-    // rest their place in line.
-    trailing: `<span class="${pillClass}">${escapeHtml(c.label)}</span>${orderPillHtml(opts.order)}`,
+    // The server order (docs/server-order.md): only the leader wears a badge;
+    // the order itself is read from position.
+    trailing: `${orderPillHtml(opts.order)}<span class="${pillClass}">${escapeHtml(c.label)}</span>`,
     trailingBelow: true,
   });
   return `
-    ${orderControlsHtml(server, opts.order)}
     ${row}
     ${deadDelete}
     ${approveUnlock}
@@ -488,24 +489,28 @@ export function renderServerCard(server, pod, opts = {}) {
 }
 
 export const LEADER_LABEL = "Leader";
-export const ORDER_HINT = "Drag servers to choose who leads. The first one that's online leads; the next takes over while it's down.";
+export const LEADER_PENDING_LABEL = "Leader, waiting for the server to confirm";
 
-/** The trailing pill for a server's place in the order. */
+/** The Leader badge: gray until the leader confirms it holds the order. */
 export function orderPillHtml(order) {
-  if (!order) return "";
-  if (order.isLeader) return ` <span class="pill ok" data-order-leader>${LEADER_LABEL}</span>`;
-  return ` <span class="pill" title="Next in line">#${order.position}</span>`;
+  if (!order?.isLeader) return "";
+  if (order.confirmed === false) {
+    return `<span class="pill" data-order-leader data-order-leader-pending title="${LEADER_PENDING_LABEL}" aria-label="${LEADER_PENDING_LABEL}">${LEADER_LABEL}</span>`;
+  }
+  return `<span class="pill ok" data-order-leader>${LEADER_LABEL}</span>`;
 }
 
-/** The drag handle and up/down buttons on a reorderable server card. */
+/** The leading column: a drag handle (plus up/down buttons that show only
+ *  for the keyboard) on a reorderable server, an empty slot otherwise so the
+ *  names line up. CSS hides both when the list can't be reordered. */
 function orderControlsHtml(server, order) {
-  if (!order?.reorderable) return "";
+  if (!order?.reorderable) return `<span class="server-order-slot" aria-hidden="true"></span>`;
   const name = escapeHtml(serverShortName(server.serverId));
-  return `<div class="server-order-controls">
-      <button type="button" class="icon-button server-order-handle js-order-handle" aria-label="Drag ${name} to reorder" title="Drag to reorder">⠿</button>
-      <button type="button" class="icon-button js-order-up" aria-label="Move ${name} up"${order.position === 1 ? " disabled" : ""}>↑</button>
-      <button type="button" class="icon-button js-order-down" aria-label="Move ${name} down"${order.last ? " disabled" : ""}>↓</button>
-    </div>`;
+  return `<span class="server-order-controls">
+      <button type="button" class="server-order-step js-order-up" aria-label="Move ${name} up"${order.first ? " disabled" : ""}>↑</button>
+      <span class="server-order-handle js-order-handle" aria-hidden="true">⠿</span>
+      <button type="button" class="server-order-step js-order-down" aria-label="Move ${name} down"${order.last ? " disabled" : ""}>↓</button>
+    </span>`;
 }
 
 /** "standing in for home3" when servers above the leader are down. */
@@ -660,7 +665,7 @@ function renderRecoveryBanner() {
     icon: keyIcon,
     title: "Your account isn't backed up yet",
     message:
-      "If you lose access to this device, you may lose access to your Flagship cloud",
+      "Save a passkey so you can recover your account if you get a new device.",
     ctaLabel: "Secure my account",
     dismissible: true,
     tone: "teal",
@@ -794,12 +799,19 @@ function renderDeviceCapabilityChip(cap) {
 // query. Chip taps + typing re-paint from this model WITHOUT re-fetching —
 // pure presentation, exactly like the iOS Home `.searchable` + chip filter.
 let homeServerEntries = [];
-/** The registered servers in the owner's order (docs/server-order.md):
- *  `{server, pod, hasLiveUnlockRequest, bucket}` each. */
+/** The registered servers in the owner's committed order
+ *  (docs/server-order.md): `{server, pod, hasLiveUnlockRequest, bucket}` each. */
 let homeRegistered = [];
 let homePods = [];
 let homeDemo = false;
 let orderSaving = false;
+/** While a server is dragged, the order on screen (STKs of the reorderable
+ *  servers); null otherwise. Rows and labels both come from it, so they can
+ *  never disagree mid-drag. */
+let orderDraft = null;
+let draggingStk = "";
+let refreshAfterDrag = false;
+let suppressCardClickUntil = 0;
 
 function orderKey(r) {
   return {
@@ -809,18 +821,45 @@ function orderKey(r) {
   };
 }
 
-/** Card entries for the ranked registered servers: the first online one
- *  leads, the rest are numbered in line. */
-export function registeredEntries(ranked) {
+function rowStk(r) {
+  return String(r.pod?.identityPubKey ?? "").toLowerCase();
+}
+
+function isRevokedRow(r) {
+  return !!r.server?.revoked || r.pod?.revokedAt != null;
+}
+
+/** A server that can take a place in the order: registered with a box key. */
+function isOrderable(r) {
+  return !!rowStk(r) && !isRevokedRow(r);
+}
+
+/**
+ * Card entries for the ranked registered servers. Only the leader (the first
+ * one online) is labelled; its badge is gray while a drag is on and until the
+ * leader holds the order on screen (`orderIssuedAt`; see isLeaderConfirmed,
+ * orderAckOf).
+ */
+export function registeredEntries(ranked, { orderIssuedAt = 0, dragging = false } = {}) {
   const { leaderIndex, standingInFor } = leadershipOf(ranked, (r) => r.bucket === "online");
-  const reorderable = ranked.filter((r) => r.pod?.identityPubKey).length > 1;
+  const confirmed = isLeaderConfirmed({
+    dragging,
+    orderIssuedAt,
+    leaderOrderIssuedAt: orderAckOf(ranked[leaderIndex]?.pod),
+  });
+  const orderable = ranked.filter(isOrderable);
+  const reorderable = orderable.length > 1;
   return ranked.map((r, i) => {
+    const slot = orderable.indexOf(r);
     const order = {
-      position: i + 1,
-      last: i === ranked.length - 1,
+      first: slot === 0,
+      last: slot === orderable.length - 1,
       isLeader: i === leaderIndex,
-      standingInFor: i === leaderIndex ? standingInFor.map((x) => String(x.server.serverId)) : [],
-      reorderable: reorderable && !!r.pod?.identityPubKey,
+      confirmed,
+      standingInFor: i === leaderIndex
+        ? standingInFor.filter((x) => !isRevokedRow(x) && x.bucket !== "pending").map((x) => String(x.server.serverId))
+        : [],
+      reorderable: reorderable && slot >= 0,
     };
     return {
       html: renderServerCard(r.server, r.pod, { hasLiveUnlockRequest: r.hasLiveUnlockRequest, order }),
@@ -829,9 +868,26 @@ export function registeredEntries(ranked) {
       cardClass: "server-card",
       // undefined (no pod row) lets the delete flow look the box key up itself.
       identityPubKey: r.pod ? (r.pod.identityPubKey ?? null) : undefined,
-      orderStk: order.reorderable ? String(r.pod.identityPubKey).toLowerCase() : "",
+      orderStk: order.reorderable ? rowStk(r) : "",
     };
   });
+}
+
+/** The registered servers as Home shows them: the drag's draft order while
+ *  one is on, else the committed order. */
+function shownRegistered() {
+  return orderDraft ? rankByServerOrder(homeRegistered, orderDraft, orderKey) : homeRegistered;
+}
+
+/** `issuedAt` of the order on screen; 0 for a demo account, whose order never
+ *  reaches a box to be confirmed. */
+function shownOrderIssuedAt() {
+  if (homeDemo) return 0;
+  return serverOrderOf(getSession()?.username)?.issuedAt ?? 0;
+}
+
+function shownEntries() {
+  return registeredEntries(shownRegistered(), { orderIssuedAt: shownOrderIssuedAt(), dragging: orderDraft !== null });
 }
 
 // One order state for Home and server detail: when it changes anywhere (Make
@@ -844,50 +900,149 @@ onServerOrderChange(() => {
 
 /** The registered servers' STKs in Home's current order. */
 export function homeOrderStks() {
-  return homeRegistered.map((r) => String(r.pod?.identityPubKey ?? "").toLowerCase()).filter(Boolean);
+  return shownRegistered().map(rowStk).filter(Boolean);
 }
 
 /** What Home shows now: each registered server in order, and which leads. */
 export function homeOrderView() {
-  const { leaderIndex } = leadershipOf(homeRegistered, (r) => r.bucket === "online");
-  return homeRegistered.map((r, i) => ({ fqdn: String(r.server.serverId).toLowerCase(), leader: i === leaderIndex }));
+  const shown = shownRegistered();
+  const { leaderIndex } = leadershipOf(shown, (r) => r.bucket === "online");
+  return shown.map((r, i) => ({ fqdn: String(r.server.serverId).toLowerCase(), leader: i === leaderIndex }));
 }
 
 /** Test seam: the registered servers Home last loaded. */
-export function _setHomeServersForTests(registered) {
+export function _setHomeServersForTests(registered, { demo = false } = {}) {
   homeServerEntries = [];
+  orderDraft = null;
+  draggingStk = "";
+  orderSaving = false;
+  homeDemo = demo;
   paintRegistered(rankByServerOrder(registered, currentServerOrder(), orderKey));
 }
 
-/** Repaint Home with the registered servers in `ranked` order. */
+/** Test seam: whether Home's Leader badge is confirmed right now. */
+export function _homeLeaderConfirmedForTests() {
+  const shown = shownRegistered();
+  const { leaderIndex } = leadershipOf(shown, (r) => r.bucket === "online");
+  return isLeaderConfirmed({
+    dragging: orderDraft !== null,
+    orderIssuedAt: shownOrderIssuedAt(),
+    leaderOrderIssuedAt: orderAckOf(shown[leaderIndex]?.pod),
+  });
+}
+
+/** Test seam: drive the drag the pointer handlers drive. */
+export const _orderDragForTests = {
+  start: (stk) => startOrderDrag(stk),
+  moveTo: (stks) => moveOrderDraft(stks),
+  end: (commit) => endOrderDrag(commit),
+  state: () => ({ draft: orderDraft ? [...orderDraft] : null, dragging: draggingStk, saving: orderSaving }),
+};
+
+/** Repaint Home with the registered servers in `ranked` (committed) order. */
 function paintRegistered(ranked) {
   homeRegistered = ranked;
+  repaintRegistered();
+}
+
+function repaintRegistered() {
   const pending = homeServerEntries.filter((e) => e.cardClass.includes("--pending"));
-  homeServerEntries = [...registeredEntries(ranked), ...pending];
+  homeServerEntries = [...shownEntries(), ...pending];
   renderServerCards();
 }
 
 /**
- * The owner moved a server: show the new order at once, sign and save it,
- * make the new leader the current server, and put the old order back (with
- * the reason) if saving fails. A newer order elsewhere reloads Home.
+ * Save a new order (the reorderable servers' STKs). saveServerOrder shows it
+ * at once and puts the old one back on failure, both through
+ * onServerOrderChange; whatever happens, Home ends on the committed order
+ * with no draft left. A newer order elsewhere reloads Home.
  */
-async function commitServerOrder(ranked) {
-  if (orderSaving) return;
-  const before = homeRegistered;
-  const stks = ranked.map((r) => String(r.pod?.identityPubKey ?? "").toLowerCase()).filter(Boolean);
-  paintRegistered(ranked);
+async function commitServerOrder(stks, { focus = null } = {}) {
+  orderDraft = null;
+  if (orderSaving) {
+    repaintRegistered();
+    return;
+  }
   orderSaving = true;
+  const saving = saveServerOrder({ stks }, { demo: homeDemo, pods: homePods });
+  if (focus) focusOrderStep(focus.stk, focus.selector);
   try {
-    await saveServerOrder({ stks }, { demo: homeDemo });
+    await saving;
     preferLeaderAsCurrent(homePods);
   } catch (e) {
     toast(humanError(e), "err");
     if (e?.status === 409) void renderHome().catch(() => {});
-    else paintRegistered(before);
   } finally {
     orderSaving = false;
+    if (homeRegistered.length) paintRegistered(rankByServerOrder(homeRegistered, currentServerOrder(), orderKey));
+    if (focus) focusOrderStep(focus.stk, focus.selector);
   }
+}
+
+/** Keep keyboard focus on a moved server's up/down button across repaints. */
+function focusOrderStep(stk, selector) {
+  const card = globalThis.document?.querySelector?.(`#servers-list [data-order-stk="${stk}"]`);
+  if (!card) return;
+  const btn = card.querySelector(selector);
+  const target = btn && !btn.disabled ? btn : card.querySelector(".js-order-up:not([disabled]), .js-order-down:not([disabled])");
+  target?.focus?.();
+}
+
+function committedOrderableStks() {
+  return homeRegistered.filter(isOrderable).map(rowStk);
+}
+
+/** A drag begins: the draft starts as the committed order. */
+function startOrderDrag(stk) {
+  if (orderSaving || draggingStk || !committedOrderableStks().includes(stk)) return false;
+  draggingStk = stk;
+  orderDraft = committedOrderableStks();
+  repaintRegistered();
+  return true;
+}
+
+/** The dragged server moved: repaint only when the draft actually changes. */
+function moveOrderDraft(stks) {
+  if (!draggingStk || !orderDraft) return;
+  if (stks.join(",") === orderDraft.join(",")) return;
+  orderDraft = stks;
+  repaintRegistered();
+}
+
+/**
+ * A drag ends (drop, cancel, or lost pointer). A drop that moved something
+ * saves; anything else clears the draft. Either way the list repaints, so
+ * the Leader badge settles on the first server that's online.
+ */
+function endOrderDrag(commit) {
+  if (!draggingStk) return;
+  const draft = orderDraft;
+  draggingStk = "";
+  suppressCardClickUntil = Date.now() + 400;
+  if (commit && draft && draft.join(",") !== committedOrderableStks().join(",")) {
+    void commitServerOrder(draft);
+  } else {
+    orderDraft = null;
+    repaintRegistered();
+  }
+  if (refreshAfterDrag) {
+    refreshAfterDrag = false;
+    if (currentViewId() === "view-home") void renderHome().catch(() => {});
+  }
+}
+
+/** The draft with the dragged server placed where `clientY` points. Reads
+ *  the live cards, since every draft change repaints them. */
+function draftOrderAt(clientY) {
+  const cards = [...(document.querySelectorAll("#servers-list [data-server-cards] [data-order-stk]") ?? [])];
+  const others = cards.filter((c) => c.getAttribute("data-order-stk") !== draggingStk);
+  const slot = others.filter((c) => {
+    const r = c.getBoundingClientRect();
+    return clientY > r.top + r.height / 2;
+  }).length;
+  const stks = others.map((c) => c.getAttribute("data-order-stk"));
+  stks.splice(slot, 0, draggingStk);
+  return stks;
 }
 let homeFilter = "all";
 let homeQuery = "";
@@ -918,6 +1073,7 @@ function renderServerCards() {
   // Reordering works on the whole list only, so not while filtered or searched.
   const reorderable = homeFilter === "all" && !homeQuery.trim()
     && homeServerEntries.filter((e) => e.orderStk).length > 1;
+  const showDragging = reorderable && !!draggingStk;
 
   const cardsHtml = visible.length
     ? visible
@@ -928,7 +1084,8 @@ function renderServerCards() {
             ? ` data-open-fqdn="${escapeHtml(e.fields.fqdn)}"`
             : "";
           if (reorderable && e.orderStk) attrs += ` data-order-stk="${escapeHtml(e.orderStk)}"`;
-          const cls = openable ? `${e.cardClass} is-tappable` : e.cardClass;
+          let cls = openable ? `${e.cardClass} is-tappable` : e.cardClass;
+          if (showDragging && e.orderStk === draggingStk) cls += " is-dragging";
           return `<div class="card ${cls}"${attrs}>${e.html}</div>`;
         })
         .join("")
@@ -942,12 +1099,11 @@ function renderServerCards() {
     <div class="fs-hero-compact" data-home-compact aria-hidden="true">Servers</div>
     <div class="fs-hero">
       <h2 class="fs-hero-title" data-home-title>Servers</h2>
+      <button class="secondary" id="home-add-server">+ Add/connect a server</button>
+      <button class="linklike mt-1" id="home-take-over">Someone handing you a box? Take over →</button>
       ${searchField({ value: homeQuery, placeholder: "Search servers", id: "home-search" })}
       ${chipRow({ items: chips, selected: homeFilter, ariaLabel: "Filter servers" })}
-      <button class="secondary mt-2" id="home-add-server">+ Add a server</button>
-      <button class="linklike mt-1" id="home-take-over">Someone handing you a box? Take over →</button>
     </div>
-    ${reorderable ? `<p class="note small" id="home-order-hint">${escapeHtml(ORDER_HINT)}</p>` : ""}
     <div data-server-cards${reorderable ? " data-reorderable" : ""}>${cardsHtml}</div>
   `;
 
@@ -960,7 +1116,7 @@ function renderServerCards() {
  * old nodes + their listeners, so re-binding can't stack handlers).
  */
 function wireHomeListControls(list) {
-  // "+ Add a server" — provision a brand-new box directly (Slice A: no more
+  // "+ Add/connect a server" — provision a brand-new box directly (Slice A: no more
   // chooser). Pairing is automatic (auto-pair); take-over is the separate
   // "Take over" link + the /transfer deep-link + camera claim.
   list.querySelector("#home-add-server")?.addEventListener("click", async () => {
@@ -972,7 +1128,8 @@ function wireHomeListControls(list) {
   // card tap never hijacks a button.
   list.querySelectorAll("[data-open-fqdn]").forEach((card) => {
     card.addEventListener("click", async (ev) => {
-      if (ev.target.closest("button, a, input, label, select, textarea")) return;
+      if (ev.target.closest("button, a, input, label, select, textarea, .server-order-controls")) return;
+      if (Date.now() < suppressCardClickUntil) return;
       const fqdn = card.getAttribute("data-open-fqdn");
       if (!fqdn) return;
       const profile = getActiveProfile();
@@ -1068,58 +1225,54 @@ function wireHomeListControls(list) {
 
 /**
  * The server order on Home (docs/server-order.md): drag a card by its handle,
- * or use its up/down buttons from the keyboard. Each move commits the whole
- * new order.
+ * or use its up/down buttons from the keyboard. The drag's listeners live on
+ * `window`, not the handle, because every draft change repaints the cards
+ * (the handle the drag began on is gone by the drop).
  */
 function wireServerOrder(list) {
   const container = list.querySelector("[data-server-cards][data-reorderable]");
   if (!container) return;
-  const indexOf = (card) => homeRegistered.findIndex(
-    (r) => String(r.pod?.identityPubKey ?? "").toLowerCase() === card?.getAttribute("data-order-stk"),
-  );
-  const move = (card, delta) => {
-    const from = indexOf(card);
+  const move = (btn, delta, selector) => {
+    const stk = btn.closest("[data-order-stk]")?.getAttribute("data-order-stk");
+    if (!stk || orderSaving || draggingStk) return;
+    const stks = committedOrderableStks();
+    const from = stks.indexOf(stk);
     if (from < 0) return;
-    void commitServerOrder(moveItem(homeRegistered, from, from + delta));
+    void commitServerOrder(moveItem(stks, from, from + delta), { focus: { stk, selector } });
   };
   container.querySelectorAll(".js-order-up").forEach((b) =>
-    b.addEventListener("click", (e) => { e.stopPropagation(); move(b.closest("[data-order-stk]"), -1); }));
+    b.addEventListener("click", (e) => { e.stopPropagation(); move(b, -1, ".js-order-up"); }));
   container.querySelectorAll(".js-order-down").forEach((b) =>
-    b.addEventListener("click", (e) => { e.stopPropagation(); move(b.closest("[data-order-stk]"), 1); }));
+    b.addEventListener("click", (e) => { e.stopPropagation(); move(b, 1, ".js-order-down"); }));
   container.querySelectorAll(".js-order-handle").forEach((handle) => {
     handle.addEventListener("click", (e) => e.stopPropagation());
     handle.addEventListener("pointerdown", (e) => {
-      const card = handle.closest("[data-order-stk]");
-      if (!card || orderSaving) return;
+      if (e.button > 0) return;
+      const stk = handle.closest("[data-order-stk]")?.getAttribute("data-order-stk");
+      if (!stk) return;
       e.preventDefault();
-      handle.setPointerCapture?.(e.pointerId);
-      card.classList.add("is-dragging");
+      if (!startOrderDrag(stk)) return;
+      const pointerId = e.pointerId;
+      const finish = (commit) => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", onCancel);
+        window.removeEventListener("blur", onBlur);
+        endOrderDrag(commit);
+      };
       const onMove = (ev) => {
-        const cards = [...container.querySelectorAll("[data-order-stk]")].filter((c) => c !== card);
-        const before = cards.find((c) => {
-          const r = c.getBoundingClientRect();
-          return ev.clientY < r.top + r.height / 2;
-        });
-        if (before) container.insertBefore(card, before);
-        else if (cards.length) cards[cards.length - 1].after(card);
+        if (ev.pointerId !== pointerId) return;
+        // A mouse released outside the window sends no pointerup.
+        if (ev.pointerType === "mouse" && ev.buttons === 0) return finish(true);
+        moveOrderDraft(draftOrderAt(ev.clientY));
       };
-      const onUp = () => {
-        handle.removeEventListener("pointermove", onMove);
-        handle.removeEventListener("pointerup", onUp);
-        handle.removeEventListener("pointercancel", onUp);
-        card.classList.remove("is-dragging");
-        const stks = [...container.querySelectorAll("[data-order-stk]")].map((c) => c.getAttribute("data-order-stk"));
-        const ranked = stks
-          .map((stk) => homeRegistered.find((r) => String(r.pod?.identityPubKey ?? "").toLowerCase() === stk))
-          .filter(Boolean);
-        const rest = homeRegistered.filter((r) => !ranked.includes(r));
-        const next = [...ranked, ...rest];
-        if (next.every((r, i) => r === homeRegistered[i])) return;
-        void commitServerOrder(next);
-      };
-      handle.addEventListener("pointermove", onMove);
-      handle.addEventListener("pointerup", onUp);
-      handle.addEventListener("pointercancel", onUp);
+      const onUp = (ev) => { if (ev.pointerId === pointerId) finish(true); };
+      const onCancel = (ev) => { if (ev.pointerId === pointerId) finish(false); };
+      const onBlur = () => finish(false);
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointercancel", onCancel);
+      window.addEventListener("blur", onBlur);
     });
   });
 }
@@ -1338,7 +1491,7 @@ export async function renderHome() {
     homeRegistered = rankByServerOrder(registered, currentServerOrder(), orderKey);
     homePods = [...podStatusByDomain.values()];
     homeDemo = serverSource.kind === "demo";
-    entries.push(...registeredEntries(homeRegistered));
+    entries.push(...shownEntries());
     for (const order of pendingOrders) {
       entries.push({
         html: renderPendingCard(order),
@@ -1655,6 +1808,7 @@ function liveSyncSnapshotSignature(snap) {
         p.lastReported ?? "",
         p.currentCert?.sha256 ?? "",
         p.revokedAt ?? "",
+        p.orderIssuedAt ?? "",
         reqs,
       ].join("|");
     })
@@ -1678,7 +1832,9 @@ function armHomeLiveSync() {
     const sig = liveSyncSnapshotSignature(snap);
     if (sig === homeLiveSyncLastSig) return;
     homeLiveSyncLastSig = sig;
-    if (currentViewId() === "view-home") void renderHome().catch(() => {});
+    // A repaint mid-drag would rebuild the list under the finger; run it at the drop.
+    if (draggingStk) refreshAfterDrag = true;
+    else if (currentViewId() === "view-home") void renderHome().catch(() => {});
   });
 }
 

@@ -71,9 +71,9 @@ describe("home recovery-banner wiring", () => {
     expect(HOME_JS).toMatch(/getElementById\(["']servers-list["']\)/);
   });
 
-  it("uses the concise loss warning", () => {
+  it("asks for a passkey for a new device", () => {
     expect(HOME_JS).toContain(
-      "If you lose access to this device, you may lose access to your Flagship cloud",
+      "Save a passkey so you can recover your account if you get a new device.",
     );
   });
 });

@@ -563,31 +563,69 @@ button.linklike:hover, .btn.linklike:hover {
    action buttons still handle their own clicks). */
 .server-card.is-tappable { cursor: pointer; }
 
-/* The server order (docs/server-order.md): a drag handle plus up/down
-   buttons on each reorderable card. */
-.server-order-controls {
+/* The server order (docs/server-order.md): the drag handle leads each
+   reorderable row; the up/down buttons stay for the keyboard and only show
+   while focused. Outside an unfiltered list of 2+ servers the column goes. */
+.server-order-controls,
+.server-order-slot {
+  flex: 0 0 auto;
+  align-self: stretch;
   display: flex;
-  justify-content: flex-end;
-  gap: 4px;
-  margin-bottom: 4px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  margin: -14px 0 -14px -10px;
 }
-.server-order-controls button {
-  min-width: 36px;
-  min-height: 36px;
-  padding: 0 8px;
+[data-server-cards]:not([data-reorderable]) .server-order-controls,
+[data-server-cards]:not([data-reorderable]) .server-order-slot { display: none; }
+.server-order-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  flex: 1;
+  color: var(--ink-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.server-order-step {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.server-order-step:focus-visible {
+  position: static;
+  width: 28px;
+  height: 24px;
+  overflow: visible;
+  clip: auto;
+  padding: 0;
   background: transparent;
   color: var(--ink-muted);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  font-size: 16px;
+  border-radius: 6px;
+  font-size: 14px;
   line-height: 1;
 }
-.server-order-controls button:disabled { opacity: 0.35; }
-.server-order-handle { cursor: grab; touch-action: none; }
 .server-card.is-dragging {
   opacity: 0.85;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
   cursor: grabbing;
+}
+.fs-listrow-title .fs-listrow-title-icon {
+  width: 14px;
+  height: 14px;
+  margin-right: 6px;
+  vertical-align: -2px;
+  color: var(--ink-muted);
 }
 
 /* ── Pill / status ──────────────────────────────────────────────── */

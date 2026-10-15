@@ -4,7 +4,7 @@
 
 import { $, registerView, show } from "../lib/router.js";
 import { ScreensError, boxClient } from "../lib/api.js";
-import { accountPods, anyCopying, appSandboxNotice, fetchServerApps, leaderOf, loadAccountPods, podFqdn, preferLeaderAsCurrent, serverAppsHtml, watchWhileCopying } from "../lib/appPlacement.js";
+import { accountPods, anyCopying, appSandboxNotice, fetchServerApps, isPodOnline, loadAccountPods, podFqdn, preferLeaderAsCurrent, serverAppsHtml, watchWhileCopying } from "../lib/appPlacement.js";
 import { isCompanionProfile } from "../lib/companionGuard.js";
 import {
   enableLongLived,
@@ -46,7 +46,18 @@ import {
 } from "../lib/journal.js";
 import { signWithIrk, bytesToHex } from "../keystore.js";
 import { sensitiveSigner } from "../lib/adminRoot.js";
-import { currentServerOrder, makeLeader, rankPods } from "../lib/serverOrder.js";
+import {
+  currentServerOrder,
+  isLeaderConfirmed,
+  makeLeader,
+  onServerOrderChange,
+  orderAckOf,
+  rankPods,
+  serverOrderOf,
+} from "../lib/serverOrder.js";
+import { podShortName } from "../lib/podSwitcher.js";
+import { getActiveProfile } from "../lib/profiles.js";
+import { isDemoProfile } from "../lib/demoAccount.js";
 import {
   clearPendingUpdate,
   describeLastUpdate,
@@ -392,15 +403,11 @@ export async function renderServerDetail() {
       </div>
       <h2 class="mt-4">Leader</h2>
       <div class="card" id="leader-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
-        <p class="note">
-          The first server in your order that's online leads: it serves your
-          apps and new apps go to it. When it's down the next one in line takes
-          over until it's back. Drag servers on Home to change the order.
-        </p>
         <div class="row" id="leader-status">
           <span class="label">Status</span>
           <span class="pill" id="leader-pill">…</span>
         </div>
+        <p class="note small hidden" id="leader-confirm-note">${escapeHtml(LEADER_WAITING_NOTE)}</p>
         <button id="make-leader-btn" class="full-width mt-2">Make leader</button>
       </div>
       ${serverSharingHtml(body)}
@@ -570,18 +577,39 @@ function wireServerApps(serverFqdn) {
     .catch((e) => paint([], { error: humanError(e) }));
 }
 
-/** This server's place in the owner's order, from the account's `/pods`. */
+export const LEADER_WAITING_NOTE = "Waiting for it to confirm the new order.";
+
+/** Where a non-leading server stands, by who it takes over from (no numbers):
+ *  `above` are the servers ranked over it. */
+export function successionLine(above) {
+  const names = (above ?? []).map((n) => podShortName(n));
+  if (!names.length) return "First in line to lead";
+  if (names.length === 1) return `Takes over while ${names[0]} is down`;
+  return `Takes over while ${names.slice(0, -1).join(", ")} and ${names[names.length - 1]} are down`;
+}
+
+/** This server's place in the owner's order, from the account's `/pods`:
+ *  it leads when it's the first one online. */
 async function leaderModel(fqdn, deps = {}) {
   const want = String(fqdn).toLowerCase();
   const pods = accountPods(await (deps.loadAccountPods ?? loadAccountPods)(getSession().username));
   const ranked = rankPods(pods, currentServerOrder());
   const stks = ranked.map((p) => String(p.identityPubKey ?? "").toLowerCase()).filter(Boolean);
-  const self = ranked.find((p) => podFqdn(p) === want);
+  const index = ranked.findIndex((p) => podFqdn(p) === want);
+  const self = ranked[index];
+  const isLeader = index >= 0 && index === ranked.findIndex((p) => isPodOnline(p));
+  const demo = deps.demo ?? isDemoProfile(getActiveProfile());
   return {
+    pods,
     stk: String(self?.identityPubKey ?? "").toLowerCase(),
     stks,
-    position: ranked.indexOf(self) + 1,
-    isLeader: leaderOf(pods) === want,
+    position: index + 1,
+    isLeader,
+    confirmed: isLeaderConfirmed({
+      orderIssuedAt: demo ? 0 : (serverOrderOf(getSession().username)?.issuedAt ?? 0),
+      leaderOrderIssuedAt: orderAckOf(self),
+    }),
+    above: index > 0 ? ranked.slice(0, index).map(podFqdn) : [],
   };
 }
 
@@ -592,21 +620,40 @@ async function leaderModel(fqdn, deps = {}) {
 export async function makeServerLeader(fqdn, deps = {}) {
   const m = await leaderModel(fqdn, deps);
   if (!m.stk) throw new Error("this server isn't registered yet — wait for it to come online");
-  return (deps.makeLeader ?? makeLeader)(m.stk, m.stks, deps);
+  return (deps.makeLeader ?? makeLeader)(m.stk, m.stks, { ...deps, pods: deps.pods ?? m.pods });
+}
+
+/** The order card's status line, pill style and confirmation caption. */
+export async function leaderStatus(fqdn, deps = {}) {
+  const m = await leaderModel(fqdn, deps).catch(() => null);
+  if (!m || m.position < 1) return { text: "not ranked yet", pill: "pill", waiting: false, canLead: false, model: m };
+  if (m.isLeader) {
+    return { text: "Leader", pill: m.confirmed ? "pill ok" : "pill", waiting: !m.confirmed, canLead: m.position !== 1, model: m };
+  }
+  return { text: successionLine(m.above), pill: "", waiting: false, canLead: !!m.stk && m.position !== 1, model: m };
 }
 
 function wireMakeLeader(body) {
   const btn = $("make-leader-btn");
   const pill = $("leader-pill");
+  const note = $("leader-confirm-note");
   if (!btn) return;
   const paint = async () => {
-    const m = await leaderModel(body.serverFqdn).catch(() => null);
+    const st = await leaderStatus(body.serverFqdn);
     if (!pill) return;
-    pill.className = m?.isLeader ? "pill ok" : "pill";
-    pill.textContent = !m || m.position < 1 ? "not ranked yet" : m.isLeader ? "Leader" : `#${m.position} in line`;
-    btn.disabled = !m?.stk || m.position === 1;
+    pill.className = st.pill;
+    pill.textContent = st.text;
+    if (st.waiting) pill.setAttribute("title", "Leader, waiting for the server to confirm");
+    else pill.removeAttribute("title");
+    note?.classList.toggle("hidden", !st.waiting);
+    btn.disabled = !st.canLead;
   };
   void paint();
+  // A box's ack, or the order changing anywhere, repaints the card while it's on screen.
+  const stop = onServerOrderChange(() => {
+    if (!btn.isConnected) return stop();
+    void paint();
+  });
   btn.addEventListener("click", async () => {
     btn.disabled = true;
     btn.textContent = "Signing…";

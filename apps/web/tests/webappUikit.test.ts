@@ -234,6 +234,16 @@ describe("listRow", () => {
     expect(html).toContain("fs-listrow--tappable");
     expect(html).toContain('data-row-action="open"');
   });
+  it("takes caller-built leading markup and a glyph before the title", () => {
+    const html = listRow({
+      leading: { kind: "html", html: '<span class="handle">⠿</span>' },
+      titleIcon: "<svg></svg>",
+      title: "blog.demo",
+    });
+    expect(html).toContain('<span class="handle">⠿</span>');
+    expect(html).not.toContain("fs-listrow-icon");
+    expect(html).toMatch(/fs-listrow-title"><span class="fs-listrow-title-icon icon" aria-hidden="true"><svg><\/svg><\/span>blog\.demo/);
+  });
   it("escapes a hostile title + subtitle + detail", () => {
     const html = listRow({
       leading: { kind: "icon", svg: "", tone: "teal" },
