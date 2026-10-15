@@ -113,7 +113,6 @@ import { initBuildMcpView } from "./views/build-mcp.js";
 import { initBuildJournalView } from "./views/build-journal.js";
 import { initEditServiceView } from "./views/edit-service.js";
 import { initRecoveryView, enterRecovery } from "./views/recovery.js";
-import { initPostRecoveryChoiceView } from "./views/post-recovery-choice.js";
 import { initAccountDeleteView, enterAccountDelete } from "./views/account-delete.js";
 import { initInstallProgressView, enterInstallProgress } from "./views/install-progress.js";
 import { initOrdersDebugView, enterOrdersDebug } from "./views/orders-debug.js";
@@ -182,7 +181,6 @@ const SUB_VIEW_TABS = {
   "view-add-device": "settings",
   "view-recovery": "settings",
   "view-post-recovery": "settings",
-  "view-post-recovery-choice": "settings",
   "view-paired-sessions": "settings",
   "view-secured-sessions": "settings",
   "view-access-authorize": "settings",
@@ -559,7 +557,6 @@ async function boot() {
   initServiceEnvView();
   initVibeCodeChatView();
   initRecoveryView();
-  initPostRecoveryChoiceView();
   initAccountDeleteView();
   // post-recovery is owned by another worker; init it best-effort so
   // the shell loads cleanly whether or not it's on disk yet.

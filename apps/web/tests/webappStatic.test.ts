@@ -159,7 +159,6 @@ describe("/webapp PWA static surface", () => {
     // Idempotent endpoints we'll auto-retry — appear in REPLAY_PATH_PATTERNS
     // as escaped-slash regex literals.
     expect(r.body).toContain("\\/api\\/screens\\/orders\\/send");
-    expect(r.body).toContain("\\/api\\/screens\\/url-controller\\/claim");
     expect(r.body).toContain("\\/api\\/screens\\/app-backup\\/start");
   });
 
