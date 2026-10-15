@@ -135,6 +135,9 @@ export interface UserDataOptions {
    * to before. Carried from the recipe via {@link LoadedBlob.debugGrant}.
    */
   debugGrant?: string;
+  /** The outbound proxy siblings (docs/outbound-proxy.md); see {@link LoadedBlob.outboundProxy}. */
+  outboundProxy?: string;
+  outboundProxyCredentials?: string;
 }
 
 /**
@@ -205,6 +208,7 @@ export function resolveBootstrapInputs(opts: UserDataOptions): ResolvedBootstrap
           opts.pairingOrder,
           opts.swkHex,
           opts.debugGrant,
+          { outboundProxy: opts.outboundProxy, outboundProxyCredentials: opts.outboundProxyCredentials },
         ),
       ),
     ),
@@ -2204,6 +2208,7 @@ export function installBlobToJson(
   pairingOrder?: string,
   swkHex?: string,
   debugGrant?: string,
+  proxy?: { outboundProxy?: string; outboundProxyCredentials?: string },
 ): Record<string, unknown> {
   return {
     version: b.version,
@@ -2258,6 +2263,14 @@ export function installBlobToJson(
     // debug-access gate reads it from install-blob.json and verifies it under the
     // owner IRK before enabling the debug user/SSH.
     ...(debugGrant ? { debugGrant } : {}),
+    // The owner-signed outbound proxy (docs/outbound-proxy.md), and its
+    // credentials only when the owner put them in the recipe. Unsigned
+    // siblings: the order carries its own signature, which the daemon checks
+    // before it uses the proxy. Absent ⇒ serialized as before.
+    ...(proxy?.outboundProxy ? { outboundProxy: proxy.outboundProxy } : {}),
+    ...(proxy?.outboundProxy && proxy.outboundProxyCredentials
+      ? { outboundProxyCredentials: proxy.outboundProxyCredentials }
+      : {}),
   };
 }
 
