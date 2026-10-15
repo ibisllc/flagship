@@ -21,6 +21,7 @@
  */
 
 import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ChatRequest } from "@flagship/llm-providers";
 import { inferenceCatalog, inferenceCatalogResponse } from "@flagship/control-plane";
@@ -281,6 +282,7 @@ export async function runOne(o: RunOptions): Promise<RunResult> {
     let answers = 0;
     const ctx: CallContext = { ...baseCtx, step: name, phase: "chat" };
     const finish = (pass: boolean, reason?: string, files = 0): StepResult => {
+      if (o.saveAppsDir) saveTranscript(join(o.saveAppsDir, o.runId, name), session.modelConversation());
       const failed = outcomes.filter((x) => !x.ok);
       return {
         step: name,
@@ -448,4 +450,10 @@ async function saveFiles(dir: string, files: Record<string, string>): Promise<vo
     await mkdir(join(full, ".."), { recursive: true });
     await writeFile(full, c);
   }
+}
+
+/** What the model was sent and wrote, for reading a failed build afterwards. */
+function saveTranscript(dir: string, conversation: ReadonlyArray<{ role: string; content: string }>): void {
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "transcript.json"), JSON.stringify(conversation.map((m) => ({ role: m.role, content: m.content })), null, 1));
 }
