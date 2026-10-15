@@ -5,6 +5,7 @@
  */
 import acme from "acme-client";
 import { startOutboundBridge, type BridgeHandle } from "./bridge.js";
+import { OUTBOUND_PROXY_CURLRC, syncCurlrc } from "./curlrc.js";
 import { buildOutboundProxyHttp, outboundProxySummary, type OutboundProxySummary } from "./http.js";
 import { outboundNet as defaultNet, type OutboundNet } from "./outboundNet.js";
 import { OutboundProxyStore, settingOf, type OutboundProxyAuthority, type StoredOutboundProxy } from "./store.js";
@@ -53,8 +54,14 @@ export async function setUpOutboundProxy(opts: {
       }
     }
     net.configure(setting);
+    try {
+      await syncCurlrc(`${opts.dataDir}/${OUTBOUND_PROXY_CURLRC}`, setting);
+    } catch (e) {
+      log(`[outbound-proxy] couldn't update the health reporter's proxy file (${(e as Error).message})`);
+    }
     const p = stored?.signed.proxy;
-    log(setting && p ? `[outbound-proxy] connecting through a ${p.kind} proxy` : "[outbound-proxy] connecting directly");
+    if (setting && p) log(`[outbound-proxy] connecting through a ${p.kind} proxy`);
+    else if (net.isHooked()) log("[outbound-proxy] connecting directly");
     for (const fn of listeners) {
       try {
         fn();
@@ -66,7 +73,7 @@ export async function setUpOutboundProxy(opts: {
 
   await store.load();
   if (!store.current()) await store.adoptFromInstallBlob(opts.installBlobPath);
-  if (settingOf(store.current())) await activate(store.current());
+  await activate(store.current());
 
   return {
     store,
