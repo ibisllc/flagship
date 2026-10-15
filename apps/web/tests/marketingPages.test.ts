@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildServer } from "../src/server.js";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 describe("marketing surface — design system v2 (dark+teal)", () => {
   it("/tokens.css exposes the v2 design-system custom properties", async () => {
@@ -129,9 +131,14 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     const r = await app.inject({ method: "GET", url: "/open/" });
     expect(r.body).toContain('id="web-alt" hidden');
     expect(r.body).toContain("path + location.search + location.hash");
-    for (const path of ["/join", "/share", "/transfer", "/qr", "/remote", "/builder", "/access", "/invite-accept"]) {
-      expect(r.body).toContain(`"${path}": {`);
-    }
+    // Every path the Worker serves this page at (APP_LINK_PATHS) has its copy.
+    const route = readFileSync(join(__dirname, "../../com/src/route.ts"), "utf8");
+    const list = /APP_LINK_PATHS[^=]*=\s*new Set\(\s*\[([^\]]*)\]/.exec(route)?.[1] ?? "";
+    const paths = [...list.matchAll(/"(\/[a-z-]+)"/g)].map((m) => m[1]!);
+    expect(paths).toContain("/join");
+    for (const path of paths) expect(r.body).toContain(`"${path}": {`);
+    // The old desktop QR login's /qr is no longer an app link.
+    expect(r.body).not.toContain('"/qr": {');
   });
 
   it("never promotes one available desktop build without the other", async () => {
