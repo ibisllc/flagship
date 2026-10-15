@@ -8,16 +8,23 @@ name: builder-linux (pytest + render smoke)
 # ubuntu-latest (adw >= 1.4, the ToolbarView path) and debian:12 (adw 1.2,
 # the fallback path Crostini/bookworm users get).
 
+# The shared VM vectors and the builder engine/CLI the AppImage bundles are
+# part of this app too: a change there must run these tests.
 on:
   pull_request:
     paths:
       - "apps/builder-linux/**"
+      - "apps/desktop-shared/golden/**"
+      - "packages/flagship-builder/**"
       - ".github/workflows/builder-linux.yml"
   push:
     branches: [main]
     paths:
       - "apps/builder-linux/**"
+      - "apps/desktop-shared/golden/**"
+      - "packages/flagship-builder/**"
       - ".github/workflows/builder-linux.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read

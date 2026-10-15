@@ -5,12 +5,14 @@ on:
     paths:
       - "apps/builder-windows/**"
       - "apps/desktop-shared/golden/**"
+      - "packages/flagship-builder/engine/**"
       - ".github/workflows/builder-windows.yml"
   push:
     branches: [main]
     paths:
       - "apps/builder-windows/**"
       - "apps/desktop-shared/golden/**"
+      - "packages/flagship-builder/engine/**"
       - ".github/workflows/builder-windows.yml"
   # Lets a branch that carries Windows code (e.g. the parked `alpine`) be
   # checked on demand — feature branches get no push/PR run of their own.
