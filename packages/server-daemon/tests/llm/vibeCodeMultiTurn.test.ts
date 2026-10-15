@@ -14,6 +14,7 @@
 import { describe, expect, it } from "vitest";
 import {
   looksLikePastedSecret,
+  misroutedFileContent,
   VibeCodeSession,
   type EnvVarAckPayload,
   type VibeCodeEvent,
@@ -193,16 +194,54 @@ describe("VibeCodeSession multi-turn", () => {
     expect(r.reason).toMatch(/not talkToUser/);
   });
 
-  it("unknown tool_use surfaces an error event instead of dangling", () => {
+  it("an unknown tool doesn't dangle: the model gets a hidden correction and carries on", () => {
     const s = newSession();
-    const errs: VibeCodeEvent[] = [];
-    s.on("event", (e) => {
-      if (e.kind === "error") errs.push(e);
-    });
+    s.pushUserMessage("build it");
     s.receiveToolUse({ id: "tu_9", name: "deleteEverything", input: {} });
-    expect(errs).toHaveLength(1);
-    if (errs[0]?.kind === "error") {
-      expect(errs[0].message).toMatch(/unknown tool 'deleteEverything'/);
-    }
+    s.endAssistant();
+    expect(s.pendingToolUses()).toHaveLength(0);
+    expect(s.meta.status).toBe("streaming");
+    expect(s.takeMisroutedNudge()).toBe(true);
+    const last = s.modelConversation().at(-1);
+    expect(last?.role).toBe("user");
+    expect(last?.content).toMatch(/^\[tool_result:tu_9\] There is no tool named 'deleteEverything'/);
+    expect(s.messages().some((m) => m.text.includes("deleteEverything"))).toBe(false);
+    expect(s.takeMisroutedNudge()).toBe(false);
+  });
+
+  it("a file called as a tool is kept as that file", () => {
+    const s = newSession();
+    s.pushUserMessage("change it");
+    s.feedAssistant("=== src/index.js ===\nconsole.log(1)\n");
+    s.receiveToolUse({ id: "tu_10", name: "flagship.app.json", input: { content: '{"name":"x"}' } });
+    s.endAssistant();
+    expect(s.files()["flagship.app.json"]?.trim()).toBe('{"name":"x"}');
+    expect(s.files()["src/index.js"]).toBe("console.log(1)\n");
+    expect(s.takeMisroutedNudge()).toBe(true);
+    expect(s.modelConversation().at(-1)?.content).toMatch(/kept as the file flagship\.app\.json/);
+  });
+
+  it("reads 'functions.'-prefixed tool names as the real tool", () => {
+    const s = newSession();
+    s.receiveToolUse({ id: "tu_11", name: "functions.talkToUser", input: { message: "Which colour?" } });
+    expect(s.meta.status).toBe("awaiting-tool-response");
+    expect(s.pendingRequest()).not.toBeNull();
+  });
+
+  it("fails with a reason after repeated misroutes", () => {
+    const s = newSession();
+    for (let i = 0; i < 3; i++) s.receiveToolUse({ id: `tu_m${i}`, name: "writeFile", input: { a: 1 } });
+    expect(s.meta.status).toBe("failed");
+    expect(s.meta.failureReason).toMatch(/tool that doesn't exist \('writeFile'\)/);
+    expect(s.takeMisroutedNudge()).toBe(false);
+  });
+
+  it("only takes misrouted calls that look like files as files", () => {
+    expect(misroutedFileContent("src/app.ts", { code: "x" })).toBe("x");
+    expect(misroutedFileContent("Dockerfile", { text: "FROM x" })).toBe("FROM x");
+    expect(misroutedFileContent("writeFile", { content: "x" })).toBeNull();
+    expect(misroutedFileContent("../etc/passwd", { content: "x" })).toBeNull();
+    expect(misroutedFileContent("/etc/passwd.txt", { content: "x" })).toBeNull();
+    expect(misroutedFileContent("notes.md", { a: "one", b: "two" })).toBeNull();
   });
 });

@@ -626,7 +626,9 @@ export class VibeCodeSession extends EventEmitter {
     }
     const content = misroutedFileContent(args.name, args.input);
     if (content !== null) {
-      this.feedAssistant(`\n=== ${args.name} ===\n${content.endsWith("\n") ? content : `${content}\n`}`);
+      const last = this.history[this.history.length - 1];
+      const lineStart = last?.role !== "assistant" || last.content.endsWith("\n");
+      this.feedAssistant(`${lineStart ? "" : "\n"}=== ${args.name} ===\n${content.endsWith("\n") ? content : `${content}\n`}`);
     }
     this.misroutedNudge =
       `[tool_result:${args.id}] There is no tool named '${args.name}'. ` +
@@ -729,7 +731,7 @@ export class VibeCodeSession extends EventEmitter {
       // a downstream user-reply / tool-ack can resume it. Only flip to
       // ready-to-deploy when the parser observed `=== END ===` and no
       // tool is pending.
-      if (this.pendingTools.size === 0 && this.parser.isDone()) {
+      if (this.pendingTools.size === 0 && this.misroutedNudge === null && this.parser.isDone()) {
         this.meta.status = "ready-to-deploy";
         this.emit("event", {
           kind: "phase",
