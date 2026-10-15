@@ -59,6 +59,14 @@ func main() {
 }
 
 func run(args []string, stdin io.Reader, stdout io.Writer) error {
+	if len(args) > 0 {
+		switch args[0] {
+		case "ohttp-seal":
+			return runOhttpSeal(args[1:], stdout)
+		case "ohttp-open":
+			return runOhttpOpen(args[1:], stdout)
+		}
+	}
 	fs := flag.NewFlagSet("flagship-unseal", flag.ContinueOnError)
 	identityPrivHex := fs.String("identity-priv-hex", "", "box Ed25519 identity (STK) seed, 32 bytes hex (64 chars)")
 	sealedHex := fs.String("sealed-hex", "", "the sealed blob, hex")
