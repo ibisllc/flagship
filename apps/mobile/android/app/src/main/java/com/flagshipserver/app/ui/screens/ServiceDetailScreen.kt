@@ -112,6 +112,11 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
     val pagePod = com.flagshipserver.app.core.LocalPodScope.current?.pod ?: appState.currentPod
     val pagePodState = androidx.compose.runtime.rememberUpdatedState(pagePod)
     val podClients = com.flagshipserver.app.core.LocalPodClients.current
+    // Uninstalling (here or by unticking a server) is an admin order: the box
+    // refuses it from any other device.
+    val adminDevice = remember {
+        com.flagshipserver.app.core.GymSeams.forceAdminRoot || com.flagshipserver.app.keystore.Keystore.hasAdminRoot()
+    }
 
     val detailVm: ServiceDetailViewModel = viewModel(
         key = "service-detail-$serviceId-${pagePod?.podId}",
@@ -272,7 +277,7 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                     message = placementMessage,
                     restricted = appState.isRestrictedDevice(),
                     onCopy = { row -> scope.launch { placementVm.copyTo(row.pod.podId) } },
-                    onRemove = { row -> confirmRemoveFrom = row },
+                    onRemove = { row -> if (adminDevice) confirmRemoveFrom = row else toasts.error(UNINSTALL_ADMIN_ONLY_LINE) },
                     onDismissMessage = { placementVm.dismissMessage() },
                 )
 
@@ -391,13 +396,22 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
 
                 // ── Uninstall (this server's copy) ─────────────────────
                 Spacer(Modifier.height(FS.space.s8))
-                FSDangerButton(
-                    label = "Uninstall",
-                    onClick = { showUninstallDialog = true },
-                    enabled = !uninstalling,
-                    block = true,
-                    modifier = Modifier.semantics { testTag = "service-detail-uninstall-btn" },
-                )
+                if (adminDevice) {
+                    FSDangerButton(
+                        label = "Uninstall",
+                        onClick = { showUninstallDialog = true },
+                        enabled = !uninstalling,
+                        block = true,
+                        modifier = Modifier.semantics { testTag = "service-detail-uninstall-btn" },
+                    )
+                } else {
+                    Text(
+                        UNINSTALL_ADMIN_ONLY_LINE,
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 13.sp),
+                        modifier = Modifier.semantics { testTag = "service-detail-uninstall-admin-only" },
+                    )
+                }
                 Spacer(Modifier.height(FS.space.s12))
             }
         }
@@ -988,6 +1002,8 @@ private fun wrapAtDots(s: String): String = s.replace(".", ".​")
 // Mirrors the Worker's DNS_LABEL_RE in appRename.ts. Keep in sync — drift
 // means the button enables for stems the server then rejects.
 private val STEM_RE = Regex("^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$")
+
+internal const val UNINSTALL_ADMIN_ONLY_LINE = "Only an admin device can remove an app."
 
 @Composable
 private fun ReplaceStemDialog(

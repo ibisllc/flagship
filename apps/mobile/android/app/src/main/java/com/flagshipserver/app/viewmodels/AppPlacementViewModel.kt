@@ -40,8 +40,9 @@ class AppPlacementViewModel(
     private val pagePodId: () -> String? = { null },
     /** The sensitive-order key (admin root when held, else the owner IRK). */
     private val copySigner: suspend (String) -> Ed25519Sign = { r -> Keystore.adminSigningKey(r) },
-    /** The owner IRK, which a box checks a signed uninstall against. */
-    private val uninstallSigner: suspend (String) -> Ed25519Sign = { r -> Keystore.deriveIRK(r) },
+    /** The admin root (an admin-only order: a box refuses the IRK once an
+     *  admin root is pinned); the owner IRK on an account without one. */
+    private val uninstallSigner: suspend (String) -> Ed25519Sign = { r -> Keystore.adminSigningKey(r) },
     private val now: () -> Long = { System.currentTimeMillis() },
 ) {
     sealed interface Presence {

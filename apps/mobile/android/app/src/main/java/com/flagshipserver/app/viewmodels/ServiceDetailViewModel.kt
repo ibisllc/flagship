@@ -36,8 +36,9 @@ class ServiceDetailViewModel(
     private val client: ScreensClient,
     /** The box this page works on, when the client can't say. */
     private val fallbackServerDomain: () -> String? = { null },
-    /** The owner IRK, which the box checks a signed uninstall against. */
-    private val uninstallSigner: suspend (String) -> Ed25519Sign = { r -> Keystore.deriveIRK(r) },
+    /** The admin root (an admin-only order: the box refuses the IRK once an
+     *  admin root is pinned); the owner IRK on an account without one. */
+    private val uninstallSigner: suspend (String) -> Ed25519Sign = { r -> Keystore.adminSigningKey(r) },
     private val now: () -> Long = { System.currentTimeMillis() },
 ) : ViewModel() {
 

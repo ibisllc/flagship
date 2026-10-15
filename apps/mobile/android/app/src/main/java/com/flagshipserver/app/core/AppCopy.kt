@@ -42,8 +42,9 @@ object AppCopy {
 }
 
 /**
- * The owner-signed service uninstall, verified by the box against its owner
- * IRK (`DELETE /api/services/:serviceId`). Mirror of `UninstallServiceRequest`
+ * The admin-signed service uninstall, verified by the box against its pinned
+ * admin root (its owner IRK only when it has none; `DELETE
+ * /api/services/:serviceId`). Mirror of `UninstallServiceRequest`
  * in packages/protocol/src/serviceLifecycle.ts and iOS UninstallServiceOrder:
  *
  *   flagship/uninstall-service/v1|<serverId>|<creator>|<slug>|<issuedAt>
