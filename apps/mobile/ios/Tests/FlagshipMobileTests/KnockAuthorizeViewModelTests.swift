@@ -23,7 +23,12 @@ final class KnockAuthorizeViewModelTests: XCTestCase {
         return InviteOwnerStore(defaults: d)
     }
 
-    /// Our OWN server (in AppState pods) ⇒ the global AID signs.
+    /// This device's account device key.
+    private func deviceKey() -> Curve25519.Signing.PrivateKey {
+        try! Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 0xd0, count: 32))
+    }
+
+    /// Our OWN server (in AppState pods) ⇒ this device's account device key signs.
     private func makeVM(
         _ mock: MockServiceAccessClient,
         store: any SecuredSessionStoring,
@@ -32,6 +37,7 @@ final class KnockAuthorizeViewModelTests: XCTestCase {
         now: @escaping () -> Int64 = { 1_700_004_000_000 }
     ) -> KnockAuthorizeViewModel {
         let k = aid()
+        let d = deviceKey()
         return KnockAuthorizeViewModel(
             client: mock,
             store: store,
@@ -41,9 +47,66 @@ final class KnockAuthorizeViewModelTests: XCTestCase {
             pageId: page ?? self.page,
             ownServers: [server],
             owners: ownerStore(),
-            aid: { _ in k },
+            aid: { _ in XCTFail("a device with a device id never signs in with the AID"); return k },
             appAid: { _, _ in XCTFail("own server must not use a per-app id"); return k },
+            deviceKey: { _ in d },
+            shareKey: { _, _ in XCTFail("own server must not use a share key"); return k },
             now: now)
+    }
+
+    func testOwnServerWithoutADeviceIdFallsBackToTheAid() async throws {
+        let fx = try fixture()
+        let mock = MockServiceAccessClient()
+        let vm = friendVM(mock, fx: fx, owners: ownerStore(), ownServers: [server])
+        await vm.authorize()
+        XCTAssertEqual(vm.phase, .authorized)
+        XCTAssertEqual(mock.authorizeKnockCalls.first?.authorization["visitorAID"], fx.friendAidPubHex)
+    }
+
+    func testSharedServerSignsWithThatSharesMemberKey() async throws {
+        let mock = MockServiceAccessClient()
+        let member = try Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 0x5e, count: 32))
+        var asked: [String] = []
+        let shared = "home.bob.flagship.services"
+        let vm = KnockAuthorizeViewModel(
+            client: mock, store: InMemorySecuredSessionStore(),
+            serverDomain: shared.uppercased(), svc: svc, serviceRef: "bob--notes", pageId: page,
+            ownServers: [server],
+            sharedServers: [shared: "0f1e2d3c4b5a69788796a5b4c3d2e1f0", "other.carol.flagship.services": "11"],
+            owners: ownerStore(),
+            aid: { _ in XCTFail("no AID on a shared server"); return member },
+            appAid: { _, _ in XCTFail("no per-app id on a shared server"); return member },
+            deviceKey: { _ in XCTFail("the device key stays on our own servers"); return member },
+            shareKey: { id, _ in asked.append(id); return member },
+            now: { 1_700_004_000_000 })
+        await vm.authorize()
+        XCTAssertEqual(vm.phase, .authorized)
+        XCTAssertEqual(asked, ["0f1e2d3c4b5a69788796a5b4c3d2e1f0"])
+        let call = try XCTUnwrap(mock.authorizeKnockCalls.first)
+        let pub = member.publicKey.rawRepresentation
+        XCTAssertEqual(call.authorization["visitorAID"], HexUtil.encode(pub))
+        let bytes = try ServiceInvite.canonicalKnock(serverId: shared.uppercased(), serviceRef: "bob--notes", pageId: page,
+                                                     visitorAID: pub, issuedAt: 1_700_004_000_000)
+        XCTAssertTrue(ServiceInvite.verify(HexUtil.decode(call.signatureHex)!, bytes, pub: pub))
+    }
+
+    func testInvitedServerNeverSeesTheDeviceKey() async throws {
+        let fx = try fixture()
+        let owners = ownerStore()
+        owners.remember(serverDomain: server, ownerAidHex: fx.authorAidPubHex)
+        let mock = MockServiceAccessClient()
+        let umk = fx.friendUmk
+        let vm = KnockAuthorizeViewModel(
+            client: mock, store: InMemorySecuredSessionStore(),
+            serverDomain: server, svc: svc, serviceRef: ref, pageId: page,
+            owners: owners,
+            aid: { _ in ServiceInvite.deriveAccountId(umkSeed: umk)! },
+            appAid: { appRef, _ in ServiceInvite.deriveAppAccountId(umkSeed: umk, appRef: appRef)! },
+            deviceKey: { _ in XCTFail("the device key stays on our own servers"); return nil },
+            now: { 1_700_004_000_000 })
+        await vm.authorize()
+        XCTAssertEqual(vm.phase, .authorized)
+        XCTAssertEqual(mock.authorizeKnockCalls.first?.authorization["visitorAID"], appPubHex(fx))
     }
 
     // MARK: fixture (packages/protocol/tests/fixtures/serviceAccessGating.vectors.json)
@@ -264,11 +327,12 @@ final class KnockAuthorizeViewModelTests: XCTestCase {
         XCTAssertEqual(call.authorization["serverId"], server)
         XCTAssertEqual(call.authorization["serviceRef"], ref)
         XCTAssertEqual(call.authorization["pageId"], page)
-        XCTAssertEqual(call.authorization["visitorAID"], HexUtil.encode(aid().publicKey.rawRepresentation))
+        XCTAssertEqual(call.authorization["visitorAID"], HexUtil.encode(deviceKey().publicKey.rawRepresentation),
+                       "on our own server the account device key signs in")
 
         // The posted signature verifies against the canonical knock bytes the
         // box re-derives (CryptoKit sigs are randomized → verify, don't compare).
-        let aidPub = aid().publicKey.rawRepresentation
+        let aidPub = deviceKey().publicKey.rawRepresentation
         let bytes = try! ServiceInvite.canonicalKnock(
             serverId: server, serviceRef: ref, pageId: page,
             visitorAID: aidPub, issuedAt: 1_700_004_000_000)

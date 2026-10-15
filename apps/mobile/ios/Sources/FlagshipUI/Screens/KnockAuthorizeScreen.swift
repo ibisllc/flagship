@@ -1,4 +1,5 @@
 import SwiftUI
+import Flagship
 import FlagshipAPI
 import FlagshipCore
 
@@ -6,7 +7,8 @@ import FlagshipCore
 /// "Web-experience gating"). Reached from an `https://flagshipserver.com/access#…` link (the
 /// box's knock page / QR) or a pasted "Process URL". Shows "Open <app> on
 /// <server>?" with Open / Cancel; Open signs the authorization behind the
-/// biometric gate (global AID on our own servers, the invite's contact AID on a
+/// biometric gate (this device's account device key on our own servers, the
+/// share's member key on one shared with us, our id for the app on a
 /// friend's; see KnockAuthorizeViewModel) and POSTs it to the box. On success
 /// the browser is signed in and the user is told to return to it.
 public struct KnockAuthorizeScreen: View {
@@ -59,6 +61,7 @@ public struct KnockAuthorizeScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             if vm == nil {
+                if !SharedWithMeStore.shared.loaded { await SharedWithMeStore.shared.load(allowAuth: false) }
                 vm = KnockAuthorizeViewModel(
                     client: client,
                     store: store,
@@ -74,6 +77,18 @@ public struct KnockAuthorizeScreen: View {
                               let dir = try? await mailbox.fetchPods(username: user)
                         else { return app.pods.map(\.fqdn) }
                         return app.pods.map(\.fqdn) + dir.pods.map(\.serverDomain)
+                    },
+                    sharedServers: Dictionary(
+                        SharedWithMeStore.shared.items.map { ($0.entry.serverDomain, $0.entry.shareId) },
+                        uniquingKeysWith: { first, _ in first }),
+                    deviceKey: { [app] reason in
+                        guard let user = app.currentUser, !user.isEmpty,
+                              let deviceId = app.activeProfile?.deviceId, !deviceId.isEmpty else { return nil }
+                        return try await Keystore.deriveAccountDeviceKey(accountId: user, deviceId: deviceId, reason: reason)
+                    },
+                    shareKey: { shareId, reason in
+                        guard let flow = SharedWithMeStore.shared.flow else { throw ServerShareFlowError.notSignedIn }
+                        return try await flow.memberKey(shareId: shareId, reason: reason)
                     })
             }
         }

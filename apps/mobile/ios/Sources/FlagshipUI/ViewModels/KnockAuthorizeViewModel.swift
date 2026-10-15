@@ -14,15 +14,18 @@ import FlagshipCore
 /// QR; THIS phone authorizes it. This VM:
 ///   1. signs a `KnockAuthorization { serverId, serviceRef, pageId,
 ///      visitorAID, issuedAt }` over the canonical knock bytes behind ONE
-///      biometric, with the identity the box knows us by (docs/app-apis.md §5):
-///      our global AID on one of our own servers (AppState pods, refreshed once
-///      from `/pods` when the box isn't listed, so a cold start from a deep
-///      link still knows it); on a box we were invited to, the per-owner
-///      contact AID the invite bound (owner AID remembered at redeem,
-///      InviteOwnerStore). Only the pods decide "our own box": a record naming
-///      our own AID came from a link its author chose, so it is ignored. Any
-///      other box gets nothing: signing with the global AID there would hand a
-///      stranger's box our cross-box id,
+///      biometric, with the identity the box knows us by
+///      (docs/service-access-gating.md, "Who is signing in"): on one of our
+///      own servers (AppState pods, refreshed once from `/pods` when the box
+///      isn't listed, so a cold start from a deep link still knows it) this
+///      device's account device key, so the box can tell an admin device from
+///      the others (the AID only when the profile has no device id); on a
+///      server shared with us, that share's member key; on a box we were
+///      invited to, our id for the knock's app (owner AID remembered at
+///      redeem, InviteOwnerStore). Only the pods decide "our own box": a
+///      record naming our own AID came from a link its author chose, so it is
+///      ignored. Any other box gets nothing: the device key or a share key
+///      there would hand a stranger's box an id it could link,
 ///   2. POSTs it to the BOX's `/api/service-access/knock/authorize`,
 ///   3. on 200 the box mints the browser session + a phone-held secretId; we
 ///      persist a `SecuredSession` (so the owner can later refresh/stop it from
@@ -50,6 +53,12 @@ public final class KnockAuthorizeViewModel {
     private let aid: @MainActor (String) async throws -> Curve25519.Signing.PrivateKey
     /// The visitor's id for an app, `deriveAppAccountId(UMK, serviceRef)`.
     private let appAid: @MainActor (_ serviceRef: String, _ reason: String) async throws -> Curve25519.Signing.PrivateKey
+    /// This device's account device key; nil when the profile has none.
+    private let deviceKey: @MainActor (String) async throws -> Curve25519.Signing.PrivateKey?
+    /// Servers shared with this account: box FQDN → shareId.
+    private let sharedServers: [String: String]
+    /// A share's member key, `HKDF(UMK, "flagship/server-share-member/v1|<shareId>")`.
+    private let shareKey: @MainActor (_ shareId: String, _ reason: String) async throws -> Curve25519.Signing.PrivateKey
     private let owners: any InviteOwnerStoring
     /// FQDNs of the account's own servers (AppState pods).
     private var ownServers: Set<String>
@@ -69,11 +78,22 @@ public final class KnockAuthorizeViewModel {
         pageId: String,
         ownServers: [String] = [],
         refreshOwnServers: (@MainActor () async -> [String])? = nil,
+        sharedServers: [String: String] = [:],
         owners: any InviteOwnerStoring = InviteOwnerStore(),
         aid: (@MainActor (String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
         appAid: (@MainActor (_ serviceRef: String, _ reason: String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
+        deviceKey: (@MainActor (String) async throws -> Curve25519.Signing.PrivateKey?)? = nil,
+        shareKey: (@MainActor (_ shareId: String, _ reason: String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
         now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }
     ) {
+        var shares: [String: String] = [:]
+        for (host, shareId) in sharedServers {
+            let h = InviteOwnerStore.normalizeHost(host)
+            if !h.isEmpty { shares[h] = shareId }
+        }
+        self.sharedServers = shares
+        self.deviceKey = deviceKey ?? { _ in nil }
+        self.shareKey = shareKey ?? { _, _ in throw ServerShareFlowError.notSignedIn }
         self.client = client
         self.store = store
         self.serverDomain = serverDomain
@@ -105,7 +125,10 @@ public final class KnockAuthorizeViewModel {
     private func signingKey(reason: String) async throws -> Curve25519.Signing.PrivateKey? {
         let host = InviteOwnerStore.normalizeHost(serverDomain)
         if ownServers.contains(host) {
-            return try await aid(reason)
+            return try await ownServerKey(reason)
+        }
+        if let shareId = sharedServers[host] {
+            return try await shareKey(shareId, reason)
         }
         if let ownerHex = owners.ownerAidHex(forServer: host),
            let ownerPub = HexUtil.decode(ownerHex) {
@@ -117,9 +140,14 @@ public final class KnockAuthorizeViewModel {
         if let refreshOwnServers {
             let fresh = await refreshOwnServers().map(InviteOwnerStore.normalizeHost)
             ownServers.formUnion(fresh.filter { !$0.isEmpty })
-            if ownServers.contains(host) { return try await aid(reason) }
+            if ownServers.contains(host) { return try await ownServerKey(reason) }
         }
         return nil
+    }
+
+    private func ownServerKey(_ reason: String) async throws -> Curve25519.Signing.PrivateKey {
+        if let device = try await deviceKey(reason) { return device }
+        return try await aid(reason)
     }
 
     /// The site being signed in to, e.g. `notes.home.alice.flagship.services`
