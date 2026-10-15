@@ -319,7 +319,7 @@
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/DeepLink.swift", "case \"account\":"], ["apps/mobile/shared/Sources/FlagshipCore/PushNotifications.swift", "func link\\(forPush"]] },
         "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/DeepLink.kt", "\"account\" -> when"]] },
-        "web": { "status": "partial", "reason": "service-worker.js webappDeepLink opens Home for account/ and settings/ links instead of the matching settings view.", "anchors": [["apps/web/public/webapp/service-worker.js", "function webappDeepLink"]] }
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/service-worker.js", "function webappDeepLink"], ["apps/web/public/webapp/service-worker.js", "\"settings/two-factor\": \"/\\?view=account-security\""], ["apps/web/public/webapp/lib/deepLink.js", "view-trusted-devices"]] }
       }
     },
     {

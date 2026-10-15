@@ -141,6 +141,11 @@ export async function dispatchInitialView() {
       show("view-activity");
       return;
     }
+    if (q.view === "view-account-security" || q.view === "view-trusted-devices") {
+      const { show } = await import("./router.js");
+      show(q.view);
+      return;
+    }
     if (q.view === "view-settings" || q.view === "view-settings-tab") {
       const { show } = await import("./router.js");
       show("view-settings-tab");
