@@ -348,7 +348,7 @@ public struct RootShell: View {
 
     static func tab(for link: DeepLink, selected: RootDestination) -> RootDestination {
         switch link {
-        case .secretRequests:                         return .activity
+        case .secretRequests, .accountActivity:       return .activity
         case .serverDetail, .createServer:            return .home
         case .appDetail, .vibeCodeChat, .startVibeCode,
              .appDetailOnServer, .createAppOnServer: return .apps

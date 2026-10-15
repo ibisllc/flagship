@@ -53,6 +53,9 @@ public struct ActivityTab: View {
         case .secretRequests:
             if !path.contains(.secretRequests) { path.append(.secretRequests) }
             _ = linker.consume()
+        case .accountActivity:
+            if path.last != .auditLog { path.append(.auditLog) }
+            _ = linker.consume()
         default:
             break
         }

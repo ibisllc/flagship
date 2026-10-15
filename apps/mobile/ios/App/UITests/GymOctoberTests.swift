@@ -175,6 +175,65 @@ final class GymOctoberTests: XCTestCase {
         gymShot(app, "access-control-members-only")
     }
 
+    // ─── Who can invite: admins rank, any device invites at Member ───────────
+
+    private func openPlantsAccess(_ app: XCUIApplication) {
+        openPlants(app)
+        let access = app.buttons["service-detail-open-access"]
+        XCTAssertTrue(reveal(app, access), "Plants' page should offer Access control.")
+        access.tap()
+        XCTAssertTrue(app.navigationBars["Access control"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["service-access-members-title"].waitForExistence(timeout: 10))
+    }
+
+    func test_accessControlRankLockedOnNonAdminDevice() throws {
+        let app = launch(tab: "apps", ["-smoke-access-fixture", "-smoke-non-admin-device"])
+        openPlantsAccess(app)
+        let samRank = app.descendants(matching: .any)["service-access-role-sam-bright-maple--plants"]
+        XCTAssertTrue(reveal(app, samRank), "Each member still shows a rank.")
+        XCTAssertTrue(samRank.label.contains("Manager"), "Got: \(samRank.label)")
+        XCTAssertFalse(app.buttons["service-access-role-sam-bright-maple--plants"].exists,
+                       "A non-admin device shows ranks read-only.")
+        XCTAssertTrue(app.buttons["service-access-remove-sam-bright-maple--plants"].exists,
+                      "This device may withdraw the member invite it made.")
+        XCTAssertFalse(app.buttons["service-access-remove-priya-bright-maple--plants"].exists,
+                       "It may not withdraw an admin's invite.")
+        gymShot(app, "access-control-non-admin-list")
+
+        app.swipeDown()
+        let add = app.buttons["service-access-add-person"]
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+        add.tap()
+        let reason = app.staticTexts["service-access-member-only-reason"]
+        XCTAssertTrue(reveal(app, reason), "The locked picker says why.")
+        XCTAssertEqual(reason.label, "Only an admin device can give a higher rank")
+        let newRank = app.descendants(matching: .any)["service-access-new-role"]
+        XCTAssertTrue(newRank.exists)
+        XCTAssertTrue(newRank.label.contains("Member"), "Got: \(newRank.label)")
+        XCTAssertFalse(app.buttons["service-access-new-role"].exists, "The rank can't be picked.")
+        gymShot(app, "access-control-rank-locked")
+    }
+
+    func test_accessControlMembersShowInvitedBy() throws {
+        let app = launch(tab: "apps", ["-smoke-access-fixture"])
+        openPlantsAccess(app)
+        let expected = [
+            "sam": "Invited by this device",
+            "priya": "Invited by Harry's iPad",
+            "family": "Invited by another device",
+        ]
+        for (who, line) in expected {
+            let by = app.staticTexts["service-access-invited-by-\(who)-bright-maple--plants"]
+            XCTAssertTrue(reveal(app, by), "\(who)'s row says who invited them.")
+            XCTAssertEqual(by.label, line)
+            XCTAssertTrue(app.buttons["service-access-revoke-\(who)-bright-maple--plants"].exists,
+                          "An admin device revokes \(who) in one tap.")
+        }
+        XCTAssertFalse(app.staticTexts["service-access-invited-by-jordan-bright-maple--plants"].exists,
+                       "An invite from before attribution shows nothing.")
+        gymShot(app, "access-control-invited-by")
+    }
+
     // ─── Server order: Make leader stays gray until the box confirms ─────────
 
     func test_makeLeaderWaitsForTheServerToConfirm() throws {

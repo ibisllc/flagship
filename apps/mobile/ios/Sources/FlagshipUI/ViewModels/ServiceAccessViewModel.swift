@@ -17,17 +17,21 @@ import FlagshipCore
 ///     changes a rank with a signed `flagship/app-member-role/v1` order,
 ///   - manages the allow-list across the THREE invite tiers (personal auto /
 ///     personal manual / group multi-use): add a person/group (seal the bundle
-///     under the household key → **AID-sign** the create → POST `.com` → return
+///     under the household key → sign the create → POST `.com` → return
 ///     the `https://<server>/invite#<secret>&a=<authorAID>[&i=…]` link),
 ///     list (an OWNER-SIGNED `.com` query; decrypt the bundle locally; group =
-///     one "label — k/N" row), and remove (**AID-signed** revoke on `.com` + an
+///     one "label — k/N" row), and remove (a signed revoke on `.com` + an
 ///     owner-IRK prune of each bound AID on the box).
 ///
-/// v2 signing: the author signs create / revoke / the listing with the STABLE
-/// **AID** (so the box-as-authority verifies against the owner key across IRK
-/// rotations; `.com` dual-accepts AID|IRK). The box's mode toggle + allow-remove
-/// stay owner-**IRK** signed (the box pins the owner IRK). The friend's recorded
-/// identity is their PER-AUTHOR contact AID.
+/// Who can invite (owner decision 2026-10-15): only admins grant higher access;
+/// any device of the account may invite at Member, and admins are told. An
+/// admin device (it holds the admin root) signs create / revoke with the admin
+/// root, behind one Face ID that also opens the session's account keys. Any
+/// other device signs them with the stable **AID**: `.com` records the invite
+/// as member tier, the box caps its joins at Member, and this device may only
+/// withdraw its own member invites and never changes ranks. The listing is
+/// AID-signed on every device. The box's mode toggle + allow-remove stay
+/// owner-**IRK** signed (the box pins the owner IRK).
 @Observable
 @MainActor
 public final class ServiceAccessViewModel {
@@ -70,9 +74,14 @@ public final class ServiceAccessViewModel {
         public let groupMax: Int?
         /// Manual-approve invite (no bind until the author finalizes).
         public let manual: Bool
+        /// "admin" | "member" as `.com` recorded it; nil on old rows.
+        public let creatorTier: String?
+        /// The account device id that created the invite; nil on old rows.
+        public let creatorDeviceId: String?
         public var id: String { inviteId }
         public var isGroup: Bool { groupMax != nil }
-        public init(inviteId: String, name: String, photo: String?, bound: Bool, boundAID: String?, groupBoundAIDs: [String] = [], groupMax: Int? = nil, manual: Bool = false) {
+        public init(inviteId: String, name: String, photo: String?, bound: Bool, boundAID: String?, groupBoundAIDs: [String] = [], groupMax: Int? = nil, manual: Bool = false,
+                    creatorTier: String? = nil, creatorDeviceId: String? = nil) {
             self.inviteId = inviteId
             self.name = name
             self.photo = photo
@@ -81,8 +90,13 @@ public final class ServiceAccessViewModel {
             self.groupBoundAIDs = groupBoundAIDs
             self.groupMax = groupMax
             self.manual = manual
+            self.creatorTier = creatorTier
+            self.creatorDeviceId = creatorDeviceId
         }
     }
+
+    /// Why a non-admin device's rank picker is locked to Member.
+    public static let memberOnlyReason = "Only an admin device can give a higher rank"
 
     public private(set) var phase: Phase = .idle
     public private(set) var restricted = false
@@ -101,6 +115,15 @@ public final class ServiceAccessViewModel {
     public private(set) var busyRoles: Set<String> = []
     /// Set when an invite was created but its rank couldn't be set.
     public private(set) var roleNotice: String?
+    /// This account's device names (decrypted on the phone), nil until read
+    /// or when this device can't read the directory.
+    public private(set) var deviceNames: [String: String]?
+
+    /// Does this device hold the account's admin root? Only then can it give
+    /// a rank above Member, change ranks or revoke anyone's invite.
+    public let isAdminDevice: Bool
+    /// This device's account device id (sent with a create, for attribution).
+    public let deviceId: String?
 
     private let client: any ServiceAccessClient
     private let serverDomain: String
@@ -117,6 +140,10 @@ public final class ServiceAccessViewModel {
     private let screens: (any ScreensClient)?
     /// Sensitive-order signer for rank changes (admin root when held, else the IRK).
     private let roleSigner: AppAccessSigner
+    /// The admin root, on an admin device, behind a prompt that also opens
+    /// the session's account keys, so the AID that follows costs none.
+    private let adminSigner: AppAccessSigner
+    private let loadDeviceNames: @MainActor () async -> [String: String]?
     private let now: () -> Int64
 
     public init(
@@ -129,10 +156,18 @@ public final class ServiceAccessViewModel {
         irkSigner: (@MainActor (String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
         screens: (any ScreensClient)? = nil,
         roleSigner: AppAccessSigner? = nil,
+        isAdminDevice: Bool? = nil,
+        adminSigner: AppAccessSigner? = nil,
+        deviceId: String? = nil,
+        deviceNames: (@MainActor () async -> [String: String]?)? = nil,
         now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }
     ) {
         self.screens = screens
         self.roleSigner = roleSigner ?? AppAccessOrder.defaultSigner
+        self.isAdminDevice = isAdminDevice ?? Keystore.hasAdminRoot
+        self.adminSigner = adminSigner ?? { reason in try await ServerOrderSaver.sensitiveOrderKey(reason: reason) }
+        self.deviceId = deviceId?.lowercased()
+        self.loadDeviceNames = deviceNames ?? { nil }
         self.client = client
         self.serverDomain = serverDomain
         self.serviceRef = serviceRef
@@ -184,10 +219,37 @@ public final class ServiceAccessViewModel {
     /// How many people a members-only switch leaves able to open it.
     public var memberPeopleCount: Int { members?.members.count ?? allowCount }
 
+    /// Rank changes are an admin device's alone; others see ranks read-only.
+    public var canChangeRanks: Bool { isAdminDevice }
+
+    /// An admin device may revoke any row; any other device only the member
+    /// invites it created itself.
+    public func canRemove(_ p: Person) -> Bool {
+        if isAdminDevice { return true }
+        guard let deviceId, p.creatorTier == "member" else { return false }
+        return p.creatorDeviceId?.lowercased() == deviceId
+    }
+
+    /// "Invited by <device>" for one row, or nil for rows from before
+    /// invites recorded who made them.
+    public func invitedBy(for p: Person) -> String? {
+        Self.invitedByText(creatorTier: p.creatorTier, creatorDeviceId: p.creatorDeviceId,
+                           ownDeviceId: deviceId, names: deviceNames)
+    }
+
+    public static func invitedByText(creatorTier: String?, creatorDeviceId: String?,
+                                     ownDeviceId: String?, names: [String: String]?) -> String? {
+        guard creatorTier != nil || creatorDeviceId != nil else { return nil }
+        guard let id = creatorDeviceId?.lowercased(), !id.isEmpty else { return "Invited by another device" }
+        if let own = ownDeviceId?.lowercased(), id == own { return "Invited by this device" }
+        if let name = names?[id], !name.isEmpty { return "Invited by \(name)" }
+        return "Invited by another device"
+    }
+
     /// Sign + send a rank change for one row. Returns whether the box took it.
     @discardableResult
     public func setRole(_ role: AppMemberRole, for p: Person) async -> Bool {
-        guard let screens, let members, !busyRoles.contains(p.inviteId) else { return false }
+        guard canChangeRanks, let screens, let members, !busyRoles.contains(p.inviteId) else { return false }
         busyRoles.insert(p.inviteId)
         defer { busyRoles.remove(p.inviteId) }
         let target = members.roleTarget(inviteId: p.inviteId, boundAID: p.isGroup ? nil : p.boundAID)
@@ -235,7 +297,7 @@ public final class ServiceAccessViewModel {
 
     /// Mint a capability invite for a new person / group at the chosen tier;
     /// returns the share-link (also stored in `lastInviteLink`). One biometric
-    /// (author AID + household). The link carries the author's AID (the friend
+    /// at most (see `inviteKeys`). The link carries the author's AID (the friend
     /// derives their per-author contact AID) and — for a MANUAL invite — the
     /// inviteId (so the friend can sign the acceptance).
     @discardableResult
@@ -246,7 +308,7 @@ public final class ServiceAccessViewModel {
         busyAdd = true
         defer { busyAdd = false }
         do {
-            let keys = try await authorAidKeys("Create an invite for \(serviceRef)")
+            let keys = try await inviteKeys("Create an invite for \(serviceRef)")
             let aidPub = keys.aid.publicKey.rawRepresentation
             let bundle = ServiceInvite.Bundle(name: trimmed, photo: photo)
             let secret = randomSecret()
@@ -266,16 +328,8 @@ public final class ServiceAccessViewModel {
                 inviteId: inviteId, authorAID: aidPub, serviceRef: serviceRef,
                 secretHash: secretHash, encryptedBundle: encryptedBundle, issuedAt: ts,
                 maxRedemptions: maxN, expiresAt: expiresAt)
-            // Slice D (D-2) — service-invite CREATE is SENSITIVE (admin-gated).
-            // Sign with the admin master root when this device holds one; else
-            // AID (the legacy dual-accept path `.com`/box still honor when no
-            // admin root is pinned). The `authorAID` field stays the AID (the
-            // recorded inviter identity + the link's author key) — only the
-            // signing key changes; canonical bytes are unchanged.
-            let createSignKey: Curve25519.Signing.PrivateKey = Keystore.hasAdminRoot
-                ? try await Keystore.adminRootKey(reason: "Create an invite for \(serviceRef)")
-                : keys.aid
-            let sig = try ServiceInvite.sign(bytes, with: createSignKey)
+            // `authorAID` stays the AID (the link's author key) whoever signs.
+            let sig = try ServiceInvite.sign(bytes, with: keys.signer)
             var request: [String: Any] = [
                 "inviteId": inviteId,
                 "authorAID": HexUtil.encode(aidPub),
@@ -288,6 +342,7 @@ public final class ServiceAccessViewModel {
             if let expiresAt { request["expiresAt"] = expiresAt }
             // approvalMode is a `.com`-side policy field (NOT in the signed bytes).
             if tier.isManual { request["approvalMode"] = "manual" }
+            if let deviceId { request["deviceId"] = deviceId }
             try await client.createInvite(controlBase: controlBase, username: username, request: request, signatureHex: HexUtil.encode(sig))
 
             // No local create cache: the author's box fetches the signed create
@@ -305,8 +360,8 @@ public final class ServiceAccessViewModel {
             lastInviteTier = tier
             roleNotice = nil
             // The rank rides a signed order right after the create; the app's
-            // default rank needs none.
-            if let role, let screens, role.rawValue != members?.defaultRole {
+            // default rank needs none, and a member invite stays at Member.
+            if isAdminDevice, let role, let screens, role.rawValue != members?.defaultRole {
                 do {
                     try await sendRole(screens: screens, target: AppMemberRoleOrder.inviteTarget(inviteId),
                                        role: role, reason: "Give \(trimmed) a rank")
@@ -324,7 +379,7 @@ public final class ServiceAccessViewModel {
         }
     }
 
-    /// Remove a person / group: AID-signed revoke on `.com` (records the
+    /// Remove a person / group: a signed revoke on `.com` (records the
     /// revocation) AND — for each bound AID — an owner-IRK prune from the box's
     /// allow-list. The box allow-list is add-only, so a `.com` revoke alone never
     /// reaches it: a redeemed friend (or every group member) would keep access
@@ -333,6 +388,7 @@ public final class ServiceAccessViewModel {
     /// friend with live access.
     public func remove(inviteId: String) async {
         let person = people.first(where: { $0.inviteId == inviteId })
+        if let person, !canRemove(person) { return }
         // AIDs to prune from the box: a group's whole set, else the single bind
         // — only those for whom this was their last grant. Someone who also
         // holds another invite keeps it: the box drops just this grant when
@@ -344,16 +400,14 @@ public final class ServiceAccessViewModel {
         var revokeFailed = false
         var pruneFailed = false
 
-        // `.com` revoke (AID-signed; records the revocation / what the directory shows).
+        // `.com` revoke: the admin root, or the AID that created a member invite.
         do {
-            let aidKey = try await authorAidKeys("Remove this person from \(serviceRef)").aid
+            let reason = "Remove this person from \(serviceRef)"
+            let revokeSignKey = isAdminDevice
+                ? try await adminSigner(reason)
+                : try await authorAidKeys(reason).aid
             let ts = now()
             let bytes = try ServiceInvite.canonicalRevoke(inviteId: inviteId, issuedAt: ts)
-            // Slice D (D-2) — service-invite REVOKE is SENSITIVE (admin-gated):
-            // admin master root when present, else the legacy AID.
-            let revokeSignKey: Curve25519.Signing.PrivateKey = Keystore.hasAdminRoot
-                ? try await Keystore.adminRootKey(reason: "Remove this person from \(serviceRef)")
-                : aidKey
             let sig = try ServiceInvite.sign(bytes, with: revokeSignKey)
             let request: [String: Any] = ["inviteId": inviteId, "issuedAt": ts]
             try await client.revokeInvite(controlBase: controlBase, username: username, inviteId: inviteId, request: request, signatureHex: HexUtil.encode(sig))
@@ -427,14 +481,33 @@ public final class ServiceAccessViewModel {
                         boundAID: row.boundAidHex,
                         groupBoundAIDs: groupAids,
                         groupMax: row.maxRedemptions,
-                        manual: row.approvalMode == "manual")
+                        manual: row.approvalMode == "manual",
+                        creatorTier: row.creatorTier,
+                        creatorDeviceId: row.creatorDeviceId)
                 }
+            if deviceNames == nil, people.contains(where: { $0.creatorDeviceId != nil }) {
+                deviceNames = await loadDeviceNames()
+            }
         } catch {
             // Keep the last-known list; the load-phase error is already surfaced.
         }
     }
 
     public func clearLink() { lastInviteLink = nil; lastInviteTier = nil }
+
+    /// The AID + household for a create, and the key that signs it: on an
+    /// admin device the admin root, asked for first so its one prompt also
+    /// opens the session's account keys and the AID costs no second one.
+    private func inviteKeys(_ reason: String) async throws
+        -> (aid: Curve25519.Signing.PrivateKey, household: Data, signer: Curve25519.Signing.PrivateKey) {
+        guard isAdminDevice else {
+            let k = try await authorAidKeys(reason)
+            return (k.aid, k.household, k.aid)
+        }
+        let root = try await adminSigner(reason)
+        let k = try await authorAidKeys(reason)
+        return (k.aid, k.household, root)
+    }
 
     private func randomSecret() -> Data {
         var d = Data(count: 32)

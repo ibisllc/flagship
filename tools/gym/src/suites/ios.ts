@@ -854,6 +854,45 @@ const OCTOBER: readonly Scenario[] = [
     },
   ),
   iosTotal(
+    "ios-oct-access-control-rank-locked-non-admin",
+    "D3: rank picker locked on a non-admin device: Add person shows Member with 'Only an admin device can give a higher rank', ranks are read-only and only its own member invite can be removed (-smoke-access-fixture -smoke-non-admin-device).",
+    O + "test_accessControlRankLockedOnNonAdminDevice",
+    {
+      steps: [
+        { kind: "tap", describe: "Plants → Access control.", handle: "service-detail-open-access" },
+        { kind: "assert", describe: "Sam's rank is read-only.", handle: "service-access-role-sam-bright-maple--plants" },
+        { kind: "tap", describe: "+ Add person.", handle: "service-access-add-person" },
+        { kind: "assert", describe: "The locked picker says why.", handle: "service-access-member-only-reason" },
+      ],
+      assertions: [
+        { describe: "Rank locked to Member", handle: "service-access-new-role", expect: "present" },
+        { describe: "Why it is locked", handle: "service-access-member-only-reason", expect: "present" },
+        { describe: "No remove on an admin's invite", handle: "service-access-remove-priya-bright-maple--plants", expect: "absent" },
+      ],
+      screenshots: [shot("access-control-non-admin-list", "Read-only ranks."), shot("access-control-rank-locked", "Locked picker.")],
+      dimension: "D3",
+    },
+  ),
+  iosTotal(
+    "ios-oct-access-control-invited-by",
+    "D3: members list shows Invited by: this device, the admin's iPad by name (decrypted on the phone), another device for an unnamed one, nothing for old rows; an admin device revokes each in one tap (-smoke-access-fixture).",
+    O + "test_accessControlMembersShowInvitedBy",
+    {
+      steps: [
+        { kind: "tap", describe: "Plants → Access control.", handle: "service-detail-open-access" },
+        { kind: "assert", describe: "Sam: Invited by this device.", handle: "service-access-invited-by-sam-bright-maple--plants" },
+        { kind: "assert", describe: "Priya: Invited by Harry's iPad.", handle: "service-access-invited-by-priya-bright-maple--plants" },
+      ],
+      assertions: [
+        { describe: "Invited by line", handle: "service-access-invited-by-sam-bright-maple--plants", expect: "present" },
+        { describe: "One-tap Revoke", handle: "service-access-revoke-sam-bright-maple--plants", expect: "present" },
+        { describe: "Old rows show nothing", handle: "service-access-invited-by-jordan-bright-maple--plants", expect: "absent" },
+      ],
+      screenshots: [shot("access-control-invited-by", "Who invited each member.")],
+      dimension: "D3",
+    },
+  ),
+  iosTotal(
     "ios-oct-server-order-leader-pending",
     "D1: Make leader on Office's page; until the box confirms, the page and Home show the leader in gray.",
     O + "test_makeLeaderWaitsForTheServerToConfirm",

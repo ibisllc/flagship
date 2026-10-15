@@ -9,6 +9,25 @@ public struct ServiceAccessKeys: Sendable {
     public let authorAidKeys: @MainActor @Sendable (String) async throws -> (aid: Curve25519.Signing.PrivateKey, household: Data)
     public let irkSigner: @MainActor @Sendable (String) async throws -> Curve25519.Signing.PrivateKey
     public let roleSigner: @MainActor @Sendable (String) async throws -> Curve25519.Signing.PrivateKey
+    public let isAdminDevice: Bool
+    public let deviceId: String?
+    public let deviceNames: [String: String]?
+
+    public init(
+        authorAidKeys: @escaping @MainActor @Sendable (String) async throws -> (aid: Curve25519.Signing.PrivateKey, household: Data),
+        irkSigner: @escaping @MainActor @Sendable (String) async throws -> Curve25519.Signing.PrivateKey,
+        roleSigner: @escaping @MainActor @Sendable (String) async throws -> Curve25519.Signing.PrivateKey,
+        isAdminDevice: Bool = true,
+        deviceId: String? = nil,
+        deviceNames: [String: String]? = nil
+    ) {
+        self.authorAidKeys = authorAidKeys
+        self.irkSigner = irkSigner
+        self.roleSigner = roleSigner
+        self.isAdminDevice = isAdminDevice
+        self.deviceId = deviceId
+        self.deviceNames = deviceNames
+    }
 }
 
 private struct ServiceAccessKeysKey: EnvironmentKey {
@@ -24,10 +43,17 @@ public extension EnvironmentValues {
 
 /// Gym-only (`-smoke-mode -smoke-access-fixture`): a members list for the demo
 /// apps, so Access control renders people, a group and their ranks without a
-/// keystore or a box.
+/// keystore or a box. Sam was invited from this device (member tier), Priya
+/// from the admin's iPad, Family from a device the directory doesn't name,
+/// and Jordan before invites recorded who made them. `nonAdmin` plays a
+/// device without the admin root (`-smoke-non-admin-device`).
 public enum ServiceAccessFixture {
+    public static let thisDeviceId = String(repeating: "d0", count: 16)
+    public static let ipadDeviceId = String(repeating: "1a", count: 16)
+    public static let unnamedDeviceId = String(repeating: "2b", count: 16)
+
     public static func seed(access: MockServiceAccessClient, screens: MockScreensClient,
-                            serviceIds: [String]) -> ServiceAccessKeys {
+                            serviceIds: [String], nonAdmin: Bool = false) -> ServiceAccessKeys {
         let aid = try! Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 5, count: 32))
         let irk = try! Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 9, count: 32))
         let household = Data(repeating: 0x33, count: 32)
@@ -37,19 +63,20 @@ public enum ServiceAccessFixture {
         var rows: [ServiceInviteRow] = []
         for ref in serviceIds {
             func row(_ id: String, _ name: String, bound: String?, group: [String] = [], max: Int? = nil,
-                     manual: Bool = false) -> ServiceInviteRow {
+                     manual: Bool = false, by: (tier: String, device: String)? = nil) -> ServiceInviteRow {
                 let inviteId = "\(id)-\(ref)"
                 let sealed = (try? ServiceInvite.sealBundle(ServiceInvite.Bundle(name: name, photo: nil),
                                                            householdKey: household, inviteId: inviteId)) ?? ""
                 return ServiceInviteRow(inviteId: inviteId, serviceRef: ref, encryptedBundleHex: sealed,
                                         boundAidHex: bound, boundAt: bound == nil ? nil : 1, createdAt: 1, revokedAt: nil,
                                         boundAidsHex: group, maxRedemptions: max, redemptions: max == nil ? nil : group.count,
-                                        approvalMode: manual ? "manual" : nil)
+                                        approvalMode: manual ? "manual" : nil,
+                                        creatorTier: by?.tier, creatorDeviceId: by?.device)
             }
             rows += [
-                row("sam", "Sam", bound: sam),
-                row("priya", "Priya", bound: priya, manual: true),
-                row("family", "Family", bound: nil, group: [sam, guest], max: 5),
+                row("sam", "Sam", bound: sam, by: ("member", thisDeviceId)),
+                row("priya", "Priya", bound: priya, manual: true, by: ("admin", ipadDeviceId)),
+                row("family", "Family", bound: nil, group: [sam, guest], max: 5, by: ("admin", unnamedDeviceId)),
                 row("jordan", "Jordan", bound: nil),
             ]
             let id = { (s: String) in "\(s)-\(ref)" }
@@ -76,6 +103,9 @@ public enum ServiceAccessFixture {
         return ServiceAccessKeys(
             authorAidKeys: { _ in (aid, household) },
             irkSigner: { _ in irk },
-            roleSigner: { _ in irk })
+            roleSigner: { _ in irk },
+            isAdminDevice: !nonAdmin,
+            deviceId: thisDeviceId,
+            deviceNames: [ipadDeviceId: "Harry's iPad", thisDeviceId: "Harry's iPhone"])
     }
 }

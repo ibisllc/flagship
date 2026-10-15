@@ -9,7 +9,12 @@ import FlagshipCore
 ///     the box; sets it with an owner-IRK envelope; rolls back on failure),
 ///   - in both modes, Members (n): people and groups with a rank picker each
 ///     (a signed `flagship/app-member-role/v1` order), + Add person / + Add
-///     group (the rank chosen at creation), remove (revoke).
+///     group (the rank chosen at creation), remove (revoke), and who invited
+///     each one ("Invited by <device>").
+///
+/// Only an admin device (it holds the admin root) gives a rank above Member,
+/// changes ranks or revokes anyone; another device invites at Member and may
+/// withdraw only its own member invites.
 ///
 /// Self-contained: reads the box+`.com` access client from the environment.
 public struct ServiceAccessScreen: View {
@@ -17,6 +22,8 @@ public struct ServiceAccessScreen: View {
     @Environment(\.serviceAccessClient) private var client
     @Environment(\.screensClient) private var screens
     @Environment(\.serviceAccessKeys) private var keys
+    @Environment(\.flagshipServerClient) private var server
+    @Environment(AppState.self) private var app
     @Environment(ToastCenter.self) private var toasts
 
     private let serverDomain: String
@@ -232,9 +239,18 @@ public struct ServiceAccessScreen: View {
                 HStack {
                     Text("Rank").foregroundColor(c.text)
                     Spacer()
-                    rolePicker(selection: newRole, id: "service-access-new-role") { newRole = $0 }
+                    if vm?.isAdminDevice == false {
+                        rankLabel(.member, id: "service-access-new-role")
+                    } else {
+                        rolePicker(selection: newRole, id: "service-access-new-role") { newRole = $0 }
+                    }
                 }
-                if let desc = vm?.members?.description(of: newRole) {
+                if vm?.isAdminDevice == false {
+                    Text(ServiceAccessViewModel.memberOnlyReason)
+                        .font(FS.font.caption())
+                        .foregroundColor(c.textMuted)
+                        .accessibilityIdentifier("service-access-member-only-reason")
+                } else if let desc = vm?.members?.description(of: newRole) {
                     Text(desc).font(FS.font.caption()).foregroundColor(c.textMuted)
                 }
                 if kind == .group {
@@ -300,6 +316,25 @@ public struct ServiceAccessScreen: View {
         .accessibilityLabel("Rank: \(selection.label)")
     }
 
+    /// A rank shown read-only (a non-admin device can't change it).
+    private func rankLabel(_ role: AppMemberRole, id: String) -> some View {
+        let c = FSColors.scheme(scheme)
+        return HStack(spacing: 4) {
+            if role.crowned {
+                Image(systemName: "crown.fill").font(.system(size: 12)).foregroundColor(Color(red: 0.79, green: 0.64, blue: 0.15))
+            }
+            Text(role.label).font(.system(size: 14, weight: .semibold))
+        }
+        .foregroundColor(c.textMuted)
+        .padding(.horizontal, FS.space.s3)
+        .frame(minHeight: 32)
+        .background(c.surfaceSunken)
+        .clipShape(Capsule())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Rank: \(role.label)")
+        .accessibilityIdentifier(id)
+    }
+
     @ViewBuilder
     private func groupFields(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s2) {
@@ -361,23 +396,52 @@ public struct ServiceAccessScreen: View {
                     if let also = vm?.alsoIn(for: p), !also.isEmpty {
                         Text(also).font(FS.font.caption()).foregroundColor(c.textMuted)
                     }
+                    if let by = vm?.invitedBy(for: p) {
+                        HStack(spacing: FS.space.s2) {
+                            Text(by)
+                                .font(FS.font.caption())
+                                .foregroundColor(c.textMuted)
+                                .lineLimit(1)
+                                .accessibilityIdentifier("service-access-invited-by-\(p.inviteId)")
+                            if vm?.isAdminDevice == true {
+                                Button("Revoke") { confirmRemove = p }
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(c.danger)
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel("Revoke \(p.name)")
+                                    .accessibilityIdentifier("service-access-revoke-\(p.inviteId)")
+                            }
+                        }
+                    }
                 }
                 Spacer(minLength: FS.space.s2)
                 if let role = vm?.role(for: p) {
-                    rolePicker(selection: role, id: "service-access-role-\(p.inviteId)",
-                               busy: vm?.busyRoles.contains(p.inviteId) == true) { r in
-                        Task { await pickRole(r, for: p) }
+                    if vm?.canChangeRanks == true {
+                        rolePicker(selection: role, id: "service-access-role-\(p.inviteId)",
+                                   busy: vm?.busyRoles.contains(p.inviteId) == true) { r in
+                            Task { await pickRole(r, for: p) }
+                        }
+                    } else {
+                        rankLabel(role, id: "service-access-role-\(p.inviteId)")
                     }
                 }
-                Button { confirmRemove = p } label: {
-                    Image(systemName: p.isGroup ? "xmark.circle" : "person.crop.circle.badge.minus")
-                        .foregroundColor(c.danger)
+                if showsRemoveIcon(p) {
+                    Button { confirmRemove = p } label: {
+                        Image(systemName: p.isGroup ? "xmark.circle" : "person.crop.circle.badge.minus")
+                            .foregroundColor(c.danger)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(p.isGroup ? "Revoke \(p.name)" : "Remove \(p.name)")
+                    .accessibilityIdentifier("service-access-remove-\(p.inviteId)")
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(p.isGroup ? "Revoke \(p.name)" : "Remove \(p.name)")
-                .accessibilityIdentifier("service-access-remove-\(p.inviteId)")
             }
         }
+    }
+
+    /// An admin row with an "Invited by" line carries its Revoke there.
+    private func showsRemoveIcon(_ p: ServiceAccessViewModel.Person) -> Bool {
+        guard let vm, vm.canRemove(p) else { return false }
+        return !(vm.isAdminDevice && vm.invitedBy(for: p) != nil)
     }
 
     /// A group shows "k of N joined" (N = cap, 0 = no limit); an approve-first
@@ -421,6 +485,10 @@ public struct ServiceAccessScreen: View {
 
     @MainActor
     private func reload() async {
+        let deviceId = keys?.deviceId ?? app.activeProfile?.deviceId
+        let fixtureNames = keys?.deviceNames
+        let account = username
+        let directory = server
         let m = vm ?? ServiceAccessViewModel(
             client: client,
             serverDomain: serverDomain,
@@ -429,7 +497,14 @@ public struct ServiceAccessScreen: View {
             authorAidKeys: keys?.authorAidKeys,
             irkSigner: keys?.irkSigner,
             screens: screens,
-            roleSigner: keys?.roleSigner
+            roleSigner: keys?.roleSigner,
+            isAdminDevice: keys?.isAdminDevice,
+            adminSigner: keys?.roleSigner,
+            deviceId: deviceId,
+            deviceNames: {
+                if let fixtureNames { return fixtureNames }
+                return await AccountDeviceNames.load(username: account, deviceId: deviceId, server: directory)
+            }
         )
         vm = m
         await m.load()
@@ -474,7 +549,7 @@ public struct ServiceAccessScreen: View {
         approveFirst = false
         photoDataUri = nil
         photoItem = nil
-        newRole = AppMemberRole(wire: vm?.members?.defaultRole) ?? .member
+        newRole = vm?.isAdminDevice == false ? .member : AppMemberRole(wire: vm?.members?.defaultRole) ?? .member
     }
 
     @MainActor

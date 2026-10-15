@@ -47,6 +47,8 @@ final class AuditLogViewModelTests: XCTestCase {
         XCTAssertEqual(AuditLogViewModel.label(for: "recovery-set-up"),     "Set up recovery")
         XCTAssertEqual(AuditLogViewModel.label(for: "recovery-rotated"),    "Rotated recovery passkey")
         XCTAssertEqual(AuditLogViewModel.label(for: "app-renamed"),         "Renamed app URL")
+        XCTAssertEqual(AuditLogViewModel.label(for: "invite-created"),      "Someone was invited to an app")
+        XCTAssertEqual(AuditLogViewModel.icon(for: "invite-created"),       "person.badge.plus")
     }
 
     func test_label_for_unknownKind_isHumanized() {

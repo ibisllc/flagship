@@ -138,6 +138,10 @@ public enum DeepLink: Equatable, Sendable {
     /// the `account/devices` (quarantined device) and `account/re-pair` pushes.
     case accountDevices
 
+    /// Activity → the account's audit log: the `invite-created` push (a
+    /// non-admin device invited someone to one of the account's apps).
+    case accountActivity
+
     /// An in-app destination as an https app link,
     /// `https://<controlHost>/app/<route>[?query]`: the form every producer
     /// emits, routed exactly like the legacy `flagship://<route>[?query]`.
@@ -329,6 +333,7 @@ public enum DeepLink: Equatable, Sendable {
             switch url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")) {
             case "security": return .accountSecurity
             case "devices", "re-pair": return .accountDevices
+            case "activity": return .accountActivity
             default: return nil
             }
         case "settings":

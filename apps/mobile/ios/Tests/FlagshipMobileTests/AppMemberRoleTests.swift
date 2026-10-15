@@ -97,14 +97,46 @@ final class AppMemberRoleTests: XCTestCase {
     }
 
     private func makeVM(_ access: MockServiceAccessClient, _ screens: MockScreensClient,
-                        roleKey: Curve25519.Signing.PrivateKey) -> ServiceAccessViewModel {
+                        roleKey: Curve25519.Signing.PrivateKey, isAdmin: Bool = true) -> ServiceAccessViewModel {
         let a = key(5); let i = key(9); let hh = Data(repeating: 0x33, count: 32)
         access.listsCreatedInvites = true
         return ServiceAccessViewModel(
             client: access, serverDomain: server, serviceRef: serviceRef, username: "alice",
             controlBase: URL(string: "https://flagshipserver.com")!,
             authorAidKeys: { _ in (a, hh) }, irkSigner: { _ in i },
-            screens: screens, roleSigner: { _ in roleKey }, now: { 1_700_000_000_000 })
+            screens: screens, roleSigner: { _ in roleKey }, isAdminDevice: isAdmin,
+            adminSigner: { _ in roleKey }, now: { 1_700_000_000_000 })
+    }
+
+    func test_nonAdminDeviceSendsNoRankOrderAndCannotChangeRanks() async {
+        let access = MockServiceAccessClient()
+        let screens = MockScreensClient()
+        let vm = makeVM(access, screens, roleKey: key(7), isAdmin: false)
+        await vm.load()
+        XCTAssertFalse(vm.canChangeRanks)
+        _ = await vm.addPerson(name: "Club", photo: nil, tier: .group(maxRedemptions: 5, expiresAt: nil), role: .manager)
+        XCTAssertEqual(access.createCalls.count, 1)
+        XCTAssertTrue(screens.setAppMemberRoleCalls.isEmpty, "a member invite never sends a rank order")
+        guard let p = vm.people.first else { return XCTFail("no row") }
+        let ok = await vm.setRole(.master, for: p)
+        XCTAssertFalse(ok)
+        XCTAssertTrue(screens.setAppMemberRoleCalls.isEmpty, "a non-admin device never changes a rank")
+    }
+
+    func test_inviteTierFromTheBox() {
+        let r = AppMembersResponse(
+            serviceId: serviceRef, mode: "open", defaultRole: "member",
+            members: [AppMember(aid: String(repeating: "a", count: 64), role: "member",
+                                grants: [AppMemberGrant(inviteId: "g1", role: "member", tier: "member")])],
+            invites: [AppMemberInviteRole(inviteId: "i1", role: "manager", set: true, tier: "admin"),
+                      AppMemberInviteRole(inviteId: "i2", role: "member", set: false)])
+        XCTAssertEqual(r.inviteTier("i1"), .admin)
+        XCTAssertEqual(r.inviteTier("g1"), .member)
+        XCTAssertNil(r.inviteTier("i2"), "old rows carry no tier")
+        let json = #"{"serviceId":"s","mode":"open","roles":["member"],"defaultRole":"member","members":[{"aid":"aa","role":"member","grants":[{"inviteId":"x","role":"member","tier":"member"}]}],"invites":[{"inviteId":"x","role":"member","set":false,"tier":null}]}"#
+        let decoded = try? JSONDecoder().decode(AppMembersResponse.self, from: Data(json.utf8))
+        XCTAssertEqual(decoded?.members.first?.grants.first?.tier, "member")
+        XCTAssertNil(decoded?.invites.first?.tier)
     }
 
     func test_newInviteWithAnotherRoleSendsASignedOrder_defaultSendsNone() async throws {

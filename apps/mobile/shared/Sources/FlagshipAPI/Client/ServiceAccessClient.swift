@@ -153,12 +153,17 @@ public struct ServiceInviteRow: Equatable, Sendable, Identifiable {
     public let redemptions: Int?
     /// v2 approval policy: "auto" | "manual". nil ⇒ auto (v1 default).
     public let approvalMode: String?
+    /// "admin" | "member": which tier of key signed the create. nil on old rows.
+    public let creatorTier: String?
+    /// The account device id that created it (attribution only, never signed).
+    public let creatorDeviceId: String?
     public var id: String { inviteId }
     public init(
         inviteId: String, serviceRef: String, encryptedBundleHex: String,
         boundAidHex: String?, boundAt: Int64?, createdAt: Int64?, revokedAt: Int64?,
         boundAidsHex: [String] = [], maxRedemptions: Int? = nil, expiresAt: Int64? = nil,
-        redemptions: Int? = nil, approvalMode: String? = nil
+        redemptions: Int? = nil, approvalMode: String? = nil,
+        creatorTier: String? = nil, creatorDeviceId: String? = nil
     ) {
         self.inviteId = inviteId
         self.serviceRef = serviceRef
@@ -172,6 +177,8 @@ public struct ServiceInviteRow: Equatable, Sendable, Identifiable {
         self.expiresAt = expiresAt
         self.redemptions = redemptions
         self.approvalMode = approvalMode
+        self.creatorTier = creatorTier
+        self.creatorDeviceId = creatorDeviceId
     }
     /// True when this invite is a group/multi-use link (lower-trust tier).
     public var isGroup: Bool { maxRedemptions != nil }
@@ -445,7 +452,9 @@ public final class LiveServiceAccessClient: ServiceAccessClient, @unchecked Send
                 maxRedemptions: int("maxRedemptions"),
                 expiresAt: i64("expiresAt"),
                 redemptions: int("redemptions"),
-                approvalMode: r["approvalMode"] as? String
+                approvalMode: r["approvalMode"] as? String,
+                creatorTier: r["creatorTier"] as? String,
+                creatorDeviceId: r["creatorDeviceId"] as? String
             )
         }
     }
@@ -469,7 +478,7 @@ public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Send
     public struct SetModeCall: Sendable { public let serverDomain: String; public let request: [String: String]; public let signatureHex: String }
     public struct RemoveAllowCall: Sendable { public let serverDomain: String; public let request: [String: String]; public let signatureHex: String }
     public struct CreateCall: Sendable { public let username: String; public let request: [String: String]; public let signatureHex: String }
-    public struct RevokeCall: Sendable { public let username: String; public let inviteId: String }
+    public struct RevokeCall: Sendable { public let username: String; public let inviteId: String; public let signatureHex: String }
     public struct RedeemCall: Sendable { public let serverDomain: String; public let secretHex: String; public let visitorAidHex: String }
     public struct AcceptCall: Sendable { public let serverDomain: String; public let accept: [String: String]; public let acceptSigHex: String }
     public struct ListCall: Sendable { public let username: String; public let query: [String: String]; public let signatureHex: String }
@@ -518,6 +527,8 @@ public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Send
     public var removeAllowError: Error?
     /// When true, a created invite shows up in the next list (like `.com`).
     public var listsCreatedInvites = false
+    /// The tier a listed created invite records (`.com` decides it from the signer).
+    public var createdTier: String?
 
     public init() {}
     private func maybeThrow() throws { if let e = nextError { nextError = nil; throw e } }
@@ -561,7 +572,8 @@ public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Send
                 inviteId: id, serviceRef: ref, encryptedBundleHex: (request["encryptedBundle"] as? String) ?? "",
                 boundAidHex: nil, boundAt: nil, createdAt: 1, revokedAt: nil,
                 maxRedemptions: maxN, redemptions: maxN == nil ? nil : 0,
-                approvalMode: request["approvalMode"] as? String))
+                approvalMode: request["approvalMode"] as? String,
+                creatorTier: createdTier, creatorDeviceId: request["deviceId"] as? String))
         }
     }
 
@@ -573,8 +585,8 @@ public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Send
 
     public func revokeInvite(controlBase: URL, username: String, inviteId: String, request: [String: Any], signatureHex: String) async throws {
         try maybeThrow()
-        lock.withLock { _revoke.append(RevokeCall(username: username, inviteId: inviteId)) }
-        rows = rows.map { $0.inviteId == inviteId ? ServiceInviteRow(inviteId: $0.inviteId, serviceRef: $0.serviceRef, encryptedBundleHex: $0.encryptedBundleHex, boundAidHex: $0.boundAidHex, boundAt: $0.boundAt, createdAt: $0.createdAt, revokedAt: 1, boundAidsHex: $0.boundAidsHex, maxRedemptions: $0.maxRedemptions, expiresAt: $0.expiresAt, redemptions: $0.redemptions, approvalMode: $0.approvalMode) : $0 }
+        lock.withLock { _revoke.append(RevokeCall(username: username, inviteId: inviteId, signatureHex: signatureHex)) }
+        rows = rows.map { $0.inviteId == inviteId ? ServiceInviteRow(inviteId: $0.inviteId, serviceRef: $0.serviceRef, encryptedBundleHex: $0.encryptedBundleHex, boundAidHex: $0.boundAidHex, boundAt: $0.boundAt, createdAt: $0.createdAt, revokedAt: 1, boundAidsHex: $0.boundAidsHex, maxRedemptions: $0.maxRedemptions, expiresAt: $0.expiresAt, redemptions: $0.redemptions, approvalMode: $0.approvalMode, creatorTier: $0.creatorTier, creatorDeviceId: $0.creatorDeviceId) : $0 }
     }
 
     public func authorizeKnock(serverDomain: String, authorization: [String: Any], signatureHex: String) async throws -> AuthorizeKnockResult {

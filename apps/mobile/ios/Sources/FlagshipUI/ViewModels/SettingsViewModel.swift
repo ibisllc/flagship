@@ -160,45 +160,16 @@ public final class SettingsViewModel {
             }
             accountDisplayName = decryptedAccountName
 
-            let selfProfiles = Dictionary(uniqueKeysWithValues: directory.selfProfiles.map { ($0.deviceId, $0) })
             let managedProfiles = Dictionary(uniqueKeysWithValues: directory.managedProfiles.map { ($0.deviceId, $0) })
             let grants = Dictionary(grouping: directory.grants, by: \.deviceId)
             let presentations = directory.devices.filter { $0.revokedAt == nil }.map { device in
                 let managed = managedProfiles[device.deviceId]
-                let own = selfProfiles[device.deviceId]
-                let encryptedName: String? = {
-                    if let managed {
-                        return try? AccountMetadata.decrypt(
-                            ciphertext: .init(nonceHex: managed.nonceHex, ciphertextHex: managed.ciphertextHex),
-                            keyBytes: directoryKey,
-                            coordinates: .init(
-                                accountId: username,
-                                deviceId: device.deviceId,
-                                recordType: .deviceManagedProfile,
-                                revision: managed.revision,
-                                keyVersion: managed.keyVersion
-                            )
-                        )
-                    }
-                    guard let own else { return nil }
-                    return try? AccountMetadata.decrypt(
-                        ciphertext: .init(nonceHex: own.nonceHex, ciphertextHex: own.ciphertextHex),
-                        keyBytes: directoryKey,
-                        coordinates: .init(
-                            accountId: username,
-                            deviceId: device.deviceId,
-                            recordType: .deviceSelfProfile,
-                            revision: own.revision,
-                            keyVersion: own.keyVersion
-                        )
-                    )
-                }()
                 let deviceGrants = grants[device.deviceId] ?? []
                 let scopeSet = deviceGrants.reduce(into: Set<String>()) { $0.formUnion($1.scopes) }
-                let fallbackPlatform = Self.platformDisplay(device.platformClass)
                 return DirectoryDevice(
                     deviceId: device.deviceId,
-                    displayName: encryptedName ?? "\(fallbackPlatform) · Device \(device.supportCode)",
+                    displayName: AccountDeviceNames.displayName(
+                        of: device, in: directory, accountId: username, directoryKey: directoryKey),
                     platformClass: device.platformClass,
                     supportCode: device.supportCode,
                     createdAt: device.createdAt,
@@ -407,16 +378,6 @@ public final class SettingsViewModel {
             deviceId: profile.deviceId, signerPubHex: signerPub, requestId: requestId,
             issuedAt: issuedAt, signatureHex: HexUtil.encode(Data(signature))
         ))
-    }
-
-    private static func platformDisplay(_ value: String?) -> String {
-        switch value {
-        case "ios": return "iPhone"
-        case "android": return "Android"
-        case "web": return "Web browser"
-        case "macos": return "Mac"
-        default: return "Device"
-        }
     }
 
     // Legacy alias — older call sites read .controlDevices. Kept so

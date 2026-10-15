@@ -473,13 +473,15 @@ struct FlagshipApp: App {
     private let liveServiceAccess: any ServiceAccessClient
     /// Gym-only (`-smoke-mode -smoke-access-fixture`): a members list on the
     /// demo apps' Access control, signed with fixed keys instead of the Keystore.
+    /// `-smoke-non-admin-device` plays a device without the admin root.
     private let accessFixture = AccessFixtureOnce()
     private var accessFixtureKeys: ServiceAccessKeys? {
         let args = ProcessInfo.processInfo.arguments
         guard args.contains("-smoke-mode"), args.contains("-smoke-access-fixture"), !dev.useLiveClient else { return nil }
         return accessFixture.keys {
             ServiceAccessFixture.seed(access: mockServiceAccess, screens: mockClient,
-                                      serviceIds: ["bright-maple--plants", "bright-maple--wiki", "trent--scratchpad"])
+                                      serviceIds: ["bright-maple--plants", "bright-maple--wiki", "trent--scratchpad"],
+                                      nonAdmin: args.contains("-smoke-non-admin-device"))
         }
     }
     private let liveMailbox: any SecretMailboxClient

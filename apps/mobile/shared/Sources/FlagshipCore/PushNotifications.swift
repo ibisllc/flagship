@@ -74,6 +74,11 @@ public final class PushNotifications: NSObject {
     /// They name no server, so a tap just opens the app, where Home shows it.
     public nonisolated static let accountNoticeCategories: Set<String> = ["cert-alert", "server-registered"]
 
+    /// A non-admin device of this account invited someone to one of its apps
+    /// (sent to admin devices only, content-free). Its `deepLink` opens the
+    /// account activity; older payloads without one still land there.
+    public nonisolated static let inviteCreatedCategory = "invite-created"
+
     /// Where a tapped push leads: its app link when it carries one, else
     /// what its `kind` / `category` names.
     public nonisolated static func link(forPush info: [AnyHashable: Any]) -> DeepLink? {
@@ -89,6 +94,7 @@ public final class PushNotifications: NSObject {
         let category = info["category"] as? String
             ?? (info["aps"] as? [AnyHashable: Any])?["category"] as? String
         if (kind ?? category) == "secret-request" { return .secretRequests }
+        if (kind ?? category) == inviteCreatedCategory { return .accountActivity }
         if let category, accountNoticeCategories.contains(category) { return nil }
         if kind == "vibecode-needs-you", let sessionId = info["sessionId"] as? String, !sessionId.isEmpty {
             return .vibeCodeChat(sessionId: sessionId)

@@ -29,12 +29,21 @@ public enum AppMemberRole: String, Codable, CaseIterable, Sendable, Identifiable
     }
 }
 
+/// Who created an invite, as the box decided from the key that signed it:
+/// `admin` (the admin root) or `member` (a membership key; its joins are
+/// capped at Member). Nil on rows from before tiers were recorded.
+public enum AppInviteTier: String, Codable, Sendable {
+    case admin, member
+}
+
 public struct AppMemberGrant: Codable, Equatable, Sendable {
     public let inviteId: String
     public let role: String
-    public init(inviteId: String, role: String) {
+    public let tier: String?
+    public init(inviteId: String, role: String, tier: String? = nil) {
         self.inviteId = inviteId
         self.role = role
+        self.tier = tier
     }
 }
 
@@ -58,10 +67,12 @@ public struct AppMemberInviteRole: Codable, Equatable, Sendable {
     public let inviteId: String
     public let role: String
     public let set: Bool
-    public init(inviteId: String, role: String, set: Bool) {
+    public let tier: String?
+    public init(inviteId: String, role: String, set: Bool, tier: String? = nil) {
         self.inviteId = inviteId
         self.role = role
         self.set = set
+        self.tier = tier
     }
 }
 
@@ -113,6 +124,13 @@ public struct AppMembersResponse: Codable, Equatable, Sendable {
     public func rowRole(inviteId: String, boundAID: String?) -> String {
         if let m = member(boundAID), !m.grants.contains(where: { $0.inviteId == inviteId }) { return m.role }
         return invites.first { $0.inviteId == inviteId }?.role ?? defaultRole
+    }
+
+    /// The tier the box recorded for an invite, or nil when it has none.
+    public func inviteTier(_ inviteId: String) -> AppInviteTier? {
+        let raw = invites.first { $0.inviteId == inviteId }?.tier
+            ?? members.lazy.flatMap(\.grants).first { $0.inviteId == inviteId }?.tier
+        return raw.flatMap(AppInviteTier.init(rawValue:))
     }
 
     /// The person's other grants, for "also in Family: Viewer".

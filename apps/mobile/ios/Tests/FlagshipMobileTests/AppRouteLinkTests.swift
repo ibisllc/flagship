@@ -23,6 +23,7 @@ final class AppRouteLinkTests: XCTestCase {
             ("account/security?u=bright-maple", .accountSecurity),
             ("account/devices?u=bright-maple", .accountDevices),
             ("account/re-pair?u=bright-maple", .accountDevices),
+            ("account/activity", .accountActivity),
             ("settings/two-factor", .accountSecurity),
             ("install-progress", .createServer),
         ]
@@ -65,6 +66,20 @@ final class AppRouteLinkTests: XCTestCase {
     func test_newDestinations_openTheSettingsTab() {
         XCTAssertEqual(RootShell.tab(for: .accountSecurity, selected: .home), .settings)
         XCTAssertEqual(RootShell.tab(for: .accountDevices, selected: .apps), .settings)
+        XCTAssertEqual(RootShell.tab(for: .accountActivity, selected: .home), .activity)
+    }
+
+    // The Worker's invite-created notice as APNs delivers it.
+    func test_push_inviteCreated_opensTheAccountActivity() {
+        let aps: [AnyHashable: Any] = ["category": "invite-created",
+                                       "alert": ["title": "Flagship", "body": "A device on your account invited someone to one of your apps."]]
+        XCTAssertEqual(
+            PushNotifications.link(forPush: ["aps": aps, "kind": "invite-created",
+                                             "deepLink": "https://\(host)/app/account/activity"]),
+            .accountActivity)
+        XCTAssertEqual(PushNotifications.link(forPush: ["aps": aps]), .accountActivity, "no link: the category still routes")
+        XCTAssertEqual(PushNotifications.link(forPush: ["category": "invite-created", "kind": "invite-created"]), .accountActivity)
+        XCTAssertEqual(PushNotifications.link(forPush: ["flagship_url": "flagship://account/activity"]), .accountActivity)
     }
 
     // MARK: - Push payloads
