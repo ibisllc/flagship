@@ -39,6 +39,11 @@ object BoxProxyProtocol {
     const val PATH = "/api/screens/outbound-proxy"
     const val MAX_SKEW_MS = 10 * 60_000L
     val KINDS = listOf("none", "socks5", "http")
+    const val PRO_NOTE = "An outbound proxy is part of Pro."
+
+    /** Free accounts can't set a proxy; an unknown plan doesn't block (the box
+     *  checks too, once .com has told it the plan). */
+    fun allowedForTier(tier: String?): Boolean = tier != "free"
 
     private val HEX64 = Regex("^[0-9a-f]{64}$")
     private val HEX128 = Regex("^[0-9a-f]{128}$")
