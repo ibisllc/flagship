@@ -358,6 +358,7 @@
 //       every fourth round once it has failed too (lib/liveSync.js).
 //  v154: a server's Home row no longer lists "leads <app>"; only the leader is marked.
 //  v155: finishing the first-run wizard enters Home (it showed the pre-sign-in panel until a reload).
+//  v174: feat/custom-names only: feat/marketplace's v172 plus the paid name change (v173 is feat/custom-domains').
 //  v172: feat/marketplace only: feat/UX's shell (v171) plus the marketplace, tier status, allowance, install, developer views and the Pro "Separate list on each server" switch (lib/listScope.js); a version above its parent's, bump past the parent's on rebase.
 //  v171: app chat requests from other owners' apps wait under Activity and ask in a sheet (Allow,
 //       Always allow, Deny, each owner-signed; Ask me each time ends an Always allow: lib/chatAlerts.js),
@@ -579,6 +580,7 @@ const OPTIONAL_SHELL = [
   "/lib/allowance.js",
   "/lib/marketplaceLlmKey.js",
   "/lib/proBanner.js",
+  "/lib/nameDibs.js",
   "/views/bootstrap.js",
   "/views/wizard.js",
   "/views/unlock.js",
@@ -600,6 +602,7 @@ const OPTIONAL_SHELL = [
   "/views/tier-status.js",
   "/views/marketplace.js",
   "/views/developer.js",
+  "/views/name-dibs.js",
   "/views/vibe-code.js",
   "/views/edit-service.js",
   "/views/service-env.js",
