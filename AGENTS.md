@@ -493,7 +493,9 @@ allowances (1M / 5M / 20M a month) are placeholders. `feat/custom-names`'
   `https://<control apex>/<path>` (Worker `APP_LINK_PATHS`: join, share,
   transfer, qr, remote, builder, access, invite-accept, plus `/app/<route>` for
   any other app screen: widgets, Siri intents, push `deepLink`s, e.g.
-  `/app/account/security`); a bearer secret rides the fragment (share).
+  `/app/account/security`). Params ride the fragment, which browsers never
+  send, whenever they are a secret or name a server, app or person (share,
+  access, invite-accept); the query otherwise.
   Nothing emits `flagship://` any more (MCP resource names aside, which aren't
   links); parsers still read the old forms. The old desktop QR login
   (`login.html`, `/deck`, `flagship://desktop`, `/api/desktop/pair`,

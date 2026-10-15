@@ -41,7 +41,7 @@ sealed interface InviteRedeemPhase {
     data object Redeeming : InviteRedeemPhase
     data class Done(val serviceRef: String, val firstBind: Boolean) : InviteRedeemPhase
     /** MANUAL-approve: redeem accepted but pending the author's confirmation. The
-     *  friend must send [replyLink] (an `https://flagshipserver.com/invite-accept?…` link + QR) back to
+     *  friend must send [replyLink] (an `https://flagshipserver.com/invite-accept#…` link + QR) back to
      *  the author through the same private channel; the author finalizes. */
     data class AwaitingApproval(val serviceRef: String, val replyLink: String, val replyBody: String) : InviteRedeemPhase
     data class Failed(val message: String) : InviteRedeemPhase
@@ -125,7 +125,7 @@ class InviteRedeemViewModel(
 
     /** Build the acceptance reply for the MANUAL-approve loop: sign an
      *  AcceptServiceInvite with the SAME (contact) AID and surface the canonical
-     *  `https://<control>/invite-accept?…` reply (link + QR) carrying ONLY {accept,
+     *  `https://<control>/invite-accept#…` reply (link + QR) carrying ONLY {accept,
      *  acceptSig}. The box-relayed create is used only to learn what to sign over
      *  (inviteId / serviceRef) — it is NOT shipped (the author's box fetches the
      *  signed create from .com at finalize). */

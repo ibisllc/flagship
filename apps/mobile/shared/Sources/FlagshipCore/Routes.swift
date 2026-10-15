@@ -178,7 +178,7 @@ public enum SettingsRoute: Hashable, Sendable {
     /// (online/offline) and a Stop (close + remove). Reached from Settings.
     case securedSessions
     /// Web-experience gating — "Process URL": a paste field that takes a
-    /// `https://flagshipserver.com/access?…` link (or the raw "Get link" string) from a
+    /// `https://flagshipserver.com/access#…` link (or the raw "Get link" string) from a
     /// box's knock page and routes it into the same KnockAuthorize flow.
     case processUrl
     /// Last-device account-DEATH ceremony (docs/account-deletion-and-name-reclaim.md

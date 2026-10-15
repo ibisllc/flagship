@@ -70,21 +70,11 @@
           },
           {
             "/": "/access",
-            "?": {
-              "server": "?*",
-              "ref": "?*",
-              "page": "?*"
-            },
-            "comment": "App sign-in. A private app's knock page links /access?server=&svc=&ref=&page= to sign that browser in."
+            "comment": "App sign-in. A private app's knock page links /access#server=&svc=&ref=&page= (the fragment keeps the server and app out of our logs) to sign that browser in."
           },
           {
             "/": "/invite-accept",
-            "?": {
-              "server": "?*",
-              "iid": "?*",
-              "sig": "?*"
-            },
-            "comment": "An invitee's acceptance reply, opened by the app's owner to grant access."
+            "comment": "An invitee's acceptance reply, /invite-accept#server=&iid=&ref=&aid=&sig=&at=, opened by the app's owner to grant access."
           },
           {
             "/": "/app/*",

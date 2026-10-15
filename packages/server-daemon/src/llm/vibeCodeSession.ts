@@ -369,6 +369,21 @@ export interface VibeCodeSessionSnapshot {
   cancelled: boolean;
 }
 
+const MAX_MISROUTED_TOOLS = 2;
+const FILE_CONTENT_KEYS = ["content", "contents", "text", "code", "file_content", "body"];
+
+/** The file a misrouted tool call carries, or null when it doesn't look like one. */
+export function misroutedFileContent(name: string, input: Record<string, unknown>): string | null {
+  if (!/^[A-Za-z0-9_.\-/]+$/.test(name) || name.startsWith("/") || name.includes("..")) return null;
+  if (!/\.[A-Za-z0-9]{1,8}$/.test(name) && !name.includes("/") && name !== "Dockerfile") return null;
+  for (const k of FILE_CONTENT_KEYS) {
+    const v = input[k];
+    if (typeof v === "string") return v;
+  }
+  const strings = Object.values(input).filter((v): v is string => typeof v === "string");
+  return strings.length === 1 ? strings[0]! : null;
+}
+
 export const INTERRUPTED_REASON = "The server restarted while this build was running. Its files are kept; deploy again, or start a new build.";
 
 /**
@@ -398,6 +413,10 @@ export class VibeCodeSession extends EventEmitter {
   private readonly pendingTools = new Map<string, PendingToolUse>();
   /** W10 — owner-notify hook fired on awaiting-tool-response transition. */
   private notifyOwner: NotifyOwnerCallback | null = null;
+  /** Calls to tools the chat doesn't have, this session (bounded retries). */
+  private misroutedTools = 0;
+  /** The hidden correction to send once the turn that misrouted ends. */
+  private misroutedNudge: string | null = null;
 
   constructor(args: {
     username: string;
@@ -530,6 +549,11 @@ export class VibeCodeSession extends EventEmitter {
    */
   receiveToolUse(args: { id: string; name: string; input: Record<string, unknown> }): void {
     if (this.cancelled) return;
+    args = { ...args, name: args.name.replace(/^functions\./, "") };
+    if (args.name !== "requestEnvVar" && args.name !== "talkToUser") {
+      this.receiveMisroutedTool(args);
+      return;
+    }
     const wasStreaming = this.meta.status === "streaming";
     this.pendingTools.set(args.id, {
       id: args.id,
@@ -577,23 +601,47 @@ export class VibeCodeSession extends EventEmitter {
       } as VibeCodeEvent);
       return;
     }
-    if (args.name === "talkToUser") {
-      const message =
-        typeof args.input.message === "string" ? args.input.message : "";
-      this.emit("event", {
-        kind: "talk-to-user",
-        id: args.id,
-        message,
-      } as VibeCodeEvent);
+    const message =
+      typeof args.input.message === "string" ? args.input.message : "";
+    this.emit("event", {
+      kind: "talk-to-user",
+      id: args.id,
+      message,
+    } as VibeCodeEvent);
+  }
+
+  /**
+   * Some models (seen with Qwen3.6 on an edit) "call" a file as a tool,
+   * e.g. `flagship.app.json({content})`, then stop to wait for a result that
+   * never comes, which used to leave the chat stuck. A file is taken as if it
+   * had been written as a block; either way the model is told, in a hidden
+   * tool result, to write files as blocks and carry on. Past the retry bound
+   * the session fails with a reason the owner can act on.
+   */
+  private receiveMisroutedTool(args: { id: string; name: string; input: Record<string, unknown> }): void {
+    this.misroutedTools++;
+    if (this.misroutedTools > MAX_MISROUTED_TOOLS) {
+      this.fail(`The AI kept calling a tool that doesn't exist ('${args.name}'). Send your message again, or pick another model.`, true);
       return;
     }
-    // Unknown tool — fail closed: surface an error so the orchestrator
-    // doesn't silently dangle in awaiting-tool-response.
-    this.emit("event", {
-      kind: "error",
-      message: `unknown tool '${args.name}' invoked by model`,
-      recoverable: true,
-    } as VibeCodeEvent);
+    const content = misroutedFileContent(args.name, args.input);
+    if (content !== null) {
+      this.feedAssistant(`\n=== ${args.name} ===\n${content.endsWith("\n") ? content : `${content}\n`}`);
+    }
+    this.misroutedNudge =
+      `[tool_result:${args.id}] There is no tool named '${args.name}'. ` +
+      (content !== null ? `Its content was kept as the file ${args.name}. ` : "") +
+      "Write files in your reply as `=== path ===` blocks, never as tool calls. " +
+      "Continue with the rest of the app (repeat any file you had started) and end with `=== END ===`.";
+  }
+
+  /** The hidden correction for a misrouted tool, once; the driver then resumes the model. */
+  takeMisroutedNudge(): boolean {
+    const nudge = this.misroutedNudge;
+    this.misroutedNudge = null;
+    if (nudge === null || this.cancelled || this.meta.status !== "streaming") return false;
+    this.pushUserMessage(nudge);
+    return true;
   }
 
   /** Resolve a pending requestEnvVar ack. The payload is VALUE-FREE by type. */

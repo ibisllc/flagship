@@ -132,7 +132,7 @@ describe("web-experience gating — knock page", () => {
     expect(holder).toMatch(/^[0-9a-f]+$/);
     expect(res!.headers["set-cookie"]).toContain("HttpOnly");
     // Embedded deeplink with the right params.
-    expect(html).toContain("https://flagshipserver.com/access?");
+    expect(html).toContain("https://flagshipserver.com/access#");
     expect(html).toContain(`ref=${SERVICE}`);
     expect(pageIdFromHtml(html)).toMatch(/^[0-9a-f]{32}$/);
   });

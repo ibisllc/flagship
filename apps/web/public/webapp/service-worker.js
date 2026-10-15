@@ -165,7 +165,8 @@
 //       apps are members-only; the owner's unlock opt-in says what it hands over.
 //  v79: notifications that name an app screen (https://<apex>/app/<route>)
 //       open the matching webapp view; the old desktop-pairing view
-//       (views/pair.js, flagship://desktop QR) is gone.
+//       (views/pair.js, flagship://desktop QR) is gone; invite replies and
+//       app sign-in links carry their params in the fragment.
 const SHELL_VERSION = "v79";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 

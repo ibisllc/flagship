@@ -80,8 +80,9 @@ public enum DeepLink: Equatable, Sendable {
     /// POSTs the acceptance to their box. Carries the box host, the inviteId, the
     /// serviceRef, the consumer's contact AID, the acceptance signature, and the
     /// signed `acceptedAt`:
-    /// `https://flagshipserver.com/invite-accept?server=&iid=&ref=&aid=&sig=&at=`
-    /// (older apps sent `flagship://invite-accept?…`).
+    /// `https://flagshipserver.com/invite-accept#server=&iid=&ref=&aid=&sig=&at=`
+    /// (the fragment never reaches `.com`; earlier links used `?…`, older apps
+    /// `flagship://invite-accept?…`).
     case inviteAccept(serverDomain: String, inviteId: String, serviceRef: String, contactAidHex: String, acceptSigHex: String, acceptedAt: Int64)
 
     /// Web-experience gating — QR-login for a restricted service's WEBSITE
@@ -93,8 +94,9 @@ public enum DeepLink: Equatable, Sendable {
     /// only), the `ref` serviceRef (a `<creator>--<slug>` the box keys its
     /// allow-list on), and the single-use `page` id (the box-minted pageId the
     /// authorization signature binds). Reachable two ways:
-    ///   - the box's `https://flagshipserver.com/access?server=…&svc=…&ref=…&page=…`
-    ///     link (older boxes: `flagship://access?…`), as the same-device "Access
+    ///   - the box's `https://flagshipserver.com/access#server=…&svc=…&ref=…&page=…`
+    ///     link (the fragment never reaches `.com`; older boxes: `/access?…` or
+    ///     `flagship://access?…`), as the same-device "Access
     ///     site" button and the cross-device QR, and
     ///   - Settings → "Process URL", which pastes either that deeplink OR the
     ///     raw "Get link" string into the same handler.
@@ -171,12 +173,11 @@ public enum DeepLink: Equatable, Sendable {
     public static func parse(_ url: URL) -> DeepLink? {
         if let legacy = legacyForm(ofAppRoute: url) { return parse(legacy) }
         if isControlHostLink(url) {
-            let params = queryParams(url)
             switch trimmedPath(url) {
             case "/remote":   return remoteLink(url)
             case "/builder":  return builderLink(url)
-            case "/access":   return accessLink(params)
-            case "/invite-accept": return inviteAcceptLink(params)
+            case "/access":   return accessLink(fragmentOrQueryParams(url))
+            case "/invite-accept": return inviteAcceptLink(fragmentOrQueryParams(url))
             default: break
             }
         }
@@ -355,6 +356,31 @@ public enum DeepLink: Equatable, Sendable {
             }
     }
 
+    /// `#k=v&…` read the way `URLSearchParams` writes it (`+` is a space).
+    static func fragmentParams(_ url: URL) -> [String: String] {
+        guard let frag = URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedFragment,
+              !frag.isEmpty else { return [:] }
+        func decode(_ s: Substring) -> String {
+            let spaced = s.replacingOccurrences(of: "+", with: " ")
+            return spaced.removingPercentEncoding ?? spaced
+        }
+        var out: [String: String] = [:]
+        for pair in frag.split(separator: "&") {
+            let kv = pair.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+            guard let k = kv.first, !k.isEmpty else { continue }
+            out[decode(k)] = kv.count > 1 ? decode(kv[1]) : ""
+        }
+        return out
+    }
+
+    /// The `/access` and `/invite-accept` links carry their params in the
+    /// fragment, which a browser never sends to the control host. Links
+    /// minted before that carry them in the query.
+    static func fragmentOrQueryParams(_ url: URL) -> [String: String] {
+        let frag = fragmentParams(url)
+        return frag.isEmpty ? queryParams(url) : frag
+    }
+
     private static func remoteLink(_ url: URL) -> DeepLink? {
         RemoteApprovalLink.parse(url.absoluteString) != nil
             ? .companionDockApproval(link: url.absoluteString) : nil
@@ -365,7 +391,7 @@ public enum DeepLink: Equatable, Sendable {
             ? .builderPair(link: url.absoluteString) : nil
     }
 
-    /// The knock authorization (`access?server=<fqdn>&svc=<label>&ref=<serviceRef>&page=<pageId>`):
+    /// The knock authorization (`access#server=<fqdn>&svc=<label>&ref=<serviceRef>&page=<pageId>`):
     /// the box's knock page hands it to a browser and THIS phone authorizes it.
     /// `svc` is display-only and may be empty; server/ref/page are required.
     private static func accessLink(_ params: [String: String]) -> DeepLink? {
@@ -489,13 +515,15 @@ public enum ServiceInviteLinks {
     }
 
     /// The CONSUMER's manual-approve acceptance REPLY link:
-    /// `https://flagshipserver.com/invite-accept?server=&iid=&ref=&aid=&sig=&at=`.
-    /// The author opens it to finalize the bind.
+    /// `https://flagshipserver.com/invite-accept#server=&iid=&ref=&aid=&sig=&at=`.
+    /// The author opens it to finalize the bind; the fragment keeps the
+    /// server, app and signature from `.com` when it opens in a browser.
     public static func acceptReplyLink(serverDomain: String, inviteId: String, serviceRef: String, contactAidHex: String, acceptSigHex: String, acceptedAt: Int64) -> String? {
-        func esc(_ s: String) -> String { s.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? s }
+        let unreserved = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+        func esc(_ s: String) -> String { s.addingPercentEncoding(withAllowedCharacters: unreserved) ?? s }
         let host = serverDomain.trimmingCharacters(in: CharacterSet(charactersIn: "/ "))
         guard !host.isEmpty, !inviteId.isEmpty, !serviceRef.isEmpty else { return nil }
-        return "https://\(Endpoints.controlHost)/invite-accept?server=\(esc(host))&iid=\(esc(inviteId))&ref=\(esc(serviceRef))&aid=\(contactAidHex.lowercased())&sig=\(acceptSigHex.lowercased())&at=\(acceptedAt)"
+        return "https://\(Endpoints.controlHost)/invite-accept#server=\(esc(host))&iid=\(esc(inviteId))&ref=\(esc(serviceRef))&aid=\(contactAidHex.lowercased())&sig=\(acceptSigHex.lowercased())&at=\(acceptedAt)"
     }
 }
 

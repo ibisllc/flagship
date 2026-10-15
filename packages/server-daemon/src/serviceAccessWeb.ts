@@ -220,7 +220,7 @@ export function buildServiceAccessWeb(opts: ServiceAccessWebOptions): ServiceAcc
     const label = host.endsWith(suffix) ? host.slice(0, host.length - suffix.length) : "";
     const ua = req.headers["user-agent"] ?? "";
     const { pageId, holderToken } = knocks.mint(serviceRef, ua, now(), knockTtlMs);
-    const deeplink = `${controlBaseUrl}/access?${new URLSearchParams({
+    const deeplink = `${controlBaseUrl}/access#${new URLSearchParams({
       server: opts.serverId,
       svc: label,
       ref: serviceRef,

@@ -105,7 +105,7 @@ class InviteRedeemViewModelTest {
         p as InviteRedeemPhase.AwaitingApproval
         assertEquals("alice--notes", p.serviceRef)
         // Canonical reply form (cross-client) carrying ONLY {accept, acceptSig}.
-        assertTrue(p.replyLink.startsWith("https://flagshipserver.com/invite-accept?"))
+        assertTrue(p.replyLink.startsWith("https://flagshipserver.com/invite-accept#"))
         // The reply decodes back to a verifiable acceptance bound to THIS contact AID.
         val acc = InviteLink.decodeAcceptance(p.replyLink)!!
         assertEquals(iid, acc.accept["inviteId"]!!.jsonPrimitive.content)

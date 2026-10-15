@@ -788,7 +788,7 @@ describe("webapp serviceInvite — wire helpers", () => {
   it("parseAccessDeepLink parses the /access app link and the older flagship://access form (tolerating pasted whitespace) + rejects junk", async () => {
     const si = await loadServiceInvite();
     const query = `server=${encodeURIComponent(VECTORS.serverId)}&svc=notes&ref=${encodeURIComponent(VECTORS.serviceRef)}&page=${VECTORS.knock.pageId}`;
-    const link = `https://flagshipserver.com/access?${query}`;
+    const link = `https://flagshipserver.com/access#${query}`;
     const want = {
       serverId: VECTORS.serverId,
       svc: "notes",
@@ -797,8 +797,11 @@ describe("webapp serviceInvite — wire helpers", () => {
     };
     expect(si.parseAccessDeepLink(`  \n${link}\t `)).toEqual(want);
     expect(si.parseAccessDeepLink(`flagship://access?${query}`)).toEqual(want);
+    // Links minted before the fragment form carried the params in the query.
+    expect(si.parseAccessDeepLink(`https://flagshipserver.com/access?${query}`)).toEqual(want);
+    expect(si.parseAccessDeepLink("https://flagshipserver.com/access#server=x&svc=s")).toBeNull();
     // The open-in-app page hands the webapp its own copy of the link.
-    expect(si.parseAccessDeepLink(`https://webapp.flagshipserver.com/access/?${query}`)).toEqual(want);
+    expect(si.parseAccessDeepLink(`https://webapp.flagshipserver.com/access/#${query}`)).toEqual(want);
     expect(si.parseAccessDeepLink(`https://evil.example/access?${query}`)).toBeNull();
     expect(si.parseAccessDeepLink(`http://flagshipserver.com/access?${query}`)).toBeNull();
     expect(si.parseAccessDeepLink(`https://flagshipserver.com/accessx?${query}`)).toBeNull();
@@ -874,7 +877,7 @@ describe("webapp serviceInvite — wire helpers", () => {
       { inviteId: VECTORS.accept.inviteId, serviceRef: VECTORS.accept.serviceRef, contactAID: bytesToHex(contact.publicKey), acceptedAt: VECTORS.accept.acceptedAt },
       bytesToHex(acceptSig),
     );
-    expect(reply.startsWith("https://flagshipserver.com/invite-accept?")).toBe(true);
+    expect(reply.startsWith("https://flagshipserver.com/invite-accept#")).toBe(true);
     // AUTHOR parses the reply (tolerating pasted whitespace).
     const parsed = si.parseAcceptReply(`  \n${reply}\t `);
     expect(parsed.serverDomain).toBe("home.alice.flagship.services");
@@ -1034,7 +1037,7 @@ describe("webapp serviceInvite — wire helpers", () => {
     const SIG = "1f".repeat(64);
     const AT = 1700006000000;
     const QUERY = `server=${SERVER}&iid=${IID}&ref=${REF}&aid=${AID}&sig=${SIG}&at=${AT}`;
-    const FROZEN_REPLY = `https://flagshipserver.com/invite-accept?${QUERY}`;
+    const FROZEN_REPLY = `https://flagshipserver.com/invite-accept#${QUERY}`;
     // build === the frozen string.
     expect(
       si.buildAcceptReply(SERVER, { inviteId: IID, serviceRef: REF, contactAID: AID, acceptedAt: AT }, SIG),
@@ -1047,8 +1050,10 @@ describe("webapp serviceInvite — wire helpers", () => {
     });
     // Tolerates surrounding whitespace + an https:// prefix on the server param.
     expect(si.parseAcceptReply(`  ${FROZEN_REPLY}  `)!.accept.inviteId).toBe(IID);
-    // Replies from older apps (`flagship://invite-accept?…`) still parse.
+    // Replies from older apps (`flagship://invite-accept?…`) and from before
+    // the fragment form (`…/invite-accept?…`) still parse.
     expect(si.parseAcceptReply(`flagship://invite-accept?${QUERY}`)!.accept.inviteId).toBe(IID);
+    expect(si.parseAcceptReply(`https://flagshipserver.com/invite-accept?${QUERY}`)!.accept.inviteId).toBe(IID);
     // Only our control apex: a lookalike host or path is not a reply.
     expect(si.parseAcceptReply(`https://evil.example/invite-accept?${QUERY}`)).toBeNull();
     expect(si.parseAcceptReply(`https://flagshipserver.com/invite?${QUERY}`)).toBeNull();

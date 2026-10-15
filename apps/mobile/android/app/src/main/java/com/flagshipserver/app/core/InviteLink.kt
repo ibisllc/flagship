@@ -12,8 +12,9 @@
 //
 //  2. The ACCEPTANCE reply (MANUAL-approve, tier 2). The friend's app emits the
 //     canonical cross-client App Link
-//       https://flagshipserver.com/invite-accept?server=&iid=&ref=&aid=&sig=&at=
-//     (older apps emitted the same query as `flagship://invite-accept?…`)
+//       https://flagshipserver.com/invite-accept#server=&iid=&ref=&aid=&sig=&at=
+//     (in the fragment, which a browser without the app never sends; links from
+//     before carry the same as a `?query`, older apps `flagship://invite-accept?…`)
 //     carrying ONLY { accept, acceptSig } — the friend's contact-AID-signed
 //     AcceptServiceInvite + the box host. It carries NO create: the AUTHOR's box
 //     FETCHES the owner's signed create from .com by inviteId at finalize, so the
@@ -104,7 +105,7 @@ object InviteLink {
     )
 
     /** FRIEND: build the canonical acceptance reply App Link
-     *  `https://<control>/invite-accept?server=&iid=&ref=&aid=&sig=&at=` (cross-client;
+     *  `https://<control>/invite-accept#server=&iid=&ref=&aid=&sig=&at=` (cross-client;
      *  identical on webapp/iOS). Carries ONLY {accept, acceptSig}. [accept] is the
      *  `{inviteId, serviceRef, contactAID, acceptedAt}` object. */
     fun buildAcceptReply(serverDomain: String, accept: JsonObject, acceptSigHex: String): String {
@@ -112,13 +113,13 @@ object InviteLink {
         val ref = accept["serviceRef"]?.jsonPrimitive?.contentOrNull ?: ""
         val aid = accept["contactAID"]?.jsonPrimitive?.contentOrNull ?: ""
         val at = accept["acceptedAt"]?.jsonPrimitive?.contentOrNull ?: ""
-        return "https://${Endpoints.controlHost}/invite-accept?server=$serverDomain" +
+        return "https://${Endpoints.controlHost}/invite-accept#server=$serverDomain" +
             "&iid=${iid.lowercase()}&ref=$ref&aid=${aid.lowercase()}&sig=${acceptSigHex.lowercase()}&at=$at"
     }
 
     /** Decode a pasted/scanned acceptance reply. Parses the canonical
-     *  `https://<control>/invite-accept?…` App Link or its older
-     *  `flagship://invite-accept?…` twin, OR (back-compat) the legacy
+     *  `https://<control>/invite-accept#…` App Link (or its earlier `?…` form), its
+     *  older `flagship://invite-accept?…` twin, OR (back-compat) the legacy
      *  `flagship://accept?b=<base64url({v,accept,acceptSig,create,createSig})>`
      *  bundle (the create is ignored — the box fetches it). Returns null on
      *  anything malformed. */
@@ -137,8 +138,17 @@ object InviteLink {
             uri.path?.trimEnd('/') == "/invite-accept"
     }
 
+    /** The fragment's params when it has any, else the query's. */
+    private fun linkParams(raw: String): String {
+        val fragment = raw.substringAfter('#', "")
+        if ('=' in fragment) return fragment
+        return raw.substringBefore('#').substringAfter('?', "")
+    }
+
     private fun decodeCanonical(raw: String): Acceptance? {
-        fun param(k: String): String? = Regex("[?&]$k=([^&]*)").find(raw)?.groupValues?.get(1)
+        val params = linkParams(raw)
+        fun param(k: String): String? = Regex("(?:^|&)$k=([^&]*)").find(params)?.groupValues?.get(1)
+            ?.let { runCatching { java.net.URLDecoder.decode(it, "UTF-8") }.getOrNull() }
         val iid = param("iid")?.lowercase() ?: return null
         val ref = param("ref") ?: return null
         val aid = param("aid")?.lowercase() ?: return null

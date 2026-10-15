@@ -7,7 +7,7 @@ import FlagshipCore
 /// Author-side MANUAL-approve finalize (docs/service-access-gating.md, "## v2
 /// hardening", tier 2).
 ///
-/// The CONSUMER sent back a reply link (`https://flagshipserver.com/invite-accept?…`) carrying
+/// The CONSUMER sent back a reply link (`https://flagshipserver.com/invite-accept#…`) carrying
 /// their contact-AID-signed `AcceptServiceInvite`. THIS phone is the AUTHOR: it
 /// POSTs ONLY `{accept, acceptSig}` to the AUTHOR's box, which FETCHES the owner's
 /// signed create from `.com` by the acceptance's inviteId (STK-signed), verifies

@@ -256,6 +256,7 @@ export function buildVibeCodeStartStreaming(
     };
 
     await streamTurn(args.harness, credential, request, session);
+    if (session.takeMisroutedNudge()) await buildVibeCodeResumeStreaming(args)(s.sessionId);
   };
 }
 
@@ -396,5 +397,6 @@ export function buildVibeCodeResumeStreaming(
     };
 
     await streamTurn(args.harness, credential, request, session);
+    if (session.takeMisroutedNudge()) await resumeStreaming(sessionId);
   };
 }

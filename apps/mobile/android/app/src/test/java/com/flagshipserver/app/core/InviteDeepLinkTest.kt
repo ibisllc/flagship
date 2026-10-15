@@ -161,6 +161,29 @@ class InviteDeepLinkTest {
         assertNull(DeepLink.parse(Uri.parse("flagship://access?server=home.alice.flagship.services&ref=alice--notes")))
     }
 
+    @Test fun accessFragmentLinkParses() {
+        val expected = DeepLink.AuthorizeKnock("home.alice.flagship.services", "notes", "alice--notes", "abc123")
+        val f = "server=home.alice.flagship.services&svc=notes&ref=alice--notes&page=abc123"
+        for (raw in listOf(
+            "https://flagshipserver.com/access#$f",
+            "https://flagshipserver.com/access/#$f",
+            "https://www.flagshipserver.com/access#$f",
+            "https://flagshipserver.com/app/access#$f",
+        )) {
+            assertEquals(raw, expected, DeepLink.parse(Uri.parse(raw)))
+            assertEquals(raw, expected, AppLink.resolve(Uri.parse(raw)))
+        }
+        // URLSearchParams-encoded: %20 and + both decode to a space.
+        val spaced = DeepLink.AuthorizeKnock("home.alice.flagship.services", "my notes", "alice--notes", "abc123")
+        assertEquals(spaced, DeepLink.parse(Uri.parse("https://flagshipserver.com/access#${f.replace("svc=notes", "svc=my%20notes")}")))
+        assertEquals(spaced, DeepLink.parse(Uri.parse("https://flagshipserver.com/access#${f.replace("svc=notes", "svc=my+notes")}")))
+        // The fragment wins over a query; an empty fragment falls back to the query.
+        assertEquals(expected, DeepLink.parse(Uri.parse("https://flagshipserver.com/access?server=x&ref=y&page=z#$f")))
+        assertEquals(expected, DeepLink.parse(Uri.parse("https://flagshipserver.com/access?$f#")))
+        assertNull(DeepLink.parse(Uri.parse("https://flagshipserver.com/access#server=home.alice.flagship.services&ref=alice--notes")))
+        assertNull(DeepLink.parse(Uri.parse("https://evil.example/access#$f")))
+    }
+
     @Test fun accessAppLinkParsesLikeTheScheme() {
         val expected = DeepLink.AuthorizeKnock("home.alice.flagship.services", "notes", "alice--notes", "abc123")
         for (raw in listOf(
@@ -188,6 +211,9 @@ class InviteDeepLinkTest {
 
     @Test fun inviteAcceptParsesBothForms() {
         for (raw in listOf(
+            "https://flagshipserver.com/invite-accept#$acceptQuery",
+            "https://flagshipserver.com/invite-accept/#$acceptQuery",
+            "https://www.flagshipserver.com/invite-accept#$acceptQuery",
             "https://flagshipserver.com/invite-accept?$acceptQuery",
             "https://flagshipserver.com/invite-accept/?$acceptQuery",
             "https://www.flagshipserver.com/invite-accept?$acceptQuery",
@@ -202,6 +228,8 @@ class InviteDeepLinkTest {
         assertNull(DeepLink.parse(Uri.parse("https://flagshipserver.com/invite-accept?${acceptQuery.substringAfter("&")}")))
         assertNull(DeepLink.parse(Uri.parse("https://flagshipserver.com/invite-accept?server=h&iid=short")))
         assertNull(DeepLink.parse(Uri.parse("https://evil.example/invite-accept?$acceptQuery")))
+        assertNull(DeepLink.parse(Uri.parse("https://flagshipserver.com/invite-accept#${acceptQuery.substringAfter("&")}")))
+        assertNull(DeepLink.parse(Uri.parse("https://evil.example/invite-accept#$acceptQuery")))
     }
 
     // ── builder — Flagship Studio's pairing QR ─────────────────────────────

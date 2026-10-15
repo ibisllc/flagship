@@ -3,7 +3,7 @@ import FlagshipAPI
 import FlagshipCore
 
 /// Visitor-side knock-authorize screen (docs/service-access-gating.md,
-/// "Web-experience gating"). Reached from an `https://flagshipserver.com/access?…` link (the
+/// "Web-experience gating"). Reached from an `https://flagshipserver.com/access#…` link (the
 /// box's knock page / QR) or a pasted "Process URL". Shows "Open <app> on
 /// <server>?" with Open / Cancel; Open signs the authorization behind the
 /// biometric gate (global AID on our own servers, the invite's contact AID on a

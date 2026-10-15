@@ -90,7 +90,7 @@ class InviteLinkTest {
         }
         // The canonical reply carries ONLY {accept, acceptSig} — no create.
         val reply = InviteLink.buildAcceptReply("home.alice.flagship.services", accept, "a".repeat(128))
-        assertTrue(reply.startsWith("https://flagshipserver.com/invite-accept?"))
+        assertTrue(reply.startsWith("https://flagshipserver.com/invite-accept#"))
         val acc = InviteLink.decodeAcceptance(reply)!!
         assertEquals("home.alice.flagship.services", acc.serverDomain)
         assertEquals(iid, acc.accept["inviteId"]!!.jsonPrimitive.content)
@@ -109,7 +109,7 @@ class InviteLinkTest {
         val aid = "086abb1c191c86e7cb68d4736f73c68f8b0c55c2a3fafa6a2c770fc308ab242a"
         val sig = "1f".repeat(64)
         val at = 1_700_006_000_000L
-        val frozen = "https://flagshipserver.com/invite-accept?server=$server&iid=$iid&ref=$ref&aid=$aid&sig=$sig&at=$at"
+        val frozen = "https://flagshipserver.com/invite-accept#server=$server&iid=$iid&ref=$ref&aid=$aid&sig=$sig&at=$at"
         val accept = buildJsonObject {
             put("inviteId", JsonPrimitive(iid))
             put("serviceRef", JsonPrimitive(ref))
@@ -121,6 +121,7 @@ class InviteLinkTest {
         assertEquals(iid, acc.accept["inviteId"]!!.jsonPrimitive.content)
         assertEquals(aid, acc.accept["contactAID"]!!.jsonPrimitive.content)
         assertEquals(sig, acc.acceptSigHex)
+        assertEquals(server, acc.serverDomain)
     }
 
     /** Older apps sent the same reply as `flagship://invite-accept?…`; it still decodes,
@@ -128,6 +129,12 @@ class InviteLinkTest {
     @Test fun decodeAcceptanceAcceptsOlderAndVariantForms() {
         val q = "server=home.alice.flagship.services&iid=${"e".repeat(64)}&ref=alice-notes&aid=${"c".repeat(64)}&sig=${"1f".repeat(64)}&at=1700"
         for (raw in listOf(
+            "https://flagshipserver.com/invite-accept#$q",
+            "https://flagshipserver.com/invite-accept/#$q",
+            "https://www.flagshipserver.com/invite-accept#$q",
+            // Links minted in the ?query form before the fragment move.
+            "https://flagshipserver.com/invite-accept?$q",
+            "https://flagshipserver.com/invite-accept?$q#",
             "flagship://invite-accept?$q",
             "https://flagshipserver.com/invite-accept/?$q",
             "https://www.flagshipserver.com/invite-accept?$q",
@@ -137,7 +144,22 @@ class InviteLinkTest {
             assertEquals(raw, "1f".repeat(64), acc?.acceptSigHex)
         }
         assertNull(InviteLink.decodeAcceptance("https://evil.example/invite-accept?$q"))
+        assertNull(InviteLink.decodeAcceptance("https://evil.example/invite-accept#$q"))
         assertNull(InviteLink.decodeAcceptance("https://flagshipserver.com/invite?$q"))
+    }
+
+    /** The fragment is URLSearchParams-encoded, and wins over a query. */
+    @Test fun decodeAcceptanceDecodesFragmentParams() {
+        val sig = "1f".repeat(64)
+        val q = "server=home.alice.flagship.services&iid=${"e".repeat(64)}&ref=alice%2Dnotes&aid=${"c".repeat(64)}&sig=$sig&at=1700"
+        val acc = InviteLink.decodeAcceptance("https://flagshipserver.com/invite-accept#$q")!!
+        assertEquals("alice-notes", acc.accept["serviceRef"]!!.jsonPrimitive.content)
+        val spaced = InviteLink.decodeAcceptance("https://flagshipserver.com/invite-accept#${q.replace("alice%2Dnotes", "alice+notes")}")!!
+        assertEquals("alice notes", spaced.accept["serviceRef"]!!.jsonPrimitive.content)
+        val both = InviteLink.decodeAcceptance(
+            "https://flagshipserver.com/invite-accept?server=other.example#$q",
+        )!!
+        assertEquals("home.alice.flagship.services", both.serverDomain)
     }
 
     /** Back-compat: the legacy `flagship://accept?b=<base64url>` bundle still

@@ -4,7 +4,7 @@ import { renderQrSvg as renderQrSvgJs } from "../../../apps/web/public/qrEncoder
 import { renderQrSvg, encodeQr } from "../src/qrSvg.js";
 
 const SAMPLES = [
-  "https://flagshipserver.com/access?server=home.alice.flagship.services&svc=notes&ref=alice-notes&page=cb2421036efeb738c6017d8ee92e7b89",
+  "https://flagshipserver.com/access#server=home.alice.flagship.services&svc=notes&ref=alice-notes&page=cb2421036efeb738c6017d8ee92e7b89",
   "https://flagshipserver.com/",
   "a",
   "The quick brown fox jumps over the lazy dog 0123456789",

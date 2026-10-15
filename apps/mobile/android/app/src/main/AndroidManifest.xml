@@ -51,8 +51,9 @@
                 <data android:scheme="https" android:host="flagshipserver.com" android:path="/share" />
                 <!-- QR codes and shared links (the old flagship:// forms below still
                      open): the remote page's /remote?s=&k=, Studio's /builder?c=&k=,
-                     the knock page's /access?server=&svc=&ref=&page= and a friend's
-                     /invite-accept?server=&iid=&ref=&aid=&sig=&at= reply. Without the
+                     the knock page's /access#server=&svc=&ref=&page= and a friend's
+                     /invite-accept#server=&iid=&ref=&aid=&sig=&at= reply (filters match
+                     the path only, so the fragment and older ?query forms both open). Without the
                      app, the site shows a "get the app" page at each path. -->
                 <data android:scheme="https" android:host="flagshipserver.com" android:path="/remote" />
                 <data android:scheme="https" android:host="flagshipserver.com" android:path="/remote/" />

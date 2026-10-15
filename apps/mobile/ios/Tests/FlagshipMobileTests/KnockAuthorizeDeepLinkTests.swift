@@ -114,6 +114,33 @@ final class KnockAuthorizeDeepLinkTests: XCTestCase {
         )
     }
 
+    func testParsesFragmentAccessLink() {
+        let expected = DeepLink.knockAuthorize(serverDomain: server, svc: svc, serviceRef: ref, pageId: page)
+        let frag = "server=\(server)&svc=\(svc)&ref=\(ref)&page=\(page)"
+        XCTAssertEqual(DeepLink.parse(URL(string: "https://flagshipserver.com/access#\(frag)")!), expected)
+        XCTAssertEqual(DeepLink.parse(URL(string: "https://www.flagshipserver.com/access/#\(frag)")!), expected)
+        XCTAssertEqual(DeepLink.parsePastedString("  https://flagshipserver.com/access#\(frag)\n"), expected)
+        XCTAssertNil(DeepLink.parse(URL(string: "https://example.com/access#\(frag)")!))
+        XCTAssertNil(DeepLink.parse(URL(string: "https://flagshipserver.com/access#server=\(server)&svc=\(svc)&ref=\(ref)")!))
+    }
+
+    func testFragmentAccessLinkDecodesLikeURLSearchParams() {
+        // `new URLSearchParams({svc: "My notes & more"}).toString()`.
+        let link = "https://flagshipserver.com/access#server=\(server)&svc=My+notes+%26+more&ref=\(ref)&page=\(page)"
+        XCTAssertEqual(DeepLink.parse(URL(string: link)!),
+                       .knockAuthorize(serverDomain: server, svc: "My notes & more", serviceRef: ref, pageId: page))
+        let pct = "https://flagshipserver.com/access#server=\(server)&svc=My%20notes&ref=alice%2D%2Dnotes&page=\(page)"
+        XCTAssertEqual(DeepLink.parse(URL(string: pct)!),
+                       .knockAuthorize(serverDomain: server, svc: "My notes", serviceRef: ref, pageId: page))
+    }
+
+    func testFragmentWinsAndEmptyFragmentFallsBackToQuery() {
+        let expected = DeepLink.knockAuthorize(serverDomain: server, svc: svc, serviceRef: ref, pageId: page)
+        let frag = "server=\(server)&svc=\(svc)&ref=\(ref)&page=\(page)"
+        XCTAssertEqual(DeepLink.parse(URL(string: "https://flagshipserver.com/access?server=other.example&ref=x&page=y#\(frag)")!), expected)
+        XCTAssertEqual(DeepLink.parse(URL(string: "https://flagshipserver.com/access?\(frag)#")!), expected)
+    }
+
     func testPastedGarbageIsNil() {
         XCTAssertNil(DeepLink.parsePastedString("not a link"))
         XCTAssertNil(DeepLink.parsePastedString(""))

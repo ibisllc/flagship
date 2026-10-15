@@ -81,6 +81,19 @@ final class DeepLinkTests: XCTestCase {
         }
     }
 
+    // /access and /invite-accept moved their params into the fragment;
+    // /remote and /builder keep theirs in the query.
+    func test_remoteAndBuilder_stayInTheQuery() {
+        let sid = Base64URL.encode(Data(repeating: 7, count: 16))
+        let k = Base64URL.encode(Data(repeating: 9, count: 32))
+        let remote = "https://flagshipserver.com/remote?s=\(sid)&k=\(k)"
+        XCTAssertEqual(DeepLink.parse(URL(string: remote)!), .companionDockApproval(link: remote))
+        XCTAssertNil(DeepLink.parse(URL(string: "https://flagshipserver.com/remote#s=\(sid)&k=\(k)")!))
+        let pk = "pOCSkrZRwni5dyxWn1-puxPZBrRqtoyd-dwrRAn4ogk"
+        let builder = "https://flagshipserver.com/builder?c=AEBAGBAF&k=\(pk)"
+        XCTAssertEqual(DeepLink.parse(URL(string: builder)!), .builderPair(link: builder))
+    }
+
     func test_builderLink_badCodeOrHost_isNil() {
         let pk = "pOCSkrZRwni5dyxWn1-puxPZBrRqtoyd-dwrRAn4ogk"
         XCTAssertNil(DeepLink.parse(URL(string: "https://flagshipserver.com/builder?c=nope!&k=\(pk)")!))

@@ -81,8 +81,9 @@ sealed interface DeepLink {
     /** Web-experience gating (docs/service-access-gating.md, "Web-experience
      *  gating") — the visitor's phone authorizes a SEPARATE browser's QR-login
      *  for a restricted service's website. Carried by the knock page's
-     *  `https://flagshipserver.com/access?server=<serverFqdn>&svc=<urlLabel>&ref=<serviceRef>&page=<pageId>`
-     *  App Link (older pages: `flagship://access?…`; also a QR for cross-device,
+     *  `https://flagshipserver.com/access#server=<serverFqdn>&svc=<urlLabel>&ref=<serviceRef>&page=<pageId>`
+     *  App Link (in the fragment so a browser without the app never sends them;
+     *  links minted earlier carry a `?query`, older pages `flagship://access?…`; also a QR for cross-device,
      *  and a copyable "Get link" string).
      *  All four params are required; a malformed link is NOT routed. */
     data class AuthorizeKnock(
@@ -102,8 +103,8 @@ sealed interface DeepLink {
     data class BuilderPair(val rawLink: String) : DeepLink
 
     /** A friend's acceptance of a manual-approve invite (see [InviteLink.buildAcceptReply]),
-     *  `https://flagshipserver.com/invite-accept?server=&iid=&ref=&aid=&sig=&at=`
-     *  (older apps: `flagship://invite-accept?…`). Opens the owner's approve screen,
+     *  `https://flagshipserver.com/invite-accept#server=&iid=&ref=&aid=&sig=&at=`
+     *  (earlier: the same as a `?query`; older apps: `flagship://invite-accept?…`). Opens the owner's approve screen,
      *  which submits it to the box named by `server`. */
     data class AcceptInvite(val rawLink: String) : DeepLink
 
@@ -173,7 +174,7 @@ sealed interface DeepLink {
                     return ServerShare.parseShareLink(uri.toString())?.let { ShareOffer(it.shareId, it.secretHex) }
                 }
                 // The App Link twins of flagship://join, remote, builder, access
-                // and invite-accept: same query, same validation.
+                // and invite-accept: same params, same validation.
                 if (Endpoints.isControlHost(host)) {
                     val path = uri.path?.trimEnd('/')
                     val twin = APP_LINK_PATHS.firstOrNull { "/$it" == path }
@@ -203,7 +204,15 @@ sealed interface DeepLink {
                 .build()
         }
 
+        /** [uri] with its fragment params moved into the query, or null when the
+         *  fragment carries none (a link in the older `?query` form). */
+        private fun fragmentAsQuery(uri: Uri): Uri? {
+            val fragment = uri.encodedFragment?.takeIf { '=' in it } ?: return null
+            return uri.buildUpon().encodedQuery(fragment).encodedFragment(null).build()
+        }
+
         private fun parseHost(host: String, uri: Uri): DeepLink? {
+            if (host == "access") fragmentAsQuery(uri)?.let { return parseHost(host, it) }
             val params = uri.queryParameterNames.associateWith { uri.getQueryParameter(it) ?: "" }
             return when (host) {
                 // Back-compat: legacy `unlock-approve(s)` links (old pushes /

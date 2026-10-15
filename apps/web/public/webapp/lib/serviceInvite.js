@@ -53,7 +53,7 @@ export const ACCESS_MODES = ["open", "restricted"];
 // identity"): nothing is shared between apps, nothing depends on the inviter.
 export { deriveAppAccountIdFromSeed as deriveAppAccountId } from "../keystore.js";
 
-import { appLinkUrl, isAppLink } from "./apex.js";
+import { appLinkFragmentUrl, appLinkParams, isAppLink } from "./apex.js";
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -877,9 +877,10 @@ export async function redeemInvite(args, deps = {}) {
 // CANONICAL acceptance-reply form (cross-client): the friend's app emits, and
 // the AUTHOR opens, an app link
 //
-//   https://<control apex>/invite-accept?server=&iid=&ref=&aid=&sig=&at=
+//   https://<control apex>/invite-accept#server=&iid=&ref=&aid=&sig=&at=
 //
-// (older apps sent `flagship://invite-accept?…`, still accepted).
+// (the fragment keeps it out of our logs if opened in a browser; the ?query
+// form and older apps' `flagship://invite-accept?…` are still accepted).
 //
 // carrying ONLY `{accept, acceptSig}` — the friend's contact-AID-signed
 // `AcceptServiceInvite` (inviteId/serviceRef/contactAID/acceptedAt + sig) + the
@@ -916,7 +917,7 @@ export function buildAcceptReply(serverDomain, accept, acceptSig) {
     sig: acceptSig.toLowerCase(),
     at: String(accept.acceptedAt),
   });
-  return appLinkUrl("/invite-accept", q);
+  return appLinkFragmentUrl("/invite-accept", q);
 }
 
 /**
@@ -958,7 +959,7 @@ export function parseAcceptReply(raw) {
     ? (url.host || url.pathname.replace(/^\/+/, "")).toLowerCase() === "invite-accept"
     : isAppLink(url, "/invite-accept");
   if (!isReply) return null;
-  const p = url.searchParams;
+  const p = url.protocol === "flagship:" ? url.searchParams : appLinkParams(url);
   const accept = {
     inviteId: p.get("iid"),
     serviceRef: p.get("ref"),
@@ -1088,7 +1089,8 @@ export async function buildVisitHeader(args, deps = {}) {
 // ──────────────────────────────────────────────────────────────────────
 
 /**
- * Parse an `https://<control apex>/access?server=&svc=&ref=&page=` app link
+ * Parse an `https://<control apex>/access#server=&svc=&ref=&page=` app link
+ * (also its earlier ?query form)
  * (or the older `flagship://access?…` form). Tolerates
  * surrounding whitespace (it's pasted) and percent-encoded params. Returns
  * `{ serverId, svc, serviceRef, pageId }` or null when it isn't an access link
@@ -1115,7 +1117,7 @@ export function parseAccessDeepLink(raw) {
       return null;
     }
     if (!isAppLink(url, "/access")) return null;
-    params = url.searchParams;
+    params = appLinkParams(url);
   }
   const serverId = (params.get("server") || "").trim();
   const svc = (params.get("svc") || "").trim();

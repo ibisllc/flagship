@@ -106,6 +106,19 @@ export function appLinkUrl(path, params) {
   return `${controlApex()}${path}?${new URLSearchParams(params)}`;
 }
 
+/** The same with the params in the fragment, which browsers never send: for
+ *  links that name a server, an app or a person. */
+export function appLinkFragmentUrl(path, params) {
+  return `${controlApex()}${path}#${new URLSearchParams(params)}`;
+}
+
+/** An app link's params: the fragment's, else (links minted before the
+ *  fragment form) the query's. */
+export function appLinkParams(url) {
+  const hash = url.hash.replace(/^#/, "");
+  return hash ? new URLSearchParams(hash) : url.searchParams;
+}
+
 /** Is `url` (a URL) the app link for `path` on our control apex? */
 export function isAppLink(url, path) {
   if (url.protocol !== "https:" || url.pathname.replace(/\/+$/, "") !== path) return false;

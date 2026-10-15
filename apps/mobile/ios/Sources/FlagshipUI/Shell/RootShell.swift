@@ -36,7 +36,7 @@ public struct RootShell: View {
     /// gated behind the lock screen until the visitor unlocks (they AID-sign).
     @State private var pendingKnock: KnockTarget?
     /// v2 manual-approve — the AUTHOR finalizing a consumer's acceptance reply
-    /// (`https://flagshipserver.com/invite-accept?…`), presented as a full-screen cover.
+    /// (`https://flagshipserver.com/invite-accept#…`), presented as a full-screen cover.
     @State private var pendingAccept: AcceptTarget?
 
     private struct RedeemTarget: Identifiable, Equatable {
