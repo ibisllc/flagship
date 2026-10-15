@@ -15,6 +15,10 @@ const MOD_URL = pathToFileURL(
   resolve(__dirname, "../public/webapp/lib/pinLock.js"),
 ).href;
 
+// Each PIN check is a real argon2id run; the lockout test does six in a row,
+// which outlasts the default 30 s when the machine is busy.
+const ARGON2_TIMEOUT_MS = 180_000;
+
 async function loadPin() {
   return import(MOD_URL);
 }
@@ -53,7 +57,7 @@ describe("pinLock — validation", () => {
   });
 });
 
-describe("pinLock — set / unlock roundtrip", () => {
+describe("pinLock — set / unlock roundtrip", { timeout: ARGON2_TIMEOUT_MS }, () => {
   it("unlocks with the correct PIN and returns the same seed", async () => {
     const pin = await loadPin();
     const d = deps();
@@ -72,7 +76,7 @@ describe("pinLock — set / unlock roundtrip", () => {
   });
 });
 
-describe("pinLock — brute-force lockout", () => {
+describe("pinLock — brute-force lockout", { timeout: ARGON2_TIMEOUT_MS }, () => {
   it("counts down on wrong PINs, then on the 5th wipes the PIN", async () => {
     const pin = await loadPin();
     const d = deps();
@@ -101,7 +105,7 @@ describe("pinLock — brute-force lockout", () => {
   });
 });
 
-describe("pinLock — verifyPin (Change-PIN gate)", () => {
+describe("pinLock — verifyPin (Change-PIN gate)", { timeout: ARGON2_TIMEOUT_MS }, () => {
   it("returns true only for the correct PIN and never touches the counter", async () => {
     const pin = await loadPin();
     const d = deps();
@@ -113,7 +117,7 @@ describe("pinLock — verifyPin (Change-PIN gate)", () => {
   });
 });
 
-describe("pinLock — device binding (the pepper)", () => {
+describe("pinLock — device binding (the pepper)", { timeout: ARGON2_TIMEOUT_MS }, () => {
   it("a PIN wrapped under one device pepper cannot be unwrapped under another", async () => {
     const pin = await loadPin();
     const kv = makeKv();
@@ -130,7 +134,7 @@ describe("pinLock — device binding (the pepper)", () => {
   });
 });
 
-describe("pinLock — clearPin (the reset rule)", () => {
+describe("pinLock — clearPin (the reset rule)", { timeout: ARGON2_TIMEOUT_MS }, () => {
   it("removes the PIN and its counter; hasPin goes false", async () => {
     const pin = await loadPin();
     const d = deps();
