@@ -777,6 +777,33 @@ export async function checkPipeUpgrade(
   return checkRateLimit(env, { endpoint: pipe, ip });
 }
 
+const relayedRequests = new WeakSet<Request>();
+
+/** Mark a request the OHTTP gateway decrypted (no header, so a client can't claim it). */
+export function markRelayed(request: Request): Request {
+  relayedRequests.add(request);
+  return request;
+}
+
+/**
+ * The identifier for the "ip" axis. A request that came through the private
+ * relay has no address of its own (every one arrives from the relay's), so it
+ * is keyed by what it names or who signed it; one with neither shares a single
+ * relay bucket rather than going unmetered (docs/outbound-proxy.md §OHTTP).
+ */
+export function clientKey(
+  request: Request,
+  endpoint: RateLimitEndpoint,
+  pathname: string,
+  irkPub: string | undefined,
+): string | null {
+  if (!relayedRequests.has(request)) return clientIp(request);
+  const serial = endpoint === "provision-status" ? /^\/api\/order\/([^/]+)\/status$/.exec(pathname)?.[1] : undefined;
+  if (serial) return `relay:order:${serial}`;
+  if (irkPub) return `relay:irk:${irkPub}`;
+  return "relay";
+}
+
 /** Read the client IP from CF-Connecting-IP, falling back to X-Forwarded-For first hop. */
 export function clientIp(request: Request): string | null {
   const cfip = request.headers.get("cf-connecting-ip");

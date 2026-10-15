@@ -43,9 +43,11 @@ import {
   checkPipeUpgrade,
   checkRateLimit,
   clientIp,
+  clientKey,
   endpointFor,
   extractIrkPub,
   extractUsernameHash,
+  markRelayed,
   rateLimitedResponse,
   type RateLimitNamespace,
 } from "./rateLimit.js";
@@ -674,7 +676,7 @@ async function routeImpl(
   // boot-unlock paths.
   {
     const res = await tryOhttp(request, url, env, { apex: apexHost(env), boot: BOOT_HOST }, (inner) =>
-      route(inner, env, ctx),
+      route(markRelayed(inner), env, ctx),
     );
     if (res) return res;
   }
@@ -899,7 +901,7 @@ async function routeImpl(
     const usernameHash = extractUsernameHash(url.pathname);
     const rl = await checkRateLimit(env, {
       endpoint: rlEndpoint,
-      ip: clientIp(request),
+      ip: clientKey(request, rlEndpoint, url.pathname, irkPub),
       ...(irkPub ? { irkPub } : {}),
       ...(usernameHash ? { usernameHash } : {}),
     }, ctx);
