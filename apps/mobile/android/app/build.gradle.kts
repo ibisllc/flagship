@@ -190,6 +190,11 @@ dependencies {
     //   es5 bundle if a smaller artifact is ever wanted.
     implementation("org.mozilla:rhino:1.9.1")
 
+    // Server status shared with the home-screen widget and the watch.
+    implementation(project(":companion"))
+    // Home-screen widget (Jetpack Glance; 1.1.x pairs with the Compose 1.7 BOM).
+    implementation("androidx.glance:glance-appwidget:1.1.1")
+
     // Image loading (avatars, app screenshots)
     implementation("io.coil-kt:coil-compose:2.7.0")
 

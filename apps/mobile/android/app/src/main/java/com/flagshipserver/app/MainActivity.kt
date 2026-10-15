@@ -542,6 +542,7 @@ class MainActivity : FragmentActivity() {
             LaunchedEffect(liveSyncPaired) {
                 if (liveSyncPaired) liveSync.start(this) else liveSync.stop()
             }
+            com.flagshipserver.app.companion.CompanionSurfaces(appState)
 
             val sizeClass = calculateWindowSizeClass(this)
 

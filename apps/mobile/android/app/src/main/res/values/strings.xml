@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Flagship</string>
+    <string name="widget_pod_status_label">Servers</string>
+    <string name="widget_pod_status_description">Online status for your Flagship servers.</string>
 </resources>

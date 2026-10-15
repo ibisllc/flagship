@@ -175,6 +175,19 @@
             </intent-filter>
         </service>
 
+        <!-- Home-screen server status widget (Glance). -->
+        <receiver
+            android:name=".companion.PodStatusWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_pod_status_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/pod_status_widget_info" />
+        </receiver>
+
         <!-- Dead-man affirmation reminder (T-6h/T-1h/T-15m alarms) -->
         <receiver
             android:name=".push.DeadManReminderReceiver"
