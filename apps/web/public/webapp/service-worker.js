@@ -226,7 +226,9 @@
 //  v102: feat/marketplace only: main's shell plus the branch's files
 //       (marketplace, tier status, allowance, install, developer views), so
 //       it runs a version above main's; bump it past main's on rebase.
-const SHELL_VERSION = "v102";
+//  v104: feat/custom-names only: feat/marketplace's v102 plus the name-dibs
+//       notice and claim view (v98 is feat/custom-domains').
+const SHELL_VERSION = "v104";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -373,6 +375,7 @@ const OPTIONAL_SHELL = [
   "/lib/allowance.js",
   "/lib/marketplaceLlmKey.js",
   "/lib/proBanner.js",
+  "/lib/nameDibs.js",
   "/views/bootstrap.js",
   "/views/wizard.js",
   "/views/unlock.js",
@@ -392,6 +395,7 @@ const OPTIONAL_SHELL = [
   "/views/tier-status.js",
   "/views/marketplace.js",
   "/views/developer.js",
+  "/views/name-dibs.js",
   "/views/vibe-code.js",
   "/views/edit-service.js",
   "/views/service-env.js",
