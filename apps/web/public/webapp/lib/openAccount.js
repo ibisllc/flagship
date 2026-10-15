@@ -161,7 +161,11 @@ export async function openAccount(username, deps) {
     throw new Error("administrator key unavailable");
   }
   const toHex = deps.bytesToHex || defaultBytesToHex;
-  const deviceId = (deps.generateDeviceId || generateDeviceId)();
+  const identity = pendingIdentityFor(username, toHex(session.irk.publicKey), () => ({
+    deviceId: (deps.generateDeviceId || generateDeviceId)(),
+    grantId: (deps.randomUUID || crypto.randomUUID.bind(crypto))(),
+  }));
+  const deviceId = identity.deviceId;
   const deriveDeviceKey = deps.deriveAccountDeviceKeyFromSeed || deriveAccountDeviceKeyFromSeed;
   const deriveAid = deps.deriveAccountIdFromSeed || deriveAccountIdFromSeed;
   const signAdmin = deps.signWithAdminRoot || signWithAdminRoot;
@@ -169,7 +173,7 @@ export async function openAccount(username, deps) {
   const aid = await deriveAid(session.umk);
   const issuedAt = Date.now();
   const grant = {
-    grantId: (deps.randomUUID || crypto.randomUUID.bind(crypto))(),
+    grantId: identity.grantId,
     username,
     deviceId,
     devicePubHex: toHex(deviceKey.publicKey),
@@ -284,6 +288,28 @@ export async function openAccount(username, deps) {
   }
 
   return { username, alreadyClaimed: created.created === false, deviceId };
+}
+
+// `.com` answers a bootstrap repeated under the same keys, device and grant as
+// "already created", but a device id it hasn't seen becomes a second primary
+// device for the account. So a retry (a transport blip, a 5xx) presents the
+// ids the first attempt minted: kept per username + device key for the life
+// of the page, like iOS's OpenAccountViewModel.pendingIdentity.
+const pendingIdentities = new Map();
+
+function pendingIdentityFor(username, irkPubHex, mint) {
+  const key = `${username}|${irkPubHex}`;
+  let identity = pendingIdentities.get(key);
+  if (!identity) {
+    identity = mint();
+    pendingIdentities.set(key, identity);
+  }
+  return identity;
+}
+
+/** Forget every pending sign-up identity (tests). */
+export function resetPendingOpenAccountIdentities() {
+  pendingIdentities.clear();
 }
 
 function canonicalDeviceGrant(grant) {

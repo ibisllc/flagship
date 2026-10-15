@@ -118,3 +118,48 @@ describe("webapp account bootstrap", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 });
+
+describe("webapp account bootstrap retries", () => {
+  it("a retry presents the device id and grant id the first attempt minted", async () => {
+    const { openAccount, resetPendingOpenAccountIdentities } = await loadLib();
+    resetPendingOpenAccountIdentities();
+    const { deps } = harness();
+    let n = 0;
+    const generateDeviceId = vi.fn(() => String(++n).padStart(32, "0"));
+    const randomUUID = vi.fn(() => `grant-${n}`);
+    const fetch = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(jsonResponse(503, "busy"))
+      .mockResolvedValueOnce(jsonResponse(200, { created: false }));
+    const run = () => openAccount("jolly-ranger", { ...deps, generateDeviceId, randomUUID, fetch });
+    await expect(run()).rejects.toThrow(/Failed to fetch/);
+    await expect(run()).rejects.toThrow(/503/);
+    await expect(run()).resolves.toMatchObject({ alreadyClaimed: true });
+    const bodies = fetch.mock.calls.map((c) => JSON.parse(c[1].body));
+    expect(new Set(bodies.map((b) => b.device.deviceId)).size).toBe(1);
+    expect(new Set(bodies.map((b) => b.grant.grantId)).size).toBe(1);
+    expect(new Set(bodies.map((b) => b.deviceProfile.deviceId)).size).toBe(1);
+    expect(generateDeviceId).toHaveBeenCalledTimes(1);
+  });
+
+  it("another account name, or another device key, mints its own ids", async () => {
+    const { openAccount, resetPendingOpenAccountIdentities } = await loadLib();
+    resetPendingOpenAccountIdentities();
+    const { deps, session } = harness();
+    let n = 0;
+    const generateDeviceId = vi.fn(() => String(++n).padStart(32, "0"));
+    const fetch = vi.fn(async () => jsonResponse(200, { created: true }));
+    const ids: string[] = [];
+    for (const [name, irk] of [["jolly-ranger", 2], ["calm-otter", 2], ["jolly-ranger", 8]] as const) {
+      const out = await openAccount(name, {
+        ...deps,
+        session: { ...session, irk: { publicKey: new Uint8Array(32).fill(irk) } },
+        generateDeviceId,
+        fetch,
+      });
+      ids.push(out.deviceId);
+    }
+    expect(new Set(ids).size).toBe(3);
+  });
+});
