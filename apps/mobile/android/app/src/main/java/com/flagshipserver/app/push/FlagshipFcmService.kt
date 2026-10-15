@@ -42,12 +42,11 @@ class FlagshipFcmService : FirebaseMessagingService() {
             data["deepLink"] = ProvisionStatusPush.deepLink(provisionEvent)
         }
 
-        // Boot-secret RELAY — a `secret-request` push means the user's box
-        // posted a SecretRequest to its `.com` mailbox and `.com` woke us
-        // to come finish the handshake. Surface it + route the tap into the
-        // approvals surface (the phone fetches + re-verifies on open; the
-        // push carries NO secret). Synthesize the deep link if the Worker
-        // didn't include one.
+        // Boot-secret RELAY — a `secret-request` push means one of the user's
+        // boxes posted a SecretRequest to its `.com` mailbox and `.com` woke
+        // us to come finish the handshake. It names no server, so the text is
+        // fixed and the tap opens the approvals list, which fetches and
+        // re-verifies the pending requests.
         val shareStartup = ShareStartupPush.matches(data)
         if (shareStartup) {
             data["title"] = ShareStartupPush.TITLE
@@ -57,12 +56,9 @@ class FlagshipFcmService : FirebaseMessagingService() {
         val secretEvent = if (shareStartup) null else SecretRequestPush.parse(data)
         secretEvent?.let { event ->
             SecretRequestBridge.onSecretRequest?.invoke(event)
-            if (data["deepLink"].isNullOrEmpty()) {
-                // Route into the v2 sealed-key RELAY approval list (the phone
-                // fetches + re-verifies the pending request(s) on open; the
-                // push carries no secret, so no per-id link is needed).
-                data["deepLink"] = com.flagshipserver.app.core.Endpoints.appRoute("secret-requests")
-            }
+            data["title"] = SecretRequestPush.TITLE
+            data["body"] = SecretRequestPush.BODY
+            data["deepLink"] = com.flagshipserver.app.core.Endpoints.appRoute("secret-requests")
         }
 
         // A `generic` push (§3a; `app-access` from an older box) names no
@@ -81,10 +77,8 @@ class FlagshipFcmService : FirebaseMessagingService() {
         // has already been woken above.
         if (!com.flagshipserver.app.core.PrivacySettings.fromContext(this).pushNotificationsEnabled.value) return
 
-        val title = data["title"] ?: message.notification?.title
-            ?: (secretEvent?.let { "Finish setting up ${it.serverFqdn}" }) ?: "Flagship"
-        val body = data["body"] ?: message.notification?.body
-            ?: (secretEvent?.let { "Open Flagship to confirm it's your box and release its boot secret." }) ?: ""
+        val title = data["title"] ?: message.notification?.title ?: "Flagship"
+        val body = data["body"] ?: message.notification?.body ?: ""
         val deepLink = data["deepLink"]
 
         ensureChannel(this)

@@ -1,45 +1,33 @@
-// Boot-secret RELAY push on Android — parse a `secret-request` FCM push
-// into a typed event and surface it via a closure bridge.
+// Boot-secret RELAY push on Android — recognise a `secret-request` FCM push
+// and surface it via a closure bridge.
 //
-// Mirror of the Worker fan-out payload (the box's SecretRequest woke the
-// phone): { kind: "secret-request", serverFqdn, purpose, requestNonceHex }.
-// A liveness signal ONLY — it carries no secret; the phone fetches the
-// pending request(s) from `.com`'s mailbox on open (the reliable path) and
-// re-verifies against the directory before doing any crypto. See
+// `.com` sends FCM only the category plus `{ kind: "secret-request",
+// deepLink: https://<apex>/app/secret-requests }`: nothing that names the
+// server or what it asks for. A liveness signal ONLY — the phone fetches the
+// pending request(s) from `.com`'s mailbox on open and re-verifies them
+// against the directory before doing any crypto. See
 // docs/security-phone-as-unlock-endpoint.md.
 
 package com.flagshipserver.app.push
 
-/** A `secret-request` push: the user's box posted a SecretRequest to its
- *  `.com` mailbox and `.com` woke the phone to come finish the handshake.
- *  PURE routing/matching hints — NOT the security boundary (the phone
- *  re-verifies the box's STK-signed request against the directory). */
+/** A `secret-request` push: one of the user's boxes posted a SecretRequest to
+ *  its `.com` mailbox and `.com` woke the phone to come finish the handshake. */
 data class SecretRequestEvent(
-    /** The box's canonical FQDN, e.g. `home.alice.flagship.services`. */
-    val serverFqdn: String,
-    /** "unlock-key" | "entitlement" — what the box is asking for. */
-    val purpose: String,
-    /** Echo of the request nonce (matching hint). */
-    val requestNonceHex: String,
+    /** The approvals app link `.com` sent, if any. */
+    val deepLink: String?,
 )
 
-/** Pure parser for a `secret-request` FCM `data` map. Returns null for any
- *  other category so the FCM service can fall through to its standard
- *  notification path. Pure + side-effect-free → unit-testable without a
- *  FirebaseMessagingService. */
 object SecretRequestPush {
+    const val TITLE = "Flagship"
+    const val BODY = "A server is waiting for your approval."
+
+    /** Null for any other push, including a shared server's start-up notice,
+     *  which rides the same category but opens Home instead. */
     fun parse(data: Map<String, String>): SecretRequestEvent? {
-        // The category lands either as the FCM `category`/`kind` field; the
-        // Worker sets `kind`. Accept either for robustness.
-        val isSecret = data["kind"] == "secret-request" || data["category"] == "secret-request"
-        if (!isSecret) return null
-        val fqdn = data["serverFqdn"]?.takeIf { it.isNotEmpty() } ?: return null
-        val purpose = data["purpose"]?.takeIf { it.isNotEmpty() } ?: return null
-        return SecretRequestEvent(
-            serverFqdn = fqdn,
-            purpose = purpose,
-            requestNonceHex = data["requestNonceHex"].orEmpty(),
-        )
+        val kind = data["kind"]
+        if (kind != null && kind != "secret-request") return null
+        if (kind == null && data["category"] != "secret-request") return null
+        return SecretRequestEvent(deepLink = data["deepLink"]?.takeIf { it.isNotEmpty() })
     }
 }
 

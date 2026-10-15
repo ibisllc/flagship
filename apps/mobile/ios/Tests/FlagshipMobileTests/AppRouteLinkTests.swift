@@ -92,6 +92,20 @@ final class AppRouteLinkTests: XCTestCase {
             .secretRequests)
     }
 
+    // The Worker's boot-approval wake as APNs delivers it: the category only
+    // inside `aps`, `kind` + `deepLink` at the top level.
+    func test_push_secretRequestWake_routesToApprovals() {
+        let aps: [AnyHashable: Any] = ["category": "secret-request", "alert": ["title": "Flagship"]]
+        XCTAssertEqual(
+            PushNotifications.link(forPush: ["aps": aps, "flagship-sealed": "", "kind": "secret-request",
+                                             "deepLink": "https://\(host)/app/secret-requests"]),
+            .secretRequests)
+        XCTAssertEqual(PushNotifications.link(forPush: ["aps": aps, "flagship-sealed": ""]), .secretRequests)
+        XCTAssertEqual(
+            PushNotifications.link(forPush: ["aps": aps, "kind": PushNotifications.shareStartupKind]),
+            .sharedWithMe)
+    }
+
     // MARK: - In-process delivery (App Intents)
 
     @MainActor

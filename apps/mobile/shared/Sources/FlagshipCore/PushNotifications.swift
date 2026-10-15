@@ -79,7 +79,11 @@ public final class PushNotifications: NSObject {
         }
         let kind = info["kind"] as? String
         if kind == shareStartupKind { return .sharedWithMe }
-        if (kind ?? info["category"] as? String) == "secret-request" { return .secretRequests }
+        // APNs carries the category only inside `aps`; a top-level one is
+        // Android's spelling and local notifications'.
+        let category = info["category"] as? String
+            ?? (info["aps"] as? [AnyHashable: Any])?["category"] as? String
+        if (kind ?? category) == "secret-request" { return .secretRequests }
         if kind == "vibecode-needs-you", let sessionId = info["sessionId"] as? String, !sessionId.isEmpty {
             return .vibeCodeChat(sessionId: sessionId)
         }

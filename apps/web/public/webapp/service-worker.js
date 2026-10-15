@@ -167,7 +167,9 @@
 //       open the matching webapp view; the old desktop-pairing view
 //       (views/pair.js, flagship://desktop QR) is gone; invite replies and
 //       app sign-in links carry their params in the fragment.
-const SHELL_VERSION = "v79";
+//  v80: a boot/unlock approval push reads "A server is waiting for your
+//       approval." and opens the approvals view.
+const SHELL_VERSION = "v80";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -537,6 +539,23 @@ self.addEventListener("push", (event) => {
     return;
   }
 
+  // One of the owner's boxes waits for an approval (unlock or entitlement).
+  // The text names no server, like the phone apps'; the approvals view
+  // fetches and re-verifies what's pending.
+  if (data && (data.kind === "secret-request" || data.category === "secret-request")) {
+    event.waitUntil(
+      self.registration.showNotification("Flagship", {
+        body: "A server is waiting for your approval.",
+        tag: "flagship-secret-request",
+        renotify: true,
+        requireInteraction: true,
+        icon: "/icon.svg",
+        data: { kind: "secret-request", deepLink: "/?view=boot-approval" },
+      }),
+    );
+    return;
+  }
+
   // Generic fallback for any other (or empty) payload.
   const body = (data && typeof data.body === "string")
     ? data.body
@@ -566,12 +585,18 @@ self.addEventListener("push", (event) => {
 // the root.
 // Push payloads name app screens as https://<apex>/app/<route> (older
 // servers sent flagship://<route>). The phone apps route those; here the
-// install-progress view has its own webapp route and the rest open home.
+// install-progress and approvals views have their own webapp routes and the
+// rest open home.
+const WEBAPP_ROUTES = {
+  "install-progress": "/?view=install-progress",
+  "secret-requests": "/?view=boot-approval",
+  "secret-request": "/?view=boot-approval",
+};
 function webappDeepLink(link) {
   if (typeof link !== "string") return null;
   const m = link.match(/^(?:https:\/\/[^/]+\/app\/|flagship:\/\/)([^?#]*)/i);
   if (!m) return link;
-  return m[1] === "install-progress" ? "/?view=install-progress" : "/";
+  return WEBAPP_ROUTES[m[1]] ?? "/";
 }
 
 self.addEventListener("notificationclick", (event) => {

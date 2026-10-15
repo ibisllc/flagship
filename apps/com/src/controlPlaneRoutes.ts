@@ -226,6 +226,7 @@ import {
   type BootRouteDeps,
 } from "@flagship/boot-core";
 import { InProcessDirectoryClient, InProcessNotifyPipe } from "./bootInProcess.js";
+import { buildPushUserDevices } from "./pushUserDevices.js";
 import {
   workerCaTrustChain,
   caEnforceFromEnv,
@@ -851,7 +852,7 @@ export async function tryBootHost(
     servers: storage.servers,
     ...(forwarder
       ? {
-          pushUserDevices: buildPushUserDevices(storage.pushTokens, forwarder),
+          pushUserDevices: buildPushUserDevices(storage.pushTokens, forwarder, env.CONTROL_APEX),
           shareStartup: { shares: storage.serverShares, forward: forwarder },
         }
       : {}),
@@ -1641,7 +1642,7 @@ export async function tryControlPlane(
         boxSealedLeases: storage.boxSealedLeases,
         grants: storage.deviceCapabilityGrants,
         ...(forwarder
-          ? { pushUserDevices: buildPushUserDevices(storage.pushTokens, forwarder) }
+          ? { pushUserDevices: buildPushUserDevices(storage.pushTokens, forwarder, env.CONTROL_APEX) }
           : {}),
       };
     };
@@ -2171,7 +2172,7 @@ export async function tryControlPlane(
             secretMailbox: storage.secretMailbox,
             ...(env.BOOT_NOTIFY_SECRET ? { notifySharedSecret: env.BOOT_NOTIFY_SECRET } : {}),
             ...(forwarder
-              ? { pushUserDevices: buildPushUserDevices(storage.pushTokens, forwarder) }
+              ? { pushUserDevices: buildPushUserDevices(storage.pushTokens, forwarder, env.CONTROL_APEX) }
               : {}),
           },
           request.headers.get("x-boot-notify-secret"),
@@ -3938,46 +3939,6 @@ function directoryAuthorization(request: Request, accountId: string, path: strin
       issuedAt,
     },
     signature,
-  };
-}
-
-/**
- * Build the `pushUserDevices` closure handed to the consume handler.
- * Returns silently when the user has no registered tokens or the
- * forwarder has no provider configured. The wrapper swallows errors
- * because /consume's response time shouldn't be held back by push
- * provider round-trips, and a failed push isn't an unlock failure.
- */
-function buildPushUserDevices(
-  pushTokens: import("@flagship/storage").PushTokenStorage,
-  forwarder: NonNullable<ReturnType<typeof buildOptionalPushForwarder>>,
-): (username: string, category: string, payload?: Uint8Array) => Promise<void> {
-  return async (username, category, payload) => {
-    try {
-      const tokens = await pushTokens.listByUser(username);
-      if (tokens.length === 0) return;
-      await forwarder({
-        targets: tokens.map((t) => ({
-          tokenId: t.tokenId,
-          platform: t.platform,
-          providerToken: t.providerToken,
-        })),
-        category,
-        // APNs/FCM use the sealed-payload story (encrypted by the
-        // daemon under the device's pushX25519Pub) — empty here for
-        // the consume-trigger path since we don't have a pre-sealed
-        // blob to forward. Web Push uses RFC 8291 with the plaintext
-        // payload below; the SW decrypts and personalises the
-        // notification.
-        sealedPayloadHex: "",
-        ...(payload ? { webpushPayloadBytes: payload } : {}),
-      });
-    } catch {
-      // Silently swallow — push failures shouldn't surface as boot
-      // failures. The pending row stays around so the next /consume
-      // poll within the dedup window will skip the push, and a
-      // later poll outside the window will retry.
-    }
   };
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { apnsAlertFor, buildPushForwarder } from "../src/pushBridge.js";
+import { apnsAlertFor, buildPushForwarder, secretRequestDisplayData } from "../src/pushBridge.js";
 
 interface Captured {
   url: string;
@@ -81,6 +81,31 @@ describe("buildPushForwarder — APNs", () => {
   it("gives every category a fixed alert that names no server, app or host", () => {
     expect(apnsAlertFor("app-access")).toEqual({ title: "Flagship", body: "One of your apps wants to reach the internet." });
     expect(apnsAlertFor("some-future-category")).toEqual({ title: "Flagship", body: "Open Flagship to see what's new." });
+    expect(apnsAlertFor("secret-request")).toEqual({ title: "Flagship", body: "A server is waiting for your approval." });
+    expect(apnsAlertFor("secret-request", "share-start-up")).toEqual({
+      title: "Flagship",
+      body: "A server shared with you is asking you to unlock it.",
+    });
+  });
+
+  it("puts a secret-request's kind and approvals link at the top level of the APNs body", async () => {
+    const { f, calls } = fakeFetch([{ status: 200, body: "" }]);
+    const forward = buildPushForwarder({
+      apns: { keyId: "K", teamId: "T", privateKeyPem: APNS_TEST_KEY, bundleId: "com.flagship.app" },
+      fetchImpl: f,
+      now: () => 1_700_000_000_000,
+    });
+    await forward({
+      targets: [{ tokenId: "tok1", platform: "apns", providerToken: "ABC" }],
+      category: "secret-request",
+      sealedPayloadHex: "",
+      displayData: secretRequestDisplayData("gym.flagshipserver.com"),
+    });
+    const body = JSON.parse(calls[0]!.body);
+    expect(body.kind).toBe("secret-request");
+    expect(body.deepLink).toBe("https://gym.flagshipserver.com/app/secret-requests");
+    expect(body.aps.category).toBe("secret-request");
+    expect(Object.keys(body).sort()).toEqual(["aps", "deepLink", "flagship-sealed", "kind"]);
   });
 
   it("counts a non-200 response as failed; returns ok=false when nothing sent", async () => {

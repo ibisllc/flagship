@@ -132,6 +132,10 @@ export async function dispatchInitialView() {
         return enterVibeCodeChat(q.sessionId);
       }
     }
+    if (q.view === "view-boot-approval") {
+      const { enterBootApproval } = await import("../views/boot-approval.js");
+      return enterBootApproval();
+    }
     if (q.view === "view-activity") {
       const { show } = await import("./router.js");
       show("view-activity");

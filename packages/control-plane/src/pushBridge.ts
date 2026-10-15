@@ -29,6 +29,8 @@
  * 5MB+ each).
  */
 
+import { appRouteLink } from "./appLink.js";
+
 /**
  * Minimal fetch signature this module needs. Defined locally so control-plane
  * doesn't take a dependency on the LLM-providers package just for a fetch type
@@ -249,6 +251,7 @@ const APNS_TOKEN_TTL_MS = 50 * 60_000; // refresh well under Apple's 60-min cap
  * the details from the box once it's open.
  */
 const APNS_ALERTS: Record<string, { title: string; body: string }> = {
+  "secret-request": { title: "Flagship", body: "A server is waiting for your approval." },
   "unlock-request": { title: "Flagship", body: "A server is asking you to unlock it." },
   "unlock-approve": { title: "Flagship", body: "A server is asking you to unlock it." },
   "boot-approval": { title: "Flagship", body: "A server is asking you to unlock it." },
@@ -259,8 +262,23 @@ const APNS_ALERTS: Record<string, { title: string; body: string }> = {
 };
 const APNS_ALERT_DEFAULT = { title: "Flagship", body: "Open Flagship to see what's new." };
 
-export function apnsAlertFor(category: string): { title: string; body: string } {
-  return APNS_ALERTS[category] ?? APNS_ALERT_DEFAULT;
+/** A `kind` that rides another category's wake but reads differently. */
+const APNS_KIND_ALERTS: Record<string, { title: string; body: string }> = {
+  "share-start-up": { title: "Flagship", body: "A server shared with you is asking you to unlock it." },
+};
+
+export function apnsAlertFor(category: string, kind?: string): { title: string; body: string } {
+  return (kind ? APNS_KIND_ALERTS[kind] : undefined) ?? APNS_ALERTS[category] ?? APNS_ALERT_DEFAULT;
+}
+
+/**
+ * What a boot/unlock approval wake carries to APNs and FCM besides its
+ * category: a fixed `kind` and the app link of the approvals list. Nothing
+ * names the server, the account or what it asks for; the phone fetches and
+ * re-verifies the pending requests from the mailbox once it's open.
+ */
+export function secretRequestDisplayData(apex = "flagshipserver.com"): Record<string, string> {
+  return { kind: "secret-request", deepLink: appRouteLink("secret-requests", {}, apex) };
 }
 
 async function sendApns(args: {
@@ -289,7 +307,7 @@ async function sendApns(args: {
   // unconditionally on unlock-approve and let the device decide.
   const isCritical = args.category === "unlock-approve";
   const apsBody: Record<string, unknown> = {
-    alert: apnsAlertFor(args.category),
+    alert: apnsAlertFor(args.category, args.displayData?.kind),
     "mutable-content": 1,
     category: args.category,
     "thread-id": args.category,
