@@ -140,6 +140,18 @@ class LiveScreensClient(
     override suspend fun serverDetail(): ServerDetailResponse =
         request("/api/screens/server-detail", ServerDetailResponse.serializer())
 
+    override suspend fun outboundProxy(): OutboundProxySummary =
+        request(com.flagshipserver.app.core.BoxProxyProtocol.PATH, OutboundProxySummary.serializer())
+
+    override suspend fun outboundProxySet(req: OutboundProxySetRequest): OutboundProxySetResponse {
+        val body = json.encodeToString(OutboundProxySetRequest.serializer(), req).toByteArray()
+        // The box tests the proxy before it answers, which can take a while.
+        return request(
+            com.flagshipserver.app.core.BoxProxyProtocol.PATH, OutboundProxySetResponse.serializer(), "POST", body,
+            readTimeoutSeconds = 60,
+        )
+    }
+
     override suspend fun serverUpdates(refresh: Boolean): ReleaseCatalogResponse =
         request(
             if (refresh) "/api/screens/updates?refresh=1" else "/api/screens/updates",
