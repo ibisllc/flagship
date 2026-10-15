@@ -2328,10 +2328,38 @@ def build_window(application, model: Optional[WizardModel] = None):
                 parts.append(f"device: {s.selected_disk.device_path}")
             done_label.set_text("\n".join(parts))
 
+    # A tray icon with each server's Start/Stop/Restart, where the desktop
+    # shows StatusNotifierItems (the Windows tray, the Mac menu bar).
+    from tray import start_tray, tray_menu
+
+    tray_status: dict = {"text": None}
+
+    def _build_tray_menu():
+        return tray_menu(
+            wizard_model.vm.servers,
+            tray_status["text"],
+            open_window=window.present,
+            start=wizard_model.start_server,
+            stop=wizard_model.stop_server,
+            restart=wizard_model.restart_server,
+            stop_all=lambda: [
+                wizard_model.stop_server(s.name) for s in wizard_model.vm.servers if s.can_stop
+            ],
+            quit_app=window.close,
+        )
+
+    tray = start_tray(_build_tray_menu, window.present)
+
+    def _render_and_tray() -> bool:
+        _render()
+        if tray is not None:
+            tray.refresh()
+        return False
+
     def _on_change() -> None:
         # The model fires on_change from background threads; marshal to
         # the main loop before touching widgets.
-        GLib.idle_add(_render)
+        GLib.idle_add(_render_and_tray)
 
     wizard_model.on_change = _on_change
     _render()
@@ -2376,6 +2404,9 @@ def build_window(application, model: Optional[WizardModel] = None):
         if not wizard_model.vm.has_live_servers:
             return False
         shutdown["started"] = True
+        tray_status["text"] = "Shutting down your servers…"
+        if tray is not None:
+            tray.refresh()
         busy = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
         busy.set_valign(Gtk.Align.CENTER)
         busy.set_halign(Gtk.Align.CENTER)
@@ -2421,6 +2452,8 @@ def build_window(application, model: Optional[WizardModel] = None):
     GLib.idle_add(lambda: wizard_model.pairing_watch.launch() and False)
     monitor.start()
     window.connect("destroy", lambda _w: monitor.stop())
+    if tray is not None:
+        window.connect("destroy", lambda _w: tray.close())
 
     return window
 
