@@ -51,7 +51,7 @@ describe("grouped model menu", () => {
     expect(mg.buildGroups({ entries: [OPENAI], flagshipUsable: false, currentProvider: "flagship" }).map((g: any) => g.id)).toEqual(["flagship", "k1"]);
     // A key typed for this build but not saved still gets a group.
     const typed = mg.buildGroups({ entries: [OPENAI], unsaved: { provider: "google", apiKey: "g-1", relay: true } });
-    expect(typed.map((g: any) => g.title)).toEqual(["openai · Work", "google · this key"]);
+    expect(typed.map((g: any) => g.title)).toEqual(["openai · Work", "google · Unsaved key"]);
     expect(mg.buildGroups({ entries: [OPENAI], unsaved: { provider: "openai", apiKey: "sk-work" } })).toHaveLength(1);
   });
 

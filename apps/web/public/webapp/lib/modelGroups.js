@@ -53,7 +53,7 @@ export function buildGroups({ entries = [], flagshipUsable = false, flagshipMenu
 }
 
 export const UNSAVED_GROUP = "unsaved";
-export const UNSAVED_LABEL = "this key";
+export const UNSAVED_LABEL = "Unsaved key";
 
 export function groupById(groups, id) {
   return (groups || []).find((g) => g.id === id) ?? null;
@@ -142,7 +142,7 @@ function groupRowsHtml(group, choice) {
   const menu = group.menu;
   if (!menu) return `<div class="mm-loading note">Loading models…</div>`;
   if (menu.kind === "flagship") {
-    if (!menu.catalog) return `<p class="note mm-muted mm-note">Not available right now.</p>`;
+    if (!menu.catalog) return `<p class="note mm-muted mm-note">The models couldn't be listed right now.</p>`;
     return menu.catalog.models.map((m) => rowHtml(menu, m, mine, attrs)).join("");
   }
   if (!menu.listed) {
