@@ -100,7 +100,7 @@ describe("admin-authority-guard.sh — against fixtures (a violation trips the g
       [
         "export async function handleSetCustomDomain(deps, body) {",
         "  const authz = await authorizeSensitiveComOp(deps, { username: u, userRec, verifyWith: (pub) => verifySetCustomDomain(claim, sig, hexToBytes(pub)) });",
-        "  if (!authz.ok && !memberInviteSigner(userRec, (pub) => verifySetCustomDomain(claim, sig, pub))) {",
+        "  if (!authz.ok && !deviceInviteSigner(deps, u, id, (pub) => verifySetCustomDomain(claim, sig, pub))) {",
         "    return forbidden('invalid signature');",
         "  }",
         "}",
@@ -184,14 +184,14 @@ describe("admin-authority-guard.sh — the allowlist matches the §2 sensitive .
     const block = /MEMBERSHIP_KEY_EXCEPTIONS=\(([\s\S]*?)\)/.exec(script)?.[1] ?? "";
     const entries = [...block.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
     expect(entries).toEqual([
-      "packages/control-plane/src/serviceInvites.ts|handleCreateServiceInvite|memberInviteSigner",
+      "packages/control-plane/src/serviceInvites.ts|handleCreateServiceInvite|deviceInviteSigner",
       "packages/control-plane/src/serviceInvites.ts|handleRevokeServiceInvite|revokedByCreator",
     ]);
   });
 
   it("the real invite handlers do call their documented helper (the exception is load-bearing)", () => {
     const src = readFileSync(join(__dirname, "../packages/control-plane/src/serviceInvites.ts"), "utf8");
-    expect(src).toMatch(/memberInviteSigner\(userRec/);
-    expect(src).toMatch(/revokedByCreator\(userRec/);
+    expect(src).toMatch(/deviceInviteSigner\(deps, userV\.label/);
+    expect(src).toMatch(/revokedByCreator\(deps, userV\.label/);
   });
 });

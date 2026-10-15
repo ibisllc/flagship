@@ -105,6 +105,7 @@ import type {
   ServiceInviteApprovalMode,
   ServiceInviteCreatorTier,
   RevokedInviteRecord,
+  ServiceInviteRevokeProof,
   WatchDelegateRecord,
   WatchDelegateStorage,
   AcmeAccountKeyGrantRecord,
@@ -4712,6 +4713,10 @@ interface ServiceInviteRow {
   creator_tier?: string | null;
   creator_pub_hex?: string | null;
   creator_device_id?: string | null;
+  // migration 0102
+  revoke_sig?: string | null;
+  revoke_issued_at?: number | null;
+  revoke_signer_pub_hex?: string | null;
 }
 
 function rowToServiceInvite(r: ServiceInviteRow, boundAIDs: string[]): ServiceInviteRecord {
@@ -4735,6 +4740,9 @@ function rowToServiceInvite(r: ServiceInviteRow, boundAIDs: string[]): ServiceIn
     creatorTier: r.creator_tier === "admin" || r.creator_tier === "member" ? r.creator_tier : null,
     creatorPubHex: r.creator_pub_hex ?? null,
     creatorDeviceId: r.creator_device_id ?? null,
+    revokeSig: r.revoke_sig ?? null,
+    revokeIssuedAt: r.revoke_issued_at ?? null,
+    revokeSignerPubHex: r.revoke_signer_pub_hex ?? null,
   };
 }
 
@@ -4742,7 +4750,8 @@ const SERVICE_INVITE_COLS =
   `invite_id, author_aid, service_ref, encrypted_bundle, secret_hash,
    bound_aid, bound_at, created_at, revoked_at,
    create_sig, create_issued_at, max_redemptions, expires_at, redemptions, approval_mode,
-   creator_tier, creator_pub_hex, creator_device_id`;
+   creator_tier, creator_pub_hex, creator_device_id,
+   revoke_sig, revoke_issued_at, revoke_signer_pub_hex`;
 
 /**
  * D1 ServiceInviteStorage — bearer-link service-access capability invites
@@ -4891,15 +4900,23 @@ export class D1ServiceInviteStorage implements ServiceInviteStorage {
     return { ok: true, firstBind: true, record: rec! };
   }
 
-  async revoke(inviteId: string, now: number): Promise<boolean> {
-    // Set revoked_at only if not already set (preserve the first revoke time);
-    // report existence regardless so a re-revoke of a known id returns true.
+  async revoke(inviteId: string, now: number, proof?: ServiceInviteRevokeProof): Promise<boolean> {
+    // Set revoked_at only if not already set (preserve the first revoke time
+    // and its signed revoke); report existence regardless so a re-revoke of a
+    // known id returns true.
     await this.db
       .prepare(
-        `UPDATE service_invites SET revoked_at = ?2
+        `UPDATE service_invites SET revoked_at = ?2, revoke_sig = ?3, revoke_issued_at = ?4,
+             revoke_signer_pub_hex = ?5
            WHERE invite_id = ?1 AND revoked_at IS NULL`,
       )
-      .bind(inviteId, now)
+      .bind(
+        inviteId,
+        now,
+        proof?.signature.toLowerCase() ?? null,
+        proof?.issuedAt ?? null,
+        proof?.signerPubHex.toLowerCase() ?? null,
+      )
       .run();
     const r = await this.db
       .prepare(`SELECT 1 AS one FROM service_invites WHERE invite_id = ?1 LIMIT 1`)
@@ -4940,12 +4957,20 @@ export class D1ServiceInviteStorage implements ServiceInviteStorage {
   async revokedSince(authorAID: string, cursor: number): Promise<RevokedInviteRecord[]> {
     const rs = await this.db
       .prepare(
-        `SELECT invite_id, service_ref, revoked_at FROM service_invites
+        `SELECT invite_id, service_ref, revoked_at, revoke_sig, revoke_issued_at, revoke_signer_pub_hex
+           FROM service_invites
            WHERE author_aid = ?1 AND revoked_at IS NOT NULL AND revoked_at > ?2
            ORDER BY revoked_at ASC`,
       )
       .bind(authorAID.toLowerCase(), cursor)
-      .all<{ invite_id: string; service_ref: string; revoked_at: number }>();
+      .all<{
+        invite_id: string;
+        service_ref: string;
+        revoked_at: number;
+        revoke_sig: string | null;
+        revoke_issued_at: number | null;
+        revoke_signer_pub_hex: string | null;
+      }>();
     const out: RevokedInviteRecord[] = [];
     for (const r of rs.results ?? []) {
       out.push({
@@ -4953,6 +4978,9 @@ export class D1ServiceInviteStorage implements ServiceInviteStorage {
         serviceRef: r.service_ref,
         boundAIDs: await this.boundAIDsFor(r.invite_id),
         revokedAt: r.revoked_at,
+        revokeSig: r.revoke_sig ?? null,
+        revokeIssuedAt: r.revoke_issued_at ?? null,
+        revokeSignerPubHex: r.revoke_signer_pub_hex ?? null,
       });
     }
     return out;

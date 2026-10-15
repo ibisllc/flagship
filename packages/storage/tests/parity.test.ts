@@ -1979,8 +1979,37 @@ describe("D1 ↔ InMemory parity", () => {
             serviceRef: "alice-notes",
             boundAIDs: ["bb".repeat(32), "cc".repeat(32)],
             revokedAt: 5000,
+            revokeSig: null,
+            revokeIssuedAt: null,
+            revokeSignerPubHex: null,
           },
         ],
+      });
+    });
+
+    it("keeps the first signed revoke beside the revocation (0102)", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.serviceInvites.create({
+          inviteId: "r1",
+          authorAID: "aa".repeat(32),
+          serviceRef: "alice--notes",
+          encryptedBundle: "00",
+          secretHash: "dd".repeat(32),
+          createdAt: 1,
+        });
+        await s.serviceInvites.revoke("r1", 10, { signature: "AB".repeat(64), issuedAt: 9, signerPubHex: "EE".repeat(32) });
+        await s.serviceInvites.revoke("r1", 20, { signature: "cd".repeat(64), issuedAt: 19, signerPubHex: "ff".repeat(32) });
+        const got = await s.serviceInvites.get("r1");
+        const since = await s.serviceInvites.revokedSince("aa".repeat(32), 0);
+        return {
+          got: { revokedAt: got?.revokedAt, sig: got?.revokeSig, at: got?.revokeIssuedAt, by: got?.revokeSignerPubHex },
+          since: since.map((x) => [x.revokeSig, x.revokeIssuedAt, x.revokeSignerPubHex]),
+        };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({
+        got: { revokedAt: 10, sig: "ab".repeat(64), at: 9, by: "ee".repeat(32) },
+        since: [["ab".repeat(64), 9, "ee".repeat(32)]],
       });
     });
   });

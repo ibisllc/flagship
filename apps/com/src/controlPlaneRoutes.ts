@@ -198,6 +198,7 @@ import {
   handlePairDemoUser,
   handleGymProvision,
   handleMintDeviceGrant,
+  handleListAccountDeviceGrants,
   handleRevokeDeviceGrant,
   handleApplyAdminRootRotation,
   handleListAdminRootRotations,
@@ -1355,6 +1356,7 @@ export async function tryControlPlane(
           invites: storage.serviceInvites,
           usernames: storage.usernames,
           grants: storage.deviceCapabilityGrants,
+          identities: storage.deviceIdentities,
         },
         decodeURIComponent(m[1]!),
         await readJson(request),
@@ -2434,6 +2436,23 @@ export async function tryControlPlane(
           usernames: storage.usernames,
         },
         await readJson(request),
+      ),
+    );
+  }
+  // The account's device book for its own servers (docs/service-access-gating.md,
+  // "Account members"): the box verifies every grant under the keys it pins.
+  if (method === "GET" && (m = path.match(ROUTE_RE.DEVICE_GRANTS_LIST))) {
+    const username = decodeURIComponent(m[1]!).toLowerCase();
+    const refused = await gateAccountRead(storage, env, request, username);
+    if (refused) return refused;
+    return finishRead(
+      await handleListAccountDeviceGrants(
+        {
+          storage: storage.deviceCapabilityGrants,
+          identities: storage.deviceIdentities,
+          usernames: storage.usernames,
+        },
+        username,
       ),
     );
   }

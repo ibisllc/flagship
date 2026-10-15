@@ -66,28 +66,32 @@ SENSITIVE_HANDLERS=(
   "packages/control-plane/src/routing.ts|handleRegisterRck"
 )
 
-# MEMBERSHIP-KEY EXCEPTIONS — owner decision 2026-10-15 (docs/service-access-
-# gating.md "Who can invite"): "Only admins grant higher access; any device of
-# the account may invite at Member, and admins are told." These are the ONLY
-# places a sensitive handler may accept the account's membership key after the
-# admin gate refused, each through one named helper (`<relpath>|<function>|<helper>`):
+# DEVICE-KEY EXCEPTIONS — owner decision 2026-10-15 (docs/service-access-
+# gating.md "Account members, ranks and who may change them"): a non-admin
+# device that is manager-class in an app may invite at Member and withdraw the
+# invites it made. These are the ONLY places a sensitive handler may accept a
+# non-admin key after the admin gate refused, each through one named helper
+# (`<relpath>|<function>|<helper>`):
 #
-#   - invite CREATE, member tier: `memberInviteSigner` accepts a create signed
-#     by the account's AID or IRK. It grants nothing above Member: `.com` records
-#     the tier and tells the admin devices, and the BOX reads the tier from the
-#     signing key itself and caps every join through that invite at Member
-#     (serviceAccess.ts), so `.com` can't lift it either.
+#   - invite CREATE, member tier: `deviceInviteSigner` accepts a create signed
+#     by the account device key of the device the request names, while that
+#     device is active (never the AID or IRK, which every device holds). It
+#     grants nothing above Member: `.com` records the tier and the device and
+#     tells the admin devices, and the BOX reads the tier from the signing key,
+#     caps every join at Member and lets people in only while that device is
+#     still manager-class in the app (serviceAccess.ts).
 #   - invite REVOKE of that member invite: `revokedByCreator` accepts the very
-#     key that created it (a device withdraws its own invite), only while that
-#     key is still one of the account's membership keys. Removing people,
-#     changing a rank or the open/members-only mode stay admin-only.
+#     device key that created it, only while the device is active. `.com` keeps
+#     the signed revoke; the box prunes only for a revoke it verifies itself.
+#     Removing other people, changing a rank or the open/members-only mode stay
+#     admin-only.
 #
 # Nothing else may call these helpers; a new entry here needs an owner decision.
 MEMBERSHIP_KEY_EXCEPTIONS=(
-  "packages/control-plane/src/serviceInvites.ts|handleCreateServiceInvite|memberInviteSigner"
+  "packages/control-plane/src/serviceInvites.ts|handleCreateServiceInvite|deviceInviteSigner"
   "packages/control-plane/src/serviceInvites.ts|handleRevokeServiceInvite|revokedByCreator"
 )
-MEMBERSHIP_KEY_HELPERS='memberInviteSigner|revokedByCreator|verifyAccountSigned'
+MEMBERSHIP_KEY_HELPERS='deviceInviteSigner|memberInviteSigner|revokedByCreator|verifyAccountSigned'
 
 # A gate token proves the handler routes authorization through the master-admin
 # path. `signerRoot` covers the admin-scope grant-mint discriminator (§3.3),

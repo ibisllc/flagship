@@ -398,3 +398,55 @@ export async function requireDeviceScope(
 }
 
 export const _internalParseScopes = parseScopes;
+
+// ──────────────────────────────────────────────────────────────────────
+// GET /api/users/:u/device-grants (account read token)
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * The account's active device grants, signatures included, for the account's
+ * own servers (docs/service-access-gating.md, "Account members"): a box
+ * verifies every grant itself under the keys it pins (admin root, owner IRK)
+ * and learns which devices are admins, so `.com` can drop a device from this
+ * list but never add or promote one. Device ids and public keys only; names
+ * stay sealed in the account directory. The route requires the account read
+ * token (a box mints it with its STK).
+ */
+export async function handleListAccountDeviceGrants(
+  deps: DeviceCapabilityGrantsDeps,
+  username: string,
+): Promise<HandlerResponseWithHeaders> {
+  const userNorm = username.toLowerCase();
+  const userRec = await deps.usernames.get(userNorm);
+  if (!userRec) return notFound("username not registered");
+  const [grants, devices] = await Promise.all([
+    deps.storage.listForUser(userNorm),
+    deps.identities.listForAccount(userNorm),
+  ]);
+  const live = new Map(
+    devices.filter((d) => d.revokedAt === null).map((d) => [d.deviceId, d.devicePubHex.toLowerCase()] as const),
+  );
+  const out: Array<Record<string, unknown>> = [];
+  for (const g of grants) {
+    if (g.revokedAt !== null || live.get(g.deviceId) !== g.devicePubHex.toLowerCase()) continue;
+    let scopes: DeviceScope[] | null;
+    try {
+      scopes = parseScopes(JSON.parse(g.scopesJson));
+    } catch {
+      scopes = null;
+    }
+    if (!scopes) continue;
+    out.push({
+      grantId: g.grantId,
+      username: g.username,
+      deviceId: g.deviceId,
+      devicePubHex: g.devicePubHex.toLowerCase(),
+      scopes,
+      issuedAt: g.issuedAt,
+      expiresAt: g.expiresAt,
+      signatureHex: g.signatureHex.toLowerCase(),
+      signerRoot: g.signerRoot,
+    });
+  }
+  return ok({ username: userNorm, grants: out }, { "cache-control": "private, no-store" });
+}

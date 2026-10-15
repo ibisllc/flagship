@@ -16,6 +16,7 @@ import type {
   ServiceInviteRedeemResult,
   ServiceInviteApprovalMode,
   ServiceInviteCreatorTier,
+  ServiceInviteRevokeProof,
   RevokedInviteRecord,
   WatchDelegateRecord,
   WatchDelegateStorage,
@@ -2733,6 +2734,9 @@ export class InMemoryServiceInviteStorage implements ServiceInviteStorage {
       creatorTier: rec.creatorTier ?? null,
       creatorPubHex: rec.creatorPubHex?.toLowerCase() ?? null,
       creatorDeviceId: rec.creatorDeviceId ?? null,
+      revokeSig: null,
+      revokeIssuedAt: null,
+      revokeSignerPubHex: null,
     });
     return { ok: true };
   }
@@ -2771,10 +2775,15 @@ export class InMemoryServiceInviteStorage implements ServiceInviteStorage {
     return { ok: true, firstBind: true, record: { ...rec, boundAIDs: [...rec.boundAIDs] } };
   }
 
-  async revoke(inviteId: string, now: number): Promise<boolean> {
+  async revoke(inviteId: string, now: number, proof?: ServiceInviteRevokeProof): Promise<boolean> {
     const rec = this.byId.get(inviteId);
     if (!rec) return false;
-    if (rec.revokedAt === null) rec.revokedAt = now;
+    if (rec.revokedAt === null) {
+      rec.revokedAt = now;
+      rec.revokeSig = proof?.signature.toLowerCase() ?? null;
+      rec.revokeIssuedAt = proof?.issuedAt ?? null;
+      rec.revokeSignerPubHex = proof?.signerPubHex.toLowerCase() ?? null;
+    }
     return true;
   }
 
@@ -2807,6 +2816,9 @@ export class InMemoryServiceInviteStorage implements ServiceInviteStorage {
         serviceRef: r.serviceRef,
         boundAIDs: [...r.boundAIDs],
         revokedAt: r.revokedAt!,
+        revokeSig: r.revokeSig,
+        revokeIssuedAt: r.revokeIssuedAt,
+        revokeSignerPubHex: r.revokeSignerPubHex,
       }));
   }
 }

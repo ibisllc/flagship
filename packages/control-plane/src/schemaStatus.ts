@@ -67,6 +67,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0100",
   // Hourly counts of rate-limit refusals and near-limit passes.
   "0101",
+  // The signed revoke beside each revoked service invite (the box verifies it).
+  "0102",
 ];
 
 export interface SchemaStatusDeps {

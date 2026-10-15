@@ -1,13 +1,15 @@
 /**
- * Who can invite (owner decision 2026-10-15, docs/service-access-gating.md "Who
- * can invite"): only admins grant higher access; any device of the account may
- * invite at Member, and admins are told.
+ * Who may invite (owner decision 2026-10-15, docs/service-access-gating.md
+ * "Account members, ranks and who may change them").
  *
  * On an admin-pinned account `.com` accepts an invite create from the admin
- * root / an admin-granted device (tier `admin`) OR from the account's
- * membership key, AID or IRK (tier `member`); it records the tier, the key and
- * the device id, pushes the admin devices (member tier only) and logs it.
- * Revoke: an admin, or the key that created that member invite.
+ * root / an admin-granted device (tier `admin`) OR from a device's own account
+ * device key, for the device the request names (tier `member`); the AID and
+ * IRK no longer create invites there. It records the tier, the key and the
+ * device (proven by the signature), pushes the admin devices (member tier
+ * only) and logs it. Revoke: an admin, or the device key that created that
+ * member invite while the device is active; the signed revoke is kept for the
+ * box to verify.
  */
 import { describe, expect, it } from "vitest";
 import {
@@ -32,7 +34,9 @@ import {
   handleCreateServiceInvite,
   handleListServiceInvites,
   handleRevokeServiceInvite,
+  handleRevokedSinceServiceInvites,
 } from "../src/serviceInvites.js";
+import { handleListAccountDeviceGrants } from "../src/deviceCapabilityGrants.js";
 import {
   adminDeviceIds,
   buildNotifyAdminDevices,
@@ -55,6 +59,9 @@ function key(fill: number): Keypair {
 const adminRoot = key(51);
 const adminDevice = key(52);
 const stranger = key(53);
+const phone = key(54);
+const tablet = key(55);
+const TABLET_ID = "c3".repeat(16);
 const ADMIN_DEVICE_ID = "a1".repeat(16);
 const PHONE_ID = "b2".repeat(16);
 
@@ -92,7 +99,7 @@ async function seed(opts: { pinned?: boolean } = {}) {
     revokedAt: null,
     signerRoot: "admin-root",
   });
-  for (const [deviceId, pub] of [[ADMIN_DEVICE_ID, adminDevice.publicKey], [PHONE_ID, key(54).publicKey]] as const) {
+  for (const [deviceId, pub] of [[ADMIN_DEVICE_ID, adminDevice.publicKey], [PHONE_ID, phone.publicKey], [TABLET_ID, tablet.publicKey]] as const) {
     await s.deviceIdentities.put({ accountId: USER, deviceId, devicePubHex: hex(pub), platformClass: "ios", createdAt: 1, lastSeenAt: 1, revokedAt: null });
     await s.pushTokens.put({
       tokenId: `tok-${deviceId.slice(0, 4)}`,
@@ -185,15 +192,24 @@ describe("invite create — two tiers on an admin-pinned account", () => {
   });
 
   for (const [name, signer] of [["IRK", irk], ["AID", aid]] as const) {
-    it(`the membership ${name} creates a MEMBER invite, records the device, and tells the admins`, async () => {
+    it(`the membership ${name}, which every device holds, can't create an invite on an admin-pinned account`, async () => {
+      const { deps, pushes } = await seed();
+      const { body } = createBody(signer, { deviceId: PHONE_ID });
+      expect((await handleCreateServiceInvite(deps, USER, body)).status).toBe(403);
+      expect(pushes).toHaveLength(0);
+    });
+  }
+
+  {
+    it(`a device's own key creates a MEMBER invite, proves the device, and tells the admins`, async () => {
       const { deps, pushes, s } = await seed();
-      const { inviteId, body } = createBody(signer, { deviceId: PHONE_ID });
+      const { inviteId, body } = createBody(phone, { deviceId: PHONE_ID });
       const r = await handleCreateServiceInvite(deps, USER, body);
       expect(r.status).toBe(200);
       expect((r.body as { tier: string }).tier).toBe("member");
       const rec = await s.serviceInvites.get(inviteId);
       expect(rec?.creatorTier).toBe("member");
-      expect(rec?.creatorPubHex).toBe(hex(signer.publicKey));
+      expect(rec?.creatorPubHex).toBe(hex(phone.publicKey));
       expect(rec?.creatorDeviceId).toBe(PHONE_ID);
       // The push reaches the admin device only, and says nothing about the invite.
       expect(pushes).toHaveLength(1);
@@ -215,26 +231,31 @@ describe("invite create — two tiers on an admin-pinned account", () => {
   it("refuses a stranger's key (403) and a malformed device id (400)", async () => {
     const { deps, pushes } = await seed();
     expect((await handleCreateServiceInvite(deps, USER, createBody(stranger).body)).status).toBe(403);
-    const bad = createBody(irk);
+    const bad = createBody(phone);
     (bad.body.request as Record<string, unknown>).deviceId = "PHONE";
     expect((await handleCreateServiceInvite(deps, USER, bad.body)).status).toBe(400);
     expect(pushes).toHaveLength(0);
   });
 
-  it("keeps the invite but drops an unknown or revoked device id", async () => {
+  it("refuses a device key that doesn't match the device it names, an unknown device or a revoked one", async () => {
     const { deps, s } = await seed();
-    const unknown = createBody(irk, { deviceId: "cc".repeat(16) });
-    expect((await handleCreateServiceInvite(deps, USER, unknown.body)).status).toBe(200);
-    expect((await s.serviceInvites.get(unknown.inviteId))?.creatorDeviceId).toBeNull();
+    expect((await handleCreateServiceInvite(deps, USER, createBody(phone, { deviceId: TABLET_ID }).body)).status).toBe(403);
+    expect((await handleCreateServiceInvite(deps, USER, createBody(phone, { deviceId: "cc".repeat(16) }).body)).status).toBe(403);
+    expect((await handleCreateServiceInvite(deps, USER, createBody(phone).body)).status).toBe(403);
     await s.deviceIdentities.revoke(USER, PHONE_ID, NOW);
-    const revoked = createBody(irk, { deviceId: PHONE_ID });
-    expect((await handleCreateServiceInvite(deps, USER, revoked.body)).status).toBe(200);
-    expect((await s.serviceInvites.get(revoked.inviteId))?.creatorDeviceId).toBeNull();
+    expect((await handleCreateServiceInvite(deps, USER, createBody(phone, { deviceId: PHONE_ID }).body)).status).toBe(403);
+  });
+
+  it("an admin root create keeps the named device as attribution", async () => {
+    const { deps, s } = await seed();
+    const { inviteId, body } = createBody(adminRoot, { deviceId: ADMIN_DEVICE_ID });
+    expect((await handleCreateServiceInvite(deps, USER, body)).status).toBe(200);
+    expect((await s.serviceInvites.get(inviteId))?.creatorDeviceId).toBe(ADMIN_DEVICE_ID);
   });
 
   it("a failing push never fails the invite", async () => {
     const { deps } = await seed();
-    const r = await handleCreateServiceInvite({ ...deps, notifyAdmins: async () => { throw new Error("apns down"); } }, USER, createBody(irk).body);
+    const r = await handleCreateServiceInvite({ ...deps, notifyAdmins: async () => { throw new Error("apns down"); } }, USER, createBody(phone, { deviceId: PHONE_ID }).body);
     expect(r.status).toBe(200);
   });
 
@@ -244,24 +265,31 @@ describe("invite create — two tiers on an admin-pinned account", () => {
     const r = await handleCreateServiceInvite(deps, USER, body);
     expect(r.status).toBe(200);
     expect((await s.serviceInvites.get(inviteId))?.creatorTier).toBe("admin");
+    const byDevice = createBody(phone, { deviceId: PHONE_ID });
+    expect((await handleCreateServiceInvite(deps, USER, byDevice.body)).status).toBe(200);
+    expect((await s.serviceInvites.get(byDevice.inviteId))?.creatorTier).toBe("admin");
     expect(pushes).toHaveLength(0);
   });
 });
 
 describe("invite revoke — admin, or the key that created that invite", () => {
-  it("the creating membership key withdraws its own member invite", async () => {
-    const { deps } = await seed();
-    const { inviteId, body } = createBody(aid);
+  it("the creating device withdraws its own member invite, and the signed revoke is kept", async () => {
+    const { deps, s } = await seed();
+    const { inviteId, body } = createBody(phone, { deviceId: PHONE_ID });
     await handleCreateServiceInvite(deps, USER, body);
-    expect((await handleRevokeServiceInvite(deps, USER, revokeBody(inviteId, aid))).status).toBe(200);
+    const rv = revokeBody(inviteId, phone);
+    expect((await handleRevokeServiceInvite(deps, USER, rv)).status).toBe(200);
+    const rec = await s.serviceInvites.get(inviteId);
+    expect(rec).toMatchObject({ revokeSig: rv.signature, revokeIssuedAt: NOW, revokeSignerPubHex: hex(phone.publicKey) });
   });
 
-  it("a different membership key can't revoke it, an admin can", async () => {
+  it("another device, the AID or the IRK can't revoke it; an admin can", async () => {
     const { deps } = await seed();
-    const { inviteId, body } = createBody(aid);
+    const { inviteId, body } = createBody(phone, { deviceId: PHONE_ID });
     await handleCreateServiceInvite(deps, USER, body);
-    expect((await handleRevokeServiceInvite(deps, USER, revokeBody(inviteId, irk))).status).toBe(403);
-    expect((await handleRevokeServiceInvite(deps, USER, revokeBody(inviteId, stranger))).status).toBe(403);
+    for (const k of [tablet, irk, aid, stranger]) {
+      expect((await handleRevokeServiceInvite(deps, USER, revokeBody(inviteId, k))).status).toBe(403);
+    }
     expect((await handleRevokeServiceInvite(deps, USER, revokeBody(inviteId, adminRoot))).status).toBe(200);
   });
 
@@ -274,19 +302,19 @@ describe("invite revoke — admin, or the key that created that invite", () => {
     expect((await handleRevokeServiceInvite(deps, USER, revokeBody(inviteId, adminDevice))).status).toBe(200);
   });
 
-  it("the creator key stops counting once it is no longer the account's", async () => {
+  it("the creator key stops counting once its device is revoked", async () => {
     const { deps, s } = await seed();
-    const { inviteId, body } = createBody(irk);
+    const { inviteId, body } = createBody(phone, { deviceId: PHONE_ID });
     await handleCreateServiceInvite(deps, USER, body);
-    expect(await s.usernames.swapIrkPub(USER, hex(irk.publicKey), hex(key(60).publicKey), NOW)).toBe(true);
-    expect((await handleRevokeServiceInvite(deps, USER, revokeBody(inviteId, irk))).status).toBe(403);
+    await s.deviceIdentities.revoke(USER, PHONE_ID, NOW);
+    expect((await handleRevokeServiceInvite(deps, USER, revokeBody(inviteId, phone))).status).toBe(403);
   });
 });
 
 describe("invite list — who invited", () => {
   it("each invite carries its creator tier and device id (never a name)", async () => {
     const { deps } = await seed();
-    const member = createBody(irk, { deviceId: PHONE_ID });
+    const member = createBody(phone, { deviceId: PHONE_ID });
     const admin = createBody(adminRoot);
     await handleCreateServiceInvite(deps, USER, member.body);
     await handleCreateServiceInvite(deps, USER, admin.body);
@@ -303,6 +331,47 @@ describe("invite list — who invited", () => {
     const byId = Object.fromEntries(rows.map((x) => [x.inviteId, x]));
     expect(byId[member.inviteId]).toMatchObject({ creatorTier: "member", creatorDeviceId: PHONE_ID });
     expect(byId[admin.inviteId]).toMatchObject({ creatorTier: "admin", creatorDeviceId: null });
+  });
+});
+
+describe("revoked-since carries the signed revoke", () => {
+  it("serves the revoke envelope, its signature and the key .com verified it under", async () => {
+    const { deps } = await seed();
+    const { inviteId, body } = createBody(phone, { deviceId: PHONE_ID });
+    await handleCreateServiceInvite(deps, USER, body);
+    const rv = revokeBody(inviteId, phone);
+    await handleRevokeServiceInvite(deps, USER, rv);
+    const query: ServiceInviteListQuery = { username: USER, authorAID: hex(aid.publicKey), scope: "revoked-since", cursor: 0, issuedAt: NOW };
+    const r = await handleRevokedSinceServiceInvites(deps, USER, {
+      authorAID: query.authorAID,
+      scope: "revoked-since",
+      cursor: "0",
+      issuedAt: String(NOW),
+      sig: hex(signServiceInviteListQuery(query, aid)),
+    });
+    expect(r.status).toBe(200);
+    const row = (r.body as { revoked: Array<Record<string, unknown>> }).revoked[0]!;
+    expect(row).toMatchObject({
+      inviteId,
+      revoke: { inviteId, issuedAt: NOW },
+      revokeSig: rv.signature,
+      revokerPubHex: hex(phone.publicKey),
+    });
+  });
+});
+
+describe("the device book a box reads", () => {
+  it("lists active grants with signatures and drops revoked devices", async () => {
+    const { s } = await seed();
+    const deps = { storage: s.deviceCapabilityGrants, identities: s.deviceIdentities, usernames: s.usernames };
+    const r = await handleListAccountDeviceGrants(deps, USER);
+    expect(r.status).toBe(200);
+    const grants = (r.body as { grants: Array<{ deviceId: string; signerRoot: string; scopes: string[] }> }).grants;
+    expect(grants.map((g) => g.deviceId)).toEqual([ADMIN_DEVICE_ID]);
+    expect(grants[0]).toMatchObject({ signerRoot: "admin-root", scopes: ["admin", "view-directory"] });
+    await s.deviceIdentities.revoke(USER, ADMIN_DEVICE_ID, NOW);
+    expect(((await handleListAccountDeviceGrants(deps, USER)).body as { grants: unknown[] }).grants).toEqual([]);
+    expect((await handleListAccountDeviceGrants(deps, "nobody")).status).toBe(404);
   });
 });
 

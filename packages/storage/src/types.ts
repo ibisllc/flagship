@@ -1826,8 +1826,18 @@ export interface ServiceInviteRecord {
   creatorTier: ServiceInviteCreatorTier | null;
   /** The key the create verified under (hex): the only non-admin key that may revoke it. */
   creatorPubHex: string | null;
-  /** The account device id the creating device named (attribution only; never a name). */
+  /** The account device whose key signed the create (proven by the signature; never a name). */
   creatorDeviceId: string | null;
+  /**
+   * The signed revoke (migration 0102; docs/service-access-gating.md "Account
+   * members"): the box prunes an invite's people only for a revoke it verifies
+   * itself. NULL on rows revoked before 0102 or not revoked.
+   */
+  revokeSig: string | null;
+  /** The revoke envelope's signed `issuedAt`. */
+  revokeIssuedAt: number | null;
+  /** The key the revoke verified under on `.com` (a hint for the box). */
+  revokeSignerPubHex: string | null;
 }
 
 /** Which authority signed an invite's create. */
@@ -1857,6 +1867,17 @@ export interface RevokedInviteRecord {
   /** Every AID that was bound (lower-hex) — the box prunes ALL of these. */
   boundAIDs: string[];
   revokedAt: number;
+  /** The signed revoke, when `.com` kept one (migration 0102). */
+  revokeSig: string | null;
+  revokeIssuedAt: number | null;
+  revokeSignerPubHex: string | null;
+}
+
+/** The signed revoke `.com` keeps beside a revocation. */
+export interface ServiceInviteRevokeProof {
+  signature: string;
+  issuedAt: number;
+  signerPubHex: string;
 }
 
 export interface ServiceInviteStorage {
@@ -1909,7 +1930,7 @@ export interface ServiceInviteStorage {
    * first revokedAt). Returns whether a row existed. The caller has verified
    * the author's IRK/AID signature over the revoke.
    */
-  revoke(inviteId: string, now: number): Promise<boolean>;
+  revoke(inviteId: string, now: number, proof?: ServiceInviteRevokeProof): Promise<boolean>;
   /** A single invite by id, or undefined. */
   get(inviteId: string): Promise<ServiceInviteRecord | undefined>;
   /** Lookup by secretHash (redeem-path read), or undefined. */

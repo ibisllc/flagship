@@ -22,15 +22,18 @@
  * blind store + first-bind arbiter). `.com` still enforces maxN / expiry /
  * first-bind atomically and runs the manual-approve pending state.
  *
- * Who can invite (owner decision 2026-10-15, docs/service-access-gating.md):
- * only admins grant higher access; any device of the account may let people in
- * at Member, and admins are told. On an account with a pinned admin root a
- * create signed by the admin root (or an admin-granted device) is an ADMIN
- * invite; one signed by the account's membership key (AID or IRK, which every
- * device holds) is a MEMBER invite: `.com` records the tier, pushes the admin
- * devices a content-free notice and logs it to the account activity. The box
- * reads the tier from the signing key itself and caps a member invite's joins
- * at Member, so `.com`'s record is never what keeps a rank down.
+ * Who may invite (owner decision 2026-10-15, docs/service-access-gating.md,
+ * "Account members, ranks and who may change them"): on an account with a
+ * pinned admin root a create signed by the admin root (or an admin-granted
+ * device) is an ADMIN invite; one signed by a non-admin device's own account
+ * device key (the request names its `deviceId`, and the signature proves it)
+ * is a MEMBER invite: `.com` records the tier and the device, pushes the admin
+ * devices a content-free notice and logs it to the account activity. The AID
+ * and IRK, which every device holds, no longer create invites there. The box
+ * reads the tier from the signing key itself, caps a member invite's joins at
+ * Member and lets people in only while the creating device may still invite
+ * in that app, so `.com`'s record is never what keeps a rank down. A revoke is
+ * kept with its signature so the box can verify it before pruning anyone.
  */
 
 import {
@@ -97,7 +100,7 @@ export interface ServiceInviteDeps {
    * (`request.deviceId`), kept only when it is a live device of the account.
    * Absent ⇒ the named id is not recorded.
    */
-  identities?: Pick<DeviceIdentityStorage, "get">;
+  identities?: Pick<DeviceIdentityStorage, "get" | "getByPub">;
   /** Push the account's admin devices the content-free member-invite notice. */
   notifyAdmins?: (username: string) => Promise<unknown>;
   /** Account activity: a member invite is logged there (content-free). */
@@ -133,22 +136,27 @@ function verifyAccountSigned(
 }
 
 /**
- * MEMBER-tier invite authority (the one documented exception in
- * scripts/admin-authority-guard.sh): on an admin-pinned account a create the
- * admin gate refused may still be signed by the account's membership key, the
- * AID or the IRK, which every device of the account holds. Returns the key it
- * verified under, or null. Its joins are capped at Member by the box.
+ * Device-key invite authority (one of the documented exceptions in
+ * scripts/admin-authority-guard.sh): a create the admin gate refused may be
+ * signed by the account device key of the device it names, while that device
+ * is active. Returns the device and the key it verified under, or null. The box
+ * caps its joins at Member and checks the device may still invite there.
  */
-function memberInviteSigner(userRec: UsernameRecord, verify: (pub: Uint8Array) => boolean): string | null {
-  for (const hex of [userRec.aidPubHex, userRec.irkPubHex]) {
-    if (!hex) continue;
-    try {
-      if (verify(hexToBytes(hex))) return hex.toLowerCase();
-    } catch {
-      /* next key */
-    }
+async function deviceInviteSigner(
+  deps: ServiceInviteDeps,
+  username: string,
+  deviceId: unknown,
+  verify: (pub: Uint8Array) => boolean,
+): Promise<{ deviceId: string; pubHex: string } | null> {
+  if (typeof deviceId !== "string" || !DEVICE_ID_RE.test(deviceId) || !deps.identities) return null;
+  const device = await deps.identities.get(username, deviceId);
+  if (!device || device.revokedAt !== null) return null;
+  try {
+    if (!verify(hexToBytes(device.devicePubHex))) return null;
+  } catch {
+    return null;
   }
-  return null;
+  return { deviceId: device.deviceId, pubHex: device.devicePubHex.toLowerCase() };
 }
 
 const DEVICE_ID_RE = /^[0-9a-f]{32}$/;
@@ -170,7 +178,11 @@ interface CreateBody {
     maxRedemptions?: unknown;
     expiresAt?: unknown;
     approvalMode?: unknown;
-    /** The account device id of the device that made it (attribution only, not signed). */
+    /**
+     * The account device that made it. A non-admin device signs with this
+     * device's key, so the signature proves it; next to an admin-root
+     * signature it is attribution only.
+     */
     deviceId?: unknown;
   };
   signature?: unknown;
@@ -258,10 +270,10 @@ export async function handleCreateServiceInvite(
   } catch {
     return malformed("invalid signature hex");
   }
-  // Who can invite: the admin gate first (admin root / admin-granted device;
+  // Who may invite: the admin gate first (admin root / admin-granted device;
   // on an account with no admin root, the account's own AID or IRK, as
-  // before). On an admin-pinned account a create the gate refused may still
-  // come from the membership key: a MEMBER invite, capped at Member.
+  // before). A create the gate refused may still come from a device's own
+  // account device key: a MEMBER invite on an admin-pinned account.
   const createAuthz = await authorizeSensitiveComOp(
     { grants: deps.grants, now: deps.now },
     {
@@ -274,21 +286,27 @@ export async function handleCreateServiceInvite(
   );
   let tier: ServiceInviteCreatorTier;
   let creatorPubHex: string;
+  let creatorDeviceId: string | undefined;
   if (createAuthz.ok) {
     tier = "admin";
-    creatorPubHex = createAuthz.signerPubHex;
+    creatorPubHex = createAuthz.signerPubHex.toLowerCase();
+    // An admin-granted device signed with its own key: that names it. The
+    // admin root names no device, so the id the request gives is kept as
+    // attribution, when it is a live device of the account.
+    const signer = deps.identities ? await deps.identities.getByPub(userV.label, creatorPubHex) : undefined;
+    if (signer && signer.revokedAt === null) creatorDeviceId = signer.deviceId;
+    else if (typeof r.deviceId === "string" && deps.identities) {
+      const named = await deps.identities.get(userV.label, r.deviceId);
+      if (named && named.revokedAt === null) creatorDeviceId = named.deviceId;
+    }
   } else {
-    const member = userRec.adminRootPubHex
-      ? memberInviteSigner(userRec, (pub) => verifyCreateServiceInvite(create, sig, pub))
-      : null;
-    if (!member) return forbidden("invalid signature");
-    tier = "member";
-    creatorPubHex = member;
-  }
-  let creatorDeviceId: string | undefined;
-  if (typeof r.deviceId === "string" && deps.identities) {
-    const device = await deps.identities.get(userV.label, r.deviceId);
-    if (device && device.revokedAt === null) creatorDeviceId = device.deviceId;
+    const device = await deviceInviteSigner(deps, userV.label, r.deviceId, (pub) =>
+      verifyCreateServiceInvite(create, sig, pub),
+    );
+    if (!device) return forbidden("invalid signature");
+    tier = userRec.adminRootPubHex ? "member" : "admin";
+    creatorPubHex = device.pubHex;
+    creatorDeviceId = device.deviceId;
   }
 
   const res = await deps.invites.create({
@@ -444,6 +462,7 @@ export async function handleRedeemServiceInvite(
       serviceRef: existing.serviceRef,
       create: carrier,
       createSig: existing.createSig,
+      creatorPubHex: existing.creatorPubHex,
     });
   }
 
@@ -471,27 +490,31 @@ export async function handleRedeemServiceInvite(
     encryptedBundle: res.record.encryptedBundle,
     create: carrier,
     createSig: res.record.createSig,
+    creatorPubHex: res.record.creatorPubHex,
   });
 }
 
 /**
  * The creator-key withdraw (documented in scripts/admin-authority-guard.sh):
- * a MEMBER invite may be revoked by the very key that created it, and only
- * while that key is still one of the account's membership keys.
+ * a MEMBER invite may be revoked by the very device key that created it, and
+ * only while that device is still an active device of the account. Returns the
+ * key it verified under, or null. (Whether the device may still withdraw in
+ * that app is the box's call: it verifies the kept revoke itself.)
  */
-function revokedByCreator(
-  userRec: UsernameRecord,
+async function revokedByCreator(
+  deps: ServiceInviteDeps,
+  username: string,
   invite: { creatorTier: ServiceInviteCreatorTier | null; creatorPubHex: string | null },
   verify: (pub: Uint8Array) => boolean,
-): boolean {
+): Promise<string | null> {
   const creator = invite.creatorTier === "member" ? invite.creatorPubHex?.toLowerCase() : undefined;
-  if (!creator) return false;
-  const accountKeys = [userRec.aidPubHex, userRec.irkPubHex].filter((k): k is string => !!k).map((k) => k.toLowerCase());
-  if (!accountKeys.includes(creator)) return false;
+  if (!creator || !deps.identities) return null;
+  const device = await deps.identities.getByPub(username, creator);
+  if (!device || device.revokedAt !== null) return null;
   try {
-    return verify(hexToBytes(creator));
+    return verify(hexToBytes(creator)) ? creator : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -557,11 +580,16 @@ export async function handleRevokeServiceInvite(
       now,
     },
   );
-  if (!revokeAuthz.ok && !revokedByCreator(userRec, existing, (pub) => verifyRevokeServiceInvite(revoke, sig, pub))) {
-    return forbidden("invalid signature");
-  }
+  const signerPubHex = revokeAuthz.ok
+    ? revokeAuthz.signerPubHex.toLowerCase()
+    : await revokedByCreator(deps, userV.label, existing, (pub) => verifyRevokeServiceInvite(revoke, sig, pub));
+  if (!signerPubHex) return forbidden("invalid signature");
 
-  await deps.invites.revoke(r.inviteId, now);
+  await deps.invites.revoke(r.inviteId, now, {
+    signature: body.signature.toLowerCase(),
+    issuedAt: r.issuedAt,
+    signerPubHex,
+  });
   return ok({ revoked: true, inviteId: r.inviteId });
 }
 
@@ -746,6 +774,12 @@ export async function handleRevokedSinceServiceInvites(
       serviceRef: r.serviceRef,
       boundAIDs: r.boundAIDs,
       revokedAt: r.revokedAt,
+      // The signed revoke the box verifies before it prunes anyone (null on
+      // rows revoked before migration 0102: the box ignores those).
+      revoke:
+        r.revokeSig !== null && r.revokeIssuedAt !== null ? { inviteId: r.inviteId, issuedAt: r.revokeIssuedAt } : null,
+      revokeSig: r.revokeSig,
+      revokerPubHex: r.revokeSignerPubHex,
     })),
     cursor: nextCursor,
   });
@@ -825,5 +859,5 @@ export async function handleFetchServiceInviteCreate(
   // the box falls back (the author can re-issue). The signed create is REQUIRED.
   if (!existing.createSig) return notFound("invite has no signed create");
 
-  return ok({ create: createCarrier(existing), createSig: existing.createSig });
+  return ok({ create: createCarrier(existing), createSig: existing.createSig, creatorPubHex: existing.creatorPubHex });
 }
