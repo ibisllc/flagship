@@ -566,6 +566,22 @@ allowances (1M / 5M / 20M a month) are placeholders.
   known-bug fixes (retried account creation registered a second device; Wipe &
   restart kept the old key), Android's matching retry fix, the Android parity
   fixes, and the update card's "last update" line. Both need rebuilds.
+- **Android glanceable surfaces + Wear OS (2026-10-15, `apps/mobile/android/`
+  `app/.../companion/`, `:companion`, `:wear`):** a Glance home-screen widget
+  matching iOS's; an ongoing setup notification per install (Android's Live
+  Activity; `provision-status` pushes no longer post one notification per
+  phase); launcher shortcuts (Approvals + one per server); a notification
+  channel per push category (`flagship.alerts` stays as "Other"). Wear OS app
+  (minSdk 30 = Wear OS 3, versionCode = phone + 1,000,000, same applicationId
+  and signing key, which the Data Layer needs): servers, boxes waiting to
+  unlock, recent activity, install progress, a tile and a complication. Its
+  Approve is a Data Layer request the phone answers with its own approval:
+  re-fetch + directory re-verify, unseal, boot response signed with the
+  watch-delegate key (role "delegate"), never a biometric prompt (only while
+  the app session is unlocked and Account security → "Quick approve from
+  watch" is on). Not yet run on a device or watch; the Play listing needs the
+  Wear OS form factor and the watch APK uploaded. iOS's install Live Activity
+  never starts: nothing calls `InstallProgressBridge.onStart`.
 - **Data layer = Postgres 18 + a files folder per app (2026-10-12):** on
   `main`, needs an endorsed update for existing boxes (and a `.com` redeploy
   for the demo cloud-init copy of the unit). MinIO, Redis, Adminer,
