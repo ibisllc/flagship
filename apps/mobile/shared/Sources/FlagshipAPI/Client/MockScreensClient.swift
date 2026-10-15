@@ -33,6 +33,11 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     /// achieves the same by swapping `SessionStore.podBaseUrl`.
     public var podContext: String = "home"
 
+    /// Pods whose box doesn't answer (offline, revoked, never came online):
+    /// their server detail fails like a real unreachable box, so the server
+    /// page shows its honest offline / revoked state.
+    public var unreachablePodIds: Set<String> = []
+
     // MARK: - Releases
 
     public func serverUpdates(refresh: Bool) async throws -> ReleaseCatalogResponse {
@@ -58,6 +63,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
 
     public func serverDetail() async throws -> ServerDetailResponse {
         try await tick()
+        if unreachablePodIds.contains(podContext) { throw URLError(.cannotConnectToHost) }
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         let oneDay: Int64 = 24 * 3600 * 1000
         // Vary fixture per current pod so the switcher visibly
@@ -83,7 +89,10 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                 RecentInstallEvent(at: now - 60_000 * 30, kind: "installed", serviceId: "bright-maple--plants", detail: "via vibe-code"),
                 RecentInstallEvent(at: now - 60_000 * 60 * 6, kind: "deploy", serviceId: "bright-maple--wiki", detail: "v1.4.0"),
                 RecentInstallEvent(at: now - 60_000 * 60 * 26, kind: "installed", serviceId: "bright-maple--wiki", detail: "via vibe-code"),
-            ]
+            ],
+            lastUpdate: LastUpdate(outcome: "applied", at: now - 2 * oneDay,
+                                   targetCommit: "9f2c1ab3de4567890abcdef1234567890abcdef1",
+                                   previousCommit: "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b")
         )
     }
 

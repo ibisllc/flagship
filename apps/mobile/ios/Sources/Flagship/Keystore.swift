@@ -1111,6 +1111,9 @@ public struct Keystore {
         // (one Secure-Enclave use = one Face ID), reuse it for every later derive
         // without re-prompting. The cache is cleared on lock/background/sign-out
         // (clearSessionKeyCache), so the biometric still gates each *session*.
+        if let seed = GymSeams.accountRootSeed {
+            return SymmetricKey(data: seed)
+        }
         let profile = activeProfileId
         if let cached = cachedSessionUmk(profile) {
             return cached

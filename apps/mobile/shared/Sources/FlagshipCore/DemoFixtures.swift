@@ -68,7 +68,11 @@ public enum DemoFixtures {
                 name: "Music",
                 description: "Garage rack, music studio",
                 fqdn: "music.\(username).flagship.services",
-                status: .offline
+                status: .offline,
+                // Was live, stopped reporting a few hours ago: the honest
+                // "offline, last seen" state, not "never came online".
+                liveness: .unreachable,
+                lastSeenMsAgo: 3 * 60 * 60 * 1000
             ),
         ]
     }
@@ -118,6 +122,27 @@ public enum DemoFixtures {
                 cameOnline: false,
                 registeredAt: sevenDaysAgoMs,
                 awaitingUnlock: false
+            )
+        )
+        return pods
+    }
+
+    /// GYM seed variant — the three sample pods PLUS a box the owner revoked
+    /// (lost, then found again): its page says it's revoked and offers
+    /// Un-revoke instead of Revoke. Gym-only.
+    public static func samplePodsWithRevokedServer(username: String) -> [PodInfo] {
+        let suffix = { UUID().uuidString.prefix(6).lowercased() }
+        var pods = samplePods(username: username)
+        let twoDaysAgoMs = Int64(Date().timeIntervalSince1970 * 1000) - 2 * 24 * 60 * 60 * 1000
+        pods.append(
+            PodInfo(
+                podId: "demo-garage-\(suffix())",
+                name: "Garage",
+                description: "Revoked after it went missing",
+                fqdn: "garage.\(username).flagship.services",
+                status: .offline,
+                revokedAt: twoDaysAgoMs,
+                revocationReason: "lost"
             )
         )
         return pods

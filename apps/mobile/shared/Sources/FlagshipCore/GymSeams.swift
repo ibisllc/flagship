@@ -25,4 +25,18 @@ public enum GymSeams {
     /// gym stops at render/confirm stages. Set ONLY by the `-smoke-mode`
     /// launch seam.
     public nonisolated(unsafe) static var bypassBiometricGates = false
+
+    /// Keep the app-wide "<App> wants to reach <host>" sheet from opening.
+    /// The mock box always has a request waiting (Plants →
+    /// tile.openstreetmap.org), so without this the sheet covers every smoke
+    /// launch and nothing behind it can be tapped. `-smoke-access-alert`
+    /// leaves it on for the scenario that answers it.
+    public nonisolated(unsafe) static var suppressAccessAlerts = false
+
+    /// A fixed account root (UMK) for the smoke session. A demo session has
+    /// none in the keychain, so everything derived from it (the IRK, the
+    /// sensitive-order key, free-AI requests) would throw before reaching
+    /// the mock clients, which accept any signature. Set ONLY by the
+    /// `-smoke-mode` seam; the onboarding walk creates real keys instead.
+    public nonisolated(unsafe) static var accountRootSeed: Data?
 }

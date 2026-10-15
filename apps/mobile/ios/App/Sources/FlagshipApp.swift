@@ -36,6 +36,7 @@ struct FlagshipApp: App {
         // DeveloperSettings.apexHost — applied in its own init — is the
         // fallback when no launch arg is present.)
         Self.applyApexHostArgIfPresent()
+        Self.applySmokeOnboardingIfRequested()
         let state = AppState()
         _appState = State(initialValue: state)
         // `.com` serves the account's servers, devices and app names only
@@ -168,7 +169,8 @@ struct FlagshipApp: App {
         linker: DeepLinker,
         operations: ActiveOperationsCenter,
         trust: TrustCenter,
-        privacy: PrivacySettings
+        privacy: PrivacySettings,
+        screens: MockScreensClient
     ) {
         let args = ProcessInfo.processInfo.arguments
         guard args.contains("-smoke-mode") else { return }
@@ -217,6 +219,12 @@ struct FlagshipApp: App {
                     username: user,
                     pods: DemoFixtures.samplePodsWithAwaitingUnlock(username: user)
                 )
+            } else if args.contains("-smoke-revoked") {
+                DemoFixtures.activate(
+                    app,
+                    username: user,
+                    pods: DemoFixtures.samplePodsWithRevokedServer(username: user)
+                )
             } else if args.contains("-smoke-dead") {
                 DemoFixtures.activate(
                     app,
@@ -227,6 +235,9 @@ struct FlagshipApp: App {
                 DemoFixtures.activate(app, username: user)
             }
         }
+        // A box that isn't online doesn't answer: the mock fails its server
+        // detail, as a real one would.
+        screens.unreachablePodIds = Set(app.pods.filter { $0.status != .online }.map(\.podId))
         // `-smoke-ops` seeds ONE in-flight build so the global operations
         // sliver (`global-operations-bar`) renders deterministically for the
         // gym's sliver scenario. The default DemoFixtures pods are all
@@ -252,6 +263,12 @@ struct FlagshipApp: App {
         // screen AUTO-prompts, and a bypassed prompt would auto-unlock the
         // very trap that scenario asserts (D4-E1).
         GymSeams.bypassBiometricGates = !wantLocked
+        GymSeams.accountRootSeed = Data(repeating: 0x47, count: 32)
+        GymSeams.suppressAccessAlerts = !args.contains("-smoke-access-alert")
+        if !GymSeams.suppressAccessAlerts {
+            // "Not now" persists for a day; a prior run's answer must not hide the sheet.
+            UserDefaults.standard.removeObject(forKey: "flagship.appAccess.notNowUntil")
+        }
         // `-smoke-trust-untrusted` seeds a positively-untrusted maintainer-trust
         // verdict so the red GlobalTrustBar (`global-trust-bar`) renders (D4-E7).
         // The live path derives this from a real `.com` blessing check
@@ -267,6 +284,18 @@ struct FlagshipApp: App {
                 )
             ])
         }
+    }
+
+    /// Gym-only (`-smoke-onboarding`): start unpaired with nothing left from a
+    /// previous run (the onboarding walk creates real keys on the simulator,
+    /// and a leftover account would be restored instead of showing Welcome),
+    /// against the mock client (DeveloperSettings), with the UI-level Face ID
+    /// prompts passed as in `-smoke-mode`.
+    private static func applySmokeOnboardingIfRequested() {
+        guard ProcessInfo.processInfo.arguments.contains("-smoke-onboarding") else { return }
+        Keystore.wipeAllProfiles()
+        GymSeams.bypassBiometricGates = true
+        GymSeams.suppressAccessAlerts = true
     }
 
     /// Backend-apex override seam for the gym test build. When launched with
@@ -545,7 +574,8 @@ struct FlagshipApp: App {
                     Text("Flagship.com no longer lists this account. Nothing on this iPhone has been deleted. You can keep using the local account, or erase its local keys and data to start over.")
                 }
                 .onAppear {
-                    Self.applySmokeModeIfRequested(appState, linker: linker, operations: operations, trust: trust, privacy: privacy)
+                    Self.applySmokeModeIfRequested(appState, linker: linker, operations: operations, trust: trust, privacy: privacy,
+                                                   screens: mockClient)
                     appDelegate.linker = linker
                     linker.makeCurrent()
                     WatchBridge.shared.activate(

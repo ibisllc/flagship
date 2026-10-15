@@ -63,8 +63,10 @@ public final class DeveloperSettings {
         // expired"). Assigned in init, so `didSet` does NOT fire: the override
         // is in-memory only and never persists onto the simulator (a later
         // live-tier launch on the same simulator keeps its own default).
-        // Production never passes `-smoke-mode`.
-        if ProcessInfo.processInfo.arguments.contains("-smoke-mode") {
+        // Production never passes `-smoke-mode`. `-smoke-onboarding` (a fresh,
+        // unpaired launch for the onboarding walk) is no-backend too.
+        let args = ProcessInfo.processInfo.arguments
+        if args.contains("-smoke-mode") || args.contains("-smoke-onboarding") {
             self.useLiveClient = false
         }
         self.unlocked = defaults.bool(forKey: revealedKey)
