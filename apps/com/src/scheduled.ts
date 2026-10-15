@@ -62,6 +62,7 @@ import { runAdapterPublish } from "./adapterPublish.js";
 import { runAdapterInsights } from "./adapterInsights.js";
 import { runModelCapabilityRefresh } from "./inferenceModelRoutes.js";
 import { pruneRateLimitLog } from "./rateLimitLog.js";
+import { runRelayProbeCron, type OhttpEnv } from "./ohttpRoutes.js";
 import type { AdapterBucketLike } from "./adapterIndex.js";
 
 /** Scope of one row that the dump emits. */
@@ -70,7 +71,8 @@ export type DumpRow =
   | { type: "table"; name: string }
   | { type: "row"; table: string; data: Record<string, unknown> };
 
-export interface ScheduledEnv {
+export interface ScheduledEnv extends OhttpEnv {
+  CONTROL_APEX?: string;
   DB?: D1Database;
   /** R2 bucket for D1 backup artifacts. Separate from ISO_BUCKET. */
   BACKUPS_BUCKET?: R2BucketLike;
@@ -396,6 +398,13 @@ export async function scheduled(
       ctx.waitUntil(
         runAdapterPublish(env, now).catch((e) => {
           console.error("[adapters] publish failed", (e as Error).message);
+        }),
+      );
+      // The private relay (docs/outbound-proxy.md §OHTTP): one request through
+      // it a day; a failure shows on /status/ and opens an issue.
+      ctx.waitUntil(
+        runRelayProbeCron(env, now, { apex: env.CONTROL_APEX ?? "flagshipserver.com" }).catch((e) => {
+          console.error("[relay-probe] failed", (e as Error).message);
         }),
       );
       // The own-key model menus' capability table, from OpenRouter's catalog.
