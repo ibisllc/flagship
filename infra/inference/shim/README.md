@@ -19,7 +19,7 @@ reports the true usage back to `.com`.
 | `UPSTREAM_MODEL` / `FALLBACK_MODEL` | a pinned model id, only for an upstream the catalog names no ids for (our own vLLM) |
 | `UPSTREAM_TIMEOUT_MS` | how long to wait for an upstream's response headers before trying the fallback (default 60000) |
 | `UPSTREAM_CACHE_SALT` / `FALLBACK_CACHE_SALT` | `"per-pass"` adds a vLLM `cache_salt` derived from the pass, so the shared prefix cache can't be probed across accounts; our own vLLM only (a hosted API may reject the field) |
-| `MAX_OUTPUT_TOKENS` | ceiling on output tokens per call (default 8192) |
+| `MAX_OUTPUT_TOKENS` | optional global ceiling on output tokens per call, over each model's own cap (unset: the model's cap, or 8192 when `.com` names no model) |
 | `PAUSED` | `"1"` refuses every call with "isn't available right now" |
 | `COM_BASE_URL` | `.com` for the allowance check and usage reports |
 
@@ -65,9 +65,10 @@ multiplier assumes.
 ## Which model, and the fallback
 
 The box sends a catalog id (`low`, `medium`, …). `.com`'s allowance check
-answers with that model's multiplier, modalities, whether it reasons, and its
-id on each upstream (`packages/control-plane/src/inferenceModels.ts`); an
-unknown id gets the default model. The shim sends the primary its id. When
+answers with that model's multiplier, modalities, output cap, and per
+upstream its id and the fields that turn its thinking off there
+(`packages/control-plane/src/inferenceModels.ts`); an unknown id gets the
+default model. The shim sends the primary its id. When
 the primary answers 5xx, times out or drops the connection, the same request
 (with the fallback's id and key) goes to the fallback, once, before any byte
 reaches the box. A 4xx about the request (bad parameters, too long, rate
@@ -104,8 +105,18 @@ Then set `.com`'s `FLAGSHIP_INFERENCE_ENDPOINT` to
 - What a call cost reaches the box as a last stream chunk after `[DONE]`,
   `{"object":"flagship.usage","credits":N,"model":"low"}` (a non-streaming
   reply carries `flagship.credits`), so the apps show "used N credits".
-- "Think harder" arrives as `reasoning_effort`; the shim sends it as
-  `reasoning_effort` (DeepInfra) or `reasoning.effort` (OpenRouter), and drops
-  it for a model that doesn't reason. An image sent to a text-only model is
-  refused with `free-ai-no-images`, naming the model to switch to.
+- Flagship Inference never pays for thinking (owner, 2026-10-15): reasoning
+  tokens are billed as output (4× in credits) and share the reply's cap. The
+  shim drops any effort or thinking field the box sends (`reasoning_effort`,
+  `reasoning`, `chat_template_kwargs`, …) and sends the catalog's
+  `thinkingOff` for the model on that upstream instead: on DeepInfra
+  `chat_template_kwargs.enable_thinking: false` (Qwen, GLM) or
+  `reasoning_effort: "none"` (DeepSeek, MiniMax), all probed; on OpenRouter
+  `reasoning.effort: "none"`, except GLM, whose reasoning OpenRouter marks
+  mandatory, at `"low"` (documented, not probed). Own keys (BYOK) never pass
+  through the shim and keep their effort.
+- Each call's `max_tokens` is the box's ask, at most the catalog model's
+  `maxOutputTokens` (and `MAX_OUTPUT_TOKENS` when set).
+- An image sent to a text-only model is refused with `free-ai-no-images`,
+  naming the model to switch to.
 - Prompts pass through; they are not logged or stored.

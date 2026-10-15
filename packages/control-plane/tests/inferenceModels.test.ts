@@ -30,8 +30,8 @@ function entry(id: string, inUsd: number, outUsd: number, extra: Partial<Catalog
     descriptor: "",
     contextTokens: 1,
     modalities: ["text"],
-    reasoning: false,
-    upstream: { a: { id, inUsd, outUsd } },
+    maxOutputTokens: 1,
+    upstream: { a: { id, inUsd, outUsd, thinkingOff: {} } },
     ...extra,
   };
 }
@@ -50,7 +50,10 @@ describe("multipliers come from real cost plus the margin", () => {
 
   it("prices a model at its dearest upstream", () => {
     const two = entry("two", 0.1, 0.95, {
-      upstream: { a: { id: "a", inUsd: 0.1, outUsd: 0.95 }, b: { id: "b", inUsd: 0.3, outUsd: 0.95 } },
+      upstream: {
+        a: { id: "a", inUsd: 0.1, outUsd: 0.95, thinkingOff: {} },
+        b: { id: "b", inUsd: 0.3, outUsd: 0.95, thinkingOff: {} },
+      },
     });
     expect(buildCost(two)).toBeCloseTo((0.3 * 424_000 + 0.95 * 13_000) / 1e6, 10);
   });
@@ -87,10 +90,34 @@ describe("multipliers come from real cost plus the margin", () => {
     expect(inferenceCatalogResponse({ inputWeight: 1, outputWeight: 4 })).toMatchObject({ defaultModel: "low", creditTokens: 1000 });
   });
 
+  it("never thinks: every upstream names its switch, and the menu offers no effort", () => {
+    for (const m of INFERENCE_MODELS) {
+      for (const u of Object.values(m.upstream)) expect(u.thinkingOff).toBeTypeOf("object");
+      expect(m.maxOutputTokens).toBeGreaterThanOrEqual(16_384);
+    }
+    for (const m of inferenceCatalog()) expect(m.reasoning).toBe(false);
+    const low = INFERENCE_MODELS.find((m) => m.id === "low")!;
+    expect(low.upstream.deepinfra!.thinkingOff).toEqual({ chat_template_kwargs: { enable_thinking: false } });
+    expect(low.upstream.openrouter!.thinkingOff).toEqual({ reasoning: { effort: "none" } });
+  });
+
   it("resolves a call's model for the shim, unknown ids to the default", () => {
     const m = resolveInferenceModel("medium");
-    expect(m).toMatchObject({ id: "medium", multiplier: 1, modalities: ["text"], visionAlternative: "Medium multimodal 2× (GLM-5.3-Flash)" });
-    expect(m.upstream.openrouter).toEqual({ id: "deepseek/deepseek-v4-flash", maxPriceIn: 0.09, maxPriceOut: 0.18 });
+    expect(m).toMatchObject({
+      id: "medium",
+      multiplier: 1,
+      modalities: ["text"],
+      maxOutputTokens: 32_768,
+      visionAlternative: "Medium multimodal 2× (GLM-5.3-Flash)",
+    });
+    expect(m.upstream.openrouter).toEqual({
+      id: "deepseek/deepseek-v4-flash",
+      maxPriceIn: 0.09,
+      maxPriceOut: 0.18,
+      thinkingOff: { reasoning: { effort: "none" } },
+    });
+    expect(m.upstream.deepinfra!.thinkingOff).toEqual({ reasoning_effort: "none" });
+    expect(resolveInferenceModel("high").maxOutputTokens).toBe(24_576);
     expect(resolveInferenceModel("flagship-free").id).toBe("low");
     expect(chargeMultiplier("high")).toBe(3.5);
     expect(chargeMultiplier(undefined)).toBe(1);

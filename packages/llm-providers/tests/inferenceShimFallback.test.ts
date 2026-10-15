@@ -6,7 +6,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mintScopedInferenceToken } from "@flagship/control-plane";
 import shim, { BUSY_MESSAGE, type Env } from "../../../infra/inference/shim/src/index.js";
-import { creditsFor, shouldFallBack, upstreamBody } from "../../../infra/inference/shim/src/meter.js";
+import {
+  DEFAULT_OUTPUT_TOKENS,
+  creditsFor,
+  outputCap,
+  shouldFallBack,
+  upstreamBody,
+} from "../../../infra/inference/shim/src/meter.js";
 import { flagshipStreaming, type ChatStreamEvent } from "../src/index.js";
 
 const SECRET = "shim-secret";
@@ -30,18 +36,21 @@ const LOW = {
   id: "low",
   multiplier: 1,
   modalities: ["text", "image"],
-  reasoning: true,
+  maxOutputTokens: 32_768,
   upstream: {
-    deepinfra: { id: "Qwen/Qwen3.6-35B-A3B" },
-    openrouter: { id: "qwen/qwen3.6-35b-a3b", maxPriceIn: 0.1, maxPriceOut: 0.95 },
+    deepinfra: { id: "Qwen/Qwen3.6-35B-A3B", thinkingOff: { chat_template_kwargs: { enable_thinking: false } } },
+    openrouter: { id: "qwen/qwen3.6-35b-a3b", maxPriceIn: 0.1, maxPriceOut: 0.95, thinkingOff: { reasoning: { effort: "none" } } },
   },
 };
 const MEDIUM = {
   id: "medium",
   multiplier: 2,
   modalities: ["text"],
-  reasoning: false,
-  upstream: { deepinfra: { id: "deepseek-ai/DeepSeek-V4-Flash" }, openrouter: { id: "deepseek/deepseek-v4-flash" } },
+  maxOutputTokens: 20_000,
+  upstream: {
+    deepinfra: { id: "deepseek-ai/DeepSeek-V4-Flash", thinkingOff: { reasoning_effort: "none" } },
+    openrouter: { id: "deepseek/deepseek-v4-flash", thinkingOff: { reasoning: { effort: "low" } } },
+  },
   visionAlternative: "Medium multimodal 3× (Qwen3.8-27B)",
 };
 
@@ -253,14 +262,64 @@ describe("our own tunnelled vLLM as the fallback", () => {
 });
 
 describe("the catalog model shapes the call", () => {
-  it("translates Think harder into each upstream's effort parameter", async () => {
-    await call({ model: "low", reasoning_effort: "high", messages: [{ role: "user", content: "hi" }] });
-    expect(calls(PRIMARY)[0]!.body.reasoning_effort).toBe("high");
+  it("turns thinking off with each model's switch on each upstream, whatever effort the box asks", async () => {
+    const asks = {
+      reasoning_effort: "high",
+      reasoning: { effort: "high" },
+      chat_template_kwargs: { enable_thinking: true },
+      messages: [{ role: "user", content: "hi" }],
+    };
+    await call({ model: "low", ...asks });
+    const p = calls(PRIMARY)[0]!.body;
+    expect(p.chat_template_kwargs).toEqual({ enable_thinking: false });
+    expect(p.reasoning_effort).toBeUndefined();
+    expect(p.reasoning).toBeUndefined();
+
+    seen = [];
+    await call({ model: "medium", ...asks });
+    const m = calls(PRIMARY)[0]!.body;
+    expect(m.reasoning_effort).toBe("none");
+    expect(m.chat_template_kwargs).toBeUndefined();
+    expect(m.reasoning).toBeUndefined();
+
     primary = () => new Response("down", { status: 500 });
     seen = [];
-    await call({ model: "low", reasoning_effort: "high", messages: [{ role: "user", content: "hi" }] });
-    expect(calls(FALLBACK)[0]!.body.reasoning).toEqual({ effort: "high" });
-    expect(calls(FALLBACK)[0]!.body.reasoning_effort).toBeUndefined();
+    await call({ model: "low", ...asks });
+    const f = calls(FALLBACK)[0]!.body;
+    expect(f.reasoning).toEqual({ effort: "none" });
+    expect(f.reasoning_effort).toBeUndefined();
+    expect(f.chat_template_kwargs).toBeUndefined();
+
+    seen = [];
+    await call({ model: "medium", ...asks });
+    // A host where the model can't stop thinking gets the lowest effort it takes.
+    expect(calls(FALLBACK)[0]!.body.reasoning).toEqual({ effort: "low" });
+  });
+
+  it("caps output at the model's own cap, under the optional global ceiling", async () => {
+    await call({ model: "low", messages: [{ role: "user", content: "hi" }] });
+    expect(calls(PRIMARY)[0]!.body.max_tokens).toBe(32_768);
+    seen = [];
+    await call({ model: "medium", max_tokens: 100_000, messages: [{ role: "user", content: "hi" }] });
+    expect(calls(PRIMARY)[0]!.body.max_tokens).toBe(20_000);
+    seen = [];
+    await call({ model: "medium", max_tokens: 500, messages: [{ role: "user", content: "hi" }] });
+    expect(calls(PRIMARY)[0]!.body.max_tokens).toBe(500);
+    seen = [];
+    const t = await mintScopedInferenceToken(
+      { username: "alice", keyId: "fa-1", iat: Date.now(), exp: Date.now() + 60_000, dailyInputTokenCap: 1, dailyOutputTokenCap: 1 },
+      SECRET,
+    );
+    await shim.fetch(
+      new Request("https://inference.example/v1/chat/completions", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${t}` },
+        body: JSON.stringify({ model: "low", messages: [{ role: "user", content: "hi" }] }),
+      }),
+      { ...env, MAX_OUTPUT_TOKENS: "16000" },
+      { waitUntil: () => {} },
+    );
+    expect(calls(PRIMARY)[0]!.body.max_tokens).toBe(16_000);
   });
 
   it("refuses images for a text-only model, naming the one to switch to", async () => {
@@ -320,8 +379,28 @@ describe("shim helpers", () => {
     expect(shouldFallBack({ status: 429 })).toBe(false);
   });
 
-  it("drops the effort for a model that doesn't reason", () => {
-    const b = upstreamBody({ messages: [], reasoning_effort: "high" }, { name: "deepinfra", url: PRIMARY }, "x", { ...MEDIUM });
-    expect(b.reasoning_effort).toBeUndefined();
+  it("shapes thinking per model and host, and never forwards the box's own switch", () => {
+    const di = { name: "deepinfra", url: PRIMARY };
+    const or = { name: "openrouter", url: FALLBACK };
+    const asked = { messages: [], reasoning_effort: "high", thinking: { type: "enabled" }, enable_thinking: true };
+    expect(upstreamBody(asked, di, "x", LOW)).toEqual({ messages: [], model: "x", chat_template_kwargs: { enable_thinking: false } });
+    expect(upstreamBody(asked, di, "x", MEDIUM)).toEqual({ messages: [], model: "x", reasoning_effort: "none" });
+    expect(upstreamBody(asked, or, "x", LOW)).toMatchObject({ reasoning: { effort: "none" } });
+    // No catalog (a pinned model): nothing the box asked for, nothing added.
+    const pinned = upstreamBody(asked, di, "x", null);
+    expect(pinned).toEqual({ messages: [], model: "x" });
+    // The catalog's object is copied, never shared between calls.
+    const a = upstreamBody({ messages: [] }, di, "x", LOW);
+    (a.chat_template_kwargs as Record<string, unknown>).enable_thinking = true;
+    expect(LOW.upstream.deepinfra.thinkingOff.chat_template_kwargs.enable_thinking).toBe(false);
+  });
+
+  it("output cap: the model's, the default without one, the ceiling over both", () => {
+    expect(outputCap(LOW)).toBe(32_768);
+    expect(outputCap(LOW, 8000)).toBe(8000);
+    expect(outputCap(LOW, 64_000)).toBe(32_768);
+    expect(outputCap(null)).toBe(DEFAULT_OUTPUT_TOKENS);
+    expect(outputCap({ ...LOW, maxOutputTokens: undefined })).toBe(DEFAULT_OUTPUT_TOKENS);
+    expect(outputCap(LOW, Number.NaN)).toBe(32_768);
   });
 });

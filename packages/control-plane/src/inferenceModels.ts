@@ -9,17 +9,29 @@
  * rare, they should be reviewed like code, and the multipliers are computed
  * from the prices below by one tested function. To change the lineup, edit
  * INFERENCE_MODELS (ids must exist on every listed upstream with tool
- * calling), run the tests, and deploy `.com`. docs/ai-inference-costs.md §15
+ * calling, each with a probed `thinkingOff`), run the tests, and deploy `.com`. docs/ai-inference-costs.md §15
  * records the current lineup and how the multipliers came out.
  */
 
 import type { InferenceCatalogResponse, InferenceModel } from "@flagship/protocol";
+
+/** Top-level chat-completions fields, as an upstream takes them. */
+export type RequestFields = Readonly<Record<string, unknown>>;
 
 /** One upstream's id for a model and what it charges us there (USD per million tokens). */
 export interface UpstreamPrice {
   id: string;
   inUsd: number;
   outUsd: number;
+  /**
+   * The request fields that turn the model's thinking off on this upstream;
+   * the shim sends them on every call, whatever the box asked. Flagship
+   * Inference never pays for thinking (owner, 2026-10-15): reasoning tokens
+   * are billed as output and share the reply's cap. Each host and model takes
+   * a different switch, so each is probed (docs/ai-inference-costs.md §17).
+   * A host where thinking can't be turned off gets its lowest effort.
+   */
+  thinkingOff: RequestFields;
 }
 
 export interface CatalogEntry {
@@ -29,7 +41,12 @@ export interface CatalogEntry {
   descriptor: string;
   contextTokens: number;
   modalities: Array<"text" | "image">;
-  reasoning: boolean;
+  /**
+   * The most output tokens one call may produce (the shim's `max_tokens`).
+   * Sized to fit a whole first build of a large app with thinking off; it
+   * only stops a runaway reply and costs nothing unless used.
+   */
+  maxOutputTokens: number;
   default?: boolean;
   /** For a text-only model: the catalog id to switch to for an image. */
   visionAlternative?: string;
@@ -71,11 +88,18 @@ export const INFERENCE_MODELS: readonly CatalogEntry[] = [
     descriptor: "Quick and thrifty. Handles most apps and reads screenshots.",
     contextTokens: 262_144,
     modalities: ["text", "image"],
-    reasoning: true,
+    maxOutputTokens: 32_768,
     default: true,
     upstream: {
-      deepinfra: { id: "Qwen/Qwen3.6-35B-A3B", inUsd: 0.1, outUsd: 0.95 },
-      openrouter: { id: "qwen/qwen3.6-35b-a3b", inUsd: 0.1, outUsd: 0.95 },
+      // Thinks by default. Probed 2026-10-15: no reasoning_content, 4 output tokens.
+      deepinfra: {
+        id: "Qwen/Qwen3.6-35B-A3B",
+        inUsd: 0.1,
+        outUsd: 0.95,
+        thinkingOff: { chat_template_kwargs: { enable_thinking: false } },
+      },
+      // OpenRouter's documented switch; not probed (no key).
+      openrouter: { id: "qwen/qwen3.6-35b-a3b", inUsd: 0.1, outUsd: 0.95, thinkingOff: { reasoning: { effort: "none" } } },
     },
   },
   {
@@ -85,11 +109,13 @@ export const INFERENCE_MODELS: readonly CatalogEntry[] = [
     descriptor: "A larger model with a 1M-token memory, for big apps. Text only.",
     contextTokens: 1_000_000,
     modalities: ["text"],
-    reasoning: true,
+    maxOutputTokens: 32_768,
     visionAlternative: "medium-vision",
     upstream: {
-      deepinfra: { id: "deepseek-ai/DeepSeek-V4-Flash", inUsd: 0.09, outUsd: 0.18 },
-      openrouter: { id: "deepseek/deepseek-v4-flash", inUsd: 0.09, outUsd: 0.18 },
+      // DeepInfra serves it without thinking unless asked; "none" keeps it so. Probed 2026-10-15.
+      deepinfra: { id: "deepseek-ai/DeepSeek-V4-Flash", inUsd: 0.09, outUsd: 0.18, thinkingOff: { reasoning_effort: "none" } },
+      // OpenRouter defaults it to "high" and lists "none"; not probed (no key).
+      openrouter: { id: "deepseek/deepseek-v4-flash", inUsd: 0.09, outUsd: 0.18, thinkingOff: { reasoning: { effort: "none" } } },
     },
   },
   {
@@ -99,10 +125,17 @@ export const INFERENCE_MODELS: readonly CatalogEntry[] = [
     descriptor: "Sees screenshots and sketches well, with a 1M-token memory.",
     contextTokens: 1_000_000,
     modalities: ["text", "image"],
-    reasoning: true,
+    maxOutputTokens: 24_576,
     upstream: {
-      deepinfra: { id: "zai-org/GLM-5.3-Flash", inUsd: 0.15, outUsd: 0.5 },
-      openrouter: { id: "z-ai/glm-5.3-flash", inUsd: 0.15, outUsd: 0.5 },
+      // Probed 2026-10-15: reasoning_tokens 0.
+      deepinfra: {
+        id: "zai-org/GLM-5.3-Flash",
+        inUsd: 0.15,
+        outUsd: 0.5,
+        thinkingOff: { chat_template_kwargs: { enable_thinking: false } },
+      },
+      // OpenRouter marks its reasoning mandatory (efforts max, high, low): the lowest. Not probed (no key).
+      openrouter: { id: "z-ai/glm-5.3-flash", inUsd: 0.15, outUsd: 0.5, thinkingOff: { reasoning: { effort: "low" } } },
     },
   },
   {
@@ -112,10 +145,12 @@ export const INFERENCE_MODELS: readonly CatalogEntry[] = [
     descriptor: "The strongest at long, many-step builds. Reads images.",
     contextTokens: 262_144,
     modalities: ["text", "image"],
-    reasoning: true,
+    maxOutputTokens: 24_576,
     upstream: {
-      deepinfra: { id: "MiniMaxAI/MiniMax-M3", inUsd: 0.28, outUsd: 1.1 },
-      openrouter: { id: "minimax/minimax-m3", inUsd: 0.28, outUsd: 1.1 },
+      // Probed 2026-10-15: no reasoning_content, 2 output tokens.
+      deepinfra: { id: "MiniMaxAI/MiniMax-M3", inUsd: 0.28, outUsd: 1.1, thinkingOff: { reasoning_effort: "none" } },
+      // OpenRouter's documented switch; not probed (no key).
+      openrouter: { id: "minimax/minimax-m3", inUsd: 0.28, outUsd: 1.1, thinkingOff: { reasoning: { effort: "none" } } },
     },
   },
 ];
@@ -160,7 +195,8 @@ export function inferenceCatalog(models: readonly CatalogEntry[] = INFERENCE_MOD
       descriptor: e.descriptor,
       contextTokens: e.contextTokens,
       modalities: [...e.modalities],
-      reasoning: e.reasoning,
+      // Flagship Inference never thinks, so the apps offer no effort for it.
+      reasoning: false,
       ...(e.default ? { default: true } : {}),
       ...(e.visionAlternative ? { visionAlternative: e.visionAlternative } : {}),
       upstream: Object.fromEntries(Object.entries(e.upstream).map(([k, v]) => [k, v.id])),
@@ -188,8 +224,9 @@ export interface ResolvedInferenceModel {
   id: string;
   multiplier: number;
   modalities: string[];
-  reasoning: boolean;
-  upstream: Record<string, { id: string; maxPriceIn: number; maxPriceOut: number }>;
+  /** The model's output cap per call. */
+  maxOutputTokens: number;
+  upstream: Record<string, { id: string; maxPriceIn: number; maxPriceOut: number; thinkingOff: RequestFields }>;
   /** The label of the model to switch to for images. */
   visionAlternative?: string;
 }
@@ -203,9 +240,12 @@ export function resolveInferenceModel(id: string | undefined): ResolvedInference
     id: entry.id,
     multiplier: me.multiplier,
     modalities: [...entry.modalities],
-    reasoning: entry.reasoning,
+    maxOutputTokens: entry.maxOutputTokens,
     upstream: Object.fromEntries(
-      Object.entries(entry.upstream).map(([k, v]) => [k, { id: v.id, maxPriceIn: v.inUsd, maxPriceOut: v.outUsd }]),
+      Object.entries(entry.upstream).map(([k, v]) => [
+        k,
+        { id: v.id, maxPriceIn: v.inUsd, maxPriceOut: v.outUsd, thinkingOff: v.thinkingOff },
+      ]),
     ),
     ...(alt ? { visionAlternative: alt.label } : {}),
   };

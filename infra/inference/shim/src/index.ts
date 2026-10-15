@@ -9,7 +9,9 @@
  *      at zero with `.com`'s reason (used up this week, busy today, ended);
  *   3. rebuilds the request from an allowlist (no `user`, no message
  *      names, no extras, the upstream's own id for the catalog model `.com`
- *      resolved, capped output) and sends it to the primary upstream with
+ *      resolved, thinking turned off with that model's switch on that host,
+ *      output capped at the model's own cap) and sends it to the primary
+ *      upstream with
  *      only our key: no box headers, no client IP, no account id ever leave
  *      this Worker. When the primary fails (5xx, a timeout, a dropped
  *      connection; never a 4xx about the request), the same request goes
@@ -34,6 +36,7 @@ import {
   extractUsage,
   hasImages,
   isContextTooLong,
+  outputCap,
   sanitizeChatRequest,
   shouldFallBack,
   upstreamBody,
@@ -91,7 +94,11 @@ export interface Env {
   FALLBACK_CACHE_SALT?: string;
   /** How long to wait for an upstream's response headers before giving up on it. Default 60 s. */
   UPSTREAM_TIMEOUT_MS?: string;
-  /** Ceiling on output tokens per call. Default 8192. */
+  /**
+   * Optional global ceiling on output tokens per call, over each catalog
+   * model's own cap (`maxOutputTokens`). Unset: the model's cap, or 8192
+   * when `.com` names no model.
+   */
   MAX_OUTPUT_TOKENS?: string;
   /** "1" answers every call with "Flagship Inference isn't available right now" (a kill switch). */
   PAUSED?: string;
@@ -150,9 +157,8 @@ export default {
     }
     const model = allowance.model;
 
-    const maxOut = Number(env.MAX_OUTPUT_TOKENS);
     const clean = sanitizeChatRequest(raw, {
-      maxOutputTokens: Number.isFinite(maxOut) && maxOut > 0 ? Math.floor(maxOut) : 8192,
+      maxOutputTokens: outputCap(model, env.MAX_OUTPUT_TOKENS ? Number(env.MAX_OUTPUT_TOKENS) : undefined),
     });
     if (!clean.ok) return aiError(400, clean.error, "invalid-request");
     if (model && !model.modalities.includes("image") && hasImages(clean.body)) {
@@ -381,7 +387,7 @@ function resolvedModel(raw: unknown): ResolvedModel | null {
     id: m.id,
     multiplier: m.multiplier > 0 ? m.multiplier : 1,
     modalities: Array.isArray(m.modalities) ? m.modalities.filter((x): x is string => typeof x === "string") : ["text"],
-    reasoning: m.reasoning === true,
+    ...(typeof m.maxOutputTokens === "number" && m.maxOutputTokens > 0 ? { maxOutputTokens: m.maxOutputTokens } : {}),
     upstream: m.upstream,
     ...(typeof m.visionAlternative === "string" ? { visionAlternative: m.visionAlternative } : {}),
   };

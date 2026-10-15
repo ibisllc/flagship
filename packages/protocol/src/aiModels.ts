@@ -29,7 +29,11 @@ export interface InferenceModel {
   contextTokens: number;
   /** "text", "image". */
   modalities: string[];
-  /** The model reasons. On its own this offers no effort control; `efforts` does. */
+  /**
+   * The model reasons. Always false since 2026-10-15: Flagship Inference
+   * never thinks (the shim turns it off). On its own this offers no effort
+   * control; `efforts` does.
+   */
   reasoning: boolean;
   /**
    * The effort levels the apps offer for this model (the shim's words), when

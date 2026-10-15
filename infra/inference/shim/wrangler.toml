@@ -29,8 +29,9 @@ FALLBACK_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
 # FALLBACK_CACHE_SALT = "per-pass"
 # Give up on an upstream that hasn't answered (headers) in this long.
 UPSTREAM_TIMEOUT_MS = "60000"
-# Ceiling on output tokens per call.
-MAX_OUTPUT_TOKENS = "8192"
+# Each catalog model has its own output cap (maxOutputTokens in .com's
+# catalog). Set this only to hold every model under one global ceiling:
+# MAX_OUTPUT_TOKENS = "32768"
 # "1" pauses free AI for everyone (calls get "isn't available right now").
 PAUSED = "0"
 COM_BASE_URL = "https://flagshipserver.com"

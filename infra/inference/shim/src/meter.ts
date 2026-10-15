@@ -120,6 +120,8 @@ export interface UpstreamModel {
   /** USD per million tokens: the most this model may cost there (OpenRouter's max_price). */
   maxPriceIn?: number;
   maxPriceOut?: number;
+  /** The request fields that turn the model's thinking off there, sent on every call. */
+  thinkingOff?: Record<string, unknown>;
 }
 
 /** What `.com`'s allowance check says about the model the box asked for. */
@@ -128,7 +130,8 @@ export interface ResolvedModel {
   id: string;
   multiplier: number;
   modalities: string[];
-  reasoning: boolean;
+  /** The model's output cap per call (`max_tokens`). */
+  maxOutputTokens?: number;
   /** Keyed by the upstream's name ("deepinfra", "openrouter"). */
   upstream: Record<string, UpstreamModel>;
   /** For a text-only model: the label of the model to switch to for images. */
@@ -183,10 +186,15 @@ export function isOpenRouter(url: string): boolean {
   }
 }
 
+/** Fields that switch thinking on or off; only the catalog sets them. */
+const THINKING_FIELDS = ["reasoning_effort", "reasoning", "chat_template_kwargs", "thinking", "enable_thinking"];
+
 /**
- * The body for one upstream: its own model id; reasoning effort in its own
- * parameter (dropped for a model that doesn't reason); on OpenRouter, only
- * zero-data-retention hosts that don't collect data, under the price we budget.
+ * The body for one upstream: its own model id; thinking turned off with the
+ * switch the catalog names for this model on this host (Flagship Inference
+ * never pays for thinking, so whatever effort the box asked for is dropped);
+ * on OpenRouter, only zero-data-retention hosts that don't collect data,
+ * under the price we budget.
  */
 export function upstreamBody(
   clean: Record<string, unknown>,
@@ -195,13 +203,9 @@ export function upstreamBody(
   m: ResolvedModel | null,
 ): Record<string, unknown> {
   const out: Record<string, unknown> = { ...clean, model: modelId };
-  const effort = out.reasoning_effort;
-  delete out.reasoning_effort;
-  const reasons = m ? m.reasoning : true;
-  if (typeof effort === "string" && reasons) {
-    if (isOpenRouter(u.url)) out.reasoning = { effort };
-    else out.reasoning_effort = effort;
-  }
+  for (const f of THINKING_FIELDS) delete out[f];
+  const off = m?.upstream[u.name]?.thinkingOff;
+  if (off && typeof off === "object" && !Array.isArray(off)) Object.assign(out, structuredClone(off));
   if (isOpenRouter(u.url)) {
     const price = m?.upstream[u.name];
     out.provider = {
@@ -213,6 +217,18 @@ export function upstreamBody(
     };
   }
   return out;
+}
+
+/** The output cap when `.com` names no model (a pinned model, no catalog). */
+export const DEFAULT_OUTPUT_TOKENS = 8192;
+
+/**
+ * The output cap for one call: the catalog model's own, else the default,
+ * under the optional global ceiling (the shim's MAX_OUTPUT_TOKENS).
+ */
+export function outputCap(m: ResolvedModel | null, ceiling?: number): number {
+  const own = m?.maxOutputTokens && m.maxOutputTokens > 0 ? Math.floor(m.maxOutputTokens) : DEFAULT_OUTPUT_TOKENS;
+  return ceiling !== undefined && Number.isFinite(ceiling) && ceiling > 0 ? Math.min(own, Math.floor(ceiling)) : own;
 }
 
 /** Does the request carry an image (an OpenAI `image_url` content part)? */
@@ -258,7 +274,6 @@ const REQUEST_FIELDS = new Set([
   "presence_penalty",
   "frequency_penalty",
   "stream",
-  "reasoning_effort",
 ]);
 
 /** Per-message fields passed upstream (`name` and any extras are dropped). */
