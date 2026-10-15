@@ -171,6 +171,11 @@ fun CreateServerScreen(
     // user. Signed at MINT behind the SAME create biometric. Snaps back when
     // Advanced mode is turned off.
     var debugFriendly by remember { mutableStateOf(false) }
+    // ADVANCED — an outbound proxy from the box's first connection
+    // (docs/outbound-proxy.md). Signed at mint with the sensitive-order key and
+    // carried as the UNSIGNED `outboundProxy` sibling (credentials beside it,
+    // only when typed). Snaps back to "none" when Advanced mode is turned off.
+    var proxyDraft by remember { mutableStateOf(com.flagshipserver.app.core.BoxProxyDraft()) }
     val swkDepositStore = remember { PendingSwkDepositStore.from(context) }
     val pairingDepositStore = remember { PendingPairingDepositStore.from(context) }
     // Per-service leadership (Phase 6): the per-cloud CGK is NEVER embedded in the
@@ -202,6 +207,7 @@ fun CreateServerScreen(
             diskEncryption = if (encryptDisk) null else "none",
             embedSecrets = embedSecrets,
             debugFriendly = debugFriendly,
+            outboundProxy = proxyDraft.takeIf { advancedMode && it.kind != "none" },
             swkDepositStore = swkDepositStore,
             cgkDepositStore = cgkDepositStore,
             pairingDepositStore = pairingDepositStore,
@@ -353,12 +359,18 @@ fun CreateServerScreen(
                 advancedMode = advancedMode,
                 onAdvancedMode = {
                     advancedMode = it
-                    if (!it) { embedSecrets = false; debugFriendly = false }
+                    if (!it) {
+                        embedSecrets = false
+                        debugFriendly = false
+                        proxyDraft = com.flagshipserver.app.core.BoxProxyDraft()
+                    }
                 },
                 embedSecrets = embedSecrets,
                 onEmbedSecrets = { embedSecrets = it },
                 debugFriendly = debugFriendly,
                 onDebugFriendly = { debugFriendly = it },
+                proxyDraft = proxyDraft,
+                onProxyDraft = { proxyDraft = it },
                 backupPolicy = backupPolicy,
                 onBackupPolicy = {
                     backupPolicy = it
@@ -371,6 +383,12 @@ fun CreateServerScreen(
                     if (designStep == 0 && !ServerLabel.isValid(name)) {
                         error = ServerLabel.errorMessage(name) ?: "Enter a subdomain."
                         return@DesignPhase
+                    }
+                    if (designStep == 1 && advancedMode) {
+                        proxyDraft.error()?.let {
+                            error = it
+                            return@DesignPhase
+                        }
                     }
                     error = null
                     designStep += 1
@@ -472,6 +490,7 @@ fun CreateServerScreen(
                                 // phone deposits the SWK after registration.
                                 embedSecrets = embedSecrets,
                                 debugFriendly = debugFriendly,
+                                outboundProxy = proxyDraft.takeIf { advancedMode && it.kind != "none" },
                                 swkDepositStore = swkDepositStore,
                                 pairingDepositStore = pairingDepositStore,
                                 cgkDepositStore = cgkDepositStore,
@@ -581,6 +600,8 @@ private fun DesignPhase(
     onEmbedSecrets: (Boolean) -> Unit,
     debugFriendly: Boolean,
     onDebugFriendly: (Boolean) -> Unit,
+    proxyDraft: com.flagshipserver.app.core.BoxProxyDraft,
+    onProxyDraft: (com.flagshipserver.app.core.BoxProxyDraft) -> Unit,
     backupPolicy: CreateServerDraftStore.BackupPolicy,
     onBackupPolicy: (CreateServerDraftStore.BackupPolicy) -> Unit,
     error: String?,
@@ -640,6 +661,8 @@ private fun DesignPhase(
                         onEmbedSecrets = onEmbedSecrets,
                         debugFriendly = debugFriendly,
                         onDebugFriendly = onDebugFriendly,
+                        proxyDraft = proxyDraft,
+                        onProxyDraft = onProxyDraft,
                     )
                 }
                 else -> {
@@ -797,6 +820,8 @@ private fun AdvancedModePicker(
     onEmbedSecrets: (Boolean) -> Unit,
     debugFriendly: Boolean,
     onDebugFriendly: (Boolean) -> Unit,
+    proxyDraft: com.flagshipserver.app.core.BoxProxyDraft,
+    onProxyDraft: (com.flagshipserver.app.core.BoxProxyDraft) -> Unit,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
@@ -856,6 +881,8 @@ private fun AdvancedModePicker(
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 12.sp),
         )
+        Spacer(Modifier.height(FS.space.s4))
+        OutboundProxyCreateBlock(draft = proxyDraft, onDraft = onProxyDraft)
     }
 }
 
@@ -1126,6 +1153,8 @@ private suspend fun prepareDelivery(
     // Debug-friendly server (Advanced): when true, bake an owner-IRK-signed
     // debug-access grant into the recipe as the UNSIGNED `debugGrant` sibling.
     debugFriendly: Boolean = false,
+    // The owner's outbound proxy (Advanced), signed into the `outboundProxy` sibling.
+    outboundProxy: com.flagshipserver.app.core.BoxProxyDraft? = null,
     swkDepositStore: PendingSwkDepositStore? = null,
     // Per-service leadership (Phase 6): the per-cloud CGK is NEVER embedded in the
     // recipe; it is owed on EVERY created server (independent of embed-secrets) and
@@ -1151,6 +1180,7 @@ private suspend fun prepareDelivery(
         diskEncryption = diskEncryption,
         embedSecrets = embedSecrets,
         debugFriendly = debugFriendly,
+        outboundProxy = outboundProxy,
         swkDepositStore = swkDepositStore,
         cgkDepositStore = cgkDepositStore,
         pairingDepositStore = pairingDepositStore,
@@ -1199,10 +1229,15 @@ internal suspend fun mintRecipeBundle(
     // Debug-friendly server (Advanced): bake an owner-IRK-signed debug-access
     // grant into the recipe as the UNSIGNED `debugGrant` sibling.
     debugFriendly: Boolean = false,
+    // The owner's outbound proxy (docs/outbound-proxy.md): signed here with the
+    // sensitive-order key (admin root when held, else the IRK) and carried as
+    // the UNSIGNED `outboundProxy` sibling, credentials beside it when typed.
+    outboundProxy: com.flagshipserver.app.core.BoxProxyDraft? = null,
     swkDepositStore: PendingSwkDepositStore? = null,
     cgkDepositStore: com.flagshipserver.app.core.PendingCgkDepositStore? = null,
     pairingDepositStore: PendingPairingDepositStore? = null,
     sessionStore: com.flagshipserver.app.api.SessionStoring? = null,
+    proxySigner: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.adminSigningKey(r) },
 ): MintedBundle {
     // The subdomain IS what the user typed (validated as a DNS label in the
     // design step; no slugify). Normalize case only.
@@ -1318,6 +1353,15 @@ internal suspend fun mintRecipeBundle(
     // box's FQDN. nil for the production default (no debug grant).
     val debugGrantSibling = if (debugFriendly) debugGrantEnvelope(serverDomain, irk, now) else null
 
+    val proxySibling = outboundProxy?.takeIf { it.kind != "none" }?.let { draft ->
+        draft.error()?.let { throw IllegalArgumentException(it) }
+        val order = draft.order(serverDomain, auth = draft.hasCredentials, now = now)
+        com.flagshipserver.app.core.BoxProxyWire(
+            order,
+            com.flagshipserver.app.core.BoxProxyProtocol.sign(order, proxySigner("Create server $serverName")),
+        )
+    }
+
     val bundle = InstallBlobBundle(
         blob = WireBlob(
             serverDomain = serverDomain,
@@ -1344,6 +1388,8 @@ internal suspend fun mintRecipeBundle(
         pairingOrder = embeddedPairingOrder,
         swkHex = embeddedSwkHex,
         debugGrant = debugGrantSibling,
+        outboundProxy = proxySibling,
+        outboundProxyCredentials = proxySibling?.let { outboundProxy?.credentials() },
     )
 
     return MintedBundle(

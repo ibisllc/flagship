@@ -21,6 +21,14 @@ interface ScreensClient {
     // P1.1 server-detail
     suspend fun serverDetail(): ServerDetailResponse
 
+    /** `GET /api/screens/outbound-proxy` (docs/outbound-proxy.md). */
+    suspend fun outboundProxy(): OutboundProxySummary =
+        throw ScreensError.NotImplemented("outbound proxy")
+
+    /** `POST /api/screens/outbound-proxy`: apply the owner's signed proxy order. */
+    suspend fun outboundProxySet(req: OutboundProxySetRequest): OutboundProxySetResponse =
+        throw ScreensError.NotImplemented("outbound proxy")
+
     /** Endorsed releases the box verified for itself (GET /api/screens/updates). */
     suspend fun serverUpdates(refresh: Boolean): ReleaseCatalogResponse =
         throw ScreensError.NotImplemented("release list")
