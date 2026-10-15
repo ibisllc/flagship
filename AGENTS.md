@@ -787,11 +787,16 @@ metal), plus the Debian 13.7.0 check. Record results under "Desktop Studio".
     co-managers can see**; **IDE/git builds for co-managers** with MCP keys
     scoped to the share and revoked with it. Offices (company owns the
     server, staff come and go) need all four: target them after.
-19. **Set the real Flagship Inference allowances** from measured builds:
-    run the DeepInfra build harness (`infra/inference/build-eval`) for
-    tokens per build per model, then set `AI_PROMO_*` on `.com` (generous
-    starter; weekly ≥ one real edit session). The paid-tier AI allowances
-    (1M/5M/20M) in `meter.ts` are placeholders until payments.
+19. **Flagship Inference allowances: decided (owner, 2026-10-15).** Keep
+    2M starter, 500k a week, 50M daily cap: 40 measured builds put a first
+    build at 3-9% of the 474k estimate (`docs/ai-inference-costs.md` §16;
+    harness `infra/inference/build-eval`). Thinking is off on Flagship
+    Inference (we pay for it) and replies get per-model caps (branch
+    `inference-no-thinking`, in progress); build chats can switch model and
+    provider and continue finished or failed chats (branch
+    `build-chat-model-switch`, in progress). The description stays at 30
+    characters. Paid-tier AI allowances (1M/5M/20M) in `meter.ts` are
+    placeholders until payments.
 
 ### Feature branches (each = `main` + one feature; rebase when `main` moves)
 
