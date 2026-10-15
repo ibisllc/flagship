@@ -887,10 +887,12 @@ metal), plus the Debian 13.7.0 check. Record results under "Desktop Studio".
     2M starter, 500k a week, 50M daily cap: 40 measured builds put a first
     build at 3-9% of the 474k estimate (`docs/ai-inference-costs.md` §16;
     harness `infra/inference/build-eval`). Thinking is off on Flagship
-    Inference (we pay for it) and replies get per-model caps (branch
-    `inference-no-thinking`, in progress); build chats can switch model and
-    provider and continue finished or failed chats (branch
-    `build-chat-model-switch`, in progress). The description stays at 30
+    Inference (we pay for it): the shim strips the box's effort and sends
+    each model's switch, except GLM, which fails every build switched off
+    and gets none; replies get per-model caps. Remeasured with thinking off
+    (§16): High 9/10 (was 6/10), GLM 9/10. Live with the next shim and
+    `.com` deploys. Open: Qwen sometimes asks its questions as plain text
+    and the box deploys with no manifest. The description stays at 30
     characters. Paid-tier AI allowances (1M/5M/20M) in `meter.ts` are
     placeholders until payments.
 

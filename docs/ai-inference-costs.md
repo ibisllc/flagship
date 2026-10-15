@@ -792,8 +792,7 @@ Failures it found, all fixed on the box (need an endorsed release):
   cap mid-file, and the box deployed the truncated reply: 3 builds lost
   (`19e13d62` asks the model to carry on).
 
-Still open: MiniMax's visible "Thinking Process" text also shows in the
-owner's chat (the shim should ask DeepInfra to split reasoning out); apps
+Still open: apps
 that crash at start and that the fix loop can't repair (Low, Medium, High,
 one or two each); one DeepInfra 429 on DeepSeek, which production's
 OpenRouter fallback would absorb.
@@ -804,3 +803,35 @@ it), so crashes after start are under-counted and real fix rounds will
 cost more; the scripted owner answers at once and never asks for extra
 changes. Rerun with `npm run build-eval` (see its README), or with Docker
 through the `build-eval` workflow.
+
+### Thinking off (2026-10-15, evening)
+
+Flagship Inference no longer pays for thinking: the shim strips any effort
+the box asks for and sends each model's switch from the catalog
+(`packages/control-plane/src/inferenceModels.ts`), and each model gets its
+own output cap (16–32k) instead of the single 8,192. The same 40 runs again,
+for **$0.55**, plus GLM rerun on its final setting ($0.16):
+
+| Model | Apps passed | First build | One edit | App with its edits | $ per app |
+|---|---|---|---|---|---|
+| Low 1× (Qwen3.6-35B-A3B) | 6/10 | 29 / 65 | 31 / 61 | 71 / 193 | $0.013 |
+| Medium 1× (DeepSeek-V4-Flash) | 5/10 (4 lost to DeepInfra 429s) | 16 / 55 | 38 / 59 | 54 / 143 | $0.003 |
+| Medium multimodal 2× (GLM-5.3-Flash), no switch | 9/10 | 38 / 222 | 42 / 119 | 148 / 1,301 | $0.009 |
+| High 3.5× (MiniMax-M3) | 9/10 | 75 / 228 | 101 / 195 | 312 / 407 | $0.015 |
+
+- **High is the clear win:** 9/10 (was 6/10), its first build about half
+  the credits, and no transcript shows the "Thinking Process" text any more,
+  so the output cap no longer cuts a reply mid-file.
+- **GLM must not be switched off.** With `enable_thinking: false` DeepInfra
+  reports no reasoning tokens, but GLM writes its reasoning as visible
+  reply text (about 7k tokens a reply, so nothing is saved) and then leaves
+  out `flagship.app.json`: 0/9. Sent as DeepInfra serves it, GLM built 9/10
+  with short replies, so the catalog sends it no switch. Its one 1,301-credit
+  run (kanban, 3 fix rounds) is the fix-loop cost again.
+- **Low and Medium** are about the same or cheaper; their failures are not
+  thinking: four DeepInfra 429s (production falls back to OpenRouter), a
+  manifest with an empty name, apps that crash at start, and Qwen asking its
+  clarifying questions as plain reply text, which the box took as a finished
+  turn with no manifest (open).
+- The allowance decision stands: a first build is 16–38 credits at the
+  median on every model.
