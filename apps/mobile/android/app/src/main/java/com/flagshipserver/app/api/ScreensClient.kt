@@ -168,8 +168,9 @@ interface ScreensClient {
     suspend fun appMembers(serviceId: String): AppMembersResponse =
         throw ScreensError.NotImplemented("app members")
 
-    /** `POST …/members/role`: the owner's signed `flagship/app-member-role/v1` order. */
-    suspend fun setAppMemberRole(serviceId: String, req: AppMemberRoleRequest): AppMemberRoleResponse =
+    /** `POST …/members/rank`: an admin's signed `flagship/app-rank/v1` order
+     *  (409: a newer order won, sign again; 403: not an admin). */
+    suspend fun setAppRank(serviceId: String, req: AppRankRequest): AppRankResponse =
         throw ScreensError.NotImplemented("app members")
 
     /** `GET /api/screens/services/:serviceId/api-keys` (docs/app-apis.md §3).

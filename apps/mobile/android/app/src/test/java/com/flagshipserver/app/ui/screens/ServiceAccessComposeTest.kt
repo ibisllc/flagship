@@ -12,12 +12,14 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import com.flagshipserver.app.api.AppAccountMember
 import com.flagshipserver.app.api.AppMember
 import com.flagshipserver.app.api.AppMemberGrant
 import com.flagshipserver.app.api.AppMemberInviteRole
@@ -71,7 +73,10 @@ class ServiceAccessComposeTest {
         return "{${parts.joinToString(",")}}"
     }
 
-    private fun vm(admin: Boolean = true): Pair<ServiceAccessViewModel, FakeTransport> {
+    private val selfPub = "a1".repeat(32)
+    private lateinit var screens: MockScreensClient
+
+    private fun vm(admin: Boolean = true, selfRank: String? = "manager"): Pair<ServiceAccessViewModel, FakeTransport> {
         val list = "{\"invites\":[" + listOf(
             row("sam", "Sam", bound = sam, tier = "admin", by = kitchen),
             row("priya", "Priya", bound = priya, manual = true),
@@ -79,13 +84,21 @@ class ServiceAccessComposeTest {
             row("jordan", "Jordan", tier = "member", by = thisDevice),
         ).joinToString(",") + "]}"
         val t = FakeTransport(getJsonByUrl = mapOf("service-invites" to list, "service-access" to """{"mode":"open","allowCount":3}"""))
-        val screens = MockScreensClient(simulatedLatencyMs = 0)
+        screens = MockScreensClient(simulatedLatencyMs = 0)
         screens.membersFixture[ref] = AppMembersResponse(
             serviceId = ref, mode = "open", defaultRole = "member",
             descriptions = mapOf(
                 "member" to "Adds and edits their own plants",
                 "manager" to "Also waters and edits anyone's plants",
                 "master" to "Also changes the garden's settings",
+            ),
+            accountMembers = listOf(
+                AppAccountMember(
+                    kind = "device", deviceId = thisDevice, devicePub = selfPub, tier = if (admin) "admin" else "member",
+                    rank = if (admin) "master" else selfRank, refused = !admin && selfRank == null,
+                ),
+                AppAccountMember(kind = "device", deviceId = kitchen, devicePub = "b2".repeat(32), tier = "admin", rank = "master"),
+                AppAccountMember(kind = "co-manager", shareId = "0f1e2d3c4b5a69788796a5b4c3d2e1f0", label = "Sam's family", rank = "manager"),
             ),
             members = listOf(
                 AppMember(sam, "manager", listOf(AppMemberGrant("sam", "manager"), AppMemberGrant("family", "member"))),
@@ -101,16 +114,16 @@ class ServiceAccessComposeTest {
         return ServiceAccessViewModel(
             serverDomain = server, serviceRef = ref, username = "alice",
             client = ServiceAccessClient(boxTransport = t, comTransport = t),
-            irkSigner = { Ed25519Sign(irk.privateKey) },
             aidSigner = { ServerKeys.deriveAccountId(umkSeed) },
             aidPubHex = { HexUtil.encode(ServerKeys.deriveAccountIdPub(umkSeed)) },
             householdKey = { household },
             screens = screens,
-            roleSigner = { Ed25519Sign(irk.privateKey) },
             isAdminDevice = { admin },
             adminSigner = { Ed25519Sign(irk.privateKey) },
             deviceId = { thisDevice },
-            deviceNames = { mapOf(kitchen to "Kitchen iPad") },
+            deviceSigner = { Ed25519Sign(irk.privateKey) },
+            ownDevicePubHex = { selfPub },
+            deviceNames = { mapOf(kitchen to "Kitchen iPad", thisDevice to "Pixel 9") },
         ) to t
     }
 
@@ -149,7 +162,26 @@ class ServiceAccessComposeTest {
         for (id in listOf("sam", "priya", "family", "jordan")) {
             composeRule.onNodeWithTag("service-access-remove-$id").assertExists()
         }
+        composeRule.onNodeWithText("ACCOUNT MEMBERS (3)").assertIsDisplayed()
+        composeRule.onNodeWithText("Pixel 9").assertIsDisplayed()
+        composeRule.onNodeWithText("This device · Admin").assertIsDisplayed()
+        composeRule.onNodeWithText("Kitchen iPad").assertIsDisplayed()
+        composeRule.onNodeWithText("Sam's family").assertIsDisplayed()
+        composeRule.onNodeWithText("Co-manages this server").assertIsDisplayed()
+        composeRule.onAllNodesWithTag("service-access-cant-invite").assertCountEquals(0)
+        composeRule.onAllNodesWithTag("service-access-mode-admin-only").assertCountEquals(0)
         shot("access-android-open")
+
+        val share = "service-access-account-rank-share-0f1e2d3c4b5a69788796a5b4c3d2e1f0"
+        composeRule.onNodeWithTag(share).assertIsEnabled().performClick()
+        composeRule.onNodeWithTag("$share-master").assertIsDisplayed()
+        composeRule.onNodeWithText("Refuse").assertIsDisplayed()
+        shot("access-android-account-rank-menu")
+        composeRule.onNodeWithTag("$share-refuse").performClick()
+        composeRule.waitUntil(10_000) { vm.members.value?.accountMembers?.get(2)?.isRefused == true }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(share).assertContentDescriptionEquals("Rank: Refused")
+        assertTrue(screens.setAppRankCalls.last().second.order.rank == "refused")
 
         composeRule.onNodeWithTag("service-access-mode-members").performClick()
         composeRule.onNodeWithText("Only these 3 people will be able to open it.").assertIsDisplayed()
@@ -176,6 +208,14 @@ class ServiceAccessComposeTest {
         }
         composeRule.waitUntil(10_000) { vm.members.value != null && vm.people.value.size == 4 }
         composeRule.waitForIdle()
+        composeRule.onNodeWithTag("service-access-mode-members").assertIsNotEnabled()
+        composeRule.onNodeWithText("Only an admin device can change who may open this app.").assertIsDisplayed()
+        composeRule.onNodeWithText("This device").assertIsDisplayed()
+        composeRule.onNodeWithTag("service-access-account-rank-device-$thisDevice")
+            .assertIsNotEnabled()
+            .assertContentDescriptionEquals("Rank: Manager")
+        composeRule.onNodeWithTag("service-access-account-rank-device-$kitchen").assertIsNotEnabled()
+        composeRule.onAllNodesWithTag("service-access-cant-invite").assertCountEquals(0)
         composeRule.onNodeWithTag("service-access-role-sam").assertIsNotEnabled()
         composeRule.onNodeWithTag("service-access-role-sam").performClick()
         composeRule.onAllNodesWithText("Also changes the garden's settings").assertCountEquals(0)
@@ -196,5 +236,27 @@ class ServiceAccessComposeTest {
         composeRule.onNodeWithTag("service-access-remove-jordan").performClick()
         composeRule.onNodeWithTag("service-access-remove-confirm").performClick()
         composeRule.waitUntil(10_000) { t.posts.any { it.first.endsWith("/service-invites/revoke") } }
+        composeRule.waitUntil(10_000) { t.posts.any { it.first.endsWith("/api/service-access/invite-withdraw") } }
     }
+
+    private fun belowManager(rank: String?) {
+        val (vm, _) = vm(admin = false, selfRank = rank)
+        composeRule.setContent {
+            FlagshipTheme { ServiceAccessContent(vm, ref, "Plants", onShare = {}, onCopy = {}, pickPhoto = null) }
+        }
+        composeRule.waitUntil(10_000) { vm.members.value != null && vm.people.value.size == 4 }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("service-access-cant-invite").assertIsDisplayed()
+        composeRule.onNodeWithText("Only an admin can let you invite people to this app.").assertIsDisplayed()
+        composeRule.onAllNodesWithTag("service-access-add-person").assertCountEquals(0)
+        composeRule.onAllNodesWithTag("service-access-add-group").assertCountEquals(0)
+        composeRule.onAllNodesWithTag("service-access-remove-jordan").assertCountEquals(0)
+        composeRule.onNodeWithTag("service-access-account-rank-device-$thisDevice")
+            .assertContentDescriptionEquals(if (rank == null) "Rank: Refused" else "Rank: Member")
+        shot(if (rank == null) "access-android-refused" else "access-android-member-rank")
+    }
+
+    @Test fun aMemberRankDevice_seesWhyInsteadOfAdd_andRevokesNothing() = belowManager("member")
+
+    @Test fun aRefusedDevice_seesWhyInsteadOfAdd_andRevokesNothing() = belowManager(null)
 }

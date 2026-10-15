@@ -1,13 +1,13 @@
-// Admin "Access control" screen (docs/service-access-gating.md, "Open mode +
-// members"). Mirror of iOS ServiceAccessScreen + the webapp views/service-access.js:
-// an Open to all | Members only toggle (reads the TRUE mode from the box; sets it
-// with an owner-IRK envelope; never changes the list) and, in both modes, the
-// members list: people and groups with a rank picker each (signed
-// flagship/app-member-role/v1 orders; admin devices only), "Invited by
-// <device>", + Add person (optionally one you approve first) / + Add group with
-// the rank chosen at creation (Member only on a device that isn't an admin),
-// one-tap Revoke (.com revoke + owner-IRK box prune of the AIDs for whom it was
-// the last grant; non-admins only on their own member invites), and CONFIRM a
+// "Access control" screen (docs/service-access-gating.md, "Open mode + members"
+// and "Account members, ranks and who may change them"). Mirror of iOS
+// ServiceAccessScreen + the webapp views/service-access.js: an Open to all |
+// Members only toggle (admin devices only; never changes the list), the
+// Account members (this account's devices, names decrypted on the phone, and
+// the co-managing accounts, each with its rank; on an admin device a rank menu
+// with Refuse), and the invited people and groups with their ranks, "Invited
+// by <device>", + Add person / + Add group (any rank on an admin device, Member
+// on a Manager-class device, and on a device below Manager the line saying
+// why), Revoke (admins any invite, other devices their own), and CONFIRM a
 // reply from someone you approve.
 
 package com.flagshipserver.app.ui.screens
@@ -38,6 +38,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -74,7 +75,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.flagshipserver.app.api.AppAccountMember
+import com.flagshipserver.app.api.MockScreensClient
 import com.flagshipserver.app.core.AppMemberRole
+import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalToastCenter
@@ -114,18 +118,34 @@ fun ServiceAccessScreen(nav: NavController, serviceId: String) {
     val live = com.flagshipserver.app.core.LocalDeveloperSettings.current?.useLiveClient?.collectAsState()?.value ?: true
     val server = com.flagshipserver.app.core.LocalFlagshipServerClient.current
     val vm = remember(serviceId, serverDomain, live) {
-        val deviceId = { appState.activeProfile?.deviceId?.takeIf { it.length == 32 } }
-        ServiceAccessViewModel(
-            serverDomain = serverDomain, serviceRef = serviceId, username = username, screens = screens,
-            client = if (live) com.flagshipserver.app.api.ServiceAccessClient()
-            else com.flagshipserver.app.api.MockServiceAccessClient.shared,
-            deviceId = deviceId,
-            deviceNames = {
-                val id = deviceId()
-                if (id == null) null
-                else com.flagshipserver.app.viewmodels.AccountDeviceNames.load(server, username, id)
-            },
-        )
+        val mockBox = screens is MockScreensClient
+        val profileDevice = { appState.activeProfile?.deviceId?.takeIf { it.length == 32 } }
+        // The mock box's device book names this phone by a fixed key; a real
+        // box by the account device key derived on this phone.
+        val deviceId = if (mockBox) ({ profileDevice() ?: MockScreensClient.SELF_DEVICE_ID }) else profileDevice
+        if (mockBox) {
+            ServiceAccessViewModel(
+                serverDomain = serverDomain, serviceRef = serviceId, username = username, screens = screens,
+                client = if (live) com.flagshipserver.app.api.ServiceAccessClient()
+                else com.flagshipserver.app.api.MockServiceAccessClient.shared,
+                deviceId = deviceId,
+                deviceSigner = { _ -> Keystore.accountDeviceSigner(Keystore.currentUmkSeed(), username, deviceId() ?: MockScreensClient.SELF_DEVICE_ID) },
+                ownDevicePubHex = { MockScreensClient.SELF_DEVICE_PUB },
+                deviceNames = { MockScreensClient.DEVICE_NAMES },
+            )
+        } else {
+            ServiceAccessViewModel(
+                serverDomain = serverDomain, serviceRef = serviceId, username = username, screens = screens,
+                client = if (live) com.flagshipserver.app.api.ServiceAccessClient()
+                else com.flagshipserver.app.api.MockServiceAccessClient.shared,
+                deviceId = deviceId,
+                deviceNames = {
+                    val id = deviceId()
+                    if (id == null) null
+                    else com.flagshipserver.app.viewmodels.AccountDeviceNames.load(server, username, id)
+                },
+            )
+        }
     }
     ServiceAccessContent(
         vm = vm,
@@ -231,7 +251,7 @@ internal fun ServiceAccessContent(
                         .fillMaxWidth()
                         .semantics { testTag = "service-access-restrict-toggle" },
                 ) {
-                    val enabled = !busyMode && phase !is ServiceAccessPhase.Loading
+                    val enabled = vm.isAdmin && !busyMode && phase !is ServiceAccessPhase.Loading
                     val colors = SegmentedButtonDefaults.colors(
                         activeContainerColor = FS.colors.primary.copy(alpha = 0.14f),
                         activeContentColor = FS.colors.text,
@@ -273,6 +293,46 @@ internal fun ServiceAccessContent(
                         modifier = Modifier.semantics { testTag = "service-access-mode-status" },
                     )
                 }
+                if (!vm.isAdmin) {
+                    Text(
+                        MODE_ADMIN_ONLY_LINE,
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 12.sp),
+                        modifier = Modifier.semantics { testTag = "service-access-mode-admin-only" },
+                    )
+                }
+            }
+        }
+
+        // Account members: this account's devices and the co-managing accounts.
+        val accountMembers = members?.accountMembers.orEmpty()
+        if (accountMembers.isNotEmpty()) {
+            Text(
+                "ACCOUNT MEMBERS (${accountMembers.size})",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.6.sp),
+                modifier = Modifier.semantics { testTag = "service-access-account-members-title" },
+            )
+            FSCard(padding = PaddingValues(FS.space.s4)) {
+                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+                    accountMembers.forEach { m ->
+                        AccountMemberRow(
+                            member = m,
+                            name = vm.accountMemberName(m, deviceNames),
+                            detail = vm.accountMemberDetail(m),
+                            canChange = vm.isAdmin && m.rankTarget != null,
+                            descriptions = members?.descriptions.orEmpty(),
+                            busy = m.rowKey in busyRoles,
+                            onRank = { r ->
+                                scope.launch {
+                                    val name = vm.accountMemberName(m, deviceNames)
+                                    if (vm.setAccountRank(m, r)) toasts.success(if (r == null) "$name is refused." else "$name is now ${r.label}.")
+                                    else (vm.phase.value as? ServiceAccessPhase.Failed)?.let { toasts.error(it.message) }
+                                }
+                            },
+                        )
+                    }
+                }
             }
         }
 
@@ -283,7 +343,15 @@ internal fun ServiceAccessContent(
             style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.6.sp),
             modifier = Modifier.semantics { testTag = "service-access-members-title" },
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+        vm.inviteBlockedLine?.let { line ->
+            Text(
+                line,
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                modifier = Modifier.semantics { testTag = "service-access-cant-invite" },
+            )
+        }
+        if (vm.canInvite) Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             FSSecondaryButton(
                 label = "+ Add person",
                 onClick = {
@@ -450,8 +518,14 @@ internal fun ServiceAccessContent(
                             else (vm.phase.value as? ServiceAccessPhase.Failed)?.let { toasts.error(it.message) }
                         }
                     },
+                    canRemoveMembers = vm.isAdmin,
                     onRemove = { confirmRemove = person },
-                    onRemoveMember = { aid -> scope.launch { vm.removeGroupMember(aid); toasts.success("Member removed.") } },
+                    onRemoveMember = { aid ->
+                        scope.launch {
+                            if (vm.removeGroupMember(aid)) toasts.success("Member removed.")
+                            else (vm.phase.value as? ServiceAccessPhase.Failed)?.let { toasts.error(it.message) }
+                        }
+                    },
                 )
             }
         }
@@ -514,7 +588,7 @@ internal fun ServiceAccessContent(
                         confirmRemove = null
                         removing = removing + p.inviteId
                         scope.launch {
-                            val ok = vm.remove(p.inviteId, p.boundAidHex, p.memberAids)
+                            val ok = vm.remove(p.inviteId)
                             removing = removing - p.inviteId
                             if (ok) toasts.success(if (p.isGroup) "Group revoked." else "Removed.")
                             else (vm.phase.value as? ServiceAccessPhase.Failed)?.let { toasts.error(it.message) }
@@ -549,26 +623,32 @@ internal fun ServiceAccessContent(
 }
 
 internal const val RANK_LOCKED_LINE = "Only an admin device can give a higher rank"
+internal const val MODE_ADMIN_ONLY_LINE = "Only an admin device can change who may open this app."
+internal const val REFUSED_LABEL = "Refused"
 
 /** A rank menu; the display names come from [AppMemberRole.label] only, each
  *  item carries the app's one line for that rank, and Master its crown. Not
- *  [enabled]: the rank, read-only (a device that isn't an admin). */
+ *  [enabled]: the rank, read-only (a device that isn't an admin). With
+ *  [onRefuse] (an account member on an admin device) it also offers Refuse; a
+ *  null [selected] reads "Refused". */
 @Composable
 private fun RolePicker(
-    selected: AppMemberRole,
+    selected: AppMemberRole?,
     tag: String,
     busy: Boolean = false,
     enabled: Boolean = true,
     descriptions: Map<String, String> = emptyMap(),
+    onRefuse: (() -> Unit)? = null,
     onPick: (AppMemberRole) -> Unit,
 ) {
     var open by remember { mutableStateOf(false) }
+    val label = selected?.label ?: REFUSED_LABEL
     Box {
         androidx.compose.material3.AssistChip(
             onClick = { if (!busy && enabled) open = true },
             enabled = enabled,
-            label = { Text(selected.label) },
-            leadingIcon = if (selected.crowned) {
+            label = { Text(label, color = if (selected == null) FS.colors.danger else androidx.compose.ui.graphics.Color.Unspecified) },
+            leadingIcon = if (selected?.crowned == true) {
                 { Icon(CrownIcon, contentDescription = null, tint = CROWN_GOLD, modifier = Modifier.size(16.dp)) }
             } else null,
             trailingIcon = when {
@@ -576,7 +656,7 @@ private fun RolePicker(
                 enabled -> { { Icon(Icons.Filled.ArrowDropDown, contentDescription = null) } }
                 else -> null
             },
-            modifier = Modifier.semantics { testTag = tag; contentDescription = "Rank: ${selected.label}" },
+            modifier = Modifier.semantics { testTag = tag; contentDescription = "Rank: $label" },
         )
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             AppMemberRole.entries.forEach { r ->
@@ -595,9 +675,66 @@ private fun RolePicker(
                         r.crowned -> { { Icon(CrownIcon, contentDescription = null, tint = CROWN_GOLD) } }
                         else -> null
                     },
+                    modifier = Modifier.semantics { testTag = "$tag-${r.wire}" },
+                )
+            }
+            if (onRefuse != null) {
+                androidx.compose.material3.HorizontalDivider()
+                DropdownMenuItem(
+                    text = { Text("Refuse", color = FS.colors.danger) },
+                    onClick = { open = false; if (selected != null) onRefuse() },
+                    leadingIcon = if (selected == null) { { Icon(Icons.Filled.Check, contentDescription = null) } } else null,
+                    modifier = Modifier.semantics { testTag = "$tag-refuse" },
                 )
             }
         }
+    }
+}
+
+/** One of the account's devices or a co-managing account, with its rank in this app. */
+@Composable
+private fun AccountMemberRow(
+    member: AppAccountMember,
+    name: String,
+    detail: String,
+    canChange: Boolean,
+    descriptions: Map<String, String>,
+    busy: Boolean,
+    onRank: (AppMemberRole?) -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(FS.space.s3),
+        modifier = Modifier.semantics { testTag = "service-access-account-${member.rowKey}" },
+    ) {
+        Box(
+            Modifier
+                .size(36.dp)
+                .background(FS.colors.surfaceSunken, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                if (member.isDevice) Icons.Filled.Smartphone else Icons.Filled.Groups,
+                contentDescription = null,
+                tint = FS.colors.textMuted,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        Column(Modifier.weight(1f)) {
+            Text(name, color = FS.colors.text, style = TextStyle(fontSize = 16.sp), maxLines = 1)
+            if (detail.isNotEmpty()) {
+                Text(detail, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+            }
+        }
+        RolePicker(
+            selected = member.appRank,
+            tag = "service-access-account-rank-${member.rowKey}",
+            busy = busy,
+            enabled = canChange,
+            descriptions = descriptions,
+            onRefuse = if (canChange) ({ onRank(null) }) else null,
+            onPick = { onRank(it) },
+        )
     }
 }
 
@@ -610,6 +747,7 @@ private fun PersonRow(
     alsoIn: String,
     invitedBy: String?,
     canRemove: Boolean,
+    canRemoveMembers: Boolean,
     busyRole: Boolean,
     busyRemove: Boolean,
     onRole: (AppMemberRole) -> Unit,
@@ -684,7 +822,7 @@ private fun PersonRow(
                     }
                 }
             }
-            if (person.isGroup && person.memberAids.isNotEmpty() && canRemove) {
+            if (person.isGroup && person.memberAids.isNotEmpty() && canRemoveMembers) {
                 androidx.compose.material3.TextButton(
                     onClick = { expanded = !expanded },
                     modifier = Modifier.semantics { testTag = "service-access-group-members-toggle" },

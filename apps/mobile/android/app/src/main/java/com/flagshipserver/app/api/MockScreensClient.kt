@@ -377,26 +377,57 @@ class MockScreensClient(
 
     // ---------- Access control — members' ranks ------------------------
 
-    /** Per-service members the box would list (absent: none, default editor). */
+    /** Per-service members the box would list (absent: no people, the default
+     *  account members). */
     val membersFixture: MutableMap<String, AppMembersResponse> = mutableMapOf()
-    val setAppMemberRoleCalls: MutableList<Pair<String, AppMemberRoleRequest>> = mutableListOf()
+    val setAppRankCalls: MutableList<Pair<String, AppRankRequest>> = mutableListOf()
     /** Status to refuse the next rank change with (e.g. 403), once. */
     var memberRoleStatus: Int? = null
 
+    /** The mock box's device book and co-managers: this device (an admin with
+     *  the gym's admin seed, else at the gym's chosen rank, Manager by
+     *  default), the account's other phone and one co-managing family. */
+    fun defaultAccountMembers(): List<AppAccountMember> {
+        val admin = com.flagshipserver.app.core.GymSeams.forceAdminRoot
+        val seeded = com.flagshipserver.app.core.GymSeams.deviceRank
+        val refused = !admin && seeded == "refused"
+        return listOf(
+            AppAccountMember(
+                kind = "device", deviceId = SELF_DEVICE_ID, devicePub = SELF_DEVICE_PUB,
+                tier = if (admin) "admin" else "member",
+                rank = when { admin -> "master"; refused -> null; else -> seeded ?: "manager" },
+                set = !admin && seeded != null, refused = refused,
+            ),
+            AppAccountMember(kind = "device", deviceId = OTHER_DEVICE_ID, devicePub = OTHER_DEVICE_PUB, tier = "admin", rank = "master"),
+            AppAccountMember(kind = "co-manager", shareId = CO_MANAGER_SHARE_ID, label = "Sam's family", rank = "manager"),
+        )
+    }
+
     override suspend fun appMembers(serviceId: String): AppMembersResponse {
         tick()
-        return membersFixture[serviceId] ?: AppMembersResponse(serviceId = serviceId, mode = "open", defaultRole = "member")
+        return membersFixture[serviceId]
+            ?: AppMembersResponse(serviceId = serviceId, mode = "open", defaultRole = "member", accountMembers = defaultAccountMembers())
     }
 
     /** Mirrors the box: records the order and updates the listed rank. */
-    override suspend fun setAppMemberRole(serviceId: String, req: AppMemberRoleRequest): AppMemberRoleResponse {
+    override suspend fun setAppRank(serviceId: String, req: AppRankRequest): AppRankResponse {
         tick()
-        setAppMemberRoleCalls.add(serviceId to req)
+        setAppRankCalls.add(serviceId to req)
         memberRoleStatus?.let { memberRoleStatus = null; throw ScreensError.Http(it, """{"error":"refused"}""") }
         val cur = appMembers(serviceId)
         val t = req.order.target
-        val role = req.order.role
+        val role = req.order.rank
         val next = when {
+            t.startsWith("device:") || t.startsWith("share:") -> {
+                val key = t.substringAfter(':')
+                val refused = role == com.flagshipserver.app.core.AppAccessOrders.REFUSED
+                cur.copy(
+                    accountMembers = cur.accountMembers.map { m ->
+                        val hit = if (t.startsWith("device:")) m.devicePub == key else m.shareId == key
+                        if (hit) m.copy(rank = if (refused) null else role, set = true, refused = refused) else m
+                    },
+                )
+            }
             t.startsWith("invite:") -> {
                 val id = t.removePrefix("invite:")
                 cur.copy(
@@ -413,7 +444,7 @@ class MockScreensClient(
             else -> cur
         }
         membersFixture[serviceId] = next
-        return AppMemberRoleResponse(ok = true, target = t, role = role)
+        return AppRankResponse(ok = true, target = t, rank = role)
     }
 
     override suspend fun serviceDb(serviceId: String): AppDbOverview {
@@ -507,7 +538,7 @@ class MockScreensClient(
                 AppDetailResponse.DataLayerInstance("postgres", "${app.slug}_db")
             ),
             members = listOf(
-                AppDetailResponse.AppMember("ab12cd", "owner", app.installedAt)
+                AppDetailResponse.AppMember("ab12cd", "master", app.installedAt)
             ),
             browserTabs = emptyList(),
             lastBackup = AppDetailResponse.BackupSummary(
@@ -992,5 +1023,17 @@ class MockScreensClient(
             )
         }
         return CompanionResolvePendingResponse(ok = true, alreadyResolved = false)
+    }
+
+    companion object {
+        /** The mock box's device book: this phone, and the account's other one. */
+        const val SELF_DEVICE_ID = "0123456789abcdef0123456789abcdef"
+        val SELF_DEVICE_PUB = "a1".repeat(32)
+        const val OTHER_DEVICE_ID = "fedcba9876543210fedcba9876543210"
+        val OTHER_DEVICE_PUB = "b2".repeat(32)
+        const val CO_MANAGER_SHARE_ID = "0f1e2d3c4b5a69788796a5b4c3d2e1f0"
+
+        /** The names the account directory would give them (decrypted on the phone). */
+        val DEVICE_NAMES = mapOf(SELF_DEVICE_ID to "Pixel 9", OTHER_DEVICE_ID to "Kitchen iPad")
     }
 }

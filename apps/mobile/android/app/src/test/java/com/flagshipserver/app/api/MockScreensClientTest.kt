@@ -63,7 +63,7 @@ class MockScreensClientTest {
         assertTrue(r.dataLayerInstances.isNotEmpty())
         assertEquals("postgres", r.dataLayerInstances.first().store)
         assertTrue(r.members.isNotEmpty())
-        assertEquals("owner", r.members.first().role)
+        assertEquals("master", r.members.first().role)
         // browserTabs present (empty is a valid steady state), lastBackup +
         // recentLogs populated.
         assertNotNull(r.browserTabs)

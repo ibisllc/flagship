@@ -1,14 +1,16 @@
 // Box- AND `.com`-direct client for per-service access gating
 // (docs/service-access-gating.md). Mirrors FrontPageClient / LockPowerClient.
 //
-// BOX (pod-direct, owner-AID/IRK or friend-contact-AID signed):
+// BOX (pod-direct):
 //   GET  https://<pod>/api/service-access/<serviceRef>   → { mode, allowCount }
-//   POST https://<pod>/api/service-access                ({ request, signature })  (owner)
-//   POST https://<pod>/api/service-invites/redeem        ({ secret, visitorAID, aidSig, redeemedAt })  (contact-AID)
+//   POST https://<pod>/api/service-access                ({ request, signature })  (admin root: service-access-mode/v2)
+//   POST https://<pod>/api/service-access/allow-remove   ({ request, signature })  (admin root: service-allow-remove/v2)
+//   POST https://<pod>/api/service-access/invite-withdraw ({ revoke, signature })  (admin root, or the invite's creator device key)
+//   POST https://<pod>/api/service-invites/redeem        ({ secret, visitorAID, aidSig, redeemedAt })  (per-app id)
 //   POST https://<pod>/api/service-access/accept         ({ accept, acceptSig, create, createSig })  (manual-approve finalize)
 //
-// `.com` (public CA), author AID/IRK-signed create/revoke + SIGNED metadata list:
-//   POST https://<control>/api/users/<u>/service-invites          ({ request{…, deviceId}, signature })  (admin root; a non-admin device's AID = Member tier)
+// `.com` (public CA), signed create/revoke + SIGNED metadata list:
+//   POST https://<control>/api/users/<u>/service-invites          ({ request{…, deviceId}, signature })  (admin root; a non-admin device's account device key = Member tier)
 //   GET  https://<control>/api/users/<u>/service-invites?authorAID=…&scope=list&cursor=0&issuedAt=…&sig=…  (v2: owner-signed)
 //   POST https://<control>/api/users/<u>/service-invites/revoke    ({ request, signature })  (admin root, or the key that created a member invite)
 
@@ -161,6 +163,25 @@ open class ServiceAccessClient(
         )
         val obj = json.parseToJsonElement(String(resp.body, Charsets.UTF_8)).jsonObject
         return obj["removed"]?.jsonPrimitive?.contentOrNull == "true"
+    }
+
+    /** POST the same signed invite revoke `.com` got straight to the BOX, which
+     *  verifies it itself (an admin, or the device that made the invite while
+     *  it may still invite there) and removes the people who joined through
+     *  it at once. Returns how many it removed. */
+    open suspend fun withdrawInvite(serverDomain: String, revoke: JsonObject, signatureHex: String): Int {
+        val body = buildJsonObject {
+            put("revoke", revoke)
+            put("signature", JsonPrimitive(signatureHex))
+        }
+        val resp = boxTransport.execute(
+            "POST", "${podBaseUrl(serverDomain)}/api/service-access/invite-withdraw",
+            body = body.toString().toByteArray(Charsets.UTF_8),
+            contentType = "application/json",
+            accept = setOf(200),
+        )
+        val obj = json.parseToJsonElement(String(resp.body, Charsets.UTF_8)).jsonObject
+        return obj["pruned"]?.jsonPrimitive?.longOrNull?.toInt() ?: 0
     }
 
     /** Friend AID-signed redeem. Maps 404/409/403 to ServiceAccessError. */
@@ -417,6 +438,8 @@ class MockServiceAccessClient : ServiceAccessClient() {
     }
 
     override suspend fun removeServiceAllow(serverDomain: String, request: JsonObject, signatureHex: String): Boolean = true
+
+    override suspend fun withdrawInvite(serverDomain: String, revoke: JsonObject, signatureHex: String): Int = 0
 
     override suspend fun listInvites(
         username: String,

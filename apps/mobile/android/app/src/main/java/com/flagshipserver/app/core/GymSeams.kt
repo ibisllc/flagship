@@ -17,6 +17,12 @@ object GymSeams {
     @Volatile
     var forceAdminRoot: Boolean = false
 
+    /** This device's rank in the mock box's apps when it isn't an admin
+     *  ("member" | "manager" | "master" | "refused"; null = the default,
+     *  Manager), so the gym reaches each Access control state. */
+    @Volatile
+    var deviceRank: String? = null
+
     /** Pass the biometric / device-credential prompts (twin of iOS
      *  `GymSeams.bypassBiometricGates`). An emulator has no screen lock, so
      *  every signed order in the no-backend gym would stop at a prompt that

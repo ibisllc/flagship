@@ -295,9 +295,9 @@ class LiveScreensClient(
     override suspend fun appMembers(serviceId: String): AppMembersResponse =
         request("${servicePath(serviceId)}/members", AppMembersResponse.serializer())
 
-    override suspend fun setAppMemberRole(serviceId: String, req: AppMemberRoleRequest): AppMemberRoleResponse {
-        val body = json.encodeToString(AppMemberRoleRequest.serializer(), req).toByteArray()
-        return request("${servicePath(serviceId)}/members/role", AppMemberRoleResponse.serializer(), "POST", body)
+    override suspend fun setAppRank(serviceId: String, req: AppRankRequest): AppRankResponse {
+        val body = json.encodeToString(AppRankRequest.serializer(), req).toByteArray()
+        return request("${servicePath(serviceId)}/members/rank", AppRankResponse.serializer(), "POST", body)
     }
 
     override suspend fun serviceApiKeys(serviceId: String): AppApiKeysResponse =

@@ -1315,7 +1315,8 @@ data class CompanionResolvePendingResponse(
 //
 // Wire parity with packages/server-daemon/src/memberRoles.ts. Every
 // redemption of an invite is its own grant; a person holding several has the
-// highest rank.
+// highest rank. Account members are the account's own devices and the
+// accounts co-managing the server, each with its rank in this app.
 
 /** `tier` is who signed the invite ("admin" | "member"; null before tiers were
  *  recorded): a member-tier invite's joins are capped at Member by the box. */
@@ -1330,8 +1331,57 @@ data class AppMember(
     val direct: String? = null,
 )
 
+/** `creatorPub` is the key that signed the create (an account device key or
+ *  the admin root); `creatorDeviceId` the device it belongs to, when known. */
 @Serializable
-data class AppMemberInviteRole(val inviteId: String, val role: String, val set: Boolean = false, val tier: String? = null)
+data class AppMemberInviteRole(
+    val inviteId: String,
+    val role: String,
+    val set: Boolean = false,
+    val tier: String? = null,
+    val creatorPub: String? = null,
+    val creatorDeviceId: String? = null,
+)
+
+/** One of the account's devices (`kind` "device") or a co-managing account
+ *  (`kind` "co-manager", named by the server owner's own [label]). [rank] is
+ *  null when an admin refused it in this app; [set] when an admin order, not
+ *  the default, gave it. */
+@Serializable
+data class AppAccountMember(
+    val kind: String,
+    val deviceId: String? = null,
+    val devicePub: String? = null,
+    /** "admin" | "member" (devices only). */
+    val tier: String? = null,
+    val shareId: String? = null,
+    val label: String? = null,
+    val rank: String? = null,
+    val set: Boolean = false,
+    val refused: Boolean = false,
+) {
+    val isDevice: Boolean get() = kind == "device"
+    val isRefused: Boolean get() = refused || rank == null
+    val appRank: com.flagshipserver.app.core.AppMemberRole?
+        get() = if (isRefused) null else com.flagshipserver.app.core.AppMemberRole.fromWire(rank)
+
+    /** The app-rank target naming this row, or null when it can't be named. */
+    val rankTarget: String?
+        get() = if (isDevice) {
+            devicePub?.lowercase()?.takeIf { HEX64.matches(it) }?.let { com.flagshipserver.app.core.AppAccessOrders.deviceTarget(it) }
+        } else {
+            shareId?.lowercase()?.takeIf { HEX32.matches(it) }?.let { com.flagshipserver.app.core.AppAccessOrders.shareTarget(it) }
+        }
+
+    /** Stable per row (busy state, test tags). */
+    val rowKey: String
+        get() = if (isDevice) "device-${deviceId ?: devicePub.orEmpty().take(16)}" else "share-${shareId.orEmpty()}"
+
+    private companion object {
+        val HEX64 = Regex("^[0-9a-f]{64}$")
+        val HEX32 = Regex("^[0-9a-f]{32}$")
+    }
+}
 
 /** `GET /api/screens/services/:id/members`. */
 @Serializable
@@ -1342,6 +1392,7 @@ data class AppMembersResponse(
     val defaultRole: String,
     /** The app's one line per rank (its manifest's `role_descriptions`). */
     val descriptions: Map<String, String> = emptyMap(),
+    val accountMembers: List<AppAccountMember> = emptyList(),
     val members: List<AppMember> = emptyList(),
     val invites: List<AppMemberInviteRole> = emptyList(),
 ) {
@@ -1349,20 +1400,28 @@ data class AppMembersResponse(
 
     fun member(aid: String?): AppMember? = aid?.lowercase()?.let { a -> members.firstOrNull { it.aid == a } }
 
+    /** This device's own row, found by its account device key. */
+    fun self(devicePubHex: String?): AppAccountMember? {
+        val pub = devicePubHex?.lowercase() ?: return null
+        return accountMembers.firstOrNull { it.isDevice && it.devicePub?.lowercase() == pub }
+    }
+
     /** Where a rank change for one row goes: a person's personal invite is their
      *  grant; a member who joined before grants were tracked, by their AID. */
     fun roleTarget(inviteId: String, boundAID: String?): String {
         val m = member(boundAID)
-        if (m != null && m.grants.none { it.inviteId == inviteId }) return "aid:${m.aid}"
-        return "invite:$inviteId"
+        if (m != null && m.grants.none { it.inviteId == inviteId }) return com.flagshipserver.app.core.AppAccessOrders.aidTarget(m.aid)
+        return com.flagshipserver.app.core.AppAccessOrders.inviteTarget(inviteId)
     }
 
-    fun inviteTier(inviteId: String): String? = invites.firstOrNull { it.inviteId == inviteId }?.tier
+    fun invite(inviteId: String): AppMemberInviteRole? = invites.firstOrNull { it.inviteId == inviteId }
+
+    fun inviteTier(inviteId: String): String? = invite(inviteId)?.tier
 
     fun rowRole(inviteId: String, boundAID: String?): String {
         val m = member(boundAID)
         if (m != null && m.grants.none { it.inviteId == inviteId }) return m.role
-        return invites.firstOrNull { it.inviteId == inviteId }?.role ?: defaultRole
+        return invite(inviteId)?.role ?: defaultRole
     }
 
     /** The person's other grants, for "also in Family: Viewer". */
@@ -1373,12 +1432,6 @@ data class AppMembersResponse(
         }
     }
 
-    /** Only the AIDs for whom this grant was the last one are pruned on the box. */
-    fun aidsToPrune(inviteId: String, aids: List<String>): List<String> = aids.filter { aid ->
-        val m = member(aid) ?: return@filter true
-        m.grants.all { it.inviteId == inviteId }
-    }
-
     companion object {
         fun alsoInText(others: List<Pair<String, String>>, label: (String) -> String): String =
             if (others.isEmpty()) "" else "also in " + others.joinToString(", ") { (l, r) -> "$l: ${label(r)}" }
@@ -1386,20 +1439,19 @@ data class AppMembersResponse(
 }
 
 @Serializable
-data class AppMemberRoleOrderBody(
-    val serverDomain: String,
-    val serviceId: String,
+data class AppRankOrderBody(
+    val serviceRef: String,
     val target: String,
-    val role: String,
+    val rank: String,
     val issuedAt: Long,
 )
 
-/** `POST /api/screens/services/:id/members/role` body. */
+/** `POST /api/screens/services/:id/members/rank` body (flagship/app-rank/v1). */
 @Serializable
-data class AppMemberRoleRequest(val order: AppMemberRoleOrderBody, val signature: String)
+data class AppRankRequest(val order: AppRankOrderBody, val signature: String)
 
 @Serializable
-data class AppMemberRoleResponse(val ok: Boolean, val target: String, val role: String)
+data class AppRankResponse(val ok: Boolean, val target: String, val rank: String)
 
 // ---------- AI model menus (packages/protocol/src/aiModels.ts) ----------
 
