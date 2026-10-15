@@ -229,7 +229,7 @@ How it works:
 One build is **424k input + 13k output tokens = 474k weighted**: 14 turns,
 a 14k first prompt growing 2.5k per turn, 900 output tokens per turn. That
 matches the earlier "a few hundred thousand tokens, mostly input" estimate.
-It is a model, not a measurement: `infra/inference/build-eval` runs scripted
+It is a model, not a measurement, and §16 measured builds at 3–9% of it: `infra/inference/build-eval` runs scripted
 builds, edits and fix rounds through the box's own loop against DeepInfra
 and reports the real figures per model and app size (`npm run build-eval`).
 
@@ -752,3 +752,55 @@ Notes:
 To change the lineup: edit `INFERENCE_MODELS` (ids must exist with tool
 calling on every upstream listed), update this table, run the tests, deploy
 `.com`. The shim needs no change.
+
+## 16. Measured builds (2026-10-15)
+
+`infra/inference/build-eval` ran the box's own build loop against DeepInfra:
+10 scripted apps (static page to club manager), each a first build plus 1–3
+edits, once per model. 40 runs cost **$0.79**. Credits are what `.com`
+charges (multiplier included); "median / worst 10%".
+
+| Model | Apps passed | First build | One edit | App with its edits | $ per app |
+|---|---|---|---|---|---|
+| Low 1× (Qwen3.6-35B-A3B) | 8/10 | 34 / 199 | 41 / 444 | 117 / 751 | $0.023 |
+| Medium 1× (DeepSeek-V4-Flash) | 7/10 | 38 / 99 | 27 / 53 | 103 / 179 | $0.005 |
+| Medium multimodal 2× (GLM-5.3-Flash) | 5/10 | 28 / 100 | 27 / 85 | 80 / 129 | $0.005 |
+| High 3.5× (MiniMax-M3) | 6/10 | 143 / 192 | 124 / 148 | 236 / 466 | $0.017 |
+
+What it changes:
+
+- **A first build is 14–41k weighted tokens, 3–9% of §5's 474k.** Builds
+  are one or two turns, not 14: the model writes the whole app in one reply,
+  and most of the input is the cached system prompt. §6–7's per-customer
+  costs are roughly 10× too high.
+- **Fix rounds are the expensive case.** A run that needed them used 5–25×
+  the median (Low's chore tracker: 1,430 credits).
+- **The allowance buys a lot.** The 2M starter covers about 17 apps with
+  their edits on Low, 20 on Medium, 25 on Medium multimodal and 8 on High;
+  the 500k week about a quarter of that. Spent in full, a starter costs us at
+  most about $0.40 (Low is the dearest per credit) and a week $0.10.
+- **Recommendation: keep 2M starter, 500k a week and the 50M daily cap.**
+  Raise the week only if owners report running out mid-edit.
+
+Failures it found, all fixed on the box (need an endorsed release):
+
+- Qwen "called" `flagship.app.json` as a tool and waited: the chat hung
+  (`55d5c50a`).
+- GLM wrote descriptions over 30 characters and its fix rounds never
+  shortened them: 3 builds lost (`c83316e8`).
+- MiniMax writes its reasoning as visible text, hits the 8,192-token output
+  cap mid-file, and the box deployed the truncated reply: 3 builds lost
+  (`19e13d62` asks the model to carry on).
+
+Still open: MiniMax's visible "Thinking Process" text also shows in the
+owner's chat (the shim should ask DeepInfra to split reasoning out); apps
+that crash at start and that the fix loop can't repair (Low, Medium, High,
+one or two each); one DeepInfra 429 on DeepSeek, which production's
+OpenRouter fallback would absorb.
+
+Limits of the measurement: one run per model and app, so each cell is a
+single sample; the build check was static (no Docker on the Mac that ran
+it), so crashes after start are under-counted and real fix rounds will
+cost more; the scripted owner answers at once and never asks for extra
+changes. Rerun with `npm run build-eval` (see its README), or with Docker
+through the `build-eval` workflow.
