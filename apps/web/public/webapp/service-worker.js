@@ -268,7 +268,9 @@
 //       the Pro "Separate list on each server" switch: lib/listScope.js, an
 //       access-lists push that opens the activity), so it runs a version
 //       above main's; bump it past main's on rebase.
-const SHELL_VERSION = "v117";
+//  v118: feat/custom-domains only: feat/marketplace's v117 plus the service
+//       page's custom-domain card and the services list's bound domains.
+const SHELL_VERSION = "v118";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
