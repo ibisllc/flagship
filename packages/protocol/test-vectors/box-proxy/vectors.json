@@ -1,5 +1,5 @@
 {
-  "about": "A box's outbound proxy order (docs/outbound-proxy.md). Every platform must derive `keys.irkPubHex` from `keys.umkSeedHex`, build each case's `canonical` from its `fields` byte for byte (booleans as 1/0), and reproduce `signatureHex` with the IRK; `rejectSignatureHex` must fail to verify; every `refuse` case must be refused before signing; `normalize` maps typed input to the host that is signed; `credentials` are checked by the same rules everywhere (never signed).",
+  "about": "A box's outbound proxy order (docs/outbound-proxy.md). Every platform must derive `keys.irkPubHex` from `keys.umkSeedHex`, build each case's `canonical` from its `fields` byte for byte (booleans as 1/0), and reproduce `signatureHex` with the IRK; `rejectSignatureHex` must fail to verify; every `refuse` case must be refused before signing; `normalize` maps typed input to the host that is signed; `hostErrors` gives the exact message (or null) every app shows for a typed host; `credentials` are checked by the same rules everywhere (never signed).",
   "keys": {
     "umkSeedHex": "2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a",
     "irkPubHex": "c49775473bf9dcf5ad1608c8e66823d55dc6889be27e42a029fd9de195c8d7e4"
@@ -292,6 +292,44 @@
     {
       "input": "proxy.example.net.",
       "host": "proxy.example.net"
+    }
+  ],
+  "hostErrors": [
+    {
+      "host": "proxy.example.net",
+      "error": null
+    },
+    {
+      "host": "192.168.1.20",
+      "error": null
+    },
+    {
+      "host": "2001:db8::7",
+      "error": null
+    },
+    {
+      "host": "",
+      "error": "Enter the proxy's address."
+    },
+    {
+      "host": "proxy.example.net:1080",
+      "error": "Use a host name or an IP address, without a scheme, path or port."
+    },
+    {
+      "host": "192.168.1.20:3128",
+      "error": "Use a host name or an IP address, without a scheme, path or port."
+    },
+    {
+      "host": "192.168.1.300",
+      "error": "That isn't a valid IPv4 address."
+    },
+    {
+      "host": "bad_host.example",
+      "error": "Use a host name or an IP address, without a scheme, path or port."
+    },
+    {
+      "host": "socks5://proxy.example.net",
+      "error": "Use a host name or an IP address, without a scheme, path or port."
     }
   ],
   "credentials": {
