@@ -22,6 +22,7 @@
 # Env: GYM_WORKTREE      (default ~/.cache/flagship/gym-worktree)
 #      GYM_SECRETS_FILE  (default <main checkout>/.gym-secrets.env)
 #      GYM_UPCLOUD_TOKEN_FILE (default ~/.config/flagship/upcloud-token)
+#      GYM_BASE_REF      rebase the gym branch onto this ref instead of origin/main (never pushed)
 #      GYM_REFRESH_DRY_RUN=1  same as --dry-run
 #
 # Never touches prod: prod is only READ (its secret names, to compare).
@@ -44,6 +45,10 @@ for arg in "$@"; do
 done
 
 WT="${GYM_WORKTREE:-$HOME/.cache/flagship/gym-worktree}"
+# GYM_BASE_REF tries the gym on unlanded work (e.g. a feature branch): the gym
+# branch is rebased onto it locally and never pushed.
+BASE="${GYM_BASE_REF:-origin/main}"
+[ "$BASE" = "origin/main" ] || push=0
 COMMON_DIR="$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || echo "$REPO/.git")"
 MAIN_CHECKOUT="$(dirname "$COMMON_DIR")"
 SECRETS_FILE="${GYM_SECRETS_FILE:-$MAIN_CHECKOUT/.gym-secrets.env}"
@@ -74,9 +79,9 @@ if [ "$DRY" != "1" ]; then
 fi
 
 # ── 1. branch ─────────────────────────────────────────────────────────────
-phase "1/6 gym branch rebased on origin/main ($WT)"
+phase "1/6 gym branch rebased on $BASE ($WT)"
 if [ "$DRY" = "1" ]; then
-  say "DRY-RUN would: fetch origin; worktree $WT at origin/gym; rebase onto origin/main if behind; push HEAD:gym --force-with-lease"
+  say "DRY-RUN would: fetch origin; worktree $WT at origin/gym; rebase onto $BASE if behind; push HEAD:gym --force-with-lease"
 else
   git -C "$REPO" fetch -q origin main gym
   if ! git -C "$WT" rev-parse --git-dir >/dev/null 2>&1; then
@@ -87,11 +92,11 @@ else
   [ -z "$(git -C "$WT" status --porcelain)" ] || die "$WT has uncommitted changes; commit or discard them first"
   old_gym="$(git -C "$WT" rev-parse origin/gym)"
   git -C "$WT" checkout -q --detach origin/gym
-  if git -C "$WT" merge-base --is-ancestor origin/main HEAD; then
-    say "gym already contains origin/main ($(git -C "$WT" rev-parse --short origin/main))"
+  if git -C "$WT" merge-base --is-ancestor "$BASE" HEAD; then
+    say "gym already contains $BASE ($(git -C "$WT" rev-parse --short "$BASE"))"
   else
-    say "rebasing gym ($(git -C "$WT" rev-list --count HEAD..origin/main) commits behind) onto origin/main"
-    if ! git -C "$WT" rebase -q origin/main; then
+    say "rebasing gym ($(git -C "$WT" rev-list --count HEAD.."$BASE") commits behind) onto $BASE"
+    if ! git -C "$WT" rebase -q "$BASE"; then
       git -C "$WT" rebase --abort || true
       die "gym does not rebase cleanly onto main; resolve by hand (docs/runbooks/gym-test-env.md, 'Keeping the gym branch current')"
     fi
@@ -267,4 +272,4 @@ wait_200 "$CONTROL_HEALTH" || die "gym control plane not healthy: $CONTROL_HEALT
 say "control plane 200"
 wait_200 "$SERVICES_HEALTH" || die "gym data plane not healthy: $SERVICES_HEALTH"
 say "data plane 200"
-echo "✓ gym-refresh OK — gym $(git -C "$WT" rev-parse --short HEAD) on main $(git -C "$REPO" rev-parse --short origin/main)"
+echo "✓ gym-refresh OK — gym $(git -C "$WT" rev-parse --short HEAD) on main $(git -C "$REPO" rev-parse --short "$BASE")"
