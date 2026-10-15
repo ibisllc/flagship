@@ -42,6 +42,7 @@ export * from "./appMemberRole.js";
 export * from "./serverShare.js";
 export * from "./accountReadToken.js";
 export * from "./serverOrder.js";
+export * from "./boxProxy.js";
 export * from "./appApiKey.js";
 export * from "./appCopy.js";
 export * from "./archiveDownload.js";
