@@ -128,7 +128,8 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   app working with retail / NFC boxes), **`feat/browser-extension`**,
   **`feat/phone-usb-burn`** (Android burns a USB stick on its own),
   **`feat/custom-names`** (dibs + paid name change) and **`feat/custom-domains`**
-  (custom domains as a Pro feature) — the last two branch OFF `feat/marketplace`
+  (custom domains as a Pro feature) and **`feat/outbound-proxy`** (a box's
+  traffic through a proxy + OHTTP setup) — the last three branch OFF `feat/marketplace`
   (they need its payment rail), so rebase them onto it after it moves.
   **No marketplace/retail code may sit on `main` until
   that feature launches** — branching IS the gate, there is NO gating/flag code
@@ -894,6 +895,11 @@ Not compiled since the rebase: the iOS and Android code on any branch.
   UI in any app (removed 2026-10-13 in `209a6298`; the branch brings it all
   back on top of marketplace); keep the branch's Pro wording at launch.
   Remaining: live e2e, Stripe price ids.
+- **`feat/outbound-proxy`** (off marketplace; Pro): a box's outbound traffic
+  through an owner-set SOCKS5/HTTP proxy, and its setup calls through an
+  OHTTP relay to `.com`'s gateway (`docs/outbound-proxy.md`). It holds D1
+  migration **0099** (`relay_health`): `main` skips 0099. Owner: pick the
+  relay (Oblivious Network first) and set the relay secrets.
 - **`feat/phone-usb-burn`:** validate the OTG write on a real phone + stick,
   publish the seed and set `FLAGSHIP_ISO_SEED`.
 - **`feat/retail`** (NFC box), **`feat/browser-extension`**, **`alpine`** (parked
