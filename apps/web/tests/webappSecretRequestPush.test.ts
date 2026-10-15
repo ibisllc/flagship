@@ -83,3 +83,19 @@ describe("service worker — secret-request push", () => {
     expect(src).toMatch(/q\.view === "view-boot-approval"[\s\S]{0,160}enterBootApproval\(\)/);
   });
 });
+
+describe("service worker — category-only account notices", () => {
+  for (const [category, body] of [
+    ["cert-alert", "One of your servers needs your attention."],
+    ["server-registered", "A new server was added to your account."],
+  ] as const) {
+    it(`${category} gets its own text and opens Home`, async () => {
+      const { listeners, shown, opened } = buildSandbox();
+      await fire(listeners, "push", { data: { json: () => ({ category }) } });
+      expect(shown).toHaveLength(1);
+      expect(shown[0]!.opts.body).toBe(body);
+      await fire(listeners, "notificationclick", { notification: { close: () => {}, data: shown[0]!.opts.data } });
+      expect(opened).toEqual(["https://webapp.flagshipserver.com/"]);
+    });
+  }
+});

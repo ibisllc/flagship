@@ -180,7 +180,9 @@
 //  v84: Backup/clone server on a server's page and "Add/Import a server" on
 //       Home (a backup file imports onto any server); Replace and the install
 //       Timeline are gone; Activity shows the box's own events.
-const SHELL_VERSION = "v84";
+//  v86: a server's relay-trust alert and a newly registered server get their
+//       own notice text instead of "Flagship has an update for you."
+const SHELL_VERSION = "v86";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -449,6 +451,11 @@ self.addEventListener("online", () => {
 //
 // `notificationclick` focuses an existing webapp tab if one is open,
 // otherwise opens the root (or a deep-link the payload provides).
+const ACCOUNT_NOTICES = {
+  "cert-alert": "One of your servers needs your attention.",
+  "server-registered": "A new server was added to your account.",
+};
+
 self.addEventListener("push", (event) => {
   let data = null;
   try {
@@ -565,6 +572,23 @@ self.addEventListener("push", (event) => {
         requireInteraction: true,
         icon: "/icon.svg",
         data: { kind: "secret-request", deepLink: "/?view=boot-approval" },
+      }),
+    );
+    return;
+  }
+
+  // Account notices that carry only their category (as APNs and FCM see it):
+  // a box's relay-trust SOS and a newly registered server. Home shows which.
+  const noticeText = data && typeof data.category === "string" ? ACCOUNT_NOTICES[data.category] : undefined;
+  if (noticeText) {
+    event.waitUntil(
+      self.registration.showNotification("Flagship", {
+        body: noticeText,
+        tag: `flagship-${data.category}`,
+        renotify: true,
+        requireInteraction: false,
+        icon: "/icon.svg",
+        data: { kind: data.category, deepLink: "/" },
       }),
     );
     return;
