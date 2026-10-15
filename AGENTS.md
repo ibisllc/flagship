@@ -426,6 +426,22 @@ account can view or co-manage a server, never destroy it) is in the MVP
   leader acknowledges (webapp shell v76). iOS's stuck "No. 2" came from a drop between rows
   never firing `performDrop`: rows showed the drag preview, labels the
   saved order, and nothing saved.
+- **Share this server, v1 for families (2026-10-14, `de091bcc`..`a154b318`).**
+  `docs/share-a-server.md` §5.4–§5.7 and §10. A co-manager with unlock at
+  boot can turn on "Notify this device when it needs to start": the device
+  signs its push token for that one share (`flagship/server-share-push/v1`),
+  and `.com` keeps it only while the owner's unlock deposit names the same
+  key (D1 `server_share_push`, migration 0097). A disk-unlock request pushes
+  the owner and each opted-in device (no content, `kind: share-start-up`,
+  opens Home). A co-manager at "Can manage" signs
+  `flagship/server-share-update/v1` to the box (`POST /api/shares/update`),
+  which runs the owner's gates (`admitUpdateOrder`, then
+  `applyEndorsedUpdate`); view level is refused. The owner's unlock opt-in
+  carries the house-key warning; apps list and app detail carry
+  `accessMode`, so a co-manager sees "Members only. You need an invite to
+  use this app." Needs: migration 0097, then a `.com` deploy (webapp shell
+  v78), an endorsed box release, iOS/Android store builds. Not yet run on a
+  device or a real box.
 - **Docker containers unreachable on VM appliances (fixed in `e81df698`).**
   The appliance's `Type=ether` networkd rule pulled every container's veth off
   its bridge: every app 502'd with "read ECONNRESET" after a 3 s ARP timeout
