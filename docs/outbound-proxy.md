@@ -399,8 +399,14 @@ boot, ~10–40 per phone-approved boot). Carrying the daemon's own calls
 proxy carries them.
 
 Rate limiting: every OHTTP request reaches the Worker from the relay's
-addresses, so IP-keyed limits would see all proxy boxes as one client. Key
-the gateway's inner requests on the signed identity they carry instead.
+addresses, and the gateway drops any address header inside it, so the inner
+request has no client address. The gateway marks each request it decrypts
+(in memory, so no client can claim the mark), and the limiter's per-address
+axis then keys it by what it names or who signed it (`clientKey` in
+`apps/com/src/rateLimit.ts`): an order's status by its serial, server
+registration by the signing IRK, and anything carrying neither in one shared
+relay bucket rather than going unmetered. The boot host and the sealed LUKS
+key deposit have no Worker limits, direct or relayed.
 
 **Launch item (later):** when proxying and paid features launch, use OHTTP for
 **every** box during setup (cheap: setup is a few dozen requests), not only

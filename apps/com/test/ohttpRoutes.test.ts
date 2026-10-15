@@ -52,4 +52,34 @@ describe("the Worker's OHTTP endpoints", () => {
     expect(relayFromEnv(makeEnv({ OHTTP_RELAY_URL: undefined }))).toBeNull();
     expect(ohttpRelayFrom("http://insecure.example", "00")).toBeNull();
   });
+
+  it("keys relayed rate limits on the order or the signer, never one shared address", async () => {
+    const keys: string[] = [];
+    const env = makeEnv({ RATE_LIMITER: { limit: async ({ key }) => (keys.push(key), { success: false }) } });
+    const relay = relayFromEnv(env)!;
+    const status = await sendPrivately(
+      {
+        url: "https://flagshipserver.com/api/order/ORDER123/status",
+        method: "POST",
+        headers: [["content-type", "application/json"], ["cf-connecting-ip", "203.0.113.9"]],
+        body: new TextEncoder().encode("{}"),
+      },
+      { relay, fetch: relayInto(env) },
+    );
+    expect(status).toMatchObject({ path: "ohttp", status: 429 });
+    const irk = "ab".repeat(32);
+    await sendPrivately(
+      {
+        url: "https://flagshipserver.com/api/server/register",
+        method: "POST",
+        headers: [["content-type", "application/json"]],
+        body: new TextEncoder().encode(JSON.stringify({ request: { authCode: { userPubKey: irk } } })),
+      },
+      { relay, fetch: relayInto(env) },
+    );
+    expect(keys).toEqual([
+      "provision-status|ip|60|relay:order:ORDER123",
+      `server-register|ip|3600|relay:irk:${irk}`,
+    ]);
+  });
 });
