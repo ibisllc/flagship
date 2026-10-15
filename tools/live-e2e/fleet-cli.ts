@@ -6,6 +6,7 @@
  *   npx tsx tools/live-e2e/fleet-cli.ts sweep --destroy    # destroy all of them (end-of-run safety net)
  *   npx tsx tools/live-e2e/fleet-cli.ts teardown <fleet.json>   # tear down one run's fleet
  *   npx tsx tools/live-e2e/fleet-cli.ts add-box <user> <serverName>   # another box for a demo account
+ *   npx tsx tools/live-e2e/fleet-cli.ts destroy <serverId> [fqdn]   # one gym-labelled server (+ its DNS)
  *   npx tsx tools/live-e2e/fleet-cli.ts demo-users         # demo accounts the gym Worker knows
  */
 import { readFileSync } from "node:fs";
@@ -33,6 +34,15 @@ async function main(): Promise<number> {
     const b = await addBox(new Account(rest[0]), rest[1]);
     process.stdout.write(JSON.stringify(b) + "\n");
     return 0;
+  }
+  if (cmd === "destroy" && rest[0]) {
+    const r = await http(`https://${CONTROL}/api/gym/teardown`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...adminHeaders() },
+      body: JSON.stringify({ serverIds: [rest[0]], serverDomains: rest[1] ? [rest[1]] : [] }),
+    }, 300_000);
+    process.stdout.write(JSON.stringify(r.json ?? r.text, null, 2) + "\n");
+    return r.status === 200 ? 0 : 1;
   }
   if (cmd === "demo-users") {
     const r = await http(`https://${CONTROL}/api/dev/sample-user`, { headers: adminHeaders() });

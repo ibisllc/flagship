@@ -1512,6 +1512,20 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
             // override later when Forgejo discovery lands.
             return `${opts.dataDir}/data/app-clones/${serviceId}`;
           },
+          // "Include user data": the same per-app Postgres dump and files
+          // archive an app copy sends (appCopy/ops.ts).
+          dataExporter: async ({ creator, slug, outDir }) => {
+            const app = servicePlatformRef.current?.byServiceId(ServicePlatform.serviceId(creator, slug));
+            if (!app) throw new Error(`app ${creator}/${slug} is not installed`);
+            const { realAppCopyOps } = await import("./appCopy/ops.js");
+            const ops = realAppCopyOps();
+            for (const [store, cred] of Object.entries(app.data?.postgres ?? {})) {
+              await ops.dumpDatabase(cred, `${outDir}/postgres-${store}.dump`);
+            }
+            if (app.data?.files) {
+              await ops.archiveFiles(app.data.files.volume, `flagship-${app.serviceId}`, `${outDir}/files.tar`);
+            }
+          },
         })
       : null;
 
