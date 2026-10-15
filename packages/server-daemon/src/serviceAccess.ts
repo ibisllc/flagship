@@ -94,7 +94,18 @@ export interface MemberRoles {
   grants: Record<string, string>;
   /** order target → the issuedAt of the last order applied to it (replay guard) */
   seq: Record<string, number>;
+  /**
+   * inviteId → who signed its create, as the box itself verified it: `admin`
+   * (the admin root; on a box with no admin root, the owner key) or `member`
+   * (the account's membership key on an admin-pinned box). A member invite's
+   * joins are capped at Member unless an admin-signed role order raised them.
+   * Invites bound before this was recorded have no entry (uncapped).
+   */
+  tiers: Record<string, string>;
 }
+
+/** Who signed an invite's create (docs/service-access-gating.md "Who can invite"). */
+export type InviteTier = "admin" | "member";
 
 /** The ranks an owner can give, lowest first (their wire names; the one place on the box). */
 export const MEMBER_ROLE_LADDER = APP_MEMBER_ROLES;
@@ -129,7 +140,7 @@ function higher(a: MemberRole | null, b: MemberRole | null): MemberRole | null {
 }
 
 function emptyRoles(): MemberRoles {
-  return { aids: {}, invites: {}, grants: {}, seq: {} };
+  return { aids: {}, invites: {}, grants: {}, seq: {}, tiers: {} };
 }
 
 function readRoles(v: unknown): MemberRoles {
@@ -143,6 +154,7 @@ function readRoles(v: unknown): MemberRoles {
   strMap(r.aids, out.aids);
   strMap(r.invites, out.invites);
   strMap(r.grants, out.grants);
+  strMap(r.tiers, out.tiers);
   if (r.seq && typeof r.seq === "object") {
     for (const [k, x] of Object.entries(r.seq)) if (typeof x === "number") out.seq[k] = x;
   }
@@ -150,7 +162,7 @@ function readRoles(v: unknown): MemberRoles {
 }
 
 function copyRoles(r: MemberRoles): MemberRoles {
-  return { aids: { ...r.aids }, invites: { ...r.invites }, grants: { ...r.grants }, seq: { ...r.seq } };
+  return { aids: { ...r.aids }, invites: { ...r.invites }, grants: { ...r.grants }, seq: { ...r.seq }, tiers: { ...r.tiers } };
 }
 
 type PersistShape = Record<string, Omit<ServiceAccessEntry, "roles"> & { roles?: MemberRoles }>;
@@ -394,6 +406,7 @@ export class ServiceAccessStore {
       if (!members || members.length === 0) continue;
       delete e.groups[inviteId];
       delete e.roles.invites[inviteId];
+      delete e.roles.tiers[inviteId];
       for (const key of Object.keys(e.roles.grants)) if (key.startsWith(`${inviteId}/`)) delete e.roles.grants[key];
       // Revoking one grant leaves a person's others: only someone left with
       // no grant at all stops being a member.
@@ -422,10 +435,41 @@ export class ServiceAccessStore {
     return e ? this.grantsOf(e, aidHex.toLowerCase()) : [];
   }
 
-  /** The role an invite gives (unset: the app's default). */
+  /**
+   * Record who signed an invite's create, BEFORE anyone is bound through it.
+   * `member` is sticky: an invite once seen as a member invite is never
+   * treated as an admin one, so a replayed or substituted create can only
+   * lower a rank.
+   */
+  async setInviteTier(serviceRef: string, inviteId: string, tier: InviteTier): Promise<void> {
+    const e = this.entry(serviceRef);
+    const was = e.roles.tiers[inviteId];
+    if (was === tier || was === "member") return;
+    e.roles.tiers[inviteId] = tier;
+    await this.persist();
+  }
+
+  /** Who signed an invite's create, as the box verified it (null: recorded before tiers). */
+  inviteTier(serviceRef: string, inviteId: string): InviteTier | null {
+    const t = this.byService.get(serviceRef)?.roles.tiers[inviteId];
+    return t === "admin" || t === "member" ? t : null;
+  }
+
+  /**
+   * The rank a join gets when no admin-signed role order set one: the app's
+   * default, except a member invite, which only ever lets people in at Member
+   * (the default may be `master`, and old `admin` maps to master too).
+   */
+  private unsetRank(e: ServiceAccessEntry | undefined, inviteId: string, defaultRole: string): MemberRole {
+    if (e?.roles.tiers[inviteId] === "member") return "member";
+    return ladderRole(defaultRole) ?? "member";
+  }
+
+  /** The role an invite gives (unset: the app's default; a member invite: Member). */
   inviteRole(serviceRef: string, inviteId: string, defaultRole: string): MemberRole {
-    const set = ladderRole(this.byService.get(serviceRef)?.roles.invites[inviteId]);
-    return set ?? ladderRole(defaultRole) ?? "member";
+    const e = this.byService.get(serviceRef);
+    const set = ladderRole(e?.roles.invites[inviteId]);
+    return set ?? this.unsetRank(e, inviteId, defaultRole);
   }
 
   /** The role of one person's join through an invite: its own, else the invite's. */
@@ -447,8 +491,10 @@ export class ServiceAccessStore {
     let anySet = best !== null;
     for (const id of this.grantsOf(e, aid)) {
       const set = ladderRole(e.roles.grants[`${id}/${aid}`]) ?? ladderRole(e.roles.invites[id]);
-      if (set !== null) anySet = true;
-      best = higher(best, set ?? ladderRole(defaultRole) ?? "member");
+      // A member invite's join counts as set (at Member), so the app's
+      // default never stands in for it.
+      if (set !== null || e.roles.tiers[id] === "member") anySet = true;
+      best = higher(best, set ?? this.unsetRank(e, id, defaultRole));
     }
     return anySet ? best : null;
   }
@@ -1164,6 +1210,8 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     // For a GROUP invite (create.maxRedemptions present) bind under the inviteId
     // so a group revoke can prune the whole set.
     const boundAID = comBody.boundAID.toLowerCase();
+    // The tier lands before the bind, so a join is never briefly uncapped.
+    await opts.store.setInviteTier(verified.serviceRef, verified.inviteId, verified.tier);
     // Every invite is a grant (a personal one holds one person), so revoking it
     // or giving it a role reaches exactly the people who joined through it.
     const added = await opts.store.addAllowed(verified.serviceRef, boundAID, verified.inviteId);
@@ -1188,6 +1236,7 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
         firstBind: comBody.firstBind === true,
         serviceRef: verified.serviceRef,
         boundAID,
+        tier: verified.tier,
       }),
     };
   }
@@ -1264,6 +1313,7 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     if (!acceptOk) return bad(403, "invalid acceptance signature");
 
     const contactAID = a.contactAID.toLowerCase();
+    await opts.store.setInviteTier(verified.serviceRef, verified.inviteId, verified.tier);
     // Always bind under the inviteId so a later (group or single) revoke can find
     // + prune this acceptance.
     const added = await opts.store.addAllowed(verified.serviceRef, contactAID, verified.inviteId);
@@ -1329,7 +1379,7 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     rawCreate: unknown,
     rawSig: unknown,
     expectSecretHash: string | undefined,
-  ): { inviteId: string; serviceRef: string; secretHash: string; maxRedemptions?: number } | null {
+  ): { inviteId: string; serviceRef: string; secretHash: string; maxRedemptions?: number; tier: InviteTier } | null {
     if (!rawCreate || typeof rawCreate !== "object") return null;
     if (typeof rawSig !== "string" || !/^[0-9a-f]{128}$/i.test(rawSig)) return null;
     const c = rawCreate as Record<string, unknown>;
@@ -1364,17 +1414,28 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     } catch {
       return null;
     }
-    // Owner authority: AID first (stable, survives IRK rotation), then IRK.
-    const ok =
+    // Who can invite: the admin root makes an ADMIN invite. The owner's
+    // AID or IRK (every device of the account holds them) make a MEMBER
+    // invite on a box with a pinned admin root, whose joins are capped at
+    // Member; with no admin root pinned they are the owner's authority.
+    const pinned = opts.adminRootPub && opts.adminRootPub.length === 32 ? opts.adminRootPub : undefined;
+    let tier: InviteTier;
+    if (pinned && verifyCreateServiceInvite(create, sig, pinned)) {
+      tier = "admin";
+    } else if (
       (opts.ownerAidPub ? verifyCreateServiceInvite(create, sig, opts.ownerAidPub) : false) ||
-      verifyCreateServiceInvite(create, sig, opts.ownerIrkPub) ||
-      (opts.adminRootPub ? verifyCreateServiceInvite(create, sig, opts.adminRootPub) : false);
-    if (!ok) return null;
+      verifyCreateServiceInvite(create, sig, opts.ownerIrkPub)
+    ) {
+      tier = pinned ? "member" : "admin";
+    } else {
+      return null;
+    }
     return {
       inviteId: create.inviteId,
       serviceRef: create.serviceRef,
       secretHash: create.secretHash.toLowerCase(),
       ...(create.maxRedemptions !== undefined ? { maxRedemptions: create.maxRedemptions } : {}),
+      tier,
     };
   }
 

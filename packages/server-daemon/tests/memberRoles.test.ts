@@ -172,8 +172,8 @@ describe("setting a role", () => {
       aid: OTHER,
       role: "master",
       grants: [
-        { inviteId: "family", role: "member" },
-        { inviteId: "sam-1", role: "master" },
+        { inviteId: "family", role: "member", tier: null },
+        { inviteId: "sam-1", role: "master", tier: null },
       ],
       direct: null,
     });

@@ -3,8 +3,10 @@
  * members"), over the owner's paired session only:
  *
  *   GET  /api/screens/services/:id/members
- *        → { mode, roles, defaultRole, descriptions, members:[{aid, role, grants:[{inviteId, role}], direct}], invites:[{inviteId, role, set}] }
- *          (a member's grants are their joins, one per invite redeemed; an invite's role is the one new joins get)
+ *        → { mode, roles, defaultRole, descriptions, members:[{aid, role, grants:[{inviteId, role, tier}], direct}], invites:[{inviteId, role, set, tier}] }
+ *          (a member's grants are their joins, one per invite redeemed; an invite's role is the one new joins get;
+ *          `tier` is who signed the invite: `admin`, or `member` = any device of the account, its joins capped at
+ *          Member unless an admin raised them; null for invites bound before tiers were recorded)
  *   POST /api/screens/services/:id/members/role   { order, signature } → { ok, target, role }
  *
  * The members are the app's allow-list (people who joined through an invite
@@ -17,7 +19,9 @@
  * them: the box never blocks a request by rank.
  *
  * A role change is the owner's signed `flagship/app-member-role/v1` order,
- * checked under the box's sensitive-order authority, at most 10 minutes old
+ * checked under the box's sensitive-order authority (on a box with a pinned
+ * admin root only the admin root signs it: the IRK every device holds can't
+ * raise anyone, which is what keeps a member invite at Member), at most 10 minutes old
  * and newer than the last order for the same target. Companions get 403
  * (they could read who the members are).
  */
@@ -73,6 +77,7 @@ export interface MemberRolesHttpOptions extends SensitiveAuthority {
     | "grants"
     | "grantRole"
     | "inviteRole"
+    | "inviteTier"
   >;
   /** An installed app's manifest; null when not installed here. */
   app: (serviceId: string) => { manifest: Pick<AppManifest, "access"> } | null;
@@ -102,7 +107,11 @@ export function buildMemberRolesHttp(
       .map((aid) => {
         const grants = opts.store.grants(serviceId, aid).map((inviteId) => {
           known.add(inviteId);
-          return { inviteId, role: opts.store.grantRole(serviceId, inviteId, aid, defaultRole) };
+          return {
+            inviteId,
+            role: opts.store.grantRole(serviceId, inviteId, aid, defaultRole),
+            tier: opts.store.inviteTier(serviceId, inviteId),
+          };
         });
         return {
           aid,
@@ -115,6 +124,7 @@ export function buildMemberRolesHttp(
       inviteId,
       role: opts.store.inviteRole(serviceId, inviteId, defaultRole),
       set: inviteId in set.invites,
+      tier: opts.store.inviteTier(serviceId, inviteId),
     }));
     return json(200, { serviceId, mode: opts.store.mode(serviceId), roles, defaultRole, descriptions, members, invites });
   }
