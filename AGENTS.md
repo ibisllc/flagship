@@ -406,7 +406,7 @@ owners: `docs/runbooks/release-readiness.md`; feature matrix:
   and app-bound voi.ci codes resolve their target on each visit. Boxes
   that don't send `runsServices` yet count as running everything.
 - **Remote is QR-first (2026-10-14).** remote.flagshipserver.com shows a QR
-  at once (`flagship://remote?s=<sid>&k=<browser X25519>`, the `/qr-pipe`
+  at once (`https://<control apex>/remote?s=<sid>&k=<browser X25519>`, the `/qr-pipe`
   relay); the phone shows the same 6-digit code, the owner picks a server
   and approves (biometric), and the phone mints a one-use companion ticket
   on that box and seals `flagship/remote-ticket/v1` to the browser, which
