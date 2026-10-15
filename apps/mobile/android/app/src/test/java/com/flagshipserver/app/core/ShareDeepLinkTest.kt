@@ -25,6 +25,12 @@ class ShareDeepLinkTest {
         assertEquals(DeepLink.ShareOffer(id, k), DeepLink.parse(Uri.parse("https://flagshipserver.com/share#s=$id&k=$k")))
     }
 
+    // The manifest also claims the trailing-slash paths (as APP_LINK_PATHS does).
+    @Test fun trailingSlashLinksParse() {
+        assertEquals(DeepLink.ShareOffer(id, k), DeepLink.parse(Uri.parse("https://flagshipserver.com/share/#s=$id&k=$k")))
+        assertEquals(DeepLink.ShareOffer(id, k), AppLink.resolve(Uri.parse("https://flagshipserver.com/share/#s=$id&k=$k")))
+    }
+
     @Test fun appLinkResolverParses() {
         assertEquals(DeepLink.ShareOffer(id, k), AppLink.resolve(Uri.parse("https://flagshipserver.com/share#s=$id&k=$k")))
     }

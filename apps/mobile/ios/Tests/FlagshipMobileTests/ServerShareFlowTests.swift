@@ -609,6 +609,11 @@ final class ServerShareFlowTests: XCTestCase {
                        .shareServer(shareId: s, secretHex: k))
         XCTAssertEqual(DeepLink.parse(URL(string: "https://www.flagshipserver.com/share#s=\(s)&k=\(k)")!),
                        .shareServer(shareId: s, secretHex: k))
+        // The app also claims the trailing-slash path (AASA, APP_LINK_PATHS).
+        XCTAssertEqual(DeepLink.parse(URL(string: "https://flagshipserver.com/share/#s=\(s)&k=\(k)")!),
+                       .shareServer(shareId: s, secretHex: k))
+        XCTAssertEqual(DeepLink.parse(URL(string: "https://flagshipserver.com/join/?sid=abc&pk=def")!),
+                       .joinAccount(sid: "abc", pk: "def"))
         XCTAssertEqual(DeepLink.parse(URL(string: "flagship://share?s=\(s)&k=\(k)")!),
                        .shareServer(shareId: s, secretHex: k))
         XCTAssertEqual(DeepLink.parsePastedString("  flagship://share?s=\(s)&k=\(k.uppercased())\n"),

@@ -170,8 +170,10 @@ sealed interface DeepLink {
                     val json = uri.getQueryParameter("o")?.let { ServerTransferFlow.decodeOfferParam(it) }
                     return if (json != null) TransferOffer(json) else null
                 }
-                if (host == Endpoints.controlHost && uri.path == "/share") {
-                    return ServerShare.parseShareLink(uri.toString())?.let { ShareOffer(it.shareId, it.secretHex) }
+                if (host == Endpoints.controlHost && (uri.path == "/share" || uri.path == "/share/")) {
+                    // The App Link also claims `/share/`; the link format itself is `/share`.
+                    val link = uri.toString().replaceFirst("/share/#", "/share#")
+                    return ServerShare.parseShareLink(link)?.let { ShareOffer(it.shareId, it.secretHex) }
                 }
                 // The App Link twins of flagship://join, remote, builder, access,
                 // invite and invite-accept: same params, same validation.

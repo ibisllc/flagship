@@ -53,8 +53,8 @@ const WEBAPP_HOST = "webapp.flagshipserver.com";
 const WEBAPP_ORIGIN = `https://${WEBAPP_HOST}`;
 
 /** Control-apex paths the native apps claim as universal links / App Links. */
-const APP_LINK_PATHS: ReadonlySet<string> = new Set(
-  ["/join", "/share", "/transfer", "/qr", "/remote", "/builder", "/access", "/invite", "/invite-accept"]
+export const APP_LINK_PATHS: ReadonlySet<string> = new Set(
+  ["/join", "/share", "/transfer", "/remote", "/builder", "/access", "/invite", "/invite-accept"]
     .flatMap((p) => [p, `${p}/`]),
 );
 

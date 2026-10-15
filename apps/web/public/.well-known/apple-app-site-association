@@ -7,28 +7,20 @@
         ],
         "components": [
           {
-            "/": "/qr",
-            "?": {
-              "s": "?*",
-              "k": "?*"
-            },
-            "comment": "Apex QR-relay URLs. When the user scans /qr?s=...&k=... with their phone camera, the OS routes the URL into the installed Flagship app (Universal Link) before Safari ever loads the fallback page."
-          },
-          {
-            "/": "/qr/",
-            "?": {
-              "s": "?*",
-              "k": "?*"
-            },
-            "comment": "Trailing-slash variant of the same QR-relay URL."
-          },
-          {
             "/": "/join",
             "?": {
               "sid": "?*",
               "pk": "?*"
             },
             "comment": "Add-a-device pairing. /join?sid=...&pk=... is the QR another device of the account shows; the camera opens it in the app (DeepLink.joinAccount) instead of the browser's open-in-app page."
+          },
+          {
+            "/": "/join/",
+            "?": {
+              "sid": "?*",
+              "pk": "?*"
+            },
+            "comment": "Trailing-slash variant of the same add-a-device link."
           },
           {
             "/": "/transfer",
@@ -61,6 +53,14 @@
             "comment": "Remote sign-in. remote.flagshipserver.com shows /remote?s=<sid>&k=<browser key> as a QR; the phone approves the browser."
           },
           {
+            "/": "/remote/",
+            "?": {
+              "s": "?*",
+              "k": "?*"
+            },
+            "comment": "Trailing-slash variant of the same remote sign-in link."
+          },
+          {
             "/": "/builder",
             "?": {
               "c": "?*",
@@ -69,16 +69,36 @@
             "comment": "Studio pairing. Flagship Studio shows /builder?c=<code>&k=<builder key> as a QR."
           },
           {
+            "/": "/builder/",
+            "?": {
+              "c": "?*",
+              "k": "?*"
+            },
+            "comment": "Trailing-slash variant of the same Studio pairing link."
+          },
+          {
             "/": "/access",
             "comment": "App sign-in. A private app's knock page links /access#server=&svc=&ref=&page= (the fragment keeps the server and app out of our logs) to sign that browser in."
+          },
+          {
+            "/": "/access/",
+            "comment": "Trailing-slash variant of the same app sign-in link."
           },
           {
             "/": "/invite",
             "comment": "An app invite, /invite#server=<box>&k=<secret>&a=&i=&s=, handed over by the invite page on the owner's server. The secret rides in the fragment."
           },
           {
+            "/": "/invite/",
+            "comment": "Trailing-slash variant of the same app invite."
+          },
+          {
             "/": "/invite-accept",
             "comment": "An invitee's acceptance reply, /invite-accept#server=&iid=&ref=&aid=&sig=&at=, opened by the app's owner to grant access."
+          },
+          {
+            "/": "/invite-accept/",
+            "comment": "Trailing-slash variant of the same acceptance reply."
           },
           {
             "/": "/app/*",

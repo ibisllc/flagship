@@ -224,7 +224,9 @@ public enum DeepLink: Equatable, Sendable {
         if url.scheme == "https",
            (url.host == Endpoints.controlHost || url.host == "www.\(Endpoints.controlHost)"),
            url.path == "/share" {
-            guard let parts = ServerShare.parseShareLink(url.absoluteString) else { return nil }
+            // `URL.path` drops a trailing slash; the link format itself is `/share`.
+            let link = url.absoluteString.replacingOccurrences(of: "/share/#", with: "/share#")
+            guard let parts = ServerShare.parseShareLink(link) else { return nil }
             return .shareServer(shareId: parts.shareId, secretHex: parts.secretHex)
         }
         // Universal link: a service-access invite served from a BOX —

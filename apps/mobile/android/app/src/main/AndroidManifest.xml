@@ -43,12 +43,15 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" android:host="flagshipserver.com" android:pathPrefix="/app/" />
                 <data android:scheme="https" android:host="flagshipserver.com" android:path="/join" />
+                <data android:scheme="https" android:host="flagshipserver.com" android:path="/join/" />
                 <!-- Transfer-a-box take-over offer. /transfer?o=<b64url> opens the
                      acquirer claim flow in-app; when the app isn't installed the
                      site shows its "get the app" page, which offers the webapp too. -->
                 <data android:scheme="https" android:host="flagshipserver.com" android:path="/transfer" />
+                <data android:scheme="https" android:host="flagshipserver.com" android:path="/transfer/" />
                 <!-- Share this server: /share#s=<shareId>&k=<secret> opens the accept screen. -->
                 <data android:scheme="https" android:host="flagshipserver.com" android:path="/share" />
+                <data android:scheme="https" android:host="flagshipserver.com" android:path="/share/" />
                 <!-- QR codes and shared links (the old flagship:// forms below still
                      open): the remote page's /remote?s=&k=, Studio's /builder?c=&k=,
                      the knock page's /access#server=&svc=&ref=&page= and a friend's
