@@ -302,7 +302,8 @@ shares with whom.
 ### Orders
 
 They name the app (its `serviceRef`, the same on every server of the
-account), not one server. A per-target sequence (an order's `issuedAt` must
+account), not one server, so one order holds on every server that runs the
+app ("One list per app", below). A per-target sequence (an order's `issuedAt` must
 be newer than the last one applied to that target: latest order wins) stops
 replays, together with a 10-minute freshness window when a client posts it.
 
@@ -349,6 +350,84 @@ is manager-class sees "+ Add person / group" at Member with the existing
 one-line why; one below manager sees why it can't invite. The rank picker
 offers only member, manager and master. Admin devices keep one biometric per
 invite.
+
+## One list per app (owner decision, 2026-10-15)
+
+An app that runs on several of the account's servers has **one** access list:
+its mode, allow-list and grants, invite tiers and creators, rank orders, and
+the overrides of the account's devices and co-managers. A person who joins on
+one server is in on all of them; an admin order sent to any of them holds on
+all of them.
+
+**The leader holds it.** The app's lead server is the gossip leader for its
+slug: the live server highest in the owner's server order that runs it
+(`docs/server-order.md`). A change accepted on any box (a v2 mode order, a v2
+removal, an app-rank order, a join, a withdraw) is verified there as usual,
+kept in that app's **journal**, and handed to the leader; the leader verifies
+and applies it, keeps it, and copies it out to the app's other servers in
+server order. If the leader is down, the next live server in the order is
+leader (the existing election), and a hand-over that failed is retried to
+whoever leads now.
+
+**Nobody is trusted for the list.** The journal is a set of signed entries,
+each carrying its own proof:
+
+| entry | proof every box re-checks |
+|---|---|
+| `mode`, `remove`, `rank` | the admin-only key (`flagship/service-access-mode/v2`, `flagship/service-allow-remove/v2`, `flagship/app-rank/v1`) |
+| `join` | the signed create (admin root or a device in the box's own book) and the joiner's redeem signature over the create's secret hash; the invite's cap (a personal invite binds one person), its expiry, the creator still manager-class, no later removal of that person, no withdraw of the invite |
+| `accept` | the signed create and the joiner's acceptance signature (manual approve) |
+| `withdraw` | an admin's revoke, or the creating device's while it is still manager-class there |
+
+So the leader only distributes. Applying is idempotent and "latest order
+wins" per target (the per-target `issuedAt` sequence), so arrival order
+doesn't matter. A withdraw that arrives before the join it withdraws is kept
+(`roles.withdrawn`) and refuses that join once the creator is known. v1 orders
+name one server and stay on it. `.com` keeps doing first-bind arbitration on
+the box where someone redeems; the other boxes trust the box that did only
+as far as the proofs above go (the cap stops a second person on a personal
+invite).
+
+**Box to box only.** `POST https://<server>/api/access-sync/push
+{from, to, serviceRef, issuedAt, mac, body}` (entries) and `…/pull` (the
+caller's journal digest; the answer is `same` or the entries), over each
+box's own TLS, with `mac` = HMAC-SHA256 under
+`HKDF(CGK, "flagship/access-sync/key/v1")` over
+`flagship/access-sync/v1|<push|pull>|from|to|serviceRef|issuedAt|sha256(body)`,
+at most 5 minutes old. The CGK is the account's cloud gossip key (only the
+account's boxes and devices hold it). Nothing goes through `.com`, which would
+learn per-app member ids and ranks.
+
+**Catching up.** A box keeps, per app, the other servers it has seen running
+it. At boot every such app starts **catching up**: until the box has pulled
+the list from the leader (or, when it leads, the next live server in the
+order), only the owning account's own devices get in. Invited people and
+co-managers wait (`503`, "this server is catching up with the app's other
+servers"), so a person removed elsewhere while this box was off never slips
+in on its older list. That is stricter than "serve the last known list" and
+is the conservative choice: it costs invited people up to a couple of minutes
+after a restart. A box that sees no other live server running the app for
+two minutes after boot is alone and serves its own list. An app copy starts
+from the source's list and catches up from the leader at once (the copy's
+own state is seeded first, so nothing is lost if the leader is unreachable).
+
+**Healing.** Every two minutes each box compares its journal with the
+leader's (a digest, then the entries) and both sides take what they lack, so a
+box that missed a push converges. Failed pushes are retried every 30 seconds.
+
+**Migrate, archive, uninstall.** As in "Account members": the journal lives
+beside the access state in `<dataDir>/data/flagship-access/`, so Migrate
+carries both; archive and copy carry the state; uninstall drops the app's
+state and journal.
+
+**Per-server lists later.** `scope(serviceRef)` is `"account"` for every app on
+`main`. A future per-server list (a Pro option, built on `feat/marketplace`)
+returns `"server"`: that app's changes stay on the box and its sync endpoints
+refuse. When such an account goes back to one list (it stops paying), its
+boxes adopt the leader's list.
+
+Built in `packages/server-daemon/src/accessJournal.ts` and `accessSync.ts`;
+tests `packages/server-daemon/tests/accessSync.test.ts`.
 
 ## Per-app identity (owner rule, 2026-10-13)
 

@@ -84,7 +84,7 @@ import {
 } from "./serviceAccess.js";
 import { buildServiceAccessWeb } from "./serviceAccessWeb.js";
 import { buildInvitePage } from "./invitePage.js";
-import { buildMemberRolesHttp } from "./memberRoles.js";
+import { buildMemberRolesHttp, buildRankEntryApplier } from "./memberRoles.js";
 import { buildAppSessionResolver } from "./appMemberSession.js";
 import { matchesPublicRoute } from "./serviceProxy.js";
 import { buildDaemonHttp, type DaemonContext } from "./httpApi.js";
@@ -264,6 +264,8 @@ import { buildMaintainersReleaseGate } from "./selfUpdateReleaseGate.js";
 import type { EntitlementBundle } from "./tunnel/tunnelClient.js";
 import { providerRelay } from "./tunnel/relayFetch.js";
 import { AccessPrincipals, AccountDeviceBook } from "./accessPrincipals.js";
+import { AccessJournal } from "./accessJournal.js";
+import { buildAccessSync, deriveAccessSyncKey, type AccessPeers, type AccessSync } from "./accessSync.js";
 import { BoxReadToken } from "./boxReadToken.js";
 
 /**
@@ -984,6 +986,11 @@ async function main(): Promise<void> {
   // Who a signing key is on this box (account devices, co-managers): the
   // device book is wired by wireOwnerHandlers, the shares by wireRuntimeSurfaces.
   const accessPrincipals = new AccessPrincipals(cfg?.ownerAidPub ? bytesToHexStr(cfg.ownerAidPub) : null);
+  // One access list per app across the account's servers: the hand-over is
+  // wired by wireOwnerHandlers, and learns where the app's other servers are
+  // once gossip is up (below).
+  const accessSyncRef: { current: AccessSync | null } = { current: null };
+  const accessPeersRef: { current: AccessPeers | null } = { current: null };
   const {
     pullStateStore,
     updateServer,
@@ -1233,6 +1240,7 @@ async function main(): Promise<void> {
           // An uninstalled app's access state goes with it, so a reinstall
           // under the same id doesn't inherit its members or ranks.
           if (kind === "app.removed") void serviceAccessRef.current?.forget(serviceId).catch(() => {});
+          if (kind === "app.removed") void accessSyncRef.current?.forget(serviceId).catch(() => {});
           activityLog.note(
             kind,
             kind === "app.installed"
@@ -1342,6 +1350,7 @@ async function main(): Promise<void> {
       serverOrder,
       serviceAccessRef,
       accessPrincipals,
+      accessSyncRef,
       runtime,
       cfg,
       env: env as RuntimeEnv,
@@ -1387,6 +1396,8 @@ async function main(): Promise<void> {
     activityLog,
     serviceAccessRef,
     accessPrincipals,
+    accessSyncRef,
+    accessPeersRef,
     runtime,
     cfg,
     env: env as RuntimeEnv,
@@ -1582,6 +1593,27 @@ async function main(): Promise<void> {
         // Light up `/api/leads` with the LIVE full map (it served gossipActive:false
         // until now). result.leadsSnapshot reflects the current SiblingView on demand.
         leadsSnapshotRef.current = result.leadsSnapshot;
+        // Where an app's other servers are, for the one-list-per-app hand-over.
+        if (result.view) {
+          const view = result.view;
+          const slugOf = (ref: string) => servicePlatformRefForServer.current?.byServiceId(ref)?.slug ?? null;
+          accessPeersRef.current = {
+            leaderFor: (ref) => {
+              const slug = slugOf(ref);
+              return slug ? (result.leadsSnapshot().leads[slug]?.leaderFqdn ?? null) : null;
+            },
+            runners: (ref) => {
+              const slug = slugOf(ref);
+              if (!slug) return [];
+              const rank = (stk: string) => serverOrder?.rankOf(stk) ?? null;
+              return view
+                .liveMembers(Date.now(), rank)
+                .filter((m) => m.liveness === "live" && m.services.includes(slug))
+                .sort((a, b) => (a.orderRank ?? Number.MAX_SAFE_INTEGER) - (b.orderRank ?? Number.MAX_SAFE_INTEGER) || a.birthDate - b.birthDate)
+                .map((m) => m.domain);
+            },
+          };
+        }
         // Back-patch the on-service-delete teardown so an uninstall releases the
         // box's `<slug>.<user>` route at the hub + re-announces.
         if (result.releaseRouteForRemovedService) {
@@ -2096,6 +2128,7 @@ async function wireRuntimeSurfaces(deps: {
   activityLog: ActivityLog;
   serviceAccessRef: { current: ServiceAccessStore | null };
   accessPrincipals: AccessPrincipals;
+  accessSyncRef: { current: AccessSync | null };
   serverOrder: ServerOrderHolder | null;
   runtime: DaemonRuntime;
   cfg: ServerConfig | null;
@@ -2717,6 +2750,8 @@ async function wireRuntimeSurfaces(deps: {
       access: {
         importEntry: async (id, e) => {
           await deps.serviceAccessRef.current?.importEntry(id, e);
+          // A copy starts from the source's list; the app's leader has the latest.
+          void deps.accessSyncRef.current?.catchUp(id).catch(() => {});
         },
       },
       egress: { noteCopied: (id, list, declared) => runtime.egress.noteCopied(id, list, declared) },
@@ -2956,6 +2991,7 @@ async function wireRuntimeSurfaces(deps: {
               ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
               username: cfg.userId,
               adminGrants: () => deps.accessPrincipals.book?.adminGrants() ?? [],
+              onEntry: (ref, e) => deps.accessSyncRef.current?.record(ref, e),
               store,
               app: (id) => {
                 const a = runtime.servicePlatform?.byServiceId(id);
@@ -3196,6 +3232,8 @@ async function wireOwnerHandlers(deps: {
   activityLog: ActivityLog;
   serviceAccessRef: { current: ServiceAccessStore | null };
   accessPrincipals: AccessPrincipals;
+  accessSyncRef: { current: AccessSync | null };
+  accessPeersRef: { current: AccessPeers | null };
   runtime: DaemonRuntime;
   cfg: ServerConfig | null;
   env: RuntimeEnv;
@@ -3317,6 +3355,7 @@ async function wireOwnerHandlers(deps: {
     ...(cfg.ownerAidPub ? { ownerAidPub: cfg.ownerAidPub } : {}),
     ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
     adminGrants: () => deviceBook.adminGrants(),
+    onEntry: (ref, e) => deps.accessSyncRef.current?.record(ref, e),
     store: accessStore,
     sessions: sessionStore,
     serviceInstalled: (ref) =>
@@ -3332,6 +3371,39 @@ async function wireOwnerHandlers(deps: {
     householdKey: householdHex ? hexToBytes(householdHex.trim()) : undefined,
   });
   runtime.addHandler(access.handle);
+  {
+    // One access list per app across the account's servers (box to box only).
+    const cgk = await resolveCgk().catch(() => null);
+    const journal = new AccessJournal(`${accessDataDir}/data/flagship-access/access-journal.json`);
+    await journal.load();
+    const installedIds = () => (deps.servicePlatformRef.current?.list() ?? []).map((a) => a.serviceId);
+    const applyRank = buildRankEntryApplier({
+      ownerIrkPub: cfg.irkPublicKey,
+      ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+      username: cfg.userId,
+      adminGrants: () => deviceBook.adminGrants(),
+      store: accessStore,
+      app: (id) => {
+        const a = deps.servicePlatformRef.current?.byServiceId(id);
+        return a ? { manifest: a.manifest } : null;
+      },
+    });
+    const sync = buildAccessSync({
+      selfFqdn: env.serverFqdn,
+      journal,
+      store: accessStore,
+      apply: async (ref, e) => (e.kind === "rank" ? applyRank(ref, e) : access.applyEntry(ref, e)),
+      peers: () => deps.accessPeersRef.current,
+      key: cgk ? deriveAccessSyncKey(cgk) : null,
+      installed: (ref) => installedIds().includes(ref),
+      apps: installedIds,
+      log: (m) => console.log(m),
+    });
+    deps.accessSyncRef.current = sync;
+    runtime.addHandler(sync.handle);
+    sync.start();
+    process.once("SIGTERM", () => sync.stop());
+  }
   // gating v2 revocation convergence: poll `.com` revoked-since on the
   // daemon-status heartbeat cadence + self-prune (the instant owner-prune stays
   // the primary path). Needs the owner AID (the authorAID the invites are scoped

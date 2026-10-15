@@ -64,6 +64,7 @@ import {
 import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
 import type { Principal, PrincipalResolver } from "./accessPrincipals.js";
+import type { AccessEntry } from "./accessJournal.js";
 
 const H = { "content-type": "application/json" };
 
@@ -126,6 +127,12 @@ export interface MemberRoles {
    * (admin device master, other devices and co-managers manager).
    */
   ranks: Record<string, string>;
+  /**
+   * inviteId → `<issuedAt>:<signature>` of a withdraw this box holds, verified
+   * when a join through that invite arrives (an admin's, or the creator's):
+   * a withdrawn link lets nobody new in, whichever server they join on.
+   */
+  withdrawn: Record<string, string>;
 }
 
 /** Who signed an invite's create (docs/service-access-gating.md "Account members"). */
@@ -167,7 +174,7 @@ function higher(a: MemberRole | null, b: MemberRole | null): MemberRole | null {
 }
 
 function emptyRoles(): MemberRoles {
-  return { aids: {}, invites: {}, grants: {}, seq: {}, tiers: {}, creators: {}, ranks: {} };
+  return { aids: {}, invites: {}, grants: {}, seq: {}, tiers: {}, creators: {}, ranks: {}, withdrawn: {} };
 }
 
 function readRoles(v: unknown): MemberRoles {
@@ -184,7 +191,9 @@ function readRoles(v: unknown): MemberRoles {
   strMap(r.tiers, out.tiers);
   strMap(r.creators, out.creators);
   strMap(r.ranks, out.ranks);
+  strMap(r.withdrawn, out.withdrawn);
   for (const [k, v] of Object.entries(out.creators)) if (!/^[0-9a-f]{64}$/.test(v)) delete out.creators[k];
+  for (const [k, v] of Object.entries(out.withdrawn)) if (!/^\d+:[0-9a-f]{128}$/.test(v)) delete out.withdrawn[k];
   for (const [k, v] of Object.entries(out.ranks)) {
     if (!/^(device:[0-9a-f]{64}|share:[0-9a-f]{32})$/.test(k) || accountRank(v) === null) delete out.ranks[k];
   }
@@ -203,6 +212,7 @@ function copyRoles(r: MemberRoles): MemberRoles {
     tiers: { ...r.tiers },
     creators: { ...r.creators },
     ranks: { ...r.ranks },
+    withdrawn: { ...r.withdrawn },
   };
 }
 
@@ -243,6 +253,7 @@ export class ServiceAccessStore {
 
   private readonly ownerAidHex: string | null;
   private principals: PrincipalResolver | null;
+  private readonly catchingUp = new Set<string>();
 
   constructor(
     statePath = "/var/flagship/data/flagship-access/service-access.json",
@@ -293,6 +304,12 @@ export class ServiceAccessStore {
       return { kind: "device", pub, deviceId: null, tier: "admin", legacy: true };
     }
     return null;
+  }
+
+  /** Refresh the device book (bounded like {@link ensureKnown}). */
+  async refreshAccountPeople(): Promise<void> {
+    // The empty key is never a device, so this asks for a (throttled) refresh.
+    await this.principals?.ensure("").catch(() => {});
   }
 
   /** Learn about an unknown key before deciding (refreshes the device book; bounded). */
@@ -398,6 +415,7 @@ export class ServiceAccessStore {
     const key = visitorAidHex.toLowerCase();
     const p = this.principal(key);
     if (p) return this.accountRank(serviceRef, p) !== null;
+    if (this.catchingUp.has(serviceRef)) return false;
     const e = this.byService.get(serviceRef);
     if (!e) return false; // only relevant when restricted; no row ⇒ no allow-list
     return e.allow.includes(key);
@@ -412,6 +430,7 @@ export class ServiceAccessStore {
   accountRank(serviceRef: string, p: Principal): MemberRole | null {
     const set = this.rankOverride(serviceRef, p);
     if (set === "refused") return null;
+    if (p.kind === "co-manager" && this.catchingUp.has(serviceRef)) return null;
     if (set) return set;
     return p.kind === "device" && p.tier === "admin" ? "master" : "manager";
   }
@@ -607,6 +626,47 @@ export class ServiceAccessStore {
     }
     if (changed) await this.persist();
     return pruned;
+  }
+
+  /** Keep a withdraw of an invite (even one not seen here yet), first one wins. */
+  async noteWithdrawn(serviceRef: string, inviteId: string, issuedAt: number, signatureHex: string): Promise<void> {
+    const e = this.entry(serviceRef);
+    if (e.roles.withdrawn[inviteId]) return;
+    e.roles.withdrawn[inviteId] = `${issuedAt}:${signatureHex.toLowerCase()}`;
+    await this.persist();
+  }
+
+  /** A withdraw this box holds for an invite (unverified: the caller checks the signature). */
+  withdrawn(serviceRef: string, inviteId: string): { issuedAt: number; signature: string } | null {
+    const v = this.byService.get(serviceRef)?.roles.withdrawn[inviteId];
+    const m = v ? /^(\d+):([0-9a-f]{128})$/.exec(v) : null;
+    return m ? { issuedAt: Number(m[1]), signature: m[2]! } : null;
+  }
+
+  /** How many people joined through an invite here. */
+  boundThrough(serviceRef: string, inviteId: string): number {
+    return this.byService.get(serviceRef)?.groups[inviteId]?.length ?? 0;
+  }
+
+  /** Whether an admin removed `aid` from the app after `at` (so an older join stays out). */
+  removedAfter(serviceRef: string, aidHex: string, at: number): boolean {
+    const last = this.byService.get(serviceRef)?.roles.seq[`remove:${aidHex.toLowerCase()}`];
+    return last !== undefined && last >= at;
+  }
+
+  /**
+   * While an app catches up with its other servers (docs/service-access-
+   * gating.md "One list per app"), only the owning account's own devices get
+   * in: invited people and co-managers wait, so nobody another server already
+   * removed slips through on this one's older list.
+   */
+  setCatchingUp(serviceRef: string, on: boolean): void {
+    if (on) this.catchingUp.add(serviceRef);
+    else this.catchingUp.delete(serviceRef);
+  }
+
+  isCatchingUp(serviceRef: string): boolean {
+    return this.catchingUp.has(serviceRef);
   }
 
   /** The apps on this box that know an invite (it was redeemed or accepted here). */
@@ -990,6 +1050,12 @@ export interface ServiceAccessHttpOptions {
    * admin-root-signed `admin` grant may sign admin-only orders too.
    */
   adminGrants?: () => readonly AdminGrantView[];
+  /**
+   * Called with every signed change this box accepted from a device or a
+   * redeemer (docs/service-access-gating.md "One list per app"), so it can be
+   * handed to the app's other servers. Box-internal changes aren't reported.
+   */
+  onEntry?: (serviceRef: string, entry: AccessEntry) => void;
   store: ServiceAccessStore;
   /** Resolve `serviceRef` (`<creator>-<slug>`) → installed? Guards set-mode (422 if not). */
   serviceInstalled: (serviceRef: string) => boolean;
@@ -1108,6 +1174,12 @@ export interface ServiceAccessHttp {
   store: ServiceAccessStore;
   /** Which apps a signed invite revoke may prune here (the revocation poller uses it too). */
   verifyWithdraw: (r: RevokeServiceInvite, sig: Uint8Array) => string[];
+  /**
+   * Verify and apply an entry another of the account's servers handed over
+   * (no freshness window: latest order wins per target). `rank` entries are
+   * the members module's (`skipped` here).
+   */
+  applyEntry: (serviceRef: string, entry: AccessEntry) => Promise<EntryResult>;
   /** The browser-session store, when the cookie seam is enabled (else undefined). */
   sessions?: ServiceSessionStore;
 }
@@ -1196,13 +1268,11 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
       now: now(),
     });
   }
-  const withdraw = buildInviteWithdrawVerifier({
-    store: opts.store,
-    adminSigned: (r, sig) =>
-      adminSigned(r, sig, verifyRevokeServiceInvite) ||
-      // A box with no admin root: the owner's AID is the owner's key too.
-      (!pinnedRoot && !!opts.ownerAidPub && verifyRevokeServiceInvite(r, sig, opts.ownerAidPub)),
-  });
+  const withdrawAdminSigned = (r: RevokeServiceInvite, sig: Uint8Array) =>
+    adminSigned(r, sig, verifyRevokeServiceInvite) ||
+    // A box with no admin root: the owner's AID is the owner's key too.
+    (!pinnedRoot && !!opts.ownerAidPub && verifyRevokeServiceInvite(r, sig, opts.ownerAidPub));
+  const withdraw = buildInviteWithdrawVerifier({ store: opts.store, adminSigned: withdrawAdminSigned });
 
   const decide = (serviceRef: string, req: HttpRequest): AccessDecision =>
     decideServiceAccess(
@@ -1302,6 +1372,9 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     if (!verifyServiceVisitProof(proof, sig, proof.visitorAID)) return bad(403, "invalid signature");
     const aidHex = bytesToHex(proof.visitorAID);
     await opts.store.ensureKnown(aidHex);
+    if (opts.store.isCatchingUp(proof.serviceRef) && opts.store.principal(aidHex)?.kind !== "device") {
+      return bad(503, "this server is catching up with the app's other servers: try again in a moment");
+    }
     // A cookie is only issued to someone the service lets in (an account
     // device or co-manager not refused there, or an allow-listed AID): it
     // passes a restricted gate and, on any service, names the member to the
@@ -1347,6 +1420,8 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     if ((await opts.store.applyModeOrder(order.serviceRef, order.mode, order.issuedAt)) === "stale") {
       return bad(409, "a newer change was already made: sign it again");
     }
+    // A v1 order names this server only, so only a v2 one goes to the app's other servers.
+    if (v2) opts.onEntry?.(v2.serviceRef, { kind: "mode", order: v2, signature: env.signature.toLowerCase() });
     return jsonResponse(200, {
       ok: true,
       serviceRef: order.serviceRef,
@@ -1375,6 +1450,7 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     if (!signed) return bad(403, "only an admin device can remove someone");
     const r = await opts.store.applyRemoveOrder(order.serviceRef, order.aid, order.issuedAt);
     if (r === "stale") return bad(409, "a newer change was already made: sign it again");
+    if (v2) opts.onEntry?.(v2.serviceRef, { kind: "remove", order: v2, signature: env.signature.toLowerCase() });
     // Idempotent: a no-op prune (AID already absent) still returns ok. The next
     // request from that AID is denied regardless (decide re-checks the list).
     return jsonResponse(200, { ok: true, removed: r === "removed" });
@@ -1402,12 +1478,17 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     const revoke: RevokeServiceInvite = { inviteId: r.inviteId, issuedAt: r.issuedAt };
     const known = opts.store.servicesWithInvite(revoke.inviteId);
     if (known.length === 0) return jsonResponse(200, { ok: true, pruned: 0 });
-    const refs = withdraw(revoke, hexToBytes(body.signature));
+    const signature = body.signature.toLowerCase();
+    const refs = withdraw(revoke, hexToBytes(signature));
     if (refs.length === 0) {
       return bad(403, "only an admin, or the device that sent this invite while it may still invite here, can withdraw it");
     }
     let pruned = 0;
-    for (const ref of refs) pruned += await opts.store.revokeGroup(revoke.inviteId, ref);
+    for (const ref of refs) {
+      pruned += await opts.store.revokeGroup(revoke.inviteId, ref);
+      await opts.store.noteWithdrawn(ref, revoke.inviteId, revoke.issuedAt, signature);
+      opts.onEntry?.(ref, { kind: "withdraw", revoke, signature });
+    }
     return jsonResponse(200, { ok: true, pruned });
   }
 
@@ -1514,17 +1595,15 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     // For a GROUP invite (create.maxRedemptions present) bind under the inviteId
     // so a group revoke can prune the whole set.
     const boundAID = comBody.boundAID.toLowerCase();
-    const refused = creatorRefusal(verified);
-    if (refused) return refused;
-    // The tier lands before the bind, so a join is never briefly uncapped.
-    await opts.store.setInviteTier(verified.serviceRef, verified.inviteId, verified.tier);
-    await opts.store.setInviteCreator(verified.serviceRef, verified.inviteId, verified.creatorPub);
-    // Every invite is a grant (a personal one holds one person), so revoking it
-    // or giving it a role reaches exactly the people who joined through it.
-    const added = await opts.store.addAllowed(verified.serviceRef, boundAID, verified.inviteId);
-    if (!added && !opts.store.isAllowed(verified.serviceRef, boundAID)) {
-      // The add was refused (allow-list at cap) and the AID is not already in.
-      return bad(409, "service allow-list is full");
+    const bound = await bindJoin(verified, boundAID);
+    if (bound) return bound;
+    if (boundAID === visitorAID) {
+      opts.onEntry?.(verified.serviceRef, {
+        kind: "join",
+        create: comBody.create as Record<string, unknown>,
+        createSig: String(comBody.createSig).toLowerCase(),
+        redeem: { secretHash, visitorAID, redeemedAt: body.redeemedAt, aidSig: body.aidSig.toLowerCase() },
+      });
     }
     // Hand the redeemer a browser cookie bound to their AID + this service.
     const responseHeaders: Record<string, string> = { ...H };
@@ -1594,9 +1673,10 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     // acceptance's inviteId (the author submits NO create). Fallback: a
     // body-supplied create (a transitional client / a row `.com` can't serve).
     const fetched = await fetchComCreate(a.inviteId);
-    const verified =
-      (fetched && (await verifyComCreate(fetched.create, fetched.createSig, undefined, fetched.creatorPubHex))) ||
-      (await verifyComCreate(body.create, body.createSig, undefined, undefined));
+    const fromFetch = fetched ? await verifyComCreate(fetched.create, fetched.createSig, undefined, fetched.creatorPubHex) : null;
+    const verified = fromFetch
+      ? { ...fromFetch, fromFetched: true }
+      : await verifyComCreate(body.create, body.createSig, undefined, undefined).then((v) => (v ? { ...v, fromFetched: false } : null));
     if (!verified) return bad(403, "owner create signature did not verify");
     if (verified.inviteId !== a.inviteId || verified.serviceRef !== a.serviceRef) {
       return bad(403, "acceptance does not match the create");
@@ -1620,16 +1700,18 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     if (!acceptOk) return bad(403, "invalid acceptance signature");
 
     const contactAID = a.contactAID.toLowerCase();
-    const refused = creatorRefusal(verified);
-    if (refused) return refused;
-    await opts.store.setInviteTier(verified.serviceRef, verified.inviteId, verified.tier);
-    await opts.store.setInviteCreator(verified.serviceRef, verified.inviteId, verified.creatorPub);
     // Always bind under the inviteId so a later (group or single) revoke can find
     // + prune this acceptance.
-    const added = await opts.store.addAllowed(verified.serviceRef, contactAID, verified.inviteId);
-    if (!added && !opts.store.isAllowed(verified.serviceRef, contactAID)) {
-      return bad(409, "service allow-list is full");
-    }
+    const bound = await bindJoin(verified, contactAID);
+    if (bound) return bound;
+    const usedCreate = fetched && verified.fromFetched ? fetched : { create: body.create, createSig: body.createSig };
+    opts.onEntry?.(verified.serviceRef, {
+      kind: "accept",
+      create: usedCreate.create as Record<string, unknown>,
+      createSig: String(usedCreate.createSig).toLowerCase(),
+      accept: { inviteId: a.inviteId, serviceRef: a.serviceRef, contactAID, acceptedAt: a.acceptedAt },
+      acceptSig: body.acceptSig.toLowerCase(),
+    });
     return jsonResponse(200, { bound: true, serviceRef: verified.serviceRef, boundAID: contactAID });
   }
 
@@ -1700,6 +1782,7 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     serviceRef: string;
     secretHash: string;
     maxRedemptions?: number;
+    expiresAt?: number;
     tier: InviteTier;
     creatorPub: string;
   } | null> {
@@ -1757,9 +1840,140 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
       serviceRef: create.serviceRef,
       secretHash: create.secretHash.toLowerCase(),
       ...(create.maxRedemptions !== undefined ? { maxRedemptions: create.maxRedemptions } : {}),
+      ...(create.expiresAt !== undefined ? { expiresAt: create.expiresAt } : {}),
       tier: hit.tier,
       creatorPub: hit.pub,
     };
+  }
+
+  /**
+   * Let `aid` in through a verified create, or say why not: the invite was
+   * withdrawn (a tombstone that verifies), its creator may no longer invite
+   * here, or the list is full. The tier and creator land before the bind, so a
+   * join is never briefly uncapped. Null when bound.
+   */
+  async function bindJoin(
+    v: { serviceRef: string; inviteId: string; tier: InviteTier; creatorPub: string },
+    aid: string,
+  ): Promise<HttpResponse | null> {
+    if (withdrawnHere(v.serviceRef, v.inviteId, v.creatorPub)) return bad(403, "invite revoked");
+    const refused = creatorRefusal(v);
+    if (refused) return refused;
+    await opts.store.setInviteTier(v.serviceRef, v.inviteId, v.tier);
+    await opts.store.setInviteCreator(v.serviceRef, v.inviteId, v.creatorPub);
+    // Every invite is a grant (a personal one holds one person), so revoking it
+    // or giving it a role reaches exactly the people who joined through it.
+    const added = await opts.store.addAllowed(v.serviceRef, aid, v.inviteId);
+    if (!added && !opts.store.isAllowed(v.serviceRef, aid)) return bad(409, "service allow-list is full");
+    return null;
+  }
+
+  /** Whether a withdraw this box holds for the invite verifies (an admin's, or its creator's). */
+  function withdrawnHere(serviceRef: string, inviteId: string, creatorPub: string): boolean {
+    const t = opts.store.withdrawn(serviceRef, inviteId);
+    if (!t) return false;
+    const r: RevokeServiceInvite = { inviteId, issuedAt: t.issuedAt };
+    let sig: Uint8Array;
+    try {
+      sig = hexToBytes(t.signature);
+    } catch {
+      return false;
+    }
+    if (withdrawAdminSigned(r, sig)) return true;
+    try {
+      return verifyRevokeServiceInvite(r, sig, hexToBytes(creatorPub));
+    } catch {
+      return false;
+    }
+  }
+
+  async function applyEntry(serviceRef: string, e: AccessEntry): Promise<EntryResult> {
+    switch (e.kind) {
+      case "rank":
+        return "skipped";
+      case "mode": {
+        const o = parseServiceAccessModeV2(e.order);
+        if (!o || o.serviceRef !== serviceRef || !opts.serviceInstalled(serviceRef)) return "refused";
+        if (!adminSigned(o, hexToBytes(e.signature), verifyServiceAccessModeV2)) return "refused";
+        return (await opts.store.applyModeOrder(serviceRef, o.mode, o.issuedAt)) === "ok" ? "applied" : "stale";
+      }
+      case "remove": {
+        const o = parseServiceAllowRemoveV2(e.order);
+        if (!o || o.serviceRef !== serviceRef) return "refused";
+        if (!adminSigned(o, hexToBytes(e.signature), verifyServiceAllowRemoveV2)) return "refused";
+        const r = await opts.store.applyRemoveOrder(serviceRef, o.aid, o.issuedAt);
+        return r === "stale" ? "stale" : r === "removed" ? "applied" : "unchanged";
+      }
+      case "withdraw": {
+        const r: RevokeServiceInvite = { inviteId: e.revoke.inviteId, issuedAt: e.revoke.issuedAt };
+        const sig = hexToBytes(e.signature);
+        const refs = withdraw(r, sig).filter((x) => x === serviceRef);
+        // A withdraw for an invite not seen here yet is kept: a later join
+        // through it is refused once its creator is known (withdrawnHere).
+        await opts.store.noteWithdrawn(serviceRef, r.inviteId, r.issuedAt, e.signature.toLowerCase());
+        if (refs.length === 0) return "unchanged";
+        return (await opts.store.revokeGroup(r.inviteId, serviceRef)) > 0 ? "applied" : "unchanged";
+      }
+      case "join": {
+        const d = e.redeem;
+        const aid = d.visitorAID.toLowerCase();
+        if (!/^[0-9a-f]{64}$/.test(aid) || !/^[0-9a-f]{64}$/i.test(d.secretHash)) return "refused";
+        if (!verifyServiceVisitRedeem(d.secretHash.toLowerCase(), aid, d.redeemedAt, d.aidSig)) return "refused";
+        const v = await peerCreate(e.create, e.createSig, d.secretHash.toLowerCase());
+        if (!v || v.serviceRef !== serviceRef || !opts.serviceInstalled(serviceRef)) return "refused";
+        return joinFromPeer(v, aid, d.redeemedAt);
+      }
+      case "accept": {
+        const a = e.accept;
+        const aid = a.contactAID.toLowerCase();
+        const v = await peerCreate(e.create, e.createSig, undefined);
+        if (!v || v.inviteId !== a.inviteId || v.serviceRef !== serviceRef || a.serviceRef !== serviceRef) return "refused";
+        if (!opts.serviceInstalled(serviceRef)) return "refused";
+        let ok = false;
+        try {
+          ok = verifyAcceptServiceInvite(
+            { inviteId: a.inviteId, serviceRef: a.serviceRef, contactAID: hexToBytes(aid), acceptedAt: a.acceptedAt },
+            hexToBytes(e.acceptSig),
+            hexToBytes(aid),
+          );
+        } catch {
+          ok = false;
+        }
+        if (!ok) return "refused";
+        return joinFromPeer(v, aid, a.acceptedAt);
+      }
+    }
+  }
+
+  /**
+   * A create handed over with a join: when its signer isn't in this box's
+   * device book yet (a device added since the last refresh), refresh once.
+   */
+  async function peerCreate(create: unknown, sig: unknown, secretHash: string | undefined) {
+    const v = await verifyComCreate(create, sig, secretHash, undefined);
+    if (v) return v;
+    await opts.store.refreshAccountPeople();
+    return verifyComCreate(create, sig, secretHash, undefined);
+  }
+
+  /**
+   * A join another server accepted (`.com` arbitrated it there): this box
+   * re-checks the create, the cap (a personal invite binds one person), the
+   * expiry, a withdraw it holds, the creator and a later removal of the person.
+   */
+  async function joinFromPeer(
+    v: { serviceRef: string; inviteId: string; tier: InviteTier; creatorPub: string; maxRedemptions?: number; expiresAt?: number },
+    aid: string,
+    at: number,
+  ): Promise<EntryResult> {
+    const already = opts.store.grants(v.serviceRef, aid).includes(v.inviteId);
+    if (already) return "unchanged";
+    if (v.expiresAt !== undefined && at > v.expiresAt) return "refused";
+    const bound = opts.store.boundThrough(v.serviceRef, v.inviteId);
+    const cap = v.maxRedemptions === undefined ? 1 : v.maxRedemptions;
+    if (cap > 0 && bound >= cap) return "refused";
+    if (opts.store.removedAfter(v.serviceRef, aid, at)) return "stale";
+    return (await bindJoin(v, aid)) ? "refused" : "applied";
   }
 
   /**
@@ -1775,7 +1989,7 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     return bad(403, "the device that sent this invite can no longer invite people to this app: ask for a new link");
   }
 
-  return { handle, decide, decryptBundle, store: opts.store, sessions: opts.sessions, verifyWithdraw: withdraw };
+  return { handle, decide, decryptBundle, store: opts.store, sessions: opts.sessions, verifyWithdraw: withdraw, applyEntry };
 
   // Local: verify the AID sig over the redeem tuple (mirrors .com's check; the
   // box does it first so it never relays a forged binding request upstream).
@@ -1798,6 +2012,9 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     }
   }
 }
+
+/** What applying a handed-over entry did. */
+export type EntryResult = "applied" | "unchanged" | "stale" | "refused" | "skipped";
 
 /** How old an admin-only order (or a withdraw) may be when it reaches the box. */
 export const ADMIN_ORDER_MAX_SKEW_MS = 10 * 60_000;
@@ -1940,6 +2157,11 @@ export function buildRevocationPoller(opts: RevocationPollerOptions): Revocation
         !/^[0-9a-f]{128}$/i.test(r.revokeSig)
       ) {
         continue;
+      }
+      // Kept even for an invite not seen here: a later join through it (on
+      // this box, or handed over by another) is refused once it verifies.
+      if (typeof r.serviceRef === "string") {
+        await opts.store.noteWithdrawn(r.serviceRef, r.inviteId, rv.issuedAt, r.revokeSig);
       }
       const refs = opts.verifyRevoke({ inviteId: r.inviteId, issuedAt: rv.issuedAt }, hexToBytes(r.revokeSig));
       for (const ref of refs) {

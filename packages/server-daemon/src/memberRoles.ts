@@ -43,7 +43,15 @@ import {
 import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 import type { SensitiveAuthority } from "./egress/approvals.js";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
-import { MEMBER_ROLE_LADDER, ladderRole, rankKey, type AccountRank, type ServiceAccessStore } from "./serviceAccess.js";
+import {
+  MEMBER_ROLE_LADDER,
+  ladderRole,
+  rankKey,
+  type AccountRank,
+  type EntryResult,
+  type ServiceAccessStore,
+} from "./serviceAccess.js";
+import type { AccessEntry } from "./accessJournal.js";
 
 export const MEMBER_ROLE_MAX_SKEW_MS = 10 * 60_000;
 
@@ -104,15 +112,40 @@ export interface MemberRolesHttpOptions extends SensitiveAuthority {
   adminGrants?: () => readonly AdminGrantView[];
   /** An installed app's manifest; null when not installed here. */
   app: (serviceId: string) => { manifest: Pick<AppManifest, "access"> } | null;
+  /** Every rank order this box accepted (docs/service-access-gating.md "One list per app"). */
+  onEntry?: (serviceRef: string, entry: AccessEntry) => void;
   now?: () => number;
   log?: (m: string) => void;
 }
 
-export function buildMemberRolesHttp(
-  opts: MemberRolesHttpOptions,
-): (path: string, method: string, req: HttpRequest) => Promise<HttpResponse | null> {
+/**
+ * Apply a `flagship/app-rank/v1` order another of the account's servers
+ * handed over: verified here under this box's admin-only key, latest order
+ * wins per target, no freshness window.
+ */
+export function buildRankEntryApplier(
+  opts: Omit<MemberRolesHttpOptions, "serverDomain" | "onEntry">,
+): (serviceRef: string, entry: AccessEntry) => Promise<EntryResult> {
+  const core = rankCore(opts);
+  return async (serviceRef, entry) => {
+    if (entry.kind !== "rank") return "skipped";
+    const order = parseAppRankOrder(entry.order);
+    if (!order || order.serviceRef !== serviceRef || !opts.app(serviceRef)) return "refused";
+    let sig: Uint8Array;
+    try {
+      sig = Uint8Array.from(Buffer.from(entry.signature, "hex"));
+    } catch {
+      return "refused";
+    }
+    if (!core.adminSigned(order, sig, verifyAppRank)) return "refused";
+    const r = await core.applyRank(serviceRef, order);
+    if (r === null) return "applied";
+    return r.status === 409 ? "stale" : "refused";
+  };
+}
+
+function rankCore(opts: Omit<MemberRolesHttpOptions, "serverDomain" | "onEntry">) {
   const now = opts.now ?? (() => Date.now());
-  const log = opts.log ?? (() => {});
   function adminSigned<T>(order: T, sig: Uint8Array, verify: (o: T, s: Uint8Array, p: Uint8Array) => boolean): boolean {
     return authorizeSensitiveOrder({
       order,
@@ -125,6 +158,58 @@ export function buildMemberRolesHttp(
       now: now(),
     });
   }
+
+  async function applyInvitedTarget(
+    serviceId: string,
+    target: AppMemberRoleTarget,
+    targetKey: string,
+    role: string,
+    issuedAt: number,
+  ): Promise<HttpResponse | null> {
+    const rank = ladderRole(role);
+    if (!rank || !(MEMBER_ROLE_LADDER as readonly string[]).includes(role)) {
+      return err(422, `"${role}" isn't a rank: use member, manager or master`);
+    }
+    if (target.kind !== "invite") {
+      if (opts.store.isOwner(target.aid) || opts.store.principal(target.aid)) {
+        return err(422, "that's one of the account's own devices: change it in Account members");
+      }
+      if (!opts.store.isAllowed(serviceId, target.aid)) return err(422, "not a member of this app");
+    }
+    if (target.kind === "grant" && !opts.store.grants(serviceId, target.aid).includes(target.inviteId)) {
+      return err(422, "they didn't join through that invite");
+    }
+    const r = await opts.store.setRole(serviceId, target, targetKey, rank, issuedAt);
+    if (r === "stale") return err(409, "a newer change was already made: sign it again");
+    return null;
+  }
+
+  /** Apply a verified app-rank order; null when applied. */
+  async function applyRank(serviceId: string, order: { target: string; rank: string; issuedAt: number }): Promise<HttpResponse | null> {
+    const target = parseAppRankTarget(order.target)!;
+    if (target.kind === "device" || target.kind === "share") {
+      const p = target.kind === "device" ? opts.store.principal(target.pub) : null;
+      if (target.kind === "device" && p?.kind !== "device") return err(422, "not a device of this account");
+      if (target.kind === "share" && !opts.store.accountPeople().some((x) => x.kind === "co-manager" && x.shareId === target.shareId)) {
+        return err(422, "not an account that co-manages this server");
+      }
+      const key = target.kind === "device" ? rankKey(p!) : order.target;
+      const r = await opts.store.setAccountRank(serviceId, key, order.rank as AccountRank, order.issuedAt);
+      if (r === "stale") return err(409, "a newer change was already made: sign it again");
+      return null;
+    }
+    return applyInvitedTarget(serviceId, target, order.target, order.rank, order.issuedAt);
+  }
+
+  return { adminSigned, applyInvitedTarget, applyRank };
+}
+
+export function buildMemberRolesHttp(
+  opts: MemberRolesHttpOptions,
+): (path: string, method: string, req: HttpRequest) => Promise<HttpResponse | null> {
+  const now = opts.now ?? (() => Date.now());
+  const log = opts.log ?? (() => {});
+  const { adminSigned, applyInvitedTarget, applyRank } = rankCore(opts);
 
   function list(serviceId: string, manifest: Pick<AppManifest, "access">): HttpResponse {
     const { roles, defaultRole, descriptions } = offeredRoles(manifest);
@@ -197,31 +282,6 @@ export function buildMemberRolesHttp(
     return { order: body.order, sig: Uint8Array.from(Buffer.from(body.signature, "hex")) };
   }
 
-  async function applyInvitedTarget(
-    serviceId: string,
-    target: AppMemberRoleTarget,
-    targetKey: string,
-    role: string,
-    issuedAt: number,
-  ): Promise<HttpResponse | null> {
-    const rank = ladderRole(role);
-    if (!rank || !(MEMBER_ROLE_LADDER as readonly string[]).includes(role)) {
-      return err(422, `"${role}" isn't a rank: use member, manager or master`);
-    }
-    if (target.kind !== "invite") {
-      if (opts.store.isOwner(target.aid) || opts.store.principal(target.aid)) {
-        return err(422, "that's one of the account's own devices: change it in Account members");
-      }
-      if (!opts.store.isAllowed(serviceId, target.aid)) return err(422, "not a member of this app");
-    }
-    if (target.kind === "grant" && !opts.store.grants(serviceId, target.aid).includes(target.inviteId)) {
-      return err(422, "they didn't join through that invite");
-    }
-    const r = await opts.store.setRole(serviceId, target, targetKey, rank, issuedAt);
-    if (r === "stale") return err(409, "a newer change was already made: sign it again");
-    return null;
-  }
-
   async function setRole(serviceId: string, req: HttpRequest): Promise<HttpResponse> {
     const b = readBody(req);
     if ("status" in b) return b;
@@ -246,21 +306,10 @@ export function buildMemberRolesHttp(
     if (order.serviceRef !== serviceId) return err(400, "the order is for a different app");
     if (Math.abs(now() - order.issuedAt) > MEMBER_ROLE_MAX_SKEW_MS) return err(403, "the order is stale: sign it again");
     if (!adminSigned(order, b.sig, verifyAppRank)) return err(403, "only an admin device can change a rank");
-    const target = parseAppRankTarget(order.target)!;
-    if (target.kind === "device" || target.kind === "share") {
-      const p = target.kind === "device" ? opts.store.principal(target.pub) : null;
-      if (target.kind === "device" && p?.kind !== "device") return err(422, "not a device of this account");
-      if (target.kind === "share" && !opts.store.accountPeople().some((x) => x.kind === "co-manager" && x.shareId === target.shareId)) {
-        return err(422, "not an account that co-manages this server");
-      }
-      const key = target.kind === "device" ? rankKey(p!) : order.target;
-      const r = await opts.store.setAccountRank(serviceId, key, order.rank as AccountRank, order.issuedAt);
-      if (r === "stale") return err(409, "a newer change was already made: sign it again");
-    } else {
-      const refused = await applyInvitedTarget(serviceId, target, order.target, order.rank, order.issuedAt);
-      if (refused) return refused;
-    }
-    log(`[members] ${serviceId}: ${target.kind} rank set to ${order.rank}`);
+    const refused = await applyRank(serviceId, order);
+    if (refused) return refused;
+    opts.onEntry?.(serviceId, { kind: "rank", order, signature: Buffer.from(b.sig).toString("hex") });
+    log(`[members] ${serviceId}: ${order.target.split(":")[0]} rank set to ${order.rank}`);
     return json(200, { ok: true, target: order.target, rank: order.rank });
   }
 

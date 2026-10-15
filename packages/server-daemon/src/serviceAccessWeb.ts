@@ -354,6 +354,9 @@ export function buildServiceAccessWeb(opts: ServiceAccessWebOptions): ServiceAcc
     const aidHex = bytesToHex(parsed.visitorAID);
     // A device the box hasn't heard of yet may be new: refresh the book first.
     await opts.store.ensureKnown(aidHex);
+    if (opts.store.isCatchingUp(parsed.serviceRef) && opts.store.principal(aidHex)?.kind !== "device") {
+      return bad(503, "this server is catching up with the app's other servers: try again in a moment");
+    }
     // Only someone the service lets in (an account device or co-manager not
     // refused there, or an allow-listed AID) gets a session. On a restricted
     // service it passes the gate; on any service it names the member to the
