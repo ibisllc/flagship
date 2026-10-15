@@ -28,6 +28,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -48,17 +50,26 @@ import androidx.compose.material.icons.outlined.Image
 import androidx.navigation.NavController
 import com.flagshipserver.app.api.ServiceEnvSetEnvelope
 import com.flagshipserver.app.api.ServiceEnvSetRequest
+import com.flagshipserver.app.api.boxError
 import com.flagshipserver.app.api.userFacing
 import com.flagshipserver.app.api.VibeCodePendingRequest
 import com.flagshipserver.app.api.VibeCodeReplyRequest
 import com.flagshipserver.app.api.VibeCodeSessionPublicState
 import com.flagshipserver.app.api.VibeCodeAttachment
+import com.flagshipserver.app.api.LlmProviderCredential
+import com.flagshipserver.app.core.AiCredential
 import com.flagshipserver.app.core.AiKeyStore
+import com.flagshipserver.app.core.AiRelay
 import com.flagshipserver.app.core.BuildSessionAi
 import com.flagshipserver.app.core.ChatAttachments
+import com.flagshipserver.app.core.FreeAiCopy
+import com.flagshipserver.app.core.FreeAiRefresh
 import com.flagshipserver.app.core.FreeAiSessions
+import com.flagshipserver.app.core.MessageCredential
 import com.flagshipserver.app.core.ModelCatalogs
 import com.flagshipserver.app.core.ModelChoice
+import com.flagshipserver.app.core.ModelGroup
+import com.flagshipserver.app.core.ModelGroups
 import com.flagshipserver.app.core.ModelMenu
 import com.flagshipserver.app.core.ModelMenus
 import com.flagshipserver.app.core.VisionCheck
@@ -73,6 +84,8 @@ import com.flagshipserver.app.core.VibeTranscript
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.VibeCodeDeployViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -108,11 +121,16 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
     val freeAiService = rememberFreeAiService()
     val context = LocalContext.current
 
-    // The model menu: the session's AI (the credential it started with), and
-    // the model + effort the next message goes with. The owner may change
-    // them between messages; every reply carries them.
-    var menu by remember { mutableStateOf<ModelMenu?>(null) }
+    // The model menu, grouped by provider: Flagship Inference and each saved
+    // key. [groupId] is the group the next message goes with, [boxGroupId]
+    // the one whose key the box holds; picking another group sends its key.
+    var groups by remember { mutableStateOf<List<ModelGroup>>(emptyList()) }
+    val menus = remember { mutableStateMapOf<String, ModelMenu>() }
+    var groupId by remember { mutableStateOf<String?>(null) }
+    var boxGroupId by remember { mutableStateOf<String?>(null) }
+    var menuReady by remember { mutableStateOf(false) }
     var choice by remember { mutableStateOf<ModelChoice?>(null) }
+    var pollEpoch by remember { mutableIntStateOf(0) }
     var staged by remember { mutableStateOf<List<VibeCodeAttachment>>(emptyList()) }
     var attachError by remember { mutableStateOf<String?>(null) }
     var vision by remember { mutableStateOf<VisionCheck?>(null) }
@@ -128,30 +146,78 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { stage(it) }
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { stage(it) }
 
-    // A build on free AI credits gets a fresh credential with every reply
-    // (they last 12 h); false when the credits ran out and nothing was sent.
+    fun credentialOf(g: ModelGroup): AiCredential? = when {
+        g.isFlagship -> null
+        g.id == ModelGroups.SESSION_KEY -> BuildSessionAi.credentialFor(sessionId)
+        else -> runCatching { AiKeyStore.credentialFor(g.id) }.getOrNull()
+    }
+
+    // Each group's models, once per screen (ModelCatalogs caches them for the
+    // app session).
+    suspend fun loadMenu(g: ModelGroup): ModelMenu {
+        menus[g.id]?.let { return it }
+        val m = if (g.isFlagship) {
+            ModelMenu.Flagship(ModelCatalogs.inference())
+        } else {
+            credentialOf(g)?.let { ModelCatalogs.menuFor(it, client) }
+                ?: ModelMenu.Own(g.provider, listed = false, options = emptyList(), defaultModel = null, reason = "failed")
+        }
+        menus[g.id] = m
+        return m
+    }
+
+    // Every message says the model and effort. A Flagship Inference chat gets
+    // a fresh pass each time (they last 12 h); an own key rides along when
+    // the owner picked it here or the box holds none. False when nothing was
+    // sent (the reason is shown).
     suspend fun reply(base: VibeCodeReplyRequest): Boolean {
         val (model, effort) = ModelMenus.replyWire(choice)
         val req = base.copy(model = model, effort = effort)
-        val withCred = when (val r = freeAiService.refreshFor(sessionId)) {
-            // The box lost this session's key (a restart): send the one it
-            // started with again, as iOS does.
-            is com.flagshipserver.app.core.FreeAiRefresh.None -> {
-                val saved = BuildSessionAi.credentialFor(sessionId)
-                if (state?.needsCredential == true && saved != null) {
-                    req.copy(credential = com.flagshipserver.app.api.LlmProviderCredential.from(saved))
-                } else {
-                    req
+        val group = ModelGroups.byId(groups, groupId)
+        var passServer: String? = null
+        var key: AiCredential? = null
+        val rule = ModelGroups.messageCredential(
+            group,
+            picked = groupId != boxGroupId,
+            needsCredential = state?.needsCredential == true,
+        )
+        val withCred = when (rule) {
+            MessageCredential.NONE -> req
+            MessageCredential.FLAGSHIP_PASS -> {
+                val server = FreeAiSessions.serverFor(sessionId) ?: serverFqdn.takeIf { it != "unknown" }.orEmpty()
+                when (val r = freeAiService.passFor(server)) {
+                    is FreeAiRefresh.Fresh -> {
+                        passServer = server
+                        req.copy(credential = LlmProviderCredential.from(r.credential))
+                    }
+                    is FreeAiRefresh.Stop -> {
+                        errorMessage = r.message
+                        return false
+                    }
+                    FreeAiRefresh.None -> req
                 }
             }
-            is com.flagshipserver.app.core.FreeAiRefresh.Fresh ->
-                req.copy(credential = com.flagshipserver.app.api.LlmProviderCredential.from(r.credential))
-            is com.flagshipserver.app.core.FreeAiRefresh.Stop -> {
-                errorMessage = r.message
-                return false
+            MessageCredential.OWN_KEY -> {
+                val c = group?.let(::credentialOf)
+                if (c == null) {
+                    errorMessage = KEY_GONE
+                    return false
+                }
+                key = c
+                req.copy(credential = LlmProviderCredential.from(c))
             }
         }
         client.vibeCodeSessionReply(sessionId, withCred)
+        boxGroupId = groupId
+        passServer?.let {
+            FreeAiSessions.remember(sessionId, it)
+            AiRelay.lastUsedKeyId = null
+        }
+        key?.let {
+            FreeAiSessions.forget(sessionId)
+            BuildSessionAi.remember(sessionId, it)
+            AiRelay.lastUsedKeyId = it.keyId
+        }
         return true
     }
 
@@ -167,25 +233,46 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
         if (deployPhase is VibeCodeDeployViewModel.Phase.Deployed || deployPhase is VibeCodeDeployViewModel.Phase.Failed) reload()
     }
 
+    // Open on the group the chat uses now: the box's provider, else the key
+    // this app started it with, else (older box) a catalog model id.
     LaunchedEffect(sessionId, state != null) {
         val s = state ?: return@LaunchedEffect
-        if (menu != null) return@LaunchedEffect
-        val cred = BuildSessionAi.credentialFor(sessionId)
-        val m = when {
-            cred != null -> ModelCatalogs.menuFor(cred, client)
-            FreeAiSessions.serverFor(sessionId) != null -> ModelMenu.Flagship(ModelCatalogs.inference())
-            else -> {
-                // Reopened after a restart: a catalog id means Flagship Inference.
-                val cat = ModelCatalogs.inference()
-                if (cat != null && cat.models.any { it.id == s.model }) ModelMenu.Flagship(cat) else ModelMenu.Unknown
-            }
+        if (menuReady) return@LaunchedEffect
+        val sessionCred = BuildSessionAi.credentialFor(sessionId)
+        val (catalog, usable) = coroutineScope {
+            val status = async { FreeAiCopy.view(freeAiService.status())?.usable == true }
+            ModelCatalogs.inference() to status.await()
         }
-        val saved = runCatching { AiKeyStore.defaultModelFor(cred) }.getOrNull()
-        choice = ModelMenus.initial(m, saved, s.model?.takeIf { it.isNotBlank() }?.let { ModelChoice(it, s.effort) })
-        menu = m
+        val provider = ModelGroups.chatProvider(
+            s.provider,
+            sessionCred,
+            onFlagship = FreeAiSessions.serverFor(sessionId) != null,
+            modelInCatalog = catalog?.models?.any { it.id == s.model } == true,
+        )
+        val keys = runCatching { AiKeyStore.list() }.getOrDefault(emptyList())
+        val built = ModelGroups.build(
+            keys,
+            flagshipUsable = usable,
+            currentProvider = provider,
+            sessionKeyProvider = sessionCred?.takeIf { !it.isFreeAi && it.keyId == null }?.provider,
+        )
+        val g = ModelGroups.initial(built, provider, sessionCred)
+        val current = s.model?.takeIf { it.isNotBlank() }?.let { ModelChoice(it, s.effort) }
+        choice = if (g == null) {
+            current
+        } else {
+            val saved = runCatching {
+                AiKeyStore.defaultModel(if (g.isFlagship) AiKeyStore.FLAGSHIP_INFERENCE_ID else g.id)
+            }.getOrNull()
+            ModelMenus.initial(loadMenu(g), saved, current)
+        }
+        groups = built
+        groupId = g?.id
+        boxGroupId = g?.id
+        menuReady = true
     }
 
-    LaunchedEffect(sessionId) {
+    LaunchedEffect(sessionId, pollEpoch) {
         reload()
         // Poll the public state while the session is still moving toward a
         // terminal state. `ready-to-deploy` is included so the screen keeps
@@ -231,10 +318,23 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
             color = FS.colors.text,
             style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
         )
-        val m = menu
-        if (m != null && !(m is ModelMenu.Unknown && choice == null)) {
+        if (menuReady && (groups.isNotEmpty() || choice != null)) {
             Spacer(Modifier.height(FS.space.s2))
-            ChatModelBar(m, choice, onChoice = { choice = it })
+            GroupedChatModelBar(
+                groups = groups,
+                menus = menus,
+                groupId = groupId,
+                choice = choice,
+                notice = ModelGroups.contextNotice(
+                    groupId?.let { menus[it] }, choice, state?.model, state?.conversationTokens,
+                ),
+                onOpen = { groups.forEach { g -> if (menus[g.id] == null) scope.launch { loadMenu(g) } } },
+                onPick = { id, c ->
+                    groupId = id
+                    choice = c
+                },
+                onEffort = { e -> choice = choice?.copy(effort = e) },
+            )
         }
         Spacer(Modifier.height(FS.space.s4))
 
@@ -292,6 +392,79 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
         }
         Spacer(Modifier.height(FS.space.s3))
 
+        // A new message on a chat that is ready to deploy or failed starts the
+        // AI again on its files; polling follows it until it settles.
+        fun sendNow(continuing: Boolean) {
+            scope.launch(Dispatchers.Main) {
+                submitting = true
+                try {
+                    val req = VibeCodeReplyRequest(
+                        text = replyDraft,
+                        attachments = staged.takeIf { it.isNotEmpty() },
+                    )
+                    if (reply(req)) {
+                        replyDraft = ""
+                        staged = emptyList()
+                        attachError = null
+                        errorMessage = null
+                        if (continuing) deployVm.reset()
+                        reload()
+                        pollEpoch++
+                    }
+                } catch (t: Throwable) {
+                    errorMessage = t.boxError() ?: t.userFacing()
+                } finally {
+                    submitting = false
+                }
+            }
+        }
+
+        @Composable
+        fun Composer(label: String?, placeholder: String?, continuing: Boolean, fieldTag: String, sendTag: String) {
+            OutlinedTextField(
+                value = replyDraft,
+                onValueChange = { replyDraft = it },
+                label = if (label != null) ({ Text(label) }) else null,
+                placeholder = if (placeholder != null) ({ Text(placeholder) }) else null,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics { testTag = fieldTag },
+            )
+            Spacer(Modifier.height(FS.space.s2))
+            ChatComposerAttachments(
+                staged = staged,
+                error = attachError,
+                onPhoto = {
+                    photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                },
+                onFile = { filePicker.launch(ChatAttachments.DOCUMENT_MIME_TYPES) },
+                onRemove = { i -> staged = staged.filterIndexed { j, _ -> j != i } },
+            )
+            Spacer(Modifier.height(FS.space.s3))
+            FSPrimaryButton(
+                label = if (submitting) "Sending…" else "Send",
+                enabled = !submitting && ChatContinuation.canSend(replyDraft, continuing),
+                modifier = Modifier.semantics { testTag = sendTag },
+                onClick = {
+                    val check = ModelMenus.visionCheck(
+                        groupId?.let { menus[it] } ?: ModelMenu.Unknown, choice, ChatAttachments.hasImage(staged),
+                    )
+                    if (check is VisionCheck.Send) sendNow(continuing) else vision = check
+                },
+            )
+            vision?.let { check ->
+                VisionDialog(
+                    check = check,
+                    onSwitch = { to ->
+                        vision = null
+                        choice = to
+                        sendNow(continuing)
+                    },
+                    onDismiss = { vision = null },
+                )
+            }
+        }
+
         val pending = s.pendingRequest
         if (pending != null) {
             when (pending) {
@@ -302,68 +475,13 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
                             Spacer(Modifier.height(FS.space.s1))
                             Text(pending.payload.message, color = FS.colors.text)
                             Spacer(Modifier.height(FS.space.s3))
-                            OutlinedTextField(
-                                value = replyDraft,
-                                onValueChange = { replyDraft = it },
-                                label = { Text("Type your reply") },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .semantics { testTag = "vibecode-reply-field" },
+                            Composer(
+                                label = "Type your reply",
+                                placeholder = null,
+                                continuing = false,
+                                fieldTag = "vibecode-reply-field",
+                                sendTag = "vibecode-reply-send-btn",
                             )
-                            Spacer(Modifier.height(FS.space.s2))
-                            fun sendNow() {
-                                scope.launch(Dispatchers.Main) {
-                                    submitting = true
-                                    try {
-                                        val req = VibeCodeReplyRequest(
-                                            text = replyDraft,
-                                            attachments = staged.takeIf { it.isNotEmpty() },
-                                        )
-                                        if (reply(req)) {
-                                            replyDraft = ""
-                                            staged = emptyList()
-                                            attachError = null
-                                            reload()
-                                        }
-                                    } catch (t: Throwable) {
-                                        errorMessage = t.userFacing()
-                                    } finally {
-                                        submitting = false
-                                    }
-                                }
-                            }
-                            ChatComposerAttachments(
-                                staged = staged,
-                                error = attachError,
-                                onPhoto = {
-                                    photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                                },
-                                onFile = { filePicker.launch(ChatAttachments.DOCUMENT_MIME_TYPES) },
-                                onRemove = { i -> staged = staged.filterIndexed { j, _ -> j != i } },
-                            )
-                            Spacer(Modifier.height(FS.space.s3))
-                            FSPrimaryButton(
-                                label = if (submitting) "Sending…" else "Send",
-                                enabled = !submitting && replyDraft.isNotEmpty(),
-                                modifier = Modifier.semantics { testTag = "vibecode-reply-send-btn" },
-                                onClick = {
-                                    val check = ModelMenus.visionCheck(
-                                        menu ?: ModelMenu.Unknown, choice, ChatAttachments.hasImage(staged),
-                                    )
-                                    if (check is VisionCheck.Send) sendNow() else vision = check
-                                },
-                            )
-                            vision?.let { check ->
-                                VisionDialog(
-                                    check = check,
-                                    onSwitch = { to ->
-                                        vision = null
-                                        choice = to
-                                        sendNow()
-                                    },
-                                    onDismiss = { vision = null },
-                                )
-                            }
                         }
                     }
                 }
@@ -559,6 +677,21 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
             Spacer(Modifier.height(FS.space.s3))
         }
 
+        if (ChatContinuation.takesMessage(s)) {
+            FSCard {
+                Column {
+                    Composer(
+                        label = null,
+                        placeholder = ChatContinuation.placeholder(s.status),
+                        continuing = true,
+                        fieldTag = "vibecode-continue-field",
+                        sendTag = "vibecode-continue-send-btn",
+                    )
+                }
+            }
+            Spacer(Modifier.height(FS.space.s3))
+        }
+
         if (errorMessage != null) {
             ErrorCard(message = errorMessage!!)
         }
@@ -585,13 +718,62 @@ private const val FOLLOW_SLACK_PX = 120
 
 internal const val EARLIER_SUMMARISED = "Earlier conversation summarised"
 
-/** The header's model menu and, for a Flagship model that reasons, "Think harder". */
+internal const val KEY_GONE = "That AI key isn't saved on this phone any more. Pick another model."
+
+/** When the chat takes a new message that isn't an answer, and what its field says. */
+internal object ChatContinuation {
+    const val ASK_FOR_CHANGE = "Ask for a change…"
+    const val TRY_NEXT = "Tell the AI what to try next…"
+
+    /** The box says the chat can continue and the AI isn't asking anything. */
+    fun takesMessage(s: VibeCodeSessionPublicState): Boolean = s.canContinue && s.pendingRequest == null
+
+    fun placeholder(status: String): String = if (status == "failed") TRY_NEXT else ASK_FOR_CHANGE
+
+    /** A new message needs words; an answer may be empty only if it has none. */
+    fun canSend(draft: String, continuing: Boolean): Boolean =
+        if (continuing) draft.isNotBlank() else draft.isNotEmpty()
+}
+
+/** One model menu (Settings → AI keys) and the effort beside it. */
 @Composable
 internal fun ChatModelBar(menu: ModelMenu, choice: ModelChoice?, onChoice: (ModelChoice?) -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
         ModelMenuChip(menu, choice, onChoice)
-        if (choice != null && ModelMenus.thinkHarderOffered(menu, choice)) {
-            ThinkHarderChip(ModelMenus.thinkHarder(choice)) { on -> onChoice(ModelMenus.withThinkHarder(choice, on)) }
+        val efforts = ModelMenus.efforts(menu, choice)
+        if (choice != null && efforts.isNotEmpty()) {
+            EffortChip(efforts, choice.effort) { e -> onChoice(choice.copy(effort = e)) }
+        }
+    }
+}
+
+/** The build chat's menu grouped by provider, the effort beside it, and the
+ *  line saying older messages will be summarised. */
+@Composable
+internal fun GroupedChatModelBar(
+    groups: List<ModelGroup>,
+    menus: Map<String, ModelMenu>,
+    groupId: String?,
+    choice: ModelChoice?,
+    notice: String?,
+    onOpen: () -> Unit,
+    onPick: (String, ModelChoice?) -> Unit,
+    onEffort: (String) -> Unit,
+) {
+    Column {
+        Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            GroupedModelMenuChip(groups, menus, groupId, choice, onOpen, onPick)
+            val efforts = ModelGroups.effortOptions(groupId?.let { menus[it] }, choice)
+            if (choice != null && efforts.isNotEmpty()) EffortChip(efforts, choice.effort, onEffort)
+        }
+        if (notice != null) {
+            Spacer(Modifier.height(FS.space.s1))
+            Text(
+                notice,
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp),
+                modifier = Modifier.semantics { testTag = "model-context-notice" },
+            )
         }
     }
 }

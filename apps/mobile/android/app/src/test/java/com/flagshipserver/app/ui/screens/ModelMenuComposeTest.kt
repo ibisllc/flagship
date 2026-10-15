@@ -1,5 +1,5 @@
-// The build chat's model menu, "Think harder", attachment chips + notice and
-// the vision-switch alert. Set MODELS_SHOT_DIR (env) or models.shot.dir
+// The build chat's model menu (grouped by provider), the effort beside it,
+// the context line, attachment chips + notice and the vision-switch alert. Set MODELS_SHOT_DIR (env) or models.shot.dir
 // (system property) to also write review PNGs.
 
 package com.flagshipserver.app.ui.screens
@@ -37,6 +37,8 @@ import com.flagshipserver.app.api.ModelOption
 import com.flagshipserver.app.api.VibeCodeAttachment
 import com.flagshipserver.app.api.VibeCodeSessionMessage
 import com.flagshipserver.app.core.ModelChoice
+import com.flagshipserver.app.core.ModelGroups
+import com.flagshipserver.app.core.SavedAiKey
 import com.flagshipserver.app.core.ModelMenu
 import com.flagshipserver.app.core.ModelMenus
 import com.flagshipserver.app.core.VisionCheck
@@ -124,22 +126,79 @@ class ModelMenuComposeTest {
         ChatModelBar(menu, choice, onChoice = {})
     }
 
-    @Test fun headerShowsShortNameAndThinkHarder() {
-        show { Column(Modifier.padding(FS.space.s6)) { Header(flagship, ModelChoice("low", "high")) } }
+    @Test fun headerShowsShortNameAndNoEffortForAFlagshipModelThatListsNone() {
+        show { Column(Modifier.padding(FS.space.s6)) { Header(flagship, ModelChoice("low")) } }
         composeRule.onNodeWithText("Low 1×").assertIsDisplayed()
-        composeRule.onNodeWithTag("think-harder").assertIsDisplayed()
+        composeRule.onNodeWithTag("model-effort").assertDoesNotExist()
+        composeRule.onNodeWithText("Think harder").assertDoesNotExist()
     }
 
-    @Test fun noThinkHarderForAModelThatDoesntReason() {
-        show { Column(Modifier.padding(FS.space.s6)) { Header(flagship, ModelChoice("medium-vision")) } }
-        composeRule.onNodeWithText("Medium multimodal 2×").assertIsDisplayed()
-        composeRule.onNodeWithTag("think-harder").assertDoesNotExist()
+    @Test fun headerShowsTheEffortBesideAModelThatListsEfforts() {
+        show { Column(Modifier.padding(FS.space.s6)) { Header(own, ModelChoice("gpt-5.4-mini", "high")) } }
+        composeRule.onNodeWithText("GPT-5.4 Mini").assertIsDisplayed()
+        composeRule.onNodeWithTag("model-effort").assertIsDisplayed()
+        composeRule.onNodeWithText("High").assertIsDisplayed()
+    }
+
+    private val keys = listOf(SavedAiKey("k1", "openai", "Work", "sk-one"), SavedAiKey("k2", "anthropic", "Home", "sk-two"))
+    private val groups = ModelGroups.build(keys, flagshipUsable = true, currentProvider = "openai")
+
+    @Test fun groupedMenuListsFlagshipThenEachKeyWithItsModels() {
+        show {
+            Column(Modifier.padding(horizontal = FS.space.s6)) {
+                GroupedChatModelBar(
+                    groups = groups,
+                    menus = mapOf("flagship" to flagship, "k1" to own),
+                    groupId = "k1",
+                    choice = ModelChoice("gpt-5.4-mini", "medium"),
+                    notice = ModelGroups.CONTEXT_NOTICE,
+                    onOpen = {}, onPick = { _, _ -> }, onEffort = {},
+                )
+                Spacer(Modifier.height(4.dp))
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = FS.colors.surface,
+                    shadowElevation = 3.dp,
+                    tonalElevation = 3.dp,
+                    modifier = Modifier.width(320.dp),
+                ) {
+                    Column(Modifier.padding(vertical = 8.dp)) {
+                        GroupedModelMenuItems(
+                            groups, mapOf("flagship" to flagship, "k1" to own), "k1", ModelChoice("gpt-5.4-mini", "medium"),
+                            onPick = { _, _ -> }, onClose = {},
+                        )
+                    }
+                }
+            }
+        }
+        composeRule.onNodeWithText("GPT-5.4 Mini · Work").assertIsDisplayed()
+        composeRule.onNodeWithTag("model-effort").assertIsDisplayed()
+        composeRule.onNodeWithText("Older messages will be summarised to fit this model.").assertIsDisplayed()
+        composeRule.onNodeWithTag("model-group-flagship").assertIsDisplayed()
+        composeRule.onNodeWithText("openai · Work").assertIsDisplayed()
+        composeRule.onNodeWithText("anthropic · Home").assertIsDisplayed()
+        composeRule.onNodeWithText(MODELS_LOADING).assertIsDisplayed()
+        save("models-grouped-android.png")
+    }
+
+    @Test fun pickingAModelFromAnotherGroupSaysWhichGroup() {
+        var picked: Pair<String, ModelChoice?>? = null
+        show {
+            Column(Modifier.padding(FS.space.s6)) {
+                GroupedModelMenuItems(
+                    groups, mapOf("flagship" to flagship, "k1" to own), "k1", ModelChoice("gpt-5.4-mini", "medium"),
+                    onPick = { id, c -> picked = id to c }, onClose = {},
+                )
+            }
+        }
+        composeRule.onNodeWithTag("model-item-flagship-medium").performClick()
+        assertEquals("flagship" to ModelChoice("medium"), picked)
     }
 
     @Test fun menuOpenShowsLabelsAndDescriptors() {
         show {
             Column(Modifier.padding(horizontal = FS.space.s6)) {
-                Header(flagship, ModelChoice("low", "high"))
+                Header(flagship, ModelChoice("low"))
                 Spacer(Modifier.height(4.dp))
                 // The dropdown's own rows, drawn in place (a popup is its own window).
                 Surface(
@@ -149,7 +208,7 @@ class ModelMenuComposeTest {
                     tonalElevation = 3.dp,
                     modifier = Modifier.width(320.dp),
                 ) {
-                    Column(Modifier.padding(vertical = 8.dp)) { ModelMenuItems(flagship, ModelChoice("low", "high"), {}, {}) }
+                    Column(Modifier.padding(vertical = 8.dp)) { ModelMenuItems(flagship, ModelChoice("low"), {}, {}) }
                 }
             }
         }
@@ -159,16 +218,17 @@ class ModelMenuComposeTest {
     }
 
     @Test fun ownKeyMenuShowsUnknownCapsAndEfforts() {
-        var picked: ModelChoice? = null
+        var picked: String? = null
         show {
             Column(Modifier.padding(FS.space.s6)) {
-                ModelMenuItems(own, ModelChoice("gpt-5.4-mini", "medium"), { picked = it }, {})
+                ModelMenuItems(own, ModelChoice("gpt-5.4-mini", "medium"), {}, {})
+                EffortItems(ModelMenus.efforts(own, ModelChoice("gpt-5.4-mini")), "medium") { picked = it }
             }
         }
         composeRule.onNodeWithText(ModelMenus.UNKNOWN_CAPS).assertIsDisplayed()
         composeRule.onNodeWithText("Extra high").assertIsDisplayed()
         composeRule.onNodeWithTag("model-effort-xhigh").performClick()
-        assertEquals(ModelChoice("gpt-5.4-mini", "xhigh"), picked)
+        assertEquals("xhigh", picked)
         save("models-own-android.png")
     }
 

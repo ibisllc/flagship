@@ -46,12 +46,10 @@ sealed class VisionCheck {
 object ModelMenus {
     const val FLAGSHIP_TITLE = "Flagship Inference"
     const val DEFAULT_TITLE = "Default model"
-    const val THINK_HARDER = "Think harder"
     const val UNKNOWN_CAPS = "capabilities unknown"
     const val KEY_REFUSED = "The key was refused"
     const val MODEL_FIELD = "Model"
     const val EFFORT = "Effort"
-    const val THINK_HARDER_EFFORT = "high"
 
     fun from(r: AiModelsResponse): ModelMenu =
         if (r.kind == "flagship") ModelMenu.Flagship(r.catalog)
@@ -88,8 +86,9 @@ object ModelMenus {
             val c = menu.catalog
             if (c == null) null
             else listOfNotNull(current, saved).firstOrNull { ch -> c.models.any { it.id == ch.model } }
+                ?.let { ch -> ch.copy(effort = ch.effort?.takeIf { it in efforts(menu, ch) }) }
                 ?: (c.models.firstOrNull { it.id == c.defaultModel } ?: c.models.firstOrNull { it.default == true })
-                    ?.let { ModelChoice(it.id) }
+                    ?.let { select(menu, it.id) }
         }
         is ModelMenu.Own -> {
             val pick = listOfNotNull(current, saved).firstOrNull { it.model.isNotBlank() }
@@ -103,18 +102,19 @@ object ModelMenus {
         ModelMenu.Unknown -> current
     }
 
-    /** Pick [id]: an own-key model starts on its default effort; a Flagship
-     *  model keeps "Think harder" when it can. */
-    fun select(menu: ModelMenu, id: String, previous: ModelChoice?): ModelChoice = when (menu) {
-        is ModelMenu.Flagship -> {
-            val keep = previous?.effort == THINK_HARDER_EFFORT && flagshipModel(menu, id)?.reasoning == true
-            ModelChoice(id, if (keep) THINK_HARDER_EFFORT else null)
+    /** Pick [id]: it starts on its own default effort, when it lists efforts. */
+    fun select(menu: ModelMenu, id: String): ModelChoice =
+        ModelChoice(id, defaultEffort(menu, id))
+
+    /** A model's default effort, when it offers efforts and names one of them. */
+    fun defaultEffort(menu: ModelMenu, id: String?): String? {
+        val efforts = efforts(menu, id?.let { ModelChoice(it) })
+        val def = when (menu) {
+            is ModelMenu.Flagship -> flagshipModel(menu, id)?.defaultEffort
+            is ModelMenu.Own -> option(menu, id)?.defaultEffort
+            ModelMenu.Unknown -> null
         }
-        is ModelMenu.Own -> {
-            val o = option(menu, id)
-            ModelChoice(id, o?.defaultEffort?.takeIf { !o.efforts.isNullOrEmpty() })
-        }
-        ModelMenu.Unknown -> ModelChoice(id)
+        return def?.takeIf { it in efforts }
     }
 
     /** The chip's text: the model's short name. */
@@ -124,17 +124,26 @@ object ModelMenus {
         ModelMenu.Unknown -> choice?.model?.takeIf { it.isNotBlank() } ?: DEFAULT_TITLE
     }
 
-    /** The own-key model's efforts; empty: no effort control. */
-    fun efforts(menu: ModelMenu, choice: ModelChoice?): List<String> =
-        option(menu, choice?.model)?.efforts.orEmpty()
+    /** The efforts the chosen model lists (a Flagship model only what its
+     *  catalog entry lists); empty: no effort control. */
+    fun efforts(menu: ModelMenu, choice: ModelChoice?): List<String> {
+        val listed = when (menu) {
+            is ModelMenu.Flagship -> flagshipModel(menu, choice?.model)?.efforts
+            is ModelMenu.Own -> option(menu, choice?.model)?.efforts
+            ModelMenu.Unknown -> null
+        }
+        return listed.orEmpty().filter { it.isNotBlank() }
+    }
 
-    fun thinkHarderOffered(menu: ModelMenu, choice: ModelChoice?): Boolean =
-        flagshipModel(menu, choice?.model)?.reasoning == true
-
-    fun thinkHarder(choice: ModelChoice?): Boolean = choice?.effort == THINK_HARDER_EFFORT
-
-    fun withThinkHarder(choice: ModelChoice, on: Boolean): ModelChoice =
-        choice.copy(effort = if (on) THINK_HARDER_EFFORT else null)
+    /** The model's context window, when known. */
+    fun contextTokens(menu: ModelMenu, model: String?): Long? {
+        val n = when (menu) {
+            is ModelMenu.Flagship -> flagshipModel(menu, model)?.contextTokens
+            is ModelMenu.Own -> option(menu, model)?.contextTokens
+            ModelMenu.Unknown -> null
+        }
+        return n?.takeIf { it > 0 }
+    }
 
     /** `model`/`effort` for start: nothing is sent when there's no choice. */
     fun startWire(choice: ModelChoice?): Pair<String?, String?> =
@@ -156,7 +165,7 @@ object ModelMenus {
                 val alt = flagshipModel(menu, m.visionAlternative)
                 return if (alt != null) {
                     VisionCheck.Switch(
-                        select(menu, alt.id, choice),
+                        select(menu, alt.id),
                         "I'll have to switch to ${alt.model} (${multiplier(alt.multiplier)}) for this.",
                     )
                 } else {
@@ -168,7 +177,7 @@ object ModelMenus {
                 if (o.vision != false) return VisionCheck.Send
                 val alt = option(menu, o.visionAlternative)
                 return if (alt != null) {
-                    VisionCheck.Switch(select(menu, alt.id, choice), "I'll have to switch to ${alt.label} for this.")
+                    VisionCheck.Switch(select(menu, alt.id), "I'll have to switch to ${alt.label} for this.")
                 } else {
                     VisionCheck.Blocked(cantSee(o.label))
                 }

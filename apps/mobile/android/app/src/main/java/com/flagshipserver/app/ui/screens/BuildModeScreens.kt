@@ -1147,9 +1147,10 @@ private fun SessionTile(session: VibeCodeSessionMeta, title: String, onClick: ()
                 FSPill(BuildSummary.methodLabel("scratch"), FSPillKind.Idle)
             }
         }
+        val action = BuildSessions.action(session.status)
         Text(
-            if (active) "Resume" else "Open",
-            color = if (active) FS.colors.success else FS.colors.primary,
+            action,
+            color = if (action == "Open") FS.colors.primary else FS.colors.success,
             style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
         )
     }

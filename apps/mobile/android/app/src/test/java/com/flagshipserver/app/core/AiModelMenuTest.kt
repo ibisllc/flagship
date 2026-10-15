@@ -129,7 +129,8 @@ class AiModelMenuTest {
     @Test fun initialChoice() {
         // Catalog default, then a saved default, then what the session uses now.
         assertEquals(ModelChoice("low"), ModelMenus.initial(flagship, null))
-        assertEquals(ModelChoice("high", "high"), ModelMenus.initial(flagship, ModelChoice("high", "high")))
+        // An effort the model doesn't list (an old "Think harder" pick) is dropped.
+        assertEquals(ModelChoice("high"), ModelMenus.initial(flagship, ModelChoice("high", "high")))
         assertEquals(ModelChoice("medium"), ModelMenus.initial(flagship, ModelChoice("high"), ModelChoice("medium")))
         assertEquals(ModelChoice("low"), ModelMenus.initial(flagship, ModelChoice("retired")))
         assertNull(ModelMenus.initial(ModelMenu.Flagship(null), ModelChoice("low")))
@@ -137,20 +138,38 @@ class AiModelMenuTest {
         assertEquals(ModelChoice("gpt-5.4-mini", "medium"), ModelMenus.initial(own, null))
     }
 
-    @Test fun thinkHarderAndEfforts() {
-        assertTrue(ModelMenus.thinkHarderOffered(flagship, ModelChoice("low")))
-        assertFalse(ModelMenus.thinkHarderOffered(flagship, ModelChoice("medium-vision")))
-        assertFalse(ModelMenus.thinkHarderOffered(own, ModelChoice("gpt-5.4-mini")))
-        val on = ModelMenus.withThinkHarder(ModelChoice("low"), true)
-        assertEquals("high", on.effort)
-        assertNull(ModelMenus.withThinkHarder(on, false).effort)
-        // Switching to a model that doesn't reason drops it.
-        assertNull(ModelMenus.select(flagship, "medium-vision", on).effort)
-        assertEquals("high", ModelMenus.select(flagship, "high", on).effort)
+    @Test fun effortsComeOnlyFromWhatAModelLists() {
+        // A Flagship model that reasons but lists no efforts gets no control and no effort.
+        assertTrue(ModelMenus.efforts(flagship, ModelChoice("low")).isEmpty())
+        assertEquals(ModelChoice("high"), ModelMenus.select(flagship, "high"))
+        assertNull(ModelMenus.select(flagship, "medium-vision").effort)
         assertEquals(5, ModelMenus.efforts(own, ModelChoice("gpt-5.4-mini")).size)
         assertTrue(ModelMenus.efforts(own, ModelChoice("brand-new")).isEmpty())
-        assertEquals(ModelChoice("gpt-5.4-mini", "medium"), ModelMenus.select(own, "gpt-5.4-mini", null))
-        assertEquals(ModelChoice("brand-new"), ModelMenus.select(own, "brand-new", ModelChoice("gpt-5.4-mini", "high")))
+        assertEquals(ModelChoice("gpt-5.4-mini", "medium"), ModelMenus.select(own, "gpt-5.4-mini"))
+        assertEquals(ModelChoice("brand-new"), ModelMenus.select(own, "brand-new"))
+    }
+
+    @Test fun aFlagshipModelThatListsEffortsGetsTheControl() {
+        val listed = screensJson.decodeFromString(
+            InferenceCatalogResponse.serializer(),
+            """{"models":[
+                {"id":"low","label":"Low 1× (Qwen)","contextTokens":262144,"reasoning":true,
+                 "efforts":["low","medium","high"],"defaultEffort":"medium","default":true},
+                {"id":"plain","label":"Plain 1× (X)","contextTokens":131072,"reasoning":true,"efforts":[]}],
+               "defaultModel":"low"}""",
+        )
+        assertEquals(listOf("low", "medium", "high"), listed.models[0].efforts)
+        assertEquals("medium", listed.models[0].defaultEffort)
+        val m = ModelMenu.Flagship(listed)
+        assertEquals(listOf("low", "medium", "high"), ModelMenus.efforts(m, ModelChoice("low")))
+        assertTrue(ModelMenus.efforts(m, ModelChoice("plain")).isEmpty())
+        assertEquals(ModelChoice("low", "medium"), ModelMenus.select(m, "low"))
+        assertEquals(ModelChoice("low", "medium"), ModelMenus.initial(m, null))
+        assertEquals(ModelChoice("low", "high"), ModelMenus.initial(m, ModelChoice("low", "high")))
+        assertEquals(262144L, ModelMenus.contextTokens(m, "low"))
+        assertNull(ModelMenus.contextTokens(m, "gone"))
+        assertNull(ModelMenus.contextTokens(own, "brand-new"))
+        assertEquals(400000L, ModelMenus.contextTokens(own, "gpt-5.4-mini"))
     }
 
     @Test fun wire() {
@@ -205,6 +224,22 @@ class AiModelMenuTest {
         assertEquals("plants.csv", a[2].name)
         assertEquals(2.8, s.messages[1].credits!!, 0.0)
         assertNull(s.messages[0].credits)
+        // An older box sends none of the continuation fields.
+        assertFalse(s.canContinue)
+        assertNull(s.provider)
+        assertNull(s.conversationTokens)
+    }
+
+    @Test fun sessionStateSaysItCanContinueAndWhichProvider() {
+        val s = screensJson.decodeFromString(
+            VibeCodeSessionPublicState.serializer(),
+            """{"id":"s1","appId":null,"status":"failed","failureReason":"boom","messages":[],
+                "canContinue":true,"provider":"anthropic","conversationTokens":91234,"needsCredential":true}""",
+        )
+        assertTrue(s.canContinue)
+        assertEquals("anthropic", s.provider)
+        assertEquals(91234L, s.conversationTokens)
+        assertEquals(true, s.needsCredential)
     }
 
     @Test fun replyAndStartEncodeModelEffortAndAttachments() {
