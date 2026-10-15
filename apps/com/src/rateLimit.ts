@@ -1,49 +1,48 @@
 /**
- * Rate-limit layer for the four mutating control-plane endpoints.
+ * Rate-limit layer for the control-plane endpoints.
  *
  *   POST   /api/username/claim                 5/h per-IP, 1/min per-IRK
  *   POST   /api/auth-code/issue                20/h per-IP, 10/h per-IRK
  *   POST   /api/server/register                10/h per-IP, 5/h per-IRK
  *   GET    /api/recovery/by-username/<hash>    10/h per-IP, 3 per 15min per usernameHash
  *   DELETE /api/recovery/by-username/<hash>    same as GET (pre-auth)
+ *   … and the rest of the LIMITS table below.
  *
- * Each endpoint is checked along two independent axes (IP + IRK, or IP
- * + usernameHash for recovery). If *either* axis trips its threshold,
- * we return 429 with `Retry-After`. The two axes are independently
- * counted: a flood from one IP exhausts that IP's budget but doesn't
- * affect a different IP, and the same is true per-IRK.
+ * Each endpoint is checked along independent axes (IP, IRK, or the
+ * username hash). If *any* axis trips one of its windows, we return 429
+ * with `Retry-After`. A flood from one IP exhausts that IP's budget but
+ * doesn't affect a different IP, and the same is true per-IRK.
  *
- * Why one binding, multiple keys: Cloudflare's RATE_LIMITER namespace
- * carries a single (period, limit) configured at the binding level.
- * Encoding (endpoint, axis, identifier) into the `key` lets us share
- * one namespace across axes. The deployed binding is configured to
- * the *tightest* limit (recovery's 3-per-15min); for endpoints with
- * more generous budgets, we issue *fewer* `.limit()` calls — one per
- * window where the budget remains. Either approach lets a single
- * namespace fence multiple thresholds.
+ * Counting lives in the RATE_LIMITS Durable Object namespace
+ * (rateLimitCounter.ts): one object per (endpoint, axis, identifier), so
+ * each budget is counted once worldwide, with the exact limit and window
+ * written here. Cloudflare's `ratelimit` binding was not used for this:
+ * it holds one (limit, period) per namespace, periods of 10 or 60 s only,
+ * and counts per location.
  *
- * The function returns a Response when limited and `null` when the
- * request is allowed through; callers wire this into `route()` *after*
- * body parsing so the IRK can be extracted from the signed request
- * payload before applying the per-IRK axis.
+ * The function returns a result the caller turns into a 429; callers wire
+ * this into `route()` *after* body parsing so the IRK can be extracted
+ * from the signed request payload before applying the per-IRK axis.
  */
 
-export interface RateLimitBinding {
-  limit(options: { key: string }): Promise<{ success: boolean }>;
+import { isWindowRules, type HitResult, type WindowRule } from "./rateLimitCounter.js";
+
+export type { WindowRule } from "./rateLimitCounter.js";
+
+/** The slice of a Durable Object namespace the limiter uses. */
+export interface RateLimitNamespace {
+  idFromName(name: string): unknown;
+  get(id: never): { fetch(request: Request): Promise<Response> };
 }
 
 export interface RateLimitEnv {
-  /** Cloudflare RATE_LIMITER namespace binding (configured in wrangler.toml). */
-  RATE_LIMITER?: RateLimitBinding;
+  /** Durable Object namespace of RateLimitCounter (wrangler.toml). */
+  RATE_LIMITS?: RateLimitNamespace;
   /**
-   * Dedicated namespace for the /qr-pipe WebSocket upgrade endpoint
-   * (Task P2 — bound DO spawn rate per IP). Configured with a much
-   * higher threshold than the mutating control-plane namespace
-   * because each legitimate landing-page visit may trigger one
-   * spawn — and `pre-expire` renewals add ~1 per 4 minutes per
-   * engaged tab.
+   * Multiplies every limit (default 1). Only the gym sets it, so its
+   * scripted runs from one address don't spend a real user's budget.
    */
-  RATE_LIMITER_QR_PIPE?: RateLimitBinding;
+  RATE_LIMIT_SCALE?: string;
 }
 
 /** Endpoint identifier — drives the per-endpoint thresholds + 429 body. */
@@ -61,6 +60,11 @@ export type RateLimitEndpoint =
   // tight one: a legitimate recovery initiates ONCE.
   | "re-pair-initiate"
   | "qr-pipe-upgrade"
+  | "builder-pipe-upgrade"
+  // TOTP verify (the recovery proof carrier). Keyed per target username:
+  // the control-plane's own 5-per-15-min counter lives in one isolate's
+  // memory, so this is the cap that holds across Cloudflare's machines.
+  | "totp-verify"
   | "device-grants-revoke"
   | "device-grants-mint"
   // Watch delegate keys (Phase 2c) — same shape as device grants:
@@ -139,6 +143,17 @@ export type RateLimitEndpoint =
   // signature-check load from one address.
   | "free-ai";
 
+/**
+ * Endpoints that refuse when the counter can't be reached: each one gates
+ * a guessable secret, where an unmetered minute matters more than a
+ * legitimate retry. Everything else lets the request through.
+ */
+const FAIL_CLOSED: ReadonlySet<RateLimitEndpoint> = new Set<RateLimitEndpoint>([
+  "recovery-by-username",
+  "re-pair-initiate",
+  "totp-verify",
+]);
+
 interface AxisLimit {
   axis: "ip" | "irk" | "usernameHash";
   /** Per-axis request budget. */
@@ -148,12 +163,8 @@ interface AxisLimit {
 }
 
 /**
- * Per-endpoint thresholds per the design-decisions table.
- *
- * The deployed binding's (period, limit) is configured separately in
- * wrangler.toml. These constants are the contract this module enforces
- * across both the binding-backed path and the in-Worker fallback used
- * by tests + small deployments that don't want a separate namespace.
+ * Per-endpoint thresholds per the design-decisions table. Each rule is
+ * enforced as written: at most `limit` requests in any `windowSec`.
  */
 export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
   "username-claim": [
@@ -183,11 +194,14 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
     { axis: "ip", limit: 10, windowSec: 3600 },
     { axis: "usernameHash", limit: 3, windowSec: 900 },
   ],
-  // qr-pipe-upgrade is enforced through a dedicated namespace
-  // binding (`RATE_LIMITER_QR_PIPE`) — no entry needed in the
-  // general LIMITS table, but the discriminated-union completeness
-  // forces a key here.
+  // Each /qr-pipe or /builder-pipe upgrade materialises a relay Durable
+  // Object; see checkPipeUpgrade.
   "qr-pipe-upgrade": [{ axis: "ip", limit: 30, windowSec: 60 }],
+  "builder-pipe-upgrade": [{ axis: "ip", limit: 30, windowSec: 60 }],
+  "totp-verify": [
+    { axis: "ip", limit: 20, windowSec: 900 },
+    { axis: "usernameHash", limit: 5, windowSec: 900 },
+  ],
   "device-grants-revoke": [
     { axis: "ip", limit: 10, windowSec: 60 },
     { axis: "irk", limit: 20, windowSec: 3600 },
@@ -321,34 +335,74 @@ export interface AllowedResult {
  * when any axis trips — the caller turns that into a 429 — or
  * `AllowedResult` when the request should proceed.
  *
- * If RATE_LIMITER isn't bound (e.g. local dev without the namespace),
- * this is a no-op: the design treats the binding as authoritative and
- * never short-circuits the request on a missing binding. Tests assert
- * both branches explicitly.
+ * Without the RATE_LIMITS namespace (unit tests that don't wire it) this
+ * is a no-op. When the counter is unreachable, FAIL_CLOSED endpoints
+ * refuse for a minute and the rest pass.
  */
 export async function checkRateLimit(
   env: RateLimitEnv,
   input: RateLimitInput,
 ): Promise<RateLimitedResult | AllowedResult> {
-  if (!env.RATE_LIMITER) return { limited: false };
-  const axes = LIMITS[input.endpoint];
-  for (const axis of axes) {
-    const id = identifierFor(input, axis.axis);
-    if (id === null) continue; // axis not applicable (e.g., missing IRK for unsigned endpoint)
-    // Two rules on the same axis (a per-minute and a per-hour cap) must not
-    // share a counter, or every request counts against both twice.
-    const key = `${input.endpoint}|${axis.axis}|${axis.windowSec}|${id}`;
-    const outcome = await env.RATE_LIMITER.limit({ key });
-    if (!outcome.success) {
-      return {
-        limited: true,
-        endpoint: input.endpoint,
-        axis: axis.axis,
-        retryAfterSec: axis.windowSec,
-      };
-    }
+  const ns = env.RATE_LIMITS;
+  if (!ns) return { limited: false };
+  const scale = limitScale(env);
+  const byAxis = new Map<AxisLimit["axis"], WindowRule[]>();
+  for (const rule of LIMITS[input.endpoint]) {
+    const rules = byAxis.get(rule.axis) ?? [];
+    rules.push({ limit: Math.ceil(rule.limit * scale), windowSec: rule.windowSec });
+    byAxis.set(rule.axis, rules);
   }
-  return { limited: false };
+  const checks: Promise<{ axis: AxisLimit["axis"]; hit: HitResult }>[] = [];
+  for (const [axis, rules] of byAxis) {
+    const id = identifierFor(input, axis);
+    if (id === null) continue; // axis not applicable (e.g., missing IRK for unsigned endpoint)
+    checks.push(hitCounter(ns, `${input.endpoint}|${axis}|${id}`, rules).then((hit) => ({ axis, hit })));
+  }
+  let outcomes: { axis: AxisLimit["axis"]; hit: HitResult }[];
+  try {
+    outcomes = await Promise.all(checks);
+  } catch (err) {
+    console.error(`rate limit counter unreachable for ${input.endpoint}:`, err);
+    if (!FAIL_CLOSED.has(input.endpoint)) return { limited: false };
+    const axis = byAxis.keys().next().value ?? "ip";
+    return { limited: true, endpoint: input.endpoint, axis, retryAfterSec: 60 };
+  }
+  let worst: { axis: AxisLimit["axis"]; hit: HitResult } | undefined;
+  for (const o of outcomes) {
+    if (!o.hit.ok && (!worst || o.hit.retryAfterSec > worst.hit.retryAfterSec)) worst = o;
+  }
+  if (!worst) return { limited: false };
+  return {
+    limited: true,
+    endpoint: input.endpoint,
+    axis: worst.axis,
+    retryAfterSec: worst.hit.retryAfterSec,
+  };
+}
+
+function limitScale(env: RateLimitEnv): number {
+  const n = Number(env.RATE_LIMIT_SCALE);
+  return Number.isFinite(n) && n >= 1 ? n : 1;
+}
+
+async function hitCounter(
+  ns: RateLimitNamespace,
+  key: string,
+  rules: WindowRule[],
+): Promise<HitResult> {
+  if (!isWindowRules(rules)) throw new Error(`bad rate-limit rules for ${key}`);
+  const stub = ns.get(ns.idFromName(key) as never);
+  const res = await stub.fetch(
+    new Request("https://rate-limits.internal/hit", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ rules }),
+    }),
+  );
+  if (!res.ok) throw new Error(`rate-limit counter answered ${res.status}`);
+  const body = (await res.json()) as Partial<HitResult>;
+  if (typeof body.ok !== "boolean") throw new Error("rate-limit counter answered without a verdict");
+  return { ok: body.ok, retryAfterSec: Number(body.retryAfterSec) || 0 };
 }
 
 function identifierFor(input: RateLimitInput, axis: AxisLimit["axis"]): string | null {
@@ -403,6 +457,9 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   // limiting a finalization would strand a legitimate recovery.
   if (m === "POST" && /^\/api\/users\/[^/]+\/re-pair$/.test(pathname)) {
     return "re-pair-initiate";
+  }
+  if (m === "POST" && /^\/api\/users\/[^/]+\/totp\/verify$/.test(pathname)) {
+    return "totp-verify";
   }
   if (
     (m === "GET" || m === "DELETE") &&
@@ -591,74 +648,34 @@ export function extractUsernameHash(pathname: string): string | undefined {
     pathname.match(/^\/api\/account\/resolve\/([^/]+)$/) ??
     // Re-pair initiate is keyed by its TARGET account, so one handle
     // can't be hammered from a rotating source address.
-    pathname.match(/^\/api\/users\/([^/]+)\/re-pair$/);
-  return m ? decodeURIComponent(m[1]!) : undefined;
+    pathname.match(/^\/api\/users\/([^/]+)\/re-pair$/) ??
+    pathname.match(/^\/api\/users\/([^/]+)\/totp\/verify$/);
+  if (!m) return undefined;
+  // One budget per account however the path spells it (case, escapes).
+  try {
+    return decodeURIComponent(m[1]!).trim().toLowerCase();
+  } catch {
+    return m[1]!.toLowerCase();
+  }
 }
 
 /**
- * Bound `/qr-pipe` WebSocket upgrades per client IP. Each accepted
- * upgrade materialises a Durable Object that pays storage + alarm
- * overhead even with hibernation; unauthenticated /qr-pipe traffic
- * is what burned the DO free-tier duration before the hibernation
- * fix landed. Keep this generous enough for legitimate users (page
- * reloads, ~4-minute pre-expire renewals while engaged) and tight
- * enough that one source can't fan out thousands of DOs.
- *
- * Returns the same shape as `checkRateLimit` so callers can pipe
- * straight into `rateLimitedResponse`.
- *
- * The binding is keyed independently from the mutating-control-plane
- * RATE_LIMITER namespace so the two budgets don't fight; today this
- * is a separate `RATE_LIMITER_QR_PIPE` binding in wrangler.toml.
- *
- * When the binding isn't present (dev / tests that don't wire it),
- * this is a no-op — matching the rest of the rate-limit module's
- * "fail open" posture for missing bindings.
+ * Bound `/qr-pipe` and `/builder-pipe` WebSocket upgrades per client IP.
+ * Each accepted upgrade materialises a relay Durable Object that pays
+ * storage + alarm overhead even with hibernation; unauthenticated
+ * /qr-pipe traffic is what burned the DO free-tier duration before the
+ * hibernation fix landed. Generous enough for legitimate users (page
+ * reloads, ~4-minute pre-expire renewals while engaged), tight enough
+ * that one source can't fan out thousands of DOs. The two pipes count
+ * separately. Without an IP there is nothing to key on, so it passes.
  */
-export async function checkQrPipeUpgrade(
+export async function checkPipeUpgrade(
   env: RateLimitEnv,
+  pipe: "qr-pipe-upgrade" | "builder-pipe-upgrade",
   ip: string | null,
 ): Promise<RateLimitedResult | AllowedResult> {
-  if (!env.RATE_LIMITER_QR_PIPE) return { limited: false };
   if (!ip) return { limited: false };
-  const key = `qr-pipe-upgrade|ip|${ip}`;
-  const outcome = await env.RATE_LIMITER_QR_PIPE.limit({ key });
-  if (!outcome.success) {
-    return {
-      limited: true,
-      endpoint: "qr-pipe-upgrade",
-      axis: "ip",
-      retryAfterSec: 60,
-    };
-  }
-  return { limited: false };
-}
-
-/**
- * Per-IP gate on /builder-pipe upgrades — same DO-spawn concern as the QR
- * relay (each accepted upgrade materialises a Durable Object). Reuses the
- * `RATE_LIMITER_QR_PIPE` binding with a DISTINCT key prefix so the two
- * budgets are independent without provisioning a second namespace. Fails
- * open when the binding is absent (dev / tests), matching the module's
- * posture for missing bindings.
- */
-export async function checkBuilderPipeUpgrade(
-  env: RateLimitEnv,
-  ip: string | null,
-): Promise<RateLimitedResult | AllowedResult> {
-  if (!env.RATE_LIMITER_QR_PIPE) return { limited: false };
-  if (!ip) return { limited: false };
-  const key = `builder-pipe-upgrade|ip|${ip}`;
-  const outcome = await env.RATE_LIMITER_QR_PIPE.limit({ key });
-  if (!outcome.success) {
-    return {
-      limited: true,
-      endpoint: "builder-pipe-upgrade",
-      axis: "ip",
-      retryAfterSec: 60,
-    };
-  }
-  return { limited: false };
+  return checkRateLimit(env, { endpoint: pipe, ip });
 }
 
 /** Read the client IP from CF-Connecting-IP, falling back to X-Forwarded-For first hop. */

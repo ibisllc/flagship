@@ -17,9 +17,9 @@ import {
   endpointFor,
   extractUsernameHash,
   LIMITS,
-  type RateLimitBinding,
   type RateLimitEnv,
 } from "../../../apps/com/src/rateLimit.js";
+import { memoryRateLimits } from "../../../apps/com/test/rateLimitFakes.js";
 
 /**
  * Task #74 — Argon2id-gated wrappedUmk fetch.
@@ -277,21 +277,9 @@ describe("Task #74 — delete still works after gate is in place", () => {
 });
 
 describe("Task #74 — rate-limit on the gated fetch", () => {
-  /**
-   * Stub binding that fails the Nth call onwards for a key.
-   * Multiple keys are tracked independently — this mirrors Cloudflare's
-   * RATE_LIMITER namespace behaviour.
-   */
-  function failAfter(threshold: number) {
-    const perKey = new Map<string, number>();
-    const binding: RateLimitBinding = {
-      async limit({ key }) {
-        const next = (perKey.get(key) ?? 0) + 1;
-        perKey.set(key, next);
-        return { success: next <= threshold };
-      },
-    };
-    return binding;
+  /** Real rate-limit counters, held in memory. */
+  function counters() {
+    return memoryRateLimits().ns;
   }
 
   it("endpoint matcher classifies POST .../fetch as recovery-by-username", () => {
@@ -320,10 +308,7 @@ describe("Task #74 — rate-limit on the gated fetch", () => {
   });
 
   it("4th attempt within the window trips the username-hash axis", async () => {
-    // Threshold of 3 → first 3 calls succeed, 4th fails. This stub
-    // assumes a single per-key counter; the real binding does too.
-    const binding = failAfter(3);
-    const env: RateLimitEnv = { RATE_LIMITER: binding };
+    const env: RateLimitEnv = { RATE_LIMITS: counters() };
     const input = {
       endpoint: "recovery-by-username" as const,
       ip: "1.2.3.4",
@@ -336,18 +321,14 @@ describe("Task #74 — rate-limit on the gated fetch", () => {
     const fourth = await checkRateLimit(env, input);
     expect(fourth.limited).toBe(true);
     if (fourth.limited) {
-      // We track BOTH the per-IP axis (cap 10/h, 3 calls in → not
-      // tripped here) and the per-usernameHash axis (cap 3/15min,
-      // tripped on the 4th). The stub fires on per-key counter, so the
-      // first axis tested wins. Either is a fine fail — what matters
-      // is that the 4th request is rejected.
-      expect(["ip", "usernameHash"]).toContain(fourth.axis);
+      // The per-IP axis (10/h) still has room; the per-usernameHash
+      // axis (3 per 15 min) is what refuses the 4th.
+      expect(fourth.axis).toBe("usernameHash");
     }
   });
 
   it("a different usernameHash gets its own budget (axes are per-key)", async () => {
-    const binding = failAfter(3);
-    const env: RateLimitEnv = { RATE_LIMITER: binding };
+    const env: RateLimitEnv = { RATE_LIMITS: counters() };
     // Burn alice's budget.
     for (let i = 0; i < 3; i++) {
       await checkRateLimit(env, {

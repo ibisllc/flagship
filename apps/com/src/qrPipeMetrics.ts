@@ -8,8 +8,8 @@
  *   - `upgrade_count`        — request reached the DO (a DO was
  *                              materialised; this is what drives
  *                              free-tier duration consumption).
- *   - `rate_limited_count`   — request was turned away by
- *                              RATE_LIMITER_QR_PIPE before reaching
+ *   - `rate_limited_count`   — request was turned away by the
+ *                              per-IP upgrade cap before reaching
  *                              the DO.
  *
  * The /api/_status/relay endpoint reads the last N buckets so the

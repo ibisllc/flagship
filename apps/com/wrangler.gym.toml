@@ -84,19 +84,13 @@ bucket_name = "flagship-adapters-gym"
 [triggers]
 crons = ["0 */6 * * *", "*/10 * * * *"]
 
-# --- Rate-limit namespaces: DISTINCT ids from prod (1001/1002) ----------------
-# Different namespace_id keeps the gym's counters from sharing prod's buckets.
-[[unsafe.bindings]]
-name = "RATE_LIMITER"
-type = "ratelimit"
-namespace_id = "2001"
-simple = { limit = 3, period = 60 }
-
-[[unsafe.bindings]]
-name = "RATE_LIMITER_QR_PIPE"
-type = "ratelimit"
-namespace_id = "2002"
-simple = { limit = 30, period = 60 }
+# Every rate limit in apps/com/src/rateLimit.ts counts in a RateLimitCounter
+# Durable Object (one per endpoint, axis and identifier), so each budget is
+# global and exact. Cloudflare's `ratelimit` binding isn't used: one
+# (limit, period) per namespace, 10 or 60 s periods only, counted per location.
+[[durable_objects.bindings]]
+name = "RATE_LIMITS"
+class_name = "RateLimitCounter"
 
 # --- D1: the gym's OWN database (wiped between runs) ---------------------------
 # PLACEHOLDER database_id — create the real DB once and paste its id here:
@@ -134,6 +128,11 @@ tag = "v3"
 # burner→builder class rename (see apps/com/wrangler.toml). Ephemeral DO.
 renamed_classes = [{ from = "BurnerRelaySession", to = "BuilderRelaySession" }]
 
+[[migrations]]
+tag = "v4"
+# The rate-limit counters (apps/com/src/rateLimitCounter.ts).
+new_sqlite_classes = ["RateLimitCounter"]
+
 [vars]
 # ⭐ THE FLIP (§6.5 / §12-G1): point the apex vars at the `gym.` apex. These are
 # the SAME vars prod's wrangler.toml defaults to the literals — here we override
@@ -150,6 +149,9 @@ CONTROL_APEX = "gym.flagshipserver.com"
 # unhandled /api/* to the :8443 TLS-term endpoint.
 SERVICES_BASE_URL = "https://flagship-services-gym.fly.dev:8443"
 TUNNEL_HUB_URL = "wss://flagship-services-gym.fly.dev:8443/tunnel"
+# Scripted gym runs come from one address; scale the rate limits so a run
+# doesn't trip budgets sized for one person (apps/com/src/rateLimit.ts).
+RATE_LIMIT_SCALE = "10"
 # Anycast IPs of the gym Fly app's SNI passthrough listener. PLACEHOLDERS —
 # fill in after `flyctl ips allocate-v4/-v6 -a flagship-services-gym`
 # (see the runbook). The Worker writes A/AAAA for each registered

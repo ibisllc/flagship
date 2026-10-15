@@ -67,6 +67,7 @@ jobs:
           set -euo pipefail
           nohup npx --yes "wrangler@${WRANGLER_VERSION}" dev --port 8787 \
             --var ACCOUNT_READ_TOKEN_SECRET:e2e-local-read-token-secret \
+            --var RATE_LIMIT_SCALE:100 \
             > "$GITHUB_WORKSPACE/wrangler-dev.log" 2>&1 &
           echo $! > "$GITHUB_WORKSPACE/wrangler-dev.pid"
 

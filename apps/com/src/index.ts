@@ -3,6 +3,7 @@ import { scheduled, type ScheduledEnv } from "./scheduled.js";
 
 export { BuildRelaySession } from "./buildRelay.js";
 export { BuilderRelaySession } from "./builderRelay.js";
+export { RateLimitCounter } from "./rateLimitCounter.js";
 
 /**
  * flagshipserver.com — Cloudflare Worker.

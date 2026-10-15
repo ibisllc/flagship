@@ -38,15 +38,14 @@ import {
   readRecent as readRelayMetrics,
 } from "./qrPipeMetrics.js";
 import {
-  checkQrPipeUpgrade,
-  checkBuilderPipeUpgrade,
+  checkPipeUpgrade,
   checkRateLimit,
   clientIp,
   endpointFor,
   extractIrkPub,
   extractUsernameHash,
   rateLimitedResponse,
-  type RateLimitBinding,
+  type RateLimitNamespace,
 } from "./rateLimit.js";
 
 const WEBAPP_HOST = "webapp.flagshipserver.com";
@@ -287,14 +286,11 @@ export interface RouteEnv {
   /** SNI passthrough anycast IPs (also used by serverRegister to publish DNS). */
   SERVICES_PASSTHROUGH_IPV4?: string;
   SERVICES_PASSTHROUGH_IPV6?: string;
-  /** Cloudflare rate-limit binding shared by all four mutating control-plane endpoints. */
-  RATE_LIMITER?: RateLimitBinding;
-  /**
-   * Dedicated rate-limit binding for /qr-pipe upgrades (P2). Keeps
-   * DO-spawn-per-IP bounded so the free-tier duration budget can't
-   * be drained by a single source.
-   */
-  RATE_LIMITER_QR_PIPE?: RateLimitBinding;
+  /** RateLimitCounter Durable Objects: every budget in rateLimit.ts, the
+   *  /qr-pipe and /builder-pipe upgrade caps included. */
+  RATE_LIMITS?: RateLimitNamespace;
+  /** Multiplies every rate limit; the gym only. */
+  RATE_LIMIT_SCALE?: string;
   /**
    * Build-relay Durable Object namespace (task #59). Tests pass a
    * lightweight stub; production wiring is in wrangler.toml.
@@ -785,7 +781,7 @@ async function routeImpl(
     return serveWipPreview(request, url, env, previewPrefix);
   }
 
-  // Rate-limit the four mutating control-plane endpoints. Runs BEFORE
+  // Rate-limit the control-plane endpoints (rateLimit.ts). Runs BEFORE
   // dispatch but AFTER body buffering so we can pull the IRK pubkey
   // out of signed requests for the per-IRK axis. When the limit trips
   // we 429 immediately — never reach the D1 handler or the upstream.
@@ -1065,7 +1061,7 @@ async function forwardQrPipeUpgrade(
   // materialises a Durable Object; without this gate any unauth'd
   // source can fan out enough DOs to refill the free-tier duration
   // bucket before throttling notices.
-  const rl = await checkQrPipeUpgrade(env, clientIp(request));
+  const rl = await checkPipeUpgrade(env, "qr-pipe-upgrade", clientIp(request));
   if (rl.limited) {
     // P3 — count it so /status/ can flag a runaway before the next
     // billing email. recordRateLimited is awaited so the row commits;
@@ -1103,7 +1099,7 @@ async function forwardBuilderPipeUpgrade(
   if (!/^[A-Za-z0-9_-]{16,64}$/.test(sid)) {
     return jsonResponse({ error: "sid must be 16-64 base64url chars" }, 400);
   }
-  const rl = await checkBuilderPipeUpgrade(env, clientIp(request));
+  const rl = await checkPipeUpgrade(env, "builder-pipe-upgrade", clientIp(request));
   if (rl.limited) {
     await recordRateLimited(env.DB);
     return rateLimitedResponse(rl);

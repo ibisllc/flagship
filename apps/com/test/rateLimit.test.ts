@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  checkQrPipeUpgrade,
+  checkPipeUpgrade,
   checkRateLimit,
   clientIp,
   endpointFor,
@@ -8,43 +8,26 @@ import {
   extractUsernameHash,
   rateLimitedResponse,
   LIMITS,
-  type RateLimitBinding,
   type RateLimitEnv,
+  type RateLimitNamespace,
 } from "../src/rateLimit.js";
+import { hitWindows } from "../src/rateLimitCounter.js";
 import { route, type RouteEnv } from "../src/route.js";
+import { memoryRateLimits } from "./rateLimitFakes.js";
 
-/**
- * Rate-limit binding stub. Tracks every `key` it was called with and
- * decides success/fail via the policy callback. Tests rebuild the
- * stub per case so call records don't leak.
- */
-function makeBinding(
-  policy: (key: string, callsForKey: number) => boolean,
-): { binding: RateLimitBinding; calls: string[] } {
-  const calls: string[] = [];
-  const perKey = new Map<string, number>();
-  const binding: RateLimitBinding = {
-    async limit({ key }) {
-      const next = (perKey.get(key) ?? 0) + 1;
-      perKey.set(key, next);
-      calls.push(key);
-      return { success: policy(key, next) };
-    },
-  };
-  return { binding, calls };
+/** Counters that answer by policy instead of counting (true = allow). */
+function makeCounters(policy: (key: string, callsForKey: number) => boolean) {
+  return memoryRateLimits({ policy });
 }
 
-/** Tiny helper: a binding that always allows. */
-function allowAll(): { binding: RateLimitBinding; calls: string[] } {
-  return makeBinding(() => true);
+function allowAll() {
+  return makeCounters(() => true);
 }
 
-/** A binding that fails on every Nth call to a given key (per-key counter). */
-function failAfter(threshold: number): {
-  binding: RateLimitBinding;
-  calls: string[];
-} {
-  return makeBinding((_k, n) => n <= threshold);
+/** A clock the test moves by hand. */
+function clock(start = 1_000_000) {
+  let t = start;
+  return { now: () => t, advance: (sec: number) => (t += sec * 1000) };
 }
 
 describe("rateLimit — endpoint detection", () => {
@@ -111,136 +94,186 @@ describe("rateLimit — endpoint detection", () => {
 });
 
 describe("rateLimit — checkRateLimit", () => {
-  it("is a no-op when RATE_LIMITER binding isn't bound (dev / no namespace)", async () => {
+  it("is a no-op when the RATE_LIMITS namespace isn't bound", async () => {
     const env: RateLimitEnv = {};
     const r = await checkRateLimit(env, { endpoint: "username-claim", ip: "1.2.3.4" });
     expect(r.limited).toBe(false);
   });
 
-  it("returns 429 when the per-IP axis trips", async () => {
-    const { binding, calls } = failAfter(5);
-    const env: RateLimitEnv = { RATE_LIMITER: binding };
+  it("applies the table's own limit and window: 5 per hour per IP for username-claim", async () => {
+    const c = clock();
+    const { ns } = memoryRateLimits({ now: c.now });
+    const env: RateLimitEnv = { RATE_LIMITS: ns };
     for (let i = 0; i < 5; i++) {
-      const r = await checkRateLimit(env, {
-        endpoint: "username-claim",
-        ip: "1.2.3.4",
-      });
-      expect(r.limited).toBe(false);
+      expect((await checkRateLimit(env, { endpoint: "username-claim", ip: "1.2.3.4" })).limited).toBe(false);
+      c.advance(60);
     }
-    // 6th call trips IP axis (and possibly IRK; we check IP first).
-    const sixth = await checkRateLimit(env, {
-      endpoint: "username-claim",
-      ip: "1.2.3.4",
-    });
+    const sixth = await checkRateLimit(env, { endpoint: "username-claim", ip: "1.2.3.4" });
     expect(sixth.limited).toBe(true);
     if (sixth.limited) {
       expect(sixth.axis).toBe("ip");
       expect(sixth.endpoint).toBe("username-claim");
-      expect(sixth.retryAfterSec).toBe(3600);
+      // The first request leaves the hour 3300 s after this one.
+      expect(sixth.retryAfterSec).toBe(3600 - 5 * 60);
     }
-    expect(calls.length).toBeGreaterThan(5);
+    c.advance(3600 - 5 * 60);
+    expect((await checkRateLimit(env, { endpoint: "username-claim", ip: "1.2.3.4" })).limited).toBe(false);
   });
 
-  it("encodes endpoint + axis + identifier into the key (so different endpoints don't share buckets)", async () => {
-    const { binding, calls } = allowAll();
-    const env: RateLimitEnv = { RATE_LIMITER: binding };
+  it("counts a 15-minute budget across the whole window, not per minute", async () => {
+    const c = clock();
+    const { ns } = memoryRateLimits({ now: c.now });
+    const env: RateLimitEnv = { RATE_LIMITS: ns };
+    const hit = (ip: string) =>
+      checkRateLimit(env, { endpoint: "recovery-by-username", ip, usernameHash: "h" });
+    for (let i = 0; i < 3; i++) {
+      expect((await hit(`10.0.0.${i}`)).limited).toBe(false);
+      c.advance(120);
+    }
+    const fourth = await hit("10.0.0.9");
+    expect(fourth.limited).toBe(true);
+    if (fourth.limited) expect(fourth.axis).toBe("usernameHash");
+    c.advance(900 - 3 * 120);
+    expect((await hit("10.0.0.10")).limited).toBe(false);
+  });
+
+  it("keeps refused requests out of the count", async () => {
+    const c = clock();
+    const { ns } = memoryRateLimits({ now: c.now });
+    const env: RateLimitEnv = { RATE_LIMITS: ns };
+    for (let i = 0; i < 3; i++) {
+      await checkRateLimit(env, { endpoint: "recovery-by-username", ip: `10.0.1.${i}`, usernameHash: "x" });
+    }
+    for (let i = 0; i < 20; i++) {
+      c.advance(10);
+      await checkRateLimit(env, { endpoint: "recovery-by-username", ip: `10.0.2.${i}`, usernameHash: "x" });
+    }
+    c.advance(900 - 200);
+    expect(
+      (await checkRateLimit(env, { endpoint: "recovery-by-username", ip: "10.0.3.1", usernameHash: "x" })).limited,
+    ).toBe(false);
+  });
+
+  it("keys one counter per endpoint, axis and identifier", async () => {
+    const { ns, calls } = allowAll();
+    const env: RateLimitEnv = { RATE_LIMITS: ns };
     await checkRateLimit(env, { endpoint: "username-claim", ip: "1.2.3.4" });
     await checkRateLimit(env, { endpoint: "auth-code-issue", ip: "1.2.3.4" });
-    expect(calls).toContain("username-claim|ip|3600|1.2.3.4");
-    expect(calls).toContain("auth-code-issue|ip|3600|1.2.3.4");
+    expect(calls).toContain("username-claim|ip|1.2.3.4");
+    expect(calls).toContain("auth-code-issue|ip|1.2.3.4");
   });
 
-  it("gives two rules on the same axis their own counters", async () => {
-    const { binding, calls } = allowAll();
-    await checkRateLimit({ RATE_LIMITER: binding }, { endpoint: "username-suggest", ip: "1.2.3.4" });
-    expect(calls).toEqual(["username-suggest|ip|60|1.2.3.4", "username-suggest|ip|3600|1.2.3.4"]);
+  it("checks both windows of one axis in a single counter", async () => {
+    const c = clock();
+    const { ns, calls } = memoryRateLimits({ now: c.now });
+    const env: RateLimitEnv = { RATE_LIMITS: ns };
+    for (let i = 0; i < 30; i++) {
+      expect((await checkRateLimit(env, { endpoint: "username-suggest", ip: "1.2.3.4" })).limited).toBe(false);
+    }
+    expect(new Set(calls)).toEqual(new Set(["username-suggest|ip|1.2.3.4"]));
+    // 30 a minute trips first ...
+    expect((await checkRateLimit(env, { endpoint: "username-suggest", ip: "1.2.3.4" })).limited).toBe(true);
+    // ... and 200 an hour holds across minutes.
+    for (let m = 0; m < 6; m++) {
+      c.advance(61);
+      for (let i = 0; i < 30; i++) await checkRateLimit(env, { endpoint: "username-suggest", ip: "1.2.3.4" });
+    }
+    c.advance(61);
+    const r = await checkRateLimit(env, { endpoint: "username-suggest", ip: "1.2.3.4" });
+    expect(r.limited).toBe(true);
+    if (r.limited) expect(r.retryAfterSec).toBeGreaterThan(60);
   });
 
   it("counts different IPs independently", async () => {
-    const { binding } = failAfter(1);
-    const env: RateLimitEnv = { RATE_LIMITER: binding };
-    const a1 = await checkRateLimit(env, { endpoint: "username-claim", ip: "1.1.1.1" });
-    const a2 = await checkRateLimit(env, { endpoint: "username-claim", ip: "1.1.1.1" });
-    const b1 = await checkRateLimit(env, { endpoint: "username-claim", ip: "2.2.2.2" });
-    expect(a1.limited).toBe(false);
-    expect(a2.limited).toBe(true); // 1.1.1.1 over budget
-    expect(b1.limited).toBe(false); // different IP, fresh budget
+    const { ns } = memoryRateLimits();
+    const env: RateLimitEnv = { RATE_LIMITS: ns };
+    for (let i = 0; i < 5; i++) await checkRateLimit(env, { endpoint: "username-claim", ip: "1.1.1.1" });
+    expect((await checkRateLimit(env, { endpoint: "username-claim", ip: "1.1.1.1" })).limited).toBe(true);
+    expect((await checkRateLimit(env, { endpoint: "username-claim", ip: "2.2.2.2" })).limited).toBe(false);
   });
 
   it("counts different IRKs independently", async () => {
-    const { binding } = failAfter(1);
-    const env: RateLimitEnv = { RATE_LIMITER: binding };
-    // Use a single IP across all calls so only the IRK axis differs.
-    const ip = "1.2.3.4";
-    const r1 = await checkRateLimit(env, {
-      endpoint: "auth-code-issue",
-      ip,
-      irkPub: "aa".repeat(32),
-    });
-    expect(r1.limited).toBe(false);
-    // Second call with the SAME IRK trips its bucket — but only after
-    // both ip-bucket and irk-bucket are evaluated; the IP bucket also
-    // counts as we re-use the same IP. With threshold=1, the second
-    // call's IP-bucket trips first.
-    const r2 = await checkRateLimit(env, {
-      endpoint: "auth-code-issue",
-      ip,
-      irkPub: "aa".repeat(32),
-    });
-    expect(r2.limited).toBe(true);
-    // A fresh IP + fresh IRK is allowed.
-    const r3 = await checkRateLimit(env, {
-      endpoint: "auth-code-issue",
-      ip: "9.9.9.9",
-      irkPub: "bb".repeat(32),
-    });
-    expect(r3.limited).toBe(false);
+    const { ns } = memoryRateLimits();
+    const env: RateLimitEnv = { RATE_LIMITS: ns };
+    const claim = (ip: string, irkPub: string) => checkRateLimit(env, { endpoint: "username-claim", ip, irkPub });
+    expect((await claim("1.1.1.1", "aa".repeat(32))).limited).toBe(false);
+    const again = await claim("2.2.2.2", "aa".repeat(32));
+    expect(again.limited).toBe(true);
+    if (again.limited) expect(again.axis).toBe("irk");
+    expect((await claim("3.3.3.3", "bb".repeat(32))).limited).toBe(false);
   });
 
   it("skips the IRK axis when irkPub is not supplied (unsigned recovery endpoint case)", async () => {
-    const { binding, calls } = allowAll();
-    const env: RateLimitEnv = { RATE_LIMITER: binding };
-    await checkRateLimit(env, {
+    const { ns, calls } = allowAll();
+    await checkRateLimit({ RATE_LIMITS: ns }, {
       endpoint: "recovery-by-username",
       ip: "1.2.3.4",
       usernameHash: "deadbeef",
     });
-    // Two axes for recovery: ip + usernameHash. NO irk axis.
     expect(calls.some((k) => k.includes("|ip|"))).toBe(true);
     expect(calls.some((k) => k.includes("|usernameHash|"))).toBe(true);
     expect(calls.some((k) => k.includes("|irk|"))).toBe(false);
   });
 
-  it("recovery axis trips per usernameHash (independent of IP)", async () => {
-    const { binding } = failAfter(3);
-    const env: RateLimitEnv = { RATE_LIMITER: binding };
-    // Three different IPs hitting the SAME usernameHash should still trip
-    // on the 4th request because usernameHash bucket is shared.
-    for (let i = 0; i < 3; i++) {
-      const r = await checkRateLimit(env, {
-        endpoint: "recovery-by-username",
-        ip: `10.0.0.${i}`,
-        usernameHash: "shared-hash",
-      });
-      expect(r.limited).toBe(false);
+  it("skips the ip axis when ip is null (defensive — never crashes)", async () => {
+    const { ns, calls } = allowAll();
+    await checkRateLimit({ RATE_LIMITS: ns }, { endpoint: "username-claim", ip: null });
+    expect(calls.some((k) => k.startsWith("username-claim|ip|"))).toBe(false);
+  });
+
+  it("scales every limit by RATE_LIMIT_SCALE", async () => {
+    const { ns } = memoryRateLimits();
+    const env: RateLimitEnv = { RATE_LIMITS: ns, RATE_LIMIT_SCALE: "3" };
+    for (let i = 0; i < 15; i++) {
+      expect((await checkRateLimit(env, { endpoint: "username-claim", ip: "1.2.3.4" })).limited).toBe(false);
     }
-    const r4 = await checkRateLimit(env, {
-      endpoint: "recovery-by-username",
-      ip: "10.0.0.99",
-      usernameHash: "shared-hash",
-    });
-    expect(r4.limited).toBe(true);
-    if (r4.limited) {
-      expect(r4.axis).toBe("usernameHash");
-      expect(r4.retryAfterSec).toBe(900);
+    expect((await checkRateLimit(env, { endpoint: "username-claim", ip: "1.2.3.4" })).limited).toBe(true);
+  });
+
+  it("ignores a scale below 1 or not a number", async () => {
+    for (const scale of ["0.1", "abc", ""]) {
+      const { ns } = memoryRateLimits();
+      const env: RateLimitEnv = { RATE_LIMITS: ns, RATE_LIMIT_SCALE: scale };
+      for (let i = 0; i < 5; i++) await checkRateLimit(env, { endpoint: "username-claim", ip: "1.2.3.4" });
+      expect((await checkRateLimit(env, { endpoint: "username-claim", ip: "1.2.3.4" })).limited).toBe(true);
     }
   });
 
-  it("skips the ip axis when ip is null (defensive — never crashes)", async () => {
-    const { binding, calls } = allowAll();
-    const env: RateLimitEnv = { RATE_LIMITER: binding };
-    await checkRateLimit(env, { endpoint: "username-claim", ip: null });
-    expect(calls.some((k) => k.startsWith("username-claim|ip|"))).toBe(false);
+  it("refuses secret-guessing endpoints when the counter is unreachable, passes the rest", async () => {
+    const { ns } = memoryRateLimits({ fail: true });
+    const env: RateLimitEnv = { RATE_LIMITS: ns };
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      for (const endpoint of ["recovery-by-username", "re-pair-initiate", "totp-verify"] as const) {
+        const r = await checkRateLimit(env, { endpoint, ip: "1.2.3.4", usernameHash: "u" });
+        expect(r.limited, endpoint).toBe(true);
+      }
+      expect((await checkRateLimit(env, { endpoint: "username-claim", ip: "1.2.3.4" })).limited).toBe(false);
+    } finally {
+      err.mockRestore();
+    }
+  });
+});
+
+describe("rateLimit — the counter's sliding log", () => {
+  it("frees one slot as each request leaves the window", () => {
+    const rules = [{ limit: 2, windowSec: 10 }];
+    let logs = {};
+    for (const t of [0, 3000]) logs = hitWindows(logs, rules, t).logs;
+    const refused = hitWindows(logs, rules, 5000);
+    expect(refused.result).toEqual({ ok: false, retryAfterSec: 5 });
+    expect(hitWindows(logs, rules, 10_001).result.ok).toBe(true);
+  });
+
+  it("records nothing in any window when one window is full", () => {
+    const rules = [
+      { limit: 10, windowSec: 60 },
+      { limit: 1, windowSec: 3600 },
+    ];
+    const first = hitWindows({}, rules, 0);
+    const second = hitWindows(first.logs, rules, 1000);
+    expect(second.result.ok).toBe(false);
+    expect(second.logs["10/60"]).toEqual([0]);
   });
 });
 
@@ -331,7 +364,7 @@ describe("rateLimit — 429 response shape", () => {
 });
 
 describe("rateLimit — wired into route()", () => {
-  function makeEnv(rl: RateLimitBinding | undefined, overrides: Partial<RouteEnv> = {}): RouteEnv {
+  function makeEnv(rl: RateLimitNamespace | undefined, overrides: Partial<RouteEnv> = {}): RouteEnv {
     return {
       SERVICES_BASE_URL: "https://flagship.services",
       ASSETS: {
@@ -339,22 +372,22 @@ describe("rateLimit — wired into route()", () => {
           return new Response(`asset:${new URL(req.url).pathname}`, { status: 200 });
         },
       },
-      ...(rl ? { RATE_LIMITER: rl } : {}),
+      ...(rl ? { RATE_LIMITS: rl } : {}),
       ...overrides,
     };
   }
 
-  it("lets unprotected /api/* routes through even when the binding always says fail", async () => {
-    const { binding } = makeBinding(() => false);
-    const env = makeEnv(binding);
+  it("lets unprotected /api/* routes through even when every counter refuses", async () => {
+    const { ns } = makeCounters(() => false);
+    const env = makeEnv(ns);
     // No upstream fetch needed because /api/health is served by the Worker.
     const r = await route(new Request("https://flagshipserver.com/api/health"), env);
     expect(r.status).toBe(200);
   });
 
-  it("returns 429 when the binding fails for /api/username/claim", async () => {
-    const { binding } = makeBinding(() => false);
-    const env = makeEnv(binding);
+  it("returns 429 when the counter refuses /api/username/claim", async () => {
+    const { ns } = makeCounters(() => false);
+    const env = makeEnv(ns);
     const r = await route(
       new Request("https://flagshipserver.com/api/username/claim", {
         method: "POST",
@@ -370,9 +403,9 @@ describe("rateLimit — wired into route()", () => {
     expect(body.endpoint).toBe("username-claim");
   });
 
-  it("passes the request through to the upstream proxy when the binding allows", async () => {
-    const { binding } = allowAll();
-    const env = makeEnv(binding);
+  it("passes the request through to the upstream proxy when the counter allows", async () => {
+    const { ns } = allowAll();
+    const env = makeEnv(ns);
     // Mock the upstream fetch so route() can proceed to proxy fallback
     // (DB binding is absent → control-plane local handler is skipped).
     const realFetch = globalThis.fetch;
@@ -398,8 +431,8 @@ describe("rateLimit — wired into route()", () => {
   });
 
   it("re-attaches the body to the request the upstream sees (no body loss after pre-parse)", async () => {
-    const { binding } = allowAll();
-    const env = makeEnv(binding);
+    const { ns } = allowAll();
+    const env = makeEnv(ns);
     let receivedBody = "";
     const realFetch = globalThis.fetch;
     globalThis.fetch = vi.fn(async (input: Request | string | URL, init?: RequestInit) => {
@@ -425,8 +458,8 @@ describe("rateLimit — wired into route()", () => {
   });
 
   it("rate-limits the recovery endpoint (GET, pre-auth path with usernameHash axis)", async () => {
-    const { binding, calls } = makeBinding((key) => !key.startsWith("recovery-by-username|usernameHash|900|"));
-    const env = makeEnv(binding);
+    const { ns, calls } = makeCounters((key) => !key.startsWith("recovery-by-username|usernameHash|"));
+    const env = makeEnv(ns);
     const r = await route(
       new Request("https://flagshipserver.com/api/recovery/by-username/abc", {
         headers: { "cf-connecting-ip": "1.2.3.4" },
@@ -437,63 +470,41 @@ describe("rateLimit — wired into route()", () => {
     const body = JSON.parse(await r.text());
     expect(body.endpoint).toBe("recovery-by-username");
     expect(body.limit).toBe("usernameHash");
-    expect(calls.some((k) => k === "recovery-by-username|ip|3600|1.2.3.4")).toBe(true);
-    expect(calls.some((k) => k === "recovery-by-username|usernameHash|900|abc")).toBe(true);
+    expect(calls.some((k) => k === "recovery-by-username|ip|1.2.3.4")).toBe(true);
+    expect(calls.some((k) => k === "recovery-by-username|usernameHash|abc")).toBe(true);
   });
 
-  describe("checkQrPipeUpgrade (P2)", () => {
-    it("no-ops when RATE_LIMITER_QR_PIPE isn't bound (dev / tests)", async () => {
-      const r = await checkQrPipeUpgrade({}, "1.2.3.4");
-      expect(r.limited).toBe(false);
-    });
-
+  describe("checkPipeUpgrade (P2)", () => {
     it("no-ops when client IP is null (CF didn't tell us)", async () => {
-      const { binding } = allowAll();
-      const r = await checkQrPipeUpgrade({ RATE_LIMITER_QR_PIPE: binding }, null);
+      const { ns, calls } = allowAll();
+      const r = await checkPipeUpgrade({ RATE_LIMITS: ns }, "qr-pipe-upgrade", null);
       expect(r.limited).toBe(false);
+      expect(calls).toEqual([]);
     });
 
-    it("keys on `qr-pipe-upgrade|ip|<ip>` so it doesn't collide with control-plane keys", async () => {
-      const { binding, calls } = allowAll();
-      await checkQrPipeUpgrade({ RATE_LIMITER_QR_PIPE: binding }, "1.2.3.4");
-      expect(calls).toEqual(["qr-pipe-upgrade|ip|1.2.3.4"]);
+    it("keys each pipe apart from the other and from control-plane keys", async () => {
+      const { ns, calls } = allowAll();
+      await checkPipeUpgrade({ RATE_LIMITS: ns }, "qr-pipe-upgrade", "1.2.3.4");
+      await checkPipeUpgrade({ RATE_LIMITS: ns }, "builder-pipe-upgrade", "1.2.3.4");
+      expect(calls).toEqual(["qr-pipe-upgrade|ip|1.2.3.4", "builder-pipe-upgrade|ip|1.2.3.4"]);
     });
 
-    it("returns a 429-shaped result when the binding rejects", async () => {
-      const { binding } = failAfter(0); // first call already fails
-      const r = await checkQrPipeUpgrade({ RATE_LIMITER_QR_PIPE: binding }, "1.2.3.4");
-      expect(r.limited).toBe(true);
-      if (r.limited) {
-        expect(r.endpoint).toBe("qr-pipe-upgrade");
-        expect(r.axis).toBe("ip");
-        expect(r.retryAfterSec).toBeGreaterThan(0);
+    it("allows 30 upgrades a minute per IP, then a 429-shaped result", async () => {
+      const { ns } = memoryRateLimits();
+      const env: RateLimitEnv = { RATE_LIMITS: ns };
+      for (let i = 0; i < 30; i++) {
+        expect((await checkPipeUpgrade(env, "qr-pipe-upgrade", "1.2.3.4")).limited).toBe(false);
       }
-    });
-
-    it("rateLimitedResponse renders the qr-pipe-upgrade result correctly", async () => {
-      const { binding } = failAfter(0);
-      const r = await checkQrPipeUpgrade({ RATE_LIMITER_QR_PIPE: binding }, "1.2.3.4");
+      const r = await checkPipeUpgrade(env, "qr-pipe-upgrade", "1.2.3.4");
       expect(r.limited).toBe(true);
       if (!r.limited) throw new Error("expected limited result");
+      expect(r.endpoint).toBe("qr-pipe-upgrade");
+      expect(r.axis).toBe("ip");
       const res = rateLimitedResponse(r);
       expect(res.status).toBe(429);
-      const body = JSON.parse(await res.text());
-      expect(body.endpoint).toBe("qr-pipe-upgrade");
-      expect(body.limit).toBe("ip");
+      expect(JSON.parse(await res.text())).toEqual({ error: "rate-limited", endpoint: "qr-pipe-upgrade", limit: "ip" });
       expect(res.headers.get("retry-after")).toBeTruthy();
-    });
-
-    it("two distinct IPs occupy independent buckets", async () => {
-      // failAfter is per-key; if the limiter conflated IPs the second
-      // call would inherit the first's count and trip.
-      const { binding } = failAfter(0);
-      const a = await checkQrPipeUpgrade({ RATE_LIMITER_QR_PIPE: binding }, "1.1.1.1");
-      const b = await checkQrPipeUpgrade({ RATE_LIMITER_QR_PIPE: binding }, "2.2.2.2");
-      // Both trip independently (first call already fails), but the
-      // keys must differ — failAfter only fails after threshold for
-      // that specific key.
-      expect(a.limited).toBe(true);
-      expect(b.limited).toBe(true);
+      expect((await checkPipeUpgrade(env, "qr-pipe-upgrade", "2.2.2.2")).limited).toBe(false);
     });
   });
 
@@ -526,6 +537,29 @@ describe("rateLimit — wired into route()", () => {
       { axis: "ip", limit: 10, windowSec: 60 },
       { axis: "irk", limit: 20, windowSec: 3600 },
     ]);
+  });
+});
+
+describe("TOTP verify budget", () => {
+  it("routes POST /api/users/:u/totp/verify to its own endpoint, keyed by target", () => {
+    expect(endpointFor("POST", "/api/users/alice/totp/verify")).toBe("totp-verify");
+    expect(extractUsernameHash("/api/users/alice/totp/verify")).toBe("alice");
+  });
+
+  it("allows 5 attempts per account in 15 minutes from any number of addresses", async () => {
+    const { ns } = memoryRateLimits();
+    const env: RateLimitEnv = { RATE_LIMITS: ns };
+    const verify = (ip: string) => checkRateLimit(env, { endpoint: "totp-verify", ip, usernameHash: "alice" });
+    for (let i = 0; i < 5; i++) expect((await verify(`10.9.0.${i}`)).limited).toBe(false);
+    expect((await verify("10.9.0.99")).limited).toBe(true);
+  });
+});
+
+describe("username keys", () => {
+  it("count one account however the path spells it", () => {
+    expect(extractUsernameHash("/api/users/Alice/re-pair")).toBe("alice");
+    expect(extractUsernameHash("/api/users/%41lice/totp/verify")).toBe("alice");
+    expect(extractUsernameHash("/api/users/%E0%A4%A/re-pair")).toBe("%e0%a4%a");
   });
 });
 

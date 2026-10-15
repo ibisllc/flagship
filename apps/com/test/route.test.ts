@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { route, _internal, type RouteEnv } from "../src/route.js";
+import { memoryRateLimits } from "./rateLimitFakes.js";
 import { handleCaLeaseStatus } from "@flagship/control-plane";
 
 interface CapturedFetch {
@@ -1367,26 +1368,18 @@ describe("qr-pipe relay routes (v2 protocol)", () => {
 
   describe("rate-limit (P2)", () => {
     function makeQrPipeRateBinding(allow: boolean) {
-      const calls: string[] = [];
-      return {
-        binding: {
-          async limit({ key }: { key: string }) {
-            calls.push(key);
-            return { success: allow };
-          },
-        },
-        calls,
-      };
+      const { ns, calls } = memoryRateLimits({ policy: () => allow });
+      return { binding: ns, calls };
     }
 
-    it("returns 429 when RATE_LIMITER_QR_PIPE rejects, never reaches the DO", async () => {
+    it("returns 429 when the upgrade cap refuses, never reaches the DO", async () => {
       const BUILD_RELAY = makeRelayStub();
       const { binding, calls } = makeQrPipeRateBinding(false);
       const r = await route(
         new Request("https://flagshipserver.com/qr-pipe/abc123XYZ_def456-?role=browser", {
           headers: { upgrade: "websocket", "cf-connecting-ip": "9.9.9.9" },
         }),
-        makeEnv({ BUILD_RELAY, RATE_LIMITER_QR_PIPE: binding }),
+        makeEnv({ BUILD_RELAY, RATE_LIMITS: binding }),
       );
       expect(r.status).toBe(429);
       const body = JSON.parse(await r.text());
@@ -1405,7 +1398,7 @@ describe("qr-pipe relay routes (v2 protocol)", () => {
         new Request("https://flagshipserver.com/qr-pipe/abc123XYZ_def456-?role=phone", {
           headers: { upgrade: "websocket", "cf-connecting-ip": "9.9.9.9" },
         }),
-        makeEnv({ BUILD_RELAY, RATE_LIMITER_QR_PIPE: binding }),
+        makeEnv({ BUILD_RELAY, RATE_LIMITS: binding }),
       );
       expect(r.status).toBe(200);
       expect(BUILD_RELAY._upgraded).toHaveLength(1);
@@ -1417,7 +1410,7 @@ describe("qr-pipe relay routes (v2 protocol)", () => {
         new Request("https://flagshipserver.com/qr-pipe/abc123XYZ_def456-?role=browser", {
           headers: { upgrade: "websocket", "cf-connecting-ip": "9.9.9.9" },
         }),
-        makeEnv({ BUILD_RELAY /* RATE_LIMITER_QR_PIPE deliberately omitted */ }),
+        makeEnv({ BUILD_RELAY /* RATE_LIMITS deliberately omitted */ }),
       );
       expect(r.status).toBe(200);
       expect(BUILD_RELAY._upgraded).toHaveLength(1);
@@ -1430,7 +1423,7 @@ describe("qr-pipe relay routes (v2 protocol)", () => {
         new Request("https://flagshipserver.com/qr-pipe/short?role=browser", {
           headers: { upgrade: "websocket", "cf-connecting-ip": "9.9.9.9" },
         }),
-        makeEnv({ BUILD_RELAY, RATE_LIMITER_QR_PIPE: binding }),
+        makeEnv({ BUILD_RELAY, RATE_LIMITS: binding }),
       );
       expect(r.status).toBe(400);
       // The limiter should NOT have been hit — sid validation is a
@@ -1494,20 +1487,14 @@ describe("qr-pipe relay routes (v2 protocol)", () => {
     it("a rate-limited upgrade records rate_limited_count, not upgrade_count", async () => {
       const BUILD_RELAY = makeRelayStub();
       const { db, runs } = makeDbSpy();
-      const { binding } = (() => {
-        return {
-          binding: {
-            async limit() { return { success: false }; },
-          },
-        };
-      })();
+      const { ns: binding } = memoryRateLimits({ policy: () => false });
       const r = await route(
         new Request("https://flagshipserver.com/qr-pipe/abc123XYZ_def456-?role=browser", {
           headers: { upgrade: "websocket", "cf-connecting-ip": "9.9.9.9" },
         }),
         makeEnv({
           BUILD_RELAY,
-          RATE_LIMITER_QR_PIPE: binding,
+          RATE_LIMITS: binding,
           DB: db as unknown as import("@flagship/storage").D1Database,
         }),
       );

@@ -558,6 +558,13 @@ allowances (1M / 5M / 20M a month) are placeholders.
 
 - **`.com` Worker:** current with `main` as of 2026-10-13 (webapp shell **v60**; `main` is at v71).
   Always `npx tsc -b` first and apply pending D1 migrations before deploying.
+- **Rate limits count in Durable Objects (2026-10-15):** every budget in
+  `apps/com/src/rateLimit.ts` is applied as written (any window, counted once
+  worldwide) by `RateLimitCounter` objects, one per endpoint, axis and id;
+  the `ratelimit` bindings are gone. New `totp-verify` cap (5 per 15 min per
+  account); username keys are case-folded; recovery, re-pair and TOTP refuse
+  if the counter is unreachable. The gym runs with `RATE_LIMIT_SCALE` 10 and
+  local e2e with 100. Needs a `.com` deploy (DO migration `v4`) and the gym's.
 - **App "Back up now" (2026-10-15):** the box never mounted `/api/backups/<id>`,
   so every client's archive fetch 404'd; now mounted (owner sessions only).
   The webapp fetches it with the session and saves the Blob, like iOS/Android.

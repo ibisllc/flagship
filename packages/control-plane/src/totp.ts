@@ -122,12 +122,11 @@ const VERIFY_WINDOW_MS = 15 * 60_000;
 
 /**
  * Module-scoped rolling-window rate-limiter for /totp/verify + the
- * re-pair TOTP gate. In production .com terms the Worker's
- * RATE_LIMITER binding is the right home, but it's keyed by IP +
- * IRK, not username. For verify, the username is the right axis
- * (you don't want to leak that a different IP is also trying), so
- * we keep a per-username counter here. The Map is bounded by the
- * sweep on every check; entries past the 15 min window are dropped.
+ * re-pair TOTP gate, keyed per username. It lives in one isolate's
+ * memory, so on .com it drives the failed-rate alert while the hard
+ * cap across machines is the Worker's `totp-verify` budget
+ * (apps/com/src/rateLimit.ts). The Map is bounded by the sweep on
+ * every check; entries past the 15 min window are dropped.
  */
 interface VerifyAttempts {
   windowStart: number;
