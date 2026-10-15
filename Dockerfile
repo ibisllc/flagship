@@ -29,8 +29,10 @@ COPY apps/web/src apps/web/src/
 COPY apps/web/public apps/web/public/
 COPY apps/com/package.json apps/com/
 COPY tools tools/
-# A root workspace and tsc -b reference; without it `tsc -b` stops at TS5083.
+# A root workspace and tsc -b reference (its tsconfig also compiles the shim's
+# src); without them `tsc -b` stops at TS5083 / missing inputs.
 COPY infra/inference/build-eval infra/inference/build-eval/
+COPY infra/inference/shim/src infra/inference/shim/src/
 
 # Install ALL deps (incl. dev) so tsc + types are available for the
 # `tsc -b` step. devDependencies are pruned out below before the runtime
