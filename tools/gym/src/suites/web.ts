@@ -1446,13 +1446,12 @@ const TOTAL: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-inference-reply-choice",
-    "The model choice is per message: after the AI asks a question the owner switches to Medium and turns on Think harder (iOS model-menu-think-harder); the reply carries model 'medium' + effort 'high' and a fresh pass, and each reply shows its own credits line.",
+    "The model choice is per message: after the AI asks a question the owner switches to Medium (Flagship Inference lists no effort levels, so no effort picker shows); the reply carries model 'medium', effort null and a fresh pass, and each reply shows its own credits line.",
     "gym inference each reply carries the model choice made for it",
     {
       steps: [
         { kind: "launch", describe: "Start a Flagship Inference build that pauses on a talkToUser question." },
         { kind: "tap", describe: "Switch to Medium 1×.", handle: '#vc-model-bar [data-mm-model="medium"]' },
-        { kind: "tap", describe: "Think harder.", handle: "#vc-model-bar [data-mm-think]" },
         { kind: "type", describe: "Answer.", handle: "#vc-prompt" },
         { kind: "tap", describe: "Send.", handle: "#vc-send" },
       ],
@@ -1461,7 +1460,7 @@ const TOTAL: readonly Scenario[] = [
         { describe: "Medium on the trigger", handle: "#vc-model-bar .mm-trigger-text", expect: "text", text: "Medium 1×" },
         { describe: "Ready after the reply", handle: "#vc-status", expect: "text", text: "Ready to deploy" },
       ],
-      screenshots: [shot("reply-think-harder", "Medium + Think harder before replying."), shot("reply-sent", "After the reply, with credits per message.")],
+      screenshots: [shot("reply-switch-model", "Medium picked before replying."), shot("reply-sent", "After the reply, with credits per message.")],
       dimension: "D2",
     },
   ),
@@ -1502,6 +1501,39 @@ const TOTAL: readonly Scenario[] = [
         { describe: "Switched to the multimodal model", handle: "#vc-model-bar .mm-trigger-text", expect: "text", text: "Medium multimodal 2×" },
       ],
       screenshots: [shot("attachments-staged", "Staged chips + refusals + notice."), shot("vision-switch", "The switch-model offer for an image.")],
+      dimension: "D2",
+    },
+  ),
+  webTotal(
+    "web-total-inference-notification-chat",
+    "An AI-needs-you notification (?view=vibecode-chat&sessionId=…&server=…) opens the build chat on the server holding the session, not the current one: the env-var card asks for the value, /env/set goes to that box signed with its serverId, and the ack carries a fresh Flagship Inference pass minted for that box plus the session's model on the menu (iOS VibeCodeSessionScreen, Android vibecode chat).",
+    "gym inference a notification opens the build chat on the session's server",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Home on Home; pair Office too, whose gym-sess-9 runs on Flagship Inference." },
+        { kind: "assert", describe: "The link opens the build chat at the env-var request.", handle: "#vc-envvar" },
+        { kind: "type", describe: "Paste the value.", handle: "#vc-envvar-value" },
+        { kind: "tap", describe: "Send value.", handle: "#vc-envvar-send" },
+      ],
+      assertions: [
+        { describe: "AI waiting", handle: "#vc-status", expect: "text", text: "The AI has a question" },
+        { describe: "The session's model on the menu", handle: "#vc-model-bar .mm-trigger-text", expect: "text", text: "Medium 1×" },
+      ],
+      screenshots: [shot("notification-chat", "The build chat opened from a notification.")],
+      dimension: "D2",
+    },
+  ),
+  webTotal(
+    "web-total-inference-notification-find-server",
+    "A chat link with only a session id asks the current server first, then the account's other servers, and opens the chat on the one that holds the session.",
+    "gym inference a link without a server finds the one holding the session",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Home on Home; pair Office, which holds gym-sess-9." },
+        { kind: "assert", describe: "The chat opens on Office at the env-var request.", handle: "#vc-envvar" },
+      ],
+      assertions: [{ describe: "Env-var card", handle: "#vc-envvar", expect: "text", text: "WEATHER_API_KEY" }],
+      screenshots: [shot("notification-chat-found", "The chat found on the other server.")],
       dimension: "D2",
     },
   ),

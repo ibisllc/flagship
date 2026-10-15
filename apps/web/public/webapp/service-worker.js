@@ -205,7 +205,10 @@
 //      and its model menu lists Flagship Inference and every saved key with
 //      their models (switching provider sends that key); precaches
 //      lib/modelGroups.js.
-const SHELL_VERSION = "v93";
+//  v94: an AI-needs-you notification opens the build chat on the server
+//      holding the session (the bare vibecode-chat view is gone); its
+//      env-var ack carries the key and the model choice.
+const SHELL_VERSION = "v94";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -364,7 +367,6 @@ const OPTIONAL_SHELL = [
   "/views/app-db.js",
   "/views/paired-sessions.js",
   "/views/vibe-code.js",
-  "/views/vibecode-chat.js",
   "/views/edit-service.js",
   "/views/service-env.js",
   "/views/recovery.js",
@@ -581,9 +583,10 @@ self.addEventListener("push", (event) => {
     const body = which === "requestEnvVar"
       ? "The AI needs an environment variable to continue."
       : "The AI is asking you a question.";
+    const server = typeof data.server === "string" && data.server ? `&server=${encodeURIComponent(data.server)}` : "";
     const deepLink = typeof data.deepLink === "string"
       ? data.deepLink
-      : `/?view=vibecode-chat&sessionId=${encodeURIComponent(data.sessionId)}`;
+      : `/?view=vibecode-chat&sessionId=${encodeURIComponent(data.sessionId)}${server}`;
     event.waitUntil(
       self.registration.showNotification("Flagship", {
         body,

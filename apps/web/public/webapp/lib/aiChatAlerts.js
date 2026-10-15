@@ -12,7 +12,7 @@
 //   1. GET /api/phone/alerts?since=<cursor> on a foreground interval.
 //   2. For each `ai-chat-needs-you` envelope:
 //        - upsert a build op into the operations sliver (deep-links to the
-//          chat at that session), and
+//          chat at that session, on the server the alert came from), and
 //        - raise a LOCAL notification (once per session+tool) so the owner
 //          sees it even when not looking at the sliver.
 //   3. Advance the cursor and ACK the drained range so the queue doesn't
@@ -44,6 +44,16 @@ export function aiChatAlertBody(alert) {
 }
 
 /**
+ * The webapp link that opens the build chat at an alert's session, naming the
+ * server it came from so the chat signs and sends to that box.
+ * @param {{sessionId:string, server?:string}} n
+ */
+export function aiChatDeepLink(n) {
+  const server = n && n.server ? `&server=${encodeURIComponent(n.server)}` : "";
+  return `/?view=vibecode-chat&sessionId=${encodeURIComponent(n.sessionId)}${server}`;
+}
+
+/**
  * Upsert the paused session into the operations sliver. The sliver reads the
  * ActiveOperationsCenter, so this is what makes "the AI build is waiting on
  * you" ride along across navigation with a tap that opens the chat. The op
@@ -57,7 +67,7 @@ export function surfaceAiChatOperation(alert, deps = {}) {
   const sessionId = alert.serviceId;
   ops.upsertBuild(sessionId, "AI build", null, {
     view: "view-vibecode-chat",
-    params: { sessionId },
+    params: alert.server ? { sessionId, server: alert.server } : { sessionId },
   });
 }
 
@@ -70,6 +80,7 @@ export function surfaceAiChatOperation(alert, deps = {}) {
  *
  * @param {object} args
  * @param {number} args.since                 the last-seen alert id (cursor)
+ * @param {string} [args.server]               the box the fetcher reaches (tags each alert)
  * @param {(alert:object)=>void} [args.notify] raise a local notification
  * @param {object} [args.operations]          the ActiveOperationsCenter
  * @param {(path:string, init?:object)=>Promise<any>} [args.fetcher] screensFetch shim
@@ -91,9 +102,10 @@ export async function drainAiChatAlertsOnce(args) {
     const alert = env && env.alert;
     if (!alert || alert.kind !== AI_CHAT_ALERT_KIND) continue;
     if (typeof alert.serviceId !== "string" || alert.serviceId.length === 0) continue;
-    surfaceAiChatOperation(alert, { operations: args.operations });
+    const tagged = args.server ? { ...alert, server: args.server } : alert;
+    surfaceAiChatOperation(tagged, { operations: args.operations });
     try {
-      notify(alert);
+      notify(tagged);
     } catch {
       /* a bad notifier must not wedge the drain */
     }
@@ -141,6 +153,7 @@ export function makeAiChatNotifier(deps) {
       body: aiChatAlertBody(alert),
       tag,
       sessionId,
+      ...(alert.server ? { server: alert.server } : {}),
     });
   };
 }
@@ -157,6 +170,7 @@ export function makeAiChatNotifier(deps) {
  * @param {(alert:object)=>void} [deps.notify]
  * @param {object} [deps.operations]
  * @param {(path:string, init?:object)=>Promise<any>} [deps.fetcher]
+ * @param {() => string} [deps.server]  the box the fetcher reaches right now
  * @param {number} [deps.intervalMs]
  * @param {() => boolean} [deps.active]  gate — only drain while this returns true
  * @param {Function} [deps.setTimeout]
@@ -181,6 +195,7 @@ export function startAiChatAlertPoll(deps = {}) {
           notify: deps.notify,
           operations: deps.operations,
           fetcher: deps.fetcher,
+          server: typeof deps.server === "function" ? deps.server() : undefined,
         });
         cursor = r.cursor;
       } catch {

@@ -66,6 +66,31 @@ describe("router parseViewQuery — vibecode-chat deep-link (M9)", () => {
   });
 });
 
+describe("router parseViewQuery — the server holding the session", () => {
+  it("carries server alongside a sessionId", async () => {
+    stubWindow("?view=vibecode-chat&sessionId=s1&server=office.alice.flagship.services");
+    const { parseViewQuery } = await loadRouter();
+    expect(parseViewQuery().server).toBe("office.alice.flagship.services");
+  });
+
+  it("ignores server on links without a session", async () => {
+    stubWindow("?view=home&server=office.alice.flagship.services");
+    const { parseViewQuery } = await loadRouter();
+    expect(parseViewQuery().server).toBeNull();
+  });
+
+  it("clearViewQuery strips server only with the session it names", async () => {
+    let replaced = stubWindow("?view=vibecode-chat&sessionId=s1&server=office.alice.flagship.services");
+    let { clearViewQuery } = await loadRouter();
+    clearViewQuery();
+    expect(new URL(replaced[0]!).searchParams.has("server")).toBe(false);
+    replaced = stubWindow("?view=home&server=keep.example");
+    ({ clearViewQuery } = await loadRouter());
+    clearViewQuery();
+    expect(new URL(replaced[0]!).searchParams.get("server")).toBe("keep.example");
+  });
+});
+
 describe("router clearViewQuery — strips sessionId (M9)", () => {
   it("removes sessionId so a cold-start vibecode link can't re-fire", async () => {
     const replaced = stubWindow("?view=vibecode-chat&sessionId=sess-abc-42&keep=1");
@@ -86,9 +111,10 @@ describe("deepLink dispatch — opens the vibecode chat (M9)", () => {
     "utf8",
   );
 
-  it("dispatches view-vibecode-chat to enterVibeCodeChat with the session id", () => {
+  it("dispatches view-vibecode-chat to the build chat with the session id and its server", () => {
     expect(SRC).toContain('view-vibecode-chat');
-    expect(SRC).toMatch(/enterVibeCodeChat\(q\.sessionId\)/);
-    expect(SRC).toContain("../views/vibecode-chat.js");
+    expect(SRC).toMatch(/openVibeCodeSessionById\(q\.sessionId, \{ server: q\.server \|\| "" \}\)/);
+    expect(SRC).toContain("../views/vibe-code.js");
+    expect(SRC).not.toContain("vibecode-chat.js");
   });
 });

@@ -124,12 +124,13 @@ export async function dispatchInitialView() {
     }
     if (q.view === "view-vibecode-chat" || q.view === "view-vibe-code-chat") {
       // W10 — a `vibecode-needs-you` push (the AI paused on a tool_use) cold-
-      // starts the app at this session's chat so the owner can answer it.
-      // iOS consumes the same deep-link via `.vibeCodeChat(sessionId:)`. With
-      // no session id there's nothing to open — fall through to Home.
+      // starts the app at this session's build chat so the owner can answer
+      // it, on the server the link names (else the one that holds it). iOS
+      // consumes the same deep-link via `.vibeCodeChat(sessionId:)`. With no
+      // session id there's nothing to open — fall through to Home.
       if (q.sessionId) {
-        const { enterVibeCodeChat } = await import("../views/vibecode-chat.js");
-        return enterVibeCodeChat(q.sessionId);
+        const { openVibeCodeSessionById } = await import("../views/vibe-code.js");
+        return openVibeCodeSessionById(q.sessionId, { server: q.server || "" });
       }
     }
     if (q.view === "view-boot-approval") {

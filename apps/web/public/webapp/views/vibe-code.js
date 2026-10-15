@@ -37,8 +37,9 @@
 // next message. A chat starts on the default model saved in Settings.
 
 import { $, registerView, show } from "../lib/router.js";
-import { ScreensError, boxClient } from "../lib/api.js";
-import { creationTarget, mountCreationPicker } from "../lib/appPlacement.js";
+import { ScreensError, boxClient, currentPodFqdn } from "../lib/api.js";
+import { creationTarget, loadAccountPods, mountCreationPicker, sessionServers } from "../lib/appPlacement.js";
+import { findSessionServer } from "../lib/vibeSessions.js";
 import { activeOperations } from "../lib/activeOperations.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
@@ -1007,14 +1008,22 @@ async function sendEnvVar() {
 async function answerEnvVar(status) {
   if (!activeSessionId) return;
   try {
+    // The ack resumes the AI, so it carries what any message does: the key
+    // for the chosen model (a fresh Flagship pass; an own key when it changes
+    // or the box has none) and the model choice. A chat opened from a
+    // notification holds no key itself: the menu follows the box's provider.
     const body = { envVarStatus: status };
-    // A free AI pass is swapped for a fresh one on every reply.
-    buildCredential = await freshCredential(buildCredential, client().fqdn);
-    if (buildCredential) body.credential = buildCredential;
+    const credential = await messageCredential();
+    if (credential) {
+      body.credential = credential;
+      buildCredential = credential;
+    }
+    Object.assign(body, wireChoice(currentMenu(), modelChoice, { reply: true }));
     await boxFetch(`/api/screens/llm/sessions/${encodeURIComponent(activeSessionId)}/reply`, {
       method: "POST",
       body: JSON.stringify(body),
     });
+    if (credential) boxGroupId = modelChoice.group;
     pendingEnvVar = null;
     toast(status === "set" ? "Sent" : "Declined", "ok");
     schedulePoll();
@@ -1255,4 +1264,30 @@ export async function openVibeCodeSession(sessionId, { back = null, credential =
   const sendBtn = $("vc-send");
   if (sendBtn) sendBtn.textContent = "Send";
   await poll().catch(() => {});
+}
+
+export const SESSION_NOT_FOUND = "That build isn't open on any of your servers any more.";
+
+/**
+ * Open a session named only by its id (an AI-needs-you notification, the
+ * operations sliver): on `server` when that box holds it, else the current
+ * server, else whichever of this device's servers does. Every call, and the
+ * serverId an env value is signed for, then names that box.
+ */
+export async function openVibeCodeSessionById(sessionId, { server = "" } = {}) {
+  const fqdn = await findSessionServer(sessionId, {
+    first: [server, currentPodFqdn()],
+    more: async () => sessionServers(await loadAccountPods(getSession()?.username ?? "")).map((s) => s.fqdn),
+    probe: async (candidate) => {
+      const c = boxClient(candidate);
+      if (!c.hasSession()) return false;
+      await c.fetch(`/api/screens/llm/sessions/${encodeURIComponent(sessionId)}`);
+      return true;
+    },
+  });
+  if (!fqdn) {
+    toast(SESSION_NOT_FOUND, "err");
+    return enterBuildJournal();
+  }
+  return openVibeCodeSession(sessionId, { server: fqdn });
 }

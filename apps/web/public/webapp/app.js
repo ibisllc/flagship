@@ -25,10 +25,11 @@ import {
   setOperationsBarUnlockedResolver,
 } from "./lib/operationsBar.js";
 import {
+  aiChatDeepLink,
   startAiChatAlertPoll,
   makeAiChatNotifier,
 } from "./lib/aiChatAlerts.js";
-import { getPodBaseUrl } from "./lib/api.js";
+import { currentPodFqdn, getPodBaseUrl } from "./lib/api.js";
 import { installComFetchGuard } from "./lib/comFetch.js";
 import { applyCompanionUiRestrictions, installCompanionUiRestrictions } from "./lib/companionGuard.js";
 import { applyDemoSettingsRestrictions, isDemoProfile } from "./lib/demoAccount.js";
@@ -103,9 +104,8 @@ import {
   enterCompanionRequests,
   refreshBadgeOnce as refreshCompanionRequestsBadge,
 } from "./views/companion-requests.js";
-import { initVibeCodeView, enterVibeCode } from "./views/vibe-code.js";
+import { initVibeCodeView, enterVibeCode, openVibeCodeSessionById } from "./views/vibe-code.js";
 import { initServiceEnvView, enterServiceEnv } from "./views/service-env.js";
-import { initVibeCodeChatView, enterVibeCodeChat } from "./views/vibecode-chat.js";
 import { initBuildSourceView, enterBuildSource } from "./views/build-source.js";
 import { initBuildKeyView } from "./views/build-key.js";
 import { initBuildGitView } from "./views/build-git.js";
@@ -163,7 +163,6 @@ const SUB_VIEW_TABS = {
   "view-app-access": "apps",
   "view-app-db": "apps",
   "view-vibe-code": "apps",
-  "view-vibecode-chat": "apps",
   "view-build-source": "apps",
   "view-build-key": "apps",
   "view-build-git": "apps",
@@ -394,11 +393,11 @@ function getPodBaseUrlSafe() {
 /**
  * #91 — raise a LOCAL notification for a paused AI build. Prefers the service
  * worker's `showNotification` so a tap routes through the SW's
- * `notificationclick` (DEEP_LINK → vibecode-chat); falls back to an inline
+ * `notificationclick` (DEEP_LINK → the build chat); falls back to an inline
  * `Notification` whose onclick opens the chat directly. Fully best-effort:
  * no permission / no support is a silent no-op (the operations sliver already
  * carries the signal). Never the pass/fail path — it's a courtesy wake.
- * @param {{title:string, body:string, tag:string, sessionId:string}} n
+ * @param {{title:string, body:string, tag:string, sessionId:string, server?:string}} n
  */
 function showAiChatNotification(n) {
   try {
@@ -408,7 +407,7 @@ function showAiChatNotification(n) {
     const data = {
       kind: "ai-chat-needs-you",
       sessionId: n.sessionId,
-      deepLink: `/?view=vibecode-chat&sessionId=${encodeURIComponent(n.sessionId)}`,
+      deepLink: aiChatDeepLink(n),
     };
     if ("serviceWorker" in navigator && navigator.serviceWorker.ready) {
       navigator.serviceWorker.ready
@@ -427,7 +426,7 @@ function showAiChatNotification(n) {
       try {
         window.focus();
       } catch { /* ignore */ }
-      void enterVibeCodeChat(n.sessionId);
+      void openVibeCodeSessionById(n.sessionId, { server: n.server || "" });
       notif.close();
     };
   } catch {
@@ -555,7 +554,6 @@ async function boot() {
   initBuildJournalView();
   initEditServiceView();
   initServiceEnvView();
-  initVibeCodeChatView();
   initRecoveryView();
   initAccountDeleteView();
   // post-recovery is owned by another worker; init it best-effort so
@@ -643,6 +641,8 @@ async function boot() {
   startAiChatAlertPoll({
     active: () => sliversUnlocked() && !!getPodBaseUrlSafe(),
     notify: makeAiChatNotifier({ show: showAiChatNotification }),
+    // The alerts come from the current server: the chat opens there.
+    server: () => currentPodFqdn(),
   });
 
   // "<App> wants to reach <host>" (docs/ai-privacy-and-staging.md §3a): fetch
