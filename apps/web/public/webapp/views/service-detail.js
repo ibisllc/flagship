@@ -223,6 +223,7 @@ export async function renderServiceDetail(serviceId) {
           <span class="note">Open to all or members only, and each member's rank</span>
         </span>
       </button>
+      ${renderRecentLogs(body.recentLogs)}
       <h2 class="mt-4">Backup</h2>
       <div class="card">
         <p class="note">
@@ -778,6 +779,18 @@ async function revokeFromPage(btn) {
 }
 
 /** Shown only when the box says the service can be edited here. */
+/** The box's recent log lines for the app (app-detail `recentLogs`), shown
+ *  only when it sends some, as on iOS and Android. */
+export function renderRecentLogs(lines) {
+  const list = (Array.isArray(lines) ? lines : []).filter((l) => typeof l === "string");
+  if (list.length === 0) return "";
+  return `
+      <h2 class="mt-4">Recent logs</h2>
+      <div class="card" id="sd-recent-logs">
+        <pre class="json-block mono">${list.map((l) => escapeHtml(l)).join("\n")}</pre>
+      </div>`;
+}
+
 function renderEditRow() {
   return `
       <button class="card full-width edit-row" id="sd-edit">
