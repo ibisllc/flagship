@@ -275,7 +275,8 @@ export function sessionTokenForPod(podFqdn) {
  */
 export function boxClient(podFqdn = "") {
   const fqdn = String(podFqdn ?? "").trim().toLowerCase() || currentPodFqdn();
-  const baseUrl = fqdn ? `https://${fqdn}` : getPodBaseUrl();
+  // The current pod keeps its own base URL: one paired by address may carry a port.
+  const baseUrl = fqdn && fqdn !== currentPodFqdn() ? `https://${fqdn}` : getPodBaseUrl();
   const token = () => (fqdn ? sessionTokenForPod(fqdn) : getSessionToken());
   return {
     fqdn,

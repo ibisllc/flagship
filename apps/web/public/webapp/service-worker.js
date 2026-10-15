@@ -191,7 +191,10 @@
 //      auto-unlock deposits the box-sealed v2 lease; account alerts open
 //      account security or the device list; every start-up module is
 //      precached.
-const SHELL_VERSION = "v87";
+//  v88: A server order refused because another device saved a newer one
+//      says so instead of blaming the connection; a server paired by
+//      address keeps its port when a screen reaches it by name.
+const SHELL_VERSION = "v88";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
