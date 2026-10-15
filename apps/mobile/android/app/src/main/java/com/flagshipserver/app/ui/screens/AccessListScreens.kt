@@ -58,6 +58,8 @@ import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.ui.theme.FSLayout
+import com.flagshipserver.app.core.AppOrderSigning
+import com.flagshipserver.app.core.LocalAppOrderSigning
 import com.flagshipserver.app.viewmodels.AppAccessOrder
 import com.flagshipserver.app.viewmodels.AppAccessViewModel
 import kotlinx.coroutines.launch
@@ -69,11 +71,16 @@ private fun appVm(
     serviceId: String,
     client: ScreensClient,
     appName: String,
+    signing: AppOrderSigning?,
     fallbackServerDomain: () -> String?,
 ) = AppAccessViewModel(
     serviceId = serviceId,
     client = client,
-    order = AppAccessOrder(client, fallbackServerDomain),
+    order = if (signing != null) {
+        AppAccessOrder(client, { signing.serverDomain }, signing.signer)
+    } else {
+        AppAccessOrder(client, fallbackServerDomain)
+    },
     appName = appName,
 )
 
@@ -91,7 +98,8 @@ fun InternetAccessSection(
     val client = LocalScreensClient.current
     val toasts = LocalToastCenter.current
     val scope = rememberCoroutineScope()
-    val vm = remember(serviceId, client) { appVm(serviceId, client, appName, fallbackServerDomain) }
+    val signing = LocalAppOrderSigning.current
+    val vm = remember(serviceId, client, signing) { appVm(serviceId, client, appName, signing, fallbackServerDomain) }
     LaunchedEffect(vm, summary) { vm.load() }
     // Back from the editor (a reviewed draft saved, a list changed): reload.
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -283,8 +291,9 @@ fun AccessListScreen(nav: NavController, serviceId: String, fromDraft: Boolean =
     }
     // An alert from another box switches the current pod first; rebuild on it.
     val podId by appState.currentPodId.collectAsState()
-    val vm = remember(serviceId, client, podId) {
-        appVm(serviceId, client, appName) { (appState.sessionPod ?: appState.leaderPod)?.fqdn }
+    val signing = LocalAppOrderSigning.current
+    val vm = remember(serviceId, client, podId, signing) {
+        appVm(serviceId, client, appName, signing) { (appState.sessionPod ?: appState.leaderPod)?.fqdn }
     }
     val restricted = appState.isRestrictedDevice()
     val state by vm.state.collectAsState()

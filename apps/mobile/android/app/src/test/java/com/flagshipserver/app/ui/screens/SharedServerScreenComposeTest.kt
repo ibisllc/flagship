@@ -55,6 +55,7 @@ class SharedServerScreenComposeTest {
 
     private var noticesTo: Boolean? = null
     private var updated = 0
+    private var openedApp: String? = null
 
     private fun show(state: SharedServerUi) {
         composeRule.setContent {
@@ -66,6 +67,7 @@ class SharedServerScreenComposeTest {
                     onBack = {}, onApprove = {}, onAnswer = { _, _ -> }, onLeave = {}, onRetry = {},
                     onNotices = { noticesTo = it },
                     onUpdate = { updated++ },
+                    onOpenApp = { openedApp = it },
                 )
             }
         }
@@ -126,9 +128,9 @@ class SharedServerScreenComposeTest {
                 ),
             ),
         )
-        composeRule.onNodeWithTag("shared-members-only-svc-1").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("shared-members-only-svc-1", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText(ShareCopy.MEMBERS_ONLY_HINT).assertIsDisplayed()
-        composeRule.onNodeWithTag("shared-members-only-svc-2").assertDoesNotExist()
+        composeRule.onNodeWithTag("shared-members-only-svc-2", useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test fun manageShowsItsSectionsAndNoOwnerSection() {
@@ -139,6 +141,47 @@ class SharedServerScreenComposeTest {
         composeRule.onNodeWithText("Internet requests").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("shared-leave").performScrollTo().assertIsDisplayed()
         ownerOnly.forEach { composeRule.onNodeWithText(it).assertDoesNotExist() }
+    }
+
+    @Test fun anInstalledAppOpensItsPage_aCopyingOneDoesNot() {
+        show(
+            ui(ServerShare.LEVEL_VIEW, startup = false).copy(
+                apps = listOf(
+                    ServerAppsViewModel.Row("svc-1", "Notes", "notes.home.alice.flagship.services", "Running"),
+                    ServerAppsViewModel.Row("svc-2", "Blog", "", "Copying… 40%", copying = true),
+                ),
+            ),
+        )
+        composeRule.onNodeWithTag("shared-app-row-svc-2").performScrollTo().performClick()
+        assert(openedApp == null)
+        composeRule.onNodeWithTag("shared-app-row-svc-1").performScrollTo().performClick()
+        assert(openedApp == "svc-1")
+    }
+
+    @Test fun anAppPageAtViewShowsTheAppButNotItsAccessOrData() {
+        val detail = kotlinx.coroutines.runBlocking {
+            val mock = com.flagshipserver.app.api.MockScreensClient(simulatedLatencyMs = 0)
+            mock.appDetail(mock.appsList().apps.first().serviceId)
+        }
+        composeRule.setContent {
+            FlagshipTheme {
+                SharedAppContent(
+                    appName = "Notes",
+                    ui = com.flagshipserver.app.viewmodels.SharedAppUi(
+                        phase = com.flagshipserver.app.viewmodels.SharedAppUi.Phase.Ready,
+                        detail = detail,
+                        session = ShareSession("fss_x", Long.MAX_VALUE, ServerShare.LEVEL_VIEW, unlockAtBoot = false, seeAppData = false),
+                    ),
+                    nav = androidx.navigation.compose.rememberNavController(),
+                    onBack = {},
+                    onRetry = null,
+                )
+            }
+        }
+        composeRule.onNodeWithTag("shared-app-card").assertIsDisplayed()
+        composeRule.onNodeWithTag("shared-app-open").assertIsDisplayed()
+        composeRule.onNodeWithText("Internet access").assertDoesNotExist()
+        composeRule.onNodeWithText("Database").assertDoesNotExist()
     }
 
     @Test fun viewHidesManageSections() {

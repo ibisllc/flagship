@@ -315,8 +315,13 @@ fun AppDbQueryScreen(nav: NavController, serviceId: String, store: String) {
     val client = LocalScreensClient.current
     val scope = rememberCoroutineScope()
     val appName = displayName(serviceId)
-    val vm = remember(serviceId, store, client) {
-        AppDbQueryViewModel(serviceId, store, client, appName, fallbackServerDomain = { appState.sessionPod?.fqdn })
+    val signing = com.flagshipserver.app.core.LocalAppOrderSigning.current
+    val vm = remember(serviceId, store, client, signing) {
+        if (signing != null) {
+            AppDbQueryViewModel(serviceId, store, client, appName, fallbackServerDomain = { signing.serverDomain }, signer = signing.signer)
+        } else {
+            AppDbQueryViewModel(serviceId, store, client, appName, fallbackServerDomain = { appState.sessionPod?.fqdn })
+        }
     }
     val phase by vm.phase.collectAsState()
     var sql by rememberSaveable(serviceId, store) { mutableStateOf("") }

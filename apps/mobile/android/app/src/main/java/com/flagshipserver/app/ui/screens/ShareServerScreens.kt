@@ -711,7 +711,7 @@ private fun OfferView(offer: ServerShare.OfferPayload, busy: Boolean, onAccept: 
 // ── The other account: the shared server's page ───────────────────────────
 
 @Composable
-fun SharedServerScreen(shareId: String, onBack: () -> Unit) {
+fun SharedServerScreen(shareId: String, onBack: () -> Unit, onOpenApp: (String) -> Unit = {}) {
     val runtime = LocalServerShares.current ?: return
     val toasts = LocalToastCenter.current
     val scope = rememberCoroutineScope()
@@ -755,6 +755,7 @@ fun SharedServerScreen(shareId: String, onBack: () -> Unit) {
                 if (vm.update()) toasts.success(ShareCopy.updating(entry.serverName.ifBlank { entry.serverDomain.substringBefore('.') }))
             }
         },
+        onOpenApp = onOpenApp,
     )
 }
 
@@ -770,6 +771,7 @@ fun SharedServerContent(
     onRetry: () -> Unit,
     onNotices: (Boolean) -> Unit = {},
     onUpdate: () -> Unit = {},
+    onOpenApp: (String) -> Unit = {},
 ) {
     var confirmLeave by remember { mutableStateOf(false) }
     var confirmUpdate by remember { mutableStateOf(false) }
@@ -827,7 +829,7 @@ fun SharedServerContent(
                     Spacer(Modifier.height(FS.space.s6))
                     Muted("The owner stopped sharing this server.", size = 15)
                 }
-                SharedServerUi.Phase.Ready -> ReadySections(serverDomain, ui, onAnswer, onUpdate = { confirmUpdate = true })
+                SharedServerUi.Phase.Ready -> ReadySections(serverDomain, ui, onAnswer, onUpdate = { confirmUpdate = true }, onOpenApp = onOpenApp)
             }
 
             if (ui.phase != SharedServerUi.Phase.Ended && ui.phase != SharedServerUi.Phase.Left) {
@@ -880,7 +882,13 @@ private fun StartupCard(serverName: String, s: ShareStartup, busy: Boolean, onAp
 }
 
 @Composable
-private fun ReadySections(serverDomain: String, ui: SharedServerUi, onAnswer: (AccessRequest, Boolean) -> Unit, onUpdate: () -> Unit) {
+private fun ReadySections(
+    serverDomain: String,
+    ui: SharedServerUi,
+    onAnswer: (AccessRequest, Boolean) -> Unit,
+    onUpdate: () -> Unit,
+    onOpenApp: (String) -> Unit,
+) {
     Spacer(Modifier.height(FS.space.s6))
     SharedStatusCard(serverDomain, ui.detail)
     Spacer(Modifier.height(FS.space.s6))
@@ -901,6 +909,8 @@ private fun ReadySections(serverDomain: String, ui: SharedServerUi, onAnswer: (A
                     title = row.name,
                     subtitle = row.status,
                     detail = row.address.ifEmpty { null },
+                    onClick = if (row.opens) { { onOpenApp(row.serviceId) } } else null,
+                    modifier = Modifier.testTag("shared-app-row-${row.serviceId}"),
                     below = if (row.membersOnly) {
                         { Muted(ShareCopy.MEMBERS_ONLY_HINT, size = 12, modifier = Modifier.testTag("shared-members-only-${row.serviceId}")) }
                     } else {

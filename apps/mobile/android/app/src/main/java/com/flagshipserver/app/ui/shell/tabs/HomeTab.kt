@@ -394,7 +394,16 @@ fun HomeTab() {
         }
         composable("shared-server/{shareId}") { entry ->
             val shareId = entry.arguments?.getString("shareId") ?: return@composable
-            SharedServerScreen(shareId = shareId, onBack = { nav.popBackStack() })
+            SharedServerScreen(
+                shareId = shareId,
+                onBack = { nav.popBackStack() },
+                onOpenApp = { serviceId -> nav.navigate(com.flagshipserver.app.ui.screens.sharedAppRoute(shareId, serviceId)) },
+            )
+        }
+        composable("shared-app/{shareId}/{serviceId}") { entry ->
+            val shareId = entry.arguments?.getString("shareId") ?: return@composable
+            val serviceId = entry.arguments?.getString("serviceId") ?: return@composable
+            com.flagshipserver.app.ui.screens.SharedAppScreen(shareId = shareId, serviceId = serviceId, onBack = { nav.popBackStack() })
         }
         composable("server-detail/{podId}") { entry ->
             val podId = entry.arguments?.getString("podId") ?: return@composable

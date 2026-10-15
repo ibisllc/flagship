@@ -7,6 +7,7 @@ package com.flagshipserver.app.viewmodels
 import android.content.Context
 import androidx.compose.runtime.staticCompositionLocalOf
 import com.flagshipserver.app.api.AccessRequest
+import com.flagshipserver.app.api.AppDetailResponse
 import com.flagshipserver.app.api.InMemorySessionStore
 import com.flagshipserver.app.api.LiveScreensClient
 import com.flagshipserver.app.api.ScreensClient
@@ -612,6 +613,82 @@ class SharedServerViewModel(
             false
         } finally {
             _ui.update { it.copy(busy = false) }
+        }
+    }
+}
+
+// ── The other account: one app on a shared server ─────────────────────────
+
+data class SharedAppUi(
+    val phase: Phase = Phase.Loading,
+    val detail: AppDetailResponse? = null,
+    /** The share's own screens client, for the app's sections. */
+    val client: ScreensClient? = null,
+    val session: ShareSession? = null,
+    val message: String? = null,
+) {
+    enum class Phase { Loading, Ready, Failed, Waiting, Ended }
+
+    val manage: Boolean get() = session?.level == ServerShare.LEVEL_MANAGE
+    val seeAppData: Boolean get() = session?.seeAppData == true
+}
+
+/** One app's page on a server shared with this account: what it is, its
+ *  internet access at "Can manage", and its data when the owner allowed it.
+ *  Mirror of iOS SharedAppScreen. */
+class SharedAppViewModel(
+    private val runtime: ServerShareRuntime,
+    val entry: SharedEntry,
+    val serviceId: String,
+) {
+    private val client get() = runtime.client
+    private val _ui = MutableStateFlow(SharedAppUi())
+    val ui: StateFlow<SharedAppUi> = _ui.asStateFlow()
+
+    val appName: String get() = serviceId.substringAfter("--").replaceFirstChar { it.uppercase() }
+
+    /** The share's member key signs this app's orders (never the account's admin key). */
+    suspend fun memberSigner(reason: String) = client.memberSigner(entry, reason)
+
+    private suspend fun signedIn(fresh: Boolean): ScreensClient? =
+        when (val r = client.signIn(entry, reuse = !fresh)) {
+            is ShareSignIn.In -> {
+                val s = _ui.value.client.takeIf { _ui.value.session?.token == r.session.token }
+                    ?: runtime.memberScreens(entry.serverDomain, r.session.token)
+                _ui.update { it.copy(session = r.session, client = s) }
+                s
+            }
+            ShareSignIn.Waiting -> {
+                _ui.update { it.copy(phase = SharedAppUi.Phase.Waiting) }
+                null
+            }
+            ShareSignIn.Ended -> {
+                _ui.update { it.copy(phase = SharedAppUi.Phase.Ended) }
+                null
+            }
+        }
+
+    suspend fun load() {
+        try {
+            val s = signedIn(fresh = false) ?: return
+            val detail = try {
+                s.appDetail(serviceId)
+            } catch (e: ScreensError.Http) {
+                if (e.status != 401) throw e
+                client.forgetSession(entry.shareId)
+                (signedIn(fresh = true) ?: return).appDetail(serviceId)
+            }
+            _ui.update { it.copy(phase = SharedAppUi.Phase.Ready, detail = detail, message = null) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: ScreensError.Http) {
+            if (e.status == 403 && e.body.contains("share-ended")) {
+                _ui.update { it.copy(phase = SharedAppUi.Phase.Ended) }
+            } else if (_ui.value.detail == null) {
+                _ui.update { it.copy(phase = SharedAppUi.Phase.Failed, message = e.shareMessage()) }
+            }
+        } catch (t: Throwable) {
+            if (_ui.value.detail == null) _ui.update { it.copy(phase = SharedAppUi.Phase.Failed, message = t.shareMessage()) }
         }
     }
 }
