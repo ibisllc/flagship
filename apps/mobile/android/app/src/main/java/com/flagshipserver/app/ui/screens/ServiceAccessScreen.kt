@@ -111,8 +111,13 @@ fun ServiceAccessScreen(nav: NavController, serviceId: String) {
         if (delim > 0) serviceId.substring(delim + 2).replaceFirstChar { it.uppercase() } else serviceId
     }
 
-    val vm = remember(serviceId, serverDomain) {
-        ServiceAccessViewModel(serverDomain = serverDomain, serviceRef = serviceId, username = username, screens = screens)
+    val live = com.flagshipserver.app.core.LocalDeveloperSettings.current?.useLiveClient?.collectAsState()?.value ?: true
+    val vm = remember(serviceId, serverDomain, live) {
+        ServiceAccessViewModel(
+            serverDomain = serverDomain, serviceRef = serviceId, username = username, screens = screens,
+            client = if (live) com.flagshipserver.app.api.ServiceAccessClient()
+            else com.flagshipserver.app.api.MockServiceAccessClient.shared,
+        )
     }
     ServiceAccessContent(
         vm = vm,

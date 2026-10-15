@@ -64,6 +64,10 @@ object DemoFixtures {
             description = "Garage rack, music studio",
             fqdn = "music.$username.flagship.services",
             status = PodInfo.Status.OFFLINE,
+            // Was live, stopped reporting a few hours ago: the honest
+            // "offline, last seen" state, not "never came online".
+            liveness = PodInfo.Liveness.UNREACHABLE,
+            lastSeenMsAgo = 3L * 60 * 60 * 1000,
         ),
     )
 

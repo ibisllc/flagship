@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,6 +28,8 @@ import com.flagshipserver.app.core.FreeAiCopy
 import com.flagshipserver.app.core.FreeAiService
 import com.flagshipserver.app.core.FreeAiState
 import com.flagshipserver.app.core.LocalAppState
+import com.flagshipserver.app.core.LocalDeveloperSettings
+import com.flagshipserver.app.core.MockFreeAiClient
 import com.flagshipserver.app.core.LocalPodScope
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSGhostButton
@@ -38,11 +41,14 @@ import com.flagshipserver.app.ui.theme.FS
 @Composable
 fun rememberFreeAiService(): FreeAiService {
     val appState = LocalAppState.current
-    return remember(appState) { freeAiServiceFor(appState) }
+    val live = LocalDeveloperSettings.current?.useLiveClient?.collectAsState()?.value ?: true
+    return remember(appState, live) { freeAiServiceFor(appState, live) }
 }
 
-fun freeAiServiceFor(appState: AppState): FreeAiService =
-    FreeAiService(username = { appState.currentUser.value })
+/** The live `.com` client, or the mock one when the app runs on mock clients. */
+fun freeAiServiceFor(appState: AppState, live: Boolean = true): FreeAiService =
+    if (live) FreeAiService(username = { appState.currentUser.value })
+    else FreeAiService(client = MockFreeAiClient(), username = { appState.currentUser.value })
 
 /** The box a build on this screen runs on: the chosen server, else the session's. */
 @Composable

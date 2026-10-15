@@ -102,7 +102,7 @@ sealed class ServiceAccessError(message: String) : RuntimeException(message) {
 /** Box calls ride the box transport (the pod-pinned OkHttp — set-mode/redeem
  *  are signature-authed daemon endpoints, so a rogue cert must not intercept);
  *  `.com` calls ride a separate (public-CA) transport. Pluggable for tests. */
-class ServiceAccessClient(
+open class ServiceAccessClient(
     private val boxTransport: JsonHttpTransport = OkHttpJsonTransport(HttpClientFactory.build()),
     private val comTransport: JsonHttpTransport = OkHttpJsonTransport(),
     private val podBaseUrl: (serverDomain: String) -> String = { "https://$it" },
@@ -112,7 +112,7 @@ class ServiceAccessClient(
 
     // ── box ───────────────────────────────────────────────────────────────
 
-    suspend fun getAccessState(serverDomain: String, serviceRef: String): ServiceAccessState {
+    open suspend fun getAccessState(serverDomain: String, serviceRef: String): ServiceAccessState {
         val enc = URLEncoder.encode(serviceRef, "UTF-8")
         val resp = boxTransport.execute("GET", "${podBaseUrl(serverDomain)}/api/service-access/$enc", accept = setOf(200))
         val obj = json.parseToJsonElement(String(resp.body, Charsets.UTF_8)).jsonObject
@@ -122,7 +122,7 @@ class ServiceAccessClient(
     }
 
     /** POST a signed set-service-access-mode envelope (IRK). Returns the box's mode. */
-    suspend fun setAccessMode(serverDomain: String, request: JsonObject, signatureHex: String): String {
+    open suspend fun setAccessMode(serverDomain: String, request: JsonObject, signatureHex: String): String {
         val body = buildJsonObject {
             put("request", request)
             put("signature", JsonPrimitive(signatureHex))
@@ -143,7 +143,7 @@ class ServiceAccessClient(
      *  service's allow-list so a revoked friend is denied on their next request.
      *  Returns the box's `removed` flag (idempotent: a no-op prune still 200s).
      *  The OkHttp transport runs the call on Dispatchers.IO. */
-    suspend fun removeServiceAllow(serverDomain: String, request: JsonObject, signatureHex: String): Boolean {
+    open suspend fun removeServiceAllow(serverDomain: String, request: JsonObject, signatureHex: String): Boolean {
         val body = buildJsonObject {
             put("request", request)
             put("signature", JsonPrimitive(signatureHex))
@@ -314,7 +314,7 @@ class ServiceAccessClient(
         return s
     }
 
-    suspend fun createInvite(username: String, request: JsonObject, signatureHex: String) {
+    open suspend fun createInvite(username: String, request: JsonObject, signatureHex: String) {
         val body = buildJsonObject {
             put("request", request)
             put("signature", JsonPrimitive(signatureHex))
@@ -334,7 +334,7 @@ class ServiceAccessClient(
      * fields (`maxRedemptions`/`expiresAt`/`redemptions`/`boundAIDs`/`approvalMode`)
      * are parsed for the group guest-list entry. Runs on Dispatchers.IO.
      */
-    suspend fun listInvites(
+    open suspend fun listInvites(
         username: String,
         authorAidHex: String,
         issuedAt: Long,
@@ -373,7 +373,7 @@ class ServiceAccessClient(
         }
     }
 
-    suspend fun revokeInvite(username: String, request: JsonObject, signatureHex: String) {
+    open suspend fun revokeInvite(username: String, request: JsonObject, signatureHex: String) {
         val body = buildJsonObject {
             put("request", request)
             put("signature", JsonPrimitive(signatureHex))
@@ -384,5 +384,45 @@ class ServiceAccessClient(
             contentType = "application/json",
             accept = setOf(200),
         )
+    }
+}
+
+/**
+ * Mock-mode box + `.com` for Access control (iOS MockServiceAccessClient's
+ * twin): each app starts open to all with no invites, and a signed mode change
+ * takes effect in memory. Never touches the network, so a demo or gym session
+ * doesn't call a real box with a made-up name.
+ */
+class MockServiceAccessClient : ServiceAccessClient() {
+    private val modes = mutableMapOf<String, String>()
+    private val invites = mutableListOf<ServiceInviteRow>()
+
+    override suspend fun getAccessState(serverDomain: String, serviceRef: String): ServiceAccessState =
+        ServiceAccessState(modes[serviceRef] ?: "open", 0)
+
+    override suspend fun setAccessMode(serverDomain: String, request: JsonObject, signatureHex: String): String {
+        val ref = request["serviceRef"]?.jsonPrimitive?.contentOrNull
+            ?: request["serviceId"]?.jsonPrimitive?.contentOrNull ?: ""
+        val mode = request["mode"]?.jsonPrimitive?.contentOrNull ?: "open"
+        modes[ref] = mode
+        return mode
+    }
+
+    override suspend fun removeServiceAllow(serverDomain: String, request: JsonObject, signatureHex: String): Boolean = true
+
+    override suspend fun listInvites(
+        username: String,
+        authorAidHex: String,
+        issuedAt: Long,
+        sigHex: String,
+    ): List<ServiceInviteRow> = invites.toList()
+
+    override suspend fun createInvite(username: String, request: JsonObject, signatureHex: String) {}
+
+    override suspend fun revokeInvite(username: String, request: JsonObject, signatureHex: String) {}
+
+    companion object {
+        /** One per process, so a mode change survives leaving the screen. */
+        val shared = MockServiceAccessClient()
     }
 }

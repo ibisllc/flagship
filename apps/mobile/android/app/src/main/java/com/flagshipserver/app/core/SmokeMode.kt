@@ -12,6 +12,7 @@
 //   iOS -smoke-trust-untrusted  ↔ --ez flagship.smokeTrustUntrusted true
 //   iOS -smoke-awaiting-unlock  ↔ --es flagship.smokePods awaiting-unlock
 //   iOS -smoke-dead             ↔ --es flagship.smokePods dead
+//   iOS -smoke-username <name>  ↔ --es flagship.smokeUsername <name>
 //
 // PRODUCTION SAFETY: MainActivity only calls into here when the app is
 // debuggable (ApplicationInfo.FLAG_DEBUGGABLE) AND the smokeMode extra is set —
@@ -34,6 +35,9 @@ data class SmokeModeConfig(
     /** Treat this device as holding the admin master root (GymSeams twin of
      *  iOS `-smoke-admin-root`) so the Slice-D admin-gated surfaces render. */
     val seedAdminRoot: Boolean,
+    /** The demo handle (default `smoketest`). `bright-maple` matches the mock
+     *  box's FQDNs, which the server page's per-server cards look pods up by. */
+    val username: String = SMOKE_USERNAME,
 ) {
     companion object {
         const val EXTRA_SMOKE_MODE = "flagship.smokeMode"
@@ -42,6 +46,7 @@ data class SmokeModeConfig(
         const val EXTRA_SMOKE_TRUST_UNTRUSTED = "flagship.smokeTrustUntrusted"
         const val EXTRA_SMOKE_PODS = "flagship.smokePods"
         const val EXTRA_SMOKE_ADMIN_ROOT = "flagship.smokeAdminRoot"
+        const val EXTRA_SMOKE_USERNAME = "flagship.smokeUsername"
 
         const val SMOKE_USERNAME = "smoketest"
 
@@ -58,6 +63,8 @@ data class SmokeModeConfig(
                 seedTrustUntrusted = intent.getBooleanExtra(EXTRA_SMOKE_TRUST_UNTRUSTED, false),
                 podsVariant = intent.getStringExtra(EXTRA_SMOKE_PODS)?.trim()?.lowercase(),
                 seedAdminRoot = intent.getBooleanExtra(EXTRA_SMOKE_ADMIN_ROOT, false),
+                username = intent.getStringExtra(EXTRA_SMOKE_USERNAME)?.trim()?.lowercase()
+                    ?.takeIf { it.matches(Regex("^[a-z0-9-]{1,40}$")) } ?: SMOKE_USERNAME,
             )
         }
     }
@@ -76,12 +83,18 @@ object SmokeMode {
         trust: TrustCenter,
     ): RootDestination {
         if (!appState.isPaired.value) {
+            val user = config.username
             val pods = when (config.podsVariant) {
-                "awaiting-unlock" -> DemoFixtures.samplePodsWithAwaitingUnlock(SmokeModeConfig.SMOKE_USERNAME)
-                "dead" -> DemoFixtures.samplePodsWithDeadServer(SmokeModeConfig.SMOKE_USERNAME)
-                else -> DemoFixtures.samplePods(SmokeModeConfig.SMOKE_USERNAME)
+                "awaiting-unlock" -> DemoFixtures.samplePodsWithAwaitingUnlock(user)
+                "dead" -> DemoFixtures.samplePodsWithDeadServer(user)
+                else -> DemoFixtures.samplePods(user)
+            }.mapIndexed { i, pod ->
+                // Real boxes carry their STK; the server order names servers by
+                // it, so without one the order, its handles and Make leader
+                // never render. A fixed, obviously-fake key per box.
+                pod.copy(identityPubKeyHex = "%02x".format(0x51 + i).repeat(32))
             }
-            appState.completeOnboarding(username = SmokeModeConfig.SMOKE_USERNAME, pods = pods)
+            appState.completeOnboarding(username = user, pods = pods)
         }
 
         // The gym drives an UNLOCKED shell (mirror of iOS's deterministic-unlock
@@ -111,6 +124,7 @@ object SmokeMode {
         // Treat this device as an admin (Slice D) — set BOTH ways so a prior
         // same-process launch's seed can never leak into an unflagged run.
         GymSeams.forceAdminRoot = config.seedAdminRoot
+        GymSeams.bypassBiometricGates = true
 
         if (config.seedTrustUntrusted) {
             trust.markUntrusted(

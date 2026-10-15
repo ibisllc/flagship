@@ -16,4 +16,12 @@ object GymSeams {
      *  rotation/admit (which would fail on the absent real key — by design). */
     @Volatile
     var forceAdminRoot: Boolean = false
+
+    /** Pass the biometric / device-credential prompts (twin of iOS
+     *  `GymSeams.bypassBiometricGates`). An emulator has no screen lock, so
+     *  every signed order in the no-backend gym would stop at a prompt that
+     *  can't succeed. Only SmokeMode sets it (debug builds, smoke intent);
+     *  the orders it lets through go to the mock clients. */
+    @Volatile
+    var bypassBiometricGates: Boolean = false
 }

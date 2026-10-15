@@ -23,6 +23,10 @@ class MockScreensClient(
     /// session-store pod base URL.
     var podContext: String = "home"
 
+    /** Boxes (by podContext label) that don't answer, like a real offline,
+     *  revoked or never-online box: their server detail fails. */
+    val unreachablePodContexts: MutableSet<String> = mutableSetOf()
+
     private suspend fun tick() {
         if (simulatedLatencyMs > 0) delay(simulatedLatencyMs)
         if (shouldFail) throw ScreensError.Http(503, "simulated failure")
@@ -60,6 +64,7 @@ class MockScreensClient(
 
     override suspend fun serverDetail(): ServerDetailResponse {
         tick()
+        if (podContext in unreachablePodContexts) throw java.io.IOException("$podContext isn't answering")
         val day = 24L * 3600 * 1000
         val pod = podContext
         val serviceCount = (abs(pod.hashCode()) % 5) + 1
@@ -79,6 +84,12 @@ class MockScreensClient(
                 RecentInstallEvent(now() - 60_000L * 30, "installed", "bright-maple--plants", "via vibe-code"),
                 RecentInstallEvent(now() - 60_000L * 60 * 6, "deploy", "bright-maple--wiki", "v1.4.0"),
                 RecentInstallEvent(now() - 60_000L * 60 * 26, "installed", "bright-maple--wiki", "via vibe-code"),
+            ),
+            lastUpdate = LastUpdate(
+                outcome = "applied",
+                at = now() - 2L * day,
+                targetCommit = "9f2c1ab3de4567890abcdef1234567890abcdef1",
+                previousCommit = "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b",
             ),
         )
     }
