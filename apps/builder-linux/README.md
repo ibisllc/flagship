@@ -90,6 +90,10 @@ SSH (debug VMs only), Delete. Selecting a row opens its detail pane.
 
 Extra requirements for hosting (on top of the builder's):
 
+- `xorriso` to build an installer, for a USB burn or a server hosted from the
+  installer ISO (`sudo apt install xorriso` / `sudo dnf install xorriso` /
+  `sudo pacman -S libisoburn`); Studio says so before downloading anything
+  when it is missing
 - `qemu-system-x86` + `qemu-utils` (e.g. `sudo apt install qemu-system-x86
   qemu-utils`)
 - OVMF firmware (`sudo apt install ovmf` / `sudo dnf install edk2-ovmf`)
@@ -152,7 +156,7 @@ the amd64 image.
 
 ```sh
 sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 \
-                 qemu-system-x86 qemu-utils ovmf
+                 qemu-system-x86 qemu-utils ovmf xorriso
 ```
 
 Three container quirks the app now handles:

@@ -43,7 +43,7 @@ users get:
 ## 3. Linux (x86-64 desktop with GTK 4 + libadwaita)
 
 ```sh
-sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 qemu-system-x86 qemu-utils ovmf nodejs
+sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 gir1.2-secret-1 qemu-system-x86 qemu-utils ovmf nodejs xorriso
 python3 -m pytest apps/builder-linux/tests -q
 bash apps/builder-linux/appimage/build.sh
 ```

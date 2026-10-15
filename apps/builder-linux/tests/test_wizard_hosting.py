@@ -548,3 +548,36 @@ def test_choosing_host_here_when_it_cant_run_only_shows_why(tmp_path, monkeypatc
     monkeypatch.setattr(m, "run_host_here", lambda: pytest.fail("must not start"))
     m.choose_host_here()
     assert m.state.destination == ServerDestination.HOST_HERE
+
+
+def test_xorriso_detection_honours_the_override_then_path(tmp_path):
+    from wizard import xorriso_missing
+
+    assert xorriso_missing(which=lambda _n: None, environ={})
+    assert not xorriso_missing(which=lambda _n: "/usr/bin/xorriso", environ={})
+    tool = tmp_path / "xorriso"
+    tool.write_text("")
+    assert not xorriso_missing(which=lambda _n: None, environ={"FLAGSHIP_XORRISO": str(tool)})
+    assert xorriso_missing(which=lambda _n: "/usr/bin/xorriso",
+                           environ={"FLAGSHIP_XORRISO": str(tmp_path / "gone")})
+
+
+def test_without_xorriso_hosting_says_what_to_install_before_downloading(tmp_path, monkeypatch):
+    from wizard import XORRISO_MISSING_MESSAGE
+
+    vm = make_vm(tmp_path)
+    m = WizardModel(
+        locate_fn=lambda: Resolved(node_path="/usr/bin/node", entry_path="/cli.ts"),
+        vm_manager=vm,
+        ensure_base_fn=lambda *_a, **_k: pytest.fail("nothing is downloaded"),
+        xorriso_missing_fn=lambda: True,
+        handoff_seconds=0,
+    )
+    m.state.recipe_path = _write_recipe(tmp_path)
+    verified(m)
+    m._run_host_here_sync()
+    assert vm.servers == []
+    assert any(ll.text == XORRISO_MISSING_MESSAGE for ll in m.state.log_lines)
+    m.state.log_lines.clear()
+    m.run_bake()
+    assert any(ll.text == XORRISO_MISSING_MESSAGE for ll in m.state.log_lines)

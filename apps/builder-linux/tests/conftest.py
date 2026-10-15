@@ -25,3 +25,5 @@ def _no_published_appliance(monkeypatch):
         raise ApplianceCacheError("unavailable", "No prebuilt server image is published yet.")
 
     monkeypatch.setattr(wizard, "_live_ensure_appliance", unavailable)
+    # The remaster itself is faked in these tests; xorriso need not exist.
+    monkeypatch.setenv("FLAGSHIP_XORRISO", sys.executable)

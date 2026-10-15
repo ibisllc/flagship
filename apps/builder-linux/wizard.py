@@ -23,6 +23,7 @@ from __future__ import annotations
 import contextlib
 import os
 import shlex
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -317,6 +318,24 @@ def _live_ensure_appliance(installer_git_ref: str, *, arch: str, progress, cance
     )
 
 
+XORRISO_MISSING_MESSAGE = (
+    "Building the installer needs xorriso, which isn't installed. Install it "
+    "(Debian/Ubuntu: sudo apt install xorriso; Fedora: sudo dnf install "
+    "xorriso; Arch: sudo pacman -S libisoburn) and try again."
+)
+
+
+def xorriso_missing(which: Callable[[str], Optional[str]] = shutil.which,
+                    environ: Optional[dict] = None) -> bool:
+    """Whether the remaster's xorriso can't be found (FLAGSHIP_XORRISO, as
+    the CLI honours it, or PATH)."""
+    env = os.environ if environ is None else environ
+    override = env.get("FLAGSHIP_XORRISO")
+    if override:
+        return not os.path.exists(override)
+    return which("xorriso") is None
+
+
 def derive_out_iso_path(iso_path: Path) -> Path:
     """Same shape as the Mac model: `<iso-stem>.flagship.iso` next to
     the input."""
@@ -358,6 +377,7 @@ class WizardModel:
         auto_pair: bool = False,
         schedule: Callable[[float, Callable[[], None]], Callable[[], None]] = timer_schedule,
         wifi_store: Optional[WifiStore] = None,
+        xorriso_missing_fn: Callable[[], bool] = lambda: xorriso_missing(),
     ) -> None:
         self.state = WizardState(mode=mode)
         self.on_change = on_change or (lambda: None)
@@ -369,6 +389,7 @@ class WizardModel:
         self._ensure_base = ensure_base_fn or iso_base_cache.ensure
         self._ensure_appliance = ensure_appliance_fn or _live_ensure_appliance
         self._appliance_failed = False
+        self._xorriso_missing = xorriso_missing_fn
         self._wifi_store = wifi_store or WifiStore(keyring=default_backend())
         self.state.wifi_ssid, self.state.wifi_password = self._wifi_store.load()
         self._auto_pair = auto_pair
@@ -487,11 +508,21 @@ class WizardModel:
             self.state.verified = VerifyInfo.from_dict(parsed)
             self._notify()
 
+    def _require_xorriso(self) -> bool:
+        """Say what to install, before any download, when the remaster
+        couldn't run."""
+        if self._xorriso_missing():
+            self._append_log("stderr", XORRISO_MISSING_MESSAGE)
+            return False
+        return True
+
     def run_bake(self) -> None:
         """Flash the USB. Both modes remaster + write via the Node CLI's
         `write` subcommand (needs root → pkexec). Simple mode first ensures the
         server-manifest Debian base ISO is cached, then feeds it to the SAME
         CLI path Advanced uses with a user-supplied ISO."""
+        if not self._require_xorriso():
+            return
         if self.state.mode == MODE_SIMPLE:
             threading.Thread(target=self._run_simple_bake_sync, daemon=True).start()
         else:
@@ -653,6 +684,8 @@ class WizardModel:
 
     def _run_prepare_sync(self) -> None:
         if self.state.recipe_path is None or self.state.iso_path is None:
+            return
+        if not self._require_xorriso():
             return
         recipe = self.state.recipe_path
         iso = self.state.iso_path
@@ -906,6 +939,8 @@ class WizardModel:
                 self._hand_off(config.name)
                 return
 
+            if not self._require_xorriso():
+                return
             # Same Simple-mode base ISO fetch as the USB path (HOST arch — the
             # guest must match this machine); Advanced mode may bring its own
             # stock ISO.
