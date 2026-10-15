@@ -283,6 +283,12 @@ Internally each iteration is a Forgejo branch. The user never sees a branch name
 
 `Undo` rolls back to that checkpoint. `Try` reverts *temporarily*; if liked, a `Make this current` button promotes it. No branch names, no commit hashes, no merge UI.
 
+### 4.4 Before it's live: carrying on a chat (shipped 2026-10-15)
+
+A chat that hasn't gone live yet stays a conversation. Ready to deploy, a deploy that didn't work, a server restart in the middle: the owner opens it from the build list (`Continue`) and types. The placeholder says what fits: *"Ask for a change…"* when it's ready to deploy, *"Tell the AI what to try next…"* when it failed. The AI picks up with its files and the reason it stopped; the owner deploys again when it's ready. A deployed app is changed from its own page (*Change this app*), in a new chat on its live files.
+
+The model menu above the chat lists Flagship Inference and each AI key the owner saved, each with its models; picking one under another key moves the chat to that provider with the next message. If the new model holds less of the conversation, one quiet line says *"Older messages will be summarised to fit this model."* Details: `build-modes.md` "Continuing a chat".
+
 ---
 
 ## 5. Failure UX
