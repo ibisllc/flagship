@@ -26,7 +26,7 @@ export const ACCOUNT_READ_TOKEN_LABEL = "account-read-token";
 const TAG_DEVICE_ENDPOINT_CLAIM = "flagship/device-endpoint-claim/v1";
 /** Re-mint a token this long before `.com` would stop accepting it. */
 const REFRESH_MARGIN_MS = 10 * 60_000;
-const GATED_PATH = /\/api\/users\/([^/?#]+)\/(?:pods|stream|audit|apps\/aliases|apps\/[^/?#]+\/links)(?:[?#]|$)/;
+const GATED_PATH = /\/api\/users\/([^/?#]+)\/(?:pods|stream|audit|allowance|purchases|apps\/aliases|apps\/[^/?#]+\/links)(?:[?#]|$)/;
 
 /** @type {Map<string, { token: string, expiresAt: number }>} */
 const tokens = new Map();

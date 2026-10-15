@@ -1009,11 +1009,13 @@ export async function tryControlPlane(
       ),
     );
   }
-  // Public per-user allowance read — the #6 dashboard + #7 alert data source.
-  // Unauthenticated account METADATA (same disclosure class as /pods); the
-  // edge rate-limits it ("user-allowance").
+  // Per-user allowance read — the #6 dashboard + #7 alert data source. Account
+  // metadata gated like /pods by the account's read token
+  // (docs/account-read-token.md); the edge rate-limits it ("user-allowance").
   if (method === "GET" && (m = path.match(ROUTE_RE.USER_ALLOWANCE))) {
-    return finishPlain(
+    const gate = await gateAccountRead(storage, env, request, decodeURIComponent(m[1]!));
+    if (gate) return gate;
+    return finishRead(
       await handleUserAllowance(
         { meter: new D1MeterStorage(env.DB), tiers: storage.tiers },
         decodeURIComponent(m[1]!),
@@ -3429,9 +3431,12 @@ export async function tryControlPlane(
   }
 
   // ── Paid apps (#14) — purchase entitlements + curated pricing ─
-  // GET /api/users/:u/purchases (PUBLIC) — the install-what-you-own list.
+  // GET /api/users/:u/purchases — the install-what-you-own list, gated by the
+  // account's read token like /pods (docs/account-read-token.md).
   if (method === "GET" && (m = path.match(ROUTE_RE.USER_PURCHASES))) {
-    return finishPlain(
+    const gate = await gateAccountRead(storage, env, request, decodeURIComponent(m[1]!));
+    if (gate) return gate;
+    return finishRead(
       await handleListUserPurchases(
         { purchases: new D1AppPurchaseStorage(env.DB), marketplace: storage.marketplace },
         decodeURIComponent(m[1]!),
