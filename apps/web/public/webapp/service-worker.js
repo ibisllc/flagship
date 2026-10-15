@@ -268,7 +268,11 @@
 //       the Pro "Separate list on each server" switch: lib/listScope.js, an
 //       access-lists push that opens the activity), so it runs a version
 //       above main's; bump it past main's on rebase.
-const SHELL_VERSION = "v117";
+//  v120: feat/outbound-proxy's own shell (feat/marketplace's v117 plus a
+//       server's outbound proxy, docs/outbound-proxy.md): set under
+//       Advanced when creating a server, changed on the server's page;
+//       precaches lib/boxProxy.js.
+const SHELL_VERSION = "v120";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -319,6 +323,7 @@ const OPTIONAL_SHELL = [
   "/lib/auditLog.js",
   "/lib/accountRead.js",
   "/lib/serverOrder.js",
+  "/lib/boxProxy.js",
   "/lib/totp.js",
   "/lib/edToMont.js",
   "/lib/bootApproval.js",
