@@ -256,7 +256,7 @@ export function buildVibeCodeStartStreaming(
     };
 
     await streamTurn(args.harness, credential, request, session);
-    if (session.takeMisroutedNudge()) await buildVibeCodeResumeStreaming(args)(s.sessionId);
+    if (session.takeNudge()) await buildVibeCodeResumeStreaming(args)(s.sessionId);
   };
 }
 
@@ -278,6 +278,7 @@ async function streamTurn(
     }
     if (e.kind === "end") {
       if (e.credits) session.recordCredits(e.credits);
+      if (e.stopReason === "length" || e.stopReason === "max_tokens") session.markCutOff();
       session.endAssistant();
       return;
     }
@@ -397,6 +398,6 @@ export function buildVibeCodeResumeStreaming(
     };
 
     await streamTurn(args.harness, credential, request, session);
-    if (session.takeMisroutedNudge()) await resumeStreaming(sessionId);
+    if (session.takeNudge()) await resumeStreaming(sessionId);
   };
 }

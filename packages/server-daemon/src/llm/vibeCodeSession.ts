@@ -371,6 +371,7 @@ export interface VibeCodeSessionSnapshot {
 }
 
 const MAX_MISROUTED_TOOLS = 2;
+const MAX_CUT_OFF_CONTINUATIONS = 4;
 const FILE_CONTENT_KEYS = ["content", "contents", "text", "code", "file_content", "body"];
 
 /** The file a misrouted tool call carries, or null when it doesn't look like one. */
@@ -416,8 +417,10 @@ export class VibeCodeSession extends EventEmitter {
   private notifyOwner: NotifyOwnerCallback | null = null;
   /** Calls to tools the chat doesn't have, this session (bounded retries). */
   private misroutedTools = 0;
-  /** The hidden correction to send once the turn that misrouted ends. */
-  private misroutedNudge: string | null = null;
+  /** Replies cut off at the model's output limit, this session (bounded continuations). */
+  private cutOffs = 0;
+  /** The hidden correction to send once the current turn ends (a misrouted tool, a cut-off reply). */
+  private pendingNudge: string | null = null;
 
   constructor(args: {
     username: string;
@@ -631,17 +634,37 @@ export class VibeCodeSession extends EventEmitter {
       const lineStart = last?.role !== "assistant" || last.content.endsWith("\n");
       this.feedAssistant(`${lineStart ? "" : "\n"}=== ${args.name} ===\n${content.endsWith("\n") ? content : `${content}\n`}`);
     }
-    this.misroutedNudge =
+    this.pendingNudge =
       `[tool_result:${args.id}] There is no tool named '${args.name}'. ` +
       (content !== null ? `Its content was kept as the file ${args.name}. ` : "") +
       "Write files in your reply as `=== path ===` blocks, never as tool calls. " +
       "Continue with the rest of the app (repeat any file you had started) and end with `=== END ===`.";
   }
 
-  /** The hidden correction for a misrouted tool, once; the driver then resumes the model. */
-  takeMisroutedNudge(): boolean {
-    const nudge = this.misroutedNudge;
-    this.misroutedNudge = null;
+  /**
+   * The reply stopped at the model's output limit before `=== END ===`, so
+   * its last file is truncated and the app isn't ready (MiniMax-M3 spends
+   * much of an 8,192-token reply thinking out loud). The model is asked, in a
+   * hidden tool result, to carry on from the cut file. Call before
+   * `endAssistant`, while the parser still tells END from a cut.
+   */
+  markCutOff(): void {
+    if (this.cancelled || this.meta.status !== "streaming" || this.pendingTools.size > 0 || this.parser.isDone()) return;
+    this.cutOffs++;
+    if (this.cutOffs > MAX_CUT_OFF_CONTINUATIONS) {
+      this.fail("The AI's replies kept running past its length limit. Ask for a smaller first version, or pick another model.", true);
+      return;
+    }
+    this.pendingNudge ??=
+      `[tool_result:cut-off-${this.cutOffs}] Your reply was cut off at the output length limit before \`=== END ===\`. ` +
+      "Don't restate your plan. Continue the app: start with the `=== path ===` line of the file you were writing and write that whole file again, " +
+      "then the files still missing, and end with `=== END ===`.";
+  }
+
+  /** The hidden correction (misrouted tool, cut-off reply), once; the driver then resumes the model. */
+  takeNudge(): boolean {
+    const nudge = this.pendingNudge;
+    this.pendingNudge = null;
     if (nudge === null || this.cancelled || this.meta.status !== "streaming") return false;
     this.pushUserMessage(nudge);
     return true;
@@ -732,7 +755,7 @@ export class VibeCodeSession extends EventEmitter {
       // a downstream user-reply / tool-ack can resume it. Only flip to
       // ready-to-deploy when the parser observed `=== END ===` and no
       // tool is pending.
-      if (this.pendingTools.size === 0 && this.misroutedNudge === null && this.parser.isDone()) {
+      if (this.pendingTools.size === 0 && this.pendingNudge === null && this.parser.isDone()) {
         this.meta.status = "ready-to-deploy";
         this.emit("event", {
           kind: "phase",

@@ -201,12 +201,12 @@ describe("VibeCodeSession multi-turn", () => {
     s.endAssistant();
     expect(s.pendingToolUses()).toHaveLength(0);
     expect(s.meta.status).toBe("streaming");
-    expect(s.takeMisroutedNudge()).toBe(true);
+    expect(s.takeNudge()).toBe(true);
     const last = s.modelConversation().at(-1);
     expect(last?.role).toBe("user");
     expect(last?.content).toMatch(/^\[tool_result:tu_9\] There is no tool named 'deleteEverything'/);
     expect(s.messages().some((m) => m.text.includes("deleteEverything"))).toBe(false);
-    expect(s.takeMisroutedNudge()).toBe(false);
+    expect(s.takeNudge()).toBe(false);
   });
 
   it("a file called as a tool is kept as that file", () => {
@@ -217,7 +217,7 @@ describe("VibeCodeSession multi-turn", () => {
     s.endAssistant();
     expect(s.files()["flagship.app.json"]?.trim()).toBe('{"name":"x"}');
     expect(s.files()["src/index.js"]).toBe("console.log(1)\n");
-    expect(s.takeMisroutedNudge()).toBe(true);
+    expect(s.takeNudge()).toBe(true);
     expect(s.modelConversation().at(-1)?.content).toMatch(/kept as the file flagship\.app\.json/);
   });
 
@@ -233,7 +233,46 @@ describe("VibeCodeSession multi-turn", () => {
     for (let i = 0; i < 3; i++) s.receiveToolUse({ id: `tu_m${i}`, name: "writeFile", input: { a: 1 } });
     expect(s.meta.status).toBe("failed");
     expect(s.meta.failureReason).toMatch(/tool that doesn't exist \('writeFile'\)/);
-    expect(s.takeMisroutedNudge()).toBe(false);
+    expect(s.takeNudge()).toBe(false);
+  });
+
+  it("a reply cut off at the length limit isn't deployed; the model is asked to carry on", () => {
+    const s = newSession();
+    s.pushUserMessage("build it");
+    s.feedAssistant("=== flagship.app.json ===\n{}\n=== src/index.js ===\nconst a = ");
+    s.markCutOff();
+    s.endAssistant();
+    expect(s.meta.status).toBe("streaming");
+    expect(s.takeNudge()).toBe(true);
+    expect(s.modelConversation().at(-1)?.content).toMatch(/^\[tool_result:cut-off-1\] Your reply was cut off/);
+    expect(s.messages().at(-1)?.role).toBe("assistant");
+    s.prepareForResume();
+    s.feedAssistant("=== src/index.js ===\nconst a = 1;\n=== END ===\n");
+    s.endAssistant();
+    expect(s.meta.status).toBe("ready-to-deploy");
+    expect(s.files()["src/index.js"]).toBe("const a = 1;\n");
+  });
+
+  it("a reply that reached END before the limit is ready as usual", () => {
+    const s = newSession();
+    s.feedAssistant("=== a.js ===\nx\n=== END ===\n");
+    s.markCutOff();
+    s.endAssistant();
+    expect(s.meta.status).toBe("ready-to-deploy");
+    expect(s.takeNudge()).toBe(false);
+  });
+
+  it("fails with a reason after repeated cut-offs", () => {
+    const s = newSession();
+    for (let i = 0; i < 5; i++) {
+      s.prepareForResume();
+      s.feedAssistant("=== a.js ===\nunfinished");
+      s.markCutOff();
+      s.endAssistant();
+      s.takeNudge();
+    }
+    expect(s.meta.status).toBe("failed");
+    expect(s.meta.failureReason).toMatch(/length limit/);
   });
 
   it("only takes misrouted calls that look like files as files", () => {
