@@ -16,7 +16,6 @@ import { escapeHtml } from "./util.js";
 export const FLAGSHIP_TITLE = "Flagship Inference";
 export const UNKNOWN_NOTE = "capabilities unknown";
 export const REFUSED_NOTE = "The key was refused";
-export const THINK_HARDER = "Think harder";
 export const PROVIDER_DEFAULT = "Provider default";
 export const ATTACH_NOTICE = "The AI will see what you attach.";
 export const SAMPLE_DATA_NOTICE = "Sample data goes only to the private test copy.";
@@ -131,7 +130,7 @@ export function creditsUsedText(credits) {
   return `used ${String(n)} credit${n === 1 ? "" : "s"}`;
 }
 
-function effortFor(opt, wanted) {
+export function effortFor(opt, wanted) {
   if (!opt?.efforts?.length) return null;
   if (wanted && opt.efforts.includes(wanted)) return wanted;
   return opt.defaultEffort && opt.efforts.includes(opt.defaultEffort) ? opt.defaultEffort : null;
@@ -139,35 +138,26 @@ function effortFor(opt, wanted) {
 
 /**
  * Where a chat starts: the saved default when the menu has it, else the
- * menu's own default. `{ model, effort, thinkHarder }`.
+ * menu's own default. `{ model, effort }`. An effort is offered only for a
+ * model that lists effort levels; nothing is assumed for Flagship Inference.
  */
 export function initialChoice(menu, saved = {}) {
-  const none = { model: null, effort: null, thinkHarder: false };
+  const none = { model: null, effort: null };
   if (!menu) return none;
   if (menu.kind === "flagship") {
     if (!menu.catalog) return none;
     const model = optionFor(menu, saved.model) ? saved.model : menu.catalog.defaultModel ?? menu.catalog.models[0]?.id ?? null;
-    return { model, effort: null, thinkHarder: saved.effort === "high" && !!optionFor(menu, model)?.reasoning };
+    return { model, effort: effortFor(optionFor(menu, model), saved.effort) };
   }
   if (!menu.listed) return { ...none, model: saved.model || menu.defaultModel || null };
   const opt = optionFor(menu, saved.model) ?? optionFor(menu, menu.defaultModel);
   if (!opt) return { ...none, model: saved.model || menu.defaultModel || null };
-  return { model: opt.id, effort: effortFor(opt, saved.effort), thinkHarder: false };
+  return { model: opt.id, effort: effortFor(opt, saved.effort) };
 }
 
 /** The choice after picking another model: effort back to that model's default. */
-export function withModel(menu, choice, id) {
-  const opt = optionFor(menu, id);
-  return {
-    model: id || null,
-    effort: menu?.kind === "own" ? effortFor(opt, null) : null,
-    thinkHarder: menu?.kind === "flagship" && opt?.reasoning ? !!choice?.thinkHarder : false,
-  };
-}
-
-/** Whether "Think harder" is offered for the current Flagship model. */
-export function canThinkHarder(menu, choice) {
-  return menu?.kind === "flagship" && !!optionFor(menu, choice?.model)?.reasoning;
+export function withModel(menu, _choice, id) {
+  return { model: id || null, effort: effortFor(optionFor(menu, id), null) };
 }
 
 /**
@@ -180,9 +170,7 @@ export function wireChoice(menu, choice, { reply = false } = {}) {
   if (!menu || !choice?.model) return out;
   if (menu.kind === "flagship" && !menu.catalog) return out;
   out.model = choice.model;
-  let effort = null;
-  if (menu.kind === "flagship") effort = canThinkHarder(menu, choice) && choice.thinkHarder ? "high" : null;
-  else effort = choice.effort || null;
+  const effort = choice.effort || null;
   if (effort) out.effort = effort;
   else if (reply) out.effort = null;
   return out;
@@ -305,7 +293,7 @@ export function attachNotice(staged) {
 
 // ---- the menu itself -----------------------------------------------------
 
-function rowSub(menu, m) {
+export function rowSub(menu, m) {
   if (menu.kind === "flagship") return m.descriptor || "";
   if (m.known === false) return UNKNOWN_NOTE;
   const parts = [];
@@ -341,30 +329,23 @@ export function menuPanelHtml(menu, choice) {
   return menu.models.map((m) => rowHtml(menu, m, choice)).join("");
 }
 
-function rowHtml(menu, m, choice) {
+export function rowHtml(menu, m, choice, attrs = "") {
   const selected = m.id === choice?.model;
   const sub = rowSub(menu, m);
   return `
-    <button type="button" class="mm-row${selected ? " is-selected" : ""}" role="option" aria-selected="${selected}" data-mm-model="${escapeHtml(m.id)}">
+    <button type="button" class="mm-row${selected ? " is-selected" : ""}" role="option" aria-selected="${selected}" data-mm-model="${escapeHtml(m.id)}"${attrs}>
       <span class="mm-row-label">${escapeHtml(m.label || m.id)}</span>
       ${sub ? `<span class="mm-row-sub${m.known === false ? " mm-muted" : ""}">${escapeHtml(sub)}</span>` : ""}
     </button>`;
 }
 
-/** The effort picker for an own-key model with `efforts`, else "". */
+/** The effort picker for a model that lists `efforts`, else "". */
 export function effortPickerHtml(menu, choice) {
-  if (menu?.kind !== "own") return "";
   const opt = optionFor(menu, choice?.model);
   if (!opt?.efforts?.length) return "";
   return `<select class="mm-effort" data-mm-effort aria-label="Effort">${opt.efforts
     .map((e) => `<option value="${escapeHtml(e)}"${e === choice?.effort ? " selected" : ""}>${escapeHtml(effortLabel(e))}</option>`)
     .join("")}</select>`;
-}
-
-/** The "Think harder" switch, when the Flagship model reasons, else "". */
-export function thinkHarderHtml(menu, choice) {
-  if (!canThinkHarder(menu, choice)) return "";
-  return `<label class="inline-check mm-think"><input type="checkbox" role="switch" data-mm-think${choice?.thinkHarder ? " checked" : ""}> ${escapeHtml(THINK_HARDER)}</label>`;
 }
 
 /** A note under the trigger for an unknown model, else "". */
@@ -376,14 +357,14 @@ export function unknownNoteHtml(menu, choice) {
 /**
  * Mount a compact model menu in `host`.
  *   menu        — a loaded menu, or null with `load` to fetch it on first open
- *   choice      — { model, effort, thinkHarder }
+ *   choice      — { model, effort }
  *   onChange    — called with the new choice
- *   thinkHarder — show the "Think harder" switch (the chat; not Settings)
+ *   effort      — show the effort picker
  *   fallback    — trigger text with no model chosen
  * Returns { update(menu, choice) }.
  */
-export function mountModelMenu(host, { menu = null, load = null, choice = {}, onChange = () => {}, thinkHarder = true, fallback = PROVIDER_DEFAULT } = {}) {
-  let state = { menu, choice: { model: null, effort: null, thinkHarder: false, ...choice } };
+export function mountModelMenu(host, { menu = null, load = null, choice = {}, onChange = () => {}, effort = true, fallback = PROVIDER_DEFAULT } = {}) {
+  let state = { menu, choice: { model: null, effort: null, ...choice } };
   let open = false;
   const set = (next) => {
     state.choice = next;
@@ -409,8 +390,7 @@ export function mountModelMenu(host, { menu = null, load = null, choice = {}, on
         <button type="button" class="mm-trigger" aria-haspopup="listbox" aria-expanded="${open}"${fixed ? " disabled" : ""}>
           <span class="mm-trigger-text">${escapeHtml(triggerText(m, c, { fallback }))}</span>${fixed ? "" : '<span class="mm-caret" aria-hidden="true">▾</span>'}
         </button>
-        ${effortPickerHtml(m, c)}
-        ${thinkHarder ? thinkHarderHtml(m, c) : ""}
+        ${effort ? effortPickerHtml(m, c) : ""}
         ${unknownNoteHtml(m, c)}
         ${open ? `<div class="mm-panel" role="listbox">${menuPanelHtml(m, c)}</div>` : ""}
       </div>`;
@@ -429,13 +409,10 @@ export function mountModelMenu(host, { menu = null, load = null, choice = {}, on
       });
     });
     host.querySelector("[data-mm-free]")?.addEventListener("change", (ev) => {
-      set({ model: ev.target.value.trim() || null, effort: null, thinkHarder: false });
+      set({ model: ev.target.value.trim() || null, effort: null });
     });
     host.querySelector("[data-mm-effort]")?.addEventListener("change", (ev) => {
       set({ ...state.choice, effort: ev.target.value || null });
-    });
-    host.querySelector("[data-mm-think]")?.addEventListener("change", (ev) => {
-      set({ ...state.choice, thinkHarder: ev.target.checked });
     });
     host.querySelector(".mm")?.addEventListener("keydown", (ev) => {
       if (ev.key === "Escape") close();

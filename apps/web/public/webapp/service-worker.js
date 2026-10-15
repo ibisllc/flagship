@@ -201,7 +201,11 @@
 //  v92: Backup/clone server downloads through the box's own link (straight
 //       to disk, resumable), approved with this device's key; a backup is
 //       sized first and carries no images.
-const SHELL_VERSION = "v92";
+//  v93: a build chat that is ready to deploy or failed takes a new message,
+//      and its model menu lists Flagship Inference and every saved key with
+//      their models (switching provider sends that key); precaches
+//      lib/modelGroups.js.
+const SHELL_VERSION = "v93";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -269,6 +273,7 @@ const OPTIONAL_SHELL = [
   "/lib/appApiKeys.js",
   "/lib/freeAi.js",
   "/lib/modelMenu.js",
+  "/lib/modelGroups.js",
   "/lib/appDb.js",
   "/lib/knockIdentity.js",
   "/lib/appPlacement.js",

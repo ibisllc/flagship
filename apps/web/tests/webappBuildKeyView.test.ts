@@ -81,8 +81,10 @@ describe("webapp AI-key step", () => {
     const body = await asset("/webapp/views/vibe-code.js");
     expect(body).toContain("buildCredential");
     // credential rides the start (and reply) request bodies.
-    expect(body).toContain("startBody.credential = buildCredential");
-    expect(body).toContain("replyBody.credential = buildCredential");
+    expect(body).toContain("startBody.credential = credential");
+    expect(body).toContain("replyBody.credential = credential");
+    // A chat that can continue but has no key on the box asks for one.
+    expect(body).toContain("lastState?.needsCredential");
     // A skipped key surfaces a gentle nudge back into the key step.
     expect(body).toContain("r.needsCredential");
     expect(body).toContain("enterBuildKey");

@@ -29,6 +29,7 @@ import {
   isActiveSession,
   openBuilds,
   pastBuildSubtitle,
+  sessionActionLabel,
   sessionPillClass,
   sessionStatusLabel,
   sessionTitle,
@@ -118,7 +119,7 @@ async function renderList() {
               ${serverPill(s, many)}
             </span>
           </span>
-          <span class="build-session-action">${active ? "Resume" : "Open"}</span>
+          <span class="build-session-action">${escapeHtml(sessionActionLabel(s.status))}</span>
         </button>${discard}`;
       })
       .join("");

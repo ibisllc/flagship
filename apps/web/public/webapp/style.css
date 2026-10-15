@@ -2366,16 +2366,7 @@ button[data-device-restricted] {
 .mm-trigger:disabled { opacity: 1; cursor: default; color: var(--ink-muted); }
 .mm-caret { color: var(--ink-muted); font-size: 11px; }
 .mm-effort { width: auto; min-height: 32px; padding: 4px 28px 4px 12px; font-size: 13px; border-radius: var(--radius-pill); }
-.mm-think {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-size: 13px;
-  letter-spacing: normal;
-  text-transform: none;
-  color: var(--ink-soft);
-  cursor: pointer;
-}
-.mm-think input { width: auto; margin: 0; }
+.mm-context { flex-basis: 100%; margin: 0; font-size: 12px; color: var(--ink-muted); }
 .mm-muted { color: var(--ink-faint); }
 .mm-note { margin: 0; font-size: 12px; }
 .mm-panel {
