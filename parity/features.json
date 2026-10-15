@@ -47,7 +47,7 @@
       "ref": "ios",
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift", "This server isn't paired with this device yet"]] },
-        "android": { "status": "partial", "reason": "Only Loaded / Failed / skeleton states (ServerDetailScreen.kt); PodPairViewModel is unused.", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServerDetailScreen.kt", "is LoadingState\\.Failed -> ErrorCard"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServerDetailScreen.kt", "NEVER_ONLINE, OFFLINE, COMING_UP, NOT_PAIRED"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServerDetailScreen.kt", "PodPairViewModel\\("]] },
         "web": { "status": "partial", "reason": "A separate views/pod-pair.js; no not-paired card on the server page.", "anchors": [["apps/web/public/webapp/views/pod-pair.js", "export (async )?function enterPodPair"]] }
       }
     },
@@ -307,9 +307,9 @@
       "title": "Push: secret-request (boot/unlock approval) tap opens the approvals list",
       "ref": "ios",
       "surfaces": {
-        "ios": { "status": "missing", "reason": "PushNotifications.link(forPush:) reads top-level kind/category, but .com's APNs push carries the category only in aps.category (pushUserDevices sends no displayData).", "anchors": [] },
-        "android": { "status": "missing", "reason": "SecretRequestPush.parse needs serverFqdn and purpose, which the FCM data never carries, so the push shows an empty body and routes nowhere.", "anchors": [] },
-        "web": { "status": "missing", "reason": "service-worker.js has no secret-request branch: generic text, no deep link.", "anchors": [["apps/web/public/webapp/service-worker.js", "secret-request"]] }
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/PushNotifications.swift", "\\[\"aps\"\\] as\\? \\[AnyHashable: Any\\]\\)\\?\\[\"category\"\\]"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/push/SecretRequestPush.kt", "secret-request"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/DeepLink.kt", "\"secret-requests\""]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/service-worker.js", "\"secret-requests\": \"/\\?view=boot-approval\""]] }
       }
     },
     {
@@ -389,7 +389,7 @@
       "ref": "mac",
       "surfaces": {
         "mac": { "status": "present", "anchors": [["apps/builder-mac/Sources/FlagshipBuilderCore/VM/ApplianceCache.swift", "ApplianceCache"], ["apps/builder-mac/Sources/FlagshipBuilderCore/VM/Qcow2Expander.swift", "Qcow2Expander"], ["apps/builder-mac/Sources/FlagshipBuilderCore/VM/ApplianceProvisioner.swift", "ApplianceProvisioner"]] },
-        "win": { "status": "missing", "reason": "Wizard.cs always plans provisioningMode: InstallerISO.", "anchors": [["apps/builder-windows/src/Wizard.cs", "VMProvisioningMode\\.Appliance"]] },
+        "win": { "status": "present", "anchors": [["apps/builder-windows/src/Wizard.cs", "VMProvisioningMode\\.PrebuiltAppliance"], ["apps/builder-windows/src/VM/ApplianceCache.cs", "class ApplianceCache"]] },
         "linux": { "status": "present", "anchors": [["apps/builder-linux/vm/appliance_cache.py", "^class ApplianceCache:"], ["apps/builder-linux/wizard.py", "_live_ensure_appliance"]] }
       }
     },

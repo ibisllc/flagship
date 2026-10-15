@@ -606,7 +606,11 @@ function checkDeepLinks(repo) {
   const sw = stripComments(repo.read(P.sw) ?? "");
   const fn = sw.indexOf("function webappDeepLink");
   const webRouter = fn >= 0 ? sliceBraces(sw, sw.indexOf("{", fn)) : "";
-  const web = uniq(allMatches(webRouter, /===\s*"([a-z0-9-]+)(?:\/[a-z0-9-]+)?"/g));
+  const routeTable = /const WEBAPP_ROUTES\s*=\s*\{([^}]*)\}/.exec(sw)?.[1] ?? "";
+  const web = uniq([
+    ...allMatches(webRouter, /===\s*"([a-z0-9-]+)(?:\/[a-z0-9-]+)?"/g),
+    ...allMatches(routeTable, /^\s*"([a-z0-9-]+)(?:\/[a-z0-9-]+)?"\s*:/gm),
+  ]);
   for (const [link, files] of [...emitted.entries()].sort()) {
     const host = link.split("/")[0];
     for (const [client, hosts] of [["ios", ios], ["android", and], ["web", web]]) {
