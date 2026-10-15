@@ -348,6 +348,29 @@ public enum ServiceRenameClaim {
     }
 }
 
+/// #79A — attach an external (custom) domain to a service. Signed by the
+/// user's current IRK. Mirrors @flagship/protocol
+/// canonicalSetCustomDomain + the Android/webapp clients byte-for-byte
+/// so Live == Mock on the wire (a drift here = "signed-by-IRK but .com
+/// rejects the attach").
+public enum SetCustomDomainClaim {
+    public static let canonicalTag = "flagship/custom-domain/v1"
+    public static func canonicalBytes(
+        username: String,
+        serviceId: String,
+        fqdn: String,
+        issuedAt: Int64
+    ) -> Data {
+        Data([
+            canonicalTag,
+            username,
+            serviceId,
+            fqdn.lowercased(),
+            String(issuedAt),
+        ].joined(separator: "|").utf8)
+    }
+}
+
 /// E2 — Wipe & restart envelope. Signed by the OLD IRK over the
 /// new IRK + new credentialID + SHA-256 of the new wrapped UMK.
 /// Mirrors packages/protocol/src/auth.ts `TAG_WIPE_RESTART`.
