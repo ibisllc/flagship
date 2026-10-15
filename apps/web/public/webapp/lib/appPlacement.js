@@ -340,6 +340,26 @@ export function canonicalUninstallServiceBytes({ serverId, creator, slug, issued
   return new TextEncoder().encode([TAG_UNINSTALL_SERVICE, serverId, creator, slug, String(issuedAt)].join("|"));
 }
 
+export const REMOVE_APP_LABEL = "Remove app";
+export const REMOVE_APP_BUSY = "Removing…";
+export const REMOVE_APP_TITLE = "Remove this app?";
+
+/** The confirmation's words: what goes, where, and what stays. */
+export function removeAppMessage({ slug, server, otherCopies = 0 }) {
+  const where = server ? ` from ${server}` : "";
+  const rest = otherCopies > 0
+    ? ` Your ${otherCopies === 1 ? "other server keeps its copy" : `other ${otherCopies} servers keep their copies`}.`
+    : "";
+  return `This uninstalls ${slug}${where} and deletes its data there. This can't be undone.${rest}`;
+}
+
+/** The owner-facing words for a refused uninstall. */
+export function removeAppErrorMessage(e) {
+  if (e?.status === 0) return "This device isn't paired with that server.";
+  if (e?.status === 403) return boxSays(e) ?? "The server refused the request. Check this device's clock and try again.";
+  return boxSays(e) ?? (e instanceof Error && e.message ? e.message : "Couldn't remove the app. Try again in a moment.");
+}
+
 /** Sign the uninstall for `serverFqdn` and DELETE it there. */
 export async function removeAppFromServer({ serverFqdn, serviceId, creator, slug, umk, signWithIrk, clientFor = boxClient, now = Date.now, bytesToHex = toHex }) {
   if (!umk) throw new Error("unlock the webapp first");

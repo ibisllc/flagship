@@ -50,6 +50,7 @@ import {
   verifyServerTransferClaim,
   verifySetRoutingTarget,
   verifyTunnelHello,
+  verifyUninstallService,
   verifyWatchDelegateKey,
   type DeviceScope,
 } from "../src/index.js";
@@ -499,6 +500,17 @@ describe("cross-language canonical-bytes vectors (shared fixture)", () => {
           },
           sig,
           adminRootPub,
+        );
+      case "uninstall-service":
+        return verifyUninstallService(
+          {
+            serverId: i.serverId as string,
+            creator: i.creator as string,
+            slug: i.slug as string,
+            issuedAt: i.issuedAt as number,
+          },
+          sig,
+          irkPub,
         );
       case "daemon-status":
       case "daemon-status-liveness":

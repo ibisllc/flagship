@@ -18,6 +18,7 @@ import { canonicalPushRevoke } from "../public/webapp/lib/push.js";
 import { canonicalRevokeBytes } from "../public/webapp/lib/revokeServer.js";
 import { canonicalRePairInitiateBytes } from "../public/webapp/lib/replaceDeviceCeremony.js";
 import { canonicalClaimBytes } from "../public/webapp/lib/serverTransfer.js";
+import { canonicalUninstallServiceBytes } from "../public/webapp/lib/appPlacement.js";
 
 const PATH = resolve(__dirname, "..", "..", "..", "test-vectors", "canonical-bytes.json");
 
@@ -115,6 +116,13 @@ const WEBAPP_ENCODERS: Record<string, (i: Record<string, unknown>) => Uint8Array
       acquirerUsername: i.acquirerUsername as string,
       acquirerIrkPubHex: i.acquirerIrkPub as string,
       acquirerAdminRootPubHex: i.acquirerAdminRootPubHex as string,
+      issuedAt: i.issuedAt as number,
+    }),
+  "uninstall-service": (i) =>
+    canonicalUninstallServiceBytes({
+      serverId: i.serverId as string,
+      creator: i.creator as string,
+      slug: i.slug as string,
       issuedAt: i.issuedAt as number,
     }),
 };

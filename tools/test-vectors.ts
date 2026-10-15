@@ -60,6 +60,7 @@ import {
   signServerTransferClaim,
   signSetRoutingTarget,
   signTunnelHello,
+  signUninstallService,
   signWatchDelegateKey,
   type AccountRecovery,
   type AdminRootRotation,
@@ -88,6 +89,7 @@ import {
   type ServerTransferClaim,
   type SetRoutingTarget,
   type TunnelHello,
+  type UninstallServiceRequest,
   type WatchDelegateKey,
 } from "@flagship/protocol";
 
@@ -851,6 +853,26 @@ function buildVectors(): Vector[] {
     ),
   );
 
+  // ---- UninstallService (IRK, or the admin root on admin-tier accounts) —
+  // "Remove app": names the box the app is removed from, and the
+  // `<creator>--<slug>` halves (a slug may carry single dashes). ----
+  const uninstall: UninstallServiceRequest = {
+    serverId: "home.harry.flagship.services",
+    creator: "harry",
+    slug: "notes-app",
+    issuedAt: ISSUED_AT,
+  };
+  vectors.push(
+    makeVector(
+      "uninstall-service",
+      "irk",
+      { ...uninstall },
+      signUninstallService(uninstall, irk),
+      payloadByName("uninstall-service", { ...uninstall }),
+      ["ts", "webapp"],
+    ),
+  );
+
   return vectors;
 }
 
@@ -1109,6 +1131,8 @@ function payloadByName(name: string, i: Record<string, unknown>): Uint8Array {
           i.issuedAt,
         ].join("|"),
       );
+    case "uninstall-service":
+      return enc(["flagship/uninstall-service/v1", i.serverId, i.creator, i.slug, i.issuedAt].join("|"));
     case "daemon-status":
     case "daemon-status-liveness": {
       const apps = [...(i.appsServed as string[])].sort().join(",");

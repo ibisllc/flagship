@@ -7,12 +7,18 @@ import { $, registerView, show } from "../lib/router.js";
 import { screensFetch, ScreensError, getPodBaseUrl, currentPodFqdn, makeCurrentPod } from "../lib/api.js";
 import { inlineConfirm } from "../lib/modal.js";
 import {
+  REMOVE_APP_BUSY,
+  REMOVE_APP_LABEL,
+  REMOVE_APP_TITLE,
   REMOVE_CONFIRM_TITLE,
   appServerState,
   appStatePillHtml,
   changeRunsOn,
   fetchRunsOn,
   loadAccountPods,
+  removeAppErrorMessage,
+  removeAppFromServer,
+  removeAppMessage,
   runsOnHtml,
   runsOnModel,
   watchWhileCopying,
@@ -240,6 +246,7 @@ export async function renderServiceDetail(serviceId) {
         </p>
         <button id="sd-configure-env" class="full-width mt-2">Configure environment</button>
       </div>
+      ${isCompanionProfile() ? "" : `<button id="service-detail-remove-btn" class="danger full-width mt-4" type="button">${escapeHtml(REMOVE_APP_LABEL)}</button>`}
     `;
 
     $("sd-edit")?.addEventListener("click", async () => {
@@ -266,6 +273,7 @@ export async function renderServiceDetail(serviceId) {
       const { enterServiceAccess } = await import("./service-access.js");
       await enterServiceAccess(s);
     });
+    $("service-detail-remove-btn")?.addEventListener("click", (ev) => void removeAppHere(s, ev.currentTarget));
     bindWebDomainsHandlers(s);
     if (readAccessSummary(s)) void loadAccessSection(s);
     else bindEgressHandlers(s);
@@ -898,6 +906,53 @@ async function toggleRunsOn(state, fqdn, checked) {
   }
   paintRunsOn(state);
   watchRunsOn(state);
+}
+
+// "Remove app": the owner's signed uninstall (flagship/uninstall-service/v1)
+// to the box this page reads, as iOS's Remove service. Unlike unticking a
+// Runs on row, it also removes the app's only copy.
+async function removeAppHere(app, btn) {
+  const session = getSession();
+  if (!session?.umk) {
+    toast("Unlock the webapp first.", "err");
+    return;
+  }
+  const fqdn = currentPodFqdn();
+  const otherCopies = (runsOn?.app?.serviceId === app.serviceId ? runsOn.rows : [])
+    .filter((r) => r.state === "has" && r.fqdn !== fqdn).length;
+  const ok = await inlineConfirm({
+    title: REMOVE_APP_TITLE,
+    message: removeAppMessage({ slug: app.slug, server: fqdn, otherCopies }),
+    okLabel: REMOVE_APP_LABEL,
+    danger: true,
+  });
+  if (!ok) return;
+  btn.disabled = true;
+  btn.textContent = REMOVE_APP_BUSY;
+  try {
+    await removeAppFromServer({
+      serverFqdn: fqdn,
+      serviceId: app.serviceId,
+      creator: app.creator,
+      slug: app.slug,
+      umk: session.umk,
+      signWithIrk: sensitiveSigner(),
+    });
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = REMOVE_APP_LABEL;
+    toast(removeAppErrorMessage(e), "err");
+    return;
+  }
+  runsOn?.stop?.();
+  toast(`Removed ${app.slug}.`, "ok");
+  if (backToServer) {
+    const { enterServerDetail } = await import("./server-detail.js");
+    await enterServerDetail(backToServer);
+    return;
+  }
+  const { enterServicesList } = await import("./services-list.js");
+  await enterServicesList();
 }
 
 // Where Back goes: the services list, or the server page the app was opened from.
