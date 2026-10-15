@@ -431,7 +431,7 @@ fun AccessRequestDialogHost(center: AccessRequestCenter, onViewList: (AccessAler
     if (alert.isDraft) {
         AlertDialog(
             onDismissRequest = { scope.launch { center.notNow() } },
-            title = { Text(alert.asks) },
+            title = { Text(alert.asks, modifier = Modifier.testTag("access-alert-draft-title")) },
             text = {
                 Column {
                     alert.request.hosts.forEach { h ->
@@ -488,7 +488,7 @@ fun AccessRequestDialogHost(center: AccessRequestCenter, onViewList: (AccessAler
             val sending = phase as? AccessRequestCenter.Phase.Sending
             AlertDialog(
                 onDismissRequest = { if (sending == null) scope.launch { center.notNow() } },
-                title = { Text(alert.asks) },
+                title = { Text(alert.asks, modifier = Modifier.testTag("access-alert-title")) },
                 text = {
                     Column {
                         Text(alert.detail)

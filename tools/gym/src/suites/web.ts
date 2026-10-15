@@ -1099,7 +1099,7 @@ const TOTAL: readonly Scenario[] = [
   // ── Servers: order + Leader badge, update card, un-revoke / delete — gym-servers.spec.ts ──
   webTotal(
     "web-total-server-order-drag",
-    "Server order (docs/server-order.md): dragging a server by its handle reorders Home at once (badge gray mid-drag), signs a flagship/server-order/v1 with the IRK and posts it to .com; the new leader's badge stays gray ('Leader, waiting for the server to confirm') until the box answers the hand-delivered order. Add/connect a server sits above the list. Mirrors iOS home-add-server / sd-leader-pending, Android home-add-server / pod-leader-badge / pod-leader-badge-pending.",
+    "Server order (docs/server-order.md): dragging a server by its handle reorders Home at once (badge gray mid-drag), signs a flagship/server-order/v1 with the IRK and posts it to .com; the new leader's badge stays gray ('Leader, waiting for the server to confirm') until the box answers the hand-delivered order. Add/connect a server sits above the list. Mirrors iOS home-add-server / sd-leader-pending, Android home-add-server / leader-badge / leader-badge-pending.",
     "gym servers home drag reorders and the leader badge stays gray until the leader confirms",
     {
       steps: [

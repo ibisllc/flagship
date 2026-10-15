@@ -164,7 +164,7 @@ class HomeScreenComposeTest {
 
     @Test fun orderedServers_showOnlyTheLeader_noPlaceInLine() {
         setOrdered()
-        composeRule.onNodeWithTag("pod-leader-badge", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("leader-badge", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Standing in for home3").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("#1").assertDoesNotExist()
         composeRule.onNodeWithText("#2").assertDoesNotExist()
@@ -176,14 +176,14 @@ class HomeScreenComposeTest {
 
     @Test fun theLeaderBadge_isGrayUntilTheLeaderHoldsTheOrder() {
         setOrdered(issuedAt = 10, acks = mapOf("b" to 5L))
-        composeRule.onNodeWithTag("pod-leader-badge", useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithTag("leader-badge", useUnmergedTree = true).assertDoesNotExist()
         composeRule.onNodeWithContentDescription("Leader, waiting for the server to confirm").performScrollTo().assertIsDisplayed()
     }
 
     @Test fun theLeaderBadge_isConfirmedOnceTheLeaderAcks() {
         setOrdered(issuedAt = 10, acks = mapOf("b" to 10L))
-        composeRule.onNodeWithTag("pod-leader-badge", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithTag("pod-leader-badge-pending", useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithTag("leader-badge", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("leader-badge-pending", useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test fun theRecoveryNudge_asksForAPasskey() {

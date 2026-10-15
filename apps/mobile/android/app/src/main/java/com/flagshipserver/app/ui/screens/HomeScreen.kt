@@ -686,13 +686,13 @@ fun ServerRow(
 @Composable
 private fun LeaderPill(confirmed: Boolean) {
     if (confirmed) {
-        FSPill("Leader", kind = FSPillKind.Online, modifier = Modifier.testTag("pod-leader-badge"))
+        FSPill("Leader", kind = FSPillKind.Online, modifier = Modifier.testTag("leader-badge"))
     } else {
         FSPill(
             "Leader",
             kind = FSPillKind.Idle,
             modifier = Modifier
-                .testTag("pod-leader-badge-pending")
+                .testTag("leader-badge-pending")
                 .clearAndSetSemantics { contentDescription = "Leader, waiting for the server to confirm" },
         )
     }
