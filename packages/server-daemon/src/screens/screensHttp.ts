@@ -27,6 +27,7 @@ import type { AppEnvStore } from "../serviceEnvStore.js";
 import type { BuildCredentialStore } from "../llm/buildCredentialStore.js";
 import { parseRelayFlag, type LlmCredential } from "../llmHarness.js";
 import { isAppAccessPath } from "../egress/approvals.js";
+import { OUTBOUND_PROXY_PATH, type OutboundProxySummary } from "../outboundProxy/http.js";
 import { isAppApiKeysPath, type AppApiKeysHttp } from "../appApiKeys.js";
 import { ACCESS_ALERTS_PATH, buildAccessAlertSettingHttp, type AccessAlertSetting } from "../egress/accessAlertSetting.js";
 import { SERVER_ORDER_PATH, buildServerOrderHttp } from "../serverOrderHttp.js";
@@ -172,6 +173,15 @@ export interface ScreensHttpDeps {
    */
   /** API keys apps accept from machine clients (`/services/:id/api-keys`, appApiKeys.ts). */
   appApiKeys?: AppApiKeysHttp | null;
+  /**
+   * The box's outbound proxy (`/api/screens/outbound-proxy`,
+   * docs/outbound-proxy.md): read by any session, changed only by the owner
+   * with a signed order. Its summary rides on server-detail.
+   */
+  outboundProxy?: {
+    handle: (path: string, method: string, req: HttpRequest, ctx: { companion: boolean }) => Promise<HttpResponse | null>;
+    summary: () => OutboundProxySummary;
+  } | null;
   appEgress?: {
     handle: (path: string, method: string, req: HttpRequest) => Promise<HttpResponse | null>;
     view: (serviceId: string, declared: readonly string[]) => { declared: string[]; approved: string[] };
@@ -567,6 +577,12 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
         holder: deps.serverOrder,
         denyCompanion: (r) => denyCompanionWrite(deps.pairedSessions ?? null, r),
       })(path, method, req);
+      if (r) return r;
+    }
+
+    if (deps.outboundProxy && path === OUTBOUND_PROXY_PATH) {
+      const companion = deps.pairedSessions?.isCompanionRequest?.(req) === true;
+      const r = await deps.outboundProxy.handle(path, method, req, { companion });
       if (r) return r;
     }
 
@@ -1560,6 +1576,7 @@ function serverDetail(deps: ScreensHttpDeps, now: () => number): ServerDetailRes
     currentCommit: deps.currentCommit?.() ?? null,
     lastUpdate: deps.lastUpdate?.() ?? null,
     appSandbox: appSandboxStatus(),
+    ...(deps.outboundProxy ? { outboundProxy: deps.outboundProxy.summary() } : {}),
     startedAt: deps.startedAt,
     uptimeMs: now() - deps.startedAt,
     certNotAfter: cert?.notAfter,
