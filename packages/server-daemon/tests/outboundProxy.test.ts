@@ -10,6 +10,9 @@ import { isDirectHost, OutboundNet } from "../src/outboundProxy/outboundNet.js";
 import { startOutboundBridge } from "../src/outboundProxy/bridge.js";
 import { OutboundProxyStore, settingOf } from "../src/outboundProxy/store.js";
 import { buildOutboundProxyHttp, OUTBOUND_PROXY_PATH } from "../src/outboundProxy/http.js";
+import { buildCurlrc } from "../src/outboundProxy/curlrc.js";
+import { buildHealthReportScript } from "../src/healthReporter.js";
+import { execFileSync } from "node:child_process";
 
 const closers: Array<() => void> = [];
 afterEach(() => {
@@ -389,5 +392,24 @@ describe("the outbound proxy store and endpoint", () => {
     expect(JSON.parse(String(r?.body)).error).toBe("Can't reach the proxy.");
     expect(e.store.current()).toBeNull();
     expect(e.activated).toHaveLength(0);
+  });
+});
+
+describe("the proxy curl config for scripts outside the daemon", () => {
+  it("names the proxy with remote DNS and quotes the credentials", () => {
+    expect(buildCurlrc({ upstream: { kind: "socks5", host: "2001:db8::7", port: 9050 }, fallbackDirect: false })).toBe(
+      'proxy = "socks5h://[2001:db8::7]:9050"\n',
+    );
+    expect(
+      buildCurlrc({ upstream: { kind: "http", host: "proxy.example.net", port: 3128, username: "al", password: 'p"w\\x' }, fallbackDirect: true }),
+    ).toBe('proxy = "http://proxy.example.net:3128"\nproxy-user = "al:p\\"w\\\\x"\n');
+  });
+
+  it("the health script uses it when present and stays valid bash", () => {
+    const script = buildHealthReportScript({ controlPlaneBaseUrl: "https://flagshipserver.com", serverDomain: "home.a.flagship.services" });
+    expect(script).toContain("[ -r /var/flagship/outbound-proxy.curlrc ] && proxy=(-K /var/flagship/outbound-proxy.curlrc)");
+    const d = mkdtempSync(join(tmpdir(), "health-"));
+    writeFileSync(join(d, "h.sh"), script);
+    execFileSync("bash", ["-n", join(d, "h.sh")]);
   });
 });
