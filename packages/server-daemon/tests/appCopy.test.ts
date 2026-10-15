@@ -11,7 +11,7 @@ import { mkdtempSync, readdirSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   deriveIRK,
   ed,
@@ -39,6 +39,14 @@ import { buildScreensHttp } from "../src/screens/screensHttp.js";
 import type { HttpRequest } from "../src/runtime.js";
 import { readServiceSource, writeSourceTree } from "../src/llm/serviceSource.js";
 import { swkOps, testCustodian } from "./helpers/keyCustody.js";
+
+// 8 MiB chunks made the multi-chunk test gzip, hash and write ~70 MB of
+// random bytes, which ran past the 30 s timeout on a loaded machine. Both
+// sides read the size from wire.ts, so a small one exercises the same path.
+vi.mock("../src/appCopy/wire.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/appCopy/wire.js")>()),
+  APP_COPY_CHUNK_BYTES: 64 * 1024,
+}));
 
 const SRC = "home3.harry.flagship.services";
 const DST = "leticia.harry.flagship.services";
@@ -84,9 +92,13 @@ function fakeOps(over: Partial<AppCopyOps> = {}) {
   const restoredFiles: Array<{ volume: string; content: string }> = [];
   const paused: string[] = [];
   let gate: Promise<void> | null = null;
+  const atGate = deferred();
   const ops: AppCopyOps = {
     saveImage: async (image, out) => {
-      if (gate) await gate;
+      if (gate) {
+        atGate.resolve();
+        await gate;
+      }
       await writeFile(out, `image:${image}`);
     },
     loadImage: async (p) => {
@@ -111,7 +123,7 @@ function fakeOps(over: Partial<AppCopyOps> = {}) {
     },
     ...over,
   };
-  return { ops, images, removed, restoredDbs, restoredFiles, paused, hold: (p: Promise<void>) => (gate = p) };
+  return { ops, images, removed, restoredDbs, restoredFiles, paused, hold: (p: Promise<void>) => (gate = p), atGate: atGate.promise };
 }
 
 function platformFor(box: typeof srcBox, nameKey: string, startOk = true) {
@@ -238,8 +250,10 @@ async function world(o: WorldOpts = {}) {
       fetchLog.push({ part: (JSON.parse(init.body) as { part: string }).part, status: r!.status });
       return new Response(r!.status === 204 ? null : r!.body, { status: r!.status, headers: r!.headers ?? {} });
     },
-    pollMs: 1,
-    sleep: () => new Promise((r) => setTimeout(r, 1)),
+    // Every poll is a signed fetch the source verifies (pure-JS ed25519): at
+    // 1 ms they starved the source's own preparation of the main thread and
+    // a copy took tens of seconds on a loaded machine.
+    pollMs: 20,
     lanFetch: o.lanFetch ? o.lanFetch(source) : null,
     ownLanAddresses: () => ["192.168.64.42"],
     now,
@@ -278,7 +292,7 @@ describe("the owner's order on the target (POST /api/screens/services/copy)", ()
     expect(r.json).toEqual({ copyId: expect.stringMatching(/^[0-9a-f]{24}$/) });
 
     // While the source makes the bundle the app is a greyed row in the apps list.
-    await new Promise((res) => setTimeout(res, 5));
+    await w.sOps.atGate;
     const during = await call(w, "GET", "/api/screens/apps-list");
     expect(during.json.apps).toEqual([
       {
@@ -404,6 +418,7 @@ describe("the owner's order on the target (POST /api/screens/services/copy)", ()
     await w.target.settle();
     expect((await call(w, "GET", COPIES_PATH)).json.copies[0].state).toBe("done");
     expect(loaded!.equals(big)).toBe(true);
+    expect(w.fetchLog.filter((f) => f.part === "image")).toHaveLength(3);
     expect(most).toBeGreaterThan(1);
     expect(most).toBeLessThanOrEqual(APP_COPY_PARALLEL);
   });
@@ -687,7 +702,7 @@ describe("the source's export endpoint (POST /api/app-copy/export)", () => {
     const w = await world();
     const g = grant();
     expect((await exportCall(w, { g })).status).toBe(202);
-    for (let i = 0; i < 50; i++) {
+    for (const deadline = Date.now() + 20_000; Date.now() < deadline; ) {
       const r = await exportCall(w, { g });
       if (r.status === 200) {
         expect(r.json!.parts.map((p: { name: string }) => p.name)).toEqual(["image", "db:default", "files", "source"]);
@@ -697,7 +712,7 @@ describe("the source's export endpoint (POST /api/app-copy/export)", () => {
         expect(r.json!.env.sealed).toBeTruthy();
         return;
       }
-      await new Promise((res) => setTimeout(res, 2));
+      await new Promise((res) => setTimeout(res, 20));
     }
     throw new Error("never ready");
   });
