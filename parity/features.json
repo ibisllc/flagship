@@ -390,7 +390,7 @@
       "surfaces": {
         "mac": { "status": "present", "anchors": [["apps/builder-mac/Sources/FlagshipBuilderCore/VM/ApplianceCache.swift", "ApplianceCache"], ["apps/builder-mac/Sources/FlagshipBuilderCore/VM/Qcow2Expander.swift", "Qcow2Expander"], ["apps/builder-mac/Sources/FlagshipBuilderCore/VM/ApplianceProvisioner.swift", "ApplianceProvisioner"]] },
         "win": { "status": "missing", "reason": "Wizard.cs always plans provisioningMode: InstallerISO.", "anchors": [["apps/builder-windows/src/Wizard.cs", "VMProvisioningMode\\.Appliance"]] },
-        "linux": { "status": "partial", "reason": "Only when FLAGSHIP_VM_APPLIANCE_BASE is set (wizard.py); no download or verify.", "anchors": [["apps/builder-linux/wizard.py", "FLAGSHIP_VM_APPLIANCE_BASE"]] }
+        "linux": { "status": "present", "anchors": [["apps/builder-linux/vm/appliance_cache.py", "^class ApplianceCache:"], ["apps/builder-linux/wizard.py", "_live_ensure_appliance"]] }
       }
     },
     {

@@ -1,6 +1,8 @@
 {
   "about": "Derived-check findings that are intentional. Each entry names its check id and finding key exactly as scripts/parity-check.mjs prints them, and says why. An entry that no longer matches anything is reported as stale: delete it.",
   "entries": [
+    { "check": "test-vectors", "key": "mac:vm-core-vectors.applianceSeed", "reason": "By the section's own notes the Mac's JSONEncoder writes an equivalent seed body, not the same bytes, so it doesn't assert this vector." },
+    { "check": "test-vectors", "key": "linux:vm-core-vectors.applianceSeed", "reason": "Linux writes the seed through the Node CLI's appliance-provision, which packages/flagship-builder/tests/appliance.test.ts checks against this section." },
     { "check": "deep-links", "key": "ios-lacks-host:deadman", "reason": "Android's own dead-man reminder notification opens app/deadman/<server>; iOS's local reminder carries category deadman-affirm and serverDomain in userInfo instead of a link." },
     { "check": "signed-tags", "key": "android:flagship/umk-wrap/v1", "reason": "iOS Secure Enclave keystore wrapping, local storage only and never on the wire; Android wraps in the Android Keystore." },
     { "check": "signed-tags", "key": "web:flagship/umk-wrap/v1", "reason": "iOS Secure Enclave keystore wrapping, local storage only; the webapp wraps with its PIN (pin-wrap/v1)." },
