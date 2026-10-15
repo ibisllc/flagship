@@ -59,6 +59,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0095",
   // The owner's server order (who leads, who's next).
   "0096",
+  // How proxy servers' setup calls reached .com: private relay or direct (feat/outbound-proxy).
+  "0098",
 ];
 
 export interface SchemaStatusDeps {
