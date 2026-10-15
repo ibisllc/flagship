@@ -1,5 +1,5 @@
 /**
- * RelayHealthStorage (migration 0098): per-day arrival counts and the latest
+ * RelayHealthStorage (migration 0099): per-day arrival counts and the latest
  * relay probe, against the InMemory adapter and the D1 adapter over a fully
  * migrated node:sqlite.
  */
