@@ -90,6 +90,24 @@ struct OutboundProxyFieldsView: View {
     }
 }
 
+/// "An outbound proxy is part of Pro." with a link to the Pro page, shown to
+/// Free accounts instead of the fields.
+struct OutboundProxyProNote: View {
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        VStack(alignment: .leading, spacing: 2) {
+            Text(OutboundProxyCopy.proNote)
+                .font(FS.font.caption())
+                .foregroundColor(c.textMuted)
+            Link(OutboundProxyCopy.seePro, destination: OutboundProxyCopy.proUrl)
+                .font(FS.font.caption())
+        }
+        .accessibilityIdentifier("proxy-pro")
+    }
+}
+
 /// The server page's "Outbound proxy" section. Hidden when the box doesn't
 /// report one (older daemons).
 struct OutboundProxyCard: View {
@@ -114,6 +132,9 @@ struct OutboundProxyCard: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         let shown = controller?.summary ?? summary
+        // The box says `available: false` once .com has told it the account is
+        // on Free: no new proxy, but one already set can still be turned off.
+        let pro = shown.available != false
         VStack(alignment: .leading, spacing: FS.space.s3) {
             Text(OutboundProxyCopy.title.uppercased())
                 .font(.system(size: 12, weight: .semibold))
@@ -137,13 +158,18 @@ struct OutboundProxyCard: View {
                     if let err = controller?.errorMessage, !showSheet {
                         Text(err).font(FS.font.caption()).foregroundColor(c.danger)
                     }
-                    if !app.isDemoAccount {
+                    if !pro {
+                        OutboundProxyProNote()
+                    }
+                    if !app.isDemoAccount && (pro || shown.proxy != nil) {
                         HStack(spacing: FS.space.s2) {
-                            FSSecondaryButton(OutboundProxyCopy.change) {
-                                ctl().beginEdit()
-                                showSheet = true
+                            if pro {
+                                FSSecondaryButton(OutboundProxyCopy.change) {
+                                    ctl().beginEdit()
+                                    showSheet = true
+                                }
+                                .accessibilityIdentifier("sd-proxy-change")
                             }
-                            .accessibilityIdentifier("sd-proxy-change")
                             if shown.proxy != nil {
                                 FSGhostButton(OutboundProxyCopy.turnOff) {
                                     let vm = ctl()
