@@ -407,7 +407,6 @@ self.addEventListener("fetch", (event) => {
 const REPLAY_QUEUE = [];
 const REPLAY_PATH_PATTERNS = [
   /^\/api\/screens\/orders\/send$/,
-  /^\/api\/screens\/url-controller\/claim$/,
   /^\/api\/screens\/app-backup\/start$/,
 ];
 

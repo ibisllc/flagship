@@ -156,7 +156,7 @@ export async function recoverFromCloud(username) {
   // subsequent unlockSession (which loads the admin root from the keystore)
   // brings the recovered browser up as an ADMIN device (D-4 story 4). Keyed to
   // profileIdFromCloudName(username) — the SAME profile the recovered UMK lands
-  // under in the takeover/keep-both flows — so the two records stay together.
+  // under in the takeover flow — so the two records stay together.
   // Best-effort: a legacy escrow (UMK alone) simply has no admin root to store.
   if (Array.isArray(result.adminRootSeed) && result.adminRootSeed.length === 32) {
     await persistRecoveredAdminRoot({

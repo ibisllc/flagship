@@ -192,18 +192,6 @@ export async function renderServiceDetail(serviceId) {
         ? '<div class="card placeholder">no stores</div>'
         : (body.dataLayerInstances ?? []).map(renderStoreRow).join("")
       }
-      <h2 class="mt-4">Members</h2>
-      ${(body.members ?? []).length === 0
-        ? '<div class="card placeholder">none</div>'
-        : (body.members ?? []).map((m) => `
-          <div class="card">
-            <div class="row">
-              <span class="value text-xs">${escapeHtml(m.stableIdPrefix)}…</span>
-              <span class="pill">${escapeHtml(m.role)}</span>
-            </div>
-          </div>
-        `).join("")
-      }
       ${hasBrowserBundle(body) ? `
         <h2 class="mt-4">Browser bundle</h2>
         <div class="card">

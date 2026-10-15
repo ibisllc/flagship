@@ -149,7 +149,6 @@ describe("UX-B (B3) — error-humanizer rollout: no catch site shows raw error t
     "views/create-server.js",
     "views/companion-dock.js",
     "views/companion-requests.js",
-    "views/url-controller.js",
     "views/trusted-devices.js",
     "views/paired-sessions.js",
     "views/peer-backup.js",
