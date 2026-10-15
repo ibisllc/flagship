@@ -177,7 +177,10 @@
 //       (never a second device); an app's page ends in "Remove app" (the signed
 //       uninstall to the server the page reads, the only copy included) and shows
 //       the box's "Recent logs" when it sends some.
-const SHELL_VERSION = "v83";
+//  v84: A server order refused because another device saved a newer one
+//      says so instead of blaming the connection; a server paired by
+//      address keeps its port when a screen reaches it by name.
+const SHELL_VERSION = "v84";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
