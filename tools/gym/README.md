@@ -96,8 +96,15 @@ surfaces, totals:{total,passed,failed,skipped}, results:[ScenarioResult], ok }`.
 | Surface | Engine | How the adapter drives it |
 |---|---|---|
 | **web** | Playwright (chromium) | WRAPS `apps/web/e2e` via `apps/web/e2e/gym/playwright.gym.config.ts` — a self-contained static webapp server (no wrangler, no pod-sim, no backend). Maps Playwright's JSON report + `gym-screenshot:` attachments into the artifact. |
-| **ios** | XCUITest | Shells `xcodebuild test -scheme FlagshipApp -only-testing:FlagshipAppUITests/<Class>[/method]`, launching in `-smoke-mode` (seeded `DemoFixtures`, no backend). The every-merge legs are `GymSmokeTests` + `GymEveryMergeTests`; the total tranche is `GymTotalTests`. Extracts screenshots from the `.xcresult`. **Building this also builds the App + UITest target.** |
-| **android** | (stub) | Adapter **interface + TODO only**. The full Compose-UI-Test/emulator harness + the ~43-screen `testTag` sweep is a later phase (§10 Phase-5). The runner cleanly SKIPS Android. |
+| **ios** | XCUITest | `prepare` runs ONE `xcodebuild build-for-testing` (`GYM_IOS_XCODEGEN=1` regenerates the project first), then runs every selected scenario as one `test-without-building` batch per simulator: iPhone (iPhone 17 Pro when installed) first, then the `GymIPad*` scenarios on the iPad (iPad Pro 13-inch M5). It boots each simulator before its batch and shuts it down after, so only one is up. Each scenario's verdict comes from its tests in the `.xcresult` (a 0-test match fails; all-skipped is a skip). Screenshots are the tests' `gym-screenshot:<point>` attachments. Uses the newest `/Applications/Xcode*.app` unless `DEVELOPER_DIR` is set; `GYM_IOS_DERIVED_DATA=<dir>` keeps the build for the next run (default: a temp folder deleted at the end); `GYM_IOS_DESTINATION` / `GYM_IOS_IPAD_DESTINATION` override the simulators. |
+| **android** | Compose UI Test (instrumented) | `prepare` boots the AVD headless when no device is online (`GYM_ANDROID_AVD`, else `flagship_gym`, else the first AVD), turns animations off, and runs ONE `./gradlew :app:connectedDebugAndroidTest` for every selected `class[#method]`; each scenario's verdict comes from the connected-test JUnit XML. `finish` kills the emulator it booted (`GYM_ANDROID_KEEP_EMULATOR=1` keeps it). Screenshots are pulled from the app's `files/gym-shots` (`gym-screenshot-<Class>.<method>--<point>-<n>.png`). Needs JDK 17 (`GYM_ANDROID_JAVA_HOME` / `JAVA_HOME` / openjdk@17). |
+
+The one-command native runs (from the repo root):
+
+```sh
+npm run gym -- total --surface ios --mock-only       # iPhone + iPad, one build
+npm run gym -- total --surface android --mock-only   # boots/kills the AVD itself
+```
 
 The runner **skips** (never fails) a surface whose toolchain is absent — so
 `gym:every-merge --surface web` runs on Linux CI with no Xcode, and iOS is
@@ -175,8 +182,8 @@ tools/gym/
     adapters/
       types.ts           # the SurfaceAdapter interface
       web.ts             # wraps Playwright
-      ios.ts             # wraps XCUITest
-      android.ts         # interface + stub (later phase)
+      ios.ts             # wraps XCUITest (one build, batched per simulator)
+      android.ts         # wraps connectedDebugAndroidTest (boots the AVD)
     ai/
       hooks.ts           # judge + navigator interfaces + no-op defaults
       byokSeam.ts        # the BYOK adapter seam

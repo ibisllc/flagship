@@ -33,6 +33,7 @@ import com.flagshipserver.app.MainActivity
 import com.flagshipserver.app.core.SmokeModeConfig
 import org.junit.After
 import org.junit.Rule
+import org.junit.rules.TestName
 import java.io.File
 import java.io.FileOutputStream
 
@@ -46,6 +47,9 @@ abstract class GymBase {
     /** Empty rule (no auto-launched activity) so we control the launch Intent. */
     @get:Rule
     val composeRule: ComposeTestRule = createEmptyComposeRule()
+
+    @get:Rule
+    val testName = TestName()
 
     private var scenario: ActivityScenario<MainActivity>? = null
     /** The directory the gym adapter pulls bitmaps from (cleared each scenario). */
@@ -121,8 +125,9 @@ abstract class GymBase {
 
     /**
      * Capture a screenshot of the current screen and write it under the gym's
-     * shot dir as `gym-screenshot-<point>-<n>.png` — the name shape the gym's
-     * Android adapter scrapes off the device. Mirror of iOS gymShot. A capture
+     * shot dir as `gym-screenshot-<Class>.<method>--<point>-<n>.png` — the name
+     * shape the gym's Android adapter scrapes off the device (the test name lets
+     * it hand each shot to its scenario when the whole suite runs as one batch). Mirror of iOS gymShot. A capture
      * failure is swallowed (it must never change the verdict).
      */
     protected fun gymShot(point: String) {
@@ -131,7 +136,8 @@ abstract class GymBase {
             val safePoint = point.replace(Regex("[^A-Za-z0-9_.-]"), "-")
             val bitmap: Bitmap = instr.uiAutomation.takeScreenshot() ?: return
             val n = shotCounter++
-            val file = File(shotDir, "gym-screenshot-$safePoint-$n.png")
+            val test = "${this::class.java.simpleName}.${testName.methodName}"
+            val file = File(shotDir, "gym-screenshot-$test--$safePoint-$n.png")
             FileOutputStream(file).use { out ->
                 bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
             }

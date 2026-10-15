@@ -1,23 +1,23 @@
 /**
  * Android adapter — WRAPS the Compose-UI-Test + Espresso instrumentation suite
- * (§12-G3 / §10 Phase-5). It shells `./gradlew :app:connectedDebugAndroidTest`
- * for the scenario's class[#method], launching MainActivity on an AVD in
- * smoke mode (the `flagship.smoke*` Intent extras, wired in MainActivity ->
- * SmokeMode). The deterministic verdict = gradle's per-test pass/fail parsed
- * from the connected-test XML; bitmaps captured on-device (the `gym-screenshot-`
- * shot dir) are pulled into the run dir for the advisory judge.
+ * (§12-G3 / §10 Phase-5), launching MainActivity in smoke mode (the
+ * `flagship.smoke*` Intent extras, wired in MainActivity -> SmokeMode).
  *
- * AVAILABILITY (detect-and-skip): the on-device suite needs (a) a JDK 17 (the
- * gym CLI runs on a Mac with no system Java — JAVA_HOME must point at
- * openjdk@17), and (b) a REACHABLE device — an `adb devices` online entry, or
- * an installed AVD. On a machine with NO emulator binary + NO AVD (e.g. this
- * dev Mac), `available()` returns `ok:false` with a clear reason, so the runner
- * SKIPS Android cleanly (never fails it) and `gym:total` stays green. The
- * `assembleDebugAndroidTest` compile gate is independent — it runs in CI / on
- * the Mac and proves the harness compiles even when no AVD exists.
+ * One run = ONE gradle invocation: `prepare` boots the AVD headless when no
+ * device is online (GYM_ANDROID_AVD, else `flagship_gym`, else the first AVD),
+ * then runs `:app:connectedDebugAndroidTest` once for every selected scenario
+ * (a comma-separated class[#method] list). `run` reads each scenario's verdict
+ * from the connected-test JUnit XML: every test it names must have run and
+ * passed. `finish` kills the emulator if the gym booted it. Bitmaps captured
+ * on-device (`gym-screenshot-<point>-<n>.png`, named by the test) are pulled
+ * for the advisory judge.
+ *
+ * AVAILABILITY (detect-and-skip): needs a JDK 17 (GYM_ANDROID_JAVA_HOME /
+ * JAVA_HOME / openjdk@17) and an online device or an AVD to boot. Without
+ * either the runner SKIPS Android cleanly (never fails it).
  */
 
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdtempSync,
@@ -82,16 +82,80 @@ function hasOnlineDevice(adb: string): boolean {
   return false;
 }
 
-/** True iff at least one AVD exists (so the runner COULD boot an emulator). */
-function hasAvd(androidHome: string | undefined): boolean {
+function listAvds(androidHome: string | undefined): string[] {
   const emulator = androidHome ? join(androidHome, "emulator", "emulator") : undefined;
-  if (!emulator || !existsSync(emulator)) return false;
+  if (!emulator || !existsSync(emulator)) return [];
   const out = spawnSync(emulator, ["-list-avds"], { encoding: "utf8", timeout: 15_000 });
-  return out.status === 0 && (out.stdout ?? "").trim().length > 0;
+  if (out.status !== 0) return [];
+  return (out.stdout ?? "").split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("INFO"));
+}
+
+/** The AVD the gym boots: GYM_ANDROID_AVD, else `flagship_gym`, else the first one. */
+function pickAvd(androidHome: string | undefined): string | undefined {
+  const avds = listAvds(androidHome);
+  const wanted = process.env.GYM_ANDROID_AVD;
+  if (wanted) return avds.includes(wanted) ? wanted : undefined;
+  return avds.includes("flagship_gym") ? "flagship_gym" : avds[0];
+}
+
+/** One test as the connected-test XML reports it. */
+export interface JUnitCase {
+  /** Fully-qualified class name. */
+  readonly className: string;
+  readonly name: string;
+  readonly result: "passed" | "failed" | "skipped";
+  readonly durationMs: number;
+  readonly message?: string;
+}
+
+/** Parse every <testcase> of a JUnit XML document. */
+export function parseJUnitCases(xml: string): JUnitCase[] {
+  const out: JUnitCase[] = [];
+  const re = /<testcase\b([^>]*?)(\/>|>([\s\S]*?)<\/testcase>)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(xml))) {
+    const attrs = m[1] ?? "";
+    const body = m[3] ?? "";
+    const attr = (k: string): string => new RegExp(`\\b${k}="([^"]*)"`).exec(attrs)?.[1] ?? "";
+    const failure = /<(failure|error)\b([^>]*?)(\/>|>([\s\S]*?)<\/\1>)/.exec(body);
+    const skipped = /<skipped\b/.test(body);
+    const message = failure
+      ? /\bmessage="([^"]*)"/.exec(failure[2] ?? "")?.[1] || (failure[4] ?? "").split("\n")[0] || "failed"
+      : undefined;
+    out.push({
+      className: attr("classname"),
+      name: attr("name"),
+      result: failure ? "failed" : skipped ? "skipped" : "passed",
+      durationMs: Math.round(Number(attr("time") || "0") * 1000),
+      ...(message !== undefined ? { message: decodeXml(message) } : {}),
+    });
+  }
+  return out;
+}
+
+function decodeXml(s: string): string {
+  return s
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
+/** The cases a `class[#method]` harness selects. */
+export function casesForHarness(harness: string, cases: readonly JUnitCase[]): JUnitCase[] {
+  const [cls, method] = harness.split("#");
+  return cases.filter((c) => c.className === cls && (method === undefined || c.name === method));
 }
 
 export class AndroidAdapter implements SurfaceAdapter {
   readonly surface = "android" as const;
+
+  private cases: JUnitCase[] = [];
+  private batchError: string | undefined;
+  private batchLog = "";
+  private bootedSerial: string | undefined;
+  private emulatorPid: number | undefined;
 
   async available(ctx: AdapterContext): Promise<{ ok: boolean; reason?: string }> {
     if (!existsSync(join(ctx.repoRoot, ANDROID_DIR_REL))) {
@@ -107,114 +171,170 @@ export class AndroidAdapter implements SurfaceAdapter {
     }
     const androidHome = resolveAndroidHome();
     const adb = adbPath(androidHome);
-    // A booted emulator/device is what `connectedDebugAndroidTest` needs.
-    if (adb && hasOnlineDevice(adb)) return { ok: true };
-    // No online device — is there at least an AVD the owner could boot? Either
-    // way we SKIP (we don't auto-boot an emulator here), but the reason tells
-    // the owner which case they're in.
-    if (hasAvd(androidHome)) {
-      return {
-        ok: false,
-        reason:
-          "an AVD exists but no emulator is booted — start it " +
-          "(`emulator -avd <name>` + `adb wait-for-device`) then re-run the gym",
-      };
-    }
+    if (!adb) return { ok: false, reason: "no adb (install the Android SDK platform-tools)" };
+    if (hasOnlineDevice(adb)) return { ok: true };
+    if (pickAvd(androidHome)) return { ok: true };
     return {
       ok: false,
       reason:
-        "no Android emulator/AVD on this machine — `connectedDebugAndroidTest` " +
-        "needs a booted device. Create + boot an AVD (see the gym owner notes), " +
+        "no Android device online and no AVD to boot — create one (e.g. `flagship_gym`) " +
         "or run the compile gate `:app:assembleDebugAndroidTest` instead.",
     };
   }
 
-  async run(scenario: Scenario, ctx: AdapterContext): Promise<AdapterOutcome> {
-    const started = Date.now();
+  async prepare(scenarios: readonly Scenario[], ctx: AdapterContext): Promise<{ ok: boolean; reason?: string }> {
     const androidDir = join(ctx.repoRoot, ANDROID_DIR_REL);
-    const logParts: string[] = [];
-    const javaHome = resolveJavaHome();
     const androidHome = resolveAndroidHome();
-    const adb = adbPath(androidHome);
-
-    // Clear the on-device shot dir before the run so we only pull THIS
-    // scenario's bitmaps (best-effort; ignore failures).
-    if (adb) {
-      spawnSync(adb, ["shell", "run-as", APP_ID, "rm", "-rf", `files/${ON_DEVICE_SHOT_SUBDIR}`], {
-        encoding: "utf8",
-        timeout: 30_000,
-      });
-    }
-
-    // `scenario.harness` is the Compose-UI-Test class[#method] identifier (no
-    // "/"), passed to AndroidJUnitRunner via the class arg.
+    const adb = adbPath(androidHome)!;
     const env: NodeJS.ProcessEnv = { ...process.env };
+    const javaHome = resolveJavaHome();
     if (javaHome) env.JAVA_HOME = javaHome;
     if (androidHome) env.ANDROID_HOME = androidHome;
 
+    if (!hasOnlineDevice(adb)) {
+      const booted = this.bootEmulator(androidHome, adb);
+      if (!booted.ok) return booted;
+    }
+    // Animations make Compose idling flaky on a cold emulator.
+    for (const k of ["window_animation_scale", "transition_animation_scale", "animator_duration_scale"]) {
+      spawnSync(adb, ["shell", "settings", "put", "global", k, "0"], { encoding: "utf8", timeout: 30_000 });
+    }
+    spawnSync(adb, ["shell", "run-as", APP_ID, "rm", "-rf", `files/${ON_DEVICE_SHOT_SUBDIR}`], {
+      encoding: "utf8",
+      timeout: 30_000,
+    });
+
+    const resultsDir = join(androidDir, "app", "build", "outputs", "androidTest-results", "connected");
+    rmSync(resultsDir, { recursive: true, force: true });
+    const classes = [...new Set(scenarios.map((s) => s.harness))].join(",");
     const gradle = spawnSync(
       "./gradlew",
       [
         ":app:connectedDebugAndroidTest",
-        `-Pandroid.testInstrumentationRunnerArguments.class=${scenario.harness}`,
-        "--stacktrace",
+        `-Pandroid.testInstrumentationRunnerArguments.class=${classes}`,
+        "--console=plain",
       ],
-      { cwd: androidDir, encoding: "utf8", env, timeout: 1_200_000 },
+      { cwd: androidDir, encoding: "utf8", env, timeout: 4 * 60 * 60 * 1000, maxBuffer: 512 * 1024 * 1024 },
     );
-    logParts.push("[gradle]\n" + (gradle.stdout ?? "") + (gradle.stderr ?? ""));
-
-    // The deterministic verdict. Gradle's exit code is the primary signal; the
-    // connected-test XML refines it (a 0-test run is NOT a pass — it proves
-    // nothing, the same rule as the runner's empty-selection guard).
-    const xml = this.parseConnectedResults(androidDir, logParts);
-    let passed: boolean;
-    if (xml.total > 0) passed = gradle.status === 0 && xml.failures === 0 && xml.errors === 0;
-    else {
-      passed = false;
-      logParts.push(
-        "[gym] connectedDebugAndroidTest produced no parseable test XML — not claiming a pass",
-      );
+    const out = (gradle.stdout ?? "") + (gradle.stderr ?? "");
+    this.batchLog = out
+      .split("\n")
+      .filter((l) => /FAILED|failed|error:|BUILD|Tests? on/.test(l))
+      .slice(-80)
+      .join("\n");
+    this.cases = [];
+    if (existsSync(resultsDir)) {
+      for (const f of this.findXml(resultsDir)) {
+        try {
+          this.cases.push(...parseJUnitCases(readFileSync(f, "utf8")));
+        } catch {
+          // An unreadable report leaves its tests unmatched, which fails them.
+        }
+      }
     }
+    if (this.cases.length === 0) {
+      this.batchError = `connectedDebugAndroidTest produced no test results (exit ${gradle.status})`;
+    }
+    this.pullShots(adb, ctx);
+    return { ok: true };
+  }
 
-    const screenshots = adb ? this.pullScreenshots(adb, scenario, ctx, logParts) : [];
-
+  async run(scenario: Scenario, ctx: AdapterContext): Promise<AdapterOutcome> {
+    if (this.batchError) {
+      return { passed: false, durationMs: 0, screenshots: [], log: `[gym] ${this.batchError}\n${this.batchLog}`.slice(-6000) };
+    }
+    const tests = casesForHarness(scenario.harness, this.cases);
+    const durationMs = tests.reduce((a, t) => a + t.durationMs, 0);
+    const lines: string[] = [];
+    let passed: boolean;
+    let skipped = false;
+    if (tests.length === 0) {
+      passed = false;
+      lines.push(`[gym] \`${scenario.harness}\` matched no test (missing/misnamed harness?) — NOT claiming a pass`);
+    } else if (tests.some((t) => t.result === "failed")) {
+      passed = false;
+      lines.push(`[gym] ${tests.filter((t) => t.result === "failed").length} test(s) failed`);
+    } else if (tests.every((t) => t.result === "skipped")) {
+      passed = false;
+      skipped = true;
+      lines.push("[gym] every test skipped");
+    } else {
+      passed = true;
+      lines.push(`[gym] ${tests.length} test(s) passed`);
+    }
+    for (const t of tests) {
+      lines.push(`  ${t.result.padEnd(8)} ${t.className.split(".").pop()}#${t.name} (${t.durationMs}ms)`);
+      if (t.message) lines.push(`      ${t.message.slice(0, 600)}`);
+    }
+    const screenshots = this.screenshotsFor(scenario, tests, ctx);
     return {
       passed,
-      durationMs: Date.now() - started,
+      ...(skipped ? { skipped: true, skipReason: "every test skipped" } : {}),
+      durationMs,
       screenshots,
-      log: logParts.join("\n").slice(-6000),
+      log: lines.join("\n").slice(-6000),
     };
   }
 
-  /**
-   * Parse the connected-test JUnit XML
-   * (app/build/outputs/androidTest-results/connected/<dir>/*.xml) into a
-   * tests/failures/errors tally. AGP writes one file per device; we sum them.
-   */
-  private parseConnectedResults(
-    androidDir: string,
-    logParts: string[],
-  ): { total: number; failures: number; errors: number } {
-    const tally = { total: 0, failures: 0, errors: 0 };
-    const base = join(androidDir, "app", "build", "outputs", "androidTest-results", "connected");
-    if (!existsSync(base)) return tally;
-    for (const f of this.findXml(base)) {
-      try {
-        const txt = readFileSync(f, "utf8");
-        // <testsuite ... tests="N" failures="N" errors="N" ...>
-        const ts = /<testsuite\b[^>]*>/.exec(txt)?.[0] ?? "";
-        const num = (attr: string): number => {
-          const m = new RegExp(`\\b${attr}="(\\d+)"`).exec(ts);
-          return m ? Number(m[1]) : 0;
-        };
-        tally.total += num("tests");
-        tally.failures += num("failures");
-        tally.errors += num("errors");
-      } catch (e) {
-        logParts.push("[gym] failed to read connected-test XML " + f + ": " + String(e));
+  async finish(): Promise<void> {
+    const adb = adbPath(resolveAndroidHome());
+    if (adb && this.bootedSerial && process.env.GYM_ANDROID_KEEP_EMULATOR !== "1") {
+      spawnSync(adb, ["-s", this.bootedSerial, "emu", "kill"], { encoding: "utf8", timeout: 60_000 });
+      for (let i = 0; i < 30 && hasOnlineDevice(adb); i++) spawnSync("sleep", ["2"]);
+      if (this.emulatorPid) {
+        try {
+          process.kill(this.emulatorPid);
+        } catch {
+          // Already gone.
+        }
       }
     }
-    return tally;
+    this.bootedSerial = undefined;
+    this.emulatorPid = undefined;
+    this.cases = [];
+    this.batchError = undefined;
+    this.shotFiles = new Map();
+    if (this.shotTmp) rmSync(this.shotTmp, { recursive: true, force: true });
+    this.shotTmp = undefined;
+  }
+
+  /** Boot the AVD headless and wait for Android to finish booting (≤ 6 min). */
+  private bootEmulator(androidHome: string | undefined, adb: string): { ok: boolean; reason?: string } {
+    const avd = pickAvd(androidHome);
+    if (!avd || !androidHome) return { ok: false, reason: "no AVD to boot (set GYM_ANDROID_AVD)" };
+    const emulator = join(androidHome, "emulator", "emulator");
+    const child = spawn(
+      emulator,
+      ["-avd", avd, "-no-window", "-no-audio", "-no-boot-anim", "-no-snapshot-save", "-gpu", "swiftshader_indirect"],
+      { detached: true, stdio: "ignore" },
+    );
+    child.unref();
+    this.emulatorPid = child.pid;
+    const deadline = Date.now() + 6 * 60 * 1000;
+    while (Date.now() < deadline) {
+      const serial = this.onlineEmulatorSerial(adb);
+      if (serial) {
+        const prop = spawnSync(adb, ["-s", serial, "shell", "getprop", "sys.boot_completed"], {
+          encoding: "utf8",
+          timeout: 15_000,
+        });
+        if ((prop.stdout ?? "").trim() === "1") {
+          this.bootedSerial = serial;
+          return { ok: true };
+        }
+      }
+      spawnSync("sleep", ["3"]);
+    }
+    return { ok: false, reason: `the ${avd} emulator did not finish booting within 6 minutes` };
+  }
+
+  private onlineEmulatorSerial(adb: string): string | undefined {
+    const out = spawnSync(adb, ["devices"], { encoding: "utf8", timeout: 15_000 });
+    for (const line of (out.stdout ?? "").split("\n").slice(1)) {
+      const [serial, state] = line.trim().split(/\s+/);
+      if (serial?.startsWith("emulator-") && state === "device") return serial;
+    }
+    return undefined;
   }
 
   private findXml(dir: string): string[] {
@@ -227,53 +347,49 @@ export class AndroidAdapter implements SurfaceAdapter {
     return out;
   }
 
+  /** `<Class>.<method>` → [{point, local file}] pulled off the device. */
+  private shotFiles = new Map<string, Array<{ point: string; file: string }>>();
+  private shotTmp: string | undefined;
+
   /**
-   * Pull the on-device `gym-screenshot-<point>-<n>.png` bitmaps the androidTest
-   * suite wrote (under the app's filesDir/gym-shots) into the run dir. Uses
-   * `adb exec-out run-as <app> cat` so it works on a debuggable app without
-   * external-storage permissions. A missing shot never changes the verdict.
+   * Pull every `gym-screenshot-<Class>.<method>--<point>-<n>.png` the suite
+   * wrote under the app's filesDir/gym-shots. `exec-out run-as … cat` works on
+   * a debuggable app without storage permissions and streams binary cleanly.
    */
-  private pullScreenshots(
-    adb: string,
-    scenario: Scenario,
-    ctx: AdapterContext,
-    logParts: string[],
-  ): ScreenshotRef[] {
-    const out: ScreenshotRef[] = [];
+  private pullShots(adb: string, ctx: AdapterContext): void {
+    void ctx;
     const rel = `files/${ON_DEVICE_SHOT_SUBDIR}`;
-    const ls = spawnSync(adb, ["shell", "run-as", APP_ID, "ls", "-1", rel], {
-      encoding: "utf8",
-      timeout: 30_000,
-    });
-    if (ls.status !== 0 || !ls.stdout) {
-      logParts.push("[gym] no on-device gym-shots dir (ok — screenshots are advisory)");
-      return out;
-    }
-    const tmp = mkdtempSync(join(tmpdir(), "gym-android-shots-"));
-    let n = 0;
+    const ls = spawnSync(adb, ["shell", "run-as", APP_ID, "ls", "-1", rel], { encoding: "utf8", timeout: 30_000 });
+    if (ls.status !== 0 || !ls.stdout) return;
+    this.shotTmp = mkdtempSync(join(tmpdir(), "gym-android-shots-"));
     for (const raw of ls.stdout.split("\n")) {
       const fname = raw.trim();
-      if (!fname.toLowerCase().endsWith(".png")) continue;
-      // `gym-screenshot-<point>-<n>.png` → recover the point name.
-      const m = /^gym-screenshot-(.+)-\d+\.png$/.exec(fname);
-      const point = m?.[1] ?? "shot";
-      // exec-out streams binary cleanly (a plain `shell` would corrupt it).
+      const m = /^gym-screenshot-(.+?)--(.+)-\d+\.png$/.exec(fname);
+      if (!m) continue;
       const cat = spawnSync(adb, ["exec-out", "run-as", APP_ID, "cat", `${rel}/${fname}`], {
         timeout: 60_000,
         maxBuffer: 64 * 1024 * 1024,
       });
       if (cat.status !== 0 || !cat.stdout) continue;
-      try {
-        const localTmp = join(tmp, fname);
-        writeFileSync(localTmp, cat.stdout);
-        const destName = `${scenario.id}-${point}-android-${n++}.png`;
-        copyFileSync(localTmp, join(ctx.runDir, "screenshots", destName));
-        out.push({ point, path: join("screenshots", destName) });
-      } catch (e) {
-        logParts.push("[gym] failed to write pulled screenshot " + fname + ": " + String(e));
+      const local = join(this.shotTmp, fname);
+      writeFileSync(local, cat.stdout);
+      const list = this.shotFiles.get(m[1]!) ?? [];
+      list.push({ point: m[2]!, file: local });
+      this.shotFiles.set(m[1]!, list);
+    }
+  }
+
+  private screenshotsFor(scenario: Scenario, tests: readonly JUnitCase[], ctx: AdapterContext): ScreenshotRef[] {
+    const out: ScreenshotRef[] = [];
+    let n = 0;
+    for (const t of tests) {
+      const key = `${t.className.split(".").pop()}.${t.name}`;
+      for (const shot of this.shotFiles.get(key) ?? []) {
+        const destName = `${scenario.id}-${shot.point}-android-${n++}.png`;
+        copyFileSync(shot.file, join(ctx.runDir, "screenshots", destName));
+        out.push({ point: shot.point, path: join("screenshots", destName) });
       }
     }
-    rmSync(tmp, { recursive: true, force: true });
     return out;
   }
 }

@@ -256,6 +256,85 @@ describe("runGym end-to-end (fake adapters) writes a real artifact", () => {
   });
 });
 
+describe("runGym prepares each surface once, then finishes it", () => {
+  it("hands prepare only the scenarios it will run, runs them, then calls finish", async () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "gym-root-"));
+    const events: string[] = [];
+    const ios: SurfaceAdapter = {
+      surface: "ios",
+      async available() { return { ok: true }; },
+      async prepare(list) { events.push(`prepare:${list.map((s) => s.id).join(",")}`); return { ok: true }; },
+      async run(s) { events.push(`run:${s.id}`); return { passed: true, durationMs: 1, screenshots: [], log: "" }; },
+      async finish() { events.push("finish"); },
+    };
+    try {
+      const summary = await runGym(
+        [
+          { ...baseScenario, id: "a", surface: "ios" },
+          { ...baseScenario, id: "live", surface: "ios", backend: "live" },
+          { ...baseScenario, id: "b", surface: "ios" },
+        ],
+        {
+          repoRoot, suite: "total", tier: "every-merge",
+          adapters: { web: fakeAdapter("web"), ios, android: fakeAdapter("android") },
+          liveEnvCheck: async () => ({ reachable: false, reason: "down" }),
+          log: () => {},
+        },
+      );
+      expect(events).toEqual(["prepare:a,b", "run:a", "run:b", "finish"]);
+      expect(summary.results.map((r) => r.id)).toEqual(["a", "live", "b"]);
+      expect(summary.results[1]!.skipped).toBe(true);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("a failed prepare FAILS every scenario of that surface and still finishes", async () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "gym-root-"));
+    let finished = false;
+    const android: SurfaceAdapter = {
+      surface: "android",
+      async available() { return { ok: true }; },
+      async prepare() { return { ok: false, reason: "emulator did not boot" }; },
+      async run() { throw new Error("run must not be called after a failed prepare"); },
+      async finish() { finished = true; },
+    };
+    try {
+      const summary = await runGym([{ ...baseScenario, id: "x", surface: "android" }], {
+        repoRoot, suite: "total", tier: "every-merge",
+        adapters: { web: fakeAdapter("web"), ios: fakeAdapter("ios"), android },
+        log: () => {},
+      });
+      expect(summary.results[0]!.passed).toBe(false);
+      expect(summary.results[0]!.skipped).toBe(false);
+      expect(summary.results[0]!.log).toContain("emulator did not boot");
+      expect(finished).toBe(true);
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("an adapter-reported skip is a skip, not a pass", async () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "gym-root-"));
+    const ios: SurfaceAdapter = {
+      surface: "ios",
+      async available() { return { ok: true }; },
+      async run() { return { passed: false, skipped: true, skipReason: "iPad only", durationMs: 1, screenshots: [], log: "" }; },
+    };
+    try {
+      const summary = await runGym([{ ...baseScenario, id: "s", surface: "ios" }], {
+        repoRoot, suite: "total", tier: "every-merge",
+        adapters: { web: fakeAdapter("web"), ios, android: fakeAdapter("android") },
+        log: () => {},
+      });
+      expect(summary.results[0]!.skipped).toBe(true);
+      expect(summary.results[0]!.skipReason).toBe("iPad only");
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("the shipped gym suite (§12-G4 every-merge + §12-G5 total tranche)", () => {
   const web = ALL_SCENARIOS.filter((s) => s.surface === "web");
   const ios = ALL_SCENARIOS.filter((s) => s.surface === "ios");

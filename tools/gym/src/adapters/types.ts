@@ -23,6 +23,9 @@ export interface AdapterOutcome {
    * only annotates.
    */
   readonly missingHandles?: readonly string[];
+  /** The harness ran but skipped every matching test (e.g. an iPad-only check on an iPhone). */
+  readonly skipped?: boolean;
+  readonly skipReason?: string;
 }
 
 export interface AdapterContext {
@@ -41,4 +44,13 @@ export interface SurfaceAdapter {
   available(ctx: AdapterContext): Promise<{ ok: boolean; reason?: string }>;
   /** Run one scenario deterministically and report the verdict + artifacts. */
   run(scenario: Scenario, ctx: AdapterContext): Promise<AdapterOutcome>;
+  /**
+   * Once per run, before this surface's first scenario: everything `run` will
+   * be asked for (already past the guardrail and the live-env gate). Lets an
+   * adapter boot its device, build once and run the lot as one batch. A
+   * failure fails every one of them with `reason`.
+   */
+  prepare?(scenarios: readonly Scenario[], ctx: AdapterContext): Promise<{ ok: boolean; reason?: string }>;
+  /** After this surface's last scenario, whenever `prepare` ran: release what it started. */
+  finish?(ctx: AdapterContext): Promise<void>;
 }

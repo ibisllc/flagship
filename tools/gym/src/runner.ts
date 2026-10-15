@@ -69,6 +69,21 @@ export function selectScenarios(
   });
 }
 
+function skippedResult(scenario: Scenario, reason: string | undefined): ScenarioResult {
+  return {
+    id: scenario.id,
+    surface: scenario.surface,
+    tier: scenario.tier,
+    goal: scenario.goal,
+    passed: false,
+    skipped: true,
+    ...(reason !== undefined ? { skipReason: reason } : {}),
+    durationMs: 0,
+    screenshots: [],
+    aiFindings: [],
+  };
+}
+
 /** Run one scenario through its adapter + the advisory AI layer. */
 async function runOne(
   scenario: Scenario,
@@ -76,27 +91,22 @@ async function runOne(
   ctx: AdapterContext,
   ai: AiHooks,
   log: (line: string) => void,
+  prepared: { ok: boolean; reason?: string },
 ): Promise<ScenarioResult> {
-  // GUARDRAIL (§7-G): refuse a destructive scenario whose target is not demo.
-  const guard = guardScenario(scenario);
-  if (!guard.allowed) {
-    log(`[GUARD] ${scenario.surface}/${scenario.id}: ${guard.reason}`);
-    return {
-      id: scenario.id,
-      surface: scenario.surface,
-      tier: scenario.tier,
-      goal: scenario.goal,
-      passed: false,
-      skipped: true,
-      skipReason: guard.reason,
-      durationMs: 0,
-      screenshots: [],
-      aiFindings: [],
-    };
-  }
-
   log(`[RUN ] ${scenario.surface}/${scenario.id} — ${scenario.goal}`);
-  const outcome = await adapter.run(scenario, ctx);
+  const outcome = prepared.ok
+    ? await adapter.run(scenario, ctx)
+    : {
+        passed: false,
+        durationMs: 0,
+        screenshots: [],
+        log: `[gym] ${scenario.surface} setup failed: ${prepared.reason ?? "unknown"}`,
+      };
+
+  if (outcome.skipped) {
+    log(`[SKIP] ${scenario.surface}/${scenario.id}: ${outcome.skipReason ?? "skipped by the harness"}`);
+    return { ...skippedResult(scenario, outcome.skipReason), screenshots: outcome.screenshots, log: outcome.log };
+  }
 
   // Layer 2 (advisory only): judge each captured screenshot; annotate any
   // missing handles via the navigator. NEVER feeds the verdict.
@@ -167,46 +177,53 @@ export async function runGym(
     log(`[LIVE] ${liveGate.reachable ? "env reachable" : "env unreachable → live scenarios skip"}: ${liveGate.reason}`);
   }
 
-  const results: ScenarioResult[] = [];
+  // Decide every skip up front (guardrail, live-env gate, absent toolchain) so
+  // each adapter's `prepare` sees exactly the scenarios it will be asked to run.
+  const byId = new Map<Scenario, ScenarioResult>();
+  const runnable = new Map<Surface, Scenario[]>();
   for (const scenario of selected) {
+    // GUARDRAIL (§7-G): refuse a destructive scenario whose target is not demo.
+    const guard = guardScenario(scenario);
+    if (!guard.allowed) {
+      log(`[GUARD] ${scenario.surface}/${scenario.id}: ${guard.reason}`);
+      byId.set(scenario, skippedResult(scenario, guard.reason));
+      continue;
+    }
     // Live scenarios are gated on env reachability — SKIP (never fail) when down.
     if (scenario.backend === "live" && liveGate && !liveGate.reachable) {
       log(`[SKIP] ${scenario.surface}/${scenario.id}: ${liveGate.reason}`);
-      results.push({
-        id: scenario.id,
-        surface: scenario.surface,
-        tier: scenario.tier,
-        goal: scenario.goal,
-        passed: false,
-        skipped: true,
-        skipReason: liveGate.reason,
-        durationMs: 0,
-        screenshots: [],
-        aiFindings: [],
-      });
+      byId.set(scenario, skippedResult(scenario, liveGate.reason));
       continue;
     }
-
-    const adapter = opts.adapters[scenario.surface];
     const avail = availability.get(scenario.surface)!;
     if (!avail.ok) {
       log(`[SKIP] ${scenario.surface}/${scenario.id}: ${avail.reason}`);
-      results.push({
-        id: scenario.id,
-        surface: scenario.surface,
-        tier: scenario.tier,
-        goal: scenario.goal,
-        passed: false,
-        skipped: true,
-        skipReason: avail.reason,
-        durationMs: 0,
-        screenshots: [],
-        aiFindings: [],
-      });
+      byId.set(scenario, skippedResult(scenario, avail.reason));
       continue;
     }
-    results.push(await runOne(scenario, adapter, ctx, ai, log));
+    const list = runnable.get(scenario.surface) ?? [];
+    list.push(scenario);
+    runnable.set(scenario.surface, list);
   }
+
+  // One surface at a time, so at most one simulator/emulator is up.
+  for (const [surface, list] of runnable) {
+    const adapter = opts.adapters[surface];
+    let prepared: { ok: boolean; reason?: string } = { ok: true };
+    try {
+      if (adapter.prepare) {
+        log(`[PREP] ${surface}: ${list.length} scenario(s)`);
+        prepared = await adapter.prepare(list, ctx);
+        if (!prepared.ok) log(`[PREP] ${surface} failed: ${prepared.reason ?? "unknown"}`);
+      }
+      for (const scenario of list) {
+        byId.set(scenario, await runOne(scenario, adapter, ctx, ai, log, prepared));
+      }
+    } finally {
+      if (adapter.prepare && adapter.finish) await adapter.finish(ctx);
+    }
+  }
+  const results = selected.map((s) => byId.get(s)!);
 
   const summary = summarize({
     startedAt,
