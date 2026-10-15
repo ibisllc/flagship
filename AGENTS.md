@@ -688,8 +688,9 @@ metal), plus the Debian 13.7.0 check. Record results under "Desktop Studio".
   Cloudflare), our own gateway in the `.com` Worker
   (`/.well-known/ohttp-keys`, `/api/ohttp/gateway`), direct fallback marked
   and counted (migration 0098), /status/ warns "Private relay down", daily
-  probe opens an issue. Design only: the initramfs OHTTP client (unlock still
-  goes direct). Owner to provision the relay + `OHTTP_GATEWAY_KEYS`. Webapp
+  probe opens an issue. The Go unseal helper can seal/open unlock calls
+  (`ohttp-seal`/`ohttp-open`); wiring it into the initramfs is design only,
+  so unlock still goes direct. Owner to provision the relay + `OHTTP_GATEWAY_KEYS`. Webapp
   shell v80 on the branch (re-pick at rebase).
 - **`feat/retail`** (NFC box), **`feat/browser-extension`**, **`alpine`** (parked
   installer), **`gym`** (test harness; run its live account-recovery spec).
