@@ -174,9 +174,9 @@ export interface AppPurchaseHttpResult {
   body: unknown;
 }
 
-/** `GET /api/users/:u/purchases` — PUBLIC. The install-what-you-own list
- *  (mobile #19 consumes it). Account METADATA only (which apps the user owns),
- *  same disclosure class as the `/pods` directory. */
+/** `GET /api/users/:u/purchases` — the install-what-you-own list (mobile #19
+ *  consumes it). Account METADATA (which apps the user owns); the route gates
+ *  it with the account's read token like `/pods`. */
 export async function handleListUserPurchases(
   deps: AppPurchaseDeps,
   username: string | null,
