@@ -91,8 +91,26 @@ public partial class MainWindow : Window
         _wizard.ReturnToPairingCover();
     }
 
-    private void MenuRestartElevated_Click(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// The elevated copy must not start while this one still runs servers: it
+    /// would find their disks in use, and quitting is a power cut to them
+    /// otherwise. So the owner is told, the servers shut down gracefully
+    /// first, and only then does the elevated copy start.
+    /// </summary>
+    private async void MenuRestartElevated_Click(object sender, RoutedEventArgs e)
     {
+        if (_quitGate.IsShuttingDown) return;
+        var live = _wizard.Vm.Servers.Count(s => s.CanStop || s.CanCancelInstall);
+        if (live > 0)
+        {
+            var answer = MessageBox.Show(this,
+                $"Restarting as administrator first shuts down the {(live == 1 ? "server" : $"{live} servers")} running on this PC. " +
+                "Each powers off gracefully, which can take up to a minute; an installation in progress starts over later. " +
+                "Start them again after the restart.",
+                "Restart as administrator?", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+            if (answer != MessageBoxResult.OK) return;
+            await ShutDownServersAsync();
+        }
         try
         {
             var executable = Environment.ProcessPath
@@ -108,12 +126,21 @@ public partial class MainWindow : Window
         catch (System.ComponentModel.Win32Exception error) when (error.NativeErrorCode == 1223)
         {
             // UAC was cancelled; leave this normal-permission window open.
+            RestoreAfterShutdown();
         }
         catch (Exception error)
         {
+            RestoreAfterShutdown();
             MessageBox.Show(this, error.Message, "Could not restart as administrator",
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
+
+    private void RestoreAfterShutdown()
+    {
+        Title = "Flagship Studio";
+        IsEnabled = true;
+        _trayIcon.SetStatus(null);
     }
     private void MenuExit_Click(object sender, RoutedEventArgs e) => Close();
 
