@@ -116,10 +116,11 @@ export function canonicalFor(request) {
   ].join("|");
 }
 
-async function signedBody(serverFqdn) {
+async function signedBody(serverFqdn, { askForUsername = true } = {}) {
   const session = getSession();
   if (!session.umk) throw Object.assign(new Error("Unlock first"), { code: "locked" });
-  const username = await ensureUsername();
+  const username = askForUsername ? await ensureUsername() : session.username;
+  if (!username) throw Object.assign(new Error("No username yet"), { code: "no-username" });
   const request = {
     username,
     serverFqdn: serverFqdn || "",
@@ -147,10 +148,14 @@ async function post(path, body) {
   return { status: r.status, ok: r.ok, body: json };
 }
 
-/** `{ available, credits }`, or null when it can't be read. */
+/**
+ * `{ available, credits }`, or null when it can't be read. Settings and the
+ * AI-key step read it on their own, so it never asks for a username: an
+ * account without one yet sees the entry as unavailable.
+ */
 export async function fetchFreeAiStatus() {
   try {
-    const r = await post("/api/free-ai/status", await signedBody(""));
+    const r = await post("/api/free-ai/status", await signedBody("", { askForUsername: false }));
     if (!r.ok || !r.body?.credits) return null;
     return {
       available: r.body.available === true,
