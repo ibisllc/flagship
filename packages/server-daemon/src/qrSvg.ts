@@ -1,5 +1,5 @@
 /**
- * Minimal QR encoder — byte-mode, auto-sized to version ≤ 10, returns an inline
+ * Minimal QR encoder — byte-mode, auto-sized to version ≤ 40, returns an inline
  * SVG string. A strict-TS port of `apps/web/public/qrEncoder.js` (deterministic,
  * dependency-free): the box serves the restricted-service knock page itself and
  * MUST stay self-contained (no remote asset fetch — same rule as
@@ -14,46 +14,56 @@ const ECL_M = 1;
 const ECL_Q = 2;
 const ECL_H = 3;
 
-// Total data codeword capacity per (version, ECL). CAPACITY_BYTES[version-1][ecl].
-const CAPACITY_BYTES: number[][] = [
-  [19, 16, 13, 9],
-  [34, 28, 22, 16],
-  [55, 44, 34, 26],
-  [80, 64, 48, 36],
-  [108, 86, 62, 46],
-  [136, 108, 76, 60],
-  [156, 124, 88, 66],
-  [194, 154, 110, 86],
-  [232, 182, 132, 100],
-  [274, 216, 154, 122],
+// All codewords (data + error correction) per version 1..40 (Table 1).
+const TOTAL_CODEWORDS: number[] = [
+  26, 44, 70, 100, 134, 172, 196, 242, 292, 346,
+  404, 466, 532, 581, 655, 733, 815, 901, 991, 1085,
+  1156, 1258, 1364, 1474, 1588, 1706, 1828, 1921, 2051, 2185,
+  2323, 2465, 2611, 2761, 2876, 3034, 3196, 3362, 3532, 3706,
 ];
+
+// Error-correction blocks and EC codewords per block, per ECL (L, M, Q, H)
+// and version 1..40 (Table 9). Data codewords split as evenly as possible:
+// the last `total % blocks` blocks carry one more.
+const EC_BLOCKS: number[][] = [
+  [1, 1, 1, 1, 1, 2, 2, 2, 2, 4, 4, 4, 4, 4, 6, 6, 6, 6, 7, 8, 8, 9, 9, 10, 12, 12, 12, 13, 14, 15, 16, 17, 18, 19, 19, 20, 21, 22, 24, 25],
+  [1, 1, 1, 2, 2, 4, 4, 4, 5, 5, 5, 8, 9, 9, 10, 10, 11, 13, 14, 16, 17, 17, 18, 20, 21, 23, 25, 26, 28, 29, 31, 33, 35, 37, 38, 40, 43, 45, 47, 49],
+  [1, 1, 2, 2, 4, 4, 6, 6, 8, 8, 8, 10, 12, 16, 12, 17, 16, 18, 21, 20, 23, 23, 25, 27, 29, 34, 34, 35, 38, 40, 43, 45, 48, 51, 53, 56, 59, 62, 65, 68],
+  [1, 1, 2, 4, 4, 4, 5, 6, 8, 8, 11, 11, 16, 16, 18, 16, 19, 21, 25, 25, 25, 34, 30, 32, 35, 37, 40, 42, 45, 48, 51, 54, 57, 60, 63, 66, 70, 74, 77, 81],
+];
+const EC_PER_BLOCK: number[][] = [
+  [7, 10, 15, 20, 26, 18, 20, 24, 30, 18, 20, 24, 26, 30, 22, 24, 28, 30, 28, 28, 28, 28, 30, 30, 26, 28, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30],
+  [10, 16, 26, 18, 24, 16, 18, 22, 22, 26, 30, 22, 22, 24, 24, 28, 28, 26, 26, 26, 26, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28],
+  [13, 22, 18, 26, 18, 24, 18, 22, 20, 24, 28, 26, 24, 20, 30, 24, 28, 28, 26, 30, 28, 30, 30, 30, 30, 28, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30],
+  [17, 28, 22, 16, 22, 28, 26, 26, 24, 28, 24, 28, 22, 24, 24, 30, 28, 28, 26, 28, 30, 24, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30],
+];
+
+const MAX_VERSION = 40;
 
 // [ecCodewordsPerBlock, blocksGroup1, dataPerBlockGroup1, blocksGroup2, dataPerBlockGroup2]
 type EcRow = [number, number, number, number, number];
-const EC_PARAMS: Record<number, Record<"L" | "M" | "Q" | "H", EcRow>> = {
-  1: { L: [7, 1, 19, 0, 0], M: [10, 1, 16, 0, 0], Q: [13, 1, 13, 0, 0], H: [17, 1, 9, 0, 0] },
-  2: { L: [10, 1, 34, 0, 0], M: [16, 1, 28, 0, 0], Q: [22, 1, 22, 0, 0], H: [28, 1, 16, 0, 0] },
-  3: { L: [15, 1, 55, 0, 0], M: [26, 1, 44, 0, 0], Q: [18, 2, 17, 0, 0], H: [22, 2, 13, 0, 0] },
-  4: { L: [20, 1, 80, 0, 0], M: [18, 2, 32, 0, 0], Q: [26, 2, 24, 0, 0], H: [16, 4, 9, 0, 0] },
-  5: { L: [26, 1, 108, 0, 0], M: [24, 2, 43, 0, 0], Q: [18, 2, 15, 2, 16], H: [22, 2, 11, 2, 12] },
-  6: { L: [18, 2, 68, 0, 0], M: [16, 4, 27, 0, 0], Q: [24, 4, 19, 0, 0], H: [28, 4, 15, 0, 0] },
-  7: { L: [20, 2, 78, 0, 0], M: [18, 4, 31, 0, 0], Q: [18, 2, 14, 4, 15], H: [26, 4, 13, 1, 14] },
-  8: { L: [24, 2, 97, 0, 0], M: [22, 2, 38, 2, 39], Q: [22, 4, 18, 2, 19], H: [26, 4, 14, 2, 15] },
-  9: { L: [30, 2, 116, 0, 0], M: [22, 3, 36, 2, 37], Q: [20, 4, 16, 4, 17], H: [24, 4, 12, 4, 13] },
-  10: { L: [18, 2, 68, 2, 69], M: [26, 4, 43, 1, 44], Q: [24, 6, 19, 2, 20], H: [28, 6, 15, 2, 16] },
-};
+function ecParams(version: number, ecl: number): EcRow {
+  const total = TOTAL_CODEWORDS[version - 1]!;
+  const blocks = EC_BLOCKS[ecl]![version - 1]!;
+  const ecPer = EC_PER_BLOCK[ecl]![version - 1]!;
+  const b2 = total % blocks;
+  const d1 = Math.floor(total / blocks) - ecPer;
+  return [ecPer, blocks - b2, d1, b2, d1 + 1];
+}
 
-const ECL_LETTER: ["L", "M", "Q", "H"] = ["L", "M", "Q", "H"];
+function dataCapacity(version: number, ecl: number): number {
+  return TOTAL_CODEWORDS[version - 1]! - EC_BLOCKS[ecl]![version - 1]! * EC_PER_BLOCK[ecl]![version - 1]!;
+}
 
 function pickVersion(text: string, ecl: number): number {
   const bytes = new TextEncoder().encode(text);
-  for (let v = 1; v <= 10; v++) {
-    const cap = CAPACITY_BYTES[v - 1]![ecl]!;
+  for (let v = 1; v <= MAX_VERSION; v++) {
+    const cap = dataCapacity(v, ecl);
     const lenBits = v >= 10 ? 16 : 8;
     const headerBytes = Math.ceil((4 + lenBits) / 8);
     if (bytes.length + headerBytes <= cap) return v;
   }
-  throw new Error("QR text too long for version <= 10");
+  throw new Error("QR text too long for version <= 40");
 }
 
 class BitStream {
@@ -162,22 +172,46 @@ function reserveFormat(m: Matrix): void {
   m[N - 8]![8] = 1; // dark module
 }
 
-const ALIGNMENT_POSITIONS: Record<number, number[]> = {
-  1: [],
-  2: [6, 18],
-  3: [6, 22],
-  4: [6, 26],
-  5: [6, 30],
-  6: [6, 34],
-  7: [6, 22, 38],
-  8: [6, 24, 42],
-  9: [6, 26, 46],
-  10: [6, 28, 50],
-};
+/** Alignment-pattern centre rows/columns (Annex E): 6, the last at size-7,
+ *  evenly spaced (even steps) between; version 32 is the table's exception. */
+function alignmentPositions(version: number): number[] {
+  if (version === 1) return [];
+  const count = Math.floor(version / 7) + 2;
+  const size = 17 + version * 4;
+  const step = version === 32 ? 26 : Math.ceil((size - 13) / (2 * count - 2)) * 2;
+  const pos = [size - 7];
+  for (let i = 1; i < count - 1; i++) pos.push(pos[i - 1]! - step);
+  pos.push(6);
+  return pos.reverse();
+}
+
+// Version information (versions 7+): the version in 6 bits plus a BCH(18,6)
+// remainder, in the two 6×3 blocks beside the top-right and bottom-left finders.
+const VERSION_GEN = 0b1111100100101;
+function versionBits(version: number): number {
+  let rem = version << 12;
+  for (let i = 17; i >= 12; i--) {
+    if ((rem >> i) & 1) rem ^= VERSION_GEN << (i - 12);
+  }
+  return (version << 12) | rem;
+}
+
+function placeVersion(m: Matrix, version: number): void {
+  if (version < 7) return;
+  const N = m.length;
+  const bits = versionBits(version);
+  for (let i = 0; i < 18; i++) {
+    const bit = (bits >> i) & 1;
+    const a = Math.floor(i / 3);
+    const b = (i % 3) + N - 11;
+    m[a]![b] = bit;
+    m[b]![a] = bit;
+  }
+}
 
 function placeAlignment(m: Matrix, version: number): void {
-  const pos = ALIGNMENT_POSITIONS[version];
-  if (!pos || pos.length === 0) return;
+  const pos = alignmentPositions(version);
+  if (pos.length === 0) return;
   const last = pos[pos.length - 1]!;
   for (const cy of pos) {
     for (const cx of pos) {
@@ -261,8 +295,8 @@ function writeFormat(m: Matrix, ecl: number, mask: number): void {
   m[8]![8] = (bits >> 7) & 1;
   m[8]![7] = (bits >> 8) & 1;
   for (let i = 9; i < 15; i++) m[8]![14 - i] = (bits >> i) & 1;
-  for (let i = 0; i < 8; i++) m[N - 1 - i]![8] = (bits >> i) & 1;
-  for (let i = 8; i < 15; i++) m[8]![N - 15 + i] = (bits >> i) & 1;
+  for (let i = 0; i < 8; i++) m[8]![N - 1 - i] = (bits >> i) & 1;
+  for (let i = 8; i < 15; i++) m[N - 15 + i]![8] = (bits >> i) & 1;
   m[N - 8]![8] = 1;
 }
 
@@ -296,9 +330,8 @@ export function encodeQr(text: string, eclLetter: "L" | "M" | "Q" | "H" = "L"): 
   const ecl = { L: ECL_L, M: ECL_M, Q: ECL_Q, H: ECL_H }[eclLetter] ?? ECL_L;
   const version = pickVersion(text, ecl);
   const size = 17 + version * 4;
-  const ecParams = EC_PARAMS[version]![ECL_LETTER[ecl]!];
-  const [ecPerBlock, b1, d1, b2, d2] = ecParams;
-  const totalData = CAPACITY_BYTES[version - 1]![ecl]!;
+  const [ecPerBlock, b1, d1, b2, d2] = ecParams(version, ecl);
+  const totalData = dataCapacity(version, ecl);
 
   const bytes = new TextEncoder().encode(text);
   const bs = new BitStream();
@@ -347,6 +380,7 @@ export function encodeQr(text: string, eclLetter: "L" | "M" | "Q" | "H" = "L"): 
   placeAlignment(m, version);
   placeTiming(m);
   reserveFormat(m);
+  placeVersion(m, version);
 
   const dataMask = m.map((row) => Array.from(row, (v) => (v === -1 ? 1 : 0)));
   placeData(m, all);

@@ -8,6 +8,9 @@ const SAMPLES = [
   "https://flagshipserver.com/",
   "a",
   "The quick brown fox jumps over the lazy dog 0123456789",
+  // v7+ (version blocks) and v17 (a signed transfer-offer link's size).
+  "x".repeat(150),
+  `https://flagshipserver.com/transfer?o=${"eyJ2IjoxLCJraW5kIjoiZmxhZ3NoaXAtdHJhbnNmZXItb2ZmZXIi".repeat(11)}`,
 ];
 
 describe("qrSvg — server-side QR port", () => {
