@@ -13,6 +13,28 @@ import { buildOutboundProxyHttp, OUTBOUND_PROXY_PATH } from "../src/outboundProx
 import { buildCurlrc } from "../src/outboundProxy/curlrc.js";
 import { buildHealthReportScript } from "../src/healthReporter.js";
 import { execFileSync } from "node:child_process";
+import { WebSocket, WebSocketServer } from "ws";
+import "reflect-metadata";
+import { webcrypto } from "node:crypto";
+import { createServer as createHttpsServer, request as httpsRequest } from "node:https";
+import { X509CertificateGenerator, SubjectAlternativeNameExtension, cryptoProvider } from "@peculiar/x509";
+
+cryptoProvider.set(webcrypto as unknown as Crypto);
+
+async function selfSigned(name: string) {
+  const keys = (await webcrypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"])) as CryptoKeyPair;
+  const cert = await X509CertificateGenerator.createSelfSigned({
+    serialNumber: "01",
+    name: `CN=${name}`,
+    notBefore: new Date(Date.now() - 60_000),
+    notAfter: new Date(Date.now() + 3_600_000),
+    signingAlgorithm: { name: "ECDSA", hash: "SHA-256" },
+    keys,
+    extensions: [new SubjectAlternativeNameExtension([{ type: "dns", value: name }])],
+  });
+  const pkcs8 = Buffer.from(await webcrypto.subtle.exportKey("pkcs8", keys.privateKey)).toString("base64");
+  return { cert: cert.toString("pem"), key: `-----BEGIN PRIVATE KEY-----\n${pkcs8.match(/.{1,64}/g)!.join("\n")}\n-----END PRIVATE KEY-----\n` };
+}
 
 const closers: Array<() => void> = [];
 afterEach(() => {
@@ -225,6 +247,46 @@ describe("OutboundNet", () => {
     const res = await fetch("http://api.example.com/f", { dispatcher: net.dispatcher() } as RequestInit);
     expect(await res.text()).toBe("hello /f");
     expect(p.seen[0]).toMatchObject({ host: "api.example.com", port: 80 });
+  });
+
+  it("carries a ws WebSocket through the proxy via its agent", async () => {
+    const wss = new WebSocketServer({ host: "127.0.0.1", port: 0 });
+    await new Promise<void>((r) => wss.once("listening", () => r()));
+    closers.push(() => wss.close());
+    wss.on("connection", (s) => s.on("message", (m) => s.send(`echo ${m}`)));
+    const p = await socks5((wss.address() as AddressInfo).port);
+    const net = new OutboundNet();
+    net.configure({ upstream: { kind: "socks5", host: "127.0.0.1", port: p.port }, fallbackDirect: false });
+    const ws = new WebSocket("ws://hub.example.org:8443/tunnel", { agent: net.httpAgent() });
+    const reply = await new Promise<string>((resolve, reject) => {
+      ws.once("open", () => ws.send("hi"));
+      ws.once("message", (m) => resolve(String(m)));
+      ws.once("error", reject);
+    });
+    ws.close();
+    expect(reply).toBe("echo hi");
+    expect(p.seen[0]).toMatchObject({ host: "hub.example.org", port: 8443 });
+  });
+
+  it("speaks TLS end to end through the proxy (https agent)", async () => {
+    const tls = await selfSigned("hub.example.org");
+    const srv = createHttpsServer({ cert: tls.cert, key: tls.key }, (req, res) => res.end(`tls ${req.url}`));
+    const port = await listen(srv as unknown as Server);
+    closers.push(() => srv.close());
+    const p = await socks5(port);
+    const net = new OutboundNet();
+    net.configure({ upstream: { kind: "socks5", host: "127.0.0.1", port: p.port }, fallbackDirect: false });
+    const body = await new Promise<string>((resolve, reject) => {
+      const req = httpsRequest({ host: "hub.example.org", path: "/h", agent: net.httpsAgent(), ca: tls.cert }, (res) => {
+        let b = "";
+        res.on("data", (d) => (b += d));
+        res.on("end", () => resolve(b));
+      });
+      req.on("error", reject);
+      req.end();
+    });
+    expect(body).toBe("tls /h");
+    expect(p.seen[0]).toMatchObject({ host: "hub.example.org", port: 443 });
   });
 
   it("gives child processes the bridge only while a proxy is set", () => {
