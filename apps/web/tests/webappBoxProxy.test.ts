@@ -174,4 +174,35 @@ describe("the server page", () => {
     const readOnly = outboundProxyHtml({ serverFqdn: DOMAIN, outboundProxy: on }, { canEdit: false });
     expect(readOnly).not.toContain("outbound-proxy-change");
   });
+
+  it("on a Free account shows the Pro row and keeps only Turn off", async () => {
+    const { outboundProxyHtml } = await load("views/server-detail.js");
+    const off = { proxy: null, hasCredentials: false, status: { state: "direct" }, available: false };
+    const freeOff = outboundProxyHtml({ serverFqdn: DOMAIN, outboundProxy: off }, { canEdit: true });
+    expect(freeOff).toContain("An outbound proxy is part of Pro.");
+    expect(freeOff).toContain('href="/pro"');
+    expect(freeOff).not.toContain("outbound-proxy-change");
+    expect(freeOff).not.toContain("outbound-proxy-off");
+    const on = { ...off, proxy: { kind: "socks5", host: "proxy.example.net", port: 1080, auth: false }, status: { state: "ok" } };
+    const freeOn = outboundProxyHtml({ serverFqdn: DOMAIN, outboundProxy: on }, { canEdit: true });
+    expect(freeOn).not.toContain("outbound-proxy-change");
+    expect(freeOn).toContain('id="outbound-proxy-off"');
+    const pro = outboundProxyHtml({ serverFqdn: DOMAIN, outboundProxy: { ...off, available: true } }, { canEdit: true });
+    expect(pro).not.toContain("part of Pro");
+    expect(pro).toContain('id="outbound-proxy-change"');
+  });
+});
+
+describe("the Pro gate when creating a server", () => {
+  it("treats only a Free plan as closed, and swaps the fields for the Pro row", async () => {
+    const { proxyAllowedForTier, proxyProHtml } = await load("lib/boxProxy.js");
+    expect(proxyAllowedForTier("free")).toBe(false);
+    expect(proxyAllowedForTier("hobby")).toBe(true);
+    expect(proxyAllowedForTier("maker")).toBe(true);
+    expect(proxyAllowedForTier(null)).toBe(true);
+    expect(proxyProHtml()).toContain("An outbound proxy is part of Pro.");
+    const view = readFileSync(resolve(__dirname, "..", "public", "webapp", "views/create-server.js"), "utf8");
+    expect(view).toContain("if (!proxyAllowedForTier(accountTier)) {");
+    expect(view).toContain("block.innerHTML = proxyProHtml();");
+  });
 });
