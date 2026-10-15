@@ -217,7 +217,9 @@
 //  v97: feat/marketplace only: main's shell plus the branch's files
 //       (marketplace, tier status, allowance, install, developer views), so
 //       it runs a version above main's; bump it past main's on rebase.
-const SHELL_VERSION = "v97";
+//  v98: feat/custom-domains only: feat/marketplace's v97 plus the service
+//       page's custom-domain card and the services list's bound domains.
+const SHELL_VERSION = "v98";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
