@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 rootProject.name = "Flagship"
 include(":app")
 include(":companion")
+include(":wear")

@@ -34,6 +34,6 @@ class WatchRequestService : WearableListenerService() {
     private companion object {
         // Outlives the service instance: the reply may land after the system
         // unbinds it.
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     }
 }
