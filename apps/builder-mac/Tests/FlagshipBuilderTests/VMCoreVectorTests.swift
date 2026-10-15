@@ -199,4 +199,37 @@ final class VMCoreVectorTests: XCTestCase {
             XCTAssertFalse(VMInventoryStore.isValidName(n), "'\(n)' should be invalid")
         }
     }
+
+    // MARK: - Disk durability
+
+    func testWritableDiskAttachmentMatchesVectors() throws {
+        let vectors = try loadVectors()
+        let section = (vectors["diskDurability"] as! [String: Any])["virtualizationFramework"] as! [String: String]
+        XCTAssertEqual(section["cachingMode"], VMDiskDurability.cachingMode.rawValue)
+        XCTAssertEqual(section["synchronizationMode"], VMDiskDurability.synchronizationMode.rawValue)
+    }
+
+    // MARK: - Server health
+
+    func testServerHealthMatchesVectors() throws {
+        let vectors = try loadVectors()
+        let section = vectors["serverHealth"] as! [String: Any]
+        let domain = section["serverDomain"] as! String
+        let now = Date(timeIntervalSince1970: (section["nowMs"] as! NSNumber).doubleValue / 1000)
+        for c in section["urlCases"] as! [[String: Any]] {
+            let serial = c["serial"] as! String
+            XCTAssertEqual(VMServerHealth.orderHealthURL(serial: serial)?.absoluteString, c["url"] as? String, serial)
+        }
+        for c in section["cases"] as! [[String: Any]] {
+            let name = c["name"] as! String
+            let health = VMServerHealth.fromOrderHealth(Data((c["response"] as! String).utf8), serverDomain: domain)
+            guard let expected = c["verdict"] as? [String: Any] else {
+                XCTAssertNil(health, name)
+                continue
+            }
+            let v = try XCTUnwrap(health, name).verdict(at: now)
+            XCTAssertEqual(v.ok, expected["ok"] as? Bool, name)
+            XCTAssertEqual(v.lines, expected["lines"] as? [String], name)
+        }
+    }
 }

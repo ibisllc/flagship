@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "notes": "Cross-language contract for the desktop VM core (apps/builder-mac FlagshipBuilderCore/VM <-> apps/builder-windows src/VM). Both test suites MUST consume this file so the cores cannot drift — the same role engine/golden/preseed-vectors.json plays for the preseed engine. States: created | installing | installed | awaitingPhoneUnlock | running | stopped | failed:install | failed:run. Events: startInstall | installSucceeded | installFailed | powerOn | guestUnlocked | powerOff | runtimeFailed. Effects: attachInstallerISO | detachInstallerISO | startVirtualMachine | stopVirtualMachine. 'sealed' mirrors VMConfig.awaitsPhoneUnlockAtBoot; transitions listing no 'sealed' key must hold for BOTH values.",
+  "notes": "Cross-language contract for the desktop VM core (apps/builder-mac FlagshipBuilderCore/VM <-> apps/builder-windows src/VM <-> apps/builder-linux vm). Both test suites MUST consume this file so the cores cannot drift — the same role engine/golden/preseed-vectors.json plays for the preseed engine. States: created | installing | installed | awaitingPhoneUnlock | running | stopped | failed:install | failed:run. Events: startInstall | installSucceeded | installFailed | powerOn | guestUnlocked | powerOff | runtimeFailed. Effects: attachInstallerISO | detachInstallerISO | startVirtualMachine | stopVirtualMachine. 'sealed' mirrors VMConfig.awaitsPhoneUnlockAtBoot; transitions listing no 'sealed' key must hold for BOTH values.",
   "lifecycle": {
     "transitions": [
       { "start": "created", "event": "startInstall", "next": "installing", "effects": ["attachInstallerISO", "startVirtualMachine"] },
@@ -76,6 +76,119 @@
       { "hostCpus": 12, "hostRamGiB": 32, "vmCpus": 4, "vmMemGiB": 6, "maxVMs": 4 },
       { "hostCpus": 16, "hostRamGiB": 16, "vmCpus": 4, "vmMemGiB": 4, "maxVMs": 2 },
       { "hostCpus": 32, "hostRamGiB": 128, "vmCpus": 4, "vmMemGiB": 6, "maxVMs": 8 }
+    ]
+  },
+  "diskDurability": {
+    "notes": "How every hosted server's writable main disk is attached. Two VMs were left with zeroed system files by guest writes the host never flushed. Virtualization.framework (Mac): host-cached, every guest flush reaches the disk. QEMU (Windows, Linux): writeback cache with guest flushes honoured (never cache=unsafe or cache.no-flush), thread-pool I/O (works on every filesystem and on Windows, unlike O_DIRECT), and guest TRIM freeing space in the host image. Each QEMU port asserts every key=value below on the main -drive.",
+    "virtualizationFramework": { "cachingMode": "cached", "synchronizationMode": "full" },
+    "qemuMainDrive": { "cache": "writeback", "aio": "threads", "discard": "unmap" }
+  },
+  "serverHealth": {
+    "notes": "A hosted server's own health report, read from .com by the order serial that created it (GET /api/order/<serial>/health, control-plane serverHealth.ts). 'response' is the raw body; each port reads it for serverDomain and renders the verdict at nowMs. null = nothing to show (another server, no report yet, malformed). Copy matches the phone apps (BoxHealth.verdict on iOS).",
+    "serverDomain": "home.u-x.flagship.services",
+    "nowMs": 1800000000000,
+    "urlCases": [
+      {
+        "serial": "AB12_cd-34",
+        "url": "https://flagshipserver.com/api/order/AB12_cd-34/health"
+      },
+      {
+        "serial": "../x/../y",
+        "url": null
+      },
+      {
+        "serial": "short",
+        "url": null
+      },
+      {
+        "serial": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "url": null
+      }
+    ],
+    "cases": [
+      {
+        "name": "healthy",
+        "response": "{\"serverDomain\":\"Home.u-x.flagship.services\",\"health\":{\"v\":1,\"domain\":\"home.u-x.flagship.services\",\"at\":1,\"uptimeS\":93600,\"memTotalMB\":3900,\"memAvailMB\":800,\"swapUsedMB\":0,\"oomKills\":0,\"daemon\":{\"state\":\"active\",\"restarts\":1,\"lastExit\":0},\"tunnel\":true,\"diskUsedPct\":31,\"receivedAt\":1799999980000}}",
+        "verdict": {
+          "ok": true,
+          "lines": [
+            "Healthy · 800 MB free of 3900 MB · disk 31% · up 1d 2h"
+          ]
+        }
+      },
+      {
+        "name": "hours of uptime",
+        "response": "{\"serverDomain\":\"Home.u-x.flagship.services\",\"health\":{\"v\":1,\"domain\":\"home.u-x.flagship.services\",\"at\":1,\"uptimeS\":11100,\"memTotalMB\":3900,\"memAvailMB\":800,\"swapUsedMB\":0,\"oomKills\":0,\"daemon\":{\"state\":\"active\",\"restarts\":1,\"lastExit\":0},\"tunnel\":true,\"diskUsedPct\":31,\"receivedAt\":1800000000000}}",
+        "verdict": {
+          "ok": true,
+          "lines": [
+            "Healthy · 800 MB free of 3900 MB · disk 31% · up 3h 5m"
+          ]
+        }
+      },
+      {
+        "name": "minutes of uptime",
+        "response": "{\"serverDomain\":\"Home.u-x.flagship.services\",\"health\":{\"v\":1,\"domain\":\"home.u-x.flagship.services\",\"at\":1,\"uptimeS\":2700,\"memTotalMB\":3900,\"memAvailMB\":800,\"swapUsedMB\":0,\"oomKills\":0,\"daemon\":{\"state\":\"active\",\"restarts\":1,\"lastExit\":0},\"tunnel\":true,\"diskUsedPct\":31,\"receivedAt\":1800000000000}}",
+        "verdict": {
+          "ok": true,
+          "lines": [
+            "Healthy · 800 MB free of 3900 MB · disk 31% · up 45m"
+          ]
+        }
+      },
+      {
+        "name": "issues",
+        "response": "{\"serverDomain\":\"Home.u-x.flagship.services\",\"health\":{\"v\":1,\"domain\":\"home.u-x.flagship.services\",\"at\":1,\"uptimeS\":93600,\"memTotalMB\":3900,\"memAvailMB\":800,\"swapUsedMB\":0,\"oomKills\":2,\"daemon\":{\"state\":\"failed\",\"restarts\":1,\"lastExit\":0},\"tunnel\":false,\"diskUsedPct\":31,\"receivedAt\":1800000000000}}",
+        "verdict": {
+          "ok": false,
+          "lines": [
+            "Ran out of memory 2× since it started (800 MB free of 3900 MB now).",
+            "The server software isn't running (failed; restarted 1×, last exit code 0).",
+            "Can't reach the Flagship relay."
+          ]
+        }
+      },
+      {
+        "name": "restart loop and full disk",
+        "response": "{\"serverDomain\":\"Home.u-x.flagship.services\",\"health\":{\"v\":1,\"domain\":\"home.u-x.flagship.services\",\"at\":1,\"uptimeS\":93600,\"memTotalMB\":3900,\"memAvailMB\":800,\"swapUsedMB\":0,\"oomKills\":0,\"daemon\":{\"state\":\"active\",\"restarts\":4,\"lastExit\":0},\"tunnel\":true,\"diskUsedPct\":93,\"receivedAt\":1800000000000}}",
+        "verdict": {
+          "ok": false,
+          "lines": [
+            "The server software restarted 4× since it started (last exit code 0).",
+            "Disk is 93% full."
+          ]
+        }
+      },
+      {
+        "name": "stale",
+        "response": "{\"serverDomain\":\"Home.u-x.flagship.services\",\"health\":{\"v\":1,\"domain\":\"home.u-x.flagship.services\",\"at\":1,\"uptimeS\":93600,\"memTotalMB\":3900,\"memAvailMB\":800,\"swapUsedMB\":0,\"oomKills\":2,\"daemon\":{\"state\":\"active\",\"restarts\":1,\"lastExit\":0},\"tunnel\":true,\"diskUsedPct\":31,\"receivedAt\":1799999640000}}",
+        "verdict": {
+          "ok": false,
+          "lines": [
+            "No health report for 6 min. The server itself may be off or frozen."
+          ]
+        }
+      },
+      {
+        "name": "another server",
+        "response": "{\"serverDomain\":\"other.u-x.flagship.services\",\"health\":{\"v\":1,\"domain\":\"home.u-x.flagship.services\",\"at\":1,\"uptimeS\":93600,\"memTotalMB\":3900,\"memAvailMB\":800,\"swapUsedMB\":0,\"oomKills\":0,\"daemon\":{\"state\":\"active\",\"restarts\":1,\"lastExit\":0},\"tunnel\":true,\"diskUsedPct\":31,\"receivedAt\":1800000000000}}",
+        "verdict": null
+      },
+      {
+        "name": "malformed report",
+        "response": "{\"serverDomain\":\"Home.u-x.flagship.services\",\"health\":{\"v\":\"bad\"}}",
+        "verdict": null
+      },
+      {
+        "name": "no report yet",
+        "response": "{\"serverDomain\":\"Home.u-x.flagship.services\",\"health\":null}",
+        "verdict": null
+      },
+      {
+        "name": "not json",
+        "response": "<html>",
+        "verdict": null
+      }
     ]
   },
   "nameValidation": {

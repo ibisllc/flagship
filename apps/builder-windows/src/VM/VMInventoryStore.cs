@@ -18,8 +18,23 @@ public sealed record VMRecord
     // Linux state_changed_at). Drives the "still coming up" stall advisory. Legacy
     // bundles predate it ⇒ default(DateTimeOffset); callers fall back to CreatedAt.
     public DateTimeOffset StateChangedAt { get; init; }
+    /// <summary>When the guest last came online; null = never.</summary>
+    public DateTimeOffset? LastConnectedAt { get; init; }
     [JsonConverter(typeof(ServerTierJsonConverter))]
     public ServerTier Tier { get; init; } = ServerTier.HostedVM;
+
+    /// <summary>An auto-unlock server that has run before unlocks itself with
+    /// the key the phone left it at its first approval, so a restart needs
+    /// nobody. Only its first boot, or an approve-every-boot server, waits for
+    /// the phone. Mirrors the Mac VMRecord.unlocksOnItsOwn.</summary>
+    [JsonIgnore]
+    public bool UnlocksOnItsOwn => Config.BootUnlockMode != "approve" && LastConnectedAt is not null;
+
+    /// <summary>State.Label, except a sealed boot that needs no one reads as unlocking.</summary>
+    [JsonIgnore]
+    public string StateLabel => State.Kind == VMStateKind.AwaitingPhoneUnlock && UnlocksOnItsOwn
+        ? "Unlocking…"
+        : State.Label;
 }
 
 /// <summary>

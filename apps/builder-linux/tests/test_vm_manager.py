@@ -85,7 +85,8 @@ def seed(store, name, state):
     store.create(VMRecord(config=config(name), state=state, created_at=1.0))
 
 
-def manager(store, host=None, toolchain=TOOLCHAIN, error=None, clock=None, probe=None):
+def manager(store, host=None, toolchain=TOOLCHAIN, error=None, clock=None, probe=None,
+            health=None):
     return VMManager(
         store,
         toolchain,
@@ -94,6 +95,8 @@ def manager(store, host=None, toolchain=TOOLCHAIN, error=None, clock=None, probe
         host_factory=(lambda: host) if host is not None else None,
         unlock_probe=probe or (lambda url: False),
         unlock_interval=0.01,
+        health_fetch=health or (lambda url: None),
+        health_interval=0.01,
     )
 
 
@@ -233,8 +236,8 @@ def test_clean_stop_after_plausible_duration_is_success_then_first_boot(store, t
     assert not os.path.exists(iso)
     # The VM was restarted from disk (second start, no ISO).
     assert host.started == [("a.h.flagship.services", True), ("a.h.flagship.services", False)]
-    assert m.servers[0].record.config.provision_status_serial is None
-    assert store.load("a.h.flagship.services").config.provision_status_serial is None
+    # The order serial outlives the install: it reads the running server's health.
+    assert store.load("a.h.flagship.services").config.provision_status_serial == "01VMTEST"
     m._cancel_unlock_poll("a.h.flagship.services")
 
 
@@ -396,12 +399,32 @@ def test_status_subtitles_follow_state_and_unlock_mode():
     sealed = HostedServer(
         VMRecord(config=base, state=VMState.awaiting_phone_unlock(), created_at=1.0)
     )
-    assert "phone-home unlock" in sealed.status_subtitle
+    assert "approve the first unlock" in sealed.status_subtitle
+    assert sealed.state_label == "Waiting for you to unlock"
+    ran_before = HostedServer(
+        VMRecord(
+            config=base,
+            state=VMState.awaiting_phone_unlock(),
+            created_at=1.0,
+            last_connected_at=5.0,
+        )
+    )
+    assert ran_before.state_label == "Unlocking…"
+    assert "Nothing to approve" in ran_before.status_subtitle
     approve_cfg = VMConfig(**{**base.__dict__, "boot_unlock_mode": "approve"})
     approve = HostedServer(
         VMRecord(config=approve_cfg, state=VMState.awaiting_phone_unlock(), created_at=1.0)
     )
     assert "approve the unlock" in approve.status_subtitle
+    approve_ran = HostedServer(
+        VMRecord(
+            config=approve_cfg,
+            state=VMState.awaiting_phone_unlock(),
+            created_at=1.0,
+            last_connected_at=5.0,
+        )
+    )
+    assert approve_ran.state_label != "Unlocking…"
     running = HostedServer(VMRecord(config=base, state=VMState.running(), created_at=1.0))
     assert running.status_subtitle == "Serving at https://home.harry.flagship.services/"
     assert running.can_stop and not running.can_start
@@ -521,3 +544,72 @@ def test_quit_waits_for_a_stop_already_in_flight(store):
     stopper.join(timeout=5.0)
     assert not quitter.is_alive()
     assert host.graceful_stops == [STOP_GRACE_SECONDS]
+
+
+# ---- health + last connected ----
+
+
+def _health_body(received_ms: int) -> bytes:
+    return (
+        '{"serverDomain":"a.h.flagship.services","health":{"uptimeS":120,"memTotalMB":3900,'
+        '"memAvailMB":800,"oomKills":0,"daemon":{"state":"active","restarts":0,"lastExit":0},'
+        '"tunnel":true,"diskUsedPct":31,"receivedAt":%d}}' % received_ms
+    ).encode()
+
+
+def test_running_server_polls_its_order_health_and_remembers_it_connected(store):
+    import time as _time
+
+    store.create(
+        VMRecord(
+            config=config("a.h.flagship.services", provision_status_serial="01VMTEST"),
+            state=VMState.stopped(),
+            created_at=1.0,
+        )
+    )
+    host = FakeHost()
+    urls = []
+    fetched = threading.Event()
+
+    def fetch(url):
+        urls.append(url)
+        fetched.set()
+        return _health_body(int(1000.0 * 1000))
+
+    m = manager(store, host=host, clock=lambda: 1000.0, probe=lambda url: True, health=fetch)
+    m.power_on("a.h.flagship.services")
+    deadline = _time.time() + 5
+    while m.servers[0].record.state.kind != VMStateKind.RUNNING and _time.time() < deadline:
+        _time.sleep(0.01)
+    assert m.servers[0].record.state.kind == VMStateKind.RUNNING
+    assert fetched.wait(5)
+    assert urls[0] == "https://flagshipserver.com/api/order/01VMTEST/health"
+    deadline = _time.time() + 5
+    while m.health_verdict("a.h.flagship.services") is None and _time.time() < deadline:
+        _time.sleep(0.01)
+    verdict = m.health_verdict("a.h.flagship.services")
+    assert verdict is not None and verdict.ok
+    deadline = _time.time() + 5
+    while store.load("a.h.flagship.services").last_connected_at == 0.0 and _time.time() < deadline:
+        _time.sleep(0.01)
+    assert store.load("a.h.flagship.services").last_connected_at == 1000.0
+    m.power_off("a.h.flagship.services")
+    assert m.health_verdict("a.h.flagship.services") is None
+    assert "a.h.flagship.services" not in m._health_polls
+    assert store.load("a.h.flagship.services").last_connected_at == 1000.0
+
+
+def test_server_without_an_order_serial_shows_no_health(store):
+    seed(store, "a.h.flagship.services", VMState.stopped())
+    host = FakeHost()
+    called = []
+    m = manager(store, host=host, probe=lambda url: True, health=lambda url: called.append(url))
+    m.power_on("a.h.flagship.services")
+    import time as _time
+
+    deadline = _time.time() + 5
+    while m.servers[0].record.state.kind != VMStateKind.RUNNING and _time.time() < deadline:
+        _time.sleep(0.01)
+    assert m.servers[0].record.state.kind == VMStateKind.RUNNING
+    assert "a.h.flagship.services" not in m._health_polls
+    assert called == []

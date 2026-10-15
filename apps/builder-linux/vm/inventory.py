@@ -67,6 +67,23 @@ class VMRecord:
     # Drives the "still coming up" stall advisory. 0.0 (legacy bundles) ⇒ callers
     # fall back to created_at.
     state_changed_at: float = 0.0
+    # When the guest last came online (0.0 = never). An auto-unlock server
+    # that has run before unlocks itself with the key its phone left it.
+    last_connected_at: float = 0.0
+
+    @property
+    def unlocks_on_its_own(self) -> bool:
+        """Only a first boot, or an approve-every-boot server, waits for the
+        phone. Mirrors the Mac VMRecord.unlocksOnItsOwn."""
+        return self.config.boot_unlock_mode != "approve" and self.last_connected_at > 0
+
+    @property
+    def state_label(self) -> str:
+        """state.label, except a sealed boot that needs no one reads as
+        unlocking."""
+        if self.state.kind == VMStateKind.AWAITING_PHONE_UNLOCK and self.unlocks_on_its_own:
+            return "Unlocking…"
+        return self.state.label
 
 
 class VMStoreErrorKind(enum.Enum):
@@ -154,6 +171,7 @@ def _record_to_dict(r: VMRecord) -> dict:
         # Written raw (round-trip identity); the created_at fallback for a 0.0 /
         # legacy value is applied at use time (HostedServer.coming_up_stalled).
         "stateChangedAt": r.state_changed_at,
+        "lastConnectedAt": r.last_connected_at or None,
         "tier": r.tier.value,
     }
 
@@ -167,6 +185,7 @@ def _record_from_dict(d: dict) -> VMRecord:
         tier=ServerTier(d.get("tier", "hosted-vm")),
         # Legacy bundles predate the field ⇒ fall back to created_at.
         state_changed_at=float(d.get("stateChangedAt", created)),
+        last_connected_at=float(d.get("lastConnectedAt") or 0.0),
     )
 
 

@@ -74,7 +74,7 @@ public class QemuCommandLineTests
         // then installs onto the 755MB stick and fails. AHCI reproduces the
         // metal order (sda = system disk, sdb = installer). Found live.
         var s = Joined(QemuCommandLine.Build(Config(), Layout, Code, false, 4444, 0));
-        Assert.Contains(@"id=flagship-main,if=none,format=qcow2,file=C:\vms\home.harry.flagship.services\disk.qcow2", s);
+        Assert.Contains(@"id=flagship-main,if=none,format=qcow2,cache=writeback,aio=threads,discard=unmap,file=C:\vms\home.harry.flagship.services\disk.qcow2", s);
         Assert.Contains("ide-hd,drive=flagship-main", s);
         Assert.DoesNotContain("if=virtio,format=qcow2", s);
     }

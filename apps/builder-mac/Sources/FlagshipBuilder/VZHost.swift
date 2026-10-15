@@ -221,17 +221,25 @@ final class VZHost: NSObject {
         try await vm.resume()
     }
 
-    /// Create the sparse main disk if it doesn't exist yet (APFS keeps it
-    /// thin; the guest grows into it).
-    /// A guest's writable disk. The default caching mode (`.automatic`) has
-    /// left Linux guests with zeroed and corrupt files (home2's ext4 oopses on
-    /// zeroed pages, leticia's zeroed system libraries, both surviving
-    /// reinstalls); `.cached` with full synchronization keeps the host's own
-    /// cache coherent and makes every guest flush reach the host's disk.
+    /// A guest's writable disk, attached per `VMDiskDurability`.
     static func writableDisk(_ url: URL) throws -> VZDiskImageStorageDeviceAttachment {
-        try VZDiskImageStorageDeviceAttachment(url: url, readOnly: false, cachingMode: .cached, synchronizationMode: .full)
+        let caching: VZDiskImageCachingMode
+        switch VMDiskDurability.cachingMode {
+        case .automatic: caching = .automatic
+        case .cached: caching = .cached
+        case .uncached: caching = .uncached
+        }
+        let sync: VZDiskImageSynchronizationMode
+        switch VMDiskDurability.synchronizationMode {
+        case .full: sync = .full
+        case .fsync: sync = .fsync
+        case .none: sync = .none
+        }
+        return try VZDiskImageStorageDeviceAttachment(url: url, readOnly: false, cachingMode: caching, synchronizationMode: sync)
     }
 
+    /// Create the sparse main disk if it doesn't exist yet (APFS keeps it
+    /// thin; the guest grows into it).
     static func ensureMainDisk(config: VMConfig, layout: VMBundleLayout) throws {
         let url = layout.diskImageURL(config.name)
         guard !FileManager.default.fileExists(atPath: url.path) else { return }

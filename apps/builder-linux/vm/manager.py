@@ -38,6 +38,7 @@ from .lifecycle import (
 )
 from .qemu_host import QemuHost, QemuHostError
 from .qemu_locator import QemuLocatorError, QemuToolchain, locate
+from .server_health import VMServerHealth
 from .server_tier import ServerTier
 
 
@@ -110,7 +111,7 @@ class HostedServer:
 
     @property
     def state_label(self) -> str:
-        return self.record.state.label
+        return self.record.state_label
 
     @property
     def state_kind(self) -> VMStateKind:
@@ -121,9 +122,14 @@ class HostedServer:
         s = self.record.state
         c = self.record.config
         if s.kind == VMStateKind.AWAITING_PHONE_UNLOCK:
+            if self.record.unlocks_on_its_own:
+                return "Unlocking its disk with the key your phone left it. Nothing to approve."
             if c.boot_unlock_mode == "approve":
                 return "The disk is sealed — approve the unlock on your phone."
-            return "The disk is sealed — waiting for the phone-home unlock."
+            return (
+                "The disk is sealed — approve the first unlock on your phone. "
+                "After that it unlocks on its own."
+            )
         if s.kind == VMStateKind.INSTALLING:
             observation = self.install_observation
             if observation is None:
@@ -202,6 +208,14 @@ class HostedServer:
         return self.record.config.serial_console_enabled
 
 
+def _default_health_fetch(url: str) -> Optional[bytes]:
+    try:
+        with urllib.request.urlopen(url, timeout=15) as response:
+            return response.read(64 * 1024)
+    except Exception:
+        return None
+
+
 def _default_unlock_probe(url: str) -> bool:
     """TLS terminates ON THE BOX (SNI passthrough), so ANY HTTP response —
     including an error status — proves the LUKS unlock completed, the daemon
@@ -234,6 +248,8 @@ class VMManager:
         unlock_interval: float = 15.0,
         on_change: Optional[Callable[[], None]] = None,
         host_arch_tag: Optional[str] = host_arch.ARCH_AMD64,
+        health_fetch: Callable[[str], Optional[bytes]] = _default_health_fetch,
+        health_interval: float = 60.0,
     ) -> None:
         self.store = store
         self.toolchain = toolchain
@@ -264,6 +280,11 @@ class VMManager:
         self._unlock_polls: Dict[str, threading.Event] = {}
         self._install_polls: Dict[str, threading.Event] = {}
         self._install_stall_logged: set[str] = set()
+        self._health_fetch = health_fetch
+        self._health_interval = health_interval
+        self._health_polls: Dict[str, threading.Event] = {}
+        # The latest signed health report per running server (name -> report).
+        self.health_reports: Dict[str, VMServerHealth] = {}
         # Guests powering off after Stop; a Start of the same server waits on
         # its event so the disk is never open in two QEMUs.
         self._stopping: Dict[str, threading.Event] = {}
@@ -340,23 +361,17 @@ class VMManager:
         for record in self.store.list():
             kind = record.state.kind
             if kind == VMStateKind.INSTALLING:
-                normalized = VMRecord(
-                    config=record.config,
+                normalized = replace(
+                    record,
                     state=VMState.failed(
                         VMFailurePhase.INSTALL,
                         "The app quit while the install was running.",
                     ),
-                    created_at=record.created_at,
-                    tier=record.tier,
                     state_changed_at=self._clock(),
                 )
             elif kind in (VMStateKind.AWAITING_PHONE_UNLOCK, VMStateKind.RUNNING):
-                normalized = VMRecord(
-                    config=record.config,
-                    state=VMState.stopped(),
-                    created_at=record.created_at,
-                    tier=record.tier,
-                    state_changed_at=self._clock(),
+                normalized = replace(
+                    record, state=VMState.stopped(), state_changed_at=self._clock()
                 )
             else:
                 normalized = record
@@ -415,6 +430,7 @@ class VMManager:
         self._lifecycles.pop(name, None)
         self._cancel_unlock_poll(name)
         self._cancel_install_poll(name)
+        self._cancel_health_poll(name)
         try:
             self.store.delete(name)
         except VMStoreError:
@@ -503,15 +519,15 @@ class VMManager:
         except VMLifecycleError:
             self.log(f"VM {name}: ignored {event.kind.value} in state {server.record.state.label}")
             return
-        config = server.record.config
-        if lc.state.kind == VMStateKind.INSTALLED:
-            config = replace(config, provision_status_serial=None)
-        server.record = VMRecord(
-            config=config,
+        server.record = replace(
+            server.record,
             state=lc.state,
-            created_at=server.record.created_at,
-            tier=server.record.tier,
             state_changed_at=lc.state_changed_at,
+            last_connected_at=(
+                lc.state_changed_at
+                if lc.state.kind == VMStateKind.RUNNING
+                else server.record.last_connected_at
+            ),
         )
         try:
             self.store.save(server.record)
@@ -522,6 +538,7 @@ class VMManager:
         # minute, and a stopped server must not be probed meanwhile.
         self._sync_unlock_poll(server.record.config)
         self._sync_install_poll(server.record.config)
+        self._sync_health_poll(server.record.config)
         self._run_effects(effects, server.record.config)
 
     def _run_effects(self, effects, config: VMConfig) -> None:
@@ -773,6 +790,60 @@ class VMManager:
         stop = self._install_polls.pop(name, None)
         if stop is not None:
             stop.set()
+
+    # ---- health reports ----
+
+    def _sync_health_poll(self, config: VMConfig) -> None:
+        """While a guest runs, read its signed health report from .com (by the
+        order that created it) once a minute. The report comes from a timer
+        inside the guest, so it explains a server that stopped answering. A VM
+        without an order serial shows no health line."""
+        name = config.name
+        if self._current_state_kind(name) != VMStateKind.RUNNING:
+            self._cancel_health_poll(name)
+            return
+        url = VMServerHealth.order_health_url(config.provision_status_serial or "")
+        if name in self._health_polls or url is None:
+            return
+        stop = threading.Event()
+        self._health_polls[name] = stop
+        domain = config.server_domain
+
+        def poll() -> None:
+            last_issues: List[str] = []
+            while not stop.is_set():
+                body = self._health_fetch(url)
+                health = (
+                    VMServerHealth.from_order_health(body, domain) if body is not None else None
+                )
+                if health is not None and not stop.is_set():
+                    self.health_reports[name] = health
+                    v = health.verdict(int(self._clock() * 1000))
+                    issues = [] if v.ok else v.lines
+                    if issues != last_issues:
+                        self.log(
+                            f"VM {name}: health back to normal"
+                            if not issues
+                            else f"VM {name}: health — {' '.join(issues)}"
+                        )
+                        last_issues = issues
+                    self.on_change()
+                stop.wait(self._health_interval)
+
+        threading.Thread(target=poll, daemon=True).start()
+
+    def _cancel_health_poll(self, name: str) -> None:
+        stop = self._health_polls.pop(name, None)
+        if stop is not None:
+            stop.set()
+        self.health_reports.pop(name, None)
+
+    def health_verdict(self, name: str):
+        """The current verdict for a running server's report, or None."""
+        health = self.health_reports.get(name)
+        if health is None or self._current_state_kind(name) != VMStateKind.RUNNING:
+            return None
+        return health.verdict(int(self._clock() * 1000))
 
     # ---- plumbing ----
 

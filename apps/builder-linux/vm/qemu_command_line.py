@@ -26,6 +26,11 @@ from . import host_arch
 from .config import VMConfig, VMNetworkMode, VMProvisioningMode
 from .inventory import VMBundleLayout
 
+# The main disk's cache/flush policy, pinned in the shared vm-core-vectors.json
+# "diskDurability" section: guest flushes reach the host disk, so a crash or
+# forced stop can't leave zeroed files.
+MAIN_DRIVE_OPTIONS = "cache=writeback,aio=threads,discard=unmap"
+
 
 def build(
     config: VMConfig,
@@ -94,7 +99,7 @@ def build(
         # installer stick becomes sda and d-i tries to install onto the stick.
         # SATA main + USB installer reproduces the metal order (sda = system
         # disk, sdb = installer).
-        "-drive", f"id=flagship-main,if=none,format=qcow2,file={layout.disk_image_path(name)}",
+        "-drive", f"id=flagship-main,if=none,format=qcow2,{MAIN_DRIVE_OPTIONS},file={layout.disk_image_path(name)}",
     ]
     if is_arm64:
         # virt has no built-in SATA (q35 does) — an explicit AHCI keeps the

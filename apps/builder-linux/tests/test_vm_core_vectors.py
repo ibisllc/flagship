@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from vm import resource_plan
+from vm import qemu_command_line, resource_plan
 from vm.host_resources import HostResources
 from vm.inventory import VMInventoryStore
 from vm.lifecycle import (
@@ -159,3 +159,35 @@ def test_name_validation_matches_vectors():
         assert VMInventoryStore.is_valid_name(n), f"'{n}' should be valid"
     for n in section["invalid"]:
         assert not VMInventoryStore.is_valid_name(n), f"'{n}' should be invalid"
+
+
+# ---- disk durability ----
+
+
+def test_qemu_main_drive_matches_vectors():
+    options = dict(
+        kv.split("=", 1) for kv in qemu_command_line.MAIN_DRIVE_OPTIONS.split(",")
+    )
+    expected = VECTORS["diskDurability"]["qemuMainDrive"]
+    assert expected, "vector file must pin the main drive options"
+    for key, value in expected.items():
+        assert options.get(key) == value, f"main drive {key}"
+
+
+# ---- server health ----
+
+
+def test_server_health_matches_vectors():
+    from vm.server_health import VMServerHealth
+
+    section = VECTORS["serverHealth"]
+    for c in section["urlCases"]:
+        assert VMServerHealth.order_health_url(c["serial"]) == c["url"], c["serial"]
+    for c in section["cases"]:
+        health = VMServerHealth.from_order_health(c["response"], section["serverDomain"])
+        if c["verdict"] is None:
+            assert health is None, c["name"]
+            continue
+        assert health is not None, c["name"]
+        v = health.verdict(section["nowMs"])
+        assert (v.ok, v.lines) == (c["verdict"]["ok"], c["verdict"]["lines"]), c["name"]

@@ -586,9 +586,27 @@
                             </StackPanel>
                         </Border>
 
+                        <!-- The guest's own signed health report, once it runs the reporter. -->
+                        <Border Background="{StaticResource FB.Surface}"
+                                BorderBrush="{StaticResource FB.Border}"
+                                BorderThickness="1" CornerRadius="8"
+                                Padding="14" Margin="0,0,0,8"
+                                Visibility="{Binding HasHealth,
+                                    Converter={StaticResource BoolToVisibility}}">
+                            <StackPanel MaxWidth="440">
+                                <TextBlock Text="{Binding HealthTitle}"
+                                           Style="{StaticResource RowTitle}"/>
+                                <TextBlock Text="{Binding HealthText}"
+                                           Style="{StaticResource RowHint}"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+
                         <TextBlock Text="{Binding SpecSummary}"
+                                   Style="{StaticResource Caption}"/>
+                        <TextBlock Text="{Binding LastConnectedText}"
                                    Style="{StaticResource Caption}"
-                                   Margin="0,0,0,12"/>
+                                   Margin="0,2,0,12"/>
 
                         <!-- Controls -->
                         <StackPanel Orientation="Horizontal">

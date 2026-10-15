@@ -1625,9 +1625,16 @@ def build_window(application, model: Optional[WizardModel] = None):
     status_inner.append(detail_subtitle)
     status_card.set_child(status_inner)
     detail_box.append(status_card)
+    # The guest's own signed health report, once it runs the reporter.
+    detail_health = Gtk.Label(xalign=0.0)
+    detail_health.set_wrap(True)
+    detail_box.append(detail_health)
     detail_spec = Gtk.Label(xalign=0.0)
     detail_spec.add_css_class("dim-label")
     detail_box.append(detail_spec)
+    detail_last_connected = Gtk.Label(xalign=0.0)
+    detail_last_connected.add_css_class("dim-label")
+    detail_box.append(detail_last_connected)
     detail_actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
     detail_start = Gtk.Button(label="Start")
     detail_start.add_css_class("suggested-action")
@@ -1772,7 +1779,11 @@ def build_window(application, model: Optional[WizardModel] = None):
                     _state_text = f"● {observation.summary} · {server.badge_label}"
             else:
                 _state_text = f"● {server.state_label} · {server.badge_label}"
+                verdict = wizard_model.vm.health_verdict(server.name)
+                if verdict is not None and not verdict.ok:
+                    _state_text = f"⚠ {verdict.lines[0]}"
             state_label = Gtk.Label(label=_state_text, xalign=0.0)
+            state_label.set_wrap(True)
             state_label.add_css_class("dim-label")
             col.append(state_label)
             spec_label = Gtk.Label(label=server.spec_summary, xalign=0.0)
@@ -1940,6 +1951,16 @@ def build_window(application, model: Optional[WizardModel] = None):
             detail_state.set_text(server.state_label)
             detail_subtitle.set_text(server.status_subtitle_at(time.time()))
             detail_spec.set_text(server.spec_summary)
+            verdict = wizard_model.vm.health_verdict(server.name)
+            detail_health.set_visible(verdict is not None)
+            if verdict is not None:
+                title = "Health" if verdict.ok else "⚠ Server health"
+                detail_health.set_text(f"{title}: " + "\n".join(verdict.lines))
+            connected = server.record.last_connected_at
+            detail_last_connected.set_text(
+                "Last connected: "
+                + (time.strftime("%d %b %Y %H:%M", time.localtime(connected)) if connected else "Not yet")
+            )
             detail_start.set_visible(server.can_start)
             detail_stop.set_visible(server.can_stop)
             detail_retry.set_visible(server.can_retry_install)

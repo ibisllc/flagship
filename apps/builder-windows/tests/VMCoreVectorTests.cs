@@ -175,4 +175,57 @@ public class VMCoreVectorTests
         foreach (var n in section.GetProperty("invalid").EnumerateArray())
             Assert.False(VMInventoryStore.IsValidName(n.GetString()!), $"'{n.GetString()}' should be invalid");
     }
+
+    // ---- server health ----
+
+    [Fact]
+    public void ServerHealthMatchesVectors()
+    {
+        var section = Vectors.GetProperty("serverHealth");
+        var domain = section.GetProperty("serverDomain").GetString()!;
+        var now = DateTimeOffset.FromUnixTimeMilliseconds(section.GetProperty("nowMs").GetInt64());
+        foreach (var c in section.GetProperty("urlCases").EnumerateArray())
+        {
+            var serial = c.GetProperty("serial").GetString()!;
+            var url = c.GetProperty("url");
+            Assert.Equal(url.ValueKind == JsonValueKind.Null ? null : url.GetString(), VMServerHealth.OrderHealthUrl(serial));
+        }
+        int count = 0;
+        foreach (var c in section.GetProperty("cases").EnumerateArray())
+        {
+            var name = c.GetProperty("name").GetString();
+            var health = VMServerHealth.FromOrderHealth(c.GetProperty("response").GetString()!, domain);
+            var expected = c.GetProperty("verdict");
+            if (expected.ValueKind == JsonValueKind.Null)
+            {
+                Assert.True(health is null, name);
+                continue;
+            }
+            Assert.True(health is not null, name);
+            var v = health!.Verdict(now);
+            Assert.True(expected.GetProperty("ok").GetBoolean() == v.Ok, name);
+            Assert.Equal(expected.GetProperty("lines").EnumerateArray().Select(l => l.GetString()!).ToArray(), v.Lines.ToArray());
+            count++;
+        }
+        Assert.True(count >= 5, "vector file must actually contain health cases");
+    }
+
+    // ---- disk durability ----
+
+    [Fact]
+    public void QemuMainDriveMatchesVectors()
+    {
+        var options = QemuCommandLine.MainDriveOptions.Split(',')
+            .Select(kv => kv.Split('=', 2))
+            .ToDictionary(kv => kv[0], kv => kv[1]);
+        var expected = Vectors.GetProperty("diskDurability").GetProperty("qemuMainDrive");
+        int count = 0;
+        foreach (var kv in expected.EnumerateObject())
+        {
+            Assert.True(options.TryGetValue(kv.Name, out var got) && got == kv.Value.GetString(),
+                        $"main drive {kv.Name}");
+            count++;
+        }
+        Assert.True(count > 0, "vector file must pin the main drive options");
+    }
 }

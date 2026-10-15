@@ -65,14 +65,26 @@ public sealed class HostedServer : INotifyPropertyChanged
     public string DisplayName => $"{_record.Config.ServerName}.{_record.Config.Username}";
     public string Fqdn => _record.Config.ServerDomain;
     public string BadgeLabel => _record.Tier.BadgeLabel();
-    public string StateLabel => _record.State.Label;
+    public string StateLabel => _record.StateLabel;
     public VMStateKind StateKind => _record.State.Kind;
     public InstallObservation? InstallObservation { get; internal set; }
+
+    /// <summary>The guest's own signed health report while it runs.</summary>
+    public VMServerHealth? Health { get; internal set; }
+    public HealthVerdict? HealthVerdict => StateKind == VMStateKind.Running ? Health?.Verdict(DateTimeOffset.UtcNow) : null;
+    public bool HasHealth => HealthVerdict is not null;
+    public string HealthTitle => HealthVerdict is { Ok: false } ? "Server health" : "Health";
+    public string HealthText => HealthVerdict is { } v ? string.Join("\n", v.Lines) : "";
+
+    public string LastConnectedText => _record.LastConnectedAt is { } at
+        ? "Last connected " + at.ToLocalTime().ToString("d MMM yyyy HH:mm", System.Globalization.CultureInfo.CurrentCulture)
+        : "Not connected yet";
+
     public string SidebarStatus => StateKind == VMStateKind.Installing && InstallObservation is { } observation
         ? observation.IsStale(DateTimeOffset.UtcNow)
             ? $"No guest progress for {observation.StaleMinutes(DateTimeOffset.UtcNow)}m · {observation.Summary}"
             : observation.Summary
-        : StateLabel;
+        : HealthVerdict is { Ok: false } health ? health.Lines[0] : StateLabel;
 
     public string StatusSubtitle
     {
@@ -82,9 +94,11 @@ public sealed class HostedServer : INotifyPropertyChanged
                 return "Taking longer than expected — the box may not have reached the network. Check that it's online, or power off and retry.";
             return _record.State.Kind switch
             {
-                VMStateKind.AwaitingPhoneUnlock => _record.Config.BootUnlockMode == "approve"
-                    ? "The disk is sealed — approve the unlock on your phone."
-                    : "The disk is sealed — waiting for the phone-home unlock.",
+                VMStateKind.AwaitingPhoneUnlock => _record.UnlocksOnItsOwn
+                    ? "Unlocking its disk with the key your phone left it. Nothing to approve."
+                    : _record.Config.BootUnlockMode == "approve"
+                        ? "The disk is sealed — approve the unlock on your phone."
+                        : "The disk is sealed — approve the first unlock on your phone. After that it unlocks on its own.",
                 VMStateKind.Installing => InstallObservation is null
                     ? "Waiting for the first guest checkpoint."
                     : InstallObservation.IsStale(DateTimeOffset.UtcNow)
@@ -168,11 +182,15 @@ public sealed class VMManager
     private readonly Dictionary<string, bool> _attachIso = new();
     private readonly Dictionary<string, CancellationTokenSource> _unlockPolls = new();
     private readonly Dictionary<string, CancellationTokenSource> _installPolls = new();
+    private readonly Dictionary<string, CancellationTokenSource> _healthPolls = new();
+    private readonly Func<string, CancellationToken, Task<string?>> _healthFetch;
+    private readonly TimeSpan _healthInterval;
     private readonly HashSet<string> _installStallLogged = new();
     private readonly SynchronizationContext? _sync;
     private readonly Func<DateTimeOffset> _clock;
     private static readonly HttpClient UnlockProbe = new() { Timeout = TimeSpan.FromSeconds(10) };
     private static readonly HttpClient InstallProbe = new() { Timeout = TimeSpan.FromSeconds(10) };
+    private static readonly HttpClient HealthProbe = new() { Timeout = TimeSpan.FromSeconds(15) };
     private static readonly Regex ProvisionSerial = new("^[A-Za-z0-9_-]{8,64}$", RegexOptions.CultureInvariant);
     private static readonly HashSet<string> ProvisionPhases = new()
     {
@@ -181,12 +199,16 @@ public sealed class VMManager
     };
 
     public VMManager(VMInventoryStore store, QemuToolchain? toolchain, string? toolchainError = null,
-                     Func<DateTimeOffset>? clock = null)
+                     Func<DateTimeOffset>? clock = null,
+                     Func<string, CancellationToken, Task<string?>>? healthFetch = null,
+                     TimeSpan? healthInterval = null)
     {
         Store = store;
         _toolchain = toolchain;
         ToolchainError = toolchainError;
         _clock = clock ?? (() => DateTimeOffset.UtcNow);
+        _healthFetch = healthFetch ?? FetchHealthAsync;
+        _healthInterval = healthInterval ?? TimeSpan.FromMinutes(1);
         _sync = SynchronizationContext.Current;
         LoadAndNormalize();
     }
@@ -287,6 +309,7 @@ public sealed class VMManager
         _lifecycles.Remove(name);
         if (_unlockPolls.Remove(name, out var cts)) cts.Cancel();
         if (_installPolls.Remove(name, out var installCts)) installCts.Cancel();
+        if (_healthPolls.Remove(name, out var healthCts)) healthCts.Cancel();
         try { Store.Delete(name); } catch { }
         var server = Server(name);
         if (server != null) Servers.Remove(server);
@@ -365,20 +388,18 @@ public sealed class VMManager
             Log($"VM {name}: ignored {ev.Kind} in state {server.Record.State.Label}");
             return;
         }
-        var config = lc.State.Kind == VMStateKind.Installed
-            ? server.Record.Config with { ProvisionStatusSerial = null }
-            : server.Record.Config;
         server.Record = server.Record with
         {
-            Config = config,
             State = lc.State,
             StateChangedAt = lc.StateChangedAt,
+            LastConnectedAt = lc.State.Kind == VMStateKind.Running ? lc.StateChangedAt : server.Record.LastConnectedAt,
         };
         try { Store.Save(server.Record); } catch { }
         CancelPollsLeftBehind(name);
         await RunEffectsAsync(effects, server.Record.Config);
         SyncUnlockPoll(server.Record.Config);
         SyncInstallPoll(server.Record.Config);
+        SyncHealthPoll(server.Record.Config);
     }
 
     private async Task RunEffectsAsync(IReadOnlyList<VMEffect> effects, VMConfig config)
@@ -442,6 +463,7 @@ public sealed class VMManager
             unlock.Cancel();
         if (kind != VMStateKind.Installing && _installPolls.Remove(name, out var install))
             install.Cancel();
+        if (kind != VMStateKind.Running) StopHealthPoll(name);
     }
 
     /// <summary>States in which the lifecycle expects a QEMU process.</summary>
@@ -667,6 +689,72 @@ public sealed class VMManager
                 catch (OperationCanceledException) { return; }
             }
         });
+    }
+
+    // ---- Health reports ----
+
+    /// <summary>
+    /// While a guest runs, read its signed health report from `.com` (by the
+    /// order that created it) once a minute. The report comes from a timer
+    /// inside the guest, so it explains a server that stopped answering. A VM
+    /// without an order serial shows no health line.
+    /// </summary>
+    private void SyncHealthPoll(VMConfig config)
+    {
+        var name = config.Name;
+        if (CurrentStateKind(name) != VMStateKind.Running)
+        {
+            StopHealthPoll(name);
+            return;
+        }
+        var url = VMServerHealth.OrderHealthUrl(config.ProvisionStatusSerial);
+        if (_healthPolls.ContainsKey(name) || url is null) return;
+        var cts = new CancellationTokenSource();
+        _healthPolls[name] = cts;
+        var domain = config.ServerDomain;
+        _ = Task.Run(async () =>
+        {
+            var lastIssues = "";
+            while (!cts.IsCancellationRequested)
+            {
+                string? body = null;
+                try { body = await _healthFetch(url, cts.Token); }
+                catch (OperationCanceledException) when (cts.IsCancellationRequested) { return; }
+                catch { }
+                if (body is not null && VMServerHealth.FromOrderHealth(body, domain) is { } health)
+                {
+                    OnUi(() =>
+                    {
+                        if (cts.IsCancellationRequested || Server(name) is not { } server) return;
+                        server.Health = health;
+                        server.RefreshTimeDerivedState();
+                        var v = health.Verdict(_clock());
+                        var issues = v.Ok ? "" : string.Join(" ", v.Lines);
+                        if (issues == lastIssues) return;
+                        Log(issues.Length == 0 ? $"VM {name}: health back to normal" : $"VM {name}: health — {issues}");
+                        lastIssues = issues;
+                    });
+                }
+                try { await Task.Delay(_healthInterval, cts.Token); }
+                catch (OperationCanceledException) { return; }
+            }
+        });
+    }
+
+    private void StopHealthPoll(string name)
+    {
+        if (_healthPolls.Remove(name, out var cts)) cts.Cancel();
+        if (Server(name) is { Health: not null } server)
+        {
+            server.Health = null;
+            server.RefreshTimeDerivedState();
+        }
+    }
+
+    private static async Task<string?> FetchHealthAsync(string url, CancellationToken ct)
+    {
+        using var response = await HealthProbe.GetAsync(url, ct);
+        return response.IsSuccessStatusCode ? await response.Content.ReadAsStringAsync(ct) : null;
     }
 
     // ---- plumbing ----

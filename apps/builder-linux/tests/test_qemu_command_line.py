@@ -58,7 +58,8 @@ def test_main_disk_is_ahci_for_metal_identical_sda():
     assert ("-machine", "q35") in pairs(args)
     assert (
         "-drive",
-        "id=flagship-main,if=none,format=qcow2,file=/data/VMs/home.harry.flagship.services/disk.qcow2",
+        "id=flagship-main,if=none,format=qcow2,cache=writeback,aio=threads,discard=unmap,"
+        "file=/data/VMs/home.harry.flagship.services/disk.qcow2",
     ) in pairs(args)
     assert ("-device", "ide-hd,drive=flagship-main") in pairs(args)
     assert not any(a.startswith("virtio-blk") for a in args)

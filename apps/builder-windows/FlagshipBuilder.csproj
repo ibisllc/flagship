@@ -60,6 +60,7 @@
     <Compile Include="src\VM\QemuHost.cs" />
     <Compile Include="src\VM\SshLaunch.cs" />
     <Compile Include="src\VM\VMManager.cs" />
+    <Compile Include="src\VM\VMServerHealth.cs" />
     <Compile Include="src\VM\PendingStops.cs" />
   </ItemGroup>
 

@@ -12,6 +12,11 @@ namespace Flagship.Builder.VM;
 /// </summary>
 public static class QemuCommandLine
 {
+    /// <summary>The main disk's cache/flush policy, pinned in the shared
+    /// vm-core-vectors.json "diskDurability" section: guest flushes reach the
+    /// host disk, so a crash or forced stop can't leave zeroed files.</summary>
+    public const string MainDriveOptions = "cache=writeback,aio=threads,discard=unmap";
+
     /// <summary>
     /// uefiCodePath: the shared readonly edk2 code image from the located
     /// toolchain (only the VARS half is per-VM).
@@ -82,7 +87,7 @@ public static class QemuCommandLine
             // install onto the 755MB stick ("failed to partition: too small",
             // found live). SATA main + USB installer reproduces the metal
             // order: sda = system disk, sdb = installer.
-            "-drive", $"id=flagship-main,if=none,format=qcow2,file={layout.DiskImagePath(name)}",
+            "-drive", $"id=flagship-main,if=none,format=qcow2,{MainDriveOptions},file={layout.DiskImagePath(name)}",
             "-device", "ide-hd,drive=flagship-main",
         };
 

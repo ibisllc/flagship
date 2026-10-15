@@ -212,4 +212,52 @@ public sealed class VMManagerTests : IDisposable
         s.Record = s.Record with { State = VMState.Installing };
         Assert.True(s.CanCancelInstall);
     }
+
+    [Fact]
+    public void AServerThatRanBeforeUnlocksOnItsOwn()
+    {
+        Seed("home.harry.flagship.services", VMState.Stopped);
+        var s = Manager().Servers.Single();
+        s.Record = s.Record with { State = VMState.AwaitingPhoneUnlock, StateChangedAt = DateTimeOffset.UtcNow };
+        Assert.Equal(VMState.AwaitingPhoneUnlock.Label, s.StateLabel);
+        Assert.Contains("approve the first unlock", s.StatusSubtitle);
+        Assert.Equal("Not connected yet", s.LastConnectedText);
+
+        s.Record = s.Record with { LastConnectedAt = DateTimeOffset.FromUnixTimeSeconds(1_800_000_000) };
+        Assert.Equal("Unlocking…", s.StateLabel);
+        Assert.Contains("Nothing to approve", s.StatusSubtitle);
+        Assert.StartsWith("Last connected ", s.LastConnectedText);
+
+        s.Record = s.Record with { Config = s.Record.Config with { BootUnlockMode = "approve" } };
+        Assert.Equal(VMState.AwaitingPhoneUnlock.Label, s.StateLabel);
+        Assert.Contains("approve the unlock", s.StatusSubtitle);
+    }
+
+    [Fact]
+    public void LastConnectedSurvivesASaveAndLoad()
+    {
+        Seed("home.harry.flagship.services", VMState.Stopped);
+        var at = DateTimeOffset.FromUnixTimeSeconds(1_800_000_000);
+        _store.Save(_store.Load("home.harry.flagship.services") with { LastConnectedAt = at });
+        Assert.Equal(at, _store.Load("home.harry.flagship.services").LastConnectedAt);
+        Assert.Equal(at, Manager().Servers.Single().Record.LastConnectedAt);
+    }
+
+    [Fact]
+    public void ARunningServersHealthShowsInTheSidebar()
+    {
+        Seed("home.harry.flagship.services", VMState.Stopped);
+        var s = Manager().Servers.Single();
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        s.Health = new VMServerHealth(120, 3900, 800, 2, "active", 0, 0, true, 31, now);
+        Assert.False(s.HasHealth);
+        s.Record = s.Record with { State = VMState.Running };
+        Assert.True(s.HasHealth);
+        Assert.Equal("Server health", s.HealthTitle);
+        Assert.StartsWith("Ran out of memory 2×", s.SidebarStatus);
+        s.Health = s.Health with { OomKills = 0 };
+        Assert.Equal("Health", s.HealthTitle);
+        Assert.Equal("Running", s.SidebarStatus);
+        Assert.StartsWith("Healthy · 800 MB free", s.HealthText);
+    }
 }
