@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { BOX_NPM_SCOPE, BOX_TSC_BUILD, BURN_PASSPHRASE } from "./userdata.js";
+import { BOX_NPM_SCOPE, BOX_TSC_BUILD, BURN_PASSPHRASE, SETUP_POST_FN } from "./userdata.js";
 
 export const APPLIANCE_SEED_MAGIC = "FLSHSD01";
 export const APPLIANCE_SEED_HEADER_BYTES = 80;
@@ -48,10 +48,10 @@ exec > >(tee -a /var/log/flagship-appliance-specialize.log /dev/console) 2>&1
 # phrases or the bootstrap's one bounded FATAL line, never logs or secrets.
 STATUS_URL=""
 STEP="starting"
+${SETUP_POST_FN}
 report() {
     [ -n "$STATUS_URL" ] || return 0
-    curl -fsS --connect-timeout 3 --max-time 8 -X POST -H 'content-type: application/json' \
-        --data "$(jq -cn --arg p "$1" --arg d "$2" '{phase:$p,detail:$d}')" "$STATUS_URL" >/dev/null 2>&1 || true
+    flagship_post "$STATUS_URL" "$(jq -cn --arg p "$1" --arg d "$2" '{phase:$p,detail:$d}')" 8 >/dev/null 2>&1 || true
 }
 stage() { STEP="$1"; echo "[appliance] $1"; report installing "$1"; }
 trap 'rc=$?; echo "[appliance] specialization failed line=$LINENO rc=$rc"; report error "Setup stopped while $STEP (line $LINENO)"; exit "$rc"' ERR
