@@ -160,6 +160,37 @@ final class OutboundProxyTests: XCTestCase {
         XCTAssertEqual(vm.proxyKind, .none)
     }
 
+    func test_aFreeAccountSeesTheProNoteAndNoProxyBlocksContinue() async {
+        let server = MockFlagshipServerClient()
+        server.simulatedLatency = 0
+        server.accountTierAnswer = "free"
+        let vm = CreateServerViewModel(username: "harry", server: server, relay: MockQrRelayClient())
+        vm.name = "home"
+        XCTAssertTrue(vm.proxyAllowed, "an unknown plan doesn't block")
+        await vm.loadAccountTier()
+        XCTAssertFalse(vm.proxyAllowed)
+        vm.advancedMode = true
+        vm.proxyKind = .socks5
+        XCTAssertNil(vm.proxyError)
+        XCTAssertTrue(vm.canAdvanceFromDesign)
+
+        server.accountTierAnswer = "hobby"
+        await vm.loadAccountTier()
+        XCTAssertTrue(vm.proxyAllowed)
+        XCTAssertFalse(vm.canAdvanceFromDesign)
+        XCTAssertTrue(OutboundProxyCopy.allowed(tier: "maker"))
+        XCTAssertFalse(OutboundProxyCopy.allowed(tier: "free"))
+        XCTAssertEqual(OutboundProxyCopy.proNote, "An outbound proxy is part of Pro.")
+    }
+
+    func test_theBoxSaysWhenTheProxyIsntAvailable() throws {
+        let json = #"{"proxy":null,"hasCredentials":false,"status":{"state":"direct","since":1},"available":false}"#
+        let s = try JSONDecoder().decode(OutboundProxySummary.self, from: Data(json.utf8))
+        XCTAssertEqual(s.available, false)
+        let older = try JSONDecoder().decode(OutboundProxySummary.self, from: Data(#"{"proxy":null,"hasCredentials":false,"status":{"state":"direct","since":1}}"#.utf8))
+        XCTAssertNil(older.available)
+    }
+
     func test_recipeCarriesTheSignedOrderAndOnlyTypedCredentials() throws {
         let order = BoxProxy.make(serverDomain: "home.harry.flagship.services", kind: .socks5, host: "proxy.example.net",
                                   port: 1080, auth: true, fallbackDirect: false, now: 5, nonce: Data(repeating: 1, count: 32))
