@@ -273,6 +273,28 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         }
     }
 
+    // Outbound proxy (docs/outbound-proxy.md).
+    public var outboundProxySummary = OutboundProxySummary(
+        proxy: nil, hasCredentials: false, status: .init(state: "direct", since: 0))
+    public private(set) var outboundProxySetCalls: [OutboundProxySetRequest] = []
+    /// Thrown by `outboundProxySet` (after recording the call), once.
+    public var outboundProxySetError: Error?
+
+    public func outboundProxy() async throws -> OutboundProxySummary { outboundProxySummary }
+
+    public func outboundProxySet(_ req: OutboundProxySetRequest) async throws -> OutboundProxySetResponse {
+        outboundProxySetCalls.append(req)
+        if let e = outboundProxySetError { outboundProxySetError = nil; throw e }
+        let p = req.proxy
+        let keep = outboundProxySummary.hasCredentials && req.credentials == nil && p.auth
+        outboundProxySummary = OutboundProxySummary(
+            proxy: p.kind == "none" ? nil : .init(kind: p.kind, host: p.host, port: p.port, auth: p.auth,
+                                                  fallbackDirect: p.fallbackDirect, issuedAt: p.issuedAt),
+            hasCredentials: p.auth && (req.credentials != nil || keep),
+            status: .init(state: p.kind == "none" ? "direct" : "ok", since: p.issuedAt))
+        return OutboundProxySetResponse(ok: true, outboundProxy: outboundProxySummary)
+    }
+
     public func boxDomain() async -> String? {
         mockBoxDomain ?? "\(podContext).bright-maple.flagship.services"
     }

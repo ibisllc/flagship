@@ -90,6 +90,9 @@ public struct ServerDetailResponse: Codable, Equatable, Sendable {
     public var lastUpdate: LastUpdate? = nil
     /// The sandbox every app runs in (gVisor). Absent from older daemons.
     public var appSandbox: AppSandbox? = nil
+    /// The box's outbound proxy and whether it works (docs/outbound-proxy.md).
+    /// Absent from older daemons: the page then hides the section.
+    public var outboundProxy: OutboundProxySummary? = nil
 }
 
 /// The box's app sandbox (docs/app-runtimes.md §5.1): `off`, `starting`,

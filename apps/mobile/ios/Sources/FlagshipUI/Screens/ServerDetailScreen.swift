@@ -247,6 +247,9 @@ public struct ServerDetailScreen: View {
                     BootUnlockCard(serverDomain: d.serverFqdn)
                     ServerOrderCard(serverDomain: d.serverFqdn)
                     ShareServerCard(serverDomain: d.serverFqdn)
+                    if let proxy = d.outboundProxy {
+                        OutboundProxyCard(serverDomain: d.serverFqdn, summary: proxy, onRefreshDetail: onRefreshDetail)
+                    }
                     FrontPageCard(serverDomain: d.serverFqdn)
                     LockPowerCard(serverDomain: d.serverFqdn)
                     DeadManCard(serverDomain: d.serverFqdn, serverName: serverName ?? d.serverFqdn)
