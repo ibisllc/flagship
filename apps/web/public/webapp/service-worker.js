@@ -173,7 +173,9 @@
 //       (/invite#server=<box>&k=…) is accepted against that box.
 //  v82: Settings and the AI-key step read Flagship Inference's status
 //      without asking for a username first.
-const SHELL_VERSION = "v82";
+//  v83: A server order refused because another device saved a newer one
+//      says so instead of blaming the connection.
+const SHELL_VERSION = "v83";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

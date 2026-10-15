@@ -318,6 +318,12 @@ export class ServerOrderError extends Error {
   }
 }
 
+/** The toast for a failed save: a newer order saved on another device says
+ *  so in its own words; anything else gets the caller's usual copy. */
+export function serverOrderFailureText(e, fallback) {
+  return e instanceof ServerOrderError && e.status === 409 ? e.message : fallback(e);
+}
+
 /**
  * Save the owner's new order. The browser shows it at once; a demo account
  * keeps it here only. A real account signs it and posts it to `.com`; on any
