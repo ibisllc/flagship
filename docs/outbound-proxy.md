@@ -374,10 +374,10 @@ Pieces:
   marked `unconfigured`. A per-box strict mode (no fallback) is a later
   option; `sendPrivately` already takes `fallbackDirect: false`.
 - **Which path each request took** (`relay_arrivals`, migration
-  `0098_relay_health.sql`): `.com` counts arrivals per UTC day as `ohttp`
+  `0099_relay_health.sql`): `.com` counts arrivals per UTC day as `ohttp`
   (through the gateway) or `direct-fallback` (a direct request carrying the
-  marker). No box, account or address is stored. The migration number was
-  free on `main` at 0097; renumber it if `main` takes 0098 first.
+  marker). No box, account or address is stored. `main` took 0098, so the
+  branch holds 0099; `main` must skip 0099 while the branch is open.
 - **/status/**: `/api/_status/probe` returns `privateRelay: {state, message,
   arrivals, lastProbe}`. The page shows **"Private relay down: servers are
   reaching Flagship directly"** when any direct fallback arrived today or

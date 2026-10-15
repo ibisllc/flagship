@@ -980,7 +980,7 @@ Not compiled since the rebase: the iOS and Android code on any branch.
   through OHTTP (RFC 9458): third-party relay (Oblivious Network planned, not
   Cloudflare), our own gateway in the `.com` Worker
   (`/.well-known/ohttp-keys`, `/api/ohttp/gateway`), direct fallback marked
-  and counted (migration 0098), /status/ warns "Private relay down", daily
+  and counted (migration 0099; `main` skips it), /status/ warns "Private relay down", daily
   probe opens an issue. The Go unseal helper can seal/open unlock calls
   (`ohttp-seal`/`ohttp-open`); wiring it into the initramfs is design only,
   so unlock still goes direct. Owner to provision the relay + `OHTTP_GATEWAY_KEYS`. Webapp
