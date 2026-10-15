@@ -200,6 +200,17 @@ public protocol FlagshipServerClient: Sendable {
         serviceId: String
     ) async throws -> AppLinksResponse
 
+    /// Bind an external domain to the app (#79A). Decoupled
+    /// request/confirm: a 200 only RECORDS it (.com verifies the CNAME
+    /// out-of-band and pushes the outcome); the ONLY synchronous denial
+    /// is the 300s rate limit (429 "Too soon — try again in Ns.").
+    /// Returns the refreshed links so callers reflect it immediately.
+    func setCustomDomain(
+        username: String,
+        serviceId: String,
+        body: SetCustomDomainRequest
+    ) async throws -> AppLinksResponse
+
     /// v1.2 Phase 4 — read the account-type / TOTP-enrolled state for
     /// the Settings security badge. Maps to GET /api/users/:u — public
     /// read; the Worker echoes `accountType` ("single" | "multi") +
@@ -449,6 +460,30 @@ public struct AppRenameRequest: Encodable, Sendable {
     }
 }
 
+/// #79A — IRK-signed external-domain attach request. Same envelope
+/// shape as AppRenameRequest; canonical bytes = SetCustomDomainClaim
+/// (flagship/custom-domain/v1 | username | serviceId | fqdn | issuedAt),
+/// matching the .com verifier + the Android/webapp clients.
+public struct SetCustomDomainRequest: Encodable, Sendable {
+    public struct Inner: Encodable, Sendable {
+        public let username: String
+        public let serviceId: String
+        public let fqdn: String
+        public let issuedAt: Int64
+        public init(username: String, serviceId: String, fqdn: String, issuedAt: Int64) {
+            self.username = username
+            self.serviceId = serviceId
+            self.fqdn = fqdn
+            self.issuedAt = issuedAt
+        }
+    }
+    public let request: Inner
+    public let signature: String   // hex; Ed25519 by the user's IRK
+    public init(request: Inner, signature: String) {
+        self.request = request; self.signature = signature
+    }
+}
+
 public struct AppRenameResponse: Decodable, Equatable, Sendable {
     public let ok: Bool
     public let displayLabel: String?
@@ -480,6 +515,16 @@ public struct AppLinksResponse: Decodable, Equatable, Sendable {
     public let shortCode: String?
     /// The custom-name state behind the "Your link" field; nil from an older `.com`.
     public let link: VoiciLinkState?
+    /// The attached external domain, if the user has requested one. A
+    /// Replace never touches it. Shown optimistically at the top of
+    /// WEB DOMAINS as soon as it's requested.
+    public let customDomain: String?
+    /// Whether .com has verified the CNAME. nil/false = requested but
+    /// not yet confirmed. Drives the SUBTLE confirm signal: the apps
+    /// list swaps the short link for the custom domain only once true.
+    /// (The last-change *time* is NOT here — that's stored on-device;
+    /// the server keeps its own rate-limit timer in its DB.)
+    public let customDomainConfirmed: Bool?
     public init(
         serviceId: String,
         displayLabel: String,
@@ -487,7 +532,9 @@ public struct AppLinksResponse: Decodable, Equatable, Sendable {
         instances: [AppLinkInstance],
         shortUrl: String?,
         shortCode: String? = nil,
-        link: VoiciLinkState? = nil
+        link: VoiciLinkState? = nil,
+        customDomain: String? = nil,
+        customDomainConfirmed: Bool? = nil
     ) {
         self.serviceId = serviceId
         self.displayLabel = displayLabel
@@ -496,6 +543,8 @@ public struct AppLinksResponse: Decodable, Equatable, Sendable {
         self.shortUrl = shortUrl
         self.shortCode = shortCode
         self.link = link
+        self.customDomain = customDomain
+        self.customDomainConfirmed = customDomainConfirmed
     }
 }
 
@@ -3105,6 +3154,17 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     /// Scripted alias map per (username, serviceId). The links endpoint
     /// returns these; the rename endpoint writes into them.
     public var appAliasByUser: [String: [String: (displayLabel: String, canonicalUrl: String)]] = [:]
+    /// Bound external domains, keyed [user][serviceId]. A Replace never
+    /// clears this — it's deliberately a separate store from aliases.
+    public var customDomainByUser: [String: [String: String]] = [:]
+    /// Server-side rate limit mirror: [user][serviceId] → last change.
+    public var customDomainLastChangedByUser: [String: [String: Date]] = [:]
+    /// Min seconds between custom-domain changes (server-enforced).
+    public var customDomainMinInterval: TimeInterval = 300
+    /// Demo only: how long after a request the Mock pretends .com
+    /// finished the out-of-band CNAME verification. A real server
+    /// pushes the outcome; the Mock just flips confirmed after this.
+    public var customDomainConfirmDelay: TimeInterval = 6
 
     public func renameApp(
         username: String,
@@ -3164,6 +3224,15 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         // surfaces the same link across calls (so a copy-paste in
         // demo mode is stable + previews stay snapshot-friendly).
         let shortCode = synthesizeMockShortCode(forServiceId: serviceId, label: label)
+        let lastChanged = customDomainLastChangedByUser[username.lowercased()]?[serviceId]
+        // Demo: .com "confirms" the CNAME customDomainConfirmDelay
+        // seconds after the request (a real server pushes the outcome).
+        // The server keeps its own lastChanged timer for the rate
+        // limit; it is NOT echoed to the client (the client stores its
+        // own local timestamp for the countdown).
+        let confirmed = lastChanged.map {
+            Date().timeIntervalSince($0) >= customDomainConfirmDelay
+        }
         return AppLinksResponse(
             serviceId: serviceId,
             displayLabel: label,
@@ -3176,8 +3245,39 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
             ],
             shortUrl: "https://voi.ci/\(shortCode)",
             shortCode: shortCode,
-            link: VoiciLinkState(name: nil, held: 0, limit: 5, changesLeft: 3)
+            link: VoiciLinkState(name: nil, held: 0, limit: 5, changesLeft: 3),
+            customDomain: customDomainByUser[username.lowercased()]?[serviceId],
+            customDomainConfirmed: confirmed
         )
+    }
+
+    public func setCustomDomain(
+        username: String,
+        serviceId: String,
+        body: SetCustomDomainRequest
+    ) async throws -> AppLinksResponse {
+        try await tick()
+        let u = username.lowercased()
+        // Server-side rate limit (the lastChanged column). The client
+        // mirrors this with a cooldown, but the server is the backstop.
+        if let last = customDomainLastChangedByUser[u]?[serviceId] {
+            let elapsed = Date().timeIntervalSince(last)
+            if elapsed < customDomainMinInterval {
+                let wait = Int((customDomainMinInterval - elapsed).rounded(.up))
+                throw ScreensClientError.http(
+                    status: 429,
+                    message: "Too soon — try again in \(wait)s."
+                )
+            }
+        }
+        // Synchronous confirmation: a real server fetches the CNAME
+        // here and only commits if it points at the user's stub. The
+        // Mock has no DNS, so it accepts the claim (the demo can't
+        // exercise a real failure path). Record from the signed body.
+        customDomainByUser[u, default: [:]][serviceId] =
+            body.request.fqdn.trimmingCharacters(in: .whitespaces).lowercased()
+        customDomainLastChangedByUser[u, default: [:]][serviceId] = Date()
+        return try await getAppLinks(username: username, serviceId: serviceId)
     }
 
     /// FNV-1a over (serviceId|label) → first 6 hex digits, lowercased.
@@ -4030,6 +4130,38 @@ public final class LiveFlagshipServerClient: FlagshipServerClient, @unchecked Se
             throw ScreensClientError.http(status: status, message: text)
         }
         return try JSONDecoder().decode(AppLinksResponse.self, from: data)
+    }
+
+    public func setCustomDomain(
+        username: String,
+        serviceId: String,
+        body: SetCustomDomainRequest
+    ) async throws -> AppLinksResponse {
+        let u = username.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? username
+        let a = serviceId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? serviceId
+        var req = URLRequest(url: baseUrl.appendingPathComponent("/api/users/\(u)/apps/\(a)/custom-domain"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONEncoder().encode(body)
+        let (data, resp) = try await send(req)
+        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else {
+            // .com returns { "error": "…" } on the synchronous denials
+            // (429 rate-limit / 400 apex / 403 sig). Surface .error
+            // verbatim so the 429 message is byte-identical to the
+            // Mock ("Too soon — try again in Ns.", U+2014); fall back
+            // to the raw body if it isn't the {error} shape.
+            struct ErrBody: Decodable { let error: String? }
+            let decoded = try? JSONDecoder().decode(ErrBody.self, from: data)
+            let message = decoded?.error
+                ?? String(data: data, encoding: .utf8)
+                ?? "Couldn't request custom domain."
+            throw ScreensClientError.http(status: status, message: message)
+        }
+        // 200 = recorded only (the POST returns { recorded:true }, NOT
+        // the links). Re-read links so the pending domain surfaces
+        // optimistically; .com confirms the CNAME out-of-band.
+        return try await getAppLinks(username: username, serviceId: serviceId)
     }
 
     public func listAuditEvents(username: String, sinceSeq: Int, limit: Int) async throws -> AuditEventListResponse {

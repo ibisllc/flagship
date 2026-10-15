@@ -138,7 +138,14 @@ function stripScheme(s) {
  *  loaded yet so the list doesn't jump as fetches resolve. */
 function urlRowHtml(service, links) {
   const canonical = links?.canonicalUrl ?? service.url;
-  const short = links?.shortUrl ?? null;
+  // A bound custom domain takes the short link's slot ONLY once .com
+  // has confirmed it (order flipped active) — that swap is the subtle
+  // "it's live" cue. Mirrors iOS ServicesTab.urlRow + the service-detail view.
+  const confirmedCustom =
+    links?.customDomainConfirmed === true && links?.customDomain
+      ? `https://${links.customDomain}`
+      : null;
+  const short = confirmedCustom ?? links?.shortUrl ?? null;
   return `
     <div class="mt-1" data-section="urls">
       <div class="row">

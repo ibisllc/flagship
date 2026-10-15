@@ -140,6 +140,6 @@ describe("the app page's Backup card", () => {
     expect(detail).not.toContain("body.fetchPath}");
     const sw = await asset("/webapp/service-worker.js");
     expect(sw).toContain('"/lib/appBackup.js"');
-    expect(sw).toContain('SHELL_VERSION = "v160"');
+    expect(sw).toContain('SHELL_VERSION = "v161"');
   });
 });

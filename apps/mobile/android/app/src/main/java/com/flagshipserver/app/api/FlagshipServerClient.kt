@@ -170,10 +170,24 @@ interface FlagshipServerClient {
     ): AppRenameResponse
 
     /** V3 — read the per-user URL identity of a service:
-     *  { displayLabel, canonicalUrl, instances, shortUrl, shortCode, link }. */
+     *  { displayLabel, canonicalUrl, instances, shortUrl, shortCode, link,
+     *    customDomain, customDomainConfirmed }. */
     suspend fun getAppLinks(
         username: String,
         serviceId: String,
+    ): AppLinksResponse
+
+    /** #79A — attach an external (custom) domain to a service. Signed by
+     *  the user's current IRK. Decoupled request/confirm: a 200 only
+     *  RECORDS the request (.com verifies the CNAME out-of-band and
+     *  pushes the outcome later); the ONLY synchronous denial is the
+     *  300s rate limit (429 "Too soon — try again in Ns.", byte-
+     *  identical to the Mock). On success returns the refreshed links
+     *  so callers surface the domain optimistically. */
+    suspend fun setCustomDomain(
+        username: String,
+        serviceId: String,
+        body: SetCustomDomainRequest,
     ): AppLinksResponse
 
     /** v1.2 Phase 4 — read the account-type / TOTP-enrolled state for
@@ -459,6 +473,12 @@ data class AppLinksResponse(
     val canonicalUrl: String,
     val instances: List<AppLinkInstance>,
     val shortUrl: String? = null,
+    /** #79A — the bound external domain (present as soon as the order
+     *  is recorded, even pending). A Replace never clears it. */
+    val customDomain: String? = null,
+    /** True once .com flips the order active. The apps-list short→
+     *  custom swap keys on this; null/false = still pending. */
+    val customDomainConfirmed: Boolean? = null,
     /** The service's permanent random code (voi.ci/<code>); shown in the link field until a custom name is set. */
     val shortCode: String? = null,
     val link: AppLinkState? = null,
@@ -474,6 +494,20 @@ data class AppLinkState(
     val nextChangeAt: Long? = null,
     val releasesAt: Long? = null,
 )
+
+@Serializable
+data class SetCustomDomainRequest(
+    val request: Inner,
+    val signature: String,
+) {
+    @Serializable
+    data class Inner(
+        val username: String,
+        val serviceId: String,
+        val fqdn: String,
+        val issuedAt: Long,
+    )
+}
 
 @Serializable
 data class WipeRestartRequest(
@@ -1782,6 +1816,27 @@ class LiveFlagshipServerClient(
                 extraHeaders = auth,
             )
         }
+    }
+
+    override suspend fun setCustomDomain(
+        username: String,
+        serviceId: String,
+        body: SetCustomDomainRequest,
+    ): AppLinksResponse {
+        val u = java.net.URLEncoder.encode(username, "UTF-8")
+        val a = java.net.URLEncoder.encode(serviceId, "UTF-8")
+        // The .com POST returns { recorded:true } (NOT links) and is
+        // the ONLY synchronous step — a non-2xx (429 rate-limit /
+        // 4xx) surfaces as HttpException(status, body) where body is
+        // { "error": "Too soon — try again in Ns." }. On 200 we mirror
+        // iOS Live: re-read links so the bound (still-pending) domain
+        // shows immediately; .com confirms out-of-band.
+        transport.postJson(
+            url = "$base/api/users/$u/apps/$a/custom-domain",
+            body = body,
+            serializer = SetCustomDomainRequest.serializer(),
+        )
+        return getAppLinks(username, serviceId)
     }
 
     override suspend fun getUsernameRecord(username: String): UsernameLookupResponse {

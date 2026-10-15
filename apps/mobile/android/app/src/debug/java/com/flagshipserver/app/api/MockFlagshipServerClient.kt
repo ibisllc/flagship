@@ -548,6 +548,19 @@ class MockFlagshipServerClient(
     /** Mock-side alias cache; getAppLinks reads it, renameApp writes
      *  to it so test fixtures stay self-consistent across calls. */
     var appAliasByUser: MutableMap<String, MutableMap<String, Pair<String, String>>> = mutableMapOf()
+    /** #79A — bound external domains, keyed [user][appId]. A Replace
+     *  never clears this — deliberately separate from aliases. */
+    var customDomainByUser: MutableMap<String, MutableMap<String, String>> = mutableMapOf()
+    /** Server-side rate-limit mirror: [user][appId] → last-change ms. */
+    var customDomainLastChangedByUser: MutableMap<String, MutableMap<String, Long>> = mutableMapOf()
+    /** Min ms between custom-domain changes (server-enforced; the
+     *  client mirrors a UX cooldown). 300s, same as .com + iOS. */
+    var customDomainMinIntervalMs: Long = 300_000
+    /** Demo only: how long after a request the Mock pretends .com
+     *  finished the out-of-band CNAME verify (a real server pushes
+     *  the outcome; the Mock just flips confirmed after this). */
+    var customDomainConfirmDelayMs: Long = 6_000
+
     override suspend fun renameApp(
         username: String,
         serviceId: String,
@@ -598,6 +611,15 @@ class MockFlagshipServerClient(
         val label = alias?.first ?: defaultLabel
         val host = Endpoints.userZoneHost(username.lowercase())
         val canonical = alias?.second ?: "https://$label.$host"
+        val u = username.lowercase()
+        val lastChanged = customDomainLastChangedByUser[u]?.get(serviceId)
+        // Demo: .com "confirms" the CNAME customDomainConfirmDelayMs
+        // after the request (a real server pushes the outcome). The
+        // server keeps its own lastChanged timer for the rate limit;
+        // it is NOT echoed (the client stores its own local stamp).
+        val confirmed = lastChanged?.let {
+            System.currentTimeMillis() - it >= customDomainConfirmDelayMs
+        }
         return AppLinksResponse(
             serviceId = serviceId,
             displayLabel = label,
@@ -608,7 +630,39 @@ class MockFlagshipServerClient(
             shortUrl = "https://voi.ci/$MOCK_SHORT_CODE",
             shortCode = MOCK_SHORT_CODE,
             link = AppLinkState(name = null, held = 0, limit = 5, changesLeft = 3),
+            customDomain = customDomainByUser[u]?.get(serviceId),
+            customDomainConfirmed = confirmed,
         )
+    }
+
+    override suspend fun setCustomDomain(
+        username: String,
+        serviceId: String,
+        body: SetCustomDomainRequest,
+    ): AppLinksResponse {
+        tick()
+        val u = username.lowercase()
+        // Server-side rate limit (the lastChanged column). The client
+        // mirrors this with a cooldown, but the server is the backstop.
+        val last = customDomainLastChangedByUser[u]?.get(serviceId)
+        if (last != null) {
+            val elapsed = System.currentTimeMillis() - last
+            if (elapsed < customDomainMinIntervalMs) {
+                // ceil to whole seconds; U+2014 em dash + trailing
+                // period — MUST byte-match .com + iOS Mock.
+                val wait = (customDomainMinIntervalMs - elapsed + 999) / 1000
+                throw HttpException(429, "Too soon — try again in ${wait}s.")
+            }
+        }
+        // Synchronous confirmation: a real server fetches the CNAME
+        // here and only commits if it points at the user's stub. The
+        // Mock has no DNS, so it accepts the claim (the demo can't
+        // exercise a real failure path).
+        customDomainByUser.getOrPut(u) { mutableMapOf() }[serviceId] =
+            body.request.fqdn.trim().lowercase()
+        customDomainLastChangedByUser.getOrPut(u) { mutableMapOf() }[serviceId] =
+            System.currentTimeMillis()
+        return getAppLinks(username, serviceId)
     }
 
     override suspend fun wipeRestart(

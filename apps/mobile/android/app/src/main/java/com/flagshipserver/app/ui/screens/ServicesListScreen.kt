@@ -139,7 +139,7 @@ fun ServicesListScreen(nav: NavController) {
 
     // Merge the servers' apps lists with the per-service /links fan-out
     // as iOS AppsTab.AppRow does: slug.capitalized name, the combined
-    // status pill, short link.
+    // status pill, confirmed-custom-domain → short-link swap.
     val allApps: List<AppSummary> = when (val s = state) {
         is LoadingState.Loaded -> s.value.map { toRow(it, linksByServiceId[it.app.serviceId]) }
         else -> emptyList()
@@ -338,9 +338,14 @@ private fun subtitleFor(app: AppSummary, isShared: Boolean): String? {
 }
 
 /** The short (shareable) URL for the monospaced detail line, falling back
- *  to the canonical URL. Mirrors iOS. */
+ *  to a confirmed custom domain, then the canonical URL. Mirrors iOS. */
 private fun shortUrlText(app: AppSummary): String? {
-    val short = app.shortUrl ?: app.canonicalUrl ?: return null
+    val confirmedCustom = if (app.customDomainConfirmed == true && !app.customDomain.isNullOrEmpty()) {
+        "https://${app.customDomain}"
+    } else {
+        null
+    }
+    val short = confirmedCustom ?: app.shortUrl ?: app.canonicalUrl ?: return null
     return stripScheme(short)
 }
 
@@ -350,7 +355,8 @@ private fun stripScheme(s: String): String =
 /** Merge one daemon AppSummary + its /links result into the row
  *  display model — faithful to iOS AppsTab.AppRow:
  *  `slug.capitalized` name, status→pill, links.canonicalUrl ?? the
- *  daemon URL. */
+ *  daemon URL, and the confirmed-custom-domain short-link swap (the
+ *  swap itself lives in AppRow, gated on customDomainConfirmed). */
 private fun toRow(listed: ServicesListViewModel.Listed, links: AppLinksResponse?): AppSummary {
     val api = listed.app
     return AppSummary(
@@ -363,6 +369,8 @@ private fun toRow(listed: ServicesListViewModel.Listed, links: AppLinksResponse?
         version = api.version,
         shortUrl = links?.shortUrl,
         canonicalUrl = links?.canonicalUrl ?: api.url,
+        customDomain = links?.customDomain,
+        customDomainConfirmed = links?.customDomainConfirmed,
         egressPending = listed.egressPending,
     )
 }
@@ -386,6 +394,10 @@ data class AppSummary(
     val shortUrl: String? = null,
     /** V3 — canonical FQDN; the monospaced detail fallback. */
     val canonicalUrl: String? = null,
+    /** #81 — the bound external domain + whether .com confirmed it.
+     *  Populated by the same /links fan-out as shortUrl. */
+    val customDomain: String? = null,
+    val customDomainConfirmed: Boolean? = null,
     /** A host is waiting for the owner's answer (or, on an older box, the
      *  app declares hosts the owner hasn't allowed yet). */
     val egressPending: Boolean = false,

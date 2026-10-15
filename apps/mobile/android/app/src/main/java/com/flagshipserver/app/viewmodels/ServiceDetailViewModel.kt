@@ -8,7 +8,7 @@
 // Where else the app runs lives on AppPlacementViewModel
 // (docs/app-placement.md §4).
 //
-// The WEB DOMAINS / Replace machinery stays on
+// The WEB DOMAINS / Replace / custom-domain machinery stays on
 // RenameServiceViewModel (the iOS split is the same: AppLinks live on a
 // sibling path). This VM never touches it.
 //

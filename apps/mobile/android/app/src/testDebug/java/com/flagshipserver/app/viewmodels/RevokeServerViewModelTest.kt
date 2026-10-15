@@ -34,6 +34,7 @@ import com.flagshipserver.app.api.RecoveryEnvelopeRequest
 import com.flagshipserver.app.api.RecoveryEnvelopeResponse
 import com.flagshipserver.app.api.ReleaseServerNameRequest
 import com.flagshipserver.app.api.ServerRevocationRequest
+import com.flagshipserver.app.api.SetCustomDomainRequest
 import com.flagshipserver.app.api.WatchDelegateMintRequest
 import com.flagshipserver.app.api.WatchDelegateMintResponse
 import com.flagshipserver.app.api.WatchDelegateRevokeRequest
@@ -198,6 +199,7 @@ class RevokeServerViewModelTest {
         override suspend fun wipeRestart(username: String, body: WipeRestartRequest, ifMatch: String?): WipeRestartResponse = throw error
         override suspend fun renameApp(username: String, serviceId: String, body: AppRenameRequest): AppRenameResponse = throw error
         override suspend fun getAppLinks(username: String, serviceId: String): AppLinksResponse = throw error
+        override suspend fun setCustomDomain(username: String, serviceId: String, body: SetCustomDomainRequest): AppLinksResponse = throw error
         override suspend fun getUsernameRecord(username: String): UsernameLookupResponse = throw error
         override suspend fun getAccountIrkPub(username: String): String = throw error
         override suspend fun totpEnrollBegin(username: String, body: TotpEnrollBeginRequest): TotpEnrollBeginResponse = throw error
