@@ -683,6 +683,21 @@ metal), plus the Debian 13.7.0 check. Record results under "Desktop Studio".
 17. **Flagship Inference region choice:** both shim upstreams are US
     (DeepInfra primary, OpenRouter fallback). Add a user-selectable US/EU
     region (an EU upstream such as Scaleway, picked per account).
+18. **Share this server, after v1** (owner, 2026-10-14; v1 targets a family:
+    start-up approval while the owner is away, plus day-to-day upkeep).
+    Later, in order: **succession** (the owner names a successor who can
+    claim ownership if the owner's dead-man switch lapses, after a waiting
+    period the owner can cancel; today transfer needs the giver, so a server
+    dies with its owner's account); **disk-key rotation** when an unlock
+    share ends (an ex-sharer may have kept the key); an **activity log
+    co-managers can see**; **IDE/git builds for co-managers** with MCP keys
+    scoped to the share and revoked with it. Offices (company owns the
+    server, staff come and go) need all four: target them after.
+19. **Set the real Flagship Inference allowances** from measured builds:
+    run the DeepInfra build harness (`infra/inference/build-eval`) for
+    tokens per build per model, then set `AI_PROMO_*` on `.com` (generous
+    starter; weekly ≥ one real edit session). The paid-tier AI allowances
+    (1M/5M/20M) in `meter.ts` are placeholders until payments.
 
 ### Feature branches (each = `main` + one feature; rebase when `main` moves)
 
