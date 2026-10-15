@@ -37,9 +37,9 @@ public struct VMConfig: Codable, Sendable, Equatable {
     public let bootUnlockMode: String
     /// From the SIGNED blob: whether the guest root is LUKS-encrypted.
     public let diskEncrypted: Bool
-    /// Random order capability used only while the unattended guest install is
-    /// running, so Studio can read the same privacy-safe checkpoints the phone
-    /// sees. It never grants access to the server or its content.
+    /// Random order capability: Studio reads the same privacy-safe install
+    /// checkpoints the phone sees with it, then the running server's health
+    /// report. It never grants access to the server or its content.
     public let provisionStatusSerial: String?
     /// nil decodes legacy bundles as installerISO.
     public let provisioningMode: VMProvisioningMode?
@@ -52,23 +52,6 @@ public struct VMConfig: Codable, Sendable, Equatable {
     /// unlock supplies the key (auto = a held lease answers, approve = the
     /// owner taps). An unencrypted guest boots straight through.
     public var awaitsPhoneUnlockAtBoot: Bool { diskEncrypted }
-
-    public func clearingProvisionStatusSerial() -> VMConfig {
-        VMConfig(
-            name: name,
-            serverDomain: serverDomain,
-            username: username,
-            serverName: serverName,
-            cpuCount: cpuCount,
-            memoryBytes: memoryBytes,
-            mainDiskSizeBytes: mainDiskSizeBytes,
-            networkMode: networkMode,
-            serialConsoleEnabled: serialConsoleEnabled,
-            bootUnlockMode: bootUnlockMode,
-            diskEncrypted: diskEncrypted,
-            provisionStatusSerial: nil,
-            provisioningMode: provisioningMode)
-    }
 
     public init(name: String,
                 serverDomain: String,

@@ -164,9 +164,6 @@ final class VMManager: ObservableObject {
         lifecycles[name] = lc
         server.record.state = lc.state
         server.record.stateChangedAt = lc.stateChangedAt
-        if case .installed = lc.state {
-            server.record.config = server.record.config.clearingProvisionStatusSerial()
-        }
         if case .running = lc.state {
             server.record.lastConnectedAt = lc.stateChangedAt
         }

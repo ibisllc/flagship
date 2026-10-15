@@ -58,7 +58,6 @@ final class VMConfigTests: XCTestCase {
         XCTAssertEqual(cfg.mainDiskSizeBytes, VMResourcePlan.defaultMainDiskSizeBytes)
         XCTAssertEqual(cfg.networkMode, .nat)
         XCTAssertEqual(cfg.provisionStatusSerial, "01VMTEST")
-        XCTAssertNil(cfg.clearingProvisionStatusSerial().provisionStatusSerial)
     }
 
     // MARK: - Serial console ⇔ debug grant (the hard guardrail)
