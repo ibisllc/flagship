@@ -1096,6 +1096,477 @@ const TOTAL: readonly Scenario[] = [
       dimension: "D1",
     },
   ),
+  // ── Servers: order + Leader badge, update card, un-revoke / delete — gym-servers.spec.ts ──
+  webTotal(
+    "web-total-server-order-drag",
+    "Server order (docs/server-order.md): dragging a server by its handle reorders Home at once (badge gray mid-drag), signs a flagship/server-order/v1 with the IRK and posts it to .com; the new leader's badge stays gray ('Leader, waiting for the server to confirm') until the box answers the hand-delivered order. Add/connect a server sits above the list. Mirrors iOS home-add-server / sd-leader-pending, Android home-add-server / pod-leader-badge / pod-leader-badge-pending.",
+    "gym servers home drag reorders and the leader badge stays gray until the leader confirms",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Home with three servers (stubbed /api/me/servers + /pods with a saved order the leader holds)." },
+        { kind: "assert", describe: "Green Leader badge on the first online server.", handle: "[data-order-leader]" },
+        { kind: "tap", describe: "Drag office's handle above home.", handle: ".js-order-handle" },
+        { kind: "assert", describe: "Signed order posted; office leads with a gray badge.", handle: "[data-order-leader-pending]" },
+        { kind: "assert", describe: "Office box answers heldIssuedAt; badge turns green.", handle: "[data-order-leader]" },
+      ],
+      assertions: [
+        { describe: "Add/connect a server above the list", handle: "#home-add-server", expect: "text", text: "Add/connect a server" },
+        { describe: "List is reorderable", handle: "#servers-list [data-server-cards][data-reorderable]", expect: "present" },
+        { describe: "Leader badge", handle: "#servers-list [data-order-leader]", expect: "text", text: "Leader" },
+        { describe: "Gray until confirmed", handle: "#servers-list [data-order-leader-pending]", expect: "present" },
+      ],
+      screenshots: [
+        shot("order-confirmed", "The saved order, leader confirmed."),
+        shot("order-dragging", "Mid-drag: draft order, badge gray."),
+        shot("order-leader-pending", "New leader waiting for the box to confirm."),
+        shot("order-leader-confirmed", "The box confirmed the order."),
+      ],
+      dimension: "D1",
+    },
+  ),
+  webTotal(
+    "web-total-server-order-revert",
+    "Server order: a down first server leaves the next online one leading ('standing in for media'); the keyboard step 'Move office up' saves at once, and when .com answers 409 (a newer order from another device) the toast says so and the previous order comes back.",
+    "gym servers home keyboard reorder reverts when another device saved a newer order",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Home; saved order media(offline), home, office; .com answers the save 409." },
+        { kind: "assert", describe: "Home leads, standing in for media.", handle: "[data-order-leader]" },
+        { kind: "tap", describe: "Focus 'Move office up' and press Enter.", handle: ".js-order-up" },
+        { kind: "assert", describe: "409 toast; order reverts.", handle: "#toast" },
+      ],
+      assertions: [
+        { describe: "Standing-in subtitle", handle: "#servers-list", expect: "text", text: "standing in for media" },
+        { describe: "Newer-order toast", handle: "#toast", expect: "text", text: "Your server order changed on another device" },
+        { describe: "Leader back on home", handle: "#servers-list [data-order-leader]", expect: "text", text: "Leader" },
+      ],
+      screenshots: [shot("order-standing-in", "Leader standing in for a down server."), shot("order-reverted", "The order put back after a 409.")],
+      dimension: "D1",
+    },
+  ),
+  webTotal(
+    "web-total-server-update-card",
+    "Update card: shows the running commit and the box's last-update verdict (a rollback in plain words), the release note from the box's own release list, and 'Update to latest' signs an UpdateOrder (from/target commits) to .com's update lane; the card then shows the pending order instead of the button. Mirrors iOS sd-update-last-outcome / sd-update-available / sd-update-server / update-latest-btn / sd-update-pending.",
+    "gym servers update card shows the last update and orders the latest release",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach server-detail; box reports currentCommit + lastUpdate (rolled-back) + a newer release." },
+        { kind: "assert", describe: "Last update verdict + release note.", handle: "#update-last-outcome" },
+        { kind: "tap", describe: "Update to latest.", handle: "#update-server-btn" },
+        { kind: "tap", describe: "Order the latest release.", handle: "#update-latest-btn" },
+        { kind: "tap", describe: "Done.", handle: "[data-update-cancel]" },
+        { kind: "assert", describe: "Pending order replaces the button.", handle: "#update-pending" },
+      ],
+      assertions: [
+        { describe: "Rollback verdict", handle: "#update-last-outcome", expect: "text", text: "didn't start cleanly" },
+        { describe: "Release note", handle: "#update-available", expect: "text", text: "New release available: v1.4.0" },
+        { describe: "Pending order shown", handle: "#update-pending", expect: "text", text: "Update to v1.4.0 sent" },
+        { describe: "Button hidden while pending", handle: "#update-server-btn", expect: "absent" },
+      ],
+      screenshots: [
+        shot("update-card", "The update card with the last update + release note."),
+        shot("update-dialog", "The update dialog."),
+        shot("update-pending", "The pending order on the card."),
+      ],
+      dimension: "D6",
+    },
+  ),
+  webTotal(
+    "web-total-server-unrevoke",
+    "Reversible revoke: a revoked server's page says it can't connect until un-revoked and offers Un-revoke in place of Revoke; Un-revoke posts an IRK-signed flagship/server-unrevoke request, toasts the restore, and the page flips back to 'Revoke server (reversible)'. Mirrors iOS sd-unrevoke-server / server-detail-revoked.",
+    "gym servers un-revoke restores a revoked server",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach server-detail for a server /pods reports revoked (lost)." },
+        { kind: "assert", describe: "Revoked note + Un-revoke.", handle: "#unrevoke-server-btn" },
+        { kind: "tap", describe: "Un-revoke.", handle: "#unrevoke-server-btn" },
+        { kind: "assert", describe: "Restored; Revoke is back.", handle: "#revoke-server-btn" },
+      ],
+      assertions: [
+        { describe: "Revoked note", handle: "[data-detail-unreachable]", expect: "text", text: "This server is revoked" },
+        { describe: "Restore toast", handle: "#toast", expect: "text", text: "Server restored" },
+        { describe: "Reversible Revoke back", handle: "#revoke-server-btn", expect: "text", text: "Revoke server (reversible)" },
+      ],
+      screenshots: [shot("revoked-server", "A revoked server's page."), shot("unrevoked-server", "After Un-revoke.")],
+      dimension: "D1",
+    },
+  ),
+  webTotal(
+    "web-total-server-delete",
+    "Delete a server: 'Delete and wipe this server' opens a typed-name gate (Delete stays disabled until the server's name is typed); confirming deposits a wipe-now decommission order for the box key, then releases the name, toasts, and Home no longer lists it. All .com calls are stubbed. Mirrors iOS sd-delete-server / delete-server-name-field / delete-server-confirm, Android delete-server-dialog / delete-server-confirm.",
+    "gym servers delete a revoked server behind the typed-name gate",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach server-detail for a revoked (stolen) server; stub decommission + release." },
+        { kind: "tap", describe: "Delete and wipe this server.", handle: "#delete-server-btn" },
+        { kind: "type", describe: "Type a wrong name, then the server's name.", handle: "[data-delete-input]" },
+        { kind: "tap", describe: "Delete server.", handle: "[data-delete-go]" },
+        { kind: "assert", describe: "Deleted toast; Home without it.", handle: "#servers-list" },
+      ],
+      assertions: [
+        { describe: "Delete dialog", handle: 'dialog[aria-label="Delete server"]', expect: "present" },
+        { describe: "Deleted toast", handle: "#toast", expect: "text", text: "Deleted media" },
+        { describe: "Gone from Home", handle: '#servers-list [data-open-fqdn="media.smoketest.flagship.services"]', expect: "absent" },
+      ],
+      screenshots: [shot("delete-confirm", "The typed-name gate, armed."), shot("deleted-home", "Home after the delete.")],
+      dimension: "D1",
+      destructive: { destructive: true, demoUsername: "smoketest" },
+    },
+  ),
+  // ── The app page: access control + ranks, internet access, API keys, Database, Runs on — gym-apps.spec.ts ──
+  webTotal(
+    "web-total-apps-access-control",
+    "App access control (docs/service-access-gating.md 'Open mode + members'): Members (n) lists each person/group with its rank; Members only asks once and sends an IRK-signed flagship/service-access-mode/v1; raising a member to Master signs flagship/app-member-role/v1 (target invite:<id>) and shows the crown; the list never changes with the mode. iOS: service-access-restrict-toggle, service-access-mode-status, service-access-members-title.",
+    "gym apps access control goes members-only and sets a rank with signed orders",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach the app page (stubbed box + sealed .com invites), open Access control.", handle: "#sd-access" },
+        { kind: "assert", describe: "Members (2) with each rank; open mode note.", handle: "#sa-members-title" },
+        { kind: "tap", describe: "Members only, confirm.", handle: '#sa-mode [data-mode="restricted"]' },
+        { kind: "tap", describe: "Raise Sam to Master.", handle: 'select[data-action="sa-role"]' },
+        { kind: "assert", describe: "Signed mode + role orders verified against this browser's keys.", handle: "#sa-mode-status" },
+      ],
+      assertions: [
+        { describe: "Members count", handle: "#sa-members-title", expect: "text", text: "Members (2)" },
+        { describe: "Members-only note", handle: "#sa-mode-status", expect: "text", text: "Only members and you can open it" },
+        { describe: "Master wears the crown", handle: ".sa-crown", expect: "present" },
+      ],
+      screenshots: [shot("access-control-open", "Access control, open to all."), shot("access-control-ranks", "Members only, Sam as Master.")],
+      dimension: "D6",
+    },
+  ),
+  webTotal(
+    "web-total-apps-access-requests",
+    "App internet access (§3a): pending hosts show why (tried N times / asked at install); Allow and Deny each put the rule on top of the list and send it signed (flagship/app-access/v1 over the list's sha256); the rule count follows. iOS: service-detail-access-allow / -deny / -pending / -rules.",
+    "gym apps internet access requests are allowed and denied with a signed access list",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach the app page with two pending hosts." },
+        { kind: "tap", describe: "Allow api.openai.com.", handle: '[data-access-act="allow"]' },
+        { kind: "tap", describe: "Deny tracker.example.com.", handle: '[data-access-act="deny"]' },
+        { kind: "assert", describe: "Signed lists verified; requests gone; 3 rules.", handle: "#sd-access-count" },
+      ],
+      assertions: [
+        { describe: "Rule count after both answers", handle: "#sd-access-count", expect: "text", text: "3 rules" },
+        { describe: "No pending requests left", handle: "[data-access-host]", expect: "absent" },
+      ],
+      screenshots: [shot("access-requests", "Two hosts waiting."), shot("access-answered", "Both answered.")],
+      dimension: "D6",
+    },
+  ),
+  webTotal(
+    "web-total-apps-access-list-editor",
+    "App access list editor: a suggested list (host + why) opens in Review with the draft note; a bad line is flagged by number and Save goes off; Save signs the NORMALIZED list (flagship/app-access/v1) and clears the draft. iOS: access-list-editor, access-list-errors, access-list-save, service-detail-access-draft-review.",
+    "gym apps access list editor reviews a suggested list, flags bad lines and saves it signed",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach the app page with a suggested list." },
+        { kind: "tap", describe: "Review the suggestion.", handle: '[data-access-draft-act="review"]' },
+        { kind: "type", describe: "Add a line with a scheme (invalid).", handle: "#app-access-text" },
+        { kind: "type", describe: "Fix it (trailing spaces, blank line).", handle: "#app-access-text" },
+        { kind: "tap", describe: "Save.", handle: "#app-access-save" },
+      ],
+      assertions: [
+        { describe: "Draft card", handle: "[data-access-draft]", expect: "text", text: "This app suggests letting it reach these hosts" },
+        { describe: "Line error while invalid", handle: "#app-access-errors", expect: "text", text: "Line 3" },
+        { describe: "Save off after saving", handle: "#app-access-save", expect: "disabled" },
+      ],
+      screenshots: [
+        shot("access-draft-card", "The suggested-list card."),
+        shot("access-editor-error", "A bad line flagged."),
+        shot("access-editor-saved", "Saved."),
+      ],
+      dimension: "D6",
+    },
+  ),
+  webTotal(
+    "web-total-apps-api-keys",
+    "App API keys (docs/app-apis.md §3): an unnamed key is refused before signing; Create signs flagship/app-api-key/v1 (random 16-hex keyId, scope read, expiresAt 0); the secret shows once with the copy warning and is gone after Done; Revoke confirms then DELETEs. iOS: api-key-label, api-key-scope, api-key-secret, api-key-shown-once-warning, service-detail-api-key-revoke.",
+    "gym apps API key is created signed, its secret shown once, and a key revoked",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach the app page with one existing key." },
+        { kind: "tap", describe: "Create key with no name (refused).", handle: "#sd-api-key-go" },
+        { kind: "type", describe: "Name it.", handle: "#sd-api-key-label" },
+        { kind: "tap", describe: "Create key.", handle: "#sd-api-key-go" },
+        { kind: "tap", describe: "Done.", handle: "#sd-api-key-done" },
+        { kind: "tap", describe: "Revoke the old key, confirm.", handle: "[data-api-key-revoke]" },
+      ],
+      assertions: [
+        { describe: "Name required", handle: "#sd-api-key-error", expect: "text", text: "Give the key a name" },
+        { describe: "Secret gone after Done", handle: "#sd-api-key-secret", expect: "absent" },
+        { describe: "Revoked key gone", handle: '[data-api-key="0123456789abcdef"]', expect: "absent" },
+      ],
+      screenshots: [shot("api-key-revealed", "The new key, shown once."), shot("api-key-revoked", "After revoking the old key.")],
+      dimension: "D6",
+    },
+  ),
+  webTotal(
+    "web-total-apps-database",
+    "App Database (docs/app-apis.md §6): the entry counts tables; tables list rows/size and views; a table pages read-only (NULL shown); a writing statement first runs unsigned, gets needsGrant, and runs only after Confirm and run signs flagship/app-db-write/v1 over the SQL's sha256. iOS: service-detail-open-database, database-confirm-write, database-confirm-run, database-query-summary.",
+    "gym apps database browses read-only and a write runs only after a signed confirm",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach the app page; open the database.", handle: "#sd-db-open" },
+        { kind: "tap", describe: "Open the items table.", handle: '[data-db-table="items"]' },
+        { kind: "type", describe: "Run SQL: an UPDATE.", handle: "#app-db-sql-text" },
+        { kind: "tap", describe: "Run (read-only attempt).", handle: "#app-db-run" },
+        { kind: "tap", describe: "Confirm and run (signed).", handle: "#app-db-confirm" },
+      ],
+      assertions: [
+        { describe: "Page range", handle: "#app-db-range", expect: "text", text: "Rows 1–2 of 2" },
+        { describe: "Needs-grant prompt", handle: "[data-db-needs-grant]", expect: "text", text: "This changes data" },
+        { describe: "Signed write ran", handle: "[data-db-result]", expect: "text", text: "UPDATE · 1 row" },
+      ],
+      screenshots: [
+        shot("db-table", "A table page."),
+        shot("db-needs-grant", "The write asks to confirm."),
+        shot("db-write-ran", "The signed write ran."),
+      ],
+      dimension: "D6",
+    },
+  ),
+  webTotal(
+    "web-total-apps-runs-on",
+    "Runs on (docs/app-placement.md §4-§5): the only copy is ticked and locked, a server without a session here is unknown and never ticked; ticking signs flagship/app-copy/v1 and POSTs it to the TARGET box with its own session, shows Copying… until the target lists the app; unticking confirms and sends the signed uninstall (flagship/uninstall-service/v1) to that box only. iOS: runs-on-<fqdn>, runs-on-state-<fqdn>, runs-on-message.",
+    "gym apps runs-on ticks a copy to another server and unticks it with a signed uninstall",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach the app page; three servers in /pods (one without a session)." },
+        { kind: "tap", describe: "Tick media.", handle: '[data-runs-on-toggle="media.smoketest.flagship.services"]' },
+        { kind: "assert", describe: "Copying… then ticked once media lists the app." },
+        { kind: "tap", describe: "Untick media, confirm.", handle: '[data-runs-on-toggle="media.smoketest.flagship.services"]' },
+      ],
+      assertions: [
+        { describe: "Only copy locked", handle: '[data-runs-on-toggle="home.smoketest.flagship.services"]', expect: "disabled" },
+        { describe: "Unknown server never ticked", handle: '[data-runs-on-toggle="attic.smoketest.flagship.services"]', expect: "disabled" },
+      ],
+      screenshots: [
+        shot("runs-on", "Runs on before."),
+        shot("runs-on-copying", "Copying to media."),
+        shot("runs-on-removed", "Removed from media."),
+      ],
+      dimension: "D6",
+    },
+  ),
+
+  // ── Flagship Inference in Settings + the build chat (gym-inference.spec.ts) ──
+  webTotal(
+    "web-total-inference-settings-card",
+    "Flagship Inference in Settings (iOS/Android free-ai-card, free-ai-status): with a readable status the built-in card is listed first and active with no key saved, shows '1,840 free credits left · 500 added each week', has no remove, mounts its default-model menu from the catalog, and every status read is IRK-signed with the account's username.",
+    "gym inference settings lists Flagship Inference first with the credits line",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Home with a seeded username; route /api/free-ai/status + /api/inference/models." },
+        { kind: "tap", describe: "Settings → AI keys.", handle: "#settings-tab-providers" },
+        { kind: "assert", describe: "Built-in card with the credits line.", handle: "#free-ai-card" },
+      ],
+      assertions: [
+        { describe: "Credits line", handle: "#free-ai-line", expect: "text", text: "1,840 free credits left · 500 added each week" },
+        { describe: "Active with no key saved", handle: "#free-ai-use", expect: "text", text: "active" },
+        { describe: "Default-model menu on the catalog default", handle: "#free-ai-default-model .mm-trigger-text", expect: "text", text: "Low 1×" },
+        { describe: "No remove on the built-in entry", handle: '#free-ai-card [data-action="remove"]', expect: "absent" },
+      ],
+      screenshots: [shot("settings-free-ai", "The Flagship Inference card with credits.")],
+      dimension: "D3",
+    },
+  ),
+  webTotal(
+    "web-total-inference-refusals",
+    "Flagship Inference refusals (iOS/Android free-ai-status, free-ai-add-key / free-ai-add-own-key): used up, no running server, busy today and ended each show their exact sentence, stay listed but can't be chosen, and offer the own-key route except for no-server.",
+    "gym inference settings shows each refusal in its own words",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Settings → AI keys; route the status per case." },
+        { kind: "assert", describe: "Each refusal's sentence, re-rendered per status.", handle: "#free-ai-line" },
+      ],
+      assertions: [
+        { describe: "Used up", handle: "#free-ai-line", expect: "text", text: "You've used this week's Flagship Inference credits." },
+        { describe: "No server: no own-key offer", handle: "#free-ai-line", expect: "text", text: "starts once one of your servers is running" },
+        { describe: "Ended", handle: "#free-ai-line", expect: "text", text: "The free building period has ended" },
+        { describe: "Not choosable while refused", handle: "#free-ai-use", expect: "absent" },
+      ],
+      screenshots: [
+        shot("refusal-used-up", "Used up."),
+        shot("refusal-no-server", "No running server."),
+        shot("refusal-busy-today", "Busy today."),
+        shot("refusal-ended", "Ended."),
+      ],
+      dimension: "D3",
+    },
+  ),
+  webTotal(
+    "web-total-inference-auto-use",
+    "AI-key step with no saved key and credits left skips straight to the chat on Flagship Inference ('Using Flagship Inference', iOS build-key-use-free-ai); the model menu (iOS model-menu-<id>) starts on the catalog default, a picked model rides the start with a pass freshly minted for THIS box, and a reply shows 'used 2.8 credits' (iOS vibecode-credits, Android message-credits).",
+    "gym inference AI-key step builds on Flagship Inference straight away with no saved key",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Home; route status, token, catalog and the box's name-check/start/session." },
+        { kind: "tap", describe: "Services → Build → Start from scratch.", handle: "#build-src-scratch" },
+        { kind: "assert", describe: "Chat opens on Flagship Inference, menu on Low 1×.", handle: "#vc-model-bar" },
+        { kind: "tap", describe: "Pick High 3.5× from the menu.", handle: '#vc-model-bar [data-mm-model="high"]' },
+        { kind: "type", describe: "Prompt + name.", handle: "#vc-name" },
+        { kind: "tap", describe: "Build it.", handle: "#vc-send" },
+        { kind: "assert", describe: "Start body carries model + pass; reply credits line.", handle: ".vc-msg-credits" },
+      ],
+      assertions: [
+        { describe: "Auto-use toast", handle: "#toast", expect: "text", text: "Using Flagship Inference" },
+        { describe: "Chosen model on the trigger", handle: "#vc-model-bar .mm-trigger-text", expect: "text", text: "High 3.5×" },
+        { describe: "Credits under the reply", handle: "#vc-messages .vc-msg-credits", expect: "text", text: "used 2.8 credits" },
+      ],
+      screenshots: [
+        shot("chat-on-flagship", "The chat on Flagship Inference."),
+        shot("model-menu-open", "The Flagship Inference model menu."),
+        shot("reply-credits", "A reply with its credits line."),
+      ],
+      dimension: "D2",
+    },
+  ),
+  webTotal(
+    "web-total-inference-reply-choice",
+    "The model choice is per message: after the AI asks a question the owner switches to Medium and turns on Think harder (iOS model-menu-think-harder); the reply carries model 'medium' + effort 'high' and a fresh pass, and each reply shows its own credits line.",
+    "gym inference each reply carries the model choice made for it",
+    {
+      steps: [
+        { kind: "launch", describe: "Start a Flagship Inference build that pauses on a talkToUser question." },
+        { kind: "tap", describe: "Switch to Medium 1×.", handle: '#vc-model-bar [data-mm-model="medium"]' },
+        { kind: "tap", describe: "Think harder.", handle: "#vc-model-bar [data-mm-think]" },
+        { kind: "type", describe: "Answer.", handle: "#vc-prompt" },
+        { kind: "tap", describe: "Send.", handle: "#vc-send" },
+      ],
+      assertions: [
+        { describe: "AI asked a question", handle: "#vc-status", expect: "text", text: "The AI has a question" },
+        { describe: "Medium on the trigger", handle: "#vc-model-bar .mm-trigger-text", expect: "text", text: "Medium 1×" },
+        { describe: "Ready after the reply", handle: "#vc-status", expect: "text", text: "Ready to deploy" },
+      ],
+      screenshots: [shot("reply-think-harder", "Medium + Think harder before replying."), shot("reply-sent", "After the reply, with credits per message.")],
+      dimension: "D2",
+    },
+  ),
+  webTotal(
+    "web-total-inference-beside-saved-key",
+    "AI-key step with a saved key (Android build-key-free-ai, iOS build-key-use-free-ai): Flagship Inference is the first row with the credits line and no delete, the saved key follows masked with its own delete, nothing is minted until the owner chooses, and choosing it mints a pass, opens the chat and marks it last used.",
+    "gym inference AI-key step offers Flagship Inference beside a saved key",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Home; save an OpenAI key on this device; route status/token/catalog." },
+        { kind: "tap", describe: "Start from scratch.", handle: "#build-src-scratch" },
+        { kind: "assert", describe: "Free row first, saved key second.", handle: "#build-key-saved" },
+        { kind: "tap", describe: "Use Flagship Inference.", handle: "#build-key-free-ai-use" },
+      ],
+      assertions: [
+        { describe: "Free row credits line", handle: "#build-key-free-ai-status", expect: "text", text: "1,840 free credits left · 500 added each week" },
+        { describe: "Saved key masked", handle: "#build-key-saved", expect: "text", text: "sk-g••••cdef" },
+        { describe: "Chat on the catalog default", handle: "#vc-model-bar .mm-trigger-text", expect: "text", text: "Low 1×" },
+      ],
+      screenshots: [shot("build-key-with-saved", "The AI-key step with a saved key.")],
+      dimension: "D2",
+    },
+  ),
+  webTotal(
+    "web-total-inference-attachments",
+    "Build chat attachments (iOS chat-attach / chat-attach-error / chat-attach-notice, Android attachment-notice / attachment-remove): CSV, PDF and an image stage as chips; invalid JSON and an .exe are refused in the box's words; sample data adds the test-copy notice; a chip can be removed; a text-only model offers the multimodal switch for the image; start carries exactly the staged attachments and the switched model.",
+    "gym inference attachments stage, refuse what the box would, and ride the start",
+    {
+      steps: [
+        { kind: "launch", describe: "Open the chat on Flagship Inference; pick text-only Medium." },
+        { kind: "type", describe: "Attach plants.csv, broken.json, care.pdf, setup.exe, mockup.png.", handle: "#vc-attach-input" },
+        { kind: "tap", describe: "Remove then re-add care.pdf.", handle: ".vc-chip-x" },
+        { kind: "tap", describe: "Build it → accept the switch to the multimodal model.", handle: "[data-modal-ok]" },
+      ],
+      assertions: [
+        { describe: "Refusals", handle: "#vc-attach-error", expect: "text", text: "isn't valid JSON" },
+        { describe: "Sample-data notice", handle: "#vc-attach-notice", expect: "text", text: "Sample data goes only to the private test copy." },
+        { describe: "Switched to the multimodal model", handle: "#vc-model-bar .mm-trigger-text", expect: "text", text: "Medium multimodal 2×" },
+      ],
+      screenshots: [shot("attachments-staged", "Staged chips + refusals + notice."), shot("vision-switch", "The switch-model offer for an image.")],
+      dimension: "D2",
+    },
+  ),
+
+  // ── Browser remote, QR-first (remote.<apex>) — gym-remote.spec.ts ──
+  webTotal(
+    "web-total-remote-qr-first",
+    "Remote: remote.<apex> shows the QR at once — https://<apex>/remote?s=<relay sid>&k=<browser X25519> on the same /qr-pipe session it joined as the browser — with nothing to type, no account named and no /pods read; every entry path is the ceremony.",
+    "gym remote shows the QR at once and asks for no account",
+    {
+      steps: [
+        { kind: "launch", describe: "Open https://remote.flagshipserver.com/ (webapp tree routed onto the remote origin; /qr-pipe is a routed WebSocket)." },
+        { kind: "assert", describe: "QR rendered immediately.", handle: "#dock-qr svg" },
+        { kind: "tap", describe: "Copy link for the phone (the link the QR encodes).", handle: "#dock-copy" },
+        { kind: "assert", describe: "No code yet, no input, no /pods request.", handle: "#dock-code-step" },
+        { kind: "launch", describe: "Open /?view=settings on the remote origin — still the ceremony." },
+      ],
+      assertions: [
+        { describe: "Remote view", handle: "#view-dock-start", expect: "present" },
+        { describe: "QR", handle: "#dock-qr svg", expect: "present" },
+        { describe: "No code before a phone joins", handle: "#dock-code-step", expect: "absent" },
+        { describe: "Nothing to type", handle: "#view-dock-start input", expect: "absent" },
+      ],
+      screenshots: [shot("remote-qr", "The remote page's QR, before a phone joins.")],
+      dimension: "D3",
+    },
+  ),
+  webTotal(
+    "web-total-remote-code-and-redeem",
+    "Remote: when the phone joins, the page shows the same 6-digit code (iOS companion-dock-match-code ↔ #dock-code); the phone's sealed flagship/remote-ticket/v1 is opened and redeemed only on the server it names, leaving a keyless companion profile.",
+    "gym remote shows the phone's code and redeems the sealed ticket on the named server",
+    {
+      steps: [
+        { kind: "launch", describe: "Open the remote page; read the approval link." },
+        { kind: "tap", describe: "Simulated phone (real X25519/HKDF/AES-GCM) sends peer-hello through the relay." },
+        { kind: "assert", describe: "Matching 6-digit code + waiting status.", handle: "#dock-code" },
+        { kind: "tap", describe: "Phone delivers the sealed ticket." },
+        { kind: "assert", describe: "POST /api/companion/redeem on that server; lands on Home as a companion.", handle: "#view-home" },
+      ],
+      assertions: [
+        { describe: "Code shown", handle: "#dock-code-step", expect: "present" },
+        { describe: "Waiting for the phone", handle: "#dock-status", expect: "text", text: "Waiting for approval on your phone" },
+        { describe: "Connected to Home", handle: "#view-home", expect: "present" },
+      ],
+      screenshots: [
+        shot("remote-code", "The matching code while the phone approves."),
+        shot("remote-connected", "Home after the ticket was redeemed."),
+      ],
+      dimension: "D3",
+    },
+  ),
+  webTotal(
+    "web-total-remote-refuses-foreign-server",
+    "Remote (security): a ticket naming a server outside the data apex is refused with a plain message and Start again; nothing is redeemed anywhere.",
+    "gym remote refuses a ticket naming a server off the data apex",
+    {
+      steps: [
+        { kind: "launch", describe: "Open the remote page; phone joins." },
+        { kind: "tap", describe: "Phone delivers a ticket for https://home.smoketest.example.com." },
+        { kind: "assert", describe: "Refusal + Start again; no redeem request.", handle: "#dock-status" },
+      ],
+      assertions: [
+        { describe: "Refusal", handle: "#dock-status", expect: "text", text: "won't connect to" },
+        { describe: "Start again", handle: "#dock-restart", expect: "present" },
+      ],
+      screenshots: [shot("remote-refused", "The refused ticket.")],
+      dimension: "D4",
+    },
+  ),
+  webTotal(
+    "web-total-remote-expired-fresh-qr",
+    "Remote: when the relay session expires the page quietly opens a new one — new session id and browser key in a fresh QR, no error.",
+    "gym remote replaces an expired code with a fresh QR",
+    {
+      steps: [
+        { kind: "launch", describe: "Open the remote page; read the approval link." },
+        { kind: "tap", describe: "Relay sends {kind:\"expired\"}." },
+        { kind: "assert", describe: "A second relay session + a different link; no error.", handle: "#dock-qr svg" },
+      ],
+      assertions: [
+        { describe: "Fresh QR", handle: "#dock-qr svg", expect: "present" },
+        { describe: "No Start again", handle: "#dock-restart", expect: "absent" },
+      ],
+      screenshots: [shot("remote-fresh-qr", "The replacement QR.")],
+      dimension: "D3",
+    },
+  ),
 ];
 
 /** The webapp lane of the gym registry (every-merge subset + total tranche). */
