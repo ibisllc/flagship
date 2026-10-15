@@ -1,0 +1,95 @@
+name: Build cost measurement (on demand)
+
+# Measures what an AI app build costs on Flagship Inference by running the
+# scripted builds of infra/inference/build-eval against DeepInfra, with the
+# real Docker build and start check and a Postgres for the apps' data.
+# It spends real money (capped by max_usd) with the DEEPINFRA_API_KEY repo
+# secret, so it only ever runs by hand.
+
+on:
+  workflow_dispatch:
+    inputs:
+      models:
+        description: "Catalog ids, comma-separated (empty = all)"
+        default: ""
+      scenarios:
+        description: "Scenario ids, comma-separated (empty = all)"
+        default: ""
+      repeat:
+        description: "Runs per model and scenario"
+        default: "1"
+      concurrency:
+        description: "Runs at once"
+        default: "2"
+      max_usd:
+        description: "Spending limit in USD"
+        default: "5"
+      mock:
+        description: "Use the mock model (no key, no cost) to test the workflow"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    services:
+      postgres:
+        # The box's Postgres image (packages/server-daemon/src/volumeDump.ts pins its digest).
+        image: pgvector/pgvector:0.8.7-pg18-trixie
+        env:
+          POSTGRES_PASSWORD: buildeval
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install workspace deps
+        run: npm ci
+
+      - name: Build the packages the harness loads
+        run: npx tsc -b infra/inference/build-eval
+
+      - name: Measure
+        env:
+          DEEPINFRA_API_KEY: ${{ secrets.DEEPINFRA_API_KEY }}
+          BUILD_EVAL_PG_URL: postgres://postgres:buildeval@127.0.0.1:5432/postgres
+          # The box's docker build flags are the legacy builder's.
+          DOCKER_BUILDKIT: "0"
+          MODELS: ${{ inputs.models }}
+          SCENARIOS: ${{ inputs.scenarios }}
+          REPEAT: ${{ inputs.repeat }}
+          CONCURRENCY: ${{ inputs.concurrency }}
+          MAX_USD: ${{ inputs.max_usd }}
+          MOCK: ${{ inputs.mock }}
+        run: |
+          args=(--stage docker --out "$RUNNER_TEMP/build-eval" --repeat "$REPEAT" --concurrency "$CONCURRENCY" --max-usd "$MAX_USD")
+          [ -n "$MODELS" ] && args+=(--models "$MODELS")
+          [ -n "$SCENARIOS" ] && args+=(--scenarios "$SCENARIOS")
+          [ "$MOCK" = "true" ] && args+=(--mock)
+          npx tsx infra/inference/build-eval/src/cli.ts "${args[@]}"
+          cat "$RUNNER_TEMP/build-eval/summary.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-eval-${{ github.run_id }}
+          path: ${{ runner.temp }}/build-eval
+          if-no-files-found: ignore
+          retention-days: 30
