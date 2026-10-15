@@ -14,10 +14,13 @@ import FlagshipCore
 public struct AddDeviceScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
-    let vm: AddDeviceViewModel
+    // @State keeps the first model: Settings rebuilds this view (and a fresh
+    // model) whenever it re-renders, and `.task` never starts the new one, so
+    // the screen fell back to "Couldn't add the device · Not started".
+    @State private var vm: AddDeviceViewModel
 
     public init(vm: AddDeviceViewModel) {
-        self.vm = vm
+        _vm = State(initialValue: vm)
     }
 
     public var body: some View {

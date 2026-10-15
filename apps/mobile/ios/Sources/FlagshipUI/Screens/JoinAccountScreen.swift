@@ -16,7 +16,9 @@ import FlagshipCore
 public struct JoinAccountScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dismiss) private var dismiss
-    let vm: JoinAccountViewModel
+    // @State: the host builds a fresh model on every re-render, which would
+    // drop a pairing in progress.
+    @State private var vm: JoinAccountViewModel
     /// Pre-filled when entered via a deeplink/universal link.
     let initialJoinUrl: String?
     /// Mock seam bridge — see JoinAccountViewModel.connect. Production
@@ -35,7 +37,7 @@ public struct JoinAccountScreen: View {
         provideRawPubkeyToRelay: ((Data) -> Void)? = nil,
         onJoined: @escaping (JoinAccountViewModel.AdmittedProfile) -> Void
     ) {
-        self.vm = vm
+        _vm = State(initialValue: vm)
         self.initialJoinUrl = initialJoinUrl
         self.provideRawPubkeyToRelay = provideRawPubkeyToRelay
         self.onJoined = onJoined
