@@ -199,12 +199,23 @@ test.describe("gym webapp total", () => {
     await page.click("#services-list-open-vibe-code");
     await expect(page.locator("#view-build-source")).toBeVisible({ timeout: 10_000 });
     // Scratch → the reusable AI-key step (renders backendless; keys are
-    // device-local). With no saved keys it shows the placeholder + the
-    // use-a-different-key affordance.
+    // device-local). Flagship Inference is the built-in first row, never
+    // deletable; with no backend its status can't be read, so the row is
+    // disabled with the reason and, with no saved key, the add-key form opens
+    // instead of the step being skipped. No username prompt pops up over it.
     await page.click("#build-src-scratch");
     await expect(page.locator("#view-build-key")).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator("#build-key-saved")).toContainText(/no saved keys/i, { timeout: 5_000 });
-    await expect(page.locator("#build-key-different")).toBeVisible();
+    const freeRow = page.locator("#build-key-saved #build-key-free-ai");
+    await expect(freeRow).toBeVisible({ timeout: 10_000 });
+    await expect(freeRow).toContainText("Flagship Inference");
+    await expect(freeRow).toHaveClass(/is-disabled/);
+    await expect(page.locator("#build-key-free-ai-status")).toHaveText(
+      "Flagship Inference isn't available right now. You can add your own AI key.",
+    );
+    await expect(freeRow.locator(".build-key-delete")).toHaveCount(0);
+    await expect(page.locator("#build-key-free-ai-use")).toHaveCount(0);
+    await expect(page.locator("#build-key-form")).toBeVisible();
+    await expect(page.locator(".modal-title")).toHaveCount(0);
     await shot(page, testInfo, "build-key");
   });
 
@@ -221,41 +232,76 @@ test.describe("gym webapp total", () => {
     await shot(page, testInfo, "session-tiers-gated");
   });
 
-  test("gym total webapp a greyed session action shows the set-up-recovery toast", async ({ page }, testInfo) => {
-    // The gated tap consults account/resolve to decide last-device (→ deletion
-    // ceremony) vs another-device (→ the recovery nudge). With no backend that
-    // resolve fails-closed to last-device. Stub a multi-device account so the
-    // policy is "normal" and the recovery NUDGE — the path under test — fires.
-    await page.route(
-      (url) => url.href.includes("/api/account/resolve/"),
-      (route) =>
-        route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify({ trustedDeviceCount: 2 }),
-        }),
-    );
+  test("gym total webapp a greyed session action opens the last-device deletion ceremony", async ({ page }, testInfo) => {
+    // D3-C1 — with no cloud recovery, "Lock with passkey" erases the only copy
+    // of the account key, so a tap on the greyed button never wipes: it routes
+    // into the account-deletion ceremony (typed username + confirm). Since the
+    // private-naming cutover the device count is no longer public, so every
+    // real account takes the ceremony (demo accounts are exempt). We back out
+    // of it: no self-delete request fires and the account key stays in memory.
+    const destructive: string[] = [];
+    page.on("request", (r) => {
+      if (/\/api\/account\/self-delete|\/api\/devices\/.*\/revoke/.test(r.url())) destructive.push(r.url());
+    });
     await reachSettingsDetail(page);
+    await page.evaluate(async () => {
+      const { getSession } = await import("/lib/state.js");
+      getSession().username = "smoketest";
+    });
     await expect(page.locator("#settings-signout")).toHaveClass(/gated/, { timeout: 10_000 });
-    // Tapping the greyed tier-2 action does NOT run the destructive path; it
-    // surfaces a toast routing the user to recovery enrollment. (The "unlocked"
-    // toast from the unlock step queues ahead, so allow the queue to drain.)
     await page.click("#settings-signout");
-    await expect(page.locator("#toast")).toContainText(/set up account recovery/i, { timeout: 10_000 });
-    // It must NOT have left the settings detail page (the wipe never ran).
+    await expect(page.locator("#view-account-delete")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("#account-delete-username")).toHaveText("smoketest");
+    const go = page.locator("#account-delete-go");
+    await expect(go).toBeDisabled();
+    await page.fill("#account-delete-confirm-input", "someone-else");
+    await expect(go).toBeDisabled();
+    await page.fill("#account-delete-confirm-input", "smoketest");
+    await expect(go).toBeEnabled();
+    await shot(page, testInfo, "deletion-ceremony");
+    await page.click("#account-delete-back");
     await expect(page.locator("#view-settings")).toBeVisible();
-    await shot(page, testInfo, "recovery-toast");
+    const keyKept = await page.evaluate(async () => {
+      const { getSession } = await import("/lib/state.js");
+      return getSession().umk instanceof Uint8Array;
+    });
+    expect(keyKept).toBe(true);
+    expect(destructive).toEqual([]);
   });
 
   // ─── D3 — AI-keys manager + recovery screen ──────────────────────────────
 
   test("gym total webapp settings renders the AI-keys manager", async ({ page }, testInfo) => {
     await reachSettingsDetail(page);
-    // The providers (AI-keys) section renders inline on the settings detail; with
-    // the in-memory UMK the list renders (empty + the free-credits CTA) and the
-    // Add-provider affordance is present (never displays a full key). D3-C2.
-    await expect(page.locator("#providers-list")).toBeVisible({ timeout: 10_000 });
+    // The providers (AI-keys) section renders inline on the settings detail.
+    // Flagship Inference is always listed first as the built-in provider with
+    // no remove control (disabled with the reason when its status can't be
+    // read, as here with no backend); the Add-provider affordance is present.
+    // D3-C2.
+    const freeCard = page.locator("#free-ai-card");
+    await expect(freeCard).toBeVisible({ timeout: 10_000 });
+    await expect(freeCard).toContainText("Flagship Inference");
+    await expect(freeCard).toContainText("built-in");
+    await expect(freeCard.locator('[data-action="remove"]')).toHaveCount(0);
+    await expect(page.locator("#free-ai-line")).toContainText(/isn't available right now/);
+    await expect(page.locator("#free-ai-add-key")).toBeVisible();
     await expect(page.locator("#add-provider-go")).toBeVisible();
+    // A saved key lists AFTER the built-in entry, masked, with its own remove.
+    await page.click("#add-provider-go");
+    await page.fill("#np-label", "My OpenAI");
+    await page.fill("#np-key", "sk-gymfixture-0123456789abcdef");
+    await page.click("#np-save");
+    const saved = page.locator("#providers-list .provider-entry");
+    await expect(saved).toHaveCount(1, { timeout: 10_000 });
+    await expect(saved).toContainText("My OpenAI");
+    await expect(saved).not.toContainText("sk-gymfixture-0123456789abcdef");
+    await expect(saved.locator('[data-action="remove"]')).toBeVisible();
+    const order = await page.evaluate(() => {
+      const a = document.getElementById("free-ai-card");
+      const b = document.getElementById("providers-list");
+      return !!a && !!b && !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+    expect(order).toBe(true);
     await shot(page, testInfo, "ai-keys");
   });
 
@@ -399,10 +445,16 @@ test.describe("gym webapp total", () => {
     });
     await expect(page.locator("#revoke-server-btn")).toBeVisible({ timeout: 10_000 });
     await page.click("#revoke-server-btn");
-    // The confirm dialog opens with the reason picker + the brick warning.
-    const dlg = page.locator('dialog[aria-label="Revoke this server"]');
+    // The confirm dialog opens with the reason picker. Revoking is reversible
+    // now (Un-revoke restores the server; Delete is the permanent path), so
+    // the copy says the name stays reserved until it's un-revoked.
+    const dlg = page.locator('dialog[aria-label="Revoke server"]');
     await expect(dlg).toBeVisible({ timeout: 5_000 });
+    await expect(dlg.locator(".modal-title")).toHaveText("Revoke home.smoketest.flagship.services?");
+    await expect(dlg.locator(".modal-message")).toContainText("un-revoke it");
+    await expect(dlg.locator(".modal-message")).toContainText("name stays reserved");
     await expect(dlg.locator('input[name="revoke-reason"]').first()).toBeVisible();
+    await expect(dlg.locator('input[name="revoke-reason"]').first()).toBeChecked();
     await expect(dlg.locator("[data-revoke-go]")).toBeVisible();
     await shot(page, testInfo, "revoke-confirm");
     // Cancel — no revoke fired; back on the server-detail page.
@@ -503,15 +555,15 @@ test.describe("gym webapp total", () => {
   });
 
   test("gym total webapp git build offers AI-adapt for a non-fit repo", async ({ page }, testInfo) => {
-    // D2-B7 — a NOT-fit repo → the verdict explains + offers "Build with AI
-    // instead" (which would route through the AI-key step). We stop at the
-    // verdict render — no adapt fired.
+    // D2-B7 — a NOT-fit repo → the verdict says why in plain words + offers
+    // "Use AI to adapt and deploy" (which routes through the AI-key step) and
+    // the anonymous-share switch. We stop at the verdict render — no adapt fired.
     await reachHome(page);
     await seedPairedPod(page);
     await routePodJson(page, "/api/build/git", {
       buildId: "gym-git-nofit",
       fit: false,
-      reason: "No manifest; ships its own login",
+      reason: "no flagship.app.json in the repo root",
       fileCount: 40,
     });
     await page.evaluate(async () => {
@@ -522,8 +574,13 @@ test.describe("gym webapp total", () => {
     await page.fill("#build-git-url", "https://github.com/you/some-saas");
     await page.click("#build-git-check");
     await expect(page.locator("#build-git-verdict")).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator("#build-git-verdict")).toContainText(/Not Flagship-ready/i);
-    await expect(page.locator("#build-git-adapt")).toBeVisible();
+    const verdict = page.locator("#build-git-verdict");
+    await expect(verdict).toContainText("This repo is not yet adapted for Flagship.");
+    await expect(verdict).not.toContainText(/Flagship-ready/);
+    await expect(page.locator("#build-git-deploy")).toHaveCount(0);
+    await expect(page.locator("#build-git-adapt")).toHaveText("Use AI to adapt and deploy");
+    await expect(page.locator("#build-git-share")).toBeVisible();
+    await expect(page.locator("#build-git-recheck")).toBeVisible();
     await shot(page, testInfo, "git-verdict-nofit");
   });
 
@@ -633,12 +690,18 @@ test.describe("gym webapp total", () => {
     await reachHome(page);
     await seedPairedPod(page);
     await routePodJson(page, "/api/screens/vibe-code/start", { needsCredential: true });
+    await routePodJson(page, "/api/screens/vibe-code/name-check", { ok: true, name: "habits" });
     await page.evaluate(async () => {
       const { enterVibeCode } = await import("/views/vibe-code.js");
       enterVibeCode();
     });
     await expect(page.locator("#view-vibe-code")).toBeVisible({ timeout: 10_000 });
+    // The owner names the app (its web address) before Build it enables.
     await page.fill("#vc-prompt", "A simple habit tracker");
+    await expect(page.locator("#vc-send")).toBeDisabled();
+    await page.fill("#vc-name", "habits");
+    await expect(page.locator("#vc-name-status")).toHaveText("✓ Available", { timeout: 10_000 });
+    await expect(page.locator("#vc-send")).toBeEnabled();
     await page.click("#vc-send");
     // needsCredential → enterBuildKey opens the AI-key step.
     await expect(page.locator("#view-build-key")).toBeVisible({ timeout: 10_000 });
@@ -678,39 +741,78 @@ test.describe("gym webapp total", () => {
   });
 
   test("gym total webapp trusted-devices lists the account's devices", async ({ page }, testInfo) => {
-    // D3-C7 — the trusted-devices list renders device rows from a seeded
-    // /api/users/:u/devices. The view shows its loading chrome first, then the
-    // seeded rows. (The pending re-pair fetch stays un-routed → no banner.)
+    // D3-C7 — the trusted-devices list comes only from the SIGNED account
+    // directory (GET /api/accounts/<id>/directory, device-key signed). Human
+    // device names travel as ciphertext and are decrypted in this unlocked
+    // client; a device without a name falls back to its platform + support
+    // code. We seed the profile's account + device ids, encrypt this device's
+    // self-profile under the session's directory key, and route the directory.
+    const ACCOUNT_ID = "0f1e2d3c4b5a69788796a5b4c3d2e1f0";
+    const THIS_DEVICE = "a1b2c3d4e5f60718293a4b5c6d7e8f90";
+    const PHONE = "f0e1d2c3b4a5968778695a4b3c2d1e0f";
     await reachHome(page);
-    await page.evaluate(async () => {
-      const store = await import("/lib/profilesStore.js");
-      store.ensureProfile("smoketest");
-      store.setActiveCloudName("smoketest");
-      store.set("username", "smoketest");
-      const { getSession } = await import("/lib/state.js");
-      getSession().username = "smoketest";
-    });
-    // The devices read goes to .com (same origin) — route it on any host.
+    const selfProfile = await page.evaluate(
+      async ({ accountId, deviceId }) => {
+        const [profiles, store, meta, { getSession }] = await Promise.all([
+          import("/lib/profiles.js"),
+          import("/lib/profilesStore.js"),
+          import("/lib/accountMetadata.js"),
+          import("/lib/state.js"),
+        ]);
+        profiles.addProfile({ cloudName: "smoketest", accountId, deviceId });
+        store.ensureProfile("smoketest");
+        store.setActiveCloudName("smoketest");
+        store.set("username", "smoketest");
+        const session = getSession();
+        session.username = "smoketest";
+        const fields = { accountId, recordType: "device-self-profile", deviceId, revision: 1, keyVersion: 1 };
+        const sealed = await meta.encryptProfile(
+          "Gym laptop",
+          await meta.deriveDeviceDirectoryKey(session.umk),
+          fields,
+        );
+        return { accountId, deviceId, revision: 1, keyVersion: 1, ...sealed };
+      },
+      { accountId: ACCOUNT_ID, deviceId: THIS_DEVICE },
+    );
+    let signedRead = false;
     await page.route(
-      (url) => url.href.includes("/devices"),
-      async (route) =>
-        route.fulfill({
+      (url) => url.pathname === `/api/accounts/${ACCOUNT_ID}/directory`,
+      async (route) => {
+        const h = route.request().headers();
+        signedRead =
+          h["x-flagship-device-id"] === THIS_DEVICE && /^[0-9a-f]{128}$/.test(h["x-flagship-signature"] ?? "");
+        await route.fulfill({
           status: 200,
           contentType: "application/json",
           body: JSON.stringify({
+            accountId: ACCOUNT_ID,
             devices: [
-              { tokenId: "dev-this", label: "This browser", createdAt: Date.now(), quarantinedUntil: 0 },
-              { tokenId: "dev-phone", label: "iPhone", createdAt: Date.now() - 86_400_000, quarantinedUntil: 0 },
+              { deviceId: THIS_DEVICE, platformClass: "web", createdAt: Date.now() - 3_600_000 },
+              { deviceId: PHONE, platformClass: "ios", supportCode: "K7Q2-9XPM", createdAt: Date.now() - 86_400_000 },
             ],
+            selfProfiles: [selfProfile],
+            managedProfiles: [],
+            grants: [],
           }),
-        }),
+        });
+      },
     );
     await page.evaluate(async () => {
       const { show } = await import("/lib/router.js");
       show("view-trusted-devices");
     });
     await expect(page.locator("#view-trusted-devices")).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator("#trusted-devices-list")).toContainText(/iPhone/i, { timeout: 10_000 });
+    const list = page.locator("#trusted-devices-list");
+    const mine = list.locator(`[data-device-id="${THIS_DEVICE}"]`);
+    await expect(mine).toContainText("Gym laptop", { timeout: 10_000 });
+    await expect(mine).toContainText("This device");
+    await expect(mine.locator("[data-self-rename]")).toBeVisible();
+    const phone = list.locator(`[data-device-id="${PHONE}"]`);
+    await expect(phone).toContainText("iPhone / iPad · Device K7Q2-9XPM");
+    await expect(phone).not.toContainText("This device");
+    await expect(list).toContainText("@smoketest");
+    expect(signedRead).toBe(true);
     await shot(page, testInfo, "trusted-devices");
   });
 

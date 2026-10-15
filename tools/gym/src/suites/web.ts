@@ -264,18 +264,20 @@ const TOTAL: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-ai-key-step",
-    "D2-B2: scratch routes through the AI-key step (renders backendless; device-local keys).",
+    "D2-B2: scratch routes through the AI-key step; Flagship Inference is the built-in first row (never deletable), disabled with its reason when unreadable, and no username prompt pops over it.",
     "gym total webapp scratch routes through the AI-key step",
     {
       steps: [
         { kind: "launch", describe: "Reach the chooser." },
         { kind: "tap", describe: "Scratch → AI-key step.", handle: "#build-src-scratch" },
-        { kind: "assert", describe: "AI-key step + no-saved-keys placeholder.", handle: "#build-key-saved" },
+        { kind: "assert", describe: "Built-in Flagship Inference row, disabled with the reason.", handle: "#build-key-free-ai" },
       ],
       assertions: [
         { describe: "AI-key view present", handle: "#view-build-key", expect: "present" },
-        { describe: "No-saved-keys placeholder", handle: "#build-key-saved", expect: "text", text: "no saved keys" },
-        { describe: "Use-a-different-key affordance", handle: "#build-key-different", expect: "present" },
+        { describe: "Built-in Flagship Inference row", handle: "#build-key-free-ai", expect: "text", text: "Flagship Inference" },
+        { describe: "Unavailable reason", handle: "#build-key-free-ai-status", expect: "text", text: "isn't available right now" },
+        { describe: "No use button while unavailable", handle: "#build-key-free-ai-use", expect: "absent" },
+        { describe: "Add-key form opens", handle: "#build-key-form", expect: "present" },
       ],
       screenshots: [shot("build-key", "The AI-key step.")],
       dimension: "D2",
@@ -302,36 +304,46 @@ const TOTAL: readonly Scenario[] = [
     },
   ),
   webTotal(
-    "web-total-greyed-action-toast",
-    "D3-C1: tapping a greyed session action shows the set-up-recovery toast and does NOT run the destructive path.",
-    "gym total webapp a greyed session action shows the set-up-recovery toast",
+    "web-total-greyed-action-ceremony",
+    "D3-C1: with no cloud recovery, tapping the greyed Lock-with-passkey routes into the last-device deletion ceremony (typed username gate); backing out sends nothing and keeps the key.",
+    "gym total webapp a greyed session action opens the last-device deletion ceremony",
     {
       steps: [
         { kind: "launch", describe: "Reach Settings." },
         { kind: "tap", describe: "Tap the greyed tier-2 action.", handle: "#settings-signout" },
-        { kind: "assert", describe: "Recovery toast + stays on settings.", handle: "#toast" },
+        { kind: "assert", describe: "Deletion ceremony opens, gated on the typed username.", handle: "#view-account-delete" },
+        { kind: "type", describe: "Type the username to arm Delete.", handle: "#account-delete-confirm-input" },
+        { kind: "tap", describe: "Back out.", handle: "#account-delete-back" },
       ],
       assertions: [
-        { describe: "Recovery toast", handle: "#toast", expect: "text", text: "Set up account recovery" },
-        { describe: "Still on settings detail (no wipe)", handle: "#view-settings", expect: "present" },
+        { describe: "Deletion ceremony", handle: "#view-account-delete", expect: "present" },
+        { describe: "Username shown", handle: "#account-delete-username", expect: "text", text: "smoketest" },
+        { describe: "Delete armed only by the typed username", handle: "#account-delete-go", expect: "enabled" },
+        { describe: "Back on settings (no wipe)", handle: "#view-settings", expect: "present" },
       ],
-      screenshots: [shot("recovery-toast", "The set-up-recovery toast.")],
+      screenshots: [shot("deletion-ceremony", "The last-device deletion ceremony, armed but not run.")],
       dimension: "D3",
     },
   ),
   // D3 — AI-keys manager + recovery screen.
   webTotal(
     "web-total-ai-keys-manager",
-    "D3-C2: the AI-keys manager (providers) renders the list + the add-key affordance (never the full key).",
+    "D3-C2: the AI-keys manager lists Flagship Inference first as the built-in provider (no remove), then saved keys masked with their own remove.",
     "gym total webapp settings renders the AI-keys manager",
     {
       steps: [
         { kind: "launch", describe: "Reach Settings." },
-        { kind: "assert", describe: "Providers list + add affordance.", handle: "#providers-list" },
+        { kind: "assert", describe: "Built-in Flagship Inference card.", handle: "#free-ai-card" },
+        { kind: "tap", describe: "Add a provider.", handle: "#add-provider-go" },
+        { kind: "type", describe: "Fill label + key.", handle: "#np-key" },
+        { kind: "tap", describe: "Save.", handle: "#np-save" },
+        { kind: "assert", describe: "Saved key listed after the built-in, masked.", handle: "#providers-list" },
       ],
       assertions: [
-        { describe: "Providers list present", handle: "#providers-list", expect: "present" },
+        { describe: "Flagship Inference built-in card", handle: "#free-ai-card", expect: "text", text: "Flagship Inference" },
+        { describe: "Own-key offer while unavailable", handle: "#free-ai-add-key", expect: "present" },
         { describe: "Add-provider affordance present", handle: "#add-provider-go", expect: "present" },
+        { describe: "Saved key listed (masked)", handle: "#providers-list", expect: "text", text: "My OpenAI" },
       ],
       screenshots: [shot("ai-keys", "The AI-keys manager.")],
       dimension: "D3",
@@ -457,17 +469,18 @@ const TOTAL: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-server-detail-revoke-confirm",
-    "D1-A11 / D6-G11: tapping Revoke opens the confirm ceremony (reason radios + Revoke/Cancel); Cancel runs no delete (non-destructive).",
+    "D1-A11 / D6-G11: tapping Revoke opens the reversible-revoke confirm (reason radios, un-revoke + name-reserved copy); Cancel sends nothing.",
     "gym total webapp server-detail revoke opens the confirm ceremony",
     {
       steps: [
         { kind: "launch", describe: "Reach server-detail (routed BFF)." },
         { kind: "tap", describe: "Tap Revoke this server.", handle: "#revoke-server-btn" },
-        { kind: "assert", describe: "Confirm dialog opens.", handle: 'dialog[aria-label="Revoke this server"]' },
-        { kind: "tap", describe: "Cancel — no delete.", handle: "[data-revoke-cancel]" },
+        { kind: "assert", describe: "Confirm dialog opens.", handle: 'dialog[aria-label="Revoke server"]' },
+        { kind: "tap", describe: "Cancel — no revoke.", handle: "[data-revoke-cancel]" },
       ],
       assertions: [
-        { describe: "Revoke confirm dialog opens", handle: 'dialog[aria-label="Revoke this server"]', expect: "present" },
+        { describe: "Revoke confirm dialog opens", handle: 'dialog[aria-label="Revoke server"]', expect: "present" },
+        { describe: "Says it can be un-revoked", handle: 'dialog[aria-label="Revoke server"] .modal-message', expect: "text", text: "un-revoke it" },
         { describe: "Reason radio present", handle: 'input[name="revoke-reason"]', expect: "present" },
         { describe: "Back on server-detail after Cancel", handle: "#view-server-detail", expect: "present" },
       ],
@@ -551,18 +564,20 @@ const TOTAL: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-git-verdict-nofit",
-    "D2-B7: a NOT-fit repo renders the explain + 'Build with AI instead' adapt affordance.",
+    "D2-B7: a NOT-fit repo states why in plain words and offers 'Use AI to adapt and deploy' + the anonymous-share switch; no Install.",
     "gym total webapp git build offers AI-adapt for a non-fit repo",
     {
       steps: [
-        { kind: "launch", describe: "Reach build-git; route /api/build/git → not-fit." },
+        { kind: "launch", describe: "Reach build-git; route /api/build/git → not-fit (no manifest)." },
         { kind: "type", describe: "Paste a repo URL.", handle: "#build-git-url" },
         { kind: "tap", describe: "Check repo.", handle: "#build-git-check" },
         { kind: "assert", describe: "Not-fit verdict + adapt.", handle: "#build-git-adapt" },
       ],
       assertions: [
-        { describe: "Verdict shown", handle: "#build-git-verdict", expect: "text", text: "Not Flagship-ready" },
-        { describe: "Build-with-AI button present", handle: "#build-git-adapt", expect: "present" },
+        { describe: "Plain not-adapted sentence", handle: "#build-git-verdict", expect: "text", text: "not yet adapted for Flagship" },
+        { describe: "Adapt button", handle: "#build-git-adapt", expect: "text", text: "Use AI to adapt and deploy" },
+        { describe: "Share switch", handle: "#build-git-share", expect: "present" },
+        { describe: "No Install for a non-fit repo", handle: "#build-git-deploy", expect: "absent" },
       ],
       screenshots: [shot("git-verdict-nofit", "The not-fit verdict with the adapt affordance.")],
       dimension: "D2",
@@ -625,16 +640,18 @@ const TOTAL: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-needs-credential",
-    "D2-B3 (edge): a scratch first turn that gets 200 {needsCredential:true} routes into the AI-key step instead of streaming.",
+    "D2-B3 (edge): a named scratch first turn that gets 200 {needsCredential:true} routes into the AI-key step instead of streaming.",
     "gym total webapp scratch chat needsCredential routes to the AI-key step",
     {
       steps: [
-        { kind: "launch", describe: "Reach vibe-code; route /vibe-code/start → needsCredential." },
+        { kind: "launch", describe: "Reach vibe-code; route name-check → free, /vibe-code/start → needsCredential." },
         { kind: "type", describe: "Type a prompt.", handle: "#vc-prompt" },
-        { kind: "tap", describe: "Send.", handle: "#vc-send" },
+        { kind: "type", describe: "Name the app (Build it stays disabled until named).", handle: "#vc-name" },
+        { kind: "tap", describe: "Build it.", handle: "#vc-send" },
         { kind: "assert", describe: "Routes to the AI-key step.", handle: "#view-build-key" },
       ],
       assertions: [
+        { describe: "Name available", handle: "#vc-name-status", expect: "text", text: "Available" },
         { describe: "AI-key step opens", handle: "#view-build-key", expect: "present" },
       ],
       screenshots: [shot("needs-credential", "The needsCredential → add-an-AI-key transition.")],
@@ -664,16 +681,16 @@ const TOTAL: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-trusted-devices",
-    "D3-C7: the trusted-devices list renders device rows from a routed /devices.",
+    "D3-C7: the trusted-devices list renders rows from the signed account directory, decrypting device names client-side (platform + support code when unnamed).",
     "gym total webapp trusted-devices lists the account's devices",
     {
       steps: [
-        { kind: "launch", describe: "Reach Home (active profile); route /devices; show trusted-devices." },
+        { kind: "launch", describe: "Reach Home; seed account + device ids; route the signed /api/accounts/<id>/directory." },
         { kind: "assert", describe: "Device rows render.", handle: "#trusted-devices-list" },
       ],
       assertions: [
-        { describe: "Trusted-devices view present", handle: "#view-trusted-devices", expect: "present" },
-        { describe: "Device list populated", handle: "#trusted-devices-list", expect: "text", text: "iPhone" },
+        { describe: "This device's decrypted name", handle: "#trusted-devices-list", expect: "text", text: "Gym laptop" },
+        { describe: "Unnamed phone falls back to platform + code", handle: "#trusted-devices-list", expect: "text", text: "iPhone / iPad · Device K7Q2-9XPM" },
       ],
       screenshots: [shot("trusted-devices", "The trusted-devices list.")],
       dimension: "D3",
@@ -1004,6 +1021,79 @@ const TOTAL: readonly Scenario[] = [
         shot("promote-toggle-admin", "The default-OFF promote toggle + warning."),
       ],
       dimension: "D3",
+    },
+  ),
+
+  // ── Share this server (docs/share-a-server.md §8) — gym-share.spec.ts ──
+  webTotal(
+    "web-total-share-owner",
+    "Share a server (owner): the server page's Shared with card shows each co-manager's confirm code and activity, sits between Leader and Transfer, and the Share sheet arms only once named, unlock + app-data default off, then shows the https link + QR.",
+    "gym share owner card and share sheet",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach the owner's server page (stubbed .com + box)." },
+        { kind: "assert", describe: "Shared with card + code + activity.", handle: "#shared-with-card" },
+        { kind: "tap", describe: "Share this server.", handle: "#share-server-btn" },
+        { kind: "type", describe: "Name who it's for.", handle: "[data-share-label]" },
+        { kind: "tap", describe: "Create the link.", handle: "[data-share-create]" },
+        { kind: "assert", describe: "https share link + QR.", handle: "[data-share-link]" },
+      ],
+      assertions: [
+        { describe: "Shared with card", handle: "#shared-with-card", expect: "text", text: "Sam" },
+        { describe: "Six-digit confirm code", handle: "#shared-with-card [data-share-sas]", expect: "present" },
+        { describe: "Share sheet", handle: 'dialog[aria-label="Share this server"]', expect: "present" },
+        { describe: "Unlock-at-boot defaults off", handle: "[data-share-unlock]", expect: "present" },
+        { describe: "Link QR", handle: "[data-share-qr] svg", expect: "present" },
+      ],
+      screenshots: [
+        shot("owner-shared-with", "The owner's Shared with card."),
+        shot("share-sheet-form", "The Share sheet before creating."),
+        shot("share-sheet-link", "The Share sheet with the link + QR."),
+      ],
+      dimension: "D1",
+    },
+  ),
+  webTotal(
+    "web-total-share-member-accept",
+    "Share a server (co-manager): opening a share link shows the offer, accepting shows the six-digit code and waits for the owner to confirm.",
+    "gym share member accepts a link and reads the code",
+    {
+      steps: [
+        { kind: "launch", describe: "Open the share link's accept view (stubbed offer)." },
+        { kind: "assert", describe: "Offer shown.", handle: "#share-accept-content" },
+        { kind: "tap", describe: "Accept." },
+        { kind: "assert", describe: "Code + waiting for the owner.", handle: "[data-share-waiting]" },
+      ],
+      assertions: [
+        { describe: "Offer names the server", handle: "#share-accept-content", expect: "text", text: "home is shared with you" },
+        { describe: "Six-digit code", handle: "[data-share-sas]", expect: "present" },
+        { describe: "Waiting for the owner", handle: "[data-share-waiting]", expect: "text", text: "Waiting for the owner to confirm" },
+      ],
+      screenshots: [shot("member-offer", "The share offer."), shot("member-code", "The code, waiting for the owner.")],
+      dimension: "D1",
+    },
+  ),
+  webTotal(
+    "web-total-share-member-server",
+    "Share a server (co-manager): Home lists Shared with me with honest status; the shared server page offers the start-up unlock and app access editing but none of the owner-only cards (transfer, danger zone, power, sharing, update).",
+    "gym share member home and shared server page",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Home as the co-manager (sealed inbox entries)." },
+        { kind: "assert", describe: "Shared with me section.", handle: "#shared-with-me" },
+        { kind: "tap", describe: "Open the shared server.", handle: "[data-open-share]" },
+        { kind: "assert", describe: "Shared server page without owner-only cards.", handle: "#view-shared-server" },
+        { kind: "type", describe: "Edit an app's access list.", handle: '[data-access-editor="notes"] textarea' },
+      ],
+      assertions: [
+        { describe: "Shared with me", handle: "#shared-with-me", expect: "text", text: "Shared with me" },
+        { describe: "Start-up unlock card", handle: "#shared-startup-card", expect: "text", text: "Unlock it?" },
+        { describe: "Level shown", handle: "#shared-server-sub", expect: "text", text: "Can manage" },
+        { describe: "No transfer card", handle: "#view-shared-server #transfer-card", expect: "absent" },
+        { describe: "No danger zone", handle: "#view-shared-server #danger-zone-card", expect: "absent" },
+      ],
+      screenshots: [shot("member-home", "Shared with me on Home."), shot("member-server-page", "The shared server page.")],
+      dimension: "D1",
     },
   ),
 ];
