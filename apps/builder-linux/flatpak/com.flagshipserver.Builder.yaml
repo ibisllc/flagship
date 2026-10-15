@@ -44,6 +44,7 @@ modules:
       - install -Dm644 pairing_watch.py     ${FLATPAK_DEST}/share/flagship-builder/pairing_watch.py
       - install -Dm644 wifi_store.py        ${FLATPAK_DEST}/share/flagship-builder/wifi_store.py
       - install -Dm644 tray.py              ${FLATPAK_DEST}/share/flagship-builder/tray.py
+      - install -Dm644 version.py           ${FLATPAK_DEST}/share/flagship-builder/version.py
       - mkdir -p ${FLATPAK_DEST}/share/flagship-builder/vm
       - install -m644 -t ${FLATPAK_DEST}/share/flagship-builder/vm vm/*.py
       - install -Dm755 disk_write.py        ${FLATPAK_DEST}/share/flagship-builder/disk_write.py

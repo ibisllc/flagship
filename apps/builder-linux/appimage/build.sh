@@ -63,6 +63,12 @@ install -Dm644 "${LINUX_DIR}/pair_session.py"      "${APPDIR}/usr/share/flagship
 install -Dm644 "${LINUX_DIR}/pairing_watch.py"     "${APPDIR}/usr/share/flagship-builder/pairing_watch.py"
 install -Dm644 "${LINUX_DIR}/wifi_store.py"        "${APPDIR}/usr/share/flagship-builder/wifi_store.py"
 install -Dm644 "${LINUX_DIR}/tray.py"              "${APPDIR}/usr/share/flagship-builder/tray.py"
+if [ -n "${FLAGSHIP_STUDIO_VERSION:-}" ]; then
+  [[ "${FLAGSHIP_STUDIO_VERSION}" =~ ^[0-9A-Za-z.+-]+$ ]] || { echo "bad FLAGSHIP_STUDIO_VERSION" >&2; exit 2; }
+  printf 'VERSION = "%s"\n' "${FLAGSHIP_STUDIO_VERSION}" > "${APPDIR}/usr/share/flagship-builder/version.py"
+else
+  install -Dm644 "${LINUX_DIR}/version.py"         "${APPDIR}/usr/share/flagship-builder/version.py"
+fi
 mkdir -p "${APPDIR}/usr/share/flagship-builder/vm"
 install -m644 -t "${APPDIR}/usr/share/flagship-builder/vm" "${LINUX_DIR}"/vm/*.py
 # disk_write.py is the script pkexec elevates for the raw write — install it

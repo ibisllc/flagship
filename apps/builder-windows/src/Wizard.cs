@@ -613,8 +613,9 @@ public sealed class Wizard : INotifyPropertyChanged
         SelectedServerName = Vm.Server(name) is null ? null : name;
     }
 
-    /// <summary>Reported to the manifest endpoint. Mirrors FlagshipBuilder.csproj &lt;Version&gt;.</summary>
-    public const string BuilderVersion = "0.0.1";
+    /// <summary>Reported to the manifest endpoint: the version studio-release
+    /// stamped into this build (FlagshipBuilder.csproj StudioVersion).</summary>
+    public static readonly string BuilderVersion = StudioVersion.Current;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 

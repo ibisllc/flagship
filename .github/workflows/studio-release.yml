@@ -35,7 +35,12 @@ jobs:
 
       - name: Publish self-contained app
         shell: powershell
-        run: apps/builder-windows/make.ps1 publish
+        env:
+          StudioVersion: ${{ inputs.version }}
+        run: |
+          apps/builder-windows/make.ps1 publish
+          $stamped = (Get-Item apps/builder-windows/dist/FlagshipBuilder.exe).VersionInfo.ProductVersion
+          if (-not $stamped.StartsWith("${{ inputs.version }}")) { throw "exe reports $stamped, not ${{ inputs.version }}" }
 
       # Studio remasters the Debian ISO with a native xorriso, resolved from
       # tools\xorriso.exe beside the exe before PATH (README "xorriso"). Users
@@ -108,6 +113,8 @@ jobs:
             file python3 python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 libadwaita-1-0 xvfb xauth
 
       - name: Build AppImage
+        env:
+          FLAGSHIP_STUDIO_VERSION: ${{ inputs.version }}
         run: bash apps/builder-linux/appimage/build.sh
 
       - name: Smoke-test the packaged AppImage outside the repo
@@ -122,6 +129,7 @@ jobs:
           node "$root/cli-dist/cli.mjs" --help | head -3
           # Every module wizard.py imports at startup must be in the bundle.
           PYTHONPATH="$root" xvfb-run -a python3 -c "import wizard, cli_runner, pair_session, pairing_watch, wifi_store, tray, vm.manager, vm.appliance_cache, vm.host_power; print('python imports ok')"
+          PYTHONPATH="$root" python3 -c "import version, sys; v='${{ inputs.version }}'; sys.exit(0 if version.VERSION == v else f'AppImage reports {version.VERSION}, not {v}')"
 
       - name: Rename
         run: mv apps/builder-linux/dist/FlagshipBuilder-x86_64.AppImage "FlagshipStudio-Linux-x86_64-${{ inputs.version }}.AppImage"

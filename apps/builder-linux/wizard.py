@@ -55,6 +55,7 @@ from cli_runner import (
 )
 from pair_session import PairEvent, PairSession
 from pairing_watch import PairingWatch, timer_schedule
+from version import VERSION
 from wifi_store import WifiStore, default_backend
 from vm import host_arch, recipe_info, resource_plan, ssh_launch
 from vm.appliance_cache import ApplianceCache, ApplianceCacheError, backing_files_in_use
@@ -74,8 +75,8 @@ from vm.server_tier import ServerDestination, ServerTier
 MODE_SIMPLE = "simple"
 MODE_ADVANCED = "advanced"
 
-# Reported to /api/iso-manifest as `builderVersion`. Bump on release.
-BUILDER_VERSION = "0.1.0"
+# Reported to /api/iso-manifest as `builderVersion`; stamped at release.
+BUILDER_VERSION = VERSION
 
 
 def locate_flasher() -> str:
@@ -1383,7 +1384,7 @@ def build_window(application, model: Optional[WizardModel] = None):
         dlg.set_transient_for(window)
         dlg.set_modal(True)
         dlg.set_program_name("Flagship Studio")
-        dlg.set_version("0.1.0")
+        dlg.set_version(VERSION)
         dlg.set_comments("Build and host your own Flagship server.")
         dlg.set_website("https://flagshipserver.com")
         dlg.present()

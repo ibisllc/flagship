@@ -19,7 +19,9 @@
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <EnableDefaultPageItems>false</EnableDefaultPageItems>
     <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
-    <Version>0.0.1</Version>
+    <!-- studio-release.yml passes StudioVersion; a local build is a dev build. -->
+    <StudioVersion Condition="'$(StudioVersion)' == ''">0.0.0-dev</StudioVersion>
+    <Version>$(StudioVersion)</Version>
     <Authors>Flagship</Authors>
     <Product>Flagship Studio</Product>
     <Description>Single-window USB builder for Flagship recipes</Description>
@@ -45,6 +47,7 @@
     <Compile Include="src\PairSession.cs" />
     <Compile Include="src\PairingWatch.cs" />
     <Compile Include="src\WifiCredentialStore.cs" />
+    <Compile Include="src\StudioVersion.cs" />
     <Compile Include="src\NativePairingCrypto.cs" />
     <Compile Include="src\NativeIsoRemaster.cs" />
     <Compile Include="src\NativePreseedEngine.cs" />
