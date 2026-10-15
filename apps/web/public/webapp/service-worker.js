@@ -171,7 +171,9 @@
 //       approval." and opens the approvals view.
 //  v81: an app invite handed over by the owner's server
 //       (/invite#server=<box>&k=…) is accepted against that box.
-const SHELL_VERSION = "v81";
+//  v82: Settings and the AI-key step read Flagship Inference's status
+//      without asking for a username first.
+const SHELL_VERSION = "v82";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
