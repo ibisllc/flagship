@@ -110,6 +110,7 @@ import type { UpdateOutcomeRecord } from "../updateOutcome.js";
 import { isAppDbPath } from "../dataLayer/ownerDb.js";
 import { isMemberRolesPath } from "../memberRoles.js";
 import { isAppCopyPath } from "../appCopy/target.js";
+import { isServerArchivePath } from "../serverArchive/service.js";
 import type { ReleaseCatalogSource } from "../updateReleases.js";
 import type { AppStatusSource } from "../appStatus.js";
 import type { ServiceActivityKind } from "../serviceActivity.js";
@@ -204,6 +205,12 @@ export interface ScreensHttpDeps {
     handle: (path: string, method: string, req: HttpRequest, ctx: { companion: boolean }) => Promise<HttpResponse | null>;
     inProgress: (hostUsername: string) => AppSummary[];
   } | null;
+  /**
+   * "Backup/clone server" (serverArchive/service.ts): make the sealed archive
+   * of every app, hand it over in chunks, and import one onto this server.
+   * Owner sessions only.
+   */
+  serverArchive?: { handle: (path: string, method: string, req: HttpRequest, ctx: { companion: boolean }) => Promise<HttpResponse | null> } | null;
   /**
    * Every app's container state in one Docker call (appStatus.ts). Unset ⇒
    * every app is `unknown`.
@@ -560,6 +567,12 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       const denied = denyCompanionWrite(deps.pairedSessions ?? null, req);
       if (denied) return denied;
       const r = await deps.memberRoles.handle(path, method, req);
+      if (r) return r;
+    }
+
+    if (deps.serverArchive && isServerArchivePath(path)) {
+      const companion = deps.pairedSessions?.isCompanionRequest?.(req) === true;
+      const r = await deps.serverArchive.handle(path, method, req, { companion });
       if (r) return r;
     }
 

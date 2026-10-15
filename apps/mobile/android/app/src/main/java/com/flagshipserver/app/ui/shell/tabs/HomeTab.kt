@@ -13,6 +13,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -302,6 +303,10 @@ fun HomeTab() {
                 hasCloudRecovery = hasRecovery,
                 dismissed = bannerDismissed,
             )
+            var showImportBackup by remember { androidx.compose.runtime.mutableStateOf(false) }
+            if (showImportBackup) {
+                com.flagshipserver.app.ui.screens.ImportBackupDialog(onDismiss = { showImportBackup = false })
+            }
             HomeScreen(
                 state = vm.state.collectAsState().value,
                 username = app.currentUser.collectAsState().value ?: "",
@@ -318,6 +323,7 @@ fun HomeTab() {
                 // (Slice B); taking over a transferred box is a link/QR
                 // ingestion (Slice C, via the deep link / "Process a link").
                 onAddServer = { nav.navigate("create-server") },
+                onImportBackup = { showImportBackup = true },
                 onMakeLeader = { pod -> saveOrder { orderSaver.makeLeader(pod.podId) } },
                 onReorder = { ids -> saveOrder { orderSaver.reorder(ids) } },
                 onDeleteServer = { pod ->

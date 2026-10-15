@@ -94,7 +94,7 @@ final class MigrationViewModelTests: XCTestCase {
         XCTAssertEqual(vm.mode, .initiate)
         XCTAssertEqual(vm.oldStkPubHex, stkHex)
         XCTAssertFalse(vm.backupMissing)
-        XCTAssertEqual(vm.disposition, .wipeAfterHandoff, "wipe-after-handoff is the default")
+        XCTAssertEqual(vm.disposition, .wipeAfterHandoff, "a migration always retires and wipes the old server")
         XCTAssertFalse(vm.startBlocked)
     }
 
@@ -115,15 +115,13 @@ final class MigrationViewModelTests: XCTestCase {
     }
 
     func testUnreadableBackupSignalGatesConservatively() async {
-        // Default mock screens: participating:false ⇒ backup missing ⇒ the
-        // default wipe-after-handoff disposition is blocked; keep is not.
+        // Default mock screens: participating:false ⇒ backup missing ⇒ blocked
+        // (the migration always retires and wipes the old server).
         let vm = makeVM(migration: MockServerMigrationClient(), screens: MockScreensClient())
         await vm.load()
         XCTAssertEqual(vm.mode, .initiate)
         XCTAssertTrue(vm.backupMissing)
         XCTAssertTrue(vm.startBlocked)
-        vm.disposition = .keep
-        XCTAssertFalse(vm.startBlocked, "keep leaves the old disk as the fallback copy")
     }
 
     // MARK: - Initiate

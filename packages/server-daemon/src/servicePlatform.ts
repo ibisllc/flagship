@@ -104,6 +104,8 @@ export interface ServiceRedeployArgs {
 }
 
 export interface ServicePlatformDeps {
+  /** Activity-feed hook for an app arriving, changing or leaving. */
+  onAppEvent?: (kind: "app.installed" | "app.updated" | "app.removed", serviceId: string) => void;
   /** Called whenever the app set or an app's state may have changed. */
   onAppsChanged?: () => void;
   /** Whose box this is — used for the host-vs-creator URL collapse + as IRK-mutation owner.
@@ -309,7 +311,20 @@ export class ServicePlatform {
    */
   install(args: ServiceInstallArgs): Promise<InstallResult> {
     const id = ServicePlatform.serviceId(args.request.creator, args.request.slug);
-    return whileDeploying(this.deps.activity, id, () => this.installNow(args));
+    const existed = this.apps.has(id);
+    return whileDeploying(this.deps.activity, id, async () => {
+      const res = await this.installNow(args);
+      if (res.ok) this.notifyApp(existed ? "app.updated" : "app.installed", id);
+      return res;
+    });
+  }
+
+  private notifyApp(kind: "app.installed" | "app.updated" | "app.removed", serviceId: string): void {
+    try {
+      this.deps.onAppEvent?.(kind, serviceId);
+    } catch {
+      /* the feed never fails an install */
+    }
   }
 
   private async installNow(args: ServiceInstallArgs): Promise<InstallResult> {
@@ -916,6 +931,18 @@ export class ServicePlatform {
   }
 
   async uninstall(args: {
+    request: UninstallServiceRequest;
+    signature: Bytes;
+    verify: (req: UninstallServiceRequest, sig: Bytes, irkPub: Bytes) => boolean;
+  }): Promise<UninstallResult> {
+    const res = await this.uninstallNow(args);
+    if (res.ok && !res.alreadyGone) {
+      this.notifyApp("app.removed", ServicePlatform.serviceId(args.request.creator, args.request.slug));
+    }
+    return res;
+  }
+
+  private async uninstallNow(args: {
     request: UninstallServiceRequest;
     signature: Bytes;
     verify: (req: UninstallServiceRequest, sig: Bytes, irkPub: Bytes) => boolean;

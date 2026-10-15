@@ -98,18 +98,18 @@ public struct ActivityScreen: View {
                             viewFullAuditLogRow(c: c)
                         }
                     }
-                    section("RECENT DEPLOYS", c: c) {
-                        if feed.recentInstalls.isEmpty {
+                    section("ON THIS SERVER", c: c) {
+                        let rows = feed.boxEvents.filter { BoxEventLabels.title($0) != nil }
+                        if rows.isEmpty {
                             FSCard {
-                                Text("Nothing yet.").foregroundColor(c.textMuted)
+                                Text("Nothing has happened yet.").foregroundColor(c.textMuted)
                             }
                         } else {
                             FSCard {
                                 VStack(spacing: FS.space.s3) {
-                                    ForEach(feed.recentInstalls.indices, id: \.self) { i in
-                                        let e = feed.recentInstalls[i]
-                                        installRow(event: e, c: c)
-                                        if i < feed.recentInstalls.count - 1 {
+                                    ForEach(rows.indices, id: \.self) { i in
+                                        boxRow(entry: rows[i], c: c)
+                                        if i < rows.count - 1 {
                                             Divider().background(c.border)
                                         }
                                     }
@@ -230,19 +230,19 @@ public struct ActivityScreen: View {
         }
     }
 
-    private func installRow(event: RecentInstallEvent, c: FSColors) -> some View {
+    private func boxRow(entry: BoxActivityEntry, c: FSColors) -> some View {
         HStack(alignment: .top) {
-            Image(systemName: icon(for: event.kind))
-                .foregroundColor(color(for: event.kind, c: c))
+            Image(systemName: BoxEventLabels.symbol(entry))
+                .foregroundColor(entry.ok ? c.primary : c.danger)
                 .frame(width: 22)
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(verb(event.kind)) \(event.serviceId)").foregroundColor(c.text)
-                if let detail = event.detail {
+                Text(BoxEventLabels.title(entry) ?? "").foregroundColor(c.text)
+                if let detail = entry.detail, !detail.isEmpty {
                     Text(detail).font(FS.font.bodySm()).foregroundColor(c.textMuted)
                 }
             }
             Spacer()
-            Text(relative(ms: event.at)).font(FS.font.caption()).foregroundColor(c.textMuted)
+            Text(relative(ms: entry.ts)).font(FS.font.caption()).foregroundColor(c.textMuted)
         }
     }
 
@@ -260,32 +260,6 @@ public struct ActivityScreen: View {
         }
     }
 
-    private func icon(for kind: String) -> String {
-        switch kind {
-        case "installed":     return "arrow.down.app.fill"
-        case "uninstalled":   return "trash"
-        case "deploy":        return "arrow.triangle.2.circlepath"
-        case "update-pulled": return "arrow.triangle.pull"
-        default:              return "circle.fill"
-        }
-    }
-    private func color(for kind: String, c: FSColors) -> Color {
-        switch kind {
-        case "installed":   return c.success
-        case "uninstalled": return c.danger
-        case "deploy":      return c.primary
-        default:            return c.textMuted
-        }
-    }
-    private func verb(_ kind: String) -> String {
-        switch kind {
-        case "installed":     return "Deployed"
-        case "uninstalled":   return "Removed"
-        case "deploy":        return "Redeployed"
-        case "update-pulled": return "Updated"
-        default:              return kind
-        }
-    }
     private func relative(ms: Int64) -> String {
         Date.flagshipFormatted(epochMs: ms)
     }

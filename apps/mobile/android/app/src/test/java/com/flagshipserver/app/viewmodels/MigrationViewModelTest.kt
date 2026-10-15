@@ -155,8 +155,6 @@ class MigrationViewModelTest {
         assertEquals(MigrationMode.Initiate, vm.mode.value)
         assertTrue(vm.backupMissing)
         assertTrue(vm.startBlocked)
-        vm.setDisposition(ServerMigrationFlow.Disposition.Keep)
-        assertFalse("keep leaves the old disk as the fallback copy", vm.startBlocked)
     }
 
     // ── Initiate ──────────────────────────────────────────────────────────────

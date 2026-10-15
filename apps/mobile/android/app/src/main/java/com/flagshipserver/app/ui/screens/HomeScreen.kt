@@ -92,6 +92,8 @@ fun HomeScreen(
     serverOrderAcks: Map<String, Long> = emptyMap(),
     onOpenPod: (PodInfo) -> Unit,
     onAddServer: () -> Unit,
+    /** "Import a backup" in the Add/Import chooser. */
+    onImportBackup: () -> Unit = {},
     /** Move a server to the top of the order (docs/server-order.md). */
     onMakeLeader: (PodInfo) -> Unit,
     onRefresh: () -> Unit,
@@ -148,6 +150,24 @@ fun HomeScreen(
      *  (docs/account-read-token.md "A refused read is never no servers"). */
     onShowServers: () -> Unit = {},
 ) {
+    var showAddOrImport by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    if (showAddOrImport) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showAddOrImport = false },
+            title = { androidx.compose.material3.Text("Add/Import a server") },
+            text = { androidx.compose.material3.Text(com.flagshipserver.app.core.ServerArchive.CLONE_HINT) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { showAddOrImport = false; onAddServer() }) {
+                    androidx.compose.material3.Text("Add a new server")
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showAddOrImport = false; onImportBackup() }) {
+                    androidx.compose.material3.Text("Import a backup")
+                }
+            },
+        )
+    }
     val scroll = rememberScrollState()
     // Search text over the server list (name / fqdn / description). Pure
     // presentation — never mutates `pods`. Empty ⇒ no filtering.
@@ -258,8 +278,8 @@ fun HomeScreen(
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                 // The empty state carries its own "Add your first server".
                 FSGhostButton(
-                    label = "Add/connect a server",
-                    onClick = onAddServer,
+                    label = "Add/Import a server",
+                    onClick = { showAddOrImport = true },
                     block = true,
                     modifier = Modifier.testTag("home-add-server"),
                 )

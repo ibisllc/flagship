@@ -5,6 +5,8 @@
 package com.flagshipserver.app.viewmodels
 
 import com.flagshipserver.app.api.AuditEvent
+import com.flagshipserver.app.api.BoxActivityEntry
+import com.flagshipserver.app.core.BoxEventLabels
 import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.api.RecentInstallEvent
 import com.flagshipserver.app.api.ScreensClient
@@ -30,6 +32,15 @@ sealed interface ActivityItem {
         override val at: Long = event.at,
         override val title: String = "${event.kind}: ${event.serviceId}",
         override val subtitle: String? = event.detail,
+    ) : ActivityItem
+
+    /** What the server itself did (its own log: updates, migration, backups,
+     *  imports, app changes, shares). */
+    data class BoxEvent(
+        val entry: BoxActivityEntry,
+        override val at: Long = entry.ts,
+        override val title: String = BoxEventLabels.title(entry) ?: "",
+        override val subtitle: String? = entry.detail,
     ) : ActivityItem
 
     data class RecoverySnapshot(
@@ -76,6 +87,8 @@ object ActivityFeedFilter {
         return when (item) {
             // Account-wide — never hidden by a server filter.
             is ActivityItem.AuditEntry -> true
+            // The log of the server the page reads: already scoped to one box.
+            is ActivityItem.BoxEvent -> true
             is ActivityItem.RecoverySnapshot -> true
             // Pod-attributable: keep only when the event text names the pod as
             // a complete dot-delimited LABEL — a segment boundary before it
@@ -121,7 +134,7 @@ class ActivityViewModel(
         // dangling uncaught exceptions in the parent scope.
         val outcome = runCatching {
             coroutineScope {
-                val detailJob = async { runCatching { client.serverDetail().recentInstallEvents }.getOrDefault(emptyList()) }
+                val detailJob = async { runCatching { client.boxActivity(100) }.getOrDefault(emptyList()) }
                 val recoveryJob = async { runCatching { client.postRecoveryStatus().report }.getOrNull() }
                 // Account-level audit feed. Lives on .com (not the
                 // daemon) so the fetch is tolerated as missing (a
@@ -143,7 +156,7 @@ class ActivityViewModel(
         outcome.fold(
             onSuccess = { (recents, snapshot, audit) ->
                 val items = buildList {
-                    recents.forEach { add(ActivityItem.InstallEvent(it)) }
+                    recents.filter { BoxEventLabels.title(it) != null }.forEach { add(ActivityItem.BoxEvent(it)) }
                     snapshot?.let { add(ActivityItem.RecoverySnapshot(it)) }
                     audit.forEach { add(ActivityItem.AuditEntry(it)) }
                 }.sortedByDescending { it.at }

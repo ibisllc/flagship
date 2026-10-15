@@ -1110,6 +1110,58 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     /// tests can assert the right value flowed through.
     public private(set) var togglePeerBackupCalls: [Bool] = []
 
+    // MARK: - Backup/clone server (in-memory: the archive is a fixed blob)
+
+    public var archiveBytes: Data = Data(repeating: 7, count: 5_000)
+    public private(set) var archiveStarts: [ServerArchiveStartRequest] = []
+    public private(set) var archiveForgotten = false
+    public private(set) var restoreStarts: [ServerRestoreStartRequest] = []
+    public private(set) var restoreChunks: [(offset: Int64, count: Int)] = []
+    public private(set) var restoreCommits: [ServerRestoreCommitRequest] = []
+    public var restoreApps: [ServerRestoreApp] = [ServerRestoreApp(serviceId: "alice--wiki", name: "Wiki", state: "done")]
+    public var restoreFinalState = "done"
+    public var restoreFailure: String?
+
+    public func serverArchiveStart(_ req: ServerArchiveStartRequest) async throws {
+        try await tick()
+        archiveStarts.append(req)
+        archiveForgotten = false
+    }
+    public func serverArchiveStatus() async throws -> ServerArchiveStatus? {
+        try await tick()
+        guard let id = archiveStarts.last?.archiveId, !archiveForgotten else { return nil }
+        return ServerArchiveStatus(archiveId: id, state: "ready", startedAt: 1, bytes: Int64(archiveBytes.count),
+                                   apps: [ServerArchiveApp(serviceId: "alice--wiki", name: "Wiki")])
+    }
+    public func serverArchiveChunk(offset: Int64) async throws -> Data {
+        try await tick()
+        let start = Int(offset)
+        return archiveBytes.subdata(in: start..<min(start + 2_000, archiveBytes.count))
+    }
+    public func serverArchiveForget() async throws {
+        try await tick()
+        archiveForgotten = true
+    }
+    public func serverRestoreStart(_ req: ServerRestoreStartRequest) async throws {
+        try await tick()
+        restoreStarts.append(req)
+    }
+    public func serverRestoreChunk(offset: Int64, data: Data) async throws {
+        try await tick()
+        restoreChunks.append((offset, data.count))
+    }
+    public func serverRestoreCommit(_ req: ServerRestoreCommitRequest) async throws {
+        try await tick()
+        restoreCommits.append(req)
+    }
+    public func serverRestoreStatus() async throws -> ServerRestoreStatus? {
+        try await tick()
+        guard let id = restoreStarts.last?.archiveId else { return nil }
+        return ServerRestoreStatus(archiveId: id, state: restoreFailure == nil ? restoreFinalState : "failed",
+                                   bytes: restoreStarts.last?.bytes ?? 0, received: restoreStarts.last?.bytes ?? 0,
+                                   apps: restoreApps, reason: restoreFailure)
+    }
+
     public func peerBackupStatus() async throws -> PeerBackupStatusResponse {
         try await tick()
         if let fixture = peerBackupStatusFixture { return fixture }

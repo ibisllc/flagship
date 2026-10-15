@@ -214,7 +214,7 @@ test.describe("gym webapp share", () => {
     await expect(page.locator("#server-activity-card")).toContainText("Sam · changed notes's internet access");
     // Shared with sits after Leader and before Transfer.
     const order = await page.evaluate(() =>
-      ["leader-card", "shared-with-card", "server-activity-card", "transfer-card"].map((id) => {
+      ["leader-card", "shared-with-card", "server-activity-card", "danger-zone-card"].map((id) => {
         const el = document.getElementById(id)!;
         return el.getBoundingClientRect().top + window.scrollY;
       }),
@@ -300,7 +300,7 @@ test.describe("gym webapp share", () => {
     await expect(page.locator("#view-shared-server")).toBeVisible();
     await expect(page.locator("#shared-startup-card")).toContainText("home is starting. Unlock it?", { timeout: 10_000 });
     await expect(page.locator("#shared-server-sub")).toHaveText("Shared with you · Can manage");
-    for (const owned of ["#transfer-card", "#danger-zone-card", "#lock-power-card", "#shared-with-card", "#update-card"]) {
+    for (const owned of ["#danger-zone-card", "#lock-power-card", "#shared-with-card", "#update-card"]) {
       await expect(page.locator(`#view-shared-server ${owned}`)).toHaveCount(0);
     }
     await page.locator('[data-access-open="notes"]').click();

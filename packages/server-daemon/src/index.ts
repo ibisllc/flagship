@@ -189,6 +189,7 @@ import { realAppCopyOps } from "./appCopy/ops.js";
 import { buildAppCopySource } from "./appCopy/source.js";
 import { AppCopyStore } from "./appCopy/store.js";
 import { buildAppCopyTarget } from "./appCopy/target.js";
+import { buildServerArchiveService } from "./serverArchive/service.js";
 import {
   buildSelfDeletePoller,
   fileMarkerStore,
@@ -251,7 +252,7 @@ import {
   runUpdateBootGate,
   type UpdateHealthSignal,
 } from "./updateHealthGate.js";
-import { fileUpdateOutcomeStore } from "./updateOutcome.js";
+import { fileUpdateOutcomeStore, onUpdateOutcome } from "./updateOutcome.js";
 import { buildReleaseCatalog } from "./updateReleases.js";
 import { runFirstBootUpdate } from "./firstBootUpdate.js";
 import { installHealthReporter } from "./healthReporter.js";
@@ -557,6 +558,17 @@ async function main(): Promise<void> {
 
   const dataDir = process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship";
   const adminRootPinPath = `${dataDir}/admin-root-pin.json`;
+
+  // What happened on this box (apps' Activity tab). One log for the whole
+  // process; shares, migration, updates, backups and app changes all write to it.
+  const activityLog = new ActivityLog(defaultActivityLogPath(dataDir));
+  await activityLog.load().catch((e: Error) => console.warn(`[activity] load failed: ${e.message}`));
+  onUpdateOutcome((r) => {
+    const to = r.targetCommit ? ` ${r.targetCommit.slice(0, 8)}` : "";
+    if (r.outcome === "applied") activityLog.note("server.update.applied", `Updated to${to}.`);
+    else if (r.outcome === "rolled-back") activityLog.note("server.update.rolled-back", `The update to${to} failed its boot check and was rolled back.`, { ok: false });
+    else activityLog.note("server.update.refused", `An update order was refused${r.reason ? ` (${r.reason})` : ""}.`, { ok: false });
+  });
 
   // Transfer-a-box re-home (docs/account-deletion-and-name-reclaim.md §4, Layer
   // A). If a prior boot's poller observed an ownership transfer it persisted a
@@ -1207,6 +1219,16 @@ async function main(): Promise<void> {
         // On-service-delete teardown of the per-service route. Late-bound: the
         // gossip claimer + loop are wired below, after the runtime is up.
         onServiceRemoved: (slug) => onServiceRemovedRef.current?.(slug),
+        onAppEvent: (kind, serviceId) =>
+          activityLog.note(
+            kind,
+            kind === "app.installed"
+              ? `Installed ${serviceId}.`
+              : kind === "app.updated"
+                ? `Redeployed ${serviceId}.`
+                : `Removed ${serviceId}.`,
+            { target: serviceId },
+          ),
       },
       additionalHandlers,
       updateServer,
@@ -1301,6 +1323,7 @@ async function main(): Promise<void> {
     // threading ~15 values through separate builders. Also starts the
     // update-pack scheduler. Same order + side effects as before.
     await wireRuntimeSurfaces({
+      activityLog,
       serverOrder,
       serviceAccessRef,
       runtime,
@@ -1344,6 +1367,7 @@ async function main(): Promise<void> {
   // no timer, no behavior change. Mounts onto the live runtime + arms the
   // dead-man SIGTERM/SIGINT stop hooks.
   await wireOwnerHandlers({
+    activityLog,
     serviceAccessRef,
     runtime,
     cfg,
@@ -1439,6 +1463,7 @@ async function main(): Promise<void> {
         return { complete: false, detail: out.reason };
       },
       onTakeOver: async ({ serverDomain }) => {
+        activityLog.note("server.migration.taken-over", "This server took over the name from the old server.");
         // Symmetric restore step: the shard restore above landed `_dumps/**`
         // onto disk, but those are DUMPS — reload them INTO this fresh box's
         // data stack (psql < pg_dumpall / files tars into fresh volumes /
@@ -2049,6 +2074,7 @@ async function loadEntitlementsOrExit(deps: {
  * original inline block.
  */
 async function wireRuntimeSurfaces(deps: {
+  activityLog: ActivityLog;
   serviceAccessRef: { current: ServiceAccessStore | null };
   serverOrder: ServerOrderHolder | null;
   runtime: DaemonRuntime;
@@ -2682,6 +2708,48 @@ async function wireRuntimeSurfaces(deps: {
     return target;
   })();
 
+  // "Backup/clone server": one sealed archive of every app, downloadable, and
+  // importable onto any server of the account under any name.
+  const serverArchiveService = await (async () => {
+    const platform = runtime.servicePlatform;
+    if (!cfg || !platform || !env.serverFqdn) return null;
+    const ops = realAppCopyOps();
+    const service = buildServerArchiveService({
+      dir: join(dataDir, "archives"),
+      build: {
+        serverFqdn: env.serverFqdn,
+        apps: () => platform.list(),
+        containerName: (id) => `flagship-${id}`,
+        ops,
+        envStore: runtime.envStore,
+        access: { exportEntry: (id) => deps.serviceAccessRef.current?.exportEntry(id) ?? null },
+        accessList: (id) => runtime.egress.exportList(id),
+        sourceDir: vibeAppDir,
+        log: (m) => console.log(m),
+      },
+      restore: {
+        serverFqdn: env.serverFqdn,
+        platform,
+        dataProvisioner: runtime.dataProvisioner,
+        ops,
+        signInstall: (req) => custodian.signInstallService(req),
+        envStore: runtime.envStore,
+        access: {
+          importEntry: async (id, e) => {
+            await deps.serviceAccessRef.current?.importEntry(id, e);
+          },
+        },
+        egress: { noteCopied: (id, list, declared) => runtime.egress.noteCopied(id, list, declared) },
+        sourceDir: vibeAppDir,
+        log: (m) => console.log(m),
+      },
+      note: (kind, detail, ok) => deps.activityLog.note(kind, detail, { ok: ok ?? true }),
+      log: (m) => console.log(m),
+    });
+    await service.init();
+    return service;
+  })();
+
   // Share this server (docs/share-a-server.md): another account's per-share
   // sessions, gated by level on every screens route, and the activity log.
   const sharesBundle = await (async () => {
@@ -2700,8 +2768,7 @@ async function wireRuntimeSurfaces(deps: {
     if (dropped > 0) console.warn(`[shares] dropped ${dropped} share(s) that no longer verify`);
     const sessions = new ShareSessionStore(defaultShareSessionPath(dataDir));
     await sessions.load();
-    const activity = new ActivityLog(defaultActivityLogPath(dataDir));
-    await activity.load();
+    const activity = deps.activityLog;
     const verifyOwnerRevoke = (r: ServerShareRevoke, sig: Uint8Array) =>
       authorizeSensitiveOrder({ ...authority, order: r, signature: sig, verify: verifyServerShareRevoke });
     // A co-manager's update order takes the owner's gates (shares/shareUpdate.ts).
@@ -2779,6 +2846,7 @@ async function wireRuntimeSurfaces(deps: {
     },
     appEgress: runtime.egress.appEgress,
     appCopy: appCopyTarget,
+    serverArchive: serverArchiveService,
     // The status pill (docs/app-placement.md §6): one `docker ps` for every
     // app, and what's deploying or being edited here.
     appStatus: buildAppStatusReader({
@@ -2943,6 +3011,17 @@ async function wireRuntimeSurfaces(deps: {
       writeRequestStore: companionWriteRequestStore,
     },
     postRecoveryStatus: () => rePairWatcherRef.current?.snapshot() ?? null,
+    installEventLog: {
+      recent: () =>
+        deps.activityLog
+          .recent(200)
+          .flatMap((e) => {
+            const kind =
+              e.kind === "app.installed" ? "installed" : e.kind === "app.removed" ? "uninstalled" : e.kind === "app.updated" ? "deploy" : null;
+            return kind && e.target ? [{ at: e.ts, kind, serviceId: e.target, ...(e.detail ? { detail: e.detail } : {}) } as const] : [];
+          })
+          .slice(0, 20),
+    },
     // W10 — per-app env-var KV editor + vibe-code session BFF deps.
     appEnvStore: runtime.envStore,
     // The session's app id (`<creator>--<slug>`): the edited service, else
@@ -3033,6 +3112,7 @@ async function wireRuntimeSurfaces(deps: {
  * SIGTERM/SIGINT stop hooks. No-op (and no behavior change) when cfg is null.
  */
 async function wireOwnerHandlers(deps: {
+  activityLog: ActivityLog;
   serviceAccessRef: { current: ServiceAccessStore | null };
   runtime: DaemonRuntime;
   cfg: ServerConfig | null;
@@ -3222,6 +3302,7 @@ async function wireOwnerHandlers(deps: {
       username: cfg.userId,
       controlPlaneBaseUrl: env.controlPlaneBaseUrl,
       markerStore: decommissionMarkerStore(`${dataDir}/decommissioned`),
+      onEvent: (kind, detail, ok) => deps.activityLog.note(kind, detail, { ok: ok ?? true }),
       // Final-flush (the migration/replacement FINAL DELTA): DUMP the data
       // stores (consistent dumps, services still LIVE — pg_dumpall / sqlite
       // .backup can't run against a stopped container), THEN quiesce the data services (write-freeze — now a REAL

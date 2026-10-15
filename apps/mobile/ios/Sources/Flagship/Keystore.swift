@@ -443,6 +443,18 @@ public struct Keystore {
         return key
     }
 
+    /// The key that seals one server archive (`ServerArchive.deriveKey`):
+    /// server-id independent, so any device of the account can back up a server
+    /// or import a backup onto a server with a different name.
+    public static func deriveServerArchiveKey(archiveId: String, reason: String) async throws -> Data {
+        let umk = try await unwrappedUMK(reason: reason)
+        let umkData = umk.withUnsafeBytes { Data($0) }
+        guard let key = ServerArchive.deriveKey(umkSeed: umkData, archiveId: archiveId) else {
+            throw KeystoreError.derivationFailed("server archive key")
+        }
+        return key
+    }
+
     /// Gating v2 (Wave 3) author path: unwrap the UMK ONCE and return the author's
     /// stable AID PRIVATE key + the household key in one biometric. v2 SIGNS the
     /// create / revoke / list-query with the AID (not the rotating IRK), so the

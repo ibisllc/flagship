@@ -1,12 +1,13 @@
-// Activity tab: live feed of recent install events + post-recovery
-// status + account audit. Mirrors apps/mobile/{ios,android}
-// ActivityScreen + ActivityViewModel.
-//
-// Fan-out fetch the sources in parallel, then render recovery as its
-// own card and the rest as a merged time-sorted "Recent" list.
+// Activity tab: one time-sorted list of what the servers did (their own log at
+// /api/screens/activity: updates, migration, backups, imports, app changes,
+// shares) merged with the account events from flagshipserver.com, plus the
+// post-recovery card. Mirrors apps/mobile/{ios,android} ActivityScreen +
+// ActivityViewModel. Sources are fetched in parallel.
 
 import { $, registerView, show } from "../lib/router.js";
-import { screensFetch, ScreensError, getPodBaseUrl, setPodBaseUrl } from "../lib/api.js";
+import { screensFetch, ScreensError, getPodBaseUrl, setPodBaseUrl, boxClient } from "../lib/api.js";
+import { mergeFeed } from "../lib/activityFeed.js";
+import { podShortName } from "../lib/podSwitcher.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
 import { get as profileGet } from "../lib/profilesStore.js";
 import {
@@ -90,10 +91,8 @@ async function fanOut() {
       return raw ? JSON.parse(raw).username ?? "" : "";
     } catch { return ""; }
   })();
-  const [detail, recovery, audit] = await Promise.all([
-    screensFetch("/api/screens/server-detail")
-      .then((b) => b.recentInstallEvents ?? [])
-      .catch((e) => { if (e instanceof ScreensError) return []; throw e; }),
+  const [boxes, recovery, audit] = await Promise.all([
+    fetchBoxEvents(),
     screensFetch("/api/screens/post-recovery/status")
       .then((b) => b.report ?? null)
       .catch((e) => { if (e instanceof ScreensError) return null; throw e; }),
@@ -104,7 +103,40 @@ async function fanOut() {
           .catch(() => [])
       : Promise.resolve([]),
   ]);
-  return { detail, recovery, audit };
+  return { boxes, recovery, audit };
+}
+
+/** Each server's own log: the selected server's, or every server this device has a session for. */
+async function fetchBoxEvents() {
+  const specific = (() => {
+    try {
+      const host = new URL(getPodBaseUrl()).hostname;
+      return host || "";
+    } catch {
+      return "";
+    }
+  })();
+  const fqdns = specific
+    ? [specific]
+    : activityPods.map((p) => String(p?.serverDomain ?? "").toLowerCase()).filter(Boolean);
+  if (fqdns.length === 0) {
+    const entries = await screensFetch("/api/screens/activity?limit=100")
+      .then((b) => b.entries ?? [])
+      .catch((e) => { if (e instanceof ScreensError) return []; throw e; });
+    return [{ serverName: "", entries }];
+  }
+  const label = fqdns.length > 1;
+  return Promise.all(
+    fqdns.map(async (fqdn) => {
+      const client = boxClient(fqdn);
+      if (!client.hasSession()) return { serverName: "", entries: [] };
+      const entries = await client
+        .fetch("/api/screens/activity?limit=100")
+        .then((b) => b?.entries ?? [])
+        .catch(() => []);
+      return { serverName: label ? podShortName(fqdn) : "", entries };
+    }),
+  );
 }
 
 // The label / icon mapping lives in lib/auditLog.js so the inline
@@ -133,7 +165,7 @@ export async function renderActivity() {
     activityPods = [];
   }
   try {
-    const { detail, recovery, audit } = await fanOut();
+    const { boxes, recovery, audit } = await fanOut();
 
     const recoveryCard = recovery == null
       ? ""
@@ -149,48 +181,30 @@ export async function renderActivity() {
           <button class="secondary full-width mt-2" id="activity-feed-open-recovery">View report</button>
         </div>`;
 
-    const recentRows = detail
-      .slice()
-      .sort((a, b) => b.at - a.at)
-      .map((e) => `
-        <div class="card">
+    const rows = mergeFeed({
+      boxes,
+      audit,
+      auditLabel: eventKindLabel,
+      auditIcon: eventKindIcon,
+      auditDetail: auditDisplayDetail,
+    });
+    const feed = rows.length === 0
+      ? '<div class="card placeholder">Nothing has happened yet.</div>'
+      : rows.map((r) => `
+        <div class="card${r.ok ? "" : " card-warn"}">
           <div class="row">
-            <span class="value">${escapeHtml(e.kind)}: ${escapeHtml(e.serviceId)}</span>
-            <span class="pill">${escapeHtml(fmtDate(e.at))}</span>
+            <span class="value"><span aria-hidden="true">${escapeHtml(r.icon)}</span> ${escapeHtml(r.title)}</span>
+            <span class="pill">${escapeHtml(fmtDate(r.at))}</span>
           </div>
-          ${e.detail ? `<p class="note small">${escapeHtml(e.detail)}</p>` : ""}
-        </div>`)
-      .join("") || '<div class="card placeholder">No recent activity.</div>';
-
-    // Inline preview of the latest account events (newest first, capped
-    // at what the 20-row fetch returned), plus a "see all" link into the
-    // full-page Account-history view (live .com feed, mirror of the iOS
-    // AuditLogScreen). The card is omitted entirely when there's nothing
-    // to show so a fresh account doesn't render an empty header.
-    const auditCard = audit.length === 0
-      ? ""
-      : `
-        <h2 class="mt-4">Account events</h2>
-        ${audit.map((e) => `
-          <div class="card">
-            <div class="row">
-              <span class="value">
-                <span aria-hidden="true">${eventKindIcon(e.eventKind)}</span>
-                ${escapeHtml(eventKindLabel(e.eventKind))}
-              </span>
-              <span class="pill">${escapeHtml(fmtDate(e.postedAt))}</span>
-            </div>
-            ${auditDisplayDetail(e) ? `<p class="note small">${escapeHtml(auditDisplayDetail(e))}</p>` : ""}
-          </div>`).join("")}
-        <button class="secondary full-width mt-2" id="activity-see-all-audit">See all account history</button>
-      `;
+          ${r.server ? `<p class="note small">${escapeHtml(r.server)}</p>` : ""}
+          ${r.detail ? `<p class="note small">${escapeHtml(r.detail)}</p>` : ""}
+        </div>`).join("");
 
     root.innerHTML = `
       ${activityPodSwitcherHtml()}
       ${recoveryCard}
-      ${auditCard}
-      <h2 class="mt-4">Recent</h2>
-      ${recentRows}
+      ${feed}
+      <button class="secondary full-width mt-2" id="activity-see-all-audit">See all account history</button>
     `;
     wireActivityPodSwitcher(root);
     $("activity-feed-open-recovery")?.addEventListener("click", () => show("view-post-recovery"));

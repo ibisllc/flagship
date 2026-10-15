@@ -55,12 +55,15 @@ class LiveScreensClient(
     private suspend fun token(): String = store.sessionToken.first()
         ?: throw ScreensError.NoSessionToken
 
+    private val octetMt = "application/octet-stream".toMediaType()
+
     private suspend fun <R> request(
         path: String,
         deserializer: DeserializationStrategy<R>?,
         method: String = "GET",
         body: ByteArray? = null,
         readTimeoutSeconds: Long? = null,
+        binaryBody: Boolean = false,
     ): R {
         val base = base()
         val token = token()
@@ -69,8 +72,9 @@ class LiveScreensClient(
             .header("x-flagship-session", token)
             .apply {
                 if (body != null) {
-                    method(method, body.toRequestBody(jsonMt))
-                    header("content-type", jsonMt.toString())
+                    val mt = if (binaryBody) octetMt else jsonMt
+                    method(method, body.toRequestBody(mt))
+                    header("content-type", mt.toString())
                 } else {
                     method(method, null)
                 }
@@ -344,6 +348,43 @@ class LiveScreensClient(
 
     override suspend fun serviceCopies(): AppCopiesResponse =
         request("/api/screens/services/copies", AppCopiesResponse.serializer())
+
+    override suspend fun serverArchiveStart(req: ServerArchiveStartRequest) {
+        val body = json.encodeToString(ServerArchiveStartRequest.serializer(), req).toByteArray()
+        request<Unit>("/api/screens/server-archive/start", null, "POST", body, readTimeoutSeconds = 30)
+    }
+
+    override suspend fun serverArchiveStatus(): ServerArchiveStatus? =
+        request("/api/screens/server-archive", ServerArchiveStatusResponse.serializer()).archive
+
+    override suspend fun serverArchiveChunk(offset: Long): ByteArray =
+        requestBytes("/api/screens/server-archive/chunk?offset=$offset", readTimeoutSeconds = 300)
+
+    override suspend fun serverArchiveForget() {
+        request<Unit>("/api/screens/server-archive", null, "DELETE", null, readTimeoutSeconds = 30)
+    }
+
+    override suspend fun serverRestoreStart(req: ServerRestoreStartRequest) {
+        val body = json.encodeToString(ServerRestoreStartRequest.serializer(), req).toByteArray()
+        request<Unit>("/api/screens/server-restore/start", null, "POST", body, readTimeoutSeconds = 30)
+    }
+
+    override suspend fun serverRestoreChunk(offset: Long, data: ByteArray) {
+        request<Unit>("/api/screens/server-restore/chunk?offset=$offset", null, "POST", data, readTimeoutSeconds = 300, binaryBody = true)
+    }
+
+    override suspend fun serverRestoreCommit(req: ServerRestoreCommitRequest) {
+        val body = json.encodeToString(ServerRestoreCommitRequest.serializer(), req).toByteArray()
+        request<Unit>("/api/screens/server-restore/commit", null, "POST", body, readTimeoutSeconds = 60)
+    }
+
+    override suspend fun serverRestoreStatus(): ServerRestoreStatus? =
+        request("/api/screens/server-restore", ServerRestoreStatusResponse.serializer()).restore
+
+    override suspend fun boxActivity(limit: Int, before: Int?): List<BoxActivityEntry> {
+        val q = if (before != null) "&before=$before" else ""
+        return request("/api/screens/activity?limit=$limit$q", BoxActivityResponse.serializer()).entries
+    }
 
     override suspend fun uninstallService(serviceId: String, body: UninstallServiceBody) {
         val bytes = json.encodeToString(UninstallServiceBody.serializer(), body).toByteArray()

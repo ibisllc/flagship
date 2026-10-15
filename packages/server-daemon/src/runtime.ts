@@ -362,6 +362,8 @@ export interface DaemonRuntimeOptions {
      * the runtime (and thus ServicePlatform) is up.
      */
     onServiceRemoved?: (slug: string) => void | Promise<void>;
+    /** Activity-feed hook for apps installed, updated or removed. */
+    onAppEvent?: (kind: "app.installed" | "app.updated" | "app.removed", serviceId: string) => void;
     /** Override the installed-service store (tests). Default: SWK-sealed under dataDir. */
     registry?: InstalledServicesStore | null;
   };
@@ -1359,6 +1361,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       envStore = fileStore;
     }
     servicePlatformRef.current = new ServicePlatform({
+      ...(apOpts.onAppEvent ? { onAppEvent: apOpts.onAppEvent } : {}),
       ...(apOpts.onAppsChanged ? { onAppsChanged: apOpts.onAppsChanged } : {}),
       host: {
         username: apOpts.hostUsername,

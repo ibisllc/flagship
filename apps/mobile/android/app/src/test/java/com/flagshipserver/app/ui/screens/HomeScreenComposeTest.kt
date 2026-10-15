@@ -171,7 +171,7 @@ class HomeScreenComposeTest {
         composeRule.onNodeWithText("Touch and hold a server", substring = true).assertDoesNotExist()
         composeRule.onNodeWithTag("home-server-handle-a").assertExists()
         composeRule.onNodeWithTag("home-server-handle-b").assertExists()
-        composeRule.onNodeWithText("Add/connect a server").assertIsDisplayed()
+        composeRule.onNodeWithText("Add/Import a server").assertIsDisplayed()
     }
 
     @Test fun theLeaderBadge_isGrayUntilTheLeaderHoldsTheOrder() {

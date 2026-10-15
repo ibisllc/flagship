@@ -363,8 +363,6 @@ fun ServerDetailScreen(
             Spacer(Modifier.height(FS.space.s6))
             JournalCard(serverDomain = d.value.serverFqdn)
             Spacer(Modifier.height(FS.space.s6))
-            ReplaceServerCard(serverDomain = d.value.serverFqdn, onReplaced = onBack)
-            Spacer(Modifier.height(FS.space.s6))
             UpdateServerCard(
                 serverDomain = d.value.serverFqdn,
                 currentCommit = d.value.currentCommit,
@@ -372,7 +370,7 @@ fun ServerDetailScreen(
                 onRefresh = { detailVm?.load() },
             )
             Spacer(Modifier.height(FS.space.s6))
-            TransferCard(serverDomain = d.value.serverFqdn)
+            ServerBackupCard(serverDomain = d.value.serverFqdn)
             Spacer(Modifier.height(FS.space.s6))
             MigrateCard(serverDomain = d.value.serverFqdn)
         }
@@ -388,7 +386,7 @@ fun ServerDetailScreen(
         // never-online or revoked server can still be revoked or deleted.
         if (pod != null) {
             Spacer(Modifier.height(FS.space.s6))
-            DangerZoneCard(pod = pod, onDeleted = onBack)
+            DangerZoneCard(pod = pod, canTransfer = detail is LoadingState.Loaded, onDeleted = onBack)
         }
 
         Spacer(Modifier.height(FS.space.s12))
@@ -1308,73 +1306,6 @@ private fun DeadManCard(serverDomain: String) {
     }
 }
 
-// "Replace this server" entry on server-detail (docs/server-replacement-graceful-
-// decommission.md). Owner-only — the decommission order is IRK-signed behind the
-// biometric inside ReplaceServerViewModel. Opens ReplaceServerScreen (backup
-// pre-flight gate → disposition picker → mint + deposit) in a full-screen dialog.
-// A graceful retire distinct from Revoke (which locks the box out until
-// un-revoked); this hands the FQDN to a replacement. Mirror of iOS ReplaceServerCard.
-@Composable
-private fun ReplaceServerCard(serverDomain: String, onReplaced: () -> Unit) {
-    val app = LocalAppState.current
-    val mailbox = LocalSecretMailboxClient.current
-    val screens = LocalScreensClient.current
-    val username by app.currentUser.collectAsState()
-    var showSheet by remember { mutableStateOf(false) }
-
-    Text(
-        "Replace",
-        color = FS.colors.text,
-        style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
-    )
-    Spacer(Modifier.height(FS.space.s2))
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Text(
-                "Swap this box for a new one on the same address. It flushes a final backup, releases routing, and powers off so a replacement can take over cleanly. Needs a backup, or you'll lose its data.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-            )
-            FSDangerButton(
-                label = "Replace this server",
-                onClick = { showSheet = true },
-                block = true,
-                modifier = Modifier.semantics { contentDescription = "sd-replace-server" },
-            )
-        }
-    }
-
-    if (showSheet) {
-        val podId = com.flagshipserver.app.core.PodInfo.podId(serverDomain)
-        val vm = remember(serverDomain) {
-            ReplaceServerViewModel(
-                serverFqdn = serverDomain,
-                username = username ?: "",
-                mailbox = mailbox,
-                screens = screens,
-                // L3 — retire the box instance locally so a rebooting encrypted
-                // zombie is never re-surfaced for unlock approval.
-                onRetired = { app.removePod(podId) },
-            )
-        }
-        Dialog(
-            onDismissRequest = { showSheet = false },
-            properties = DialogProperties(usePlatformDefaultWidth = false),
-        ) {
-            Column(Modifier.fillMaxSize().background(FS.colors.bg)) {
-                Row(Modifier.fillMaxWidth().padding(FS.space.s4)) {
-                    FSGhostButton(label = "Done", onClick = {
-                        showSheet = false
-                        // If the pod was retired, pop back to Home.
-                        if (app.pods.value.none { it.podId == podId }) onReplaced()
-                    })
-                }
-                ReplaceServerScreen(vm = vm, serverFqdn = serverDomain)
-            }
-        }
-    }
-}
-
 /** Short display form of the box-reported HEAD, or null while unknown
  *  (e.g. an un-reburned box whose daemon predates the field). */
 private fun shortCommit(sha: String?): String? =
@@ -1449,18 +1380,13 @@ internal fun UpdateServerCard(
     }
 
     Text(
-        "Update",
+        "Update Firmware",
         color = FS.colors.text,
         style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
     )
     Spacer(Modifier.height(FS.space.s2))
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Text(
-                "Move this server to a different blessed release in place — no reburn, keys and data untouched. Two signatures are required: Flagship's maintainers must have blessed the release, and you must authorize applying it here. The box verifies both, and rolls back automatically if the new version fails to boot.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-            )
             shortCommit(currentCommit)?.let { short ->
                 Text(
                     "Running $short",
@@ -1826,37 +1752,21 @@ internal fun UpdateServerSheet(
 // Owner-only — the offer is IRK-signed behind the biometric inside
 // TransferGiverViewModel, so only the box's owner can complete it. Opens the
 // existing TransferGiverScreen (type-to-confirm → QR → disk-key hand-off) in a
-// full-screen dialog. Lives just above the danger zone as an irreversible
-// management action. Mirror of iOS TransferCard.
+// full-screen dialog. First button in the danger zone. Mirror of iOS DangerZoneCard.
 @Composable
-private fun TransferCard(serverDomain: String) {
+private fun TransferButton(serverDomain: String) {
     val app = LocalAppState.current
     val transfer = LocalServerTransferClient.current
     val mailbox = LocalSecretMailboxClient.current
     val username by app.currentUser.collectAsState()
     var showSheet by remember { mutableStateOf(false) }
 
-    Text(
-        "Transfer",
-        color = FS.colors.text,
-        style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+    FSDangerButton(
+        label = "Transfer to another account",
+        onClick = { showSheet = true },
+        block = true,
+        modifier = Modifier.semantics { contentDescription = "sd-transfer-server" },
     )
-    Spacer(Modifier.height(FS.space.s2))
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Text(
-                "Hand this box and everything on it to another account. The new owner scans a QR; your phone hands off the disk key. You'll lose control of it — this cannot be undone.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-            )
-            FSDangerButton(
-                label = "Transfer to another account",
-                onClick = { showSheet = true },
-                block = true,
-                modifier = Modifier.semantics { contentDescription = "sd-transfer-server" },
-            )
-        }
-    }
 
     if (showSheet) {
         val vm = remember(serverDomain) {
@@ -1886,8 +1796,8 @@ private fun TransferCard(serverDomain: String) {
 // pre-seeds it from backup, and hands the name over — the old box is wiped
 // only after a confirmed take-over. Owner-only; the migration order is
 // admin-signed behind the biometric inside MigrationViewModel. Distinct from
-// Replace (retire-first, then re-create) — migration keeps the old box serving
-// until the new one is ready. Mirror of iOS MigrateServerCard.
+// the old box keeps serving until the new one is ready, then is retired and
+// wiped. Mirror of iOS MigrateServerCard.
 @Composable
 private fun MigrateCard(serverDomain: String) {
     val app = LocalAppState.current
@@ -1906,7 +1816,7 @@ private fun MigrateCard(serverDomain: String) {
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             Text(
-                "Move this server to new hardware — same address, same data. A new box restores from backup and takes over the name; the old box is wiped only after the hand-off is confirmed.",
+                "Move this server to new hardware, same name and data. The old server is retired and wiped once the new one has taken over.",
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
             )
@@ -1949,7 +1859,7 @@ private fun MigrateCard(serverDomain: String) {
 // (RevokeServerViewModel); Delete is gated on typing the server's name.
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DangerZoneCard(pod: com.flagshipserver.app.core.PodInfo, onDeleted: () -> Unit) {
+private fun DangerZoneCard(pod: com.flagshipserver.app.core.PodInfo, canTransfer: Boolean, onDeleted: () -> Unit) {
     val app = LocalAppState.current
     val server = LocalFlagshipServerClient.current
     val mailbox = LocalSecretMailboxClient.current
@@ -1969,6 +1879,7 @@ private fun DangerZoneCard(pod: com.flagshipserver.app.core.PodInfo, onDeleted: 
     Spacer(Modifier.height(FS.space.s2))
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            if (canTransfer) TransferButton(serverDomain = pod.fqdn)
             if (!pod.isRevoked) {
                 FSDangerButton(
                     label = "Revoke server (reversible)",

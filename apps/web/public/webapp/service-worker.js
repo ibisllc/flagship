@@ -177,7 +177,10 @@
 //       (never a second device); an app's page ends in "Remove app" (the signed
 //       uninstall to the server the page reads, the only copy included) and shows
 //       the box's "Recent logs" when it sends some.
-const SHELL_VERSION = "v83";
+//  v84: Backup/clone server on a server's page and "Add/Import a server" on
+//       Home (a backup file imports onto any server); Replace and the install
+//       Timeline are gone; Activity shows the box's own events.
+const SHELL_VERSION = "v84";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -252,10 +255,13 @@ const OPTIONAL_SHELL = [
   "/lib/memberRoles.js",
   "/lib/serverShare.js",
   "/lib/serverShares.js",
+  "/lib/serverArchive.js",
+  "/lib/activityFeed.js",
   "/views/bootstrap.js",
   "/views/wizard.js",
   "/views/unlock.js",
   "/views/home.js",
+  "/views/import-backup.js",
   "/views/settings.js",
   "/views/pod-pair.js",
   "/views/server-detail.js",

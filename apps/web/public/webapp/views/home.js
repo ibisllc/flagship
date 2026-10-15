@@ -57,6 +57,7 @@ import {
   serverOrderOf,
 } from "../lib/serverOrder.js";
 import { preferLeaderAsCurrent } from "../lib/appPlacement.js";
+import { ADD_IMPORT_LABEL, openAddOrImport } from "./import-backup.js";
 
 registerView("view-home", { tab: "home" });
 
@@ -1099,7 +1100,7 @@ function renderServerCards() {
     <div class="fs-hero-compact" data-home-compact aria-hidden="true">Servers</div>
     <div class="fs-hero">
       <h2 class="fs-hero-title" data-home-title>Servers</h2>
-      <button class="secondary" id="home-add-server">+ Add/connect a server</button>
+      <button class="secondary" id="home-add-server">${escapeHtml(ADD_IMPORT_LABEL)}</button>
       <button class="linklike mt-1" id="home-take-over">Someone handing you a box? Take over →</button>
       ${searchField({ value: homeQuery, placeholder: "Search servers", id: "home-search" })}
       ${chipRow({ items: chips, selected: homeFilter, ariaLabel: "Filter servers" })}
@@ -1116,12 +1117,16 @@ function renderServerCards() {
  * old nodes + their listeners, so re-binding can't stack handlers).
  */
 function wireHomeListControls(list) {
-  // "+ Add/connect a server" — provision a brand-new box directly (Slice A: no more
-  // chooser). Pairing is automatic (auto-pair); take-over is the separate
-  // "Take over" link + the /transfer deep-link + camera claim.
-  list.querySelector("#home-add-server")?.addEventListener("click", async () => {
-    const { enterCreateServer } = await import("./create-server.js");
-    await enterCreateServer();
+  // "+ Add/Import a server" — add a brand-new box (pairing is automatic) or
+  // import a backup onto one of the account's servers. Take-over is the
+  // separate "Take over" link + the /transfer deep-link + camera claim.
+  list.querySelector("#home-add-server")?.addEventListener("click", () => {
+    openAddOrImport({
+      onAdd: async () => {
+        const { enterCreateServer } = await import("./create-server.js");
+        await enterCreateServer();
+      },
+    });
   });
   // Tap a registered server card → open its detail screen. Clicks that
   // land on an inner control (approve / delete / links) are ignored so the

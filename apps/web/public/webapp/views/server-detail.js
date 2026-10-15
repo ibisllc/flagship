@@ -81,13 +81,18 @@ import {
   runGiverAdminHandoff,
   watchClaimThenHandoff,
 } from "../lib/adminRootTransfer.js";
+import { resolveReplacementContext } from "../lib/serverReplacement.js";
 import {
-  resolveReplacementContext,
-  preflightGate,
-  runReplacement,
-  DISK_DISPOSITIONS,
-  DEFAULT_DISPOSITION,
-} from "../lib/serverReplacement.js";
+  BACKUP_EXCLUDES_NOTE,
+  BACKUP_NOTE,
+  BACKUP_TITLE,
+  backupFileName,
+  downloadBackup,
+  formatBytes,
+  forgetBackup,
+  startServerBackup,
+  waitForBackup,
+} from "../lib/serverArchive.js";
 import {
   startMigration,
   fetchMigration,
@@ -98,7 +103,6 @@ import {
   clearMigrationHold,
   migrationSteps,
   migrationWaitCopy,
-  MIGRATION_DISPOSITIONS,
   DEFAULT_MIGRATION_DISPOSITION,
 } from "../lib/serverMigration.js";
 import { getSession } from "../lib/state.js";
@@ -195,14 +199,18 @@ export function isRestorableRevokedPod(pod) {
  *
  * @param {{ serverFqdn: string, username: string, revoked: boolean }} o
  */
-export function renderDangerZoneCard({ serverFqdn, username, revoked }) {
+export function renderDangerZoneCard({ serverFqdn, username, revoked, canTransfer = false }) {
+  const transferButton = canTransfer
+    ? `<button id="transfer-start-btn" class="danger full-width">Transfer to another account</button>`
+    : "";
   const revokeButton = revoked
     ? `<button id="unrevoke-server-btn" class="full-width">Un-revoke server</button>`
     : `<button id="revoke-server-btn" class="danger full-width">Revoke server (reversible)</button>`;
   return `
       <h2 class="mt-4">Danger zone</h2>
       <div class="card" id="danger-zone-card" data-server-fqdn="${escapeHtml(serverFqdn)}" data-username="${escapeHtml(username)}">
-        ${revokeButton}
+        ${transferButton}
+        ${revokeButton.replace('full-width"', canTransfer ? 'full-width mt-2"' : 'full-width"')}
         <button id="delete-server-btn" class="danger full-width mt-2">Delete and wipe this server</button>
       </div>`;
 }
@@ -304,17 +312,6 @@ export async function renderServerDetail() {
         <div id="auto-unlock-leases-list" class="mt-1"></div>
         <button id="auto-unlock-enable" class="full-width mt-2">Enable for 7 days</button>
       </div>
-      <h2 class="mt-4">Recent install events</h2>
-      ${(body.recentInstallEvents ?? []).length === 0
-        ? '<div class="card placeholder">none</div>'
-        : (body.recentInstallEvents ?? []).map((e) => `
-          <div class="card">
-            <div class="row">
-              <span class="value">${escapeHtml(e.kind)}: ${escapeHtml(e.serviceId)}</span>
-              <span class="pill">${escapeHtml(fmtDate(e.at))}</span>
-            </div>
-          </div>
-        `).join("")}
       <h2 class="mt-4">Front page</h2>
       <div class="card" id="front-page-card">
         <p class="note">
@@ -412,37 +409,8 @@ export async function renderServerDetail() {
       </div>
       ${serverSharingHtml(body)}
 
-      <h2 class="mt-4">Transfer</h2>
-      <div class="card" id="transfer-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
-        <p class="note">
-          Hand <strong>${escapeHtml(body.serverFqdn)}</strong> and
-          <strong>all its contents</strong> to another account. You will lose
-          control of it. The other person scans the code from
-          <em>Add a server → Pair an existing box</em>.
-        </p>
-        <button id="transfer-start-btn" class="full-width mt-2">Transfer to another account</button>
-      </div>
-
-      <h2 class="mt-4">Replace</h2>
-      <div class="card" id="replace-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
-        <p class="note">
-          Retire this box and burn a fresh one for
-          <strong>${escapeHtml(body.serverFqdn)}</strong>. The old box flushes a
-          final backup, releases the name, and powers off <em>before</em> the
-          replacement can claim it — so the two never fight over the route.
-        </p>
-        <button id="replace-start-btn" class="full-width mt-2">Replace this server</button>
-      </div>
-
-      <h2 class="mt-4">Update</h2>
+      <h2 class="mt-4">Update Firmware</h2>
       <div class="card" id="update-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
-        <p class="note">
-          Move <strong>${escapeHtml(body.serverFqdn)}</strong> to a different
-          blessed release in place — no reburn, keys and data untouched. Two
-          signatures are required: Flagship's maintainers must have blessed the
-          release, and you must authorize applying it here. The box verifies
-          both, and rolls back automatically if the new version fails to boot.
-        </p>
         <div class="row mt-2">
           <span class="label">Running</span>
           <span class="value" id="update-current-commit">${escapeHtml(shortCommit(body.currentCommit))}</span>
@@ -457,14 +425,17 @@ export async function renderServerDetail() {
         </p>
       </div>
 
+      <h2 class="mt-4">Backup</h2>
+      <div class="card" id="backup-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
+        <p class="note">${escapeHtml(BACKUP_NOTE)}</p>
+        <button id="backup-start-btn" class="full-width mt-2">Backup/clone server</button>
+      </div>
+
       <h2 class="mt-4">Migrate</h2>
       <div class="card" id="migrate-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
         <p class="note">
-          Move <strong>${escapeHtml(body.serverFqdn)}</strong> to new hardware —
-          same name, same data, new box. The new box restores from backup while
-          this one keeps serving; the name only moves once the restore is
-          confirmed, and the old box is never wiped before the new one has taken
-          over.
+          Move this server to new hardware, same name and data. The old server
+          is retired and wiped once the new one has taken over.
         </p>
         <button id="migrate-start-btn" class="full-width mt-2">Migrate to new hardware</button>
       </div>
@@ -473,6 +444,7 @@ export async function renderServerDetail() {
         serverFqdn: body.serverFqdn,
         username: body.username,
         revoked: isRestorableRevokedPod(detailPod),
+        canTransfer: true,
       })}
     `;
     wireAutoUnlock(body.serverFqdn);
@@ -484,9 +456,9 @@ export async function renderServerDetail() {
     wireServerSharing(body);
     wireServerApps(body.serverFqdn);
     wireTransfer(body);
-    wireReplace(body);
     wireUpdate(body);
     wireMigrate(body);
+    wireBackup(body);
     wireDangerZone(body.serverFqdn, body.username, {
       revoked: isRestorableRevokedPod(detailPod),
       pod: detailPod,
@@ -1363,164 +1335,109 @@ async function openTransferDialog(body) {
   });
 }
 
-// ---- Replace this server (graceful decommission) ----------------------
+// ---- Backup/clone server --------------------------------------------------
 
-function wireReplace(body) {
-  $("replace-start-btn")?.addEventListener("click", () => {
-    openReplaceDialog(body).catch((e) => {
+function wireBackup(body) {
+  $("backup-start-btn")?.addEventListener("click", () => {
+    openBackupDialog(body).catch((e) => {
       if (e?.code !== "cancelled") {
-        console.error("server replace failed", e);
+        console.error("server backup failed", e);
         toast(humanError(e), "err");
       }
     });
   });
 }
 
-const DISPOSITION_LABELS = {
-  keep: "Keep the disk (power off, data intact)",
-  "wipe-after-handoff": "Wipe after the replacement is proven (recommended)",
-  "wipe-now": "Wipe now (irreversible — accepts the backup as the only copy)",
-};
-
-// "Replace this server": resolve the box's current STK + backup-enrollment, let
-// the owner pick a disposition (with a HARD pre-flight gate when a wipe would
-// lose un-backed-up data), then mint+sign+deposit the decommission order and
-// retire the instance locally (L3) so the phone never re-approves this box.
-async function openReplaceDialog(body) {
+// Make the backup on the server, then hand the user the file. One dialog, no
+// choices: it works, shows progress, and ends with the download.
+async function openBackupDialog(body) {
   const session = getSession();
-  if (!session.umk || !session.irk) {
+  if (!session.umk) {
     toast("Unlock the webapp first", "err");
     return;
   }
   const serverFqdn = body.serverFqdn;
-  const username = session.username || body.username;
-
+  const client = boxClient(serverFqdn);
   const dlg = document.createElement("dialog");
   dlg.className = "modal-card";
-  dlg.setAttribute("aria-label", "Replace this server");
+  dlg.setAttribute("aria-label", BACKUP_TITLE);
   dlg.innerHTML = `
-    <h3 class="modal-title">Replace ${escapeHtml(serverFqdn)}?</h3>
-    <p class="modal-message" data-replace-loading>Checking this server's backup…</p>
-    <div class="hidden" data-replace-body>
-      <p class="note" data-replace-backup></p>
-      <label class="caption mt-2">What happens to the old disk?</label>
-      <select class="full-width" data-replace-disposition>
-        ${DISK_DISPOSITIONS.map(
-          (d) => `<option value="${escapeHtml(d)}"${d === DEFAULT_DISPOSITION ? " selected" : ""}>${escapeHtml(DISPOSITION_LABELS[d])}</option>`,
-        ).join("")}
-      </select>
-      <p class="note small err-text hidden" data-replace-gate></p>
-      <p class="note small hidden" data-replace-warn></p>
-    </div>
-    <p class="modal-error err-text hidden" data-replace-error></p>
+    <h3 class="modal-title">${escapeHtml(BACKUP_TITLE)}</h3>
+    <p class="modal-message" data-bk-status>Making the backup…</p>
+    <progress class="full-width" data-bk-bar max="100" value="0"></progress>
+    <p class="note small">${escapeHtml(BACKUP_EXCLUDES_NOTE)}</p>
+    <p class="modal-error err-text hidden" data-bk-error></p>
     <div class="row-2 mt-3">
-      <button class="secondary" data-replace-cancel>Cancel</button>
-      <button class="danger" data-replace-go disabled>Retire and replace</button>
-    </div>
-    <div class="mt-3 hidden" data-replace-result>
-      <p class="note">Server retiring — the old box will flush a final backup,
-      release the name and power off. Burn a replacement when ready from
-      <em>Add a server</em>; it claims the name once the old box has stepped down.</p>
+      <button class="secondary" data-bk-close>Close</button>
+      <button class="hidden" data-bk-save>Save backup</button>
     </div>
   `;
   document.body.appendChild(dlg);
   dlg.showModal();
-
-  const cleanup = () => { if (dlg.open) dlg.close(); dlg.remove(); };
-  const loadingEl = dlg.querySelector("[data-replace-loading]");
-  const bodyEl = dlg.querySelector("[data-replace-body]");
-  const backupEl = dlg.querySelector("[data-replace-backup]");
-  const dispoEl = dlg.querySelector("[data-replace-disposition]");
-  const gateEl = dlg.querySelector("[data-replace-gate]");
-  const warnEl = dlg.querySelector("[data-replace-warn]");
-  const errEl = dlg.querySelector("[data-replace-error]");
-  const goBtn = dlg.querySelector("[data-replace-go]");
-  const cancelBtn = dlg.querySelector("[data-replace-cancel]");
-  const resultEl = dlg.querySelector("[data-replace-result]");
-
-  let ctx = { retiredStkPubHex: null, backupEnrolled: false };
-
-  const refreshGate = () => {
-    const disposition = dispoEl.value;
-    const wipeNow = disposition === "wipe-now";
-    const { blocked, reason } = preflightGate({
-      disposition,
-      backupEnrolled: ctx.backupEnrolled,
-    });
-    if (blocked) {
-      gateEl.textContent = reason;
-      gateEl.classList.remove("hidden");
-      // wipe-now is the explicit "I accept data loss" escape hatch (§11.4): it
-      // stays enabled (with the warning), every other wipe is hard-blocked.
-      goBtn.disabled = !wipeNow || !ctx.retiredStkPubHex;
-    } else {
-      gateEl.classList.add("hidden");
-      goBtn.disabled = !ctx.retiredStkPubHex;
-    }
-    if (wipeNow) {
-      warnEl.textContent = "Wipe-now is irreversible — there is no fallback if the backup is incomplete.";
-      warnEl.classList.remove("hidden");
-    } else {
-      warnEl.classList.add("hidden");
-    }
+  const statusEl = dlg.querySelector("[data-bk-status]");
+  const barEl = dlg.querySelector("[data-bk-bar]");
+  const errEl = dlg.querySelector("[data-bk-error]");
+  const saveBtn = dlg.querySelector("[data-bk-save]");
+  const closeBtn = dlg.querySelector("[data-bk-close]");
+  let closed = false;
+  const cleanup = () => {
+    closed = true;
+    if (dlg.open) dlg.close();
+    dlg.remove();
   };
+  closeBtn.addEventListener("click", cleanup);
+  dlg.addEventListener("close", () => { closed = true; });
 
-  return new Promise((resolve, reject) => {
-    const onCancel = () => { cleanup(); reject({ code: "cancelled" }); };
-    dlg.addEventListener("close", onCancel, { once: true });
-    cancelBtn.addEventListener("click", onCancel);
-
-    void (async () => {
-      ctx = await resolveReplacementContext({ serverDomain: serverFqdn, username });
-      loadingEl.classList.add("hidden");
-      bodyEl.classList.remove("hidden");
-      backupEl.textContent = ctx.backupEnrolled
-        ? "Peer-backup is enrolled — the old box flushes a final backup before it steps down."
-        : "No backup is enrolled for this server. Wiping will lose its data — set up backup first, or accept the loss with 'wipe-now'.";
-      if (!ctx.retiredStkPubHex) {
-        errEl.textContent = "Couldn't read this box's current key from the directory — is it online? It must be reachable to be replaced.";
-        errEl.classList.remove("hidden");
-      }
-      dispoEl.addEventListener("change", refreshGate);
-      refreshGate();
-    })().catch((e) => {
-      loadingEl.classList.add("hidden");
-      errEl.textContent = humanError(e);
-      errEl.classList.remove("hidden");
+  try {
+    await startServerBackup({ client, umk: session.umk });
+    const archive = await waitForBackup({
+      client,
+      onProgress: (a) => {
+        if (closed) throw Object.assign(new Error("closed"), { code: "cancelled" });
+        const { done, total, app } = a.progress || {};
+        statusEl.textContent = total ? `Backing up ${app || "apps"} (${Math.min(done + 1, total)} of ${total})…` : "Making the backup…";
+        barEl.value = total ? Math.round((done / total) * 100) : 0;
+      },
     });
-
-    goBtn.addEventListener("click", async () => {
+    barEl.value = 100;
+    statusEl.textContent = `Backup ready (${formatBytes(archive.bytes)}). Save it somewhere safe.`;
+    saveBtn.classList.remove("hidden");
+    saveBtn.addEventListener("click", async () => {
+      saveBtn.disabled = true;
       errEl.classList.add("hidden");
-      goBtn.disabled = true;
-      const orig = goBtn.textContent;
-      goBtn.textContent = "Signing…";
       try {
-        await runReplacement({
-          serverDomain: serverFqdn,
-          username,
-          retiredStkPubHex: ctx.retiredStkPubHex,
-          disposition: dispoEl.value,
-          backupEnrolled: ctx.backupEnrolled,
-          umk: session.umk,
-          irkPubHex: bytesToHex(session.irk.publicKey),
-          // Slice D: the decommission order is signed with the admin root (when
-          // present); the co-signed mailbox-auth stays the IRK (tag-routed).
-          signWithIrk: sensitiveSigner(),
+        statusEl.textContent = "Downloading…";
+        const blob = await downloadBackup({
+          client,
+          archive,
+          onBytes: (n, total) => { barEl.value = Math.round((n / total) * 100); },
         });
-        bodyEl.classList.add("hidden");
-        resultEl.classList.remove("hidden");
-        goBtn.classList.add("hidden");
-        cancelBtn.textContent = "Done";
-        toast("Server retiring — burn a replacement when ready", "ok");
-        resolve({ ok: true });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = backupFileName(serverFqdn, Date.now());
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        await forgetBackup({ client }).catch(() => {});
+        statusEl.textContent = "Saved. The server has removed its copy.";
+        saveBtn.classList.add("hidden");
+        toast("Backup saved", "ok");
       } catch (e) {
         errEl.textContent = humanError(e);
         errEl.classList.remove("hidden");
-        goBtn.textContent = orig;
-        refreshGate();
+        statusEl.textContent = "The download didn't finish.";
+        saveBtn.disabled = false;
       }
     });
-  });
+  } catch (e) {
+    if (closed || e?.code === "cancelled") return;
+    errEl.textContent = humanError(e);
+    errEl.classList.remove("hidden");
+    statusEl.textContent = "The backup didn't finish.";
+    barEl.classList.add("hidden");
+  }
 }
 
 // ---- Update this server (dual-signed in-place update) ------------------
@@ -1888,11 +1805,6 @@ function wireMigrate(body) {
   });
 }
 
-const MIGRATION_DISPOSITION_LABELS = {
-  keep: "Keep the old disk (manual fallback copy)",
-  "wipe-after-handoff": "Wipe the old box after the new one takes over (recommended)",
-};
-
 // One dialog, two modes: no session yet → the admin-signed INITIATE ceremony;
 // live session → the 8-step progress timeline with the phase-appropriate
 // action (hand off / abort). Abort is offered at every pre-take-over step
@@ -1923,16 +1835,12 @@ async function openMigrateDialog(body) {
     <p class="modal-message" data-mig-loading>Checking for a migration in progress…</p>
     <div class="hidden" data-mig-init>
       <p class="note" data-mig-backup></p>
-      <label class="caption mt-2">What happens to the old box's disk?</label>
-      <select class="full-width" data-mig-disposition>
-        ${MIGRATION_DISPOSITIONS.map(
-          (d) => `<option value="${escapeHtml(d)}"${d === DEFAULT_MIGRATION_DISPOSITION ? " selected" : ""}>${escapeHtml(MIGRATION_DISPOSITION_LABELS[d])}</option>`,
-        ).join("")}
-      </select>
       <p class="note small err-text hidden" data-mig-gate></p>
-      <p class="note small mt-2">The old box is wiped only <em>after</em> the new
-      one has restored the data and taken over the name. If anything fails, the
-      old box keeps serving with all its data.</p>
+      <p class="note small mt-2">The old server is retired and wiped only
+      <em>after</em> the new one has restored the data and taken over the name:
+      from then on it can't unlock or connect, and it wipes itself as soon as it
+      is reachable. If anything fails first, the old server keeps serving with
+      all its data.</p>
     </div>
     <div class="hidden" data-mig-progress>
       <ul class="mt-2" data-mig-steps style="list-style:none;padding-left:0"></ul>
@@ -1953,7 +1861,7 @@ async function openMigrateDialog(body) {
   const loadingEl = dlg.querySelector("[data-mig-loading]");
   const initEl = dlg.querySelector("[data-mig-init]");
   const backupEl = dlg.querySelector("[data-mig-backup]");
-  const dispoEl = dlg.querySelector("[data-mig-disposition]");
+  const disposition = DEFAULT_MIGRATION_DISPOSITION;
   const gateEl = dlg.querySelector("[data-mig-gate]");
   const progressEl = dlg.querySelector("[data-mig-progress]");
   const stepsEl = dlg.querySelector("[data-mig-steps]");
@@ -2075,27 +1983,18 @@ async function openMigrateDialog(body) {
     initEl.classList.remove("hidden");
     backupEl.textContent = ctx.backupEnrolled
       ? "Peer-backup is enrolled — the new box restores from it while this one keeps serving."
-      : "No backup is enrolled for this server. The migration moves data THROUGH backup — enable backup first, or choose to keep the old disk.";
+      : "No backup is enrolled for this server, and the migration moves data through backup. Enable backup first, or use Backup/clone server and import the file onto the new server instead.";
     actionBtn.textContent = "Start migration";
     actionBtn.classList.remove("hidden");
 
-    const refreshGate = () => {
-      // The restore rides peer-backup, so a no-backup box can only migrate
-      // with `keep` (the old disk remains the fallback copy). Same fail-closed
-      // posture as the replace pre-flight gate.
-      const wipes = dispoEl.value === "wipe-after-handoff";
-      const blocked = wipes && !ctx.backupEnrolled;
-      if (blocked) {
-        gateEl.textContent =
-          "This server has no backup — enable backup first, or keep the old disk as the fallback.";
-        gateEl.classList.remove("hidden");
-      } else {
-        gateEl.classList.add("hidden");
-      }
-      actionBtn.disabled = blocked || !ctx.retiredStkPubHex;
-    };
-    dispoEl.addEventListener("change", refreshGate);
-    refreshGate();
+    const blocked = !ctx.backupEnrolled;
+    if (blocked) {
+      gateEl.textContent = "This server has no backup yet, so it can't be migrated.";
+      gateEl.classList.remove("hidden");
+    } else {
+      gateEl.classList.add("hidden");
+    }
+    actionBtn.disabled = blocked || !ctx.retiredStkPubHex;
 
     actionBtn.onclick = async () => {
       errEl.classList.add("hidden");
@@ -2106,7 +2005,7 @@ async function openMigrateDialog(body) {
         await startMigration({
           ...signerArgs(),
           oldStkPubHex: ctx.retiredStkPubHex,
-          disposition: dispoEl.value,
+          disposition,
         });
         // The SWK hold makes the NEXT added pod's SWK deposit migration-aware
         // (lib/serverMigration.js migrationSwkServerId).

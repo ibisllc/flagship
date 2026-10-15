@@ -307,6 +307,40 @@ describe("server-migration happy path", () => {
   });
 });
 
+describe("server-migration retires the old box", () => {
+  it("take-over tears down the old box's unlock leases and writes the account feed rows", async () => {
+    const w = await setup();
+    await w.storage.autoUnlockLeases.put({
+      serverDomain: HOST,
+      leaseId: "lease-1",
+      unlockKeyHex: "ab".repeat(32),
+      multiUse: true,
+      depositedAt: 1,
+      expiresAt: Date.now() + 86_400_000,
+    });
+    const withFeed = (): ServerMigrationDeps => ({
+      ...deps(w),
+      autoUnlockLeases: w.storage.autoUnlockLeases,
+      boxSealedLeases: w.storage.boxSealedLeases,
+      auditEvents: w.storage.auditEvents,
+    });
+    const d = withFeed();
+    expect((await handlePostMigrationStart(d, HOST, startBody(w))).status).toBe(200);
+    expect((await handlePostMigrationAttach(d, HOST, attachBody(w))).status).toBe(200);
+    expect((await handlePostMigrationPreSeeded(d, HOST, ackBody(w, "pre-seeded"))).status).toBe(200);
+    expect((await handlePostMigrationConfirmReady(d, HOST, controlBody(w, "confirm-ready"))).status).toBe(200);
+    expect((await handlePostMigrationFreeze({ ...freezeDeps(w), ...d }, HOST, freezeBody(w))).status).toBe(200);
+    expect((await handlePostEpochComplete(deps(w), HOST, { stk: hex(w.oldStk.publicKey) })).status).toBe(200);
+    expect(await w.storage.autoUnlockLeases.list(HOST, Date.now())).toHaveLength(1);
+
+    expect((await handlePostMigrationTakeOver(d, HOST, ackBody(w, "take-over"))).status).toBe(200);
+
+    expect(await w.storage.autoUnlockLeases.list(HOST, Date.now())).toHaveLength(0);
+    const rows = await w.storage.auditEvents.list(USERNAME, 0, 50);
+    expect(rows.map((r) => r.eventKind).sort()).toEqual(["server-migration-started", "server-migration-taken-over"]);
+  });
+});
+
 describe("server-migration invariants (server-side enforcement)", () => {
   it("take-over is rejected in every phase before freezing (release-before-claim)", async () => {
     for (const phase of ["provisioned", "pre-seeded", "ready"] as const) {

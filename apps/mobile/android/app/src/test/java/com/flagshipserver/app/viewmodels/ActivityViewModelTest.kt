@@ -61,7 +61,7 @@ import org.junit.Test
  * can exercise the merge/sort/empty branches deterministically.
  */
 private class StubScreensClient(
-    var recentEvents: List<RecentInstallEvent> = emptyList(),
+    var boxEntries: List<com.flagshipserver.app.api.BoxActivityEntry> = emptyList(),
     var recoverySnapshot: PostRecoverySnapshot? = null,
     var detailFails: Boolean = false,
     var recoveryFails: Boolean = false,
@@ -72,8 +72,12 @@ private class StubScreensClient(
             serverFqdn = "home.test.flagship.services",
             username = "test", daemonVersion = "0", startedAt = 0, uptimeMs = 0,
             certSans = emptyList(), serviceCount = 0, pairedSessionCount = 0,
-            recentInstallEvents = recentEvents,
+            recentInstallEvents = emptyList(),
         )
+    }
+    override suspend fun boxActivity(limit: Int, before: Int?): List<com.flagshipserver.app.api.BoxActivityEntry> {
+        if (detailFails) throw ScreensError.Http(500, "activity down")
+        return boxEntries
     }
     override suspend fun postRecoveryStatus(): PostRecoveryStatusResponse {
         if (recoveryFails) throw ScreensError.Http(404, "no recovery")
@@ -123,9 +127,10 @@ class ActivityViewModelTest {
 
     @Test fun itemsMergeAndSortByTimeDescending() = runTest {
         val client = StubScreensClient(
-            recentEvents = listOf(
-                RecentInstallEvent(at = 300, kind = "deploy", serviceId = "wiki", detail = "v1"),
-                RecentInstallEvent(at = 200, kind = "installed", serviceId = "plants", detail = null),
+            boxEntries = listOf(
+                com.flagshipserver.app.api.BoxActivityEntry(ts = 300, action = "app.updated", kind = "app.updated", detail = "Redeployed wiki."),
+                com.flagshipserver.app.api.BoxActivityEntry(ts = 200, action = "app.installed", kind = "app.installed", detail = "Installed plants."),
+                com.flagshipserver.app.api.BoxActivityEntry(ts = 250, action = "post /api/screens/x"),
             ),
             recoverySnapshot = PostRecoverySnapshot(
                 currentIrkPubHex = "ab", state = WatcherState(lastPolledAt = 0),
@@ -141,8 +146,9 @@ class ActivityViewModelTest {
         vm.load().join()
         val feed = (vm.state.first() as LoadingState.Loaded).value
         assertEquals(listOf<Long>(300L, 200L, 50L), feed.items.map { it.at })
-        assertTrue(feed.items[0] is ActivityItem.InstallEvent)
-        assertTrue(feed.items[1] is ActivityItem.InstallEvent)
+        assertTrue(feed.items[0] is ActivityItem.BoxEvent)
+        assertEquals("App redeployed", feed.items[0].title)
+        assertTrue(feed.items[1] is ActivityItem.BoxEvent)
         assertTrue(feed.items[2] is ActivityItem.RecoverySnapshot)
     }
 

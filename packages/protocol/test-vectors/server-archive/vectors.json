@@ -1,0 +1,22 @@
+{
+  "about": "Server archive key (Backup/clone server): HKDF-SHA256(UMK seed, salt empty, info \"flagship/server-archive/v1|<archiveIdHex>\") -> 32 bytes. archiveIdHex is 16 random bytes, lowercase hex, public in the archive header. Server-id independent so an archive can be imported under a new name.",
+  "info": "flagship/server-archive/v1",
+  "cases": [
+    {
+      "umkSeedHex": "1616161616161616161616161616161616161616161616161616161616161616",
+      "archiveIdHex": "00112233445566778899aabbccddeeff",
+      "keyHex": "3e5a08d073d094db39fcfd6755a171f37d5cdd3ed94997c0862e533af6e07b33"
+    },
+    {
+      "umkSeedHex": "0101010101010101010101010101010101010101010101010101010101010101",
+      "archiveIdHex": "ffeeddccbbaa99887766554433221100",
+      "keyHex": "44cd66793b8c71510c8492eff492af614d6e0ea9ca370c7db96d5de31ed7cc77"
+    }
+  ],
+  "invalidArchiveIds": [
+    "",
+    "00112233",
+    "00112233445566778899AABBCCDDEEFF",
+    "zz112233445566778899aabbccddeeff"
+  ]
+}

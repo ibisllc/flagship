@@ -178,6 +178,19 @@ public protocol ScreensClient: Sendable {
     func serviceCopies() async throws -> AppCopiesResponse
 
     // P9 — peer-backup management.
+    // "Backup/clone server": a sealed archive of every app, downloaded in
+    // chunks; and the import of one onto this box.
+    func serverArchiveStart(_ req: ServerArchiveStartRequest) async throws
+    func serverArchiveStatus() async throws -> ServerArchiveStatus?
+    func serverArchiveChunk(offset: Int64) async throws -> Data
+    func serverArchiveForget() async throws
+    func serverRestoreStart(_ req: ServerRestoreStartRequest) async throws
+    func serverRestoreChunk(offset: Int64, data: Data) async throws
+    func serverRestoreCommit(_ req: ServerRestoreCommitRequest) async throws
+    func serverRestoreStatus() async throws -> ServerRestoreStatus?
+    /// What this box did, newest first (`before` is the `seq` cursor).
+    func boxActivity(limit: Int, before: Int?) async throws -> [BoxActivityEntry]
+
     func peerBackupStatus() async throws -> PeerBackupStatusResponse
     func peerBackupToggle(participate: Bool) async throws -> PeerBackupStatusResponse
 
@@ -451,6 +464,31 @@ public extension ScreensClient {
     func serviceCopies() async throws -> AppCopiesResponse {
         throw ScreensClientError.notImplemented("app copy")
     }
+    func serverArchiveStart(_ req: ServerArchiveStartRequest) async throws {
+        throw ScreensClientError.notImplemented("server backup")
+    }
+    func serverArchiveStatus() async throws -> ServerArchiveStatus? {
+        throw ScreensClientError.notImplemented("server backup")
+    }
+    func serverArchiveChunk(offset: Int64) async throws -> Data {
+        throw ScreensClientError.notImplemented("server backup")
+    }
+    func serverArchiveForget() async throws {
+        throw ScreensClientError.notImplemented("server backup")
+    }
+    func serverRestoreStart(_ req: ServerRestoreStartRequest) async throws {
+        throw ScreensClientError.notImplemented("server import")
+    }
+    func serverRestoreChunk(offset: Int64, data: Data) async throws {
+        throw ScreensClientError.notImplemented("server import")
+    }
+    func serverRestoreCommit(_ req: ServerRestoreCommitRequest) async throws {
+        throw ScreensClientError.notImplemented("server import")
+    }
+    func serverRestoreStatus() async throws -> ServerRestoreStatus? {
+        throw ScreensClientError.notImplemented("server import")
+    }
+    func boxActivity(limit: Int, before: Int?) async throws -> [BoxActivityEntry] { [] }
     func buildAdapterFile(buildId: String) async throws -> String {
         throw ScreensClientError.notImplemented("flagship.app.json")
     }

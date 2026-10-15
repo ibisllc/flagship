@@ -6,7 +6,7 @@ import Flagship
 
 /// Drill-down view of a single server: TLS cert, uptime, version, SANs,
 /// live monitoring (CPU / memory / disk / I/O), paired sessions count,
-/// recent install timeline.
+/// Danger zone (transfer, revoke, delete).
 public struct ServerDetailScreen: View {
     @Environment(\.colorScheme) private var scheme
     let state: LoadingState<ServerDetailResponse>
@@ -251,11 +251,9 @@ public struct ServerDetailScreen: View {
                     LockPowerCard(serverDomain: d.serverFqdn)
                     DeadManCard(serverDomain: d.serverFqdn, serverName: serverName ?? d.serverFqdn)
                     JournalCard(serverDomain: d.serverFqdn)
-                    timeline(d: d, c: c)
+                    ServerBackupCard(serverDomain: d.serverFqdn)
                     MigrateServerCard(serverDomain: d.serverFqdn)
-                    ReplaceServerCard(serverDomain: d.serverFqdn, onReplaced: onDeleted)
                     UpdateServerCard(serverDomain: d.serverFqdn, currentCommit: d.currentCommit, lastUpdate: d.lastUpdate, onRefreshDetail: onRefreshDetail)
-                    TransferCard(serverDomain: d.serverFqdn)
                 }
                 // The health report comes from the directory, not the box, so
                 // it still shows when the box's own detail can't load.
@@ -271,6 +269,7 @@ public struct ServerDetailScreen: View {
                         displayName: serverName,
                         identityPubKeyHex: identityPubKeyHex,
                         revoked: revoked,
+                        canTransfer: isLoaded,
                         onDeleted: onDeleted
                     )
                 }
@@ -508,36 +507,6 @@ public struct ServerDetailScreen: View {
                         }
                     }
                 }.buttonStyle(.plain)
-            }
-        }
-    }
-
-    private func timeline(d: ServerDetailResponse, c: FSColors) -> some View {
-        sectionWrap("TIMELINE", c: c) {
-            if d.recentInstallEvents.isEmpty {
-                FSCard { Text("Nothing yet.").foregroundColor(c.textMuted) }
-            } else {
-                FSCard {
-                    VStack(spacing: FS.space.s3) {
-                        ForEach(d.recentInstallEvents.indices, id: \.self) { i in
-                            let e = d.recentInstallEvents[i]
-                            HStack(alignment: .top) {
-                                Circle().fill(c.primary).frame(width: 6, height: 6).padding(.top, 6)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("\(verb(e.kind)) \(e.serviceId)").foregroundColor(c.text)
-                                    if let detail = e.detail {
-                                        Text(detail).font(FS.font.bodySm()).foregroundColor(c.textMuted)
-                                    }
-                                }
-                                Spacer()
-                                Text(relative(ms: e.at)).font(FS.font.caption()).foregroundColor(c.textMuted)
-                            }
-                            if i < d.recentInstallEvents.count - 1 {
-                                Divider().background(c.border)
-                            }
-                        }
-                    }
-                }
             }
         }
     }
@@ -871,13 +840,12 @@ private actor ApprovalKeyCache {
     }
 }
 
-/// Transfer-a-box entry on server-detail (docs/account-deletion-and-name-reclaim.md §4).
+/// Transfer-a-box entry in the danger zone (docs/account-deletion-and-name-reclaim.md §4).
 /// Owner-only — the offer is IRK-signed behind the biometric inside
 /// `TransferGiverViewModel`, so only the box's owner can complete it. Opens the
 /// existing `TransferGiverScreen` (type-to-confirm → QR → disk-key hand-off) in
-/// a sheet. Lives just above the danger zone as an irreversible management action.
-struct TransferCard: View {
-    @Environment(\.colorScheme) private var scheme
+/// a sheet. First button in the danger zone.
+struct TransferButton: View {
     @Environment(\.serverTransferClient) private var transfer
     @Environment(\.secretMailboxClient) private var mailbox
     @Environment(AppState.self) private var app
@@ -887,24 +855,10 @@ struct TransferCard: View {
     @State private var showSheet = false
 
     var body: some View {
-        let c = FSColors.scheme(scheme)
-        VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("TRANSFER")
-                .font(.system(size: 12, weight: .semibold))
-                .tracking(1)
-                .foregroundColor(c.textMuted)
-            FSCard {
-                VStack(alignment: .leading, spacing: FS.space.s2) {
-                    Text("Hand this box and everything on it to another account. The new owner scans a QR; your phone hands off the disk key. You'll lose control of it — this cannot be undone.")
-                        .font(FS.font.caption())
-                        .foregroundColor(c.textMuted)
-                    FSDangerButton("Transfer to another account", block: true) {
-                        showSheet = true
-                    }
-                    .accessibilityIdentifier("sd-transfer-server")
-                }
-            }
+        FSDangerButton("Transfer to another account", block: true) {
+            showSheet = true
         }
+        .accessibilityIdentifier("sd-transfer-server")
         .sheet(isPresented: $showSheet) {
             NavigationStack {
                 TransferGiverScreen(
@@ -953,7 +907,7 @@ struct MigrateServerCard: View {
                 .foregroundColor(c.textMuted)
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
-                    Text("Move this server to new hardware — same address, same data. A new box restores from backup and takes over the name; the old box is wiped only after the hand-off is confirmed.")
+                    Text("Move this server to new hardware, same name and data. The old server is retired and wiped once the new one has taken over.")
                         .font(FS.font.caption())
                         .foregroundColor(c.textMuted)
                     FSPrimaryButton("Migrate to new hardware", block: true) {
@@ -977,76 +931,6 @@ struct MigrateServerCard: View {
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Done") { showSheet = false }
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// "Replace this server" entry on server-detail (docs/server-replacement-
-/// graceful-decommission.md). Owner-only — the decommission order is IRK-signed
-/// behind the biometric inside `ReplaceServerViewModel`. Opens the
-/// `ReplaceServerScreen` (backup pre-flight gate → disposition picker → mint +
-/// deposit) in a sheet. Lives just above transfer/danger as a graceful retire
-/// (distinct from Revoke, which bricks; this hands the FQDN to a replacement).
-struct ReplaceServerCard: View {
-    @Environment(\.colorScheme) private var scheme
-    @Environment(\.secretMailboxClient) private var mailbox
-    @Environment(\.screensClient) private var screens
-    @Environment(AppState.self) private var app
-
-    let serverDomain: String
-    /// Pops the nav stack after the replacement is ordered (this page now points
-    /// at a retired box that's been removed from the fleet).
-    var onReplaced: () -> Void = {}
-
-    @State private var showSheet = false
-
-    var body: some View {
-        let c = FSColors.scheme(scheme)
-        VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("REPLACE")
-                .font(.system(size: 12, weight: .semibold))
-                .tracking(1)
-                .foregroundColor(c.textMuted)
-            FSCard {
-                VStack(alignment: .leading, spacing: FS.space.s2) {
-                    Text("Swap this box for a new one on the same address. It flushes a final backup, releases routing, and powers off so a replacement can take over cleanly. Needs a backup, or you'll lose its data.")
-                        .font(FS.font.caption())
-                        .foregroundColor(c.textMuted)
-                    FSDangerButton("Replace this server", block: true) {
-                        showSheet = true
-                    }
-                    .accessibilityIdentifier("sd-replace-server")
-                }
-            }
-        }
-        .sheet(isPresented: $showSheet) {
-            NavigationStack {
-                ReplaceServerScreen(
-                    vm: ReplaceServerViewModel(
-                        mailbox: mailbox,
-                        screens: screens,
-                        serverFqdn: serverDomain,
-                        username: app.currentUser ?? "",
-                        // L3 — retire the box instance locally so a rebooting
-                        // encrypted zombie is never re-surfaced for unlock approval.
-                        onRetired: {
-                            app.removePod(PodInfo.podId(forFqdn: serverDomain))
-                        }
-                    ),
-                    serverFqdn: serverDomain
-                )
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Done") {
-                            showSheet = false
-                            // If the pod was retired, pop back to Home.
-                            if !app.pods.contains(where: { $0.podId == PodInfo.podId(forFqdn: serverDomain) }) {
-                                onReplaced()
-                            }
-                        }
                     }
                 }
             }
@@ -1103,15 +987,12 @@ struct UpdateServerCard: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("UPDATE")
+            Text("UPDATE FIRMWARE")
                 .font(.system(size: 12, weight: .semibold))
                 .tracking(1)
                 .foregroundColor(c.textMuted)
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
-                    Text("Move this server to a different blessed release in place — no reburn, keys and data untouched. Two signatures are required: Flagship's maintainers must have blessed the release, and you must authorize applying it here. The box verifies both, and rolls back automatically if the new version fails to boot.")
-                        .font(FS.font.caption())
-                        .foregroundColor(c.textMuted)
                     if let short = ServerDetailScreen.shortCommit(currentCommit) {
                         HStack {
                             Text("Running").font(FS.font.caption()).foregroundColor(c.textMuted)
@@ -1489,6 +1370,8 @@ struct DangerZoneCard: View {
     let displayName: String?
     let identityPubKeyHex: String
     let revoked: Bool
+    /// Transfer needs the box (disk-key hand-off), so only a loaded page offers it.
+    var canTransfer: Bool = false
     /// Pop back to Home after a delete: this page now points at nothing.
     var onDeleted: () -> Void = {}
 
@@ -1517,6 +1400,9 @@ struct DangerZoneCard: View {
                 .foregroundColor(c.textMuted)
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
+                    if canTransfer {
+                        TransferButton(serverDomain: serverDomain)
+                    }
                     if revoked {
                         FSPrimaryButton(unrevoking ? "Restoring…" : "Un-revoke server", block: true) {
                             Task { await unrevoke(toasts: toastCenter, app: appState) }

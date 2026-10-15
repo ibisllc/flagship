@@ -501,10 +501,9 @@ describe("share links at boot", () => {
 
 const OWNER_ONLY = [
   "danger-zone-card",
-  "transfer-card",
-  "replace-card",
   "update-card",
   "migrate-card",
+  "backup-card",
   "lock-power-card",
   "deadman-card",
   "journal-card",

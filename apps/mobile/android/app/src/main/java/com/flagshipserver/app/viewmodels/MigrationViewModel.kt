@@ -65,7 +65,8 @@ class MigrationViewModel(
     private val _session = MutableStateFlow<MigrationSession?>(null)
     val session: StateFlow<MigrationSession?> = _session.asStateFlow()
 
-    private val _disposition = MutableStateFlow(ServerMigrationFlow.DEFAULT_DISPOSITION)
+    /** Always wipe-after-handoff: the old server is retired, bricked and wiped. */
+    private val _disposition = MutableStateFlow(ServerMigrationFlow.Disposition.WipeAfterHandoff)
     val disposition: StateFlow<ServerMigrationFlow.Disposition> = _disposition.asStateFlow()
 
     private val _working = MutableStateFlow(false)
@@ -86,10 +87,6 @@ class MigrationViewModel(
     var oldStkPubHex: String? = null
         private set
 
-    fun setDisposition(d: ServerMigrationFlow.Disposition) {
-        _disposition.value = d
-    }
-
     // ── Timeline projection ───────────────────────────────────────────────────
 
     val steps: List<ServerMigrationTimeline.Step>
@@ -109,8 +106,7 @@ class MigrationViewModel(
 
     /** The wipe-after-handoff gate (mirrors the Replace pre-flight posture). */
     val startBlocked: Boolean
-        get() = (_disposition.value == ServerMigrationFlow.Disposition.WipeAfterHandoff && backupMissing) ||
-            oldStkPubHex == null
+        get() = backupMissing || oldStkPubHex == null
 
     // ── Load / poll ───────────────────────────────────────────────────────────
 
@@ -203,9 +199,8 @@ class MigrationViewModel(
             _errorMessage.value = "Couldn't read this box's current key — refresh and try again."
             return
         }
-        if (_disposition.value == ServerMigrationFlow.Disposition.WipeAfterHandoff && backupMissing) {
-            _errorMessage.value =
-                "This server has no backup — enable backup first, or keep the old disk as the fallback."
+        if (backupMissing) {
+            _errorMessage.value = "This server has no backup yet — enable backup first."
             return
         }
         _working.value = true

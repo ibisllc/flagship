@@ -13,6 +13,7 @@ const INFO_ACCOUNT_ID = "flagship/account-id/v1";
 const INFO_CONTACT_ID = "flagship/contact-aid/v1";
 const INFO_APP_ACCOUNT_ID = "flagship/app-aid/v1";
 const INFO_HOUSEHOLD_KEY = "flagship/household-key/v1";
+const INFO_SERVER_ARCHIVE = "flagship/server-archive/v1";
 
 export function generateUMK(rng: () => Bytes = randomBytes): UserMasterKey {
   const seed = rng();
@@ -126,6 +127,19 @@ function hexOf(b: Bytes): string {
  */
 export function deriveHouseholdKey(umk: UserMasterKey): Bytes {
   return derive(umk, INFO_HOUSEHOLD_KEY);
+}
+
+/**
+ * Key that seals ONE server archive ("Backup/clone server"). UMK-derived and
+ * independent of any server id, so any device of the account can open an
+ * archive and import it onto a server with a different name. The archive id
+ * (random, public, in the archive header) makes every archive's key distinct.
+ * The phone derives it and hands it to the box over the pinned pipe, both to
+ * seal an archive and to open one on import; the box never holds the UMK.
+ */
+export function deriveServerArchiveKey(umk: UserMasterKey, archiveIdHex: string): Bytes {
+  if (!/^[0-9a-f]{32}$/.test(archiveIdHex)) throw new Error("archive id must be 16 bytes of lowercase hex");
+  return derive(umk, `${INFO_SERVER_ARCHIVE}|${archiveIdHex}`);
 }
 
 export function deriveBAK(umk: UserMasterKey, serverId: ServerId): Keypair {

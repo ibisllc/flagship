@@ -61,7 +61,7 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
 
     /// The raw 2xx body (non-2xx throws `.http` with the body text).
     private func requestData(_ path: String, method: String = "GET", body: Data? = nil,
-                             timeout: TimeInterval? = nil) async throws -> Data {
+                             timeout: TimeInterval? = nil, contentType: String = "application/json") async throws -> Data {
         guard let base = await store.podBaseUrl else { throw ScreensClientError.notPaired }
         guard let token = await store.sessionToken else { throw ScreensClientError.noSessionToken }
         guard let url = URL(string: base.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + path) else {
@@ -74,7 +74,7 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
         req.setValue(token, forHTTPHeaderField: "x-flagship-session")
         if let body {
             req.httpBody = body
-            req.setValue("application/json", forHTTPHeaderField: "content-type")
+            req.setValue(contentType, forHTTPHeaderField: "content-type")
         }
 
         let data: Data
@@ -321,6 +321,39 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     }
     public func serviceCopies() async throws -> AppCopiesResponse {
         try await request("/api/screens/services/copies")
+    }
+    public func serverArchiveStart(_ req: ServerArchiveStartRequest) async throws {
+        _ = try await requestData("/api/screens/server-archive/start", method: "POST", body: try JSONEncoder().encode(req), timeout: 30)
+    }
+    public func serverArchiveStatus() async throws -> ServerArchiveStatus? {
+        let r: ServerArchiveStatusResponse = try await request("/api/screens/server-archive")
+        return r.archive
+    }
+    public func serverArchiveChunk(offset: Int64) async throws -> Data {
+        try await requestData("/api/screens/server-archive/chunk?offset=\(offset)", timeout: 300)
+    }
+    public func serverArchiveForget() async throws {
+        _ = try await requestData("/api/screens/server-archive", method: "DELETE", timeout: 30)
+    }
+    public func serverRestoreStart(_ req: ServerRestoreStartRequest) async throws {
+        _ = try await requestData("/api/screens/server-restore/start", method: "POST", body: try JSONEncoder().encode(req), timeout: 30)
+    }
+    public func serverRestoreChunk(offset: Int64, data: Data) async throws {
+        _ = try await requestData("/api/screens/server-restore/chunk?offset=\(offset)", method: "POST", body: data, timeout: 300,
+                                  contentType: "application/octet-stream")
+    }
+    public func serverRestoreCommit(_ req: ServerRestoreCommitRequest) async throws {
+        _ = try await requestData("/api/screens/server-restore/commit", method: "POST", body: try JSONEncoder().encode(req), timeout: 60)
+    }
+    public func serverRestoreStatus() async throws -> ServerRestoreStatus? {
+        let r: ServerRestoreStatusResponse = try await request("/api/screens/server-restore")
+        return r.restore
+    }
+    public func boxActivity(limit: Int, before: Int?) async throws -> [BoxActivityEntry] {
+        var path = "/api/screens/activity?limit=\(limit)"
+        if let before { path += "&before=\(before)" }
+        let r: BoxActivityResponse = try await request(path)
+        return r.entries
     }
     public func serviceApiKeyCreate(serviceId: String, _ req: AppApiKeyCreateRequest) async throws -> AppApiKeyCreateResponse {
         let body = try JSONEncoder().encode(req)

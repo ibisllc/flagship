@@ -449,9 +449,9 @@ describe("the server page's order card", () => {
 });
 
 describe("Home's layout", () => {
-  it("puts Add/connect a server under the heading, above the filters, with no reorder hint", () => {
+  it("puts Add/Import a server under the heading, above the filters, with no reorder hint", () => {
     const src = readFileSync(resolve(__dirname, "../public/webapp/views/home.js"), "utf8");
-    const add = src.indexOf('id="home-add-server">+ Add/connect a server');
+    const add = src.indexOf('id="home-add-server">${escapeHtml(ADD_IMPORT_LABEL)}');
     expect(add).toBeGreaterThan(src.indexOf("data-home-title>Servers</h2>"));
     expect(add).toBeLessThan(src.indexOf("${chipRow({ items: chips"));
     expect(add).toBeLessThan(src.indexOf("${searchField({ value: homeQuery"));

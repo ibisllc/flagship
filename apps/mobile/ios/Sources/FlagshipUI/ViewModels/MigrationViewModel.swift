@@ -42,7 +42,8 @@ public final class MigrationViewModel {
     public private(set) var backupMissing = false
     /// The migrating box's CURRENT STK from the directory (nil ⇒ can't start).
     public private(set) var oldStkPubHex: String?
-    public var disposition: ServerMigrationFlow.Disposition = ServerMigrationFlow.defaultDisposition
+    /// Always wipe-after-handoff: the old server is retired, bricked and wiped.
+    public let disposition: ServerMigrationFlow.Disposition = .wipeAfterHandoff
     public private(set) var session: MigrationSession?
     public private(set) var working = false
     /// Inline error surfaced next to the action (the mode stays usable).
@@ -118,7 +119,7 @@ public final class MigrationViewModel {
 
     /// The wipe-after-handoff gate (mirrors the Replace pre-flight posture).
     public var startBlocked: Bool {
-        (disposition == .wipeAfterHandoff && backupMissing) || oldStkPubHex == nil
+        backupMissing || oldStkPubHex == nil
     }
 
     // MARK: - Load / poll
@@ -200,8 +201,8 @@ public final class MigrationViewModel {
             errorMessage = "Couldn't read this box's current key — refresh and try again."
             return
         }
-        if disposition == .wipeAfterHandoff && backupMissing {
-            errorMessage = "This server has no backup — enable backup first, or keep the old disk as the fallback."
+        if backupMissing {
+            errorMessage = "This server has no backup yet — enable backup first."
             return
         }
         working = true

@@ -217,6 +217,28 @@ interface ScreensClient {
     suspend fun serviceCopy(req: AppCopyRequest): AppCopyResponse =
         throw ScreensError.NotImplemented("copies")
 
+    // "Backup/clone server": a sealed archive of every app, downloaded in
+    // chunks; and the import of one onto this box.
+    suspend fun serverArchiveStart(req: ServerArchiveStartRequest): Unit =
+        throw ScreensError.NotImplemented("server backup")
+    suspend fun serverArchiveStatus(): ServerArchiveStatus? =
+        throw ScreensError.NotImplemented("server backup")
+    suspend fun serverArchiveChunk(offset: Long): ByteArray =
+        throw ScreensError.NotImplemented("server backup")
+    suspend fun serverArchiveForget(): Unit =
+        throw ScreensError.NotImplemented("server backup")
+    suspend fun serverRestoreStart(req: ServerRestoreStartRequest): Unit =
+        throw ScreensError.NotImplemented("server import")
+    suspend fun serverRestoreChunk(offset: Long, data: ByteArray): Unit =
+        throw ScreensError.NotImplemented("server import")
+    suspend fun serverRestoreCommit(req: ServerRestoreCommitRequest): Unit =
+        throw ScreensError.NotImplemented("server import")
+    suspend fun serverRestoreStatus(): ServerRestoreStatus? =
+        throw ScreensError.NotImplemented("server import")
+
+    /** What this box did, newest first (`before` is the `seq` cursor). */
+    suspend fun boxActivity(limit: Int = 100, before: Int? = null): List<BoxActivityEntry> = emptyList()
+
     /** `GET /api/screens/services/copies`: the copies this box is receiving. */
     suspend fun serviceCopies(): AppCopiesResponse =
         throw ScreensError.NotImplemented("copies")

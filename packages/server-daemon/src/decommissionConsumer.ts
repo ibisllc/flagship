@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import {
   verifyServerDecommission,
   type AdminGrantView,
@@ -138,11 +138,42 @@ export function decodeAndVerifyDecommissionOrder(args: {
 export interface DecommissionMarkerStore {
   has(): Promise<boolean>;
   mark(order: ServerDecommission): Promise<void>;
+  /**
+   * `wipe-after-handoff` timed out without a confirmation: the box is released
+   * and powered off but NOT wiped, so the closeout is unfinished. A later boot
+   * finishes it (re-checks the hand-off, wipes if confirmed) instead of
+   * treating the timeout as final. The stage names the order (its nonce), so
+   * only THAT order resumes; a later, different order runs the full closeout.
+   * Optional: a store without it keeps the old terminal behaviour.
+   */
+  markAwaitingConfirm?(order: ServerDecommission): Promise<void>;
+  /** The nonce of the order a timed-out closeout is waiting on, or null. */
+  awaitingConfirmNonce?(): Promise<string | null>;
+  clearAwaitingConfirm?(): Promise<void>;
 }
 
 /** Default file-backed marker (a small JSON sentinel, default `/var/flagship/decommissioned`). */
 export function fileMarkerStore(markerPath = "/var/flagship/decommissioned"): DecommissionMarkerStore {
+  const pendingPath = `${markerPath}.awaiting-confirm`;
   return {
+    async markAwaitingConfirm(order) {
+      await writeFile(
+        pendingPath,
+        JSON.stringify({ nonce: order.nonce, issuedAt: order.issuedAt, retiredStkPubHex: order.retiredStkPubHex }),
+        { mode: 0o600 },
+      );
+    },
+    async awaitingConfirmNonce() {
+      try {
+        const v = JSON.parse(await readFile(pendingPath, "utf-8")) as { nonce?: unknown };
+        return typeof v.nonce === "string" ? v.nonce.toLowerCase() : null;
+      } catch {
+        return null;
+      }
+    },
+    async clearAwaitingConfirm() {
+      await rm(pendingPath, { force: true });
+    },
     async has() {
       try {
         await readFile(markerPath, "utf-8");
@@ -218,6 +249,8 @@ export interface RunDecommissionOptions {
   fetchImpl?: typeof fetch;
   now?: () => number;
   onLog?: (m: string) => void;
+  /** Activity-feed hook: a stable kind plus one readable line. Never throws into the closeout. */
+  onEvent?: (kind: string, detail: string, ok?: boolean) => void;
 }
 
 export type DecommissionOutcome =
@@ -246,6 +279,23 @@ export async function runDecommissionConsumer(
     /* a missing/unreadable marker is treated as "not yet decommissioned" */
   }
 
+  // A previous pass may have released this box and timed out waiting for the
+  // hand-off confirmation. Which order it was waiting on decides, below,
+  // whether this pass resumes it (no second flush or release) or starts fresh.
+  let stagedNonce: string | null = null;
+  try {
+    stagedNonce = (await opts.markerStore.awaitingConfirmNonce?.()) ?? null;
+  } catch {
+    stagedNonce = null;
+  }
+  const emit = (kind: string, detail: string, ok = true) => {
+    try {
+      opts.onEvent?.(kind, detail, ok);
+    } catch {
+      /* the feed must never break a closeout */
+    }
+  };
+
   // 2. Fetch this box's own order (keyed by OUR STK).
   const base = opts.controlPlaneBaseUrl.replace(/\/+$/, "");
   const url =
@@ -256,6 +306,8 @@ export async function runDecommissionConsumer(
   let orderSignatureHex: string | undefined;
   try {
     const res = await fetchImpl(url, { method: "GET" });
+    // No order (none was ever given, or the migration was aborted): nothing
+    // to do. A staged closeout keeps its stage; it is bound to its order.
     if (res.status === 404) return { decommissioned: false, reason: "no-order" };
     if (!res.ok) {
       log(`[decommission] GET ${res.status}; ignoring`);
@@ -301,6 +353,13 @@ export async function runDecommissionConsumer(
     return { decommissioned: false, reason: "wrong-stk" };
   }
 
+  // Resume only the order the stage names. A stage left by an older order
+  // (e.g. an aborted migration) must not let a new one skip its final flush.
+  const resuming = stagedNonce !== null && stagedNonce === order.nonce.toLowerCase();
+  if (stagedNonce !== null && !resuming) {
+    await opts.markerStore.clearAwaitingConfirm?.().catch(() => {});
+  }
+
   log(
     `[decommission] verified owner-IRK order for ${opts.serverDomain} ` +
       `(disposition=${order.diskDisposition}, finalBackup=${order.finalBackup}, epoch=${order.backupEpoch})`,
@@ -310,7 +369,7 @@ export async function runDecommissionConsumer(
   //    deposit rides the box's STK/namespace, not routing, so this is safe even
   //    though routing is already revoked (I3). Report epoch-complete so the
   //    successor's barrier clears. Best-effort throughout.
-  if (order.finalBackup) {
+  if (order.finalBackup && !resuming) {
     try {
       await opts.backupFlush(order.backupEpoch);
       log(`[decommission] final backup flushed at epoch ${order.backupEpoch}`);
@@ -327,11 +386,19 @@ export async function runDecommissionConsumer(
   }
 
   // 6. Release routing (drop the tunnel) — all dispositions stop serving now.
-  try {
-    await opts.releaseRouting();
-    log("[decommission] routing released (tunnel dropped)");
-  } catch (e) {
-    log(`[decommission] releaseRouting failed (continuing): ${(e as Error).message}`);
+  if (!resuming) {
+    try {
+      await opts.releaseRouting();
+      log("[decommission] routing released (tunnel dropped)");
+    } catch (e) {
+      log(`[decommission] releaseRouting failed (continuing): ${(e as Error).message}`);
+    }
+    emit(
+      "server.decommission.released",
+      order.diskDisposition === "wipe-after-handoff"
+        ? "This server stopped serving; it will be wiped once the new server has taken over."
+        : "This server stopped serving and is powering off.",
+    );
   }
 
   // 7. Apply the SIGNED disk disposition (§6a).
@@ -354,6 +421,34 @@ export async function runDecommissionConsumer(
     if (confirmed) {
       log("[decommission] replacement restore CONFIRMED; wiping then powering off");
       wiped = await safeWipe(opts, log);
+      emit(
+        wiped ? "server.decommission.wiped" : "server.decommission.wipe-failed",
+        wiped
+          ? "The new server took over and this server's data was wiped."
+          : "The new server took over, but wiping this server's data failed.",
+        wiped,
+      );
+    } else if (resuming) {
+      log("[decommission] handoff still unconfirmed; staying idle and checking again later");
+      return { decommissioned: false, reason: "error" };
+    } else if (opts.markerStore.markAwaitingConfirm) {
+      log("[decommission] handoff confirm TIMED OUT; powering off WITHOUT wiping — will finish at the next boot");
+      try {
+        await opts.markerStore.markAwaitingConfirm(order);
+      } catch (e) {
+        log(`[decommission] failed to write awaiting-confirm marker (continuing): ${(e as Error).message}`);
+      }
+      emit(
+        "server.decommission.awaiting-handoff",
+        "The new server hasn't confirmed the take-over yet. This server is off and not wiped; it will wipe itself when it next starts and the hand-off is confirmed.",
+        false,
+      );
+      try {
+        await opts.lockAndPower();
+      } catch (e) {
+        log(`[decommission] lockAndPower failed: ${(e as Error).message}`);
+      }
+      return { decommissioned: true, disposition: order.diskDisposition, wiped: false };
     } else {
       log("[decommission] handoff confirm TIMED OUT; powering off WITHOUT wiping (data preserved as fallback)");
     }
@@ -367,8 +462,16 @@ export async function runDecommissionConsumer(
   //    logged and we proceed (the power-off is the terminal act anyway).
   try {
     await opts.markerStore.mark(order);
+    await opts.markerStore.clearAwaitingConfirm?.();
   } catch (e) {
     log(`[decommission] failed to write marker (continuing): ${(e as Error).message}`);
+  }
+  if (order.diskDisposition !== "wipe-after-handoff") {
+    emit(
+      "server.decommission.closed",
+      order.diskDisposition === "wipe-now" ? (wiped ? "This server was wiped and powered off." : "This server powered off; wiping failed.") : "This server powered off with its data kept.",
+      order.diskDisposition !== "wipe-now" || wiped,
+    );
   }
 
   // 9. Ack consume (advisory GC) — best-effort.
@@ -430,13 +533,22 @@ export function buildDecommissionPoller(
 ): DecommissionPoller {
   const intervalMs = opts.intervalMs ?? 5 * 60_000;
   let timer: ReturnType<typeof setInterval> | null = null;
+  // A closeout can wait hours for the hand-off; ticks that land meanwhile must
+  // not start a second closeout (a second flush, release or wipe).
+  let inFlight: Promise<DecommissionOutcome> | null = null;
 
   async function pollOnce(): Promise<DecommissionOutcome> {
-    const out = await runDecommissionConsumer(opts);
-    if (out.decommissioned || (!out.decommissioned && out.reason === "already-done")) {
-      stop();
+    if (inFlight) return inFlight;
+    inFlight = runDecommissionConsumer(opts);
+    try {
+      const out = await inFlight;
+      if (out.decommissioned || (!out.decommissioned && out.reason === "already-done")) {
+        stop();
+      }
+      return out;
+    } finally {
+      inFlight = null;
     }
-    return out;
   }
   function stop() {
     if (timer) {

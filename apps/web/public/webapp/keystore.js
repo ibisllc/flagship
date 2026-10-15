@@ -496,6 +496,18 @@ export async function deriveHouseholdKeyFromSeed(umkSeed) {
 }
 
 /**
+ * The key that seals one server archive ("Backup/clone server"): HKDF of the
+ * UMK seed under `flagship/server-archive/v1|<archiveIdHex>`. Independent of
+ * any server id, so any of the account's devices can open an archive and
+ * import it onto a server with a different name. Must pass
+ * packages/protocol/test-vectors/server-archive/vectors.json.
+ */
+export async function deriveServerArchiveKeyFromSeed(umkSeed, archiveIdHex) {
+  if (!/^[0-9a-f]{32}$/.test(String(archiveIdHex))) throw new Error("archive id must be 16 bytes of lowercase hex");
+  return hkdf32(umkSeed, `flagship/server-archive/v1|${archiveIdHex}`);
+}
+
+/**
  * Sign canonical-bytes with the account AID (stable). Mirrors `signWithIrk`
  * but uses {@link deriveAccountIdFromSeed} — the friend's redeem + visit
  * proofs are AID-signed (the IRK rotates; the AID does not).

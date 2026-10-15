@@ -203,8 +203,8 @@ test.describe("gym webapp servers", () => {
     });
     await renderHome(page);
 
-    // "Add/connect a server" sits above the list (iOS/Android: home-add-server).
-    await expect(page.locator("#home-add-server")).toHaveText("+ Add/connect a server");
+    // "Add/Import a server" sits above the list (iOS/Android: home-add-server).
+    await expect(page.locator("#home-add-server")).toHaveText("+ Add/Import a server");
     const addAbove = await page.evaluate(() => {
       const add = document.getElementById("home-add-server");
       const cards = document.querySelector("#servers-list [data-server-cards]");

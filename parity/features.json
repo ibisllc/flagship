@@ -13,7 +13,7 @@
     },
     {
       "id": "home-server-order",
-      "title": "Home: drag server order (server-order/v1), leader badge, Add/connect",
+      "title": "Home: drag server order (server-order/v1), leader badge, Add/Import a server",
       "ref": "ios",
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/ServerOrder.swift", "flagship/server-order/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerOrderCard.swift", "Make leader"]] },
@@ -33,7 +33,7 @@
     },
     {
       "id": "server-page",
-      "title": "Server page: monitoring, Make leader, lock/power, dead-man, update, delete/revoke/un-revoke, migrate/replace",
+      "title": "Server page: monitoring, Make leader, lock/power, dead-man, update, delete/revoke/un-revoke, Backup/clone, migrate",
       "ref": "ios",
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift", "DeadMan"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/MonitoringPane.swift", "struct MonitoringPane"], ["apps/mobile/shared/Sources/FlagshipAPI/Client/SecretMailboxClient.swift", "api/releases"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/MigrateServerScreen.swift", "struct MigrateServerScreen"]] },
@@ -501,6 +501,26 @@
         "mac": { "status": "present", "anchors": [["apps/builder-mac/Info.plist", "CFBundleShortVersionString"]] },
         "win": { "status": "partial", "reason": "FlagshipBuilder.csproj says 0.0.1 while the release is studio-v0.1.1.", "anchors": [["apps/builder-windows/FlagshipBuilder.csproj", "<Version>"]] },
         "linux": { "status": "partial", "reason": "Hard-coded 0.1.0 in wizard.py.", "anchors": [["apps/builder-linux/wizard.py", "BUILDER_VERSION = \"0\\.1\\.0\""]] }
+      }
+    },
+    {
+      "id": "backup-clone-server",
+      "title": "Backup/clone server: sealed archive download, and Add/Import a server",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/ServerArchive.swift", "flagship/server-archive/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerArchiveScreens.swift", "Backup/clone server"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift", "Add/Import a server"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerArchive.kt", "flagship/server-archive/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServerArchiveScreens.kt", "Backup/clone server"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/HomeScreen.kt", "Add/Import a server"]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/keystore.js", "flagship/server-archive/v1"], ["apps/web/public/webapp/views/server-detail.js", "Backup/clone server"], ["apps/web/public/webapp/views/home.js", "ADD_IMPORT_LABEL"]] }
+      }
+    },
+    {
+      "id": "activity-feed",
+      "title": "Activity: the server's own events merged with account events",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/ViewModels/ActivityViewModel.swift", "enum BoxEventLabels"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ActivityScreen.swift", "ON THIS SERVER"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/BoxEventLabels.kt", "object BoxEventLabels"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/viewmodels/ActivityViewModel.kt", "BoxEvent"]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/activityFeed.js", "BOX_EVENT_LABELS"], ["apps/web/public/webapp/views/activity.js", "mergeFeed"]] }
       }
     }
   ]

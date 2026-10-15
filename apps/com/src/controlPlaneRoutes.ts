@@ -1904,6 +1904,9 @@ export async function tryControlPlane(
       serverEvictions: storage.serverEvictions,
       mailbox: buildSecretMailboxDeps(),
       grants: storage.deviceCapabilityGrants,
+      autoUnlockLeases: storage.autoUnlockLeases,
+      boxSealedLeases: storage.boxSealedLeases,
+      auditEvents: storage.auditEvents,
     });
     if (method === "POST" && (m = path.match(ROUTE_RE.MIGRATION_ATTACH))) {
       return finishPlain(

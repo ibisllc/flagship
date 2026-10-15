@@ -50,6 +50,9 @@ import {
   type ServerMigrationOrder,
 } from "@flagship/protocol";
 import type {
+  AutoUnlockLeaseStorage,
+  BoxSealedLeaseStorage,
+  AuditEventStorage,
   DeviceCapabilityGrantStorage,
   ServerEvictionStorage,
   ServerMigrationRecord,
@@ -59,6 +62,7 @@ import type {
 } from "@flagship/storage";
 import { HEX64, hexToBytes } from "./hex.js";
 import { authorizeSensitiveComOp } from "./adminAuthorityGate.js";
+import { recordAuditEvent } from "./auditEvents.js";
 import { authPhoneMailbox, type SecretMailboxDeps } from "./secretMailbox.js";
 import { handlePostDecommission, type ServerDecommissionDeps } from "./serverDecommission.js";
 import { conflict, forbidden, malformed, notFound, ok, type HandlerResponse } from "./types.js";
@@ -73,7 +77,46 @@ export interface ServerMigrationDeps {
   grants?: DeviceCapabilityGrantStorage;
   /** Mailbox-auth deps (authenticates the phone depositor as the owner). */
   mailbox: SecretMailboxDeps;
+  /** At take-over the OLD box's boot-unlock leases are torn down (it can no
+   *  longer unlock by lease). Optional: absent ⇒ the directory rebind alone gates it. */
+  autoUnlockLeases?: AutoUnlockLeaseStorage;
+  boxSealedLeases?: BoxSealedLeaseStorage;
+  /** Account activity rows for started / taken-over / aborted. */
+  auditEvents?: AuditEventStorage;
   now?: () => number;
+}
+
+async function auditMigration(
+  deps: ServerMigrationDeps,
+  username: string,
+  eventKind: "server-migration-started" | "server-migration-taken-over" | "server-migration-aborted",
+  detail: string,
+  postedAt: number,
+): Promise<void> {
+  if (!deps.auditEvents) return;
+  try {
+    await recordAuditEvent({ auditEvents: deps.auditEvents }, { username, eventKind, detail, devicePrefix: "", postedAt });
+  } catch {
+    // The feed never undoes a migration step.
+  }
+}
+
+/** Drop every boot-unlock lease for the host. Best-effort per lease. */
+async function revokeHostLeases(deps: ServerMigrationDeps, host: string, now: number): Promise<void> {
+  for (const store of [deps.autoUnlockLeases, deps.boxSealedLeases]) {
+    if (!store) continue;
+    try {
+      for (const l of await store.list(host, now)) {
+        try {
+          await store.revoke(host, l.leaseId);
+        } catch {
+          /* swallow — the directory rebind is the gate; this is hardening */
+        }
+      }
+    } catch {
+      /* swallow */
+    }
+  }
 }
 
 const HEX_NONCE = /^[0-9a-f]{64}$/; // 32 bytes hex
@@ -199,6 +242,13 @@ export async function handlePostMigrationStart(
     takenOverAt: null,
     abortedAt: null,
   });
+  await auditMigration(
+    deps,
+    reg.username,
+    "server-migration-started",
+    `Started moving ${host.toLowerCase()} to new hardware.`,
+    now,
+  );
   return ok({ ok: true, phase: "initiated" });
 }
 
@@ -484,7 +534,19 @@ export async function handlePostMigrationTakeOver(
     registeredAt: now,
   });
   await deps.serverMigrations.markTakenOver(host.toLowerCase(), now);
+  // Brick the old box: its STK no longer matches the directory (so the unlock
+  // relay, lease path and hub all refuse it), and its boot-unlock leases are
+  // torn down so a stale lease can't release the disk key either. Done BEFORE
+  // the successor-confirm so the wipe gate never opens ahead of the brick.
+  await revokeHostLeases(deps, host.toLowerCase(), now);
   await deps.serverEvictions.markNewAcked(host.toLowerCase(), now);
+  await auditMigration(
+    deps,
+    session.username,
+    "server-migration-taken-over",
+    `${host.toLowerCase()} moved to new hardware; the old server is retired${session.disposition === "wipe-after-handoff" ? " and being wiped" : " (data kept)"}.`,
+    now,
+  );
   return ok({ ok: true, phase: "taken-over" });
 }
 
@@ -620,6 +682,7 @@ export async function handlePostMigrationAbort(
     return conflict("migration already took over — past the point of no return");
   }
   await deps.serverMigrations.markAborted(host.toLowerCase(), now);
+  await auditMigration(deps, v.username, "server-migration-aborted", `Moving ${host.toLowerCase()} to new hardware was cancelled.`, now);
   // Neutralize a deposited-but-unconsumed decommission order so the old box
   // never learns of a retracted eviction (and a mid-wait old box's migration
   // confirm poll sees `aborted` and powers off KEEPING its data).

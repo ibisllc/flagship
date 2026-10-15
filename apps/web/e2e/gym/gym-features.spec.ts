@@ -164,7 +164,7 @@ test.describe("gym webapp features", () => {
       const { enterServerDetail } = await import("/views/server-detail.js");
       await enterServerDetail();
     });
-    await expect(page.locator("#transfer-card")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("#transfer-start-btn")).toBeVisible({ timeout: 10_000 });
     await page.click("#transfer-start-btn");
     const dlg = page.locator('dialog[aria-label="Transfer this server"]');
     await expect(dlg).toBeVisible({ timeout: 5_000 });

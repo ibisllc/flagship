@@ -31,6 +31,7 @@ import {
   type ServerDecommission,
 } from "@flagship/protocol";
 import {
+  buildDecommissionPoller,
   runDecommissionConsumer,
   decodeAndVerifyDecommissionOrder,
   type DecommissionMarkerStore,
@@ -330,6 +331,145 @@ describe("runDecommissionConsumer", () => {
     expect(out).toMatchObject({ decommissioned: true, disposition: "wipe-after-handoff", wiped: false });
     expect(spy.wipes).toBe(0);
     expect(spy.powers).toBe(1);
+  });
+
+  describe("wipe-after-handoff that timed out is finished at the next boot", () => {
+    function stagedMarker() {
+      const m = {
+        marked: false,
+        awaiting: false,
+        async has() {
+          return m.marked;
+        },
+        async mark() {
+          m.marked = true;
+        },
+        nonce: null as string | null,
+        async markAwaitingConfirm(order: ServerDecommission) {
+          m.awaiting = true;
+          m.nonce = order.nonce;
+        },
+        async awaitingConfirmNonce() {
+          return m.awaiting ? m.nonce : null;
+        },
+        async clearAwaitingConfirm() {
+          m.awaiting = false;
+          m.nonce = null;
+        },
+      };
+      return m;
+    }
+    const wah = () => makeOrder({ diskDisposition: "wipe-after-handoff", finalBackup: true });
+
+    it("timeout writes the awaiting stage, not the final marker, and reports the feed event", async () => {
+      const irk = makeKey(1);
+      const markerStore = stagedMarker();
+      const events: string[] = [];
+      const { opts, spy } = baseOpts({
+        fetchImpl: fetchFor(carrier(wah(), irk)),
+        ownerIrkPub: irk.publicKey,
+        awaitHandoffConfirm: async () => false,
+        markerStore,
+        onEvent: (k) => events.push(k),
+      });
+      const out = await runDecommissionConsumer(opts);
+      expect(out).toMatchObject({ decommissioned: true, wiped: false });
+      expect(markerStore.marked).toBe(false);
+      expect(markerStore.awaiting).toBe(true);
+      expect(spy.wipes).toBe(0);
+      expect(spy.powers).toBe(1);
+      expect(events).toEqual(["server.decommission.released", "server.decommission.awaiting-handoff"]);
+    });
+
+    it("next boot: confirmed hand-off wipes, without re-flushing or re-releasing", async () => {
+      const irk = makeKey(1);
+      const markerStore = stagedMarker();
+      markerStore.awaiting = true;
+      markerStore.nonce = NONCE;
+      const events: string[] = [];
+      const { opts, spy } = baseOpts({
+        fetchImpl: fetchFor(carrier(wah(), irk)),
+        ownerIrkPub: irk.publicKey,
+        awaitHandoffConfirm: async () => true,
+        markerStore,
+        onEvent: (k) => events.push(k),
+      });
+      const out = await runDecommissionConsumer(opts);
+      expect(out).toMatchObject({ decommissioned: true, wiped: true });
+      expect(spy.flushes).toEqual([]);
+      expect(spy.released).toBe(0);
+      expect(spy.wipes).toBe(1);
+      expect(markerStore.marked).toBe(true);
+      expect(markerStore.awaiting).toBe(false);
+      expect(events).toEqual(["server.decommission.wiped"]);
+    });
+
+    it("next boot: still unconfirmed stays idle (no power-off, keeps the stage)", async () => {
+      const irk = makeKey(1);
+      const markerStore = stagedMarker();
+      markerStore.awaiting = true;
+      markerStore.nonce = NONCE;
+      const { opts, spy } = baseOpts({
+        fetchImpl: fetchFor(carrier(wah(), irk)),
+        ownerIrkPub: irk.publicKey,
+        awaitHandoffConfirm: async () => false,
+        markerStore,
+      });
+      const out = await runDecommissionConsumer(opts);
+      expect(out.decommissioned).toBe(false);
+      expect(spy.powers).toBe(0);
+      expect(spy.wipes).toBe(0);
+      expect(markerStore.awaiting).toBe(true);
+    });
+
+    it("next boot with no order (aborted): does nothing and keeps the stage", async () => {
+      const irk = makeKey(1);
+      const markerStore = stagedMarker();
+      markerStore.awaiting = true;
+      markerStore.nonce = NONCE;
+      const { opts, spy } = baseOpts({ fetchImpl: fetchFor(null), ownerIrkPub: irk.publicKey, markerStore });
+      const out = await runDecommissionConsumer(opts);
+      expect(out).toEqual({ decommissioned: false, reason: "no-order" });
+      expect(markerStore.awaiting).toBe(true);
+      expect(spy.wipes).toBe(0);
+      expect(spy.powers).toBe(0);
+    });
+
+    it("a stage left by an older order never lets a NEW order skip its final flush", async () => {
+      const irk = makeKey(1);
+      const markerStore = stagedMarker();
+      markerStore.awaiting = true;
+      markerStore.nonce = "cd".repeat(32);
+      const { opts, spy } = baseOpts({
+        fetchImpl: fetchFor(carrier(wah(), irk)),
+        ownerIrkPub: irk.publicKey,
+        awaitHandoffConfirm: async () => true,
+        markerStore,
+      });
+      const out = await runDecommissionConsumer(opts);
+      expect(out).toMatchObject({ decommissioned: true, wiped: true });
+      expect(spy.flushes).toEqual([0]);
+      expect(spy.released).toBe(1);
+      expect(markerStore.awaiting).toBe(false);
+    });
+
+    it("the poller never runs two closeouts at once", async () => {
+      const irk = makeKey(1);
+      let release!: (v: boolean) => void;
+      const gate = new Promise<boolean>((r) => (release = r));
+      const { opts, spy } = baseOpts({
+        fetchImpl: fetchFor(carrier(wah(), irk)),
+        ownerIrkPub: irk.publicKey,
+        awaitHandoffConfirm: () => gate,
+      });
+      const poller = buildDecommissionPoller(opts);
+      const a = poller.pollOnce();
+      const b = poller.pollOnce();
+      release(true);
+      await Promise.all([a, b]);
+      expect(spy.released).toBe(1);
+      expect(spy.wipes).toBe(1);
+    });
   });
 
   it("still marks + powers off (no loop) when wipeContent itself fails", async () => {

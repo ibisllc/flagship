@@ -83,7 +83,7 @@ public struct MigrateServerScreen: View {
             if vm.backupMissing {
                 MigrateCallout(
                     kind: .warning,
-                    text: "No backup is enrolled for this server. The migration moves data THROUGH backup — enable backup first, or choose to keep the old disk."
+                    text: "No backup is enrolled for this server. The migration moves data through backup — enable backup first."
                 )
             } else {
                 MigrateCallout(
@@ -92,20 +92,12 @@ public struct MigrateServerScreen: View {
                 )
             }
 
-            Text("WHAT HAPPENS TO THE OLD BOX'S DISK?")
-                .font(.system(size: 12, weight: .semibold)).tracking(1)
-                .foregroundColor(c.textMuted)
-            dispositionRow(c, .wipeAfterHandoff, "Wipe the old box after the new one takes over (recommended)",
-                           "Keeps the old disk as a safety net until the new box proves a good restore and takes over the name, then scrubs it.")
-            dispositionRow(c, .keep, "Keep the old disk (manual fallback copy)",
-                           "Powers off with data intact after the hand-off — a local fallback copy.")
-
-            if vm.disposition == .wipeAfterHandoff && vm.backupMissing {
-                Text("This server has no backup — enable backup first, or keep the old disk as the fallback.")
+            if vm.backupMissing {
+                Text("This server has no backup yet, so it can't be migrated. Enable backup first, or use Backup/clone server and import the file onto the new server.")
                     .font(FS.font.caption()).foregroundColor(c.danger)
             }
 
-            Text("The old box is wiped only after the new one has restored the data and taken over the name. If anything fails, the old box keeps serving with all its data.")
+            Text("The old server is retired and wiped only after the new one has restored the data and taken over the name: from then on it can't unlock or connect, and it wipes itself as soon as it is reachable. If anything fails first, the old server keeps serving with all its data.")
                 .font(FS.font.caption()).foregroundColor(c.textMuted)
 
             if let err = vm.errorMessage {
@@ -120,26 +112,6 @@ public struct MigrateServerScreen: View {
         }
     }
 
-    @ViewBuilder private func dispositionRow(_ c: FSColors, _ d: ServerMigrationFlow.Disposition, _ title: String, _ detail: String) -> some View {
-        Button {
-            vm.disposition = d
-        } label: {
-            HStack(alignment: .top, spacing: FS.space.s3) {
-                Image(systemName: vm.disposition == d ? "largecircle.fill.circle" : "circle")
-                    .foregroundColor(vm.disposition == d ? c.primary : c.textMuted)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(FS.font.body()).foregroundColor(c.text)
-                    Text(detail).font(FS.font.caption()).foregroundColor(c.textMuted)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(FS.space.s3)
-            .background(c.surface)
-            .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("migrate-disposition-\(d.rawValue)")
-    }
 
     // MARK: - Progress mode (the 8-step timeline)
 

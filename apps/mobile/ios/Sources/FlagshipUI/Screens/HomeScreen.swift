@@ -67,6 +67,9 @@ public struct HomeScreen: View {
     let serverListLocked: Bool
     var onOpenPod: (PodInfo) -> Void = { _ in }
     var onAddServer: () -> Void = {}
+    /// "Import a backup" in the Add/Import chooser.
+    var onImportBackup: () -> Void = {}
+    @State private var showAddOrImport = false
     /// Move a server to the top of the owner's order (docs/server-order.md).
     var onMakeLeader: (PodInfo) -> Void = { _ in }
     /// The owner dropped a server elsewhere in the list: the new order, by pod id.
@@ -127,6 +130,7 @@ public struct HomeScreen: View {
         onCancelServer: @escaping (PodInfo) -> Void = { _ in },
         onDeleteServer: @escaping (PodInfo) -> Void = { _ in },
         onAddServer: @escaping () -> Void = {},
+        onImportBackup: @escaping () -> Void = {},
         onMakeLeader: @escaping (PodInfo) -> Void = { _ in },
         onReorder: @escaping ([String]) -> Void = { _ in },
         onShowMyServers: @escaping () async -> Void = {},
@@ -157,6 +161,7 @@ public struct HomeScreen: View {
         self.serverListLocked = serverListLocked
         self.onOpenPod = onOpenPod
         self.onAddServer = onAddServer
+        self.onImportBackup = onImportBackup
         self.onMakeLeader = onMakeLeader
         self.onReorder = onReorder
         self.onShowMyServers = onShowMyServers
@@ -573,14 +578,14 @@ public struct HomeScreen: View {
         }
     }
 
-    /// "Add/connect a server", above the list. The empty state carries its
+    /// "Add/Import a server", above the list. The empty state carries its
     /// own primary CTA, so this shows once at least one server exists.
     @ViewBuilder
     private func addServerButton(c: FSColors) -> some View {
-        Button(action: onAddServer) {
+        Button(action: { showAddOrImport = true }) {
             HStack(spacing: 8) {
                 Image(systemName: "plus.circle.fill").foregroundColor(c.primary)
-                Text("Add/connect a server").font(.system(size: 15, weight: .semibold)).foregroundColor(c.primary)
+                Text("Add/Import a server").font(.system(size: 15, weight: .semibold)).foregroundColor(c.primary)
                 Spacer()
             }
             .padding(.horizontal, FS.space.s4)
@@ -593,6 +598,13 @@ public struct HomeScreen: View {
             .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
         }
         .accessibilityIdentifier("home-add-server")
+        .confirmationDialog("Add/Import a server", isPresented: $showAddOrImport, titleVisibility: .visible) {
+            Button("Add a new server") { onAddServer() }
+            Button("Import a backup") { onImportBackup() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(ServerArchive.cloneHint)
+        }
     }
 
     static let listSpace = "home-server-list"

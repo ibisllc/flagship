@@ -36,6 +36,8 @@ public struct HomeTab: View {
     /// list's "Delete server" context action). Non-nil ⇒ the typed-name
     /// delete sheet is shown.
     @State private var pendingDeletePod: PodInfo?
+    /// Home → Add/Import a server → Import a backup.
+    @State private var showImportBackup = false
 
     public init() {}
 
@@ -157,6 +159,7 @@ public struct HomeTab: View {
                         pendingDeletePod = pod
                     },
                     onAddServer: { path.append(.provisionServer) },
+                    onImportBackup: { showImportBackup = true },
                     onMakeLeader: { pod in
                         Task { await saveServerOrder { await $0.makeLeader(podId: pod.podId) } }
                     },
@@ -269,6 +272,19 @@ public struct HomeTab: View {
             // not on the next launch.
             if hasOnline {
                 Task { await refreshRecoveryStatus() }
+            }
+        }
+        .sheet(isPresented: $showImportBackup) {
+            NavigationStack {
+                ImportBackupSheet(vm: ImportBackupViewModel(
+                    targets: app.pods
+                        .filter { $0.status == .online && !$0.fqdn.isEmpty }
+                        .map { .init(fqdn: $0.fqdn, label: $0.name) },
+                    clients: podClients
+                ))
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("Done") { showImportBackup = false } }
+                }
             }
         }
         .sheet(item: $pendingDeletePod) { pod in

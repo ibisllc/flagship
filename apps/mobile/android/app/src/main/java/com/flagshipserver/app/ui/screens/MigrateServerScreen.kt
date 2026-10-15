@@ -97,7 +97,6 @@ fun MigrateServerScreen(vm: MigrationViewModel) {
 
 @Composable
 private fun InitiateMode(vm: MigrationViewModel) {
-    val disposition by vm.disposition.collectAsState()
     val working by vm.working.collectAsState()
     val errorMessage by vm.errorMessage.collectAsState()
     val scope = rememberCoroutineScope()
@@ -109,7 +108,7 @@ private fun InitiateMode(vm: MigrationViewModel) {
     )
     if (vm.backupMissing) {
         MigrateCallout(
-            "No backup is enrolled for this server. The migration moves data THROUGH backup — enable backup first, or choose to keep the old disk.",
+            "No backup is enrolled for this server. The migration moves data through backup — enable backup first.",
             FS.colors.warning,
         )
     } else {
@@ -119,32 +118,16 @@ private fun InitiateMode(vm: MigrationViewModel) {
         )
     }
 
-    Text(
-        "WHAT HAPPENS TO THE OLD BOX'S DISK?",
-        color = FS.colors.textMuted,
-        style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp),
-    )
-    MigrateDispositionRow(
-        disposition, { vm.setDisposition(it) }, ServerMigrationFlow.Disposition.WipeAfterHandoff,
-        "Wipe the old box after the new one takes over (recommended)",
-        "Keeps the old disk as a safety net until the new box proves a good restore and takes over the name, then scrubs it.",
-    )
-    MigrateDispositionRow(
-        disposition, { vm.setDisposition(it) }, ServerMigrationFlow.Disposition.Keep,
-        "Keep the old disk (manual fallback copy)",
-        "Powers off with data intact after the hand-off — a local fallback copy.",
-    )
-
-    if (disposition == ServerMigrationFlow.Disposition.WipeAfterHandoff && vm.backupMissing) {
+    if (vm.backupMissing) {
         Text(
-            "This server has no backup — enable backup first, or keep the old disk as the fallback.",
+            "This server has no backup yet, so it can't be migrated. Enable backup first, or use Backup/clone server and import the file onto the new server.",
             color = FS.colors.danger,
             style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
         )
     }
 
     Text(
-        "The old box is wiped only after the new one has restored the data and taken over the name. If anything fails, the old box keeps serving with all its data.",
+        "The old server is retired and wiped only after the new one has restored the data and taken over the name: from then on it can't unlock or connect, and it wipes itself as soon as it is reachable. If anything fails first, the old server keeps serving with all its data.",
         color = FS.colors.textMuted,
         style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
     )
@@ -159,33 +142,6 @@ private fun InitiateMode(vm: MigrationViewModel) {
         large = true,
         modifier = Modifier.semantics { contentDescription = "migrate-start" },
     )
-}
-
-@Composable
-private fun MigrateDispositionRow(
-    selected: ServerMigrationFlow.Disposition,
-    onPick: (ServerMigrationFlow.Disposition) -> Unit,
-    value: ServerMigrationFlow.Disposition,
-    title: String,
-    detail: String,
-) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(FS.radius.sm))
-            .background(FS.colors.surface)
-            .selectable(selected = selected == value, onClick = { onPick(value) })
-            .padding(FS.space.s3)
-            .semantics { contentDescription = "migrate-disposition-${value.wire}" },
-        verticalAlignment = Alignment.Top,
-    ) {
-        RadioButton(selected = selected == value, onClick = { onPick(value) })
-        Spacer(Modifier.width(FS.space.s2))
-        Column {
-            Text(title, color = FS.colors.text, style = TextStyle(fontSize = 16.sp))
-            Text(detail, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp))
-        }
-    }
 }
 
 // MARK: - Progress mode (the 8-step timeline)

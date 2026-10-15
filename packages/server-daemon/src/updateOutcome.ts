@@ -82,10 +82,22 @@ export function parseUpdateOutcome(raw: unknown): UpdateOutcomeRecord | null {
   return out;
 }
 
+let outcomeListener: ((record: UpdateOutcomeRecord) => void) | null = null;
+
+/** Called after each verdict is durably written (the activity feed); one per process. */
+export function onUpdateOutcome(listener: ((record: UpdateOutcomeRecord) => void) | null): void {
+  outcomeListener = listener;
+}
+
 export function fileUpdateOutcomeStore(path: string): UpdateOutcomeStore {
   return {
     async write(record) {
       await writeFileDurable(path, JSON.stringify(record));
+      try {
+        outcomeListener?.(record);
+      } catch {
+        /* the feed never fails an update */
+      }
     },
     readSync() {
       try {

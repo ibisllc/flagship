@@ -389,6 +389,15 @@ object Keystore {
         return ServerKeys.deriveHouseholdKey(loadOrCreateUmkSeed())
     }
 
+    /** The key that seals one server archive (`ServerArchive.deriveKey`):
+     *  server-id independent, so any device of the account can back up a server
+     *  or import a backup onto a server with a different name. Biometric-gated. */
+    suspend fun deriveServerArchiveKey(archiveId: String, reason: String = "Authorize Flagship"): ByteArray {
+        BiometricAuthority.current()?.ensureFresh(title = "Authorize Flagship", subtitle = reason)
+        return com.flagshipserver.app.core.ServerArchive.deriveKey(loadOrCreateUmkSeed(), archiveId)
+            ?: throw IllegalStateException("server archive key")
+    }
+
     data class X25519KeyPair(val privateKey: ByteArray, val publicKey: ByteArray)
 
     /** Load (or create + persist) the per-device X25519 keypair used to
