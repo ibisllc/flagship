@@ -101,11 +101,16 @@ public struct OutboundProxySummary: Codable, Equatable, Sendable {
     public let proxy: Proxy?
     public let hasCredentials: Bool
     public let status: Status
+    /// False once `.com` has told the box the account is on Free: the proxy is
+    /// part of Pro, so the box takes no new one (turning it off still works).
+    /// Absent from older boxes.
+    public let available: Bool?
 
-    public init(proxy: Proxy?, hasCredentials: Bool, status: Status) {
+    public init(proxy: Proxy?, hasCredentials: Bool, status: Status, available: Bool? = nil) {
         self.proxy = proxy
         self.hasCredentials = hasCredentials
         self.status = status
+        self.available = available
     }
 }
 

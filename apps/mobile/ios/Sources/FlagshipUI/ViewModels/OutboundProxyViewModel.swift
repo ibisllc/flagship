@@ -26,6 +26,13 @@ public enum OutboundProxyCopy {
     public static let confirmReason = "Confirm the proxy change"
     public static let savedOn = "Saved. The server is reconnecting through the proxy."
     public static let savedOff = "Saved. The server now connects directly."
+    public static let proNote = "An outbound proxy is part of Pro."
+    public static let seePro = "See Pro"
+    public static let proUrl = URL(string: "https://flagshipserver.com/pro")!
+
+    /// Free accounts can't set a proxy; an unknown plan doesn't block (the box
+    /// checks too, once `.com` has told it the plan).
+    public static func allowed(tier: String?) -> Bool { tier != "free" }
 
     /// "SOCKS5 · host:port · needs a password", or "Off".
     public static func summaryLine(_ p: OutboundProxySummary.Proxy?) -> String {
