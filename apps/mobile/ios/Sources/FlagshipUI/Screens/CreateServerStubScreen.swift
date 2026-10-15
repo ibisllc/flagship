@@ -500,6 +500,28 @@ public struct CreateServerStubScreen: View {
                     .font(.caption)
                     .foregroundColor(c.textMuted)
                     .padding(.leading, FS.space.s3)
+
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    Text(OutboundProxyCopy.title)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundColor(c.text)
+                    Text(OutboundProxyCopy.explainer)
+                        .font(.caption)
+                        .foregroundColor(c.textMuted)
+                    OutboundProxyFieldsView(
+                        kind: $vm.proxyKind,
+                        host: $vm.proxyHost,
+                        port: $vm.proxyPort,
+                        username: $vm.proxyUsername,
+                        password: $vm.proxyPassword,
+                        fallbackDirect: $vm.proxyFallbackDirect,
+                        error: vm.proxyError,
+                        credentialsGoInRecipe: true
+                    )
+                }
+                .padding(.leading, FS.space.s3)
+                .padding(.top, FS.space.s2)
+                .accessibilityIdentifier("cs-outbound-proxy")
             }
         }
     }
