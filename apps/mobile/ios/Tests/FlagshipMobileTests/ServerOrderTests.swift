@@ -61,10 +61,8 @@ final class ServerOrderTests: XCTestCase {
         XCTAssertEqual(homeOrder(app), ["work", "home3", "leticia"])
         XCTAssertEqual(app.leaderPodId, "work")
         XCTAssertEqual(app.currentPodId, "work")
-        let labels = HomeScreen.orderLabels(pods: app.pods, leaderPodId: app.leaderPodId)
-        XCTAssertEqual(labels["work"], .leader(standingInFor: nil))
-        XCTAssertEqual(labels["home3"], .inLine(2))
-        XCTAssertEqual(labels["leticia"], .inLine(3))
+        // Only the leader is labelled; the rest read their place from position.
+        XCTAssertEqual(HomeScreen.leaderLabel(pods: app.pods), .init(podId: "work", standingInFor: nil))
         // Signed once with the sensitive-order key and posted.
         XCTAssertEqual(signer.calls, [ServerOrderSaver.reason])
         let posted = try XCTUnwrap(mailbox.serverOrders.first)
@@ -121,8 +119,67 @@ final class ServerOrderTests: XCTestCase {
         let outcome = await saver(app, mailbox, signer).makeLeader(podId: "b")
         XCTAssertEqual(outcome, .local)
         XCTAssertEqual(homeOrder(app), ["b", "a"])
+        XCTAssertTrue(app.holdsServerOrder("b"), "a demo leader is never left gray")
         XCTAssertTrue(signer.calls.isEmpty)
         XCTAssertTrue(mailbox.serverOrders.isEmpty)
+    }
+
+    // MARK: - Acknowledgement
+
+    func testTheLeaderIsUnconfirmedUntilItHoldsTheOrderOnScreen() async {
+        let app = state()
+        // Never ordered: boxes and apps both rank oldest first.
+        XCTAssertTrue(app.holdsServerOrder("home3"))
+        let mailbox = MockSecretMailboxClient()
+        let saver = ServerOrderSaver(app: app, mailbox: mailbox, signer: { _ in Curve25519.Signing.PrivateKey() },
+                                     now: { 1_760_000_000_000 })
+        _ = await saver.makeLeader(podId: "work")
+        XCTAssertFalse(app.holdsServerOrder("work"))
+        // A stale heartbeat never moves the acknowledgement back.
+        app.recordServerOrderAck(podId: "work", issuedAt: 1_760_000_000_000)
+        app.recordServerOrderAck(podId: "work", issuedAt: 5)
+        XCTAssertTrue(app.holdsServerOrder("work"))
+        XCTAssertFalse(app.holdsServerOrder("home3"))
+    }
+
+    func testTheSavedOrderIsHandedToEveryServerThatIsUp() async throws {
+        let app = state()
+        app.upsertRegisteredPod(fqdn: "leticia.harry.flagship.services", name: "leticia",
+                                registeredAt: 200, liveness: .unreachable, identityPubKeyHex: stkB)
+        let boxes = ["home3": MockScreensClient(), "work": MockScreensClient(), "leticia": MockScreensClient()]
+        boxes["home3"]!.deliverServerOrderError = ScreensClientError.http(status: 404, message: "old box")
+        let clients = PodScreensClientFactory { fqdn in boxes[String(fqdn.prefix(while: { $0 != "." }))]! }
+        let wire = SignedServerOrderWire(
+            order: .init(user: "harry", stks: [stkC, stkA, stkB], issuedAt: 42, nonce: String(repeating: "0", count: 64)),
+            signature: String(repeating: "0", count: 128)
+        )
+        await ServerOrderSaver(app: app, mailbox: MockSecretMailboxClient(), clients: clients).deliver(wire)
+        XCTAssertEqual(boxes["work"]!.deliveredServerOrders, [wire])
+        XCTAssertTrue(boxes["leticia"]!.deliveredServerOrders.isEmpty, "an offline box gets it from .com")
+        XCTAssertEqual(app.serverOrderAcks, ["work": 42])
+    }
+
+    func testTheReconcilerRecordsEachBoxsAcknowledgement() async {
+        let app = AppState()
+        app.completeOnboarding(username: "harry", pods: [])
+        let dir = PodsDirectoryResponse(
+            username: "harry",
+            pods: [
+                PodDirectoryEntry(serverDomain: "home3.harry.flagship.services", identityPubKey: stkA, lastReported: 1,
+                                  registeredAt: 100, liveness: "live", orderIssuedAt: 7),
+                PodDirectoryEntry(serverDomain: "leticia.harry.flagship.services", identityPubKey: stkB, lastReported: 1,
+                                  registeredAt: 200, liveness: "live"),
+            ]
+        )
+        let store = PendingServerStore(defaults: UserDefaults(suiteName: "ack-\(UUID().uuidString)")!)
+        await PendingServerReconciler(app: app, store: store, fetchPods: { _ in dir }).reconcile()
+        XCTAssertEqual(app.serverOrderAcks, [PodInfo.podId(forFqdn: "home3.harry.flagship.services"): 7])
+    }
+
+    func testOrderJsonDecodesTheAcknowledgement() throws {
+        let json = #"{"serverDomain":"a.harry.flagship.services","identityPubKey":"aa","orderIssuedAt":1760000000000}"#
+        let entry = try JSONDecoder().decode(PodDirectoryEntry.self, from: Data(json.utf8))
+        XCTAssertEqual(entry.orderIssuedAt, 1_760_000_000_000)
     }
 
     // MARK: - Ranking and succession
@@ -137,8 +194,7 @@ final class ServerOrderTests: XCTestCase {
                                 registeredAt: 200, liveness: .unreachable, identityPubKeyHex: stkB)
         XCTAssertEqual(app.leaderPodId, "home3")
         XCTAssertEqual(app.currentPodId, "home3")
-        XCTAssertEqual(HomeScreen.orderLabels(pods: app.pods, leaderPodId: app.leaderPodId)["home3"],
-                       .leader(standingInFor: "leticia"))
+        XCTAssertEqual(HomeScreen.leaderLabel(pods: app.pods), .init(podId: "home3", standingInFor: "leticia"))
 
         app.upsertRegisteredPod(fqdn: "leticia.harry.flagship.services", name: "leticia",
                                 registeredAt: 200, liveness: .live, identityPubKeyHex: stkB)

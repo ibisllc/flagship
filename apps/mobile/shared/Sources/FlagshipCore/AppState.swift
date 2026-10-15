@@ -269,6 +269,10 @@ public final class AppState {
     /// True while this device is signing and posting a new order: `/pods`
     /// snapshots taken before it landed don't move the list back.
     public private(set) var isSavingServerOrder = false
+    /// Per pod id, the `issuedAt` of the server order that box says it ranks
+    /// by: from `/pods` (its heartbeat's `orderIssuedAt`) or its own answer
+    /// when this device handed it a new order. Only ever moves forward.
+    public private(set) var serverOrderAcks: [String: Int64] = [:]
 
     public init(
         isPaired: Bool = false,
@@ -393,6 +397,17 @@ public final class AppState {
         rankPods()
         if let leader = leaderPodId { currentPodId = leader }
         return snapshot
+    }
+
+    public func recordServerOrderAck(podId: String, issuedAt: Int64) {
+        guard issuedAt > (serverOrderAcks[podId] ?? -1) else { return }
+        serverOrderAcks[podId] = issuedAt
+    }
+
+    /// True once `podId` holds the order on screen (always, when the owner
+    /// never ordered: boxes and apps then rank the same way, oldest first).
+    public func holdsServerOrder(_ podId: String) -> Bool {
+        serverOrderIssuedAt == 0 || (serverOrderAcks[podId] ?? 0) >= serverOrderIssuedAt
     }
 
     /// The new order was saved (or kept local, for a demo account).
@@ -572,6 +587,7 @@ public final class AppState {
         self.serverOrder = []
         self.serverOrderIssuedAt = 0
         self.isSavingServerOrder = false
+        self.serverOrderAcks = [:]
         self.leaderPodId = nil
         self.currentPodId = nil
         self.sessionPodIds = nil
@@ -849,6 +865,7 @@ public final class AppState {
         self.serverOrder = []
         self.serverOrderIssuedAt = 0
         self.isSavingServerOrder = false
+        self.serverOrderAcks = [:]
         self.leaderPodId = nil
         self.currentPodId = nil
         self.sessionPodIds = nil

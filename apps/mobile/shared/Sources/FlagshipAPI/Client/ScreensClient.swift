@@ -126,6 +126,11 @@ public protocol ScreensClient: Sendable {
     /// `GET /api/screens/events` (WebSocket): one value per
     /// `{"type":"access-request"}` frame. Finishes when the socket closes.
     func accessRequestEvents() -> AsyncStream<Void>
+    /// `POST /api/screens/server-order` (docs/server-order.md): hand the box
+    /// the owner's signed server order; it answers with the one it now holds.
+    /// An older box answers 404 and gets the order from `.com` instead.
+    @discardableResult
+    func deliverServerOrder(_ order: SignedServerOrderWire) async throws -> ServerOrderAck
     /// `GET /api/screens/settings/access-alerts`. An older box answers 404.
     func accessAlertsSetting() async throws -> AccessAlertsSetting
     /// `POST /api/screens/settings/access-alerts {enabled}` (owner session;
@@ -418,6 +423,9 @@ public extension ScreensClient {
     }
     func accessRequestEvents() -> AsyncStream<Void> {
         AsyncStream { $0.finish() }
+    }
+    func deliverServerOrder(_ order: SignedServerOrderWire) async throws -> ServerOrderAck {
+        throw ScreensClientError.notImplemented("server order")
     }
     func accessAlertsSetting() async throws -> AccessAlertsSetting {
         throw ScreensClientError.notImplemented("access alerts setting")

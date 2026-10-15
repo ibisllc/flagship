@@ -138,7 +138,7 @@ public struct PendingServerReconciler {
             // cert. A registered box with neither is "registered but never
             // came online"; the UI marks it + offers the decommission/free-
             // the-name delete instead of the lost/stolen revoke.
-            app.upsertRegisteredPod(
+            let podId = app.upsertRegisteredPod(
                 fqdn: fqdn,
                 name: pendingName ?? Self.serverNameFromFqdn(fqdn),
                 cameOnline: entry.cameOnline,
@@ -156,6 +156,9 @@ public struct PendingServerReconciler {
                 revokedAt: entry.revokedAt,
                 revocationReason: entry.revocationReason
             )
+            if let ack = entry.orderIssuedAt {
+                app.recordServerOrderAck(podId: podId, issuedAt: ack)
+            }
             // Secret-free recipe: a registered box now has a directory identity
             // to seal the SWK to. The handler no-ops unless a deposit is owed
             // for this fqdn (idempotent via PendingSwkDepositStore).

@@ -28,17 +28,21 @@ public struct ServerOrderSaver {
 
     private let app: AppState
     private let mailbox: any SecretMailboxClient
+    /// Reaches each server directly, to hand it the new order at once.
+    private let clients: PodScreensClientFactory?
     private let signer: Signer
     private let now: () -> Int64
 
     public init(
         app: AppState,
         mailbox: any SecretMailboxClient,
+        clients: PodScreensClientFactory? = nil,
         signer: Signer? = nil,
         now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }
     ) {
         self.app = app
         self.mailbox = mailbox
+        self.clients = clients
         self.signer = signer ?? { reason in try await Self.sensitiveOrderKey(reason: reason) }
         self.now = now
     }
@@ -49,6 +53,8 @@ public struct ServerOrderSaver {
         let issuedAt = now()
         let snapshot = app.beginServerOrderChange(podIds: podIds, issuedAt: issuedAt)
         if app.isDemoAccount {
+            // A demo order never leaves the device: no box will acknowledge it.
+            for pod in app.pods { app.recordServerOrderAck(podId: pod.podId, issuedAt: issuedAt) }
             app.finishServerOrderChange()
             return .local
         }
@@ -60,11 +66,10 @@ public struct ServerOrderSaver {
         do {
             let key = try await signer(Self.reason)
             let signature = try order.sign(with: key)
-            try await mailbox.postServerOrder(
-                username: user,
-                body: SignedServerOrderWire(order: order.wire, signature: signature)
-            )
+            let wire = SignedServerOrderWire(order: order.wire, signature: signature)
+            try await mailbox.postServerOrder(username: user, body: wire)
             app.finishServerOrderChange()
+            Task { await deliver(wire) }
             return .saved
         } catch ScreensClientError.http(status: 409, message: _) {
             app.restoreServerOrder(snapshot)
@@ -73,6 +78,28 @@ public struct ServerOrderSaver {
             app.restoreServerOrder(snapshot)
             return .failed(Self.message(for: error))
         }
+    }
+
+    /// Hand the saved order to every server that is up, so each acts on it
+    /// now instead of on its next check-in with `.com`, and record what each
+    /// answers (Home shows the leader gray until the leader holds it). A box
+    /// that can't be reached, or is too old to take it, still gets the order
+    /// from `.com`, which keeps only the newest one.
+    public func deliver(_ wire: SignedServerOrderWire) async {
+        guard let clients else { return }
+        let targets = app.pods.filter { $0.status == .online && !$0.isRevoked && !$0.fqdn.isEmpty }
+        let acks = await withTaskGroup(of: (String, Int64?).self) { group in
+            for pod in targets {
+                group.addTask {
+                    let client = await clients.client(forFqdn: pod.fqdn)
+                    return (pod.podId, try? await client.deliverServerOrder(wire).heldIssuedAt)
+                }
+            }
+            var out: [(String, Int64)] = []
+            for await (podId, held) in group { if let held { out.append((podId, held)) } }
+            return out
+        }
+        for (podId, held) in acks { app.recordServerOrderAck(podId: podId, issuedAt: held) }
     }
 
     /// Move one server to the top of the order.

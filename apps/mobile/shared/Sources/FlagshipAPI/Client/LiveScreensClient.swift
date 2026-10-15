@@ -300,6 +300,10 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
         let body = try JSONEncoder().encode(req)
         return try await request("/api/screens/services/\(segment(serviceId))/members/role", method: "POST", body: body)
     }
+    @discardableResult
+    public func deliverServerOrder(_ order: SignedServerOrderWire) async throws -> ServerOrderAck {
+        try await request("/api/screens/server-order", method: "POST", body: try JSONEncoder().encode(order))
+    }
     public func accessAlertsSetting() async throws -> AccessAlertsSetting {
         try await request("/api/screens/settings/access-alerts")
     }

@@ -180,6 +180,14 @@ public struct SignedServerOrderWire: Codable, Equatable, Sendable {
     }
 }
 
+/// What a box answers when handed a server order
+/// (`POST /api/screens/server-order`): the `issuedAt` of the order it now
+/// ranks by. At or past the one sent, it acknowledges it.
+public struct ServerOrderAck: Codable, Equatable, Sendable {
+    public let heldIssuedAt: Int64
+    public init(heldIssuedAt: Int64) { self.heldIssuedAt = heldIssuedAt }
+}
+
 /// The decommission deposit body. `auth`/`authSignature` are the SAME IRK
 /// mailbox-auth shape as the other phone-mailbox calls; `order` is the
 /// `ServerDecommission` field set and `signature` is the owner-IRK signature
@@ -493,6 +501,9 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
     /// `BoxHealth`). nil on a box that hasn't updated to the reporter, and on
     /// a garbled relay, so it never fails the pods-list decode.
     public let health: BoxHealth?
+    /// `issuedAt` of the server order the box last reported ranking by (its
+    /// acknowledgement, docs/server-order.md). nil when it never reported one.
+    public let orderIssuedAt: Int64?
     public init(
         serverDomain: String,
         identityPubKey: String,
@@ -507,7 +518,8 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         liveness: String? = nil,
         lastSeenMsAgo: Int64? = nil,
         leadsServices: [String] = [],
-        health: BoxHealth? = nil
+        health: BoxHealth? = nil,
+        orderIssuedAt: Int64? = nil
     ) {
         self.serverDomain = serverDomain; self.identityPubKey = identityPubKey
         self.revokedAt = revokedAt; self.lastReported = lastReported
@@ -520,6 +532,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         self.lastSeenMsAgo = lastSeenMsAgo
         self.leadsServices = leadsServices
         self.health = health
+        self.orderIssuedAt = orderIssuedAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -541,6 +554,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         self.signedStatus = (try? c.decodeIfPresent(SignedDaemonStatus.self, forKey: .signedStatus)) ?? nil
         self.trustStatus = (try? c.decodeIfPresent(SignedBoxTrustStatus.self, forKey: .trustStatus)) ?? nil
         self.health = (try? c.decodeIfPresent(BoxHealth.self, forKey: .health)) ?? nil
+        self.orderIssuedAt = (try? c.decodeIfPresent(Int64.self, forKey: .orderIssuedAt)) ?? nil
     }
 
     /// Encode mirrors the wire shape (the presence flag round-trips through a
@@ -562,6 +576,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         if !leadsServices.isEmpty { try c.encode(leadsServices, forKey: .leadsServices) }
         if !pendingRequests.isEmpty { try c.encode(pendingRequests, forKey: .pendingRequests) }
         try c.encodeIfPresent(health, forKey: .health)
+        try c.encodeIfPresent(orderIssuedAt, forKey: .orderIssuedAt)
     }
 
     /// `cameOnline` derivation, shared by the reconciler. A box that has
@@ -580,7 +595,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
 
     private struct CurrentCert: Codable, Equatable { let sha256: String? }
     private enum CodingKeys: String, CodingKey {
-        case serverDomain, identityPubKey, revokedAt, revocationReason, lastReported, registeredAt, currentCert, signedStatus, trustStatus, pendingRequests, liveness, lastSeenMsAgo, leadsServices, health
+        case serverDomain, identityPubKey, revokedAt, revocationReason, lastReported, registeredAt, currentCert, signedStatus, trustStatus, pendingRequests, liveness, lastSeenMsAgo, leadsServices, health, orderIssuedAt
     }
 }
 

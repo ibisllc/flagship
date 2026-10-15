@@ -11,6 +11,7 @@ public struct HomeTab: View {
     @Environment(\.flagshipServerClient) private var server
     @Environment(\.secretMailboxClient) private var mailbox
     @Environment(\.leadsClient) private var leads
+    @Environment(\.podScreensClients) private var podClients
     @Environment(AppState.self) private var app
     @Environment(DeepLinker.self) private var linker
     @Environment(ToastCenter.self) private var toasts
@@ -115,6 +116,8 @@ public struct HomeTab: View {
                     deviceDisplayName: app.activeProfile?.deviceDisplayName,
                     pods: app.pods,
                     leaderPodId: app.leaderPodId,
+                    serverOrderIssuedAt: app.serverOrderIssuedAt,
+                    serverOrderAcks: app.serverOrderAcks,
                     showRecoveryNudge: app.shouldShowRecoveryNudge,
                     showRecoveryBackupBanner: !app.isDemoAccount && RecoveryBannerStore.shouldShow(
                         hasCloudRecovery: app.hasCloudRecovery,
@@ -396,7 +399,7 @@ public struct HomeTab: View {
     /// Save a new server order (docs/server-order.md). The list already
     /// shows it; on failure `ServerOrderSaver` puts the old one back.
     private func saveServerOrder(_ run: (ServerOrderSaver) async -> ServerOrderSaver.Outcome) async {
-        switch await run(ServerOrderSaver(app: app, mailbox: mailbox)) {
+        switch await run(ServerOrderSaver(app: app, mailbox: mailbox, clients: podClients)) {
         case .saved, .local:
             break
         case .superseded:

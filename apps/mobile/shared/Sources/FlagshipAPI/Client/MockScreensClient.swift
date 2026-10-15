@@ -652,6 +652,18 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         accessEventContinuations.forEach { $0.yield(()) }
     }
 
+    /// Server orders handed to this box; it holds the newest.
+    public private(set) var deliveredServerOrders: [SignedServerOrderWire] = []
+    public var deliverServerOrderError: Error?
+
+    @discardableResult
+    public func deliverServerOrder(_ order: SignedServerOrderWire) async throws -> ServerOrderAck {
+        try await tick()
+        if let deliverServerOrderError { throw deliverServerOrderError }
+        deliveredServerOrders.append(order)
+        return ServerOrderAck(heldIssuedAt: deliveredServerOrders.map(\.order.issuedAt).max() ?? 0)
+    }
+
     /// The box's push-alert setting; nil answers 404 like an older box.
     public var mockAccessAlertsEnabled: Bool? = true
     public private(set) var accessAlertsSettingCalls = 0

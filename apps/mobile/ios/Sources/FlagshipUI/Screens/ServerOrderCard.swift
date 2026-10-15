@@ -8,6 +8,7 @@ import FlagshipCore
 struct ServerOrderCard: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.secretMailboxClient) private var mailbox
+    @Environment(\.podScreensClients) private var podClients
     @Environment(AppState.self) private var app
     @Environment(ToastCenter.self) private var toasts
 
@@ -37,15 +38,18 @@ struct ServerOrderCard: View {
                                 .font(FS.font.body())
                                 .foregroundColor(c.text)
                                 .accessibilityIdentifier("sd-is-leader")
+                            if !app.holdsServerOrder(pod.podId) {
+                                Text("Waiting for it to confirm the new order.")
+                                    .font(FS.font.caption())
+                                    .foregroundColor(c.textMuted)
+                                    .accessibilityIdentifier("sd-leader-pending")
+                            }
                         } else {
-                            Text("No. \(position + 1) of \(ranked.count)")
+                            Text(Self.successionLine(above: ranked.prefix(position).map(\.name)))
                                 .font(FS.font.body())
                                 .foregroundColor(c.text)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
-                        Text("The first server in your order that's up leads: it serves your apps and gets new ones. Reorder them on Home.")
-                            .font(FS.font.caption())
-                            .foregroundColor(c.textMuted)
-                            .fixedSize(horizontal: false, vertical: true)
                         if position > 0 {
                             FSPrimaryButton(working ? "Saving…" : "Make leader", enabled: !working, block: true) {
                                 Task { await makeLeader(pod) }
@@ -58,11 +62,22 @@ struct ServerOrderCard: View {
         }
     }
 
+    /// Where a server stands, from position alone (no numbers): who it
+    /// takes over from.
+    static func successionLine(above: [String]) -> String {
+        switch above.count {
+        case 0: return "First in line to lead"
+        case 1: return "Takes over while \(above[0]) is down"
+        default:
+            return "Takes over while \(above.dropLast().joined(separator: ", ")) and \(above.last!) are down"
+        }
+    }
+
     private func makeLeader(_ pod: PodInfo) async {
         guard !working else { return }
         working = true
         defer { working = false }
-        switch await ServerOrderSaver(app: app, mailbox: mailbox).makeLeader(podId: pod.podId) {
+        switch await ServerOrderSaver(app: app, mailbox: mailbox, clients: podClients).makeLeader(podId: pod.podId) {
         case .saved, .local:
             toasts.success("\(pod.name) is now first in your order.")
         case .superseded:
