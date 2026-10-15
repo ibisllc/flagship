@@ -208,7 +208,10 @@
 //  v94: an AI-needs-you notification opens the build chat on the server
 //      holding the session (the bare vibecode-chat view is gone); its
 //      env-var ack carries the key and the model choice.
-const SHELL_VERSION = "v94";
+//  v95: Any device may invite at Member (admins pick higher ranks); the
+//      members list says which device invited each person; admins get an
+//      invite-created push that opens the account activity.
+const SHELL_VERSION = "v95";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -689,6 +692,22 @@ self.addEventListener("push", (event) => {
     return;
   }
 
+  // A non-admin device of the account invited someone (owner rule: admins are
+  // told). The push names no app, person or device; the activity view does.
+  if (data && (data.category === "invite-created" || data.kind === "invite-created")) {
+    event.waitUntil(
+      self.registration.showNotification("Flagship", {
+        body: "A device on your account invited someone to one of your apps.",
+        tag: "flagship-invite-created",
+        renotify: true,
+        requireInteraction: false,
+        icon: "/icon.svg",
+        data: { kind: "invite-created", deepLink: "/?view=account-audit" },
+      }),
+    );
+    return;
+  }
+
   // Account notices that carry only their category (as APNs and FCM see it):
   // a box's relay-trust SOS and a newly registered server. Home shows which.
   const noticeText = data && typeof data.category === "string" ? ACCOUNT_NOTICES[data.category] : undefined;
@@ -747,6 +766,7 @@ const WEBAPP_ROUTES = {
   "settings/two-factor": "/?view=account-security",
   "account/devices": "/?view=trusted-devices",
   "account/re-pair": "/?view=trusted-devices",
+  "account/activity": "/?view=account-audit",
 };
 function webappDeepLink(link) {
   if (typeof link !== "string") return null;

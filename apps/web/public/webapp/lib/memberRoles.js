@@ -75,9 +75,87 @@ export async function signAppMemberRole({ serverDomain, serviceId, target, role,
 
 const membersPath = (serviceId) => `/api/screens/services/${encodeURIComponent(serviceId)}/members`;
 
-/** `{mode, roles, defaultRole, descriptions, members:[{aid, role, grants:[{inviteId, role}], direct}], invites:[{inviteId, role, set}]}`. */
+/**
+ * `{mode, roles, defaultRole, descriptions, members:[{aid, role, grants:[{inviteId, role, tier}], direct}],
+ * invites:[{inviteId, role, set, tier}]}`. `tier` is who signed the invite: "admin", "member" (its joins
+ * stay Member unless an admin raises them) or null (invites from before tiers were recorded).
+ */
 export async function fetchMembers(serviceId, { fetchJson }) {
-  return fetchJson(membersPath(serviceId));
+  return normalizeMembers(await fetchJson(membersPath(serviceId)));
+}
+
+const tierOf = (v) => (v === "admin" || v === "member" ? v : null);
+
+export function normalizeMembers(body) {
+  if (!body || typeof body !== "object") return body;
+  return {
+    ...body,
+    members: Array.isArray(body.members)
+      ? body.members.map((m) => ({
+          ...m,
+          grants: Array.isArray(m?.grants) ? m.grants.map((g) => ({ ...g, tier: tierOf(g?.tier) })) : [],
+        }))
+      : [],
+    invites: Array.isArray(body.invites) ? body.invites.map((i) => ({ ...i, tier: tierOf(i?.tier) })) : [],
+  };
+}
+
+/** The box's tier for one invite ("admin" | "member" | null). */
+export function inviteTier(inviteId, members) {
+  return members?.invites?.find((i) => i.inviteId === inviteId)?.tier ?? null;
+}
+
+// Who can invite (owner rule 2026-10-15): any device of the account may invite
+// at Member; only a device holding the admin root grants higher ranks, changes
+// ranks or withdraws someone else's invite.
+
+export const ADMIN_ONLY_RANK_NOTE = "Only an admin device can give a higher rank";
+
+/** Whether this unlocked session holds the account's admin root. */
+export function isAdminDevice(session) {
+  return session?.adminRootSeed instanceof Uint8Array;
+}
+
+/** The ranks this device may give a new invite. */
+export function addableRoles(isAdmin) {
+  return isAdmin ? MEMBER_ROLES : ["member"];
+}
+
+/** Whether this device may revoke a `.com` invite row: an admin any, others only their own member invites. */
+export function canRevokeInvite(invite, { isAdmin, deviceId }) {
+  if (isAdmin) return true;
+  return invite?.creatorTier === "member" && typeof deviceId === "string" && deviceId !== "" && invite.creatorDeviceId === deviceId;
+}
+
+/**
+ * "Invited by …" for a row, or "" for rows from before creators were recorded.
+ * `deviceNames` maps device id → the name decrypted from the account directory
+ * (null when this device can't read it).
+ */
+export function invitedByText(invite, { deviceId, deviceNames }) {
+  const by = invite?.creatorDeviceId ?? null;
+  if (by === null && (invite?.creatorTier ?? null) === null) return "";
+  if (by !== null && by === deviceId) return "Invited by this device";
+  const name = by !== null ? deviceNames?.get(by) : null;
+  return name ? `Invited by ${name}` : "Invited by another device";
+}
+
+/**
+ * A memoized device id → name lookup over the signed, encrypted account
+ * directory. A failed read (no directory access, offline) resolves to null
+ * and is not retried until a new resolver is made.
+ */
+export function deviceNameResolver(fetchDirectory) {
+  let pending = null;
+  return () => {
+    pending ??= Promise.resolve()
+      .then(fetchDirectory)
+      .then(
+        (dir) => new Map((dir?.devices ?? []).filter((d) => d?.deviceId && d.displayName).map((d) => [d.deviceId, d.displayName])),
+        () => null,
+      );
+    return pending;
+  };
 }
 
 /** Sign and send one role change. Resolves to the box's `{ok, target, role}`. */

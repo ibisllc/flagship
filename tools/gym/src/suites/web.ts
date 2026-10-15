@@ -1236,6 +1236,47 @@ const TOTAL: readonly Scenario[] = [
     },
   ),
   webTotal(
+    "web-total-apps-rank-locked-non-admin",
+    "Who can invite (owner rule 2026-10-15): on a device without the admin root the rank picker is locked to Member with 'Only an admin device can give a higher rank'; ranks show read-only with no rank menu; Remove appears only on this device's own member invite; the create carries this device's id and is AID-signed, and no role order follows.",
+    "gym apps rank picker is locked to Member on a non-admin device",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Access control as a non-admin device (no admin root; the directory read is refused).", handle: "#sd-access" },
+        { kind: "assert", describe: "No rank menus; Sam shows Master read-only with no Remove; Lee (own invite) has Remove.", handle: "#sa-people" },
+        { kind: "tap", describe: "Add person.", handle: "#sa-add-person" },
+        { kind: "assert", describe: "Rank locked to Member with the one-line why.", handle: "#sa-rank-locked" },
+        { kind: "tap", describe: "Create the invite.", handle: "#sa-add-go" },
+        { kind: "assert", describe: "AID-signed create with this device's id; no role order.", handle: "#sa-add-status" },
+      ],
+      assertions: [
+        { describe: "Rank picker disabled", handle: "#sa-new-role", expect: "disabled" },
+        { describe: "Why it's locked", handle: "#sa-rank-locked", expect: "text", text: "Only an admin device can give a higher rank" },
+        { describe: "No rank menus", handle: 'select[data-action="sa-role"]', expect: "absent" },
+      ],
+      screenshots: [shot("rank-locked", "Add person on a non-admin device."), shot("member-invite-created", "The Member invite created.")],
+      dimension: "D6",
+    },
+  ),
+  webTotal(
+    "web-total-apps-members-invited-by",
+    "Members list 'Invited by': each row names the device that invited the person, decrypted on this device from the signed account directory ('Invited by this device' for its own; 'another device' when unresolved; nothing on rows from before creators were recorded). An admin device gets a rank menu and Revoke on every row; Revoke is signed with the admin root and the directory is read once.",
+    "gym apps members list shows who invited each person",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Access control as an admin device; the directory names the other device.", handle: "#sd-access" },
+        { kind: "assert", describe: "Invited by Kitchen iPad / this device / another device / nothing.", handle: ".sa-invited-by" },
+        { kind: "tap", describe: "Remove Sam, confirm.", handle: '[data-action="sa-remove"]' },
+        { kind: "assert", describe: "Admin-root-signed revoke; Members (3).", handle: "#sa-members-title" },
+      ],
+      assertions: [
+        { describe: "Device name resolved client-side", handle: ".sa-invited-by", expect: "text", text: "Invited by Kitchen iPad" },
+        { describe: "Members after the revoke", handle: "#sa-members-title", expect: "text", text: "Members (3)" },
+      ],
+      screenshots: [shot("invited-by", "Each row says who invited them."), shot("invite-revoked", "After revoking Sam.")],
+      dimension: "D6",
+    },
+  ),
+  webTotal(
     "web-total-apps-access-requests",
     "App internet access (§3a): pending hosts show why (tried N times / asked at install); Allow and Deny each put the rule on top of the list and send it signed (flagship/app-access/v1 over the list's sha256); the rule count follows. iOS: service-detail-access-allow / -deny / -pending / -rules.",
     "gym apps internet access requests are allowed and denied with a signed access list",

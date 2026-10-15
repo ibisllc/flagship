@@ -2320,6 +2320,7 @@ button[data-device-restricted] {
 }
 .sa-crown { display: inline-flex; color: #C9A227; }
 .sa-crown svg { width: 18px; height: 18px; }
+.sa-rank { font-size: 14px; font-weight: 600; color: var(--ink-soft); }
 
 /* Share this server (docs/share-a-server.md §8) */
 .share-row { padding: var(--space-3) 0; border-top: 1px solid var(--border-soft); }

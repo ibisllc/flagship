@@ -396,6 +396,13 @@ export function canonicalKnockBytes(k) {
 // so tests can drive a fixed key.
 // ──────────────────────────────────────────────────────────────────────
 
+const DEVICE_ID_RE = /^[0-9a-f]{32}$/;
+
+/** Who signed an invite's create: "admin", "member" (any device of the account), or null (old rows). */
+export function inviteTierOf(v) {
+  return v === "admin" || v === "member" ? v : null;
+}
+
 function comApiBase(comBase) {
   return String(comBase || "").replace(/\/+$/, "");
 }
@@ -512,8 +519,11 @@ export function inviteContextFromLocation(loc = typeof window !== "undefined" ? 
  * @param {"auto"|"manual"} [args.approvalMode]   .com redeem policy (default auto)
  * @param {number} [args.maxRedemptions]   group cap, 0 = unlimited (SIGNED)
  * @param {number} [args.expiresAt]        optional expiry epoch-ms (SIGNED)
+ * @param {string} [args.deviceId]         this device's account device id (32 hex);
+ *                                         unsigned, .com records who invited
  * @param {Uint8Array} args.umk            the unlocked seed (passed to signWithAccountId)
- * @param {(umk,bytes)=>Promise<Uint8Array>} args.signWithAccountId   the AID signer
+ * @param {(umk,bytes)=>Promise<Uint8Array>} args.signWithAccountId   the admin root on
+ *   an admin device (admin tier), else the AID (member tier: joins capped at Member)
  * @param {{ fetch?, now?, randomBytes? }} [deps]
  */
 export async function createInvite(args, deps = {}) {
@@ -528,6 +538,7 @@ export async function createInvite(args, deps = {}) {
     approvalMode,
     maxRedemptions,
     expiresAt,
+    deviceId,
     umk,
     signWithAccountId,
   } = args;
@@ -569,6 +580,7 @@ export async function createInvite(args, deps = {}) {
       ...(maxRedemptions !== undefined ? { maxRedemptions } : {}),
       ...(expiresAt !== undefined ? { expiresAt } : {}),
       ...(approvalMode !== undefined ? { approvalMode } : {}),
+      ...(typeof deviceId === "string" && DEVICE_ID_RE.test(deviceId) ? { deviceId } : {}),
     },
     signature: bytesToHex(sig),
   };
@@ -586,9 +598,10 @@ export async function createInvite(args, deps = {}) {
     const text = await resp.text().catch(() => "");
     throw err(`create failed (${resp.status}): ${text}`.trim(), String(resp.status));
   }
-  await resp.json().catch(() => ({}));
+  const created = await resp.json().catch(() => ({}));
   return {
     inviteId,
+    tier: inviteTierOf(created?.tier),
     secretHex: bytesToHex(secret),
     // The v2 link carries the author AID + inviteId in the fragment so the friend
     // can redeem under their per-author contact identity + (manual) reply an
@@ -685,14 +698,17 @@ export async function listInvites(args, deps = {}) {
       redemptions: typeof i.redemptions === "number" ? i.redemptions : null,
       boundAIDs: Array.isArray(i.boundAIDs) ? i.boundAIDs : null,
       approvalMode: i.approvalMode === "manual" || i.approvalMode === "auto" ? i.approvalMode : null,
+      creatorTier: inviteTierOf(i.creatorTier),
+      creatorDeviceId: typeof i.creatorDeviceId === "string" && DEVICE_ID_RE.test(i.creatorDeviceId) ? i.creatorDeviceId : null,
     });
   }
   return out;
 }
 
 /**
- * AID-sign + POST a revoke (by inviteId) to .com (v2 box-as-authority — the
- * revoke is verified against the owner's STABLE AID, the same key as create).
+ * Sign + POST a revoke (by inviteId) to .com. An admin device signs with the
+ * admin root; any other device may withdraw only its own member invite, signed
+ * with the same AID that created it.
  * For a GROUP invite this drops the WHOLE set; the box's revocation poller +
  * the per-AID box prune are what enforce it on the serving path.
  */

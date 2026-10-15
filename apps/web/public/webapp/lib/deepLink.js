@@ -142,6 +142,10 @@ export async function dispatchInitialView() {
       show("view-activity");
       return;
     }
+    if (q.view === "view-account-audit") {
+      const { enterAccountAudit } = await import("../views/account-audit.js");
+      return enterAccountAudit();
+    }
     if (q.view === "view-account-security" || q.view === "view-trusted-devices") {
       const { show } = await import("./router.js");
       show(q.view);

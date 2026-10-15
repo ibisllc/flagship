@@ -83,6 +83,7 @@ export const AUDIT_KIND_LABELS = Object.freeze({
   "account-deleted": "Deleted account",
   "username-reclaimed": "Username reclaimed",
   "ct-unexpected-cert": "Unexpected certificate observed",
+  "invite-created": "Someone was invited to an app",
 });
 
 /**
@@ -134,6 +135,7 @@ export function auditKindIcon(kind) {
       "re-pair-refused-no-credential": "⛔",
       "quarantine-blocked-revoke": "⛔",
       "ct-unexpected-cert": "⚠️",
+      "invite-created": "✉️",
     }[kind] ?? "•"
   );
 }

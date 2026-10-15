@@ -172,9 +172,48 @@ async function signedBy(page: Page, canonical: string, sigHex: string, key: "sen
 
 const fresh = (issuedAt: unknown) => typeof issuedAt === "number" && Math.abs(Date.now() - issuedAt) < 5 * 60_000;
 
+const ACCOUNT_ID = "0f1e2d3c4b5a69788796a5b4c3d2e1f0";
+const THIS_DEVICE = "a1b2c3d4e5f60718293a4b5c6d7e8f90";
+const OTHER_DEVICE = "f0e1d2c3b4a5968778695a4b3c2d1e0f";
+const GONE_DEVICE = "00112233445566778899aabbccddeeff";
+
+/** Give this browser an account device id; `admin` decides whether it holds the admin root. */
+async function asDevice(page: Page, { admin }: { admin: boolean }): Promise<void> {
+  await page.evaluate(
+    async ({ accountId, deviceId, admin }) => {
+      const profiles = await import("/lib/profiles.js");
+      const store = await import("/lib/profilesStore.js");
+      const { getSession } = await import("/lib/state.js");
+      profiles.addProfile({ cloudName: "smoketest", accountId, deviceId });
+      store.ensureProfile("smoketest");
+      store.setActiveCloudName("smoketest");
+      store.set("username", "smoketest");
+      const session = getSession();
+      session.username = "smoketest";
+      session.adminRootSeed = admin ? crypto.getRandomValues(new Uint8Array(32)) : null;
+    },
+    { accountId: ACCOUNT_ID, deviceId: THIS_DEVICE, admin },
+  );
+}
+
+/** Invite bundles sealed under this account's household key, by inviteId. */
+async function sealBundles(page: Page, names: Record<string, string>): Promise<Record<string, string>> {
+  return page.evaluate(async (names) => {
+    const ks = await import("/keystore.js");
+    const si = await import("/lib/serviceInvite.js");
+    const { getSession } = await import("/lib/state.js");
+    const hk = await ks.deriveHouseholdKeyFromSeed(getSession().umk);
+    const out: Record<string, string> = {};
+    for (const [id, name] of Object.entries(names)) out[id] = await si.sealInviteBundle({ name }, hk, id);
+    return out;
+  }, names);
+}
+
 test.describe("gym webapp apps", () => {
   test("gym apps access control goes members-only and sets a rank with signed orders", async ({ page }, testInfo) => {
     await reachHome(page);
+    // Only an admin device changes ranks; the role order is signed with its admin root.
+    await asDevice(page, { admin: true });
     const SAM_AID = "5a".repeat(32);
     const invites = await page.evaluate(async () => {
       const ks = await import("/keystore.js");
@@ -280,6 +319,185 @@ test.describe("gym webapp apps", () => {
     expect(roleCall!.headers["x-flagship-session"]).toBe("gym-home-token");
     await expect(page.locator("#sa-members-title")).toHaveText("Members (2)");
     await shot(page, testInfo, "access-control-ranks");
+  });
+
+  test("gym apps rank picker is locked to Member on a non-admin device", async ({ page }, testInfo) => {
+    await reachHome(page);
+    await asDevice(page, { admin: false });
+    const sealed = await sealBundles(page, { "inv-sam": "Sam", "inv-lee": "Lee" });
+    const members = {
+      mode: "open",
+      roles: ["member", "manager", "master"],
+      defaultRole: "member",
+      descriptions: {},
+      members: [],
+      invites: [
+        { inviteId: "inv-sam", role: "master", set: true, tier: "admin" },
+        { inviteId: "inv-lee", role: "member", set: false, tier: "member" },
+      ],
+    };
+    const calls = await stub(page, [
+      ...baseRules(appDetail()),
+      {
+        method: "GET",
+        match: (u) => u.pathname === "/api/users/smoketest/service-invites",
+        answer: () => ({
+          json: {
+            invites: [
+              { inviteId: "inv-sam", serviceRef: SERVICE_ID, encryptedBundle: sealed["inv-sam"], createdAt: Date.now() - 86_400_000, approvalMode: "auto", creatorTier: "admin", creatorDeviceId: OTHER_DEVICE },
+              { inviteId: "inv-lee", serviceRef: SERVICE_ID, encryptedBundle: sealed["inv-lee"], createdAt: Date.now() - 3_600_000, approvalMode: "auto", creatorTier: "member", creatorDeviceId: THIS_DEVICE },
+            ],
+          },
+        }),
+      },
+      // A device without view-directory can't read the account directory.
+      { method: "GET", match: (u) => u.pathname === `/api/accounts/${ACCOUNT_ID}/directory`, answer: () => ({ status: 403, json: { error: "forbidden" } }) },
+      { method: "GET", match: on(HOME, svc("/members")), answer: () => ({ json: members }) },
+      {
+        method: "POST",
+        match: (u) => u.pathname === "/api/users/smoketest/service-invites",
+        answer: (c) => ({ json: { created: true, inviteId: c.body.request.inviteId, tier: "member" } }),
+      },
+    ]);
+    await openApp(page);
+    await page.click("#sd-access");
+    await expect(page.locator("#sa-members-title")).toHaveText("Members (2)", { timeout: 10_000 });
+
+    // Ranks are read-only here; only this device's own member invite can be withdrawn.
+    const sam = page.locator("#sa-people .card", { hasText: "Sam" });
+    const lee = page.locator("#sa-people .card", { hasText: "Lee" });
+    await expect(page.locator('select[data-action="sa-role"]')).toHaveCount(0);
+    await expect(sam.locator(".sa-rank")).toHaveText("Master");
+    await expect(sam.locator('[data-action="sa-remove"]')).toHaveCount(0);
+    await expect(sam.locator(".sa-invited-by")).toHaveText("Invited by another device");
+    await expect(lee.locator('[data-action="sa-remove"]')).toHaveText("Remove");
+    await expect(lee.locator(".sa-invited-by")).toHaveText("Invited by this device");
+
+    // A new invite can only be Member, and says why.
+    await page.click("#sa-add-person");
+    await expect(page.locator("#sa-new-role")).toBeDisabled();
+    await expect(page.locator("#sa-new-role")).toHaveValue("member");
+    await expect(page.locator("#sa-new-role option")).toHaveCount(1);
+    await expect(page.locator("#sa-rank-locked")).toHaveText("Only an admin device can give a higher rank");
+    await shot(page, testInfo, "rank-locked");
+
+    await page.fill("#sa-name", "Robin");
+    await page.click("#sa-add-go");
+    await expect(page.locator("#sa-add-status")).toHaveText("Invite for Robin created.", { timeout: 10_000 });
+    const create = calls.find((c) => c.method === "POST" && c.url.pathname === "/api/users/smoketest/service-invites");
+    expect(create).toBeTruthy();
+    const req = create!.body.request;
+    expect(req.deviceId).toBe(THIS_DEVICE);
+    expect(fresh(req.issuedAt)).toBe(true);
+    // Signed with the account's AID (member tier), never an admin key it doesn't hold.
+    expect(
+      await page.evaluate(
+        async ({ req, sig }) => {
+          const ks = await import("/keystore.js");
+          const si = await import("/lib/serviceInvite.js");
+          const { getSession } = await import("/lib/state.js");
+          const aid = await ks.deriveAccountIdFromSeed(getSession().umk);
+          const bytes = si.canonicalCreateBytes({ ...req, authorAID: ks.hexToBytes(req.authorAID) });
+          return ks.verifyWithEd25519Pub(aid.publicKey, ks.hexToBytes(sig), bytes);
+        },
+        { req, sig: create!.body.signature },
+      ),
+    ).toBe(true);
+    // Member needs no rank order.
+    expect(calls.some((c) => c.method === "POST" && c.url.pathname === svc("/members/role"))).toBe(false);
+    await shot(page, testInfo, "member-invite-created");
+  });
+
+  test("gym apps members list shows who invited each person", async ({ page }, testInfo) => {
+    await reachHome(page);
+    await asDevice(page, { admin: true });
+    const sealed = await sealBundles(page, { "inv-sam": "Sam", "inv-lee": "Lee", "inv-kim": "Kim", "inv-old": "Old friend" });
+    const phoneProfile = await page.evaluate(
+      async ({ accountId, deviceId }) => {
+        const meta = await import("/lib/accountMetadata.js");
+        const { getSession } = await import("/lib/state.js");
+        const fields = { accountId, recordType: "device-self-profile", deviceId, revision: 1, keyVersion: 1 };
+        const sealed = await meta.encryptProfile("Kitchen iPad", await meta.deriveDeviceDirectoryKey(getSession().umk), fields);
+        return { accountId, deviceId, revision: 1, keyVersion: 1, ...sealed };
+      },
+      { accountId: ACCOUNT_ID, deviceId: OTHER_DEVICE },
+    );
+    let invites = [
+      { inviteId: "inv-sam", serviceRef: SERVICE_ID, encryptedBundle: sealed["inv-sam"], createdAt: Date.now() - 86_400_000, approvalMode: "auto", creatorTier: "member", creatorDeviceId: OTHER_DEVICE },
+      { inviteId: "inv-lee", serviceRef: SERVICE_ID, encryptedBundle: sealed["inv-lee"], createdAt: Date.now() - 86_400_000, approvalMode: "auto", creatorTier: "admin", creatorDeviceId: THIS_DEVICE },
+      { inviteId: "inv-kim", serviceRef: SERVICE_ID, encryptedBundle: sealed["inv-kim"], createdAt: Date.now() - 86_400_000, approvalMode: "auto", creatorTier: "admin", creatorDeviceId: GONE_DEVICE },
+      { inviteId: "inv-old", serviceRef: SERVICE_ID, encryptedBundle: sealed["inv-old"], createdAt: Date.now() - 86_400_000, approvalMode: "auto" },
+    ];
+    let directoryReads = 0;
+    const calls = await stub(page, [
+      ...baseRules(appDetail()),
+      { method: "GET", match: (u) => u.pathname === "/api/users/smoketest/service-invites", answer: () => ({ json: { invites } }) },
+      {
+        method: "GET",
+        match: (u) => u.pathname === `/api/accounts/${ACCOUNT_ID}/directory`,
+        answer: () => {
+          directoryReads += 1;
+          return {
+            json: {
+              accountId: ACCOUNT_ID,
+              devices: [
+                { deviceId: THIS_DEVICE, platformClass: "web", createdAt: Date.now() - 3_600_000 },
+                { deviceId: OTHER_DEVICE, platformClass: "ios", createdAt: Date.now() - 86_400_000 },
+              ],
+              selfProfiles: [phoneProfile],
+              managedProfiles: [],
+              grants: [],
+            },
+          };
+        },
+      },
+      {
+        method: "GET",
+        match: on(HOME, svc("/members")),
+        answer: () => ({
+          json: {
+            mode: "open",
+            roles: ["member", "manager", "master"],
+            defaultRole: "member",
+            descriptions: {},
+            members: [],
+            invites: invites.map((i) => ({ inviteId: i.inviteId, role: "member", set: false, tier: i.creatorTier ?? null })),
+          },
+        }),
+      },
+      {
+        method: "POST",
+        match: (u) => u.pathname === "/api/users/smoketest/service-invites/revoke",
+        answer: (c) => {
+          invites = invites.filter((i) => i.inviteId !== c.body.request.inviteId);
+          return { json: { revoked: true } };
+        },
+      },
+    ]);
+    await openApp(page);
+    await page.click("#sd-access");
+    await expect(page.locator("#sa-members-title")).toHaveText("Members (4)", { timeout: 10_000 });
+    const row = (name: string) => page.locator("#sa-people .card", { hasText: name });
+    await expect(row("Sam").locator(".sa-invited-by")).toHaveText("Invited by Kitchen iPad");
+    await expect(row("Lee").locator(".sa-invited-by")).toHaveText("Invited by this device");
+    await expect(row("Kim").locator(".sa-invited-by")).toHaveText("Invited by another device");
+    await expect(row("Old friend").locator(".sa-invited-by")).toHaveCount(0);
+    // An admin device changes ranks and can revoke every row.
+    await expect(page.locator('select[data-action="sa-role"]')).toHaveCount(4);
+    await expect(page.locator('[data-action="sa-remove"]')).toHaveCount(4);
+    await shot(page, testInfo, "invited-by");
+
+    await row("Sam").locator('[data-action="sa-remove"]').click();
+    await page.click("[data-modal-ok]");
+    await expect(page.locator("#sa-members-title")).toHaveText("Members (3)", { timeout: 10_000 });
+    const revoke = calls.find((c) => c.method === "POST" && c.url.pathname === "/api/users/smoketest/service-invites/revoke");
+    expect(revoke).toBeTruthy();
+    const r = revoke!.body.request;
+    expect(r.inviteId).toBe("inv-sam");
+    expect(await signedBy(page, ["flagship/service-invite/revoke/v1", r.inviteId, r.issuedAt].join("|"), revoke!.body.signature)).toBe(true);
+    // The directory is read once, however often the list redraws.
+    expect(directoryReads).toBe(1);
+    await shot(page, testInfo, "invite-revoked");
   });
 
   test("gym apps internet access requests are allowed and denied with a signed access list", async ({ page }, testInfo) => {
