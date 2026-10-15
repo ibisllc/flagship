@@ -242,6 +242,7 @@ fun ProcessUrlScreen(nav: NavController) {
                     is DeepLink.CompanionDockApproval -> deepLinker.enqueue(link)
                     is DeepLink.BuilderPair -> deepLinker.enqueue(link)
                     is DeepLink.AcceptInvite -> deepLinker.enqueue(link)
+                    is DeepLink.RedeemInvite -> deepLinker.enqueue(link)
                     else -> error = "That doesn't look like a Flagship link."
                 }
             },

@@ -53,7 +53,7 @@ export const ACCESS_MODES = ["open", "restricted"];
 // identity"): nothing is shared between apps, nothing depends on the inviter.
 export { deriveAppAccountIdFromSeed as deriveAppAccountId } from "../keystore.js";
 
-import { appLinkFragmentUrl, appLinkParams, isAppLink } from "./apex.js";
+import { appLinkFragmentUrl, appLinkParams, dataApex, isAppLink } from "./apex.js";
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -456,9 +456,10 @@ export function inviteSecretFromLocation(loc = typeof window !== "undefined" ? w
  * Returns null when the path isn't /invite or there is no valid 64-hex secret.
  *
  * The secret is matched as the CANONICAL bare leading token (`#<secret>` or
- * `#<secret>&…`), and — for backward-compat — also the legacy `k=<secret>` form
- * (old webapp-minted links + the iOS/Android custom-scheme `flagship://invite?k=`
- * hand-off, whose fragment-less query maps through the same parser).
+ * `#<secret>&…`), and also the `k=<secret>` form. The box's invite page hands
+ * the webapp `/invite#server=<box>&k=…&a=&i=&s=` (the webapp lives on its own
+ * origin, not the box's), so `server` names the box; it must be on the data
+ * apex. Without it the box is this page's own origin.
  */
 export function inviteContextFromLocation(loc = typeof window !== "undefined" ? window.location : null) {
   if (!loc) return null;
@@ -473,11 +474,15 @@ export function inviteContextFromLocation(loc = typeof window !== "undefined" ? 
   const a = hash.match(/(?:^|[?&])a=([0-9a-f]{64})/i);
   const i = hash.match(/(?:^|[?&])i=([0-9a-f]{64})/i);
   const sv = hash.match(/(?:^|[?&])s=([a-z0-9-]{1,128})(?:&|$)/);
+  const server = hash.match(/(?:^|[?&])server=([a-z0-9.-]{1,253})(?:&|$)/i);
+  const boxHost = server ? server[1].toLowerCase() : null;
+  if (boxHost && !boxHost.endsWith(`.${dataApex()}`)) return null;
   return {
     secret,
     authorAID: a ? a[1].toLowerCase() : null,
     inviteId: i ? i[1].toLowerCase() : null,
     serviceRef: sv ? sv[1] : null,
+    boxBaseUrl: boxHost ? `https://${boxHost}` : null,
   };
 }
 

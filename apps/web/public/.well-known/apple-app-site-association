@@ -73,6 +73,10 @@
             "comment": "App sign-in. A private app's knock page links /access#server=&svc=&ref=&page= (the fragment keeps the server and app out of our logs) to sign that browser in."
           },
           {
+            "/": "/invite",
+            "comment": "An app invite, /invite#server=<box>&k=<secret>&a=&i=&s=, handed over by the invite page on the owner's server. The secret rides in the fragment."
+          },
+          {
             "/": "/invite-accept",
             "comment": "An invitee's acceptance reply, /invite-accept#server=&iid=&ref=&aid=&sig=&at=, opened by the app's owner to grant access."
           },

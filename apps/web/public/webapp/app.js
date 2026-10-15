@@ -740,7 +740,7 @@ async function boot() {
     setSubtitle("invite");
     // The v2 fragment also carries the author AID + inviteId (for the friend's
     // per-author contact identity + the manual-approve acceptance) — pass them.
-    await enterInviteRedeem(inviteCtx.secret, undefined, {
+    await enterInviteRedeem(inviteCtx.secret, inviteCtx.boxBaseUrl ?? undefined, {
       authorAID: inviteCtx.authorAID,
       inviteId: inviteCtx.inviteId,
       serviceRef: inviteCtx.serviceRef,

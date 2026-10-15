@@ -1,5 +1,6 @@
 // Parsing of the service-access redeem deep link (docs/service-access-gating.md):
-// the flagship://invite?server=…&k=… custom-scheme hand-off + the box universal
+// the control-host App Link https://flagshipserver.com/invite#server=…&k=…, its
+// older flagship://invite?server=…&k=… twin + the box universal
 // link https://<server>.<user>.flagship.services/invite#<secret>. The Uri.parse
 // paths need Robolectric (android.net.Uri lives in android.jar); the pure
 // secretFromFragment helper is plain-JVM.
@@ -50,6 +51,47 @@ class InviteDeepLinkTest {
     @Test fun customSchemeServerAndK() {
         val link = DeepLink.parse(Uri.parse("flagship://invite?server=home.alice.flagship.services&k=$secret"))
         assertEquals(DeepLink.RedeemInvite("home.alice.flagship.services", secret), link)
+    }
+
+    // ── The box page's "Open in the Flagship app": /invite#server=&k=&a=&i=&s= ──
+
+    private val box = "home.alice.flagship.services"
+    private val author = "cd".repeat(32)
+
+    @Test fun controlHostInviteFragmentParses() {
+        val full = "server=$box&k=$secret&a=$author&i=$inviteId&s=alice-notes"
+        val expected = DeepLink.RedeemInvite(box, secret, author, inviteId, "alice-notes")
+        for (raw in listOf(
+            "https://flagshipserver.com/invite#$full",
+            "https://flagshipserver.com/invite/#$full",
+            "https://www.flagshipserver.com/invite#$full",
+        )) {
+            assertEquals(raw, expected, DeepLink.parse(Uri.parse(raw)))
+            assertEquals(raw, expected, AppLink.resolve(Uri.parse(raw)))
+        }
+        // a, i and s may be absent.
+        assertEquals(
+            DeepLink.RedeemInvite(box, secret),
+            DeepLink.parse(Uri.parse("https://flagshipserver.com/invite#server=$box&k=$secret")),
+        )
+        // URLSearchParams-encoded, and the same as the older custom-scheme form.
+        assertEquals(
+            expected,
+            DeepLink.parse(Uri.parse("https://flagshipserver.com/invite#server=home%2Ealice%2Eflagship%2Eservices&k=${secret.uppercase()}&a=$author&i=$inviteId&s=alice%2Dnotes")),
+        )
+        assertEquals(expected, DeepLink.parse(Uri.parse("flagship://invite?$full")))
+    }
+
+    @Test fun controlHostInviteFragmentRejectsBadLinks() {
+        assertNull(DeepLink.parse(Uri.parse("https://flagshipserver.com/invite#server=$box")))
+        assertNull(DeepLink.parse(Uri.parse("https://flagshipserver.com/invite#server=$box&k=notahex")))
+        assertNull(DeepLink.parse(Uri.parse("https://flagshipserver.com/invite#k=$secret")))
+        assertNull(DeepLink.parse(Uri.parse("https://flagshipserver.com/invite#server=evil.example&k=$secret")))
+        assertNull(DeepLink.parse(Uri.parse("https://flagshipserver.com/invite#server=flagship.services.evil.example&k=$secret")))
+        assertNull(DeepLink.parse(Uri.parse("https://flagshipserver.com/invite#$secret")))
+        assertNull(DeepLink.parse(Uri.parse("https://flagshipserver.com/invite")))
+        assertNull(DeepLink.parse(Uri.parse("https://evil.example/invite#server=$box&k=$secret")))
+        assertNull(DeepLink.parse(Uri.parse("flagship://invite?server=evil.example&k=$secret")))
     }
 
     @Test fun customSchemeMissingServerIsNull() {

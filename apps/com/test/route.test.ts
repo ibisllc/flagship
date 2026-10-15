@@ -1139,7 +1139,7 @@ describe("app links — open-in-app page on the control apex", () => {
   // (store buttons + an opt-in webapp link). It must NOT redirect into the
   // webapp origin: an installed Android webapp claims every navigation there.
 
-  const appLinks = ["/join", "/share", "/transfer", "/qr", "/remote", "/builder", "/access", "/invite-accept"];
+  const appLinks = ["/join", "/share", "/transfer", "/qr", "/remote", "/builder", "/access", "/invite", "/invite-accept"];
   for (const path of [...appLinks, ...appLinks.map((p) => `${p}/`)]) {
     it(`${path} serves /open/index.html with no redirect, ungated`, async () => {
       const r = await route(new Request(`https://flagshipserver.com${path}?o=x`), makeEnv());

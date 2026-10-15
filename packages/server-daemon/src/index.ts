@@ -82,6 +82,7 @@ import {
   ServiceSessionStore,
 } from "./serviceAccess.js";
 import { buildServiceAccessWeb } from "./serviceAccessWeb.js";
+import { buildInvitePage } from "./invitePage.js";
 import { buildMemberRolesHttp } from "./memberRoles.js";
 import { buildAppSessionResolver } from "./appMemberSession.js";
 import { matchesPublicRoute } from "./serviceProxy.js";
@@ -3401,6 +3402,7 @@ async function wireOwnerHandlers(deps: {
     controlBaseUrl: env.controlPlaneBaseUrl,
   });
   runtime.addHandler(accessWeb.handle);
+  runtime.addHandler(buildInvitePage({ serverId: env.serverFqdn, controlBaseUrl: env.controlPlaneBaseUrl }));
   // Enforcement: a restricted service's per-label reverse proxy is fronted by
   // this guard. A request to `<urlLabel>.<serverFqdn>` resolves to its
   // installed `<creator>-<slug>`; OPEN services + unknown labels fall through.

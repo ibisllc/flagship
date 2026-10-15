@@ -936,6 +936,7 @@ describe("webapp serviceInvite — wire helpers", () => {
       authorAID: null,
       inviteId: null,
       serviceRef: null,
+      boxBaseUrl: null,
     });
     // v2 context — carries the author AID + inviteId from the CANONICAL
     // (bare-secret) fragment `#<secret>&a=…&i=…`.
@@ -945,6 +946,7 @@ describe("webapp serviceInvite — wire helpers", () => {
       authorAID: VECTORS.derived.authorAidPubHex,
       inviteId: VECTORS.inviteId,
       serviceRef: null,
+      boxBaseUrl: null,
     });
     // Backward-compat: a legacy `k=<secret>` fragment still parses (old
     // webapp-minted links + the mobile custom-scheme hand-off).
@@ -958,6 +960,7 @@ describe("webapp serviceInvite — wire helpers", () => {
       authorAID: VECTORS.derived.authorAidPubHex,
       inviteId: VECTORS.inviteId,
       serviceRef: null,
+      boxBaseUrl: null,
     });
     // With the app (`s=`), the friend's id for it can be derived.
     expect(
@@ -967,7 +970,25 @@ describe("webapp serviceInvite — wire helpers", () => {
       authorAID: VECTORS.derived.authorAidPubHex,
       inviteId: VECTORS.inviteId,
       serviceRef: VECTORS.serviceRef,
+      boxBaseUrl: null,
     });
+    // The box's invite page hands the webapp `server=<box>&k=…` (the webapp
+    // lives on its own origin); the box must be on the data apex.
+    expect(
+      si.inviteContextFromLocation({
+        pathname: "/invite",
+        hash: `#server=home.alice.flagship.services&k=${VECTORS.secretHex}&a=${VECTORS.derived.authorAidPubHex}&i=${VECTORS.inviteId}&s=${VECTORS.serviceRef}`,
+      }),
+    ).toEqual({
+      secret: VECTORS.secretHex,
+      authorAID: VECTORS.derived.authorAidPubHex,
+      inviteId: VECTORS.inviteId,
+      serviceRef: VECTORS.serviceRef,
+      boxBaseUrl: "https://home.alice.flagship.services",
+    });
+    expect(
+      si.inviteContextFromLocation({ pathname: "/invite", hash: `#server=evil.example&k=${VECTORS.secretHex}` }),
+    ).toBeNull();
     // buildInviteLink round-trips both forms (v2 now BARE-secret, no k=).
     expect(si.buildInviteLink("https://home.alice.flagship.services", VECTORS.secretHex)).toBe(
       `https://home.alice.flagship.services/invite#${VECTORS.secretHex}`,
@@ -999,6 +1020,7 @@ describe("webapp serviceInvite — wire helpers", () => {
       authorAID: FROZEN_AUTHOR,
       inviteId: FROZEN_INVITE,
       serviceRef: null,
+      boxBaseUrl: null,
     });
     // The current form also names the app; frozen the same on iOS + Android.
     const FROZEN_FRAG_APP = `${FROZEN_FRAG}&s=alice-notes`;
@@ -1014,6 +1036,7 @@ describe("webapp serviceInvite — wire helpers", () => {
       authorAID: FROZEN_AUTHOR,
       inviteId: FROZEN_INVITE,
       serviceRef: "alice-notes",
+      boxBaseUrl: null,
     });
     // parse(bare secret) === { secret only }.
     expect(si.inviteContextFromLocation({ pathname: "/invite", hash: `#${FROZEN_SECRET}` })).toEqual({
@@ -1021,6 +1044,7 @@ describe("webapp serviceInvite — wire helpers", () => {
       authorAID: null,
       inviteId: null,
       serviceRef: null,
+      boxBaseUrl: null,
     });
   });
 

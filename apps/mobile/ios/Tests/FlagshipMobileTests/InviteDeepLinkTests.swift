@@ -144,6 +144,49 @@ final class InviteDeepLinkTests: XCTestCase {
             .inviteRedeem(serverDomain: "home.alice.flagship.services", secretHex: s, authorAidHex: a, inviteId: i))
     }
 
+    func testControlHostInviteFragmentRoutesToRedeem() {
+        let box = "home.alice.flagship.services"
+        let full = "server=\(box)&k=\(secret)&a=\(authorAid)&i=\(inviteId)&s=alice-notes"
+        let expectedFull = DeepLink.inviteRedeem(serverDomain: box, secretHex: secret, authorAidHex: authorAid,
+                                                 inviteId: inviteId, serviceRef: "alice-notes")
+        for base in ["https://flagshipserver.com/invite", "https://www.flagshipserver.com/invite", "https://flagshipserver.com/invite/"] {
+            XCTAssertEqual(DeepLink.parse(URL(string: "\(base)#\(full)")!), expectedFull, base)
+        }
+        XCTAssertEqual(DeepLink.parsePastedString("  https://flagshipserver.com/invite#\(full)\n"), expectedFull)
+        XCTAssertEqual(
+            DeepLink.parse(URL(string: "https://flagshipserver.com/invite#server=\(box)&k=\(secret)")!),
+            .inviteRedeem(serverDomain: box, secretHex: secret, authorAidHex: nil, inviteId: nil))
+        // URLSearchParams encoding.
+        XCTAssertEqual(
+            DeepLink.parse(URL(string: "https://flagshipserver.com/invite#server=home%2Ealice.flagship.services&k=\(secret)&a=\(authorAid)&i=\(inviteId)&s=alice%2Dnotes")!),
+            expectedFull)
+        XCTAssertEqual(
+            DeepLink.parse(URL(string: "https://flagshipserver.com/invite#server=\(box)&k=\(secret.uppercased())&s=Bad+Ref")!),
+            .inviteRedeem(serverDomain: box, secretHex: secret, authorAidHex: nil, inviteId: nil))
+    }
+
+    func testControlHostInviteFragmentRejects() {
+        let box = "home.alice.flagship.services"
+        let bad = [
+            "https://flagshipserver.com/invite#server=evil.example&k=\(secret)",
+            "https://flagshipserver.com/invite#server=flagship.services&k=\(secret)",
+            "https://flagshipserver.com/invite#server=\(box)",
+            "https://flagshipserver.com/invite#server=\(box)&k=abcd",
+            "https://flagshipserver.com/invite#k=\(secret)",
+            "https://flagshipserver.com/invite?server=\(box)&k=\(secret)",
+            "https://example.com/invite#server=\(box)&k=\(secret)",
+        ]
+        for link in bad { XCTAssertNil(DeepLink.parse(URL(string: link)!), link) }
+    }
+
+    func testExistingInviteFormsStillParse() {
+        let box = "home.alice.flagship.services"
+        let expected = DeepLink.inviteRedeem(serverDomain: box, secretHex: secret, authorAidHex: authorAid,
+                                             inviteId: inviteId, serviceRef: "alice-notes")
+        XCTAssertEqual(DeepLink.parse(URL(string: "https://\(box)/invite#\(secret)&a=\(authorAid)&i=\(inviteId)&s=alice-notes")!), expected)
+        XCTAssertEqual(DeepLink.parse(URL(string: "flagship://invite?server=\(box)&k=\(secret)&a=\(authorAid)&i=\(inviteId)&s=alice-notes")!), expected)
+    }
+
     func testAcceptReplyLinkRoundTrips() {
         let sig = String(repeating: "1c", count: 64) // 128-hex
         let link = ServiceInviteLinks.acceptReplyLink(

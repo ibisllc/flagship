@@ -56,11 +56,11 @@ sealed interface DeepLink {
     /** #92 — friend redeem of a service-access capability invite
      *  (docs/service-access-gating.md). Carries the BOX host the `/invite` link
      *  was served from + the 32-byte capability secret (64-hex). The secret is
-     *  POSTed to that box's OWN redeem endpoint, never to `.com`. Reachable two
-     *  ways: the `flagship://invite?server=<host>&k=<secret>` "open in app"
-     *  hand-off the box's /invite page offers (Android drops the URL fragment
-     *  from App-Links, so the secret rides a query), and — when the fragment
-     *  IS carried — the universal link
+     *  POSTed to that box's OWN redeem endpoint, never to `.com`. Reachable via
+     *  the box /invite page's "Open in the Flagship app" App Link
+     *  `https://flagshipserver.com/invite#server=<host>&k=<secret>&a=&i=&s=`
+     *  (older pages: `flagship://invite?…` with the same params as a query), and
+     *  the box's own universal link
      *  `https://<server>.<user>.flagship.services/invite#<secret>`.
      *  v2: [authorAidHex] (optional, from `a=<64hex>` in the fragment/query) lets
      *  the friend derive a PER-AUTHOR contact AID for the redeem; absent ⇒ the
@@ -173,8 +173,8 @@ sealed interface DeepLink {
                 if (host == Endpoints.controlHost && uri.path == "/share") {
                     return ServerShare.parseShareLink(uri.toString())?.let { ShareOffer(it.shareId, it.secretHex) }
                 }
-                // The App Link twins of flagship://join, remote, builder, access
-                // and invite-accept: same params, same validation.
+                // The App Link twins of flagship://join, remote, builder, access,
+                // invite and invite-accept: same params, same validation.
                 if (Endpoints.isControlHost(host)) {
                     val path = uri.path?.trimEnd('/')
                     val twin = APP_LINK_PATHS.firstOrNull { "/$it" == path }
@@ -187,7 +187,7 @@ sealed interface DeepLink {
             return parseHost(host, uri)
         }
 
-        private val APP_LINK_PATHS = listOf("join", "remote", "builder", "access", "invite-accept")
+        private val APP_LINK_PATHS = listOf("join", "remote", "builder", "access", "invite", "invite-accept")
 
         /** `http(s)://<control host>/app/<route>[/<more>][?q]` ≡ `flagship://<route>[/<more>][?q]`. */
         private fun appRouteTwin(uri: Uri): Uri? {
@@ -212,7 +212,7 @@ sealed interface DeepLink {
         }
 
         private fun parseHost(host: String, uri: Uri): DeepLink? {
-            if (host == "access") fragmentAsQuery(uri)?.let { return parseHost(host, it) }
+            if (host == "access" || host == "invite") fragmentAsQuery(uri)?.let { return parseHost(host, it) }
             val params = uri.queryParameterNames.associateWith { uri.getQueryParameter(it) ?: "" }
             return when (host) {
                 // Back-compat: legacy `unlock-approve(s)` links (old pushes /
@@ -229,19 +229,20 @@ sealed interface DeepLink {
                     if (json != null) TransferOffer(json) else null
                 }
                 "invite" -> {
-                    // flagship://invite?server=<host>&k=<64hex>&a=<authorAID>&i=<inviteId>
-                    // — the "open in app" hand-off from the box's /invite page (a
-                    // custom scheme can't carry the fragment, so the secret is a
-                    // `k` query).
-                    val server = params["server"] ?: params["host"] ?: ""
-                    val pathSecret = uri.path?.trim('/').orEmpty()
+                    // The box /invite page's "open in app" hand-off:
+                    // https://<control host>/invite#server=<host>&k=<64hex>&a=&i=&s=
+                    // (older pages: flagship://invite?… with the same params as a query).
+                    // The secret is POSTed to `server`, so it must be a box on the data apex.
+                    val server = (params["server"] ?: params["host"] ?: "").lowercase()
+                    if (!server.endsWith(".${Endpoints.dataApex}")) return null
+                    val pathSecret = if (uri.scheme == "flagship") uri.path?.trim('/').orEmpty() else ""
                     val candidate = params["k"] ?: params["secret"] ?: pathSecret
                     val secret = secretFromFragment(candidate)
                     val hex64 = Regex("^[0-9a-fA-F]{64}$")
                     val author = params["a"]?.takeIf { hex64.matches(it) }?.lowercase()
                     val invite = params["i"]?.takeIf { hex64.matches(it) }?.lowercase()
                     val ref = params["s"]?.takeIf { ServerKeys.isAppRef(it) }
-                    if (secret != null && server.isNotEmpty()) RedeemInvite(server, secret, author, invite, ref) else null
+                    if (secret != null) RedeemInvite(server, secret, author, invite, ref) else null
                 }
                 "join" -> {
                     // flagship://join?sid=<sid>&pk=<pkB64u>. Both params

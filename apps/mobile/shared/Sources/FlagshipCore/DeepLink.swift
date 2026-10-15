@@ -65,13 +65,15 @@ public enum DeepLink: Equatable, Sendable {
     /// without `s=` still parses but can't be redeemed (ask for a new one). The
     /// canonical fragment is the BARE secret followed by `&a=`/`&i=`/`&s=`
     /// (identical across webapp/iOS/Android).
-    /// Reachable two ways:
+    /// Reachable three ways:
     ///   - the UNIVERSAL LINK the owner shares,
     ///     `https://<server>.<user>.flagship.services/invite#<secret>&a=<authorAID>&i=<inviteId>`
-    ///     (or the bare `#<secret>`), opened by the native browser/AASA, and
-    ///   - the `flagship://invite?server=<host>&k=<secret>&a=<authorAID>&i=<inviteId>`
-    ///     custom-scheme form the box's `/invite` page offers as "open in the app"
-    ///     (a custom scheme can't carry a fragment, so the secret rides `k=` there).
+    ///     (or the bare `#<secret>`), opened by the native browser/AASA,
+    ///   - the box's `/invite` page "Open in the Flagship app" button,
+    ///     `https://flagshipserver.com/invite#server=<box>&k=<secret>&a=&i=&s=`
+    ///     (fragment, so `.com` never sees it; the box must be on the data apex), and
+    ///   - the older `flagship://invite?server=<host>&k=<secret>&a=<authorAID>&i=<inviteId>`
+    ///     custom-scheme form of that button.
     case inviteRedeem(serverDomain: String, secretHex: String, authorAidHex: String?, inviteId: String?, serviceRef: String? = nil)
 
     /// Author-finalize of a MANUAL-approve invite (v2 tier 2). The CONSUMER's app
@@ -178,6 +180,10 @@ public enum DeepLink: Equatable, Sendable {
             case "/builder":  return builderLink(url)
             case "/access":   return accessLink(fragmentOrQueryParams(url))
             case "/invite-accept": return inviteAcceptLink(fragmentOrQueryParams(url))
+            case "/invite":
+                // The box /invite page's "Open in the Flagship app" button:
+                // `#server=<box>&k=<secret>&a=&i=&s=`, all in the fragment.
+                return inviteRedeemLink(fragmentParams(url), pathSecret: "")
             default: break
             }
         }
@@ -267,19 +273,7 @@ public enum DeepLink: Equatable, Sendable {
             // — the "open in app" hand-off from the box's /invite page (a custom
             // scheme can't carry the fragment, so the secret comes as the `k`
             // query). Also accept the secret as the trailing path segment.
-            let server = params["server"] ?? params["host"] ?? ""
-            let pathSecret = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-            let candidate = params["k"] ?? params["secret"] ?? pathSecret
-            if let secret = Self.secretFromFragment(candidate), !server.isEmpty {
-                return .inviteRedeem(
-                    serverDomain: server,
-                    secretHex: secret,
-                    authorAidHex: Self.validHex64(params["a"]),
-                    // Canonical `i=`; tolerate the legacy `iid=` for in-flight links.
-                    inviteId: Self.validHex(params["i"]) ?? Self.validHex(params["iid"]),
-                    serviceRef: params["s"].flatMap { ServiceInvite.isAppRef($0) ? $0 : nil })
-            }
-            return nil
+            return inviteRedeemLink(params, pathSecret: url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")))
         case "invite-accept":
             return inviteAcceptLink(params)
         case "join":
@@ -389,6 +383,23 @@ public enum DeepLink: Equatable, Sendable {
     private static func builderLink(_ url: URL) -> DeepLink? {
         BuilderPairing.looksLikeBuilderCode(url.absoluteString)
             ? .builderPair(link: url.absoluteString) : nil
+    }
+
+    /// An invite redeem from `server=&k=&a=&i=&s=` params (the secret may
+    /// instead be the trailing path segment of the custom-scheme form).
+    private static func inviteRedeemLink(_ params: [String: String], pathSecret: String) -> DeepLink? {
+        // The redeem posts the secret to `server`, so it must be a Flagship box.
+        let server = (params["server"] ?? params["host"] ?? "").lowercased()
+        let candidate = params["k"] ?? params["secret"] ?? pathSecret
+        guard let secret = Self.secretFromFragment(candidate),
+              server.hasSuffix(".\(Endpoints.dataApex)") else { return nil }
+        return .inviteRedeem(
+            serverDomain: server,
+            secretHex: secret,
+            authorAidHex: Self.validHex64(params["a"]),
+            // Canonical `i=`; tolerate the legacy `iid=` for in-flight links.
+            inviteId: Self.validHex(params["i"]) ?? Self.validHex(params["iid"]),
+            serviceRef: params["s"].flatMap { ServiceInvite.isAppRef($0) ? $0 : nil })
     }
 
     /// The knock authorization (`access#server=<fqdn>&svc=<label>&ref=<serviceRef>&page=<pageId>`):

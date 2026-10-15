@@ -54,7 +54,7 @@ const WEBAPP_ORIGIN = `https://${WEBAPP_HOST}`;
 
 /** Control-apex paths the native apps claim as universal links / App Links. */
 const APP_LINK_PATHS: ReadonlySet<string> = new Set(
-  ["/join", "/share", "/transfer", "/qr", "/remote", "/builder", "/access", "/invite-accept"]
+  ["/join", "/share", "/transfer", "/qr", "/remote", "/builder", "/access", "/invite", "/invite-accept"]
     .flatMap((p) => [p, `${p}/`]),
 );
 
@@ -726,7 +726,7 @@ async function routeImpl(
   }
 
   // App links (`APP_LINK_PATHS`: add a device, share or take over a server,
-  // remote sign-in, Studio pairing, app sign-in, invite replies; `/app/<route>`
+  // remote sign-in, Studio pairing, app sign-in, app invites and their replies; `/app/<route>`
   // for any other screen in the app, e.g. from a notification). With the app
   // installed the OS opens them in it (AASA + Android App Links) and the
   // request never gets here. Otherwise the browser gets the open-in-app page

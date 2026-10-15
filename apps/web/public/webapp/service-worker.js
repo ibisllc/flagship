@@ -169,7 +169,9 @@
 //       app sign-in links carry their params in the fragment.
 //  v80: a boot/unlock approval push reads "A server is waiting for your
 //       approval." and opens the approvals view.
-const SHELL_VERSION = "v80";
+//  v81: an app invite handed over by the owner's server
+//       (/invite#server=<box>&k=…) is accepted against that box.
+const SHELL_VERSION = "v81";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

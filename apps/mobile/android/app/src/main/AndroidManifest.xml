@@ -61,6 +61,10 @@
                 <data android:scheme="https" android:host="flagshipserver.com" android:path="/builder/" />
                 <data android:scheme="https" android:host="flagshipserver.com" android:path="/access" />
                 <data android:scheme="https" android:host="flagshipserver.com" android:path="/access/" />
+                <!-- An app invite's "Open in the Flagship app":
+                     /invite#server=<box>&k=<secret>&a=&i=&s= opens the redeem screen. -->
+                <data android:scheme="https" android:host="flagshipserver.com" android:path="/invite" />
+                <data android:scheme="https" android:host="flagshipserver.com" android:path="/invite/" />
                 <data android:scheme="https" android:host="flagshipserver.com" android:path="/invite-accept" />
                 <data android:scheme="https" android:host="flagshipserver.com" android:path="/invite-accept/" />
             </intent-filter>
