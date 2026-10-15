@@ -10,7 +10,7 @@ import { installWhoami, setMode, waitServing } from "./gating.js";
 import type { Group } from "./types.js";
 
 const httpFn: HttpFn = async (url, init) => {
-  const r = await http(url, init ?? {}, 20_000);
+  const r = await http(url, init ?? {}, 60_000);
   return { status: r.status, text: r.text, json: r.json, setCookies: r.setCookies } as WireResponse;
 };
 

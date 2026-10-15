@@ -116,6 +116,11 @@ async function main(): Promise<number> {
     if (reusePath) {
       accounts = loadFleet(reusePath);
       log(`reusing fleet from ${reusePath}: ${accounts.map((a) => a.boxes.map((b) => b.fqdn).join(" ")).join(" ")}`);
+      await Promise.all(
+        accounts.flatMap((a) => a.boxes).map((b) =>
+          fleetRec.check(`${b.serverName}.${b.account} online + serving`, () => waitOnline(b, 3)),
+        ),
+      );
     } else {
       const wantA = needs.has("A1") || needs.has("A2");
       const wantB = needs.has("B1");

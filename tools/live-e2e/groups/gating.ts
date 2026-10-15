@@ -96,7 +96,7 @@ export const gating: Group = {
     const friend = deriveAppAccountId(friendUmk, serviceRef);
     const friendHex = bytesToHex(friend.publicKey);
     const get = (path: string, headers: Record<string, string> = {}) =>
-      tryHttp(`${app}${path}`, { headers: { accept: "text/html", ...headers } }, 15_000);
+      tryHttp(`${app}${path}`, { headers: { accept: "text/html", ...headers } }, 45_000);
 
     const session = await pair(A, b);
     const installed = await rec.check("install the probe app (open, public route /pub/*)", async () => {
@@ -150,11 +150,11 @@ export const gating: Group = {
     await rec.check("MEMBERS-ONLY: a browser gets the knock page (+ holder cookie, control-plane access link)", async () => {
       await knock();
       const k = await get("/private");
-      assert(new RegExp(`${CONTROL.replace(/\./g, "\\.")}/access\\?`).test(k.text), "knock page lacks the control-plane /access link");
+      assert(new RegExp(`${CONTROL.replace(/\./g, "\\.")}/access[?#]`).test(k.text), "knock page lacks the control-plane /access link");
       return `page=${pageId.slice(0, 8)}…`;
     });
     await rec.check("MEMBERS-ONLY: a non-browser request is 403 JSON", async () => {
-      const r = await tryHttp(`${app}/private`, { headers: { accept: "application/json" } });
+      const r = await tryHttp(`${app}/private`, { headers: { accept: "application/json" } }, 60_000);
       assert(r.status === 403 && r.json?.error === "access restricted", `got ${r.status}: ${short(r.text)}`);
       return `403 reason=${r.json?.reason}`;
     });

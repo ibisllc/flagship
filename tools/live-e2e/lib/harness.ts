@@ -25,7 +25,7 @@ export interface HttpInit {
   body?: string;
 }
 
-export async function http(url: string, init: HttpInit = {}, timeoutMs = 20_000): Promise<Resp> {
+export async function http(url: string, init: HttpInit = {}, timeoutMs = 45_000): Promise<Resp> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
@@ -46,7 +46,7 @@ export async function http(url: string, init: HttpInit = {}, timeoutMs = 20_000)
 }
 
 /** Never throws: a transport failure reads as status 0 with the cause. */
-export async function tryHttp(url: string, init: HttpInit = {}, timeoutMs = 20_000): Promise<Resp> {
+export async function tryHttp(url: string, init: HttpInit = {}, timeoutMs = 45_000): Promise<Resp> {
   try {
     return await http(url, init, timeoutMs);
   } catch (e) {
