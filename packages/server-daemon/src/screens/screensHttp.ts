@@ -19,9 +19,10 @@ import type { AppBackupService } from "../serviceBackup.js";
 import type { AppMembership } from "../membership.js";
 import type { FilePairedSessionStore } from "../pairedSessionStore.js";
 import type { TabRegistry } from "../browser/tabRegistry.js";
-import type {
-  VibeCodeSession,
-  VibeCodeSessionRegistry,
+import {
+  continueRefusal,
+  type VibeCodeSession,
+  type VibeCodeSessionRegistry,
 } from "../llm/vibeCodeSession.js";
 import type { AppEnvStore } from "../serviceEnvStore.js";
 import type { BuildCredentialStore } from "../llm/buildCredentialStore.js";
@@ -407,7 +408,12 @@ export interface VibeCodeRuntime {
    * Optional: when omitted, replies are recorded but the model is not resumed
    * (the pre-existing behaviour).
    */
-  resumeStreaming?: (sessionId: string, model?: string) => Promise<void>;
+  resumeStreaming?: (sessionId: string, model?: string, opts?: { switched?: boolean }) => Promise<void>;
+  /**
+   * Value-free journal hook: a message brought a key from another provider
+   * (the provider NAME only, never the key).
+   */
+  onProviderSwitched?: (args: { sessionId: string; provider: string }) => void;
   /** An installed service's current code, for a session that changes it. */
   editableService?: (serviceId: string) => Promise<EditableService>;
   /** Cheap check for the detail screen: built here, with its source on disk. */
@@ -939,6 +945,7 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
         } catch {
           return jerr(500, "failed to store credential");
         }
+        session.setProvider(cred.provider);
       }
       // Graceful absence: only stream if a model can actually drive the
       // session — startStreaming wired AND a credential available (just
@@ -1311,20 +1318,12 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       if (!session) return jerr(404, "session not found");
       const body = parseJson(req.body) as VibeCodeReplyRequest | null;
       if (!body) return jerr(400, "body required");
-      // A reply may carry a BYOK credential to seed/replace the session's
-      // stored credential (the needsCredential resume case). Same box-only
-      // contract as the start path; never echoed, never logged.
+      // Any message may carry a BYOK credential: it seeds a session that has
+      // none, or replaces the key (another provider, or another key of the
+      // same one). Same box-only contract as the start path; sealed, never
+      // echoed, never logged.
       const replyCred = parseCredential((body as { credential?: unknown }).credential);
       if (replyCred === "invalid") return jerr(400, "malformed credential");
-      if (replyCred && deps.vibeCode.credentials) {
-        try {
-          await deps.vibeCode.credentials.put(session.meta.sessionId, replyCred);
-        } catch {
-          return jerr(500, "failed to store credential");
-        }
-      }
-      const pending = session.pendingRequest();
-      if (!pending) return jerr(409, "no pending tool to reply to");
       // The owner may switch model or effort between messages.
       const effortRaw = (body as { effort?: unknown }).effort;
       const modelRaw = (body as { model?: unknown }).model;
@@ -1334,41 +1333,76 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       ) {
         return jerr(400, "malformed model or effort");
       }
+      // Answering the AI's question, or a new message on a chat that is ready
+      // to deploy or failed. A chat that is running, deploying, deployed or
+      // stopped takes none.
+      const answering = session.meta.status === "awaiting-tool-response" ? session.pendingRequest() : null;
+      if (!answering && !session.canContinue()) {
+        return jerr(409, continueRefusal(session.meta.status) ?? "this chat can't take a message now");
+      }
+      if (!answering && (typeof body.text !== "string" || body.text.trim().length === 0)) return jerr(400, "text required");
+      if (answering?.kind === "talkToUser" && typeof body.text !== "string") return jerr(400, "text required");
+      if (
+        answering?.kind === "requestEnvVar" &&
+        body.envVarStatus !== "set" && body.envVarStatus !== "declined" && body.envVarStatus !== "deferred"
+      ) {
+        return jerr(400, "envVarStatus must be 'set' | 'declined' | 'deferred'");
+      }
+      const text = typeof body.text === "string" ? body.text : "";
+      const attach = answering?.kind === "requestEnvVar"
+        ? null
+        : await prepareAttachments(body.attachments, deps.vibeCode.pdfText ? { pdfText: deps.vibeCode.pdfText } : {});
+      if (attach && !attach.ok) return jerr(400, attach.reason);
+      const pickedModel = typeof modelRaw === "string" && modelRaw.length > 0 ? modelRaw : undefined;
+      let switched = pickedModel !== undefined && pickedModel !== session.meta.model;
+      if (replyCred && deps.vibeCode.credentials) {
+        try {
+          await deps.vibeCode.credentials.put(session.meta.sessionId, replyCred);
+        } catch {
+          return jerr(500, "failed to store credential");
+        }
+        if (session.setProvider(replyCred.provider, { keepModel: pickedModel !== undefined })) {
+          switched = true;
+          deps.vibeCode.onProviderSwitched?.({ sessionId: session.meta.sessionId, provider: replyCred.provider });
+        }
+      }
       if (modelRaw !== undefined || effortRaw !== undefined) {
         session.setModel(modelRaw as string | undefined, effortRaw as string | null | undefined);
       }
-      if (pending.kind === "talkToUser") {
-        if (typeof body.text !== "string") return jerr(400, "text required");
-        const attach = await prepareAttachments(body.attachments, deps.vibeCode.pdfText ? { pdfText: deps.vibeCode.pdfText } : {});
-        if (!attach.ok) return jerr(400, attach.reason);
+      const resume = () => {
+        if (!deps.vibeCode?.resumeStreaming) return;
+        void deps.vibeCode.resumeStreaming(session.meta.sessionId, undefined, switched ? { switched: true } : {}).catch(
+          (e: Error) => session.fail(e.message ?? "resume failed", true),
+        );
+      };
+      if (attach?.ok && (!answering || answering.kind === "talkToUser")) {
+        const r = answering
+          ? session.pushUserReply({
+              toolUseId: answering.toolUseId,
+              text,
+              ...(attach.attachments.length > 0 ? { attachments: attach.attachments } : {}),
+            })
+          : session.pushContinuation({
+              text,
+              ...(attach.attachments.length > 0 ? { attachments: attach.attachments } : {}),
+            });
+        if (!r.ok) return jerr(409, r.reason ?? "message rejected");
         session.addSamples(attach.samples);
-        const r = session.pushUserReply({
-          toolUseId: pending.toolUseId,
-          text: body.text,
-          ...(attach.attachments.length > 0 ? { attachments: attach.attachments } : {}),
-        });
-        if (!r.ok) return jerr(409, r.reason ?? "reply rejected");
         deps.vibeCode.recordScratchTurn?.({
           sessionId: session.meta.sessionId,
-          text: body.text,
+          text,
           attachmentSummaries: attach.attachments.map(summarizeAttachment),
         });
         // Resume the model so the conversation actually continues — the reply
         // alone only flips the session back to `streaming`; without this the
         // build stalls forever after the first clarifying question.
-        if (deps.vibeCode.resumeStreaming) {
-          void deps.vibeCode.resumeStreaming(session.meta.sessionId).catch(
-            (e: Error) => session.fail(e.message ?? "resume failed", true),
-          );
-        }
+        resume();
         const out: VibeCodeReplyResponse = { ok: true };
         return jok(out);
       }
-      // pending.kind === "requestEnvVar"
-      const status = body.envVarStatus;
-      if (status !== "set" && status !== "declined" && status !== "deferred") {
-        return jerr(400, "envVarStatus must be 'set' | 'declined' | 'deferred'");
-      }
+      // A requestEnvVar the owner answered.
+      const pending = answering!;
+      const status = body.envVarStatus!;
       const name = typeof pending.input.name === "string" ? pending.input.name : "";
       let currentlySet = false;
       if (deps.appEnvStore && deps.resolveSessionAppId) {
@@ -1391,11 +1425,7 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       const r = session.pushEnvVarAck({ toolUseId: pending.toolUseId, ack });
       if (!r.ok) return jerr(409, r.reason ?? "ack rejected");
       // Resume the model so it incorporates the env-var ack and continues.
-      if (deps.vibeCode.resumeStreaming) {
-        void deps.vibeCode.resumeStreaming(session.meta.sessionId).catch(
-          (e: Error) => session.fail(e.message ?? "resume failed", true),
-        );
-      }
+      resume();
       const out: VibeCodeReplyResponse = { ok: true };
       return jok(out);
     }
@@ -1730,7 +1760,15 @@ function toVibeCodePublicState(
     ...(session.meta.model ? { model: session.meta.model } : {}),
     ...(session.meta.effort ? { effort: session.meta.effort } : {}),
     ...(session.isCompacted() ? { summarised: true } : {}),
+    canContinue: session.canContinue(),
+    conversationTokens: session.conversationTokens(),
   };
+  const provider = session.meta.provider ?? deps.vibeCode?.credentials?.providerName(session.meta.sessionId) ?? null;
+  if (provider) out.provider = provider;
+  const takesMessage = session.canContinue() || (session.meta.status === "awaiting-tool-response" && pending !== null);
+  if (takesMessage && deps.vibeCode?.credentials && !deps.vibeCode.credentials.has(session.meta.sessionId)) {
+    out.needsCredential = true;
+  }
   if (pending) {
     if (pending.kind === "talkToUser") {
       const message =
@@ -1755,9 +1793,6 @@ function toVibeCodePublicState(
         toolUseId: pending.toolUseId,
         payload: { name, description, why, example, secret },
       };
-    }
-    if (deps.vibeCode?.credentials && !deps.vibeCode.credentials.has(session.meta.sessionId)) {
-      out.needsCredential = true;
     }
   }
   if (session.meta.status === "failed" && session.meta.failureReason) {

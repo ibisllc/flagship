@@ -2613,6 +2613,7 @@ async function wireRuntimeSurfaces(deps: {
         appEnvStore: runtime.envStore,
         defaultModels: defaultLlmModels,
         contextTokens: (provider: string, model: string) => modelCatalog.contextTokens(provider, model),
+        modelEfforts: (provider: string, model: string) => modelCatalog.efforts(provider, model),
         redact: modelRedactor,
       }
     : undefined;
@@ -3019,6 +3020,16 @@ async function wireRuntimeSurfaces(deps: {
             existsSync(join(vibeAppDir, serviceId, "flagship.app.json")),
           ...(vibeStartStreaming ? { startStreaming: vibeStartStreaming } : {}),
           ...(vibeResumeStreaming ? { resumeStreaming: vibeResumeStreaming } : {}),
+          onProviderSwitched: ({ sessionId, provider }: { sessionId: string; provider: string }) => {
+            void buildJournal
+              .append(sessionId, {
+                mode: "scratch",
+                kind: "build-phase",
+                actor: "owner",
+                summary: `the chat switched to another AI provider (${provider})`,
+              })
+              .catch(() => {});
+          },
           aiModels: (credential: LlmCredential) =>
             modelCatalog.menu(
               credential.provider,

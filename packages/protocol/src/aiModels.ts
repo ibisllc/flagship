@@ -29,8 +29,14 @@ export interface InferenceModel {
   contextTokens: number;
   /** "text", "image". */
   modalities: string[];
-  /** "Think harder" is offered (reasoning on). */
+  /** The model reasons. On its own this offers no effort control; `efforts` does. */
   reasoning: boolean;
+  /**
+   * The effort levels the apps offer for this model (the shim's words), when
+   * the catalog lists any. Absent or empty: no effort control.
+   */
+  efforts?: string[];
+  defaultEffort?: string;
   /** Used when the owner hasn't chosen. */
   default?: boolean;
   /** For a text-only model: the catalog id to switch to for an image. */
