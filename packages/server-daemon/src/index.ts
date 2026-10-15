@@ -1140,6 +1140,7 @@ async function main(): Promise<void> {
           readOrderIssuedAt: () => serverOrder.current()?.order.issuedAt ?? 0,
         }
       : {}),
+    onAccountTier: (tier: string) => outboundProxy?.setAccountTier(tier),
     readLeads: () => gossipLoopRef.current?.currentLeads() ?? [],
     readRuns: () => servicePlatformRefForServer.current?.list().map((a) => a.slug),
     readTrustStatus: () => relayLockdownRef.current?.trustStatus() ?? null,
