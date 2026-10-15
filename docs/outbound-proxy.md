@@ -1,7 +1,10 @@
 # Outbound proxy for a box
 
-Status: phase 1 being built on `feat/outbound-proxy` (2026-10-14). Not on
-`main`, not deployed, no box release endorsed.
+Status: phase 1 (the proxy) and phase 2 (OHTTP for the calls before the
+daemon) built on `feat/outbound-proxy` (2026-10-14/15), except the initramfs
+OHTTP client, which is design only. Not on `main`, not deployed, no box
+release endorsed. A **Pro** feature (owner, 2026-10-15): it launches with
+payments, see "Pro only" below.
 
 ## Goal
 
@@ -27,12 +30,11 @@ address, not the box's.
   daemon makes. Children the daemon spawns (git and npm during updates) get a
   loopback HTTP proxy the daemon runs, so they need nothing but standard
   `HTTPS_PROXY` support, even when the upstream is SOCKS5 (npm has no SOCKS).
-- **Before the daemon exists: yes, but it needs a live drill first.** The
-  first-boot bootstrap and the initramfs unlock both use `curl`, which
-  supports `-x http://…` and `-x socks5h://…`. The plumbing is small (below);
-  what makes it phase 1b is that it changes the signed install path and the
-  initramfs, which reach a box only on a new burn and can't be tested here, and
-  a mistake there leaves a box that can't unlock its disk.
+- **Before the daemon exists: through OHTTP, not the proxy** (owner,
+  2026-10-15). The setup POSTs and the initramfs unlock can't use the proxy's
+  credentials (the recipe may not carry them, and they never go on the
+  unencrypted `/boot`), so a box with a proxy sends those few calls through a
+  third-party Oblivious HTTP relay (RFC 9458) instead. See "OHTTP" below.
 
 **Ship first:** SOCKS5 (with remote DNS, i.e. `socks5h`) and plain HTTP
 CONNECT, both with optional username/password. SOCKS5 covers Tor (its SOCKS
@@ -227,19 +229,30 @@ one change covers every builder.
 | cloud-init demo path (`control-plane/src/demoCloudConfig.ts`) | apt, NodeSource, git, npm, register | all of the above | cloud-init's `apt: http_proxy`; demo-only, not needed |
 | daemon first boot | endpoint discovery, tunnel, heartbeat, ACME, pairing/SWK deposits, first-boot update (`firstBootUpdate.ts`: git fetch, npm ci) | `.com`, hub, LE, GitHub, npm | **phase 1** (above) |
 
-The default install path today is the VM appliance (Studio) or a USB stick
-built from it, which skips apt/git/npm/go entirely; what's left before the
-daemon is two `.com` POSTs and the status reports. So phase 1b for the
-bootstrap is small: when `install-blob.json` has `outboundProxy`, write a
-0600 curl config (`proxy = "socks5h://host:port"`, `proxy-user = …`) and add
-`-K` to the bootstrap's `.com` curls; export `HTTPS_PROXY`/`ALL_PROXY` for the
-installer-only steps; skip the busybox beacons. The bootstrap may use the
-sibling without verifying it (whoever writes the install media already
-controls the disk); the daemon verifies it before adopting it.
+The table's "Proxy" column was the phase-1b plan; the owner replaced it with
+OHTTP (2026-10-15) for every call that reaches Flagship before the daemon:
 
-**Phase 1 behaviour, honestly:** a box created with a proxy registers with
-`.com` and uploads its sealed disk key directly (two requests at setup), then
-uses the proxy for everything from the daemon's first call on.
+- **Built:** the bootstrap's and the appliance specializer's `.com` calls
+  (status reports, `POST /api/server/register`, `POST /sealed-luks-key`) go
+  through `flagship_post` (`SETUP_POST_FN` in `userdata.ts`). For a recipe
+  with `outboundProxy` it runs `install-helper.ts ohttp-post` (OHTTP through
+  the relay, direct fallback marked); every other box keeps `curl`. Before
+  Node is installed (the installer paths' earliest reports) a proxy box sends
+  nothing rather than go direct. The register wrapper's network check
+  becomes a DNS lookup instead of a GET to `.com`. d-i's busybox beacons and
+  the bootstrap-failure log upload are left out of a proxy recipe's preseed.
+  The default path (the VM appliance) has Node from the start, so every
+  setup call goes through the relay.
+- **Not through anything, by design:** the Debian mirror, NodeSource, GitHub,
+  npm and Go (installer paths only; the appliance skips them). They are not
+  Flagship and they are large; see "Large files never go through OHTTP".
+- **The bootstrap uses the sibling without verifying it** (whoever writes the
+  install media already controls the disk); the daemon verifies it before
+  adopting the proxy.
+
+**Behaviour now:** a box created with a proxy reaches `.com` only through
+the relay during setup (or directly, marked, if the relay fails), then uses
+the proxy for everything from the daemon's first call on.
 
 ### Disk unlock at boot (the initramfs)
 
@@ -251,34 +264,168 @@ copied-in `curl`: `GET /api/boot/lease/<domain>` (auto mode), `POST
 every 120 s, for up to a year). The hook (1728–1783) copies curl, its NSS
 libraries and the CA bundle, and bakes `/boot` facts (boot host, unlock mode).
 
-Feasible: curl in the initramfs does `-x socks5h://` and `-x http://` as is.
-Design (phase 1b):
+The earlier plan (bake the proxy, maybe its password, into `/boot`) is
+dropped: **a proxy password never goes on `/boot`** (owner, 2026-10-15). The
+initramfs uses OHTTP instead, which needs nothing secret: only the relay URL
+and the gateway's public key configuration. Design (not built, see below):
 
-- The proxy (kind, host, port, fallback; **no credentials**) is baked as
-  `/boot/flagship-proxy` next to `/boot/flagship-boot-host` (bootstrap 1694)
-  and copied by the hook; the daemon rewrites it and runs `update-initramfs -u`
-  when the owner changes the proxy.
-- **Credentials can't go there safely.** `/boot` is unencrypted, so a password
-  in the initramfs is readable by anyone holding the disk. For a proxy with a
-  password the unlock either goes direct (if `fallbackDirect`) or the owner
-  opts in to "Store the proxy password on the boot partition" (a separate,
-  explicit choice, never the default).
-- **Proxy down at boot must not brick the box.** The unlock loop tries the
-  proxy; with `fallbackDirect` it falls back to a direct request after three
-  failed tries; without it, it keeps retrying (the relay loop already waits
-  for the phone indefinitely) and logs the reason to
-  `FLAGSHIP_BOOT:/flagship-unlock.log` so Studio's stalled-boot advisory can
-  say "Can't reach the proxy". The console `manual` escape (Debian cryptroot
-  passphrase prompt) is unchanged. Nothing about the disk key changes, so a
-  proxy outage delays an unlock, never destroys one.
-- Until 1b ships, **every boot's unlock goes to `boot.flagshipserver.com`
-  directly**, i.e. Flagship's boot worker sees the box's IP once per boot.
-  This is the largest remaining leak in phase 1 and the reason 1b matters.
+- **What's baked:** for a recipe with `outboundProxy`, the bootstrap writes
+  `/boot/flagship-ohttp` (relay URL + hex key configuration, both public) next
+  to `/boot/flagship-boot-host`, and the hook copies it into the initramfs.
+  Boxes without a proxy get no file and unlock exactly as today.
+- **The client:** the initramfs has curl, openssl and the Go `flagship-unseal`
+  helper, but no Node. The client becomes a second mode of that Go helper
+  (`flagship-unseal ohttp --relay … --key-config … --method … --url … --header
+  … --body-file …`): X25519 + HKDF-SHA256 from `golang.org/x/crypto` (already
+  a dependency) and AES-128-GCM from the standard library, Binary HTTP
+  known-length encoding, about 200 lines, tested against RFC 9458 Appendix A
+  like the TS one. The three unlock calls (`GET /api/boot/lease/<d>`, `POST
+  /api/boot/request`, `GET /api/boot/response/<d>/<nonce>`) keep their
+  box-signed `Authorization: Flagship-Boot-v1` header inside the encrypted
+  request; the gateway already accepts exactly these paths on
+  `boot.flagshipserver.com`.
+- **Fallback, never a brick:** each call tries the relay (10 s timeout); on a
+  timeout, network error, 402/403/5xx or an undecryptable answer it sends the
+  same signed request directly with `x-flagship-relay-fallback: <reason>`, so
+  unlock keeps working when the relay plan lapses. `.com` counts that, and
+  /status/ shows the warning. The console `manual` passphrase escape is
+  unchanged.
+- **Polling cost:** the phone-approval poll runs every few seconds while it
+  waits; through OHTTP each poll is one relay request. Lengthen the poll to
+  ~5 s for proxy boxes (an approval rarely takes under a minute) so a boot
+  costs ~10–40 relay requests; an auto-unlock boot costs one.
+- **The Wi-Fi initramfs path** also uploads a bring-up log to `.com` with
+  busybox wget on every boot (`userdata.ts`, `-wifi` late-log); a proxy
+  recipe must leave it out (generation time, like the d-i beacons).
+- The daemon rewrites `/boot/flagship-ohttp` (and runs `update-initramfs -u`)
+  only if the relay or key ever changes for that box; key rotation keeps the
+  old key valid on the gateway, so this is rare.
 
-Why 1b is not built in this pass: it changes the install-time bootstrap and the
-initramfs, which only reach a box on a new burn, can't be exercised without a
-real install (Studio VM plus a SOCKS/CONNECT proxy on the host), and a mistake
-there fails at the one step that has no daemon to report it.
+Why it's design only: it adds a mode to the Go helper and changes the
+initramfs script, which reach a box only on a new burn, can't be exercised
+here (it needs a Studio VM booting the real initramfs against a relay), and a
+mistake fails at the one step with no daemon to report it. Until it ships,
+**a proxy box's unlock request goes to `boot.flagshipserver.com` directly**,
+once per boot; it is the largest remaining leak.
+
+## OHTTP for the calls before the daemon (phase 2)
+
+Owner decision, 2026-10-15: Oblivious HTTP (RFC 9458), **only for boxes with
+a proxy set**, for the calls the proxy can't carry: the setup POSTs to `.com`
+and the initramfs boot unlock. Once the daemon runs, the proxy carries
+everything, heartbeats included. Boxes without a proxy keep talking directly
+("if you don't set one, you're okay with us seeing your stuff").
+
+How it works:
+
+1. The box encrypts the request (method, URL, headers, body, as Binary HTTP)
+   to `.com`'s gateway key (HPKE: X25519, HKDF-SHA256, AES-128-GCM) and POSTs
+   the ciphertext to a **third-party relay**.
+2. The relay forwards it to `.com`'s gateway. The relay sees the box's address
+   and ciphertext; `.com` sees the request and the relay's address.
+3. The gateway decrypts it, runs it against `.com`'s own router (never an
+   outbound fetch, so it isn't an open proxy) and encrypts the answer back.
+
+Pieces:
+
+- **Protocol** (`packages/protocol/src/ohttp.ts`, `ohttpClient.ts`): HPKE base
+  mode, the key configuration and `application/ohttp-keys` formats, request
+  and response encapsulation, Binary HTTP known-length messages; pure JS so
+  the Worker, the daemon and scripts share it. Reproduces RFC 9458 Appendix A
+  byte for byte (`packages/protocol/tests/ohttp.test.ts`). `sendPrivately`
+  is the client with the fallback rule.
+- **Gateway in the `.com` Worker** (`packages/control-plane/src/ohttpGateway.ts`,
+  `apps/com/src/ohttpRoutes.ts`), no dependency on Cloudflare's paid gateway:
+  - `GET https://flagshipserver.com/.well-known/ohttp-keys`: the published
+    key configurations (`application/ohttp-keys`, RFC 9540).
+  - `POST https://flagshipserver.com/api/ohttp/gateway` (`message/ohttp-req`
+    → `message/ohttp-res`): the relay's target.
+  - Accepts only: on `flagshipserver.com`, `POST /api/server/register`,
+    `POST /api/server/<domain>/sealed-luks-key`, `POST
+    /api/order/<serial>/status`, `GET /api/ohttp/probe`; on
+    `boot.flagshipserver.com`, `GET /api/boot/lease/<domain>`, `POST
+    /api/boot/request`, `GET /api/boot/response/<domain>/<nonce>`. Anything
+    else gets a 403 inside the encrypted answer. Spoofable headers
+    (`cf-*`, `x-forwarded-*`, `host`, our fallback marker) are dropped from
+    the inner request. 64 KiB cap.
+  - Keys: Worker secret `OHTTP_GATEWAY_KEYS` = `<keyId>:<64 hex X25519
+    private key>[,…]`, current key first; old keys stay listed during a
+    rotation so boxes holding the old configuration keep working.
+- **Relay** (owner): a well-known third-party OHTTP relay, **not Cloudflare**
+  (`.com` is on Cloudflare, so a Cloudflare relay would put both halves with
+  one company). Planned: Oblivious Network, $15/month tier (~2.6M requests).
+  Swappable: boxes know only `relayUrl` + the gateway key configuration
+  (`DEFAULT_OHTTP_RELAY` in `ohttpClient.ts`, null until provisioned; env
+  `FLAGSHIP_OHTTP_RELAY_URL` / `FLAGSHIP_OHTTP_KEY_CONFIG` override it); the
+  Worker knows `OHTTP_RELAY_URL` for its probe. An optional second relay
+  later.
+- **Fallback:** if the relay fails (timeout, unreachable, 402/403/5xx, a
+  non-OHTTP or undecryptable answer), the client sends the same request
+  directly with `x-flagship-relay-fallback: <reason>`. A lapsed plan costs
+  privacy, never availability; unlock must keep working. An answer from the
+  target itself (say a 409 from register) is the real answer and is never
+  retried directly. Until the relay is provisioned, proxy boxes go direct
+  marked `unconfigured`. A per-box strict mode (no fallback) is a later
+  option; `sendPrivately` already takes `fallbackDirect: false`.
+- **Which path each request took** (`relay_arrivals`, migration
+  `0098_relay_health.sql`): `.com` counts arrivals per UTC day as `ohttp`
+  (through the gateway) or `direct-fallback` (a direct request carrying the
+  marker). No box, account or address is stored. The migration number was
+  free on `main` at 0097; renumber it if `main` takes 0098 first.
+- **/status/**: `/api/_status/probe` returns `privateRelay: {state, message,
+  arrivals, lastProbe}`. The page shows **"Private relay down: servers are
+  reaching Flagship directly"** when any direct fallback arrived today or
+  yesterday, or the latest daily probe failed.
+- **Daily probe**: the 00:00 UTC cron sends one OHTTP request through the
+  relay to `GET /api/ohttp/probe` (no fallback), records the result
+  (`relay_probes`) and, on failure, opens one GitHub issue ("Private relay
+  down …", deduplicated while open), the same pager the CA lease uses.
+- **Large files never go through OHTTP.** Code comes from GitHub, packages
+  from npm and the registries, appliance images are downloaded by Studio on
+  the owner's computer. OHTTP carries only small JSON setup and unlock calls
+  (64 KiB cap); keep it that way.
+
+Costs (Oblivious Network's $15 tier, ~2.6M requests/month): with these
+decisions only setup and boot unlock use the relay, roughly **100–500
+requests per proxy box per month** (setup ~15–30 once, ~1 per auto-unlock
+boot, ~10–40 per phone-approved boot). Carrying the daemon's own calls
+(heartbeats, pings) too would be ~10k–30k per box per month; not needed, the
+proxy carries them.
+
+Rate limiting: every OHTTP request reaches the Worker from the relay's
+addresses, so IP-keyed limits see all proxy boxes as one client. The limiter
+is not enforcing today; when it is, key the gateway's inner requests on the
+signed identity they carry instead.
+
+**Launch item (later):** when proxying and paid features launch, use OHTTP for
+**every** box during setup (cheap: setup is a few dozen requests), not only
+proxy boxes.
+
+## Pro only, and the branch
+
+The outbound proxy is a **Pro** feature (owner, 2026-10-15), which is also
+why it doesn't launch now. Per AGENTS.md, Pro features branch off
+`feat/marketplace` (the payment rail), like `feat/custom-domains`.
+
+- **Rebase onto `feat/marketplace`: not done.** `feat/marketplace` was last
+  moved 2026-10-09 and is 336 commits behind `main` (30 ahead); this branch
+  is built on `main` 2026-10-14 and uses what landed since (the server
+  order's exports, `authorizeSensitiveOrder` call sites, the webapp shell
+  numbering, the server page). A trial rebase conflicts on its first commit
+  (`packages/protocol/src/index.ts`) and the daemon commit would conflict in
+  `index.ts`. Rebase when `feat/marketplace` is brought up to `main`.
+- **Gating plan, for that rebase:** the apps show the create-flow block and
+  the server page's section only when the account's effective tier is Pro
+  (`hobby`) or Pro Max (`maker`), using the tier the marketplace branch
+  serves (`effectiveTierOf` in `control-plane/src/metering.ts`, surfaced to
+  the apps the way `customDomainEntitlement.ts` surfaces the custom-domain
+  allowance). Free accounts see a short "Part of Pro" row instead, like
+  custom domains. **The box refuses nothing by tier:** the owner-signed order
+  is the authority, and the marketplace branch has no box-side entitlement
+  pattern to follow. The OHTTP gateway doesn't check tier either (it can't
+  tell which box is asking, by design).
+- **Webapp shell version:** this branch uses **v80** (main was at v79 when it
+  was picked, 2026-10-15); re-pick the next free version at rebase time.
 
 ## Failure UX: the proxy stops working
 
@@ -335,8 +482,10 @@ Doesn't hide:
 - **Timing correlation.** Someone watching both the box's network and the
   hub can match connection timing. Tor resists this better than a single-hop
   proxy; nothing here defends against a global observer.
-- **Phase 1 gaps**: the setup-time registration and sealed-key upload, every
-  boot's unlock request, the health timer and Docker pulls (above).
+- **Remaining gaps**: every boot's unlock request until the initramfs OHTTP
+  client ships, setup calls when the relay fails (marked and counted), Docker
+  pulls (not Flagship), and the relay operator, who sees the box's address
+  and the timing of its setup and unlock calls (not their content).
 - **The box's LAN neighbours and the owner's ISP** still see that the box
   talks to the proxy (with SOCKS5/CONNECT the target host names also cross the
   local network in the clear, inside the CONNECT or SOCKS request; an HTTPS
@@ -360,7 +509,11 @@ Changes elsewhere:
   (`wss://flagship-services.fly.dev:8443/tunnel`). Many proxies (most
   corporate CONNECT proxies, some Tor exits) only allow 443. A box behind such
   a proxy can't open its tunnel. The test-before-apply catches this and says
-  "The proxy won't connect to port 8443". Owner decision below.
+  "Some proxies only allow port 443; Flagship's relay uses 8443". Kept on
+  8443 for now (owner). **Recommended future work:** accept the tunnel on 443
+  too, under a dedicated name such as `tunnel.flagship.services` that the
+  hub's SNI router (which already peeks every :443 connection) sends to the
+  tunnel hub; boxes behind 443-only proxies then use `wss://tunnel.flagship.services/tunnel`.
 
 ## Phase 1 (this branch) vs later
 
@@ -376,24 +529,33 @@ Phase 1, built:
 - Apps: proxy fields in the create flow's Advanced section; the server page's
   Outbound proxy section with a biometric-confirmed edit.
 
-Phase 1b: the bootstrap's `.com` curls and the initramfs unlock through the
-proxy (designed above), the health timer, Docker pulls via the bridge.
+Phase 2, built: OHTTP (protocol, client, `.com` gateway, arrival counting,
+/status/ warning, daily probe and issue), the bootstrap's and specializer's
+setup calls through it, silent d-i beacons for proxy recipes, the health
+timer through the proxy.
+
+Design only: the initramfs OHTTP client (above), the Wi-Fi initramfs log
+upload left out for proxy recipes, Docker pulls via the bridge, the update
+guard's `npm ci`, per-box strict mode, a second relay, OHTTP for every box's
+setup at launch, the tunnel on 443.
 
 Later: HTTPS proxies, WireGuard full tunnel, a Flagship-run Tor option
 (`kind: tor` with an on-box tor daemon), per-destination rules.
 
-## Owner decisions
+## Owner decisions (recorded 2026-10-15)
 
-1. **Port 8443.** Either accept that proxies limited to 443 can't carry the
-   tunnel, or let the hub accept the tunnel on 443 too (the SNI router already
-   peeks every :443 connection; a dedicated name such as
-   `tunnel.flagship.services` could route to the hub).
-2. **Credentials in the setup file** when the owner types them in the create
-   flow (recommended, with the warning) versus refusing password proxies at
-   creation.
-3. **Default for "connect directly if the proxy is down"**: off (recommended:
-   it's a privacy setting) or on.
-4. **Phase 1b initramfs**: whether a proxy password may ever be stored on the
-   boot partition (opt-in) or password proxies always unlock direct.
-5. **Copy**: how strongly to say what a proxy doesn't hide (the account ↔
-   servers link stays public).
+1. **OHTTP** for proxy boxes' setup POSTs and boot unlock, through a
+   non-Cloudflare third-party relay (Oblivious Network planned), with our own
+   gateway in the Worker and a direct, counted fallback. Built except the
+   initramfs client.
+2. **Pro only**; branches off `feat/marketplace`. Rebase deferred (above).
+3. **Port 8443 only** for now; the 443 tunnel name is recommended future work.
+4. **Password in the create flow** allowed, with the setup-file warning.
+5. **"Connect directly if the proxy is down"** off by default.
+6. **Never store a proxy password on `/boot`**; the initramfs uses OHTTP.
+7. **Copy** on what a proxy doesn't hide stays as written above.
+
+Still open: provisioning the relay (Oblivious Network account,
+`OHTTP_RELAY_URL`, generating `OHTTP_GATEWAY_KEYS` and setting
+`DEFAULT_OHTTP_RELAY` in a release); whether to add the second relay; when to
+switch every box's setup to OHTTP.
