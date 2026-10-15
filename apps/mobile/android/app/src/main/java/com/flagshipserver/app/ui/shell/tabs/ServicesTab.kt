@@ -224,13 +224,11 @@ fun ServicesTab() {
         }
         composable(BUILD_CHOOSER_ROUTE) { entry -> PodScoped(nav, placement, entry, creation = true) { BuildSourceChooserScreen(nav) } }
         composable("build/git") { entry -> PodScoped(nav, placement, entry, creation = true) { BuildGitScreen(nav) } }
-        composable("marketplace") { entry -> PodScoped(nav, placement, entry, creation = true) { MarketplaceListScreen(nav) } }
+        composable("marketplace") { MarketplaceListScreen(nav) }
         composable("marketplace-detail/{creator}/{slug}") { entry ->
             val creator = entry.arguments?.getString("creator") ?: return@composable
             val slug = entry.arguments?.getString("slug") ?: return@composable
-            PodScoped(nav, placement, entry, creation = true) {
-                MarketplaceDetailScreen(nav, creator = creator, slug = slug)
-            }
+            MarketplaceDetailScreen(nav, creator = creator, slug = slug)
         }
         // W10 — per-app env-var editor. Reachable from a marketplace install of
         // an app that needs an LLM key (deep-linked with the expected env-var
