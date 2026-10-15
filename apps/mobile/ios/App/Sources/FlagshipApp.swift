@@ -126,7 +126,7 @@ struct FlagshipApp: App {
             trustGate: { @Sendable in await MainActor.run { trustCenter.isServerTrusted } },
             readTokens: readTokens
         )
-        Self.wireInstallProgressBridge()
+        Self.wireInstallProgressBridge(app: state)
         Self.wireProvisionPhaseBridge()
         // AppState's profile-switch hook bridges into the iOS-only
         // Keystore so UMK/IRK derivation tracks the active cloud. The
@@ -313,27 +313,33 @@ struct FlagshipApp: App {
     }
 
     /// Wire the FlagshipUI InstallProgressBridge to the App-target
-    /// Live Activity. The bridge is set up once at @main init so the
-    /// canonical provisioning timeline (ProvisionTimelineViewModel /
-    /// PendingServerScreen, or a push) drives the Dynamic Island / Lock
-    /// Screen + the Watch without each call site importing ActivityKit.
+    /// Live Activity. The bridge is set up once at @main init so every
+    /// checkpoint (the pending-pod watcher's and install screens' polls, or
+    /// a push) drives the Dynamic Island / Lock Screen + the Watch without
+    /// each call site importing ActivityKit. The bridge starts one activity
+    /// per install on its first checkpoint and ends it on live / error.
     @MainActor
-    private static func wireInstallProgressBridge() {
+    private static func wireInstallProgressBridge(app: AppState) {
         let b = InstallProgressBridge.shared
         b.onStart = { serial, podName in
             InstallProgressLiveActivityCenter.shared.start(
                 serial: serial,
-                podName: podName ?? "Provisioning"
+                podName: podName ?? "New server"
             )
         }
-        b.onStep = { phase in
-            Task { await InstallProgressLiveActivityCenter.shared.advance(to: bridge(phase)) }
+        b.onStep = { serial, phase in
+            Task { await InstallProgressLiveActivityCenter.shared.advance(serial: serial, to: bridge(phase)) }
         }
-        b.onComplete = { fqdn in
-            Task { await InstallProgressLiveActivityCenter.shared.complete(serverFqdn: fqdn) }
+        b.onComplete = { serial, fqdn in
+            Task { await InstallProgressLiveActivityCenter.shared.complete(serial: serial, serverFqdn: fqdn) }
         }
-        b.onFailed = { reason in
-            Task { await InstallProgressLiveActivityCenter.shared.fail(reason: reason) }
+        b.onFailed = { serial, reason in
+            Task { await InstallProgressLiveActivityCenter.shared.fail(serial: serial, reason: reason) }
+        }
+        // A push never names the server: the pending pod holding the
+        // serial (or address) does.
+        b.nameForKey = { key in
+            app.pods.first(where: { $0.pendingAuthCodeSerial == key || (!$0.fqdn.isEmpty && $0.fqdn == key) })?.name
         }
         // Rich poll-driven path: forward the full canonical status onto
         // the Watch timeline (history + serverDomain). Sparse push-driven
@@ -344,26 +350,22 @@ struct FlagshipApp: App {
     }
 
     /// Wire FlagshipCore's ProvisionPhaseBridge (fed by `provision-status`
-    /// pushes from .com) into the SAME InstallProgressBridge the
-    /// onboarding flow uses. This turns a phase push into a Live Activity
+    /// pushes from .com) into the SAME InstallProgressBridge the polls
+    /// report to. This turns a phase push into a Live Activity
     /// transition — provisioning becomes a glass box even when the app is
     /// backgrounded and the user never opened the progress screen. The
     /// phase is the single canonical `ProvisionStatusPhase`.
     @MainActor
     private static func wireProvisionPhaseBridge() {
         ProvisionPhaseBridge.shared.onPhase = { event in
+            // serverDomain isn't carried on the push meta; the poll path
+            // fills in the FQDN.
             let progress = InstallProgressBridge.shared
-            switch event.phase {
-            case .error:
-                progress.onFailed?(event.detail ?? "Setup hit a problem")
-            case .live:
-                // serverDomain isn't carried on the push meta; the Live
-                // Activity already shows the serial — pass the detail or
-                // an empty string (the poll path fills in the FQDN).
-                progress.onComplete?(event.detail ?? "")
-            default:
-                progress.onStep?(event.phase)
-            }
+            progress.report(
+                key: event.serial.isEmpty ? "provision" : event.serial,
+                phase: event.phase,
+                detail: event.detail
+            )
             // Mirror the phase onto the watch's install-progress surface
             // (W1) keyed by the order serial — same install yields the
             // same serial across every phase push, so history accumulates
@@ -372,7 +374,7 @@ struct FlagshipApp: App {
                 phase: event.phase,
                 serial: event.serial,
                 detail: event.detail,
-                podName: "Provisioning"
+                podName: progress.nameForKey?(event.serial) ?? "Provisioning"
             )
         }
     }

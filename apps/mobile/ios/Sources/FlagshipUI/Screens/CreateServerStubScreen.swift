@@ -696,6 +696,14 @@ public struct CreateServerStubScreen: View {
                 onDeliveredVisible(serverDomain, vm.name, vm.description)
                 deliveredTimeline?.stop()
                 let timeline = ProvisionTimelineViewModel(serial: serial, server: server)
+                // The install begins here: its first checkpoint starts the
+                // Live Activity (the pending-pod watcher reports the same
+                // install; repeats are dropped).
+                let podName = vm.name
+                timeline.onStatus = { status in
+                    InstallProgressBridge.shared.onStatus?(status, podName)
+                    InstallProgressBridge.shared.report(key: serial, podName: podName, status: status)
+                }
                 deliveredTimeline = timeline
                 timeline.start()
             }

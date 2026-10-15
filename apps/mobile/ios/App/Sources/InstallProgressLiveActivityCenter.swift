@@ -6,30 +6,40 @@ import WidgetKit
 /// InstallProgressBridge) and the ActivityKit Live Activity rendered by
 /// InstallProgressLiveActivity in the widget extension.
 ///
-/// Lifecycle:
+/// One activity per install, keyed by its order serial:
 ///   start(serial:podName:)       — call .request(...)
-///   advance(step:)               — call .update(...)
-///   complete(serverFqdn:)        — final .update(.live) + .end(...)
-///   fail(reason:)                — final .update(.error) + .end(...)
+///   advance(serial:to:)          — call .update(...)
+///   complete(serial:serverFqdn:) — final .update(.live) + .end(...)
+///   fail(serial:reason:)         — final .update(.error) + .end(...)
 ///
-/// All updates run on the MainActor; ActivityKit itself is
-/// MainActor-isolated. Falls silent (no-op) on iOS versions that
-/// don't have Live Activities enabled by the user — this is a UX
-/// nicety, not a contract surface.
+/// InstallProgressBridge already drops late and repeated checkpoints, so
+/// every call here moves the activity forward. All updates run on the
+/// MainActor; ActivityKit itself is MainActor-isolated. Falls silent
+/// (no-op) when the user turned Live Activities off, or when a request
+/// comes while the app is in the background (ActivityKit refuses it) —
+/// this is a UX nicety, not a contract surface.
 @MainActor
 final class InstallProgressLiveActivityCenter {
     static let shared = InstallProgressLiveActivityCenter()
 
-    private var currentActivity: Activity<InstallProgressAttributes>?
+    private var activities: [String: Activity<InstallProgressAttributes>] = [:]
+    /// Activities left by an earlier run of the app are ended on the first
+    /// start of this one; later starts leave other installs' alone.
+    private var sweptEarlierRuns = false
 
     private init() {}
 
-    /// Starts a new Live Activity. Cancels any previous in-flight
-    /// activity from a prior incomplete install (e.g. user backgrounded
-    /// during a previous attempt that never reached ready/failed).
+    /// Starts the Live Activity for one install, replacing any earlier one
+    /// for the same serial (a retry, or a relaunch mid-install).
     func start(serial: String, podName: String) {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
-        Task { await endStaleActivity() }
+        let ours = Set(activities.values.map(\.id))
+        let sweep = !sweptEarlierRuns
+        sweptEarlierRuns = true
+        let stale = Activity<InstallProgressAttributes>.activities.filter {
+            $0.attributes.serial == serial || (sweep && !ours.contains($0.id))
+        }
+        activities[serial] = nil
 
         let attributes = InstallProgressAttributes(serial: serial, podName: podName)
         let state = InstallProgressAttributes.ContentState(
@@ -37,7 +47,7 @@ final class InstallProgressLiveActivityCenter {
             completedSteps: []
         )
         do {
-            currentActivity = try Activity<InstallProgressAttributes>.request(
+            activities[serial] = try Activity<InstallProgressAttributes>.request(
                 attributes: attributes,
                 content: .init(state: state, staleDate: nil),
                 pushType: nil
@@ -48,21 +58,21 @@ final class InstallProgressLiveActivityCenter {
             // Crashing the install flow over a missing entitlement or a
             // user-side disable would be a regression.
         }
+        // Captured before the request, so the new activity is never in it.
+        Task {
+            for activity in stale {
+                await activity.end(activity.content, dismissalPolicy: .immediate)
+            }
+        }
     }
 
-    /// Advance to a new step. The previous current step is folded
-    /// into `completedSteps` so the widget's checkmark list stays
-    /// accurate even if the SSE delivers events out of order.
-    func advance(to step: InstallProgressAttributes.Step) async {
-        guard let activity = currentActivity else { return }
-        var completed = activity.content.state.completedSteps
-        let prior = activity.content.state.currentStep
-        if prior != step && !completed.contains(prior) && prior != .error {
-            completed.append(prior)
-        }
+    /// Move to a new step. Every rung before it counts as done, so the
+    /// widget's checkmark list stays right when a poll skipped a rung.
+    func advance(serial: String, to step: InstallProgressAttributes.Step) async {
+        guard let activity = activities[serial] else { return }
         let next = InstallProgressAttributes.ContentState(
             currentStep: step,
-            completedSteps: completed,
+            completedSteps: Self.completed(before: step, already: activity.content.state.completedSteps),
             serverFqdn: activity.content.state.serverFqdn,
             failureReason: nil
         )
@@ -72,49 +82,47 @@ final class InstallProgressLiveActivityCenter {
     /// Terminal success — render the green-check + FQDN one final
     /// frame, then dismiss after a short grace period so the user
     /// can tap into it from the Lock Screen if the phone is locked.
-    func complete(serverFqdn: String) async {
-        guard let activity = currentActivity else { return }
+    func complete(serial: String, serverFqdn: String) async {
+        guard let activity = activities.removeValue(forKey: serial) else { return }
         var completed = activity.content.state.completedSteps
-        for s in InstallProgressAttributes.Step.ordered {
-            if !completed.contains(s) { completed.append(s) }
+        for s in InstallProgressAttributes.Step.ordered where !completed.contains(s) {
+            completed.append(s)
         }
         let final = InstallProgressAttributes.ContentState(
             currentStep: .live,
             completedSteps: completed,
-            serverFqdn: serverFqdn,
+            serverFqdn: serverFqdn.isEmpty ? activity.content.state.serverFqdn : serverFqdn,
             failureReason: nil
         )
-        await activity.update(.init(state: final, staleDate: nil))
         await activity.end(
             .init(state: final, staleDate: nil),
             dismissalPolicy: .after(Date().addingTimeInterval(60 * 5))
         )
-        currentActivity = nil
     }
 
-    func fail(reason: String) async {
-        guard let activity = currentActivity else { return }
+    func fail(serial: String, reason: String) async {
+        guard let activity = activities.removeValue(forKey: serial) else { return }
         let final = InstallProgressAttributes.ContentState(
             currentStep: .error,
             completedSteps: activity.content.state.completedSteps,
             serverFqdn: activity.content.state.serverFqdn,
             failureReason: reason
         )
-        await activity.update(.init(state: final, staleDate: nil))
         await activity.end(
             .init(state: final, staleDate: nil),
             dismissalPolicy: .after(Date().addingTimeInterval(60 * 5))
         )
-        currentActivity = nil
     }
 
-    /// Force-end any leftover activity from a previous incomplete
-    /// flow — keeps the user from accumulating zombie Live Activities
-    /// after app crashes.
-    private func endStaleActivity() async {
-        for activity in Activity<InstallProgressAttributes>.activities {
-            await activity.end(activity.content, dismissalPolicy: .immediate)
+    private static func completed(
+        before step: InstallProgressAttributes.Step,
+        already: [InstallProgressAttributes.Step]
+    ) -> [InstallProgressAttributes.Step] {
+        guard let idx = InstallProgressAttributes.Step.ordered.firstIndex(of: step) else { return already }
+        var done = already
+        for s in InstallProgressAttributes.Step.ordered[..<idx] where !done.contains(s) {
+            done.append(s)
         }
-        currentActivity = nil
+        return done
     }
 }

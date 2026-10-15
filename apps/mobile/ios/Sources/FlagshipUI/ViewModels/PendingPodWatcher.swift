@@ -6,16 +6,15 @@ import FlagshipCore
 /// Polls flagshipserver.com `GET /api/order/<serial>/status` (the single
 /// canonical provisioning channel) for each pending pod and:
 ///
-///   - Fires `InstallProgressBridge.onStep(phase:)` for each newly-seen
-///     `ProvisionStatusPhase` so the Live Activity card advances on the
-///     Lock Screen / Dynamic Island.
+///   - Reports each checkpoint to `InstallProgressBridge`, which starts the
+///     install's Live Activity on the first one, moves it forward on later
+///     ones and ends it on `.live` / `.error`.
 ///   - On the terminal `.live` phase, flips the pod's status from
 ///     `.pending` to `.online` in AppState (using the canonical
 ///     `serverDomain`). The Home tab's pod card and the Pod Status Widget
 ///     then reflect the new state on their next render.
-///   - On `.error`, leaves the pod pending and fires
-///     `InstallProgressBridge.onFailed` so the Live Activity ends with the
-///     failure card (the user can tap Cancel Order from the pending pod's
+///   - On `.error`, leaves the pod pending (the Live Activity ends with the
+///     failure card; the user can tap Cancel Order from the pending pod's
 ///     detail page).
 ///
 /// One watcher per pending pod. Lifetime: from .pending → terminal phase
@@ -46,10 +45,6 @@ public final class PendingPodWatcher {
     /// Nanoseconds between polls. Defaults to 5s in production; tests
     /// inject a tiny value to drive a multi-step progression fast.
     private let pollIntervalNanos: UInt64
-    /// Index into `ProvisionStatusPhase.ordered` of the furthest phase
-    /// whose `onStep` we've already fired — so we don't re-fire a phase
-    /// the canonical channel keeps reporting on every poll.
-    private var firedThroughIndex: Int = -1
     private var task: Task<Void, Never>?
     /// Count of consecutive polls that found NO checkpoint (the canonical
     /// channel 404'd → nil). Reset to 0 the moment any status arrives.
@@ -134,26 +129,15 @@ public final class PendingPodWatcher {
         }
         consecutiveNoCheckpoint = 0
 
-        // Fire onStep for each newly-reached non-terminal ladder phase so
-        // the Live Activity advances monotonically.
-        if let idx = ProvisionStatusPhase.ordered.firstIndex(of: status.phase) {
-            while firedThroughIndex < idx {
-                firedThroughIndex += 1
-                let phase = ProvisionStatusPhase.ordered[firedThroughIndex]
-                if phase != .live {
-                    InstallProgressBridge.shared.onStep?(phase)
-                }
-            }
-        }
+        let podName = app.pods.first(where: { $0.podId == podId })?.name
+        InstallProgressBridge.shared.report(key: serial, podName: podName, status: status)
 
         switch status.phase {
         case .live:
             let fqdn = (status.serverDomain?.isEmpty ?? true) ? nil : status.serverDomain
             flipPodToOnline(fqdn: fqdn)
-            InstallProgressBridge.shared.onComplete?(fqdn ?? "")
             return true
         case .error:
-            InstallProgressBridge.shared.onFailed?(status.detail ?? "Setup hit a problem")
             return true
         default:
             return false

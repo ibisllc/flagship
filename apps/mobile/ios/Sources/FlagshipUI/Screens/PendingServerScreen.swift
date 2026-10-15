@@ -177,8 +177,10 @@ public struct PendingServerScreen: View {
         // Mirror each canonical poll result onto the Watch timeline (the
         // App wires InstallProgressBridge.onStatus → WatchTimelinePublisher).
         let podName = pod.name
+        let key = (pod.pendingAuthCodeSerial?.isEmpty == false ? pod.pendingAuthCodeSerial : nil) ?? pod.fqdn
         vm.onStatus = { status in
             InstallProgressBridge.shared.onStatus?(status, podName)
+            InstallProgressBridge.shared.report(key: key, podName: podName, status: status)
         }
         timeline = vm
         vm.start()

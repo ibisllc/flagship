@@ -67,14 +67,14 @@ final class PendingPodWatcherTests: XCTestCase {
         s.provisionStatusServerDomains["AC-01CAFE"] = "home.harry.flagship.services"
 
         // Bridge captures: confirm each non-terminal phase fires + final complete.
+        InstallProgressBridge.shared.resetForTest()
+        var observedStarts: [String] = []
         var observedSteps: [ProvisionStatusPhase] = []
         var observedComplete: String?
-        InstallProgressBridge.shared.onStep = { observedSteps.append($0) }
-        InstallProgressBridge.shared.onComplete = { observedComplete = $0 }
-        defer {
-            InstallProgressBridge.shared.onStep = nil
-            InstallProgressBridge.shared.onComplete = nil
-        }
+        InstallProgressBridge.shared.onStart = { key, name in observedStarts.append("\(key)/\(name ?? "-")") }
+        InstallProgressBridge.shared.onStep = { _, phase in observedSteps.append(phase) }
+        InstallProgressBridge.shared.onComplete = { _, fqdn in observedComplete = fqdn }
+        defer { InstallProgressBridge.shared.resetForTest() }
 
         // 1ms poll cadence so the Mock's one-phase-per-poll progression drains
         // the whole script quickly without real time.
@@ -90,6 +90,8 @@ final class PendingPodWatcherTests: XCTestCase {
             observedSteps,
             [.booting, .partitioning, .installing, .downloading, .registering, .sealing, .installed, .pairing]
         )
+        // The Live Activity starts once, on the first checkpoint, named after the pod.
+        XCTAssertEqual(observedStarts, ["AC-01CAFE/Home"])
         XCTAssertEqual(observedComplete, "home.harry.flagship.services")
         XCTAssertEqual(app.pods.first?.status, .online)
         XCTAssertNil(app.pods.first?.pendingAuthCodeSerial)
@@ -143,9 +145,10 @@ final class PendingPodWatcherTests: XCTestCase {
             (phase: .registering, detail: nil),
             (phase: .error, detail: "cert-issuance timed out"),
         ]
+        InstallProgressBridge.shared.resetForTest()
         var failure: String?
-        InstallProgressBridge.shared.onFailed = { failure = $0 }
-        defer { InstallProgressBridge.shared.onFailed = nil }
+        InstallProgressBridge.shared.onFailed = { _, reason in failure = reason }
+        defer { InstallProgressBridge.shared.resetForTest() }
 
         let watcher = PendingPodWatcher(
             serial: "AC-DEAD", podId: "p1", app: app, server: s, pollIntervalNanos: 1_000_000
