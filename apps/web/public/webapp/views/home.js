@@ -43,7 +43,8 @@ import { depositPairingIfNeeded } from "../lib/pairingDeposit.js";
 import { liveSync } from "../lib/liveSync.js";
 import { fetchLeads, invertLeadsMap } from "../lib/directLeads.js";
 import { fetchDecryptedDirectory } from "../lib/accountDirectory.js";
-import { accountReadFetch, onAccountReadPausedChange } from "../lib/accountRead.js";
+import { accountReadFetch, clearAccountReadTokens, onAccountReadPausedChange } from "../lib/accountRead.js";
+import { isCompanionProfile } from "../lib/companionGuard.js";
 import {
   currentServerOrder,
   isLeaderConfirmed,
@@ -96,7 +97,9 @@ const EMPTY_MARK_SVG = `
  * the base cards.
  */
 export async function fetchPodInventory(username) {
-  const out = { statusByDomain: new Map(), pending: [] };
+  // `status`: "ok" (read), "refused" (`.com` wouldn't show this browser the
+  // account's servers: no read token), or "error" (offline, a 5xx).
+  const out = { statusByDomain: new Map(), pending: [], status: "error" };
   if (!username) return out;
   // Prefer the LiveSync canal: while it's running it holds a fresh `{ pods,
   // pending }` snapshot fed by the /stream long-poll, so we read THAT instead
@@ -111,14 +114,17 @@ export async function fetchPodInventory(username) {
     out.pending = (snap.pending ?? []).filter(
       (p) => p && typeof p.fqdn === "string" && p.fqdn.length > 0,
     );
+    out.status = "ok";
     return out;
   }
   try {
     const r = await accountReadFetch(
       `${controlApex()}/api/users/${encodeURIComponent(username)}/pods`,
     );
+    if (r.status === 401 || r.status === 403) out.status = "refused";
     if (!r.ok) return out;
     const body = await r.json();
+    out.status = "ok";
     for (const p of body.pods ?? []) {
       out.statusByDomain.set(String(p.serverDomain ?? "").toLowerCase(), p);
     }
@@ -143,7 +149,7 @@ export async function fetchPodInventory(username) {
  * registered server so demo accounts reach the normal server-card renderer
  * instead of falling into the unpaired empty state.
  */
-export function homeServerSource(sessionId, profile, now = Date.now()) {
+export function homeServerSource(sessionId, profile, now = Date.now(), { username = "", companion = false } = {}) {
   const block = profile?.demoServer;
   const fqdn = typeof block?.fqdn === "string" ? block.fqdn.trim().toLowerCase() : "";
   if (fqdn) {
@@ -160,7 +166,64 @@ export function homeServerSource(sessionId, profile, now = Date.now()) {
     };
   }
   if (sessionId) return { kind: "paired", sessionId };
+  // An open account lists its servers from `.com`'s /pods, as iOS and
+  // Android do. A keyless remote browser never reads the account's servers.
+  if (username && !companion) return { kind: "account" };
   return { kind: "empty" };
+}
+
+/** The account's servers as the list rows `.com`'s /pods names (revocations
+ *  are applied later from the same rows by reconcileRevokedServers). */
+export function serversFromPods(statusByDomain) {
+  return [...statusByDomain.keys()].filter(Boolean).map((serverId) => ({ serverId, revoked: null }));
+}
+
+export const SERVER_LIST_LOCKED_TITLE = "Your server list is locked";
+export const SERVER_LIST_LOCKED_NOTE =
+  "Flagship only shows your servers to your own devices. Unlock once in this browser to show them.";
+export const SHOW_MY_SERVERS = "Show my servers";
+
+/** `.com` refused the list and there's nothing to show: say it's locked, with
+ *  "Show my servers" (iOS's home-locked-state / home-show-my-servers). */
+export function renderLockedServersList(root, { onShow } = {}) {
+  root.innerHTML = `
+    <div class="card empty-state" id="home-locked-state">
+      <h3 class="empty-headline">${escapeHtml(SERVER_LIST_LOCKED_TITLE)}</h3>
+      <p class="note empty-message">${escapeHtml(SERVER_LIST_LOCKED_NOTE)}</p>
+      <button class="primary full-width" id="home-show-my-servers" type="button">${escapeHtml(SHOW_MY_SERVERS)}</button>
+    </div>
+  `;
+  const btn = root.querySelector("#home-show-my-servers");
+  btn?.addEventListener("click", async () => {
+    btn.disabled = true;
+    btn.textContent = "Unlocking…";
+    try {
+      await onShow?.();
+    } finally {
+      if (btn.isConnected) {
+        btn.disabled = false;
+        btn.textContent = SHOW_MY_SERVERS;
+      }
+    }
+  });
+}
+
+/** "Show my servers": with the account keys unlocked here, mint a fresh read
+ *  token and reload; otherwise unlock first (PIN screen when one is set). */
+async function showMyServers() {
+  if (getSession()?.umk instanceof Uint8Array) {
+    clearAccountReadTokens();
+    await renderHome();
+    return;
+  }
+  let pinSet = false;
+  try {
+    const { hasPin } = await import("../lib/pinLock.js");
+    pinSet = await hasPin();
+  } catch {
+    pinSet = false;
+  }
+  show(pinSet ? "view-pin-unlock" : "view-unlock");
 }
 
 /**
@@ -1343,7 +1406,10 @@ export async function renderHome() {
   void renderSharedWithMe();
 
   const sid = recoveryStoreGet("sessionId");
-  const serverSource = homeServerSource(sid, getActiveProfile());
+  const serverSource = homeServerSource(sid, getActiveProfile(), Date.now(), {
+    username: session.username,
+    companion: isCompanionProfile(),
+  });
   const sessionStatusEl = $("session-status");
   const list = $("servers-list");
   list.innerHTML = "";
@@ -1361,9 +1427,23 @@ export async function renderHome() {
   }
   try {
     let body;
+    let inventory = null;
     if (serverSource.kind === "demo") {
       body = { servers: [serverSource.server] };
       sessionStatusEl.textContent = "Demo";
+    } else if (serverSource.kind === "account") {
+      inventory = await fetchPodInventory(session.username);
+      if (inventory.status === "refused" && inventory.statusByDomain.size === 0 && inventory.pending.length === 0) {
+        sessionStatusEl.textContent = "Locked";
+        sessionStatusEl.classList.remove("ok");
+        $("home-status-paused")?.classList.add("hidden");
+        renderLockedServersList(list, { onShow: showMyServers });
+        activeOperations.syncDeployOperations([]);
+        stopApprovalPoll();
+        return;
+      }
+      body = { servers: serversFromPods(inventory.statusByDomain) };
+      sessionStatusEl.textContent = "Signed in";
     } else {
       const r = await fetch(
         `/api/me/servers?sessionId=${encodeURIComponent(serverSource.sessionId)}`,
@@ -1379,7 +1459,7 @@ export async function renderHome() {
     // just-created, not-yet-registered server rides this same call.
     // Failures here are non-fatal: registered cards fall back to the bare
     // label + active/revoked pill and pending simply doesn't surface.
-    let { statusByDomain: podStatusByDomain, pending } = await fetchPodInventory(
+    let { statusByDomain: podStatusByDomain, pending } = inventory ?? await fetchPodInventory(
       session.username,
     );
     if (
