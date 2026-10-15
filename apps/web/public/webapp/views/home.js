@@ -55,6 +55,7 @@ import {
   rankByServerOrder,
   rememberServerOrder,
   saveServerOrder,
+  serverOrderFailureText,
   serverOrderOf,
 } from "../lib/serverOrder.js";
 import { preferLeaderAsCurrent } from "../lib/appPlacement.js";
@@ -1034,7 +1035,7 @@ async function commitServerOrder(stks, { focus = null } = {}) {
     await saving;
     preferLeaderAsCurrent(homePods);
   } catch (e) {
-    toast(humanError(e), "err");
+    toast(serverOrderFailureText(e, humanError), "err");
     if (e?.status === 409) void renderHome().catch(() => {});
   } finally {
     orderSaving = false;
