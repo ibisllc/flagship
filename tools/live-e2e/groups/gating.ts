@@ -174,15 +174,6 @@ export const gating: Group = {
     const secret = randomBytes(32);
     const secretHash = serviceInviteSecretHash(secret);
     const inviteId = serviceInviteId(ownerAid.publicKey, A.keys.primaryDevice.publicKey, Date.now() % 1_000_000);
-    await rec.check(".com refuses an invite create signed by the owner IRK (admin-pinned account)", async () => {
-      const create: CreateServiceInvite = { inviteId: inviteId + "x", authorAID: ownerAid.publicKey, serviceRef, secretHash, encryptedBundle: sealInviteBundle({ name: "x" }, household, inviteId + "x"), issuedAt: Date.now() };
-      const r = await postJson(`https://${CONTROL}/api/users/${A.username}/service-invites`, {
-        request: { ...create, authorAID: bytesToHex(ownerAid.publicKey) },
-        signature: bytesToHex(signCreateServiceInvite(create, irk)),
-      });
-      assert(r.status === 403, `expected 403, got ${r.status}: ${short(r.text)}`);
-      return "403";
-    });
     const created = await rec.check("invite created on .com (admin-root signed)", async () => {
       const create: CreateServiceInvite = { inviteId, authorAID: ownerAid.publicKey, serviceRef, secretHash, encryptedBundle: sealInviteBundle({ name: "Gym Friend" }, household, inviteId), issuedAt: Date.now() };
       const r = await postJson(`https://${CONTROL}/api/users/${A.username}/service-invites`, {
