@@ -864,6 +864,7 @@ struct AboutStub: View {
                                 #endif
                             }
                         labeled("License", "BUSL-1.1 → Apache 2.0 (2030)", c: c)
+                        labeled("Patents", "Patent Pending", c: c)
                         labeled("Source", "github.com/ibisllc/flagship", c: c, mono: true)
                     }
                 }

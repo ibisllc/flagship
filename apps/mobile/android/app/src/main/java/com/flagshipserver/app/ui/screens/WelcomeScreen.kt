@@ -110,6 +110,12 @@ fun WelcomeScreen(nav: NavController) {
                 onClick = { nav.navigate("join-device") },
                 block = true,
             )
+            Text(
+                "Patent Pending",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 12.sp),
+                modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = FS.space.s2),
+            )
             Spacer(Modifier.height(FS.space.s4))
         }
       }

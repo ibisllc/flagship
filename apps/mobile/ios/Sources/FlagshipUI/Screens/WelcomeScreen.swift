@@ -54,7 +54,13 @@ public struct WelcomeScreen: View {
                     // Replace-lost-device / Wipe-&-restart.
                     FSGhostButton("I already have an account", block: true, large: true, action: onExisting)
                 }
-                Spacer().frame(height: FS.space.s8)
+                FSColorReader { c in
+                    Text("Patent Pending")
+                        .font(FS.font.caption())
+                        .foregroundColor(c.textMuted)
+                }
+                .padding(.top, FS.space.s4)
+                Spacer().frame(height: FS.space.s6)
             }
             .padding(.horizontal, FS.space.s6)
             .fsReadingColumn()

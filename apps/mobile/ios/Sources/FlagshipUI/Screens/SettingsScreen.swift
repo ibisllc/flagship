@@ -972,7 +972,7 @@ public struct SettingsScreen: View {
     }
 
     private func about(c: FSColors) -> some View {
-        Text("Flagship • BUSL-1.1 • Your stuff, on your hardware.")
+        Text("Flagship • Patent Pending • BUSL-1.1 • Your stuff, on your hardware.")
             .font(FS.font.caption())
             .foregroundColor(c.textMuted)
             .frame(maxWidth: .infinity, alignment: .center)

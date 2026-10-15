@@ -439,7 +439,7 @@ fun SettingsScreen(nav: NavController) {
                     style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
                 )
                 Text(
-                    "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) · BUSL-1.1",
+                    "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) · BUSL-1.1 · Patent Pending",
                     color = FS.colors.textMuted,
                     style = TextStyle(fontSize = 12.sp),
                     modifier = Modifier

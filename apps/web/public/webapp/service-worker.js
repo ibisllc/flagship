@@ -158,7 +158,8 @@
 //       row, only the leader wears a badge (gray until it confirms the
 //       order), "Add/connect a server" sits above the list; a saved order is
 //       also handed straight to each online box.
-const SHELL_VERSION = "v76";
+//  v77: "Patent Pending" in About and a footer under every view.
+const SHELL_VERSION = "v77";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
