@@ -158,6 +158,7 @@ Everything leaving from the daemon, through one connector
 | AI provider calls, inference shim, gVisor download, Debian package repair (`systemRepair.ts`), adapter index | global dispatcher (they use `fetch`) |
 | git fetch and npm during updates (`updateConsumer.ts`, `updateReleases.ts`, `firstBootUpdate.ts`) | children inherit `HTTP(S)_PROXY=http://127.0.0.1:<bridge>`; the daemon's loopback bridge forwards through the proxy |
 | Live apps' approved hosts (egress gateway, `egress/proxy.ts`) | the gateway dials the allowed host by name through the proxy |
+| Health timer (`flagship-health.service`, `healthReporter.ts`, curl to `.com`) | `curl -K <dataDir>/outbound-proxy.curlrc`, a 0600 curl config the daemon writes on every switch; it names the upstream proxy itself because the timer keeps reporting while the daemon (and its bridge) is down |
 
 The outbound AI relay already goes through the tunnel, so it inherits the
 proxy for free.
@@ -187,9 +188,13 @@ Flagship).
   `docker.service.d` proxy drop-in pointing at the daemon's bridge plus a
   dockerd restart, and the data services pull at boot before the daemon (and
   its bridge) is up. Leaks the IP to Docker Hub / Codeberg, not to Flagship.
-- The separate `flagship-health.service` timer (`healthReporter.ts`, curl to
-  `.com`), which doesn't run under the daemon's environment. Phase 1b: give it
-  the bridge too, or fold it into the daemon. **This one reaches `.com`.**
+- The update guard (`updateGuard.ts`, a bash `ExecStartPre` that runs
+  `npm ci` to repair an interrupted update while the daemon is down): no
+  bridge exists then, so that rare repair goes to npm directly. Phase 1b: give
+  it the curl config's proxy as `npm_config_proxy` (HTTP proxies only).
+- The health report's `tunnel` field checks for an established connection to
+  port 8443; behind a proxy that connection goes to the proxy's port, so it
+  reads `false`. Cosmetic; fix with the proxy port in phase 1b.
 - The container DNS filter (`egress/dnsFilter.ts`) forwards app DNS straight
   to the box's resolver; it never reaches Flagship.
 - Anything the OS does on its own (unattended upgrades, NTP).
