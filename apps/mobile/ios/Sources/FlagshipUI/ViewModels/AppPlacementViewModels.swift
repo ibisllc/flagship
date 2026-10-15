@@ -23,6 +23,7 @@ public enum AppPlacementCopy {
     public static let notPaired = "This device isn't paired with this server"
     public static let checking = "Checking…"
     public static let noSource = "No server has a finished copy of this app to copy from."
+    public static let adminOnlyRemove = "Only an admin device can remove an app."
 
     /// "Copying… 40%", "Installing…".
     public static func copying(state: String, progress: Double?) -> String {
@@ -364,6 +365,8 @@ public final class AppRunsOnController {
     /// The app was removed from the server this page talks to.
     public private(set) var removedFromPage = false
     public let canChange: Bool
+    /// Unticking (uninstalling) is an admin device's alone.
+    public let canUninstall: Bool
 
     private let pageFqdn: String
     private let clients: PodScreensClientFactory
@@ -376,8 +379,10 @@ public final class AppRunsOnController {
 
     public init(serviceId: String, appName: String, pods: [PodInfo], pageFqdn: String,
                 clients: PodScreensClientFactory, uninstallClient: any ServiceUninstallClient,
-                canChange: Bool = true, signer: AppAccessSigner? = nil, irkSigner: AppAccessSigner? = nil,
+                canChange: Bool = true, canUninstall: Bool = true,
+                signer: AppAccessSigner? = nil, irkSigner: AppAccessSigner? = nil,
                 now: @escaping () -> Date = Date.init) {
+        self.canUninstall = canUninstall
         self.serviceId = serviceId
         self.appName = appName
         self.rows = CreationTarget.eligible(pods).map { Row(pod: $0, presence: .checking) }
@@ -386,7 +391,7 @@ public final class AppRunsOnController {
         self.uninstallClient = uninstallClient
         self.canChange = canChange
         self.signer = signer ?? AppAccessOrder.defaultSigner
-        self.irkSigner = irkSigner ?? { reason in try await Keystore.deriveIRK(reason: reason) }
+        self.irkSigner = irkSigner ?? AppAccessOrder.defaultSigner
         self.now = now
     }
 
@@ -444,6 +449,7 @@ public final class AppRunsOnController {
     /// Why a server can't be unticked here, or nil.
     public func untickRefusal(_ fqdn: String) -> String? {
         guard let row = row(fqdn), row.presence == .installed else { return nil }
+        if !canUninstall { return AppPlacementCopy.adminOnlyRemove }
         return installedCount <= 1 ? AppPlacementCopy.lastCopy(appName) : nil
     }
 

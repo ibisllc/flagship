@@ -264,7 +264,7 @@ public final class ServiceDetailViewModel {
             runsOn = AppRunsOnController(
                 serviceId: serviceId, appName: name, pods: allPods, pageFqdn: page, clients: clients,
                 uninstallClient: uninstallClient, canChange: accessCanChange,
-                signer: egressSigner, irkSigner: irkSigner)
+                canUninstall: canUninstall, signer: egressSigner, irkSigner: irkSigner)
         } else {
             runsOn?.setAppName(name)
         }
@@ -288,9 +288,11 @@ public final class ServiceDetailViewModel {
     /// Box FQDN the service runs on — the daemon pins its owner IRK as this
     /// `serverId`. Resolved by the container from the selected/leader pod.
     private let serverDomain: String?
-    /// Derives the owner IRK behind the biometric prompt. Injected so tests
-    /// can supply a deterministic key; production uses `Keystore.deriveIRK`.
+    /// Signs the uninstall: the admin root on an admin device (the box refuses
+    /// the IRK once an admin root is pinned), behind the biometric prompt.
     private let irkSigner: @MainActor (String) async throws -> Curve25519.Signing.PrivateKey
+    /// Uninstalling is an admin device's alone (the box enforces it).
+    public let canUninstall: Bool
     /// The sensitive-order key (admin root when held, else the owner IRK),
     /// behind Face ID; the same key Delete/Revoke sign with.
     private let egressSigner: @MainActor (String) async throws -> Curve25519.Signing.PrivateKey
@@ -313,9 +315,11 @@ public final class ServiceDetailViewModel {
         irkSigner: (@MainActor (String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
         egressSigner: (@MainActor (String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
         egressServerDomain: String? = nil,
-        accessCanChange: Bool = true
+        accessCanChange: Bool = true,
+        canUninstall: Bool = true
     ) {
         self.accessCanChange = accessCanChange
+        self.canUninstall = canUninstall
         self.egressServerDomain = egressServerDomain ?? serverDomain
         self.serviceId = serviceId
         self.client = client
@@ -325,7 +329,7 @@ public final class ServiceDetailViewModel {
         self.username = username
         self.uninstallClient = uninstallClient ?? MockServiceUninstallClient()
         self.serverDomain = serverDomain
-        self.irkSigner = irkSigner ?? { reason in try await Keystore.deriveIRK(reason: reason) }
+        self.irkSigner = irkSigner ?? { reason in try await Keystore.sensitiveOrderSigningKey(reason: reason) }
         self.egressSigner = egressSigner ?? { reason in try await Keystore.sensitiveOrderSigningKey(reason: reason) }
     }
 
@@ -466,17 +470,21 @@ public final class ServiceDetailViewModel {
         }
     }
 
-    /// Destructive uninstall. Mirrors the env-Save / front-page ceremony: derive
-    /// the owner IRK behind the biometric prompt, sign the canonical
+    /// Destructive uninstall, an admin device's alone: unlock the admin root
+    /// behind the biometric prompt, sign the canonical
     /// `UninstallServiceRequest` bytes, and DELETE box-direct over the pinned
     /// pipe (`DELETE /api/services/:id`) — flagshipserver.com is never in the
     /// path. Returns `true` on a 200 so the container can pop back + refresh.
     ///
-    /// The caller is expected to have just shown a confirm dialog; the IRK
-    /// derivation here triggers the Face ID prompt (the second-factor
+    /// The caller is expected to have just shown a confirm dialog; the key
+    /// unlock here triggers the Face ID prompt (the second-factor
     /// confirmation), so no extra re-prompt is needed.
     @discardableResult
     public func uninstall() async -> Bool {
+        guard canUninstall else {
+            removePhase = .failed(AppPlacementCopy.adminOnlyRemove)
+            return false
+        }
         // The owner IRK is pinned to a SPECIFIC box (`serverId`); without
         // knowing which box runs this service we can't sign a verifiable order.
         guard let domain = serverDomain, !domain.isEmpty else {

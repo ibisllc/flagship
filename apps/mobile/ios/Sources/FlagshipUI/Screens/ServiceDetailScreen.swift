@@ -90,7 +90,7 @@ public struct ServiceDetailScreen: View {
                     }
                     if vm.showsDatabase, let db = vm.database { databaseRow(db, c: c) }
                     logsAndBackup(d: d, c: c)
-                    removeButton(c: c)
+                    if vm.canUninstall { removeButton(c: c) }
                 }
                 Spacer().frame(height: FS.space.s12)
             }

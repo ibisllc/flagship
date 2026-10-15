@@ -558,7 +558,9 @@ struct ServiceDetailContainer: View {
                     uninstallClient: uninstallClient,
                     serverDomain: serverDomain,
                     egressServerDomain: sessionServerDomain,
-                    accessCanChange: !app.isRestrictedDevice
+                    accessCanChange: !app.isRestrictedDevice,
+                    canUninstall: !app.isRestrictedDevice
+                        && (Keystore.hasAdminRoot || GymSeams.forceAdminRoot || app.isDemoAccount)
                 )
             }
             await vm?.load()
