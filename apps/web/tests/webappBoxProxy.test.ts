@@ -42,9 +42,10 @@ describe("the box-proxy order", () => {
   });
 
   it("refuses every refuse case, normalizes hosts and checks credentials", async () => {
-    const { canonicalBoxProxy, normalizeBoxProxyHost, boxProxyCredentialsError } = await load("lib/boxProxy.js");
+    const { canonicalBoxProxy, normalizeBoxProxyHost, boxProxyCredentialsError, boxProxyHostError } = await load("lib/boxProxy.js");
     for (const r of V.refuse) expect(() => canonicalBoxProxy(r.fields), r.why).toThrow();
     for (const n of V.normalize) expect(normalizeBoxProxyHost(n.input)).toBe(n.host);
+    for (const h of V.hostErrors) expect(boxProxyHostError(h.host), h.host).toBe(h.error);
     for (const c of V.credentials.accept) expect(boxProxyCredentialsError(c)).toBeNull();
     for (const c of V.credentials.refuse) expect(boxProxyCredentialsError(c), c.why).not.toBeNull();
   });
