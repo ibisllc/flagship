@@ -425,6 +425,9 @@ export interface ControlPlaneEnv {
   /** `k=v[,k=v]` labels added to every UpCloud server this Worker creates.
    *  The gym sets `flagship-env=gym`; /api/gym/teardown reaps only those. */
   UPCLOUD_EXTRA_LABELS?: string;
+  /** The git ref new demo boxes clone (default `main`). The gym sets it to
+   *  try unlanded box code end to end; prod leaves it unset. */
+  DEMO_INSTALLER_GIT_REF?: string;
 
   /**
    * Public-half SSH key Hetzner attaches to demo servers. Operator's
@@ -3467,6 +3470,7 @@ export async function tryControlPlane(
         ...(sshKeyId && demoCloud.provider === "hetzner" ? { demoSshKeyId: sshKeyId } : {}),
         apex: env.SERVICES_APEX ?? "flagship.services",
         controlApex: env.CONTROL_APEX ?? "flagshipserver.com",
+        ...(env.DEMO_INSTALLER_GIT_REF ? { installerGitRef: env.DEMO_INSTALLER_GIT_REF } : {}),
       }, await readJson(request)));
     }
     if (method === "POST" && ROUTE_RE.DEMO_USER_CLEANUP.test(path)) {

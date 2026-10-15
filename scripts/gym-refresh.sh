@@ -23,6 +23,7 @@
 #      GYM_SECRETS_FILE  (default <main checkout>/.gym-secrets.env)
 #      GYM_UPCLOUD_TOKEN_FILE (default ~/.config/flagship/upcloud-token)
 #      GYM_BASE_REF      rebase the gym branch onto this ref instead of origin/main (never pushed)
+#      GYM_INSTALLER_GIT_REF  the ref new gym boxes clone (a pushed branch; default main)
 #      GYM_REFRESH_DRY_RUN=1  same as --dry-run
 #
 # Never touches prod: prod is only READ (its secret names, to compare).
@@ -237,7 +238,7 @@ else
     say "DRY-RUN would: (cd $WT/apps/com && npm run deploy -- --config $CFG) with the migration gate on $D1"
   else
     if ! out="$(cd "$WT/apps/com" && FLAGSHIP_MIGRATION_CHECK_DB="$D1" FLAGSHIP_MIGRATION_CHECK_CONFIG="$CFG" \
-        npm run deploy -- --config "$CFG" 2>&1)"; then
+        npm run deploy -- --config "$CFG" ${GYM_INSTALLER_GIT_REF:+--var "DEMO_INSTALLER_GIT_REF:$GYM_INSTALLER_GIT_REF"} 2>&1)"; then
       echo "$out" | tail -30
       die "gym Worker deploy failed"
     fi
