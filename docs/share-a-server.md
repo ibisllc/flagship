@@ -22,14 +22,15 @@ A share is one A-signed grant naming one of B's keys and a level:
 | Apps list and app detail | yes | yes |
 | Build with AI on staging, finish and go live | | yes |
 | Accept an app update held for review | | yes |
+| Update the server to a release Flagship's maintainers endorsed (§5.6) | | yes |
 | Edit an app's internet access list, answer its requests | | yes |
 | **See app data** (opt-in): the Database section, read only | opt-in | opt-in |
 | Change app data (signed statement in the Database console) | | opt-in |
-| **Unlock at boot** (opt-in): approve S's start-up | opt-in | opt-in |
+| **Unlock at boot** (opt-in): approve S's start-up, and be pushed when S waits (§5.4) | opt-in | opt-in |
 
 Always A's only, at every level: delete, wipe, transfer, replace, migrate,
-power and lock, dead-man, front page, preferred server, endorsements and
-server updates, custom domains, app uninstall, app copy, app API keys, app
+power and lock, dead-man, front page, preferred server, endorsements,
+custom domains, app uninstall, app copy, app API keys, app
 env values, app members and app access mode, companions, paired devices,
 peer backup, diagnostics/journal, and **who S is shared with**. Every
 `device-admin-tier-spec.md` §2 sensitive row stays A's: they verify against
@@ -54,7 +55,7 @@ Residual risks, stated plainly:
   its sealed copy to re-seal it for the box. Turning the opt-in off or ending
   the share deletes B's copy on `.com`, but a B who kept the plaintext could
   still open a disk image. The cut is complete only after a disk-key rotation,
-  which no flow does yet (§10 Q3).
+  which no flow does yet (§10, Later).
 - **The box does not authenticate boot approvers** (true for A too today:
   `boot-core/gate.ts` is the authority, plus who can open the sealed key).
   B's approval is gated the same way: `.com` checks B's pairwise key against
@@ -62,6 +63,11 @@ Residual risks, stated plainly:
 - `.com` sees that A has shared S (the offer row names S and A), when, how
   often the link is read, and B's IP when B's app talks to it. It does not see
   who B is.
+- **Start-up notices tell `.com` which device helps with S.** When B turns
+  them on (§5.4), `.com` stores that device's push token against the share
+  id. Apple, Google or the browser's push service can tie that token to B's
+  device, so together they can learn that this device helps with S. The
+  switch says so, and the token goes with the unlock deposit.
 - The SAS loop defeats a leaked link only if A actually compares the code.
 
 ## 3. Keys and identity
@@ -109,6 +115,8 @@ fields are lowercase; times are Unix ms, non-negative safe integers.
 | 7 | `flagship/server-share-list/v1` | `username\|issuedAt` | any of A's account keys (IRK, AID or admin root): it only reads ciphertext | `.com` |
 | 8 | `flagship/server-share-unlock/v1` | `serverDomain\|shareId\|memberPubHex\|sealedSha256\|issuedAt` | A's sensitive key | `.com` |
 | 9 | `flagship/share-inbox/v1` | `inboxPubHex\|op\|entryId\|ctSha256\|issuedAt` | B's inbox key | `.com` |
+| 10 | `flagship/server-share-push/v1` | `serverDomain\|shareId\|memberPubHex\|op\|platform\|tokenSha256\|issuedAt` | B's member key | `.com` |
+| 11 | `flagship/server-share-update/v1` | `serverDomain\|shareId\|memberPubHex\|targetCommit\|fromCommit\|nonce\|issuedAt` | B's member key | S |
 
 Field rules:
 
@@ -122,6 +130,12 @@ Field rules:
 - `sealedSha256` is the literal `off` to withdraw B's boot copy.
 - `op` is `put`, `list` or `delete`; `entryId` is 32 hex or empty for
   `list`; `ctSha256` is empty except for `put`.
+- In #10, `op` is `put` or `delete`, `platform` is `apns`, `fcm` or
+  `webpush`, and `tokenSha256` is SHA-256 hex of the provider token's UTF-8
+  (the token itself travels beside the envelope on `put`).
+- In #11, `targetCommit` and `fromCommit` are 40 lowercase hex and `nonce`
+  is 64 lowercase hex. It shares no tag with A's `flagship/server-update/v1`,
+  so neither order can stand in for the other.
 - Distinct tags keep every signature single-purpose: an accept can't replay
   as a leave or a session, a grant can't replay as an unlock deposit.
 
@@ -227,8 +241,24 @@ A's IRK (or A's watch delegate) post the reply. For B:
 4. **The gate** accepts role `share` for S only when the signer equals the
    member key of an unlock deposit for S whose share has not ended.
 5. **Off:** A signs #8 with `sealedSha256 = off`; ending the share deletes the
-   copy too. No push reaches B (a push token would link B's account to the
-   share at `.com`); B sees pending start-ups when B's app is open (§10 Q1).
+   copy too.
+6. **Start-up notices (B's side of the opt-in).** While the grant has
+   `unlockAtBoot`, B's server page has a switch per device, "Notify this
+   device when it needs to start", that says turning it on lets Flagship's
+   service know this device helps with this server. On: B signs #10 `put`
+   and `POST /api/server-shares/:id/push {push, signature, providerToken}`
+   with the link token. `.com` keeps the token (table `server_share_push`,
+   migration 0097) only while an unlock deposit for the same share names the
+   same member key (403 `unlock-not-shared` otherwise), at most 10 devices a
+   share. Off: #10 `delete`. Withdrawing the deposit, revoking or leaving
+   drops every token of the share with the deposit.
+7. **The push.** When S asks to unlock its disk (`/api/boot/request`,
+   purpose `unlock-key`), `.com` pushes A's devices as before and each
+   registered B device with the same category (`secret-request`) and alert,
+   an empty sealed payload and `kind: share-start-up`; Web Push carries only
+   `{kind, body}`. It names no server. B's apps open Home on it, where
+   "Shared with me" shows the Approve button; they don't open A's approvals
+   list.
 
 ### 5.5 See app data (opt-in)
 
@@ -237,6 +267,43 @@ CSV export, read-only `POST …/query`) work over B's session. A statement that
 changes data needs manage level **and** the opt-in, plus B's member-key
 signature over `flagship/app-db-write/v1`. Without the opt-in every database
 route answers 403 `app-data-not-shared`.
+
+### 5.6 Server updates at manage level
+
+B at "Can manage" may move S to an endorsed release. The endorsement is the
+safety check; the person ordering only picks when. B's page lists releases
+from `GET /api/screens/updates` (view level), shows the newest newer one and,
+on confirm, signs #11 with `fromCommit` = server-detail's `currentCommit` and
+a fresh nonce, and posts `POST box/api/shares/update {update, signature}` over
+the share session. The box:
+
+1. resolves the share session (401 otherwise) and requires manage level
+   (403 `manage-only`; view level never gets here);
+2. checks #11 names this share and its member key, verifies the signature,
+   and re-verifies A's grant against A's sensitive key at manage level (a
+   revoked or left share has no session and no grant);
+3. refuses while an update is staged or being applied (409 `pending-verify`,
+   `busy`);
+4. runs A's own gates (`admitUpdateOrder`): this box, fresh, unused nonce,
+   `fromCommit` = HEAD (`wrong-domain`, `stale`, `replayed-nonce`,
+   `from-commit-mismatch`), burning the nonce;
+5. answers 202, logs `server.update` under B's label, and applies with
+   `applyEndorsedUpdate`: fetch, the maintainer endorsement and lineage gate
+   (an unendorsed target is refused before any checkout), checkout, rebuild,
+   restart under the boot health gate. A refusal there lands in
+   `update-outcome.json`, which server-detail reports as `lastUpdate`.
+
+The order goes to the box, never to `.com`. `GET /api/shares/me` answers
+`canUpdate` (manage level on a box that runs from a checkout), and only then
+do the apps show the Update control.
+
+### 5.7 Apps on S
+
+B stays an ordinary visitor on S's apps: the per-app identity rule
+(`AGENTS.md`) is unchanged, and a members-only app still needs an app invite.
+The apps list and app detail carry `accessMode` (`open` or `members-only`), so
+B's page says "Members only. You need an invite to use this app." next to such
+an app.
 
 ## 6. Route map
 
@@ -252,6 +319,7 @@ unchanged.
 |---|---|
 | `GET /api/shares/nonce`, `POST /api/shares/session`, `POST /api/shares/leave` | public (signature is the auth) |
 | `GET /api/shares/me` | view |
+| `POST /api/shares/update` (B-signed #11, §5.6) | manage |
 | `GET /api/screens/server-detail`, `apps-list`, `app-detail/:id`, `server-metrics/:podId`, `release-status`, `updates`, `peer-backup/status`, `lan-hint` | view |
 | `GET /api/screens/access-requests`, `GET /api/screens/services/:id/access`, `GET …/egress` | manage |
 | `POST /api/screens/services/:id/access` (B-signed `app-access/v1`), `POST …/access/dismiss`, `POST …/access/draft/dismiss` | manage |
@@ -264,7 +332,7 @@ unchanged.
 | `POST …/query` with a B-signed `app-db-write/v1` | manage + data |
 | `GET/POST /api/screens/shares`, `POST /api/screens/shares/revoke`, `GET /api/screens/activity` | owner |
 | Everything else under `/api/screens/*` (companion, paired sessions, url-controller, api-keys, copy, env set/unset, app-invite, peer-backup toggle, app-backup, orders/send, install-events, post-recovery, adapter-report, `POST …/egress`) | owner |
-| `/api/build/*`, `/mcp/build/*`, `/api/llm/sessions*` (IDE and legacy builds) | owner (v1; §10 Q4) |
+| `/api/build/*`, `/mcp/build/*`, `/api/llm/sessions*` (IDE and legacy builds) | owner (v1; §10, Later) |
 | `/api/power`, `/api/deadman/*`, `POST /api/front-page`, `/api/journal`, `/api/service-access*`, `/api/service-certs/*`, `/api/services*`, `/api/orders-from-user`, `/api/identity/pending`, `/api/phone/alerts*` | owner (A-signed or owner session) |
 
 New box routes:
@@ -273,7 +341,8 @@ New box routes:
 |---|---|
 | `GET /api/shares/nonce` | `{nonce}` (single use, 2 min) |
 | `POST /api/shares/session` | `{session, signature}` → `{token, expiresAt, level, unlockAtBoot, seeAppData}`; 403 `not-shared` / `share-ended` |
-| `GET /api/shares/me` | → `{shareId, level, unlockAtBoot, seeAppData, serverDomain}` |
+| `GET /api/shares/me` | → `{shareId, level, unlockAtBoot, seeAppData, serverDomain, canUpdate}` |
+| `POST /api/shares/update` | `{update, signature}` → 202 `{ok, accepted, targetCommit}`; `{error, code}` otherwise (§5.6) |
 | `POST /api/shares/leave` | `{leave, signature}` → `{ok}` |
 | `GET /api/screens/shares` | → `{shares:[{shareId, label, level, unlockAtBoot, seeAppData, memberPubHex, issuedAt, sharedAt, lastSeenAt}], ended:[{shareId, label, endedAt, reason}]}` (`memberPubHex` lets A re-sign a change) |
 | `POST /api/screens/shares` | `{grant, signature, accept?, acceptSignature?}` → `{ok, share}`; the first grant for an id must carry B's acceptance |
@@ -291,6 +360,7 @@ New box routes:
 | `GET /api/server-shares/:id` | share token | offer, sealed acceptance, state, `unlock` flag |
 | `POST /api/server-shares/:id/accept` | share token | first acceptance wins (409 after) |
 | `POST /api/server-shares/:id/leave` | share token + #4 | end the row, drop B's boot copy |
+| `POST /api/server-shares/:id/push` | share token + #10, an unlock deposit for that key | put or drop one device's start-up push token (§5.4) |
 | `GET /api/server/:domain/share-ends?since=` | none (signed envelopes; box verifies) | revokes and leaves for S |
 | `POST /api/share-inbox` | #9 | B's "Shared with me" entries: put / list / delete |
 | `GET /api/boot/share/pending/:domain`, `GET /api/boot/share/key/:domain`, `POST /api/boot/response` | boot gate role `share` | §5.4 |
@@ -300,9 +370,10 @@ Every other `.com` account route stays A's: each verifies A's own keys.
 D1 migration **0087_server_shares.sql**: `server_shares` (id, owner, server,
 token hash, sealed offer/owner/acceptance, state, end envelope, times),
 `server_share_unlocks` (share id, server, member pub, sealed copy, signed
-deposit), `share_inbox` (inbox id, entry id, ciphertext, time). `.com` stores
-no label, no level (except through the unlock deposit's existence), and no
-B account.
+deposit), `share_inbox` (inbox id, entry id, ciphertext, time). Migration
+**0097_server_share_push.sql**: `server_share_push` (share id, server, member
+pub, token hash, platform, provider token, time). `.com` stores no label, no
+level (except through the unlock deposit's existence), and no B account.
 
 ## 7. Activity log
 
@@ -311,7 +382,7 @@ write a session makes under `/api/screens/*` and `/api/shares/*`, every share
 sign-in, grant, change, revoke and leave appends
 `{ts, actor, action, target?, ok}`. `actor` is `{kind:"owner"}` or
 `{kind:"share", shareId, label}`; `action` is a stable id from the route map
-(`ai.start`, `app.access.edit`, `app.update.accept`, `db.write`,
+(`ai.start`, `app.access.edit`, `app.update.accept`, `db.write`, `server.update`,
 `share.signed-in`, `share.granted`, `share.changed`, `share.revoked`,
 `share.left`, …); `target` is a service id where there is one. Reads aren't
 logged. Bodies, SQL, prompts and tokens never are. Only A reads the log
@@ -323,7 +394,10 @@ logged. Bodies, SQL, prompts and tokens never are. Only A reads the log
 (clear of Monitoring and the Danger zone). It lists each person by label with
 their level, the two opt-ins and "Remove". **Share this server** opens:
 label → level (Can view / Can manage, with one line each) → the two
-opt-ins, off, each with its consequence → link + QR + Share sheet. Once B
+opt-ins, off, each with its consequence → link + QR + Share sheet. Unlock at
+boot also says, wherever A turns it on: "Only give this to someone you'd give
+a house key. Ending the share deletes their copy, but they could have kept
+one." Once B
 accepts: "Sam's phone shows 123 456?" → Confirm (biometric) → active.
 Changing level or an opt-in re-signs the grant. An **Activity** card shows the
 log, B's actions under B's label.
@@ -333,9 +407,10 @@ Accept → the 6-digit code to read to A → "Waiting for the owner to confirm" 
 done. The home list gains a **Shared with me** section under the servers.
 B's server page shows only what B's level allows (destructive sections are
 absent, not disabled): status, monitoring, apps; at manage, the AI builder
-entry, update reviews and access lists; with app data, the Database section;
-with unlock at boot, a start-up approval card when S waits. At the bottom,
-**Leave**.
+entry, update reviews, access lists and **Update** (§5.6); with app data, the
+Database section; with unlock at boot, the "Notify this device" switch and a
+start-up approval card when S waits; a members-only hint on such apps. At the
+bottom, **Leave**.
 
 **Add a device** (all three apps) says it is for your own phones and tablets,
 and points to Share this server for other people.
@@ -406,6 +481,19 @@ with the member key) and the AI builder; with app data the Database section;
 `POST apex/api/server-shares/:id/leave {leave, signature}` (share token header),
 then delete the inbox entry.
 
+**B's start-up notices** (unlock at boot on): the device's push token (APNs,
+FCM, or the browser's Web Push subscription JSON); #10 `put` with
+`tokenSha256 = sha256hex(token)` → `POST apex/api/server-shares/:id/push
+{push, signature, providerToken}` (share token header); remember
+`{platform, tokenSha256}` per share on the device. Off: #10 `delete` with the
+remembered values. Leave forgets them. A push with `kind: share-start-up`
+opens Home.
+
+**B updates S** (manage, `me.canUpdate`): `GET box/api/screens/updates`, pick
+the newest newer release, sign #11 (`fromCommit` = server-detail
+`currentCommit`, 32 random bytes of nonce) → `POST box/api/shares/update
+{update, signature}`; the verdict shows in server-detail's `lastUpdate`.
+
 **B approves a start-up** (unlock at boot on, the server's card says it's waiting):
 the boot gate header is the usual `Authorization: Flagship-Boot-v1 <b64url JSON>` with
 `role: "share"`, signed by the member key over
@@ -416,14 +504,36 @@ check `stkPub` equals the offer's `stkPubHex` and the request signature;
 `buildSealedSecretResponse(diskKey, request)`, and
 `POST boot/api/boot/response {response:{serverDomain, requestNonceHex, purpose:"unlock-key", sealed, issuedAt}}`.
 
-## 10. Open questions for the owner
+## 10. Decisions and open questions
 
-1. **Push for B's boot approvals.** v1 sends none (a push token would let
-   `.com` link B's account to the share). Option: an opt-in "notify me" that
-   accepts that link.
-2. **Should B see S's activity log**, or only their own lines? v1: only A.
-3. **Disk-key rotation** to make ending an unlock share complete (§2).
-4. **IDE and git builds** (`/api/build/*`, MCP keys) for manage level: v1
-   keeps them A's because they hand out a long-lived MCP key.
-5. **Apps on S** don't learn about shares: B visiting S's apps is a visitor
-   like any other (Members only still needs an app invite).
+v1 aims at a family: one person runs the server, a partner co-manages it. Two
+scenarios must work: "the power went out and I'm away" (B approves S's
+start-up) and day-to-day upkeep without A. Owner decisions, 2026-10-14:
+
+1. **Push for B's start-up approvals: yes, as part of the unlock-at-boot
+   opt-in** (§5.4 steps 6–7). B's device registers its push token for that
+   one share, signed with the member key, and the switch says plainly that
+   this lets Flagship's service know this device helps with this server.
+   Content-free, same category and alert as A's. Turning it off, A
+   withdrawing the deposit, revoking or leaving deletes the token.
+2. **B sees only their own effect, not S's activity log.** v1 keeps the log
+   A's. An activity log co-managers can see is on the Later list (offices).
+3. **Disk-key rotation is not in v1.** A's opt-in carries the honest warning
+   (§8) instead; rotation is on the Later list.
+4. **IDE and git builds stay A's in v1** (they hand out a long-lived MCP key).
+   On the Later list.
+5. **Apps on S don't learn about shares.** B is an ordinary visitor; a
+   members-only app needs an app invite, and B's page says so (§5.7).
+6. **Server updates at manage level: yes** (§5.6). The release endorsement is
+   the safety check; B only picks when. View level can't.
+
+### Later
+
+- **Succession.** A names a successor who can claim ownership of S if A's
+  dead-man switch lapses, after a waiting period A can cancel.
+- **Disk-key rotation when an unlock share ends**, so ending it is complete
+  (§2).
+- **An activity log co-managers can see**, for office use.
+- **IDE and git builds for co-managers**, with MCP keys scoped to the share
+  and revoked with it.
+- **Offices as a target**, which needs the three above.
