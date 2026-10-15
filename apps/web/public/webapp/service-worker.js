@@ -177,7 +177,15 @@
 //       (never a second device); an app's page ends in "Remove app" (the signed
 //       uninstall to the server the page reads, the only copy included) and shows
 //       the box's "Recent logs" when it sends some.
-const SHELL_VERSION = "v83";
+//  v84: the transfer dialog shows its offer as a QR (/qrEncoder.js reaches
+//       version 40); Home lists an account's servers from /pods, or says the list
+//       is locked with "Show my servers"; a server's page says why its box didn't
+//       answer (offline, coming up, never online, not paired + Pair this server);
+//       recovery goes straight to the takeover (no choice screen), the raw Members
+//       list and the URL-controller view are gone; auto-unlock deposits the
+//       box-sealed v2 lease; account alerts open account security or the device
+//       list; every start-up module is precached.
+const SHELL_VERSION = "v84";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
