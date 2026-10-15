@@ -510,6 +510,9 @@ public struct HomeScreen: View {
                             .accessibilityIdentifier("home-add-first-server")
                     }
                 }
+                // .contain keeps the id on the card: otherwise it overrides
+                // the children's own ids (home-add-first-server).
+                .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("home-empty-state")
             } else {
                 HStack {

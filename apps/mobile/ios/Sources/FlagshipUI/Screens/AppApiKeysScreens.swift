@@ -50,6 +50,7 @@ struct ApiKeysSection: View {
                 }
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("service-detail-api-keys")
         .sheet(isPresented: $showCreate, onDismiss: { controller.dismissCreatedKey() }) {
             ApiKeyCreateSheet(controller: controller) { showCreate = false }
@@ -93,6 +94,7 @@ struct ApiKeysSection: View {
                 }
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("service-detail-api-key-row")
     }
 }

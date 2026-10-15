@@ -44,6 +44,7 @@ struct ShareServerCard: View {
                 sectionHeader(ServerShareCopy.sectionTitle, c: c)
                 FSCard { content(c) }
             }
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("share-server-card")
             if let model, case .loaded(let entries) = model.activity, !entries.isEmpty {
                 activityCard(entries, c: c)
@@ -184,6 +185,7 @@ struct ShareServerCard: View {
                 FSGhostButton("Cancel") { Task { await model.end(row) } }.disabled(model.busy != nil)
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("share-row-\(row.shareId)")
     }
 
@@ -238,6 +240,7 @@ struct ShareServerCard: View {
                 }
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("share-activity-card")
     }
 }
@@ -420,6 +423,7 @@ struct SharedWithMeSection: View {
                     }
                 }
             }
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("home-shared-with-me")
             .background(ServerShareDemo.route == "home" ? DemoScrollIntoView() : nil)
         }

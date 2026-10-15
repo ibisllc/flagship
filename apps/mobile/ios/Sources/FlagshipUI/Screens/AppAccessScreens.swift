@@ -84,6 +84,7 @@ struct InternetAccessSection: View {
             }
             Divider()
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("service-detail-access-draft")
     }
 
@@ -115,6 +116,7 @@ struct InternetAccessSection: View {
                 }
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("service-detail-access-pending")
     }
 }
