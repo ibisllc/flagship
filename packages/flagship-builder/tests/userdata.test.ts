@@ -297,7 +297,12 @@ describe("bootstrap sets up + enables the daemon (parity with the fixed demo)", 
       'curl -sS -o /dev/null --connect-timeout 3 --max-time 8 "$CONTROL_PLANE_BASE/"',
     );
     expect(wrapper).toContain("network unavailable after 120s");
-    expect(wrapper).toContain("curl -fsS --connect-timeout 5 --max-time 30 -X POST");
+    expect(wrapper).toContain('curl -fsS --connect-timeout 5 --max-time "${3:-30}" -X POST');
+    expect(wrapper).toContain('flagship_post "$REGISTRATION_URL" @/run/register-payload.json 30');
+    // A box with an outbound proxy goes through the private relay and never
+    // probes .com directly (docs/outbound-proxy.md).
+    expect(wrapper).toContain("npx tsx scripts/install-helper.ts ohttp-post");
+    expect(wrapper).toContain("getent hosts");
   });
   it("enables the units DETERMINISTICALLY (chroot-proof manual .wants symlinks)", () => {
     // ROOT CAUSE of the live "installed but dead at the login prompt" box:
@@ -1286,7 +1291,10 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       // and retries on failure (no once-only env-file gate); its Description
       // and comments name Postgres, Forgejo and Chromium (MinIO and Redis
       // are gone).
-      "86cf2f4f8e28104007d4636241703330e1329e01cafa4beb88ff7f079f3a10cd",
+      // Re-pinned 2026-10-15 (feat/outbound-proxy): setup POSTs go through
+      // flagship_post, which uses the private relay (OHTTP) when the recipe
+      // names an outbound proxy and curl otherwise.
+      "63cda7a9f243b500fe0feb6a606bef317223541475b562b056c921fe24b4e4e2",
     );
   });
 
@@ -1315,7 +1323,8 @@ describe("#27 root-cause fixes — op-mode staging, initramfs DNS, wired net-ens
       // Prior: 2026-07-19 daemon Restart=always.
       // Same appliance-only preinstalled helper reuse as the wired twin above.
       // Re-pinned 2026-10-12: retried data-services unit (see the wired pin above).
-      "b3f7d20a625c4921bcd68a8466279b98a26f6a0e869dacb1b319537733361e19",
+      // Re-pinned 2026-10-15 (feat/outbound-proxy): flagship_post, as above.
+      "d77b7fe5ad0b58a0ba6fa4783c952ed666da0b5c4b48073ad760386662eff266",
     );
   });
 
