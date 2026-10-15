@@ -15,12 +15,16 @@ name: e2e (Playwright + pod-sim)
 #     page.route; S11 wipe-restart and S14 hit the local Worker directly.
 #   - wrangler is not a repo dependency, so the version is pinned here
 #     (WRANGLER_VERSION) instead of floating with `npx wrangler`.
-#   - Triggered on pull_request + manual dispatch, not push:main.
+#   - Triggered on pull requests, pushes to main and manual dispatch.
+#   - The account read token secret is a throwaway local value so the
+#     private reads (/audit, /pods) can be minted and checked (S11).
 #   - retries:1 in CI comes from the playwright config; a genuinely flaky
 #     spec should be quarantined, not blanket-retried.
 
 on:
   pull_request:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -62,6 +66,7 @@ jobs:
         run: |
           set -euo pipefail
           nohup npx --yes "wrangler@${WRANGLER_VERSION}" dev --port 8787 \
+            --var ACCOUNT_READ_TOKEN_SECRET:e2e-local-read-token-secret \
             > "$GITHUB_WORKSPACE/wrangler-dev.log" 2>&1 &
           echo $! > "$GITHUB_WORKSPACE/wrangler-dev.pid"
 
