@@ -28,7 +28,7 @@ apps\builder-windows\make.ps1 publish   # dist\FlagshipBuilder.exe
 Then test the **released** package, not the dev build, because that's what
 users get:
 
-1. Download `/download/windows` (the `studio-v0.1.1` zip), unzip it, and run
+1. Download `/download/windows` (the `studio-v0.1.2` zip), unzip it, and run
    `Flagship Studio.exe`. SmartScreen will warn (unsigned): More info → Run anyway.
 2. Pair from the phone (Add server → Pair with Studio): QR or short code, then
    confirm the SAS on both screens.

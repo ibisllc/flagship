@@ -473,9 +473,10 @@ allowances (1M / 5M / 20M a month) are placeholders. `feat/custom-names`'
   Worker serves `apps/web/public/open/` at the same URL (store buttons, then an
   opt-in webapp link) instead of 308ing into the webapp origin, which an
   installed Android webapp claimed. Store listings live only in
-  `apps/web/public/app-stores.js` (live since 2026-10-14). Needs a `.com`
-  deploy (AASA claims the new paths), an endorsed box release (knock page),
-  Studio releases (Mac/Windows/Linux) and iOS/Android builds.
+  `apps/web/public/app-stores.js` (live since 2026-10-14). Live on `.com`
+  and in Studio (Mac DMG + `studio-v0.1.2`) since 2026-10-14. Still needed:
+  an endorsed box release at or after `7e0271ed` (knock page) and
+  iOS/Android store builds.
 - **Delete / reversible Revoke / Un-revoke (2026-10-12):** live on `.com` +
   webapp (shell v44); iOS dev build installed on the owner's iPhone; Android
   only as a CI/debug APK. Delete deposits a `wipe-now` decommission order
@@ -585,11 +586,11 @@ release, and applies to a VM from its next start).
 ### Desktop Studio
 
 - **Mac:** notarized DMG at `/download/mac` (`scripts/release-studio.sh`;
-  republished 2026-10-13 with VM disks attached `.cached` + `.full` sync;
+  republished 2026-10-14 with the https pairing QR; 2026-10-13 brought VM disks attached `.cached` + `.full` sync;
   2026-10-12 brought graceful VM stop + the appliance cache in Application
   Support). `wrangler` is not a repo dependency: the script's final
   `npm run deploy` needs a wrangler on PATH.
-- **Windows + Linux:** `studio-v0.1.1` on GitHub Releases, built by the
+- **Windows + Linux:** `studio-v0.1.2` on GitHub Releases, built by the
   on-demand `studio-release.yml` (pass `publish=true` to release). Windows is a
   zip with `xorriso` bundled in `tools\`, **unsigned** (no code-signing cert;
   v0.0.1 wasn't signed either). Linux is an x86-64 AppImage that needs Node.js
