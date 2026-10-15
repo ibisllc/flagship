@@ -262,13 +262,11 @@ export function allowanceViewFrom(username: string, s: QuotaStatus): AllowanceVi
   };
 }
 
-/** `GET /api/users/:u/allowance` — PUBLIC, unauthenticated read of a user's
- *  current public-bandwidth allowance (the #6 dashboard + #7 alert data
- *  source). This is account METADATA only (tier + a byte total for the month,
- *  no content, no keys), the same disclosure class as the unauthenticated
- *  `/pods` directory — so it carries no secret, but the route MUST rate-limit
- *  it. Returns 0-usage/free defaults for an unknown username (no oracle on
- *  existence beyond what `/pods` already gives). */
+/** `GET /api/users/:u/allowance` — a user's current public-bandwidth
+ *  allowance (the #6 dashboard + #7 alert data source). Account METADATA only
+ *  (tier + a byte total for the month, no content, no keys); the route gates
+ *  it with the account's read token like `/pods` and rate-limits it. Returns
+ *  0-usage/free defaults for an unknown username. */
 export async function handleUserAllowance(
   deps: MeteringDeps,
   username: string | null,
