@@ -243,6 +243,23 @@ describe("daemon-status heartbeat", () => {
     expect(calls[1].request.orderIssuedAt).toBeUndefined();
   });
 
+  it("hands the account's plan from the reply to the caller", async () => {
+    const fetchImpl = (async () =>
+      new Response(JSON.stringify({ ok: true, serverOrder: null, tier: "free" }), { status: 200 })) as unknown as typeof fetch;
+    const tiers: string[] = [];
+    await postDaemonStatus({
+      serverDomain: "home1.harry.flagship.services",
+      sign: makeKeypair(9),
+      controlPlaneBaseUrl: "https://flagshipserver.com",
+      cert: { certPem: DUMMY_PEM, privateKeyPem: "x" },
+      certValidUntil: 1_800_000_000_000,
+      appsServed: [],
+      onAccountTier: (t) => tiers.push(t),
+      fetchImpl,
+    });
+    expect(tiers).toEqual(["free"]);
+  });
+
   it("a network failure never throws (best-effort)", async () => {
     const id = makeKeypair(3);
     const fetchImpl = (async () => {
