@@ -48,13 +48,19 @@ struct ContentView: View {
             }
             Toaster()
         }
-        .sheet(item: Binding(
-            get: { app.isPaired && app.isUnlocked && privacy.pushNotificationsEnabled ? accessAlerts?.current : nil },
-            set: { _ in /* dismissal is reported by the sheet's onDisappear */ }
-        )) { item in
+        // One sheet for the whole queue: the next request replaces the answered
+        // one in place. Keyed on the item, SwiftUI re-presented the sheet per
+        // request and the closing sheet's onDisappear reported the NEXT id, so
+        // the second waiting request was snoozed for a day without being shown.
+        // `set(false)` comes only from the owner swiping the sheet away.
+        .sheet(isPresented: Binding(
+            get: { app.isPaired && app.isUnlocked && privacy.pushNotificationsEnabled && accessAlerts?.current != nil },
+            set: { shown in
+                if !shown, let center = accessAlerts, let id = center.current?.id { center.dismissed(id: id) }
+            }
+        )) {
             if let accessAlerts {
                 AppAccessAlertSheet(center: accessAlerts)
-                    .onDisappear { accessAlerts.dismissed(id: item.id) }
             }
         }
         .fullScreenCover(isPresented: Binding(
@@ -258,7 +264,7 @@ struct ContentView: View {
                     guard let app else { return false }
                     return app.isPaired && app.isUnlocked && !app.isRestrictedDevice
                 },
-                alertsEnabled: { privacy.pushNotificationsEnabled }
+                alertsEnabled: { privacy.pushNotificationsEnabled && !GymSeams.suppressAccessAlerts }
             )
             center.observeEvents()
             accessAlerts = center
