@@ -3503,9 +3503,11 @@ export class D1DaemonStatusStorage implements DaemonStatusStorage {
     };
   }
   async listForUser(username: string) {
-    // SQLite LIKE with a placeholder for the username segment.
-    // server_domain shape: "<server>.<username>.flagship.services"
-    const pattern = `%.${username.toLowerCase()}.flagship.services`;
+    // server_domain shape: "<server>.<username>.<services apex>", and the apex
+    // differs per env (the gym's is gym.flagship.services), so match the
+    // username label and confirm it is the second label.
+    const user = username.toLowerCase();
+    const pattern = `%.${user}.%`;
     const r = await this.db
       .prepare(`SELECT * FROM daemon_status WHERE server_domain LIKE ?1`)
       .bind(pattern)
@@ -3519,16 +3521,18 @@ export class D1DaemonStatusStorage implements DaemonStatusStorage {
         report_json: string | null;
         signature_hex: string | null;
       }>();
-    return (r.results ?? []).map((row) => ({
-      serverDomain: row.server_domain,
-      certSha256: row.cert_sha256,
-      certValidUntil: row.cert_valid_until,
-      certIssuer: row.cert_issuer,
-      servicesServedJson: row.services_served_json,
-      lastReported: row.last_reported,
-      reportJson: row.report_json ?? null,
-      signatureHex: row.signature_hex ?? null,
-    }));
+    return (r.results ?? [])
+      .filter((row) => row.server_domain.toLowerCase().split(".")[1] === user)
+      .map((row) => ({
+        serverDomain: row.server_domain,
+        certSha256: row.cert_sha256,
+        certValidUntil: row.cert_valid_until,
+        certIssuer: row.cert_issuer,
+        servicesServedJson: row.services_served_json,
+        lastReported: row.last_reported,
+        reportJson: row.report_json ?? null,
+        signatureHex: row.signature_hex ?? null,
+      }));
   }
 }
 
