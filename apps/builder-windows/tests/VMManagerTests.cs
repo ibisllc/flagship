@@ -234,6 +234,23 @@ public sealed class VMManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task HoldsThePcAwakeExactlyWhileAServerNeedsIt()
+    {
+        Seed("a.h.flagship.services", VMState.Stopped);
+        Seed("b.h.flagship.services", VMState.Stopped);
+        var m = Manager();
+        var holds = new List<bool>();
+        m.WakeHoldChanged = holds.Add;
+        Assert.False(m.NeedsAwake);
+        m.Server("a.h.flagship.services")!.Record = m.Server("a.h.flagship.services")!.Record with { State = VMState.Running };
+        Assert.True(m.NeedsAwake);
+        await m.DeleteServerAsync("b.h.flagship.services");
+        Assert.Equal(new[] { true }, holds);
+        await m.ShutDownAllAsync();
+        Assert.Equal(new[] { true, false }, holds);
+    }
+
+    [Fact]
     public void LastConnectedSurvivesASaveAndLoad()
     {
         Seed("home.harry.flagship.services", VMState.Stopped);

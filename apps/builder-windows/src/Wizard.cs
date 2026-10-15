@@ -64,6 +64,7 @@ public sealed class Wizard : INotifyPropertyChanged
         _baseCache = baseCache ?? new IsoBaseCache(builderVersion: BuilderVersion);
         Vm = VMManager.CreateDefault();
         Vm.Log = m => AppendLog(LogStream.Stdout, m);
+        Vm.WakeHoldChanged = on => OnUi(() => HostPower.KeepAwake(on));
         Vm.Servers.CollectionChanged += (_, _) => FireBag();
         if (Vm.Toolchain is { } tc) _ = ProbeWhpxAsync(tc);
     }

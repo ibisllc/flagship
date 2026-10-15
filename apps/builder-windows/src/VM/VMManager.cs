@@ -165,6 +165,13 @@ public sealed class VMManager
     /// <summary>Log sink — the wizard routes this into its log pane.</summary>
     public Action<string> Log = _ => { };
 
+    /// <summary>Called with true while any server installs, waits for its
+    /// unlock or runs (the PC must not sleep), and with false once none
+    /// does. The app marshals it to the UI thread (SetThreadExecutionState
+    /// is per thread).</summary>
+    public Action<bool> WakeHoldChanged = _ => { };
+    private bool _wakeHeld;
+
     public VMInventoryStore Store { get; }
 
     /// <summary>Non-null when the QEMU toolchain could not be located; the
@@ -313,6 +320,23 @@ public sealed class VMManager
         try { Store.Delete(name); } catch { }
         var server = Server(name);
         if (server != null) Servers.Remove(server);
+        SyncWakeHold();
+    }
+
+    /// <summary>True while any server installs, waits for its unlock, or runs.</summary>
+    public bool NeedsAwake => Servers.Any(s => s.StateKind is VMStateKind.Installing
+        or VMStateKind.AwaitingPhoneUnlock or VMStateKind.Running);
+
+    /// <summary>Hold off system sleep while servers need the PC; a sleeping
+    /// PC takes every server offline. The display may still sleep. Mirrors
+    /// the Mac VMManager.syncWakeHold.</summary>
+    private void SyncWakeHold()
+    {
+        var wanted = NeedsAwake;
+        if (wanted == _wakeHeld) return;
+        _wakeHeld = wanted;
+        Log(wanted ? "Keeping this PC awake while it hosts servers" : "No server running: this PC may sleep again");
+        WakeHoldChanged(wanted);
     }
 
     // ---- Lifecycle driving ----
@@ -396,6 +420,7 @@ public sealed class VMManager
         };
         try { Store.Save(server.Record); } catch { }
         CancelPollsLeftBehind(name);
+        SyncWakeHold();
         await RunEffectsAsync(effects, server.Record.Config);
         SyncUnlockPoll(server.Record.Config);
         SyncInstallPoll(server.Record.Config);

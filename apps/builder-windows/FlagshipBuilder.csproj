@@ -32,6 +32,7 @@
     <Compile Include="src\MainWindow.xaml.cs" />
     <Compile Include="src\TrayIcon.cs" />
     <Compile Include="src\TaskbarProgress.cs" />
+    <Compile Include="src\HostPower.cs" />
     <Compile Include="src\QuitGate.cs" />
     <Compile Include="src\Wizard.cs" />
     <Compile Include="src\DiskEnumerator.cs" />

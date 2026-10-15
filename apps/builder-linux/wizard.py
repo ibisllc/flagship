@@ -2166,6 +2166,24 @@ def build_window(application, model: Optional[WizardModel] = None):
     wizard_model.on_change = _on_change
     _render()
 
+    # Hold off system sleep while a server installs, waits for its unlock or
+    # runs: a sleeping PC takes every server offline.
+    from vm.host_power import WHY, SleepInhibitor
+
+    inhibitor = SleepInhibitor(
+        gtk_inhibit=lambda: application.inhibit(
+            window, Gtk.ApplicationInhibitFlags.SUSPEND, WHY
+        ),
+        gtk_uninhibit=application.uninhibit,
+        log=lambda m: wizard_model._append_log("stderr", m),
+    )
+
+    def _on_wake_hold(on: bool) -> None:
+        GLib.idle_add(lambda: inhibitor.hold(on) and False)
+
+    wizard_model.vm.on_wake_hold = _on_wake_hold
+    window.connect("destroy", lambda _w: inhibitor.hold(False))
+
     # A sealed guest awaiting unlock produces no state change while it waits, so
     # nothing re-renders and the "taking longer than expected" advisory would
     # never appear on its own. Re-render on a slow timer while any server is in

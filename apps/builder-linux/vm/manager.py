@@ -285,6 +285,10 @@ class VMManager:
         self._health_polls: Dict[str, threading.Event] = {}
         # The latest signed health report per running server (name -> report).
         self.health_reports: Dict[str, VMServerHealth] = {}
+        # Called with True while any server installs, waits for its unlock or
+        # runs (the host must not sleep), and with False once none does.
+        self.on_wake_hold: Callable[[bool], None] = lambda _on: None
+        self._wake_held = False
         # Guests powering off after Stop; a Start of the same server waits on
         # its event so the disk is never open in two QEMUs.
         self._stopping: Dict[str, threading.Event] = {}
@@ -438,6 +442,7 @@ class VMManager:
         server = self.server(name)
         if server is not None:
             self.servers.remove(server)
+        self._sync_wake_hold()
         self.on_change()
 
     # ---- lifecycle driving ----
@@ -551,6 +556,7 @@ class VMManager:
         self._sync_unlock_poll(server.record.config)
         self._sync_install_poll(server.record.config)
         self._sync_health_poll(server.record.config)
+        self._sync_wake_hold()
         self._run_effects(effects, server.record.config)
 
     def _run_effects(self, effects, config: VMConfig) -> None:
@@ -802,6 +808,34 @@ class VMManager:
         stop = self._install_polls.pop(name, None)
         if stop is not None:
             stop.set()
+
+    # ---- keeping the host awake ----
+
+    @property
+    def needs_awake(self) -> bool:
+        return any(
+            s.state_kind in (
+                VMStateKind.INSTALLING,
+                VMStateKind.AWAITING_PHONE_UNLOCK,
+                VMStateKind.RUNNING,
+            )
+            for s in self.servers
+        )
+
+    def _sync_wake_hold(self) -> None:
+        """Hold off system sleep while any server installs, waits for its
+        unlock, or runs; a sleeping host takes every server offline. The
+        display may still sleep. Mirrors the Mac VMManager.syncWakeHold."""
+        wanted = self.needs_awake
+        if wanted == self._wake_held:
+            return
+        self._wake_held = wanted
+        self.log(
+            "Keeping this PC awake while it hosts servers"
+            if wanted
+            else "No server running: this PC may sleep again"
+        )
+        self.on_wake_hold(wanted)
 
     # ---- health reports ----
 
