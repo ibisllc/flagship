@@ -27,6 +27,8 @@ final class WatchBridge: NSObject {
     static let shared = WatchBridge()
 
     private var client: (any ScreensClient)?
+    /// Answers the watch's Approve with the phone's own approval path.
+    private var approvals: WatchApprovalResponder?
 
     /// Last published timeline context. Held so a re-send after a
     /// security-alerts change preserves the timeline, since
@@ -41,8 +43,37 @@ final class WatchBridge: NSObject {
 
     /// Call once at app start to wire the bridge to the live screens
     /// client. Idempotent.
-    func activate(client: any ScreensClient) {
+    func activate(
+        client: any ScreensClient,
+        mailbox: (any SecretMailboxClient)? = nil,
+        currentUser: @escaping @MainActor () -> String? = { nil }
+    ) {
         self.client = client
+        if let mailbox {
+            approvals = WatchApprovalResponder(
+                delegateEnrolled: { Keystore.watchDelegateKey() != nil },
+                hasSessionKey: { Keystore.hasSessionKey() },
+                makeSource: {
+                    guard let username = currentUser(), !username.isEmpty else { return nil }
+                    return SecretRequestCoordinator(
+                        mailbox: mailbox,
+                        username: username,
+                        irkProvider: { try await Keystore.deriveIRK(reason: "Approve your box's boot unlock") },
+                        unsealSeedProvider: { serverDomain in
+                            var seeds: [Data] = []
+                            if let bak = try? await Keystore.deriveBAK(serverId: serverDomain, reason: "Unseal the disk key") {
+                                seeds.append(bak.rawRepresentation)
+                            }
+                            if let irk = try? await Keystore.deriveIRK(reason: "Unseal the disk key") {
+                                seeds.append(irk.rawRepresentation)
+                            }
+                            return seeds
+                        },
+                        watchDelegateKeyProvider: { Keystore.watchDelegateKey() }
+                    )
+                }
+            )
+        }
         guard WCSession.isSupported() else { return }
         if WCSession.default.delegate !== self {
             WCSession.default.delegate = self
@@ -115,7 +146,27 @@ extension WatchBridge: WCSessionDelegate {
         didReceiveMessage message: [String: Any],
         replyHandler: @escaping ([String: Any]) -> Void
     ) {
-        // The watch approvals feature was retired with the legacy flow.
-        replyHandler([:])
+        guard let payload = message["approve-unlock"] as? Data,
+              let cmd = try? JSONDecoder().decode(WatchProtocol.ApproveCommand.self, from: payload)
+        else {
+            replyHandler([:])
+            return
+        }
+        let reply = UncheckedReply(send: replyHandler)
+        Task { @MainActor in
+            let answer: WatchProtocol.ApproveReply
+            if let approvals = WatchBridge.shared.approvals {
+                answer = await approvals.respond(to: cmd)
+            } else {
+                answer = .init(requestId: cmd.requestId, ok: false, errorMessage: WatchApprovalResponder.signedOut)
+            }
+            let data = (try? JSONEncoder().encode(answer)) ?? Data()
+            reply.send(["reply": data])
+        }
     }
+}
+
+/// WCSession's reply handler isn't Sendable; it is safe to call once from any thread.
+private struct UncheckedReply: @unchecked Sendable {
+    let send: ([String: Any]) -> Void
 }

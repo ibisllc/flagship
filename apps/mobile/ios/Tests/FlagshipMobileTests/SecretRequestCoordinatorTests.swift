@@ -672,4 +672,70 @@ final class SecretRequestCoordinatorTests: XCTestCase {
         let sig = HexUtil.decode(auth.authSignature)!
         XCTAssertTrue(DeviceEndpointClaim.verify(claim, signature: sig, irkPub: phoneIrk().publicKey))
     }
+
+    // MARK: - Approve from the watch
+
+    @MainActor
+    private func watchFixture() throws -> (MockMailbox, SecretRequestCoordinator, String) {
+        let mailbox = MockMailbox(username: username)
+        let (pending, _) = makeBoxRequest(purpose: .unlockKey, nonce: Data(repeating: 0x44, count: 32), domain: "home.alice.flagship.services")
+        mailbox.pending = [pending]
+        mailbox.directory = [PodDirectoryEntry(
+            serverDomain: "home.alice.flagship.services",
+            identityPubKey: HexUtil.encode(boxStk().publicKey.rawRepresentation)
+        )]
+        let unsealPub = try Curve25519.Signing.PrivateKey(rawRepresentation: unsealSeed).publicKey.rawRepresentation
+        mailbox.sealedLuksKeyHex = HexUtil.encode(
+            try SecretSeal.sealForEd25519Recipient(plaintext: Data("disk-key".utf8), recipientEd25519Pub: unsealPub)
+        )
+        let delegate = try Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 0x05, count: 32))
+        let coord = SecretRequestCoordinator(
+            mailbox: mailbox,
+            username: username,
+            irkProvider: { self.phoneIrk() },
+            unsealSeedProvider: { _ in [self.unsealSeed] },
+            watchDelegateKeyProvider: { delegate },
+            now: { 999 },
+            nonceGen: { Data(repeating: 0xaa, count: 32) }
+        )
+        return (mailbox, coord, pending.id)
+    }
+
+    /// The watch's Approve runs the phone's own approval: a delegate-signed
+    /// sealed response reaches the boot relay. The watch sends no consent flag.
+    @MainActor
+    func testWatchApproveSignsTheResponseOnThePhone() async throws {
+        let (mailbox, coord, id) = try watchFixture()
+        let responder = WatchApprovalResponder(delegateEnrolled: { true }, hasSessionKey: { true }, makeSource: { coord })
+        let reply = await responder.respond(to: .init(requestId: id))
+        XCTAssertTrue(reply.ok, reply.errorMessage ?? "")
+        XCTAssertEqual(reply.requestId, id)
+        let posted = try XCTUnwrap(mailbox.postedResponses.last)
+        XCTAssertEqual(posted.response.purpose, "unlock-key")
+        var b64 = String(posted.bootAuth.split(separator: " ")[1])
+            .replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        while b64.count % 4 != 0 { b64 += "=" }
+        let obj = try JSONSerialization.jsonObject(with: Data(base64Encoded: b64)!) as! [String: Any]
+        XCTAssertEqual(obj["role"] as? String, "delegate")
+        XCTAssertTrue(mailbox.deposited.isEmpty, "no auto-unlock lease rides a delegate approval")
+    }
+
+    @MainActor
+    func testWatchApproveNeverPromptsAndNeverGuesses() async throws {
+        let (mailbox, coord, id) = try watchFixture()
+        func reply(enrolled: Bool, session: Bool, requestId: String = id) async -> WatchProtocol.ApproveReply {
+            await WatchApprovalResponder(delegateEnrolled: { enrolled }, hasSessionKey: { session }, makeSource: { coord })
+                .respond(to: .init(requestId: requestId))
+        }
+        let notEnrolled = await reply(enrolled: false, session: true)
+        XCTAssertEqual(notEnrolled.errorMessage, WatchApprovalResponder.notEnrolled)
+        let locked = await reply(enrolled: true, session: false)
+        XCTAssertEqual(locked.errorMessage, WatchApprovalResponder.phoneLocked)
+        let stale = await reply(enrolled: true, session: true, requestId: "other.alice.flagship.services#00")
+        XCTAssertEqual(stale.errorMessage, WatchApprovalResponder.gone)
+        XCTAssertTrue(mailbox.postedResponses.isEmpty)
+        let signedOut = await WatchApprovalResponder(delegateEnrolled: { true }, hasSessionKey: { true }, makeSource: { nil })
+            .respond(to: .init(requestId: id))
+        XCTAssertEqual(signedOut.errorMessage, WatchApprovalResponder.signedOut)
+    }
 }

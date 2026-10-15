@@ -548,7 +548,11 @@ struct FlagshipApp: App {
                     Self.applySmokeModeIfRequested(appState, linker: linker, operations: operations, trust: trust, privacy: privacy)
                     appDelegate.linker = linker
                     linker.makeCurrent()
-                    WatchBridge.shared.activate(client: activeClient)
+                    WatchBridge.shared.activate(
+                        client: activeClient,
+                        mailbox: activeMailbox,
+                        currentUser: { [appState] in appState.currentUser }
+                    )
                     // Wire the FlagshipCore security-alerts bridge → the
                     // App-target publisher so the boot-approval + audit
                     // surfaces fan out to the paired watch.
