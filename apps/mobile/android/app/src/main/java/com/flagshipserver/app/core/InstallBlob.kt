@@ -218,6 +218,26 @@ object ServiceRenameClaim {
     ).joinToString("|").toByteArray()
 }
 
+/** #79A — attach an external (custom) domain to a service. Signed by the
+ *  user's current IRK. Mirrors @flagship/protocol
+ *  canonicalSetCustomDomain (auth.ts TAG_SET_CUSTOM_DOMAIN) and the
+ *  iOS / webapp clients byte-for-byte so Live == Mock on the wire. */
+object SetCustomDomainClaim {
+    const val CANONICAL_TAG = "flagship/custom-domain/v1"
+    fun canonicalBytes(
+        username: String,
+        serviceId: String,
+        fqdn: String,
+        issuedAt: Long,
+    ): ByteArray = listOf(
+        CANONICAL_TAG,
+        username,
+        serviceId,
+        fqdn.lowercase(),
+        issuedAt.toString(),
+    ).joinToString("|").toByteArray()
+}
+
 /** C7 — Re-pair initiate envelope. Signed by the NEW IRK. Mirrors
  *  packages/protocol/src/auth.ts TAG_RE_PAIR_INITIATE. */
 object RePairInitiateClaim {

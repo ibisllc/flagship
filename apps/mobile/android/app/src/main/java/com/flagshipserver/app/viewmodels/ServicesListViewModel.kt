@@ -5,7 +5,7 @@
 // and lists each app once with the pill combining every server it is on (§6).
 // Then fans out a per-service /api/users/:u/apps/:serviceId/links fetch (#20):
 // the list paints as soon as the servers answer, and each row's voi.ci short
-// URL and canonical FQDN fill in as the /links results
+// URL, canonical FQDN and bound custom domain fill in as the /links results
 // land. Per-service failure is tolerated (one row's .com blip must not nuke
 // the whole list) — exactly the iOS behavior.
 //

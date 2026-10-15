@@ -86,6 +86,7 @@ specific iOS surfaces; both mobile mirrors have them already:
 | ID | Endpoint | Surface |
 |---|---|---|
 | P1.21 | GET /api/screens/server-metrics/:podId | ServerDetail monitoring panel (CPU/mem/disk/I/O) |
+| P1.22 | POST /api/screens/url-controller/verify | AppDetail custom-domain verify flow |
 | P1.23 | GET /api/screens/post-recovery/status | Post-recovery report (J.3/J.4 reattach snapshot) |
 
 When the daemon implements them, no client change should be required
