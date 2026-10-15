@@ -6,7 +6,7 @@
  * back the wrapped UMK, so the user lands on view-unlock instead.
  * Unlock with the same passphrase → home again.
  *
- * No .com calls — the home view's /api/me/servers fetch is allowed
+ * No .com calls — the home view's /pods read is allowed
  * to fail / 404; we just assert the views are reachable.
  */
 

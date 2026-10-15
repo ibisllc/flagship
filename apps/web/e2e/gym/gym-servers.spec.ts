@@ -49,7 +49,6 @@ async function reachHome(page: Page): Promise<void> {
       store.ensureProfile("smoketest");
       store.setActiveCloudName("smoketest");
       store.set("username", "smoketest");
-      store.set("sessionId", "gym-fixture-session-id");
       const { getSession } = await import("/lib/state.js");
       getSession().username = "smoketest";
       const api = await import("/lib/api.js");
@@ -179,7 +178,6 @@ test.describe("gym webapp servers", () => {
       releaseAck = resolve;
     });
     const sent = await stub(page, [
-      ["/api/me/servers", { servers: [{ serverId: HOME }, { serverId: OFFICE }, { serverId: MEDIA }] }],
       [
         "/api/users/smoketest/pods",
         {
@@ -268,7 +266,6 @@ test.describe("gym webapp servers", () => {
     await reachHome(page);
     const t0 = Date.now() - 3_600_000;
     const sent = await stub(page, [
-      ["/api/me/servers", { servers: [{ serverId: HOME }, { serverId: OFFICE }, { serverId: MEDIA }] }],
       [
         "/api/users/smoketest/pods",
         {
@@ -444,7 +441,6 @@ test.describe("gym webapp servers", () => {
   test("gym servers delete a revoked server behind the typed-name gate", async ({ page }, testInfo) => {
     await reachHome(page);
     const sent = await stub(page, [
-      ["/api/me/servers", { servers: [{ serverId: HOME }, { serverId: MEDIA, revoked: true }] }],
       [
         "/api/users/smoketest/pods",
         { pods: [livePod(HOME), offlinePod(MEDIA, { revokedAt: Date.now() - 86_400_000, revocationReason: "stolen" })] },

@@ -8,7 +8,7 @@
  * NO BACKEND, by construction — same posture as gym-total.spec.ts. The two
  * backendless seed techniques are reused verbatim:
  *
- *   1. CLIENT-SIDE STORE SEEDING — session/profile slots (username, sessionId,
+ *   1. CLIENT-SIDE STORE SEEDING — session/profile slots (username,
  *      pod base URL, session token) and the Slice-D `session.adminRootSeed`
  *      gate are written through the served ES modules via `page.evaluate`.
  *      Crypto is REAL (WebCrypto Ed25519): the transfer-claim spec signs a
@@ -16,7 +16,7 @@
  *      box STK + a genuinely-signed secret-request, so the client's own
  *      verification paths (verifyTransferOffer, fetchVerifiedRequests'
  *      STK re-verify) pass HONESTLY — nothing is bypassed.
- *   2. ROUTE-STUBBED reads — `/pods`, `/api/me/servers`, `/api/secret-requests`,
+ *   2. ROUTE-STUBBED reads — `/pods`, `/api/secret-requests`,
  *      the pod `apps-list`, and the one giver `transfer/offer` POST are
  *      intercepted with fixture bodies. Everything un-routed fails closed
  *      (same-origin 404s on the static server; foreign hosts are routed to 404
@@ -91,13 +91,11 @@ async function seedProfileUsername(page: Page): Promise<void> {
   });
 }
 
-/** Additionally mark this device PAIRED: the per-profile sessionId slot Home
- *  reads (`recoveryStoreGet("sessionId")`) + the pod session token. */
+/** Additionally give this device a session token on the pod; Home lists the
+ *  account's servers from the routed `/pods`. */
 async function seedPairedHome(page: Page): Promise<void> {
   await seedProfileUsername(page);
   await page.evaluate(async () => {
-    const store = await import("/lib/profilesStore.js");
-    store.set("sessionId", "gym-fixture-session-id");
     const api = await import("/lib/api.js");
     api.setSessionToken("gym-fixture-session-token");
   });
@@ -272,7 +270,6 @@ test.describe("gym webapp features", () => {
       const sig = new Uint8Array(await crypto.subtle.sign({ name: "Ed25519" }, kp.privateKey, canonical));
       return { stkPubHex, nonceHex, issuedAt, requestSignature: toHex(sig) };
     }, FQDN);
-    await routeAnyJson(page, "/api/me/servers", { servers: [{ serverId: FQDN }] });
     await routeAnyJson(page, "/api/users/smoketest/pods", {
       pods: [
         {
@@ -332,7 +329,6 @@ test.describe("gym webapp features", () => {
     const BETA = "beta.smoketest.flagship.services";
     await reachHome(page);
     await seedPairedHome(page);
-    await routeAnyJson(page, "/api/me/servers", { servers: [{ serverId: ALPHA }, { serverId: BETA }] });
     await routeAnyJson(page, "/api/users/smoketest/pods", {
       pods: [
         {
