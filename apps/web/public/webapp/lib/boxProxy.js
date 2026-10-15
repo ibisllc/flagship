@@ -28,6 +28,20 @@ export const PROXY_FALLBACK_LABEL = "If the proxy stops working, connect directl
 export const PROXY_FALLBACK_NOTE =
   "If this is off and the proxy stops working, the server goes offline until the proxy is back or you change it from the same network.";
 
+/** Shown instead of the fields on a Free account: the proxy is part of Pro. */
+export const PROXY_PRO_NOTE = "An outbound proxy is part of Pro.";
+
+/** Free accounts can't set a proxy; an unknown plan doesn't block (the box
+ *  checks too, once .com has told it the plan). */
+export function proxyAllowedForTier(tier) {
+  return tier !== "free";
+}
+
+/** The "Part of Pro" row, linking to the Pro page. */
+export function proxyProHtml() {
+  return `<p class="faint-sm" data-proxy-pro>${esc(PROXY_PRO_NOTE)} <a href="/pro" target="_blank" rel="noopener">See Pro</a></p>`;
+}
+
 const HOSTNAME_LABEL = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 const IPV4 = /^(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3}$/;
 const IPV6 = /^[0-9a-f:.]{2,45}$/;
