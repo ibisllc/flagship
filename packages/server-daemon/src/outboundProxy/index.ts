@@ -17,6 +17,8 @@ export interface OutboundProxyRuntime {
   store: OutboundProxyStore;
   net: OutboundNet;
   summary(): OutboundProxySummary;
+  /** Record the account's plan from `.com`'s heartbeat reply (Pro gate). */
+  setAccountTier(tier: string): void;
   /** Called after every switch (the tunnel reconnects so the hub sees the new path). */
   onChange(fn: () => void): void;
   /** The screens handler; `probeTarget` is the hub. */
@@ -35,6 +37,8 @@ export async function setUpOutboundProxy(opts: {
   const store = new OutboundProxyStore(`${opts.dataDir}/outbound-proxy.json`, opts.authority, log);
   const listeners: Array<() => void> = [];
   let bridge: BridgeHandle | null = null;
+  let accountTier: string | null = null;
+  const readTier = () => accountTier;
 
   const activate = async (stored: StoredOutboundProxy | null) => {
     const setting = settingOf(stored);
@@ -78,9 +82,12 @@ export async function setUpOutboundProxy(opts: {
   return {
     store,
     net,
-    summary: () => outboundProxySummary(store, net),
+    summary: () => outboundProxySummary(store, net, readTier),
+    setAccountTier: (tier) => {
+      accountTier = tier;
+    },
     onChange: (fn) => listeners.push(fn),
     http: (probeTarget) =>
-      buildOutboundProxyHttp({ store, net, authority: opts.authority, probeTarget, activate }),
+      buildOutboundProxyHttp({ store, net, authority: opts.authority, probeTarget, activate, accountTier: readTier }),
   };
 }

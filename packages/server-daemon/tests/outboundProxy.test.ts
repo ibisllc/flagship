@@ -384,7 +384,7 @@ describe("the outbound proxy store and endpoint", () => {
     }
   });
 
-  function endpoint(probeResult: string | null, now = NOW) {
+  function endpoint(probeResult: string | null, now = NOW, tier: { current: string | null } = { current: null }) {
     const d = dir();
     const store = new OutboundProxyStore(join(d, "outbound-proxy.json"), authority);
     const net = new OutboundNet();
@@ -398,6 +398,7 @@ describe("the outbound proxy store and endpoint", () => {
       activate: (s) => void activated.push(s),
       now: () => now,
       switchDelayMs: 0,
+      accountTier: () => tier.current,
     });
     const post = (body: unknown, companion = false) =>
       handle(OUTBOUND_PROXY_PATH, "POST", { method: "POST", path: OUTBOUND_PROXY_PATH, headers: {}, body: Buffer.from(JSON.stringify(body)) }, { companion });
@@ -444,6 +445,30 @@ describe("the outbound proxy store and endpoint", () => {
     const r = await e.post({ proxy: needs, signature: signBoxProxy(needs, irk) });
     expect(r?.status).toBe(400);
     expect(JSON.parse(String(r?.body)).error).toBe("Enter the proxy's username and password.");
+  });
+
+  it("takes no new proxy once .com says the account is on Free, but still turns one off", async () => {
+    const tier: { current: string | null } = { current: null };
+    const e = endpoint(null, NOW, tier);
+    expect(JSON.parse(String((await e.get())?.body)).available).toBe(true);
+    // Before .com has answered, a box doesn't refuse (it may need the proxy to ask).
+    const p = order();
+    expect((await e.post({ proxy: p, signature: signBoxProxy(p, irk) }))?.status).toBe(200);
+
+    tier.current = "free";
+    expect(JSON.parse(String((await e.get())?.body)).available).toBe(false);
+    const change = order({ host: "other.example.net", issuedAt: NOW + 1 });
+    const r = await e.post({ proxy: change, signature: signBoxProxy(change, irk) });
+    expect(r?.status).toBe(403);
+    expect(JSON.parse(String(r?.body)).code).toBe("pro-required");
+    expect(e.store.current()?.signed.proxy.host).toBe("proxy.example.net");
+
+    const off = order({ kind: "none", host: "", port: 0, issuedAt: NOW + 2 });
+    expect((await e.post({ proxy: off, signature: signBoxProxy(off, irk) }))?.status).toBe(200);
+
+    tier.current = "hobby";
+    const again = order({ issuedAt: NOW + 3 });
+    expect((await e.post({ proxy: again, signature: signBoxProxy(again, irk) }))?.status).toBe(200);
   });
 
   it("keeps the old setting when the new proxy fails its test", async () => {
