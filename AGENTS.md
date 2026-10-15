@@ -408,7 +408,16 @@ account can view or co-manage a server, never destroy it) is in the MVP
   "Show my servers" instead of an empty list; the co-manage entry moved to
   the Add-a-server page. Needs: migration 0096 before the `.com` deploy
   (webapp shell v74), an endorsed box release, iOS/Android builds. Not yet
-  run on a device.
+  run on a device. Follow-up the same day (owner's Home review): no
+  numbers (position is the order), a drag handle on the left of each row
+  with a gray server icon by the name, "Add/connect a server" above the
+  list, shorter recovery nudge; the apps hand a saved order straight to
+  each server that is up (`POST /api/screens/server-order`), boxes report
+  the order they hold (`orderIssuedAt` on the heartbeat and `/pods`) and
+  beat at once on adopting one, and the Leader badge stays gray until the
+  leader acknowledges (webapp shell v76). iOS's stuck "No. 2" came from a drop between rows
+  never firing `performDrop`: rows showed the drag preview, labels the
+  saved order, and nothing saved.
 - **Docker containers unreachable on VM appliances (fixed in `e81df698`).**
   The appliance's `Type=ether` networkd rule pulled every container's veth off
   its bridge: every app 502'd with "read ECONNRESET" after a 3 s ARP timeout
