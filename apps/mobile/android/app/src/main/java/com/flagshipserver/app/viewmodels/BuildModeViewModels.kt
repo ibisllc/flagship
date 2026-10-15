@@ -569,8 +569,8 @@ class BuildJournalViewModel(
     private val _detail = MutableStateFlow<LoadingState<List<BuildJournalEntry>>>(LoadingState.Idle)
     val detail: StateFlow<LoadingState<List<BuildJournalEntry>>> = _detail.asStateFlow()
 
-    /** Sessions still held by the box, newest first. A daemon restart empties
-     *  this; their journals stay in [list]. */
+    /** Every chat the box holds (finished and failed ones too, for 30 days),
+     *  newest activity first. Their journals stay in [list]. */
     private val _liveSessions = MutableStateFlow<List<VibeCodeSessionMeta>>(emptyList())
     val liveSessions: StateFlow<List<VibeCodeSessionMeta>> = _liveSessions.asStateFlow()
 
@@ -579,7 +579,7 @@ class BuildJournalViewModel(
         val sessions = async { runCatching { fetchLiveSessions() }.getOrDefault(emptyList()) }
         try {
             val builds = client.sessions().builds
-            _liveSessions.value = sessions.await().sortedByDescending { it.startedAt }
+            _liveSessions.value = BuildSessions.newestFirst(sessions.await())
             _list.value = LoadingState.Loaded(builds)
         } catch (t: Throwable) {
             sessions.cancel()
@@ -669,7 +669,19 @@ object BuildSessions {
         "ready-to-deploy" -> "Ready to deploy"
         "deploying" -> "Deploying"
         "deployed" -> "Deployed"
+        "failed" -> "Failed"
         "cancelled" -> "Cancelled"
         else -> "Stopped"
     }
+
+    /** The row's action: the owner can write to it, it's still running, or it's done. */
+    fun action(status: String): String = when (status) {
+        "awaiting-tool-response", "ready-to-deploy", "failed" -> "Continue"
+        "streaming", "deploying" -> "Resume"
+        else -> "Open"
+    }
+
+    /** Newest activity first: the last change, else when it started. */
+    fun newestFirst(sessions: List<VibeCodeSessionMeta>): List<VibeCodeSessionMeta> =
+        sessions.sortedByDescending { it.updatedAt ?: it.startedAt }
 }

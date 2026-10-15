@@ -1,6 +1,7 @@
-// The model menu (build chat header + Settings → AI keys), "Think harder",
-// attachment chips and the vision-switch alert. Logic lives in
-// core/AiModelMenu.kt and core/ChatAttachments.kt.
+// The model menu (build chat header, grouped by provider, and Settings → AI
+// keys), the effort picker beside it, attachment chips and the vision-switch
+// alert. Logic lives in core/AiModelMenu.kt, core/ModelGroups.kt and
+// core/ChatAttachments.kt.
 
 package com.flagshipserver.app.ui.screens
 
@@ -29,7 +30,6 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Image
-import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material.icons.outlined.PictureAsPdf
 import androidx.compose.material.icons.outlined.TableChart
 import androidx.compose.material.icons.outlined.Visibility
@@ -60,6 +60,8 @@ import com.flagshipserver.app.api.VibeCodeAttachment
 import com.flagshipserver.app.core.AttachKind
 import com.flagshipserver.app.core.ChatAttachments
 import com.flagshipserver.app.core.ModelChoice
+import com.flagshipserver.app.core.ModelGroup
+import com.flagshipserver.app.core.ModelGroups
 import com.flagshipserver.app.core.ModelMenu
 import com.flagshipserver.app.core.ModelMenus
 import com.flagshipserver.app.core.VisionCheck
@@ -78,9 +80,7 @@ fun ModelMenuChip(
     val opens = menu !is ModelMenu.Unknown && !(menu is ModelMenu.Flagship && menu.catalog == null)
     Box(modifier) {
         Pill(
-            label = ModelMenus.title(menu, choice) +
-                ModelMenus.efforts(menu, choice).takeIf { it.isNotEmpty() }
-                    ?.let { choice?.effort?.let { e -> " · ${ModelMenus.effortLabel(e)}" } }.orEmpty(),
+            label = ModelMenus.title(menu, choice),
             trailing = if (opens) Icons.Outlined.ExpandMore else null,
             onClick = if (opens) ({ open = true }) else null,
             modifier = Modifier.testTag(tag),
@@ -96,16 +96,15 @@ fun ModelMenuChip(
     }
 }
 
-/** The menu's rows: one per model (label + descriptor), the effort picker
- *  for an own-key model that has one, or a model field when the provider
- *  gave no list. */
-@OptIn(ExperimentalLayoutApi::class)
+/** The menu's rows: one per model (label + descriptor), or a model field
+ *  when the provider gave no list. [tagPrefix] keeps rows of two groups apart. */
 @Composable
 fun ModelMenuItems(
     menu: ModelMenu,
     choice: ModelChoice?,
     onChoice: (ModelChoice?) -> Unit,
     onClose: () -> Unit,
+    tagPrefix: String = "model-item-",
 ) {
     when (menu) {
         is ModelMenu.Flagship -> menu.catalog?.models?.forEach { m ->
@@ -113,9 +112,9 @@ fun ModelMenuItems(
                 title = m.label,
                 subtitle = m.descriptor.takeIf { it.isNotBlank() },
                 selected = m.id == choice?.model,
-                tag = "model-item-${m.id}",
+                tag = "$tagPrefix${m.id}",
                 onClick = {
-                    onChoice(ModelMenus.select(menu, m.id, choice))
+                    onChoice(ModelMenus.select(menu, m.id))
                     onClose()
                 },
             )
@@ -127,33 +126,12 @@ fun ModelMenuItems(
                         title = o.label,
                         subtitle = if (!o.known) ModelMenus.UNKNOWN_CAPS else null,
                         selected = o.id == choice?.model,
-                        tag = "model-item-${o.id}",
+                        tag = "$tagPrefix${o.id}",
                         onClick = {
-                            onChoice(ModelMenus.select(menu, o.id, choice))
-                            if (ModelMenus.efforts(menu, ModelChoice(o.id)).isEmpty()) onClose()
+                            onChoice(ModelMenus.select(menu, o.id))
+                            onClose()
                         },
                     )
-                }
-                val efforts = ModelMenus.efforts(menu, choice)
-                if (efforts.isNotEmpty() && choice != null) {
-                    HorizontalDivider(color = FS.colors.border)
-                    Column(Modifier.padding(horizontal = FS.space.s4, vertical = FS.space.s2)) {
-                        Text(ModelMenus.EFFORT, color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium))
-                        Spacer(Modifier.height(FS.space.s2))
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
-                            verticalArrangement = Arrangement.spacedBy(FS.space.s2),
-                        ) {
-                            efforts.forEach { e ->
-                                Pill(
-                                    label = ModelMenus.effortLabel(e),
-                                    selected = e == choice.effort,
-                                    onClick = { onChoice(choice.copy(effort = e)) },
-                                    modifier = Modifier.testTag("model-effort-$e"),
-                                )
-                            }
-                        }
-                    }
                 }
             } else {
                 Column(Modifier.padding(horizontal = FS.space.s4, vertical = FS.space.s2)) {
@@ -232,17 +210,125 @@ fun Pill(
     }
 }
 
-/** "Think harder" for a Flagship model that reasons. */
+/** The effort beside the menu, for a model that lists efforts. */
 @Composable
-fun ThinkHarderChip(on: Boolean, onToggle: (Boolean) -> Unit) {
-    Pill(
-        label = ModelMenus.THINK_HARDER,
-        selected = on,
-        leading = Icons.Outlined.Lightbulb,
-        onClick = { onToggle(!on) },
-        modifier = Modifier.testTag("think-harder"),
-    )
+fun EffortChip(efforts: List<String>, effort: String?, onEffort: (String) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Pill(
+            label = effort?.let(ModelMenus::effortLabel) ?: ModelMenus.EFFORT,
+            trailing = Icons.Outlined.ExpandMore,
+            onClick = { open = true },
+            modifier = Modifier.testTag("model-effort"),
+        )
+        DropdownMenu(
+            expanded = open,
+            onDismissRequest = { open = false },
+            containerColor = FS.colors.surface,
+        ) {
+            EffortItems(efforts, effort) {
+                onEffort(it)
+                open = false
+            }
+        }
+    }
 }
+
+/** The effort rows: one per level the model lists. */
+@Composable
+fun EffortItems(efforts: List<String>, effort: String?, onEffort: (String) -> Unit) {
+    efforts.forEach { e ->
+        MenuRow(
+            title = ModelMenus.effortLabel(e),
+            subtitle = null,
+            selected = e == effort,
+            tag = "model-effort-$e",
+            onClick = { onEffort(e) },
+        )
+    }
+}
+
+/**
+ * The build chat's menu: Flagship Inference and each saved key as a group
+ * of its models. [menus] holds each loaded group's models; [onOpen] loads the
+ * rest when the menu opens.
+ */
+@Composable
+fun GroupedModelMenuChip(
+    groups: List<ModelGroup>,
+    menus: Map<String, ModelMenu>,
+    groupId: String?,
+    choice: ModelChoice?,
+    onOpen: () -> Unit,
+    onPick: (String, ModelChoice?) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var open by remember { mutableStateOf(false) }
+    val group = ModelGroups.byId(groups, groupId)
+    Box(modifier) {
+        Pill(
+            label = ModelGroups.triggerText(group, group?.let { menus[it.id] }, choice),
+            trailing = if (groups.isNotEmpty()) Icons.Outlined.ExpandMore else null,
+            onClick = if (groups.isNotEmpty()) ({
+                open = true
+                onOpen()
+            }) else null,
+            modifier = Modifier.testTag("model-menu"),
+        )
+        DropdownMenu(
+            expanded = open,
+            onDismissRequest = { open = false },
+            modifier = Modifier.widthIn(min = 240.dp, max = 320.dp),
+            containerColor = FS.colors.surface,
+        ) {
+            GroupedModelMenuItems(groups, menus, groupId, choice, onPick, onClose = { open = false })
+        }
+    }
+}
+
+/** Every group's title and its models, in menu order. */
+@Composable
+fun GroupedModelMenuItems(
+    groups: List<ModelGroup>,
+    menus: Map<String, ModelMenu>,
+    groupId: String?,
+    choice: ModelChoice?,
+    onPick: (String, ModelChoice?) -> Unit,
+    onClose: () -> Unit,
+) {
+    groups.forEachIndexed { i, g ->
+        if (i > 0) HorizontalDivider(color = FS.colors.border)
+        Text(
+            g.title,
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .padding(horizontal = FS.space.s4, vertical = FS.space.s2)
+                .testTag("model-group-${g.id}"),
+        )
+        val m = menus[g.id]
+        val note = when {
+            m == null -> MODELS_LOADING
+            m is ModelMenu.Flagship && m.catalog == null -> MODELS_UNAVAILABLE
+            else -> null
+        }
+        if (m == null || note != null) {
+            Text(
+                note.orEmpty(),
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 13.sp),
+                modifier = Modifier.padding(horizontal = FS.space.s4, vertical = FS.space.s2),
+            )
+        } else {
+            ModelMenuItems(m, choice.takeIf { g.id == groupId }, { onPick(g.id, it) }, onClose, "model-item-${g.id}-")
+        }
+    }
+}
+
+internal const val MODELS_LOADING = "Loading models…"
+internal const val MODELS_UNAVAILABLE = "The models couldn't be listed right now."
 
 private fun iconFor(kind: AttachKind): ImageVector = when (kind) {
     AttachKind.IMAGE -> Icons.Outlined.Image

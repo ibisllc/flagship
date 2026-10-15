@@ -377,7 +377,14 @@ class FreeAiService(
      */
     suspend fun refreshFor(sessionId: String): FreeAiRefresh {
         val server = FreeAiSessions.serverFor(sessionId) ?: return FreeAiRefresh.None
-        return when (val r = runCatching { mint(server) }.getOrElse { FreeAiMint.Unavailable(FreeAiCopy.UNAVAILABLE) }) {
+        return passFor(server)
+    }
+
+    /** A fresh pass for a chat on [serverFqdn], e.g. one switching to Flagship
+     *  Inference, or the message to show instead of sending. */
+    suspend fun passFor(serverFqdn: String): FreeAiRefresh {
+        if (serverFqdn.isEmpty()) return FreeAiRefresh.Stop(FreeAiCopy.UNAVAILABLE)
+        return when (val r = runCatching { mint(serverFqdn) }.getOrElse { FreeAiMint.Unavailable(FreeAiCopy.UNAVAILABLE) }) {
             is FreeAiMint.Ok -> FreeAiRefresh.Fresh(r.credential)
             is FreeAiMint.UsedUp -> FreeAiRefresh.Stop(r.message)
             is FreeAiMint.Refused -> FreeAiRefresh.Stop(r.message)

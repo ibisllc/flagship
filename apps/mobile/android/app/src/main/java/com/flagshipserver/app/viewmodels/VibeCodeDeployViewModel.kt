@@ -76,6 +76,11 @@ class VibeCodeDeployViewModel(
         }
     }
 
+    /** The owner sent the chat another message: a failed deploy no longer applies. */
+    fun reset() {
+        if (_phase.value !is Phase.Deploying) _phase.value = Phase.Idle
+    }
+
     /** Follow a deploy the box is already running, e.g. on reopening the chat. */
     fun resume(stage: String?): Job? {
         if (_phase.value is Phase.Deploying) return null

@@ -1066,6 +1066,8 @@ data class VibeCodeSessionMeta(
      *  or discarded. Absent on sessions from before names were kept. */
     val name: String? = null,
     val visibility: String? = null,
+    /** Unix-ms of the last change; absent on older boxes. */
+    val updatedAt: Long? = null,
 ) {
     /** Discarding frees the name; a deployed session's name is its app's. */
     val canDiscard: Boolean
@@ -1134,6 +1136,14 @@ data class VibeCodeSessionPublicState(
     val effort: String? = null,
     /** Older turns were summarised to fit the model's context. */
     val summarised: Boolean = false,
+    /** The chat takes a new message that isn't an answer (ready to deploy or
+     *  failed). Absent from older boxes, which take one only while the AI asks. */
+    val canContinue: Boolean = false,
+    /** The NAME of the provider whose key the chat uses ("flagship", "openai",
+     *  …). Never the key. */
+    val provider: String? = null,
+    /** Rough size of the conversation the model is sent now, in tokens. */
+    val conversationTokens: Long? = null,
 )
 
 /** `POST /api/llm/sessions/:id/deploy {background:true}`: `started` from a
@@ -1161,8 +1171,9 @@ data class VibeCodeReplyRequest(
     /** "set" | "declined" | "deferred" — only meaningful when the
      *  pending tool is `requestEnvVar`. */
     val envVarStatus: String? = null,
-    /** Optional BYOK credential carried on a reply (e.g. the box asked for a
-     *  key mid-session, or an adapt step needs the box's model). */
+    /** Optional BYOK credential carried on a message: seeds a chat with no
+     *  key, refreshes a Flagship Inference pass, or switches the chat to
+     *  another key or provider. */
     val credential: LlmProviderCredential? = null,
 )
 
@@ -1403,6 +1414,9 @@ data class InferenceModel(
     val default: Boolean? = null,
     val visionAlternative: String? = null,
     val upstream: Map<String, String>? = null,
+    /** The effort levels to offer; absent or empty: no effort control. */
+    val efforts: List<String>? = null,
+    val defaultEffort: String? = null,
 )
 
 /** `GET https://flagshipserver.com/api/inference/models`. */

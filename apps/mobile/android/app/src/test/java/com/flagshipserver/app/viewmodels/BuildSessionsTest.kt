@@ -49,7 +49,33 @@ class BuildSessionsTest {
         assertEquals("Deploying", BuildSessions.label("deploying"))
         assertEquals("Deployed", BuildSessions.label("deployed"))
         assertEquals("Cancelled", BuildSessions.label("cancelled"))
-        assertEquals("Stopped", BuildSessions.label("failed"))
+        assertEquals("Failed", BuildSessions.label("failed"))
+        assertEquals("Stopped", BuildSessions.label("weird"))
+    }
+
+    @Test fun eachRowOffersContinueResumeOrOpen() {
+        for (s in listOf("awaiting-tool-response", "ready-to-deploy", "failed")) assertEquals(s, "Continue", BuildSessions.action(s))
+        for (s in listOf("streaming", "deploying")) assertEquals(s, "Resume", BuildSessions.action(s))
+        for (s in listOf("deployed", "cancelled")) assertEquals(s, "Open", BuildSessions.action(s))
+    }
+
+    @Test fun finishedChatsAreListedTooNewestActivityFirst() = runTest {
+        val vm = BuildJournalViewModel(MockBuildClient(simulatedLatencyMs = 0), scope = backgroundScope, fetchLiveSessions = {
+            listOf(
+                VibeCodeSessionMeta("deployed", 1, "deployed", updatedAt = 50),
+                VibeCodeSessionMeta("failed", 2, "failed", updatedAt = 400),
+                VibeCodeSessionMeta("ready", 3, "ready-to-deploy", updatedAt = 300),
+                VibeCodeSessionMeta("cancelled", 100, "cancelled"),
+                VibeCodeSessionMeta("working", 200, "streaming", updatedAt = 250),
+            )
+        })
+        vm.loadList().join()
+        assertEquals(listOf("failed", "ready", "working", "cancelled", "deployed"), vm.liveSessions.value.map { it.sessionId })
+        val decoded = json.decodeFromString(
+            VibeCodeSessionsResponse.serializer(),
+            """{"sessions":[{"sessionId":"a","startedAt":1,"status":"failed","updatedAt":9}]}""",
+        )
+        assertEquals(9L, decoded.sessions[0].updatedAt)
     }
 
     @Test fun pastBuildsLeaveOutOpenSessions() {

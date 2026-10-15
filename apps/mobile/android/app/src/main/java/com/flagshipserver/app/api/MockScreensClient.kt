@@ -724,6 +724,9 @@ class MockScreensClient(
                     secret = true,
                 ),
             ),
+            canContinue = false,
+            provider = "flagship",
+            conversationTokens = 1_200,
         )
     }
 
