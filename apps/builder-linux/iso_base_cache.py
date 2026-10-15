@@ -308,7 +308,18 @@ def _download(
 
     os.replace(tmp, dest)
     log(f"downloaded {dest} sha256={got} from {descriptor.url}")
+    _prune_other_versions(dest, arch)
     return dest
+
+
+def _prune_other_versions(keep: Path, arch: str) -> None:
+    """A newly verified base supersedes every other version of its arch."""
+    for candidate in keep.parent.glob(f"{_FILENAME_PREFIX}*{_FILENAME_SUFFIX}"):
+        if candidate != keep and _version_from_filename(candidate, arch=arch) is not None:
+            try:
+                candidate.unlink()
+            except OSError:
+                pass
 
 
 def ensure(

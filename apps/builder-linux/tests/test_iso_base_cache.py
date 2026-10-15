@@ -7,6 +7,7 @@ from __future__ import annotations
 import hashlib
 import os
 import time
+from pathlib import Path
 
 import pytest
 
@@ -273,3 +274,25 @@ def test_prune_unused_drops_only_stale_bases_of_other_arches(tmp_path, monkeypat
     os.utime(fresh, (old, old))
     iso_base_cache.prune_unused(keep_arch="arm64")
     assert fresh.exists(), "the arch about to be used is kept"
+
+
+def test_a_new_download_supersedes_older_versions_of_its_arch():
+    old, _ = _write_base("debian-13.5", b"old base")
+    arm = iso_base_cache.cached_path_for("debian-13.5", arch="arm64")
+    arm.write_bytes(b"arm base")
+    data = b"a newer base"
+    descriptor = DownloadDescriptor(
+        url="https://flagshipserver.com/base/debian.iso",
+        sha256=hashlib.sha256(data).hexdigest(),
+        version="debian-13.6",
+        size_bytes=len(data),
+        attestation="",
+    )
+    out = ensure(
+        "1.0.0",
+        manifest_fn=lambda v, c, arch="amd64": ManifestResult(download=descriptor),
+        opener=lambda _req: _FakeResponse(data),
+    )
+    assert out.read_bytes() == data
+    assert not Path(old).exists()
+    assert arm.exists(), "the other arch's base is not this download's to drop"

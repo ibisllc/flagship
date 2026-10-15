@@ -25,7 +25,9 @@ public static class ApplianceHosting
     {
         try
         {
-            return await cache.EnsureAsync(installerGitRef, progress, ct);
+            var basePath = await cache.EnsureAsync(installerGitRef, progress, ct);
+            IsoBaseCache.PruneUnused();
+            return basePath;
         }
         catch (ApplianceCacheException e) when (e.FallsBackToInstaller)
         {

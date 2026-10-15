@@ -1022,7 +1022,7 @@ class WizardModel:
 
         layout = self.vm.store.layout
         try:
-            return self._ensure_appliance(
+            base = self._ensure_appliance(
                 installer_git_ref,
                 arch=arch,
                 progress=on_progress,
@@ -1032,6 +1032,9 @@ class WizardModel:
                     layout.disk_image_path(s.name) for s in self.vm.servers
                 ),
             )
+            # Hosting needs no burn ISO; one left unused for a month goes.
+            iso_base_cache.prune_unused()
+            return base
         except ApplianceCacheError as e:
             if e.falls_back_to_installer:
                 self._append_log("stdout", f"+ {e} Using the Debian installer instead.")

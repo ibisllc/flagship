@@ -188,6 +188,41 @@ public class IsoBaseCacheTests : IDisposable
             cache.EnsureAsync(progress: _ => { }));
     }
 
+    [Fact]
+    public async Task Ensure_Download_SupersedesOlderVersions()
+    {
+        var older = new IsoBaseCache(cacheDir: _dir).PathFor("debian-12.4");
+        File.WriteAllBytes(older, new byte[] { 1 });
+        var payload = System.Text.Encoding.ASCII.GetBytes("newer-base");
+        string manifest =
+            "{\"download\":{\"url\":\"https://flagshipserver.com/b.iso\",\"sha256\":\"" + Sha256Hex(payload) +
+            "\",\"version\":\"debian-12.5\",\"sizeBytes\":" + payload.Length +
+            ",\"attestation\":\"https://flagshipserver.com/attest.json\"}}";
+        var cache = new IsoBaseCache(
+            manifestHandler: new IsoManifestClientTests.StubHandler((req, ct) => Task.FromResult(Ok(manifest))),
+            downloadHandler: new IsoManifestClientTests.StubHandler((req, ct) => Task.FromResult(OkBytes(payload))),
+            cacheDir: _dir);
+        var result = await cache.EnsureAsync(progress: _ => { });
+        Assert.True(File.Exists(result.Path));
+        Assert.False(File.Exists(older));
+    }
+
+    [Fact]
+    public void PruneUnused_DropsOnlyBasesUnusedForAMonth()
+    {
+        var cache = new IsoBaseCache(cacheDir: _dir);
+        var stale = cache.PathFor("debian-12.4");
+        var fresh = cache.PathFor("debian-12.5");
+        File.WriteAllBytes(stale, new byte[] { 1 });
+        File.WriteAllBytes(fresh, new byte[] { 2 });
+        var now = DateTime.UtcNow;
+        File.SetLastWriteTimeUtc(stale, now - TimeSpan.FromDays(31));
+        File.SetLastWriteTimeUtc(fresh, now - TimeSpan.FromDays(2));
+        IsoBaseCache.PruneUnused(_dir, now);
+        Assert.False(File.Exists(stale));
+        Assert.True(File.Exists(fresh));
+    }
+
     private static HttpResponseMessage Ok(string json) =>
         new(HttpStatusCode.OK) { Content = new StringContent(json) };
 

@@ -148,6 +148,7 @@ public sealed class IsoBaseCache
         CancellationToken cancellation = default)
     {
         // 1. Inspect the cache + report it verbatim (never decide by sha here).
+        if (CachedIsoPath() is string inUse) MarkUsed(inUse);
         IsoManifestClient.Current? current = await InspectAsync(log, cancellation).ConfigureAwait(false);
 
         // 2. Ask the server what to do.
@@ -185,6 +186,7 @@ public sealed class IsoBaseCache
         log?.Invoke($"downloading base image from {dl.Url}");
         await DownloadVerifyStoreAsync(dl, dest, progress, cancellation).ConfigureAwait(false);
         progress(1.0);
+        PruneOtherVersions(dest);
 
         log?.Invoke($"downloaded {dest} sha256={dl.Sha256} from {dl.Url}");
         return new EnsureResult(dest, true);
@@ -278,6 +280,44 @@ public sealed class IsoBaseCache
         {
             if (_downloadHandler == null) http.Dispose();
         }
+    }
+
+    /// <summary>How long a cached base ISO may sit unused before it is deleted.</summary>
+    public static readonly TimeSpan UnusedLifetime = TimeSpan.FromDays(30);
+
+    /// <summary>Delete cached base ISOs not used within UnusedLifetime. A PC
+    /// that only hosts servers (from the prebuilt image) needs no burn ISO,
+    /// and one used once for a burn shouldn't hold 800 MB forever. Mirrors
+    /// the Mac IsoBaseCache.pruneUnused.</summary>
+    public static void PruneUnused(string? dir = null, DateTime? nowUtc = null)
+    {
+        dir ??= DefaultCacheDir();
+        var now = nowUtc ?? DateTime.UtcNow;
+        try
+        {
+            foreach (var f in Directory.EnumerateFiles(dir, "flagship-base-*.iso"))
+                if (now - File.GetLastWriteTimeUtc(f) > UnusedLifetime) TryDelete(f);
+        }
+        catch { }
+    }
+
+    /// <summary>A newly verified base supersedes every other version.</summary>
+    private void PruneOtherVersions(string keep)
+    {
+        try
+        {
+            foreach (var f in Directory.EnumerateFiles(_cacheDir, "flagship-base-*.iso"))
+                if (!string.Equals(Path.GetFullPath(f), Path.GetFullPath(keep), StringComparison.OrdinalIgnoreCase))
+                    TryDelete(f);
+        }
+        catch { }
+    }
+
+    /// <summary>The file isn't otherwise modified after download, so its
+    /// write time doubles as "last used".</summary>
+    private static void MarkUsed(string path)
+    {
+        try { File.SetLastWriteTimeUtc(path, DateTime.UtcNow); } catch { }
     }
 
     // ---- helpers ----
