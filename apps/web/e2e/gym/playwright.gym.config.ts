@@ -26,6 +26,9 @@ export default defineConfig({
   // (the every-merge gym never greps them); tools/gym/tests/webRegistry.test.ts
   // keeps the titles and the registry in step.
   testMatch: /gym-[a-z]+\.spec\.ts$/,
+  // Every scenario creates and unlocks an account first (passphrase KDF in
+  // the page), which alone can pass 30 s on a loaded machine or CI runner.
+  timeout: 90_000,
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: 0,
