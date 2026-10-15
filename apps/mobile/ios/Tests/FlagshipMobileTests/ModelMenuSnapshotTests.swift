@@ -17,7 +17,7 @@ final class ModelMenuSnapshotTests: XCTestCase {
     /// menu is the real `ModelMenuPanel` placed where the popover opens, and
     /// the alert a real `UIAlertController` with the same title and buttons.
     enum Overlay {
-        case menu(ModelMenuModel)
+        case menu(GroupedModelMenu)
         case alert(VisionDecision)
     }
 
@@ -31,7 +31,7 @@ final class ModelMenuSnapshotTests: XCTestCase {
         try await Task.sleep(nanoseconds: 2_000_000_000)
         switch overlay {
         case .menu(let menu):
-            let panel = UIHostingController(rootView: ModelMenuPanel(menu: menu)
+            let panel = UIHostingController(rootView: GroupedModelMenuPanel(menu: menu)
                 .clipShape(RoundedRectangle(cornerRadius: 14)))
             panel.view.backgroundColor = .clear
             let size = panel.sizeThatFits(in: CGSize(width: 320, height: 460))
@@ -113,7 +113,20 @@ final class ModelMenuSnapshotTests: XCTestCase {
         return c
     }
 
-    private func screen(_ c: MockScreensClient, menu: ModelMenuModel, stager: ChatAttachmentStager? = nil) -> some View {
+    private let workKey = SavedKeyStore.Entry(id: "k1", provider: "openai", label: "Work", apiKey: "sk-work-1234abcd")
+
+    /// Flagship Inference (on `model`) and one saved key, `selected` chosen.
+    private func grouped(model: String, selected: String = ModelGroups.flagshipId) -> GroupedModelMenu {
+        let flagship = ModelMenuGroup(spec: ModelGroups.flagshipSpec, menu: ModelMenuModel(
+            source: .flagship(InferenceCatalogResponse.mock), initial: ModelChoice(model: model, effort: nil)))
+        let own = ModelMenuGroup(spec: ModelGroups.Spec(id: workKey.id, title: ModelGroups.keyTitle(workKey), entry: workKey),
+                                 menu: ModelMenuModel(source: .own(AiModelsResponse(
+                                    provider: "openai", kind: "own", listed: true, models: ModelOption.mockOwn,
+                                    defaultModel: "gpt-5.4-mini"))))
+        return GroupedModelMenu(groups: [flagship, own], selected: selected, box: ModelGroups.flagshipId)
+    }
+
+    private func screen(_ c: MockScreensClient, menu: GroupedModelMenu, stager: ChatAttachmentStager? = nil) -> some View {
         let s = VibeCodeSessionScreen(
             stream: VibeCodeStreamViewModel(sessionId: "vc_snap", client: c),
             serverFqdn: "home.harry.flagship.services", client: c,
@@ -126,12 +139,11 @@ final class ModelMenuSnapshotTests: XCTestCase {
             throw XCTSkip("set FLAGSHIP_SNAPSHOT_DIR to render the screenshots")
         }
         let c = client()
-        let catalog = InferenceCatalogResponse.mock
 
-        let menu = ModelMenuModel(source: .flagship(catalog), initial: ModelChoice(model: "low", effort: "high"))
+        let menu = grouped(model: "low")
         try await snapshot(screen(c, menu: menu), name: "models-menu-ios.png", dir: dir, overlay: .menu(menu))
 
-        let textOnly = ModelMenuModel(source: .flagship(catalog), initial: ModelChoice(model: "medium", effort: nil))
+        let textOnly = grouped(model: "medium")
         let staged = ChatAttachmentStager(staged: [
             .image(name: "mockup.png", mediaType: "image/png", data: Data([0])),
         ])
@@ -144,11 +156,21 @@ final class ModelMenuSnapshotTests: XCTestCase {
             .document(name: "watering-guide.pdf", data: Data([0])),
         ])
         attach.fail(ChatAttachmentRules.Refusal.tooBig(name: "holiday.jpg", kind: .image).message)
-        let low = ModelMenuModel(source: .flagship(catalog), initial: ModelChoice(model: "low", effort: nil))
+        let low = grouped(model: "low")
         try await snapshot(screen(c, menu: low, stager: attach), name: "models-attach-ios.png", dir: dir)
 
-        let ownMenu = ModelMenuModel(source: .own(AiModelsResponse(
-            provider: "openai", kind: "own", listed: true, models: ModelOption.mockOwn, defaultModel: "gpt-5.4-mini")))
+        let ownMenu = grouped(model: "low", selected: workKey.id)
         try await snapshot(screen(c, menu: ownMenu), name: "models-menu-own-ios.png", dir: dir, overlay: .menu(ownMenu))
+
+        let failed = MockScreensClient()
+        failed.simulatedLatency = 0
+        failed.vibeCodeSessionStateFixture = VibeCodeSessionPublicState(
+            id: "vc_snap", appId: "harry--plants", status: "failed",
+            messages: [VibeCodeSessionMessage(role: "user", text: "A plant tracker.", timestamp: 1)],
+            pendingRequest: nil, failureReason: "The app didn't start: port 3000 is already in use.",
+            model: "gpt-5.4-mini", canContinue: true, provider: "openai", conversationTokens: 300_000)
+        let switched = grouped(model: "low", selected: workKey.id)
+        switched.pick(groupId: workKey.id, modelId: "qwen3-coder")
+        try await snapshot(screen(failed, menu: switched), name: "models-continue-ios.png", dir: dir)
     }
 }

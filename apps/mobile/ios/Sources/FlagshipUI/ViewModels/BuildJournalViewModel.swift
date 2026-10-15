@@ -15,8 +15,8 @@ public final class BuildJournalViewModel {
     public private(set) var detail: LoadingState<[BuildJournalEntry]> = .idle
     /// The build whose timeline `detail` holds (nil when showing the list).
     public private(set) var openedBuildId: String?
-    /// Sessions still held by the box (resumable), newest first. A daemon
-    /// restart empties this; their journals stay in `list`.
+    /// Every chat the box holds (active, ready, failed, deployed, cancelled;
+    /// finished ones for 30 days), newest activity first.
     public private(set) var liveSessions: [VibeCodeSessionMeta] = []
 
     private let client: any ScreensClient
@@ -31,7 +31,7 @@ public final class BuildJournalViewModel {
         async let sessions = try? client.vibeCodeSessions().sessions
         do {
             let builds = try await client.buildSessions().builds
-            liveSessions = ((await sessions) ?? []).sorted { $0.startedAt > $1.startedAt }
+            liveSessions = Self.newestFirst((await sessions) ?? [])
             list = .loaded(builds)
         } catch {
             // The sessions list is a build-platform ENTRY call — a 404 means the
@@ -40,6 +40,11 @@ public final class BuildJournalViewModel {
             list = .failed(ScreensClientError.buildPlatformAbsent(error)
                 ?? ScreensClientError.userFacing(error))
         }
+    }
+
+    /// Newest activity first (`updatedAt`, else `startedAt`).
+    nonisolated static func newestFirst(_ sessions: [VibeCodeSessionMeta]) -> [VibeCodeSessionMeta] {
+        sessions.sorted { $0.lastActivity > $1.lastActivity }
     }
 
     public func loadDetail(buildId: String) async {

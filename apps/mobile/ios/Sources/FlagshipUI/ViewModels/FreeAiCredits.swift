@@ -72,6 +72,13 @@ public enum FreeAiSessions {
         defaults.set(ids, forKey: key)
     }
 
+    /// The chat moved to an own key.
+    public static func unmark(_ sessionId: String) {
+        var ids = defaults.stringArray(forKey: key) ?? []
+        ids.removeAll { $0 == sessionId }
+        defaults.set(ids, forKey: key)
+    }
+
     public static func isFreeAi(_ sessionId: String) -> Bool {
         (defaults.stringArray(forKey: key) ?? []).contains(sessionId)
     }

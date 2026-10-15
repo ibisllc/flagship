@@ -22,8 +22,12 @@ public struct InferenceModel: Codable, Equatable, Sendable, Identifiable {
     public let contextTokens: Int
     /// "text", "image".
     public let modalities: [String]
-    /// "Think harder" is offered.
+    /// The model reasons. On its own this offers no effort control; `efforts` does.
     public let reasoning: Bool
+    /// The effort levels offered for this model, when the catalog lists any.
+    /// Absent or empty: no effort control.
+    public let efforts: [String]?
+    public let defaultEffort: String?
     public let `default`: Bool?
     /// For a text-only model: the catalog id to switch to for an image.
     public let visionAlternative: String?
@@ -31,11 +35,13 @@ public struct InferenceModel: Codable, Equatable, Sendable, Identifiable {
 
     public init(id: String, tier: String, model: String, multiplier: Double, label: String,
                 descriptor: String, contextTokens: Int, modalities: [String], reasoning: Bool,
+                efforts: [String]? = nil, defaultEffort: String? = nil,
                 default isDefault: Bool? = nil, visionAlternative: String? = nil,
                 upstream: [String: String]? = nil) {
         self.id = id; self.tier = tier; self.model = model; self.multiplier = multiplier
         self.label = label; self.descriptor = descriptor; self.contextTokens = contextTokens
-        self.modalities = modalities; self.reasoning = reasoning; self.default = isDefault
+        self.modalities = modalities; self.reasoning = reasoning
+        self.efforts = efforts; self.defaultEffort = defaultEffort; self.default = isDefault
         self.visionAlternative = visionAlternative; self.upstream = upstream
     }
 

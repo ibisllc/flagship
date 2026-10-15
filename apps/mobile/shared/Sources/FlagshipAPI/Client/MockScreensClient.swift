@@ -1055,14 +1055,46 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                 why: "to look up today's high temperature for the dehydration warning",
                 example: "abc123…",
                 secret: true
-            )
+            ),
+            canContinue: false,
+            conversationTokens: 1_850
         )
     }
     public private(set) var vibeCodeReplies: [VibeCodeReplyRequest] = []
+    /// Refuses like the box (`/reply`): a chat that is running, deploying,
+    /// deployed or stopped takes no message, and a new one needs text.
     public func vibeCodeSessionReply(sessionId: String, _ req: VibeCodeReplyRequest) async throws -> VibeCodeReplyResponse {
         try await tick()
+        if let s = vibeCodeSessionStateFixture {
+            let answering = s.status == "awaiting-tool-response" && s.pendingRequest != nil
+            if !answering && s.canContinue != true {
+                let refusal: String
+                switch s.status {
+                case "streaming": refusal = "The AI is still working on this build. Wait for it to finish."
+                case "deploying": refusal = "This build is deploying. Wait for it to finish."
+                case "deployed": refusal = "This app is deployed. To change it, open the app and choose Change this app."
+                case "cancelled": refusal = "This build was stopped. Start a new build."
+                default: refusal = "this chat can't take a message now"
+                }
+                throw ScreensClientError.http(status: 409, message: Self.errorBody(refusal))
+            }
+            if !answering && (req.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                throw ScreensClientError.http(status: 400, message: Self.errorBody("text required"))
+            }
+        }
         vibeCodeReplies.append(req)
         return VibeCodeReplyResponse(ok: true)
+    }
+
+    private static func errorBody(_ e: String) -> String {
+        (try? String(data: JSONSerialization.data(withJSONObject: ["error": e]), encoding: .utf8)) ?? "{}"
+    }
+
+    /// What `vibeCodeSessions` lists (`GET /api/llm/sessions`).
+    public var vibeCodeSessionsFixture: [VibeCodeSessionMeta] = []
+    public func vibeCodeSessions() async throws -> VibeCodeSessionsResponse {
+        try await tick()
+        return VibeCodeSessionsResponse(sessions: vibeCodeSessionsFixture)
     }
 
     /// What `aiModels` answers; nil ⇒ an own-key list for the credential's provider.

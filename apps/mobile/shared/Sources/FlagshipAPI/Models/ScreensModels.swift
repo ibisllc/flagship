@@ -1062,12 +1062,16 @@ public struct VibeCodeSessionMeta: Codable, Equatable, Sendable, Identifiable {
     /// The owner's chosen name, which the session holds until it is deployed
     /// or discarded. Absent on sessions from before names were kept.
     public let name: String?
+    /// Unix-ms of the last change. Absent on older boxes.
+    public let updatedAt: Int64?
     public var id: String { sessionId }
     public init(sessionId: String, startedAt: Int64, status: String, serviceId: String? = nil, url: String? = nil,
-                name: String? = nil) {
+                name: String? = nil, updatedAt: Int64? = nil) {
         self.sessionId = sessionId; self.startedAt = startedAt; self.status = status
-        self.serviceId = serviceId; self.url = url; self.name = name
+        self.serviceId = serviceId; self.url = url; self.name = name; self.updatedAt = updatedAt
     }
+    /// When it last changed, for newest-first lists.
+    public var lastActivity: Int64 { updatedAt ?? startedAt }
     /// Discarding frees the name; a deployed session's name is its app's.
     public var canDiscard: Bool { status != "deployed" }
     /// Still working or waiting on the owner: worth resuming.
@@ -1115,8 +1119,8 @@ public struct VibeCodeSessionPublicState: Codable, Equatable, Sendable {
     public let pendingRequest: VibeCodePendingRequest?
     /// Why the session failed (status "failed").
     public let failureReason: String?
-    /// The AI is waiting but the box has no key for this session: the reply
-    /// must carry one.
+    /// The chat can take a message but the box holds no key for it: the next
+    /// message must carry one.
     public let needsCredential: Bool?
     /// While "deploying": "staging" | "fixing" | "going-live". Older boxes omit it.
     public let deployPhase: String?
@@ -1125,6 +1129,15 @@ public struct VibeCodeSessionPublicState: Codable, Equatable, Sendable {
     public let effort: String?
     /// Older turns were condensed to fit the model's context.
     public let summarised: Bool?
+    /// The owner can send a new message that isn't an answer (ready to deploy
+    /// or failed). Older boxes omit it and take a message only while the AI
+    /// waits on a question.
+    public let canContinue: Bool?
+    /// The NAME of the provider whose key the chat uses ("flagship",
+    /// "openai", …). Never the key.
+    public let provider: String?
+    /// A rough size of the conversation the model is sent now, in tokens.
+    public let conversationTokens: Int?
     public init(
         id: String,
         appId: String?,
@@ -1136,28 +1149,34 @@ public struct VibeCodeSessionPublicState: Codable, Equatable, Sendable {
         deployPhase: String? = nil,
         model: String? = nil,
         effort: String? = nil,
-        summarised: Bool? = nil
+        summarised: Bool? = nil,
+        canContinue: Bool? = nil,
+        provider: String? = nil,
+        conversationTokens: Int? = nil
     ) {
         self.id = id; self.appId = appId; self.status = status
         self.messages = messages; self.pendingRequest = pendingRequest
         self.failureReason = failureReason; self.needsCredential = needsCredential
         self.deployPhase = deployPhase
         self.model = model; self.effort = effort; self.summarised = summarised
+        self.canContinue = canContinue; self.provider = provider
+        self.conversationTokens = conversationTokens
     }
 }
 
 public struct VibeCodeReplyRequest: Codable, Equatable, Sendable {
     public let text: String?
     public let envVarStatus: String?   // "set" | "declined" | "deferred"
-    /// BYOK provider credential. Normally `start`'s credential is reused for
-    /// the whole session, so a reply need NOT carry one — it's supplied here
-    /// only to seed a session that started without one (the `needsCredential`
-    /// case) before resuming. Same box-only, never-logged contract.
+    /// BYOK provider credential. `start`'s credential is reused for the whole
+    /// session, so a reply need not carry one. One here replaces the
+    /// session's key: to switch provider, to seed a chat that has none
+    /// (`needsCredential`), or a fresh Flagship Inference pass. Same
+    /// box-only, never-logged contract.
     public let credential: LlmProviderCredential?
     /// The model for this and later turns (same values as on start).
     public let model: String?
     /// The reasoning effort. Sent whenever `model` is, as `null` for the
-    /// provider's default, so turning "Think harder" off takes effect.
+    /// provider's default, so clearing an effort takes effect.
     public let effort: String?
     public let attachments: [VibeCodeAttachment]?
     public init(text: String? = nil, envVarStatus: String? = nil, credential: LlmProviderCredential? = nil,

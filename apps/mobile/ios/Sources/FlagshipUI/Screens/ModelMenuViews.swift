@@ -4,12 +4,14 @@ import UniformTypeIdentifiers
 import FlagshipAPI
 
 /// The compact model menu: the current model's short name; tap for the list
-/// (labels + descriptors) and, for own keys, the effort picker.
+/// (labels + descriptors) and, when the model lists effort levels, the effort picker.
 struct ModelMenuButton: View {
     @Environment(\.colorScheme) private var scheme
     @Bindable var menu: ModelMenuModel
     @State private var isOpen = false
     var identifier = "model-menu"
+    /// False when the effort sits beside the button instead.
+    var effortInPanel = true
 
     var body: some View {
         let c = FSColors.scheme(scheme)
@@ -30,7 +32,7 @@ struct ModelMenuButton: View {
         .accessibilityLabel("Model: \(menu.shortName)")
         .accessibilityIdentifier(identifier)
         .popover(isPresented: $isOpen, arrowEdge: .top) {
-            ModelMenuPanel(menu: menu)
+            ModelMenuPanel(menu: menu, showsEffort: effortInPanel)
                 .presentationCompactAdaptation(.popover)
         }
         .task { await menu.ensureLoaded() }
@@ -41,6 +43,7 @@ struct ModelMenuButton: View {
 struct ModelMenuPanel: View {
     @Environment(\.colorScheme) private var scheme
     @Bindable var menu: ModelMenuModel
+    var showsEffort = true
 
     var body: some View {
         let c = FSColors.scheme(scheme)
@@ -68,24 +71,19 @@ struct ModelMenuPanel: View {
             row(title: ModelMenuText.flagshipInference, subtitle: ModelMenuText.boxPicks, selected: true, c: c) {}
         case .flagship(let catalog?):
             header(ModelMenuText.flagshipInference, c: c)
+            if showsEffort, let efforts = menu.efforts {
+                effortRow(efforts, c: c)
+                Divider().overlay(c.border).padding(.vertical, FS.space.s1)
+            }
             ForEach(catalog.models) { m in
                 row(title: m.label, subtitle: m.descriptor, selected: m.id == menu.catalogModel?.id, c: c) {
                     menu.select(m.id)
                 }
                 .accessibilityIdentifier("model-menu-\(m.id)")
             }
-            if menu.offersThinkHarder {
-                Divider().overlay(c.border).padding(.vertical, FS.space.s1)
-                Toggle(isOn: $menu.thinkHarder) {
-                    Text(ModelMenuText.thinkHarder).font(FS.font.bodySm()).foregroundColor(c.text)
-                }
-                .tint(c.primary)
-                .padding(.horizontal, FS.space.s4).padding(.vertical, FS.space.s2)
-                .accessibilityIdentifier("model-menu-think-harder")
-            }
         case .own(let r) where r.listed == true:
             header(r.provider.capitalized, c: c)
-            if let efforts = menu.efforts {
+            if showsEffort, let efforts = menu.efforts {
                 effortRow(efforts, c: c)
                 Divider().overlay(c.border).padding(.vertical, FS.space.s1)
             }
@@ -113,17 +111,43 @@ struct ModelMenuPanel: View {
         }
     }
 
-    private func header(_ t: String, c: FSColors) -> some View {
+    private func header(_ t: String, c: FSColors) -> some View { ModelMenuRows.header(t, c: c) }
+
+    private func row(title: String, subtitle: String?, selected: Bool, c: FSColors,
+                     action: @escaping () -> Void) -> some View {
+        ModelMenuRows.row(title: title, subtitle: subtitle, selected: selected, c: c, action: action)
+    }
+
+    private func effortRow(_ efforts: [String], c: FSColors) -> some View {
+        HStack {
+            Text("Effort").font(FS.font.bodySm()).foregroundColor(c.text)
+            Spacer()
+            Picker("Effort", selection: Binding(get: { menu.effort ?? "" }, set: { menu.setEffort($0.isEmpty ? nil : $0) })) {
+                ForEach(efforts, id: \.self) { e in Text(ModelMenuText.effort(e)).tag(e) }
+            }
+            .pickerStyle(.menu)
+            .tint(c.primary)
+            .accessibilityIdentifier("model-menu-effort")
+        }
+        .padding(.horizontal, FS.space.s4).padding(.vertical, FS.space.s1)
+    }
+}
+
+/// The rows both menus draw.
+enum ModelMenuRows {
+    static func header(_ t: String, c: FSColors) -> some View {
         Text(t.uppercased())
             .font(.system(size: 11, weight: .semibold))
             .tracking(0.6)
             .foregroundColor(c.textMuted)
+            .lineLimit(1)
+            .truncationMode(.middle)
             .padding(.horizontal, FS.space.s4)
             .padding(.top, FS.space.s1).padding(.bottom, FS.space.s2)
     }
 
-    private func row(title: String, subtitle: String?, selected: Bool, c: FSColors,
-                     action: @escaping () -> Void) -> some View {
+    static func row(title: String, subtitle: String?, selected: Bool, c: FSColors,
+                    action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(alignment: .top, spacing: FS.space.s2) {
                 Image(systemName: "checkmark")
@@ -147,43 +171,150 @@ struct ModelMenuPanel: View {
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
-
-    private func effortRow(_ efforts: [String], c: FSColors) -> some View {
-        HStack {
-            Text("Effort").font(FS.font.bodySm()).foregroundColor(c.text)
-            Spacer()
-            Picker("Effort", selection: Binding(get: { menu.effort ?? "" }, set: { menu.setEffort($0.isEmpty ? nil : $0) })) {
-                ForEach(efforts, id: \.self) { e in Text(ModelMenuText.effort(e)).tag(e) }
-            }
-            .pickerStyle(.menu)
-            .tint(c.primary)
-            .accessibilityIdentifier("model-menu-effort")
-        }
-        .padding(.horizontal, FS.space.s4).padding(.vertical, FS.space.s1)
-    }
 }
 
-/// "Think harder" by the composer (Flagship models that reason).
-struct ThinkHarderChip: View {
+/// The build chat's menu: the chosen model's short name (and the key's name
+/// for an own key); tap for every group's models.
+struct GroupedModelMenuButton: View {
     @Environment(\.colorScheme) private var scheme
-    @Binding var isOn: Bool
+    @Bindable var menu: GroupedModelMenu
+    @State private var isOpen = false
+    var identifier = "vibecode-model-menu"
 
     var body: some View {
         let c = FSColors.scheme(scheme)
-        Button { isOn.toggle() } label: {
+        Button { isOpen = true } label: {
             HStack(spacing: 4) {
-                Image(systemName: isOn ? "checkmark" : "lightbulb").font(.system(size: 11, weight: .semibold))
-                Text(ModelMenuText.thinkHarder).font(.system(size: 13, weight: .medium))
+                Text(menu.shortName)
+                    .font(.system(size: 13, weight: .semibold))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold))
             }
-            .foregroundColor(isOn ? c.primary : c.textMuted)
+            .foregroundColor(c.primary)
             .padding(.horizontal, 10).padding(.vertical, 5)
-            .background(isOn ? c.primary.opacity(0.10) : c.surface)
-            .overlay(RoundedRectangle(cornerRadius: FS.radius.pill).stroke(isOn ? c.primary.opacity(0.35) : c.border, lineWidth: 1))
-            .clipShape(Capsule())
+            .background(Capsule().fill(c.primary.opacity(0.10)))
+            .frame(maxWidth: 200)
         }
         .buttonStyle(.plain)
-        .accessibilityAddTraits(isOn ? .isSelected : [])
-        .accessibilityIdentifier("think-harder-chip")
+        .accessibilityLabel("Model: \(menu.shortName)")
+        .accessibilityIdentifier(identifier)
+        .popover(isPresented: $isOpen, arrowEdge: .top) {
+            GroupedModelMenuPanel(menu: menu)
+                .presentationCompactAdaptation(.popover)
+        }
+        .task { await menu.loadCurrent() }
+    }
+}
+
+/// The open grouped menu: Flagship Inference, then each saved key.
+struct GroupedModelMenuPanel: View {
+    @Environment(\.colorScheme) private var scheme
+    @Bindable var menu: GroupedModelMenu
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                if menu.groups.isEmpty {
+                    Text(ModelGroups.noGroups)
+                        .font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, FS.space.s4).padding(.vertical, FS.space.s2)
+                }
+                ForEach(Array(menu.groups.enumerated()), id: \.element.id) { i, g in
+                    if i > 0 { Divider().overlay(c.border).padding(.vertical, FS.space.s1) }
+                    group(g, c: c)
+                }
+            }
+            .padding(.vertical, FS.space.s2)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .frame(width: 320)
+        .frame(maxHeight: 460)
+        .fixedSize(horizontal: false, vertical: true)
+        .background(c.surface)
+        .accessibilityIdentifier("model-menu-panel")
+        .task { await menu.loadAll() }
+    }
+
+    @ViewBuilder
+    private func group(_ g: ModelMenuGroup, c: FSColors) -> some View {
+        let chosen = g.id == menu.selectedGroupId
+        ModelMenuRows.header(g.title, c: c)
+        switch g.menu.source {
+        case .idle, .loading:
+            HStack(spacing: FS.space.s2) {
+                ProgressView()
+                Text(ModelGroups.loadingModels).font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                Spacer()
+            }
+            .padding(.horizontal, FS.space.s4).padding(.vertical, FS.space.s2)
+        case .flagship(nil):
+            ModelMenuRows.row(title: ModelMenuText.flagshipInference, subtitle: ModelGroups.catalogUnreadable,
+                              selected: chosen, c: c) { menu.selectGroup(g.id) }
+        case .flagship(let catalog?):
+            ForEach(catalog.models) { m in
+                ModelMenuRows.row(title: m.label, subtitle: m.descriptor,
+                                  selected: chosen && m.id == g.menu.catalogModel?.id, c: c) {
+                    menu.pick(groupId: g.id, modelId: m.id)
+                }
+                .accessibilityIdentifier("model-menu-\(g.id)-\(m.id)")
+            }
+        case .own(let r) where r.listed == true:
+            ForEach(g.menu.ownOptions) { o in
+                ModelMenuRows.row(title: o.label, subtitle: o.known ? nil : ModelMenuText.capabilitiesUnknown,
+                                  selected: chosen && o.id == g.menu.selectedId, c: c) {
+                    menu.pick(groupId: g.id, modelId: o.id)
+                }
+                .accessibilityIdentifier("model-menu-\(g.id)-\(o.id)")
+            }
+        case .own(let r):
+            VStack(alignment: .leading, spacing: FS.space.s1) {
+                TextField("Model", text: Binding(get: { g.menu.customModel },
+                                                 set: { g.menu.customModel = $0; menu.selectGroup(g.id) }))
+                    .font(FS.font.mono())
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .padding(8)
+                    .background(RoundedRectangle(cornerRadius: FS.radius.sm).fill(c.surfaceSunken))
+                    .overlay(RoundedRectangle(cornerRadius: FS.radius.sm)
+                        .stroke(chosen ? c.primary : c.border, lineWidth: 1))
+                    .accessibilityIdentifier("model-menu-custom-\(g.id)")
+                Text(r.reason == "rejected" ? ModelMenuText.keyRefused : "Type the model's name.")
+                    .font(FS.font.caption()).foregroundColor(c.textMuted)
+            }
+            .padding(.horizontal, FS.space.s4).padding(.vertical, FS.space.s2)
+        }
+    }
+}
+
+/// The effort beside the menu, for a model that lists effort levels.
+struct EffortMenuButton: View {
+    @Environment(\.colorScheme) private var scheme
+    let efforts: [String]
+    let selected: String?
+    let onPick: (String?) -> Void
+    var identifier = "vibecode-effort-menu"
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        let label = selected.map(ModelMenuText.effort) ?? "Effort"
+        Menu {
+            Picker("Effort", selection: Binding(get: { selected ?? "" }, set: { onPick($0.isEmpty ? nil : $0) })) {
+                ForEach(efforts, id: \.self) { e in Text(ModelMenuText.effort(e)).tag(e) }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(label).font(.system(size: 13, weight: .medium)).lineLimit(1)
+                Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold))
+            }
+            .foregroundColor(c.textMuted)
+            .padding(.horizontal, 10).padding(.vertical, 5)
+            .overlay(Capsule().stroke(c.border, lineWidth: 1))
+        }
+        .accessibilityLabel("Effort: \(label)")
+        .accessibilityIdentifier(identifier)
     }
 }
 

@@ -614,6 +614,7 @@ struct VibeCodeSessionContainer: View {
                     savedCredential: {
                         VibeCodeCredentialSelection.compatible(with: SavedKeyStore().active()?.credential).credential
                     },
+                    savedKeys: { SavedKeyStore().list() },
                     freeAiCredential: { [server, app, bound] in
                         let fqdn = app.screensFqdn(bound: bound)
                         return try await FreeAiCreditsService(
@@ -622,6 +623,12 @@ struct VibeCodeSessionContainer: View {
                     },
                     inferenceCatalog: { [server] in
                         await ModelMenuCache.catalog { try await server.inferenceModels() }
+                    },
+                    flagshipUsable: { [server, app] in
+                        let status = try? await FreeAiCreditsService(
+                            client: server, username: { [app] in app.currentUser }
+                        ).status()
+                        return FreeAiEntryState.of(status).isUsable
                     }
                 )
             } else {
