@@ -209,8 +209,8 @@ owners: `docs/runbooks/release-readiness.md`; feature matrix:
   failed, ~11 min, 3 STARTER-4xCPU-8GB boxes. Fixed on `main` from what it
   found: gym boxes never showed online (`daemon_status` matched a hard-coded
   apex), invites of admin-pinned accounts could never be redeemed (box now
-  accepts the admin root; **the apps still sign invite creates with the AID
-  /IRK, which `.com` refuses on admin-pinned accounts: open**), gVisor apps had
+  accepts the admin root; the apps' AID/IRK creates now count as Member
+  invites, see "Who can invite"), gVisor apps had
   no DNS so egress approvals never worked (resolv.conf now names the gateway),
   app backup "include user data" always failed, concurrent pairings 500'd, and
   the `.services` Fly image didn't build (build-eval). Leftover gym DNS had
@@ -372,20 +372,24 @@ owners: `docs/runbooks/release-readiness.md`; feature matrix:
   anonymous visitors only on `access.public_routes` (normalised, dot segments
   refused), knock elsewhere; unknown mode = members-only (docs/app-apis.md §2,
   2026-10-14; needs an endorsed box release).
-- **Who can invite (2026-10-15).** `docs/service-access-gating.md` "Who can
-  invite". Real (admin-pinned) accounts could only invite from an admin
-  device; now any device invites at Member (AID/IRK-signed create = tier
-  `member` on `.com`, recorded with the device id, migration 0100) and every
-  admin device gets a content-free `invite-created` push plus an activity
-  row; the box reads the tier from the create's signing key and caps those
-  joins at Member whatever `default_role` says; rank orders stay
-  admin-root-only on pinned boxes; a device may revoke its own member
-  invites. Clients: admin devices sign with the admin root, others' rank
-  picker is locked to Member, "Invited by <device>" from the decrypted
-  directory, one-tap revoke for admins, route `app/account/activity`.
-  Needs: migration 0100 then a `.com` deploy, an endorsed box release (the
-  cap), iOS/Android builds. Open: the box still takes mode and allow-remove
-  orders under the owner IRK (admin-only is a client rule there).
+- **Who can invite (2026-10-15, through `226e92ed8`).**
+  `docs/service-access-gating.md` "Who can invite". Real (admin-pinned)
+  accounts could only invite from an admin device; now any device invites at
+  Member (AID/IRK-signed create = tier `member` on `.com`, recorded with the
+  device id, migration 0100) and every admin device gets a content-free
+  `invite-created` push plus an activity row; the box reads the tier from the
+  create's signing key and caps those joins at Member whatever `default_role`
+  says; rank orders stay admin-root-only on pinned boxes; a device may revoke
+  its own member invites. All three apps (webapp shell v95): admin devices
+  sign create/revoke with the admin root (iOS: one Face ID per create, the
+  admin root isn't session-cached), others' rank picker is locked to Member,
+  ranks read-only off admin devices, "Invited by <device>" from the decrypted
+  directory, Revoke on the row, route `app/account/activity`. Live gym group
+  `invites` green (`live-run-2026-10-15T21-33-02-638Z`, 11 checks); mock gym
+  scenarios on iOS and Android (locked picker, "Invited by") green. Needs:
+  migration 0100 on prod D1 then a `.com` deploy, an endorsed box release (the
+  cap), iOS/Android store builds. Open: the box still takes mode and
+  allow-remove orders under the owner IRK (admin-only is a client rule there).
 - **Per-app visitor identity (2026-10-13).** A visitor signs redeem / visit /
   knock / acceptance with `deriveAppAccountId(UMK, serviceRef)`
   (`flagship/app-aid/v1|<serviceRef>`), replacing the per-author contact AID;
