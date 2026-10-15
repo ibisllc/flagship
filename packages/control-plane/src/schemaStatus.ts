@@ -61,6 +61,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0096",
   // A co-manager's devices to wake when a shared server waits to start.
   "0097",
+  // Erase the plaintext auto-unlock leases (v1 is gone).
+  "0098",
 ];
 
 export interface SchemaStatusDeps {

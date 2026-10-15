@@ -48,8 +48,6 @@ import {
   type UploadRecoveryRecord,
   type VoiciShorten,
   type WipeRestart,
-  type AutoUnlockLease,
-  type RevokeAutoUnlockLease,
   signAuthCode,
   signAuthCodeRevocation,
   signDns01Delete,
@@ -85,8 +83,6 @@ import {
   signUploadRecoveryRecord,
   signVoiciShorten,
   signWipeRestart,
-  signAutoUnlockLease,
-  signRevokeAutoUnlockLease,
 } from "../src/auth.js";
 import {
   canonicalDaemonStatusReport,
@@ -415,16 +411,6 @@ describe("SEC-6 — service / recovery / lease / totp", () => {
     bothBad<ServerRevokeBySelf>(
       (reason) => ({ serverId: "s", reason, issuedAt: NOW }),
       (r) => signServerRevokeBySelf(r, kp),
-    );
-  });
-  it("AutoUnlockLease.leaseId / RevokeAutoUnlockLease.leaseId", () => {
-    bothBad<AutoUnlockLease>(
-      (leaseId) => ({ serverId: "s", leaseId, expiresAt: LATER, unlockKey: PUB, multiUse: false, issuedAt: NOW }),
-      (r) => signAutoUnlockLease(r, kp),
-    );
-    bothBad<RevokeAutoUnlockLease>(
-      (leaseId) => ({ serverId: "s", leaseId, issuedAt: NOW }),
-      (r) => signRevokeAutoUnlockLease(r, kp),
     );
   });
   it("ServiceRename.{username,serviceId,newDisplayLabel}", () => {

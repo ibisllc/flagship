@@ -55,8 +55,6 @@ SENSITIVE_HANDLERS=(
   "packages/control-plane/src/watchDelegates.ts|handleMintWatchDelegate"
   "packages/control-plane/src/watchDelegates.ts|handleRevokeWatchDelegate"
   "packages/control-plane/src/entitlementRevocations.ts|handlePostEntitlementRevocations"
-  "packages/control-plane/src/luksKeys.ts|handleDepositAutoUnlockLease"
-  "packages/control-plane/src/luksKeys.ts|handleRevokeAutoUnlockLease"
   "packages/control-plane/src/serviceInvites.ts|handleCreateServiceInvite"
   "packages/control-plane/src/serviceInvites.ts|handleRevokeServiceInvite"
   "packages/control-plane/src/serverOrder.ts|handlePostServerOrder"
