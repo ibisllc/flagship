@@ -44,11 +44,8 @@ import {
   handleRevokedSinceServiceInvites,
   handleCleanupApex,
   handleCompleteRePair,
-  handleConsumeUnlockKey,
-  handleDepositAutoUnlockLease,
   handleGetRePair,
   handleInitiateRePair,
-  handleListAutoUnlockLeases,
   handlePostSecretRequest,
   handleGetSecretRequests,
   handlePostSecretResponse,
@@ -115,7 +112,6 @@ import {
   pushRedirection,
   bearer,
   handleVoiciShorten,
-  handleRevokeAutoUnlockLease,
   handleDns01Delete,
   handleDns01Publish,
   handleGetInstallEvents,
@@ -569,10 +565,6 @@ const ROUTE_RE = {
   DNS01_PUBLISH: /^\/api\/dns-01\/publish$/,
   DNS01_DELETE: /^\/api\/dns-01\/delete$/,
   LUKS_SEALED: /^\/api\/server\/([^/]+)\/sealed-luks-key$/,
-  LUKS_UNLOCK_CONSUME: /^\/api\/server\/([^/]+)\/unlock-key\/consume$/,
-  LUKS_LEASE_DEPOSIT: /^\/api\/server\/([^/]+)\/unlock-key\/lease$/,
-  LUKS_LEASE_REVOKE: /^\/api\/server\/([^/]+)\/unlock-key\/lease\/([^/]+)$/,
-  LUKS_LEASE_LIST: /^\/api\/server\/([^/]+)\/unlock-key\/leases$/,
   // Phone-as-unlock-endpoint RELAY (docs/security-phone-as-unlock-
   // endpoint.md). The box POSTs an STK-signed SecretRequest to its
   // mailbox; the phone GETs pending + POSTs the sealed reply; the box
@@ -1565,69 +1557,6 @@ export async function tryControlPlane(
           luksKeys: storage.luksKeys,
         },
         decodeURIComponent(m[1]!),
-      ),
-    );
-  }
-  if (method === "POST" && (m = path.match(ROUTE_RE.LUKS_UNLOCK_CONSUME))) {
-    const host = decodeURIComponent(m[1]!);
-    return finishPlain(
-      await handleConsumeUnlockKey(
-        {
-          servers: storage.servers,
-          usernames: storage.usernames,
-          luksKeys: storage.luksKeys,
-          autoUnlockLeases: storage.autoUnlockLeases,
-        },
-        host,
-        await readJson(request),
-      ),
-    );
-  }
-  if (method === "POST" && (m = path.match(ROUTE_RE.LUKS_LEASE_DEPOSIT))) {
-    const host = decodeURIComponent(m[1]!);
-    return finishPlain(
-      await handleDepositAutoUnlockLease(
-        {
-          servers: storage.servers,
-          usernames: storage.usernames,
-          luksKeys: storage.luksKeys,
-          autoUnlockLeases: storage.autoUnlockLeases,
-          grants: storage.deviceCapabilityGrants,
-        },
-        host,
-        await readJson(request),
-      ),
-    );
-  }
-  if (method === "DELETE" && (m = path.match(ROUTE_RE.LUKS_LEASE_REVOKE))) {
-    const host = decodeURIComponent(m[1]!);
-    const leaseId = decodeURIComponent(m[2]!);
-    return finishPlain(
-      await handleRevokeAutoUnlockLease(
-        {
-          servers: storage.servers,
-          usernames: storage.usernames,
-          luksKeys: storage.luksKeys,
-          autoUnlockLeases: storage.autoUnlockLeases,
-          grants: storage.deviceCapabilityGrants,
-        },
-        host,
-        leaseId,
-        await readJson(request),
-      ),
-    );
-  }
-  if (method === "GET" && (m = path.match(ROUTE_RE.LUKS_LEASE_LIST))) {
-    const host = decodeURIComponent(m[1]!);
-    return finishPlain(
-      await handleListAutoUnlockLeases(
-        {
-          servers: storage.servers,
-          usernames: storage.usernames,
-          luksKeys: storage.luksKeys,
-          autoUnlockLeases: storage.autoUnlockLeases,
-        },
-        host,
       ),
     );
   }

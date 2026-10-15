@@ -152,8 +152,6 @@ describe("admin-authority-guard.sh — the allowlist matches the §2 sensitive .
       "watchDelegates.ts|handleMintWatchDelegate",
       "watchDelegates.ts|handleRevokeWatchDelegate",
       "entitlementRevocations.ts|handlePostEntitlementRevocations",
-      "luksKeys.ts|handleDepositAutoUnlockLease",
-      "luksKeys.ts|handleRevokeAutoUnlockLease",
       "serviceInvites.ts|handleCreateServiceInvite",
       "serviceInvites.ts|handleRevokeServiceInvite",
       "serverOrder.ts|handlePostServerOrder",
