@@ -124,12 +124,13 @@ const EVERY_MERGE: readonly Scenario[] = [
   ),
   android(
     "android-create-server-form",
-    "Home → add-server goes STRAIGHT to the create-server form (name field + disk-encryption control) — the chooser screen was removed.",
+    "Home → Add/Import a server → Add a new server opens the create-server form (name field + disk-encryption control).",
     `${PKG}.GymEveryMergeTest#createServerFormReachable`,
     {
       steps: [
         { kind: "launch", describe: "Launch smokeTab=home." },
-        { kind: "tap", describe: "Add a server (a NavHost push straight to the form).", handle: "home-add-server" },
+        { kind: "tap", describe: "Add/Import a server.", handle: "home-add-server" },
+        { kind: "tap", describe: "Add a new server.", handle: "home-add-new-server" },
         { kind: "assert", describe: "Name field.", handle: "cs-name-field" },
         { kind: "assert", describe: "Disk-encryption control.", handle: "cs-encrypt-disk-toggle" },
       ],
@@ -406,8 +407,136 @@ const FEATURE_MIRRORS: readonly Scenario[] = [
 ];
 
 /** The Android lane of the gym registry (every-merge subset + total tranche). */
+// ───── total-gym Tier-1: the October 2026 features (GymOctoberTest) ─────
+// Twins of the iOS GymOctoberTests rows; same handles where the surfaces agree.
+
+const O = `${PKG}.GymOctoberTest#`;
+
+const OCTOBER: readonly Scenario[] = [
+  androidTotal(
+    "android-oct-access-list-service-page",
+    "D6: Plants' Internet access section answers a waiting host; the request leaves the page.",
+    O + "serviceAccessPendingAllow",
+    {
+      steps: [{ kind: "tap", describe: "Services → Plants → Allow.", handle: "service-detail-access-allow" }],
+      assertions: [{ describe: "One fewer waiting host", handle: "service-detail-access-allow", expect: "present" }],
+      screenshots: [shot("service-access-pending", "Waiting."), shot("service-access-allowed", "Answered.")],
+      dimension: "D6",
+    },
+  ),
+  androidTotal(
+    "android-oct-access-control-members-only",
+    "D3: Access control starts Open to all with Members (n); Members only (confirmed) takes effect.",
+    O + "accessControlSwitchesToMembersOnly",
+    {
+      steps: [
+        { kind: "tap", describe: "Plants → Access control.", handle: "service-detail-access-row" },
+        { kind: "tap", describe: "Members only → confirm.", handle: "service-access-members-only-confirm" },
+      ],
+      assertions: [{ describe: "Members only status", handle: "service-access-mode-status", expect: "present" }],
+      screenshots: [shot("access-control-open", "Open."), shot("access-control-members-only", "Members only.")],
+      dimension: "D3",
+    },
+  ),
+  androidTotal(
+    "android-oct-api-key-create",
+    "D6: Plants' API keys list its key; creating one shows the secret.",
+    O + "apiKeyCreateShowsTheSecretOnce",
+    {
+      steps: [
+        { kind: "tap", describe: "Create key.", handle: "service-detail-api-keys-create" },
+        { kind: "assert", describe: "The secret.", handle: "api-key-created-value" },
+      ],
+      assertions: [{ describe: "Secret shown", handle: "api-key-created-value", expect: "present" }],
+      screenshots: [shot("api-key-created", "The new key.")],
+      dimension: "D6",
+    },
+  ),
+  androidTotal(
+    "android-oct-database-browse",
+    "D6: Plants' Database opens a table with its row range.",
+    O + "databaseBrowsesATable",
+    {
+      steps: [{ kind: "tap", describe: "Database → a table.", handle: "db-table-row" }],
+      assertions: [{ describe: "Row range", handle: "db-range", expect: "present" }],
+      screenshots: [shot("database-grid", "The table.")],
+      dimension: "D6",
+    },
+  ),
+  androidTotal(
+    "android-oct-runs-on",
+    "D1: Plants' page lists the servers it runs on.",
+    O + "runsOnListsTheServers",
+    {
+      steps: [{ kind: "assert", describe: "Runs-on toggles.", handle: "runs-on-toggle-" }],
+      assertions: [{ describe: "Two or more servers", handle: "runs-on-toggle-", expect: "present" }],
+      screenshots: [shot("runs-on", "Runs on.")],
+      dimension: "D1",
+    },
+  ),
+  androidTotal(
+    "android-oct-server-apps",
+    "D1: a server's page lists its apps and offers Create app here.",
+    O + "serverPageListsItsApps",
+    {
+      steps: [{ kind: "assert", describe: "Create app here.", handle: "server-create-app-here" }],
+      assertions: [{ describe: "Create app here", handle: "server-create-app-here", expect: "present" }],
+      screenshots: [shot("server-apps", "Server apps.")],
+      dimension: "D1",
+    },
+  ),
+  androidTotal(
+    "android-oct-server-order-leader-pending",
+    "D1: Make leader on Office's page; until the box confirms, the page says it is waiting.",
+    O + "makeLeaderWaitsForTheServerToConfirm",
+    {
+      steps: [
+        { kind: "tap", describe: "Office → Make leader.", handle: "sd-make-leader" },
+        { kind: "assert", describe: "Waiting to confirm.", handle: "sd-leader-pending" },
+      ],
+      assertions: [{ describe: "Leader pending until ack", handle: "sd-leader-pending", expect: "present" }],
+      screenshots: [shot("server-order-card", "The card."), shot("server-order-pending", "Waiting.")],
+      dimension: "D1",
+    },
+  ),
+  androidTotal(
+    "android-oct-offline-server",
+    "D5: an offline server's page (Music) says it's offline, not 'Connecting…' or 'never came online'.",
+    O + "offlineServerPageSaysOffline",
+    {
+      steps: [{ kind: "assert", describe: "Offline state.", handle: "server-detail-offline" }],
+      assertions: [{ describe: "Offline copy", handle: "server-detail-offline", expect: "present" }],
+      screenshots: [shot("server-offline", "The offline page.")],
+      dimension: "D5",
+    },
+  ),
+  androidTotal(
+    "android-oct-update-card",
+    "D1: the server page's update card names the new release and the last update.",
+    O + "updateCardOffersTheNewRelease",
+    {
+      steps: [{ kind: "assert", describe: "Update card.", handle: "sd-update-available" }],
+      assertions: [{ describe: "Last update line", handle: "sd-update-last-outcome", expect: "present" }],
+      screenshots: [shot("update-card", "The card.")],
+      dimension: "D1",
+    },
+  ),
+  androidTotal(
+    "android-oct-flagship-inference-credits",
+    "D3: Settings → AI keys lists Flagship Inference with '1,840 free credits left · 500 added each week' (mock .com).",
+    O + "flagshipInferenceListedInAiKeys",
+    {
+      steps: [{ kind: "assert", describe: "Flagship Inference card.", handle: "free-ai-card" }],
+      assertions: [{ describe: "Credits line", handle: "free-ai-card", expect: "present" }],
+      screenshots: [shot("flagship-inference-credits", "The credits line.")],
+      dimension: "D3",
+    },
+  ),
+];
+
 export const ANDROID_GYM_SCENARIOS: readonly Scenario[] = [
   ...EVERY_MERGE,
   ...TOTAL,
   ...FEATURE_MIRRORS,
+  ...OCTOBER,
 ];
