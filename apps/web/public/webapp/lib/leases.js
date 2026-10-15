@@ -1,101 +1,171 @@
-// Auto-unlock leases — sign + post the IRK-signed envelope that lets
-// `.com` release the LUKS unlock key on the next /unlock-key/consume.
+// Auto-unlock leases, box-sealed (flagship/auto-unlock-lease/v2), as iOS and
+// Android deposit them (packages/protocol/src/phoneEndpoint.ts §4).
 //
-// Two modes share the same envelope (see auto_unlock_lease_design.md):
-//   approveOneShot(serverFqdn)   — multiUse=false, ~10 min expiry.
-//                                   One-shot "approve this boot" helper.
-//   enableLongLived(serverFqdn)  — multiUse=true, ~7d expiry. Used by
-//                                   the per-server toggle. Renew before
-//                                   expiry by calling again.
-//   revokeLease(serverFqdn, id)  — kill switch.
-//   listLeases(serverFqdn)       — UI listing (no unlockKey returned).
+// The browser opens the disk key `.com` holds sealed for this account's IRK,
+// re-seals it FOR the box's STK (the directory-bound key), and signs a lease
+// that pins that STK. `.com` stores only the sealed blob (it never sees the
+// key) and releases it to the box on reboot; the box unseals it itself.
 //
-// The webapp is a peer device (per feedback_webapp_is_peer_not_remote)
-// — it signs locally with its IRK, never forwards to the phone.
+//   enableLongLived(serverFqdn)  — deposit a lease (7 days; renew by calling
+//                                  again; tickRenewals does it silently).
+//   revokeLease(serverFqdn, id)  — the kill switch (auto-unlock-lease-revoke/v1).
+//   listLeases(serverFqdn)       — the active leases' metadata, never the key.
+//
+// Both orders are verified against the account IRK, so they're signed with
+// it (not the admin root).
 
-import { bytesToHex, hexToBytes, hkdf32 } from "../keystore.js";
+import { bytesToHex, hexToBytes, hkdf32, signWithIrk as defaultSignWithIrk } from "../keystore.js";
 import { getSession } from "./state.js";
-import { sensitiveSigner } from "./adminRoot.js";
 import { controlApex } from "./apex.js";
 import { importX25519Private } from "./x25519.js";
+import { ed25519PubToX25519 } from "./edToMont.js";
+import { accountReadFetch } from "./accountRead.js";
 
-// Webapp lives on webapp.flagshipserver.com; .com endpoints live on the
-// apex. Same Worker handles both via host-based routing.
-const APEX = controlApex();
+export const TAG_AUTO_UNLOCK_LEASE_V2 = "flagship/auto-unlock-lease/v2";
+export const TAG_AUTO_UNLOCK_LEASE_REVOKE = "flagship/auto-unlock-lease-revoke/v1";
 
-const ONE_SHOT_TTL_MS = 10 * 60 * 1000;        // 10 min
 const DEFAULT_LONG_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+// Renew a lease with less than this left: at the 7-day expiry, on the 6th day.
+const RENEW_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-/**
- * Sign + deposit a one-shot lease in response to an Approve click on
- * a pending unlock-key request. Returns { leaseId, expiresAt } on
- * success.
- */
-export async function approveOneShot(serverFqdn) {
-  return depositLease(serverFqdn, { multiUse: false, ttlMs: ONE_SHOT_TTL_MS });
+function fieldGuard(name, value) {
+  const s = String(value);
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c === 0x7c) throw new Error(`canonical-bytes field "${name}" contains separator '|' at index ${i}`);
+    if (c <= 0x1f || c === 0x7f) throw new Error(`canonical-bytes field "${name}" contains control char 0x${c.toString(16)} at index ${i}`);
+  }
 }
 
-/**
- * Sign + deposit a long-lived multi-use lease (the "auto-unlock"
- * toggle). The same call extends an existing lease — call it
- * periodically while the device is online to keep auto-unlock alive.
- */
-export async function enableLongLived(serverFqdn, ttlMs = DEFAULT_LONG_TTL_MS) {
-  return depositLease(serverFqdn, { multiUse: true, ttlMs });
-}
-
-/** Public list of active leases for a server (no unlockKey leaked). */
-export async function listLeases(serverFqdn) {
-  const r = await fetch(
-    `${APEX}/api/server/${encodeURIComponent(serverFqdn)}/unlock-key/leases`,
+/** `flagship/auto-unlock-lease/v2|<serverDomain>|<stkPub hex>|<leaseId>|
+ *  <sealedKey hex>|<issuedAt>|<expiresAt>|<maxUses, -1 for none>`. */
+export function canonicalLeaseV2Bytes({ serverDomain, stkPubHex, leaseId, sealedKeyHex, issuedAt, expiresAt, maxUses }) {
+  fieldGuard("serverDomain", serverDomain);
+  fieldGuard("leaseId", leaseId);
+  return new TextEncoder().encode(
+    [
+      TAG_AUTO_UNLOCK_LEASE_V2,
+      serverDomain,
+      String(stkPubHex).toLowerCase(),
+      leaseId,
+      String(sealedKeyHex).toLowerCase(),
+      issuedAt,
+      expiresAt,
+      maxUses ?? -1,
+    ].join("|"),
   );
+}
+
+/** `flagship/auto-unlock-lease-revoke/v1|<serverDomain>|<leaseId>|<issuedAt>`. */
+export function canonicalLeaseRevokeBytes({ serverDomain, leaseId, issuedAt }) {
+  fieldGuard("serverDomain", serverDomain);
+  fieldGuard("leaseId", leaseId);
+  return new TextEncoder().encode([TAG_AUTO_UNLOCK_LEASE_REVOKE, serverDomain, leaseId, issuedAt].join("|"));
+}
+
+/** The active leases' metadata (`.com` never returns the sealed key here). */
+export async function listLeases(serverFqdn, deps = {}) {
+  const f = deps.fetch || fetch;
+  const r = await f(`${deps.comBase || controlApex()}/api/server/${encodeURIComponent(serverFqdn)}/unlock-key/leases-v2`);
   if (!r.ok) throw new Error(`list leases failed: ${r.status}`);
   const body = await r.json();
   return Array.isArray(body.leases) ? body.leases : [];
 }
 
-// Renew when a long-lived lease has less than this much time left.
-// 1 day default — at the 7d expiry, this means we re-sign on the
-// 6th day. With a webapp opened at least once a week the lease
-// stays alive; longer absences correctly let it decay (the design
-// intent — see auto_unlock_lease_design.md).
-const RENEW_WINDOW_MS = 24 * 60 * 60 * 1000;
+/**
+ * Deposit a box-sealed lease so the box can unlock itself on reboot until it
+ * expires. Calling it again before then extends auto-unlock.
+ */
+export async function enableLongLived(serverFqdn, ttlMs = DEFAULT_LONG_TTL_MS, deps = {}) {
+  const session = deps.session || getSession();
+  if (!session?.umk) throw new Error("unlock first");
+  const f = deps.fetch || fetch;
+  const comBase = deps.comBase || controlApex();
+  const sign = deps.signWithIrk || defaultSignWithIrk;
+  const now = (deps.now || Date.now)();
+
+  // 1. The box's STK, from the directory: the only key the lease may seal for.
+  const stkPubHex = await (deps.boxStk || directoryStk)(serverFqdn, session, { fetch: f, comBase });
+  if (!stkPubHex) throw new Error(`${serverFqdn} isn't in your account's server list`);
+
+  // 2. The disk key `.com` holds sealed for this account's IRK.
+  const sealedRes = await f(`${comBase}/api/server/${encodeURIComponent(serverFqdn)}/sealed-luks-key`);
+  if (!sealedRes.ok) throw new Error(`no sealed key on file for ${serverFqdn}: ${sealedRes.status}`);
+  const luksKey = await openSealedWithIrk(session.umk, hexToBytes((await sealedRes.json()).sealedKey));
+
+  // 3. Re-seal it FOR the box, then sign the lease that pins the box.
+  const sealedKeyHex = bytesToHex(await (deps.sealForStk || sealForEd25519Pub)(luksKey, hexToBytes(stkPubHex)));
+  const lease = {
+    serverDomain: serverFqdn,
+    stkPub: stkPubHex,
+    leaseId: bytesToHex(randomBytes(16)),
+    sealedKey: sealedKeyHex,
+    issuedAt: now,
+    expiresAt: now + ttlMs,
+  };
+  const sig = await sign(
+    session.umk,
+    canonicalLeaseV2Bytes({ ...lease, stkPubHex: lease.stkPub, sealedKeyHex: lease.sealedKey }),
+  );
+  const r = await f(`${comBase}/api/server/${encodeURIComponent(serverFqdn)}/unlock-key/lease-v2`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ lease, signature: bytesToHex(sig) }),
+  });
+  if (!r.ok) {
+    const txt = await r.text().catch(() => "");
+    throw new Error(`deposit lease failed: ${r.status} ${txt}`.trim());
+  }
+  return { leaseId: lease.leaseId, expiresAt: lease.expiresAt };
+}
+
+/** Sign + DELETE a lease: the box needs an approval on its next boot. */
+export async function revokeLease(serverFqdn, leaseId, deps = {}) {
+  const session = deps.session || getSession();
+  if (!session?.umk) throw new Error("unlock first");
+  const f = deps.fetch || fetch;
+  const sign = deps.signWithIrk || defaultSignWithIrk;
+  const request = { serverDomain: serverFqdn, leaseId, issuedAt: (deps.now || Date.now)() };
+  const sig = await sign(session.umk, canonicalLeaseRevokeBytes(request));
+  const r = await f(
+    `${deps.comBase || controlApex()}/api/server/${encodeURIComponent(serverFqdn)}/unlock-key/lease-v2/${encodeURIComponent(leaseId)}`,
+    {
+      method: "DELETE",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ request, signature: bytesToHex(sig) }),
+    },
+  );
+  if (!r.ok) {
+    const txt = await r.text().catch(() => "");
+    throw new Error(`revoke lease failed: ${r.status} ${txt}`.trim());
+  }
+  return r.json();
+}
 
 /**
- * Re-sign every long-lived lease on `serverFqdn` whose `expiresAt`
- * is within `windowMs` of now. Silent — no UI prompt, the IRK is
- * already in the unlocked session. Returns the list of leases that
- * were actually renewed (empty when there was nothing to do).
- *
- * Failure to fetch the lease list (server unreachable, .com 5xx)
- * silently no-ops — we'll try again on the next tick.
+ * Re-deposit on `serverFqdn` when its newest lease has less than `windowMs`
+ * left. Silent (the IRK is in the unlocked session); a server with no lease
+ * (auto-unlock off) or one that can't be listed is left alone.
  */
-export async function renewIfExpiringSoon(serverFqdn, windowMs = RENEW_WINDOW_MS) {
-  const session = getSession();
-  if (!session.umk) return [];
+export async function renewIfExpiringSoon(serverFqdn, windowMs = RENEW_WINDOW_MS, deps = {}) {
+  const session = deps.session || getSession();
+  if (!session?.umk) return [];
   let active;
   try {
-    active = await listLeases(serverFqdn);
+    active = await (deps.listLeases || listLeases)(serverFqdn);
   } catch {
     return [];
   }
-  const now = Date.now();
-  const renewed = [];
-  for (const lease of active) {
-    if (!lease.multiUse) continue;
-    if (lease.expiresAt - now > windowMs) continue;
-    // Re-issue with the default 7-day TTL. Multiple long-lived
-    // leases (e.g., user has webapp + phone both signed) would
-    // each get refreshed independently — that's fine, .com keeps
-    // them as separate rows keyed by leaseId.
-    try {
-      const r = await enableLongLived(serverFqdn);
-      renewed.push({ oldLeaseId: lease.leaseId, newLeaseId: r.leaseId, expiresAt: r.expiresAt });
-    } catch {
-      // Best-effort: a single failure doesn't abort the loop.
-    }
+  if (active.length === 0) return [];
+  const now = (deps.now || Date.now)();
+  const newest = active.reduce((a, b) => (b.expiresAt > a.expiresAt ? b : a));
+  if (newest.expiresAt - now > windowMs) return [];
+  try {
+    const r = await (deps.enableLongLived || enableLongLived)(serverFqdn);
+    return [{ oldLeaseId: newest.leaseId, newLeaseId: r.leaseId, expiresAt: r.expiresAt }];
+  } catch {
+    return [];
   }
-  return renewed;
 }
 
 /**
@@ -111,119 +181,53 @@ export async function tickRenewals(serverFqdns) {
   return out;
 }
 
-/** Sign + DELETE a lease. Per-device kill switch. */
-export async function revokeLease(serverFqdn, leaseId) {
-  const session = getSession();
-  if (!session.umk) throw new Error("unlock first");
-  const issuedAt = Date.now();
-  const canonical = canonicalRevoke({ serverId: serverFqdn, leaseId, issuedAt });
-  // Slice D: revoke-auto-unlock-lease is a SENSITIVE order — signed with the
-  // admin master root when this account has one, else the owner IRK (legacy).
-  const sig = await sensitiveSigner()(session.umk, canonical);
-  const r = await fetch(
-    `${APEX}/api/server/${encodeURIComponent(serverFqdn)}/unlock-key/lease/${encodeURIComponent(leaseId)}`,
-    {
-      method: "DELETE",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        request: { serverId: serverFqdn, leaseId, issuedAt },
-        signature: bytesToHex(sig),
-      }),
-    },
-  );
-  if (!r.ok) {
-    const txt = await r.text().catch(() => "");
-    throw new Error(`revoke lease failed: ${r.status} ${txt}`.trim());
-  }
-  return r.json();
-}
-
 // ---- internals ----
 
-async function depositLease(serverFqdn, { multiUse, ttlMs }) {
-  const session = getSession();
-  if (!session.umk) throw new Error("unlock first");
-
-  // 1. Fetch the sealed LUKS key the daemon stored at install time.
-  const sealedRes = await fetch(
-    `${APEX}/api/server/${encodeURIComponent(serverFqdn)}/sealed-luks-key`,
+/** The box's STK as the account's directory (`.com`'s /pods) lists it. */
+async function directoryStk(serverFqdn, session, { fetch: f, comBase }) {
+  const username = session.username;
+  if (!username) return null;
+  const r = await accountReadFetch(`${comBase}/api/users/${encodeURIComponent(username)}/pods`, { cache: "no-store" }, { fetch: f, baseUrl: comBase });
+  if (!r.ok) throw new Error(`couldn't read your server list: ${r.status}`);
+  const want = serverFqdn.toLowerCase();
+  const pod = ((await r.json()).pods ?? []).find(
+    (p) => String(p.serverDomain ?? "").toLowerCase() === want && p.revokedAt == null,
   );
-  if (!sealedRes.ok) {
-    throw new Error(`no sealed key on file for ${serverFqdn}: ${sealedRes.status}`);
-  }
-  const sealedJson = await sealedRes.json();
-  const sealedBlob = hexToBytes(sealedJson.sealedKey);
-
-  // 2. Open it with the IRK (Ed25519→X25519 conversion + ECDH + AES-GCM).
-  const unlockKey = await openSealedWithIrk(session.umk, sealedBlob);
-
-  // 3. Build + sign the lease envelope.
-  const leaseId = randomHex(16);
-  const issuedAt = Date.now();
-  const expiresAt = issuedAt + ttlMs;
-  const canonical = canonicalLease({
-    serverId: serverFqdn,
-    leaseId,
-    expiresAt,
-    unlockKey,
-    multiUse,
-    issuedAt,
-  });
-  // Slice D: auto-unlock-lease deposit is a SENSITIVE order — admin master root
-  // when present, else the owner IRK (legacy). Canonical bytes are unchanged.
-  const sig = await sensitiveSigner()(session.umk, canonical);
-
-  // 4. POST. .com verifies the signature against the user's IRK pub.
-  const r = await fetch(
-    `${APEX}/api/server/${encodeURIComponent(serverFqdn)}/unlock-key/lease`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        request: {
-          serverId: serverFqdn,
-          leaseId,
-          unlockKey: bytesToHex(unlockKey),
-          multiUse,
-          expiresAt,
-          issuedAt,
-        },
-        signature: bytesToHex(sig),
-      }),
-    },
-  );
-  if (!r.ok) {
-    const txt = await r.text().catch(() => "");
-    throw new Error(`deposit lease failed: ${r.status} ${txt}`.trim());
-  }
-  return { leaseId, expiresAt, multiUse };
+  const stk = String(pod?.identityPubKey ?? "").toLowerCase();
+  return /^[0-9a-f]{64}$/.test(stk) ? stk : null;
 }
 
-// Field order pinned to packages/protocol/src/auth.ts canonicalAutoUnlockLease.
-function canonicalLease({ serverId, leaseId, expiresAt, unlockKey, multiUse, issuedAt }) {
-  return new TextEncoder().encode(
-    [
-      "flagship/auto-unlock-lease/v1",
-      serverId,
-      leaseId,
-      expiresAt,
-      bytesToHex(unlockKey),
-      multiUse ? "1" : "0",
-      issuedAt,
-    ].join("|"),
-  );
+function randomBytes(n) {
+  const b = new Uint8Array(n);
+  crypto.getRandomValues(b);
+  return b;
 }
 
-function canonicalRevoke({ serverId, leaseId, issuedAt }) {
-  return new TextEncoder().encode(
-    ["flagship/revoke-auto-unlock-lease/v1", serverId, leaseId, issuedAt].join("|"),
+/**
+ * Seal `plaintext` FOR an Ed25519 public key (sealForEd25519Recipient):
+ * the key's X25519 form, ECDH with a fresh ephemeral X25519 key,
+ * HKDF-SHA256(salt = ephemeral pub, info = "flagship.seal.v1"), AES-GCM.
+ * Returns [ephemeral X25519 pub:32][nonce:12][ct+tag].
+ */
+export async function sealForEd25519Pub(plaintext, edPub) {
+  const recipKey = await crypto.subtle.importKey("raw", ed25519PubToX25519(edPub), "X25519", false, []);
+  const eph = await crypto.subtle.generateKey({ name: "X25519" }, true, ["deriveBits"]);
+  const ephPub = new Uint8Array(await crypto.subtle.exportKey("raw", eph.publicKey));
+  const shared = await crypto.subtle.deriveBits({ name: "X25519", public: recipKey }, eph.privateKey, 256);
+  const hk = await crypto.subtle.importKey("raw", shared, "HKDF", false, ["deriveBits"]);
+  const sym = await crypto.subtle.deriveBits(
+    { name: "HKDF", hash: "SHA-256", salt: ephPub, info: new TextEncoder().encode("flagship.seal.v1") },
+    hk,
+    256,
   );
-}
-
-function randomHex(byteLen) {
-  const buf = new Uint8Array(byteLen);
-  crypto.getRandomValues(buf);
-  return bytesToHex(buf);
+  const aesKey = await crypto.subtle.importKey("raw", sym, { name: "AES-GCM" }, false, ["encrypt"]);
+  const nonce = randomBytes(12);
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, aesKey, plaintext));
+  const out = new Uint8Array(32 + 12 + ct.length);
+  out.set(ephPub, 0);
+  out.set(nonce, 32);
+  out.set(ct, 44);
+  return out;
 }
 
 /**

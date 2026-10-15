@@ -794,7 +794,7 @@ async function refreshLeases(serverFqdn) {
     list.innerHTML = "";
     return;
   }
-  const longLived = leases.filter((l) => l.multiUse);
+  const longLived = leases;
   if (longLived.length === 0) {
     pill.textContent = "off";
     list.innerHTML = "";

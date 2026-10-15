@@ -186,13 +186,16 @@ describe("/webapp PWA static surface", () => {
     const r = await app.inject({ method: "GET", url: "/webapp/lib/leases.js" });
     expect(r.statusCode).toBe(200);
     // Public surface every consumer relies on.
-    expect(r.body).toContain("export async function approveOneShot");
+    expect(r.body).not.toContain("approveOneShot");
     expect(r.body).toContain("export async function enableLongLived");
     expect(r.body).toContain("export async function revokeLease");
     expect(r.body).toContain("export async function listLeases");
-    // Canonical bytes pinned to the protocol-side tag (auth.ts).
-    expect(r.body).toContain("flagship/auto-unlock-lease/v1");
-    expect(r.body).toContain("flagship/revoke-auto-unlock-lease/v1");
+    // Canonical bytes pinned to the protocol-side tags (phoneEndpoint.ts §4);
+    // the plaintext v1 lease is gone.
+    expect(r.body).toContain("flagship/auto-unlock-lease/v2");
+    expect(r.body).not.toContain("flagship/auto-unlock-lease/v1");
+    expect(r.body).toContain("flagship/auto-unlock-lease-revoke/v1");
+    expect(r.body).not.toContain("revoke-auto-unlock-lease");
     // Talks to the apex (not web.) for .com endpoints. The apex used to be a
     // baked literal here; it now routes through the single lib/apex.js
     // accessor (origin-driven, prod-default — G2) so a gym build retargets
@@ -305,9 +308,8 @@ describe("/webapp PWA static surface", () => {
     // Default renewal window — re-issues with ~1d remaining at the
     // 7d expiry, so a webapp opened weekly keeps leases alive.
     expect(r.body).toContain("RENEW_WINDOW_MS");
-    // Renewer must skip non-multiUse leases (one-shots are gone after
-    // first consume; renewing them is meaningless).
-    expect(r.body).toMatch(/multiUse[\s\S]{0,80}continue/);
+    // A server with no lease has auto-unlock off: the renewer leaves it so.
+    expect(r.body).toContain("if (active.length === 0) return [];");
   });
 
   it("/webapp/views/home.js wires the renewer to home enter + a 30-min interval", async () => {
