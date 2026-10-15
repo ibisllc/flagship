@@ -35,6 +35,13 @@ public struct AppSummary: Codable, Equatable, Sendable {
     /// Something is working on the app on this box right now. Absent when
     /// idle and on older boxes.
     public var activity: AppActivity? = nil
+    /// Who may open the app: "open" or "members-only". A co-manager of the
+    /// server is an ordinary visitor here. Absent on older boxes.
+    public var accessMode: String? = nil
+
+    /// A members-only app: anyone not invited to it, a co-manager included,
+    /// needs an invite to use it.
+    public var isMembersOnly: Bool { accessMode == "members-only" }
 }
 
 /// What a box is doing to an app (docs/app-placement.md §6).

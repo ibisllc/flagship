@@ -65,6 +65,8 @@ final class ServerShareVectorTests: XCTestCase {
         case "list": return try d.decode(ServerShareList.self, from: data)
         case "unlock": return try d.decode(ServerShareUnlock.self, from: data)
         case "inbox": return try d.decode(ShareInboxRequest.self, from: data)
+        case "push": return try d.decode(ServerSharePush.self, from: data)
+        case "update": return try d.decode(ServerShareUpdate.self, from: data)
         default: throw ServerShareError.invalid("unknown kind \(kind)")
         }
     }
@@ -80,6 +82,8 @@ final class ServerShareVectorTests: XCTestCase {
         case "list": return ServerShareList.parse(jsonObject: fields) != nil
         case "unlock": return ServerShareUnlock.parse(jsonObject: fields) != nil
         case "inbox": return ShareInboxRequest.parse(jsonObject: fields) != nil
+        case "push": return ServerSharePush.parse(jsonObject: fields) != nil
+        case "update": return ServerShareUpdate.parse(jsonObject: fields) != nil
         default: return false
         }
     }
@@ -117,7 +121,7 @@ final class ServerShareVectorTests: XCTestCase {
 
     func test_envelopes() throws {
         let all = try cases("envelopes")
-        XCTAssertEqual(all.count, 13)
+        XCTAssertEqual(all.count, 16)
         for c in all {
             let kind = try XCTUnwrap(c["kind"] as? String)
             let fields = try XCTUnwrap(c["fields"])
@@ -138,7 +142,7 @@ final class ServerShareVectorTests: XCTestCase {
 
     func test_refuse() throws {
         let all = try cases("refuse")
-        XCTAssertEqual(all.count, 18)
+        XCTAssertEqual(all.count, 25)
         for c in all {
             let kind = try XCTUnwrap(c["kind"] as? String)
             let fields = try XCTUnwrap(c["fields"])
@@ -150,7 +154,7 @@ final class ServerShareVectorTests: XCTestCase {
 
     func test_reject() throws {
         let all = try cases("reject")
-        XCTAssertEqual(all.count, 7)
+        XCTAssertEqual(all.count, 10)
         for c in all {
             let kind = try XCTUnwrap(c["kind"] as? String)
             let env = try envelope(kind, try XCTUnwrap(c["fields"]))
@@ -235,6 +239,32 @@ final class ServerShareVectorTests: XCTestCase {
                 XCTAssertNil(got, input)
             }
         }
+    }
+
+    func test_pushTokens() throws {
+        let all = try cases("pushTokens")
+        XCTAssertEqual(all.count, 2)
+        for t in all {
+            let token = try XCTUnwrap(t["token"] as? String)
+            XCTAssertEqual(ServerShare.shareSha256Hex(token), t["sha256"] as? String, t["platform"] as? String ?? "")
+            XCTAssertNotNil(SharePushPlatform(rawValue: try XCTUnwrap(t["platform"] as? String)))
+        }
+    }
+
+    func test_memberUpdateNeverVerifiesAsAnotherEnvelope() throws {
+        let k = try keys()
+        let member = try memberKey()
+        let u = ServerShareUpdate(serverDomain: "home.harry.flagship.services", shareId: k["shareId"]!,
+                                  memberPubHex: k["memberPubHex"]!, targetCommit: String(repeating: "2", count: 40),
+                                  fromCommit: String(repeating: "1", count: 40), nonce: String(repeating: "9c", count: 32),
+                                  issuedAt: 5)
+        let sig = try u.sign(with: member)
+        XCTAssertTrue(u.verify(signature: sig, publicKey: member.publicKey.rawRepresentation))
+        var other = u
+        other.shareId = "ffeeddccbbaa99887766554433221100"
+        XCTAssertFalse(other.verify(signature: sig, publicKey: member.publicKey.rawRepresentation))
+        let leave = ServerShareLeave(serverDomain: u.serverDomain, shareId: u.shareId, memberPubHex: u.memberPubHex, issuedAt: 5)
+        XCTAssertFalse(leave.verify(signature: sig, publicKey: member.publicKey.rawRepresentation))
     }
 
     func test_randomShareId() {

@@ -63,6 +63,14 @@ public struct HomeTab: View {
         return nil
     }
 
+    /// The shared server a content-free start-up push most likely means: the
+    /// only one this account may approve start-ups for. Nil when there are
+    /// several (Home's "Shared with me" lists them) or none.
+    static func startupShare(_ shares: [(shareId: String, unlockAtBoot: Bool)]) -> String? {
+        let candidates = shares.filter(\.unlockAtBoot)
+        return candidates.count == 1 ? candidates[0].shareId : nil
+    }
+
     /// Pop or push onto the home stack when a DeepLink lands on this
     /// tab. RootShell already switches the tab to .home for these
     /// cases; we just resolve the route inside the stack.
@@ -99,6 +107,16 @@ public struct HomeTab: View {
         case .shareServer:
             if let route = Self.route(for: link), path.last != route { path.append(route) }
             _ = linker.consume()
+        case .sharedWithMe:
+            _ = linker.consume()
+            path.removeAll()
+            Task {
+                let store = SharedWithMeStore.shared
+                await store.load(allowAuth: true)
+                if let only = Self.startupShare(store.items.map { ($0.entry.shareId, $0.session?.unlockAtBoot == true) }) {
+                    path.append(.sharedServer(shareId: only))
+                }
+            }
         default:
             break
         }

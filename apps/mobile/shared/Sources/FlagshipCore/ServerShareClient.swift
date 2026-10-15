@@ -181,6 +181,25 @@ public struct ShareMeResponse: Codable, Equatable, Sendable {
     public let unlockAtBoot: Bool
     public let seeAppData: Bool
     public let serverDomain: String
+    /// Manage level on a box that can update itself. Older boxes omit it.
+    public var canUpdate: Bool? = nil
+
+    public init(shareId: String, level: ServerShareLevel, unlockAtBoot: Bool, seeAppData: Bool,
+                serverDomain: String, canUpdate: Bool? = nil) {
+        self.shareId = shareId
+        self.level = level
+        self.unlockAtBoot = unlockAtBoot
+        self.seeAppData = seeAppData
+        self.serverDomain = serverDomain
+        self.canUpdate = canUpdate
+    }
+}
+
+/// `POST /api/shares/update` accepted the order; the box applies it next.
+public struct ShareUpdateAccepted: Codable, Equatable, Sendable {
+    public let ok: Bool
+    public let accepted: Bool
+    public let targetCommit: String
 }
 
 public struct ShareInboxListEntry: Codable, Equatable, Sendable {
@@ -235,6 +254,12 @@ struct ShareGrantBody: Encodable {
     let signature: String
     let accept: ServerShareAccept?
     let acceptSignature: String?
+}
+
+struct SharePushBody: Encodable {
+    let push: ServerSharePush
+    let signature: String
+    let providerToken: String?
 }
 
 struct ShareInboxBody: Encodable {
@@ -328,6 +353,14 @@ public final class ServerShareClient: Sendable {
                            headers: [Self.shareTokenHeader: token])
     }
 
+    /// Registers (`put`, with the token) or drops (`delete`) this device's
+    /// start-up push for one share.
+    public func sharePush(token: String, push: ServerSharePush, signature: String, providerToken: String?) async throws {
+        try await sendVoid(com, apex(), "POST", "/api/server-shares/\(push.shareId)/push",
+                           body: SharePushBody(push: push, signature: signature, providerToken: providerToken),
+                           headers: [Self.shareTokenHeader: token])
+    }
+
     public func inboxPut(request: ShareInboxRequest, signature: String, ct: String) async throws {
         try await sendVoid(com, apex(), "POST", "/api/share-inbox",
                            body: ShareInboxBody(request: request, signature: signature, ct: ct))
@@ -413,6 +446,13 @@ public final class ServerShareClient: Sendable {
 
     public func boxMe(serverDomain: String, shareToken: String) async throws -> ShareMeResponse {
         try await send(box, try boxURL(serverDomain), "GET", "/api/shares/me", body: nil as String?,
+                       headers: [Self.sessionHeader: shareToken])
+    }
+
+    public func boxUpdate(serverDomain: String, shareToken: String, update: ServerShareUpdate,
+                          signature: String) async throws -> ShareUpdateAccepted {
+        try await send(box, try boxURL(serverDomain), "POST", "/api/shares/update",
+                       body: ShareSignedBody(key: "update", envelope: update, signature: signature),
                        headers: [Self.sessionHeader: shareToken])
     }
 

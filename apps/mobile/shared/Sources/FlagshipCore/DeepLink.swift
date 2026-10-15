@@ -117,6 +117,10 @@ public enum DeepLink: Equatable, Sendable {
     /// The secret stays in the fragment, so `.com` never sees it.
     case shareServer(shareId: String, secretHex: String)
 
+    /// Home's "Shared with me": a server shared with this account is waiting
+    /// to start (the `share-start-up` push names no server). Internal-only.
+    case sharedWithMe
+
     /// Parse a `flagship://...` URL (custom scheme) OR a Flagship
     /// UNIVERSAL LINK (`https://flagshipserver.com/join?…`). The custom
     /// scheme mirrors the webapp's `?view=...` router; universal links

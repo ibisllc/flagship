@@ -24,6 +24,11 @@ public final class PushNotifications: NSObject {
     public private(set) var deviceToken: Data?
     public var onDeviceTokenChange: ((Data?) -> Void)?
 
+    /// The newest APNs token this app was given, as hex, for screens that
+    /// register it somewhere besides the account (a shared server's start-up
+    /// notices).
+    public private(set) static var latestTokenHex: String?
+
     public init(linker: DeepLinker) {
         self.linker = linker
         super.init()
@@ -53,7 +58,25 @@ public final class PushNotifications: NSObject {
     /// into our state so callers can ship it to the pod.
     public func setDeviceToken(_ token: Data?) {
         self.deviceToken = token
+        if let token, !token.isEmpty { Self.latestTokenHex = token.map { String(format: "%02x", $0) }.joined() }
         onDeviceTokenChange?(token)
+    }
+
+    /// `kind` of the push a server shared with this account sends when it
+    /// waits to start. It rides the owner's `secret-request` category, and
+    /// `kind` wins, so it opens Home's "Shared with me" instead of the
+    /// owner's approvals list.
+    public nonisolated static let shareStartupKind = "share-start-up"
+
+    /// Where a tapped push leads, for the payloads that carry no URL.
+    public nonisolated static func link(forPush info: [AnyHashable: Any]) -> DeepLink? {
+        let kind = info["kind"] as? String
+        if kind == shareStartupKind { return .sharedWithMe }
+        if (kind ?? info["category"] as? String) == "secret-request" { return .secretRequests }
+        if kind == "vibecode-needs-you", let sessionId = info["sessionId"] as? String, !sessionId.isEmpty {
+            return .vibeCodeChat(sessionId: sessionId)
+        }
+        return nil
     }
 
     public func tokenAsHex() -> String? {
@@ -151,26 +174,12 @@ extension PushNotifications: UNUserNotificationCenterDelegate {
             linker.enqueue(link)
             return
         }
-        // Phone-as-unlock-endpoint RELAY (sealed-key flow): a box is
-        // finishing setup / rebooting in "approve" mode and needs the phone
-        // to release its boot secret. Routes to the SecretRequests approval
-        // list. (`category` mirrors the Android FCM payload's alternate key.)
-        if let kind = (info["kind"] as? String) ?? (info["category"] as? String),
-           kind == "secret-request" {
-            linker.enqueue(.secretRequests)
-            return
-        }
-        // W10 — vibecode-needs-you push.
-        //
-        // The .com Web Push fan-out (RFC 8291 encrypted) carries
-        // { kind, sessionId, appId, request, deepLink } where deepLink
-        // is `flagship://vibecode/<sessionId>`. If the iOS notification
-        // unwraps that payload, the deepLink path above handles it; the
-        // fallback here is for sealed-payload pushes that surface only
-        // the discrete fields in `userInfo`.
-        if let kind = info["kind"] as? String, kind == "vibecode-needs-you",
-           let sessionId = info["sessionId"] as? String, !sessionId.isEmpty {
-            linker.enqueue(.vibeCodeChat(sessionId: sessionId))
+        // A box waiting to start: the owner's `secret-request` push routes
+        // to the approvals list, a shared server's to Home. The vibecode
+        // fallback is for sealed-payload pushes that surface only discrete
+        // fields in `userInfo` (`category` mirrors Android's alternate key).
+        if let link = Self.link(forPush: info) {
+            linker.enqueue(link)
         }
     }
 }

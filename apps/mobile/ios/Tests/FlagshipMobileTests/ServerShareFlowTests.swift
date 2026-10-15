@@ -41,6 +41,9 @@ final class FakeShareBackend: ServerShareTransport, @unchecked Sendable {
     var bootResponses: [[String: Any]] = []
     var calls: [Call] = []
     var lastGrantBody: [String: Any]?
+    var pushTokens: [String: [String: (platform: String, token: String)]] = [:]
+    var lastPushBody: [String: Any]?
+    var lastUpdateBody: [String: Any]?
 
     init(domain: String, ownerSensitivePub: Data, ownerAccountPub: Data, stk: Curve25519.Signing.PrivateKey) {
         self.domain = domain
@@ -144,6 +147,23 @@ final class FakeShareBackend: ServerShareTransport, @unchecked Sendable {
                 if row.acceptHex != nil { return (409, ["error": "this link was already used"]) }
                 rows[id]!.acceptHex = b["acceptance"] as? String
                 return (200, ["ok": true])
+            }
+            if m == "POST", parts.last == "push" {
+                lastPushBody = b
+                guard let push = ServerSharePush.parse(jsonObject: b["push"] as Any),
+                      let pub = HexUtil.decode(push.memberPubHex), verify(push, b["signature"], pub), push.shareId == id
+                else { return (403, ["error": "invalid signature"]) }
+                if row.ended != nil { return (410, ["error": "share ended"]) }
+                guard row.unlock?.memberPubHex == push.memberPubHex
+                else { return (403, ["error": "unlock-not-shared", "code": "unlock-not-shared"]) }
+                if push.op == .put {
+                    guard let token = b["providerToken"] as? String, ServerShare.shareSha256Hex(token) == push.tokenSha256
+                    else { return (403, ["error": "token is not the one that was signed"]) }
+                    pushTokens[id, default: [:]][push.tokenSha256] = (push.platform.rawValue, token)
+                    return (200, ["ok": true, "push": true])
+                }
+                pushTokens[id]?[push.tokenSha256] = nil
+                return (200, ["ok": true, "push": false])
             }
             if parts.last == "leave" {
                 guard let l = ServerShareLeave.parse(jsonObject: b["leave"] as Any),
@@ -270,6 +290,24 @@ final class FakeShareBackend: ServerShareTransport, @unchecked Sendable {
             return (200, ["token": token, "expiresAt": Int64(Date().timeIntervalSince1970 * 1000) + 43_200_000,
                           "level": held.grant.level.rawValue, "unlockAtBoot": held.grant.unlockAtBoot,
                           "seeAppData": held.grant.seeAppData])
+        }
+        if p == "/api/shares/me" || p == "/api/shares/update" {
+            guard let token = session, let shareId = sessions[token], let held = grants[shareId]
+            else { return (401, ["error": "share session ended or expired", "code": "share-session"]) }
+            if m == "GET", p == "/api/shares/me" {
+                return (200, ["shareId": shareId, "level": held.grant.level.rawValue, "unlockAtBoot": held.grant.unlockAtBoot,
+                              "seeAppData": held.grant.seeAppData, "serverDomain": domain,
+                              "canUpdate": held.grant.level == .manage])
+            }
+            lastUpdateBody = b
+            guard held.grant.level == .manage else { return (403, ["error": "manage-only", "code": "manage-only"]) }
+            guard let u = ServerShareUpdate.parse(jsonObject: b["update"] as Any),
+                  u.shareId == shareId, u.memberPubHex == held.grant.memberPubHex,
+                  let pub = HexUtil.decode(u.memberPubHex), verify(u, b["signature"], pub)
+            else { return (403, ["error": "invalid signature", "code": "invalid-signature"]) }
+            guard u.fromCommit == String(repeating: "1", count: 40)
+            else { return (409, ["error": "from-commit-mismatch", "code": "from-commit-mismatch"]) }
+            return (202, ["ok": true, "accepted": true, "targetCommit": u.targetCommit])
         }
         if m == "POST", p == "/api/shares/leave" {
             guard let l = ServerShareLeave.parse(jsonObject: b["leave"] as Any),
@@ -661,6 +699,129 @@ final class ServerShareFlowTests: XCTestCase {
         await waiter.value
         XCTAssertEqual(model.phase, .done(accepted.entry))
         XCTAssertEqual(store.rows.first?.level, .manage)
+    }
+
+    // MARK: - Start-up notices and updates (v1 decisions)
+
+    func test_startupPush_putThenDelete_signedWithTheMemberKey() async throws {
+        let (row, accepted) = try await shareAndConfirm(ShareDraft(label: "Sam", level: .view, unlockAtBoot: true, seeAppData: false))
+        let token = String(repeating: "a0", count: 32)
+        let reg = try await member.registerStartupPush(accepted.entry, platform: .apns, providerToken: token)
+        XCTAssertEqual(reg, SharePushRegistration(platform: .apns, tokenSha256: ServerShare.shareSha256Hex(token)))
+        XCTAssertEqual(backend.pushTokens[row.shareId]?[reg.tokenSha256]?.token, token)
+        let put = try XCTUnwrap(ServerSharePush.parse(jsonObject: backend.lastPushBody?["push"] as Any))
+        let memberKey = try ServerShare.deriveShareMemberKey(umkSeed: memberUmk, shareId: row.shareId)
+        XCTAssertEqual(put.memberPubHex, HexUtil.encode(memberKey.publicKey.rawRepresentation))
+        XCTAssertEqual(put.op, .put)
+        XCTAssertEqual(put.serverDomain, domain)
+
+        try await member.unregisterStartupPush(accepted.entry, reg)
+        XCTAssertEqual(backend.pushTokens[row.shareId]?.isEmpty, true)
+        XCTAssertNil(backend.lastPushBody?["providerToken"], "a delete never sends the token")
+        XCTAssertEqual(ServerSharePush.parse(jsonObject: backend.lastPushBody?["push"] as Any)?.op, .delete)
+        XCTAssertTrue(backend.didCall("POST", "com.test", "/api/server-shares/\(row.shareId)/push"))
+    }
+
+    func test_startupPush_refusedWithoutTheOwnersUnlockCopy() async throws {
+        let (_, accepted) = try await shareAndConfirm(ShareDraft(label: "Sam", level: .manage, unlockAtBoot: false, seeAppData: false))
+        do {
+            _ = try await member.registerStartupPush(accepted.entry, platform: .apns, providerToken: "ab")
+            XCTFail("registered a push without unlock at boot")
+        } catch ServerShareFlowError.startupNotShared {}
+        XCTAssertEqual(ServerShareFlowError.startupNotShared.errorDescription, "The owner hasn't let you approve this server's start-up.")
+    }
+
+    func test_update_signsWithTheMemberKey_andViewLevelIsRefused() async throws {
+        let (row, accepted) = try await shareAndConfirm()
+        let session = try await member.signIn(accepted.entry)
+        let me = try await backend.client().boxMe(serverDomain: domain, shareToken: session.token)
+        XCTAssertEqual(me.canUpdate, true)
+        let target = String(repeating: "2", count: 40)
+        let ok = try await member.orderUpdate(accepted.entry, shareToken: session.token, targetCommit: target,
+                                              fromCommit: String(repeating: "1", count: 40))
+        XCTAssertEqual(ok.targetCommit, target)
+        let u = try XCTUnwrap(ServerShareUpdate.parse(jsonObject: backend.lastUpdateBody?["update"] as Any))
+        let memberKey = try ServerShare.deriveShareMemberKey(umkSeed: memberUmk, shareId: row.shareId)
+        XCTAssertTrue(u.verify(signature: HexUtil.decode(backend.lastUpdateBody?["signature"] as! String)!,
+                               publicKey: memberKey.publicKey.rawRepresentation))
+        XCTAssertEqual(u.nonce.count, 64)
+
+        do {
+            _ = try await member.orderUpdate(accepted.entry, shareToken: session.token, targetCommit: target,
+                                             fromCommit: String(repeating: "3", count: 40))
+            XCTFail("an order for another version went through")
+        } catch let e as ShareUpdateRefusal {
+            XCTAssertEqual(e.message, "The server changed version. Refresh and try again.")
+        }
+
+        try await owner.change(row, level: .view, unlockAtBoot: false, seeAppData: false,
+                               serverDomain: domain, serverName: "Home", ownerToken: backend.ownerToken)
+        let viewMe = try await backend.client().boxMe(serverDomain: domain, shareToken: session.token)
+        XCTAssertEqual(viewMe.canUpdate, false)
+        do {
+            _ = try await member.orderUpdate(accepted.entry, shareToken: session.token, targetCommit: target,
+                                             fromCommit: String(repeating: "1", count: 40))
+            XCTFail("a view-level share updated the server")
+        } catch let e as ShareUpdateRefusal {
+            XCTAssertEqual(e.code, "manage-only")
+            XCTAssertEqual(e.message, "Only someone who can manage this server can update it.")
+        }
+    }
+
+    func test_updateRefusalWording() {
+        XCTAssertEqual(ShareUpdateRefusal.text(code: "busy", boxError: nil), "An update is already underway.")
+        XCTAssertEqual(ShareUpdateRefusal.text(code: "pending-verify", boxError: nil), "An update is already underway.")
+        XCTAssertEqual(ShareUpdateRefusal.text(code: "stale", boxError: nil), "Your device's clock looks off. Check it and try again.")
+        XCTAssertEqual(ShareUpdateRefusal.text(code: "replayed-nonce", boxError: "replayed-nonce"), "replayed-nonce")
+    }
+
+    @MainActor
+    func test_startupPushRoutesToSharedWithMe_notTheOwnersApprovals() {
+        XCTAssertEqual(PushNotifications.link(forPush: ["kind": "share-start-up", "category": "secret-request"]), .sharedWithMe)
+        XCTAssertEqual(PushNotifications.link(forPush: ["category": "secret-request"]), .secretRequests)
+        XCTAssertEqual(PushNotifications.link(forPush: ["kind": "secret-request"]), .secretRequests)
+        XCTAssertEqual(PushNotifications.link(forPush: ["kind": "vibecode-needs-you", "sessionId": "s1"]), .vibeCodeChat(sessionId: "s1"))
+        XCTAssertNil(PushNotifications.link(forPush: [:]))
+        XCTAssertEqual(RootShell.tab(for: .sharedWithMe, selected: .settings), .home)
+        XCTAssertEqual(HomeTab.startupShare([("a", false), ("b", true)]), "b")
+        XCTAssertNil(HomeTab.startupShare([("a", true), ("b", true)]))
+        XCTAssertNil(HomeTab.startupShare([]))
+    }
+
+    @MainActor
+    func test_sharedServerModel_notifyToggle_remembersAndForgetsOnLeave() async throws {
+        let (row, _) = try await shareAndConfirm(ShareDraft(label: "Sam", level: .view, unlockAtBoot: true, seeAppData: false))
+        let defaults = UserDefaults(suiteName: "share-push-\(UUID().uuidString)")!
+        let store = SharedWithMeStore(flow: member, keysUnlocked: { true }, makeScreensClient: { _, _ in MockScreensClient() },
+                                      pushRegistry: SharePushRegistry(defaults: defaults),
+                                      pushToken: { String(repeating: "a0", count: 32) })
+        await store.load(allowAuth: true)
+        let model = SharedServerModel(shareId: row.shareId, store: store)
+        XCTAssertFalse(model.notifyOn)
+        await model.setNotify(true)
+        XCTAssertNil(model.notifyError)
+        XCTAssertTrue(model.notifyOn)
+        XCTAssertTrue(store.startupNoticeOn(row.shareId))
+        XCTAssertEqual(backend.pushTokens[row.shareId]?.count, 1)
+        await model.setNotify(false)
+        XCTAssertFalse(model.notifyOn)
+        XCTAssertEqual(backend.pushTokens[row.shareId]?.isEmpty, true)
+        await model.setNotify(true)
+        try await store.leave(row.shareId)
+        XCTAssertFalse(store.startupNoticeOn(row.shareId), "leaving forgets this device's registration")
+    }
+
+    func test_appSummary_readsAccessMode() throws {
+        func app(_ extra: String) throws -> AppSummary {
+            let json = "{\"serviceId\":\"a-b\",\"creator\":\"a\",\"slug\":\"b\",\"urlLabel\":\"b\",\"url\":\"https://b\",\"status\":\"running\",\"installedAt\":1\(extra)}"
+            return try JSONDecoder().decode(AppSummary.self, from: Data(json.utf8))
+        }
+        XCTAssertTrue(try app(",\"accessMode\":\"members-only\"").isMembersOnly)
+        XCTAssertFalse(try app(",\"accessMode\":\"open\"").isMembersOnly)
+        XCTAssertFalse(try app("").isMembersOnly)
+        XCTAssertEqual(ServerShareCopy.membersOnlyHint, "Members only. You need an invite to use this app.")
+        XCTAssertEqual(ServerShareCopy.unlockHouseKey,
+                       "Only give this to someone you'd give a house key. Ending the share deletes their copy, but they could have kept one.")
     }
 
     @MainActor

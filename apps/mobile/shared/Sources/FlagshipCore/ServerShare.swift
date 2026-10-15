@@ -2,7 +2,7 @@ import Foundation
 import CryptoKit
 
 /// Swift mirror of `@flagship/protocol`'s `serverShare.ts` (docs/share-a-server.md):
-/// sharing a server with another account. The nine `|`-joined envelopes, the
+/// sharing a server with another account. The eleven `|`-joined envelopes, the
 /// link-secret derivations, the six-digit code both phones show, and the sealed
 /// JSON payloads `.com` relays without being able to read.
 ///
@@ -18,6 +18,8 @@ public enum ServerShare {
     public static let tagList = "flagship/server-share-list/v1"
     public static let tagUnlock = "flagship/server-share-unlock/v1"
     public static let tagInbox = "flagship/share-inbox/v1"
+    public static let tagPush = "flagship/server-share-push/v1"
+    public static let tagUpdate = "flagship/server-share-update/v1"
 
     static let infoMember = "flagship/server-share-member/v1"
     static let infoToken = "flagship/server-share/token/v1"
@@ -265,6 +267,10 @@ public enum ServerShare {
         if !isLowerHex(v, 64) { throw ServerShareError.invalid("server-share: \(name) must be 64 lowercase hex") }
     }
 
+    static func checkCommit(_ name: String, _ v: String) throws {
+        if !isLowerHex(v, 40) { throw ServerShareError.invalid("server-share: \(name) must be 40 lowercase hex") }
+    }
+
     static func checkSecret(_ s: Data) throws {
         if s.count != 32 { throw ServerShareError.invalid("server-share: link secret must be 32 bytes") }
     }
@@ -323,6 +329,17 @@ public enum ShareInboxOp: String, Codable, Sendable, CaseIterable {
     case put
     case list
     case delete
+}
+
+public enum SharePushOp: String, Codable, Sendable, CaseIterable {
+    case put
+    case delete
+}
+
+public enum SharePushPlatform: String, Codable, Sendable, CaseIterable {
+    case apns
+    case fcm
+    case webpush
 }
 
 // MARK: - Envelopes
@@ -610,6 +627,78 @@ public struct ShareInboxRequest: ServerShareEnvelope {
         }
         try ServerShare.time("issuedAt", issuedAt)
         return ServerShare.join(ServerShare.tagInbox, [inboxPubHex, op.rawValue, entryId, ctSha256, String(issuedAt)])
+    }
+}
+
+/// #10 — signed by B's member key; registers (or drops) one device's push
+/// token for this share's start-up approvals.
+public struct ServerSharePush: ServerShareEnvelope {
+    public var serverDomain: String
+    public var shareId: String
+    public var memberPubHex: String
+    public var op: SharePushOp
+    public var platform: SharePushPlatform
+    /// SHA-256 hex of the provider token's UTF-8 bytes.
+    public var tokenSha256: String
+    public var issuedAt: Int64
+
+    public init(serverDomain: String, shareId: String, memberPubHex: String, op: SharePushOp,
+                platform: SharePushPlatform, tokenSha256: String, issuedAt: Int64) {
+        self.serverDomain = serverDomain
+        self.shareId = shareId
+        self.memberPubHex = memberPubHex
+        self.op = op
+        self.platform = platform
+        self.tokenSha256 = tokenSha256
+        self.issuedAt = issuedAt
+    }
+
+    public func canonicalBytes() throws -> Data {
+        try ServerShare.nonEmpty("serverDomain", serverDomain)
+        try ServerShare.checkShareId(shareId)
+        try ServerShare.checkHex64("memberPubHex", memberPubHex)
+        try ServerShare.checkHex64("tokenSha256", tokenSha256)
+        try ServerShare.time("issuedAt", issuedAt)
+        return ServerShare.join(ServerShare.tagPush, [
+            serverDomain, shareId, memberPubHex, op.rawValue, platform.rawValue, tokenSha256, String(issuedAt),
+        ])
+    }
+}
+
+/// #11 — signed by B's member key at manage level: move the server to an
+/// endorsed release. The box applies it through the owner's update gates.
+public struct ServerShareUpdate: ServerShareEnvelope {
+    public var serverDomain: String
+    public var shareId: String
+    public var memberPubHex: String
+    public var targetCommit: String
+    public var fromCommit: String
+    /// 64 hex, single use.
+    public var nonce: String
+    public var issuedAt: Int64
+
+    public init(serverDomain: String, shareId: String, memberPubHex: String, targetCommit: String,
+                fromCommit: String, nonce: String, issuedAt: Int64) {
+        self.serverDomain = serverDomain
+        self.shareId = shareId
+        self.memberPubHex = memberPubHex
+        self.targetCommit = targetCommit
+        self.fromCommit = fromCommit
+        self.nonce = nonce
+        self.issuedAt = issuedAt
+    }
+
+    public func canonicalBytes() throws -> Data {
+        try ServerShare.nonEmpty("serverDomain", serverDomain)
+        try ServerShare.checkShareId(shareId)
+        try ServerShare.checkHex64("memberPubHex", memberPubHex)
+        try ServerShare.checkCommit("targetCommit", targetCommit)
+        try ServerShare.checkCommit("fromCommit", fromCommit)
+        try ServerShare.checkHex64("nonce", nonce)
+        try ServerShare.time("issuedAt", issuedAt)
+        return ServerShare.join(ServerShare.tagUpdate, [
+            serverDomain, shareId, memberPubHex, targetCommit, fromCommit, nonce, String(issuedAt),
+        ])
     }
 }
 

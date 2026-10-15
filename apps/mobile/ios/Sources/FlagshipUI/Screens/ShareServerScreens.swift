@@ -200,7 +200,7 @@ struct ShareServerCard: View {
         .accessibilityIdentifier("share-level-\(row.shareId)")
         Text(ServerShareCopy.levelLine(row.level)).font(FS.font.caption()).foregroundColor(c.textMuted)
             .fixedSize(horizontal: false, vertical: true)
-        optIn(ServerShareCopy.unlockTitle, ServerShareCopy.unlockLine, isOn: Binding(
+        optIn(ServerShareCopy.unlockTitle, ServerShareCopy.unlockLine, warning: ServerShareCopy.unlockHouseKey, isOn: Binding(
             get: { row.unlockAtBoot },
             set: { on in Task { await model.change(row, unlockAtBoot: on) } }
         ), c: c)
@@ -242,12 +242,16 @@ struct ShareServerCard: View {
     }
 }
 
-private func optIn(_ title: String, _ line: String, isOn: Binding<Bool>, c: FSColors) -> some View {
+private func optIn(_ title: String, _ line: String, warning: String? = nil, isOn: Binding<Bool>, c: FSColors) -> some View {
     Toggle(isOn: isOn) {
         VStack(alignment: .leading, spacing: 2) {
             Text(title).font(FS.font.bodySm().weight(.semibold)).foregroundColor(c.text)
             Text(line).font(FS.font.caption()).foregroundColor(c.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
+            if let warning {
+                Text(warning).font(FS.font.caption()).foregroundColor(c.warning)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
     .tint(c.primary)
@@ -328,7 +332,8 @@ struct ShareServerSheet: View {
         }
         VStack(alignment: .leading, spacing: FS.space.s3) {
             sectionHeader("ALSO LET THEM", c: c)
-            optIn(ServerShareCopy.unlockTitle, ServerShareCopy.unlockLine, isOn: $draft.unlockAtBoot, c: c)
+            optIn(ServerShareCopy.unlockTitle, ServerShareCopy.unlockLine, warning: ServerShareCopy.unlockHouseKey,
+                  isOn: $draft.unlockAtBoot, c: c)
             optIn(ServerShareCopy.dataTitle, ServerShareCopy.dataLine, isOn: $draft.seeAppData, c: c)
         }
         if let e = model.errorMessage {
@@ -578,6 +583,7 @@ struct SharedServerScreen: View {
 
     @State private var model: SharedServerModel?
     @State private var confirmLeave = false
+    @State private var confirmUpdate: ReleaseEntry?
 
     private var store: SharedWithMeStore { SharedWithMeStore.shared }
 
@@ -617,6 +623,16 @@ struct SharedServerScreen: View {
         } message: {
             Text("You lose access at once. The owner would have to share it with you again.")
         }
+        .confirmationDialog(
+            confirmUpdate.map { ServerShareCopy.updateButton($0) } ?? "",
+            isPresented: Binding(get: { confirmUpdate != nil }, set: { if !$0 { confirmUpdate = nil } }),
+            titleVisibility: .visible,
+            presenting: confirmUpdate
+        ) { release in
+            Button("Update") { Task { await model?.update(to: release) } }
+        } message: { _ in
+            Text(ServerShareCopy.updateConfirm(model?.entry?.displayName ?? "The server"))
+        }
     }
 
     @ViewBuilder
@@ -641,9 +657,11 @@ struct SharedServerScreen: View {
                 }
             case .loaded(let d):
                 status(d, c: c)
+                if model.canUpdate { updateSection(d, model: model, c: c) }
                 if let metrics = model.metrics { MonitoringPane(health: nil, metrics: metrics.state, cert: nil) }
                 appsSection(model, c: c)
             }
+            if model.session?.unlockAtBoot == true { startupNotices(model, c: c) }
             whatYouCanDo(model, c: c)
             VStack(alignment: .leading, spacing: FS.space.s3) {
                 sectionHeader("LEAVE", c: c)
@@ -708,6 +726,59 @@ struct SharedServerScreen: View {
         }
     }
 
+    private func updateSection(_ d: ServerDetailResponse, model: SharedServerModel, c: FSColors) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s3) {
+            sectionHeader("UPDATE", c: c)
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    Text("Version \(d.currentCommit.map { String($0.prefix(8)) } ?? "unknown")")
+                        .font(FS.font.bodySm()).foregroundColor(c.text)
+                    if let latest = model.latestRelease {
+                        Label("New release available: \(latest.tag)", systemImage: "arrow.up.circle.fill")
+                            .font(FS.font.bodySm()).foregroundColor(c.text)
+                        FSPrimaryButton(model.updating ? "Sending…" : ServerShareCopy.updateButton(latest),
+                                        enabled: !model.updating && d.currentCommit != nil && model.updateNotice == nil,
+                                        block: true) {
+                            confirmUpdate = latest
+                        }
+                        .accessibilityIdentifier("shared-update")
+                    } else {
+                        Text("This server is on the latest release.").font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                    }
+                    if let n = model.updateNotice {
+                        Text(n).font(FS.font.bodySm()).foregroundColor(c.success).fixedSize(horizontal: false, vertical: true)
+                    }
+                    if let e = model.updateError {
+                        Text(e).font(FS.font.bodySm()).foregroundColor(c.danger).fixedSize(horizontal: false, vertical: true)
+                    }
+                    if let last = d.lastUpdate?.summary {
+                        Text(last).font(FS.font.caption()).foregroundColor(c.textMuted).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        }
+        .accessibilityIdentifier("shared-update-card")
+    }
+
+    private func startupNotices(_ model: SharedServerModel, c: FSColors) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s3) {
+            sectionHeader("START-UP NOTICES", c: c)
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    optIn(ServerShareCopy.notifyTitle, ServerShareCopy.notifyNote, isOn: Binding(
+                        get: { model.notifyOn },
+                        set: { on in Task { await model.setNotify(on) } }
+                    ), c: c)
+                    .disabled(model.notifyBusy)
+                    .accessibilityIdentifier("shared-startup-notify")
+                    if let e = model.notifyError {
+                        Text(e).font(FS.font.bodySm()).foregroundColor(c.danger).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        }
+    }
+
     @ViewBuilder
     private func appsSection(_ model: SharedServerModel, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
@@ -720,9 +791,14 @@ struct SharedServerScreen: View {
                     ForEach(apps, id: \.serviceId) { app in
                         Button { onOpenApp(app.serviceId) } label: {
                             FSListRow(leading: .icon("app.dashed", color: app.status == "running" ? c.success : c.textMuted),
-                                      title: app.slug.capitalized, subtitle: app.summary ?? app.url) {
-                                Image(systemName: "chevron.right").foregroundColor(c.textMuted)
-                            }
+                                      title: app.slug.capitalized, subtitle: app.summary ?? app.url,
+                                      below: {
+                                          if app.isMembersOnly {
+                                              Text(ServerShareCopy.membersOnlyHint).font(FS.font.caption()).foregroundColor(c.textMuted)
+                                                  .fixedSize(horizontal: false, vertical: true)
+                                          }
+                                      },
+                                      trailing: { Image(systemName: "chevron.right").foregroundColor(c.textMuted) })
                         }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("shared-app-\(app.serviceId)")
@@ -794,6 +870,12 @@ struct SharedAppScreen: View {
                                        kind: app.status == "running" ? .online : .idle)
                             }
                             if let s = app.summary { Text(s).font(FS.font.bodySm()).foregroundColor(c.textMuted) }
+                            if app.isMembersOnly {
+                                Label(ServerShareCopy.membersOnlyHint, systemImage: "lock")
+                                    .font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .accessibilityIdentifier("shared-app-members-only")
+                            }
                             if let url = URL(string: app.url) {
                                 Link(destination: url) { Label("Open \(appName)", systemImage: "safari") }
                                     .font(FS.font.bodySm())

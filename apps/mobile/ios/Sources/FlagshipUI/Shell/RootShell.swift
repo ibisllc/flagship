@@ -310,7 +310,7 @@ public struct RootShell: View {
         case .appDetail, .vibeCodeChat, .startVibeCode,
              .appDetailOnServer, .createAppOnServer: return .apps
         case .recoverySetup, .joinAccount, .companionDockApproval: return .settings
-        case .transferOffer, .shareServer, .builderPair: return .home
+        case .transferOffer, .shareServer, .builderPair, .sharedWithMe: return .home
         case .inviteRedeem, .inviteAccept, .knockAuthorize: return selected
         }
     }

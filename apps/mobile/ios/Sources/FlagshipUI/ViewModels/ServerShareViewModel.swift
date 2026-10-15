@@ -1,6 +1,8 @@
 import Foundation
 import Observation
 import CryptoKit
+import UIKit
+import UserNotifications
 import Flagship
 import FlagshipAPI
 import FlagshipCore
@@ -20,13 +22,26 @@ public enum ServerShareCopy {
     public static func levelLine(_ l: ServerShareLevel) -> String {
         l == .view
             ? "Sees the server's status, monitoring and apps."
-            : "Also builds apps with AI, accepts app updates and changes apps' internet access."
+            : "Also builds apps with AI, accepts app updates, updates the server and changes apps' internet access."
     }
 
     public static let unlockTitle = "Approve start-ups"
     public static let unlockLine = "Their phone can unlock this server when it starts. That gives them a copy of its disk key."
+    public static let unlockHouseKey = "Only give this to someone you'd give a house key. Ending the share deletes their copy, but they could have kept one."
     public static let dataTitle = "See app data"
     public static let dataLine = "They can read your apps' databases, and change data if they can manage."
+
+    public static let notifyTitle = "Notify this device when it needs to start"
+    public static let notifyNote = "Turning this on lets Flagship's service know this device helps with this server, so it can wake you. The notice itself names no server."
+    public static let membersOnlyHint = "Members only. You need an invite to use this app."
+
+    public static func updateButton(_ r: ReleaseEntry) -> String {
+        "Update to \(r.tag.isEmpty ? String(r.commit.prefix(8)) : r.tag)"
+    }
+    public static func updateConfirm(_ name: String) -> String {
+        "\(name) restarts on the new release. Only releases Flagship's maintainers endorsed will install."
+    }
+    public static func updating(_ name: String) -> String { "Updating \(name). It restarts in a few minutes." }
 
     public static func awaitingConfirm(_ label: String) -> String { "\(label) accepted. Does their phone show this code?" }
     public static func offered(_ label: String) -> String { "Waiting for \(label) to open the link" }
@@ -50,6 +65,7 @@ public enum ServerShareCopy {
         case "app.update.accept": what = "accepted an app update"
         case "db.write": what = "changed app data"
         case "db.read": what = "read app data"
+        case "server.update": what = "updated the server"
         default: what = e.action.replacingOccurrences(of: ".", with: " ")
         }
         return "\(who) · \(what)" + (e.ok ? "" : " (refused)")
@@ -57,6 +73,7 @@ public enum ServerShareCopy {
 
     public static func message(for error: Error) -> String {
         if let e = error as? ServerShareFlowError { return e.errorDescription ?? "Something went wrong." }
+        if let e = error as? ShareUpdateRefusal { return e.message }
         if let e = error as? ServerShareHTTPError {
             switch e.status {
             case 0: return "Couldn't reach the server. Check your connection and try again."
@@ -190,6 +207,21 @@ public enum ServerShareServices {
     public static let umkSeed: @Sendable (String) async throws -> Data = { reason in
         let umk = try await Keystore.currentUMK(reason: reason)
         return umk.withUnsafeBytes { Data($0) }
+    }
+
+    /// This device's APNs token as hex, asking for notification permission
+    /// and a token when the app has none yet.
+    @MainActor
+    public static func apnsTokenHex() async throws -> String {
+        if let t = PushNotifications.latestTokenHex { return t }
+        let granted = (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])) ?? false
+        guard granted else { throw ServerShareFlowError.noPushPermission }
+        UIApplication.shared.registerForRemoteNotifications()
+        for _ in 0..<40 {
+            try await Task.sleep(for: .milliseconds(250))
+            if let t = PushNotifications.latestTokenHex { return t }
+        }
+        throw ServerShareFlowError.noPushToken
     }
 
     /// True when this session already unlocked the account key, so reading
@@ -379,19 +411,25 @@ public final class SharedWithMeStore {
 
     public let flow: ServerShareMemberFlow?
     public let demo: Bool
+    public let pushRegistry: SharePushRegistry
     private let keysUnlocked: @MainActor () -> Bool
     private let makeScreensClient: @MainActor (String, String) -> any ScreensClient
+    private let pushToken: @MainActor () async throws -> String
     private var stks: [String: String] = [:]
 
     public init(flow: ServerShareMemberFlow?, demo: Bool = false,
                 keysUnlocked: @escaping @MainActor () -> Bool = { ServerShareServices.keysUnlocked() },
                 makeScreensClient: @escaping @MainActor (String, String) -> any ScreensClient = {
                     ServerShareServices.memberScreensClient(serverDomain: $0, token: $1)
-                }) {
+                },
+                pushRegistry: SharePushRegistry = SharePushRegistry(),
+                pushToken: @escaping @MainActor () async throws -> String = { try await ServerShareServices.apnsTokenHex() }) {
         self.flow = flow
         self.demo = demo
         self.keysUnlocked = keysUnlocked
         self.makeScreensClient = makeScreensClient
+        self.pushRegistry = pushRegistry
+        self.pushToken = pushToken
         if demo {
             let sessions = ServerShareDemo.sessions()
             items = ServerShareDemo.entries().map { Item(entry: $0, status: .ready, session: sessions[$0.shareId]) }
@@ -441,6 +479,7 @@ public final class SharedWithMeStore {
             item.status = .waitingForOwner
         } catch ServerShareFlowError.shareEnded {
             try? await flow.deleteInboxEntry(item.entry.entryId)
+            pushRegistry.forget(item.entry.shareId)
             item.status = .unknown
             item.session = nil
             ended.insert(item.entry.shareId)
@@ -497,6 +536,7 @@ public final class SharedWithMeStore {
         guard let it = item(shareId) else { return }
         items.removeAll { $0.entry.shareId == shareId }
         ended.insert(shareId)
+        pushRegistry.forget(shareId)
         if !demo { try? await flow?.deleteInboxEntry(it.entry.entryId) }
     }
 
@@ -505,6 +545,45 @@ public final class SharedWithMeStore {
         if !demo { try await flow?.leave(it.entry) }
         items.removeAll { $0.entry.shareId == shareId }
         ended.insert(shareId)
+        pushRegistry.forget(shareId)
+    }
+
+    /// The box's view of this share, with whether it may update the server.
+    public func me(_ shareId: String) async throws -> ShareMeResponse {
+        if demo {
+            let s = item(shareId)?.session
+            return ShareMeResponse(shareId: shareId, level: s?.level ?? .view, unlockAtBoot: s?.unlockAtBoot ?? false,
+                                   seeAppData: s?.seeAppData ?? false, serverDomain: item(shareId)?.entry.serverDomain ?? "",
+                                   canUpdate: s?.level == .manage)
+        }
+        guard let flow, let it = item(shareId) else { throw ServerShareFlowError.shareEnded }
+        let s = try await session(for: shareId)
+        return try await flow.client.boxMe(serverDomain: it.entry.serverDomain.lowercased(), shareToken: s.token)
+    }
+
+    /// Manage level: move the server to an endorsed release.
+    public func orderUpdate(_ shareId: String, targetCommit: String, fromCommit: String) async throws {
+        if demo { return }
+        guard let flow, let it = item(shareId) else { throw ServerShareFlowError.shareEnded }
+        let s = try await session(for: shareId)
+        _ = try await flow.orderUpdate(it.entry, shareToken: s.token, targetCommit: targetCommit, fromCommit: fromCommit)
+    }
+
+    // MARK: Start-up notices (part of unlock at boot)
+
+    public func startupNoticeOn(_ shareId: String) -> Bool { pushRegistry.registration(shareId) != nil }
+
+    public func setStartupNotice(_ shareId: String, on: Bool) async throws {
+        if demo { return }
+        guard let flow, let it = item(shareId) else { throw ServerShareFlowError.shareEnded }
+        if on {
+            let token = try await pushToken()
+            let reg = try await flow.registerStartupPush(it.entry, platform: .apns, providerToken: token)
+            pushRegistry.save(reg, for: shareId)
+        } else if let reg = pushRegistry.registration(shareId) {
+            try await flow.unregisterStartupPush(it.entry, reg)
+            pushRegistry.forget(shareId)
+        }
     }
 
     // MARK: Start-up approval
@@ -626,17 +705,30 @@ public final class SharedServerModel {
     public private(set) var ended = false
     public var errorMessage: String?
     public var notice: String?
+    public private(set) var me: ShareMeResponse?
+    public private(set) var catalog: ReleaseCatalogResponse?
+    public private(set) var updating = false
+    public var updateNotice: String?
+    public var updateError: String?
+    public private(set) var notifyOn = false
+    public private(set) var notifyBusy = false
+    public var notifyError: String?
 
     private let store: SharedWithMeStore
 
     public init(shareId: String, store: SharedWithMeStore) {
         self.shareId = shareId
         self.store = store
+        self.notifyOn = store.startupNoticeOn(shareId)
     }
 
     public var entry: SharedServerEntry? { store.item(shareId)?.entry }
     public var level: ServerShareLevel? { session?.level }
     public var canManage: Bool { session?.level == .manage }
+    /// Manage level on a box that can update itself.
+    public var canUpdate: Bool { canManage && me?.canUpdate == true }
+    /// The release the Update button moves to, when one is newer.
+    public var latestRelease: ReleaseEntry? { catalog?.latest }
 
     public func load(forceNew: Bool = false) async {
         guard let entry else { ended = true; return }
@@ -652,6 +744,8 @@ public final class SharedServerModel {
             async let a = c.appsList()
             detail = .loaded(try await d)
             apps = .loaded((try? await a)?.apps ?? [])
+            me = try? await store.me(shareId)
+            if canUpdate { catalog = try? await c.serverUpdates(refresh: false) }
             await metrics?.load()
         } catch ServerShareFlowError.shareEnded {
             ended = true
@@ -682,6 +776,33 @@ public final class SharedServerModel {
             notice = "Unlocking. The server will be back in a minute or two."
         } catch {
             errorMessage = ServerShareCopy.message(for: error)
+        }
+    }
+
+    public func update(to release: ReleaseEntry) async {
+        guard !updating, canUpdate, let from = detail.value?.currentCommit else { return }
+        updating = true
+        updateError = nil
+        updateNotice = nil
+        defer { updating = false }
+        do {
+            try await store.orderUpdate(shareId, targetCommit: release.commit, fromCommit: from)
+            updateNotice = ServerShareCopy.updating(entry?.displayName ?? "The server")
+        } catch {
+            updateError = ServerShareCopy.message(for: error)
+        }
+    }
+
+    public func setNotify(_ on: Bool) async {
+        guard !notifyBusy, on != notifyOn else { return }
+        notifyBusy = true
+        notifyError = nil
+        defer { notifyBusy = false }
+        do {
+            try await store.setStartupNotice(shareId, on: on)
+            notifyOn = on
+        } catch {
+            notifyError = ServerShareCopy.message(for: error)
         }
     }
 

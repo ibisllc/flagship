@@ -20,6 +20,9 @@ public enum ServerShareFlowError: Error, Equatable, LocalizedError, Sendable {
     case notSignedIn
     case startupNotFromServer
     case noStartupWaiting
+    case startupNotShared
+    case noPushPermission
+    case noPushToken
 
     public var errorDescription: String? {
         switch self {
@@ -35,6 +38,9 @@ public enum ServerShareFlowError: Error, Equatable, LocalizedError, Sendable {
         case .notSignedIn: return "Sign in to this server first."
         case .startupNotFromServer: return "That start-up request didn't come from this server."
         case .noStartupWaiting: return "The server stopped waiting. It will ask again when it next starts."
+        case .startupNotShared: return "The owner hasn't let you approve this server's start-up."
+        case .noPushPermission: return "Allow notifications for Flagship in Settings, then try again."
+        case .noPushToken: return "This device couldn't get a notification address. Try again later."
         }
     }
 }
@@ -54,6 +60,65 @@ public enum ServerShareNames {
 
 public enum ServerShareClock {
     public static func nowMs() -> Int64 { Int64(Date().timeIntervalSince1970 * 1000) }
+}
+
+/// The box refused a co-manager's update order, in words for the person.
+public struct ShareUpdateRefusal: Error, Equatable, LocalizedError, Sendable {
+    public let code: String?
+    public let message: String
+
+    public init(code: String?, boxError: String?) {
+        self.code = code
+        self.message = Self.text(code: code, boxError: boxError)
+    }
+
+    public var errorDescription: String? { message }
+
+    public static func text(code: String?, boxError: String?) -> String {
+        switch code {
+        case "busy", "pending-verify": return "An update is already underway."
+        case "from-commit-mismatch": return "The server changed version. Refresh and try again."
+        case "manage-only": return "Only someone who can manage this server can update it."
+        case "stale": return "Your device's clock looks off. Check it and try again."
+        default: return boxError ?? "The server didn't take the update."
+        }
+    }
+}
+
+/// Which push token this device registered for a share's start-up notices,
+/// so turning the notice off can name it. Holds no secret.
+public struct SharePushRegistration: Codable, Equatable, Sendable {
+    public let platform: SharePushPlatform
+    public let tokenSha256: String
+
+    public init(platform: SharePushPlatform, tokenSha256: String) {
+        self.platform = platform
+        self.tokenSha256 = tokenSha256
+    }
+}
+
+/// This device's start-up notice registrations, one per share.
+public struct SharePushRegistry: @unchecked Sendable {
+    private let defaults: UserDefaults
+
+    public init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+    }
+
+    private func key(_ shareId: String) -> String { "flagship.sharePush.v1.\(shareId)" }
+
+    public func registration(_ shareId: String) -> SharePushRegistration? {
+        guard let data = defaults.data(forKey: key(shareId)) else { return nil }
+        return try? JSONDecoder().decode(SharePushRegistration.self, from: data)
+    }
+
+    public func save(_ reg: SharePushRegistration, for shareId: String) {
+        if let data = try? JSONEncoder().encode(reg) { defaults.set(data, forKey: key(shareId)) }
+    }
+
+    public func forget(_ shareId: String) {
+        defaults.removeObject(forKey: key(shareId))
+    }
 }
 
 // MARK: - Owner (A)
@@ -639,6 +704,68 @@ public struct ServerShareMemberFlow: Sendable {
             if let boxError { throw boxError }
         }
         try? await deleteInboxEntry(entry.entryId)
+    }
+
+    /// Start-up notices for this device (part of unlock at boot): sign #10
+    /// `put` and give `.com` the token for this share only.
+    public func registerStartupPush(_ entry: SharedServerEntry, platform: SharePushPlatform,
+                                    providerToken: String) async throws -> SharePushRegistration {
+        let reg = SharePushRegistration(platform: platform, tokenSha256: ServerShare.shareSha256Hex(providerToken))
+        do {
+            try await sendPush(entry, op: .put, reg: reg, providerToken: providerToken,
+                               reason: "Get start-up notices for \(entry.displayName)")
+        } catch let e as ServerShareHTTPError where e.status == 403 && e.code == "unlock-not-shared" {
+            throw ServerShareFlowError.startupNotShared
+        } catch let e as ServerShareHTTPError where e.status == 410 {
+            throw ServerShareFlowError.shareEnded
+        } catch let e as ServerShareHTTPError where e.status == 404 {
+            throw ServerShareFlowError.badLink
+        }
+        return reg
+    }
+
+    /// Sign #10 `delete` for the token this device registered. A share that
+    /// already ended took the token with it.
+    public func unregisterStartupPush(_ entry: SharedServerEntry, _ reg: SharePushRegistration) async throws {
+        do {
+            try await sendPush(entry, op: .delete, reg: reg, providerToken: nil,
+                               reason: "Stop start-up notices for \(entry.displayName)")
+        } catch let e as ServerShareHTTPError where e.status == 404 || e.status == 410 {
+        }
+    }
+
+    private func sendPush(_ entry: SharedServerEntry, op: SharePushOp, reg: SharePushRegistration,
+                          providerToken: String?, reason: String) async throws {
+        guard let secret = HexUtil.decode(entry.secretHex) else { throw ServerShareFlowError.badLink }
+        let member = try await memberKey(shareId: entry.shareId, reason: reason)
+        let push = ServerSharePush(serverDomain: entry.serverDomain.lowercased(), shareId: entry.shareId,
+                                   memberPubHex: HexUtil.encode(member.publicKey.rawRepresentation), op: op,
+                                   platform: reg.platform, tokenSha256: reg.tokenSha256, issuedAt: now())
+        try await client.sharePush(token: try ServerShare.shareTokenFromSecret(secret), push: push,
+                                   signature: HexUtil.encode(try push.sign(with: member)), providerToken: providerToken)
+    }
+
+    /// A co-manager moves the server to an endorsed release: sign #11 and
+    /// hand it to the box, which applies it through the owner's gates.
+    public func orderUpdate(_ entry: SharedServerEntry, shareToken: String, targetCommit: String,
+                            fromCommit: String) async throws -> ShareUpdateAccepted {
+        let target = targetCommit.lowercased()
+        let from = fromCommit.lowercased()
+        guard ServerShare.isLowerHex(target, 40), ServerShare.isLowerHex(from, 40) else {
+            throw ShareUpdateRefusal(code: "from-commit-mismatch", boxError: nil)
+        }
+        let member = try await memberKey(shareId: entry.shareId, reason: "Update \(entry.displayName)")
+        let domain = entry.serverDomain.lowercased()
+        let update = ServerShareUpdate(serverDomain: domain, shareId: entry.shareId,
+                                       memberPubHex: HexUtil.encode(member.publicKey.rawRepresentation),
+                                       targetCommit: target, fromCommit: from,
+                                       nonce: HexUtil.encode(ServerShare.randomBytes(32)), issuedAt: now())
+        do {
+            return try await client.boxUpdate(serverDomain: domain, shareToken: shareToken, update: update,
+                                              signature: HexUtil.encode(try update.sign(with: member)))
+        } catch let e as ServerShareHTTPError where e.status != 0 && e.status != 401 {
+            throw ShareUpdateRefusal(code: e.code, boxError: e.error)
+        }
     }
 
     /// The STK the owner pinned in the offer (`.com` can't swap it).
