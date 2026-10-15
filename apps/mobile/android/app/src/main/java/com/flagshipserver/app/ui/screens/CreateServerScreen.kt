@@ -176,6 +176,14 @@ fun CreateServerScreen(
     // carried as the UNSIGNED `outboundProxy` sibling (credentials beside it,
     // only when typed). Snaps back to "none" when Advanced mode is turned off.
     var proxyDraft by remember { mutableStateOf(com.flagshipserver.app.core.BoxProxyDraft()) }
+    // The proxy is part of Pro: the account's plan, read once. null while
+    // unknown, which shows the fields (the box checks too).
+    var accountTier by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        val u = app.currentUser.value ?: return@LaunchedEffect
+        accountTier = runCatching { flagshipServer.accountTier(u) }.getOrNull()
+    }
+    val proxyAllowed = com.flagshipserver.app.core.BoxProxyProtocol.allowedForTier(accountTier)
     val swkDepositStore = remember { PendingSwkDepositStore.from(context) }
     val pairingDepositStore = remember { PendingPairingDepositStore.from(context) }
     // Per-service leadership (Phase 6): the per-cloud CGK is NEVER embedded in the
@@ -207,7 +215,7 @@ fun CreateServerScreen(
             diskEncryption = if (encryptDisk) null else "none",
             embedSecrets = embedSecrets,
             debugFriendly = debugFriendly,
-            outboundProxy = proxyDraft.takeIf { advancedMode && it.kind != "none" },
+            outboundProxy = proxyDraft.takeIf { advancedMode && proxyAllowed && it.kind != "none" },
             swkDepositStore = swkDepositStore,
             cgkDepositStore = cgkDepositStore,
             pairingDepositStore = pairingDepositStore,
@@ -371,6 +379,7 @@ fun CreateServerScreen(
                 onDebugFriendly = { debugFriendly = it },
                 proxyDraft = proxyDraft,
                 onProxyDraft = { proxyDraft = it },
+                proxyAllowed = proxyAllowed,
                 backupPolicy = backupPolicy,
                 onBackupPolicy = {
                     backupPolicy = it
@@ -384,7 +393,7 @@ fun CreateServerScreen(
                         error = ServerLabel.errorMessage(name) ?: "Enter a subdomain."
                         return@DesignPhase
                     }
-                    if (designStep == 1 && advancedMode) {
+                    if (designStep == 1 && advancedMode && proxyAllowed) {
                         proxyDraft.error()?.let {
                             error = it
                             return@DesignPhase
@@ -490,7 +499,7 @@ fun CreateServerScreen(
                                 // phone deposits the SWK after registration.
                                 embedSecrets = embedSecrets,
                                 debugFriendly = debugFriendly,
-                                outboundProxy = proxyDraft.takeIf { advancedMode && it.kind != "none" },
+                                outboundProxy = proxyDraft.takeIf { advancedMode && proxyAllowed && it.kind != "none" },
                                 swkDepositStore = swkDepositStore,
                                 pairingDepositStore = pairingDepositStore,
                                 cgkDepositStore = cgkDepositStore,
@@ -602,6 +611,7 @@ private fun DesignPhase(
     onDebugFriendly: (Boolean) -> Unit,
     proxyDraft: com.flagshipserver.app.core.BoxProxyDraft,
     onProxyDraft: (com.flagshipserver.app.core.BoxProxyDraft) -> Unit,
+    proxyAllowed: Boolean,
     backupPolicy: CreateServerDraftStore.BackupPolicy,
     onBackupPolicy: (CreateServerDraftStore.BackupPolicy) -> Unit,
     error: String?,
@@ -663,6 +673,7 @@ private fun DesignPhase(
                         onDebugFriendly = onDebugFriendly,
                         proxyDraft = proxyDraft,
                         onProxyDraft = onProxyDraft,
+                        proxyAllowed = proxyAllowed,
                     )
                 }
                 else -> {
@@ -822,6 +833,7 @@ private fun AdvancedModePicker(
     onDebugFriendly: (Boolean) -> Unit,
     proxyDraft: com.flagshipserver.app.core.BoxProxyDraft,
     onProxyDraft: (com.flagshipserver.app.core.BoxProxyDraft) -> Unit,
+    proxyAllowed: Boolean,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
@@ -882,7 +894,7 @@ private fun AdvancedModePicker(
             style = TextStyle(fontSize = 12.sp),
         )
         Spacer(Modifier.height(FS.space.s4))
-        OutboundProxyCreateBlock(draft = proxyDraft, onDraft = onProxyDraft)
+        OutboundProxyCreateBlock(draft = proxyDraft, onDraft = onProxyDraft, allowed = proxyAllowed)
     }
 }
 

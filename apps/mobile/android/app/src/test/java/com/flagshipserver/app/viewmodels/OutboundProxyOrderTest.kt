@@ -111,6 +111,26 @@ class OutboundProxyOrderTest {
         assertNull(OutboundProxySummary().statusLine)
     }
 
+    @Test fun theProxyIsPartOfPro() = runTest {
+        assertFalse(BoxProxyProtocol.allowedForTier("free"))
+        assertTrue(BoxProxyProtocol.allowedForTier("hobby"))
+        assertTrue(BoxProxyProtocol.allowedForTier("maker"))
+        assertTrue(BoxProxyProtocol.allowedForTier(null))
+        assertEquals("An outbound proxy is part of Pro.", BoxProxyProtocol.PRO_NOTE)
+        val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+        val freeBox = json.decodeFromString(
+            OutboundProxySummary.serializer(),
+            """{"proxy":null,"hasCredentials":false,"status":{"state":"direct","since":1},"available":false}""",
+        )
+        assertEquals(false, freeBox.available)
+        val older = json.decodeFromString(OutboundProxySummary.serializer(), """{"proxy":null,"hasCredentials":false}""")
+        assertNull(older.available)
+        val server = com.flagshipserver.app.api.MockFlagshipServerClient(simulatedLatencyMs = 0)
+        assertNull(server.accountTier("u"))
+        server.accountTierAnswer = "free"
+        assertEquals("free", server.accountTier("u"))
+    }
+
     @Test fun switchingKindMovesTheDefaultPort() {
         val d = BoxProxyDraft().withKind("socks5")
         assertEquals("1080", d.port)
