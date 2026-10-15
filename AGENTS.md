@@ -178,6 +178,12 @@ after. Windows/Linux Studio ship as "preview". **Share this server** (another
 account can view or co-manage a server, never destroy it) is in the MVP
 (`docs/share-a-server.md`, branch `feat/share-server`).
 
+**Release readiness (2026-10-15):** `npm run ready` is the scoreboard to re-run
+after each batch of fixes (branch drift, tsc, vitest, e2e, locked gym, cross-
+client parity; `-- --native --live` before a release candidate). Loop and
+owners: `docs/runbooks/release-readiness.md`; feature matrix:
+`parity/features.json` (`npm run parity -- --report`).
+
 ### Urgent
 
 - **Renew the CA endorsement lease before 2026-11-05.** The production CA's

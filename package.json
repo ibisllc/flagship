@@ -36,7 +36,8 @@
     "live-e2e:web": "playwright test --config apps/web/e2e/live/playwright.live.config.ts",
     "judge-smoke": "tsx tools/gym/judge-smoke.ts",
     "build-eval": "npm --workspace=@flagship/build-eval run eval --",
-    "parity": "node scripts/parity-check.mjs"
+    "parity": "node scripts/parity-check.mjs",
+    "ready": "node scripts/release-readiness.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
