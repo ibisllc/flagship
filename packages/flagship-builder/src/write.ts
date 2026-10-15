@@ -150,6 +150,8 @@ export async function runWriteCommand(opts: WriteCommandOpts): Promise<WriteComm
     pairingOrder: loaded.pairingOrder,
     swkHex: loaded.swkHex,
     debugGrant: loaded.debugGrant,
+    outboundProxy: loaded.outboundProxy,
+    outboundProxyCredentials: loaded.outboundProxyCredentials,
     // Bake the owner's SSH key at install time when the recipe carries a debug
     // grant with a real key (owner Face-ID-signed consent) so a debug-friendly
     // box can be SSH-diagnosed pre-daemon. Absent/empty ⇒ undefined ⇒ the normal
