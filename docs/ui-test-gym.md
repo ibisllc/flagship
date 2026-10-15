@@ -1101,7 +1101,9 @@ scenario, red) if not. At Tier-2 this rides the existing demo-classification
   `access-list-editor`; `service-access-mode-status`,
   `service-access-members-title`; `service-detail-api-keys-create`;
   `sd-update-available`, `sd-update-last-outcome`; `server-detail-offline`;
-  `server-create-app-here`; `free-ai-card`. iOS only so far:
+  `server-create-app-here`; `free-ai-card`; `watch-delegate-toggle`
+  (Account security's Quick approve from watch; Android `GymWatchTest`
+  drives it, with `watch-delegate-active`). iOS only so far:
   `access-alert-*` (the app-wide sheet), `runs-on-<fqdn>`, `share-*`,
   `home-shared-*`, `shared-*`. A SwiftUI id on a plain stack is copied onto
   every element inside it and replaces theirs, so identified sections use

@@ -121,6 +121,12 @@ class AuditLogViewModel(
             .fold(
                 onSuccess = { events ->
                     val canLoadMore = events.size >= window && window < AUDIT_LOG_MAX_WINDOW
+                    // The watch's "Recent activity" mirrors the feed (iOS does the same).
+                    com.flagshipserver.app.companion.WatchBridge.publishEvents(
+                        events.map {
+                            com.flagshipserver.companion.SecurityAlert(it.seq, it.eventKind, it.detail, it.devicePrefix, it.postedAt)
+                        },
+                    )
                     _state.value = LoadingState.Loaded(AuditLogPage(events = events, canLoadMore = canLoadMore))
                 },
                 onFailure = { t ->

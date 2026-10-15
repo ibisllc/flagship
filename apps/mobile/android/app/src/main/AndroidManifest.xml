@@ -188,6 +188,19 @@
                 android:resource="@xml/pod_status_widget_info" />
         </receiver>
 
+        <!-- The Wear OS app's requests (Approve) over the Wearable Data Layer. -->
+        <service
+            android:name=".companion.WatchRequestService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.REQUEST_RECEIVED" />
+                <data
+                    android:scheme="wear"
+                    android:host="*"
+                    android:pathPrefix="/flagship/" />
+            </intent-filter>
+        </service>
+
         <!-- Dead-man affirmation reminder (T-6h/T-1h/T-15m alarms) -->
         <receiver
             android:name=".push.DeadManReminderReceiver"

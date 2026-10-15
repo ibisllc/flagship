@@ -47,6 +47,12 @@ interface IrkAccess {
     suspend fun resolve(reason: String): IrkMaterial
 }
 
+/** The watch-delegate key (docs/watch-delegate-key-design.md): a separate,
+ *  boot-approval-only key the IRK attested when the owner turned on "Quick
+ *  approve from watch". The boot worker honours its signature on the boot
+ *  response alone. */
+class WatchDelegateSigner(val signer: Ed25519Sign, val pubHex: String)
+
 data class IrkMaterial(
     val signer: Ed25519Sign,
     /** 32-byte Ed25519 seed of [signer] — drives the IRK-seed unseal path. */
@@ -73,6 +79,14 @@ class SecretRequestCoordinator(
     private val adminSigner: (suspend (reason: String) -> Ed25519Sign?)? = null,
     private val now: () -> Long = { System.currentTimeMillis() },
     private val nonceGen: () -> ByteArray = { randomNonce() },
+    /**
+     * The watch-delegate key, for an approval the owner gave on the watch.
+     * When it returns a key, a plain UNLOCK approval signs the boot response
+     * as role "delegate" and folds in no entitlement (that is an owner order
+     * the delegate can't sign). Null (the default) keeps every approval
+     * owner-signed. Mirror of iOS `watchDelegateKeyProvider`.
+     */
+    private val watchDelegate: () -> WatchDelegateSigner? = { null },
 ) {
     sealed class CoordinatorException(message: String) : Exception(message) {
         object NoSealedLuksKey :
@@ -167,11 +181,15 @@ class SecretRequestCoordinator(
             ?: throw CoordinatorException.DirectoryMissingServer(verified.serverDomain)
 
         val material = irk.resolve("Approve your box's boot secret")
+        val delegate: WatchDelegateSigner? =
+            if (purpose == SecretPurpose.UNLOCK_KEY && !depositAutoLease) watchDelegate() else null
         // Slice D — resolve the admin master root ONCE for this ceremony (silent
         // within the biometric-freshness window opened by irk.resolve above). The
         // RootEntitlement + auto-unlock lease are SENSITIVE orders that sign with
-        // it; null ⇒ this device is non-admin/legacy ⇒ they stay IRK-signed.
-        val orderKey: Ed25519Sign? = adminSigner?.invoke("Authorize your box to serve")
+        // it; null ⇒ this device is non-admin/legacy ⇒ they stay IRK-signed. A
+        // watch-delegate approval mints neither, so it never asks for it.
+        val orderKey: Ed25519Sign? =
+            if (delegate == null) adminSigner?.invoke("Authorize your box to serve") else null
 
         var unlockKey: ByteArray? = null
         val sealedHex = when (purpose) {
@@ -191,23 +209,36 @@ class SecretRequestCoordinator(
             issuedAt = now(),
         )
         // The sealed reply goes to the dedicated boot worker (where the box
-        // polls), owner-IRK-authed via the Flagship-Boot-v1 header.
-        val respAuth = BootAuth.ownerHeader(
-            serverDomain = verified.serverDomain,
-            method = "POST",
-            path = "/api/boot/response",
-            signer = material.signer,
-            pubHex = material.pubHex,
-            issuedAt = now(),
-            nonce = nonceGen(),
-        )
+        // polls), authed via the Flagship-Boot-v1 header: delegate-signed for
+        // a watch approval, owner-IRK-signed otherwise.
+        val respAuth = if (delegate != null) {
+            BootAuth.delegateHeader(
+                serverDomain = verified.serverDomain,
+                method = "POST",
+                path = "/api/boot/response",
+                signer = delegate.signer,
+                pubHex = delegate.pubHex,
+                issuedAt = now(),
+                nonce = nonceGen(),
+            )
+        } else {
+            BootAuth.ownerHeader(
+                serverDomain = verified.serverDomain,
+                method = "POST",
+                path = "/api/boot/response",
+                signer = material.signer,
+                pubHex = material.pubHex,
+                issuedAt = now(),
+                nonce = nonceGen(),
+            )
+        }
         mailbox.postResponse(body, respAuth)
 
         // Fold "authorize it to serve" INTO this unlock approval: pre-deposit an
         // owner-IRK-signed entitlement for the box's STK so it comes online with
         // no second tap (consent to boot ⇒ consent to serve). Best-effort — a
         // failure never fails the unlock; the box can still fetch one via relay.
-        if (purpose == SecretPurpose.UNLOCK_KEY) {
+        if (purpose == SecretPurpose.UNLOCK_KEY && delegate == null) {
             try {
                 val carrierHex = buildEntitlementReply(verified, stkPub, material, orderKey)
                 val auth = buildMailboxAuth(material)

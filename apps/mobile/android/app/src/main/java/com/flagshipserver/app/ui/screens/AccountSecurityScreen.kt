@@ -186,6 +186,8 @@ fun AccountSecurityScreen(nav: NavController) {
             )
         }
 
+        WatchQuickApproveCard(server = server, app = app)
+
         // Slice D (§5) — "Rotate admin key". Shown ONLY on a device that holds
         // the admin master root (greyed/absent otherwise).
         if (GymSeams.forceAdminRoot || Keystore.hasAdminRoot()) {
