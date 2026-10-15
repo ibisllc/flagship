@@ -35,6 +35,9 @@ export function filesMountArgs(volume: string, opts: { readonly?: boolean } = {}
 }
 
 const FILES_MOUNT_RE = /^type=volume,src=([^,]+),dst=\/data(,readonly)?$/;
+// The egress gateway's resolver file for a sandbox bridge (egress/gateway.ts):
+// daemon-written, outside /var/flagship, mounted read-only over resolv.conf.
+const RESOLV_MOUNT_RE = /^type=bind,src=\/run\/flagship-resolv-[a-z0-9-]+\.conf,dst=\/etc\/resolv\.conf,readonly$/;
 
 export interface CommandRunnerOpts {
   /**
@@ -85,11 +88,15 @@ export function assertNoHostPathInDockerArgs(args: readonly string[]): void {
     if (lower.includes("docker.sock")) {
       throw new Error(`refusing docker invocation: arg references the docker socket (${a})`);
     }
-    // Mounts. The only one allowed is an app's own files volume, in exactly
-    // the form `filesMountArgs` writes (a named volume, never a bind, at
-    // /data); `-v`/`--volume` can't say "named volume only", so they are
-    // refused outright. Data stores reach containers over the host-gateway
-    // alias, not a mount.
+    // Mounts. The only ones allowed are an app's own files volume, in exactly
+    // the form `filesMountArgs` writes (a named volume at /data), and the
+    // egress gateway's read-only resolv.conf; `-v`/`--volume` can't say
+    // "named volume only", so they are refused outright. Data stores reach
+    // containers over the host-gateway alias, not a mount.
+    if (a === "--mount" && args[0] === "run" && RESOLV_MOUNT_RE.test(args[i + 1] ?? "")) {
+      i++;
+      continue;
+    }
     if (a === "--mount") {
       const m = FILES_MOUNT_RE.exec(args[i + 1] ?? "");
       if (args[0] !== "run" || !m || !isFilesVolume(m[1]!)) {

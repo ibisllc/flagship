@@ -46,7 +46,7 @@ export function sandboxRunArgs(network: string, dataHostAlias: string): string[]
     gw,
     "--add-host",
     `${dataHostAlias}:${gw}`,
-    ...(resolv ? ["-v", `${resolv}:/etc/resolv.conf:ro`] : []),
+    ...(resolv ? ["--mount", `type=bind,src=${resolv},dst=/etc/resolv.conf,readonly`] : []),
   ];
 }
 

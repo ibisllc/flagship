@@ -52,9 +52,9 @@ describe("EgressGateway", () => {
       expect(gw.dnsServerFor("apps")).toBe("172.22.0.1");
       // gVisor never reaches docker's 127.0.0.11, so apps get a resolv.conf naming the gateway.
       const runArgs = sandboxRunArgs("flagship-apps", "host.flagship.internal")!;
-      const mount = runArgs[runArgs.indexOf("-v") + 1]!;
-      expect(mount.endsWith(":/etc/resolv.conf:ro")).toBe(true);
-      expect(readFileSync(mount.split(":")[0]!, "utf8")).toBe("nameserver 172.22.0.1\noptions ndots:0\n");
+      const mount = runArgs[runArgs.indexOf("--mount") + 1]!;
+      expect(mount).toMatch(/^type=bind,src=.*\/flagship-resolv-flagship-apps\.conf,dst=\/etc\/resolv\.conf,readonly$/);
+      expect(readFileSync(/src=([^,]+)/.exec(mount)![1]!, "utf8")).toBe("nameserver 172.22.0.1\noptions ndots:0\n");
 
       expect(await gw.allowSync("172.22.0.2", "api.github.com")).toBe(true);
       expect(await gw.allowSync("172.24.0.5", "registry.npmjs.org")).toBe(true);

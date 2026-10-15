@@ -223,6 +223,19 @@ describe("assertNoHostPathInDockerArgs (Part-3 regression guard)", () => {
     expect(() => assertNoHostPathInDockerArgs(["run", "--mount", "type=bind,src=/etc,dst=/etc", "img"])).toThrow(/mount/);
     expect(() => assertNoHostPathInDockerArgs(["run", "--mount=type=bind,src=/x", "img"])).toThrow(/mount/);
   });
+  it("allows the egress gateway's read-only resolv.conf, and only that bind", () => {
+    const resolv = "type=bind,src=/run/flagship-resolv-flagship-apps.conf,dst=/etc/resolv.conf,readonly";
+    expect(() => assertNoHostPathInDockerArgs(["run", "--mount", resolv, "img"])).not.toThrow();
+    expect(() => assertNoHostPathInDockerArgs(["build", "--mount", resolv, "ctx"])).toThrow(/mount/);
+    expect(() => assertNoHostPathInDockerArgs(["run", "--mount", resolv.replace(",readonly", ""), "img"])).toThrow(/mount/);
+    expect(() =>
+      assertNoHostPathInDockerArgs(["run", "--mount", "type=bind,src=/run/flagship-resolv-x.conf,dst=/etc/shadow,readonly", "img"]),
+    ).toThrow(/mount/);
+    expect(() =>
+      assertNoHostPathInDockerArgs(["run", "--mount", "type=bind,src=/run/../etc/passwd,dst=/etc/resolv.conf,readonly", "img"]),
+    ).toThrow(/mount/);
+  });
+
   it("allows exactly one shape of mount: an app's files volume at /data, as filesMountArgs writes it", () => {
     expect(() => assertNoHostPathInDockerArgs(["run", ...filesMountArgs("flagship-files-harry--notes"), "img"])).not.toThrow();
     expect(() =>
