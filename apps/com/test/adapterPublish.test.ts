@@ -373,7 +373,7 @@ describe("scheduled()", () => {
     expect(await run(6, e)).toBe(5);
     expect(gh.calls).toHaveLength(0);
     // 2026-10-12 is a Monday: the weekly insight is scheduled too, beside the
-    // daily model-capability refresh.
+    // daily model-capability refresh and the daily private-relay probe.
     expect(await run(0, e)).toBe(8);
     expect(gh.files()[`adapters/github.com/me/notes/${sha(1)}.json`]).toBeDefined();
   });
