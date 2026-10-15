@@ -214,7 +214,20 @@ export class FilePairedSessionStore implements PairedSessionGate {
     return row?.companion === true;
   }
 
-  private async flush(): Promise<void> {
+  private flushing: Promise<void> = Promise.resolve();
+
+  /** Writes run one at a time: two at once shared the .tmp file, and the
+   *  second rename failed with ENOENT (a 500 on a concurrent pairing). */
+  private flush(): Promise<void> {
+    const run = this.flushing.then(
+      () => this.flushNow(),
+      () => this.flushNow(),
+    );
+    this.flushing = run.catch(() => {});
+    return run;
+  }
+
+  private async flushNow(): Promise<void> {
     await mkdir(dirname(this.path), { recursive: true, mode: 0o700 });
     const obj: Record<string, PairedSession> = {};
     for (const [t, info] of this.byToken) obj[t] = { ...info };

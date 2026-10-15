@@ -31,6 +31,16 @@ describe("FilePairedSessionStore", () => {
     expect(s.list()).toEqual([]);
   });
 
+  it("concurrent adds all succeed and all persist", async () => {
+    const path = defaultPairedSessionPath(dir);
+    const s1 = new FilePairedSessionStore(path);
+    const tokens = Array.from({ length: 8 }, (_, i) => String(i).repeat(32));
+    await Promise.all(tokens.map((t) => s1.add(t)));
+    const s2 = new FilePairedSessionStore(path);
+    await s2.load();
+    for (const t of tokens) expect(s2.has(t)).toBe(true);
+  });
+
   it("add + persist + load round-trips", async () => {
     const path = defaultPairedSessionPath(dir);
     const s1 = new FilePairedSessionStore(path);
