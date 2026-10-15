@@ -77,6 +77,18 @@ for (const n of normalize) {
   if (P.normalizeBoxProxyHost(n.input) !== n.host) throw new Error(`normalize ${n.input}`);
 }
 
+const hostErrors = [
+  "proxy.example.net",
+  "192.168.1.20",
+  "2001:db8::7",
+  "",
+  "proxy.example.net:1080",
+  "192.168.1.20:3128",
+  "192.168.1.300",
+  "bad_host.example",
+  "socks5://proxy.example.net",
+].map((host) => ({ host, error: P.boxProxyHostError(host) }));
+
 const credentials = {
   accept: [
     { username: "alice", password: "s3cret pass" },
@@ -94,7 +106,7 @@ for (const c of credentials.accept) if (P.boxProxyCredentialsError(c)) throw new
 for (const c of credentials.refuse) if (!P.boxProxyCredentialsError(c)) throw new Error(`credentials accepted: ${c.why}`);
 
 const vectors = {
-  about: "A box's outbound proxy order (docs/outbound-proxy.md). Every platform must derive `keys.irkPubHex` from `keys.umkSeedHex`, build each case's `canonical` from its `fields` byte for byte (booleans as 1/0), and reproduce `signatureHex` with the IRK; `rejectSignatureHex` must fail to verify; every `refuse` case must be refused before signing; `normalize` maps typed input to the host that is signed; `credentials` are checked by the same rules everywhere (never signed).",
+  about: "A box's outbound proxy order (docs/outbound-proxy.md). Every platform must derive `keys.irkPubHex` from `keys.umkSeedHex`, build each case's `canonical` from its `fields` byte for byte (booleans as 1/0), and reproduce `signatureHex` with the IRK; `rejectSignatureHex` must fail to verify; every `refuse` case must be refused before signing; `normalize` maps typed input to the host that is signed; `hostErrors` gives the exact message (or null) every app shows for a typed host; `credentials` are checked by the same rules everywhere (never signed).",
   keys: {
     umkSeedHex: hex(umk.seed),
     irkPubHex: hex(irk.publicKey),
@@ -102,6 +114,7 @@ const vectors = {
   cases,
   refuse,
   normalize,
+  hostErrors,
   credentials,
 };
 
