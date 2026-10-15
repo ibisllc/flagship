@@ -508,20 +508,25 @@ public struct CreateServerStubScreen: View {
                     Text(OutboundProxyCopy.explainer)
                         .font(.caption)
                         .foregroundColor(c.textMuted)
-                    OutboundProxyFieldsView(
-                        kind: $vm.proxyKind,
-                        host: $vm.proxyHost,
-                        port: $vm.proxyPort,
-                        username: $vm.proxyUsername,
-                        password: $vm.proxyPassword,
-                        fallbackDirect: $vm.proxyFallbackDirect,
-                        error: vm.proxyError,
-                        credentialsGoInRecipe: true
-                    )
+                    if vm.proxyAllowed {
+                        OutboundProxyFieldsView(
+                            kind: $vm.proxyKind,
+                            host: $vm.proxyHost,
+                            port: $vm.proxyPort,
+                            username: $vm.proxyUsername,
+                            password: $vm.proxyPassword,
+                            fallbackDirect: $vm.proxyFallbackDirect,
+                            error: vm.proxyError,
+                            credentialsGoInRecipe: true
+                        )
+                    } else {
+                        OutboundProxyProNote()
+                    }
                 }
                 .padding(.leading, FS.space.s3)
                 .padding(.top, FS.space.s2)
                 .accessibilityIdentifier("cs-outbound-proxy")
+                .task { await vm.loadAccountTier() }
             }
         }
     }
