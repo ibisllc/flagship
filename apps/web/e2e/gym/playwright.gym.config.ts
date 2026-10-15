@@ -25,7 +25,7 @@ export default defineConfig({
   // the adapter `--grep`s the exact scenario title, so a `total`/quality spec
   // is only run when a `total` scenario selects it (the every-merge gym never
   // greps them).
-  testMatch: /gym-(smoke|total|quality|features|share)\.spec\.ts$/,
+  testMatch: /gym-(smoke|total|quality|features|share|servers)\.spec\.ts$/,
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: 0,
