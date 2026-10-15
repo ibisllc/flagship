@@ -61,6 +61,12 @@ export interface AppSummary {
    * GET /api/screens/services/:id/access.
    */
   access?: { rules: number; pending: number; draft?: true };
+  /**
+   * Who may open the app (docs/service-access-gating.md): anyone, or members
+   * only. A co-manager of the server is an ordinary visitor here, so a
+   * members-only app still needs an invite. Older boxes omit it.
+   */
+  accessMode?: "open" | "members-only";
   /** The app's name, on a row for a copy still underway (no manifest here yet). */
   name?: string;
   /**

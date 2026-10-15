@@ -2770,6 +2770,12 @@ async function wireRuntimeSurfaces(deps: {
   const screensHandle = buildScreensHttp({
     gate: sharesBundle?.gate ?? pairedSessions,
     shares: sharesBundle?.shares ?? null,
+    // An unreadable access state leaves every app members-only, as the proxy does.
+    accessMode: (serviceId) => {
+      const store = deps.serviceAccessRef.current;
+      if (!store) return null;
+      return !store.failedOpen() && store.mode(serviceId) === "open" ? "open" : "members-only";
+    },
     appEgress: runtime.egress.appEgress,
     appCopy: appCopyTarget,
     // The status pill (docs/app-placement.md §6): one `docker ps` for every

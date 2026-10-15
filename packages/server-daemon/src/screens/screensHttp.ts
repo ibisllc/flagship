@@ -152,6 +152,11 @@ export interface ScreensHttpDeps {
   gate: PairedSessionGate;
   /** Share this server (shares/sharesHttp.ts). */
   shares?: ScreensSharesLike | null;
+  /**
+   * Who may open each app (docs/service-access-gating.md): the app page
+   * tells a co-manager a members-only app still needs an invite.
+   */
+  accessMode?: ((serviceId: string) => "open" | "members-only" | null) | null;
   /** Bytes an app's files volume uses (null when unknown); shown on its page. */
   filesBytes?: ((volume: string) => Promise<number | null>) | null;
   /**
@@ -706,7 +711,7 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
     if (path === "/api/screens/apps-list" && method === "GET") {
       const installed = deps.servicePlatform?.list() ?? [];
       const live = await liveStates(installed.map((a) => a.serviceId), deps);
-      const apps = installed.map((a) => toSummary(a, deps.serverFqdn, deps.appEgress, live));
+      const apps = installed.map((a) => toSummary(a, deps.serverFqdn, deps.appEgress, live, deps.accessMode));
       if (deps.appCopy) {
         const have = new Set(apps.map((a) => a.serviceId));
         for (const row of deps.appCopy.inProgress(deps.username)) {
@@ -1470,9 +1475,12 @@ function toSummary(
   serverFqdn: string,
   egress?: ScreensHttpDeps["appEgress"],
   live?: LiveStates,
+  accessMode?: ScreensHttpDeps["accessMode"],
 ): AppSummary {
   const activity = live?.activity.get(app.serviceId);
+  const mode = accessMode?.(app.serviceId);
   return {
+    ...(mode ? { accessMode: mode } : {}),
     ...(egress ? { egress: egress.view(app.serviceId, app.manifest.network?.egress ?? []) } : {}),
     ...(egress?.access ? { access: egress.access(app.serviceId) } : {}),
     serviceId: app.serviceId,
@@ -1495,7 +1503,7 @@ async function appDetail(app: InstalledService, deps: ScreensHttpDeps): Promise<
     tabId,
   }));
   return {
-    app: toSummary(app, deps.serverFqdn, deps.appEgress, await liveStates([app.serviceId], deps)),
+    app: toSummary(app, deps.serverFqdn, deps.appEgress, await liveStates([app.serviceId], deps), deps.accessMode),
     manifest: app.manifest as unknown as Record<string, unknown>,
     dataLayerInstances,
     members,
