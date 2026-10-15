@@ -39,7 +39,7 @@ const STK_PUB_HEX =
 
 const REQUEST: PushRelayRequest = {
   targetUsername: "harry1",
-  category: "unlock-request",
+  category: "cert-alert",
   sealedPayloadHex: "deadbeefdeadbeefdeadbeefdeadbeef",
   issuedAt: 1_700_000_000_000,
 };
@@ -56,7 +56,7 @@ describe("push-relay envelope", () => {
     const canonical = new TextDecoder().decode(canonicalPushRelayRequest(REQUEST));
     const digest = canonical.split("|")[3];
     expect(canonical).toBe(
-      `flagship/push-relay/v1|harry1|unlock-request|${digest}|1700000000000`,
+      `flagship/push-relay/v1|harry1|cert-alert|${digest}|1700000000000`,
     );
     // The 4th field is sha256(sealedPayloadHex), lowercase hex, 64 chars.
     expect(digest).toMatch(/^[0-9a-f]{64}$/);
@@ -77,7 +77,7 @@ describe("push-relay envelope", () => {
     const sig = signPushRelayRequest(REQUEST, stk);
     for (const mutated of [
       { ...REQUEST, targetUsername: "harry2" },
-      { ...REQUEST, category: "boot-approval" as const },
+      { ...REQUEST, category: "generic" as const },
       { ...REQUEST, sealedPayloadHex: "00000000" },
       { ...REQUEST, issuedAt: REQUEST.issuedAt + 1 },
     ]) {
@@ -86,7 +86,11 @@ describe("push-relay envelope", () => {
   });
 
   it("constrains the category enum", () => {
-    expect(isPushRelayCategory("unlock-request")).toBe(true);
+    expect(isPushRelayCategory("cert-alert")).toBe(true);
+    // Nothing sends these any more; a box that tried would be refused.
+    for (const gone of ["unlock-request", "boot-approval", "device-added", "re-pair-alert"]) {
+      expect(isPushRelayCategory(gone)).toBe(false);
+    }
     expect(isPushRelayCategory("rm -rf /")).toBe(false);
     expect(PUSH_RELAY_CATEGORIES).toContain("generic");
   });

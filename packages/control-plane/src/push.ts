@@ -87,6 +87,8 @@ export interface PushDeps {
     targets: Array<{ tokenId: string; platform: "apns" | "fcm" | "webpush"; providerToken: string }>;
     category: string;
     sealedPayloadHex: string;
+    /** Web Push body; the others see the category only. */
+    webpushPayloadBytes?: Uint8Array;
   }) => Promise<{ ok: boolean; sent: number; failed: number }>;
 }
 
@@ -545,6 +547,9 @@ export async function handlePushRelay(
     })),
     category: r.category,
     sealedPayloadHex: r.sealedPayloadHex,
+    // The browser decrypts what it gets; the category alone, as APNs and FCM
+    // see it, lets its notice say what this is.
+    webpushPayloadBytes: new TextEncoder().encode(JSON.stringify({ category: r.category })),
   });
   return ok({ ...result });
 }

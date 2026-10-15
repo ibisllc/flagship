@@ -34,10 +34,7 @@ import type { Bytes, Keypair } from "./types.js";
  * recipient OS.
  */
 export const PUSH_RELAY_CATEGORIES = [
-  "unlock-request",
-  "boot-approval",
-  "device-added",
-  "re-pair-alert",
+  // The box's relay-trust SOS (relaySos.ts).
   "cert-alert",
   // An app was denied a host no rule in its access list matched (the body is
   // a marker). Boxes now send these as `generic` so the category says nothing

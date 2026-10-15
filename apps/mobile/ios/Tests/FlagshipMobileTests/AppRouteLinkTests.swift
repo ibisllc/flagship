@@ -106,6 +106,14 @@ final class AppRouteLinkTests: XCTestCase {
             .sharedWithMe)
     }
 
+    // Category-only notices name no server: a tap opens the app and nothing more.
+    func test_push_accountNotices_openTheAppOnly() {
+        for category in ["cert-alert", "server-registered"] {
+            XCTAssertTrue(PushNotifications.accountNoticeCategories.contains(category))
+            XCTAssertNil(PushNotifications.link(forPush: ["aps": ["category": category], "flagship-sealed": ""]))
+        }
+    }
+
     // MARK: - In-process delivery (App Intents)
 
     @MainActor

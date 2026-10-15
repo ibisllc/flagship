@@ -69,6 +69,11 @@ public final class PushNotifications: NSObject {
     /// owner's approvals list.
     public nonisolated static let shareStartupKind = "share-start-up"
 
+    /// Pushes that carry only their category and whose APNs alert already says
+    /// what happened: a box's relay-trust SOS and a newly registered server.
+    /// They name no server, so a tap just opens the app, where Home shows it.
+    public nonisolated static let accountNoticeCategories: Set<String> = ["cert-alert", "server-registered"]
+
     /// Where a tapped push leads: its app link when it carries one, else
     /// what its `kind` / `category` names.
     public nonisolated static func link(forPush info: [AnyHashable: Any]) -> DeepLink? {
@@ -84,6 +89,7 @@ public final class PushNotifications: NSObject {
         let category = info["category"] as? String
             ?? (info["aps"] as? [AnyHashable: Any])?["category"] as? String
         if (kind ?? category) == "secret-request" { return .secretRequests }
+        if let category, accountNoticeCategories.contains(category) { return nil }
         if kind == "vibecode-needs-you", let sessionId = info["sessionId"] as? String, !sessionId.isEmpty {
             return .vibeCodeChat(sessionId: sessionId)
         }

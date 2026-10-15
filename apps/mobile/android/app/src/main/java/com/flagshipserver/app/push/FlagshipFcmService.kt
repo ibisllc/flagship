@@ -61,6 +61,12 @@ class FlagshipFcmService : FirebaseMessagingService() {
             data["deepLink"] = com.flagshipserver.app.core.Endpoints.appRoute("secret-requests")
         }
 
+        AccountNoticePush.body(data)?.let { body ->
+            data["title"] = AccountNoticePush.TITLE
+            data["body"] = body
+            data.remove("deepLink")
+        }
+
         // A `generic` push (§3a; `app-access` from an older box) names no
         // app or host: the phone asks its boxes over the paired session, and
         // a tap just opens the app, whose foreground fetch shows the request.

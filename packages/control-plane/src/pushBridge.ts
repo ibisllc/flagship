@@ -184,7 +184,7 @@ export function buildPushForwarder(cfg: PushBridgeConfig) {
  * JSON plaintext for Web Push (RFC 8291) and leaves the APNs/FCM
  * sealed-payload hex empty — those platforms wake the device on
  * the category alone and the device opens the audit feed for
- * specifics. Same trade-off as the v1.1 unlock-approve push.
+ * specifics.
  */
 export function wrapForwarderAsV12Fanout(
   forwarder: ReturnType<typeof buildPushForwarder>,
@@ -252,11 +252,7 @@ const APNS_TOKEN_TTL_MS = 50 * 60_000; // refresh well under Apple's 60-min cap
  */
 const APNS_ALERTS: Record<string, { title: string; body: string }> = {
   "secret-request": { title: "Flagship", body: "A server is waiting for your approval." },
-  "unlock-request": { title: "Flagship", body: "A server is asking you to unlock it." },
-  "unlock-approve": { title: "Flagship", body: "A server is asking you to unlock it." },
-  "boot-approval": { title: "Flagship", body: "A server is asking you to unlock it." },
-  "device-added": { title: "Flagship", body: "A new device was added to your account." },
-  "re-pair-alert": { title: "Flagship", body: "A device needs to be paired again." },
+  "server-registered": { title: "Flagship", body: "A new server was added to your account." },
   "cert-alert": { title: "Flagship", body: "One of your servers needs your attention." },
   "app-access": { title: "Flagship", body: "One of your apps wants to reach the internet." },
 };
@@ -297,25 +293,12 @@ async function sendApns(args: {
     state.mintedAt = now();
   }
   const url = `https://${cfg.host ?? "api.push.apple.com"}/3/device/${args.providerToken}`;
-  // Boot-approval pushes are time-critical (user is holding a freshly-
-  // booted box and the unlock window is short). Setting aps.sound as
-  // a critical-alert object asks APNs to bypass Focus / Do-Not-Disturb.
-  // The user-side iOS app must hold the
-  // `com.apple.developer.usernotifications.critical-alerts` entitlement
-  // AND the user must have opted in via permission prompt; otherwise
-  // APNs silently downgrades to a normal alert. So it's safe to set
-  // unconditionally on unlock-approve and let the device decide.
-  const isCritical = args.category === "unlock-approve";
   const apsBody: Record<string, unknown> = {
     alert: apnsAlertFor(args.category, args.displayData?.kind),
     "mutable-content": 1,
     category: args.category,
     "thread-id": args.category,
   };
-  if (isCritical) {
-    apsBody.sound = { critical: 1, name: "default", volume: 1.0 };
-    apsBody["interruption-level"] = "critical";
-  }
   // Non-secret display fields (e.g. provision-phase) ride at the top
   // level of the APNs payload so they land in `userInfo` for the
   // device's notification handler. iOS reads `info["phase"]` etc.

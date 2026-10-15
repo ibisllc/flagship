@@ -61,7 +61,7 @@ describe("buildPushForwarder — APNs", () => {
     });
     const r = await forward({
       targets: [{ tokenId: "tok1", platform: "apns", providerToken: "ABCDEF1234" }],
-      category: "unlock-request",
+      category: "cert-alert",
       sealedPayloadHex: "deadbeef",
     });
     expect(r.ok).toBe(true);
@@ -72,10 +72,10 @@ describe("buildPushForwarder — APNs", () => {
     expect(c.headers["authorization"]).toMatch(/^bearer ey/);
     expect(c.headers["apns-topic"]).toBe("com.flagship.app");
     const body = JSON.parse(c.body);
-    expect(body.aps.category).toBe("unlock-request");
+    expect(body.aps.category).toBe("cert-alert");
     expect(body["flagship-sealed"]).toBe("deadbeef");
     // iOS shows nothing for a closed app without aps.alert.
-    expect(body.aps.alert).toEqual({ title: "Flagship", body: "A server is asking you to unlock it." });
+    expect(body.aps.alert).toEqual({ title: "Flagship", body: "One of your servers needs your attention." });
   });
 
   it("gives every category a fixed alert that names no server, app or host", () => {
@@ -234,29 +234,7 @@ describe("buildPushForwarder — APNs", () => {
     expect(calls[0]!.headers["authorization"]).not.toBe(calls[1]!.headers["authorization"]);
   });
 
-  it("unlock-approve category attaches critical-sound + interruption-level=critical", async () => {
-    const { f, calls } = fakeFetch([{ status: 200, body: "" }]);
-    const forward = buildPushForwarder({
-      apns: {
-        keyId: "ABC1234567",
-        teamId: "TEAM123456",
-        privateKeyPem: APNS_TEST_KEY,
-        bundleId: "com.flagship.app",
-      },
-      fetchImpl: f,
-      now: () => 1_700_000_000_000,
-    });
-    await forward({
-      targets: [{ tokenId: "u", platform: "apns", providerToken: "U" }],
-      category: "unlock-approve",
-      sealedPayloadHex: "00",
-    });
-    const body = JSON.parse(calls[0]!.body);
-    expect(body.aps.sound).toEqual({ critical: 1, name: "default", volume: 1.0 });
-    expect(body.aps["interruption-level"]).toBe("critical");
-  });
-
-  it("non-unlock-approve categories do NOT attach critical sound", async () => {
+  it("no category asks for a critical alert", async () => {
     const { f, calls } = fakeFetch([{ status: 200, body: "" }]);
     const forward = buildPushForwarder({
       apns: {
@@ -270,7 +248,7 @@ describe("buildPushForwarder — APNs", () => {
     });
     await forward({
       targets: [{ tokenId: "x", platform: "apns", providerToken: "X" }],
-      category: "install-event",
+      category: "secret-request",
       sealedPayloadHex: "00",
     });
     const body = JSON.parse(calls[0]!.body);

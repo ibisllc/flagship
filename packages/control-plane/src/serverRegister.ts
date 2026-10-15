@@ -85,6 +85,8 @@ export interface ServerRegisterDeps {
     targets: Array<{ tokenId: string; platform: "apns" | "fcm" | "webpush"; providerToken: string }>;
     category: string;
     sealedPayloadHex: string;
+    /** Web Push body; the others see the category only. */
+    webpushPayloadBytes?: Uint8Array;
   }) => Promise<{ ok: boolean; sent: number; failed: number }>;
   /**
    * The data-plane apex these server names live under — `flagship.services`
@@ -275,6 +277,7 @@ export async function handleServerRegister(
           })),
           category: "server-registered",
           sealedPayloadHex: "",
+          webpushPayloadBytes: new TextEncoder().encode(JSON.stringify({ category: "server-registered" })),
         });
       }
     } catch {
