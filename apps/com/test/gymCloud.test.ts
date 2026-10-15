@@ -58,18 +58,32 @@ describe("handleGymTeardown", () => {
     expect((r.body.servers as unknown[]).length).toBe(2);
   });
 
-  it("deletes DNS only for names under the gym apex", async () => {
+  it("reaps the named boxes' and users' records, never prod or the gym apex", async () => {
     const cloud = fakeCloud();
-    const names: string[] = [];
-    const r = await handleGymTeardown(
-      deps(cloud, async (n, t) => {
-        names.push(`${t} ${n}`);
-        return 1;
-      }),
-      { serverDomains: ["home2.gx1.gym.flagship.services"] },
-    );
+    const records = [
+      { id: "1", name: "home2.gx1.gym.flagship.services", type: "A" },
+      { id: "2", name: "*.home2.gx1.gym.flagship.services", type: "AAAA" },
+      { id: "3", name: "gx2.gym.flagship.services", type: "CAA" },
+      { id: "4", name: "*.home.gx2.gym.flagship.services", type: "A" },
+      { id: "5", name: "home.alice.flagship.services", type: "A" },
+      { id: "6", name: "*.gym.flagship.services", type: "A" },
+      { id: "7", name: "gym.flagship.services", type: "A" },
+      { id: "8", name: "home.gx3.gym.flagship.services", type: "A" },
+    ];
+    const deleted: string[] = [];
+    const dns = {
+      listAll: async () => records,
+      deleteById: async (id: string) => {
+        deleted.push(id);
+        return true;
+      },
+    };
+    const r = await handleGymTeardown({ ...deps(cloud), dns }, { serverDomains: ["home2.gx1.gym.flagship.services"], usernames: ["gx2"] });
     expect(r.status).toBe(200);
-    expect(names).toContain("A *.home2.gx1.gym.flagship.services");
+    expect(deleted.sort()).toEqual(["1", "2", "3", "4"]);
+    deleted.length = 0;
+    await handleGymTeardown({ ...deps(cloud), dns }, { all: true });
+    expect(deleted.sort()).toEqual(["1", "2", "3", "4", "8"]);
     const bad = await handleGymTeardown(deps(cloud), { serverDomains: ["home.x.flagship.services"] });
     expect(bad.status).toBe(400);
   });

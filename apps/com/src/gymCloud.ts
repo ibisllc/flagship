@@ -18,8 +18,11 @@ export interface GymTeardownDeps {
   cloud: GymCloudClient;
   /** The env label every gym server carries; teardown refuses anything else. */
   label: { key: string; value: string };
-  /** Deletes A/AAAA records for one name (CloudflareDnsClient.deleteByName). */
-  deleteDns?: (name: string, type: string) => Promise<number>;
+  /** The services zone's records (CloudflareDnsClient.listAll / deleteById). */
+  dns?: {
+    listAll(): Promise<Array<{ id: string; name: string; type: string }>>;
+    deleteById(id: string): Promise<boolean>;
+  };
   /** The services apex; only names under it are ever deleted. */
   servicesApex: string;
 }
@@ -29,6 +32,8 @@ export interface GymTeardownBody {
   all?: unknown;
   dryRun?: unknown;
   serverDomains?: unknown;
+  /** Gym usernames whose whole user zone (`<user>.<apex>` and below) is reaped. */
+  usernames?: unknown;
 }
 
 export interface GymTeardownResult {
@@ -63,6 +68,11 @@ export async function handleGymTeardown(
     }
   }
 
+  const usernames = Array.isArray(body?.usernames) ? body!.usernames : [];
+  if (!usernames.every((u): u is string => typeof u === "string" && DNS_LABEL_RE.test(u))) {
+    return { status: 400, body: { error: "usernames must be DNS labels" } };
+  }
+
   const listed = await deps.cloud.listServersByLabel(deps.label.key, deps.label.value);
   const targets: Array<{ serverId: string; title: string }> = [];
   const refused: string[] = [];
@@ -83,17 +93,10 @@ export async function handleGymTeardown(
     targets.push({ serverId: id, title: "" });
   }
 
-  if (dryRun) {
-    return {
-      status: 200,
-      body: { dryRun: true, servers: listed, wouldDestroy: targets, refused },
-    };
-  }
-
   const destroyed: string[] = [];
   const failed: Array<{ serverId: string; error: string }> = [];
   await Promise.all(
-    targets.map(async (t) => {
+    (dryRun ? [] : targets).map(async (t) => {
       try {
         await deps.cloud.destroyServer(t.serverId);
         destroyed.push(t.serverId);
@@ -103,22 +106,43 @@ export async function handleGymTeardown(
     }),
   );
 
+  // DNS: the named boxes' records, the named users' whole zones, and with
+  // `all` every record under the gym apex except the apex and its wildcard.
+  // The zone is shared with prod and capped (200 records on this plan), so a
+  // gym run must leave nothing behind.
   let dnsDeleted = 0;
   const dnsFailed: string[] = [];
-  if (deps.deleteDns) {
-    for (const d of domains as string[]) {
-      for (const name of [d.toLowerCase(), `*.${d.toLowerCase()}`]) {
-        for (const type of ["A", "AAAA"]) {
-          try {
-            dnsDeleted += await deps.deleteDns(name, type);
-          } catch {
-            dnsFailed.push(`${type} ${name}`);
-          }
-        }
+  if (deps.dns && (all || domains.length || usernames.length)) {
+    const zones = (usernames as string[]).map((u) => `${u.toLowerCase()}.${apex}`);
+    const boxes = (domains as string[]).map((d) => d.toLowerCase());
+    const doomed = (name: string): boolean => {
+      const n = name.toLowerCase();
+      if (all && n.endsWith(`.${apex}`) && n !== `*.${apex}`) return true;
+      if (boxes.some((d) => n === d || n.endsWith(`.${d}`))) return true;
+      return zones.some((z) => n === z || n.endsWith(`.${z}`));
+    };
+    let records: Array<{ id: string; name: string; type: string }> = [];
+    try {
+      records = await deps.dns.listAll();
+    } catch {
+      dnsFailed.push("list");
+    }
+    for (const r of records.filter((x) => doomed(x.name))) {
+      if (dryRun) {
+        dnsDeleted += 1;
+        continue;
+      }
+      try {
+        if (await deps.dns.deleteById(r.id)) dnsDeleted += 1;
+      } catch {
+        dnsFailed.push(`${r.type} ${r.name}`);
       }
     }
   }
 
+  if (dryRun) {
+    return { status: 200, body: { dryRun: true, servers: listed, wouldDestroy: targets, refused, dnsWouldDelete: dnsDeleted } };
+  }
   const status = failed.length || dnsFailed.length ? 502 : 200;
   return { status, body: { destroyed, failed, refused, dnsDeleted, dnsFailed } };
 }

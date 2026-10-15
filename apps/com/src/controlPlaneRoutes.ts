@@ -3548,7 +3548,7 @@ export async function tryControlPlane(
         {
           cloud: createUpCloudClient({ token: env.UPCLOUD_TOKEN }),
           label: { key: label[0], value: label[1] },
-          ...(dns ? { deleteDns: (name: string, type: string) => dns.deleteByName(name, type) } : {}),
+          ...(dns ? { dns: { listAll: () => dns.listAll(), deleteById: (id: string) => dns.deleteById(id) } } : {}),
           servicesApex: env.SERVICES_APEX ?? "flagship.services",
         },
         (await readJson(request)) as GymTeardownBody | undefined,
