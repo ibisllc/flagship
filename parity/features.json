@@ -28,7 +28,7 @@
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift", "Show my servers"]] },
         "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/HomeScreen.kt", "Show my servers"]] },
-        "web": { "status": "missing", "reason": "Only a text hint in index.html; no button.", "anchors": [["apps/web/public/webapp/views/home.js", "Show my servers"]] }
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/views/home.js", "Show my servers"], ["apps/web/public/webapp/views/home.js", "home-show-my-servers"]] }
       }
     },
     {
@@ -48,7 +48,7 @@
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift", "This server isn't paired with this device yet"]] },
         "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServerDetailScreen.kt", "NEVER_ONLINE, OFFLINE, COMING_UP, NOT_PAIRED"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServerDetailScreen.kt", "PodPairViewModel\\("]] },
-        "web": { "status": "partial", "reason": "A separate views/pod-pair.js; no not-paired card on the server page.", "anchors": [["apps/web/public/webapp/views/pod-pair.js", "export (async )?function enterPodPair"]] }
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/views/server-detail.js", "server-detail-not-paired"], ["apps/web/public/webapp/views/server-detail.js", "sd-pair-server"], ["apps/web/public/webapp/views/server-detail.js", "server-detail-never-online"]] }
       }
     },
     {
@@ -58,7 +58,7 @@
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/TransferServerScreens.swift", "struct "]] },
         "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/TransferServerScreens.kt", "fun "]] },
-        "web": { "status": "partial", "reason": "The giver's offer is a textarea with no QR (server-detail.js).", "anchors": [["apps/web/public/webapp/views/transfer-claim.js", "export (async )?function enterTransferClaim"], ["apps/web/public/webapp/lib/serverTransfer.js", "export function transferLinkFromLocation"]] }
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/views/transfer-claim.js", "export (async )?function enterTransferClaim"], ["apps/web/public/webapp/lib/serverTransfer.js", "export function transferLinkFromLocation"], ["apps/web/public/webapp/views/server-detail.js", "export async function renderTransferQr"]] }
       }
     },
     {
@@ -138,7 +138,7 @@
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/UninstallServiceOrder.swift", "uninstall-service/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Shell/ServicesTab.swift", "Remove this service\\?"]] },
         "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/viewmodels/ServiceDetailViewModel.kt", "flagship/uninstall-service/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServiceDetailScreen.kt", "showUninstallDialog"]] },
-        "web": { "status": "missing", "reason": "Only by unticking runs-on, which refuses the last copy (lib/appPlacement.js RUNS_ON_LAST_COPY).", "anchors": [["apps/web/public/webapp/views/service-detail.js", "Remove this (app|service)"]] }
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/appPlacement.js", "Remove this app\\?"], ["apps/web/public/webapp/views/service-detail.js", "service-detail-remove-btn"]] }
       }
     },
     {
@@ -148,7 +148,7 @@
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceDetailScreen.swift", "Recent logs|recentLogs"]] },
         "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServiceDetailScreen.kt", "Recent logs|recentLogs"]] },
-        "web": { "status": "missing", "reason": "The app page has no logs section.", "anchors": [["apps/web/public/webapp/views/service-detail.js", "Recent logs|recentLogs"]] }
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/views/service-detail.js", "Recent logs|recentLogs"]] }
       }
     },
     {
@@ -228,7 +228,7 @@
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/RecoveryScreen.swift", "struct RecoveryScreen"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/KeyfileExportScreen.swift", "struct "]] },
         "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/RecoveryScreen.kt", "fun RecoveryScreen"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/keystore/Keyfile.kt", "object Keyfile|class Keyfile"]] },
-        "web": { "status": "partial", "reason": "Still shows the post-recovery choice screen iOS removed (views/post-recovery-choice.js).", "anchors": [["apps/web/public/webapp/lib/recovery.js", "export"], ["apps/web/public/webapp/views/post-recovery-choice.js", "export"]] }
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/recovery.js", "export"], ["apps/web/public/webapp/lib/keyfile.js", "export"]] }
       }
     },
     {
