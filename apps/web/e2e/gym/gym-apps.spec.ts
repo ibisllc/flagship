@@ -196,6 +196,43 @@ async function asDevice(page: Page, { admin }: { admin: boolean }): Promise<void
   );
 }
 
+/** This browser's account device key (public, hex): how the box's Account members names it. */
+async function thisDevicePub(page: Page): Promise<string> {
+  return page.evaluate(
+    async ({ accountId, deviceId }) => {
+      const ks = await import("/keystore.js");
+      const { getSession } = await import("/lib/state.js");
+      return ks.bytesToHex((await ks.deriveAccountDeviceKeyFromSeed(getSession().umk, accountId, deviceId)).publicKey);
+    },
+    { accountId: ACCOUNT_ID, deviceId: THIS_DEVICE },
+  );
+}
+
+/** Whether `sigHex` over `canonical` is this browser's account device key. */
+async function signedByDevice(page: Page, canonical: string, sigHex: string): Promise<boolean> {
+  return page.evaluate(
+    async ({ canonical, sigHex, accountId, deviceId }) => {
+      const ks = await import("/keystore.js");
+      const { getSession } = await import("/lib/state.js");
+      const key = await ks.deriveAccountDeviceKeyFromSeed(getSession().umk, accountId, deviceId);
+      return ks.verifyWithEd25519Pub(key.publicKey, ks.hexToBytes(sigHex), new TextEncoder().encode(canonical));
+    },
+    { canonical, sigHex, accountId: ACCOUNT_ID, deviceId: THIS_DEVICE },
+  );
+}
+
+const PHONE_PUB = "2b".repeat(32);
+const MUM_SHARE = "0123456789abcdef0123456789abcdef";
+
+/** The box's Account members: this browser (its tier and rank), the phone (admin, Master) and Mum (co-manager). */
+function accountMembers(myPub: string, me: { tier: "admin" | "member"; rank: string | null; refused?: boolean }) {
+  return [
+    { kind: "device", deviceId: THIS_DEVICE, devicePub: myPub, tier: me.tier, rank: me.rank, set: false, refused: me.refused === true },
+    { kind: "device", deviceId: OTHER_DEVICE, devicePub: PHONE_PUB, tier: "admin", rank: "master", set: false, refused: false },
+    { kind: "co-manager", shareId: MUM_SHARE, label: "Mum", rank: "manager", set: false, refused: false },
+  ];
+}
+
 /** Invite bundles sealed under this account's household key, by inviteId. */
 async function sealBundles(page: Page, names: Record<string, string>): Promise<Record<string, string>> {
   return page.evaluate(async (names) => {
@@ -212,8 +249,9 @@ async function sealBundles(page: Page, names: Record<string, string>): Promise<R
 test.describe("gym webapp apps", () => {
   test("gym apps access control goes members-only and sets a rank with signed orders", async ({ page }, testInfo) => {
     await reachHome(page);
-    // Only an admin device changes ranks; the role order is signed with its admin root.
+    // Only an admin device changes ranks and the mode; each order is signed with its admin root.
     await asDevice(page, { admin: true });
+    const myPub = await thisDevicePub(page);
     const SAM_AID = "5a".repeat(32);
     const invites = await page.evaluate(async () => {
       const ks = await import("/keystore.js");
@@ -232,6 +270,7 @@ test.describe("gym webapp apps", () => {
       roles: ["member", "manager", "master"],
       defaultRole: "member",
       descriptions: { member: "Reads notes", manager: "Edits notes", master: "Manages who's in" },
+      accountMembers: accountMembers(myPub, { tier: "admin", rank: "master" }),
       members: [{ aid: SAM_AID, role: samRole, grants: [{ inviteId: "inv-sam", role: samRole }], direct: false }],
       invites: [
         { inviteId: "inv-sam", role: samRole, set: samRole !== "member" },
@@ -263,10 +302,10 @@ test.describe("gym webapp apps", () => {
       },
       {
         method: "POST",
-        match: on(HOME, svc("/members/role")),
+        match: on(HOME, svc("/members/rank")),
         answer: (c) => {
-          samRole = c.body.order.role;
-          return { json: { ok: true, target: c.body.order.target, role: samRole } };
+          samRole = c.body.order.rank;
+          return { json: { ok: true, target: c.body.order.target, rank: samRole } };
         },
       },
     ]);
@@ -297,24 +336,26 @@ test.describe("gym webapp apps", () => {
     const modeCall = calls.find((c) => c.method === "POST" && c.url.pathname === "/api/service-access");
     expect(modeCall).toBeTruthy();
     const req = modeCall!.body.request;
-    expect(req).toMatchObject({ serverId: HOME, serviceRef: SERVICE_ID, mode: "restricted" });
+    // v2 names the app only (no serverId), signed with the admin root.
+    expect(req).toEqual({ serviceRef: SERVICE_ID, mode: "restricted", issuedAt: req.issuedAt });
     expect(fresh(req.issuedAt)).toBe(true);
     expect(
-      await signedBy(page, ["flagship/service-access-mode/v1", req.serverId, req.serviceRef, req.mode, req.issuedAt].join("|"), modeCall!.body.signature, "irk"),
+      await signedBy(page, ["flagship/service-access-mode/v2", req.serviceRef, req.mode, req.issuedAt].join("|"), modeCall!.body.signature),
     ).toBe(true);
 
-    // Raising Sam to Master signs flagship/app-member-role/v1 for their invite.
+    // Raising Sam to Master signs flagship/app-rank/v1 for their invite.
     await sam.locator('select[data-action="sa-role"]').selectOption("master");
     await expect(sam.locator(".sa-crown")).toBeVisible({ timeout: 10_000 });
     await expect(sam.locator('select[data-action="sa-role"]')).toHaveValue("master");
-    const roleCall = calls.find((c) => c.method === "POST" && c.url.pathname === svc("/members/role"));
+    const roleCall = calls.find((c) => c.method === "POST" && c.url.pathname === svc("/members/rank"));
     expect(roleCall).toBeTruthy();
     const order = roleCall!.body.order;
-    expect(order).toMatchObject({ serverDomain: HOME, serviceId: SERVICE_ID, target: "invite:inv-sam", role: "master" });
+    expect(order).toEqual({ serviceRef: SERVICE_ID, target: "invite:inv-sam", rank: "master", issuedAt: order.issuedAt });
     expect(fresh(order.issuedAt)).toBe(true);
     expect(
-      await signedBy(page, ["flagship/app-member-role/v1", order.serverDomain, order.serviceId, order.target, order.role, order.issuedAt].join("|"), roleCall!.body.signature),
+      await signedBy(page, ["flagship/app-rank/v1", order.serviceRef, order.target, order.rank, order.issuedAt].join("|"), roleCall!.body.signature),
     ).toBe(true);
+    expect(calls.some((c) => c.url.pathname === svc("/members/role"))).toBe(false);
     // The box session rides every box call; the members list itself was never changed by the mode switch.
     expect(roleCall!.headers["x-flagship-session"]).toBe("gym-home-token");
     await expect(page.locator("#sa-members-title")).toHaveText("Members (2)");
@@ -324,16 +365,19 @@ test.describe("gym webapp apps", () => {
   test("gym apps rank picker is locked to Member on a non-admin device", async ({ page }, testInfo) => {
     await reachHome(page);
     await asDevice(page, { admin: false });
+    const myPub = await thisDevicePub(page);
     const sealed = await sealBundles(page, { "inv-sam": "Sam", "inv-lee": "Lee" });
     const members = {
       mode: "open",
       roles: ["member", "manager", "master"],
       defaultRole: "member",
       descriptions: {},
+      // This device is a Manager in the app (the default for a non-admin device).
+      accountMembers: accountMembers(myPub, { tier: "member", rank: "manager" }),
       members: [],
       invites: [
-        { inviteId: "inv-sam", role: "master", set: true, tier: "admin" },
-        { inviteId: "inv-lee", role: "member", set: false, tier: "member" },
+        { inviteId: "inv-sam", role: "master", set: true, tier: "admin", creatorPub: PHONE_PUB, creatorDeviceId: OTHER_DEVICE },
+        { inviteId: "inv-lee", role: "member", set: false, tier: "member", creatorPub: myPub, creatorDeviceId: THIS_DEVICE },
       ],
     };
     const calls = await stub(page, [
@@ -358,10 +402,24 @@ test.describe("gym webapp apps", () => {
         match: (u) => u.pathname === "/api/users/smoketest/service-invites",
         answer: (c) => ({ json: { created: true, inviteId: c.body.request.inviteId, tier: "member" } }),
       },
+      { method: "POST", match: (u) => u.pathname === "/api/users/smoketest/service-invites/revoke", answer: () => ({ json: { revoked: true } }) },
+      { method: "POST", match: on(HOME, "/api/service-access/invite-withdraw"), answer: () => ({ json: { ok: true, pruned: 0 } }) },
     ]);
     await openApp(page);
+    // No admin root: no Remove app, and Runs on is locked.
+    await expect(page.locator("#service-detail-remove-btn")).toHaveCount(0);
+    await expect(page.locator("#sd-runs-on-card")).toContainText("Only an admin device can change where this app runs.");
     await page.click("#sd-access");
     await expect(page.locator("#sa-members-title")).toHaveText("Members (2)", { timeout: 10_000 });
+
+    // Account members are read-only here; this device is a Manager.
+    const mine = page.locator("#sa-account-people .card", { hasText: "This device" });
+    await expect(mine.locator(".sa-rank")).toHaveText("Manager");
+    await expect(page.locator('select[data-action="sa-acct-rank"]')).toHaveCount(0);
+    await expect(page.locator('[data-action="sa-acct-refuse"]')).toHaveCount(0);
+    // The mode is an admin's call.
+    await expect(page.locator('#sa-mode [data-mode="restricted"]')).toBeDisabled();
+    await expect(page.locator("#sa-mode-locked")).toHaveText("Only an admin device can change who can open it.");
 
     // Ranks are read-only here; only this device's own member invite can be withdrawn.
     const sam = page.locator("#sa-people .card", { hasText: "Sam" });
@@ -389,23 +447,175 @@ test.describe("gym webapp apps", () => {
     const req = create!.body.request;
     expect(req.deviceId).toBe(THIS_DEVICE);
     expect(fresh(req.issuedAt)).toBe(true);
-    // Signed with the account's AID (member tier), never an admin key it doesn't hold.
-    expect(
-      await page.evaluate(
-        async ({ req, sig }) => {
+    // Signed with this device's account device key (member tier), never the AID or an admin key.
+    const verifyCreate = (key: "device" | "aid") =>
+      page.evaluate(
+        async ({ req, sig, key, accountId, deviceId }) => {
           const ks = await import("/keystore.js");
           const si = await import("/lib/serviceInvite.js");
           const { getSession } = await import("/lib/state.js");
-          const aid = await ks.deriveAccountIdFromSeed(getSession().umk);
+          const umk = getSession().umk;
+          const pub = key === "device"
+            ? (await ks.deriveAccountDeviceKeyFromSeed(umk, accountId, deviceId)).publicKey
+            : (await ks.deriveAccountIdFromSeed(umk)).publicKey;
           const bytes = si.canonicalCreateBytes({ ...req, authorAID: ks.hexToBytes(req.authorAID) });
-          return ks.verifyWithEd25519Pub(aid.publicKey, ks.hexToBytes(sig), bytes);
+          return ks.verifyWithEd25519Pub(pub, ks.hexToBytes(sig), bytes);
         },
-        { req, sig: create!.body.signature },
-      ),
-    ).toBe(true);
+        { req, sig: create!.body.signature, key, accountId: ACCOUNT_ID, deviceId: THIS_DEVICE },
+      );
+    expect(await verifyCreate("device")).toBe(true);
+    expect(await verifyCreate("aid")).toBe(false);
     // Member needs no rank order.
-    expect(calls.some((c) => c.method === "POST" && c.url.pathname === svc("/members/role"))).toBe(false);
+    expect(calls.some((c) => c.method === "POST" && /\/members\/(role|rank)$/.test(c.url.pathname))).toBe(false);
     await shot(page, testInfo, "member-invite-created");
+
+    // Withdrawing its own invite: the device-key-signed revoke goes to .com and to the box.
+    await lee.locator('[data-action="sa-remove"]').click();
+    await page.click("[data-modal-ok]");
+    await expect(page.locator("#toast")).toContainText("Removed.", { timeout: 10_000 });
+    const revoke = calls.find((c) => c.method === "POST" && c.url.pathname === "/api/users/smoketest/service-invites/revoke")!;
+    const r = revoke.body.request;
+    expect(r.inviteId).toBe("inv-lee");
+    expect(await signedByDevice(page, ["flagship/service-invite/revoke/v1", r.inviteId, r.issuedAt].join("|"), revoke.body.signature)).toBe(true);
+    const withdraw = calls.find((c) => c.method === "POST" && c.url.host === HOME && c.url.pathname === "/api/service-access/invite-withdraw")!;
+    expect(withdraw.body).toEqual({ revoke: r, signature: revoke.body.signature });
+    expect(calls.some((c) => c.url.pathname === "/api/service-access/allow-remove")).toBe(false);
+  });
+
+  test("gym apps account members list each device and co-manager, and an admin changes a rank and refuses", async ({ page }, testInfo) => {
+    await reachHome(page);
+    await asDevice(page, { admin: true });
+    const myPub = await thisDevicePub(page);
+    const phoneProfile = await page.evaluate(
+      async ({ accountId, deviceId }) => {
+        const meta = await import("/lib/accountMetadata.js");
+        const { getSession } = await import("/lib/state.js");
+        const fields = { accountId, recordType: "device-self-profile", deviceId, revision: 1, keyVersion: 1 };
+        const sealed = await meta.encryptProfile("Kitchen iPad", await meta.deriveDeviceDirectoryKey(getSession().umk), fields);
+        return { accountId, deviceId, revision: 1, keyVersion: 1, ...sealed };
+      },
+      { accountId: ACCOUNT_ID, deviceId: OTHER_DEVICE },
+    );
+    const ranks: Record<string, { rank: string | null; refused: boolean }> = {
+      [`device:${PHONE_PUB}`]: { rank: "master", refused: false },
+      [`share:${MUM_SHARE}`]: { rank: "manager", refused: false },
+    };
+    const members = () => ({
+      mode: "open",
+      roles: ["member", "manager", "master"],
+      defaultRole: "member",
+      descriptions: {},
+      accountMembers: accountMembers(myPub, { tier: "admin", rank: "master" }).map((m) => {
+        const key = m.kind === "co-manager" ? `share:${m.shareId}` : `device:${m.devicePub}`;
+        return ranks[key] ? { ...m, ...ranks[key], set: true } : m;
+      }),
+      members: [],
+      invites: [],
+    });
+    const calls = await stub(page, [
+      ...baseRules(appDetail()),
+      { method: "GET", match: (u) => u.pathname === "/api/users/smoketest/service-invites", answer: () => ({ json: { invites: [] } }) },
+      {
+        method: "GET",
+        match: (u) => u.pathname === `/api/accounts/${ACCOUNT_ID}/directory`,
+        answer: () => ({
+          json: {
+            accountId: ACCOUNT_ID,
+            devices: [
+              { deviceId: THIS_DEVICE, platformClass: "web", createdAt: Date.now() - 3_600_000 },
+              { deviceId: OTHER_DEVICE, platformClass: "ios", createdAt: Date.now() - 86_400_000 },
+            ],
+            selfProfiles: [phoneProfile],
+            managedProfiles: [],
+            grants: [],
+          },
+        }),
+      },
+      { method: "GET", match: on(HOME, svc("/members")), answer: () => ({ json: members() }) },
+      {
+        method: "POST",
+        match: on(HOME, svc("/members/rank")),
+        answer: (c) => {
+          const { target, rank } = c.body.order;
+          ranks[target] = rank === "refused" ? { rank: null, refused: true } : { rank, refused: false };
+          return { json: { ok: true, target, rank } };
+        },
+      },
+    ]);
+    await openApp(page);
+    await expect(page.locator("#service-detail-remove-btn")).toBeVisible();
+    await page.click("#sd-access");
+    const row = (name: string) => page.locator("#sa-account-people .card", { hasText: name });
+    await expect(row("Kitchen iPad")).toBeVisible({ timeout: 10_000 });
+    await expect(row("Kitchen iPad")).toContainText("Admin device");
+    await expect(row("Kitchen iPad").locator(".sa-crown")).toBeVisible();
+    await expect(row("This device")).toContainText("Device a1b2c3d4");
+    await expect(row("Mum")).toContainText("Co-manages this server");
+    await expect(row("Mum").locator('select[data-action="sa-acct-rank"]')).toHaveValue("manager");
+    // Only the three ranks, never an owner.
+    await expect(row("Mum").locator("option")).toHaveText(["Member", "Manager", "Master"]);
+    await expect(page.locator("#sa-add-person")).toBeVisible();
+    await shot(page, testInfo, "account-members-admin");
+
+    // Demote the phone to Member: one admin-root order naming the device key.
+    await row("Kitchen iPad").locator('select[data-action="sa-acct-rank"]').selectOption("member");
+    await expect(row("Kitchen iPad").locator('select[data-action="sa-acct-rank"]')).toHaveValue("member", { timeout: 10_000 });
+    const demote = calls.find((c) => c.method === "POST" && c.url.pathname === svc("/members/rank"))!;
+    const o1 = demote.body.order;
+    expect(o1).toEqual({ serviceRef: SERVICE_ID, target: `device:${PHONE_PUB}`, rank: "member", issuedAt: o1.issuedAt });
+    expect(fresh(o1.issuedAt)).toBe(true);
+    expect(await signedBy(page, ["flagship/app-rank/v1", o1.serviceRef, o1.target, o1.rank, o1.issuedAt].join("|"), demote.body.signature)).toBe(true);
+
+    // Refuse Mum (co-manager), then let her back in at Manager.
+    await row("Mum").locator('[data-action="sa-acct-refuse"]').click();
+    await expect(page.locator(".modal-title")).toHaveText("Refuse Mum?");
+    await page.click("[data-modal-ok]");
+    await expect(row("Mum").locator('select[data-action="sa-acct-rank"]')).toHaveValue("refused", { timeout: 10_000 });
+    await expect(row("Mum").locator('[data-action="sa-acct-refuse"]')).toHaveCount(0);
+    const refuse = calls.filter((c) => c.method === "POST" && c.url.pathname === svc("/members/rank"))[1]!;
+    const o2 = refuse.body.order;
+    expect(o2).toMatchObject({ serviceRef: SERVICE_ID, target: `share:${MUM_SHARE}`, rank: "refused" });
+    expect(await signedBy(page, ["flagship/app-rank/v1", o2.serviceRef, o2.target, o2.rank, o2.issuedAt].join("|"), refuse.body.signature)).toBe(true);
+    await shot(page, testInfo, "account-members-refused");
+
+    await row("Mum").locator('select[data-action="sa-acct-rank"]').selectOption("manager");
+    await expect(row("Mum").locator('select[data-action="sa-acct-rank"]')).toHaveValue("manager", { timeout: 10_000 });
+    await expect(row("Mum").locator('[data-action="sa-acct-refuse"]')).toHaveCount(1);
+    const back = calls.filter((c) => c.method === "POST" && c.url.pathname === svc("/members/rank"))[2]!;
+    expect(back.body.order).toMatchObject({ target: `share:${MUM_SHARE}`, rank: "manager" });
+  });
+
+  test("gym apps a member-rank device sees why it can't invite", async ({ page }, testInfo) => {
+    await reachHome(page);
+    await asDevice(page, { admin: false });
+    const myPub = await thisDevicePub(page);
+    await stub(page, [
+      ...baseRules(appDetail()),
+      { method: "GET", match: (u) => u.pathname === "/api/users/smoketest/service-invites", answer: () => ({ json: { invites: [] } }) },
+      { method: "GET", match: (u) => u.pathname === `/api/accounts/${ACCOUNT_ID}/directory`, answer: () => ({ status: 403, json: { error: "forbidden" } }) },
+      {
+        method: "GET",
+        match: on(HOME, svc("/members")),
+        answer: () => ({
+          json: {
+            mode: "open",
+            roles: ["member", "manager", "master"],
+            defaultRole: "member",
+            descriptions: {},
+            accountMembers: accountMembers(myPub, { tier: "member", rank: "member" }),
+            members: [],
+            invites: [],
+          },
+        }),
+      },
+    ]);
+    await openApp(page);
+    await page.click("#sd-access");
+    await expect(page.locator("#sa-add-why")).toHaveText("Only an admin can let you invite people to this app.", { timeout: 10_000 });
+    await expect(page.locator("#sa-add-person")).toBeHidden();
+    await expect(page.locator("#sa-add-group")).toBeHidden();
+    await expect(page.locator("#sa-account-people .card", { hasText: "This device" }).locator(".sa-rank")).toHaveText("Member");
+    await shot(page, testInfo, "member-cant-invite");
   });
 
   test("gym apps members list shows who invited each person", async ({ page }, testInfo) => {
@@ -473,6 +683,7 @@ test.describe("gym webapp apps", () => {
           return { json: { revoked: true } };
         },
       },
+      { method: "POST", match: on(HOME, "/api/service-access/invite-withdraw"), answer: () => ({ json: { ok: true, pruned: 0 } }) },
     ]);
     await openApp(page);
     await page.click("#sd-access");
@@ -495,6 +706,9 @@ test.describe("gym webapp apps", () => {
     const r = revoke!.body.request;
     expect(r.inviteId).toBe("inv-sam");
     expect(await signedBy(page, ["flagship/service-invite/revoke/v1", r.inviteId, r.issuedAt].join("|"), revoke!.body.signature)).toBe(true);
+    // The same signed revoke goes to the box, which prunes who joined through it.
+    const withdraw = calls.find((c) => c.method === "POST" && c.url.pathname === "/api/service-access/invite-withdraw");
+    expect(withdraw?.body).toEqual({ revoke: r, signature: revoke!.body.signature });
     // The directory is read once, however often the list redraws.
     expect(directoryReads).toBe(1);
     await shot(page, testInfo, "invite-revoked");
@@ -789,6 +1003,8 @@ test.describe("gym webapp apps", () => {
 
   test("gym apps runs-on ticks a copy to another server and unticks it with a signed uninstall", async ({ page }, testInfo) => {
     await reachHome(page);
+    // Copies and uninstalls are admin orders: only a device holding the admin root changes Runs on.
+    await asDevice(page, { admin: true });
     let mediaApps: Array<Record<string, unknown>> = [];
     const calls = await stub(page, [
       { method: "GET", match: on(HOME, `/api/screens/app-detail/${SERVICE_ID}`), answer: () => ({ json: appDetail() }) },

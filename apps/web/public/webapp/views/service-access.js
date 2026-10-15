@@ -1,23 +1,25 @@
-// Access control — admin UI (docs/service-access-gating.md, "Open mode +
-// members").
+// Access control (docs/service-access-gating.md, "Open mode + members" and
+// "Account members, ranks and who may change them").
 //
-// A two-way toggle (Open to all | Members only) and, in both modes, the
-// members list with each person's and group's rank (member < manager <
+// A two-way toggle (Open to all | Members only); Account members (this
+// account's devices, names decrypted from the account directory on this
+// device, and the co-managing accounts, under the owner's label), each with
+// its rank; and the invited people and groups with theirs (member < manager <
 // master, set by signed orders the box verifies; apps enforce them). The toggle
 // never changes the list. Add a person (or one you approve first: the friend
 // replies an acceptance the author finalizes here) or a group link (maxN,
-// optional expiry), each with its role; names and photos are sealed under the
-// household key (.com stores ciphertext). Remove = revoke on .com AND prune on
-// the box the AIDs for whom it was their last grant.
+// optional expiry), each with its rank; names and photos are sealed under the
+// household key (.com stores ciphertext). Remove = revoke on .com AND withdraw
+// on the box (it prunes who joined through it).
 //
-// Who can invite (owner rule 2026-10-15): an admin device (it holds the admin
-// root) signs create and revoke with the admin root and sets any rank; any
-// other device signs with the account's AID, invites at Member only, shows
-// ranks read-only and withdraws only its own member invites. Each row says
-// which device invited the person, the name decrypted from the account
-// directory on this device. The access-mode change + the per-AID prune stay
-// OWNER-IRK-signed to the box's pinned pipe. See lib/serviceInvite.js for the
-// wire + canonical bytes.
+// Who may do what (the box enforces it): an admin device (it holds the admin
+// root) signs everything with the admin root: invites at any rank, rank
+// orders (flagship/app-rank/v1, also Refuse for a device or co-manager), the
+// mode (flagship/service-access-mode/v2) and removals
+// (flagship/service-allow-remove/v2). Any other device, while its own rank in
+// the app is manager or master, invites at Member and withdraws its own
+// invites, signed with its account device key; below that it sees why it
+// can't. See lib/serviceInvite.js for the wire + canonical bytes.
 //
 // The consumer's USERNAME is never disclosed to the author in ANY tier — the
 // author sees only the private label they themselves assigned (personal) or the
@@ -30,9 +32,11 @@ import { controlApex } from "../lib/apex.js";
 import { getActiveProfile } from "../lib/profiles.js";
 import { fetchDecryptedDirectory } from "../lib/accountDirectory.js";
 import {
+  bytesToHex,
+  deriveAccountDeviceKeyFromSeed,
   deriveAccountIdFromSeed,
   deriveHouseholdKeyFromSeed,
-  signWithIrk,
+  signWithAccountDeviceKey,
   signWithAccountId,
 } from "../keystore.js";
 import { sensitiveSigner } from "../lib/adminRoot.js";
@@ -44,27 +48,35 @@ import {
   setServiceAccessMode,
   submitAccept,
   parseAcceptReply,
+  withdrawInviteOnBox,
 } from "../lib/serviceInvite.js";
-import { crownIcon, usersIcon } from "../lib/icons.js";
+import { crownIcon, monitorIcon, usersIcon } from "../lib/icons.js";
 import {
+  ADMIN_ONLY_MODE_NOTE,
   ADMIN_ONLY_RANK_NOTE,
   CROWNED_ROLE,
   MEMBER_ROLES,
-  addableRoles,
+  RANK_REFUSED,
+  accountMemberLine,
+  accountMemberName,
+  accountMemberTarget,
   aidsToPrune,
   alsoInText,
   canRevokeInvite,
   deviceNameResolver,
   fetchMembers,
+  inviteAbility,
   inviteTarget,
   invitedByText,
   isAdminDevice,
+  isManagerClass,
+  myAccountMember,
   otherGrants,
   roleDescription,
   roleLabel,
   roleTargetFor,
   rowRole,
-  setMemberRole,
+  setAppRank,
 } from "../lib/memberRoles.js";
 import { toast } from "../lib/toast.js";
 import { humanError } from "../lib/humanError.js";
@@ -102,21 +114,29 @@ function podBaseUrl() {
   return getPodBaseUrl() ?? "";
 }
 
-/** The paired box's FQDN — the server a signed role order names. */
-function podServerDomain() {
-  try {
-    return new URL(podBaseUrl()).host;
-  } catch {
-    return "";
-  }
-}
-
 const screensJson = (path, init) => screensFetch(path, init);
 
 /** This device's account device id, or "" when the profile has none. */
 function thisDeviceId() {
   const id = getActiveProfile()?.deviceId;
   return typeof id === "string" && /^[0-9a-f]{32}$/.test(id) ? id : "";
+}
+
+/** This device's account device key (public, hex), or "" when the profile has no device id. */
+async function thisDevicePub() {
+  const accountId = getActiveProfile()?.accountId;
+  const deviceId = thisDeviceId();
+  const umk = getSession()?.umk;
+  if (!accountId || !deviceId || !(umk instanceof Uint8Array)) return "";
+  return bytesToHex((await deriveAccountDeviceKeyFromSeed(umk, accountId, deviceId)).publicKey);
+}
+
+/** Signs with this device's account device key (what a non-admin device signs invites with). */
+async function signWithThisDevice(umk, bytes) {
+  const accountId = getActiveProfile()?.accountId;
+  const deviceId = thisDeviceId();
+  if (!accountId || !deviceId) throw new Error("This device isn't set up on your account yet. Sign in to your account on it again.");
+  return signWithAccountDeviceKey(umk, accountId, deviceId, bytes);
 }
 
 let deviceNamesKey = null;
@@ -151,6 +171,7 @@ export async function renderServiceAccess(service) {
   }
 
   const mode = lastKnownMode(serviceRef) ?? "open";
+  const admin = isAdminDevice(session);
 
   root.innerHTML = `
     <div class="card">
@@ -159,18 +180,23 @@ export async function renderServiceAccess(service) {
     </div>
 
     <div class="card mt-3">
-      <div class="fs-segmented" id="sa-mode" role="radiogroup" aria-label="Who can open it">
-        <button type="button" role="radio" data-mode="open" aria-checked="${mode === "open"}">${MODE_LABEL.open}</button>
-        <button type="button" role="radio" data-mode="restricted" aria-checked="${mode === "restricted"}">${MODE_LABEL.restricted}</button>
+      <div class="fs-segmented" id="sa-mode" role="radiogroup" aria-label="Who can open it"${admin ? "" : ' aria-disabled="true"'}>
+        <button type="button" role="radio" data-mode="open" aria-checked="${mode === "open"}"${admin ? "" : " disabled"}>${MODE_LABEL.open}</button>
+        <button type="button" role="radio" data-mode="restricted" aria-checked="${mode === "restricted"}"${admin ? "" : " disabled"}>${MODE_LABEL.restricted}</button>
       </div>
       <div id="sa-mode-status" class="mt-2 text-xs muted-sm">${escapeHtml(modeNote(mode))}</div>
+      ${admin ? "" : `<p id="sa-mode-locked" class="note mt-1">${escapeHtml(ADMIN_ONLY_MODE_NOTE)}</p>`}
     </div>
 
+    <h2 class="mt-4" id="sa-account-title">Account members</h2>
+    <div id="sa-account-people"><div class="card placeholder">loading…</div></div>
+
     <h2 class="mt-4" id="sa-members-title">Members</h2>
-    <div class="row-2">
+    <div class="row-2" id="sa-add-row">
       <button id="sa-add-person" class="secondary" type="button">+ Add person</button>
       <button id="sa-add-group" class="secondary" type="button">+ Add group</button>
     </div>
+    <p id="sa-add-why" class="note hidden"></p>
     <div id="sa-add-card" class="card mt-2 hidden">
       <div class="card-title" id="sa-add-title">Add a person</div>
       <p class="note mt-1">
@@ -235,6 +261,7 @@ export async function renderServiceAccess(service) {
       });
     });
   }
+  if (!admin) $("sa-add-row")?.classList.add("hidden");
   $("sa-add-person")?.addEventListener("click", () => openAddCard("person"));
   $("sa-add-group")?.addEventListener("click", () => openAddCard("group"));
   $("sa-photo")?.addEventListener("change", onPhotoPicked);
@@ -277,7 +304,7 @@ let addKind = "person";
 function openAddCard(kind) {
   addKind = kind;
   const card = $("sa-add-card");
-  if (!card) return;
+  if (!card || !addAbility().canInvite) return;
   card.classList.remove("hidden");
   $("sa-add-result")?.classList.add("hidden");
   const status = $("sa-add-status");
@@ -293,7 +320,7 @@ function openAddCard(kind) {
   const admin = isAdminDevice(getSession());
   const roleSel = $("sa-new-role");
   if (roleSel) {
-    roleSel.innerHTML = roleOptionsHtml("member", true, addableRoles(admin));
+    roleSel.innerHTML = roleOptionsHtml("member", true, addAbility().roles);
     roleSel.value = admin ? (lastMembers?.defaultRole ?? "member") : "member";
     roleSel.disabled = !admin;
   }
@@ -308,12 +335,14 @@ function setModeUi(mode) {
 }
 
 /**
- * The toggle: OWNER-IRK-sign + POST the mode to the box. The members list is
- * never touched. Going members-only asks once how many people that leaves.
+ * The toggle (admin devices only): sign flagship/service-access-mode/v2 with
+ * the admin root + POST it to the box. The members list is never touched.
+ * Going members-only asks once how many people that leaves.
  */
 async function onPickMode(serviceRef, mode) {
   const group = $("sa-mode");
   if (!group || group.getAttribute("aria-disabled") === "true") return;
+  if (!isAdminDevice(getSession())) return;
   const current = group.querySelector('[aria-checked="true"]')?.getAttribute("data-mode") ?? "open";
   if (mode === current) return;
   if (mode === "restricted") {
@@ -332,12 +361,13 @@ async function onPickMode(serviceRef, mode) {
   const session = getSession();
   setModeUi(mode);
   group.setAttribute("aria-disabled", "true");
+  group.dataset.saving = "1";
   if (status) {
     status.className = "mt-2 text-xs muted-sm";
     status.textContent = "Saving…";
   }
   try {
-    await setServiceAccessMode({ baseUrl: podBaseUrl(), serviceRef, mode, umk: session.umk, signWithIrk });
+    await setServiceAccessMode({ baseUrl: podBaseUrl(), serviceRef, mode, umk: session.umk, signWithIrk: sensitiveSigner() });
     rememberMode(serviceRef, mode);
     if (status) status.textContent = modeNote(mode);
     toast(mode === "restricted" ? "Now members only." : "Now open to all.");
@@ -350,6 +380,7 @@ async function onPickMode(serviceRef, mode) {
     throw e;
   } finally {
     group.removeAttribute("aria-disabled");
+    delete group.dataset.saving;
   }
 }
 
@@ -392,9 +423,9 @@ async function renderQrInto(box, link) {
 
 /**
  * Mint a capability invite (a person, approve-each person, or a group) with
- * its role, and surface the share-link + QR. On an admin device the role rides
- * a signed order to the box right after the create (the app's default role
- * needs none); any other device invites at Member and sends no role order.
+ * its rank, and surface the share-link + QR. On an admin device the rank rides
+ * a signed order to the box right after the create (the app's default rank
+ * needs none); a manager-class device invites at Member and sends no order.
  */
 async function onAdd(serviceRef) {
   const session = getSession();
@@ -411,6 +442,7 @@ async function onAdd(serviceRef) {
     return;
   }
   const admin = isAdminDevice(session);
+  if (!addAbility().canInvite) return;
   const role = admin ? ($("sa-new-role")?.value || "member") : "member";
   let maxRedemptions;
   let expiresAt;
@@ -456,11 +488,10 @@ async function onAdd(serviceRef) {
     let roleNote = "";
     if (admin && role !== (lastMembers?.defaultRole ?? null)) {
       try {
-        await setMemberRole({
-          serverDomain: podServerDomain(),
+        await setAppRank({
           serviceId: serviceRef,
           target: inviteTarget(r.inviteId),
-          role,
+          rank: role,
           umk: session.umk,
           signWithIrk: sensitiveSigner(),
           fetchJson: screensJson,
@@ -550,14 +581,25 @@ async function onFinalizeAccept(serviceRef) {
 let lastMembers = null;
 /** The live .com rows, last loaded. */
 let lastInvites = [];
+/** This device's account device key (hex), last derived. */
+let lastDevicePub = "";
+
+/** What this device may add right now (from the box's list and its own rank there). */
+function addAbility() {
+  return inviteAbility({
+    isAdmin: isAdminDevice(getSession()),
+    members: lastMembers,
+    me: myAccountMember(lastMembers, { devicePub: lastDevicePub, deviceId: thisDeviceId() }),
+  });
+}
 
 /**
  * The create/revoke signer: the admin root on an admin device (unlocked with
- * the session, no extra prompt), else the account AID, which .com and the box
- * take as a member-tier invite.
+ * the session, no extra prompt), else this device's account device key, which
+ * .com and the box take as a member-tier invite from this device.
  */
 function inviteSigner() {
-  return sensitiveSigner(signWithAccountId);
+  return sensitiveSigner(signWithThisDevice);
 }
 
 async function loadInvites(serviceRef) {
@@ -578,20 +620,26 @@ async function loadInvites(serviceRef) {
   return invites.filter((i) => !i.revokedAt);
 }
 
-/** Render the members list: .com's invites (bundles decrypted locally) + the box's roles. */
+/**
+ * Render Account members (the box's list; device names decrypted here) and
+ * the invited people (.com's invites, bundles decrypted locally, with the
+ * box's ranks), and what this device may do with them.
+ */
 async function renderPeople(serviceRef) {
   const root = $("sa-people");
   if (!root) return;
-  const [invites, members, names] = await Promise.allSettled([
+  const [invites, members, names, pub] = await Promise.allSettled([
     loadInvites(serviceRef),
     fetchMembers(serviceRef, { fetchJson: screensJson }),
     loadDeviceNames(),
+    thisDevicePub(),
   ]);
+  lastDevicePub = pub.status === "fulfilled" ? pub.value : "";
   if (members.status === "fulfilled") {
     lastMembers = members.value;
     if (lastMembers.mode === "open" || lastMembers.mode === "restricted") {
       rememberMode(serviceRef, lastMembers.mode);
-      if (!$("sa-mode")?.getAttribute("aria-disabled")) {
+      if (!$("sa-mode")?.dataset.saving) {
         setModeUi(lastMembers.mode);
         const status = $("sa-mode-status");
         if (status && status.className.indexOf("err-text") === -1) status.textContent = modeNote(lastMembers.mode);
@@ -600,6 +648,17 @@ async function renderPeople(serviceRef) {
   } else {
     lastMembers = null;
   }
+  const deviceNamesMap = names.status === "fulfilled" ? names.value : null;
+  const isAdmin = isAdminDevice(getSession());
+  renderAccountMembers(serviceRef, { isAdmin, deviceNames: deviceNamesMap });
+  const ability = addAbility();
+  $("sa-add-row")?.classList.toggle("hidden", !ability.canInvite);
+  const why = $("sa-add-why");
+  if (why) {
+    why.textContent = ability.why;
+    why.classList.toggle("hidden", ability.canInvite || !ability.why);
+  }
+  if (!ability.canInvite) $("sa-add-card")?.classList.add("hidden");
   if (invites.status === "rejected") {
     root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(humanError(invites.reason))}</p></div>`;
     return;
@@ -608,17 +667,21 @@ async function renderPeople(serviceRef) {
   const title = $("sa-members-title");
   if (title) title.textContent = `Members (${lastInvites.length})`;
   if (lastInvites.length === 0) {
-    root.innerHTML = '<div class="card placeholder">No members yet. Add a person or a group.</div>';
+    root.innerHTML = `<div class="card placeholder">${ability.canInvite ? "No members yet. Add a person or a group." : "No members yet."}</div>`;
     return;
   }
   const labelOf = (id) => {
     const row = lastInvites.find((i) => i.inviteId === id);
     return row ? (row.bundle?.name ?? "") : "";
   };
+  const me = myAccountMember(lastMembers, { devicePub: lastDevicePub, deviceId: thisDeviceId() });
   const ctx = {
-    isAdmin: isAdminDevice(getSession()),
+    isAdmin,
     deviceId: thisDeviceId(),
-    deviceNames: names.status === "fulfilled" ? names.value : null,
+    devicePub: lastDevicePub,
+    managerClass: !!me && !me.refused && isManagerClass(me.rank),
+    members: lastMembers,
+    deviceNames: deviceNamesMap,
   };
   root.innerHTML =
     (lastMembers ? "" : '<div class="card"><p class="err-text">Couldn\'t load roles from your server.</p></div>') +
@@ -647,27 +710,32 @@ async function renderPeople(serviceRef) {
   });
 }
 
-/** Sign + send one row's role change; roll the picker back on failure. */
+/** Admin devices: sign one flagship/app-rank/v1 with the admin root and send it. */
+async function sendRank(serviceRef, target, rank) {
+  const session = getSession();
+  if (!isAdminDevice(session)) throw new Error("Only an admin device can change a rank.");
+  await setAppRank({
+    serviceId: serviceRef,
+    target,
+    rank,
+    umk: session.umk,
+    signWithIrk: sensitiveSigner(),
+    fetchJson: screensJson,
+  });
+}
+
+/** Sign + send one row's rank change; roll the picker back on failure. */
 async function onPickRole(serviceRef, sel) {
   const before = sel.getAttribute("data-current");
   const role = sel.value;
   if (role === before) return;
-  const session = getSession();
-  if (!isAdminDevice(session)) {
+  if (!isAdminDevice(getSession())) {
     sel.value = before;
     return;
   }
   sel.disabled = true;
   try {
-    await setMemberRole({
-      serverDomain: podServerDomain(),
-      serviceId: serviceRef,
-      target: sel.getAttribute("data-target"),
-      role,
-      umk: session.umk,
-      signWithIrk: sensitiveSigner(),
-      fetchJson: screensJson,
-    });
+    await sendRank(serviceRef, sel.getAttribute("data-target"), role);
     toast(`Now ${roleLabel(role)}.`);
     await renderPeople(serviceRef);
   } catch (e) {
@@ -678,12 +746,103 @@ async function onPickRole(serviceRef, sel) {
   }
 }
 
+/** Refuse a device or co-manager in this app (admin devices); picking a rank again lets them back in. */
+async function onRefuse(serviceRef, btn) {
+  const name = btn.getAttribute("data-name") || "them";
+  const { inlineConfirm } = await import("../lib/modal.js");
+  const ok = await inlineConfirm({
+    title: `Refuse ${name}?`,
+    message: "They can't open this app until an admin gives them a rank again.",
+    okLabel: "Refuse",
+    danger: true,
+  });
+  if (!ok) return;
+  btn.disabled = true;
+  try {
+    await sendRank(serviceRef, btn.getAttribute("data-target"), RANK_REFUSED);
+    toast(`${name} is refused in this app.`);
+    await renderPeople(serviceRef);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/** The Account members list (this account's devices and the co-managers). */
+function renderAccountMembers(serviceRef, { isAdmin, deviceNames }) {
+  const root = $("sa-account-people");
+  if (!root) return;
+  if (!lastMembers) {
+    root.innerHTML = '<div class="card"><p class="err-text">Couldn\'t load ranks from your server.</p></div>';
+    return;
+  }
+  const rows = lastMembers.accountMembers ?? [];
+  if (rows.length === 0) {
+    root.innerHTML = '<div class="card placeholder">Your server doesn\'t list this account\'s devices yet.</div>';
+    return;
+  }
+  const ctx = { isAdmin, devicePub: lastDevicePub, deviceNames };
+  root.innerHTML = rows.map((r) => accountMemberRowHtml(r, ctx)).join("");
+  root.querySelectorAll('select[data-action="sa-acct-rank"]').forEach((sel) => {
+    sel.addEventListener("change", () => {
+      onPickRole(serviceRef, sel).catch((e) => {
+        console.error(e);
+        toast(humanError(e), "err");
+      });
+    });
+  });
+  root.querySelectorAll('[data-action="sa-acct-refuse"]').forEach((btn) => {
+    btn.addEventListener("click", () => {
+      onRefuse(serviceRef, btn).catch((e) => {
+        console.error(e);
+        toast(humanError(e), "err");
+      });
+    });
+  });
+}
+
+/**
+ * One Account members row: a device (its name from the decrypted directory)
+ * or a co-managing account (the owner's label), its rank (Master crowned,
+ * "Refused" when refused), and on an admin device a rank menu and Refuse.
+ */
+export function accountMemberRowHtml(row, ctx = { isAdmin: false, devicePub: "", deviceNames: null }) {
+  const name = accountMemberName(row, ctx);
+  const line = accountMemberLine(row, ctx);
+  const target = accountMemberTarget(row);
+  const current = row.refused ? RANK_REFUSED : (row.rank ?? RANK_REFUSED);
+  const icon = row.kind === "co-manager" ? usersIcon : monitorIcon;
+  let actions;
+  if (ctx.isAdmin) {
+    const refusedOption = row.refused ? `<option value="${RANK_REFUSED}" selected disabled>${escapeHtml(roleLabel(RANK_REFUSED))}</option>` : "";
+    actions = `${row.refused ? "" : crownHtml(current)}<select data-action="sa-acct-rank" data-target="${escapeHtml(target)}" data-current="${escapeHtml(current)}" aria-label="Rank for ${escapeHtml(name)}">${refusedOption}${roleOptionsHtml(row.refused ? "" : current)}</select>${
+      row.refused
+        ? ""
+        : `<button class="sa-remove" type="button" data-action="sa-acct-refuse" data-target="${escapeHtml(target)}" data-name="${escapeHtml(name)}">Refuse</button>`
+    }`;
+  } else {
+    actions = `${row.refused ? "" : crownHtml(current)}<span class="sa-rank" data-rank="${escapeHtml(current)}">${escapeHtml(roleLabel(current))}</span>`;
+  }
+  return `
+    <div class="card" data-account-member="${escapeHtml(target)}">
+      <div class="sa-member">
+        <div class="sa-avatar" aria-hidden="true">${icon}</div>
+        <div class="sa-member-body">
+          <div class="weight-600">${escapeHtml(name)}</div>
+          <div class="muted-sm text-xs sa-account-line">${escapeHtml(line)}</div>
+        </div>
+        <div class="sa-member-actions">
+          ${actions}
+        </div>
+      </div>
+    </div>`;
+}
+
 /**
  * One member row — a person (single bind) OR a group ("k of N joined"), with
  * its rank (a picker on an admin device, read-only elsewhere), who invited it,
  * and Remove/Revoke where this device may withdraw it.
  */
-export function peopleRowHtml(i, members, labelOf, ctx = { isAdmin: false, deviceId: "", deviceNames: null }) {
+export function peopleRowHtml(i, members, labelOf, ctx = { isAdmin: false, deviceId: "", devicePub: "", managerClass: false, members: null, deviceNames: null }) {
   const name = i.bundle?.name ?? "unknown";
   const photo = i.bundle?.photo;
   const isGroup = i.maxRedemptions !== null && i.maxRedemptions !== undefined;
@@ -715,7 +874,7 @@ export function peopleRowHtml(i, members, labelOf, ctx = { isAdmin: false, devic
       : `${crownHtml(role)}<span class="sa-rank" data-rank="${escapeHtml(role)}">${escapeHtml(roleLabel(role))}</span>`;
   const removeLabel = isGroup ? "Revoke" : "Remove";
   const invitedBy = invitedByText(i, ctx);
-  const remove = canRevokeInvite(i, ctx)
+  const remove = canRevokeInvite(i, { ...ctx, members })
     ? `<button class="sa-remove" type="button" data-action="sa-remove" data-id="${escapeHtml(i.inviteId)}" data-aid="${escapeHtml(i.boundAID ?? "")}" data-name="${escapeHtml(name)}" data-group="${isGroup ? "1" : "0"}">${removeLabel}</button>`
     : "";
   return `
@@ -737,34 +896,51 @@ export function peopleRowHtml(i, members, labelOf, ctx = { isAdmin: false, devic
 }
 
 /**
- * The two-leg remove CORE — DOM-free + dependency-injected, so it's testable
- * under Node (mirrors webappCompanionRequestsView's `runApprove`). Leg 1 records
- * the revocation on `.com` (AID-signed); leg 2 prunes the bound AID(s) on the BOX
- * (the leg that actually enforces). For a GROUP invite, leg 2 prunes EVERY bound
- * AID (the group is a labeled set). Returns `{ ok, prunedBox }`; an unredeemed
- * invite (no boundAID/boundAIDs) skips the box prune. A box-prune failure throws
- * a `box-prune-failed`-tagged error (the `.com` revoke already ran, so the admin
- * must know access may persist).
+ * The remove CORE — DOM-free + dependency-injected, so it's testable under
+ * Node (mirrors webappCompanionRequestsView's `runApprove`). Leg 1 records the
+ * revocation on `.com` (signed by `revokeSigner`: the admin root, or this
+ * device's key for its own invite); leg 2 hands the same signed revoke to the
+ * BOX, which drops the invite's grants and whoever is left with none. On an
+ * admin device leg 3 also prunes the bound AID(s) (v2, admin-signed): for a
+ * GROUP every bound AID, but only those for whom it was their last grant.
+ * Returns `{ ok, prunedBox }`. A box failure throws a `box-prune-failed`-tagged
+ * error (the `.com` revoke already ran, so the device must know access may
+ * persist until the box next checks).
  */
 export async function runRemovePerson(
-  { serviceRef, inviteId, boundAID, boundAIDs, isGroup, members },
-  { getSession, controlApex, podBaseUrl, signWithIrk, signWithAccountId, humanError, revokeInvite, removeServiceAllow },
+  { serviceRef, inviteId, boundAID, boundAIDs, isGroup, members, isAdmin = true },
+  { getSession, controlApex, podBaseUrl, signWithIrk, revokeSigner, humanError, revokeInvite, removeServiceAllow, withdrawInviteOnBox },
 ) {
   const session = getSession();
-  await revokeInvite({
+  const signed = await revokeInvite({
     comBase: controlApex(),
     username: session.username,
     inviteId,
     umk: session.umk,
-    signWithAccountId: sensitiveSigner(signWithAccountId),
+    signWithAccountId: revokeSigner,
   });
+  let withdrew = false;
+  if (typeof withdrawInviteOnBox === "function" && signed?.revoke && typeof signed.signature === "string") {
+    try {
+      const w = await withdrawInviteOnBox({ baseUrl: podBaseUrl(), revoke: signed.revoke, signature: signed.signature });
+      withdrew = (w?.pruned ?? 0) > 0;
+    } catch (e) {
+      if (!isAdmin) {
+        throw err(
+          `Withdrawn on flagshipserver.com, but your server didn't take it yet (${humanError(e)}). Anyone who joined keeps access until it next checks.`,
+          "box-prune-failed",
+        );
+      }
+    }
+  }
+  if (!isAdmin) return { ok: true, prunedBox: withdrew };
   // The AIDs to prune on the box: the whole group set, else the single bound
   // AID — but only those for whom this was their last grant. Someone who also
-  // holds another invite keeps it: the box drops just this grant when its
-  // revocation poller sees the .com revoke.
+  // holds another invite keeps it: the withdraw (or the box's revocation
+  // poller) drops just this grant.
   const bound = isGroup && Array.isArray(boundAIDs) ? boundAIDs : boundAID ? [boundAID] : [];
   const aids = members === undefined ? bound : aidsToPrune(inviteId, bound, members);
-  if (aids.length === 0) return { ok: true, prunedBox: false };
+  if (aids.length === 0) return { ok: true, prunedBox: withdrew };
   for (const aid of aids) {
     try {
       await removeServiceAllow({
@@ -786,7 +962,10 @@ export async function runRemovePerson(
 
 async function onRemovePerson(serviceRef, inviteId, name, boundAID, isGroup) {
   const row = lastInvites.find((i) => i.inviteId === inviteId);
-  if (!canRevokeInvite(row, { isAdmin: isAdminDevice(getSession()), deviceId: thisDeviceId() })) return;
+  const isAdmin = isAdminDevice(getSession());
+  const me = myAccountMember(lastMembers, { devicePub: lastDevicePub, deviceId: thisDeviceId() });
+  const managerClass = !!me && !me.refused && isManagerClass(me.rank);
+  if (!canRevokeInvite(row, { isAdmin, deviceId: thisDeviceId(), devicePub: lastDevicePub, managerClass, members: lastMembers })) return;
   const boundAIDs = isGroup ? (row && Array.isArray(row.boundAIDs) ? row.boundAIDs : []) : null;
   const restricted = (lastMembers?.mode ?? lastKnownMode(serviceRef)) === "restricted";
   const { inlineConfirm } = await import("../lib/modal.js");
@@ -805,8 +984,18 @@ async function onRemovePerson(serviceRef, inviteId, name, boundAID, isGroup) {
   if (!ok) return;
   try {
     await runRemovePerson(
-      { serviceRef, inviteId, boundAID, boundAIDs, isGroup, members: lastMembers ?? undefined },
-      { getSession, controlApex, podBaseUrl, signWithIrk, signWithAccountId, humanError, revokeInvite, removeServiceAllow },
+      { serviceRef, inviteId, boundAID, boundAIDs, isGroup, members: lastMembers ?? undefined, isAdmin },
+      {
+        getSession,
+        controlApex,
+        podBaseUrl,
+        signWithIrk: sensitiveSigner(),
+        revokeSigner: inviteSigner(),
+        humanError,
+        revokeInvite,
+        removeServiceAllow,
+        withdrawInviteOnBox,
+      },
     );
   } catch (e) {
     await renderPeople(serviceRef);

@@ -34,6 +34,7 @@ export const RUNS_ON_NOTE = "Tick a server to copy this app there as it is now. 
 export const RUNS_ON_UNKNOWN = "Can't reach this server, so it isn't known whether the app is there.";
 export const RUNS_ON_LAST_COPY = "This is the app's only copy, so it can't be unticked.";
 export const RUNS_ON_COMPANION = "Only the owner's devices can change where this app runs.";
+export const RUNS_ON_ADMIN_ONLY = "Only an admin device can change where this app runs.";
 export const COPYING = "Copying…";
 export const COPY_NEEDS_UPDATE = "This server needs an update to receive copies.";
 export const COPY_ALREADY = "This server already has this app, or is copying it now.";
@@ -432,7 +433,7 @@ export function runsOnModel(rows, { companion = false, busy = "", busyChecked = 
   });
 }
 
-export function runsOnHtml(model, { companion = false, error = "" } = {}) {
+export function runsOnHtml(model, { companion = false, adminOnly = false, error = "" } = {}) {
   const rows = model
     .map((r) =>
       `<label class="inline-check runs-on-row${r.state === "unknown" ? " is-unknown" : ""}" data-runs-on-fqdn="${escapeHtml(r.fqdn)}">
@@ -444,7 +445,7 @@ export function runsOnHtml(model, { companion = false, error = "" } = {}) {
   return `
       <h2 class="mt-4">${escapeHtml(RUNS_ON_TITLE)}</h2>
       <div class="card" id="sd-runs-on-card">
-        <p class="note">${escapeHtml(companion ? RUNS_ON_COMPANION : RUNS_ON_NOTE)}</p>
+        <p class="note">${escapeHtml(companion ? RUNS_ON_COMPANION : adminOnly ? RUNS_ON_ADMIN_ONLY : RUNS_ON_NOTE)}</p>
         ${rows || '<p class="faint-sm">Checking your servers…</p>'}
         ${error ? `<p class="err-text mt-2" data-runs-on-error>${escapeHtml(error)}</p>` : ""}
       </div>`;

@@ -1216,7 +1216,7 @@ const TOTAL: readonly Scenario[] = [
   // ── The app page: access control + ranks, internet access, API keys, Database, Runs on — gym-apps.spec.ts ──
   webTotal(
     "web-total-apps-access-control",
-    "App access control (docs/service-access-gating.md 'Open mode + members'): Members (n) lists each person/group with its rank; Members only asks once and sends an IRK-signed flagship/service-access-mode/v1; raising a member to Master signs flagship/app-member-role/v1 (target invite:<id>) and shows the crown; the list never changes with the mode. iOS: service-access-restrict-toggle, service-access-mode-status, service-access-members-title.",
+    "App access control (docs/service-access-gating.md 'Open mode + members', 'Account members'): Members (n) lists each person/group with its rank; on an admin device Members only asks once and sends an admin-root-signed flagship/service-access-mode/v2 (names the app, no serverId); raising a member to Master signs flagship/app-rank/v1 (target invite:<id>) to members/rank and shows the crown; the list never changes with the mode. iOS: service-access-restrict-toggle, service-access-mode-status, service-access-members-title.",
     "gym apps access control goes members-only and sets a rank with signed orders",
     {
       steps: [
@@ -1224,7 +1224,7 @@ const TOTAL: readonly Scenario[] = [
         { kind: "assert", describe: "Members (2) with each rank; open mode note.", handle: "#sa-members-title" },
         { kind: "tap", describe: "Members only, confirm.", handle: '#sa-mode [data-mode="restricted"]' },
         { kind: "tap", describe: "Raise Sam to Master.", handle: 'select[data-action="sa-role"]' },
-        { kind: "assert", describe: "Signed mode + role orders verified against this browser's keys.", handle: "#sa-mode-status" },
+        { kind: "assert", describe: "Admin-root-signed mode/v2 + app-rank/v1 orders verified against this browser's keys.", handle: "#sa-mode-status" },
       ],
       assertions: [
         { describe: "Members count", handle: "#sa-members-title", expect: "text", text: "Members (2)" },
@@ -1237,21 +1237,26 @@ const TOTAL: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-apps-rank-locked-non-admin",
-    "Who can invite (owner rule 2026-10-15): on a device without the admin root the rank picker is locked to Member with 'Only an admin device can give a higher rank'; ranks show read-only with no rank menu; Remove appears only on this device's own member invite; the create carries this device's id and is AID-signed, and no role order follows.",
+    "Who can invite ('Account members', owner decision 2026-10-15): a non-admin device that is a Manager in the app sees Account members read-only (This device: Manager), the mode toggle locked ('Only an admin device can change who can open it'), no Remove app and a locked Runs on; its rank picker is locked to Member with 'Only an admin device can give a higher rank'; Remove appears only on its own member invite; the create carries this device's id and is signed with its account device key (not the AID), no rank order follows; withdrawing its own invite sends the device-key-signed revoke to .com and the same revoke to the box's invite-withdraw.",
     "gym apps rank picker is locked to Member on a non-admin device",
     {
       steps: [
-        { kind: "launch", describe: "Reach Access control as a non-admin device (no admin root; the directory read is refused).", handle: "#sd-access" },
+        { kind: "launch", describe: "Reach Access control as a non-admin Manager device (no admin root; the directory read is refused).", handle: "#sd-access" },
+        { kind: "assert", describe: "Account members read-only (This device: Manager); mode locked with the why.", handle: "#sa-account-people" },
         { kind: "assert", describe: "No rank menus; Sam shows Master read-only with no Remove; Lee (own invite) has Remove.", handle: "#sa-people" },
         { kind: "tap", describe: "Add person.", handle: "#sa-add-person" },
         { kind: "assert", describe: "Rank locked to Member with the one-line why.", handle: "#sa-rank-locked" },
         { kind: "tap", describe: "Create the invite.", handle: "#sa-add-go" },
-        { kind: "assert", describe: "AID-signed create with this device's id; no role order.", handle: "#sa-add-status" },
+        { kind: "assert", describe: "Device-key-signed create with this device's id; no rank order.", handle: "#sa-add-status" },
+        { kind: "tap", describe: "Remove Lee (own invite), confirm.", handle: '[data-action="sa-remove"]' },
+        { kind: "assert", describe: "Device-key-signed revoke to .com and the same revoke to the box's invite-withdraw; no allow-remove.", handle: "#toast" },
       ],
       assertions: [
         { describe: "Rank picker disabled", handle: "#sa-new-role", expect: "disabled" },
         { describe: "Why it's locked", handle: "#sa-rank-locked", expect: "text", text: "Only an admin device can give a higher rank" },
+        { describe: "Mode locked", handle: "#sa-mode-locked", expect: "text", text: "Only an admin device can change who can open it." },
         { describe: "No rank menus", handle: 'select[data-action="sa-role"]', expect: "absent" },
+        { describe: "No Account members rank menus", handle: 'select[data-action="sa-acct-rank"]', expect: "absent" },
       ],
       screenshots: [shot("rank-locked", "Add person on a non-admin device."), shot("member-invite-created", "The Member invite created.")],
       dimension: "D6",
@@ -1259,20 +1264,59 @@ const TOTAL: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-apps-members-invited-by",
-    "Members list 'Invited by': each row names the device that invited the person, decrypted on this device from the signed account directory ('Invited by this device' for its own; 'another device' when unresolved; nothing on rows from before creators were recorded). An admin device gets a rank menu and Revoke on every row; Revoke is signed with the admin root and the directory is read once.",
+    "Members list 'Invited by': each row names the device that invited the person, decrypted on this device from the signed account directory ('Invited by this device' for its own; 'another device' when unresolved; nothing on rows from before creators were recorded). An admin device gets a rank menu and Revoke on every row; Revoke is signed with the admin root, the same revoke goes to the box's invite-withdraw, and the directory is read once.",
     "gym apps members list shows who invited each person",
     {
       steps: [
         { kind: "launch", describe: "Reach Access control as an admin device; the directory names the other device.", handle: "#sd-access" },
         { kind: "assert", describe: "Invited by Kitchen iPad / this device / another device / nothing.", handle: ".sa-invited-by" },
         { kind: "tap", describe: "Remove Sam, confirm.", handle: '[data-action="sa-remove"]' },
-        { kind: "assert", describe: "Admin-root-signed revoke; Members (3).", handle: "#sa-members-title" },
+        { kind: "assert", describe: "Admin-root-signed revoke, also posted to the box's invite-withdraw; Members (3).", handle: "#sa-members-title" },
       ],
       assertions: [
         { describe: "Device name resolved client-side", handle: ".sa-invited-by", expect: "text", text: "Invited by Kitchen iPad" },
         { describe: "Members after the revoke", handle: "#sa-members-title", expect: "text", text: "Members (3)" },
       ],
       screenshots: [shot("invited-by", "Each row says who invited them."), shot("invite-revoked", "After revoking Sam.")],
+      dimension: "D6",
+    },
+  ),
+  webTotal(
+    "web-total-apps-account-members-admin",
+    "Account members ('Account members', owner decision 2026-10-15): Access control lists this account's devices (names decrypted on this device from the account directory, else 'Device <id>'; 'This device' marked; admin devices say so) and each co-managing account under the owner's label, each with its rank (Master crowned; only Member, Manager, Master offered). On an admin device each row has a rank menu and Refuse: demoting a device and refusing then re-admitting a co-manager each send one admin-root-signed flagship/app-rank/v1 (device:<key> / share:<id>) to members/rank; a refused row reads Refused with no Refuse button. Remove app shows on the app page.",
+    "gym apps account members list each device and co-manager, and an admin changes a rank and refuses",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Access control as an admin device; the directory names the phone.", handle: "#sd-access" },
+        { kind: "assert", describe: "Kitchen iPad (Admin device, Master crowned), This device, Mum (Co-manages this server, Manager).", handle: "#sa-account-people" },
+        { kind: "tap", describe: "Demote Kitchen iPad to Member.", handle: 'select[data-action="sa-acct-rank"]' },
+        { kind: "tap", describe: "Refuse Mum, confirm.", handle: '[data-action="sa-acct-refuse"]' },
+        { kind: "assert", describe: "Mum reads Refused; the order is app-rank/v1 share:<id> refused, admin-root-signed.", handle: "#sa-account-people" },
+        { kind: "tap", describe: "Give Mum Manager again.", handle: 'select[data-action="sa-acct-rank"]' },
+      ],
+      assertions: [
+        { describe: "Account members rank menus", handle: 'select[data-action="sa-acct-rank"]', expect: "present" },
+        { describe: "Refuse per row", handle: '[data-action="sa-acct-refuse"]', expect: "present" },
+        { describe: "Co-manager row", handle: "#sa-account-people", expect: "text", text: "Co-manages this server" },
+      ],
+      screenshots: [shot("account-members-admin", "Account members on an admin device."), shot("account-members-refused", "Mum refused.")],
+      dimension: "D6",
+    },
+  ),
+  webTotal(
+    "web-total-apps-member-cant-invite",
+    "Account members ('Account members', owner decision 2026-10-15): a non-admin device whose own rank in the app is Member sees no '+ Add person / + Add group', only 'Only an admin can let you invite people to this app.', and its row in Account members reads Member.",
+    "gym apps a member-rank device sees why it can't invite",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Access control as a non-admin device the box ranks Member.", handle: "#sd-access" },
+        { kind: "assert", describe: "No add buttons; the one-line why; This device: Member.", handle: "#sa-add-why" },
+      ],
+      assertions: [
+        { describe: "Why it can't invite", handle: "#sa-add-why", expect: "text", text: "Only an admin can let you invite people to this app." },
+        { describe: "No add person", handle: "#sa-add-person", expect: "absent" },
+      ],
+      screenshots: [shot("member-cant-invite", "A Member device sees why it can't invite.")],
       dimension: "D6",
     },
   ),

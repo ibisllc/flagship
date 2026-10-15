@@ -33,6 +33,8 @@ import {
   verifySetServiceAccessMode,
   signRemoveServiceAllow,
   verifyRemoveServiceAllow,
+  verifyServiceAccessModeV2,
+  verifyServiceAllowRemoveV2,
   signServiceVisitProof,
   verifyServiceVisitProof,
   signKnockAuthorization,
@@ -622,7 +624,7 @@ describe("webapp serviceInvite — wire helpers", () => {
     expect(r.boundAID).toBeUndefined();
   });
 
-  it("setServiceAccessMode POSTs to the box's pinned pipe with the owner-IRK envelope", async () => {
+  it("setServiceAccessMode POSTs a v2 mode order (names the app only) to the box", async () => {
     const si = await loadServiceInvite();
     let captured: { url: string; body: any } | null = null;
     const f = async (url: string, init: RequestInit) => {
@@ -634,12 +636,13 @@ describe("webapp serviceInvite — wire helpers", () => {
       { fetch: f as unknown as typeof fetch, now: () => VECTORS.setAccessMode.issuedAt },
     );
     expect(captured!.url).toBe(`${POD}/api/service-access`);
-    expect(captured!.body.request).toEqual({ serverId: VECTORS.serverId, serviceRef: VECTORS.serviceRef, mode: "restricted", issuedAt: VECTORS.setAccessMode.issuedAt });
-    expect(captured!.body.signature).toBe(VECTORS.setAccessMode.sigHex);
+    const order = { serviceRef: VECTORS.serviceRef, mode: "restricted" as const, issuedAt: VECTORS.setAccessMode.issuedAt };
+    expect(captured!.body.request).toEqual(order);
+    expect(verifyServiceAccessModeV2(order, hexToBytes(captured!.body.signature), authorIrk.publicKey)).toBe(true);
     expect(r.mode).toBe("restricted");
   });
 
-  it("removeServiceAllow POSTs the owner-IRK prune to the box's allow-remove endpoint", async () => {
+  it("removeServiceAllow POSTs a v2 prune (names the app only) to the box's allow-remove endpoint", async () => {
     const si = await loadServiceInvite();
     let captured: { url: string; body: any } | null = null;
     const f = async (url: string, init: RequestInit) => {
@@ -651,11 +654,9 @@ describe("webapp serviceInvite — wire helpers", () => {
       { fetch: f as unknown as typeof fetch, now: () => VECTORS.removeAllow.issuedAt },
     );
     expect(captured!.url).toBe(`${POD}/api/service-access/allow-remove`);
-    expect(captured!.body.request).toEqual({ serverId: VECTORS.serverId, serviceRef: VECTORS.serviceRef, aid: VECTORS.removeAllow.aid, issuedAt: VECTORS.removeAllow.issuedAt });
-    // The sig the box receives is exactly the pinned remove-allow signature.
-    expect(captured!.body.signature).toBe(VECTORS.removeAllow.sigHex);
-    const order = { serverId: VECTORS.serverId, serviceRef: VECTORS.serviceRef, aid: VECTORS.removeAllow.aid, issuedAt: VECTORS.removeAllow.issuedAt };
-    expect(verifyRemoveServiceAllow(order, hexToBytes(captured!.body.signature), authorIrk.publicKey)).toBe(true);
+    const order = { serviceRef: VECTORS.serviceRef, aid: VECTORS.removeAllow.aid, issuedAt: VECTORS.removeAllow.issuedAt };
+    expect(captured!.body.request).toEqual(order);
+    expect(verifyServiceAllowRemoveV2(order, hexToBytes(captured!.body.signature), authorIrk.publicKey)).toBe(true);
     expect(r.removed).toBe(true);
     // An uppercase AID is lowercased before signing (matches the box's parse).
     let cap2: { body: any } | null = null;
@@ -668,7 +669,7 @@ describe("webapp serviceInvite — wire helpers", () => {
       { fetch: f2 as unknown as typeof fetch, now: () => VECTORS.removeAllow.issuedAt },
     );
     expect(cap2!.body.request.aid).toBe(VECTORS.removeAllow.aid);
-    expect(cap2!.body.signature).toBe(VECTORS.removeAllow.sigHex);
+    expect(cap2!.body.signature).toBe(captured!.body.signature);
   });
 
   it("buildVisitHeader is base64(JSON{proof,sig}) the box can parse + verify", async () => {

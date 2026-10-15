@@ -75,8 +75,13 @@ describe("Remove app — the signed uninstall", () => {
 });
 
 describe("Remove app — the app page", () => {
-  it("offers the button (iOS's service-detail-remove-btn) to the owner's devices only", () => {
-    expect(VIEW).toMatch(/isCompanionProfile\(\) \? "" : `<button id="service-detail-remove-btn" class="danger/);
+  it("offers the button (iOS's service-detail-remove-btn) to the owner's admin devices only", () => {
+    expect(VIEW).toMatch(/isCompanionProfile\(\) \|\| !isAdminDevice\(getSession\(\)\) \? "" : `<button id="service-detail-remove-btn" class="danger/);
+  });
+
+  it("locks Runs on (copies and uninstalls) on a device without the admin root, saying why", () => {
+    expect(VIEW).toContain("const adminOnly = !isAdminDevice(getSession());");
+    expect(VIEW).toContain("runsOnModel(state.rows, { companion: companion || adminOnly,");
   });
 
   it("asks first, then signs with the sensitive-order key", () => {

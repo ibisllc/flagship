@@ -9,7 +9,9 @@
 //   - redeem        AID-signed by the friend    → the box (first redeem binds)
 //   - accept        contact-AID-signed by friend → the author's box (manual tier)
 //   - revoke        AID-signed by the author     → .com (by inviteId; v2)
-//   - set-access-mode IRK-signed by the owner    → the box's pinned pipe
+//   - set-access-mode admin-signed (v2, names the app only) → the box
+//   - allow-remove  admin-signed (v2, names the app only) → the box
+//   - withdraw      the revoke, posted to the box too (it prunes who joined)
 //   - visit         AID-signed by the friend     → header on each request
 //
 // v2 (docs §v2 hardening): create + revoke switch from IRK-signing to
@@ -39,6 +41,8 @@ export const TAG_INVITE_ID = "flagship/service-invite/id/v1";
 export const TAG_BUNDLE = "flagship/service-invite/bundle/v1";
 export const TAG_ACCESS_MODE = "flagship/service-access-mode/v1";
 export const TAG_ALLOW_REMOVE = "flagship/service-allow-remove/v1";
+export const TAG_ACCESS_MODE_V2 = "flagship/service-access-mode/v2";
+export const TAG_ALLOW_REMOVE_V2 = "flagship/service-allow-remove/v2";
 export const TAG_VISIT = "flagship/service-visit/v1";
 export const TAG_KNOCK = "flagship/service-knock/v1";
 export const TAG_LIST_QUERY = "flagship/service-invite-list/v1";
@@ -375,6 +379,36 @@ export function canonicalRemoveServiceAllowBytes(s) {
   return enc.encode([TAG_ALLOW_REMOVE, s.serverId, s.serviceRef, s.aid, s.issuedAt].join("|"));
 }
 
+const SERVICE_REF_RE = /^[a-z0-9](?:[a-z0-9-]{0,126}[a-z0-9])?$/;
+
+function orderIssuedAt(tag, at) {
+  if (!Number.isSafeInteger(at) || at < 0) throw err(`${tag}: bad issuedAt`, "400");
+  return String(at);
+}
+
+function orderServiceRef(tag, ref) {
+  if (typeof ref !== "string" || !SERVICE_REF_RE.test(ref)) throw err(`${tag}: bad serviceRef`, "400");
+  return ref;
+}
+
+/**
+ * flagship/service-access-mode/v2 | serviceRef | open|restricted | issuedAt
+ * (admin-only; names the app, so it holds on every server of the account).
+ * Must pass packages/protocol/test-vectors/app-access-orders/vectors.json.
+ */
+export function canonicalSetAccessModeV2Bytes(o) {
+  const ref = orderServiceRef(TAG_ACCESS_MODE_V2, o.serviceRef);
+  if (o.mode !== "open" && o.mode !== "restricted") throw err(`${TAG_ACCESS_MODE_V2}: bad mode`, "400");
+  return enc.encode([TAG_ACCESS_MODE_V2, ref, o.mode, orderIssuedAt(TAG_ACCESS_MODE_V2, o.issuedAt)].join("|"));
+}
+
+/** flagship/service-allow-remove/v2 | serviceRef | aid (64 lower hex) | issuedAt (admin-only). */
+export function canonicalRemoveServiceAllowV2Bytes(o) {
+  const ref = orderServiceRef(TAG_ALLOW_REMOVE_V2, o.serviceRef);
+  if (typeof o.aid !== "string" || !/^[0-9a-f]{64}$/.test(o.aid)) throw err(`${TAG_ALLOW_REMOVE_V2}: aid must be 64 lowercase hex`, "400");
+  return enc.encode([TAG_ALLOW_REMOVE_V2, ref, o.aid, orderIssuedAt(TAG_ALLOW_REMOVE_V2, o.issuedAt)].join("|"));
+}
+
 /** flagship/service-visit/v1 | serverId | serviceRef | hex(visitorAID) | issuedAt */
 export function canonicalVisitBytes(v) {
   validateNoSepCtrl("serverId", v.serverId);
@@ -708,16 +742,18 @@ export async function listInvites(args, deps = {}) {
 /**
  * Sign + POST a revoke (by inviteId) to .com. An admin device signs with the
  * admin root; any other device may withdraw only its own member invite, signed
- * with the same AID that created it.
- * For a GROUP invite this drops the WHOLE set; the box's revocation poller +
- * the per-AID box prune are what enforce it on the serving path.
+ * with its account device key (the key that created it).
+ * For a GROUP invite this drops the WHOLE set. Resolves with the signed
+ * `revoke` + `signature`, which {@link withdrawInviteOnBox} hands the box so it
+ * prunes who joined at once (its revocation poller is the backstop).
  */
 export async function revokeInvite(args, deps = {}) {
   const { comBase, username, inviteId, umk, signWithAccountId } = args;
   if (!umk || typeof signWithAccountId !== "function") throw err("unlock the webapp first", "400");
   const f = deps.fetch || fetch;
   const now = (deps.now || Date.now)();
-  const sig = await signWithAccountId(umk, canonicalRevokeBytes({ inviteId, issuedAt: now }));
+  const revoke = { inviteId, issuedAt: now };
+  const signature = bytesToHex(await signWithAccountId(umk, canonicalRevokeBytes(revoke)));
   let resp;
   try {
     resp = await f(
@@ -725,7 +761,7 @@ export async function revokeInvite(args, deps = {}) {
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ request: { inviteId, issuedAt: now }, signature: bytesToHex(sig) }),
+        body: JSON.stringify({ request: revoke, signature }),
       },
     );
   } catch {
@@ -735,13 +771,44 @@ export async function revokeInvite(args, deps = {}) {
     const text = await resp.text().catch(() => "");
     throw err(`revoke failed (${resp.status}): ${text}`.trim(), String(resp.status));
   }
-  return resp.json().catch(() => ({ revoked: true }));
+  const body = await resp.json().catch(() => ({ revoked: true }));
+  return { ...body, revoke, signature };
 }
 
 /**
- * IRK-sign + POST a per-service access-mode change to the box's pinned pipe
- * (POST <pod>/api/service-access). `open` lets anyone; `restricted` gates the
- * service to its bound AID allow-list. Mirrors lib/frontPage.js's envelope.
+ * POST a signed invite revoke to the box (`/api/service-access/invite-withdraw`):
+ * it drops the invite's grants and everyone left with no other grant. The box
+ * takes an admin's revoke, or the creating device's own while that device is
+ * still manager-class in the app.
+ */
+export async function withdrawInviteOnBox(args, deps = {}) {
+  const { baseUrl, revoke, signature } = args;
+  if (!revoke || typeof revoke.inviteId !== "string" || typeof signature !== "string") throw err("missing signed revoke", "400");
+  const base = podBase(baseUrl);
+  const f = deps.fetch || fetch;
+  let resp;
+  try {
+    resp = await f(`${base}/api/service-access/invite-withdraw`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ revoke: { inviteId: revoke.inviteId, issuedAt: revoke.issuedAt }, signature }),
+    });
+  } catch {
+    throw err("could not reach the server", "network");
+  }
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => "");
+    throw err(`request failed (${resp.status}): ${text}`.trim(), String(resp.status));
+  }
+  const body = await resp.json().catch(() => ({}));
+  return { ok: true, pruned: typeof body.pruned === "number" ? body.pruned : 0 };
+}
+
+/**
+ * Sign (pass the sensitive-order signer: the admin root) + POST a per-app
+ * access-mode change to the box (POST <pod>/api/service-access) as
+ * `flagship/service-access-mode/v2`. `open` lets anyone; `restricted` gates the
+ * app to its members.
  */
 export async function setServiceAccessMode(args, deps = {}) {
   const { baseUrl, serviceRef, mode, umk, signWithIrk } = args;
@@ -751,8 +818,8 @@ export async function setServiceAccessMode(args, deps = {}) {
   const serverId = new URL(base).host;
   const now = (deps.now || Date.now)();
   const f = deps.fetch || fetch;
-  const order = { serverId, serviceRef, mode, issuedAt: now };
-  const sig = await signWithIrk(umk, canonicalSetAccessModeBytes(order));
+  const order = { serviceRef, mode, issuedAt: now };
+  const sig = await signWithIrk(umk, canonicalSetAccessModeV2Bytes(order));
   let resp;
   try {
     resp = await f(`${base}/api/service-access`, {
@@ -772,13 +839,11 @@ export async function setServiceAccessMode(args, deps = {}) {
 }
 
 /**
- * OWNER-IRK-sign + POST a single-AID prune to the box's pinned pipe
- * (POST <pod>/api/service-access/allow-remove). The `.com` invite revoke records
- * the revocation but never reaches the box (the box's allow-list is add-only),
- * so the admin fires THIS alongside it — it's what actually drops the friend's
- * access (the box re-checks the allow-list per request, so a live browser cookie
- * bound to that AID dies too). `aid` = the friend's bound AID (lowercase hex).
- * Mirrors setServiceAccessMode's envelope.
+ * Admin-sign + POST a single-AID prune to the box
+ * (POST <pod>/api/service-access/allow-remove) as
+ * `flagship/service-allow-remove/v2`. It drops the person's access at once
+ * (the box re-checks the allow-list per request, so a live browser cookie
+ * bound to that AID dies too). `aid` = the person's bound id (hex).
  */
 export async function removeServiceAllow(args, deps = {}) {
   const { baseUrl, serviceRef, aid, umk, signWithIrk } = args;
@@ -789,8 +854,8 @@ export async function removeServiceAllow(args, deps = {}) {
   const aidLower = aid.toLowerCase();
   const now = (deps.now || Date.now)();
   const f = deps.fetch || fetch;
-  const order = { serverId, serviceRef, aid: aidLower, issuedAt: now };
-  const sig = await signWithIrk(umk, canonicalRemoveServiceAllowBytes(order));
+  const order = { serviceRef, aid: aidLower, issuedAt: now };
+  const sig = await signWithIrk(umk, canonicalRemoveServiceAllowV2Bytes(order));
   let resp;
   try {
     resp = await f(`${base}/api/service-access/allow-remove`, {

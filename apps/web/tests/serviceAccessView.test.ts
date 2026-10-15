@@ -32,9 +32,13 @@ describe("service-access admin view", () => {
     // Going members-only confirms how many people that leaves; a failure rolls the toggle back.
     expect(r.body).toContain("will be able to open it.");
     expect(r.body).toContain("setModeUi(current)");
-    // Each member row has a role picker that sends a signed role order.
+    // Each member row has a rank picker that sends a signed flagship/app-rank/v1.
     expect(r.body).toContain('data-action="sa-role"');
-    expect(r.body).toContain("setMemberRole");
+    expect(r.body).toContain("setAppRank");
+    // Account members: this account's devices and the co-managers, each with a rank.
+    expect(r.body).toContain('id="sa-account-people"');
+    expect(r.body).toContain('data-action="sa-acct-rank"');
+    expect(r.body).toContain('data-action="sa-acct-refuse"');
     expect(r.body).toContain("fetchMembers");
     // Master wears the crown; the add card shows the app's one line per rank.
     expect(r.body).toContain("crownHtml(role)");
@@ -50,10 +54,14 @@ describe("service-access admin view", () => {
     // Identity derivations come from the keystore (AID + household).
     expect(r.body).toContain("deriveAccountIdFromSeed");
     expect(r.body).toContain("deriveHouseholdKeyFromSeed");
-    // v2: the access-mode change + box prune stay owner-IRK; create/revoke/list
-    // are now AID-signed (box-as-authority verifies against the stable AID).
-    expect(r.body).toContain("signWithIrk");
+    // Mode, prune and rank orders sign with the admin root (the sensitive
+    // signer); a non-admin device's create/revoke with its account device key;
+    // the .com list query with the AID.
+    expect(r.body).toContain("signWithIrk: sensitiveSigner()");
+    expect(r.body).toContain("signWithAccountDeviceKey");
     expect(r.body).toContain("signWithAccountId");
+    // The withdraw also goes to the box, which prunes who joined through it.
+    expect(r.body).toContain("withdrawInviteOnBox");
     // The copyable share-link + an inline QR + Web Share API + clipboard fallback.
     expect(r.body).toContain("navigator.share");
     expect(r.body).toContain("navigator.clipboard");
@@ -217,8 +225,8 @@ describe("service-access — runRemovePerson (revoke .com + prune box)", () => {
     controlApex: () => "https://flagshipserver.com",
     podBaseUrl: () => "https://home.alice.flagship.services",
     signWithIrk: async () => new Uint8Array(64),
-    // v2: the .com revoke is AID-signed (the box prune stays IRK-signed).
-    signWithAccountId: async () => new Uint8Array(64),
+    // The .com revoke: the admin root, or this device's key for its own invite.
+    revokeSigner: async () => new Uint8Array(64),
     humanError: (e: unknown) => String((e as Error)?.message ?? e),
   });
 
@@ -231,11 +239,11 @@ describe("service-access — runRemovePerson (revoke .com + prune box)", () => {
       { ...baseDeps(), revokeInvite, removeServiceAllow },
     );
     expect(out).toEqual({ ok: true, prunedBox: true });
-    // Leg 1: .com revoke, by inviteId, AID-signed (v2).
+    // Leg 1: .com revoke, by inviteId, signed by the revoke signer.
     expect(revokeInvite).toHaveBeenCalledTimes(1);
     expect(revokeInvite.mock.calls[0]![0]).toMatchObject({ username: "alice", inviteId: "inv-1" });
     expect(typeof (revokeInvite.mock.calls[0]![0] as { signWithAccountId: unknown }).signWithAccountId).toBe("function");
-    // Leg 2: the box prune, with the exact serviceRef + bound AID, IRK-signed.
+    // Leg 3 (admin): the box prune, with the exact serviceRef + bound AID, admin-signed.
     expect(removeServiceAllow).toHaveBeenCalledTimes(1);
     const pruneArg = removeServiceAllow.mock.calls[0]![0] as { baseUrl: string; serviceRef: string; aid: string; signWithIrk: unknown };
     expect(pruneArg.serviceRef).toBe(SERVICE);
@@ -316,6 +324,45 @@ describe("service-access — runRemovePerson (revoke .com + prune box)", () => {
     ).rejects.toMatchObject({ code: "box-prune-failed" });
     // The .com revoke still ran (leg 1 succeeds before the box prune fails).
     expect(revokeInvite).toHaveBeenCalledTimes(1);
+  });
+
+  it("hands the box the same signed revoke as a withdraw", async () => {
+    const mod = await loadServiceAccessModule();
+    const revoke = { inviteId: "inv-4", issuedAt: 1_700_000_000_000 };
+    const revokeInvite = vi.fn(async () => ({ revoked: true, revoke, signature: "ab".repeat(64) }));
+    const withdrawInviteOnBox = vi.fn(async () => ({ ok: true, pruned: 1 }));
+    const removeServiceAllow = vi.fn(async () => ({ ok: true, removed: true }));
+    const out = await mod.runRemovePerson(
+      { serviceRef: SERVICE, inviteId: "inv-4", boundAID: AID },
+      { ...baseDeps(), revokeInvite, removeServiceAllow, withdrawInviteOnBox },
+    );
+    expect(out).toEqual({ ok: true, prunedBox: true });
+    expect(withdrawInviteOnBox).toHaveBeenCalledWith({ baseUrl: "https://home.alice.flagship.services", revoke, signature: "ab".repeat(64) });
+    expect(removeServiceAllow).toHaveBeenCalledTimes(1);
+  });
+
+  it("a non-admin device withdraws through the box only, never an allow-remove", async () => {
+    const mod = await loadServiceAccessModule();
+    const revoke = { inviteId: "inv-5", issuedAt: 1_700_000_000_000 };
+    const revokeInvite = vi.fn(async () => ({ revoked: true, revoke, signature: "cd".repeat(64) }));
+    const withdrawInviteOnBox = vi.fn(async () => ({ ok: true, pruned: 1 }));
+    const removeServiceAllow = vi.fn(async () => ({ ok: true, removed: true }));
+    const out = await mod.runRemovePerson(
+      { serviceRef: SERVICE, inviteId: "inv-5", boundAID: AID, isAdmin: false },
+      { ...baseDeps(), revokeInvite, removeServiceAllow, withdrawInviteOnBox },
+    );
+    expect(out).toEqual({ ok: true, prunedBox: true });
+    expect(removeServiceAllow).not.toHaveBeenCalled();
+    const failing = vi.fn(async () => {
+      throw new Error("request failed (403): only an admin");
+    });
+    await expect(
+      mod.runRemovePerson(
+        { serviceRef: SERVICE, inviteId: "inv-5", boundAID: AID, isAdmin: false },
+        { ...baseDeps(), revokeInvite, removeServiceAllow, withdrawInviteOnBox: failing },
+      ),
+    ).rejects.toMatchObject({ code: "box-prune-failed" });
+    expect(removeServiceAllow).not.toHaveBeenCalled();
   });
 });
 

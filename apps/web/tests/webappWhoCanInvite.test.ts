@@ -1,9 +1,10 @@
-// Who can invite (owner rule 2026-10-15, docs/service-access-gating.md): any
-// device of an account may invite someone to an app at Member; only a device
-// holding the admin root gives a higher rank, changes ranks or withdraws
-// someone else's invite. Each members row says which device invited it, the
-// name decrypted on this device; admins get a content-free invite-created push
-// that opens the account activity.
+// Who can invite (docs/service-access-gating.md, "Account members, ranks and
+// who may change them"): a device of the account that is manager-class in the
+// app may invite someone at Member, signed with its account device key; only a
+// device holding the admin root gives a higher rank, changes ranks or
+// withdraws someone else's invite. Each members row says which device invited
+// it, the name decrypted on this device; admins get a content-free
+// invite-created push that opens the account activity.
 
 import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
@@ -65,10 +66,10 @@ describe("create and revoke: signer and attribution", () => {
     expect((await create(THIS_DEVICE, "admin")).r.tier).toBe("admin");
   });
 
-  it("an admin device signs create and revoke with the admin root, any other device with the AID", async () => {
+  it("an admin device signs create and revoke with the admin root, any other device with its account device key", async () => {
     const { makeSensitiveSigner, SENSITIVE_TAGS } = await load("lib/adminRoot.js");
     const si = await load("lib/serviceInvite.js");
-    const aid = vi.fn(async () => new Uint8Array([1]));
+    const deviceKey = vi.fn(async () => new Uint8Array([1]));
     const admin = vi.fn(async () => new Uint8Array([2]));
     const createBytes = si.canonicalCreateBytes({
       inviteId: "inv-1", authorAID: new Uint8Array(32), serviceRef: SERVICE, secretHash: "ab", encryptedBundle: "cd", issuedAt: 1,
@@ -76,26 +77,27 @@ describe("create and revoke: signer and attribution", () => {
     const revokeBytes = si.canonicalRevokeBytes({ inviteId: "inv-1", issuedAt: 1 });
     const umk = new Uint8Array(32);
 
-    const adminSigner = makeSensitiveSigner(new Uint8Array(32).fill(9), aid, { signWithAdminRoot: admin });
+    const adminSigner = makeSensitiveSigner(new Uint8Array(32).fill(9), deviceKey, { signWithAdminRoot: admin });
     expect(await adminSigner(umk, createBytes)).toEqual(new Uint8Array([2]));
     expect(await adminSigner(umk, revokeBytes)).toEqual(new Uint8Array([2]));
-    expect(aid).not.toHaveBeenCalled();
+    expect(deviceKey).not.toHaveBeenCalled();
 
-    const memberSigner = makeSensitiveSigner(null, aid, { signWithAdminRoot: admin });
+    const memberSigner = makeSensitiveSigner(null, deviceKey, { signWithAdminRoot: admin });
     expect(await memberSigner(umk, createBytes)).toEqual(new Uint8Array([1]));
     expect(await memberSigner(umk, revokeBytes)).toEqual(new Uint8Array([1]));
     expect(admin).toHaveBeenCalledTimes(2);
 
     // Rank changes are admin-root orders too: the box refuses an IRK-signed one.
-    expect(SENSITIVE_TAGS.has("flagship/app-member-role/v1")).toBe(true);
+    expect(SENSITIVE_TAGS.has("flagship/app-rank/v1")).toBe(true);
   });
 
-  it("the view signs both through the session's sensitive signer and sends the device id", () => {
+  it("the view signs both through the session's sensitive signer over this device's key and sends the device id", () => {
     const src = readFileSync(join(WEBAPP, "views/service-access.js"), "utf8");
     expect(src).toContain("deviceId: thisDeviceId()");
     expect(src).toContain("signWithAccountId: inviteSigner()");
-    expect(src).toMatch(/function inviteSigner\(\) \{\s*return sensitiveSigner\(signWithAccountId\);/);
-    expect(src).toContain("signWithAccountId: sensitiveSigner(signWithAccountId)");
+    expect(src).toMatch(/function inviteSigner\(\) \{\s*return sensitiveSigner\(signWithThisDevice\);/);
+    expect(src).toContain("return signWithAccountDeviceKey(umk, accountId, deviceId, bytes);");
+    expect(src).toContain("revokeSigner: inviteSigner()");
   });
 });
 
@@ -166,7 +168,7 @@ describe("rank picker and revoke rules", () => {
     expect(src).toContain("if (admin && role !== (lastMembers?.defaultRole ?? null))");
   });
 
-  it("revoke: an admin any row, others only their own member invites", async () => {
+  it("revoke: an admin any row, others only their own member invites while manager-class", async () => {
     const mr = await load("lib/memberRoles.js");
     const own = { creatorTier: "member", creatorDeviceId: THIS_DEVICE };
     const otherMember = { creatorTier: "member", creatorDeviceId: PHONE };
@@ -175,11 +177,20 @@ describe("rank picker and revoke rules", () => {
     for (const row of [own, otherMember, adminInvite, old]) {
       expect(mr.canRevokeInvite(row, { isAdmin: true, deviceId: THIS_DEVICE })).toBe(true);
     }
-    expect(mr.canRevokeInvite(own, { isAdmin: false, deviceId: THIS_DEVICE })).toBe(true);
-    expect(mr.canRevokeInvite(otherMember, { isAdmin: false, deviceId: THIS_DEVICE })).toBe(false);
-    expect(mr.canRevokeInvite(adminInvite, { isAdmin: false, deviceId: THIS_DEVICE })).toBe(false);
-    expect(mr.canRevokeInvite(old, { isAdmin: false, deviceId: THIS_DEVICE })).toBe(false);
-    expect(mr.canRevokeInvite({ creatorTier: "member", creatorDeviceId: null }, { isAdmin: false, deviceId: "" })).toBe(false);
+    const manager = { isAdmin: false, deviceId: THIS_DEVICE, managerClass: true };
+    expect(mr.canRevokeInvite(own, manager)).toBe(true);
+    expect(mr.canRevokeInvite(otherMember, manager)).toBe(false);
+    expect(mr.canRevokeInvite(adminInvite, manager)).toBe(false);
+    expect(mr.canRevokeInvite(old, manager)).toBe(false);
+    expect(mr.canRevokeInvite({ creatorTier: "member", creatorDeviceId: null }, { ...manager, deviceId: "" })).toBe(false);
+    // Demoted below manager (or refused): no withdraw, even of its own.
+    expect(mr.canRevokeInvite(own, { ...manager, managerClass: false })).toBe(false);
+    // The box's record of the creating key also names it.
+    const pub = "77".repeat(32);
+    const members = { invites: [{ inviteId: "inv-x", creatorPub: pub, creatorDeviceId: null }] };
+    const unnamed = { inviteId: "inv-x", creatorTier: "member", creatorDeviceId: null };
+    expect(mr.canRevokeInvite(unnamed, { ...manager, devicePub: pub, members })).toBe(true);
+    expect(mr.canRevokeInvite(unnamed, { ...manager, devicePub: "88".repeat(32), members })).toBe(false);
   });
 
   it("rows show the rank read-only and no rank menu on a non-admin device", async () => {
@@ -192,7 +203,7 @@ describe("rank picker and revoke rules", () => {
     const sam = { inviteId: "inv-sam", bundle: { name: "Sam" }, boundAID: null, maxRedemptions: null, creatorTier: "admin", creatorDeviceId: PHONE };
     const mine = { inviteId: "inv-mine", bundle: { name: "Lee" }, boundAID: null, maxRedemptions: null, creatorTier: "member", creatorDeviceId: THIS_DEVICE };
     const names = new Map([[PHONE, "Alice's iPhone"]]);
-    const member = { isAdmin: false, deviceId: THIS_DEVICE, deviceNames: names };
+    const member = { isAdmin: false, deviceId: THIS_DEVICE, managerClass: true, deviceNames: names };
     const admin = { isAdmin: true, deviceId: THIS_DEVICE, deviceNames: names };
     const label = () => "";
 

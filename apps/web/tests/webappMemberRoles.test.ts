@@ -1,75 +1,125 @@
-// Access control roles (docs/service-access-gating.md, "Open mode + members"):
-// the webapp's app-member-role signer against THE reference vectors, and the
-// helpers that place each members-list row's role and "also in" line.
+// Access control ranks (docs/service-access-gating.md, "Account members, ranks
+// and who may change them"): the webapp's admin-only access orders against THE
+// reference vectors (app-rank/v1, service-access-mode/v2,
+// service-allow-remove/v2, signed by a raw Ed25519 seed standing in for the
+// admin root), and the helpers that place each members-list row's rank and
+// "also in" line.
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it, vi } from "vitest";
-import { deriveIRK, ed } from "@flagship/protocol";
+import { ed } from "@flagship/protocol";
 
+type Rank = { serviceRef: string; target: string; rank: string; issuedAt: number };
+type Mode = { serviceRef: string; mode: string; issuedAt: number };
+type Remove = { serviceRef: string; aid: string; issuedAt: number };
+type Signed = { canonical: string; signature: string };
 const V = JSON.parse(
-  readFileSync(resolve(__dirname, "../../../packages/protocol/test-vectors/app-member-role/vectors.json"), "utf8"),
+  readFileSync(resolve(__dirname, "../../../packages/protocol/test-vectors/app-access-orders/vectors.json"), "utf8"),
 ) as {
-  umkSeedHex: string;
-  pub: string;
-  cases: Array<{ serverDomain: string; serviceId: string; target: string; role: string; issuedAt: number; canonical: string; signature: string }>;
-  invalid: Array<{ serverDomain: string; serviceId: string; target: string; role: string; issuedAt: number; why: string }>;
+  signerSeedHex: string;
+  signerPub: string;
+  rank: { cases: Array<Rank & Signed>; invalid: Array<Rank & { why: string }> };
+  mode: { cases: Array<Mode & Signed>; invalid: Array<Mode & { why: string }> };
+  remove: { cases: Array<Remove & Signed>; invalid: Array<Remove & { why: string }> };
 };
 
-async function lib() {
-  const path = resolve(__dirname, "..", "public", "webapp", "lib", "memberRoles.js");
-  return await import(pathToFileURL(path).href);
-}
+const webapp = (...p: string[]) => pathToFileURL(resolve(__dirname, "..", "public", "webapp", ...p)).href;
+const lib = () => import(webapp("lib", "memberRoles.js"));
+const invites = () => import(webapp("lib", "serviceInvite.js"));
 const fromHex = (h: string) => Uint8Array.from(h.match(/../g)!.map((b) => parseInt(b, 16)));
 const toHex = (b: Uint8Array) => Buffer.from(b).toString("hex");
+const text = (b: Uint8Array) => new TextDecoder().decode(b);
+const POD = "https://home.harry.flagship.services";
 
-describe("app-member-role (webapp) vs test-vectors/app-member-role", () => {
-  const irk = deriveIRK({ seed: fromHex(V.umkSeedHex) });
+/** A fetch that records the one request and answers ok. */
+function recorder(answer: unknown) {
+  const sent: Array<{ url: string; body: any }> = [];
+  const fetch = async (url: string, init: RequestInit) => {
+    sent.push({ url, body: JSON.parse(String(init.body)) });
+    return { ok: true, json: async () => answer } as Response;
+  };
+  return { sent, fetch: fetch as unknown as typeof globalThis.fetch };
+}
 
-  it.each(V.cases.map((c, i) => [i, c] as const))("case #%i: canonical bytes + signature", async (_i, c) => {
-    const m = await lib();
-    const order = { serverDomain: c.serverDomain, serviceId: c.serviceId, target: c.target, role: c.role, issuedAt: c.issuedAt };
-    expect(new TextDecoder().decode(m.canonicalAppMemberRoleBytes(order))).toBe(c.canonical);
-    const body = await m.signAppMemberRole({
-      ...order,
-      umk: new Uint8Array(32),
-      signWithIrk: async (_umk: Uint8Array, bytes: Uint8Array) => ed.sign(bytes, irk.privateKey),
-    });
-    expect(body).toEqual({ order, signature: c.signature });
+describe("admin access orders (webapp) vs test-vectors/app-access-orders", () => {
+  const seed = fromHex(V.signerSeedHex);
+  const signer = async (_umk: Uint8Array, bytes: Uint8Array) => ed.sign(bytes, seed);
+
+  it("the signer seed is the vectors' key", () => {
+    expect(toHex(ed.getPublicKey(seed))).toBe(V.signerPub);
   });
 
-  it.each(V.invalid.map((c) => [c.why, c] as const))("refuses: %s", async (_why, c) => {
+  it.each(V.rank.cases.map((c, i) => [i, c] as const))("app-rank case #%i: canonical bytes + signature", async (_i, c) => {
     const m = await lib();
-    expect(() => m.canonicalAppMemberRoleBytes(c)).toThrow();
+    const order = { serviceRef: c.serviceRef, target: c.target, rank: c.rank, issuedAt: c.issuedAt };
+    expect(text(m.canonicalAppRankBytes(order))).toBe(c.canonical);
+    expect(await m.signAppRank({ ...order, umk: new Uint8Array(32), signWithIrk: signer })).toEqual({ order, signature: c.signature });
   });
 
-  it("setMemberRole posts {order, signature} to the app's members/role route", async () => {
+  it.each(V.rank.invalid.map((c) => [c.why, c] as const))("app-rank refuses: %s", async (_why, c) => {
+    const m = await lib();
+    expect(() => m.canonicalAppRankBytes(c)).toThrow();
+  });
+
+  it.each(V.mode.cases.map((c, i) => [i, c] as const))("access-mode/v2 case #%i: canonical bytes, signature, wire", async (_i, c) => {
+    const si = await invites();
+    const order = { serviceRef: c.serviceRef, mode: c.mode, issuedAt: c.issuedAt };
+    const bytes = si.canonicalSetAccessModeV2Bytes(order);
+    expect(text(bytes)).toBe(c.canonical);
+    expect(toHex(ed.sign(bytes, seed))).toBe(c.signature);
+    const r = recorder({ ok: true });
+    await si.setServiceAccessMode(
+      { baseUrl: POD, serviceRef: c.serviceRef, mode: c.mode, umk: new Uint8Array(32), signWithIrk: signer },
+      { fetch: r.fetch, now: () => c.issuedAt },
+    );
+    expect(r.sent).toEqual([{ url: `${POD}/api/service-access`, body: { request: order, signature: c.signature } }]);
+  });
+
+  it.each(V.mode.invalid.map((c) => [c.why, c] as const))("access-mode/v2 refuses: %s", async (_why, c) => {
+    const si = await invites();
+    expect(() => si.canonicalSetAccessModeV2Bytes(c)).toThrow();
+  });
+
+  it.each(V.remove.cases.map((c, i) => [i, c] as const))("allow-remove/v2 case #%i: canonical bytes, signature, wire", async (_i, c) => {
+    const si = await invites();
+    const order = { serviceRef: c.serviceRef, aid: c.aid, issuedAt: c.issuedAt };
+    const bytes = si.canonicalRemoveServiceAllowV2Bytes(order);
+    expect(text(bytes)).toBe(c.canonical);
+    expect(toHex(ed.sign(bytes, seed))).toBe(c.signature);
+    const r = recorder({ ok: true, removed: true });
+    await si.removeServiceAllow(
+      { baseUrl: POD, serviceRef: c.serviceRef, aid: c.aid, umk: new Uint8Array(32), signWithIrk: signer },
+      { fetch: r.fetch, now: () => c.issuedAt },
+    );
+    expect(r.sent).toEqual([{ url: `${POD}/api/service-access/allow-remove`, body: { request: order, signature: c.signature } }]);
+  });
+
+  it.each(V.remove.invalid.map((c) => [c.why, c] as const))("allow-remove/v2 refuses: %s", async (_why, c) => {
+    const si = await invites();
+    expect(() => si.canonicalRemoveServiceAllowV2Bytes(c)).toThrow();
+  });
+
+  it("setAppRank posts {order, signature} to the app's members/rank route", async () => {
     const m = await lib();
     const fetchJson = vi.fn(async () => ({ ok: true }));
-    await m.setMemberRole({
-      serverDomain: "home.harry.flagship.services",
-      serviceId: "harry-weather",
-      target: "invite:abc",
-      role: "manager",
-      umk: new Uint8Array(32),
-      signWithIrk: async (_u: Uint8Array, bytes: Uint8Array) => ed.sign(bytes, irk.privateKey),
-      fetchJson,
-      now: () => 1_700_000_000_000,
-    });
+    const c = V.rank.cases[0]!;
+    await m.setAppRank({ serviceId: c.serviceRef, target: c.target, rank: c.rank, umk: new Uint8Array(32), signWithIrk: signer, fetchJson, now: () => c.issuedAt });
     const [path, init] = fetchJson.mock.calls[0] as unknown as [string, { method: string; body: string }];
-    expect(path).toBe("/api/screens/services/harry-weather/members/role");
+    expect(path).toBe(`/api/screens/services/${c.serviceRef}/members/rank`);
     expect(init.method).toBe("POST");
-    const sent = JSON.parse(init.body);
-    expect(sent.order).toEqual({
-      serverDomain: "home.harry.flagship.services",
-      serviceId: "harry-weather",
-      target: "invite:abc",
-      role: "manager",
-      issuedAt: 1_700_000_000_000,
+    expect(JSON.parse(init.body)).toEqual({
+      order: { serviceRef: c.serviceRef, target: c.target, rank: c.rank, issuedAt: c.issuedAt },
+      signature: c.signature,
     });
-    expect(ed.verify(fromHex(sent.signature), m.canonicalAppMemberRoleBytes(sent.order), irk.publicKey)).toBe(true);
-    expect(toHex(irk.publicKey)).toBe(V.pub);
+  });
+
+  it("the admin-only orders sign with the admin root on an admin device", async () => {
+    const { SENSITIVE_TAGS } = await import(webapp("lib", "adminRoot.js"));
+    for (const tag of ["flagship/app-rank/v1", "flagship/service-access-mode/v2", "flagship/service-allow-remove/v2", "flagship/uninstall-service/v1"]) {
+      expect(SENSITIVE_TAGS.has(tag)).toBe(true);
+    }
   });
 });
 
@@ -97,6 +147,7 @@ describe("members-list helpers", () => {
     expect(m.roleTargetFor({ inviteId: "old", boundAID: OLD }, members)).toBe(`aid:${OLD}`);
     // Unused invite: the default until the owner picks one.
     expect(m.rowRole({ inviteId: "new", boundAID: null }, members)).toBe("member");
+    expect(m.rowRole({ inviteId: "new", boundAID: null }, {})).toBe("member");
     expect(m.roleDescription("manager", members)).toBe("Runs tournaments");
     expect(m.roleDescription("master", members)).toBe("");
     expect(m.MEMBER_ROLES.map(m.roleLabel)).toEqual(["Member", "Manager", "Master"]);
@@ -107,5 +158,25 @@ describe("members-list helpers", () => {
     const others = m.otherGrants({ inviteId: "sam", boundAID: SAM }, members, (id: string) => (id === "family" ? "Family" : ""));
     expect(m.alsoInText(others)).toBe("also in Family: Member");
     expect(m.alsoInText([])).toBe("");
+  });
+
+  it("there is no owner rank: a legacy owner reads as master, anything else is dropped", async () => {
+    const m = await lib();
+    expect(m.normalizeRank("owner")).toBe("master");
+    expect(m.normalizeRank("viewer")).toBeNull();
+    expect(m.roleLabel("owner")).toBe("owner");
+    const n = m.normalizeMembers({
+      roles: ["member", "manager", "master", "owner"],
+      defaultRole: "owner",
+      members: [{ aid: SAM, role: "owner", grants: [{ inviteId: "sam", role: "owner" }] }],
+      invites: [{ inviteId: "sam", role: "owner", creatorPub: "AB".repeat(32), creatorDeviceId: "nope" }],
+      accountMembers: [{ kind: "device", deviceId: "a1".repeat(16), devicePub: "11".repeat(32), tier: "admin", rank: "owner", set: false, refused: false }],
+    });
+    expect(n.roles).toEqual(["member", "manager", "master"]);
+    expect(n.defaultRole).toBe("master");
+    expect(n.members[0].role).toBe("master");
+    expect(n.members[0].grants[0].role).toBe("master");
+    expect(n.invites[0]).toMatchObject({ role: "master", creatorPub: "ab".repeat(32), creatorDeviceId: null });
+    expect(n.accountMembers[0].rank).toBe("master");
   });
 });

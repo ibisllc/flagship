@@ -27,6 +27,7 @@ import {
 import { getSession } from "../lib/state.js";
 import { signWithIrk } from "../keystore.js";
 import { sensitiveSigner } from "../lib/adminRoot.js";
+import { isAdminDevice } from "../lib/memberRoles.js";
 import { enterBrowserViewer } from "./browser-viewer.js";
 import { toast } from "../lib/toast.js";
 import { humanError } from "../lib/humanError.js";
@@ -176,7 +177,7 @@ export async function renderServiceDetail(serviceId) {
           <span class="label">creator</span><span class="value">${escapeHtml(s.creator)}</span>
         </div>
       </div>
-      <div id="sd-runs-on">${runsOnHtml([], { companion: isCompanionProfile() })}</div>
+      <div id="sd-runs-on">${runsOnHtml([], { companion: isCompanionProfile(), adminOnly: !isAdminDevice(getSession()) })}</div>
       ${body.editable === true ? renderEditRow() : ""}
       ${typeof body.adaptedFrom?.repo === "string" ? renderReportRow(body.adaptedFrom.repo) : ""}
       <div id="sd-egress">${renderInternetSection(s)}</div>
@@ -224,7 +225,7 @@ export async function renderServiceDetail(serviceId) {
         </p>
         <button id="sd-configure-env" class="full-width mt-2">Configure environment</button>
       </div>
-      ${isCompanionProfile() ? "" : `<button id="service-detail-remove-btn" class="danger full-width mt-4" type="button">${escapeHtml(REMOVE_APP_LABEL)}</button>`}
+      ${isCompanionProfile() || !isAdminDevice(getSession()) ? "" : `<button id="service-detail-remove-btn" class="danger full-width mt-4" type="button">${escapeHtml(REMOVE_APP_LABEL)}</button>`}
     `;
 
     $("sd-edit")?.addEventListener("click", async () => {
@@ -888,7 +889,11 @@ function paintRunsOn(state) {
   const slot = $("sd-runs-on");
   if (!slot || runsOn !== state) return;
   const companion = isCompanionProfile();
-  slot.innerHTML = runsOnHtml(runsOnModel(state.rows, { companion, busy: state.busy, busyChecked: state.busyChecked }), { companion, error: state.error });
+  const adminOnly = !isAdminDevice(getSession());
+  slot.innerHTML = runsOnHtml(
+    runsOnModel(state.rows, { companion: companion || adminOnly, busy: state.busy, busyChecked: state.busyChecked }),
+    { companion, adminOnly, error: state.error },
+  );
   slot.querySelectorAll("[data-runs-on-toggle]").forEach((box) => {
     box.addEventListener("change", () => void toggleRunsOn(state, box.getAttribute("data-runs-on-toggle"), box.checked));
   });

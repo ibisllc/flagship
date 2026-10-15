@@ -214,7 +214,16 @@
 //  v96: a call flagshipserver.com rate-limits says who is limited and when
 //      to try again (lib/rateLimited.js, precached) instead of a generic
 //      error.
-const SHELL_VERSION = "v96";
+//  v101: Access control lists Account members (this account's devices,
+//       named on this device, and co-managing accounts) with their rank;
+//       admin devices change ranks, refuse, switch the mode, remove people
+//       and uninstall with admin-root orders that name the app
+//       (flagship/app-rank/v1, service-access-mode/v2, allow-remove/v2);
+//       other devices invite at Member and withdraw their own invites with
+//       their account device key while manager-class, else see why not. App
+//       sign-in signs with the device key on own servers and the share key
+//       on shared ones. (v97-v100 belong to feature branches.)
+const SHELL_VERSION = "v101";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
