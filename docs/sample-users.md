@@ -1583,6 +1583,8 @@ decision — an operator removes a demo with `sample-user.mjs cleanup`.
 | `UPCLOUD_PLAN` | var | Plan name for new demos (required) |
 | `UPCLOUD_TEMPLATE` | var | Debian 12 public template UUID to clone (required) |
 | `UPCLOUD_STORAGE_GB` | var | Root disk size; default 20 — keep within the plan's included storage |
+| `UPCLOUD_EXTRA_LABELS` | var | `k=v[,k=v]` labels added to every server the Worker creates. The gym sets `flagship-env=gym`; its `/api/gym/teardown` destroys only servers carrying it |
+| `DEMO_INSTALLER_GIT_REF` | var | The git ref new demo boxes clone (default `main`). Gym only, to try unlanded box code |
 | `UPCLOUD_SSH_PUBLIC_KEY` | secret | Debug only, normally UNSET. Installs one SSH key on newly created demo boxes. Delete the secret and the box's `authorized_keys` line when done. |
 
 **The UpCloud free trial blocks the tunnel.** Trial accounts firewall outbound
