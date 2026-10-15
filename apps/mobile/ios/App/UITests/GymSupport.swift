@@ -10,6 +10,14 @@ extension XCUIApplication {
             .firstMatch
     }
 
+    /// The system back button of the page titled `title`. UIKit names it
+    /// `BackButton`; it usually reports as a Button, but the gym has seen
+    /// XCUITest resolve it as a PopUpButton (iOS 26+ gives it a long-press
+    /// history menu) and fail a `buttons[...]` query on the type: match any.
+    func navBackButton(in title: String) -> XCUIElement {
+        navigationBars[title].descendants(matching: .any).matching(identifier: "BackButton").firstMatch
+    }
+
     /// "Add/Import a server" asks which: pick "Add a new server".
     func chooseAddNewServer(file: StaticString = #filePath, line: UInt = #line) {
         // The dialog nests the button in a button with the same id.

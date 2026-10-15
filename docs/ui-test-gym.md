@@ -1112,9 +1112,14 @@ scenario, red) if not. At Tier-2 this rides the existing demo-classification
   `share-create`; `home-shared-with-me`, `home-shared-<id>`; `shared-leave`,
   `shared-approve-startup` (Android's share world needs
   `flagship.smokeShares`, iOS's `-smoke-shares`). iOS only so far:
-  `runs-on-<fqdn>`. A SwiftUI id on a plain stack is copied onto
-  every element inside it and replaces theirs, so identified sections use
-  `.accessibilityElement(children: .contain)`.
+  `runs-on-<fqdn>`. **Back:** the iOS system navigation back button is
+  UIKit's own `BackButton`; address it with `navBackButton(in:)`
+  (`GymSupport.swift`), which matches any element type, never
+  `buttons["BackButton"]` (it can resolve as a PopUpButton). The webapp's
+  back controls are `<view>-back` (`build-key-back`, `vibe-code-back`);
+  Android's top-bar back has no tag (content description "Back"). A SwiftUI
+  id on a plain stack is copied onto every element inside it and replaces
+  theirs, so identified sections use `.accessibilityElement(children: .contain)`.
 
 ---
 

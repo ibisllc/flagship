@@ -211,7 +211,9 @@ final class GymTotalTests: XCTestCase {
         let menu = app.buttons["describe-model-menu"]
         XCTAssertTrue(menu.waitForExistence(timeout: 5), "Describe offers the model menu.")
         XCTAssertTrue(menu.label.hasPrefix("Model: "), "Got \(menu.label)")
-        app.navigationBars["New Service"].buttons["BackButton"].tap()
+        let back = app.navBackButton(in: "New Service")
+        XCTAssertTrue(back.waitForExistence(timeout: 5), "Describe has a back button.")
+        back.tap()
         XCTAssertTrue(app.navigationBars["AI Key"].waitForExistence(timeout: 10), "Back is the AI-key step.")
         XCTAssertTrue(app.descendants(matching: .any)["build-key-free-ai"].waitForExistence(timeout: 10),
                       "Flagship Inference is offered on the AI-key step.")
