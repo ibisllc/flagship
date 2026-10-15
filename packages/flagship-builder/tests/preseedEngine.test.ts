@@ -223,6 +223,11 @@ describe("preseed engine bundle", () => {
     );
     expect(JSON.parse(embedded.outboundProxy)).toEqual(order);
     expect(embedded.outboundProxyCredentials).toBeUndefined();
+    // d-i's busybox wget can't use the private relay, so a proxy recipe's
+    // installer never reports to .com directly (docs/outbound-proxy.md).
+    expect(preseed).not.toContain("flagshipserver.com/api/");
+    expect(preseed).not.toMatch(/wget[^\n]*api\/order/);
+    expect(engine.buildPreseed(buildSignedRecipe({}), "{}")).toMatch(/wget[^\n]*api\/order/);
     // Credentials without an order are dropped.
     expect(JSON.parse(engine.buildInstallBlobJson(buildSignedRecipe({ outboundProxyCredentials: creds }))).outboundProxyCredentials).toBeUndefined();
   });
