@@ -191,6 +191,7 @@ fun ShareServerCard(serverDomain: String, podId: String) {
             ownerSession = {
                 sessions.sessionToken(forPodId = podId)
                     ?: sessions.sessionToken.value.takeIf { app.currentPod?.podId == podId }
+                    ?: runtime.ownerSession(podId)
             },
         )
     }
@@ -268,7 +269,7 @@ fun ShareServerCardContent(
 ) {
     SectionTitle("Shared with", Modifier.testTag("share-card-title"))
     Spacer(Modifier.height(FS.space.s2))
-    FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.fillMaxWidth().testTag("share-card")) {
+    FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.fillMaxWidth().testTag("share-server-card")) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s4)) {
             val shares = ui.shares
             when {
@@ -309,7 +310,7 @@ fun ShareServerCardContent(
                 label = "Share this server",
                 onClick = onShare,
                 block = true,
-                modifier = Modifier.testTag("share-open-sheet"),
+                modifier = Modifier.testTag("share-server-open"),
             )
         }
     }
@@ -317,7 +318,7 @@ fun ShareServerCardContent(
 
 @Composable
 private fun AcceptedRow(s: AcceptedShare, busy: Boolean, onConfirm: () -> Unit, onNoMatch: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.testTag("share-accepted-${s.shareId}")) {
+    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.testTag("share-row-${s.shareId}")) {
         val sas = s.sas
         if (sas == null) {
             Text("${s.label}'s acceptance doesn't check out", color = FS.colors.danger, style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
@@ -327,7 +328,7 @@ private fun AcceptedRow(s: AcceptedShare, busy: Boolean, onConfirm: () -> Unit, 
         }
         Text("${s.label} accepted", color = FS.colors.text, style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
         Muted("Does their phone show this code?")
-        SasText(sas, Modifier.testTag("share-sas"))
+        SasText(sas, Modifier.testTag("share-sas-${s.shareId}"))
         Muted("${ShareCopy.level(s.options.level)}${if (s.options.unlockAtBoot) " · can approve start-up" else ""}${if (s.options.seeAppData) " · can see app data" else ""}")
         Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.fillMaxWidth()) {
             FSPrimaryButton(
@@ -350,7 +351,7 @@ private fun ActiveRow(
     onData: (Boolean) -> Unit,
     onRemove: () -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.testTag("share-active-${s.shareId}")) {
+    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.testTag("share-row-${s.shareId}")) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(s.label, color = FS.colors.text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold), modifier = Modifier.weight(1f))
             FSPill(ShareCopy.level(s.level), kind = if (s.level == ServerShare.LEVEL_MANAGE) FSPillKind.Provisioning else FSPillKind.Idle)
@@ -366,7 +367,7 @@ private fun ActiveRow(
 
 @Composable
 private fun PendingRow(p: PendingShare, busy: Boolean, onCopy: () -> Unit, onCancel: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.testTag("share-pending-${p.shareId}")) {
+    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.testTag("share-row-${p.shareId}")) {
         Text("Waiting for ${p.label} to open the link", color = FS.colors.text, style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
         Muted("${ShareCopy.level(p.level)} · the link works until ${FlagshipDateFormat.format(p.expiresAt)}")
         Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2), modifier = Modifier.fillMaxWidth()) {
@@ -540,7 +541,7 @@ fun SharedWithMeContent(ui: SharedWithMeUi, onOpen: (String) -> Unit) {
     // Nothing shared with this account: no section at all. Accepting a link
     // starts from the create-server screen or a scanned link.
     if (ui.items.isEmpty()) return
-    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3), modifier = Modifier.testTag("shared-with-me")) {
+    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3), modifier = Modifier.testTag("home-shared-with-me")) {
         SectionTitle("Shared with me")
         ui.items.forEach { item ->
             val (status, kind) = when (val s = item.status) {
@@ -555,7 +556,7 @@ fun SharedWithMeContent(ui: SharedWithMeUi, onOpen: (String) -> Unit) {
                 subtitle = item.entry.serverDomain,
                 onClick = { onOpen(item.entry.shareId) },
                 below = { FSPill(status, kind = kind) },
-                modifier = Modifier.testTag("shared-row-${item.entry.shareId}"),
+                modifier = Modifier.testTag("home-shared-${item.entry.shareId}"),
             )
         }
     }
@@ -876,7 +877,7 @@ private fun StartupCard(serverName: String, s: ShareStartup, busy: Boolean, onAp
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             Text("$serverName is starting", color = FS.colors.text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
             Muted("It's waiting for its disk to be unlocked. Approve only if you expected it to start${if (s.pending.postedAt > 0) " (asked ${FlagshipDateFormat.format(s.pending.postedAt)})" else ""}.")
-            FSPrimaryButton(label = if (busy) "Unlocking…" else "Unlock it", onClick = onApprove, enabled = !busy, block = true, modifier = Modifier.testTag("shared-startup-approve"))
+            FSPrimaryButton(label = if (busy) "Unlocking…" else "Unlock it", onClick = onApprove, enabled = !busy, block = true, modifier = Modifier.testTag("shared-approve-startup"))
         }
     }
 }

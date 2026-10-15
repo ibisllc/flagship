@@ -108,6 +108,7 @@ class MainActivity : FragmentActivity() {
      *  launched with `flagship.smokeTab`. Null in production / a normal launch
      *  ⇒ RootShell defaults to Home. */
     private var smokeInitialTab: com.flagshipserver.app.core.RootDestination? = null
+    private var smokeConfig: com.flagshipserver.app.core.SmokeModeConfig? = null
 
     /** The activity is visible; internet-access requests are fetched only then. */
     private val foreground = MutableStateFlow(false)
@@ -195,6 +196,7 @@ class MainActivity : FragmentActivity() {
             (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
         if (isDebuggable) {
             com.flagshipserver.app.core.SmokeModeConfig.from(intent)?.let { cfg ->
+                smokeConfig = cfg
                 smokeInitialTab = com.flagshipserver.app.core.SmokeMode.apply(
                     config = cfg,
                     appState = appState,
@@ -246,6 +248,22 @@ class MainActivity : FragmentActivity() {
         )
 
         val mockScreens = MockScreensClient()
+        val smoke = smokeConfig?.takeIf { isDebuggable }
+        // The access dialogs ask about each waiting host in turn: give Plants a
+        // second one so Allow and Deny can both be answered (iOS has two).
+        if (smoke?.seedAccessAlert == true) {
+            mockScreens.accessFixture["bright-maple--plants"]?.let { plants ->
+                mockScreens.accessFixture["bright-maple--plants"] = plants.copy(
+                    pending = plants.pending + com.flagshipserver.app.api.AppAccessPending(
+                        "tile.openstreetmap.org",
+                        com.flagshipserver.app.api.AppAccessPending.SOURCE_ATTEMPT,
+                        3,
+                        System.currentTimeMillis() - 600_000L,
+                        System.currentTimeMillis() - 60_000L,
+                    ),
+                )
+            }
+        }
         val liveScreens = LiveScreensClient(client = okHttp, store = sessionStore)
         // #91 — drains the box's phone-pollable AlertInbox (GET /api/phone/alerts)
         // for AI-chat-needs-you events. Shares the box-pinned OkHttp + session
@@ -262,6 +280,16 @@ class MainActivity : FragmentActivity() {
         val mockRelay = MockQrRelayClient()
         val liveRelay = LiveQrRelayClient(client = okHttp)
         val liveShares = com.flagshipserver.app.viewmodels.ServerShareRuntime.live(okHttp, appContext) { trustCenter.isServerTrusted }
+        // Smoke mode has no `.com` or box: an in-memory share world instead.
+        val mockShares = smoke?.takeIf { it.seedShares }?.let { cfg ->
+            val home = appState.pods.value.firstOrNull { it.name == "Home" }
+            com.flagshipserver.app.core.MockServerShares.runtime(
+                username = cfg.username,
+                homeDomain = home?.fqdn ?: "home.${cfg.username}.flagship.services",
+                homeStkPubHex = home?.identityPubKeyHex ?: "51".repeat(32),
+                memberScreens = mockScreens,
+            )
+        }
         val mockTransfer = MockServerTransferClient()
         val liveTransfer = LiveServerTransferClient(OkHttpJsonTransport(okHttp))
         val mockMailbox = MockSecretMailboxClient()
@@ -448,6 +476,16 @@ class MainActivity : FragmentActivity() {
                     scope = this@MainActivity.lifecycleScope,
                 )
             }
+            // Smoke mode: the same dialogs, fed by the mock box (one fetch).
+            val smokeAccessCenter = remember {
+                if (smoke?.seedAccessAlert != true) null else com.flagshipserver.app.core.AccessRequestCenter(
+                    boxes = {
+                        appState.currentPod?.let { listOf(com.flagshipserver.app.core.AccessBox(it.podId, it.fqdn, mockScreens)) }.orEmpty()
+                    },
+                    isActiveGate = { appState.isPaired.value && appState.isUnlocked.value },
+                )
+            }
+            LaunchedEffect(smokeAccessCenter) { smokeAccessCenter?.refresh() }
             val accessScope = androidx.compose.runtime.rememberCoroutineScope()
             androidx.compose.runtime.DisposableEffect(accessCenter) {
                 com.flagshipserver.app.core.AccessRequestBridge.onAccessRequest = {
@@ -566,13 +604,13 @@ class MainActivity : FragmentActivity() {
                     LocalServerTransferClient provides effectiveTransfer,
                     LocalSessionStore provides sessionStore,
                     com.flagshipserver.app.core.LocalPodClients provides podClients,
-                    com.flagshipserver.app.viewmodels.LocalServerShares provides (if (useLive) liveShares else null),
+                    com.flagshipserver.app.viewmodels.LocalServerShares provides (if (useLive) liveShares else mockShares),
                     LocalToastCenter provides toasts,
                     LocalActiveOperationsCenter provides operations,
                     LocalTrustCenter provides trustCenter,
                     LocalDeepLinker provides deepLinker,
                     com.flagshipserver.app.core.LocalAccessRequestCenter provides
-                        (if (useLive) accessCenter else null),
+                        (if (useLive) accessCenter else smokeAccessCenter),
                     LocalDeveloperSettings provides devSettings,
                     LocalPrivacySettings provides privacy,
                     com.flagshipserver.app.core.LocalPushNotificationsSwitch provides pushSwitch,

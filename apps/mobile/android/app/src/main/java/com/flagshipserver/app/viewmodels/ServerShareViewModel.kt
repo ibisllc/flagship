@@ -50,6 +50,8 @@ class ServerShareRuntime(
     val client: ServerShareClient,
     /** A screens client that signs in to [serverDomain] with a share token instead of an owner session. */
     val memberScreens: (serverDomain: String, token: String) -> ScreensClient,
+    /** The owner's session on a server when this phone's session store has none (the smoke-mode mock box). */
+    val ownerSession: (podId: String) -> String? = { null },
 ) {
     val sharedWithMe = SharedWithMeModel(client)
 
@@ -70,7 +72,7 @@ class ServerShareRuntime(
                     }
                 },
             )
-            return ServerShareRuntime(client) { domain, token ->
+            return ServerShareRuntime(client, memberScreens = { domain, token ->
                 LiveScreensClient(
                     client = okHttp,
                     store = InMemorySessionStore().apply {
@@ -78,7 +80,7 @@ class ServerShareRuntime(
                         setSessionToken(token)
                     },
                 )
-            }
+            })
         }
     }
 }

@@ -38,6 +38,13 @@ data class SmokeModeConfig(
     /** The demo handle (default `smoketest`). `bright-maple` matches the mock
      *  box's FQDNs, which the server page's per-server cards look pods up by. */
     val username: String = SMOKE_USERNAME,
+    /** Raise the app-wide "<App> wants to reach <host>" dialogs from the mock
+     *  box (iOS `-smoke-access-alert`); off by default so they never cover a
+     *  screen another scenario drives. */
+    val seedAccessAlert: Boolean = false,
+    /** Provide the in-memory share runtime (iOS `-smoke-shares`): Home's
+     *  "Shared with" card and the servers shared with this phone. */
+    val seedShares: Boolean = false,
 ) {
     companion object {
         const val EXTRA_SMOKE_MODE = "flagship.smokeMode"
@@ -47,6 +54,8 @@ data class SmokeModeConfig(
         const val EXTRA_SMOKE_PODS = "flagship.smokePods"
         const val EXTRA_SMOKE_ADMIN_ROOT = "flagship.smokeAdminRoot"
         const val EXTRA_SMOKE_USERNAME = "flagship.smokeUsername"
+        const val EXTRA_SMOKE_ACCESS_ALERT = "flagship.smokeAccessAlert"
+        const val EXTRA_SMOKE_SHARES = "flagship.smokeShares"
 
         const val SMOKE_USERNAME = "smoketest"
 
@@ -65,6 +74,8 @@ data class SmokeModeConfig(
                 seedAdminRoot = intent.getBooleanExtra(EXTRA_SMOKE_ADMIN_ROOT, false),
                 username = intent.getStringExtra(EXTRA_SMOKE_USERNAME)?.trim()?.lowercase()
                     ?.takeIf { it.matches(Regex("^[a-z0-9-]{1,40}$")) } ?: SMOKE_USERNAME,
+                seedAccessAlert = intent.getBooleanExtra(EXTRA_SMOKE_ACCESS_ALERT, false),
+                seedShares = intent.getBooleanExtra(EXTRA_SMOKE_SHARES, false),
             )
         }
     }
