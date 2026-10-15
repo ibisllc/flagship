@@ -229,6 +229,9 @@ How it works:
 One build is **424k input + 13k output tokens = 474k weighted**: 14 turns,
 a 14k first prompt growing 2.5k per turn, 900 output tokens per turn. That
 matches the earlier "a few hundred thousand tokens, mostly input" estimate.
+It is a model, not a measurement: `infra/inference/build-eval` runs scripted
+builds, edits and fix rounds through the box's own loop against DeepInfra
+and reports the real figures per model and app size (`npm run build-eval`).
 
 On the recommended L40S (€824/month):
 

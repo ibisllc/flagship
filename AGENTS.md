@@ -188,6 +188,14 @@ account can view or co-manage a server, never destroy it) is in the MVP
 
 ### In flight
 
+- **Build cost measurement (2026-10-14, `infra/inference/build-eval`):**
+  scripted app builds, edits and fix rounds through the box's own build loop
+  and the real shim, against DeepInfra, to set the free-AI allowance from
+  real numbers instead of the 474k-per-build estimate. Tested with its mock
+  model only. **Owner:** put a DeepInfra key in
+  `~/.config/flagship/deepinfra-eval.key` and run `npm run build-eval` (stops
+  at $5), or add the `DEEPINFRA_API_KEY` repo secret and run the
+  `build-eval.yml` workflow (Docker build check + Postgres).
 - **Flagship Inference (2026-10-13): built on `main`, not live.** A launch
   promotion ("for a limited time, building your apps is free"). Per account:
   a one-time starter reserve plus a weekly top-up (ISO week, not
