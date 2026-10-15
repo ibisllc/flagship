@@ -221,6 +221,7 @@ function build(opts: {
   sessionTtlMs?: number;
   /** Drop the STK-fetch box identity to exercise the body-supplied-create fallback. */
   noFetchIdentity?: boolean;
+  adminRootPub?: Uint8Array;
 } = {}) {
   const store = opts.store ?? tempStore();
   const sessions = opts.sessions;
@@ -228,6 +229,7 @@ function build(opts: {
   const access = buildServiceAccessHttp({
     serverId: FQDN,
     ownerIrkPub: ownerIrk.publicKey,
+    ...(opts.adminRootPub ? { adminRootPub: opts.adminRootPub } : {}),
     store,
     sessions,
     serviceInstalled: (ref) => installed.has(ref),
@@ -932,6 +934,38 @@ describe("v2 — box-as-authority redeem (verify the owner's signed create)", ()
     const res = await access.handle(req({ method: "POST", path: "/api/service-invites/redeem", body: redeemBodyV2() }));
     expect(res!.status).toBe(403);
     expect(store.isAllowed(SERVICE, hex(friendAid.publicKey))).toBe(false);
+  });
+
+  it("accepts a create signed by the pinned admin root, and only when one is pinned", async () => {
+    const adminRoot = deriveIRK({ seed: new Uint8Array(32).fill(0x5a) });
+    const fetchImpl = (async (): Promise<Response> => {
+      const inviteId = serviceInviteId(ownerAid.publicKey, ownerDevice.publicKey, 0);
+      const create: CreateServiceInvite = {
+        inviteId,
+        authorAID: ownerAid.publicKey,
+        serviceRef: SERVICE,
+        secretHash: serviceInviteSecretHash(new Uint8Array(32).fill(7)),
+        encryptedBundle: sealInviteBundle({ name: "X" }, householdKey, inviteId),
+        issuedAt: NOW,
+      };
+      return new Response(
+        JSON.stringify({
+          redeemed: true,
+          serviceRef: SERVICE,
+          boundAID: hex(friendAid.publicKey),
+          create: { ...create, authorAID: hex(create.authorAID) },
+          createSig: hex(signCreateServiceInvite(create, adminRoot)),
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      );
+    }) as unknown as typeof fetch;
+    const unpinned = build({ fetchImpl });
+    const refused = await unpinned.access.handle(req({ method: "POST", path: "/api/service-invites/redeem", body: redeemBodyV2() }));
+    expect(refused!.status).toBe(403);
+    const pinned = build({ fetchImpl, adminRootPub: adminRoot.publicKey });
+    const res = await pinned.access.handle(req({ method: "POST", path: "/api/service-invites/redeem", body: redeemBodyV2() }));
+    expect(res!.status).toBe(200);
+    expect(pinned.store.isAllowed(SERVICE, hex(friendAid.publicKey))).toBe(true);
   });
 
   it("rejects (403) when the create's secretHash does NOT match the redeemed secret", async () => {

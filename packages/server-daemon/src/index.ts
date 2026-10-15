@@ -3202,6 +3202,7 @@ async function wireOwnerHandlers(deps: {
     // gating v2 box-as-authority: verify the .com-relayed signed create against
     // the config-pinned owner AID (preferred) OR the owner IRK (transition).
     ...(cfg.ownerAidPub ? { ownerAidPub: cfg.ownerAidPub } : {}),
+    ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
     store: accessStore,
     sessions: sessionStore,
     serviceInstalled: (ref) =>

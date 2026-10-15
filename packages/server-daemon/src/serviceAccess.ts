@@ -708,6 +708,12 @@ export interface ServiceAccessHttpOptions {
    * Optional: absent ⇒ the box verifies the create against the owner IRK only.
    */
   ownerAidPub?: Uint8Array;
+  /**
+   * The pinned admin master root. On an admin-pinned account `.com` accepts an
+   * invite create only from the admin root, so the box must accept that
+   * signature too or no invite of such an account could ever be redeemed.
+   */
+  adminRootPub?: Uint8Array;
   store: ServiceAccessStore;
   /** Resolve `serviceRef` (`<creator>-<slug>`) → installed? Guards set-mode (422 if not). */
   serviceInstalled: (serviceRef: string) => boolean;
@@ -1359,9 +1365,11 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
       return null;
     }
     // Owner authority: AID first (stable, survives IRK rotation), then IRK.
-    const aidOk = opts.ownerAidPub ? verifyCreateServiceInvite(create, sig, opts.ownerAidPub) : false;
-    const irkOk = aidOk ? true : verifyCreateServiceInvite(create, sig, opts.ownerIrkPub);
-    if (!aidOk && !irkOk) return null;
+    const ok =
+      (opts.ownerAidPub ? verifyCreateServiceInvite(create, sig, opts.ownerAidPub) : false) ||
+      verifyCreateServiceInvite(create, sig, opts.ownerIrkPub) ||
+      (opts.adminRootPub ? verifyCreateServiceInvite(create, sig, opts.adminRootPub) : false);
+    if (!ok) return null;
     return {
       inviteId: create.inviteId,
       serviceRef: create.serviceRef,
