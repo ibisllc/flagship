@@ -495,6 +495,8 @@ export interface DaemonRuntime {
    * connection advertised `outbound-v1`.
    */
   outboundRelay: import("./tunnel/relayFetch.js").OutboundConnector;
+  /** Drop the tunnel and dial again now (the outbound proxy changed). */
+  reconnectTunnel(): void;
   /** LAN-direct listener; null when `lanDirect` wasn't requested. */
   lan: import("./lanDirect.js").LanListener | null;
   /**
@@ -1598,6 +1600,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       outboundAvailable: () => tunnel.outboundAvailable(),
       openOutbound: (host, port) => tunnel.openOutbound(host, port),
     },
+    reconnectTunnel: () => tunnel.reconnect(),
     lan,
     siblingRouter,
     appBackup,
