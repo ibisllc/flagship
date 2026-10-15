@@ -103,6 +103,7 @@ import type {
   ServiceInviteStorage,
   ServiceInviteRedeemResult,
   ServiceInviteApprovalMode,
+  ServiceInviteCreatorTier,
   RevokedInviteRecord,
   WatchDelegateRecord,
   WatchDelegateStorage,
@@ -4707,6 +4708,10 @@ interface ServiceInviteRow {
   expires_at?: number | null;
   redemptions?: number | null;
   approval_mode?: string | null;
+  // migration 0100
+  creator_tier?: string | null;
+  creator_pub_hex?: string | null;
+  creator_device_id?: string | null;
 }
 
 function rowToServiceInvite(r: ServiceInviteRow, boundAIDs: string[]): ServiceInviteRecord {
@@ -4727,13 +4732,17 @@ function rowToServiceInvite(r: ServiceInviteRow, boundAIDs: string[]): ServiceIn
     redemptions: r.redemptions ?? 0,
     approvalMode: r.approval_mode === "manual" ? "manual" : "auto",
     boundAIDs,
+    creatorTier: r.creator_tier === "admin" || r.creator_tier === "member" ? r.creator_tier : null,
+    creatorPubHex: r.creator_pub_hex ?? null,
+    creatorDeviceId: r.creator_device_id ?? null,
   };
 }
 
 const SERVICE_INVITE_COLS =
   `invite_id, author_aid, service_ref, encrypted_bundle, secret_hash,
    bound_aid, bound_at, created_at, revoked_at,
-   create_sig, create_issued_at, max_redemptions, expires_at, redemptions, approval_mode`;
+   create_sig, create_issued_at, max_redemptions, expires_at, redemptions, approval_mode,
+   creator_tier, creator_pub_hex, creator_device_id`;
 
 /**
  * D1 ServiceInviteStorage — bearer-link service-access capability invites
@@ -4776,6 +4785,9 @@ export class D1ServiceInviteStorage implements ServiceInviteStorage {
     maxRedemptions?: number;
     expiresAt?: number;
     approvalMode?: ServiceInviteApprovalMode;
+    creatorTier?: ServiceInviteCreatorTier;
+    creatorPubHex?: string;
+    creatorDeviceId?: string;
   }): Promise<{ ok: true } | { ok: false; reason: string }> {
     // INSERT OR IGNORE so a byte-identical re-create is idempotent; a
     // DIFFERENT invite reusing the id (or the same secret_hash via the
@@ -4786,8 +4798,8 @@ export class D1ServiceInviteStorage implements ServiceInviteStorage {
            (invite_id, author_aid, service_ref, encrypted_bundle,
             secret_hash, bound_aid, bound_at, created_at, revoked_at,
             create_sig, create_issued_at, max_redemptions, expires_at,
-            redemptions, approval_mode)
-         VALUES (?1, ?2, ?3, ?4, ?5, NULL, NULL, ?6, NULL, ?7, ?8, ?9, ?10, 0, ?11)`,
+            redemptions, approval_mode, creator_tier, creator_pub_hex, creator_device_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, NULL, NULL, ?6, NULL, ?7, ?8, ?9, ?10, 0, ?11, ?12, ?13, ?14)`,
       )
       .bind(
         rec.inviteId,
@@ -4801,6 +4813,9 @@ export class D1ServiceInviteStorage implements ServiceInviteStorage {
         rec.maxRedemptions ?? null,
         rec.expiresAt ?? null,
         rec.approvalMode ?? "auto",
+        rec.creatorTier ?? null,
+        rec.creatorPubHex?.toLowerCase() ?? null,
+        rec.creatorDeviceId ?? null,
       )
       .run();
     if ((res.meta.changes ?? 0) > 0) return { ok: true };

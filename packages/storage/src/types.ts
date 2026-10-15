@@ -505,7 +505,11 @@ export type AuditEventKind =
   // by a daemon-reported baseline cert. When a baseline exists and the
   // observed cert is newer than the baseline, this row is ALSO paired
   // with an owner push — a possible rogue / mis-issued certificate.
-  | "ct-unexpected-cert";
+  | "ct-unexpected-cert"
+  // Who can invite (docs/service-access-gating.md): a non-admin device of the
+  // account invited someone to an app (at Member). Content-free: no app,
+  // person or device name.
+  | "invite-created";
 
 /**
  * Plan B Phase 5 — recovery-method tag stored next to a re-pair
@@ -1812,7 +1816,22 @@ export interface ServiceInviteRecord {
    * revoked-since list + the box-side group-prune. Empty until first bind.
    */
   boundAIDs: string[];
+  /**
+   * Who signed the create (migration 0100; docs/service-access-gating.md "Who
+   * can invite"): `admin` (the admin root or an admin-granted device; on an
+   * account with no admin root, the account key) or `member` (any device's
+   * membership key, AID or IRK, on an admin-pinned account: its joins are
+   * capped at Member by the box). NULL on rows from before 0100.
+   */
+  creatorTier: ServiceInviteCreatorTier | null;
+  /** The key the create verified under (hex): the only non-admin key that may revoke it. */
+  creatorPubHex: string | null;
+  /** The account device id the creating device named (attribution only; never a name). */
+  creatorDeviceId: string | null;
 }
+
+/** Which authority signed an invite's create. */
+export type ServiceInviteCreatorTier = "admin" | "member";
 
 /** Result of a redeem attempt against `.com`. */
 export type ServiceInviteRedeemResult =
@@ -1862,6 +1881,9 @@ export interface ServiceInviteStorage {
     maxRedemptions?: number;
     expiresAt?: number;
     approvalMode?: ServiceInviteApprovalMode;
+    creatorTier?: ServiceInviteCreatorTier;
+    creatorPubHex?: string;
+    creatorDeviceId?: string;
   }): Promise<{ ok: true } | { ok: false; reason: string }>;
   /**
    * Atomically redeem by `secretHash`, binding to `visitorAID`:

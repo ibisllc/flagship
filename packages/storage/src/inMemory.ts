@@ -15,6 +15,7 @@ import type {
   ServiceInviteStorage,
   ServiceInviteRedeemResult,
   ServiceInviteApprovalMode,
+  ServiceInviteCreatorTier,
   RevokedInviteRecord,
   WatchDelegateRecord,
   WatchDelegateStorage,
@@ -2690,6 +2691,9 @@ export class InMemoryServiceInviteStorage implements ServiceInviteStorage {
     maxRedemptions?: number;
     expiresAt?: number;
     approvalMode?: ServiceInviteApprovalMode;
+    creatorTier?: ServiceInviteCreatorTier;
+    creatorPubHex?: string;
+    creatorDeviceId?: string;
   }): Promise<{ ok: true } | { ok: false; reason: string }> {
     const sh = rec.secretHash.toLowerCase();
     const existing = this.byId.get(rec.inviteId);
@@ -2726,6 +2730,9 @@ export class InMemoryServiceInviteStorage implements ServiceInviteStorage {
       redemptions: 0,
       approvalMode: rec.approvalMode ?? "auto",
       boundAIDs: [],
+      creatorTier: rec.creatorTier ?? null,
+      creatorPubHex: rec.creatorPubHex?.toLowerCase() ?? null,
+      creatorDeviceId: rec.creatorDeviceId ?? null,
     });
     return { ok: true };
   }

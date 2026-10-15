@@ -300,6 +300,20 @@ describe("ServiceInviteStorage parity", () => {
           // scoped per author
           expect(await store.revokedSince(OTHER, 0)).toEqual([]);
         }));
+
+      it("records who signed the create (tier, key, device); an old-shaped create reads back nulls", () =>
+        run(async (store) => {
+          await store.create({ ...mk(), creatorTier: "member", creatorPubHex: "DD".repeat(32), creatorDeviceId: "0f".repeat(16) });
+          const r = await store.get("id1");
+          expect(r?.creatorTier).toBe("member");
+          expect(r?.creatorPubHex).toBe("dd".repeat(32));
+          expect(r?.creatorDeviceId).toBe("0f".repeat(16));
+          await store.create(mk({ inviteId: "id2", secretHash: "22".repeat(32) }));
+          const old = await store.get("id2");
+          expect([old?.creatorTier, old?.creatorPubHex, old?.creatorDeviceId]).toEqual([null, null, null]);
+          const listed = await store.listForAuthor(AUTHOR);
+          expect(listed.find((x) => x.inviteId === "id1")?.creatorTier).toBe("member");
+        }));
     });
   }
 });
