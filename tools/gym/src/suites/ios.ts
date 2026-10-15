@@ -893,6 +893,60 @@ const OCTOBER: readonly Scenario[] = [
     },
   ),
   iosTotal(
+    "ios-oct-access-control-account-members-admin",
+    "D3: Account members lists this device (Admin device · This device), the iPad by its decrypted name, a refused unnamed device and Mum's co-managing account with their ranks; an admin device's rank menu offers Member, Manager, Master and Refuse (no owner), and refusing Mum takes effect (-smoke-access-fixture).",
+    O + "test_accessControlAccountMembersAdminRanksAndRefuses",
+    {
+      steps: [
+        { kind: "tap", describe: "Plants → Access control.", handle: "service-detail-open-access" },
+        { kind: "assert", describe: "Account members listed.", handle: "service-access-account-members-title" },
+        { kind: "tap", describe: "Mum's rank → Refuse.", handle: "service-access-account-rank-0f1e2d3c4b5a69788796a5b4c3d2e1f0" },
+      ],
+      assertions: [
+        { describe: "Account members (4)", handle: "service-access-account-members-title", expect: "present" },
+        { describe: "iPad named on the phone", handle: `service-access-account-name-${"1a".repeat(16)}`, expect: "present" },
+        { describe: "Refused device shows Refused", handle: `service-access-account-rank-${"2b".repeat(16)}`, expect: "present" },
+      ],
+      screenshots: [shot("access-control-account-members", "Account members."), shot("access-control-account-refused", "Mum refused.")],
+      dimension: "D3",
+    },
+  ),
+  iosTotal(
+    "ios-oct-access-control-account-members-non-admin",
+    "D3: on a non-admin device Account members are read-only (this device shows Manager, 'Device · This device') and the Open to all / Members only toggle is disabled with 'Only an admin device can change who may open it.' (-smoke-access-fixture -smoke-non-admin-device).",
+    O + "test_accessControlAccountMembersReadOnlyOnNonAdminDevice",
+    {
+      steps: [
+        { kind: "tap", describe: "Plants → Access control.", handle: "service-detail-open-access" },
+        { kind: "assert", describe: "This device's rank is read-only.", handle: `service-access-account-rank-${"d0".repeat(16)}` },
+      ],
+      assertions: [
+        { describe: "Read-only rank", handle: `service-access-account-rank-${"d0".repeat(16)}`, expect: "present" },
+        { describe: "Mode is admin-only", handle: "service-access-mode-admin-only", expect: "present" },
+      ],
+      screenshots: [shot("access-control-account-read-only", "Read-only account members.")],
+      dimension: "D3",
+    },
+  ),
+  iosTotal(
+    "ios-oct-access-control-member-rank-why",
+    "D3: a device an admin set to Member gets no '+ Add person / group', only 'Only an admin can let you invite people to this app.', and can't withdraw its own invite (-smoke-access-fixture -smoke-member-rank-device).",
+    O + "test_accessControlMemberRankDeviceSaysWhyItCannotInvite",
+    {
+      steps: [
+        { kind: "tap", describe: "Plants → Access control.", handle: "service-detail-open-access" },
+        { kind: "assert", describe: "Why it can't invite.", handle: "service-access-invite-why" },
+      ],
+      assertions: [
+        { describe: "Why-line", handle: "service-access-invite-why", expect: "present" },
+        { describe: "No + Add person", handle: "service-access-add-person", expect: "absent" },
+        { describe: "No withdraw of its own invite", handle: "service-access-remove-sam-bright-maple--plants", expect: "absent" },
+      ],
+      screenshots: [shot("access-control-member-why", "Why a Member device can't invite.")],
+      dimension: "D3",
+    },
+  ),
+  iosTotal(
     "ios-oct-server-order-leader-pending",
     "D1: Make leader on Office's page; until the box confirms, the page and Home show the leader in gray.",
     O + "test_makeLeaderWaitsForTheServerToConfirm",

@@ -200,9 +200,8 @@ final class GymOctoberTests: XCTestCase {
                        "It may not withdraw an admin's invite.")
         gymShot(app, "access-control-non-admin-list")
 
-        app.swipeDown()
         let add = app.buttons["service-access-add-person"]
-        XCTAssertTrue(add.waitForExistence(timeout: 5))
+        XCTAssertTrue(reveal(app, add), "A Manager device may invite.")
         add.tap()
         let reason = app.staticTexts["service-access-member-only-reason"]
         XCTAssertTrue(reveal(app, reason), "The locked picker says why.")
@@ -212,6 +211,83 @@ final class GymOctoberTests: XCTestCase {
         XCTAssertTrue(newRank.label.contains("Member"), "Got: \(newRank.label)")
         XCTAssertFalse(app.buttons["service-access-new-role"].exists, "The rank can't be picked.")
         gymShot(app, "access-control-rank-locked")
+    }
+
+    // ─── Account members: the account's devices and co-managers ─────────────
+
+    private let thisDevice = String(repeating: "d0", count: 16)
+    private let ipad = String(repeating: "1a", count: 16)
+    private let unnamed = String(repeating: "2b", count: 16)
+    private let mumShare = "0f1e2d3c4b5a69788796a5b4c3d2e1f0"
+
+    func test_accessControlAccountMembersAdminRanksAndRefuses() throws {
+        let app = launch(tab: "apps", ["-smoke-access-fixture"])
+        openPlantsAccess(app)
+        let title = app.staticTexts["service-access-account-members-title"]
+        XCTAssertTrue(reveal(app, title), "Access control lists the account's members.")
+        XCTAssertTrue(title.label.uppercased().contains("ACCOUNT MEMBERS (4)"), "Got: \(title.label)")
+        XCTAssertEqual(app.staticTexts["service-access-account-name-\(thisDevice)"].label, "Harry's iPhone")
+        XCTAssertEqual(app.staticTexts["service-access-account-detail-\(thisDevice)"].label, "Admin device · This device")
+        XCTAssertEqual(app.staticTexts["service-access-account-name-\(ipad)"].label, "Harry's iPad",
+                       "Device names come from the directory decrypted on the phone.")
+        XCTAssertEqual(app.staticTexts["service-access-account-name-\(unnamed)"].label, "Device 2B2B2B")
+        XCTAssertEqual(app.staticTexts["service-access-account-name-\(mumShare)"].label, "Mum")
+        XCTAssertEqual(app.staticTexts["service-access-account-detail-\(mumShare)"].label, "Co-manages this server")
+
+        let refusedRank = app.buttons["service-access-account-rank-\(unnamed)"]
+        XCTAssertTrue(refusedRank.exists, "An admin device gets a rank menu on every row.")
+        XCTAssertTrue(refusedRank.label.contains("Refused"), "Got: \(refusedRank.label)")
+        let ipadRank = app.buttons["service-access-account-rank-\(ipad)"]
+        XCTAssertTrue(ipadRank.label.contains("Master"), "Got: \(ipadRank.label)")
+        gymShot(app, "access-control-account-members")
+
+        let mumRank = app.buttons["service-access-account-rank-\(mumShare)"]
+        XCTAssertTrue(reveal(app, mumRank))
+        XCTAssertTrue(mumRank.label.contains("Manager"), "Got: \(mumRank.label)")
+        mumRank.tap()
+        func item(_ title: String) -> XCUIElement {
+            app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", title)).firstMatch
+        }
+        let refuse = app.buttons.matching(NSPredicate(
+            format: "identifier == %@ OR label BEGINSWITH %@", "service-access-account-refuse-\(mumShare)", "Refuse")).firstMatch
+        XCTAssertTrue(refuse.waitForExistence(timeout: 5), "The menu offers Refuse.")
+        XCTAssertTrue(item("Member").exists && item("Manager").exists && item("Master").exists,
+                      "The menu offers Member, Manager and Master.")
+        XCTAssertFalse(item("Owner").exists, "There is no owner rank.")
+        refuse.tap()
+        let refused = NSPredicate(format: "label CONTAINS %@", "Refused")
+        expectation(for: refused, evaluatedWith: app.buttons["service-access-account-rank-\(mumShare)"])
+        waitForExpectations(timeout: 15)
+        gymShot(app, "access-control-account-refused")
+    }
+
+    func test_accessControlAccountMembersReadOnlyOnNonAdminDevice() throws {
+        let app = launch(tab: "apps", ["-smoke-access-fixture", "-smoke-non-admin-device"])
+        openPlantsAccess(app)
+        let mine = app.descendants(matching: .any)["service-access-account-rank-\(thisDevice)"]
+        XCTAssertTrue(reveal(app, mine))
+        XCTAssertTrue(mine.label.contains("Manager"), "A non-admin device is a Manager by default; got \(mine.label)")
+        XCTAssertFalse(app.buttons["service-access-account-rank-\(thisDevice)"].exists, "Ranks are read-only here.")
+        XCTAssertEqual(app.staticTexts["service-access-account-detail-\(thisDevice)"].label, "Device · This device")
+        app.swipeDown(); app.swipeDown()
+        let mode = app.segmentedControls["service-access-restrict-toggle"]
+        XCTAssertTrue(mode.waitForExistence(timeout: 5))
+        XCTAssertFalse(mode.isEnabled, "Only an admin device changes who may open it.")
+        XCTAssertTrue(app.staticTexts["service-access-mode-admin-only"].exists)
+        gymShot(app, "access-control-account-read-only")
+    }
+
+    func test_accessControlMemberRankDeviceSaysWhyItCannotInvite() throws {
+        let app = launch(tab: "apps", ["-smoke-access-fixture", "-smoke-member-rank-device"])
+        openPlantsAccess(app)
+        let why = app.staticTexts["service-access-invite-why"]
+        XCTAssertTrue(reveal(app, why), "A Member device sees why it can't invite.")
+        XCTAssertEqual(why.label, "Only an admin can let you invite people to this app.")
+        XCTAssertFalse(app.buttons["service-access-add-person"].exists)
+        XCTAssertFalse(app.buttons["service-access-add-group"].exists)
+        XCTAssertFalse(app.buttons["service-access-remove-sam-bright-maple--plants"].exists,
+                       "Below Manager it can't withdraw even its own invite.")
+        gymShot(app, "access-control-member-why")
     }
 
     func test_accessControlMembersShowInvitedBy() throws {
