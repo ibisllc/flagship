@@ -4,6 +4,7 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -28,6 +29,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -38,6 +40,7 @@ import com.flagshipserver.app.api.OutboundProxySummary
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.core.BoxProxyDraft
 import com.flagshipserver.app.core.BoxProxyProtocol
+import com.flagshipserver.app.core.Endpoints
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.ui.components.FSCard
@@ -140,9 +143,25 @@ internal fun OutboundProxyFields(
     }
 }
 
-/** The create flow's block inside Advanced options. */
+/** "An outbound proxy is part of Pro." with a link to the Pro page, shown to
+ *  Free accounts instead of the fields. */
 @Composable
-internal fun OutboundProxyCreateBlock(draft: BoxProxyDraft, onDraft: (BoxProxyDraft) -> Unit) {
+internal fun OutboundProxyProNote() {
+    val uri = LocalUriHandler.current
+    Column(Modifier.testTag("proxy-pro")) {
+        Text(BoxProxyProtocol.PRO_NOTE, color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp))
+        Text(
+            "See Pro",
+            color = FS.colors.primary,
+            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium),
+            modifier = Modifier.clickable { uri.openUri("${Endpoints.controlBaseUrl}/pro") },
+        )
+    }
+}
+
+/** The create flow's block inside Advanced options; [allowed] is false on a Free account. */
+@Composable
+internal fun OutboundProxyCreateBlock(draft: BoxProxyDraft, onDraft: (BoxProxyDraft) -> Unit, allowed: Boolean = true) {
     Text(
         "Outbound proxy",
         color = FS.colors.text,
@@ -154,7 +173,11 @@ internal fun OutboundProxyCreateBlock(draft: BoxProxyDraft, onDraft: (BoxProxyDr
         style = TextStyle(fontSize = 12.sp),
     )
     Spacer(Modifier.height(FS.space.s2))
-    OutboundProxyFields(draft = draft, onDraft = onDraft, showSetupFileWarning = true)
+    if (allowed) {
+        OutboundProxyFields(draft = draft, onDraft = onDraft, showSetupFileWarning = true)
+    } else {
+        OutboundProxyProNote()
+    }
 }
 
 /** The server page's section. Hidden when the box doesn't report a proxy summary (older daemons). */
@@ -170,6 +193,9 @@ internal fun OutboundProxyCard(
     val toasts = LocalToastCenter.current
     val scope = rememberCoroutineScope()
     val canChange = client != null && !app.isDemoAccountNow()
+    // The box says `available = false` once .com has told it the account is on
+    // Free: no new proxy, but one already set can still be turned off.
+    val pro = summary.available != false
     var editing by remember(serverDomain) { mutableStateOf(false) }
     var working by remember(serverDomain) { mutableStateOf(false) }
     var error by remember(serverDomain) { mutableStateOf<String?>(null) }
@@ -216,18 +242,21 @@ internal fun OutboundProxyCard(
                 )
             }
             if (!editing) error?.let { Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp)) }
+            if (!pro) OutboundProxyProNote()
             if (canChange) {
-                FSPrimaryButton(
-                    label = "Change",
-                    onClick = {
-                        draft = BoxProxyDraft.from(summary)
-                        error = null
-                        editing = true
-                    },
-                    enabled = !working,
-                    block = true,
-                    modifier = Modifier.testTag("sd-proxy-change"),
-                )
+                if (pro) {
+                    FSPrimaryButton(
+                        label = "Change",
+                        onClick = {
+                            draft = BoxProxyDraft.from(summary)
+                            error = null
+                            editing = true
+                        },
+                        enabled = !working,
+                        block = true,
+                        modifier = Modifier.testTag("sd-proxy-change"),
+                    )
+                }
                 if (summary.proxy != null) {
                     FSSecondaryButton(
                         label = if (working && !editing) "Saving…" else "Turn off",
