@@ -459,6 +459,10 @@ data class OutboundProxySummary(
     val proxy: OutboundProxySetting? = null,
     val hasCredentials: Boolean = false,
     val status: OutboundProxyStatus = OutboundProxyStatus(),
+    /** False once .com has told the box the account is on Free: the proxy is
+     *  part of Pro, so the box takes no new one (turning it off still works).
+     *  Absent from older boxes. */
+    val available: Boolean? = null,
 ) {
     /** "Off", or "SOCKS5 · host:port" (+ " · needs a password"). */
     val label: String

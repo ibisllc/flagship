@@ -118,6 +118,10 @@ interface FlagshipServerClient {
      *  bound; `limit` is clamped server-side to 50. */
     suspend fun listAuditEvents(username: String, sinceSeq: Int = 0, limit: Int = 20): AuditEventListResponse
 
+    /** The account's plan ("free", "hobby" = Pro, "maker" = Pro Max) from
+     *  `GET /api/users/:u/allowance` (account read token); null when unknown. */
+    suspend fun accountTier(username: String): String? = null
+
     /** Returns true iff a cloud-stored recovery envelope exists for
      *  the given username. Powers the Home recovery-setup nudge (C9).
      *  Underlying endpoint: GET /api/recovery/by-username/<u> — 200
@@ -1353,6 +1357,10 @@ data class PushTokenRevokeRequest(
 
 // ── Mock ──────────────────────────────────────────────────────────
 
+/** The plan field of `GET /api/users/:u/allowance`. */
+@Serializable
+data class AccountTierResponse(val tier: String? = null)
+
 class MockFlagshipServerClient(
     var simulatedLatencyMs: Long = 200,
     var shouldFail: Boolean = false,
@@ -1382,6 +1390,10 @@ class MockFlagshipServerClient(
      *  progression by mutating this map. */
     var provisionStatuses: MutableMap<String, ProvisionStatusRecord> = mutableMapOf(),
 ) : FlagshipServerClient {
+    /** The plan [accountTier] answers (null = unknown). */
+    var accountTierAnswer: String? = null
+    override suspend fun accountTier(username: String): String? = accountTierAnswer
+
     private val recoveryStore = mutableMapOf<String, RecoveryEnvelope>()
 
     /** Mirror of the Worker's webauthn_recovery row, keyed by lowercased
@@ -2510,6 +2522,19 @@ class LiveFlagshipServerClient(
                 extraHeaders = auth,
             )
         }
+    }
+
+    override suspend fun accountTier(username: String): String? {
+        val encoded = java.net.URLEncoder.encode(username, "UTF-8")
+        return runCatching {
+            AccountReadTokens.authorize(username) { auth ->
+                transport.getJson(
+                    "$base/api/users/$encoded/allowance",
+                    responseSerializer = AccountTierResponse.serializer(),
+                    extraHeaders = auth,
+                )
+            }.tier
+        }.getOrNull()
     }
 
     override suspend fun hasCloudRecovery(username: String): Boolean {
