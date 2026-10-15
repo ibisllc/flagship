@@ -1,10 +1,14 @@
 import { createHash } from "node:crypto";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   APPLIANCE_FORBIDDEN_PATHS,
   APPLIANCE_SEED_HEADER_BYTES,
   APPLIANCE_SEED_MAGIC,
   APPLIANCE_SEED_SIZE_BYTES,
+  applianceBaseFormat,
   buildAppliancePrepareScript,
   buildApplianceSpecializerScript,
   encodeApplianceSeed,
@@ -24,6 +28,31 @@ describe("generalized VM appliance", () => {
     expect(Buffer.from(payload.recipeBase64, "base64")).toEqual(recipe);
     expect(Buffer.from(payload.bootstrapBase64, "base64").toString()).toContain("specialize");
     expect(payload.recipeSha256).toBe(createHash("sha256").update(recipe).digest("hex"));
+  });
+
+  it("matches the shared seed vector the Windows Studio reproduces", async () => {
+    const vectors = JSON.parse(await readFile(
+      new URL("../../../apps/desktop-shared/golden/vm-core-vectors.json", import.meta.url), "utf8"));
+    const v = vectors.applianceSeed;
+    const seed = Buffer.from(encodeApplianceSeed(Buffer.from(v.recipe, "utf8"), v.bootstrap));
+    expect(seed.length).toBe(v.sizeBytes);
+    expect(seed.subarray(0, APPLIANCE_SEED_HEADER_BYTES).toString("ascii")).toBe(v.header);
+    const body = Buffer.from(v.body, "utf8");
+    expect(seed.subarray(APPLIANCE_SEED_HEADER_BYTES, APPLIANCE_SEED_HEADER_BYTES + body.length)).toEqual(body);
+    expect(seed.subarray(APPLIANCE_SEED_HEADER_BYTES + body.length).every((b) => b === 0)).toBe(true);
+  });
+
+  it("backs an overlay with the published qcow2 archive as is and a factory disk as raw", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "appliance-format-"));
+    const qcow2 = join(dir, "base.qcow2");
+    const raw = join(dir, "base.raw");
+    const tiny = join(dir, "tiny");
+    await writeFile(qcow2, Buffer.concat([Buffer.from([0x51, 0x46, 0x49, 0xfb]), Buffer.alloc(60)]));
+    await writeFile(raw, Buffer.alloc(64));
+    await writeFile(tiny, Buffer.from([0x51, 0x46]));
+    expect(await applianceBaseFormat(qcow2)).toBe("qcow2");
+    expect(await applianceBaseFormat(raw)).toBe("raw");
+    expect(await applianceBaseFormat(tiny)).toBe("raw");
   });
 
   it("specializes only after validating the seed and cleans the public build key last", () => {

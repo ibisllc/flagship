@@ -31,6 +31,7 @@ export {
   APPLIANCE_SEED_HEADER_BYTES,
   APPLIANCE_SEED_MAGIC,
   APPLIANCE_SEED_SIZE_BYTES,
+  applianceBaseFormat,
   buildAppliancePrepareScript,
   buildApplianceSpecializerScript,
   encodeApplianceSeed,

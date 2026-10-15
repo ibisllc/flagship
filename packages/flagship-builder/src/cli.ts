@@ -35,6 +35,7 @@ import {
   debugSshKeyFromGrant,
   buildBootstrapFromRecipe,
   buildInstallBlobJsonFromRecipe,
+  applianceBaseFormat,
   encodeApplianceSeed,
   buildDebianApplianceFactoryPreseed,
   buildDebianCloudApplianceFactoryUserData,
@@ -265,11 +266,12 @@ interface ApplianceBaseManifest {
   virtualSizeBytes: number;
 }
 
-/** Linux/Windows host specialization seam. The desktop passes an already
- * downloaded raw base plus its adjacent manifest; this command verifies the
- * phone-signed recipe, exact image digest/size/arch/ref, creates a thin qcow2
- * overlay, and emits the byte-identical seed used by macOS. Nothing owner-
- * specific is ever written to the generalized base. */
+/** Linux host specialization seam. The desktop passes an already downloaded
+ * base (the published qcow2 archive, or a raw disk) plus its adjacent
+ * manifest; this command verifies the phone-signed recipe, exact image
+ * digest/size/arch/ref, creates a thin qcow2 overlay, and emits the seed the
+ * guest specializer reads. Nothing owner-specific is ever written to the
+ * generalized base. */
 async function cmdApplianceProvision(rest: string[]): Promise<void> {
   const recipePath = rest[0];
   const basePath = rest[1];
@@ -312,6 +314,7 @@ async function cmdApplianceProvision(rest: string[]): Promise<void> {
   for await (const chunk of createReadStream(basePath)) baseHasher.update(chunk);
   const got = baseHasher.digest("hex");
   if (got !== manifest.sha256) throw new Error(`prebuilt appliance checksum mismatch: expected=${manifest.sha256} got=${got}`);
+  const baseFormat = await applianceBaseFormat(basePath);
 
   const bootstrap = buildBootstrapFromRecipe(recipe.toString("utf8"), JSON.stringify({
     installerGitRef: loaded.blob.installerGitRef,
@@ -322,7 +325,7 @@ async function cmdApplianceProvision(rest: string[]): Promise<void> {
   await writeFile(seedPath, seed, { mode: 0o600, flag: "wx" });
   try {
     await promisify(execFile)(qemuImg, [
-      "create", "-f", "qcow2", "-F", "raw", "-b", resolve(basePath),
+      "create", "-f", "qcow2", "-F", baseFormat, "-b", resolve(basePath),
       diskPath, String(diskSize),
     ]);
     await chmod(diskPath, 0o600);

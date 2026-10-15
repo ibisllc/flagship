@@ -7,10 +7,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from cli_runner import Resolved
 from pair_session import PairEvent
 from vm import resource_plan
-from vm.config import VMConfig, VMNetworkMode
+from vm.appliance_cache import ApplianceCacheError
+from vm.config import VMConfig, VMNetworkMode, VMProvisioningMode
 from vm.inventory import VMBundleLayout, VMInventoryStore
 from vm.lifecycle import VMStateKind
 from vm.manager import VMManager
@@ -223,9 +226,107 @@ def test_run_host_here_creates_remasters_shreds_and_installs(tmp_path, monkeypat
     (s,) = vm.servers
     assert s.record.state.kind == VMStateKind.INSTALLING
     assert host.started == [("home.harry.flagship.services", True)]
-    assert m.state.selected_server_name is None
+    # The new server opens so its install progress is on screen.
+    assert m.state.selected_server_name == "home.harry.flagship.services"
     assert m.state.recipe_path is None and m.state.verified is None
     assert seen_handoff == [3, 2, 1]
+
+
+def _appliance_model(tmp_path, vm, ensure):
+    return WizardModel(
+        locate_fn=lambda: Resolved(node_path="/usr/bin/node", entry_path="/cli.ts"),
+        vm_manager=vm,
+        ensure_base_fn=lambda *_a, **_k: pytest.fail("the installer ISO is not needed"),
+        ensure_appliance_fn=ensure,
+        handoff_seconds=0,
+    )
+
+
+def test_run_host_here_prefers_the_published_appliance(tmp_path, monkeypatch):
+    host = FakeHost()
+    vm = make_vm(tmp_path, host=host)
+    base = tmp_path / "Appliances" / "base.qcow2"
+    asked: dict = {}
+
+    def ensure(ref, *, arch, progress, cancel, log, in_use):
+        asked.update(ref=ref, arch=arch, in_use=in_use())
+        progress("appliance", 0.5)
+        progress("verify", None)
+        return str(base)
+
+    m = _appliance_model(tmp_path, vm, ensure)
+    phases: list = []
+    m.on_change = lambda: phases.append(m.state.phase)
+    recipe = _write_recipe(tmp_path, {"installerGitRef": "main"})
+    m.state.recipe_path = recipe
+    verified(m)
+    ran: dict = {}
+
+    def fake_run_cli(build_args, on_success, use_pkexec=False):
+        ran["args"] = build_args("/cli.ts")
+        on_success("")
+
+    monkeypatch.setattr(m, "_run_cli_core", fake_run_cli)
+    m._run_host_here_sync()
+
+    assert asked == {"ref": "main", "arch": "amd64", "in_use": set()}
+    assert "appliance" in phases and "verify" in phases
+    name = "home.harry.flagship.services"
+    assert ran["args"][:7] == [
+        "/cli.ts", "appliance-provision", str(recipe), str(base), str(base) + ".json",
+        vm.store.layout.disk_image_path(name), vm.appliance_seed_path(name),
+    ]
+    assert ran["args"][ran["args"].index("--qemu-img") + 1] == "/usr/bin/qemu-img"
+    (s,) = vm.servers
+    assert s.record.config.provisioning_mode == VMProvisioningMode.PREBUILT_APPLIANCE
+    assert s.record.state.kind == VMStateKind.INSTALLING
+    assert host.started == [(name, True)]
+    assert not recipe.exists()
+    assert m.state.selected_server_name == name
+
+
+def test_run_host_here_falls_back_to_the_installer_when_no_image_fits(tmp_path, monkeypatch):
+    vm = make_vm(tmp_path)
+    iso = tmp_path / "base.iso"
+    iso.write_bytes(b"iso")
+
+    def ensure(*_a, **_k):
+        raise ApplianceCacheError("ref-mismatch", "The prebuilt server image is for x.")
+
+    m = _appliance_model(tmp_path, vm, ensure)
+    m._ensure_base = lambda *_a, **_k: iso
+    m.state.recipe_path = _write_recipe(tmp_path)
+    verified(m)
+    ran: dict = {}
+
+    def fake_run_cli(build_args, on_success, use_pkexec=False):
+        ran["args"] = build_args("/cli.ts")
+        on_success("")
+
+    monkeypatch.setattr(m, "_run_cli_core", fake_run_cli)
+    m._run_host_here_sync()
+    assert ran["args"][1] == "prepare"
+    (s,) = vm.servers
+    assert s.record.config.provisioning_mode == VMProvisioningMode.INSTALLER_ISO
+    assert any("Using the Debian installer instead" in ll.text for ll in m.state.log_lines)
+
+
+def test_run_host_here_stops_on_a_corrupt_image(tmp_path, monkeypatch):
+    vm = make_vm(tmp_path)
+
+    def ensure(*_a, **_k):
+        raise ApplianceCacheError("checksum", "The prebuilt server image failed its integrity check (part-01).")
+
+    m = _appliance_model(tmp_path, vm, ensure)
+    recipe = _write_recipe(tmp_path)
+    m.state.recipe_path = recipe
+    verified(m)
+    monkeypatch.setattr(m, "_run_cli_core", lambda *a, **k: pytest.fail("nothing is provisioned"))
+    m._run_host_here_sync()
+    assert vm.servers == []
+    assert recipe.exists()
+    assert not m.state.is_running
+    assert any("integrity check" in ll.text and ll.stream == "stderr" for ll in m.state.log_lines)
 
 
 def test_run_host_here_rolls_back_the_bundle_when_remaster_fails(tmp_path, monkeypatch):

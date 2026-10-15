@@ -191,6 +191,14 @@
       }
     ]
   },
+  "applianceSeed": {
+    "notes": "The one-use specialization seed a new hosted server reads (packages/flagship-builder appliance.ts encodeApplianceSeed is the reference; the guest specializer checks the header's length and body SHA-256 before decoding). The seed is sizeBytes long: the 80-byte ASCII header, the compact JSON body (keys in this order, no escaped '/'), then zeros. Node and Windows reproduce 'body' byte for byte; the Mac's JSONEncoder writes an equivalent body the guest accepts the same way.",
+    "sizeBytes": 8388608,
+    "recipe": "{\"serverDomain\":\"home.alice.flagship.services\",\"note\":\"a/b+c\"}",
+    "bootstrap": "#!/bin/bash\n# flagship/bootstrap/v1 +x\necho specialize > /dev/console\n",
+    "body": "{\"version\":1,\"recipeBase64\":\"eyJzZXJ2ZXJEb21haW4iOiJob21lLmFsaWNlLmZsYWdzaGlwLnNlcnZpY2VzIiwibm90ZSI6ImEvYitjIn0=\",\"bootstrapBase64\":\"IyEvYmluL2Jhc2gKIyBmbGFnc2hpcC9ib290c3RyYXAvdjEgK3gKZWNobyBzcGVjaWFsaXplID4gL2Rldi9jb25zb2xlCg==\",\"recipeSha256\":\"f2a132f84f3a4adc7281d192b3f711aa44082ca6ad2acf33c4e913282383879a\"}",
+    "header": "FLSHSD010000013aca17375ece8218e0aa94ea221a954004cb50e0e89b1fba5a11488256b7d2fc01"
+  },
   "nameValidation": {
     "notes": "Bundle names are server FQDNs. Allowed: lowercase a-z, 0-9, '.', '-'; non-empty; not '.' or '..'; no LEADING dot; no TRAILING dot (the trailing-dot rejection is one deliberate tightening over the original Mac validate() — Win32 silently strips trailing dots and no real FQDN ends in one; the Mac side should adopt it).",
     "valid": [

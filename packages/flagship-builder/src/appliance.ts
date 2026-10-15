@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { open } from "node:fs/promises";
 import { BOX_NPM_SCOPE, BOX_TSC_BUILD, BURN_PASSPHRASE } from "./userdata.js";
 
 export const APPLIANCE_SEED_MAGIC = "FLSHSD01";
@@ -10,6 +11,19 @@ export interface ApplianceSeedPayload {
   recipeBase64: string;
   bootstrapBase64: string;
   recipeSha256: string;
+}
+
+/** qcow2 when the base starts with the qcow2 magic (the published archive,
+ * used as is), raw otherwise (a locally built factory disk). */
+export async function applianceBaseFormat(path: string): Promise<"qcow2" | "raw"> {
+  const handle = await open(path, "r");
+  try {
+    const magic = Buffer.alloc(4);
+    const { bytesRead } = await handle.read(magic, 0, 4, 0);
+    return bytesRead === 4 && magic.equals(Buffer.from([0x51, 0x46, 0x49, 0xfb])) ? "qcow2" : "raw";
+  } finally {
+    await handle.close();
+  }
 }
 
 export function encodeApplianceSeed(recipe: Uint8Array, bootstrap: string): Uint8Array {

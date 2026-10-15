@@ -53,6 +53,7 @@ from cli_runner import (
 )
 from pair_session import PairEvent, PairSession
 from vm import host_arch, recipe_info, resource_plan, ssh_launch
+from vm.appliance_cache import ApplianceCache, ApplianceCacheError, backing_files_in_use
 from vm.config import VMConfig, VMProvisioningMode
 from vm.host_resources import HostResources
 from vm.inventory import VMStoreError
@@ -274,6 +275,10 @@ class WizardState:
     def phase_label(self) -> Optional[str]:
         return {
             "download": "Downloading base image…",
+            "appliance": "Downloading the server image…",
+            "verify": "Verifying the server image…",
+            "clone appliance": "Preparing the server's disk…",
+            "specialize": "Starting the server…",
             "remaster": "Building image…",
             "write": "Writing to USB…",
             "handoff": (
@@ -298,6 +303,12 @@ def stage_pasted_recipe(text: str, tmp_dir: Optional[Path] = None) -> Path:
     out.write_text(cleaned, encoding="utf-8")
     os.chmod(out, 0o600)
     return out
+
+
+def _live_ensure_appliance(installer_git_ref: str, *, arch: str, progress, cancel, log, in_use) -> str:
+    return ApplianceCache(arch, log=log, in_use=in_use).ensure(
+        installer_git_ref, progress=progress, cancel=cancel
+    )
 
 
 def derive_out_iso_path(iso_path: Path) -> Path:
@@ -334,6 +345,8 @@ class WizardModel:
         pair_session_factory: Optional[Callable[[bool], PairSession]] = None,
         ssh_launch_fn: Optional[Callable[[int], object]] = None,
         handoff_seconds: int = 5,
+        # Fetches the published prebuilt server image (tests pass a fake).
+        ensure_appliance_fn: Optional[Callable[..., str]] = None,
     ) -> None:
         self.state = WizardState(mode=mode)
         self.on_change = on_change or (lambda: None)
@@ -343,6 +356,8 @@ class WizardModel:
         self._current_runner: Optional[object] = None
         self._lock = threading.Lock()
         self._ensure_base = ensure_base_fn or iso_base_cache.ensure
+        self._ensure_appliance = ensure_appliance_fn or _live_ensure_appliance
+        self._appliance_failed = False
         self._builder_version = builder_version
         self.vm = vm_manager if vm_manager is not None else VMManager.create_default()
         self.vm.on_change = self._notify
@@ -722,11 +737,14 @@ class WizardModel:
         threading.Thread(target=self._run_host_here_sync, daemon=True).start()
 
     def _run_host_here_sync(self) -> None:
-        """"Host here": the SAME recipe -> the SAME remastered installer ISO
-        (via the Node CLI's prepare, which also bakes the debug grant's SSH key
-        exactly like a USB burn), but applied to a managed VM on this PC. The
-        guest boot chain (unattended install -> LUKS -> phone-home unlock ->
-        register) runs unmodified inside the VM; this app never holds a key."""
+        """"Host here" prefers the published prebuilt server image: download
+        and verify it once, give the new server a thin overlay on it plus a
+        one-use seed carrying the recipe, and let the guest specialize itself.
+        Without a fitting image (none published, or built for another
+        installer ref) it falls back to the SAME remastered installer ISO a
+        USB burn uses. Either way the guest boot chain (LUKS -> phone-home
+        unlock -> register) runs unmodified inside the VM; this app never
+        holds a key."""
         if self.state.recipe_path is None or self.state.verified is None:
             return
         reason = self.host_here_disabled_reason
@@ -744,18 +762,10 @@ class WizardModel:
         # (create_default sets toolchain_error), so the fallback never fires
         # in practice — it only keeps the type honest.
         guest_arch = self.vm.host_arch_tag or host_arch.ARCH_AMD64
-        appliance_base = None
-        if self.state.mode == MODE_SIMPLE and os.environ.get("FLAGSHIP_VM_FORCE_ISO") != "1":
-            appliance_base = os.environ.get("FLAGSHIP_VM_APPLIANCE_BASE") or None
-        config = VMConfig.plan(
-            fields, raw, HostResources.current(), arch=guest_arch,
-            provisioning_mode=(
-                VMProvisioningMode.PREBUILT_APPLIANCE
-                if appliance_base else VMProvisioningMode.INSTALLER_ISO
-            ),
-        )
+        simple = self.state.mode == MODE_SIMPLE
+        force_iso = os.environ.get("FLAGSHIP_VM_FORCE_ISO") == "1"
 
-        # Own is_running across the whole download→remaster pipeline (mirrors
+        # Own is_running across the whole download→provision pipeline (mirrors
         # Wizard.cs RunHostHereAsync) so progress + Cancel work from the first
         # byte and nothing else can start mid-flight.
         with self._lock:
@@ -766,17 +776,39 @@ class WizardModel:
         self._cancel_download = cancel
         self._notify()
         try:
-            if appliance_base:
+            appliance_base: Optional[str] = None
+            manifest: Optional[str] = None
+            if simple and not force_iso:
+                appliance_base = os.environ.get("FLAGSHIP_VM_APPLIANCE_BASE") or None
+                if appliance_base:
+                    manifest = os.environ.get(
+                        "FLAGSHIP_VM_APPLIANCE_MANIFEST", appliance_base + ".json"
+                    )
+                else:
+                    appliance_base = self._published_appliance(
+                        fields.effective_installer_git_ref, guest_arch, cancel
+                    )
+                    if appliance_base is None and self._appliance_failed:
+                        return
+                    manifest = appliance_base + ".json" if appliance_base else None
+
+            config = VMConfig.plan(
+                fields, raw, HostResources.current(), arch=guest_arch,
+                provisioning_mode=(
+                    VMProvisioningMode.PREBUILT_APPLIANCE
+                    if appliance_base else VMProvisioningMode.INSTALLER_ISO
+                ),
+            )
+
+            if appliance_base and manifest:
                 self.state.phase = "clone appliance"
+                self.state.progress = None
                 self._notify()
                 try:
                     self.vm.create_server(config)
                 except (VMStoreError, ValueError) as e:
                     self._append_log("stderr", str(e))
                     return
-                manifest = os.environ.get(
-                    "FLAGSHIP_VM_APPLIANCE_MANIFEST", appliance_base + ".json"
-                )
                 provisioned = [False]
 
                 def appliance_args(entry: str) -> list[str]:
@@ -797,13 +829,7 @@ class WizardModel:
                     pass
                 self.state.phase = "specialize"
                 self.vm.begin_install(config.name)
-                self.state.phase = "handoff"
-                for remaining in range(self._handoff_seconds, 0, -1):
-                    self.state.handoff_countdown = remaining
-                    self._notify()
-                    time.sleep(1)
-                self.state.handoff_countdown = None
-                self.reset_to_new_server()
+                self._hand_off(config.name)
                 return
 
             # Same Simple-mode base ISO fetch as the USB path (HOST arch — the
@@ -877,13 +903,7 @@ class WizardModel:
             except OSError:
                 pass
             self.vm.begin_install(config.name)
-            self.state.phase = "handoff"
-            for remaining in range(self._handoff_seconds, 0, -1):
-                self.state.handoff_countdown = remaining
-                self._notify()
-                time.sleep(1)
-            self.state.handoff_countdown = None
-            self.reset_to_new_server()
+            self._hand_off(config.name)
         finally:
             self._cancel_download = None
             self.state.phase = None
@@ -892,6 +912,59 @@ class WizardModel:
             with self._lock:
                 self.state.is_running = False
             self._notify()
+
+    def _hand_off(self, name: str) -> None:
+        """Count down, clear the wizard for the next server, then open the
+        one just created so its install progress is on screen (Mac
+        showHostedServer)."""
+        self.state.phase = "handoff"
+        for remaining in range(self._handoff_seconds, 0, -1):
+            self.state.handoff_countdown = remaining
+            self._notify()
+            time.sleep(1)
+        self.state.handoff_countdown = None
+        self.reset_to_new_server()
+        if self.vm.server(name) is not None:
+            self.select_server(name)
+
+    def _published_appliance(
+        self, installer_git_ref: str, arch: str, cancel: threading.Event
+    ) -> Optional[str]:
+        """The published prebuilt server image for this machine's arch, or
+        None when none fits (none published, or built for another installer
+        ref) so hosting falls back to the Debian installer. Integrity,
+        network and disk-space failures are reported, set _appliance_failed
+        and stop the run."""
+        self._appliance_failed = False
+        self.state.phase = "appliance"
+        self.state.progress = None
+        self.state.download_url = None
+        self._notify()
+
+        def on_progress(phase: str, fraction: Optional[float]) -> None:
+            self.state.phase = "verify" if phase == "verify" else "appliance"
+            self.state.progress = fraction
+            self._notify()
+
+        layout = self.vm.store.layout
+        try:
+            return self._ensure_appliance(
+                installer_git_ref,
+                arch=arch,
+                progress=on_progress,
+                cancel=cancel,
+                log=lambda m: self._append_log("stdout", f"+ {m}"),
+                in_use=lambda: backing_files_in_use(
+                    layout.disk_image_path(s.name) for s in self.vm.servers
+                ),
+            )
+        except ApplianceCacheError as e:
+            if e.falls_back_to_installer:
+                self._append_log("stdout", f"+ {e} Using the Debian installer instead.")
+                return None
+            self._append_log("stderr", str(e))
+            self._appliance_failed = True
+            return None
 
     # ---- hosted-server actions (sidebar rows + detail pane) ----
 
@@ -1919,7 +1992,9 @@ def build_window(application, model: Optional[WizardModel] = None):
         hh_accel_warning.set_visible(accel_warning is not None)
         hh_create.set_visible(not s.is_running)
         hh_caption.set_visible(not s.is_running)
-        if s.is_running and s.phase in ("download", "remaster", "handoff"):
+        if s.is_running and s.phase in (
+            "download", "appliance", "verify", "clone appliance", "specialize", "remaster", "handoff"
+        ):
             hh_progress.set_visible(True)
             if s.progress is None:
                 hh_progress.pulse()

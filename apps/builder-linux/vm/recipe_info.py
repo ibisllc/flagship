@@ -26,6 +26,12 @@ class RecipeFields:
     # Raw phone-signed values; absence has a defined default below.
     boot_unlock_mode: Optional[str] = None
     disk_encryption: Optional[str] = None
+    installer_git_ref: Optional[str] = None
+
+    @property
+    def effective_installer_git_ref(self) -> str:
+        """The ref the box installs (absence => "main", the engine default)."""
+        return (self.installer_git_ref or "").strip() or "main"
 
     @property
     def effective_boot_unlock_mode(self) -> str:
@@ -82,6 +88,7 @@ def read_recipe_fields(recipe_json: bytes) -> RecipeFields:
         ),
         boot_unlock_mode=opt_str("bootUnlockMode"),
         disk_encryption=opt_str("diskEncryption"),
+        installer_git_ref=opt_str("installerGitRef"),
     )
 
 
