@@ -38,6 +38,7 @@ daemon's workspace packages from their built `dist/`), then
 | `--out DIR` | `results/<timestamp>` | `results/` is git-ignored |
 | `--no-save-apps` | apps saved | keep or drop the apps the model wrote |
 | `--agent-max-turns N` | 24 (the box's) | the fix loop's turn cap |
+| `--model-thinking` | off | strip the shim's thinking switch on the way to DeepInfra, so each model thinks as it does by default (as before 2026-10-15); a comparison only, production never thinks |
 
 On GitHub: **Actions → Build cost measurement (on demand) → Run workflow**
 (`.github/workflows/build-eval.yml`, `workflow_dispatch` only). It uses the
@@ -65,7 +66,7 @@ safety). Low alone is about $1.70.
   run's own estimate (the dearest run of that model and scenario so far, else
   twice the doc's estimate per step) fit;
 - every model call is checked before it is sent, at its worst case (every
-  prompt token uncached, the whole 8,192-token output cap); one that doesn't
+  prompt token uncached, the model's whole output cap); one that doesn't
   fit isn't sent, its run ends "stopped by the budget", and no more runs start.
 
 The key is read from the environment or the file and is never printed,
@@ -124,8 +125,9 @@ Everything model-facing is the box's own code, imported from
 4. **Flagship Inference** (`shimHost.ts`): the provider adapter calls the
    real meter shim (`infra/inference/shim`) in-process; the shim checks a
    stand-in `.com` (the catalog model resolved by `resolveInferenceModel`, no
-   limit), shapes the request (allowlist, DeepInfra's model id, 8,192 output
-   cap, usage in the stream) and calls the upstream, where the harness adds
+   limit), shapes the request (allowlist, DeepInfra's model id, thinking off
+   with the model's switch, the model's output cap, usage in the stream) and
+   calls the upstream, where the harness adds
    the key, applies the budget guard and files the usage DeepInfra reported.
 
 ### The build check

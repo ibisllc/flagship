@@ -59,8 +59,24 @@ export interface ShimHostOptions {
   redact: (s: string) => string;
   /** How long the shim waits for the upstream's response headers (60 s, as in its wrangler.toml). */
   timeoutMs?: number;
-  /** The shim's per-call output cap (its MAX_OUTPUT_TOKENS; default 8192 as deployed). */
+  /** A global output ceiling (the shim's MAX_OUTPUT_TOKENS). Unset, as deployed: each model's own cap. */
   maxOutputTokens?: number;
+  /**
+   * Strip the shim's thinking switch on the way to DeepInfra, so each model
+   * thinks as it does by default (what calls did before 2026-10-15). Only
+   * for comparing: production always turns thinking off.
+   */
+  modelThinking?: boolean;
+}
+
+/** The fields the shim's thinking switch may set (the catalog's `thinkingOff`). */
+const THINKING_FIELDS = ["reasoning_effort", "reasoning", "chat_template_kwargs"];
+
+/** The shim's request with its thinking switch removed: the model's own default. */
+export function withModelThinking(raw: string): string {
+  const body = JSON.parse(raw) as Record<string, unknown>;
+  for (const f of THINKING_FIELDS) delete body[f];
+  return JSON.stringify(body);
 }
 
 /** The global-fetch router: hosts register their URL prefixes. */
@@ -142,7 +158,7 @@ export class ShimHost {
       UPSTREAM_NAME: "deepinfra",
       UPSTREAM_API_KEY: "placeholder-added-on-the-way-out",
       UPSTREAM_TIMEOUT_MS: String(opts.timeoutMs ?? 60_000),
-      MAX_OUTPUT_TOKENS: String(opts.maxOutputTokens ?? 8192),
+      ...(opts.maxOutputTokens ? { MAX_OUTPUT_TOKENS: String(opts.maxOutputTokens) } : {}),
       COM_BASE_URL: this.comBase,
     };
     install(this.comBase, (url, init) => this.com(url, init));
@@ -230,7 +246,8 @@ export class ShimHost {
   private async upstream(init?: RequestInit): Promise<Response> {
     const ctx = callContext.getStore();
     if (!ctx) throw new Error("a model call outside any run");
-    const raw = String(init?.body ?? "");
+    const shaped = String(init?.body ?? "");
+    const raw = this.opts.modelThinking ? withModelThinking(shaped) : shaped;
     const body = JSON.parse(raw) as { model?: string; stream?: boolean; max_tokens?: number; messages?: Array<{ content?: unknown }> };
     const model = catalogIdForUpstream(body.model ?? "");
     if (!model) throw new Error(`the shim asked for an unknown upstream model ${body.model}`);

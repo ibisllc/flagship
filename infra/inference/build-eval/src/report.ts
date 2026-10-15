@@ -32,6 +32,8 @@ export interface ReportMeta {
   maxUsd: number;
   spentUsd: number;
   stopped: string | null;
+  /** "off": the shim's thinking switch; "model-default": stripped on the way out (`--model-thinking`). */
+  thinking?: "off" | "model-default";
 }
 
 const fmt = (n: number, places = 1): string => (Number.isFinite(n) ? round(n, places).toLocaleString("en-US") : "–");
@@ -61,7 +63,7 @@ export function renderReport(runs: readonly RunResult[], meta: ReportMeta): stri
     );
   }
   out.push(
-    `- Generated ${meta.generatedAt}; upstream **${meta.upstream === "mock" ? "mock" : "DeepInfra"}**, build check **${meta.stage}**.`,
+    `- Generated ${meta.generatedAt}; upstream **${meta.upstream === "mock" ? "mock" : "DeepInfra"}**, build check **${meta.stage}**, thinking **${meta.thinking === "model-default" ? "the model's own default (`--model-thinking`, not what production sends)" : "off (the shim's switch)"}**.`,
     `- ${runs.length} of ${meta.planned} planned runs (${meta.models.join(", ")} × ${meta.scenarios.length} scenarios × ${meta.repeat} repeat${meta.repeat === 1 ? "" : "s"}).`,
     `- Spent ${usd(meta.spentUsd)} of the $${meta.maxUsd} limit, at DeepInfra's prices checked ${PRICES_CHECKED}.${meta.stopped ? ` **${meta.stopped}.**` : ""}`,
     `- Credits are what \`.com\` charges: (input × 1 + output × 4) × the model's multiplier / 1,000. "median / p90" throughout.`,

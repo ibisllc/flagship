@@ -72,7 +72,13 @@ async function main(argv: string[]): Promise<number> {
   const pgAdminUrl = process.env.BUILD_EVAL_PG_URL ?? null;
 
   const guard = new BudgetGuard(o.maxUsd);
-  const host = new ShimHost({ upstream: o.mock ? "mock" : "deepinfra", apiKey: key.key, guard, redact });
+  const host = new ShimHost({
+    upstream: o.mock ? "mock" : "deepinfra",
+    apiKey: key.key,
+    guard,
+    redact,
+    ...(o.modelThinking ? { modelThinking: true } : {}),
+  });
   await mkdir(join(o.out, "runs"), { recursive: true });
   const workDir = join(tmpdir(), `build-eval-${process.pid}`);
   log(
@@ -140,6 +146,7 @@ async function main(argv: string[]): Promise<number> {
     maxUsd: o.maxUsd,
     spentUsd: guard.spentUsd(),
     stopped: guard.tripped(),
+    thinking: (o.modelThinking ? "model-default" : "off") as "off" | "model-default",
   };
   const report = redact(renderReport(results, meta));
   await writeFile(join(o.out, "summary.md"), report);

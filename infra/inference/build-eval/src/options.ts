@@ -15,6 +15,8 @@ export interface Options {
   out: string;
   saveApps: boolean;
   agentMaxTurns?: number;
+  /** Leave each model's thinking at its own default (a comparison only; production turns it off). */
+  modelThinking: boolean;
   plan: boolean;
   help: boolean;
 }
@@ -36,7 +38,9 @@ they cost on Flagship Inference.
   --out DIR            results folder (default results/<timestamp>)
   --no-save-apps       don't keep the apps the model wrote
   --agent-max-turns N  the fix loop's turn cap (default: the box's, 24)
-  --plan               list the runs and their estimated cost, then stop
+  --model-thinking     leave each model's thinking at its own default instead of
+                       the shim's "off" (to compare; production never thinks)
+  --plan              list the runs and their estimated cost, then stop
   --help`;
 
 function positiveInt(v: string | undefined, flag: string): number {
@@ -56,6 +60,7 @@ export function parseOptions(argv: readonly string[], now: Date = new Date()): O
     stage: "auto",
     out: join(RESULTS_DIR, now.toISOString().replace(/[:.]/g, "-").replace(/Z$/, "Z")),
     saveApps: true,
+    modelThinking: false,
     plan: false,
     help: false,
   };
@@ -104,6 +109,9 @@ export function parseOptions(argv: readonly string[], now: Date = new Date()): O
         break;
       case "--agent-max-turns":
         o.agentMaxTurns = positiveInt(value(), flag);
+        break;
+      case "--model-thinking":
+        o.modelThinking = true;
         break;
       case "--plan":
         o.plan = true;
