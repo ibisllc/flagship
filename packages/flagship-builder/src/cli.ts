@@ -156,6 +156,8 @@ async function cmdUserData(rest: string[]): Promise<void> {
     pairingOrder: loaded.pairingOrder,
     swkHex: loaded.swkHex,
     debugGrant: loaded.debugGrant,
+    outboundProxy: loaded.outboundProxy,
+    outboundProxyCredentials: loaded.outboundProxyCredentials,
     // The debug SSH key baked at install time (SSH-diagnosable pre-daemon). An
     // explicit --debug-ssh-key[-file] (dev / e2e diagnosis) OVERRIDES the key
     // carried in the owner-Face-ID-signed debug grant (the production path).
@@ -217,6 +219,8 @@ async function cmdPrepare(rest: string[]): Promise<void> {
     pairingOrder: loaded.pairingOrder,
     swkHex: loaded.swkHex,
     debugGrant: loaded.debugGrant,
+    outboundProxy: loaded.outboundProxy,
+    outboundProxyCredentials: loaded.outboundProxyCredentials,
     // The debug SSH key baked at install time (SSH-diagnosable pre-daemon). An
     // explicit --debug-ssh-key[-file] (dev / e2e diagnosis) OVERRIDES the key
     // carried in the owner-Face-ID-signed debug grant (the production path).
