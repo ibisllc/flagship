@@ -515,9 +515,9 @@ const TOTAL_DETAIL: readonly Scenario[] = [
       steps: [
         { kind: "launch", describe: "Launch -smoke-mode -smoke-tab apps -smoke-ops." },
         { kind: "tap", describe: "The build operation sliver.", handle: "global-operations-bar" },
-        { kind: "assert", describe: "The vibe-code chat composer.", handle: "vibecode-reply-field" },
+        { kind: "assert", describe: "The env-var composer the AI is waiting on, over the live link.", handle: "vibecode-envvar-field" },
       ],
-      assertions: [{ describe: "Vibe-code chat composer present", handle: "vibecode-reply-field", expect: "present" }],
+      assertions: [{ describe: "Env-var composer present on a live app", handle: "vibecode-envvar-field", expect: "present" }],
       screenshots: [shot("ops-sliver-apps", "The ops sliver."), shot("vibecode-chat", "The chat screen.")],
       dimension: "D2",
     },

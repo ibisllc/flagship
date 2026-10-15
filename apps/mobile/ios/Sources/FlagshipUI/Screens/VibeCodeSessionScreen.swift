@@ -282,24 +282,12 @@ public struct VibeCodeSessionScreen: View {
 
     // MARK: - Command line
 
+    /// What the AI is waiting on comes first: an edit session runs on an app
+    /// that is already live, and the owner must still be able to answer it
+    /// (the transcript keeps the live link).
     @ViewBuilder
     private func footer(c: FSColors) -> some View {
-        if let url = liveUrl, !url.isEmpty {
-            VStack(alignment: .leading, spacing: FS.space.s2) {
-                HStack(spacing: FS.space.s3) {
-                    Text(url).font(FS.font.mono()).foregroundColor(c.text).lineLimit(1).truncationMode(.middle)
-                    Spacer(minLength: 0)
-                    FSPrimaryButton("Open") {
-                        if let u = URL(string: url.hasPrefix("http") ? url : "https://\(url)") { openURL(u) }
-                    }
-                }
-                if leftOpen {
-                    Text("This server couldn't make it invite only, so anyone with the link can open it. You can restrict it from the service's Access settings.")
-                        .font(FS.font.bodySm()).foregroundColor(c.warning)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-        } else if let pending = state?.pendingRequest {
+        if let pending = state?.pendingRequest {
             switch pending {
             case .talkToUser:
                 VStack(alignment: .leading, spacing: FS.space.s2) {
@@ -345,6 +333,21 @@ public struct VibeCodeSessionScreen: View {
                         Spacer(minLength: 0)
                         Text("Sent once to your server").font(FS.font.caption()).foregroundColor(c.textMuted)
                     }
+                }
+            }
+        } else if let url = liveUrl, !url.isEmpty {
+            VStack(alignment: .leading, spacing: FS.space.s2) {
+                HStack(spacing: FS.space.s3) {
+                    Text(url).font(FS.font.mono()).foregroundColor(c.text).lineLimit(1).truncationMode(.middle)
+                    Spacer(minLength: 0)
+                    FSPrimaryButton("Open") {
+                        if let u = URL(string: url.hasPrefix("http") ? url : "https://\(url)") { openURL(u) }
+                    }
+                }
+                if leftOpen {
+                    Text("This server couldn't make it invite only, so anyone with the link can open it. You can restrict it from the service's Access settings.")
+                        .font(FS.font.bodySm()).foregroundColor(c.warning)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
         } else if deploying || status == "deploying" {
