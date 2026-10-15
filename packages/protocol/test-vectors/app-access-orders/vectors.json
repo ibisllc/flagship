@@ -1,0 +1,188 @@
+{
+  "about": "Admin-only access orders naming the app (docs/service-access-gating.md, Account members). flagship/app-rank/v1, flagship/service-access-mode/v2, flagship/service-allow-remove/v2. Signer: a raw Ed25519 seed (stands in for the admin root).",
+  "signerSeedHex": "3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c",
+  "signerPub": "5526f742941711b3bc530ba44ff6f6dab0f0ab71af832f41a7fe3b9fdaed9c60",
+  "rank": {
+    "cases": [
+      {
+        "serviceRef": "harry--chess-club",
+        "target": "device:086abb1c191c86e7cb68d4736f73c68f8b0c55c2a3fafa6a2c770fc308ab242a",
+        "rank": "master",
+        "issuedAt": 1760000000000,
+        "canonical": "flagship/app-rank/v1|harry--chess-club|device:086abb1c191c86e7cb68d4736f73c68f8b0c55c2a3fafa6a2c770fc308ab242a|master|1760000000000",
+        "signature": "f172d2255d0e14cec7c2f16801cfc3dbac5f05bb9a6a38851f83f3107ac99d83bd1c5fce44d0b9662d7cae4cccb12f7294640529678fa8777f1aa59f36281600"
+      },
+      {
+        "serviceRef": "harry--chess-club",
+        "target": "device:086abb1c191c86e7cb68d4736f73c68f8b0c55c2a3fafa6a2c770fc308ab242a",
+        "rank": "member",
+        "issuedAt": 1760000000001,
+        "canonical": "flagship/app-rank/v1|harry--chess-club|device:086abb1c191c86e7cb68d4736f73c68f8b0c55c2a3fafa6a2c770fc308ab242a|member|1760000000001",
+        "signature": "0e54500c4aed73e375736c85505efdb4a0218c21e0a62b8c509e48ab987ec9ca981966b932d9ffac118d2edd20cdcff420d1126e146802832b6b54e532b4300e"
+      },
+      {
+        "serviceRef": "harry--chess-club",
+        "target": "device:086abb1c191c86e7cb68d4736f73c68f8b0c55c2a3fafa6a2c770fc308ab242a",
+        "rank": "refused",
+        "issuedAt": 1760000000002,
+        "canonical": "flagship/app-rank/v1|harry--chess-club|device:086abb1c191c86e7cb68d4736f73c68f8b0c55c2a3fafa6a2c770fc308ab242a|refused|1760000000002",
+        "signature": "3991560958e59d9e92df1ae5b2277f0950ab50a37ce0f48c1a76db983df17aafc9c8828e46f8da7e7ffda98222f0285acce72c56fa4d34d5c283269e5caec208"
+      },
+      {
+        "serviceRef": "harry--chess-club",
+        "target": "share:0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "rank": "manager",
+        "issuedAt": 1760000000003,
+        "canonical": "flagship/app-rank/v1|harry--chess-club|share:0f1e2d3c4b5a69788796a5b4c3d2e1f0|manager|1760000000003",
+        "signature": "f73c5197be13eab1e0fc5b6b28c4a35c820e50049eddd9321522c03dc3f6af29be686a410e45b49417db49c3e93d1cd24dbf1b61be2239e922d558990c5a7a0b"
+      },
+      {
+        "serviceRef": "harry--chess-club",
+        "target": "share:0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "rank": "refused",
+        "issuedAt": 1760000000004,
+        "canonical": "flagship/app-rank/v1|harry--chess-club|share:0f1e2d3c4b5a69788796a5b4c3d2e1f0|refused|1760000000004",
+        "signature": "5742e6b86401b0c382a5c08f9e6ef0a14796626fd5fde3e3a56199d8c76037ab31f5de6b488deec8a899c44cf47d298d525e3860ff10d4cc56d228ff2a09210b"
+      },
+      {
+        "serviceRef": "harry--chess-club",
+        "target": "invite:ea4ab8be66710610842cf6ef0d7e56bd",
+        "rank": "manager",
+        "issuedAt": 1760000000005,
+        "canonical": "flagship/app-rank/v1|harry--chess-club|invite:ea4ab8be66710610842cf6ef0d7e56bd|manager|1760000000005",
+        "signature": "4f1a6eea5eb69168a88e587588dc0d98a19c11918054b0a89f2359b775b7b857f9ce50a394bda74e86421812fa0197d40424b3117d8cce3f5c0e76bacbe3130f"
+      },
+      {
+        "serviceRef": "harry--chess-club",
+        "target": "grant:ea4ab8be66710610842cf6ef0d7e56bd/c49775473bf9dcf5ad1608c8e66823d55dc6889be27e42a029fd9de195c8d7e4",
+        "rank": "master",
+        "issuedAt": 1760000000006,
+        "canonical": "flagship/app-rank/v1|harry--chess-club|grant:ea4ab8be66710610842cf6ef0d7e56bd/c49775473bf9dcf5ad1608c8e66823d55dc6889be27e42a029fd9de195c8d7e4|master|1760000000006",
+        "signature": "91c8cdc193f5950fa80b1591844f610724aa944f65b039fb498384178b384482b1433016ffa5afb617019487bbbbada8361c145504947b2be97109d9892aef06"
+      },
+      {
+        "serviceRef": "harry--weather",
+        "target": "aid:c49775473bf9dcf5ad1608c8e66823d55dc6889be27e42a029fd9de195c8d7e4",
+        "rank": "member",
+        "issuedAt": 1760000000007,
+        "canonical": "flagship/app-rank/v1|harry--weather|aid:c49775473bf9dcf5ad1608c8e66823d55dc6889be27e42a029fd9de195c8d7e4|member|1760000000007",
+        "signature": "dfaf1ab717262046b458ea0d23b163c4a9d1941a47684faa4a02d9ed53d1fda10b1b29ab1668da8d789d59805b02f41ff15200243079ca6ead23913a5ed8a00a"
+      }
+    ],
+    "invalid": [
+      {
+        "serviceRef": "harry--chess-club",
+        "target": "aid:c49775473bf9dcf5ad1608c8e66823d55dc6889be27e42a029fd9de195c8d7e4",
+        "rank": "owner",
+        "issuedAt": 1,
+        "why": "owner is not a rank"
+      },
+      {
+        "serviceRef": "harry--chess-club",
+        "target": "aid:c49775473bf9dcf5ad1608c8e66823d55dc6889be27e42a029fd9de195c8d7e4",
+        "rank": "refused",
+        "issuedAt": 1,
+        "why": "only a device or a co-manager can be refused"
+      },
+      {
+        "serviceRef": "harry--chess-club",
+        "target": "invite:ea4ab8be66710610842cf6ef0d7e56bd",
+        "rank": "refused",
+        "issuedAt": 1,
+        "why": "an invite can't be refused (withdraw it)"
+      },
+      {
+        "serviceRef": "harry--chess-club",
+        "target": "device:086ABB1C191C86E7CB68D4736F73C68F8B0C55C2A3FAFA6A2C770FC308AB242A",
+        "rank": "member",
+        "issuedAt": 1,
+        "why": "device keys are lowercase hex"
+      },
+      {
+        "serviceRef": "harry--chess-club",
+        "target": "share:0f1e2d3c4b5a69788796a5b4c3d2e1f000",
+        "rank": "member",
+        "issuedAt": 1,
+        "why": "a share id is 32 hex"
+      },
+      {
+        "serviceRef": "Harry--Club",
+        "target": "device:086abb1c191c86e7cb68d4736f73c68f8b0c55c2a3fafa6a2c770fc308ab242a",
+        "rank": "member",
+        "issuedAt": 1,
+        "why": "serviceRef is lowercase"
+      },
+      {
+        "serviceRef": "harry|club",
+        "target": "device:086abb1c191c86e7cb68d4736f73c68f8b0c55c2a3fafa6a2c770fc308ab242a",
+        "rank": "member",
+        "issuedAt": 1,
+        "why": "no separator in serviceRef"
+      },
+      {
+        "serviceRef": "harry--chess-club",
+        "target": "device:086abb1c191c86e7cb68d4736f73c68f8b0c55c2a3fafa6a2c770fc308ab242a",
+        "rank": "member",
+        "issuedAt": -1,
+        "why": "issuedAt is non-negative"
+      }
+    ]
+  },
+  "mode": {
+    "cases": [
+      {
+        "serviceRef": "harry--chess-club",
+        "mode": "restricted",
+        "issuedAt": 1760000000100,
+        "canonical": "flagship/service-access-mode/v2|harry--chess-club|restricted|1760000000100",
+        "signature": "555341b6805bfc3310ff2c76add1f5b2f3399e7ccc4f5a44e5793001f09db7a2d4b3c36d0e450e310f1cd2829bf54c24f6fec24241b113492f31bd9f74612800"
+      },
+      {
+        "serviceRef": "harry--chess-club",
+        "mode": "open",
+        "issuedAt": 1760000000101,
+        "canonical": "flagship/service-access-mode/v2|harry--chess-club|open|1760000000101",
+        "signature": "afca644e519d45fe1557fd8df8ac95cd7ecfd3775df05c8258515ade3a472e27827958ab553420448444477271eadfb7678523a3ae0b0ef65979f22861c73806"
+      }
+    ],
+    "invalid": [
+      {
+        "serviceRef": "harry--chess-club",
+        "mode": "members-only",
+        "issuedAt": 1,
+        "why": "mode is open or restricted"
+      },
+      {
+        "serviceRef": "",
+        "mode": "open",
+        "issuedAt": 1,
+        "why": "empty serviceRef"
+      }
+    ]
+  },
+  "remove": {
+    "cases": [
+      {
+        "serviceRef": "harry--chess-club",
+        "aid": "c49775473bf9dcf5ad1608c8e66823d55dc6889be27e42a029fd9de195c8d7e4",
+        "issuedAt": 1760000000200,
+        "canonical": "flagship/service-allow-remove/v2|harry--chess-club|c49775473bf9dcf5ad1608c8e66823d55dc6889be27e42a029fd9de195c8d7e4|1760000000200",
+        "signature": "1b897cdbe09836a53390c5699d311bb379bf64fcf8b1540acfd9466ca113dafda3fdc30f988df4c6536e38251ce22fd46abd3fa309058e389fbd7d5806ac0104"
+      }
+    ],
+    "invalid": [
+      {
+        "serviceRef": "harry--chess-club",
+        "aid": "9775473bf9dcf5ad1608c8e66823d55dc6889be27e42a029fd9de195c8d7e4",
+        "issuedAt": 1,
+        "why": "aid is 64 hex"
+      },
+      {
+        "serviceRef": "harry--chess-club",
+        "aid": "C49775473BF9DCF5AD1608C8E66823D55DC6889BE27E42A029FD9DE195C8D7E4",
+        "issuedAt": 1,
+        "why": "aid is lowercase"
+      }
+    ]
+  }
+}

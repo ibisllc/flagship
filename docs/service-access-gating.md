@@ -107,7 +107,7 @@ role is chosen at creation). The toggle never changes the list.
   contract) on every path, method and WebSocket upgrade, and the app decides
   what an anonymous visitor may do (`access.public_routes` changes nothing). A
   member who signs in with their phone gets their rank.
-- **Members only:** only members and the owner get in; anyone else gets the
+- **Members only:** only members (the account's devices and co-managers count, see below) get in; anyone else gets the
   knock page, except on the paths the manifest declares in
   `access.public_routes` (a landing page, a webhook another service calls),
   which are forwarded marked anonymous. Switching to it asks once: "Only these N
@@ -115,19 +115,18 @@ role is chosen at creation). The toggle never changes the list.
 - **Unknown mode:** if the box can't read its access state, every app is
   members-only (fail closed). Decision table and path matching:
   docs/app-apis.md §2.
-- **The owner** is always `owner`.
+- **The account's devices and co-managers** have default ranks (below).
 - **Removing someone:** on an open app they lose their role and visit
   anonymously; on a members-only app they are signed out and kept out.
 
-**Ranks** (owner, final 2026-10-13) are Flagship's, never app-defined: three
-ordered, cumulative ranks plus the box owner.
+**Ranks** (owner, final 2026-10-13; `owner` removed 2026-10-15) are Flagship's,
+never app-defined: three ordered, cumulative ranks.
 
 | rank (wire) | shown as | notes |
 |---|---|---|
 | `member` | Member | the base rank; must still be able to use the app (in a game, save games) |
 | `manager` | Manager | Member + more |
-| `master` | Master 👑 | Manager + more; shown with a crown in all three apps |
-| `owner` | Owner | the box owner only, never given; Master + Flagship-level control (access control, delete) |
+| `master` | Master 👑 | Manager + more; shown with a crown in all three apps; admin devices by default |
 
 What each rank may do is the app's call: the manifest's
 `access.role_descriptions` gives one line per rank (written by the AI for
@@ -140,10 +139,10 @@ keeps the display names in one place (webapp `lib/memberRoles.js`, iOS
 `AppMemberRole`, Android `AppMemberRole`).
 
 **Grants.** Every redemption of an invite is its own grant, with its own role
-(its own, else the invite's, else the app's default; Member for a member-tier invite, see "Who can invite") and revocation: a group
+(its own, else the invite's, else the app's default; Member for an invite a non-admin made, see "Account members") and revocation: a group
 link's joins are separate per-person bindings. A person can hold several
 grants for one app (a personal invite and group links all bind their
-per-author contact AID). Their role is the **highest** of their live grants;
+per-author contact AID). Their role is the **highest** of their live grants (an `aid:` order on them replaces it);
 revoking one leaves the others, and only someone left with no grant stops
 being a member. The box keeps the grants in the service's allow-list state
 (`groups`: inviteId → AIDs, personal invites included) and the roles beside
@@ -156,7 +155,7 @@ members who joined before personal invites were tracked).
 (`memberRoles.ts`: `GET /api/screens/services/:id/members`,
 `POST …/members/role`), at most 10 minutes old and newer than the last order
 for that target. Vectors: `packages/protocol/test-vectors/app-member-role/`.
-Mode changes and removals stay the owner-IRK orders above. Clients send the
+Mode changes and removals are admin-only orders (see "Account members"). Clients send the
 invite's role right after creating it, and skip that when it is the default.
 Removing a person prunes their AID on the box only when that was their last
 grant; otherwise the box drops just that grant when its revocation poller sees
@@ -173,64 +172,183 @@ there; private routes still show the knock page themselves.
 the box entirely, or a whole invite is revoked). Anonymous visitors are never
 given a rank (decided 2026-10-14, above).
 
-## Who can invite (owner decision, 2026-10-15)
+## Account members, ranks and who may change them (owner decision, 2026-10-15)
 
-**Only admins grant higher access; any device of the account may invite at
-Member, and admins are told.** Before this, an account with a pinned admin
-root (every real account) accepted invite creates only from an admin device,
-so a phone without the admin root could not invite anyone.
+This replaces "Who can invite" (same day): its admin-only rules were a
+client rule, and every device of the account looked like the owner to the
+box (they all signed in with the one account AID). Now the box knows each
+device, gives everyone a rank by default, and enforces who may change what.
 
-| | admin device (holds the admin root) | any other device of the account |
-|---|---|---|
-| create an invite | yes, any rank (signs with the admin root) | yes, at **Member** (signs with the account's membership key, AID or IRK) |
-| change a rank (`flagship/app-member-role/v1`) | yes | no: the box refuses anything but the admin root |
-| revoke an invite | any | only the invites it created itself |
-| open/members-only, remove a person, delete | as before (the clients offer them on admin devices) | as before |
+### Ranks and defaults
 
-- **`.com`** (`serviceInvites.ts`): the create goes through the admin gate
-  first (admin root, or a device with an admin-root-signed `admin` grant:
-  tier `admin`). On an admin-pinned account a create the gate refused is
-  accepted when the account's AID or IRK signed it: tier `member`. On an
-  account with no admin root the AID/IRK create is `admin`, as before. The
-  invite row records `creator_tier`, `creator_pub_hex` (the key it verified
-  under) and `creator_device_id` (the account device id the request named,
-  kept only when it is a live device of the account; unsigned, attribution
-  only); migration 0100. The owner-signed list returns `creatorTier` and
-  `creatorDeviceId`. A revoke is accepted from the admin gate, or, for a
-  member invite, from the very key that created it while that key is still
-  the account's. `scripts/admin-authority-guard.sh` lists these two paths
-  (`memberInviteSigner`, `revokedByCreator`) as its only membership-key
-  exceptions.
-- **Admins are told.** A member-tier create pushes every admin device (the
-  devices holding a live admin-root-signed `admin` grant) a content-free
-  `invite-created` notice: "A device on your account invited someone to one
-  of your apps.", opening `https://<apex>/app/account/activity`. No app,
-  person, server or device name rides it. The same line is logged to the
-  account activity (`invite-created` audit row).
-- **The box caps it** (`serviceAccess.ts`). The box never takes the tier
-  from `.com`: it reads it from the key that signed the create it verifies
-  on redeem or manual accept. With a pinned admin root, the admin root makes
-  an `admin` invite and the owner's AID or IRK a `member` invite; with none,
-  the owner key is the authority (`admin`). The tier is stored per invite
-  (`roles.tiers`) before anyone is bound, and `member` never turns back into
-  `admin`. A join through a member invite is Member unless an admin-signed
-  role order set its invite's or its own rank, whatever the manifest's
-  `default_role` (an old `admin` default maps to master, so falling back to
-  it would leak). Rank orders on an admin-pinned box verify only under the
-  admin root, so the IRK every device holds can't lift anyone. Effective
-  rank stays the highest live grant, so an admin can raise a member-invited
-  person later (or invite them again at a higher rank). The members list
-  returns each invite's and grant's `tier`.
-- **Clients.** Admin devices sign creates and revokes with the admin root
-  (one biometric per unlocked session); other devices with the AID, and their
-  rank picker is locked to Member ("Only an admin device can give a higher
-  rank"). Rank changes are offered only on admin devices. Every member row
-  shows "Invited by <device>", the name resolved on the device from the
-  encrypted account directory (never sent to `.com` or the box), with a
-  one-tap revoke for admins.
-- **Not changed:** the box still verifies the open/members-only mode and
-  allow-remove envelopes under the owner IRK (they were never moved to the
-  admin root), so "admin only" for those is a client rule today.
+Exactly three ranks, `member` < `manager` < `master`. There is no `owner`
+rank in apps: the box never sends one, and a stored or legacy `owner` reads
+as `master`. Every app on the box gives, with no invite:
+
+| who (class on the box) | default rank |
+|---|---|
+| an **admin device** of the account that owns the box | `master` |
+| any **other device** of that account | `manager` |
+| a device of an account that **co-manages** this server (`share-a-server.md`; never an admin) | `manager` |
+| a person invited by a non-admin device | `member` |
+| a person invited by an admin | the rank the admin chose (`member` unless set) |
+
+An admin may sign an order that changes any of these for one app, up or
+down, or refuses a device or co-manager outright. An explicit order on a
+target **replaces** its default (demotion works; it is not "highest of"). An
+invited person's own (`aid:`) order also replaces their grants' ranks;
+without one, a person holding several grants has the highest.
+
+"Manager-class" means an effective rank of `manager` or `master` in that app.
+
+### Who is signing in (the box verifies it)
+
+A sign-in (knock authorization, visit proof, establish-session) is signed by
+one key, and the box classifies that key itself:
+
+1. **An account device.** The device signs with its own **account device
+   key** (`deriveAccountDeviceKeySeed(UMK, accountId, deviceId)`, the key it
+   already keeps for directory requests and read tokens). The box holds the
+   account's **device book**: every active `DeviceCapabilityGrant` of the
+   account, fetched from `.com` (`GET /api/users/<u>/device-grants` with the
+   box's STK read token) and **verified on the box**. A grant signed by the
+   pinned admin root with the `admin` scope makes an admin device; one signed
+   by the owner IRK (or by the admin root without `admin`) a non-admin
+   device. The book is refreshed every 5 minutes, and at once (at most every
+   30 s) when an unknown key signs, and kept on disk so a restart works
+   offline. A box with no admin root pinned treats every device as admin (the
+   owner key is the authority there, as before).
+2. **A co-manager.** Their device signs with the share's member key
+   (`share-a-server.md` §3); the box finds the active share holding it.
+3. **An invited person.** Their per-app id, on the app's allow-list, as
+   before.
+4. Anyone else is not let in (members-only) or is anonymous (open).
+
+The account's legacy AID still signs in from older apps: it counts as a
+non-admin device (`manager` by default) on an admin-pinned box, as admin on
+an unpinned one.
+
+The app sees the rank in `X-Flagship-Role`. Its user id (`X-Flagship-User`)
+for every device of the owning account is the one id of the owner AID (one
+person, many devices); a co-manager's comes from the share key, an invited
+person's from their per-app id. All are per app (`stableIdFor`).
+
+Why the device grants are the source: they are the only per-device list the
+box can verify without trusting `.com` (they are signed by keys the box
+pins), every device already has one (account creation signs the first
+device's with the admin root; adding a device signs the new one's with the
+admin root or the IRK), and the admin line in them is exactly the admin
+root's. A grant's `expiresAt` is a refresh horizon here, not an authority
+horizon (device-admin-tier-spec §4.1); a revocation reaches the box when
+`.com` stops listing the grant (a hidden revocation is the poll-window
+residual of §5.4 there). Residual, stated plainly: the account device key is
+UMK-derived, so any device of the account (they all hold the UMK) could
+compute another device's key. Admin versus non-admin is cryptographic (the
+admin root never leaves admin devices); one non-admin device's rank versus
+another's is enforced against the apps, not against a hostile device of the
+same person.
+
+**Privacy.** A device presents its account device key only to the account's
+own servers, and a share member key only to the server it shares; on anyone
+else's box it signs with `deriveAppAccountId` exactly as before. The box
+learns device ids and public keys from `.com`, never names, and sends
+nothing about devices back. The clients resolve device names from the
+decrypted account directory on the device.
+
+### What each class may do (box-enforced)
+
+| | admin device | non-admin device, manager-class in the app | below manager, or refused |
+|---|---|---|---|
+| create an invite | yes, any rank (admin root) | yes, always at Member (its own device key) | no |
+| withdraw an invite | any | only invites **it** created; that removes the people who joined through them | no |
+| change a rank, refuse a device or co-manager | yes (`flagship/app-rank/v1`) | no | no |
+| open / members-only, remove a person, revoke anyone else's access | yes | no | no |
+| uninstall or delete the app | yes | no | no |
+
+Co-managers, and guests an admin raised to Manager, are manager-class for
+the app (it gets the rank) but get no invite rights (owner-approved):
+`.com` can't tie their keys to the owner's account without learning who
+shares with whom.
+
+- **Invites.** An admin signs the create with the admin root (or an admin
+  device's key); a non-admin device signs it with its account device key and
+  names its `deviceId`. `.com` verifies the signature under that device's
+  registered key, so `creator_device_id` is proven by the signature, not just
+  named; on an admin-pinned account the AID and IRK no longer create invites.
+  The box verifies the create itself on redeem and manual accept (admin root,
+  an admin device, or a device in its book; `.com`'s `creatorPubHex` is only a
+  hint), records the creator key per invite (`roles.creators`, sticky like
+  `roles.tiers`), and lets the person in only while the creator is still
+  manager-class there. A creator demoted below manager, or refused, has
+  their still-open links stop letting **new** people in (403, owner-approved
+  default); people already in stay until an admin removes them.
+- **Withdraw.** A revoke (`flagship/service-invite/revoke/v1`) verifies on
+  `.com` under the admin gate, or under the creator device key while that
+  device is active; `.com` now keeps the signed revoke (migration 0102) and
+  serves it on `revoked-since`. The box prunes an invite's people only for a
+  revoke it verifies itself: the sensitive-order key, or the invite's
+  recorded creator key while that device is still manager-class in the app.
+  Devices also post the revoke straight to the box
+  (`POST /api/service-access/invite-withdraw {revoke, signature}`) so it
+  applies at once; the poll is the backstop. A revoke row without a signature
+  no longer prunes anyone.
+- **Admin-only orders**, all under the box's sensitive-order key (the admin
+  root, or a device with an admin-root-signed `admin` grant from the book; the
+  IRK only on a box with no admin root): rank orders, mode changes
+  (`flagship/service-access-mode/v2`, and v1), allow-list removals
+  (`flagship/service-allow-remove/v2`, and v1), and app uninstall (the box's
+  own identity still uninstalls for box-internal flows).
+
+### Orders
+
+They name the app (its `serviceRef`, the same on every server of the
+account), not one server. A per-target sequence (an order's `issuedAt` must
+be newer than the last one applied to that target: latest order wins) stops
+replays, together with a 10-minute freshness window when a client posts it.
+
+    flagship/app-rank/v1|<serviceRef>|<target>|<rank>|<issuedAt>
+    flagship/service-access-mode/v2|<serviceRef>|<open|restricted>|<issuedAt>
+    flagship/service-allow-remove/v2|<serviceRef>|<aid hex>|<issuedAt>
+
+`target` is `device:<64 hex>` (an account device key; the legacy AID counts
+as one), `share:<32 hex shareId>`, `invite:<inviteId>`,
+`grant:<inviteId>/<aid hex>` or `aid:<aid hex>`; `rank` is `member`,
+`manager`, `master`, or `refused` (device and share targets only). Vectors:
+`packages/protocol/test-vectors/app-access-orders/`; all four ports pass
+them. `flagship/app-member-role/v1` (server-named) is still accepted, under
+the same admin-only key.
+
+### Box surface
+
+- `GET /api/screens/services/:id/members` adds `accountMembers`: each device
+  in the book (`kind: "device"`, `deviceId`, `devicePub`, `tier`
+  `admin|member`, `rank`, `set`, `refused`) and each active co-manager
+  (`kind: "co-manager"`, `shareId`, the owner's `label`, `rank`, `set`,
+  `refused`); each invite adds `creatorPub` and `creatorDeviceId` (from the
+  book). No `owner` anywhere.
+- `POST /api/screens/services/:id/members/rank {order, signature}`.
+- `POST /api/service-access {request, signature}` takes a v2 mode order;
+  `POST /api/service-access/allow-remove` a v2 removal (v1 still parses).
+- `POST /api/service-access/invite-withdraw {revoke, signature}`.
+
+The state lives in `<dataDir>/data/flagship-access/service-access.json`
+(moved from `/var/flagship/service-access.json`, read once from there), so
+Migrate's backup and final flush carry it; app copy and server
+archive/import carry each app's entry (mode, list, grants, ranks, creators);
+uninstall drops the app's entry, so a reinstall under the same id starts
+clean.
+
+### Clients
+
+The app's Access control screen shows **Account members** next to the
+invited people: this account's devices (names from the decrypted directory)
+and the co-managing accounts (the owner's label), each with its rank. On
+admin devices each row has a rank menu (Member, Manager, Master) and
+**Refuse**, one biometric per order, as for invites. A non-admin device that
+is manager-class sees "+ Add person / group" at Member with the existing
+one-line why; one below manager sees why it can't invite. The rank picker
+offers only member, manager and master. Admin devices keep one biometric per
+invite.
 
 ## Per-app identity (owner rule, 2026-10-13)
 
