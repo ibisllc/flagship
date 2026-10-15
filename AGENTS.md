@@ -627,11 +627,26 @@ release, and applies to a VM from its next start).
   Support). `wrangler` is not a repo dependency: the script's final
   `npm run deploy` needs a wrangler on PATH.
 - **Windows + Linux:** `studio-v0.1.2` on GitHub Releases, built by the
-  on-demand `studio-release.yml` (pass `publish=true` to release). Windows is a
-  zip with `xorriso` bundled in `tools\`, **unsigned** (no code-signing cert;
-  v0.0.1 wasn't signed either). Linux is an x86-64 AppImage that needs Node.js
-  20+ and pkexec. Neither has been run on a real Windows PC or Linux desktop:
-  see "Validating on Windows and Linux" below.
+  on-demand `studio-release.yml` (pass `publish=true` to release; it now
+  stamps the version into both apps and checks it). Windows is a zip with
+  `xorriso` bundled in `tools\`, **unsigned** (no code-signing cert). Linux is
+  an x86-64 AppImage that needs Node.js 20+, pkexec and xorriso. **On `main`
+  since 2026-10-15, level with the Mac (not yet in a release):** hosting from
+  the published prebuilt appliance by default (verified qcow2 archive kept as
+  the base, a qcow2 overlay + install-blob seed per server, installer-ISO
+  fallback; a base is pruned only once no server's overlay reads it), QEMU
+  disks `cache=writeback,aio=threads,discard=unmap` (pinned in
+  `vm-core-vectors.json` with the Mac's `.cached`+`.full`), the order-serial
+  Health readout (the Mac's was dead since bb3608e9: it dropped the serial on
+  install; servers installed before the fix show none), "Unlocking…" + last
+  connected, keep-awake while hosting, pairing at launch with offline pause
+  and retry, one-click Host here that opens the new server, remembered Wi-Fi
+  (Windows DPAPI; Linux libsecret or a 0600 file; Linux gained the Wi-Fi
+  fields), base-ISO pruning, taskbar progress (Windows), a graceful Restart
+  as administrator (Windows), Restart + a StatusNotifierItem tray (Linux,
+  smoke-tested on a real session bus in CI), and an up-front xorriso check
+  (Linux). Neither has been run on a real Windows PC or Linux desktop: cut a
+  release, then see "Validating on Windows and Linux" below.
 - **Mac App Store plan: deferred** (owner, 2026-10-13, to keep Studio one
   app). `docs/studio-mac-app-store.md` is saved for a future migration:
   sandboxed hosting-only Studio in the store, USB burning in a small
@@ -662,7 +677,7 @@ metal), plus the Debian 13.7.0 check. Record results under "Desktop Studio".
    Boxes install/build only the daemon (`--workspace=packages/server-daemon`,
    `tsc -b packages/server-daemon`; box `node_modules` 182 → 113 MB). Hosts with
    ≤16 GiB RAM give a VM 4 GiB, not 6 (all three cores + vectors). Unused cached
-   ISOs are pruned after 30 days (Mac + Linux). **Validated live on this Mac
+   ISOs are pruned after 30 days (all three). **Validated live on this Mac
    2026-10-10** (`home2.plucky-avocet`, iPhone dev build + signed Studio):
    create → specialized and resealed in ~45 s → phone unlock → Let's Encrypt
    cert + HTTPS 200 about 2.5 min after creation. The first attempt exposed that
@@ -671,8 +686,8 @@ metal), plus the Debian 13.7.0 check. Record results under "Desktop Studio".
    fixed via the engine's `buildInstallBlobJsonFromRecipe`, and the specializer
    now reports each stage and any failure to the install timeline. Remaining:
    publish the CI rebuilds of both arches (they bake the code of their build
-   day, so rebuild when `main` moves meaningfully); Linux/Windows still host via
-   the installer ISO by default.
+   day, so rebuild when `main` moves meaningfully). Windows and Linux host from
+   the same appliance since 2026-10-15 (not yet run on real hardware).
 3. **Hetzner:** account suspended; five orphaned servers to delete by hand when
    it unlocks (153213447, 153638469, 153643080, 153813669, 155315594).
 4. **Minimum-OS review** (Conventions rule): Mac Studio is macOS 14, Android is
