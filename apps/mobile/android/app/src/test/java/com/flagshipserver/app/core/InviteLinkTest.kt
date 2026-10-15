@@ -97,7 +97,7 @@ class InviteLinkTest {
         }
         // The canonical reply carries ONLY {accept, acceptSig} — no create.
         val reply = InviteLink.buildAcceptReply("home.alice.flagship.services", accept, "a".repeat(128))
-        assertTrue(reply.startsWith("flagship://invite-accept?"))
+        assertTrue(reply.startsWith("https://flagshipserver.com/invite-accept?"))
         val acc = InviteLink.decodeAcceptance(reply)!!
         assertEquals("home.alice.flagship.services", acc.serverDomain)
         assertEquals(iid, acc.accept["inviteId"]!!.jsonPrimitive.content)
@@ -112,11 +112,11 @@ class InviteLinkTest {
     @Test fun frozenAcceptReplyInterop() {
         val server = "home.alice.flagship.services"
         val iid = "ea4ab8be66710610842cf6ef0d7e56bd91a4f03c7a5633fde4a66482cc292890"
-        val ref = "alice--notes"
+        val ref = "alice-notes"
         val aid = "086abb1c191c86e7cb68d4736f73c68f8b0c55c2a3fafa6a2c770fc308ab242a"
         val sig = "1f".repeat(64)
         val at = 1_700_006_000_000L
-        val frozen = "flagship://invite-accept?server=$server&iid=$iid&ref=$ref&aid=$aid&sig=$sig&at=$at"
+        val frozen = "https://flagshipserver.com/invite-accept?server=$server&iid=$iid&ref=$ref&aid=$aid&sig=$sig&at=$at"
         val accept = buildJsonObject {
             put("inviteId", JsonPrimitive(iid))
             put("serviceRef", JsonPrimitive(ref))
@@ -128,6 +128,23 @@ class InviteLinkTest {
         assertEquals(iid, acc.accept["inviteId"]!!.jsonPrimitive.content)
         assertEquals(aid, acc.accept["contactAID"]!!.jsonPrimitive.content)
         assertEquals(sig, acc.acceptSigHex)
+    }
+
+    /** Older apps sent the same reply as `flagship://invite-accept?…`; it still decodes,
+     *  as does the App Link with a trailing slash or the www host. */
+    @Test fun decodeAcceptanceAcceptsOlderAndVariantForms() {
+        val q = "server=home.alice.flagship.services&iid=${"e".repeat(64)}&ref=alice-notes&aid=${"c".repeat(64)}&sig=${"1f".repeat(64)}&at=1700"
+        for (raw in listOf(
+            "flagship://invite-accept?$q",
+            "https://flagshipserver.com/invite-accept/?$q",
+            "https://www.flagshipserver.com/invite-accept?$q",
+        )) {
+            val acc = InviteLink.decodeAcceptance(raw)
+            assertEquals(raw, "home.alice.flagship.services", acc?.serverDomain)
+            assertEquals(raw, "1f".repeat(64), acc?.acceptSigHex)
+        }
+        assertNull(InviteLink.decodeAcceptance("https://evil.example/invite-accept?$q"))
+        assertNull(InviteLink.decodeAcceptance("https://flagshipserver.com/invite?$q"))
     }
 
     /** Back-compat: the legacy `flagship://accept?b=<base64url>` bundle still

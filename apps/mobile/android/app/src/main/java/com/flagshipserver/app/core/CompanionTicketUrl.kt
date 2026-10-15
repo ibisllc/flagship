@@ -52,15 +52,19 @@ object CompanionTicketUrl {
     }
 }
 
-/** The remote page's QR (remote.<apex>): `flagship://remote?s=<sid>&k=<pk>`,
- *  a QR-relay session and the browser's ephemeral X25519 key. Nothing in it
- *  names an account or a server; the phone picks the server. */
+/** The remote page's QR (remote.<apex>): `https://flagshipserver.com/remote?s=<sid>&k=<pk>`
+ *  (older pages: `flagship://remote?s=…&k=…`), a QR-relay session and the
+ *  browser's ephemeral X25519 key. Nothing in it names an account or a server;
+ *  the phone picks the server. */
 object RemoteApprovalLink {
     private val sidPattern = Regex("^[A-Za-z0-9_-]{16,64}$")
 
     fun parse(raw: String): QrRelay.QrSession? {
         val uri = runCatching { java.net.URI(raw.trim()) }.getOrNull() ?: return null
-        if (uri.scheme != "flagship" || uri.host != "remote") return null
+        val scheme = uri.scheme == "flagship" && uri.host == "remote"
+        val appLink = uri.scheme == "https" && Endpoints.isControlHost(uri.host) &&
+            uri.path?.trimEnd('/') == "/remote"
+        if (!scheme && !appLink) return null
         val session = runCatching { QrRelay.parseQrUrl(raw) }.getOrNull() ?: return null
         return session.takeIf { sidPattern.matches(it.sid) }
     }

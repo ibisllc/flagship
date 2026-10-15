@@ -161,6 +161,67 @@ class InviteDeepLinkTest {
         assertNull(DeepLink.parse(Uri.parse("flagship://access?server=home.alice.flagship.services&ref=alice--notes")))
     }
 
+    @Test fun accessAppLinkParsesLikeTheScheme() {
+        val expected = DeepLink.AuthorizeKnock("home.alice.flagship.services", "notes", "alice--notes", "abc123")
+        for (raw in listOf(
+            "https://flagshipserver.com/access?server=home.alice.flagship.services&svc=notes&ref=alice--notes&page=abc123",
+            "https://flagshipserver.com/access/?server=home.alice.flagship.services&svc=notes&ref=alice--notes&page=abc123",
+            "https://www.flagshipserver.com/access?server=home.alice.flagship.services&svc=notes&ref=alice--notes&page=abc123",
+        )) {
+            assertEquals(raw, expected, DeepLink.parse(Uri.parse(raw)))
+            assertEquals(raw, expected, AppLink.resolve(Uri.parse(raw)))
+        }
+        // URLSearchParams-encoded (the knock page builds it that way).
+        assertEquals(
+            DeepLink.AuthorizeKnock("home.alice.flagship.services", "my notes", "alice--notes", "abc123"),
+            DeepLink.parse(Uri.parse("https://flagshipserver.com/access?server=home.alice.flagship.services&svc=my%20notes&ref=alice--notes&page=abc123")),
+        )
+        assertNull(DeepLink.parse(Uri.parse("https://flagshipserver.com/access?server=home.alice.flagship.services&ref=alice--notes")))
+        assertNull(DeepLink.parse(Uri.parse("https://evil.example/access?server=h&ref=r&page=p")))
+    }
+
+    // ── invite-accept — a friend's acceptance reply ─────────────────────────
+
+    private val acceptQuery = "server=home.alice.flagship.services" +
+        "&iid=ea4ab8be66710610842cf6ef0d7e56bd91a4f03c7a5633fde4a66482cc292890&ref=alice-notes" +
+        "&aid=086abb1c191c86e7cb68d4736f73c68f8b0c55c2a3fafa6a2c770fc308ab242a&sig=${"1f".repeat(64)}&at=1700006000000"
+
+    @Test fun inviteAcceptParsesBothForms() {
+        for (raw in listOf(
+            "https://flagshipserver.com/invite-accept?$acceptQuery",
+            "https://flagshipserver.com/invite-accept/?$acceptQuery",
+            "https://www.flagshipserver.com/invite-accept?$acceptQuery",
+            "flagship://invite-accept?$acceptQuery",
+        )) {
+            assertEquals(raw, DeepLink.AcceptInvite(raw), DeepLink.parse(Uri.parse(raw)))
+            assertEquals(raw, DeepLink.AcceptInvite(raw), AppLink.resolve(Uri.parse(raw)))
+        }
+    }
+
+    @Test fun inviteAcceptNeedsServerAndValidFields() {
+        assertNull(DeepLink.parse(Uri.parse("https://flagshipserver.com/invite-accept?${acceptQuery.substringAfter("&")}")))
+        assertNull(DeepLink.parse(Uri.parse("https://flagshipserver.com/invite-accept?server=h&iid=short")))
+        assertNull(DeepLink.parse(Uri.parse("https://evil.example/invite-accept?$acceptQuery")))
+    }
+
+    // ── builder — Flagship Studio's pairing QR ─────────────────────────────
+
+    @Test fun builderQrParsesBothForms() {
+        val q = "c=AEBAGBAF&k=pOCSkrZRwni5dyxWn1-puxPZBrRqtoyd-dwrRAn4ogk"
+        for (raw in listOf(
+            "https://flagshipserver.com/builder?$q",
+            "https://flagshipserver.com/builder/?$q",
+            "https://www.flagshipserver.com/builder?$q",
+            "flagship://builder?$q",
+        )) {
+            assertEquals(raw, DeepLink.BuilderPair(raw), DeepLink.parse(Uri.parse(raw)))
+            assertEquals(raw, DeepLink.BuilderPair(raw), AppLink.resolve(Uri.parse(raw)))
+        }
+        assertNull(DeepLink.parse(Uri.parse("https://flagshipserver.com/builder?k=x")))
+        assertNull(DeepLink.parse(Uri.parse("https://flagshipserver.com/builder?c=nope!!")))
+        assertNull(DeepLink.parse(Uri.parse("https://evil.example/builder?$q")))
+    }
+
     @Test fun appLinkResolvesAccessScheme() {
         // AppLink.resolve (the MainActivity entry point) hands flagship://
         // straight to DeepLink.parse.

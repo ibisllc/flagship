@@ -37,6 +37,7 @@ import com.flagshipserver.app.ui.screens.VibeCodeChatScreen
 import com.flagshipserver.app.viewmodels.PendingBuildCredential
 import com.flagshipserver.app.ui.screens.BrowserTabsScreen
 import com.flagshipserver.app.ui.screens.BrowserViewerScreen
+import com.flagshipserver.app.ui.screens.InviteAcceptScreen
 import com.flagshipserver.app.ui.screens.InviteRedeemScreen
 import com.flagshipserver.app.ui.screens.KnockAuthorizeScreen
 import com.flagshipserver.app.ui.screens.ServiceAccessScreen
@@ -103,6 +104,11 @@ fun ServicesTab() {
                 val ref = java.net.URLEncoder.encode(link.serviceRef, "UTF-8")
                 val pg = java.net.URLEncoder.encode(link.pageId, "UTF-8")
                 nav.navigate("knock-authorize/$srv/$ref/$pg?svc=$svc")
+            }
+            // A friend's acceptance reply: approve it on the box it names.
+            is DeepLink.AcceptInvite -> {
+                deepLinker.consume()
+                nav.navigate("invite-accept?reply=${java.net.URLEncoder.encode(link.rawLink, "UTF-8")}")
             }
             else -> { /* not for this tab */ }
         }
@@ -314,6 +320,13 @@ fun ServicesTab() {
                 onOpenService = { nav.popBackStack() },
                 onDone = { nav.popBackStack() },
             )
+        }
+        composable(
+            route = "invite-accept?reply={reply}",
+            arguments = listOf(navArgument("reply") { type = NavType.StringType; defaultValue = "" }),
+        ) { entry ->
+            val reply = java.net.URLDecoder.decode(entry.arguments?.getString("reply") ?: "", "UTF-8")
+            InviteAcceptScreen(rawReply = reply, onDone = { nav.popBackStack() })
         }
         // Web-experience gating — authorize a browser's QR-login (deep-link +
         // "Process URL" target). svc is an optional query arg (empty = apex).

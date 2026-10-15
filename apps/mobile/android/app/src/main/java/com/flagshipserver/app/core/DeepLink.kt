@@ -81,8 +81,9 @@ sealed interface DeepLink {
     /** Web-experience gating (docs/service-access-gating.md, "Web-experience
      *  gating") — the visitor's phone authorizes a SEPARATE browser's QR-login
      *  for a restricted service's website. Carried by the knock page's
-     *  `flagship://access?server=<serverFqdn>&svc=<urlLabel>&ref=<serviceRef>&page=<pageId>`
-     *  deeplink (also a QR for cross-device, and a copyable "Get link" string).
+     *  `https://flagshipserver.com/access?server=<serverFqdn>&svc=<urlLabel>&ref=<serviceRef>&page=<pageId>`
+     *  App Link (older pages: `flagship://access?…`; also a QR for cross-device,
+     *  and a copyable "Get link" string).
      *  All four params are required; a malformed link is NOT routed. */
     data class AuthorizeKnock(
         val serverId: String,
@@ -94,6 +95,17 @@ sealed interface DeepLink {
     /** A browser asking to become a remote: the QR on remote.<apex>, naming
      *  only a relay session and the browser's key (see [RemoteApprovalLink]). */
     data class CompanionDockApproval(val rawLink: String) : DeepLink
+
+    /** Flagship Studio's pairing QR, `https://flagshipserver.com/builder?c=<code>&k=<pk>`
+     *  (older Studio: `flagship://builder?…`), scanned with the phone's camera.
+     *  Opens Create server, which pairs with that Studio once the server is designed. */
+    data class BuilderPair(val rawLink: String) : DeepLink
+
+    /** A friend's acceptance of a manual-approve invite (see [InviteLink.buildAcceptReply]),
+     *  `https://flagshipserver.com/invite-accept?server=&iid=&ref=&aid=&sig=&at=`
+     *  (older apps: `flagship://invite-accept?…`). Opens the owner's approve screen,
+     *  which submits it to the box named by `server`. */
+    data class AcceptInvite(val rawLink: String) : DeepLink
 
     /** Transfer-a-box take-over (docs/device-admin-entitlements.md Slice C). The
      *  giver's box-detail page renders the IRK-signed transfer offer as a QR /
@@ -140,10 +152,23 @@ sealed interface DeepLink {
                 if (host == Endpoints.controlHost && uri.path == "/share") {
                     return ServerShare.parseShareLink(uri.toString())?.let { ShareOffer(it.shareId, it.secretHex) }
                 }
+                // The App Link twins of flagship://remote, builder, access and
+                // invite-accept: same query, same validation.
+                if (Endpoints.isControlHost(host)) {
+                    val path = uri.path?.trimEnd('/')
+                    val twin = APP_LINK_PATHS.firstOrNull { "/$it" == path }
+                    if (twin != null) return parseHost(twin, uri)
+                }
                 return null
             }
             if (uri.scheme != "flagship") return null
             val host = uri.host ?: return null
+            return parseHost(host, uri)
+        }
+
+        private val APP_LINK_PATHS = listOf("remote", "builder", "access", "invite-accept")
+
+        private fun parseHost(host: String, uri: Uri): DeepLink? {
             val params = uri.queryParameterNames.associateWith { uri.getQueryParameter(it) ?: "" }
             return when (host) {
                 // Back-compat: legacy `unlock-approve(s)` links (old pushes /
@@ -198,6 +223,14 @@ sealed interface DeepLink {
                 // flagship://remote?s=<sid>&k=<pk> — the QR on remote.<apex>.
                 "remote" -> {
                     if (RemoteApprovalLink.parse(uri.toString()) != null) CompanionDockApproval(uri.toString()) else null
+                }
+                "builder" -> {
+                    if (params["c"].isNullOrEmpty() || BuilderPairing.parse(uri.toString()) == null) null
+                    else BuilderPair(uri.toString())
+                }
+                "invite-accept" -> {
+                    val acceptance = InviteLink.decodeAcceptance(uri.toString())
+                    if (acceptance?.serverDomain == null) null else AcceptInvite(uri.toString())
                 }
                 "vibecode" -> {
                     // Accept either path form `flagship://vibecode/<id>`

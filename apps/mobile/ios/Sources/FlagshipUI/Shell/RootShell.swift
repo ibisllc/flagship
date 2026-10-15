@@ -276,6 +276,14 @@ public struct RootShell: View {
             selected = .home
             return
         }
+        if case .builderPair = link {
+            // Pairing ends in minting a recipe (biometric, this account's keys):
+            // wait for unlock, then HomeTab opens the create flow from the same
+            // pending link.
+            guard app.isUnlocked else { return }
+            selected = .home
+            return
+        }
         if case .transferOffer = link {
             // Slice C — take over a transferred box. Hold behind the lock like
             // invite/knock (the claim rides the acquirer-IRK biometric); once
@@ -302,7 +310,7 @@ public struct RootShell: View {
         case .appDetail, .vibeCodeChat, .startVibeCode,
              .appDetailOnServer, .createAppOnServer: return .apps
         case .recoverySetup, .joinAccount, .companionDockApproval: return .settings
-        case .transferOffer, .shareServer:            return .home
+        case .transferOffer, .shareServer, .builderPair: return .home
         case .inviteRedeem, .inviteAccept, .knockAuthorize: return selected
         }
     }

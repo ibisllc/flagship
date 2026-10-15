@@ -11,6 +11,9 @@ public enum HomeRoute: Hashable, Sendable {
     /// every server), and taking over a transferred box is a link/QR ingestion
     /// (handled via the universal process-link path), not a menu option.
     case provisionServer
+    /// The create flow opened by Studio's pairing link: once the server is
+    /// designed it pairs with that Studio instead of scanning its QR.
+    case provisionServerForBuilder(link: String)
     case installProgress(serial: String, name: String, description: String)
     /// Slice C — take over a transferred box, reached from a scanned/deep-linked
     /// (IRK-signed) transfer offer. Carries the offer JSON (`offerText`) so the
@@ -26,6 +29,11 @@ public enum HomeRoute: Hashable, Sendable {
     case sharedServer(shareId: String)
     /// One app on a shared server.
     case sharedApp(shareId: String, serviceId: String)
+
+    public var builderLink: String? {
+        if case .provisionServerForBuilder(let link) = self { return link }
+        return nil
+    }
 }
 
 public enum AppsRoute: Hashable, Sendable {

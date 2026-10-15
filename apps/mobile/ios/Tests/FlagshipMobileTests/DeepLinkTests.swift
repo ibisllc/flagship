@@ -53,6 +53,42 @@ final class DeepLinkTests: XCTestCase {
         XCTAssertEqual(DeepLink.parsePastedString(link), .companionDockApproval(link: link))
     }
 
+    func test_remoteUniversalLink_routesToRemoteApproval() {
+        let sid = Base64URL.encode(Data(repeating: 7, count: 16))
+        let k = Base64URL.encode(Data(repeating: 9, count: 32))
+        for link in [
+            "https://flagshipserver.com/remote?s=\(sid)&k=\(k)",
+            "https://www.flagshipserver.com/remote?s=\(sid)&k=\(k)",
+            "https://flagshipserver.com/remote/?s=\(sid)&k=\(k)",
+        ] {
+            XCTAssertEqual(DeepLink.parse(URL(string: link)!), .companionDockApproval(link: link), link)
+            XCTAssertEqual(DeepLink.parsePastedString(link), .companionDockApproval(link: link), link)
+        }
+        XCTAssertNil(DeepLink.parse(URL(string: "https://flagshipserver.com/remote?s=short&k=\(k)")!))
+        XCTAssertNil(DeepLink.parse(URL(string: "https://example.com/remote?s=\(sid)&k=\(k)")!))
+        XCTAssertNil(DeepLink.parse(URL(string: "https://flagshipserver.com/qr?s=\(sid)&k=\(k)")!))
+    }
+
+    func test_builderLink_bothForms_routeToBuilderPair() {
+        let pk = "pOCSkrZRwni5dyxWn1-puxPZBrRqtoyd-dwrRAn4ogk"
+        for link in [
+            "https://flagshipserver.com/builder?c=AEBAGBAF&k=\(pk)",
+            "https://www.flagshipserver.com/builder/?c=AEBAGBAF&k=\(pk)",
+            "flagship://builder?c=AEBAGBAF&k=\(pk)",
+        ] {
+            XCTAssertEqual(DeepLink.parse(URL(string: link)!), .builderPair(link: link), link)
+            XCTAssertEqual(DeepLink.parsePastedString(link), .builderPair(link: link), link)
+        }
+    }
+
+    func test_builderLink_badCodeOrHost_isNil() {
+        let pk = "pOCSkrZRwni5dyxWn1-puxPZBrRqtoyd-dwrRAn4ogk"
+        XCTAssertNil(DeepLink.parse(URL(string: "https://flagshipserver.com/builder?c=nope!&k=\(pk)")!))
+        XCTAssertNil(DeepLink.parse(URL(string: "flagship://builder?k=\(pk)")!))
+        XCTAssertNil(DeepLink.parse(URL(string: "https://example.com/builder?c=AEBAGBAF&k=\(pk)")!))
+        XCTAssertNil(DeepLink.parse(URL(string: "https://home.alice.flagship.services/builder?c=AEBAGBAF")!))
+    }
+
     func test_oldDockLink_isNotRouted() {
         let link = "flagship://dock?server=home.alice.flagship.services&request=\(String(repeating: "ab", count: 16))&code=\(String(repeating: "cd", count: 32))"
         XCTAssertNil(DeepLink.parse(URL(string: link)!))

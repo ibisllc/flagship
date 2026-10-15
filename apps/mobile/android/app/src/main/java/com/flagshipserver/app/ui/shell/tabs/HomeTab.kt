@@ -231,6 +231,10 @@ fun HomeTab() {
                 deepLinker.consume()
                 nav.navigate("create-server")
             }
+            is DeepLink.BuilderPair -> {
+                deepLinker.consume()
+                nav.navigate("create-server?builder=${URLEncoder.encode(link.rawLink, "UTF-8")}")
+            }
             is DeepLink.ShareOffer -> {
                 deepLinker.consume()
                 nav.navigate("share-accept?s=${link.shareId}&k=${link.secretHex}")
@@ -434,8 +438,14 @@ fun HomeTab() {
             val acquirerVm = remember(user) { TransferAcquirerViewModel(username = user, client = transferClient) }
             TransferAcquirerScreen(vm = acquirerVm, preIngestedOffer = offer)
         }
-        composable("create-server") {
+        composable(
+            route = "create-server?builder={builder}",
+            arguments = listOf(navArgument("builder") { type = NavType.StringType; defaultValue = "" }),
+        ) { entry ->
+            val builderLink = entry.arguments?.getString("builder")
+                ?.let { URLDecoder.decode(it, "UTF-8") }?.takeIf { it.isNotEmpty() }
             CreateServerScreen(
+                builderLink = builderLink,
                 onDeliveredVisible = { serverDomain, serial, name, description ->
                     // The recipe is out (builder-pair delivered) but the pairing
                     // screen stays open for consent prompts — surface the pending

@@ -8,8 +8,8 @@ import java.security.MessageDigest
  * QrRelay/QrSession (identical constants); this only adds the
  * builder-specific short-code → session-id mapping + QR parsing.
  *
- * The builder shows `flagship://builder?c=<code>&k=<builderPkB64url>` plus an
- * 8-char short code. A scanning phone gets the code AND the pubkey; a
+ * The builder shows `https://flagshipserver.com/builder?c=<code>&k=<builderPkB64url>`
+ * (older builds: `flagship://builder?c=…&k=…`) plus an 8-char short code. A scanning phone gets the code AND the pubkey; a
  * typed code gets only the code and learns the pubkey over the relay
  * (`builder-hello`). Both derive the session id from the code identically.
  *
@@ -47,6 +47,7 @@ object BuilderPairing {
 
     /**
      * Parse a scanned builder QR or a typed short code. Accepts
+     * `https://flagshipserver.com/builder?c=<code>&k=<pk>`, the older
      * `flagship://builder?c=<code>&k=<pk>`, `c=<code>&k=<pk>`, or a bare code.
      */
     fun parse(raw: String): Scanned? {

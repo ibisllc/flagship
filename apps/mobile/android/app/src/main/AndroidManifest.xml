@@ -45,10 +45,23 @@
                 <data android:scheme="https" android:host="flagshipserver.com" android:path="/join" />
                 <!-- Transfer-a-box take-over offer. /transfer?o=<b64url> opens the
                      acquirer claim flow in-app; when the app isn't installed the
-                     control apex redirects the browser to the webapp claim view. -->
+                     site shows its "get the app" page, which offers the webapp too. -->
                 <data android:scheme="https" android:host="flagshipserver.com" android:path="/transfer" />
                 <!-- Share this server: /share#s=<shareId>&k=<secret> opens the accept screen. -->
                 <data android:scheme="https" android:host="flagshipserver.com" android:path="/share" />
+                <!-- QR codes and shared links (the old flagship:// forms below still
+                     open): the remote page's /remote?s=&k=, Studio's /builder?c=&k=,
+                     the knock page's /access?server=&svc=&ref=&page= and a friend's
+                     /invite-accept?server=&iid=&ref=&aid=&sig=&at= reply. Without the
+                     app, the site shows a "get the app" page at each path. -->
+                <data android:scheme="https" android:host="flagshipserver.com" android:path="/remote" />
+                <data android:scheme="https" android:host="flagshipserver.com" android:path="/remote/" />
+                <data android:scheme="https" android:host="flagshipserver.com" android:path="/builder" />
+                <data android:scheme="https" android:host="flagshipserver.com" android:path="/builder/" />
+                <data android:scheme="https" android:host="flagshipserver.com" android:path="/access" />
+                <data android:scheme="https" android:host="flagshipserver.com" android:path="/access/" />
+                <data android:scheme="https" android:host="flagshipserver.com" android:path="/invite-accept" />
+                <data android:scheme="https" android:host="flagshipserver.com" android:path="/invite-accept/" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -83,7 +96,7 @@
             </intent-filter>
             <!-- Web-experience gating — the visitor authorizes a browser's
                  QR-login for a restricted service's WEBSITE
-                 (flagship://access?server=…&svc=…&ref=…&page=…). The box's
+                 (older knock pages: flagship://access?server=…&svc=…&ref=…&page=…). The box's
                  knock page offers this as the same-device "Access site"
                  button (and a QR for cross-device). -->
             <intent-filter>
@@ -92,7 +105,7 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="flagship" android:host="access" />
             </intent-filter>
-            <!-- The remote page's QR (flagship://remote?s=<sid>&k=<pk>): a
+            <!-- The remote page's older QR (flagship://remote?s=<sid>&k=<pk>): a
                  browser at remote.flagshipserver.com asking this phone to let
                  it in as a keyless remote. -->
             <intent-filter>
@@ -100,6 +113,20 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="flagship" android:host="remote" />
+            </intent-filter>
+            <!-- Older Studio builds' pairing QR (flagship://builder?c=<code>&k=<pk>). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="flagship" android:host="builder" />
+            </intent-filter>
+            <!-- Older apps' acceptance reply (flagship://invite-accept?…). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="flagship" android:host="invite-accept" />
             </intent-filter>
         </activity>
 

@@ -5,8 +5,8 @@ import CryptoKit
 /// specific to the builder (the SAS + AEAD reuse `QrRelay`, since the
 /// constants are identical).
 ///
-/// The builder shows a QR (`flagship://builder?c=<code>&k=<builderPkB64url>`)
-/// plus an 8-char short code. The phone scans the QR (gets the code AND
+/// The builder shows a QR (`https://flagshipserver.com/builder?c=<code>&k=<builderPkB64url>`;
+/// older builds `flagship://builder?…`) plus an 8-char short code. The phone scans the QR (gets the code AND
 /// the pubkey) or types the code (gets only the code, learns the pubkey
 /// over the relay via `builder-hello`). Both derive the relay session id
 /// from the code identically, so a scan and a typed code converge on the
@@ -57,8 +57,9 @@ public enum BuilderPairing {
     }
 
     /// Parse either a scanned builder QR or a typed short code.
-    /// Accepts: `flagship://builder?c=<code>&k=<pk>`, `c=<code>&k=<pk>`,
-    /// or a bare 8-char code.
+    /// Accepts: `https://flagshipserver.com/builder?c=<code>&k=<pk>`,
+    /// `flagship://builder?c=<code>&k=<pk>`, `c=<code>&k=<pk>`, or a bare
+    /// 8-char code.
     public static func parse(_ raw: String) throws -> Scanned {
         let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { throw PairError.badQr("empty") }

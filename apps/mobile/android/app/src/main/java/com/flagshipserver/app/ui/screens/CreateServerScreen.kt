@@ -93,6 +93,7 @@ import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.ui.theme.FSLayout
 import com.google.crypto.tink.subtle.Ed25519Sign
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 
@@ -113,6 +114,9 @@ fun CreateServerScreen(
     /** Accept a server another account shares (docs/share-a-server.md):
      *  opens the paste/scan screen. Null hides the button. */
     onCoManage: (() -> Unit)? = null,
+    /** A Studio pairing QR the phone's camera opened the app with: once the
+     *  server is designed, pairing starts with it instead of the scanner. */
+    builderLink: String? = null,
 ) {
     val app = LocalAppState.current
     val flagshipServer = LocalFlagshipServerClient.current
@@ -179,6 +183,7 @@ fun CreateServerScreen(
     // Builder-pairing controller (built when the user picks "Pair with the
     // builder app") + on-device-burn recipe (minted before showing the burn UI).
     var pairController by remember { mutableStateOf<BuilderPairController?>(null) }
+    var pendingBuilderLink by remember { mutableStateOf(builderLink) }
     var burnRecipeJson by remember { mutableStateOf<String?>(null) }
     var burnMinted by remember { mutableStateOf<MintedBundle?>(null) }
 
@@ -216,6 +221,31 @@ fun CreateServerScreen(
     fun recordDelivered(serverDomain: String) {
         ServerSettingsStore.from(context).setMode(serverDomain, bootUnlockMode)
         draftStore.reset()
+    }
+
+    fun startPair() {
+        // Builder pairing is a live relay session because Studio is
+        // the peer that receives and stages the signed recipe.
+        val controller = BuilderPairController(
+            client = LiveBuilderPairClient(),
+            scope = scope,
+            // ONE-SHOT: mint the recipe (with the Advanced toggles —
+            // embed-secrets, debug-friendly — baked in behind the
+            // SAME create biometric) + deliver it. No resume, no
+            // debug-consent round-trip (the debug grant rides the
+            // recipe). Byte-identical recipe to share/copy/burn.
+            mint = {
+                val minted = mintAndRegister()
+                val json = Json.encodeToString(InstallBlobBundle.serializer(), minted.bundle)
+                BuilderPairController.MintedRecipe(json, minted.serverDomain, minted.serial)
+            },
+        )
+        val link = pendingBuilderLink
+        pendingBuilderLink = null
+        // Undispatched so the scanner never flashes before Connecting.
+        if (link != null) scope.launch(start = CoroutineStart.UNDISPATCHED) { controller.begin(link) }
+        pairController = controller
+        phase = Phase.Pair
     }
 
     // Pair + Burn are full-screen flows with their OWN scroll containers, so they
@@ -292,6 +322,15 @@ fun CreateServerScreen(
             color = FS.colors.text,
             style = TextStyle(fontSize = 20.sp, lineHeight = 26.sp, fontWeight = FontWeight.SemiBold),
         )
+        if (phase == Phase.Design && pendingBuilderLink != null) {
+            Spacer(Modifier.height(FS.space.s2))
+            Text(
+                "Flagship Studio is waiting. Set up your server and it goes straight to Studio.",
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 14.sp, lineHeight = 19.sp),
+                modifier = Modifier.testTag("create-server-studio-waiting"),
+            )
+        }
         Spacer(Modifier.height(FS.space.s4))
 
         when (phase) {
@@ -338,33 +377,15 @@ fun CreateServerScreen(
                 },
                 onContinue = {
                     error = null
-                    phase = Phase.DeliveryChooser
+                    // Studio is already waiting on a scanned QR: pair with it.
+                    if (pendingBuilderLink != null) startPair() else phase = Phase.DeliveryChooser
                 },
                 onCancel = onCancel,
                 onCoManage = onCoManage,
             )
             Phase.DeliveryChooser -> DeliveryChooserPhase(
                 busy = working,
-                onPair = {
-                    // Builder pairing is a live relay session because Studio is
-                    // the peer that receives and stages the signed recipe.
-                    val controller = BuilderPairController(
-                        client = LiveBuilderPairClient(),
-                        scope = scope,
-                        // ONE-SHOT: mint the recipe (with the Advanced toggles —
-                        // embed-secrets, debug-friendly — baked in behind the
-                        // SAME create biometric) + deliver it. No resume, no
-                        // debug-consent round-trip (the debug grant rides the
-                        // recipe). Byte-identical recipe to share/copy/burn.
-                        mint = {
-                            val minted = mintAndRegister()
-                            val json = Json.encodeToString(InstallBlobBundle.serializer(), minted.bundle)
-                            BuilderPairController.MintedRecipe(json, minted.serverDomain, minted.serial)
-                        },
-                    )
-                    pairController = controller
-                    phase = Phase.Pair
-                },
+                onPair = { startPair() },
                 onShare = {
                     if (working) return@DeliveryChooserPhase
                     scope.launch {

@@ -1,6 +1,7 @@
 // The phone side of the remote ceremony. A browser at remote.<apex> shows
-// `flagship://remote?s=<sid>&k=<pk>`; this phone joins that QR-relay session,
-// both screens show the same 6-digit code, and on a biometric approval the
+// `https://flagshipserver.com/remote?s=<sid>&k=<pk>` (older pages:
+// `flagship://remote?…`); this phone joins that QR-relay session, both
+// screens show the same 6-digit code, and on a biometric approval the
 // phone mints a single-use companion ticket on the server the owner picked and
 // seals it to the browser, which redeems it there. Also lists and revokes the
 // browsers connected to the picked server.

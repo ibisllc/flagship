@@ -32,6 +32,14 @@ final class BuilderPairingTests: XCTestCase {
         XCTAssertEqual(scanned.builderPublicKey?.count, 32)
     }
 
+    func test_parseUniversalLinkWithPubkey() throws {
+        let pk = "pOCSkrZRwni5dyxWn1-puxPZBrRqtoyd-dwrRAn4ogk"
+        let scanned = try BuilderPairing.parse("https://flagshipserver.com/builder?c=AEBAGBAF&k=\(pk)")
+        XCTAssertEqual(scanned.codeBytes, hex("0102030405"))
+        XCTAssertEqual(scanned.builderPublicKey?.count, 32)
+        XCTAssertEqual(try BuilderPairing.parse("flagship://builder?c=AEBAGBAF&k=\(pk)"), scanned)
+    }
+
     func test_parseTypedCodeOnly() throws {
         let scanned = try BuilderPairing.parse("AEBA-GBAF")
         XCTAssertEqual(scanned.codeBytes, hex("0102030405"))
@@ -40,6 +48,7 @@ final class BuilderPairingTests: XCTestCase {
 
     func test_looksLikeBuilderCode() {
         XCTAssertTrue(BuilderPairing.looksLikeBuilderCode("flagship://builder?c=AEBAGBAF&k=x"))
+        XCTAssertTrue(BuilderPairing.looksLikeBuilderCode("https://flagshipserver.com/builder?c=AEBAGBAF&k=x"))
         XCTAssertTrue(BuilderPairing.looksLikeBuilderCode("AEBAGBAF"))
         XCTAssertFalse(BuilderPairing.looksLikeBuilderCode("https://flagshipserver.com/qr?s=abc&k=def"))
     }

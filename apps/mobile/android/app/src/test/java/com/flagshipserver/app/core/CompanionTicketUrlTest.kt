@@ -27,6 +27,21 @@ class CompanionTicketUrlTest {
         assertEquals(32, parsed.browserPublicKey.size)
     }
 
+    @Test fun remotePageAppLinkParses() {
+        for (raw in listOf(
+            "https://flagshipserver.com/remote?s=$sid&k=$pk",
+            "https://flagshipserver.com/remote/?s=$sid&k=$pk",
+            "https://www.flagshipserver.com/remote?s=$sid&k=$pk",
+        )) {
+            val parsed = RemoteApprovalLink.parse(raw)
+            assertNotNull(raw, parsed)
+            assertEquals(sid, parsed!!.sid)
+        }
+        assertNull(RemoteApprovalLink.parse("https://evil.example/remote?s=$sid&k=$pk"))
+        assertNull(RemoteApprovalLink.parse("http://flagshipserver.com/remote?s=$sid&k=$pk"))
+        assertNull(RemoteApprovalLink.parse("https://flagshipserver.com/remote?s=short&k=$pk"))
+    }
+
     @Test fun remotePageCodeRejectsOtherShapes() {
         // The old desktop-begin link (server/request/code) is gone.
         val request = "ab".repeat(16)

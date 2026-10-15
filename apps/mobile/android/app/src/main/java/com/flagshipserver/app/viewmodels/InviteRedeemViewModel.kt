@@ -125,7 +125,7 @@ class InviteRedeemViewModel(
 
     /** Build the acceptance reply for the MANUAL-approve loop: sign an
      *  AcceptServiceInvite with the SAME (contact) AID and surface the canonical
-     *  `flagship://invite-accept?…` reply (link + QR) carrying ONLY {accept,
+     *  `https://<control>/invite-accept?…` reply (link + QR) carrying ONLY {accept,
      *  acceptSig}. The box-relayed create is used only to learn what to sign over
      *  (inviteId / serviceRef) — it is NOT shipped (the author's box fetches the
      *  signed create from .com at finalize). */

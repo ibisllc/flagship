@@ -1,4 +1,5 @@
-// The remote page's QR (flagship://remote?s=&k=) must route to Settings →
+// The remote page's QR (https://flagshipserver.com/remote?s=&k=, older pages
+// flagship://remote?s=&k=) must route to Settings →
 // Remote. Before 2026-10-14 only the old `dock` host was routed, so scanning
 // the page's code with the camera did nothing. Uri.parse needs Robolectric.
 
@@ -19,6 +20,21 @@ class RemoteDeepLinkTest {
 
     @Test fun remotePageCodeRoutesToApproval() {
         assertEquals(DeepLink.CompanionDockApproval(link), DeepLink.parse(Uri.parse(link)))
+    }
+
+    @Test fun remotePageAppLinkRoutesToApproval() {
+        val q = link.substringAfter("?")
+        for (raw in listOf(
+            "https://flagshipserver.com/remote?$q",
+            "https://flagshipserver.com/remote/?$q",
+            "https://www.flagshipserver.com/remote?$q",
+        )) {
+            assertEquals(raw, DeepLink.CompanionDockApproval(raw), DeepLink.parse(Uri.parse(raw)))
+            assertEquals(raw, DeepLink.CompanionDockApproval(raw), AppLink.resolve(Uri.parse(raw)))
+        }
+        assertNull(DeepLink.parse(Uri.parse("https://flagshipserver.com/remote?s=x")))
+        assertNull(DeepLink.parse(Uri.parse("https://flagshipserver.com/qr?$q")))
+        assertNull(DeepLink.parse(Uri.parse("https://evil.example/remote?$q")))
     }
 
     @Test fun oldDockLinkIsNotRouted() {

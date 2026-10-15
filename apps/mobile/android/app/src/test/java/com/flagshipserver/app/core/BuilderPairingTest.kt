@@ -33,6 +33,13 @@ class BuilderPairingTest {
         assertEquals(32, s.builderPublicKey?.size)
     }
 
+    @Test fun parse_appLinkQr() {
+        val pk = "pOCSkrZRwni5dyxWn1-puxPZBrRqtoyd-dwrRAn4ogk"
+        val s = BuilderPairing.parse("https://flagshipserver.com/builder?c=AEBAGBAF&k=$pk")!!
+        assertTrue(s.codeBytes.contentEquals(hex("0102030405")))
+        assertEquals(32, s.builderPublicKey?.size)
+    }
+
     @Test fun parse_typedCodeOnly() {
         val s = BuilderPairing.parse("AEBA-GBAF")!!
         assertTrue(s.codeBytes.contentEquals(hex("0102030405")))
@@ -41,6 +48,7 @@ class BuilderPairingTest {
 
     @Test fun looksLikeBuilderCode() {
         assertTrue(BuilderPairing.looksLikeBuilderCode("flagship://builder?c=AEBAGBAF&k=x"))
+        assertTrue(BuilderPairing.looksLikeBuilderCode("https://flagshipserver.com/builder?c=AEBAGBAF&k=x"))
         assertTrue(BuilderPairing.looksLikeBuilderCode("AEBAGBAF"))
         assertFalse(BuilderPairing.looksLikeBuilderCode("https://flagshipserver.com/qr?s=abc&k=def"))
     }

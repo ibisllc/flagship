@@ -68,6 +68,27 @@ final class BuilderPairViewModelTests: XCTestCase {
         XCTAssertTrue(client.sentJSON.contains { $0.contains("\"phone-hello\"") })
     }
 
+    func test_universalLinkQrDerivesImmediately() async throws {
+        let client = MockBuilderPairClient()
+        let vm = makeVM(client)
+        let pk = "pOCSkrZRwni5dyxWn1-puxPZBrRqtoyd-dwrRAn4ogk"
+        await vm.qrDetected("https://flagshipserver.com/builder?c=AEBAGBAF&k=\(pk)")
+        client.emit(.accepted)
+        try await Task.sleep(nanoseconds: 100_000_000)
+        if case .matching = vm.phase {} else { XCTFail("expected .matching, got \(vm.phase)") }
+        XCTAssertTrue(client.sentJSON.contains { $0.contains("\"phone-hello\"") })
+    }
+
+    func test_builderLinkOpensCreateFlowOnHome() throws {
+        let raw = "https://flagshipserver.com/builder?c=AEBAGBAF&k=pOCSkrZRwni5dyxWn1-puxPZBrRqtoyd-dwrRAn4ogk"
+        let link = try XCTUnwrap(DeepLink.parse(try XCTUnwrap(URL(string: raw))))
+        XCTAssertEqual(RootShell.tab(for: link, selected: .settings), .home)
+        let route = try XCTUnwrap(HomeTab.route(for: link))
+        XCTAssertEqual(route, .provisionServerForBuilder(link: raw))
+        XCTAssertEqual(route.builderLink, raw)
+        XCTAssertNil(HomeRoute.provisionServer.builderLink)
+    }
+
     func test_transientPhoneSocketLossReconnectsSameSession() async throws {
         let client = MockBuilderPairClient()
         let vm = makeVM(client)

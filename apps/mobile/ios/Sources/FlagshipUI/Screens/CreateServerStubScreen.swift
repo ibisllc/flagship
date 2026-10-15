@@ -25,6 +25,9 @@ public struct CreateServerStubScreen: View {
     @State private var deliveredTimeline: ProvisionTimelineViewModel?
     // Delivery-chooser state.
     @State private var pairVM: BuilderPairViewModel?
+    /// Studio's pairing link when this flow was opened from it: used once,
+    /// in place of scanning, when the delivery step is reached.
+    @State private var builderLink: String?
     @State private var shareURL: URL?
     @State private var showShare = false
     @State private var deliveryBusy = false
@@ -41,12 +44,14 @@ public struct CreateServerStubScreen: View {
 
     public init(
         vm: CreateServerViewModel,
+        builderLink: String? = nil,
         onDeliveredVisible: @escaping (_ serverDomain: String, _ name: String, _ description: String) -> Void = { _, _, _ in },
         onDelivered: @escaping (_ serverDomain: String, _ name: String, _ description: String) -> Void = { _, _, _ in },
         onCancel: @escaping () -> Void = {},
         onCoManage: (() -> Void)? = nil
     ) {
         self.vm = vm
+        self._builderLink = State(initialValue: builderLink)
         self.onDeliveredVisible = onDeliveredVisible
         self.onDelivered = onDelivered
         self.onCancel = onCancel
@@ -167,6 +172,7 @@ public struct CreateServerStubScreen: View {
 
             if deliveryBusy { spinnerCard(c: c) }
         }
+        .task { pairWithLinkedBuilder() }
     }
 
     private func deliveryCard(icon: String, accent: Color, title: String, body: String, c: FSColors) -> some View {
@@ -188,6 +194,14 @@ public struct CreateServerStubScreen: View {
 
     private func startPair() {
         pairVM = BuilderPairViewModel(client: LiveBuilderPairClient(), minter: vm)
+    }
+
+    private func pairWithLinkedBuilder() {
+        guard let link = builderLink, pairVM == nil else { return }
+        builderLink = nil
+        let pair = BuilderPairViewModel(client: LiveBuilderPairClient(), minter: vm)
+        pairVM = pair
+        Task { await pair.qrDetected(link) }
     }
 
     private func shareRecipe() async {
@@ -229,6 +243,13 @@ public struct CreateServerStubScreen: View {
             Text("Step \(designStep + 1) of \(designStepCount)")
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(c.textMuted)
+
+            if builderLink != nil {
+                Text("Flagship Studio is waiting. Set up your server and the recipe goes straight to it.")
+                    .font(FS.font.bodySm())
+                    .foregroundColor(c.textMuted)
+                    .accessibilityIdentifier("cs-builder-linked")
+            }
 
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s3) {

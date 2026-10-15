@@ -6,7 +6,7 @@ import FlagshipAPI
 import FlagshipCore
 
 /// Backs the phone side of the remote ceremony. The computer's remote page
-/// shows `flagship://remote?s=&k=`; the phone joins that QR-relay session,
+/// shows `https://flagshipserver.com/remote?s=&k=`; the phone joins that QR-relay session,
 /// both screens show the same code, and on approval the phone mints a
 /// single-use companion ticket on the server the owner picked and seals it to
 /// the browser, which redeems it on that server.

@@ -42,9 +42,15 @@ public enum DeepLink: Equatable, Sendable {
     /// (also the `flagship://join?…` custom-scheme form).
     case joinAccount(sid: String, pk: String)
 
-    /// The remote page's QR, `flagship://remote?s=<sid>&k=<browser key>`: a
-    /// QR-relay session the phone joins to seal a ticket to that browser.
+    /// The remote page's QR, `https://flagshipserver.com/remote?s=<sid>&k=<browser key>`
+    /// (older pages: `flagship://remote?s=&k=`): a QR-relay session the phone
+    /// joins to seal a ticket to that browser.
     case companionDockApproval(link: String)
+
+    /// Flagship Studio's pairing QR, `https://flagshipserver.com/builder?c=<code>&k=<pk>`
+    /// (older Studio builds: `flagship://builder?c=&k=`). Opens the create-server
+    /// flow, which pairs with that Studio once the server is designed.
+    case builderPair(link: String)
 
     /// #92 — friend redeem of a service-access capability invite
     /// (docs/service-access-gating.md). Carries the BOX host the `/invite`
@@ -73,8 +79,9 @@ public enum DeepLink: Equatable, Sendable {
     /// looks up the matching `create`+`createSig` in their own `.com` listing, and
     /// POSTs the acceptance to their box. Carries the box host, the inviteId, the
     /// serviceRef, the consumer's contact AID, the acceptance signature, and the
-    /// signed `acceptedAt`. Custom-scheme only (it's a private reply, never a
-    /// universal link): `flagship://invite-accept?server=&iid=&ref=&aid=&sig=&at=`.
+    /// signed `acceptedAt`:
+    /// `https://flagshipserver.com/invite-accept?server=&iid=&ref=&aid=&sig=&at=`
+    /// (older apps sent `flagship://invite-accept?…`).
     case inviteAccept(serverDomain: String, inviteId: String, serviceRef: String, contactAidHex: String, acceptSigHex: String, acceptedAt: Int64)
 
     /// Web-experience gating — QR-login for a restricted service's WEBSITE
@@ -86,8 +93,9 @@ public enum DeepLink: Equatable, Sendable {
     /// only), the `ref` serviceRef (a `<creator>--<slug>` the box keys its
     /// allow-list on), and the single-use `page` id (the box-minted pageId the
     /// authorization signature binds). Reachable two ways:
-    ///   - the box's `flagship://access?server=…&svc=…&ref=…&page=…` deeplink
-    ///     (same-device "Access site" button + cross-device QR), and
+    ///   - the box's `https://flagshipserver.com/access?server=…&svc=…&ref=…&page=…`
+    ///     link (older boxes: `flagship://access?…`), as the same-device "Access
+    ///     site" button and the cross-device QR, and
     ///   - Settings → "Process URL", which pastes either that deeplink OR the
     ///     raw "Get link" string into the same handler.
     case knockAuthorize(serverDomain: String, svc: String, serviceRef: String, pageId: String)
@@ -112,10 +120,20 @@ public enum DeepLink: Equatable, Sendable {
     /// Parse a `flagship://...` URL (custom scheme) OR a Flagship
     /// UNIVERSAL LINK (`https://flagshipserver.com/join?…`). The custom
     /// scheme mirrors the webapp's `?view=...` router; universal links
-    /// are limited to the `/join` pairing path (so an arbitrary https
-    /// URL the app receives doesn't become a deep link). Returns nil
-    /// for anything we don't recognize.
+    /// are limited to a fixed set of paths on the control host (so an
+    /// arbitrary https URL the app receives doesn't become a deep link).
+    /// Returns nil for anything we don't recognize.
     public static func parse(_ url: URL) -> DeepLink? {
+        if isControlHostLink(url) {
+            let params = queryParams(url)
+            switch trimmedPath(url) {
+            case "/remote":   return remoteLink(url)
+            case "/builder":  return builderLink(url)
+            case "/access":   return accessLink(params)
+            case "/invite-accept": return inviteAcceptLink(params)
+            default: break
+            }
+        }
         // Universal link: only the /join pairing path is honored. The
         // native camera opens this straight into the app via AASA.
         if url.scheme == "https",
@@ -216,19 +234,7 @@ public enum DeepLink: Equatable, Sendable {
             }
             return nil
         case "invite-accept":
-            // flagship://invite-accept?server=&iid=&ref=&aid=&sig=&at= — the
-            // CONSUMER's manual-approve acceptance reply; THIS phone is the AUTHOR
-            // finalizing. server/iid/ref/aid(64hex)/sig(128hex)/at(ms) all required.
-            let server = params["server"] ?? params["host"] ?? ""
-            let iid = params["iid"] ?? ""
-            let ref = params["ref"] ?? ""
-            let aid = Self.validHex64(params["aid"])
-            let sig = Self.validHex128(params["sig"])
-            let at = Int64(params["at"] ?? "")
-            if !server.isEmpty, !iid.isEmpty, !ref.isEmpty, let aid, let sig, let at {
-                return .inviteAccept(serverDomain: server, inviteId: iid, serviceRef: ref, contactAidHex: aid, acceptSigHex: sig, acceptedAt: at)
-            }
-            return nil
+            return inviteAcceptLink(params)
         case "join":
             // Phase 3b — custom-scheme form of the pairing link.
             if let sid = params["sid"], !sid.isEmpty,
@@ -237,10 +243,9 @@ public enum DeepLink: Equatable, Sendable {
             }
             return nil
         case "remote":
-            if RemoteApprovalLink.parse(url.absoluteString) != nil {
-                return .companionDockApproval(link: url.absoluteString)
-            }
-            return nil
+            return remoteLink(url)
+        case "builder":
+            return builderLink(url)
         case "transfer":
             // Slice C — custom-scheme twin of the transfer take-over link:
             // flagship://transfer?o=<b64url(offerJSON)>.
@@ -253,18 +258,7 @@ public enum DeepLink: Equatable, Sendable {
             guard let parts = ServerShare.parseShareLink(url.absoluteString) else { return nil }
             return .shareServer(shareId: parts.shareId, secretHex: parts.secretHex)
         case "access":
-            // flagship://access?server=<fqdn>&svc=<label>&ref=<serviceRef>&page=<pageId>
-            // — the web-experience-gating knock authorization (the box's knock
-            // page hands this to a browser; THIS phone authorizes it). `svc` is
-            // display-only and may be empty; server/ref/page are required.
-            let server = params["server"] ?? params["host"] ?? ""
-            let svc = params["svc"] ?? ""
-            let ref = params["ref"] ?? ""
-            let page = params["page"] ?? ""
-            if !server.isEmpty, !ref.isEmpty, !page.isEmpty {
-                return .knockAuthorize(serverDomain: server, svc: svc, serviceRef: ref, pageId: page)
-            }
-            return nil
+            return accessLink(params)
         case "vibecode":
             // Two URL shapes accepted:
             //   flagship://vibecode/<sessionId>           (path)
@@ -283,6 +277,58 @@ public enum DeepLink: Equatable, Sendable {
             break
         }
         return nil
+    }
+
+    static func isControlHostLink(_ url: URL) -> Bool {
+        url.scheme == "https"
+            && (url.host == Endpoints.controlHost || url.host == "www.\(Endpoints.controlHost)")
+    }
+
+    static func trimmedPath(_ url: URL) -> String {
+        let path = url.path
+        return path.count > 1 && path.hasSuffix("/") ? String(path.dropLast()) : path
+    }
+
+    static func queryParams(_ url: URL) -> [String: String] {
+        (URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? [])
+            .reduce(into: [String: String]()) { acc, item in
+                if let v = item.value { acc[item.name] = v }
+            }
+    }
+
+    private static func remoteLink(_ url: URL) -> DeepLink? {
+        RemoteApprovalLink.parse(url.absoluteString) != nil
+            ? .companionDockApproval(link: url.absoluteString) : nil
+    }
+
+    private static func builderLink(_ url: URL) -> DeepLink? {
+        BuilderPairing.looksLikeBuilderCode(url.absoluteString)
+            ? .builderPair(link: url.absoluteString) : nil
+    }
+
+    /// The knock authorization (`access?server=<fqdn>&svc=<label>&ref=<serviceRef>&page=<pageId>`):
+    /// the box's knock page hands it to a browser and THIS phone authorizes it.
+    /// `svc` is display-only and may be empty; server/ref/page are required.
+    private static func accessLink(_ params: [String: String]) -> DeepLink? {
+        let server = params["server"] ?? params["host"] ?? ""
+        let svc = params["svc"] ?? ""
+        let ref = params["ref"] ?? ""
+        let page = params["page"] ?? ""
+        guard !server.isEmpty, !ref.isEmpty, !page.isEmpty else { return nil }
+        return .knockAuthorize(serverDomain: server, svc: svc, serviceRef: ref, pageId: page)
+    }
+
+    /// The CONSUMER's manual-approve acceptance reply; THIS phone is the AUTHOR
+    /// finalizing. server/iid/ref/aid(64hex)/sig(128hex)/at(ms) all required.
+    private static func inviteAcceptLink(_ params: [String: String]) -> DeepLink? {
+        let server = params["server"] ?? params["host"] ?? ""
+        let iid = params["iid"] ?? ""
+        let ref = params["ref"] ?? ""
+        guard !server.isEmpty, !iid.isEmpty, !ref.isEmpty,
+              let aid = validHex64(params["aid"]),
+              let sig = validHex128(params["sig"]),
+              let at = Int64(params["at"] ?? "") else { return nil }
+        return .inviteAccept(serverDomain: server, inviteId: iid, serviceRef: ref, contactAidHex: aid, acceptSigHex: sig, acceptedAt: at)
     }
 
     /// Pull a 64-hex capability secret from a fragment / candidate string.
@@ -346,8 +392,8 @@ public enum DeepLink: Equatable, Sendable {
     }
 
     /// Parse a pasted "Process URL" string into a DeepLink. The knock page's
-    /// "Get link to paste in the app" copies the VERBATIM `flagship://access?…`
-    /// deeplink, so a paste is just that URL with possible surrounding
+    /// "Get link to paste in the app" copies the VERBATIM `access` link
+    /// (https, or `flagship://access?…` from older boxes), so a paste is just that URL with possible surrounding
     /// whitespace. Trims, then defers to `parse`. Returns nil for anything we
     /// don't recognize (the Settings field surfaces a "couldn't read that link"
     /// message). Any recognized deeplink shape is accepted, not only `access`.
@@ -383,14 +429,14 @@ public enum ServiceInviteLinks {
         return "https://\(host)/invite#\(frag)"
     }
 
-    /// The CONSUMER's manual-approve acceptance REPLY link (a private channel —
-    /// custom scheme only): `flagship://invite-accept?server=&iid=&ref=&aid=&sig=&at=`.
+    /// The CONSUMER's manual-approve acceptance REPLY link:
+    /// `https://flagshipserver.com/invite-accept?server=&iid=&ref=&aid=&sig=&at=`.
     /// The author opens it to finalize the bind.
     public static func acceptReplyLink(serverDomain: String, inviteId: String, serviceRef: String, contactAidHex: String, acceptSigHex: String, acceptedAt: Int64) -> String? {
         func esc(_ s: String) -> String { s.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? s }
         let host = serverDomain.trimmingCharacters(in: CharacterSet(charactersIn: "/ "))
         guard !host.isEmpty, !inviteId.isEmpty, !serviceRef.isEmpty else { return nil }
-        return "flagship://invite-accept?server=\(esc(host))&iid=\(esc(inviteId))&ref=\(esc(serviceRef))&aid=\(contactAidHex.lowercased())&sig=\(acceptSigHex.lowercased())&at=\(acceptedAt)"
+        return "https://\(Endpoints.controlHost)/invite-accept?server=\(esc(host))&iid=\(esc(inviteId))&ref=\(esc(serviceRef))&aid=\(contactAidHex.lowercased())&sig=\(acceptSigHex.lowercased())&at=\(acceptedAt)"
     }
 }
 

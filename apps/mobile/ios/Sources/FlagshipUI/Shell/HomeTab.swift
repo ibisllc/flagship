@@ -49,11 +49,15 @@ public struct HomeTab: View {
         .task(id: linker.pending) { consume(linker.pending) }
     }
 
-    /// The Home page a scanned or tapped share link opens: the accept
-    /// screen with the link filled in.
+    /// The Home page a scanned or tapped share link opens (the accept
+    /// screen with the link filled in), or Studio's pairing link (the create
+    /// flow, which pairs with that Studio).
     static func route(for link: DeepLink) -> HomeRoute? {
         if case .shareServer(let shareId, let secretHex) = link {
             return .acceptShare(shareId: shareId, secretHex: secretHex)
+        }
+        if case .builderPair(let builderLink) = link {
+            return .provisionServerForBuilder(link: builderLink)
         }
         return nil
     }
@@ -77,6 +81,9 @@ public struct HomeTab: View {
             if !path.contains(.provisionServer) {
                 path.append(.provisionServer)
             }
+            _ = linker.consume()
+        case .builderPair:
+            if let route = Self.route(for: link), path.last != route { path.append(route) }
             _ = linker.consume()
         case .transferOffer(let offerJSON):
             // Slice C — a scanned / deep-linked (IRK-signed) transfer offer.
@@ -287,8 +294,9 @@ public struct HomeTab: View {
             } else {
                 ServerDetailContainer(podId: podId, onDeleted: { path.removeAll() })
             }
-        case .provisionServer:
+        case .provisionServer, .provisionServerForBuilder:
             CreateServerContainer(
+                builderLink: route.builderLink,
                 onDeliveredVisible: { serverDomain, serial, name, description in
                     // QR-relay delivered and the "boot disk is on the way"
                     // page is up. Surface the pod on Home RIGHT NOW (no
@@ -569,6 +577,7 @@ struct TransferAcquirerContainer: View {
 }
 
 struct CreateServerContainer: View {
+    var builderLink: String?
     let onDeliveredVisible: (_ serverDomain: String, _ serial: String, _ name: String, _ description: String) -> Void
     let onDelivered: (_ serverDomain: String, _ serial: String, _ name: String, _ description: String) -> Void
     let onCancel: () -> Void
@@ -581,11 +590,13 @@ struct CreateServerContainer: View {
     @State private var vm: CreateServerViewModel?
 
     init(
+        builderLink: String? = nil,
         onDeliveredVisible: @escaping (_ serverDomain: String, _ serial: String, _ name: String, _ description: String) -> Void = { _, _, _, _ in },
         onDelivered: @escaping (_ serverDomain: String, _ serial: String, _ name: String, _ description: String) -> Void,
         onCancel: @escaping () -> Void = {},
         onCoManage: (() -> Void)? = nil
     ) {
+        self.builderLink = builderLink
         self.onDeliveredVisible = onDeliveredVisible
         self.onDelivered = onDelivered
         self.onCancel = onCancel
@@ -598,6 +609,7 @@ struct CreateServerContainer: View {
             if let vm {
                 CreateServerStubScreen(
                     vm: vm,
+                    builderLink: builderLink,
                     onDeliveredVisible: { serverDomain, name, description in
                         let serial = vm.lastDeliveredSerial ?? ""
                         onDeliveredVisible(serverDomain, serial, name, description)

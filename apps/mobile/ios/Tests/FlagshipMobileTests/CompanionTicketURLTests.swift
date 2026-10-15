@@ -140,6 +140,25 @@ final class CompanionTicketURLTests: XCTestCase {
         XCTAssertEqual(parsed?.browserPublicKey, key)
     }
 
+    func test_remoteApprovalLink_parsesUniversalLink() {
+        let sid = Base64URL.encode(Data(repeating: 7, count: 16))
+        let key = Data(repeating: 9, count: 32)
+        let k = Base64URL.encode(key)
+        for link in [
+            "https://flagshipserver.com/remote?s=\(sid)&k=\(k)",
+            "https://www.flagshipserver.com/remote?s=\(sid)&k=\(k)",
+            "https://flagshipserver.com/remote/?s=\(sid)&k=\(k)",
+        ] {
+            let parsed = RemoteApprovalLink.parse(link)
+            XCTAssertEqual(parsed?.sid, sid, link)
+            XCTAssertEqual(parsed?.browserPublicKey, key, link)
+        }
+        XCTAssertNil(RemoteApprovalLink.parse("https://evil.example/remote?s=\(sid)&k=\(k)"))
+        XCTAssertNil(RemoteApprovalLink.parse("http://flagshipserver.com/remote?s=\(sid)&k=\(k)"))
+        XCTAssertNil(RemoteApprovalLink.parse("https://remote.flagshipserver.com/remote?s=\(sid)&k=\(k)"))
+        XCTAssertNil(RemoteApprovalLink.parse("https://flagshipserver.com/remote/x?s=\(sid)&k=\(k)"))
+    }
+
     func test_remoteApprovalLink_rejectsOtherShapes() {
         let sid = Base64URL.encode(Data(repeating: 7, count: 16))
         let k = Base64URL.encode(Data(repeating: 9, count: 32))

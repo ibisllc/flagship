@@ -1,7 +1,7 @@
 // Web-experience gating Settings surfaces (docs/service-access-gating.md):
 //   • "Open secured sessions" — the browser QR-logins this phone authorized,
 //     each with a Refresh (online/offline, ≥60s debounce) + Stop.
-//   • "Process URL" — paste a flagship://access link / "Get link" string and
+//   • "Process URL" — paste an /access link / "Get link" string and
 //     run the same authorize flow as the deep link (for when the QR can't be
 //     scanned cross-device, or the link was copied).
 
@@ -212,7 +212,7 @@ fun ProcessUrlScreen(nav: NavController) {
             value = text,
             onValueChange = { text = it; error = null },
             label = "Link",
-            placeholder = "flagship://…",
+            placeholder = "https://${com.flagshipserver.app.core.Endpoints.controlHost}/…",
             fieldTag = "process-url-input",
         )
         error?.let {
@@ -240,6 +240,8 @@ fun ProcessUrlScreen(nav: NavController) {
                     is DeepLink.ShareOffer -> deepLinker.enqueue(link)
                     // A remote page's code: Settings → Remote approves it.
                     is DeepLink.CompanionDockApproval -> deepLinker.enqueue(link)
+                    is DeepLink.BuilderPair -> deepLinker.enqueue(link)
+                    is DeepLink.AcceptInvite -> deepLinker.enqueue(link)
                     else -> error = "That doesn't look like a Flagship link."
                 }
             },

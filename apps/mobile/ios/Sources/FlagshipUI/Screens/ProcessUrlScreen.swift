@@ -1,4 +1,5 @@
 import SwiftUI
+import FlagshipAPI
 import FlagshipCore
 
 /// Settings → "Process URL" (docs/service-access-gating.md, "Web-experience
@@ -30,7 +31,7 @@ public struct ProcessUrlScreen: View {
                 FSCard {
                     VStack(alignment: .leading, spacing: FS.space.s2) {
                         Text("Link").font(FS.font.caption()).foregroundColor(c.textMuted)
-                        TextField("flagship://access?…", text: $pasted, axis: .vertical)
+                        TextField("https://\(Endpoints.controlHost)/access?…", text: $pasted, axis: .vertical)
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled(true)
                             .keyboardType(.URL)

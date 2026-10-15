@@ -1,4 +1,4 @@
-// "Process URL" parse helper — a pasted flagship://access link / "Get link"
+// "Process URL" parse helper — a pasted /access link (https or flagship://) / "Get link"
 // string resolves to an AuthorizeKnock (or null). Uri.parse needs Robolectric.
 
 package com.flagshipserver.app.ui.screens
@@ -17,6 +17,16 @@ class ProcessUrlParseTest {
     @Test fun validAccessLinkParses() {
         val link = parseAccessLink(
             "flagship://access?server=home.alice.flagship.services&svc=notes&ref=alice--notes&page=abc123",
+        )
+        assertEquals(
+            DeepLink.AuthorizeKnock("home.alice.flagship.services", "notes", "alice--notes", "abc123"),
+            link,
+        )
+    }
+
+    @Test fun accessAppLinkParses() {
+        val link = parseAccessLink(
+            "https://flagshipserver.com/access?server=home.alice.flagship.services&svc=notes&ref=alice--notes&page=abc123",
         )
         assertEquals(
             DeepLink.AuthorizeKnock("home.alice.flagship.services", "notes", "alice--notes", "abc123"),

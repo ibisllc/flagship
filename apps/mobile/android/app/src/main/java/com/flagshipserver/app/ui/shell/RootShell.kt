@@ -94,6 +94,10 @@ fun RootShell(
             // to the Apps tab, whose NavHost pushes the authorize screen.
             is com.flagshipserver.app.core.DeepLink.AuthorizeKnock -> RootDestination.APPS
             is com.flagshipserver.app.core.DeepLink.CompanionDockApproval -> RootDestination.SETTINGS
+            // Studio's pairing QR opens Create server, a Home concern.
+            is com.flagshipserver.app.core.DeepLink.BuilderPair -> RootDestination.HOME
+            // A friend's acceptance reply: the Apps tab pushes the approve screen.
+            is com.flagshipserver.app.core.DeepLink.AcceptInvite -> RootDestination.APPS
         }
         // The tab's NavHost picks the link up via its own LaunchedEffect
         // on LocalDeepLinker.pending. We leave the queue populated so

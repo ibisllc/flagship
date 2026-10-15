@@ -116,6 +116,7 @@ final class CompanionDockViewModelTests: XCTestCase {
         let sid = Base64URL.encode(Data(repeating: 1, count: 16))
         XCTAssertFalse(CompanionDockViewModel.isRemoteLink("https://flagshipserver.com/qr?s=\(sid)&k=\(k)"))
         XCTAssertTrue(CompanionDockViewModel.isRemoteLink("flagship://remote?s=\(sid)&k=\(k)"))
+        XCTAssertTrue(CompanionDockViewModel.isRemoteLink("https://flagshipserver.com/remote?s=\(sid)&k=\(k)"))
     }
 
     func test_begin_joinsRelayAndShowsMatchCode() async throws {

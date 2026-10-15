@@ -66,6 +66,13 @@ object Endpoints {
     val controlBaseUrl: String
         get() = "$scheme://$controlHost"
 
+    /** True for the control apex or its `www.` twin, the hosts our https App
+     *  Links (`/remote`, `/builder`, `/access`, `/invite-accept`) arrive on. */
+    fun isControlHost(host: String?): Boolean {
+        val h = host?.lowercase() ?: return false
+        return h == controlHost || h == "www.$controlHost"
+    }
+
     /** A sub-origin of the control apex, e.g. `https://boot.flagshipserver.com`. */
     fun subOrigin(prefix: String): String = "$scheme://$prefix.$controlHost"
 

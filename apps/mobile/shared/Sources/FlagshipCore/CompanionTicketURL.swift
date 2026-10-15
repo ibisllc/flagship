@@ -105,17 +105,23 @@ public enum CompanionTicketURL {
 }
 
 /// The QR the remote page (`remote.flagshipserver.com`) shows:
-/// `flagship://remote?s=<sid>&k=<browser X25519 key>`. It names only a QR-relay
-/// session and the browser's ephemeral key, never an account or a server; the
-/// phone picks the server and seals a single-use ticket to the browser.
+/// `https://flagshipserver.com/remote?s=<sid>&k=<browser X25519 key>` (older
+/// pages: `flagship://remote?s=&k=`). It names only a QR-relay session and the
+/// browser's ephemeral key, never an account or a server; the phone picks the
+/// server and seals a single-use ticket to the browser.
 public enum RemoteApprovalLink {
     public static func parse(_ raw: String) -> QrRelay.QrSession? {
         let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: text), url.scheme == "flagship", url.host == "remote",
+        guard let url = URL(string: text), isRemoteUrl(url),
               let session = try? QrRelay.parseQrUrl(text),
               let sid = Base64URL.decode(session.sid), sid.count == 16
         else { return nil }
         return session
+    }
+
+    private static func isRemoteUrl(_ url: URL) -> Bool {
+        if url.scheme == "flagship" { return url.host == "remote" }
+        return DeepLink.isControlHostLink(url) && DeepLink.trimmedPath(url) == "/remote"
     }
 }
 
