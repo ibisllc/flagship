@@ -7,7 +7,7 @@
  */
 
 import { createHetznerClient, type FetchLike } from "./hetzner.js";
-import { createUpCloudClient, isUpCloudServerId } from "./upcloud.js";
+import { createUpCloudClient, isUpCloudServerId, parseUpCloudLabels } from "./upcloud.js";
 
 export type DemoCloudProvider = "hetzner" | "upcloud";
 
@@ -20,6 +20,7 @@ export interface DemoCloudEnv {
   UPCLOUD_TEMPLATE?: string;
   UPCLOUD_STORAGE_GB?: string;
   UPCLOUD_SSH_PUBLIC_KEY?: string;
+  UPCLOUD_EXTRA_LABELS?: string;
 }
 
 export interface DemoCreateSettings {
@@ -78,6 +79,7 @@ export function createDemoCreateSettings(env: DemoCloudEnv, fetchImpl?: FetchLik
   if (missing) throw new Error(`demo creation requires ${missing}`);
   if (demoCloudProvider(env) === "upcloud") {
     const storageGb = upcloudStorageGb(env);
+    const extraLabels = parseUpCloudLabels(env.UPCLOUD_EXTRA_LABELS);
     return {
       provider: "upcloud",
       client: createUpCloudClient({
@@ -85,6 +87,7 @@ export function createDemoCreateSettings(env: DemoCloudEnv, fetchImpl?: FetchLik
         template: env.UPCLOUD_TEMPLATE!,
         ...(storageGb ? { storageGb } : {}),
         ...(env.UPCLOUD_SSH_PUBLIC_KEY ? { sshPublicKey: env.UPCLOUD_SSH_PUBLIC_KEY.trim() } : {}),
+        ...(Object.keys(extraLabels).length ? { extraLabels } : {}),
         ...(fetchImpl ? { fetch: fetchImpl } : {}),
       }),
       defaultRegion: env.UPCLOUD_ZONE || UPCLOUD_DEFAULT_ZONE,

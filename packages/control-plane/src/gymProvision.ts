@@ -1,9 +1,10 @@
 /**
- * Phase 1 of the gym recipe→Hetzner pipeline (docs/gym-recipe-to-hetzner.md).
+ * Phase 1 of the gym recipe→cloud pipeline (docs/gym-recipe-to-hetzner.md).
  *
  * `POST /api/gym/provision` takes an APP-SIGNED InstallBlob — the recipe the
  * real app (browser/simulator) composed and signed with its OWN device IRK —
- * plus the app's TEST IRK private key, and provisions a Hetzner box FROM that
+ * plus the app's TEST IRK private key, and provisions a demo-cloud box (the
+ * provider `DEMO_CLOUD_PROVIDER` selects) FROM that
  * recipe. The box ends up owned by the app's IRK (= `authCode.userPubKey`) by
  * construction; there is no demo-IRK or client-side trust backdoor in the
  * identity path.
@@ -47,18 +48,18 @@ import {
 export interface GymProvisionDeps {
   usernames: UsernameStorage;
   authCodes: AuthCodeStorage;
-  hetzner: ProvisioningHetznerClient;
-  /** Hetzner numeric SSH key id attached to the box so it stays root-SSH
-   *  debug-able (DEMO_PUBLIC_SSH_KEY_ID). Optional. */
+  cloud: ProvisioningHetznerClient;
+  /** Provider SSH key id attached to the box so it stays root-SSH
+   *  debug-able (DEMO_PUBLIC_SSH_KEY_ID; Hetzner only). Optional. */
   demoSshKeyId?: number;
-  /** Default Hetzner location, e.g. "fsn1". */
+  /** Default provider region/zone, e.g. "de-fra1". */
   defaultRegion: string;
-  /** Default Hetzner server_type, e.g. "cpx31" (the data stack needs headroom). */
+  /** Default provider plan/server type (the data stack needs headroom). */
   defaultSize: string;
   /** Ordered fallback server types tried on a 422. */
   fallbackServerTypes?: readonly string[];
-  /** Hetzner OS image — defaults to "debian-12". */
-  hetznerImage?: string;
+  /** Provider OS image or template — defaults to "debian-12". */
+  image?: string;
   /** Max auth-code TTL (mirrors handleAuthCodeIssue). Default 24h. */
   maxExpiryMs?: number;
   random?: (n: number) => Uint8Array;
@@ -74,6 +75,13 @@ export interface GymProvisionBody {
   /** The app's TEST IRK private key (32-byte hex). Its pubkey MUST equal
    *  authCode.userPubKey — the box self-mints entitlements with it. */
   irkPrivHex?: unknown;
+  /** Admin master root private key (32-byte hex) for an admin-pinned account
+   *  (every demo account). Its pubkey MUST equal the registered adminRootPub
+   *  and the authCode's adminRootPubKey; the box pins the pub and mints its
+   *  entitlement with the priv, exactly like a demo box. */
+  adminRootPrivHex?: unknown;
+  /** The owner's AID pub (32-byte hex); must equal the registered AID. */
+  ownerAidPubHex?: unknown;
   region?: unknown;
   size?: unknown;
 }
@@ -88,6 +96,7 @@ interface ParsedAuthCode {
   userPubKey: string;
   issuedAt: number;
   expiresAt: number;
+  adminRootPubKey?: string;
 }
 
 interface ParsedBlob {
@@ -136,7 +145,8 @@ function parseBlob(raw: unknown): ParsedBlob | null {
     !hexField(c.delegatedPubKey, HEX64) ||
     !hexField(c.userPubKey, HEX64) ||
     typeof c.issuedAt !== "number" ||
-    typeof c.expiresAt !== "number"
+    typeof c.expiresAt !== "number" ||
+    (c.adminRootPubKey !== undefined && !hexField(c.adminRootPubKey, HEX64))
   ) {
     return null;
   }
@@ -159,6 +169,7 @@ function parseBlob(raw: unknown): ParsedBlob | null {
       userPubKey: c.userPubKey,
       issuedAt: c.issuedAt,
       expiresAt: c.expiresAt,
+      ...(typeof c.adminRootPubKey === "string" ? { adminRootPubKey: c.adminRootPubKey } : {}),
     },
     authCodeUserSignature: b.authCodeUserSignature,
     installerGitRef: b.installerGitRef,
@@ -178,6 +189,7 @@ function toAuthCode(p: ParsedAuthCode): AuthCode {
     userPubKey: hexToBytes(p.userPubKey),
     issuedAt: p.issuedAt,
     expiresAt: p.expiresAt,
+    ...(p.adminRootPubKey !== undefined ? { adminRootPubKey: hexToBytes(p.adminRootPubKey) } : {}),
   };
 }
 
@@ -270,6 +282,43 @@ export async function handleGymProvision(
     return malformed("irkPrivHex pubkey does not match authCode.userPubKey");
   }
 
+  // 4b. An admin-pinned account's box must carry that admin root: the hub
+  //     verifies a pinned account's entitlement against adminRootPub only.
+  let adminRoot: { pubHex: string; privHex: string } | undefined;
+  if (body.adminRootPrivHex !== undefined) {
+    if (typeof body.adminRootPrivHex !== "string" || !HEX64.test(body.adminRootPrivHex)) {
+      return malformed("adminRootPrivHex must be 64-hex");
+    }
+    let pubHex: string;
+    try {
+      pubHex = bytesToHex(ed.getPublicKey(hexToBytes(body.adminRootPrivHex)));
+    } catch {
+      return malformed("adminRootPrivHex is not a valid ed25519 private key");
+    }
+    adminRoot = { pubHex, privHex: body.adminRootPrivHex };
+  }
+  const pinnedRoot = registered.adminRootPubHex ?? null;
+  if (pinnedRoot) {
+    if (!adminRoot || !equalHex(adminRoot.pubHex, pinnedRoot)) {
+      return forbidden("account is admin-pinned: adminRootPrivHex for the pinned root is required");
+    }
+    if (!parsed.authCode.adminRootPubKey || !equalHex(parsed.authCode.adminRootPubKey, pinnedRoot)) {
+      return forbidden("authCode.adminRootPubKey must name the pinned admin root");
+    }
+  } else if (adminRoot) {
+    return malformed("adminRootPrivHex given for an account with no pinned admin root");
+  }
+  let ownerAidPubHex: string | undefined;
+  if (body.ownerAidPubHex !== undefined) {
+    if (typeof body.ownerAidPubHex !== "string" || !HEX64.test(body.ownerAidPubHex)) {
+      return malformed("ownerAidPubHex must be 64-hex");
+    }
+    if (registered.aidPubHex && !equalHex(registered.aidPubHex, body.ownerAidPubHex)) {
+      return forbidden("ownerAidPubHex does not match the registered AID");
+    }
+    ownerAidPubHex = body.ownerAidPubHex.toLowerCase();
+  }
+
   // 5. Record the AuthCode (mirror handleAuthCodeIssue's validations). The app
   //    may already have recorded it via /api/auth-code/issue — that is the
   //    expected case (recipe creation does), so an idempotent "already active" is
@@ -309,6 +358,9 @@ export async function handleGymProvision(
       expiresAt: blob.authCode.expiresAt,
       status: "active",
       recordedAt: now,
+      ...(parsed.authCode.adminRootPubKey !== undefined
+        ? { adminRootPubKeyHex: parsed.authCode.adminRootPubKey }
+        : {}),
     });
     if (!acResult.ok) {
       return { status: 409, body: { error: `auth-code persist failed: ${acResult.reason}` } };
@@ -323,19 +375,21 @@ export async function handleGymProvision(
     installBlobJson: JSON.stringify(body.installBlob),
     installerGitRef: blob.installerGitRef || "main",
     demoUserIrkPrivHex: body.irkPrivHex,
+    ...(ownerAidPubHex ? { ownerAidPubHex } : {}),
+    ...(adminRoot ? { adminRootPubHex: adminRoot.pubHex, adminRootPrivHex: adminRoot.privHex } : {}),
   });
 
-  // 7. Provision Hetzner — mirrors handleAdminCloudInitNow, INCLUDING the SSH
-  //    key so the box is debug-able.
+  // 7. Provision the box — mirrors the demo create path, INCLUDING the SSH
+  //    key (Hetzner) so the box is debug-able.
   const region = typeof body?.region === "string" ? body.region : deps.defaultRegion;
   const size = typeof body?.size === "string" ? body.size : deps.defaultSize;
   let prov: { serverId: string; ipv4: string | null };
   try {
-    prov = await deps.hetzner.createServerWithUserData({
+    prov = await deps.cloud.createServerWithUserData({
       name: `flagship-gym-${blob.username}-${bytesToHex(rand(4))}`,
       location: region,
       serverType: size,
-      image: deps.hetznerImage ?? "debian-12",
+      image: deps.image ?? "debian-12",
       userData,
       username: blob.username,
       ...(deps.demoSshKeyId !== undefined ? { sshKeyId: deps.demoSshKeyId } : {}),
@@ -347,7 +401,7 @@ export async function handleGymProvision(
     const msg = e instanceof Error ? e.message : String(e);
     return {
       status: 502,
-      body: { error: "hetzner upstream rejected", detail: msg.slice(0, 280) },
+      body: { error: "cloud provider rejected", detail: msg.slice(0, 280) },
     };
   }
 

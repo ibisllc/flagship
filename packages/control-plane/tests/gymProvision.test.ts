@@ -89,7 +89,7 @@ function makeHetzner(): FakeHetzner {
 }
 
 /** Compose the app-signed recipe exactly like the real recipe-download flow. */
-function composeRecipe(opts: { issuedAt?: number; expiresAt?: number } = {}): {
+function composeRecipe(opts: { issuedAt?: number; expiresAt?: number; adminRootPub?: Uint8Array } = {}): {
   blob: InstallBlob;
   blobJson: unknown;
   blobSigHex: string;
@@ -107,6 +107,7 @@ function composeRecipe(opts: { issuedAt?: number; expiresAt?: number } = {}): {
     userPubKey: IRK.publicKey,
     issuedAt,
     expiresAt,
+    ...(opts.adminRootPub ? { adminRootPubKey: opts.adminRootPub } : {}),
   };
   const authCodeSig = signAuthCode(authCode, IRK);
   const blob: InstallBlob = {
@@ -139,6 +140,7 @@ function composeRecipe(opts: { issuedAt?: number; expiresAt?: number } = {}): {
       userPubKey: IRK_PUB_HEX,
       issuedAt,
       expiresAt,
+      ...(opts.adminRootPub ? { adminRootPubKey: hex(opts.adminRootPub) } : {}),
     },
     authCodeUserSignature: hex(authCodeSig),
     installerGitRef: "main",
@@ -147,7 +149,7 @@ function composeRecipe(opts: { issuedAt?: number; expiresAt?: number } = {}): {
   return { blob, blobJson, blobSigHex: hex(blobSig) };
 }
 
-async function mkDeps(opts: { register?: boolean } = {}): Promise<{
+async function mkDeps(opts: { register?: boolean; adminRootPubHex?: string } = {}): Promise<{
   deps: GymProvisionDeps;
   hetzner: FakeHetzner;
   authCodes: InMemoryAuthCodeStorage;
@@ -161,6 +163,7 @@ async function mkDeps(opts: { register?: boolean } = {}): Promise<{
       irkPubHex: IRK_PUB_HEX,
       claimedAt: 1_000_000,
       isDemo: false,
+      ...(opts.adminRootPubHex ? { adminRootPubHex: opts.adminRootPubHex } : {}),
     });
   }
   let counter = 0;
@@ -173,7 +176,7 @@ async function mkDeps(opts: { register?: boolean } = {}): Promise<{
   const deps: GymProvisionDeps = {
     usernames,
     authCodes,
-    hetzner,
+    cloud: hetzner,
     demoSshKeyId: 4242,
     defaultRegion: "fsn1",
     defaultSize: "cpx31",
@@ -365,7 +368,7 @@ describe("handleGymProvision (Phase 1)", () => {
     });
 
     expect(r.status).toBe(502);
-    expect((r.body as { error: string }).error).toMatch(/hetzner/);
+    expect((r.body as { error: string }).error).toMatch(/cloud provider/);
   });
 
   it("malformed inputs are rejected with 400", async () => {
@@ -405,5 +408,48 @@ describe("handleGymProvision (Phase 1)", () => {
     expect(r.status).toBe(400);
     expect((r.body as { error: string }).error).toMatch(/expired/);
     expect(hetzner.calls).toHaveLength(0);
+  });
+
+  describe("admin-pinned account", () => {
+    const ADMIN_PRIV = new Uint8Array(32).fill(0x33);
+    const ADMIN_PUB = ed.getPublicKey(ADMIN_PRIV);
+
+    it("ships the admin root to the box when the pinned root's priv is given", async () => {
+      const { deps, hetzner } = await mkDeps({ adminRootPubHex: hex(ADMIN_PUB) });
+      const { blobJson, blobSigHex } = composeRecipe({ adminRootPub: ADMIN_PUB });
+      const r = await handleGymProvision(deps, {
+        installBlob: blobJson,
+        blobSignature: blobSigHex,
+        irkPrivHex: IRK_PRIV_HEX,
+        adminRootPrivHex: hex(ADMIN_PRIV),
+      });
+      expect(r.status).toBe(200);
+      expect(hetzner.calls[0]!.userData).toContain("/run/flagship-demo-admin-root.hex");
+    });
+
+    it("refuses a pinned account without the admin root", async () => {
+      const { deps, hetzner } = await mkDeps({ adminRootPubHex: hex(ADMIN_PUB) });
+      const { blobJson, blobSigHex } = composeRecipe({ adminRootPub: ADMIN_PUB });
+      const r = await handleGymProvision(deps, {
+        installBlob: blobJson,
+        blobSignature: blobSigHex,
+        irkPrivHex: IRK_PRIV_HEX,
+      });
+      expect(r.status).toBe(403);
+      expect(hetzner.calls).toHaveLength(0);
+    });
+
+    it("refuses an admin root that is not the pinned one", async () => {
+      const { deps, hetzner } = await mkDeps({ adminRootPubHex: hex(ADMIN_PUB) });
+      const { blobJson, blobSigHex } = composeRecipe({ adminRootPub: ADMIN_PUB });
+      const r = await handleGymProvision(deps, {
+        installBlob: blobJson,
+        blobSignature: blobSigHex,
+        irkPrivHex: IRK_PRIV_HEX,
+        adminRootPrivHex: hex(new Uint8Array(32).fill(0x44)),
+      });
+      expect(r.status).toBe(403);
+      expect(hetzner.calls).toHaveLength(0);
+    });
   });
 });

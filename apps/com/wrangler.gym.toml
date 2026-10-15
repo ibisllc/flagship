@@ -179,20 +179,36 @@ FLAGSHIP_R2_TEMP_PUBLIC_BASE = "https://pub-023a8bc99ad045939af943fd4663ce76.r2.
 # THIS Worker into this zone via the gym's own CLOUDFLARE_DNS_API_TOKEN secret.
 CLOUDFLARE_SERVICES_ZONE_ID = "51f3bfe11a729db57effd70ed3cf9c77"
 
-# ⭐ CA chokepoint OFF in the gym (§6.5): leave CA_ENDORSEMENT_ENFORCE UNSET so the
-# #30 maintainer→CA gate runs in OBSERVE (logs the verdict, signs anyway) and a
-# lapsed/absent prod CaEndorsement never gates the TEST directory. (To instead
-# enforce against a TEST CA, set it to "true" AND wire a gym-only FLAGSHIP_CA_PRIV_HEX
-# + a gym CaEndorsement bundle.) DELIBERATELY ABSENT here.
-# CA_ENDORSEMENT_ENFORCE = "true"
+# CA chokepoint ENFORCED, as on prod. The gym branch serves its own
+# self-contained chain (gymTrustMaterial.ts: one key K is the gym maintainer
+# authority AND this Worker's FLAGSHIP_CA_PRIV_HEX, endorsed by a 100-year
+# CaEndorsement), so enforcement passes here without the prod YubiKey lease.
+CA_ENDORSEMENT_ENFORCE = "true"
+
+# Gym boxes are created on UpCloud (Hetzner is suspended). The plan is bigger
+# than prod demos' STARTER-2xCPU-4GB: a gym box runs the full data platform
+# (Postgres 18, gVisor app sandboxes, builds). Every server carries the
+# flagship-env=gym label, which is all /api/gym/teardown will ever delete.
+DEMO_CLOUD_PROVIDER = "upcloud"
+UPCLOUD_ZONE = "de-fra1"
+UPCLOUD_PLAN = "STARTER-4xCPU-8GB"
+UPCLOUD_TEMPLATE = "01000000-0000-4000-8000-000020070100"
+UPCLOUD_STORAGE_GB = "40"
+UPCLOUD_EXTRA_LABELS = "flagship-env=gym"
 
 # ── SECRETS — set against THIS Worker before the first gym deploy ─────────────
 # (NOT in this file — `wrangler secret put <NAME> --config wrangler.gym.toml`.)
-# The gym needs its OWN copies so it never reuses a prod secret:
+# The gym needs its OWN copies so it never reuses a prod secret (except the
+# UpCloud token: one account, and the flagship-env=gym label keeps them apart).
+# scripts/gym-refresh.sh reports any secret prod has that the gym lacks.
 #   FLAGSHIP_ADMIN_SECRET          gates /api/dev/sample-user/* + the D5 test hooks
-#   HCLOUD_TOKEN                   a SEPARATE test Hetzner project token (own budget/cap)
-#   DEMO_PUBLIC_SSH_KEY            the test project's SSH pubkey (+ _KEY_ID once uploaded)
-#   DEMO_PUBLIC_SSH_KEY_ID
+#   UPCLOUD_TOKEN                  the UpCloud API token (~/.config/flagship/upcloud-token)
+#   FLAGSHIP_CA_PRIV_HEX           the gym key K (gymTrustMaterial.ts on the gym branch)
+#   ACCOUNT_READ_TOKEN_SECRET, FLAGSHIP_RECOVERY_PROOF_SECRET, FLAGSHIP_TOTP_KEK,
+#   BOOT_NOTIFY_SECRET, FLAGSHIP_INFERENCE_TOKEN_SECRET   fresh random hex
+#   SERVICES_CONTROL_SECRET, USAGE_REPORT_SECRET  fresh, and the SAME values on
+#                                  the gym Fly app (flyctl secrets set -a flagship-services-gym)
+#   DEMO_PUBLIC_SSH_KEY            optional (Hetzner only; HCLOUD_TOKEN is legacy)
 #   DEMO_IRK_KEK                   32-byte hex (openssl rand -hex 32) — deterministic demo IRKs
 #   SERVICES_HMAC_KEY             Worker↔Fly shared secret (match the gym Fly app's)
 #   CLOUDFLARE_DNS_API_TOKEN      Zone:DNS:Edit on flagship.services (for the gym `gym.` records)

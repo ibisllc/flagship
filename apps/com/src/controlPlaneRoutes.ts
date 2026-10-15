@@ -232,8 +232,9 @@ import {
   activeCaLeaseNotAfterMs,
   caTrustChainPublicMaterial,
 } from "./caTrustChainLoader.js";
-import { createHetznerClient } from "./hetzner.js";
 import { createDemoCreateSettings, createDemoServerRouter, demoCreateMissingConfig } from "./demoCloud.js";
+import { createUpCloudClient, parseUpCloudLabels } from "./upcloud.js";
+import { handleGymTeardown, type GymTeardownBody } from "./gymCloud.js";
 
 export interface ControlPlaneEnv {
   DB?: D1Database;
@@ -420,6 +421,9 @@ export interface ControlPlaneEnv {
   UPCLOUD_TEMPLATE?: string;
   /** Root disk size in GB for UpCloud demos; default 20. */
   UPCLOUD_STORAGE_GB?: string;
+  /** `k=v[,k=v]` labels added to every UpCloud server this Worker creates.
+   *  The gym sets `flagship-env=gym`; /api/gym/teardown reaps only those. */
+  UPCLOUD_EXTRA_LABELS?: string;
 
   /**
    * Public-half SSH key Hetzner attaches to demo servers. Operator's
@@ -750,6 +754,7 @@ const ROUTE_RE = {
   // from an app-signed recipe + the app's TEST IRK priv. Gated on the gym env
   // in the dispatcher below — must never run on prod.
   GYM_PROVISION: /^\/api\/gym\/provision$/,
+  GYM_TEARDOWN: /^\/api\/gym\/teardown$/,
   // v2 device-addressing public endpoints (S3.3).
   DEVICE_GRANTS_LIST: /^\/api\/users\/([^/]+)\/device-grants$/,
   DEVICE_GRANTS_REVOKE: /^\/api\/users\/([^/]+)\/device-grants\/revoke$/,
@@ -3505,20 +3510,15 @@ export async function tryControlPlane(
     }
   }
 
-  // Phase 1 of the gym recipe→Hetzner pipeline (docs/gym-recipe-to-hetzner.md).
-  // gym-only; accepts an IRK priv to self-mint entitlements — must never be
-  // enabled on prod. The dispatch is fenced THREE ways: (1) the env must be the
-  // gym env (CONTROL_APEX is the gym apex — prod leaves it unset / a non-gym
-  // literal), (2) the admin secret header (same x-admin-secret gate as the demo
-  // provision routes), and (3) HCLOUD_TOKEN must be configured. Any miss → the
-  // request never reaches handleGymProvision. Prod uses the entitlement relay
-  // instead (out of scope here).
-  if (method === "POST" && ROUTE_RE.GYM_PROVISION.test(path)) {
+  // Phase 1 of the gym recipe→cloud pipeline (docs/gym-recipe-to-hetzner.md)
+  // and its teardown. gym-only; provision accepts an IRK priv to self-mint
+  // entitlements — must never be enabled on prod. Fenced three ways: (1) the
+  // env must be the gym env (CONTROL_APEX is the gym apex), (2) the admin
+  // secret header, and (3) the demo cloud must be configured. Prod uses the
+  // entitlement relay instead.
+  if (method === "POST" && (ROUTE_RE.GYM_PROVISION.test(path) || ROUTE_RE.GYM_TEARDOWN.test(path))) {
     const controlApex = env.CONTROL_APEX ?? "flagshipserver.com";
-    const isGymEnv = controlApex.startsWith("gym.");
-    if (!isGymEnv) {
-      // Fail as if the route does not exist on prod — never reveal the gym
-      // affordance off the gym env.
+    if (!controlApex.startsWith("gym.")) {
       return jsonResponse({ error: "not found" }, 404);
     }
     {
@@ -3528,13 +3528,34 @@ export async function tryControlPlane(
       });
       if (_adminAuth) return finishPlain(_adminAuth);
     }
-    if (!env.HCLOUD_TOKEN) {
-      return jsonResponse(
-        { error: "gym provision requires HCLOUD_TOKEN on the Worker" },
-        503,
+    if (ROUTE_RE.GYM_TEARDOWN.test(path)) {
+      const [label] = Object.entries(parseUpCloudLabels(env.UPCLOUD_EXTRA_LABELS));
+      if (!env.UPCLOUD_TOKEN || !label) {
+        return jsonResponse({ error: "gym teardown requires UPCLOUD_TOKEN + UPCLOUD_EXTRA_LABELS" }, 503);
+      }
+      const dns =
+        env.CLOUDFLARE_DNS_API_TOKEN && env.CLOUDFLARE_SERVICES_ZONE_ID
+          ? new CloudflareDnsClient({
+              apiToken: env.CLOUDFLARE_DNS_API_TOKEN,
+              zoneId: env.CLOUDFLARE_SERVICES_ZONE_ID,
+            })
+          : undefined;
+      const result = await handleGymTeardown(
+        {
+          cloud: createUpCloudClient({ token: env.UPCLOUD_TOKEN }),
+          label: { key: label[0], value: label[1] },
+          ...(dns ? { deleteDns: (name: string, type: string) => dns.deleteByName(name, type) } : {}),
+          servicesApex: env.SERVICES_APEX ?? "flagship.services",
+        },
+        (await readJson(request)) as GymTeardownBody | undefined,
       );
+      return jsonResponse(result.body, result.status);
     }
-    const gymHetzner = createHetznerClient(env.HCLOUD_TOKEN);
+    const missingCloud = demoCreateMissingConfig(env);
+    if (missingCloud) {
+      return jsonResponse({ error: `gym provision requires ${missingCloud} on the Worker` }, 503);
+    }
+    const gymCloud = createDemoCreateSettings(env);
     const gymSshKeyRaw = env.DEMO_PUBLIC_SSH_KEY_ID;
     const gymSshKeyId = gymSshKeyRaw ? parseInt(gymSshKeyRaw, 10) : 0;
     return finishPlain(
@@ -3542,18 +3563,12 @@ export async function tryControlPlane(
         {
           usernames: storage.usernames,
           authCodes: storage.authCodes,
-          hetzner: gymHetzner,
-          ...(gymSshKeyId ? { demoSshKeyId: gymSshKeyId } : {}),
-          // Hetzner stock-gates the CPX line (cpx31/41/51) to ash/hil — it is
-          // NOT available in fsn1, so a cpx* size + fsn1 fails Hetzner 422
-          // "unsupported location for server type". ash is the proven combo
-          // for the full-platform size below (validated live 2026-06-18).
-          defaultRegion: "ash",
-          // Full-platform gym boxes run the data-services docker stack; cpx11
-          // is too small for it (per docs/gym-recipe-to-hetzner.md + the
-          // 2026-06-18 full-platform notes). cpx31 has the headroom.
-          defaultSize: "cpx31",
-          fallbackServerTypes: ["cpx41", "cpx51"] as const,
+          cloud: gymCloud.client,
+          ...(gymSshKeyId && gymCloud.provider === "hetzner" ? { demoSshKeyId: gymSshKeyId } : {}),
+          defaultRegion: gymCloud.defaultRegion,
+          defaultSize: gymCloud.defaultSize,
+          ...(gymCloud.fallbackServerTypes ? { fallbackServerTypes: gymCloud.fallbackServerTypes } : {}),
+          ...(gymCloud.image ? { image: gymCloud.image } : {}),
         },
         await readJson(request),
       ),

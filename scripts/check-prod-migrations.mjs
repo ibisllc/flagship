@@ -32,7 +32,12 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(SCRIPT_DIR, "..");
 const MIGRATIONS_DIR = join(REPO_ROOT, "packages", "storage", "migrations");
 const COM_DIR = join(REPO_ROOT, "apps", "com");
-const DB = "flagship-state";
+// FLAGSHIP_MIGRATION_CHECK_DB/_CONFIG point the same gate at another env's
+// D1 (the gym deploys with flagship-state-gym + wrangler.gym.toml).
+const DB = process.env.FLAGSHIP_MIGRATION_CHECK_DB || "flagship-state";
+const CONFIG_ARGS = process.env.FLAGSHIP_MIGRATION_CHECK_CONFIG
+  ? ["--config", process.env.FLAGSHIP_MIGRATION_CHECK_CONFIG]
+  : [];
 
 function warn(msg) {
   process.stderr.write(`⚠ migration-check: ${msg}\n`);
@@ -63,6 +68,7 @@ const res = spawnSync(
     "d1",
     "execute",
     DB,
+    ...CONFIG_ARGS,
     "--remote",
     "--json",
     "--command",

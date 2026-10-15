@@ -53,9 +53,18 @@ export interface UpCloudServerResult {
   ipv4: string | null;
 }
 
+export interface UpCloudLabeledServer {
+  serverId: string;
+  title: string;
+  state: string;
+  labels: Record<string, string>;
+}
+
 export interface UpCloudClient {
   findServerByName(name: string): Promise<UpCloudServerResult | null>;
+  listServersByLabel(key: string, value: string): Promise<UpCloudLabeledServer[]>;
   createServerWithUserData(args: UpCloudCreateServerArgs): Promise<UpCloudServerResult>;
+  getServerLabels(serverId: string): Promise<Record<string, string> | null>;
   getServerStatus(serverId: string): Promise<{ status: string; ipv4: string | null }>;
   destroyServer(serverId: string): Promise<void>;
   createServerFromSnapshot(): never;
@@ -69,6 +78,9 @@ export interface UpCloudClientOptions {
   storageGb?: number;
   /** Debug-only SSH public key for the default login user; unset in normal operation. */
   sshPublicKey?: string;
+  /** Labels added to every server this client creates, so an environment
+   *  (e.g. the gym) can list and reap exactly its own servers. */
+  extraLabels?: Record<string, string>;
   fetch?: FetchLike;
   apiBase?: string;
   sleep?: (ms: number) => Promise<void>;
@@ -84,6 +96,7 @@ interface UpCloudIpAddress {
 
 interface UpCloudServerBody {
   uuid?: unknown;
+  labels?: { label?: Array<{ key?: unknown; value?: unknown }> };
   title?: unknown;
   hostname?: unknown;
   state?: unknown;
@@ -142,6 +155,27 @@ export function createUpCloudClient(opts: UpCloudClientOptions): UpCloudClient {
       return { serverId: match.uuid, ipv4: publicIpv4(detail ?? match) };
     },
 
+    async listServersByLabel(key, value) {
+      const path = `/server?label=${encodeURIComponent(`${key}=${value}`)}`;
+      const { status, text } = await call("GET", path);
+      if (status < 200 || status >= 300) fail("GET", "/server", status, text);
+      const servers = (safeJsonParse(text) as { servers?: { server?: UpCloudServerBody[] } } | null)
+        ?.servers?.server ?? [];
+      const out: UpCloudLabeledServer[] = [];
+      for (const s of servers) {
+        if (typeof s.uuid !== "string") continue;
+        const labels = labelMap(s);
+        if (labels[key] !== value) continue;
+        out.push({ serverId: s.uuid, title: typeof s.title === "string" ? s.title : "", state: String(s.state ?? ""), labels });
+      }
+      return out;
+    },
+
+    async getServerLabels(serverId: string) {
+      const server = await getServer(serverId);
+      return server ? labelMap(server) : null;
+    },
+
     async createServerWithUserData(args) {
       const template = args.image && isUpCloudServerId(args.image) ? args.image : opts.template;
       if (!template) {
@@ -155,7 +189,14 @@ export function createUpCloudClient(opts: UpCloudClientOptions): UpCloudClient {
           hostname: args.name,
           metadata: "yes",
           user_data: args.userData,
-          labels: { label: [{ key: DEMO_LABEL_KEY, value: args.username.toLowerCase() }] },
+          labels: {
+            label: [
+              { key: DEMO_LABEL_KEY, value: args.username.toLowerCase() },
+              ...Object.entries(opts.extraLabels ?? {})
+                .filter(([k]) => k !== DEMO_LABEL_KEY)
+                .map(([k, v]) => ({ key: k, value: v })),
+            ],
+          },
           ...(opts.sshPublicKey
             ? { login_user: { create_password: "no", ssh_keys: { ssh_key: [opts.sshPublicKey] } } }
             : {}),
@@ -231,6 +272,24 @@ export function createUpCloudClient(opts: UpCloudClientOptions): UpCloudClient {
 function demoUsernameFromName(name: string): string {
   const m = /^flagship-demo-(.+)-[0-9a-f]+$/.exec(name);
   return m?.[1] ?? name;
+}
+
+function labelMap(server: UpCloudServerBody): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const l of server.labels?.label ?? []) {
+    if (typeof l.key === "string" && typeof l.value === "string") out[l.key] = l.value;
+  }
+  return out;
+}
+
+/** Parses `k=v,k2=v2` (the UPCLOUD_EXTRA_LABELS var). Malformed pairs are dropped. */
+export function parseUpCloudLabels(raw: string | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const pair of (raw ?? "").split(",")) {
+    const m = /^\s*([A-Za-z0-9_-]{1,32})=([A-Za-z0-9_.-]{1,255})\s*$/.exec(pair);
+    if (m) out[m[1]!] = m[2]!;
+  }
+  return out;
 }
 
 function mapState(raw: unknown): string {

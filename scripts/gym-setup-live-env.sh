@@ -18,15 +18,15 @@
 #   - Cloudflare: `wrangler whoami` succeeds on the account owning the two zones.
 #   - Fly (for the data plane): `flyctl auth login`. If absent, this script does
 #     the Cloudflare half and STOPS with the exact next step.
-#   - A SEPARATE test Hetzner project token, the test project's SSH pubkey, and a
-#     Zone:DNS:Edit token for flagship.services — supplied via env vars or the
-#     interactive prompts (see "owner-supplied secrets" below). Without HCLOUD_TOKEN
-#     the gym Worker still deploys; demo-box provisioning just no-ops until it's set.
+#   - The UpCloud API token in ~/.config/flagship/upcloud-token (or
+#     GYM_UPCLOUD_TOKEN_FILE), and a Zone:DNS:Edit token for flagship.services
+#     (GYM_DNS_TOKEN, env var or prompt). Gym boxes are UpCloud servers labelled
+#     flagship-env=gym (wrangler.gym.toml [vars]); without the token the Worker
+#     still deploys, demo-box provisioning just 503s until it's set.
 #
 # USAGE:
 #   bash scripts/gym-setup-live-env.sh                 # interactive
-#   GYM_HCLOUD_TOKEN=… GYM_DNS_TOKEN=… GYM_SSH_PUBKEY="ssh-ed25519 …" \
-#     bash scripts/gym-setup-live-env.sh               # non-interactive
+#   GYM_DNS_TOKEN=… bash scripts/gym-setup-live-env.sh # non-interactive
 #   GYM_SKIP_FLY=1 bash scripts/gym-setup-live-env.sh  # CF half only
 set -euo pipefail
 
@@ -35,7 +35,7 @@ cd "$REPO"
 WRANGLER_CFG="wrangler.gym.toml"                       # relative to apps/com
 WRANGLER_CFG_ABS="$REPO/apps/com/wrangler.gym.toml"
 FLY_CFG="$REPO/fly.gym.toml"
-SECRETS_FILE="$REPO/.gym-secrets.env"                  # gitignored; the gym's test-only secrets
+SECRETS_FILE="${GYM_SECRETS_FILE:-$REPO/.gym-secrets.env}"  # gitignored; the gym's test-only secrets
 FLY_APP="flagship-services-gym"
 D1_NAME="flagship-state-gym"
 
@@ -87,8 +87,23 @@ EOF
   ok "generated + cached gym secrets (admin, DEMO_IRK_KEK, SERVICES_HMAC_KEY, VAPID)"
   [ -n "$GYM_VAPID_PUBLIC" ] || warn "VAPID generation produced no public key — set WEBPUSH_VAPID_* by hand if you exercise push"
 fi
+# Secrets prod has that the gym needs its OWN fresh value for. Generated once,
+# appended to the cache, never copied from prod.
+for v in GYM_ACCOUNT_READ_TOKEN_SECRET GYM_RECOVERY_PROOF_SECRET GYM_TOTP_KEK \
+         GYM_SERVICES_CONTROL_SECRET GYM_USAGE_REPORT_SECRET GYM_BOOT_NOTIFY_SECRET \
+         GYM_INFERENCE_TOKEN_SECRET; do
+  if [ -z "${!v:-}" ]; then
+    printf -v "$v" '%s' "$(openssl rand -hex 32)"
+    ( umask 077; printf '%s="%s"\n' "$v" "${!v}" >> "$SECRETS_FILE" )
+    ok "generated $v"
+  fi
+done
+GYM_UPCLOUD_TOKEN_FILE="${GYM_UPCLOUD_TOKEN_FILE:-$HOME/.config/flagship/upcloud-token}"
+if ! grep -q '^GYM_UPCLOUD_TOKEN_FILE=' "$SECRETS_FILE" 2>/dev/null; then
+  ( umask 077; printf 'GYM_UPCLOUD_TOKEN_FILE="%s"\n' "$GYM_UPCLOUD_TOKEN_FILE" >> "$SECRETS_FILE" )
+fi
 # Owner-supplied secrets: env-var → else prompt → else warn+skip.
-GYM_HCLOUD_TOKEN="${GYM_HCLOUD_TOKEN:-}"; GYM_DNS_TOKEN="${GYM_DNS_TOKEN:-}"; GYM_SSH_PUBKEY="${GYM_SSH_PUBKEY:-}"
+GYM_DNS_TOKEN="${GYM_DNS_TOKEN:-}"
 prompt_secret() {
   local var="$1" desc="$2"
   local cur="${!var-}"
@@ -97,9 +112,8 @@ prompt_secret() {
     printf -v "$var" '%s' "$cur"
   fi
 }
-prompt_secret GYM_HCLOUD_TOKEN "test Hetzner project API token (HCLOUD_TOKEN)"
 prompt_secret GYM_DNS_TOKEN     "Cloudflare Zone:DNS:Edit token for flagship.services"
-prompt_secret GYM_SSH_PUBKEY    "test project SSH PUBLIC key (ssh-ed25519 …)"
+[ -r "$GYM_UPCLOUD_TOKEN_FILE" ] || warn "no UpCloud token at $GYM_UPCLOUD_TOKEN_FILE — gym boxes can't be created until it exists"
 
 # ── Phase 2: Cloudflare — D1 + R2 + placeholders ─────────────────────────────
 log "Phase 2 — Cloudflare D1 + R2"
@@ -133,7 +147,8 @@ fi
 # safe; secrets land immediately after, no re-deploy needed.
 log "Phase 3 — tsc -b + deploy the gym Worker (custom domains self-provision DNS+cert)"
 ( cd "$REPO" && npx tsc -b ) || die "tsc -b failed — fix before deploying (the Worker bundles the BUILT control-plane dist/)"
-wr deploy --config "$WRANGLER_CFG" || die "wrangler deploy failed"
+( cd "$REPO/apps/com" && FLAGSHIP_MIGRATION_CHECK_DB="$D1_NAME" FLAGSHIP_MIGRATION_CHECK_CONFIG="$WRANGLER_CFG" \
+    npm run deploy -- --config "$WRANGLER_CFG" ) || die "gym Worker deploy failed"
 if curl -fsS "https://gym.flagshipserver.com/api/health" >/dev/null 2>&1; then ok "control plane healthy: https://gym.flagshipserver.com/api/health"; else warn "control-plane health not 200 yet (custom-domain cert can take a few minutes)"; fi
 
 # ── Phase 4: secrets onto the (now-existing) gym Worker ──────────────────────
@@ -142,9 +157,19 @@ put_secret() { local name="$1" val="$2"; [ -n "$val" ] || { warn "skip $name (no
 put_secret FLAGSHIP_ADMIN_SECRET "$GYM_ADMIN_SECRET"
 put_secret DEMO_IRK_KEK          "$GYM_DEMO_IRK_KEK"
 put_secret SERVICES_HMAC_KEY     "$GYM_SERVICES_HMAC_KEY"
-put_secret HCLOUD_TOKEN          "$GYM_HCLOUD_TOKEN"
 put_secret CLOUDFLARE_DNS_API_TOKEN "$GYM_DNS_TOKEN"
-put_secret DEMO_PUBLIC_SSH_KEY   "$GYM_SSH_PUBKEY"
+put_secret ACCOUNT_READ_TOKEN_SECRET      "$GYM_ACCOUNT_READ_TOKEN_SECRET"
+put_secret FLAGSHIP_RECOVERY_PROOF_SECRET "$GYM_RECOVERY_PROOF_SECRET"
+put_secret FLAGSHIP_TOTP_KEK              "$GYM_TOTP_KEK"
+put_secret SERVICES_CONTROL_SECRET        "$GYM_SERVICES_CONTROL_SECRET"
+put_secret USAGE_REPORT_SECRET            "$GYM_USAGE_REPORT_SECRET"
+put_secret BOOT_NOTIFY_SECRET             "$GYM_BOOT_NOTIFY_SECRET"
+put_secret FLAGSHIP_INFERENCE_TOKEN_SECRET "$GYM_INFERENCE_TOKEN_SECRET"
+put_secret WEBPUSH_CONTACT                "mailto:gym@flagshipserver.com"
+if [ -r "$GYM_UPCLOUD_TOKEN_FILE" ]; then
+  tr -d '\n' < "$GYM_UPCLOUD_TOKEN_FILE" | wr secret put UPCLOUD_TOKEN --config "$WRANGLER_CFG" >/dev/null 2>&1 \
+    && ok "set UPCLOUD_TOKEN" || warn "could not set UPCLOUD_TOKEN"
+fi
 [ -n "${GYM_VAPID_PUBLIC:-}" ] && put_secret WEBPUSH_VAPID_PUBLIC_KEY_B64URL "$GYM_VAPID_PUBLIC"
 [ -n "${GYM_VAPID_PRIVATE_PEM:-}" ] && put_secret WEBPUSH_VAPID_PRIVATE_KEY_PEM "$(printf '%s' "$GYM_VAPID_PRIVATE_PEM" | tr '|' '\n')"
 
@@ -164,8 +189,11 @@ EOF
 fi
 log "Phase 5 — Fly data plane ($FLY_APP)"
 flyctl apps list 2>/dev/null | grep -q "$FLY_APP" && ok "$FLY_APP exists" || { flyctl apps create "$FLY_APP" || die "fly apps create failed"; ok "created $FLY_APP"; }
-printf '%s' "$GYM_SERVICES_HMAC_KEY" | flyctl secrets import -a "$FLY_APP" <<<"SERVICES_HMAC_KEY=$GYM_SERVICES_HMAC_KEY" >/dev/null 2>&1 \
-  && ok "set SERVICES_HMAC_KEY on $FLY_APP" || warn "could not set SERVICES_HMAC_KEY on Fly (set it by hand to match the Worker)"
+printf 'SERVICES_HMAC_KEY=%s\nSERVICES_CONTROL_SECRET=%s\nUSAGE_REPORT_SECRET=%s\n' \
+    "$GYM_SERVICES_HMAC_KEY" "$GYM_SERVICES_CONTROL_SECRET" "$GYM_USAGE_REPORT_SECRET" \
+  | flyctl secrets import --stage -a "$FLY_APP" >/dev/null 2>&1 \
+  && ok "staged SERVICES_HMAC_KEY / SERVICES_CONTROL_SECRET / USAGE_REPORT_SECRET on $FLY_APP" \
+  || warn "could not set the shared secrets on Fly (set them by hand to match the Worker)"
 flyctl deploy -c "$FLY_CFG" -a "$FLY_APP" --remote-only --strategy=rolling --yes || die "fly deploy failed"
 # Allocate anycast IPs iff none yet, then patch the passthrough placeholders.
 flyctl ips list -a "$FLY_APP" 2>/dev/null | grep -qE 'v4' || flyctl ips allocate-v4 -a "$FLY_APP" || true
@@ -176,7 +204,8 @@ IP6="$(flyctl ips list -a "$FLY_APP" 2>/dev/null | grep -oiE '([0-9a-f]{0,4}:){3
 [ -n "$IP6" ] && sed -i '' "s|REPLACE_WITH_GYM_FLY_ANYCAST_IPV6|$IP6|" "$WRANGLER_CFG_ABS" 2>/dev/null || sed -i "s|REPLACE_WITH_GYM_FLY_ANYCAST_IPV6|$IP6|" "$WRANGLER_CFG_ABS" 2>/dev/null || true
 ok "Fly IPs: v4=$IP4 v6=$IP6  [commit wrangler.gym.toml]"
 log "re-deploying the gym Worker so it publishes per-box DNS at the gym Fly IPs"
-wr deploy --config "$WRANGLER_CFG" || warn "re-deploy reported an issue"
+( cd "$REPO/apps/com" && FLAGSHIP_MIGRATION_CHECK_DB="$D1_NAME" FLAGSHIP_MIGRATION_CHECK_CONFIG="$WRANGLER_CFG" \
+    npm run deploy -- --config "$WRANGLER_CFG" ) || warn "re-deploy reported an issue"
 fi
 
 # ── Phase 6: what's left (manual DNS + smoke) ────────────────────────────────
