@@ -397,14 +397,16 @@ of the last check here: **not yet checked**.
   create's signing key and caps those joins at Member whatever `default_role`
   says; rank orders stay admin-root-only on pinned boxes; a device may revoke
   its own member invites. All three apps (webapp shell v95): admin devices
-  sign create/revoke with the admin root (iOS: one Face ID per create, the
-  admin root isn't session-cached), others' rank picker is locked to Member,
+  sign create/revoke with the admin root (one Face ID per create: owner,
+  2026-10-15, each invite is its own link sent by hand, so neither batching
+  nor caching the admin root for the session), others' rank picker is locked to Member,
   ranks read-only off admin devices, "Invited by <device>" from the decrypted
   directory, Revoke on the row, route `app/account/activity`. Live gym group
   `invites` green (`live-run-2026-10-15T21-33-02-638Z`, 11 checks); mock gym
-  scenarios on iOS and Android (locked picker, "Invited by") green. Needs:
-  migration 0100 on prod D1 then a `.com` deploy, an endorsed box release (the
-  cap), iOS/Android store builds. Open: the box still takes mode and
+  scenarios on iOS and Android (locked picker, "Invited by") green. `.com`
+  live with 0100 applied (shell v96); iPhone dev build of `62ff3e917`
+  installed. Needs: an endorsed box release (the cap), iOS/Android store
+  builds. Open: the box still takes mode and
   allow-remove orders under the owner IRK (admin-only is a client rule there).
 - **Per-app visitor identity (2026-10-13).** A visitor signs redeem / visit /
   knock / acceptance with `deriveAppAccountId(UMK, serviceRef)`
