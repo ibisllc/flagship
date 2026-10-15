@@ -479,6 +479,24 @@ owners: `docs/runbooks/release-readiness.md`; feature matrix:
   leader acknowledges (webapp shell v76). iOS's stuck "No. 2" came from a drop between rows
   never firing `performDrop`: rows showed the drag preview, labels the
   saved order, and nothing saved.
+- **Continue a build chat and switch provider (2026-10-15, `d3dd73c8`..`0a8a9391`).**
+  `docs/build-modes.md` "Continuing a chat". A chat that is ready to deploy
+  or failed (also stopped by a restart) takes a new message on
+  `/api/screens/llm/sessions/:id/reply` and runs again on its files; a
+  deployed app keeps "Change this app". Any message may carry `model`,
+  `effort` and a new `credential`: a key from another provider replaces the
+  sealed one, an effort the new model doesn't list is dropped, compaction
+  fits the new model's context; the box's note to the model goes through
+  the model redactor. State adds `canContinue`, `provider` (name only),
+  `conversationTokens`. All three apps: one model menu grouped by provider
+  (Flagship Inference, then each saved key), effort only for models that
+  list levels ("Think harder" is gone), a one-line notice when a switch
+  would summarise older turns; the build list continues failed and ready
+  chats (kept 30 days after their last change). Needs an endorsed box
+  release, a `.com` deploy (webapp shell v93), iOS/Android store builds.
+  Not yet run on a device. Open: iOS shows no group for a key typed but
+  never saved; Android sends a saved Flagship default model unchecked on a
+  new build.
 - **Share this server, v1 for families (2026-10-14, `de091bcc`..`a154b318`).**
   `docs/share-a-server.md` §5.4–§5.7 and §10. A co-manager with unlock at
   boot can turn on "Notify this device when it needs to start": the device
