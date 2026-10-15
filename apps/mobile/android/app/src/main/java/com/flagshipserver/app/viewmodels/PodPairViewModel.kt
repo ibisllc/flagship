@@ -58,11 +58,13 @@ class PodPairViewModel(
 
     /** One pairing attempt. Fire once per user tap — the biometric fires inside
      *  [signer], so never call this in a loop or on appearance. Idempotent: a
-     *  present per-pod token no-ops without a biometric. */
-    suspend fun pair() {
+     *  present per-pod token no-ops without a biometric, unless
+     *  [replacingExistingToken]: the box rejected that token (401), so it is
+     *  replaced. Mirror of iOS `pair(replacingExistingToken:)`. */
+    suspend fun pair(replacingExistingToken: Boolean = false) {
         val podId = PodInfo.podId(serverDomain)
         val existing = store.sessionToken(forPodId = podId)
-        if (!existing.isNullOrEmpty()) {
+        if (!replacingExistingToken && !existing.isNullOrEmpty()) {
             _phase.value = PodPairPhase.AlreadyPaired
             return
         }

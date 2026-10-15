@@ -77,6 +77,25 @@ class PodPairViewModelTest {
         assertEquals("existing", store.sessionToken(forPodId = PodInfo.podId(server)))
     }
 
+    // The server page offers "Pair this server" only after the box rejected
+    // this device's token, so that token is replaced, not kept.
+    @Test fun pair_replacingExistingToken_mintsAFreshOne() = runTest {
+        val kp = Ed25519Sign.KeyPair.newKeyPair()
+        val store = InMemorySessionStore().apply { setSessionToken("stale", forPodId = PodInfo.podId(server)) }
+        val transport = RecordingTransport("""{"ok":true}""")
+        val vm = PodPairViewModel(
+            store = store,
+            serverDomain = server,
+            signer = { Ed25519Sign(kp.privateKey) },
+            client = LockPowerClient(transport = transport, podBaseUrl = { "https://$it" }),
+            makeToken = { "11".repeat(32) },
+        )
+        vm.pair(replacingExistingToken = true)
+        assertTrue(vm.phase.value is PodPairPhase.Paired)
+        assertEquals("https://$server/api/orders-from-user", transport.lastUrl)
+        assertEquals("11".repeat(32), store.sessionToken(forPodId = PodInfo.podId(server)))
+    }
+
     @Test fun pair_failure_doesNotPersist() = runTest {
         val kp = Ed25519Sign.KeyPair.newKeyPair()
         val store = InMemorySessionStore()

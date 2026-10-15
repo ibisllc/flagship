@@ -4,12 +4,14 @@
 package com.flagshipserver.app.viewmodels
 
 import com.flagshipserver.app.api.MockScreensClient
+import com.flagshipserver.app.api.ScreensError
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -53,6 +55,29 @@ class HomeViewModelTest {
         client.shouldFail = false
         testScheduler.advanceTimeBy(2_100); testScheduler.runCurrent()
         assertTrue(vm.state.value is LoadingState.Loaded<*>)
+        assertEquals(0, vm.failures.value)
         job.cancel()
+    }
+
+    // A box the directory calls offline / coming up gets one try, then the page
+    // shows its honest state instead of retrying behind a skeleton.
+    @Test fun loadUntilLoaded_givesUpAtOnceOnABoxThatWontAnswer() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val scope = TestScope(dispatcher)
+        val client = MockScreensClient(simulatedLatencyMs = 0)
+        client.shouldFail = true
+        val vm = HomeViewModel(client, scope)
+        vm.loadUntilLoaded(wontAnswer = true)
+        testScheduler.advanceTimeBy(50); testScheduler.runCurrent()
+        assertTrue(vm.state.value is LoadingState.Failed)
+        assertEquals(1, vm.failures.value)
+        assertFalse(vm.needsPairing.value)
+    }
+
+    @Test fun aMissingOrRejectedTokenNeedsPairing_a403DoesNot() {
+        assertTrue(HomeViewModel.isNotPaired(ScreensError.NoSessionToken))
+        assertTrue(HomeViewModel.isNotPaired(ScreensError.Http(401, "")))
+        assertFalse(HomeViewModel.isNotPaired(ScreensError.Http(403, "")))
+        assertFalse(HomeViewModel.isNotPaired(ScreensError.Http(503, "")))
     }
 }

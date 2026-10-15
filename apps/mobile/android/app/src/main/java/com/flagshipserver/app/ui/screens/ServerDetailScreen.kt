@@ -160,7 +160,10 @@ fun ServerDetailScreen(
     // current server's detail under this one's name.
     val podClients = com.flagshipserver.app.core.LocalPodClients.current
     val globalClient = LocalScreensClient.current
-    val podClient = pod?.let { podClients.screens(it) }
+    // Bumped after pairing so the per-server client is looked up again with
+    // the new token.
+    var pairedGeneration by remember { mutableStateOf(0) }
+    val podClient = remember(pod, pairedGeneration) { pod?.let { podClients.screens(it) } }
     val isCurrent = remember(allPods, leaderPodId, currentPodId, podId) { appState.currentPod?.podId == podId }
     val client = podClient ?: globalClient.takeIf { isCurrent }
     val detailVm = remember(podId, client) { client?.let { HomeViewModel(it) } }
@@ -172,12 +175,76 @@ fun ServerDetailScreen(
     }
     val detail by (detailVm?.state ?: notPaired).collectAsState()
     val metrics by (metricsVm?.state ?: notPaired).collectAsState()
+    val noFlow = remember { kotlinx.coroutines.flow.MutableStateFlow(0) }
+    val failures by (detailVm?.failures ?: noFlow).collectAsState()
+    val boxNeedsPairing by (detailVm?.needsPairing ?: remember { kotlinx.coroutines.flow.MutableStateFlow(false) }).collectAsState()
 
-    LaunchedEffect(podId, client) {
+    // HONEST LIVENESS — the directory's view of this box decides what the page
+    // says while its own detail can't load. Mirror of iOS ServerDetailContainer.
+    val liveness = pod?.let { appState.liveness(it) }
+    val deadServer = liveness == com.flagshipserver.app.core.PodInfo.LivenessState.DEAD
+    val comingUp = liveness == com.flagshipserver.app.core.PodInfo.LivenessState.COMING_ONLINE &&
+        pod?.status != com.flagshipserver.app.core.PodInfo.Status.PENDING
+    val wontAnswer = liveness == com.flagshipserver.app.core.PodInfo.LivenessState.OFFLINE ||
+        liveness == com.flagshipserver.app.core.PodInfo.LivenessState.REVOKED || comingUp
+    // Still called live by the directory but silent for ~30 s (four tries), e.g.
+    // a hosted VM that was just stopped.
+    val notAnswering = failures >= 4
+    val offline = notAnswering || liveness == com.flagshipserver.app.core.PodInfo.LivenessState.OFFLINE
+    val pairFqdn = pod?.fqdn?.takeIf { it.isNotEmpty() }
+    val notPairedHere = pairFqdn != null && (detailVm == null || boxNeedsPairing)
+
+    LaunchedEffect(podId, client, wontAnswer) {
         // Retry until the box answers its BFF — an online box whose daemon
         // raced readiness no longer sticks on the skeleton until manual refresh.
-        detailVm?.loadUntilLoaded()
+        // A box the directory calls offline / coming up gets one try.
+        detailVm?.loadUntilLoaded(wontAnswer = wontAnswer)
         metricsVm?.load()
+    }
+
+    val sessionStore = com.flagshipserver.app.core.LocalSessionStore.current
+    val flagshipServer = com.flagshipserver.app.core.LocalFlagshipServerClient.current
+    val pairToasts = LocalToastCenter.current
+    val pairScope = rememberCoroutineScope()
+    var pairing by remember { mutableStateOf(false) }
+    val onPair: () -> Unit = onPair@{
+        val fqdn = pairFqdn ?: return@onPair
+        if (pairing) return@onPair
+        pairing = true
+        pairScope.launch {
+            try {
+                val demo = pod?.demoServer
+                val user = appState.currentUser.value
+                if (demo != null && user != null) {
+                    try {
+                        com.flagshipserver.app.core.DemoSessionPairer.ensurePaired(
+                            username = user,
+                            server = demo,
+                            client = flagshipServer,
+                            store = sessionStore,
+                            replacingExistingToken = true,
+                        )
+                        pairedGeneration++
+                    } catch (_: Throwable) {
+                        pairToasts.error("The demo server is online, but this device couldn't create a paired session. Try again.")
+                    }
+                    return@launch
+                }
+                val vm = com.flagshipserver.app.viewmodels.PodPairViewModel(store = sessionStore, serverDomain = fqdn)
+                // Shown only once the box proved this device's token absent or
+                // rejected, so a stale token is replaced rather than kept.
+                vm.pair(replacingExistingToken = true)
+                when (val p = vm.phase.value) {
+                    is com.flagshipserver.app.viewmodels.PodPairPhase.Paired,
+                    is com.flagshipserver.app.viewmodels.PodPairPhase.AlreadyPaired,
+                    -> pairedGeneration++
+                    is com.flagshipserver.app.viewmodels.PodPairPhase.Failed -> pairToasts.error(p.message)
+                    else -> Unit
+                }
+            } finally {
+                pairing = false
+            }
+        }
     }
 
     val scroll = rememberScrollState()
@@ -233,10 +300,26 @@ fun ServerDetailScreen(
             Spacer(Modifier.height(FS.space.s6))
         }
 
+        val revoked = pod?.isRevoked == true
         when (val d = detail) {
             is LoadingState.Loaded -> ServerInfoCard(d.value)
-            is LoadingState.Failed -> ErrorCard(d.message, onRetry = detailVm?.let { vm -> { vm.load() } })
-            else -> ServerCardSkeleton()
+            // The revoked card above already says why nothing loads.
+            else -> if (!revoked) {
+                ServerDetailPlaceholder(
+                    kind = ServerDetailPlaceholderKind.of(
+                        loading = d !is LoadingState.Failed,
+                        attempted = failures > 0,
+                        deadServer = deadServer,
+                        offline = offline,
+                        comingUp = comingUp,
+                        notPaired = notPairedHere,
+                    ),
+                    lastSeen = pod?.humanizedLastSeen(),
+                    pairing = pairing,
+                    onPair = onPair,
+                    onRetry = detailVm?.let { vm -> { vm.loadUntilLoaded(wontAnswer = wontAnswer); Unit } },
+                )
+            }
         }
 
         // This server's apps (docs/app-placement.md §3).
@@ -2147,4 +2230,109 @@ private fun buttonLabel(p: RevokeServerPhase, holding: Boolean): String = when {
     p is RevokeServerPhase.Signing || p is RevokeServerPhase.Posting -> "Revoking…"
     holding -> "Hold to confirm…"
     else -> "Hold to revoke"
+}
+
+/** What a server page shows while the box's own detail isn't loaded. Mirror of
+ *  the iOS ServerDetailScreen state switch. */
+internal enum class ServerDetailPlaceholderKind {
+    SKELETON, CONNECTING, NEVER_ONLINE, OFFLINE, COMING_UP, NOT_PAIRED;
+
+    companion object {
+        /** [loading]: still trying (or not yet tried); [attempted]: at least one
+         *  try failed. A box the directory calls offline or still coming up says
+         *  so at once instead of a skeleton that never resolves. */
+        fun of(
+            loading: Boolean,
+            attempted: Boolean,
+            deadServer: Boolean,
+            offline: Boolean,
+            comingUp: Boolean,
+            notPaired: Boolean,
+        ): ServerDetailPlaceholderKind = when {
+            loading && offline -> OFFLINE
+            loading && comingUp -> COMING_UP
+            loading -> if (attempted) CONNECTING else SKELETON
+            deadServer -> NEVER_ONLINE
+            offline -> OFFLINE
+            comingUp -> COMING_UP
+            notPaired -> NOT_PAIRED
+            else -> CONNECTING
+        }
+    }
+}
+
+@Composable
+private fun ServerDetailPlaceholder(
+    kind: ServerDetailPlaceholderKind,
+    lastSeen: String?,
+    pairing: Boolean,
+    onPair: () -> Unit,
+    onRetry: (() -> Unit)?,
+) {
+    if (kind == ServerDetailPlaceholderKind.SKELETON) {
+        ServerCardSkeleton()
+        return
+    }
+    val (title, body, tag) = when (kind) {
+        ServerDetailPlaceholderKind.NOT_PAIRED -> Triple(
+            "This server isn't paired with this device yet",
+            "Pair it to manage this server here. Your phone will ask you to unlock once to approve.",
+            "server-detail-not-paired",
+        )
+        ServerDetailPlaceholderKind.NEVER_ONLINE -> Triple(
+            "This server never came online",
+            "The install reserved this name and registered the box, but its software never checked in. If the install failed, you can delete it below — that frees the name so you can try again.",
+            "server-detail-never-online",
+        )
+        ServerDetailPlaceholderKind.OFFLINE -> Triple(
+            lastSeen?.let { "Offline — last seen $it" } ?: "Offline",
+            "This server has gone offline — its software isn't checking in right now. Its data is safe; it'll reconnect when the box is back online.",
+            "server-detail-offline",
+        )
+        ServerDetailPlaceholderKind.COMING_UP -> Triple(
+            "Still coming up…",
+            "This server is registered and powering on, but hasn't checked in for the first time yet. This can take a few minutes after a fresh install.",
+            "server-detail-coming-up",
+        )
+        else -> Triple(
+            "Connecting to your server…",
+            "Your server is online. We're fetching its details — this can take a moment right after it comes up.",
+            "server-detail-connecting",
+        )
+    }
+    val spinner = kind == ServerDetailPlaceholderKind.CONNECTING || kind == ServerDetailPlaceholderKind.COMING_UP
+    FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.testTag(tag)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+                if (spinner) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.padding(top = 2.dp).width(18.dp).height(18.dp),
+                        strokeWidth = 2.dp,
+                        color = FS.colors.textMuted,
+                    )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        title,
+                        color = if (kind == ServerDetailPlaceholderKind.NEVER_ONLINE) FS.colors.danger else FS.colors.text,
+                        style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
+                    )
+                    Text(body, color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
+                }
+            }
+            when {
+                kind == ServerDetailPlaceholderKind.NOT_PAIRED -> FSPrimaryButton(
+                    label = if (pairing) "Pairing…" else "Pair this server",
+                    onClick = onPair,
+                    enabled = !pairing,
+                    block = true,
+                    large = true,
+                    modifier = Modifier.testTag("sd-pair-server"),
+                )
+                kind != ServerDetailPlaceholderKind.NEVER_ONLINE && onRetry != null ->
+                    FSGhostButton(label = "Check again", onClick = onRetry)
+                else -> Unit
+            }
+        }
+    }
 }
