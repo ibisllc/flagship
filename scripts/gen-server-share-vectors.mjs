@@ -58,6 +58,17 @@ const grant = {
   issuedAt: t0,
 };
 const offerSealed = "00".repeat(40);
+const apnsToken = "a0".repeat(32);
+const webpushToken = JSON.stringify({ endpoint: "https://push.example/abc", keys: { p256dh: "04ab", auth: "cd" } });
+const update = {
+  serverDomain,
+  shareId,
+  memberPubHex,
+  targetCommit: "52d0b375".padEnd(40, "1"),
+  fromCommit: "37ba277d".padEnd(40, "2"),
+  nonce: "9c".repeat(32),
+  issuedAt: t0 + 15,
+};
 const ownerSealed = "11".repeat(40);
 const defs = [
   ["grant", "owner", grant],
@@ -86,6 +97,9 @@ const defs = [
   ["inbox", "inbox", { inboxPubHex: keys.inboxPubHex, op: "put", entryId: "a1".repeat(16), ctSha256: P.shareSha256Hex("ef".repeat(50)), issuedAt: t0 + 10 }],
   ["inbox", "inbox", { inboxPubHex: keys.inboxPubHex, op: "list", entryId: "", ctSha256: "", issuedAt: t0 + 11 }],
   ["inbox", "inbox", { inboxPubHex: keys.inboxPubHex, op: "delete", entryId: "a1".repeat(16), ctSha256: "", issuedAt: t0 + 12 }],
+  ["push", "member", { serverDomain, shareId, memberPubHex, op: "put", platform: "apns", tokenSha256: P.shareSha256Hex(apnsToken), issuedAt: t0 + 13 }],
+  ["push", "member", { serverDomain, shareId, memberPubHex, op: "delete", platform: "webpush", tokenSha256: P.shareSha256Hex(webpushToken), issuedAt: t0 + 14 }],
+  ["update", "member", update],
 ];
 const canon = {
   grant: P.serverShareGrantCanonicalBytes,
@@ -97,6 +111,8 @@ const canon = {
   list: P.serverShareListCanonicalBytes,
   unlock: P.serverShareUnlockCanonicalBytes,
   inbox: P.shareInboxRequestCanonicalBytes,
+  push: P.serverSharePushCanonicalBytes,
+  update: P.serverShareUpdateCanonicalBytes,
 };
 const envelopes = defs.map(([kind, signer, fields]) => {
   const bytes = canon[kind](fields);
@@ -129,6 +145,13 @@ const refuse = [
   ["inbox", "put has no ctSha256", { inboxPubHex: keys.inboxPubHex, op: "put", entryId: "a1".repeat(16), ctSha256: "", issuedAt: t0 }],
   ["inbox", "delete carries a ctSha256", { inboxPubHex: keys.inboxPubHex, op: "delete", entryId: "a1".repeat(16), ctSha256: "ab".repeat(32), issuedAt: t0 }],
   ["inbox", "op is unknown", { inboxPubHex: keys.inboxPubHex, op: "wipe", entryId: "a1".repeat(16), ctSha256: "", issuedAt: t0 }],
+  ["push", "op is unknown", { serverDomain, shareId, memberPubHex, op: "list", platform: "apns", tokenSha256: "ab".repeat(32), issuedAt: t0 }],
+  ["push", "platform is unknown", { serverDomain, shareId, memberPubHex, op: "put", platform: "sms", tokenSha256: "ab".repeat(32), issuedAt: t0 }],
+  ["push", "tokenSha256 is not 64 hex", { serverDomain, shareId, memberPubHex, op: "put", platform: "fcm", tokenSha256: "", issuedAt: t0 }],
+  ["update", "targetCommit is a short sha", { ...update, targetCommit: "52d0b375" }],
+  ["update", "targetCommit is uppercase", { ...update, targetCommit: update.targetCommit.toUpperCase() }],
+  ["update", "fromCommit is a tag", { ...update, fromCommit: "v1.0.0" }],
+  ["update", "nonce is not 64 hex", { ...update, nonce: "9c" }],
 ].map(([kind, why, fields]) => {
   let threw = false;
   try {
@@ -149,6 +172,27 @@ const reject = [
   { why: "app-data opt-in turned on after signing", kind: "grant", fields: { ...grant, seeAppData: true }, signature: g0.signature, pub: "owner" },
   { why: "grant moved to another server", kind: "grant", fields: { ...grant, serverDomain: "media.harry.flagship.services" }, signature: g0.signature, pub: "owner" },
   { why: "the member signed a grant for themself", kind: "grant", fields: grant, signature: hex(P.ed.sign(canon.grant(grant), member.privateKey)), pub: "owner" },
+  {
+    why: "the owner signed an update in the member's name",
+    kind: "update",
+    fields: update,
+    signature: hex(P.ed.sign(canon.update(update), ownerKey.privateKey)),
+    pub: "member",
+  },
+  {
+    why: "update target changed after signing",
+    kind: "update",
+    fields: { ...update, targetCommit: "f".repeat(40) },
+    signature: hex(P.ed.sign(canon.update(update), member.privateKey)),
+    pub: "member",
+  },
+  {
+    why: "a push put replayed as a delete",
+    kind: "push",
+    fields: { serverDomain, shareId, memberPubHex, op: "delete", platform: "apns", tokenSha256: P.shareSha256Hex(apnsToken), issuedAt: t0 + 13 },
+    signature: hex(P.ed.sign(canon.push({ serverDomain, shareId, memberPubHex, op: "put", platform: "apns", tokenSha256: P.shareSha256Hex(apnsToken), issuedAt: t0 + 13 }), member.privateKey)),
+    pub: "member",
+  },
   {
     why: "an accept signature replayed as a leave",
     kind: "leave",
@@ -211,13 +255,17 @@ for (const c of links.parse) {
 
 const doc = {
   about:
-    "Share this server (docs/share-a-server.md). Every platform must: derive every value in `keys` from the two UMK seeds and the secret; build each envelope's canonical string from `fields` and reproduce the Ed25519 signature with the named signer (owner = IRK of ownerUmkSeedHex standing in for the sensitive key, member = deriveShareMemberKey(memberUmk, shareId), inbox = deriveShareInboxKey(memberUmk)); refuse every `refuse` case; fail to verify every `reject` case against the named public key; AES-256-GCM-seal each `sealed` plaintext (exact UTF-8 bytes) with the key, nonce and AAD to the given hex, and open it back; build and parse the links. Label length counts Unicode code points.",
+    "Share this server (docs/share-a-server.md). Every platform must: derive every value in `keys` from the two UMK seeds and the secret; build each envelope's canonical string from `fields` and reproduce the Ed25519 signature with the named signer (owner = IRK of ownerUmkSeedHex standing in for the sensitive key, member = deriveShareMemberKey(memberUmk, shareId), inbox = deriveShareInboxKey(memberUmk)); `push` and `update` are #10 and #11, and each `pushTokens` sha256 is shareSha256Hex(token); refuse every `refuse` case; fail to verify every `reject` case against the named public key; AES-256-GCM-seal each `sealed` plaintext (exact UTF-8 bytes) with the key, nonce and AAD to the given hex, and open it back; build and parse the links. Label length counts Unicode code points.",
   keys,
   envelopes,
   refuse,
   reject,
   sealed,
   links,
+  pushTokens: [
+    { platform: "apns", token: apnsToken, sha256: P.shareSha256Hex(apnsToken) },
+    { platform: "webpush", token: webpushToken, sha256: P.shareSha256Hex(webpushToken) },
+  ],
 };
 const text = `${JSON.stringify(doc, null, 2)}\n`;
 if (process.argv.includes("--check")) {

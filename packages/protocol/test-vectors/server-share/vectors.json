@@ -1,5 +1,5 @@
 {
-  "about": "Share this server (docs/share-a-server.md). Every platform must: derive every value in `keys` from the two UMK seeds and the secret; build each envelope's canonical string from `fields` and reproduce the Ed25519 signature with the named signer (owner = IRK of ownerUmkSeedHex standing in for the sensitive key, member = deriveShareMemberKey(memberUmk, shareId), inbox = deriveShareInboxKey(memberUmk)); refuse every `refuse` case; fail to verify every `reject` case against the named public key; AES-256-GCM-seal each `sealed` plaintext (exact UTF-8 bytes) with the key, nonce and AAD to the given hex, and open it back; build and parse the links. Label length counts Unicode code points.",
+  "about": "Share this server (docs/share-a-server.md). Every platform must: derive every value in `keys` from the two UMK seeds and the secret; build each envelope's canonical string from `fields` and reproduce the Ed25519 signature with the named signer (owner = IRK of ownerUmkSeedHex standing in for the sensitive key, member = deriveShareMemberKey(memberUmk, shareId), inbox = deriveShareInboxKey(memberUmk)); `push` and `update` are #10 and #11, and each `pushTokens` sha256 is shareSha256Hex(token); refuse every `refuse` case; fail to verify every `reject` case against the named public key; AES-256-GCM-seal each `sealed` plaintext (exact UTF-8 bytes) with the key, nonce and AAD to the given hex, and open it back; build and parse the links. Label length counts Unicode code points.",
   "keys": {
     "ownerUmkSeedHex": "2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a",
     "ownerSignerPub": "c49775473bf9dcf5ad1608c8e66823d55dc6889be27e42a029fd9de195c8d7e4",
@@ -188,6 +188,51 @@
       },
       "canonical": "flagship/share-inbox/v1|f3d62192673262d6144a7aa2bfc5bcfd6dfbcb8f11be1829ad53d78da65a9ac4|delete|a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1||1760000000012",
       "signature": "1a57db5f6bc5c898469e1c39e0f33326f952cfb67491050d042c75a00a766e266b201d8042020f9df1a5bf8bafa9ad98dc172b33f768d0b716818d205a7e6a01"
+    },
+    {
+      "kind": "push",
+      "signer": "member",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "op": "put",
+        "platform": "apns",
+        "tokenSha256": "eb374dd4b49376eeef48e9029a756e55b6afdcf778b4d7bb7949b21230ee5221",
+        "issuedAt": 1760000000013
+      },
+      "canonical": "flagship/server-share-push/v1|home.harry.flagship.services|0f1e2d3c4b5a69788796a5b4c3d2e1f0|eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff|put|apns|eb374dd4b49376eeef48e9029a756e55b6afdcf778b4d7bb7949b21230ee5221|1760000000013",
+      "signature": "2c07d30e5bd10f2aa7193d71070dbddb18e4bd98b28e8d295382cf599833068810b9038b7378eb5a84481b41306030d26e288305c2220e97b247e8fc95bc330d"
+    },
+    {
+      "kind": "push",
+      "signer": "member",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "op": "delete",
+        "platform": "webpush",
+        "tokenSha256": "8478c0c727bc46a236bf1a759a1286508946a3b4afe33ff3e151f875ddec7793",
+        "issuedAt": 1760000000014
+      },
+      "canonical": "flagship/server-share-push/v1|home.harry.flagship.services|0f1e2d3c4b5a69788796a5b4c3d2e1f0|eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff|delete|webpush|8478c0c727bc46a236bf1a759a1286508946a3b4afe33ff3e151f875ddec7793|1760000000014",
+      "signature": "14d1910d1cc93c750287b981c5921559d208a853a839de0dbfef604be774e65adebf5d627b7ab0fefebfed64bf8932c42607e0abd8a87b21fdc7b68544cf7905"
+    },
+    {
+      "kind": "update",
+      "signer": "member",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "targetCommit": "52d0b37511111111111111111111111111111111",
+        "fromCommit": "37ba277d22222222222222222222222222222222",
+        "nonce": "9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c",
+        "issuedAt": 1760000000015
+      },
+      "canonical": "flagship/server-share-update/v1|home.harry.flagship.services|0f1e2d3c4b5a69788796a5b4c3d2e1f0|eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff|52d0b37511111111111111111111111111111111|37ba277d22222222222222222222222222222222|9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c|1760000000015",
+      "signature": "cb3210555eced6ad44607e9d8a77bd94836c4ab112c2f5c43ddd88f8bf4c50e2aca03863f73761feedb73ab19708429a3ff059e4106eb3949c43faa88191c303"
     }
   ],
   "refuse": [
@@ -424,6 +469,97 @@
         "ctSha256": "",
         "issuedAt": 1760000000000
       }
+    },
+    {
+      "kind": "push",
+      "why": "op is unknown",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "op": "list",
+        "platform": "apns",
+        "tokenSha256": "abababababababababababababababababababababababababababababababab",
+        "issuedAt": 1760000000000
+      }
+    },
+    {
+      "kind": "push",
+      "why": "platform is unknown",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "op": "put",
+        "platform": "sms",
+        "tokenSha256": "abababababababababababababababababababababababababababababababab",
+        "issuedAt": 1760000000000
+      }
+    },
+    {
+      "kind": "push",
+      "why": "tokenSha256 is not 64 hex",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "op": "put",
+        "platform": "fcm",
+        "tokenSha256": "",
+        "issuedAt": 1760000000000
+      }
+    },
+    {
+      "kind": "update",
+      "why": "targetCommit is a short sha",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "targetCommit": "52d0b375",
+        "fromCommit": "37ba277d22222222222222222222222222222222",
+        "nonce": "9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c",
+        "issuedAt": 1760000000015
+      }
+    },
+    {
+      "kind": "update",
+      "why": "targetCommit is uppercase",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "targetCommit": "52D0B37511111111111111111111111111111111",
+        "fromCommit": "37ba277d22222222222222222222222222222222",
+        "nonce": "9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c",
+        "issuedAt": 1760000000015
+      }
+    },
+    {
+      "kind": "update",
+      "why": "fromCommit is a tag",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "targetCommit": "52d0b37511111111111111111111111111111111",
+        "fromCommit": "v1.0.0",
+        "nonce": "9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c",
+        "issuedAt": 1760000000015
+      }
+    },
+    {
+      "kind": "update",
+      "why": "nonce is not 64 hex",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "targetCommit": "52d0b37511111111111111111111111111111111",
+        "fromCommit": "37ba277d22222222222222222222222222222222",
+        "nonce": "9c",
+        "issuedAt": 1760000000015
+      }
     }
   ],
   "reject": [
@@ -522,6 +658,51 @@
       },
       "signature": "0505f9df8e583a3241f6a878ea22f5ab46a8d7805452deb03527a0972e3d65f142a3878f65802ad0950489b0e650933027ddd41f1295c395ca755edb8040cc0b",
       "pub": "owner"
+    },
+    {
+      "why": "the owner signed an update in the member's name",
+      "kind": "update",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "targetCommit": "52d0b37511111111111111111111111111111111",
+        "fromCommit": "37ba277d22222222222222222222222222222222",
+        "nonce": "9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c",
+        "issuedAt": 1760000000015
+      },
+      "signature": "f734093f751e0cc949767a542c0e071b909f6cf860ac1c26a5c1a9bd173736f1b13011054e543eabe740dd1920fa9b2368fc7f1de7ff6745c897d16be331b705",
+      "pub": "member"
+    },
+    {
+      "why": "update target changed after signing",
+      "kind": "update",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "targetCommit": "ffffffffffffffffffffffffffffffffffffffff",
+        "fromCommit": "37ba277d22222222222222222222222222222222",
+        "nonce": "9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c9c",
+        "issuedAt": 1760000000015
+      },
+      "signature": "cb3210555eced6ad44607e9d8a77bd94836c4ab112c2f5c43ddd88f8bf4c50e2aca03863f73761feedb73ab19708429a3ff059e4106eb3949c43faa88191c303",
+      "pub": "member"
+    },
+    {
+      "why": "a push put replayed as a delete",
+      "kind": "push",
+      "fields": {
+        "serverDomain": "home.harry.flagship.services",
+        "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+        "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "op": "delete",
+        "platform": "apns",
+        "tokenSha256": "eb374dd4b49376eeef48e9029a756e55b6afdcf778b4d7bb7949b21230ee5221",
+        "issuedAt": 1760000000013
+      },
+      "signature": "2c07d30e5bd10f2aa7193d71070dbddb18e4bd98b28e8d295382cf599833068810b9038b7378eb5a84481b41306030d26e288305c2220e97b247e8fc95bc330d",
+      "pub": "member"
     },
     {
       "why": "an accept signature replayed as a leave",
@@ -627,5 +808,17 @@
         "out": null
       }
     ]
-  }
+  },
+  "pushTokens": [
+    {
+      "platform": "apns",
+      "token": "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0",
+      "sha256": "eb374dd4b49376eeef48e9029a756e55b6afdcf778b4d7bb7949b21230ee5221"
+    },
+    {
+      "platform": "webpush",
+      "token": "{\"endpoint\":\"https://push.example/abc\",\"keys\":{\"p256dh\":\"04ab\",\"auth\":\"cd\"}}",
+      "sha256": "8478c0c727bc46a236bf1a759a1286508946a3b4afe33ff3e151f875ddec7793"
+    }
+  ]
 }

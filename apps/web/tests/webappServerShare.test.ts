@@ -33,6 +33,8 @@ const NAMES: Record<string, string> = {
   list: "ServerShareList",
   unlock: "ServerShareUnlock",
   inbox: "ShareInboxRequest",
+  push: "ServerSharePush",
+  update: "ServerShareUpdate",
 };
 
 function fns(m: Record<string, any>, kind: string) {
@@ -105,7 +107,7 @@ describe("server share — keys", () => {
 describe("server share — envelopes", () => {
   it("builds each canonical string, reproduces each signature and verifies it", async () => {
     const { m, sign, pub } = await signers();
-    expect(V.envelopes.length).toBe(13);
+    expect(V.envelopes.length).toBe(16);
     for (const e of V.envelopes) {
       const f = fns(m, e.kind);
       expect(utf8(f.canon(e.fields)), e.kind).toBe(e.canonical);
@@ -222,5 +224,13 @@ describe("server share — links", () => {
     expect(m.buildShareLink(`${b.apex}/`, b.shareId, fromHex(b.secretHex))).toBe(b.link);
     expect(m.parseShareLink(link)).toEqual({ shareId: b.shareId, secretHex: b.secretHex });
     for (const c of V.links.parse) expect(m.parseShareLink(c.in), c.in).toEqual(c.out);
+  });
+});
+
+describe("server share — push tokens", () => {
+  it("hashes each push token as the push envelopes sign it", async () => {
+    const m = await loadShare();
+    expect(V.pushTokens.length).toBe(2);
+    for (const t of V.pushTokens) expect(await m.shareSha256Hex(t.token), t.platform).toBe(t.sha256);
   });
 });

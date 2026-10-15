@@ -19,8 +19,10 @@ import {
   parseServerShareList,
   parseServerShareOffer,
   parseServerShareRevoke,
+  parseServerSharePush,
   parseServerShareSession,
   parseServerShareUnlock,
+  parseServerShareUpdate,
   parseShareAcceptancePayload,
   parseShareInboxEntry,
   parseShareInboxRequest,
@@ -33,9 +35,12 @@ import {
   serverShareLeaveCanonicalBytes,
   serverShareListCanonicalBytes,
   serverShareOfferCanonicalBytes,
+  serverSharePushCanonicalBytes,
   serverShareRevokeCanonicalBytes,
   serverShareSessionCanonicalBytes,
   serverShareUnlockCanonicalBytes,
+  serverShareUpdateCanonicalBytes,
+  shareSha256Hex,
   shareAad,
   shareInboxRequestCanonicalBytes,
   shareLinkKey,
@@ -48,12 +53,15 @@ import {
   verifyServerShareGrant,
   verifyServerShareLeave,
   verifyServerShareSession,
+  verifyServerShareUpdate,
+  verifyUpdateOrder,
   type ServerShareGrant,
+  type ServerShareUpdate,
 } from "../src/index.js";
 import { hex } from "../src/canonicalBase.js";
 import type { Bytes } from "../src/types.js";
 
-type Kind = "grant" | "revoke" | "accept" | "leave" | "session" | "offer" | "list" | "unlock" | "inbox";
+type Kind = "grant" | "revoke" | "accept" | "leave" | "session" | "offer" | "list" | "unlock" | "inbox" | "push" | "update";
 interface Vectors {
   keys: Record<string, string>;
   envelopes: Array<{ kind: Kind; signer: "owner" | "member" | "inbox"; fields: Record<string, unknown>; canonical: string; signature: string }>;
@@ -61,6 +69,7 @@ interface Vectors {
   reject: Array<{ kind: Kind; why: string; fields: Record<string, unknown>; signature: string; pub: "owner" | "member" }>;
   sealed: Array<{ name: string; keyHex: string; aad: string; plaintext: string; nonceHex: string; sealed: string }>;
   links: { build: { apex: string; shareId: string; secretHex: string; link: string }; parse: Array<{ in: string; out: unknown }> };
+  pushTokens: Array<{ platform: string; token: string; sha256: string }>;
 }
 
 const V = JSON.parse(
@@ -86,6 +95,8 @@ const canon: Record<Kind, (f: any) => Bytes> = {
   list: serverShareListCanonicalBytes,
   unlock: serverShareUnlockCanonicalBytes,
   inbox: shareInboxRequestCanonicalBytes,
+  push: serverSharePushCanonicalBytes,
+  update: serverShareUpdateCanonicalBytes,
 };
 const parse: Record<Kind, (v: unknown) => unknown> = {
   grant: parseServerShareGrant,
@@ -97,6 +108,8 @@ const parse: Record<Kind, (v: unknown) => unknown> = {
   list: parseServerShareList,
   unlock: parseServerShareUnlock,
   inbox: parseShareInboxRequest,
+  push: parseServerSharePush,
+  update: parseServerShareUpdate,
 };
 
 describe("server-share vectors: keys", () => {
@@ -170,6 +183,10 @@ describe("server-share vectors: sealed payloads and links", () => {
     expect(parseShareOwnerRecord({ ...(by.owner as object), label: "a|b" })).toBeNull();
   });
 
+  it("hashes push tokens as the envelopes sign them", () => {
+    for (const t of V.pushTokens) expect(shareSha256Hex(t.token)).toBe(t.sha256);
+  });
+
   it("builds and parses links", () => {
     const b = V.links.build;
     expect(buildShareLink(b.apex, b.shareId, fromHex(b.secretHex))).toBe(b.link);
@@ -192,6 +209,16 @@ describe("server-share beyond the vectors", () => {
     expect(verifyServerShareLeave({ ...base, issuedAt: 5 }, acceptSig, member.publicKey)).toBe(false);
     expect(verifyServerShareSession({ ...base, nonceHex: "00".repeat(32), issuedAt: 5 }, acceptSig, member.publicKey)).toBe(false);
     expect(verifyAppAccessGrant({ serverDomain: g.serverDomain, serviceId: "x", listSha256: "00".repeat(32), issuedAt: 5 }, acceptSig, member.publicKey)).toBe(false);
+  });
+
+  it("never lets a member's update verify as the owner's update order, or the reverse", () => {
+    const u = V.envelopes.find((e) => e.kind === "update")!.fields as unknown as ServerShareUpdate;
+    const order = { serverDomain: u.serverDomain, targetCommit: u.targetCommit, fromCommit: u.fromCommit, nonce: u.nonce, issuedAt: u.issuedAt };
+    const memberSig = ed.sign(serverShareUpdateCanonicalBytes(u), member.privateKey);
+    expect(verifyUpdateOrder(order, memberSig, member.publicKey)).toBe(false);
+    expect(verifyServerShareUpdate(u, memberSig, member.publicKey)).toBe(true);
+    expect(verifyServerShareUpdate(u, memberSig, owner.publicKey)).toBe(false);
+    expect(verifyServerShareUpdate({ ...u, shareId: "ffeeddccbbaa99887766554433221100" }, memberSig, member.publicKey)).toBe(false);
   });
 
   it("normalizes labels", () => {

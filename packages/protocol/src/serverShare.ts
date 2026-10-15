@@ -3,7 +3,7 @@
  *
  * A is the owner of server S; B is the account A shares S with. B's identity
  * toward S is a per-share key derived from B's UMK, so no owner can link B
- * across servers or apps. Nine '|'-joined envelopes (§4 of the spec), the
+ * across servers or apps. Eleven '|'-joined envelopes (§4 of the spec), the
  * link-secret derivations, the 6-digit code both phones show, and the sealed
  * JSON payloads `.com` relays without being able to read.
  *
@@ -25,6 +25,8 @@ export const TAG_SERVER_SHARE_OFFER = "flagship/server-share-offer/v1";
 export const TAG_SERVER_SHARE_LIST = "flagship/server-share-list/v1";
 export const TAG_SERVER_SHARE_UNLOCK = "flagship/server-share-unlock/v1";
 export const TAG_SHARE_INBOX = "flagship/share-inbox/v1";
+export const TAG_SERVER_SHARE_PUSH = "flagship/server-share-push/v1";
+export const TAG_SERVER_SHARE_UPDATE = "flagship/server-share-update/v1";
 
 const INFO_MEMBER = "flagship/server-share-member/v1";
 const INFO_TOKEN = "flagship/server-share/token/v1";
@@ -46,8 +48,12 @@ export const SHARE_UNLOCK_OFF = "off";
 export type ShareLevel = "view" | "manage";
 export const SHARE_LEVELS: readonly ShareLevel[] = ["view", "manage"];
 export type ShareInboxOp = "put" | "list" | "delete";
+export type SharePushOp = "put" | "delete";
+export type SharePushPlatform = "apns" | "fcm" | "webpush";
+export const SHARE_PUSH_PLATFORMS: readonly SharePushPlatform[] = ["apns", "fcm", "webpush"];
 
 const HEX32 = /^[0-9a-f]{32}$/;
+const HEX40 = /^[0-9a-f]{40}$/;
 const HEX64 = /^[0-9a-f]{64}$/;
 const enc = new TextEncoder();
 
@@ -365,6 +371,40 @@ export interface ShareInboxRequest {
   issuedAt: number;
 }
 
+/**
+ * #10 — signed by B's member key; registers (or drops) one device's push
+ * token for this share's start-up approvals. Only valid while the owner's
+ * unlock deposit for the same member key stands.
+ */
+export interface ServerSharePush {
+  serverDomain: string;
+  shareId: string;
+  memberPubHex: string;
+  op: SharePushOp;
+  platform: SharePushPlatform;
+  /** SHA-256 hex of the provider token's UTF-8 bytes (the token travels beside it on `put`). */
+  tokenSha256: string;
+  issuedAt: number;
+}
+
+/**
+ * #11 — signed by B's member key at manage level: move S to an endorsed
+ * release. The box applies it through the same endorsement and lineage gate
+ * as the owner's `flagship/server-update/v1`.
+ */
+export interface ServerShareUpdate {
+  serverDomain: string;
+  shareId: string;
+  memberPubHex: string;
+  /** Full lowercase commit the box moves to. */
+  targetCommit: string;
+  /** The commit the box runs now. */
+  fromCommit: string;
+  /** 64 hex, single use. */
+  nonce: string;
+  issuedAt: number;
+}
+
 export function serverShareGrantCanonicalBytes(g: ServerShareGrant): Bytes {
   domain(g.serverDomain);
   checkShareId(g.shareId);
@@ -468,6 +508,28 @@ export function shareInboxRequestCanonicalBytes(r: ShareInboxRequest): Bytes {
   return join(TAG_SHARE_INBOX, [r.inboxPubHex, r.op, r.entryId, r.ctSha256, String(r.issuedAt)]);
 }
 
+export function serverSharePushCanonicalBytes(p: ServerSharePush): Bytes {
+  domain(p.serverDomain);
+  checkShareId(p.shareId);
+  checkHex64("memberPubHex", p.memberPubHex);
+  if (p.op !== "put" && p.op !== "delete") throw new Error("server-share: push op must be put or delete");
+  if (!SHARE_PUSH_PLATFORMS.includes(p.platform)) throw new Error("server-share: push platform must be apns, fcm or webpush");
+  checkHex64("tokenSha256", p.tokenSha256);
+  time("issuedAt", p.issuedAt);
+  return join(TAG_SERVER_SHARE_PUSH, [p.serverDomain, p.shareId, p.memberPubHex, p.op, p.platform, p.tokenSha256, String(p.issuedAt)]);
+}
+
+export function serverShareUpdateCanonicalBytes(u: ServerShareUpdate): Bytes {
+  domain(u.serverDomain);
+  checkShareId(u.shareId);
+  checkHex64("memberPubHex", u.memberPubHex);
+  if (typeof u.targetCommit !== "string" || !HEX40.test(u.targetCommit)) throw new Error("server-share: targetCommit must be 40 lowercase hex");
+  if (typeof u.fromCommit !== "string" || !HEX40.test(u.fromCommit)) throw new Error("server-share: fromCommit must be 40 lowercase hex");
+  checkHex64("nonce", u.nonce);
+  time("issuedAt", u.issuedAt);
+  return join(TAG_SERVER_SHARE_UPDATE, [u.serverDomain, u.shareId, u.memberPubHex, u.targetCommit, u.fromCommit, u.nonce, String(u.issuedAt)]);
+}
+
 type Canon<T> = (v: T) => Bytes;
 
 function signer<T>(canon: Canon<T>) {
@@ -502,6 +564,10 @@ export const signServerShareUnlock = signer(serverShareUnlockCanonicalBytes);
 export const verifyServerShareUnlock = verifier(serverShareUnlockCanonicalBytes);
 export const signShareInboxRequest = signer(shareInboxRequestCanonicalBytes);
 export const verifyShareInboxRequest = verifier(shareInboxRequestCanonicalBytes);
+export const signServerSharePush = signer(serverSharePushCanonicalBytes);
+export const verifyServerSharePush = verifier(serverSharePushCanonicalBytes);
+export const signServerShareUpdate = signer(serverShareUpdateCanonicalBytes);
+export const verifyServerShareUpdate = verifier(serverShareUpdateCanonicalBytes);
 
 // ──────────────────────────────────────────────────────────────────────
 // Untrusted JSON → envelope (shape only; the canonical builder re-checks)
@@ -594,6 +660,36 @@ export const parseShareInboxRequest = parsed(shareInboxRequestCanonicalBytes, (o
   str(o.inboxPubHex) && (o.op === "put" || o.op === "list" || o.op === "delete") && str(o.entryId) &&
   str(o.ctSha256) && isTime(o.issuedAt)
     ? { inboxPubHex: o.inboxPubHex, op: o.op as ShareInboxOp, entryId: o.entryId, ctSha256: o.ctSha256, issuedAt: o.issuedAt }
+    : null,
+);
+
+export const parseServerSharePush = parsed(serverSharePushCanonicalBytes, (o) =>
+  str(o.serverDomain) && str(o.shareId) && str(o.memberPubHex) && (o.op === "put" || o.op === "delete") &&
+  str(o.platform) && str(o.tokenSha256) && isTime(o.issuedAt)
+    ? {
+        serverDomain: o.serverDomain,
+        shareId: o.shareId,
+        memberPubHex: o.memberPubHex,
+        op: o.op as SharePushOp,
+        platform: o.platform as SharePushPlatform,
+        tokenSha256: o.tokenSha256,
+        issuedAt: o.issuedAt,
+      }
+    : null,
+);
+
+export const parseServerShareUpdate = parsed(serverShareUpdateCanonicalBytes, (o) =>
+  str(o.serverDomain) && str(o.shareId) && str(o.memberPubHex) && str(o.targetCommit) && str(o.fromCommit) &&
+  str(o.nonce) && isTime(o.issuedAt)
+    ? {
+        serverDomain: o.serverDomain,
+        shareId: o.shareId,
+        memberPubHex: o.memberPubHex,
+        targetCommit: o.targetCommit,
+        fromCommit: o.fromCommit,
+        nonce: o.nonce,
+        issuedAt: o.issuedAt,
+      }
     : null,
 );
 
