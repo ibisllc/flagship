@@ -4,7 +4,7 @@ import FlagshipCore
 
 /// Author-side MANUAL-approve finalize screen (docs/service-access-gating.md,
 /// "## v2 hardening", tier 2). Reached from a consumer's reply deeplink
-/// `flagship://invite-accept?…`. The author taps "Approve" → the box fetches the
+/// `https://flagshipserver.com/invite-accept?…`. The author taps "Approve" → the box fetches the
 /// owner's signed create from `.com` by inviteId + verifies the consumer's
 /// contact-AID signature, then binds the contact AID. Works from ANY of the
 /// author's devices (no local create cache).

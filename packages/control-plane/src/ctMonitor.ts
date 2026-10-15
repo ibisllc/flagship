@@ -71,6 +71,7 @@ import type {
   ServerStorage,
 } from "@flagship/storage";
 import type { V12PushFanout } from "./totp.js";
+import { appRouteLink } from "./appLink.js";
 
 /** A leaf cert observed in a CT log for a queried identity. */
 export interface CtObservedCert {
@@ -476,7 +477,7 @@ async function pushOwner(
       category: "ct-unexpected-cert",
       title: "Unexpected certificate",
       body: `A certificate was issued for ${primaryDomain} that none of your devices requested — review.`,
-      deepLink: `flagship://account/security?u=${encodeURIComponent(username)}`,
+      deepLink: appRouteLink("account/security", { u: username }),
       meta: {
         eventKind: "ct-unexpected-cert",
         certSha256: sha,

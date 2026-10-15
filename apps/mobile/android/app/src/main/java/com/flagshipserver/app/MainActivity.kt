@@ -626,8 +626,8 @@ class MainActivity : FragmentActivity() {
         }
     }
 
-    /** Parse incoming launch intents (`flagship://...` and the
-     *  https://flagshipserver.com/app/<…> universal-link form). Push
+    /** Parse incoming launch intents (the https://flagshipserver.com
+     *  App Links, incl. `/app/<…>`, and older builds' `flagship://…`). Push
      *  notifications surface their deepLink via the same path. The
      *  actual URI→DeepLink translation lives in core.AppLink so it
      *  can be unit-tested without an activity. */

@@ -67,6 +67,7 @@ import * as OTPAuth from "otpauth";
 import { recordAuditEvent } from "./auditEvents.js";
 import { hexToBytes } from "./hex.js";
 import { conflict, forbidden, malformed, notFound, type HandlerResponse } from "./types.js";
+import { appRouteLink } from "./appLink.js";
 
 export interface TotpDeps {
   usernames: UsernameStorage;
@@ -1043,7 +1044,7 @@ export async function fireFailedRateAlertIfDue(
       title: "Suspicious 2FA activity",
       body:
         "Several incorrect 2FA codes for your account. If this isn't you, re-enroll or contact support.",
-      deepLink: "flagship://settings/two-factor",
+      deepLink: appRouteLink("settings/two-factor"),
       meta: { eventKind: "totp-failed-rate" },
     },
   });

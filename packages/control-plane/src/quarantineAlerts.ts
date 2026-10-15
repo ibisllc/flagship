@@ -37,6 +37,7 @@ import type {
 } from "@flagship/storage";
 import { recordAuditEvent } from "./auditEvents.js";
 import type { V12PushFanout } from "./totp.js";
+import { appRouteLink } from "./appLink.js";
 
 export const QUARANTINE_ALERT_BIT_T0 = 1;
 export const QUARANTINE_ALERT_BIT_T1D = 2;
@@ -168,9 +169,7 @@ function buildDefaultFirePush(
             category: req.category,
             title: "Review your trusted devices",
             body,
-            deepLink: `flagship://account/devices?u=${encodeURIComponent(
-              req.username.toLowerCase(),
-            )}`,
+            deepLink: appRouteLink("account/devices", { u: req.username.toLowerCase() }),
             meta: {
               eventKind: req.category,
               bit: req.bit,

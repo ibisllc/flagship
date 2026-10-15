@@ -1,6 +1,6 @@
 // Web-experience gating authorizer screen (docs/service-access-gating.md,
 // "Web-experience gating"). Reached from the knock page's
-// flagship://access?... deep-link or a pasted "Get link" string. "Open" signs
+// https://flagshipserver.com/access?... App Link or a pasted "Get link" string. "Open" signs
 // the knock against the box (behind the biometric gate the other AID-signing
 // flows use) with the identity that box knows us by, then confirms; the
 // browser's poll picks up the session and reloads into the app.

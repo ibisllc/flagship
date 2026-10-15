@@ -1,6 +1,6 @@
 // Phase 3b — INCOMING cross-device pairing screen. Reached two ways:
 //   - in-app scanner (Welcome → "Join with a pairing code"), or
-//   - the App-Links / flagship://join deeplink (the collaborator's native
+//   - the https://flagshipserver.com/join App Link (the collaborator's native
 //     camera follows the admin's QR).
 //
 // Drives the JoinDeviceViewModel: connect → show SAS for the USER to

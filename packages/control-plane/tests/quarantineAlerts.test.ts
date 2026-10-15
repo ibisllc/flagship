@@ -316,7 +316,7 @@ describe("scheduleQuarantineAlerts — real fan-out targets the owner's OTHER de
     expect(new Set(fires[0]!.tokenIds)).toEqual(new Set(["trusted-A", "trusted-B"]));
     expect(fires[0]!.tokenIds).not.toContain("collab-device");
     expect(fires[0]!.body).toMatch(/new device/i);
-    expect(fires[0]!.deepLink).toMatch(/^flagship:\/\/account\/devices\?u=alice/);
+    expect(fires[0]!.deepLink).toBe("https://flagshipserver.com/app/account/devices?u=alice");
     // Audit row landed + the bit stamped.
     const after = await s.pushTokens.get("collab-device");
     expect(after?.quarantineAlertsFiredBitmap).toBe(QUARANTINE_ALERT_BIT_T0);

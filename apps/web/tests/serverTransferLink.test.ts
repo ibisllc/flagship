@@ -4,7 +4,6 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 // guards the exact bytes the webapp produces/parses.
 import {
   buildTransferLink,
-  buildTransferDeepLink,
   encodeTransferOffer,
   utf8ToBase64Url,
   base64UrlToUtf8,
@@ -75,15 +74,10 @@ describe("serverTransfer — universal-link encode/decode", () => {
     expect(u.searchParams.get("o")).toBe(encodeTransferOffer(qr));
   });
 
-  it("builds the flagship:// custom-scheme twin", () => {
-    const { qr } = makeSignedOffer();
-    expect(buildTransferDeepLink(qr)).toBe(`flagship://transfer?o=${encodeTransferOffer(qr)}`);
-  });
-
-  it("parses the https link, the flagship:// twin, and a bare o= query back to the offer", () => {
+  it("parses the https link, an older app's flagship:// link, and a bare o= query back to the offer", () => {
     const { qr } = makeSignedOffer();
     const https = buildTransferLink(qr);
-    const scheme = buildTransferDeepLink(qr);
+    const scheme = `flagship://transfer?o=${encodeTransferOffer(qr)}`;
     for (const raw of [https, scheme, `o=${encodeTransferOffer(qr)}`]) {
       const parsed = parseTransferLink(raw);
       expect(parsed).toBeTruthy();

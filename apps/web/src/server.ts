@@ -2,15 +2,8 @@ import Fastify, { type FastifyInstance } from "fastify";
 import fastifyStatic from "@fastify/static";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { deriveIRK } from "@flagship/protocol";
 import { registerBuildImage } from "./routes/buildImage.js";
-import { registerQrAuth } from "./routes/qrAuth.js";
 import { registerSecurityReport } from "./routes/securityReport.js";
-import {
-  registerDesktopPair,
-  type DesktopPairOptions,
-  type DesktopSessionStore,
-} from "./routes/desktopPair.js";
 import { registerMigration, type MigrationOptions } from "./routes/migration.js";
 import {
   registerServerRegistry,
@@ -101,8 +94,7 @@ export interface ServerHandle {
  * Which surface this Fastify instance is serving.
  *
  *  - "com"      — flagshipserver.com (identity surface): static pages, /webapp,
- *                 /deck, /login, account recovery, push relay, promo issuance,
- *                 desktop pairing. Sees no traffic.
+ *                 account recovery, push relay, promo issuance. Sees no traffic.
  *  - "services" — flagship.services (traffic + peer mesh): tunnel hub,
  *                 peer-backup matchmaker, DNS publishing (later). Sees traffic
  *                 metadata but never decrypts user-content.
@@ -115,7 +107,6 @@ export interface BuildServerOptions {
   /** Default "both" — see Surface for the modes. */
   surface?: Surface;
   migration?: MigrationOptions;
-  desktopPair?: DesktopPairOptions;
   /** Pre-built server registry (tests pass a seeded one). Defaults to in-memory. */
   serverRegistry?: ServerRegistry;
   /** Resolves a userId to its IRK pubkey for registration verification. */
@@ -156,21 +147,6 @@ export interface BuildServerOptions {
    * production set FLAGSHIP_CA_PRIV_HEX.
    */
   ca?: CaIssuer;
-}
-
-/**
- * When FLAGSHIP_DEV=1 the server registers a hardcoded "harry" user whose IRK
- * is derived from a fixed dev UMK seed (matches `DEV_UMK_SEED` in
- * `/dev/phone.html`). This is what lets the in-browser fake-phone sign valid
- * pairing claims so the full QR-login UX is demoable on a single host.
- */
-function devDesktopPairOptions(): DesktopPairOptions | undefined {
-  if (process.env.FLAGSHIP_DEV !== "1") return undefined;
-  const devSeed = new Uint8Array(32).fill(7);
-  const devIrk = deriveIRK({ seed: devSeed });
-  return {
-    resolveIrkPubKey: (uid) => (uid === "harry" ? devIrk.publicKey : null),
-  };
 }
 
 export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
@@ -226,30 +202,9 @@ export function buildServer(opts: BuildServerOptions = {}): FastifyInstance {
     };
   });
 
-  let desktopSessions: DesktopSessionStore | undefined;
   if (isCom) {
     registerBuildImage(app);
-    registerQrAuth(app);
     registerSecurityReport(app);
-    desktopSessions = registerDesktopPair(app, opts.desktopPair ?? devDesktopPairOptions());
-    app.decorate("desktopSessions", desktopSessions);
-
-    // Logged-in user surface — backed by the paired desktop session.
-    const sessions = desktopSessions;
-    app.get<{ Querystring: { sessionId?: string } }>("/api/me/servers", async (req, reply) => {
-      const sid = req.query.sessionId;
-      if (!sid) return reply.status(400).send({ error: "sessionId required" });
-      const view = sessions.getPaired(sid);
-      if (!view) return reply.status(401).send({ error: "session not paired" });
-      const servers = serverRegistry.listForUser(view.userId).map((s) => ({
-        serverId: s.serverId,
-        registeredAt: s.registeredAt,
-        revoked: s.revokedAt
-          ? { reason: s.revocationReason ?? "lost", at: s.revokedAt }
-          : null,
-      }));
-      return { userId: view.userId, servers };
-    });
     if (opts.migration) registerMigration(app, opts.migration);
   }
 
@@ -359,7 +314,6 @@ declare module "fastify" {
   interface FastifyInstance {
     serverRegistry: ServerRegistry;
     pushTokenStore: PushTokenStore;
-    desktopSessions: DesktopSessionStore;
     reciprocityLedger: ReciprocityLedger;
     peerCandidatePool: PeerCandidatePool;
     serverDnsRegistry?: ServerDnsRegistry;

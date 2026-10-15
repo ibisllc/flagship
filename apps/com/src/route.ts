@@ -726,14 +726,15 @@ async function routeImpl(
   }
 
   // App links (`APP_LINK_PATHS`: add a device, share or take over a server,
-  // remote sign-in, Studio pairing, app sign-in, invite replies). With the app
+  // remote sign-in, Studio pairing, app sign-in, invite replies; `/app/<route>`
+  // for any other screen in the app, e.g. from a notification). With the app
   // installed the OS opens them in it (AASA + Android App Links) and the
   // request never gets here. Otherwise the browser gets the open-in-app page
   // AT THE SAME URL: store buttons first, the webapp as an opt-in link. Never
   // a redirect into the webapp origin: on Android an installed webapp claims
   // every navigation into its origin, so the redirect opened it unasked.
   // Before the coming-soon gate, so a real recipient always gets the page.
-  if (APP_LINK_PATHS.has(url.pathname)) {
+  if (APP_LINK_PATHS.has(url.pathname) || url.pathname.startsWith("/app/")) {
     return env.ASSETS.fetch(new Request(new URL("/open/index.html", url), {
       method: request.method,
       headers: request.headers,
@@ -853,7 +854,7 @@ async function routeImpl(
   // (api, build/iso, og, me/webapp/recovery redirects, .well-known/aasa)
   // has already returned — so the only requests reaching here are
   // static-asset fallbacks (marketing HTML, /docs, /blog, /status,
-  // /deck, CSS/JS/fonts). Show coming-soon to those unless the request
+  // CSS/JS/fonts). Show coming-soon to those unless the request
   // carries the preview cookie set by /wip_.
   //
   // SITE_PUBLIC=1 lifts the gate entirely for the public open-beta launch;

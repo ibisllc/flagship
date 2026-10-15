@@ -85,6 +85,10 @@
               "sig": "?*"
             },
             "comment": "An invitee's acceptance reply, opened by the app's owner to grant access."
+          },
+          {
+            "/": "/app/*",
+            "comment": "Any screen in the app: /app/<route> (a widget, a notification, a Siri shortcut). The app routes it like its old flagship://<route> links."
           }
         ]
       }

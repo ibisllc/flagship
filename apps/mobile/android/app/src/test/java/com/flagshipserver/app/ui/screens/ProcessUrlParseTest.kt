@@ -24,6 +24,15 @@ class ProcessUrlParseTest {
         )
     }
 
+    @Test fun accessAppRouteLinkParses() {
+        assertEquals(
+            DeepLink.AuthorizeKnock("home.alice.flagship.services", "notes", "alice--notes", "abc123"),
+            parseAccessLink(
+                "https://flagshipserver.com/app/access?server=home.alice.flagship.services&svc=notes&ref=alice--notes&page=abc123",
+            ),
+        )
+    }
+
     @Test fun accessAppLinkParses() {
         val link = parseAccessLink(
             "https://flagshipserver.com/access?server=home.alice.flagship.services&svc=notes&ref=alice--notes&page=abc123",

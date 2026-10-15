@@ -25,18 +25,16 @@ describe("surface = 'com' — identity routes only", () => {
     expect(body.service).toBe("flagshipserver.com");
   });
 
-  it("serves the marketing root + /webapp + /deck (static surface lives on .com)", async () => {
+  it("serves the marketing root + /webapp (static surface lives on .com)", async () => {
     const app = com();
     expect((await app.inject({ method: "GET", url: "/" })).statusCode).toBe(200);
     expect((await app.inject({ method: "GET", url: "/webapp/" })).statusCode).toBe(200);
-    expect((await app.inject({ method: "GET", url: "/deck/" })).statusCode).toBe(200);
   });
 
-  it("hosts identity routes: /api/build-image, /api/desktop/pair/start, /api/push/dispatch", async () => {
+  it("hosts identity routes: /api/build-image, /api/push/dispatch", async () => {
     const app = com();
     // 400 (malformed body) is the success signal here — the route exists.
     expect((await probe(app, "POST", "/api/build-image")).statusCode).not.toBe(404);
-    expect((await probe(app, "POST", "/api/desktop/pair/start")).statusCode).not.toBe(404);
     expect((await probe(app, "POST", "/api/push/dispatch")).statusCode).not.toBe(404);
   });
 
@@ -63,11 +61,10 @@ describe("surface = 'services' — traffic + peer routes only", () => {
     expect((await probe(app, "POST", "/api/peer-backup/peer-confirm")).statusCode).not.toBe(404);
   });
 
-  it("does NOT host marketing pages (no /webapp, no /, no /deck)", async () => {
+  it("does NOT host marketing pages (no /webapp, no /)", async () => {
     const app = services();
     expect((await app.inject({ method: "GET", url: "/" })).statusCode).toBe(404);
     expect((await app.inject({ method: "GET", url: "/webapp/" })).statusCode).toBe(404);
-    expect((await app.inject({ method: "GET", url: "/deck/" })).statusCode).toBe(404);
   });
 
   it("does NOT host identity routes (no /api/build-image, no /api/push/*, no /api/desktop/*)", async () => {

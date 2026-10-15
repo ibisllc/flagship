@@ -99,8 +99,8 @@ object ServerTransferFlow {
     // The offer JSON is a SIGNED non-secret, so it rides a base64url `o=` QUERY
     // param on the control-plane `/transfer` universal link (NOT a `#fragment` —
     // Android + the webapp strip fragments). Byte-identical across iOS/webapp so
-    // any surface can scan any other's QR. The custom-scheme twin is the same
-    // param on `flagship://transfer`.
+    // any surface can scan any other's QR. Older builds' `flagship://transfer`
+    // carries the same param and still parses.
 
     /** base64url(UTF8(offerJSON)), no padding — the `o=` param value. */
     fun encodeOfferParam(qr: OfferQR): String =
@@ -111,10 +111,6 @@ object ServerTransferFlow {
      *  control apex (prod = flagshipserver.com; a gym build overrides it). */
     fun offerUrl(qr: OfferQR): String =
         "${Endpoints.controlBaseUrl}/transfer?o=${encodeOfferParam(qr)}"
-
-    /** The custom-scheme twin: `flagship://transfer?o=<b64url>`. */
-    fun offerCustomSchemeUrl(qr: OfferQR): String =
-        "flagship://transfer?o=${encodeOfferParam(qr)}"
 
     /** Decode an `o=` param back to the offer JSON string, or null. */
     fun decodeOfferParam(param: String): String? =

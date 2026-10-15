@@ -304,24 +304,16 @@ export function encodeTransferOffer(offer) {
 }
 
 /** Build the universal link a phone Camera opens — `<baseUrl>/transfer?o=…`.
- *  Pass `scheme: "flagship"` for the custom-scheme twin
- *  `flagship://transfer?o=…`. `baseUrl` defaults to the control apex
- *  (`https://flagshipserver.com` in prod), so the QR is byte-identical to
- *  the iOS/Android twins.
+ *  `baseUrl` defaults to the control apex (`https://flagshipserver.com` in
+ *  prod), so the QR is byte-identical to the iOS/Android twins.
  *  @param {object|string} offer   the QR object or its JSON string
- *  @param {{ baseUrl?: string, scheme?: "https"|"flagship" }} [opts]
+ *  @param {{ baseUrl?: string }} [opts]
  *  @returns {string}
  */
 export function buildTransferLink(offer, opts = {}) {
   const o = encodeTransferOffer(offer);
-  if (opts.scheme === "flagship") return `flagship://transfer?o=${o}`;
   const base = String(opts.baseUrl || controlApex()).replace(/\/+$/, "");
   return `${base}/transfer?o=${o}`;
-}
-
-/** The `flagship://transfer?o=…` custom-scheme twin. */
-export function buildTransferDeepLink(offer) {
-  return buildTransferLink(offer, { scheme: "flagship" });
 }
 
 /** Pull the `o=` payload out of a raw string: a full `https://…/transfer?o=`

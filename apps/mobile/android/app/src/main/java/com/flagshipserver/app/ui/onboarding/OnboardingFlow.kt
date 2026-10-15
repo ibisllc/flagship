@@ -43,7 +43,7 @@ fun OnboardingFlow(onFinished: () -> Unit) {
     val deepLinker = LocalDeepLinker.current
     val pending by deepLinker.pending.collectAsState()
     // Phase 3b — a JoinDevice deeplink (the collaborator followed the
-    // admin's App-Links / flagship://join URL via their native camera).
+    // admin's https://flagshipserver.com/join App Link via their native camera).
     // Carry the raw sid + pk into the join screen route.
     LaunchedEffect(pending) {
         val link = pending
@@ -121,7 +121,7 @@ fun OnboardingFlow(onFinished: () -> Unit) {
         ) { entry ->
             val sid = URLDecoder.decode(entry.arguments?.getString("sid") ?: "", "UTF-8")
             val pk = URLDecoder.decode(entry.arguments?.getString("pk") ?: "", "UTF-8")
-            val link = JoinLink.parse("flagship://join?sid=$sid&pk=$pk")
+            val link = JoinLink.parse("https://${JoinLink.HOST}${JoinLink.PATH}?sid=$sid&pk=$pk")
             JoinDeviceScreen(
                 initialLink = link,
                 onJoined = onFinished,

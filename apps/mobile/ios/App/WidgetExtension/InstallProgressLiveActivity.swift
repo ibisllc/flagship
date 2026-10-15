@@ -60,7 +60,7 @@ struct InstallProgressLiveActivity: Widget {
             }
             // No matching DeepLink for raw install yet — point at
             // Home tab so the user lands on their pods after tap.
-            .widgetURL(URL(string: "flagship://create-server"))
+            .widgetURL(PodStatusSnapshot.read().appRouteURL("create-server"))
         }
     }
 }

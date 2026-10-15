@@ -175,7 +175,7 @@ private fun formatTs(ms: Long): String =
     if (ms <= 0) "—" else FlagshipDateFormat.format(ms, includeTime = true)
 
 /**
- * "Process URL" — paste a flagship://access link / "Get link" string and run
+ * "Process URL" — paste an https://flagshipserver.com/access link / "Get link" string and run
  * the same authorize flow as the deep link. On a valid link, navigates to the
  * KnockAuthorize screen via the shared route.
  */

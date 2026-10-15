@@ -121,6 +121,47 @@ public enum DeepLink: Equatable, Sendable {
     /// to start (the `share-start-up` push names no server). Internal-only.
     case sharedWithMe
 
+    /// Settings → Account security (two-factor, recovery codes). The
+    /// `account/security` (certificate watch) and `settings/two-factor`
+    /// (failed codes) pushes. Their `u=` names the account; the screen
+    /// opens for the active one.
+    case accountSecurity
+
+    /// Settings, which lists this account's devices and any pending re-pair:
+    /// the `account/devices` (quarantined device) and `account/re-pair` pushes.
+    case accountDevices
+
+    /// An in-app destination as an https app link,
+    /// `https://<controlHost>/app/<route>[?query]`: the form every producer
+    /// emits, routed exactly like the legacy `flagship://<route>[?query]`.
+    public static func appRouteURL(_ route: String, query: KeyValuePairs<String, String> = [:]) -> URL {
+        var allowed = CharacterSet.urlQueryAllowed
+        allowed.remove(charactersIn: "&=+#?")
+        let q = query
+            .map { "\($0.key)=\($0.value.addingPercentEncoding(withAllowedCharacters: allowed) ?? $0.value)" }
+            .joined(separator: "&")
+        return URL(string: "https://\(Endpoints.controlHost)/app/\(route)\(q.isEmpty ? "" : "?\(q)")")!
+    }
+
+    /// The legacy custom-scheme twin of an `/app/<route>` link on the control
+    /// host (path, query and fragment kept), or nil for any other URL.
+    static func legacyForm(ofAppRoute url: URL) -> URL? {
+        guard isControlHostLink(url),
+              var comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              comps.percentEncodedPath.hasPrefix("/app/") else { return nil }
+        let rest = comps.percentEncodedPath.dropFirst("/app/".count)
+        let route = rest.prefix { $0 != "/" }
+        guard !route.isEmpty,
+              route.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-") }) else { return nil }
+        comps.scheme = "flagship"
+        comps.user = nil
+        comps.password = nil
+        comps.port = nil
+        comps.host = String(route)
+        comps.percentEncodedPath = String(rest.dropFirst(route.count))
+        return comps.url
+    }
+
     /// Parse a `flagship://...` URL (custom scheme) OR a Flagship
     /// UNIVERSAL LINK (`https://flagshipserver.com/join?…`). The custom
     /// scheme mirrors the webapp's `?view=...` router; universal links
@@ -128,6 +169,7 @@ public enum DeepLink: Equatable, Sendable {
     /// arbitrary https URL the app receives doesn't become a deep link).
     /// Returns nil for anything we don't recognize.
     public static func parse(_ url: URL) -> DeepLink? {
+        if let legacy = legacyForm(ofAppRoute: url) { return parse(legacy) }
         if isControlHostLink(url) {
             let params = queryParams(url)
             switch trimmedPath(url) {
@@ -277,6 +319,19 @@ public enum DeepLink: Equatable, Sendable {
                 return .vibeCodeChat(sessionId: id)
             }
             return nil
+        case "account":
+            switch url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")) {
+            case "security": return .accountSecurity
+            case "devices", "re-pair": return .accountDevices
+            default: return nil
+            }
+        case "settings":
+            return url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")) == "two-factor"
+                ? .accountSecurity : nil
+        case "install-progress":
+            // The provision-status push names no server in its link; the
+            // create flow is where a phone follows an install.
+            return .createServer
         default:
             break
         }
@@ -455,6 +510,26 @@ public final class DeepLinker {
     public var pending: DeepLink?
     public init() {}
     public func enqueue(_ link: DeepLink) { pending = link }
+
+    private static weak var current: DeepLinker?
+    private static var undelivered: DeepLink?
+
+    /// Make this the linker `deliver(_:)` feeds (the shell's), handing it any
+    /// link that arrived before it existed.
+    public func makeCurrent() {
+        Self.current = self
+        if let link = Self.undelivered {
+            Self.undelivered = nil
+            enqueue(link)
+        }
+    }
+
+    /// Route a destination in-process from code with no view environment
+    /// (App Intents). Opening an https app link from inside the app could
+    /// land in Safari instead.
+    public static func deliver(_ link: DeepLink) {
+        if let current { current.enqueue(link) } else { undelivered = link }
+    }
     public func consume() -> DeepLink? {
         let p = pending
         pending = nil

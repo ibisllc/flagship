@@ -33,6 +33,7 @@ import {
 } from "./totp.js";
 import { ALERT_BIT_T0 } from "./rePairAlerts.js";
 import { verifyRecoveryProof } from "./recoveryProof.js";
+import { appRouteLink } from "./appLink.js";
 
 /**
  * Recovery re-pair endpoints (J.3).
@@ -854,9 +855,7 @@ export async function handleInitiateRePair(
             title: "Account recovery started",
             body:
               "A device used one of your recovery credentials to start taking over this account. Tap to review.",
-            deepLink: `flagship://account/re-pair?u=${encodeURIComponent(
-              r.username.toLowerCase(),
-            )}`,
+            deepLink: appRouteLink("account/re-pair", { u: r.username.toLowerCase() }),
             meta: {
               eventKind: "re-pair-initiated",
               completesAt: now() + graceMs,

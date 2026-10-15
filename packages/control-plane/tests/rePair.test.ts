@@ -1401,7 +1401,7 @@ describe("v1.2 Plan B Phase 5 — audit emissions on re-pair", () => {
     expect(fires).toHaveLength(1);
     expect(fires[0]!.category).toBe("re-pair-initiated");
     expect(fires[0]!.tokenIds).toEqual(["oldDevice"]);
-    expect(fires[0]!.deepLink).toMatch(/^flagship:\/\/account\/re-pair\?u=alice/);
+    expect(fires[0]!.deepLink).toBe("https://flagshipserver.com/app/account/re-pair?u=alice");
   });
 
   it("fires the failed-TOTP-rate alert via pushFanout when the re-pair gate trips the limit", async () => {

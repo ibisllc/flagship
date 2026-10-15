@@ -3,7 +3,7 @@ import FlagshipAPI
 import FlagshipCore
 
 /// Settings → "Process URL" (docs/service-access-gating.md, "Web-experience
-/// gating"). A paste field that takes a `flagship://access?…` deeplink — or the
+/// gating"). A paste field that takes an `https://flagshipserver.com/access?…` link — or the
 /// raw "Get link to paste in the app" string a box's knock page offers — and
 /// routes it into the same KnockAuthorize flow as a tapped deeplink/QR.
 ///

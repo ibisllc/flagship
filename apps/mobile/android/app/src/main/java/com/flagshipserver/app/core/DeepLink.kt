@@ -123,11 +123,31 @@ sealed interface DeepLink {
         override fun toString(): String = "ShareOffer(shareId=$shareId)"
     }
 
+    /** A server's install progress (`…/app/install-progress[?serial=]`), from a
+     *  `provision-status` push. Without a serial (or an order this phone doesn't
+     *  know) it lands on Home, whose pending server cards show the progress. */
+    data class InstallProgress(val serial: String? = null) : DeepLink
+
+    /** A dead-man reminder's tap (`…/app/deadman/<serverDomain>`): that server's
+     *  page, where its lock section has Affirm. */
+    data class Deadman(val serverDomain: String) : DeepLink
+
+    /** Account pushes (`…/app/account/<page>?u=`, `…/app/settings/<page>`).
+     *  The `u=` is not carried: the screens show the active account. */
+    data object AccountSecurity : DeepLink
+    /** Trusted devices, which also shows a pending re-pair (account recovery). */
+    data object TrustedDevices : DeepLink
+    /** An account/settings page this app has no screen for: the Settings tab. */
+    data object Settings : DeepLink
+
     companion object {
-        /// Parse a `flagship://...` URI OR a box `/invite#<secret>` universal
-        /// link. Keep in sync with iOS DeepLink.parse and the webapp router.
+        /// Parse a `flagship://...` URI, its `https://<control host>/app/...`
+        /// twin, a control-host App Link (/join, /remote, …) OR a box
+        /// `/invite#<secret>` universal link. Keep in sync with iOS
+        /// DeepLink.parse and the webapp router.
         /// Returns null when the host/scheme is not one we route.
         fun parse(uri: Uri): DeepLink? {
+            appRouteTwin(uri)?.let { return parse(it) }
             // Universal link: a service-access invite served from a BOX —
             // `https://<server>.<user>.flagship.services/invite#<secret>`.
             if (uri.scheme == "https") {
@@ -152,8 +172,8 @@ sealed interface DeepLink {
                 if (host == Endpoints.controlHost && uri.path == "/share") {
                     return ServerShare.parseShareLink(uri.toString())?.let { ShareOffer(it.shareId, it.secretHex) }
                 }
-                // The App Link twins of flagship://remote, builder, access and
-                // invite-accept: same query, same validation.
+                // The App Link twins of flagship://join, remote, builder, access
+                // and invite-accept: same query, same validation.
                 if (Endpoints.isControlHost(host)) {
                     val path = uri.path?.trimEnd('/')
                     val twin = APP_LINK_PATHS.firstOrNull { "/$it" == path }
@@ -166,7 +186,22 @@ sealed interface DeepLink {
             return parseHost(host, uri)
         }
 
-        private val APP_LINK_PATHS = listOf("remote", "builder", "access", "invite-accept")
+        private val APP_LINK_PATHS = listOf("join", "remote", "builder", "access", "invite-accept")
+
+        /** `http(s)://<control host>/app/<route>[/<more>][?q]` ≡ `flagship://<route>[/<more>][?q]`. */
+        private fun appRouteTwin(uri: Uri): Uri? {
+            if (uri.scheme != "https" && uri.scheme != "http") return null
+            if (!Endpoints.isControlHost(uri.host)) return null
+            val segments = uri.pathSegments
+            if (segments.size < 2 || segments[0] != "app") return null
+            return Uri.Builder()
+                .scheme("flagship")
+                .authority(segments[1])
+                .apply { segments.drop(2).forEach { appendPath(it) } }
+                .encodedQuery(uri.encodedQuery)
+                .encodedFragment(uri.encodedFragment)
+                .build()
+        }
 
         private fun parseHost(host: String, uri: Uri): DeepLink? {
             val params = uri.queryParameterNames.associateWith { uri.getQueryParameter(it) ?: "" }
@@ -239,6 +274,17 @@ sealed interface DeepLink {
                     val queryId = params["sessionId"].orEmpty()
                     val id = if (pathId.isNotEmpty()) pathId else queryId
                     if (id.isEmpty()) null else VibeCodeChat(id)
+                }
+                "install-progress" -> InstallProgress(params["serial"]?.takeIf { it.isNotEmpty() })
+                "deadman" -> uri.path?.trim('/')?.takeIf { it.isNotEmpty() }?.let { Deadman(it) }
+                "account" -> when (uri.pathSegments.firstOrNull()) {
+                    "security" -> AccountSecurity
+                    "devices", "re-pair" -> TrustedDevices
+                    else -> Settings
+                }
+                "settings" -> when (uri.pathSegments.firstOrNull()) {
+                    "two-factor" -> AccountSecurity
+                    else -> Settings
                 }
                 else -> null
             }

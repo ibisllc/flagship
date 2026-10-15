@@ -7,6 +7,7 @@ import type {
 } from "@flagship/storage";
 import { forbidden, malformed, notFound, ok, type HandlerResponseWithHeaders } from "./types.js";
 import type { V12PushFanout } from "./totp.js";
+import { appRouteLink } from "./appLink.js";
 
 /**
  * Provisioning-status channel — per-order install progress.
@@ -291,7 +292,7 @@ async function fanOutStatusPush(
         category: "provision-status",
         title,
         body,
-        deepLink: "flagship://install-progress",
+        deepLink: appRouteLink("install-progress"),
         meta: {
           kind: "provision-status",
           serial,

@@ -1,8 +1,8 @@
 import Foundation
 import FlagshipAPI
 
-/// P14 — builds the `https://webapp.flagshipserver.com/?companion=...` URL
-/// the phone QR encodes. The desktop browser scans the QR, the webapp's
+/// P14 — the `https://webapp.flagshipserver.com/?companion=...` URL shape a
+/// companion ticket travels in, plus the pod base URL helper. The webapp's
 /// boot-time handler decodes the `companion` query param into the
 /// 4-tuple `{ ticketId, ticketSecret, podBaseUrl, username }` and POSTs
 /// `/api/companion/redeem` against `podBaseUrl`.
@@ -29,34 +29,6 @@ public enum CompanionTicketURL {
             self.podBaseUrl = podBaseUrl
             self.username = username
         }
-    }
-
-    /// Encode the 4-tuple into the canonical
-    /// `https://webapp.flagshipserver.com/?companion=<b64url>` URL string.
-    /// Returns nil only if the JSON encode itself fails — every other
-    /// path is total.
-    public static func build(
-        ticketId: String,
-        ticketSecret: String,
-        podBaseUrl: String,
-        username: String
-    ) -> String? {
-        let env = Envelope(
-            ticketId: ticketId,
-            ticketSecret: ticketSecret,
-            podBaseUrl: podBaseUrl,
-            username: username
-        )
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        guard let json = try? encoder.encode(env) else { return nil }
-        let b64 = base64URLNoPadding(json)
-        var comps = URLComponents()
-        comps.scheme = "https"
-        comps.host = webappHost
-        comps.path = "/"
-        comps.queryItems = [URLQueryItem(name: "companion", value: b64)]
-        return comps.url?.absoluteString
     }
 
     /// Derive `podBaseUrl` from a `PodInfo.fqdn` value the way the
@@ -89,10 +61,8 @@ public enum CompanionTicketURL {
         return Data(base64Encoded: t)
     }
 
-    /// Parse a built URL back into its envelope. Used by the round-trip
-    /// test + (later) by any in-app handler that wants to inspect a
-    /// companion URL it generated. Returns nil if the URL doesn't match
-    /// the expected shape.
+    /// Parse a companion URL into its envelope. Returns nil if the URL
+    /// doesn't match the expected shape.
     public static func parse(_ urlString: String) -> Envelope? {
         guard let url = URL(string: urlString),
               let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),

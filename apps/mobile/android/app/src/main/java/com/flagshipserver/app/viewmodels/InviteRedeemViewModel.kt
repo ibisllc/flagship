@@ -41,7 +41,7 @@ sealed interface InviteRedeemPhase {
     data object Redeeming : InviteRedeemPhase
     data class Done(val serviceRef: String, val firstBind: Boolean) : InviteRedeemPhase
     /** MANUAL-approve: redeem accepted but pending the author's confirmation. The
-     *  friend must send [replyLink] (a `flagship://accept?b=…` link + QR) back to
+     *  friend must send [replyLink] (an `https://flagshipserver.com/invite-accept?…` link + QR) back to
      *  the author through the same private channel; the author finalizes. */
     data class AwaitingApproval(val serviceRef: String, val replyLink: String, val replyBody: String) : InviteRedeemPhase
     data class Failed(val message: String) : InviteRedeemPhase

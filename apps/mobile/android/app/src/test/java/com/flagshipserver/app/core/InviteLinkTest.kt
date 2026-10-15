@@ -37,16 +37,13 @@ class InviteLinkTest {
         assertEquals(invite, InviteLink.inviteIdFromLink(link))
     }
 
-    @Test fun appLinkEmbedsAuthorQuery() {
-        val link = InviteLink.appLink(server, secret, author)
-        assertTrue(link.startsWith("flagship://invite?server=$server"))
+    /** Older box pages' `flagship://invite` hand-off carries the same params as queries. */
+    @Test fun legacyAppSchemeLinkCarriesAuthorAndInvite() {
+        val link = "flagship://invite?server=$server&k=$secret&a=$author"
         assertEquals(author, InviteLink.authorAidFromLink(link))
         assertNull(InviteLink.inviteIdFromLink(link))
-    }
-
-    @Test fun appLinkEmbedsInviteIdWhenManual() {
-        val link = InviteLink.appLink(server, secret, author, invite)
-        assertEquals(invite, InviteLink.inviteIdFromLink(link))
+        assertEquals(invite, InviteLink.inviteIdFromLink("$link&i=$invite"))
+        assertEquals("alice-notes", InviteLink.serviceRefFromLink("$link&s=alice-notes"))
     }
 
     @Test fun authorAidFromFragmentVariants() {
@@ -81,10 +78,6 @@ class InviteLinkTest {
         assertEquals("alice-notes", InviteLink.serviceRefFromLink(fragApp))
         assertNull(InviteLink.serviceRefFromLink(frag))
         assertNull(InviteLink.serviceRefFromLink("$frag&s=Bad%20Ref"))
-        assertEquals(
-            "flagship://invite?server=$server&k=$s&a=$a&s=alice-notes",
-            InviteLink.appLink(server, s, a, null, "alice-notes"),
-        )
     }
 
     @Test fun acceptanceRoundTrips() {

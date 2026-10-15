@@ -66,6 +66,15 @@ public struct SettingsTab: View {
                 path.append(.companionDockApproval(link: link))
             }
             _ = linker.consume()
+        case .accountSecurity:
+            if path.last != .accountSecurity {
+                path.append(.accountSecurity)
+            }
+            _ = linker.consume()
+        case .accountDevices:
+            // Settings' own page lists the devices and any pending re-pair.
+            path.removeAll()
+            _ = linker.consume()
         default:
             break
         }

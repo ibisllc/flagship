@@ -45,7 +45,7 @@ class ServerTransferUrlTest {
         val qr = offer()
         val bare = ServerTransferFlow.encodeQR(qr)
         assertEquals(host, ServerTransferFlow.parseQR(ServerTransferFlow.offerJsonFrom(ServerTransferFlow.offerUrl(qr))!!).serverDomain)
-        assertEquals(host, ServerTransferFlow.parseQR(ServerTransferFlow.offerJsonFrom(ServerTransferFlow.offerCustomSchemeUrl(qr))!!).serverDomain)
+        assertEquals(host, ServerTransferFlow.parseQR(ServerTransferFlow.offerJsonFrom("flagship://transfer?o=${ServerTransferFlow.encodeOfferParam(qr)}")!!).serverDomain)
         assertEquals(host, ServerTransferFlow.parseQR(ServerTransferFlow.offerJsonFrom(bare)!!).serverDomain)
     }
 

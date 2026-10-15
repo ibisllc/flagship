@@ -7,7 +7,7 @@ export { BuilderRelaySession } from "./builderRelay.js";
 /**
  * flagshipserver.com — Cloudflare Worker.
  *
- * Static assets (marketing, /webapp, /deck, /security, /.well-known) live
+ * Static assets (marketing, /webapp, /security, /.well-known) live
  * on Cloudflare's edge via the [assets] binding. Anything under /api/*
  * is reverse-proxied to flagship.services on Fly. The Worker itself holds
  * no state and runs no business logic.

@@ -76,11 +76,6 @@ public enum ServerTransferFlow {
         "https://\(controlHost)\(transferLinkPath)?\(transferLinkParam)=\(try encodeOfferParam(qr))"
     }
 
-    /// The custom-scheme twin: `flagship://transfer?o=<b64url>`.
-    public static func transferCustomSchemeLink(_ qr: OfferQR) throws -> String {
-        "flagship://transfer?\(transferLinkParam)=\(try encodeOfferParam(qr))"
-    }
-
     /// Base64url-no-padding encoder (RFC 4648 §5) — matches the webapp/Android
     /// encoders + the existing `CompanionTicketURL` idiom.
     static func base64URLNoPadding(_ data: Data) -> String {

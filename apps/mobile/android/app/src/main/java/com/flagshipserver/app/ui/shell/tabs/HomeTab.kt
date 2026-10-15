@@ -221,11 +221,33 @@ fun HomeTab() {
     // Consume any deep link the shell already steered at this tab.
     val deepLinker = LocalDeepLinker.current
     val pending by deepLinker.pending.collectAsState()
-    LaunchedEffect(pending) {
+    LaunchedEffect(pending, pods) {
         when (val link = pending) {
             is DeepLink.ServerDetail -> {
                 deepLinker.consume()
                 nav.navigate("server-detail/${link.podId}")
+            }
+            is DeepLink.InstallProgress -> {
+                deepLinker.consume()
+                val serial = link.serial
+                val pod = if (serial != null) {
+                    pods.firstOrNull { it.pendingAuthCodeSerial == serial }
+                } else {
+                    pods.singleOrNull { it.status == com.flagshipserver.app.core.PodInfo.Status.PENDING }
+                }
+                when {
+                    pod != null -> nav.navigate("server-detail/${pod.podId}")
+                    serial != null -> nav.navigate("install-progress/$serial")
+                    else -> nav.popBackStack("home-root", inclusive = false)
+                }
+            }
+            is DeepLink.Deadman -> {
+                // A cold start may not have the pod list yet; this re-runs when it lands.
+                if (pods.isEmpty()) return@LaunchedEffect
+                deepLinker.consume()
+                val pod = pods.firstOrNull { it.fqdn.equals(link.serverDomain, ignoreCase = true) }
+                if (pod != null) nav.navigate("server-detail/${pod.podId}")
+                else nav.popBackStack("home-root", inclusive = false)
             }
             DeepLink.CreateServer -> {
                 deepLinker.consume()

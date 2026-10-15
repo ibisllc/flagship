@@ -979,24 +979,6 @@ section:not(.hidden) {
 /* Live frame in browser viewer — wrapper card has tighter padding. */
 .bv-frame-card { padding: var(--space-2); }
 
-/* Pair-view video preview (camera feed). */
-.pair-video {
-  width: 100%;
-  max-width: 320px;
-  aspect-ratio: 1;
-  border-radius: var(--radius);
-  background: #000;
-  display: block;
-  margin: 0 auto;
-  object-fit: cover;
-}
-.pair-status {
-  text-align: center;
-  color: var(--ink-muted);
-  font-size: 13px;
-  margin: var(--space-2) 0 0;
-}
-
 /* Three-column equal-flex button row (Send code / Cancel pairs). */
 .row-gap-3 {
   display: flex;

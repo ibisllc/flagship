@@ -128,10 +128,7 @@
               servers pair automatically. Use these only to connect this
               browser to a server you already run.
             </p>
-            <div class="row-2 mt-2">
-              <button class="secondary" id="pair-with-server">Scan a server QR</button>
-              <button class="secondary" id="open-pod-pair">Enter a server URL</button>
-            </div>
+            <button class="secondary mt-2" id="open-pod-pair">Enter a server URL</button>
           </details>
         </div>
 
@@ -1188,23 +1185,6 @@
         <button class="secondary full-width mt-2" id="account-delete-back">← Cancel</button>
       </section>
 
-      <!-- View 4: Pairing — webapp scans a server's QR to take on the "phone" role -->
-      <section id="view-pair" class="hidden">
-        <h2>Pair to a server</h2>
-        <div class="card">
-          <p class="note">
-            Open <code>/login.html</code> on the server's desktop UI, then scan its QR with this device.
-          </p>
-          <video id="pair-video" class="pair-video" playsinline autoplay muted></video>
-          <p id="pair-status" class="pair-status">starting camera…</p>
-        </div>
-        <div class="card">
-          <p class="note">No camera, or this browser doesn't support BarcodeDetector? Paste the QR payload:</p>
-          <input id="pair-paste" type="text" placeholder="flagship://desktop/…" autocomplete="off" />
-          <button id="pair-paste-go" class="full-width mt-2">Confirm pairing</button>
-        </div>
-        <button class="secondary full-width mt-2" id="pair-cancel">Cancel</button>
-      </section>
     </main>
     <footer class="app-patent-note">Flagship · Patent Pending</footer>
 

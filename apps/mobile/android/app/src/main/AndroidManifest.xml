@@ -35,8 +35,8 @@
                  pairing (Phase 3b /join). autoVerify needs the
                  /.well-known/assetlinks.json on flagshipserver.com to
                  list this app's package + signing cert (operator
-                 follow-up). The flagship:// scheme is the in-app
-                 fallback that needs no verification. -->
+                 follow-up). Older builds' flagship:// links (the
+                 filters below) still open. -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -69,9 +69,8 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="flagship" android:host="join" />
             </intent-filter>
-            <!-- flagship://transfer?o=<b64url> — the custom-scheme twin of the
-                 /transfer take-over universal link (no App-Links verification
-                 needed; the in-app fallback for pasted / non-https offers). -->
+            <!-- Older builds' flagship://transfer?o=<b64url>, the custom-scheme
+                 twin of the /transfer take-over link. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -84,10 +83,9 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="flagship" android:host="share" />
             </intent-filter>
-            <!-- #92 — service-access invite "open in app" hand-off
-                 (flagship://invite?server=<host>&k=<secret>). The box's
-                 /invite page offers this; Android drops the URL fragment from
-                 App-Links so the secret rides a query param. -->
+            <!-- #92 — older box /invite pages' "open in app" hand-off
+                 (flagship://invite?server=<host>&k=<secret>); Android drops the
+                 URL fragment from App-Links so the secret rides a query param. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -96,9 +94,7 @@
             </intent-filter>
             <!-- Web-experience gating — the visitor authorizes a browser's
                  QR-login for a restricted service's WEBSITE
-                 (older knock pages: flagship://access?server=…&svc=…&ref=…&page=…). The box's
-                 knock page offers this as the same-device "Access site"
-                 button (and a QR for cross-device). -->
+                 (older knock pages: flagship://access?server=…&svc=…&ref=…&page=…). -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />

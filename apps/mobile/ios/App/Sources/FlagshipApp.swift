@@ -547,6 +547,7 @@ struct FlagshipApp: App {
                 .onAppear {
                     Self.applySmokeModeIfRequested(appState, linker: linker, operations: operations, trust: trust, privacy: privacy)
                     appDelegate.linker = linker
+                    linker.makeCurrent()
                     WatchBridge.shared.activate(client: activeClient)
                     // Wire the FlagshipCore security-alerts bridge → the
                     // App-target publisher so the boot-approval + audit

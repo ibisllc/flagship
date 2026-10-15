@@ -17,18 +17,11 @@ import type { PushPlatform, PushTokenStore } from "./pushRelay.js";
  *   1. Replace its push token (the new device has a fresh APNs/FCM token).
  *   2. Get back the list of servers that were registered to this user, so
  *      it can re-pair with each.
- *   3. Trigger a side-effect to revoke any paired-desktop sessions (so a
- *      thief who has the OLD phone can't continue browsing).
  */
 export interface AccountRecoveryOptions {
   registry: ServerRegistry;
   pushTokenStore: PushTokenStore;
   resolveUserIrk: (userId: string) => Uint8Array | null | Promise<Uint8Array | null>;
-  /**
-   * Optional: revoke all paired desktop sessions for this user. Plug in the
-   * desktop-pair store from `desktopPair.ts`.
-   */
-  revokeAllDesktopSessions?: (irkPub: Uint8Array) => Promise<number> | number;
   /** Replay window. Default 5 min. */
   maxAgeMs?: number;
   now?: () => number;
@@ -110,12 +103,6 @@ export function registerAccountRecovery(app: FastifyInstance, opts: AccountRecov
       registeredAt: now(),
     });
 
-    let desktopSessionsRevoked = 0;
-    if (opts.revokeAllDesktopSessions) {
-      const v = await opts.revokeAllDesktopSessions(irkPub);
-      desktopSessionsRevoked = typeof v === "number" ? v : 0;
-    }
-
     const servers = opts.registry.listForUser(r.userId).map((s) => ({
       serverId: s.serverId,
       stkPub: bytesToHex(s.stkPub),
@@ -128,7 +115,6 @@ export function registerAccountRecovery(app: FastifyInstance, opts: AccountRecov
     return {
       ok: true,
       servers,
-      desktopSessionsRevoked,
     };
   });
 }

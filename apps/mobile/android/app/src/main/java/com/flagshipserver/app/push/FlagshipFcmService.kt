@@ -35,12 +35,11 @@ class FlagshipFcmService : FirebaseMessagingService() {
         // (category=="provision-status") is WAKE-ONLY: the foregrounded
         // install-progress screen polls GET /api/order/<serial>/status to
         // drive the UI, so the service just renders the standard
-        // notification (title/body/deepLink already in `data`, pointing at
-        // flagship://install-progress). We still parse it so a missing
-        // deepLink can be synthesized below.
+        // notification. The Worker's deepLink (`…/app/install-progress`) names
+        // no order, so the tap target is rebuilt with this push's serial.
         val provisionEvent = ProvisionStatusPush.parse(data)
-        if (provisionEvent != null && data["deepLink"].isNullOrEmpty()) {
-            data["deepLink"] = "flagship://install-progress"
+        if (provisionEvent != null) {
+            data["deepLink"] = ProvisionStatusPush.deepLink(provisionEvent)
         }
 
         // Boot-secret RELAY — a `secret-request` push means the user's box
@@ -62,7 +61,7 @@ class FlagshipFcmService : FirebaseMessagingService() {
                 // Route into the v2 sealed-key RELAY approval list (the phone
                 // fetches + re-verifies the pending request(s) on open; the
                 // push carries no secret, so no per-id link is needed).
-                data["deepLink"] = "flagship://secret-requests"
+                data["deepLink"] = com.flagshipserver.app.core.Endpoints.appRoute("secret-requests")
             }
         }
 
@@ -132,7 +131,7 @@ class FlagshipFcmService : FirebaseMessagingService() {
         /**
          * #91 — raise an app-initiated LOCAL notification that an AI build chat
          * is waiting on the owner. Value-free copy (driven only by the pending
-         * tool kind). The tap intent carries `flagship://vibecode/<sessionId>`,
+         * tool kind). The tap intent carries `https://<control host>/app/vibecode/<sessionId>`,
          * so it routes to [com.flagshipserver.app.core.DeepLink.VibeCodeChat]
          * exactly like a real FCM `vibecode-needs-you` wake. Best-effort: if the
          * POST_NOTIFICATIONS permission isn't granted the system drops it
@@ -140,7 +139,7 @@ class FlagshipFcmService : FirebaseMessagingService() {
          */
         fun showAiChatNotification(context: Context, sessionId: String, isEnvVar: Boolean) {
             ensureChannel(context)
-            val deepLink = "flagship://vibecode/$sessionId"
+            val deepLink = com.flagshipserver.app.core.Endpoints.appRoute("vibecode/$sessionId")
             val intent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
                 data = deepLink.toUri()

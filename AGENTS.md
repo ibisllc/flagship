@@ -491,9 +491,13 @@ allowances (1M / 5M / 20M a month) are placeholders. `feat/custom-names`'
   (compaction, model choice, attachments, `unpdf`); iOS/Android store builds.
 - **App links are https (2026-10-14).** Every QR or shared link is
   `https://<control apex>/<path>` (Worker `APP_LINK_PATHS`: join, share,
-  transfer, qr, remote, builder, access, invite-accept); a bearer secret rides
-  the fragment (share). `flagship://` is only for in-app links (widgets, push,
-  intents); parsers still read the old `flagship://` forms. Without the app the
+  transfer, qr, remote, builder, access, invite-accept, plus `/app/<route>` for
+  any other app screen: widgets, Siri intents, push `deepLink`s, e.g.
+  `/app/account/security`); a bearer secret rides the fragment (share).
+  Nothing emits `flagship://` any more (MCP resource names aside, which aren't
+  links); parsers still read the old forms. The old desktop QR login
+  (`login.html`, `/deck`, `flagship://desktop`, `/api/desktop/pair`,
+  `/api/qr`) is gone; remote.flagshipserver.com replaced it. Without the app the
   Worker serves `apps/web/public/open/` at the same URL (store buttons, then an
   opt-in webapp link) instead of 308ing into the webapp origin, which an
   installed Android webapp claimed. Store listings live only in

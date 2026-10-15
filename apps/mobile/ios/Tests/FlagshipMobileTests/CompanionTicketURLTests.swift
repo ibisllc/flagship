@@ -1,54 +1,23 @@
 import XCTest
 @testable import FlagshipCore
 
-/// P14 — verifies the exact `https://webapp.flagshipserver.com/?companion=...`
-/// shape the QR encodes + that the base64url-no-padding payload round-
-/// trips back to the original envelope. The webapp + Android decoders
-/// MUST be byte-compatible with this encoder.
+/// P14 — the `https://webapp.flagshipserver.com/?companion=...` shape parses
+/// back to its envelope, and the base64url-no-padding helpers round-trip.
 final class CompanionTicketURLTests: XCTestCase {
 
-    func test_build_emitsExpectedHostAndPath() {
-        let url = CompanionTicketURL.build(
-            ticketId: "tk-abc",
-            ticketSecret: "sek",
-            podBaseUrl: "https://home.harry.flagship.services",
-            username: "harry"
-        )
-        XCTAssertNotNil(url)
-        XCTAssertTrue(url!.hasPrefix("https://webapp.flagshipserver.com/?companion="))
+    private func companionURL(_ env: CompanionTicketURL.Envelope) throws -> String {
+        let json = try JSONEncoder().encode(env)
+        return "https://\(CompanionTicketURL.webappHost)/?companion=\(CompanionTicketURL.base64URLNoPadding(json))"
     }
 
-    func test_build_payloadIsBase64URLNoPadding() {
-        let url = CompanionTicketURL.build(
-            ticketId: "tk-abc",
-            ticketSecret: "sek",
-            podBaseUrl: "https://home.harry.flagship.services",
-            username: "harry"
-        )!
-        let comps = URLComponents(string: url)!
-        let value = comps.queryItems!.first(where: { $0.name == "companion" })!.value!
-        // No padding.
-        XCTAssertFalse(value.contains("="), "base64url must omit padding")
-        // No `+` or `/` (RFC 4648 §5).
-        XCTAssertFalse(value.contains("+"), "base64url must use `-` not `+`")
-        XCTAssertFalse(value.contains("/"), "base64url must use `_` not `/`")
-        // Must decode back to JSON.
-        XCTAssertNotNil(CompanionTicketURL.decodeBase64URLNoPadding(value))
-    }
-
-    func test_build_roundTripsViaURLComponents_parsesJSONIdentically() throws {
+    func test_parse_roundTripsAnEncodedEnvelope() throws {
         let original = CompanionTicketURL.Envelope(
             ticketId: "tk-12345678",
             ticketSecret: "0123456789abcdef0123456789abcdef",
             podBaseUrl: "https://home.harry.flagship.services",
             username: "harry"
         )
-        let url = CompanionTicketURL.build(
-            ticketId: original.ticketId,
-            ticketSecret: original.ticketSecret,
-            podBaseUrl: original.podBaseUrl,
-            username: original.username
-        )!
+        let url = try companionURL(original)
         let parsed = CompanionTicketURL.parse(url)
         XCTAssertEqual(parsed, original)
     }
@@ -60,12 +29,7 @@ final class CompanionTicketURLTests: XCTestCase {
             podBaseUrl: "https://demouser734759.flagship.services",
             username: "demouser734759"
         )
-        let url = CompanionTicketURL.build(
-            ticketId: original.ticketId,
-            ticketSecret: original.ticketSecret,
-            podBaseUrl: original.podBaseUrl,
-            username: original.username
-        )!
+        let url = try companionURL(original)
         let parsed = CompanionTicketURL.parse(url)!
         XCTAssertEqual(parsed.ticketId, original.ticketId)
         XCTAssertEqual(parsed.ticketSecret, original.ticketSecret)

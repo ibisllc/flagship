@@ -67,10 +67,20 @@ object Endpoints {
         get() = "$scheme://$controlHost"
 
     /** True for the control apex or its `www.` twin, the hosts our https App
-     *  Links (`/remote`, `/builder`, `/access`, `/invite-accept`) arrive on. */
+     *  Links (`/join`, `/remote`, `/builder`, `/access`, `/invite-accept`, `/app/…`) arrive on. */
     fun isControlHost(host: String?): Boolean {
         val h = host?.lowercase() ?: return false
         return h == controlHost || h == "www.$controlHost"
+    }
+
+    /** An in-app destination as an App Link, `https://flagshipserver.com/app/<route>[?query]`
+     *  (older builds emitted `flagship://<route>[?query]`); [route] may carry more
+     *  path, e.g. `vibecode/<id>`. */
+    fun appRoute(route: String, query: Map<String, String> = emptyMap()): String {
+        val q = query.entries.joinToString("&") {
+            "${java.net.URLEncoder.encode(it.key, "UTF-8")}=${java.net.URLEncoder.encode(it.value, "UTF-8")}"
+        }
+        return "$controlBaseUrl/app/$route" + if (q.isEmpty()) "" else "?$q"
     }
 
     /** A sub-origin of the control apex, e.g. `https://boot.flagshipserver.com`. */

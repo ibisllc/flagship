@@ -153,11 +153,9 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
       "/adapters.html",
       "/blog/",
       "/coming-soon.html",
-      "/deck/",
       "/docs/",
       "/faq.html",
       "/help.html",
-      "/login.html",
       "/open-source.html",
       "/privacy.html",
       "/security.html",
@@ -237,13 +235,6 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     const r = await app.inject({ method: "GET", url: "/security.html" });
     expect(r.statusCode).toBe(200);
     expect(r.body).toMatch(/<section id="report">[\s\S]*<form id="report-form">/);
-  });
-
-  it("login page CTA continues to the deck (not the legacy /app.html path)", async () => {
-    const app = buildServer();
-    const r = await app.inject({ method: "GET", url: "/login.html" });
-    expect(r.body).toContain('/deck/?session=');
-    expect(r.body).not.toMatch(/href="\/app\.html\?session/);
   });
 
   for (const path of ["/faq.html", "/privacy.html", "/terms.html", "/help.html", "/docs/index.html", "/disambiguate.html"]) {

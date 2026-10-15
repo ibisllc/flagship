@@ -1,18 +1,18 @@
 import AppIntents
 import Foundation
-import UIKit
+import FlagshipCore
 
 /// Intents the system exposes via Siri, Spotlight, Shortcuts, and
 /// (on supported devices) Action Button / Focus filters.
 ///
-/// All three intents open the app at the right destination via the
-/// existing flagship:// deep-link scheme — the actual work (BAK
-/// signing, network round-trip) stays in the app so the Secure
+/// The intents that open the app hand their destination straight to the
+/// shell's DeepLinker (`DeepLinker.deliver`) rather than opening a URL: an
+/// https app link opened from inside the app could go to Safari. The actual
+/// work (BAK signing, network round-trip) stays in the app so the Secure
 /// Enclave never has to be reached from an extension's process.
 ///
-/// The deep-link layer (DeepLinker) re-routes on the next view cycle,
-/// so even a backgrounded app picks up the intent's destination as
-/// soon as the user returns to focus.
+/// The shell routes the link on the next view cycle, and one delivered
+/// before the shell exists waits for it.
 
 // MARK: - Approve unlock
 
@@ -32,10 +32,7 @@ struct ApproveUnlockIntent: AppIntent {
     static var openAppWhenRun: Bool = true
 
     func perform() async throws -> some IntentResult {
-        await MainActor.run {
-            let url = URL(string: "flagship://secret-requests")!
-            UIApplication.shared.open(url)
-        }
+        await MainActor.run { DeepLinker.deliver(.secretRequests) }
         return .result()
     }
 }
@@ -57,10 +54,8 @@ struct ShowPodIntent: AppIntent {
     var pod: PodEntity
 
     func perform() async throws -> some IntentResult {
-        await MainActor.run {
-            let url = URL(string: "flagship://server?podId=\(pod.id)")!
-            UIApplication.shared.open(url)
-        }
+        let podId = pod.id
+        await MainActor.run { DeepLinker.deliver(.serverDetail(podId: podId)) }
         return .result()
     }
 }

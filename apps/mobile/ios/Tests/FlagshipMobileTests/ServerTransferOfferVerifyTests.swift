@@ -96,10 +96,9 @@ final class ServerTransferOfferVerifyTests: XCTestCase {
         XCTAssertEqual(reparsed, qr)
     }
 
-    func testCustomSchemeLinkRoundTripsThroughDeepLink() throws {
+    func testLegacyCustomSchemeLinkStillParses() throws {
         let qr = makeOffer()
-        let link = try ServerTransferFlow.transferCustomSchemeLink(qr)
-        XCTAssertTrue(link.hasPrefix("flagship://transfer?o="))
+        let link = "flagship://transfer?o=\(try ServerTransferFlow.encodeOfferParam(qr))"
         let parsed = DeepLink.parse(URL(string: link)!)
         guard case let .transferOffer(offerJSON) = parsed else {
             return XCTFail("expected .transferOffer, got \(String(describing: parsed))")
@@ -119,7 +118,7 @@ final class ServerTransferOfferVerifyTests: XCTestCase {
 
     func testParsedPastedTransferLinkResolves() {
         let qr = makeOffer()
-        let link = try! ServerTransferFlow.transferCustomSchemeLink(qr)
+        let link = try! ServerTransferFlow.transferUniversalLink(qr)
         // Settings → Process URL funnels a pasted link through the same parser.
         guard case .transferOffer = DeepLink.parsePastedString("  \(link)  ") else {
             return XCTFail("pasted transfer link should resolve to .transferOffer")

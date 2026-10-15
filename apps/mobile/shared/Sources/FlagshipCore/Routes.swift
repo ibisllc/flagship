@@ -67,7 +67,7 @@ public enum AppsRoute: Hashable, Sendable {
     case vibeCodeDescribe
     case vibeCodeGenerating(sessionId: String)
     /// W10 — vibe-code chat surface. Reached via push deep link
-    /// `flagship://vibecode/<sessionId>` when the AI needs the owner.
+    /// `https://flagshipserver.com/app/vibecode/<sessionId>` when the AI needs the owner.
     case vibeCodeChat(sessionId: String)
     /// W10 — per-app env-var KV editor. Reached from the per-service
     /// detail screen's "Configure environment" menu item.
@@ -178,7 +178,7 @@ public enum SettingsRoute: Hashable, Sendable {
     /// (online/offline) and a Stop (close + remove). Reached from Settings.
     case securedSessions
     /// Web-experience gating — "Process URL": a paste field that takes a
-    /// `flagship://access?…` deeplink (or the raw "Get link" string) from a
+    /// `https://flagshipserver.com/access?…` link (or the raw "Get link" string) from a
     /// box's knock page and routes it into the same KnockAuthorize flow.
     case processUrl
     /// Last-device account-DEATH ceremony (docs/account-deletion-and-name-reclaim.md

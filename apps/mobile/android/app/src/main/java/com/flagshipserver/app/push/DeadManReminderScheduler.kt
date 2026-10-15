@@ -13,8 +13,10 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
+import androidx.core.net.toUri
 import com.flagshipserver.app.MainActivity
 import com.flagshipserver.app.core.DeadManReminders
+import com.flagshipserver.app.core.Endpoints
 import kotlin.math.abs
 
 /** Re-posts a single dead-man affirmation reminder as a notification. The
@@ -27,7 +29,7 @@ class DeadManReminderReceiver : BroadcastReceiver() {
 
         val launch = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-            putExtra("deepLink", "flagship://deadman/$serverDomain")
+            data = Endpoints.appRoute("deadman/$serverDomain").toUri()
         }
         val pending = PendingIntent.getActivity(
             context,

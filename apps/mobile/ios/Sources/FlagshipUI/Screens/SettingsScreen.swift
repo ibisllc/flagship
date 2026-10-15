@@ -106,7 +106,7 @@ public struct SettingsScreen: View {
     /// Web-experience gating — open "Open secured sessions" (browser QR-login
     /// sessions this phone has authorized).
     var onOpenSecuredSessions: () -> Void = {}
-    /// Web-experience gating — open "Process URL" (paste a `flagship://access`
+    /// Web-experience gating — open "Process URL" (paste an `https://flagshipserver.com/access`
     /// link / "Get link" string to authorize a site).
     var onOpenProcessUrl: () -> Void = {}
     /// P14 Phase 2 — open the Companion-requests inbox. The badge count

@@ -4,7 +4,7 @@
 // CANONICAL PAYLOAD (LOCKED DESIGN §2.3). The Worker's `fanOutStatusPush`
 // (packages/control-plane/src/provisionStatus.ts) emits:
 //
-//   { category:"provision-status", title, body, deepLink:"flagship://…",
+//   { category:"provision-status", title, body, deepLink:"https://flagshipserver.com/app/install-progress",
 //     meta: { kind:"provision-status", serial, phase, detail? } }
 //
 // FCM `data` maps are flat string→string, and the Worker's pushBridge
@@ -56,4 +56,12 @@ object ProvisionStatusPush {
             detail = detail,
         )
     }
+
+    /** The tap target: `…/app/install-progress?serial=<serial>`, so the tap
+     *  opens this order's progress rather than just Home. */
+    fun deepLink(event: ProvisionStatusPushEvent): String =
+        com.flagshipserver.app.core.Endpoints.appRoute(
+            "install-progress",
+            if (event.serial.isEmpty()) emptyMap() else mapOf("serial" to event.serial),
+        )
 }

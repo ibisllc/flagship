@@ -49,12 +49,3 @@ export async function scanWithCamera(videoEl, opts = {}) {
     stop();
   }
 }
-
-/**
- * Parse `flagship://desktop/<sessionId>/<desktopPubKeyHex>`.
- */
-export function parseQrPayload(text) {
-  const m = String(text).trim().match(/^flagship:\/\/desktop\/([0-9a-f]{16})\/([0-9a-f]{64,})$/i);
-  if (!m) throw new Error("payload doesn't match flagship://desktop/<sid>/<pubkey>");
-  return { sessionId: m[1].toLowerCase(), desktopPubKeyHex: m[2].toLowerCase() };
-}

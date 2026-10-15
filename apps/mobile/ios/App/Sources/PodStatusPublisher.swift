@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import WidgetKit
 import FlagshipCore
+import FlagshipAPI
 
 /// Watches AppState.pods + currentUser and writes a PodStatusSnapshot
 /// to the App Group container so PodStatusWidget can render without
@@ -27,7 +28,8 @@ struct PodStatusPublisher {
                     statusRaw: p.status.rawValue,
                     isLeader: p.podId == app.leaderPodId
                 )
-            }
+            },
+            controlHost: Endpoints.controlHost
         )
         snap.write()
         WidgetCenter.shared.reloadAllTimelines()

@@ -565,7 +565,7 @@ public struct HomeTab: View {
 }
 
 /// Slice C — mounts `TransferAcquirerScreen` with a transfer offer PRE-INGESTED
-/// (from a scanned/deep-linked `flagship://transfer?o=` or universal link). The
+/// (from a scanned/deep-linked `https://flagshipserver.com/transfer?o=` link). The
 /// VM verifies the giver-IRK signature + expiry on ingest; an invalid/expired
 /// offer lands on the screen's `.failed` state (no confirm ever shown). The
 /// claim itself rides a severe type-to-confirm + biometric inside the screen.

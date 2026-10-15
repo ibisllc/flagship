@@ -163,7 +163,10 @@
 //       ask to be told when a shared server needs to start (a content-free
 //       `share-start-up` push), update it at "Can manage", and sees which
 //       apps are members-only; the owner's unlock opt-in says what it hands over.
-const SHELL_VERSION = "v78";
+//  v79: notifications that name an app screen (https://<apex>/app/<route>)
+//       open the matching webapp view; the old desktop-pairing view
+//       (views/pair.js, flagship://desktop QR) is gone.
+const SHELL_VERSION = "v79";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -242,7 +245,6 @@ const OPTIONAL_SHELL = [
   "/views/wizard.js",
   "/views/unlock.js",
   "/views/home.js",
-  "/views/pair.js",
   "/views/settings.js",
   "/views/pod-pair.js",
   "/views/server-detail.js",
@@ -561,10 +563,20 @@ self.addEventListener("push", (event) => {
 //
 // If no deepLink is set, the existing behavior holds: focus or open
 // the root.
+// Push payloads name app screens as https://<apex>/app/<route> (older
+// servers sent flagship://<route>). The phone apps route those; here the
+// install-progress view has its own webapp route and the rest open home.
+function webappDeepLink(link) {
+  if (typeof link !== "string") return null;
+  const m = link.match(/^(?:https:\/\/[^/]+\/app\/|flagship:\/\/)([^?#]*)/i);
+  if (!m) return link;
+  return m[1] === "install-progress" ? "/?view=install-progress" : "/";
+}
+
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const data = event.notification.data;
-  const deepLink = data && typeof data.deepLink === "string" ? data.deepLink : null;
+  const deepLink = webappDeepLink(data && data.deepLink);
   event.waitUntil(
     (async () => {
       const all = await self.clients.matchAll({

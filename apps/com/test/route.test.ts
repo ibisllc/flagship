@@ -1157,6 +1157,13 @@ describe("app links — open-in-app page on the control apex", () => {
     }
   });
 
+  it("/app/<route> (any screen in the app) serves the open-in-app page", async () => {
+    for (const path of ["/app/settings/two-factor", "/app/account/security?u=alice", "/app/vibecode/abc"]) {
+      const r = await route(new Request(`https://flagshipserver.com${path}`), makeEnv());
+      expect(await r.text(), path).toBe("asset:/open/index.html");
+    }
+  });
+
   it("/joined (a lookalike) is not an app link", async () => {
     const r = await route(new Request("https://flagshipserver.com/joined"), makeEnv());
     expect(await r.text()).toBe("asset:/coming-soon.html");

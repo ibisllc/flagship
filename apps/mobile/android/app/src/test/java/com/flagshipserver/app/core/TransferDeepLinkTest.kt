@@ -1,6 +1,6 @@
 // Slice C — parsing the transfer take-over deep links. Both the control-apex
 // universal link (`https://flagshipserver.com/transfer?o=<b64url>`) and the
-// custom-scheme twin (`flagship://transfer?o=…`) resolve to DeepLink.TransferOffer
+// older builds' custom-scheme twin (`flagship://transfer?o=…`) resolve to DeepLink.TransferOffer
 // carrying the decoded offer JSON. Uri.parse needs Robolectric.
 
 package com.flagshipserver.app.core
@@ -34,10 +34,13 @@ class TransferDeepLinkTest {
         assertEquals(DeepLink.TransferOffer(json), link)
     }
 
-    @Test fun customSchemeParsesToTransferOffer() {
+    private fun legacySchemeUrl(qr: ServerTransferFlow.OfferQR) =
+        "flagship://transfer?o=${ServerTransferFlow.encodeOfferParam(qr)}"
+
+    @Test fun legacyCustomSchemeParsesToTransferOffer() {
         val qr = offerQr()
         val json = ServerTransferFlow.encodeQR(qr)
-        val link = DeepLink.parse(Uri.parse(ServerTransferFlow.offerCustomSchemeUrl(qr)))
+        val link = DeepLink.parse(Uri.parse(legacySchemeUrl(qr)))
         assertEquals(DeepLink.TransferOffer(json), link)
     }
 
@@ -49,7 +52,7 @@ class TransferDeepLinkTest {
     }
 
     @Test fun ingestedOfferJson_verifiesAndCarriesTheDomain() {
-        val link = DeepLink.parse(Uri.parse(ServerTransferFlow.offerCustomSchemeUrl(offerQr())))
+        val link = DeepLink.parse(Uri.parse(legacySchemeUrl(offerQr())))
         val json = (link as DeepLink.TransferOffer).offerJson
         val parsed = ServerTransferFlow.parseQR(json)
         assertEquals(host, parsed.serverDomain)

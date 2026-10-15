@@ -319,7 +319,7 @@ describe("v1.2 Plan B Phase 5 — real-push fan-out", () => {
     // credential use and points at reviewing it.
     expect(fires[0]!.body).toMatch(/recovery credentials.*taking over/i);
     expect(fires[0]!.body).not.toMatch(/object/i);
-    expect(fires[0]!.deepLink).toMatch(/^flagship:\/\/account\/re-pair\?u=alice/);
+    expect(fires[0]!.deepLink).toBe("https://flagshipserver.com/app/account/re-pair?u=alice");
     // Bit was stamped after the successful fan-out.
     const after = await s.pendingRePairs.get(USERNAME);
     expect(after?.alertsFiredBitmap).toBe(ALERT_BIT_T0);

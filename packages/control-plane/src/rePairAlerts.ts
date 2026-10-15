@@ -50,6 +50,7 @@ import type {
 } from "@flagship/storage";
 import { recordAuditEvent } from "./auditEvents.js";
 import type { V12PushFanout } from "./totp.js";
+import { appRouteLink } from "./appLink.js";
 
 // NOTE: these numeric values are a PERSISTED bitfield
 // (`pending_re_pairs.alerts_fired_bitmap` in D1 / InMemory). Never
@@ -270,9 +271,7 @@ function buildDefaultFirePush(
               ? "Account takeover in 1 hour"
               : "Account recovery started",
             body,
-            deepLink: `flagship://account/re-pair?u=${encodeURIComponent(
-              req.username.toLowerCase(),
-            )}`,
+            deepLink: appRouteLink("account/re-pair", { u: req.username.toLowerCase() }),
             meta: {
               eventKind: req.category,
               bit: req.bit,

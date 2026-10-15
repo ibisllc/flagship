@@ -24,7 +24,7 @@ class ProvisionPhasePushTest {
                 "phase" to "registering",
                 "title" to "Registering with Flagship",
                 "body" to "Your server is checking in with Flagship.",
-                "deepLink" to "flagship://install-progress",
+                "deepLink" to "https://flagshipserver.com/app/install-progress",
             )
         )
         assertEquals("registering", e?.phase)
@@ -67,5 +67,16 @@ class ProvisionPhasePushTest {
         // provision-status but no phase string → not parseable.
         assertNull(ProvisionStatusPush.parse(mapOf("category" to "provision-status", "serial" to "S")))
         assertNull(ProvisionStatusPush.parse(emptyMap()))
+    }
+
+    @Test fun deepLink_namesTheOrder() {
+        assertEquals(
+            "https://flagshipserver.com/app/install-progress?serial=ORDER-123",
+            ProvisionStatusPush.deepLink(ProvisionStatusPushEvent(serial = "ORDER-123", phase = "live")),
+        )
+        assertEquals(
+            "https://flagshipserver.com/app/install-progress",
+            ProvisionStatusPush.deepLink(ProvisionStatusPushEvent(serial = "", phase = "live")),
+        )
     }
 }

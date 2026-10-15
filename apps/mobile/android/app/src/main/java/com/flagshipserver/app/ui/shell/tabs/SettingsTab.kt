@@ -66,6 +66,17 @@ fun SettingsTab() {
             deepLinker.consume()
             nav.navigate("companion-dock?link=" + URLEncoder.encode(link.rawLink, "UTF-8"))
         }
+        val accountRoute = when (link) {
+            DeepLink.AccountSecurity -> "account-security"
+            DeepLink.TrustedDevices -> "trusted-devices"
+            DeepLink.Settings -> "settings-root"
+            else -> null
+        }
+        if (accountRoute != null) {
+            deepLinker.consume()
+            nav.popBackStack("settings-root", inclusive = false)
+            if (accountRoute != "settings-root") nav.navigate(accountRoute)
+        }
     }
     NavHost(navController = nav, startDestination = "settings-root") {
         composable("settings-root") { SettingsScreen(nav) }
@@ -99,7 +110,7 @@ fun SettingsTab() {
         ) { entry ->
             val sid = URLDecoder.decode(entry.arguments?.getString("sid") ?: "", "UTF-8")
             val pk = URLDecoder.decode(entry.arguments?.getString("pk") ?: "", "UTF-8")
-            val link = JoinLink.parse("flagship://join?sid=$sid&pk=$pk")
+            val link = JoinLink.parse("https://${JoinLink.HOST}${JoinLink.PATH}?sid=$sid&pk=$pk")
             JoinDeviceScreen(
                 initialLink = link,
                 onJoined = { nav.popBackStack("settings-root", inclusive = false) },
@@ -118,7 +129,7 @@ fun SettingsTab() {
         composable("profiles") { ProfilesScreen(nav) }
         // Web-experience gating — the browser QR-logins this phone authorized.
         composable("secured-sessions") { SecuredSessionsScreen(nav) }
-        // Web-experience gating — paste a flagship://access link / "Get link".
+        // Web-experience gating — paste an https://flagshipserver.com/access link / "Get link".
         composable("process-url") { ProcessUrlScreen(nav) }
         // The authorize target ProcessUrl hands off to (same route shape as the
         // ServicesTab deep-link target; svc is an optional query arg).

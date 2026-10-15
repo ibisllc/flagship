@@ -36,7 +36,7 @@ public struct RootShell: View {
     /// gated behind the lock screen until the visitor unlocks (they AID-sign).
     @State private var pendingKnock: KnockTarget?
     /// v2 manual-approve — the AUTHOR finalizing a consumer's acceptance reply
-    /// (`flagship://invite-accept?…`), presented as a full-screen cover.
+    /// (`https://flagshipserver.com/invite-accept?…`), presented as a full-screen cover.
     @State private var pendingAccept: AcceptTarget?
 
     private struct RedeemTarget: Identifiable, Equatable {
@@ -309,7 +309,8 @@ public struct RootShell: View {
         case .serverDetail, .createServer:            return .home
         case .appDetail, .vibeCodeChat, .startVibeCode,
              .appDetailOnServer, .createAppOnServer: return .apps
-        case .recoverySetup, .joinAccount, .companionDockApproval: return .settings
+        case .recoverySetup, .joinAccount, .companionDockApproval,
+             .accountSecurity, .accountDevices: return .settings
         case .transferOffer, .shareServer, .builderPair, .sharedWithMe: return .home
         case .inviteRedeem, .inviteAccept, .knockAuthorize: return selected
         }

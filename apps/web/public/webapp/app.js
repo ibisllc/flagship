@@ -72,7 +72,6 @@ import { initBootstrapView } from "./views/bootstrap.js";
 import { initUnlockView } from "./views/unlock.js";
 import { initPinViews } from "./views/pinLock.js";
 import { initHomeView, enterHome } from "./views/home.js";
-import { initPairView, startPairing } from "./views/pair.js";
 import { initSettingsView, renderProviders } from "./views/settings.js";
 import { initPodPairView, enterPodPair } from "./views/pod-pair.js";
 import { initServerDetailView, enterServerDetail } from "./views/server-detail.js";
@@ -158,7 +157,6 @@ const SUB_VIEW_TABS = {
   "view-home": "home",
   "view-server-detail": "home",
   "view-pod-pair": "home",
-  "view-pair": "home",
   "view-create-server": "home",
   "view-services-list": "apps",
   "view-service-detail": "apps",
@@ -518,13 +516,11 @@ async function boot() {
   initUnlockView();
   initPinViews();
   initHomeView({
-    onPair: () => startPairing(),
     onSettings: async () => {
       show("view-settings");
       await renderProviders();
     },
   });
-  initPairView();
   initSettingsView();
   initPodPairView();
   initServerDetailView();
@@ -590,7 +586,7 @@ async function boot() {
   });
 
   // Home-tab → in-tab nav (the legacy home-grid is gone; what remains
-  // are the two session-row buttons "pair-with-server" + "open-pod-pair").
+  // is the session-row button "open-pod-pair").
   const wire = (id, fn) =>
     $(id)?.addEventListener("click", () => Promise.resolve(fn()).catch((e) => { console.error(e); toast(humanError(e), "err"); }));
   wire("open-pod-pair", enterPodPair);

@@ -1729,8 +1729,7 @@ export async function enterHome() {
   await renderActiveProviderChip();
 }
 
-export function initHomeView({ onPair, onSettings }) {
-  $("pair-with-server")?.addEventListener("click", onPair);
+export function initHomeView({ onSettings }) {
   $("open-settings")?.addEventListener("click", onSettings);
   onAccountReadPausedChange((paused) => $("home-status-paused")?.classList.toggle("hidden", !paused));
 }

@@ -30,11 +30,28 @@ public struct PodStatusSnapshot: Codable, Sendable, Hashable {
     public let username: String?
     public let pods: [Pod]
     public let updatedAt: Date
+    /// The control host the app talks to (a gym build's differs from prod),
+    /// so the widgets' links reach the app's `/app/*` router. Nil in a
+    /// snapshot written before it was recorded.
+    public let controlHost: String?
 
-    public init(username: String? = nil, pods: [Pod] = [], updatedAt: Date = .init()) {
+    public init(username: String? = nil, pods: [Pod] = [], updatedAt: Date = .init(), controlHost: String? = nil) {
         self.username = username
         self.pods = pods
         self.updatedAt = updatedAt
+        self.controlHost = controlHost
+    }
+
+    /// `https://<controlHost>/app/<route>[?query]`, the in-app link the app's
+    /// DeepLink router takes. A twin of `DeepLink.appRouteURL`: the widget
+    /// extension doesn't link FlagshipCore.
+    public func appRouteURL(_ route: String, query: KeyValuePairs<String, String> = [:]) -> URL {
+        var allowed = CharacterSet.urlQueryAllowed
+        allowed.remove(charactersIn: "&=+#?")
+        let q = query
+            .map { "\($0.key)=\($0.value.addingPercentEncoding(withAllowedCharacters: allowed) ?? $0.value)" }
+            .joined(separator: "&")
+        return URL(string: "https://\(controlHost ?? "flagshipserver.com")/app/\(route)\(q.isEmpty ? "" : "?\(q)")")!
     }
 
     /// Empty snapshot — what the widget reads before the app has ever

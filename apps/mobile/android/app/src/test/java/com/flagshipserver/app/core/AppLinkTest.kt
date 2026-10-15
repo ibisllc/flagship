@@ -1,8 +1,9 @@
 // Robolectric tests for AppLink.resolve — the URI → DeepLink
 // translation that MainActivity.handleIntent calls on every inbound
 // intent. Pin the two recognized forms:
-//   1. flagship://<host>?<params>
-//   2. https://flagshipserver.com/app/<host>?<params>
+//   1. https://flagshipserver.com/app/<route>[/<more>]?<params> (what the app
+//      and the Worker's pushes emit)
+//   2. older builds' flagship://<route>[/<more>]?<params>
 
 package com.flagshipserver.app.core
 
@@ -119,5 +120,78 @@ class AppLinkTest {
         // declared scheme is https, but the check is cheap.
         val uri = Uri.parse("http://flagshipserver.com/app/server?podId=p1")
         assertEquals(DeepLink.ServerDetail("p1"), AppLink.resolve(uri))
+    }
+
+    // ── /app/<route>[/<more>] keeps the whole path ───────────────────
+
+    @Test fun appLinkForm_keepsPathSegments() {
+        assertEquals(DeepLink.VibeCodeChat("sess-42"), AppLink.resolve(Uri.parse("https://flagshipserver.com/app/vibecode/sess-42")))
+        assertEquals(DeepLink.VibeCodeChat("sess-42"), AppLink.resolve(Uri.parse("flagship://vibecode/sess-42")))
+    }
+
+    @Test fun appLinkForm_acceptsWwwHost() {
+        assertEquals(DeepLink.ServerDetail("p1"), AppLink.resolve(Uri.parse("https://www.flagshipserver.com/app/server?podId=p1")))
+        assertNull(AppLink.resolve(Uri.parse("https://evil.flagshipserver.com/app/server?podId=p1")))
+    }
+
+    @Test fun appLinkForm_parsedWithoutAppLink() {
+        // Paste surfaces (Process URL) call DeepLink.parse directly.
+        assertEquals(DeepLink.VibeCodeChat("s1"), DeepLink.parse(Uri.parse("https://flagshipserver.com/app/vibecode/s1")))
+    }
+
+    // ── The Worker's push deepLinks ──────────────────────────────────
+
+    @Test fun accountPushLinks_routeToTheirScreens() {
+        val base = "https://flagshipserver.com/app"
+        assertEquals(DeepLink.AccountSecurity, AppLink.resolve(Uri.parse("$base/account/security?u=alice")))
+        assertEquals(DeepLink.TrustedDevices, AppLink.resolve(Uri.parse("$base/account/devices?u=alice")))
+        assertEquals(DeepLink.TrustedDevices, AppLink.resolve(Uri.parse("$base/account/re-pair?u=alice")))
+        assertEquals(DeepLink.AccountSecurity, AppLink.resolve(Uri.parse("$base/settings/two-factor")))
+        // A page this app has no screen for opens the Settings tab.
+        assertEquals(DeepLink.Settings, AppLink.resolve(Uri.parse("$base/account/something-new?u=alice")))
+        assertEquals(DeepLink.Settings, AppLink.resolve(Uri.parse("$base/settings")))
+    }
+
+    @Test fun accountPushLinks_legacySchemeForms() {
+        assertEquals(DeepLink.AccountSecurity, AppLink.resolve(Uri.parse("flagship://account/security?u=alice")))
+        assertEquals(DeepLink.TrustedDevices, AppLink.resolve(Uri.parse("flagship://account/re-pair?u=alice")))
+        assertEquals(DeepLink.AccountSecurity, AppLink.resolve(Uri.parse("flagship://settings/two-factor")))
+    }
+
+    @Test fun installProgress_withAndWithoutSerial() {
+        assertEquals(DeepLink.InstallProgress(), AppLink.resolve(Uri.parse("https://flagshipserver.com/app/install-progress")))
+        assertEquals(
+            DeepLink.InstallProgress("ORDER-1"),
+            AppLink.resolve(Uri.parse("https://flagshipserver.com/app/install-progress?serial=ORDER-1")),
+        )
+        assertEquals(DeepLink.InstallProgress(), AppLink.resolve(Uri.parse("flagship://install-progress")))
+    }
+
+    @Test fun deadman_carriesServerDomain() {
+        assertEquals(
+            DeepLink.Deadman("home.alice.flagship.services"),
+            AppLink.resolve(Uri.parse("https://flagshipserver.com/app/deadman/home.alice.flagship.services")),
+        )
+        assertEquals(
+            DeepLink.Deadman("home.alice.flagship.services"),
+            AppLink.resolve(Uri.parse("flagship://deadman/home.alice.flagship.services")),
+        )
+        assertNull(AppLink.resolve(Uri.parse("https://flagshipserver.com/app/deadman")))
+    }
+
+    // ── What the app itself emits round-trips ────────────────────────
+
+    @Test fun endpointsAppRoute_roundTrips() {
+        assertEquals("https://flagshipserver.com/app/secret-requests", Endpoints.appRoute("secret-requests"))
+        assertEquals(DeepLink.SecretRequests, AppLink.resolve(Uri.parse(Endpoints.appRoute("secret-requests"))))
+        assertEquals(DeepLink.VibeCodeChat("abc"), AppLink.resolve(Uri.parse(Endpoints.appRoute("vibecode/abc"))))
+        assertEquals(
+            DeepLink.Deadman("home.alice.flagship.services"),
+            AppLink.resolve(Uri.parse(Endpoints.appRoute("deadman/home.alice.flagship.services"))),
+        )
+        assertEquals(
+            DeepLink.InstallProgress("A B"),
+            AppLink.resolve(Uri.parse(Endpoints.appRoute("install-progress", mapOf("serial" to "A B")))),
+        )
     }
 }

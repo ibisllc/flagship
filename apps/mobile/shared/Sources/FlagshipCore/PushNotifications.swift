@@ -11,9 +11,10 @@ import FlagshipAPI
 ///     `orders/send` as a `register-push-device/v1` envelope so the
 ///     daemon can deliver Web-Push-style RFC 8291 encrypted payloads
 ///     for unlock approvals.
-///   - On notification tap, parse the `flagship://...` URL out of the
-///     payload (or the `view=...` query) and enqueue it on the shared
-///     DeepLinker for the SwiftUI shell to consume.
+///   - On notification tap, parse the payload's app link (`deepLink`, an
+///     `https://<controlHost>/app/...` URL; older payloads' `flagship_url`)
+///     and enqueue it on the shared DeepLinker for the SwiftUI shell to
+///     consume.
 ///
 /// Real APNs delivery requires an Apple Developer account + APNs key
 /// + the matching `APNS_KEY_ID`/`APNS_BUNDLE_ID` secrets on the Worker
@@ -68,8 +69,14 @@ public final class PushNotifications: NSObject {
     /// owner's approvals list.
     public nonisolated static let shareStartupKind = "share-start-up"
 
-    /// Where a tapped push leads, for the payloads that carry no URL.
+    /// Where a tapped push leads: its app link when it carries one, else
+    /// what its `kind` / `category` names.
     public nonisolated static func link(forPush info: [AnyHashable: Any]) -> DeepLink? {
+        for key in ["deepLink", "flagship_url"] {
+            if let raw = info[key] as? String, let url = URL(string: raw), let link = DeepLink.parse(url) {
+                return link
+            }
+        }
         let kind = info["kind"] as? String
         if kind == shareStartupKind { return .sharedWithMe }
         if (kind ?? info["category"] as? String) == "secret-request" { return .secretRequests }
@@ -164,14 +171,7 @@ extension PushNotifications: UNUserNotificationCenterDelegate {
         // screen so a tap on the notification opens it.
         if let event = ProvisionPhaseBridge.parse(info) {
             ProvisionPhaseBridge.shared.onPhase?(event)
-            if let url = URL(string: "flagship://create-server") {
-                if let link = DeepLink.parse(url) { linker.enqueue(link) }
-            }
-            return
-        }
-        if let urlString = info["flagship_url"] as? String, let url = URL(string: urlString),
-           let link = DeepLink.parse(url) {
-            linker.enqueue(link)
+            linker.enqueue(.createServer)
             return
         }
         // A box waiting to start: the owner's `secret-request` push routes

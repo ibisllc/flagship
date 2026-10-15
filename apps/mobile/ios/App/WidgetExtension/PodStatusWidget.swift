@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Home-screen widget surfacing each pod's online/offline status.
 /// Small variant shows the leader; Medium variant lists up to 4 pods.
-/// Tapping a pod row deep-links into the app via flagship://pod/<id>.
+/// Tapping a pod row opens its page in the app (`/app/server?podId=<id>`).
 ///
 /// The widget reads from the App Group via PodStatusSnapshot — the
 /// main app publishes whenever AppState.pods changes. No network
@@ -91,7 +91,7 @@ private struct PodStatusWidgetView: View {
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .widgetURL(URL(string: "flagship://server?podId=\(leader.podId)"))
+            .widgetURL(entry.snapshot.appRouteURL("server", query: ["podId": leader.podId]))
         } else {
             emptyState
         }
@@ -104,7 +104,7 @@ private struct PodStatusWidgetView: View {
         } else {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(entry.snapshot.pods.prefix(4)) { pod in
-                    Link(destination: URL(string: "flagship://server?podId=\(pod.podId)")!) {
+                    Link(destination: entry.snapshot.appRouteURL("server", query: ["podId": pod.podId])) {
                         HStack(spacing: 8) {
                             StatusDot(statusRaw: pod.statusRaw)
                             Text(pod.name).font(.subheadline.weight(.medium))

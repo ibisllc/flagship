@@ -1,7 +1,7 @@
 // Friend-side redeem screen (docs/service-access-gating.md §v2 hardening). Mirror
 // of iOS InviteRedeemScreen + the webapp views/invite-redeem.js. Reached from a
 // `https://<server>.<user>.flagship.services/invite#<secret>&a=<authorAID>[&i=<inviteId>]`
-// universal link (or the flagship://invite scheme). "Accept" signs the redeem
+// universal link (or older box pages' flagship://invite). "Accept" signs the redeem
 // with the friend's PER-AUTHOR contact AID against the box; an AUTO invite
 // confirms immediately, an APPROVE (manual) invite produces a confirmation reply
 // the friend sends back to the author to finalize.
