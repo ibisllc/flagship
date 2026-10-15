@@ -105,8 +105,14 @@ by `boxProxyCredentialsError` with the same vectors everywhere.
      `credentials` keeps the stored ones when host, port and kind are
      unchanged; otherwise it is refused (`400`, "Enter the proxy's username
      and password").
-   - Server detail (`/api/screens/server-detail`) carries the same `proxy`
-     summary so the page can show it without a second call.
+   - Server detail (`/api/screens/server-detail`) carries the same summary as
+     `outboundProxy` so the page can show it without a second call; older
+     boxes omit it and the apps hide the section.
+   - The webapp signs with the unlocked session's key and shows no separate
+     prompt (its signer takes no reason text, like the access-list save); the
+     phones prompt. On an admin-root account, creating a server with a proxy
+     prompts twice on the phones (the IRK for the recipe, the admin root for
+     the proxy order).
 
 **No `.com` deposit in phase 1, on purpose.** The server order uses a `.com`
 lane because boxes must agree on it even when the owner's phone is far away.
