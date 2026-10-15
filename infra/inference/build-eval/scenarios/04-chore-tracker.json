@@ -1,0 +1,24 @@
+{
+  "id": "chore-tracker",
+  "size": "medium",
+  "title": "Family chore tracker",
+  "name": "chores",
+  "visibility": "just-me",
+  "prompt": "A chore tracker for our family of four. I (the owner) and my partner set chores and who does them each week; the kids see their own chores and tick them off. Each done chore earns points, and there is a weekly leaderboard. The kids should not be able to create or reassign chores.",
+  "owner": {
+    "answers": [
+      "My partner and I are managers, the kids are members. Weeks start on Monday.",
+      "Points: 1 to 5 per chore, we choose when creating it."
+    ],
+    "envVars": "declined"
+  },
+  "edits": [
+    "Let managers mark a chore as recurring every week so it is re-created automatically on Monday.",
+    "Show each kid a history of their last four weeks of points.",
+    "Add a 'swap request': a kid can ask to swap a chore with a sibling, and a manager approves or declines it."
+  ],
+  "mock": {
+    "kind": "node-pg",
+    "ask": true
+  }
+}

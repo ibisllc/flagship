@@ -1,0 +1,24 @@
+{
+  "id": "kanban-realtime",
+  "size": "large",
+  "title": "Realtime kanban board",
+  "name": "kanban",
+  "visibility": "just-me",
+  "prompt": "A kanban board for my small team: boards with columns (To do, Doing, Done by default, editable), cards with title, description, assignee and due date, drag and drop between columns, and live updates: when one person moves a card, everyone else sees it move without reloading. Comments on cards. Managers can create and archive boards; members can create and move cards.",
+  "owner": {
+    "answers": [
+      "Up to 10 people. Use the sign-in Flagship gives us.",
+      "Live updates are a must, the rest can be simple."
+    ],
+    "envVars": "declined"
+  },
+  "edits": [
+    "Add labels with colours to cards and a filter by label.",
+    "Show an activity log per board: who moved or edited which card and when.",
+    "Add WIP limits per column: a column turns red when it has more cards than its limit."
+  ],
+  "mock": {
+    "kind": "node-pg",
+    "break": true
+  }
+}

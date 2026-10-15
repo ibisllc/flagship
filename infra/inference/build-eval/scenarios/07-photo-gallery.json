@@ -1,0 +1,22 @@
+{
+  "id": "photo-gallery",
+  "size": "medium",
+  "title": "Photo gallery on the files folder",
+  "name": "gallery",
+  "visibility": "just-me",
+  "prompt": "A private photo gallery for my family. Members upload photos (JPEG, PNG, up to 10 MB each) into albums, see thumbnails in a grid and open a photo full size. Store the photos in the app's files folder and the album info in Postgres. Only the uploader or a manager can delete a photo.",
+  "owner": {
+    "answers": [
+      "Thumbnails can just be the original scaled down in the browser if that is simpler."
+    ],
+    "envVars": "declined"
+  },
+  "edits": [
+    "Add a caption to each photo, editable by the uploader.",
+    "Let members download a whole album as a zip file."
+  ],
+  "mock": {
+    "kind": "node-files",
+    "break": true
+  }
+}

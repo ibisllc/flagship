@@ -1,0 +1,23 @@
+{
+  "id": "recipe-box",
+  "size": "medium",
+  "title": "Recipe box with search",
+  "name": "recipes",
+  "visibility": "link",
+  "prompt": "A recipe box: I add recipes with a title, ingredients (one per line), steps and tags. Anyone with the link can browse and search recipes by title, ingredient or tag, with typo-tolerant search. Only members can add or edit recipes.",
+  "owner": {
+    "answers": [
+      "Search should find 'tomatoe' when I mean tomato.",
+      "No photos for now."
+    ],
+    "envVars": "declined"
+  },
+  "edits": [
+    "Add a 'scale servings' control that multiplies the ingredient quantities on the recipe page.",
+    "Let members mark recipes as favourites and see a list of their own favourites."
+  ],
+  "mock": {
+    "kind": "node-pg",
+    "ask": true
+  }
+}

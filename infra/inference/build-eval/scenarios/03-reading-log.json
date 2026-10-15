@@ -1,0 +1,20 @@
+{
+  "id": "reading-log",
+  "size": "small",
+  "title": "Reading log in Python",
+  "name": "reading-log",
+  "visibility": "just-me",
+  "prompt": "Build me a reading log in Python: I add books with title, author, date finished and a 1-5 star rating, and see a list of what I read this year with the average rating.",
+  "owner": {
+    "answers": [
+      "Only me. Python is what I know, so please use Python."
+    ],
+    "envVars": "declined"
+  },
+  "edits": [
+    "Add a notes field for each book and a search box over title and author."
+  ],
+  "mock": {
+    "kind": "python"
+  }
+}

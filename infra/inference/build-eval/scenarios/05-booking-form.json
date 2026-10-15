@@ -1,0 +1,23 @@
+{
+  "id": "booking-form",
+  "size": "medium",
+  "title": "Booking form with Postgres",
+  "name": "bookings",
+  "visibility": "link",
+  "prompt": "A booking page for my one-person bike repair shop. Visitors pick a free 1-hour slot on a weekday between 9:00 and 17:00 in the next two weeks, enter their name, phone and what's wrong with the bike. I see all bookings in a list, can cancel one, and slots that are taken disappear. Store everything in Postgres.",
+  "owner": {
+    "answers": [
+      "Visitors do not need to sign in to book. Only I see the list of bookings.",
+      "No payments, no emails for now."
+    ],
+    "envVars": "declined"
+  },
+  "edits": [
+    "Let me block out whole days (holidays) so no slots show on them.",
+    "Add a confirmation page with a booking reference the customer can use to cancel their own booking."
+  ],
+  "mock": {
+    "kind": "node-pg",
+    "break": true
+  }
+}

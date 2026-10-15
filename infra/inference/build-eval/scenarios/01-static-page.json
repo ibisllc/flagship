@@ -1,0 +1,21 @@
+{
+  "id": "static-page",
+  "size": "small",
+  "title": "Bakery landing page",
+  "name": "bakery",
+  "visibility": "link",
+  "prompt": "Make a one-page website for my neighbourhood bakery, Crumb & Co. Show our opening hours (Tue-Sat 7am-3pm, Sun 8am-1pm, closed Monday), a short menu of breads and pastries with prices, our address at 12 Mill Lane, and a phone number. Warm colours, works on phones.",
+  "owner": {
+    "answers": [
+      "It's just an information page, no ordering. Anyone can see it."
+    ],
+    "envVars": "declined"
+  },
+  "edits": [
+    "Change Sunday hours to 8am-2pm and add a 'Seasonal specials' section with three items.",
+    "Add a small contact section at the bottom with our email, hello@crumb.example."
+  ],
+  "mock": {
+    "kind": "static"
+  }
+}

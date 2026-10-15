@@ -1,0 +1,21 @@
+{
+  "id": "api-with-keys",
+  "size": "medium",
+  "title": "Sensor readings API",
+  "name": "sensors",
+  "visibility": "just-me",
+  "prompt": "A small HTTP API for my home sensors. Devices POST JSON readings {sensor, kind, value, at} using an API key, and I can GET the latest reading per sensor and the readings of one sensor over a time range. Also a minimal web page for me that shows the latest values in a table. Keep the data in Postgres.",
+  "owner": {
+    "answers": [
+      "The devices will use API keys I create on the app's page. Read access for me only."
+    ],
+    "envVars": "declined"
+  },
+  "edits": [
+    "Add GET /api/sensors/:id/daily that returns min, max and average per day for the last 30 days.",
+    "Delete readings older than one year automatically, once a day."
+  ],
+  "mock": {
+    "kind": "node-pg"
+  }
+}

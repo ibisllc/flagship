@@ -1,0 +1,22 @@
+{
+  "id": "todo-list",
+  "size": "small",
+  "title": "Personal to-do list",
+  "name": "todo",
+  "visibility": "just-me",
+  "prompt": "A simple to-do list just for me: add a task, tick it off, delete it. Keep my tasks saved between visits.",
+  "owner": {
+    "answers": [
+      "Just me. Keep it simple, one list is fine."
+    ],
+    "envVars": "declined"
+  },
+  "edits": [
+    "Add an optional due date to each task and sort tasks by due date, overdue ones in red.",
+    "Add a filter to show all, open, or done tasks."
+  ],
+  "mock": {
+    "kind": "node-pg",
+    "ask": true
+  }
+}

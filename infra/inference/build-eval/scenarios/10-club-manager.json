@@ -1,0 +1,24 @@
+{
+  "id": "club-manager",
+  "size": "large",
+  "title": "Club events with weather",
+  "name": "club",
+  "visibility": "just-me",
+  "prompt": "An app for our 40-member hiking club. Members see upcoming hikes (date, meeting point, distance, difficulty) and RSVP yes, no or maybe, with a maximum number of places per hike and a waiting list. Managers create and edit hikes and see who is coming. Each hike page shows the weather forecast for its meeting point using the OpenWeatherMap API. Members can comment on a hike. Masters can export the member attendance for the year as CSV.",
+  "owner": {
+    "answers": [
+      "Use OpenWeatherMap's free API; I'll provide the key.",
+      "When someone cancels, the first person on the waiting list gets the place automatically."
+    ],
+    "envVars": "set"
+  },
+  "edits": [
+    "Add carpooling: on each hike, members can offer seats or ask for a lift, and see who is driving.",
+    "Show a banner on the home page for hikes in the next 48 hours that I am going to. No emails."
+  ],
+  "mock": {
+    "kind": "node-pg",
+    "ask": true,
+    "envVar": "OPENWEATHER_API_KEY"
+  }
+}
