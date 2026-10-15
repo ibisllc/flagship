@@ -152,10 +152,12 @@
 //  v74: the owner's server order (docs/server-order.md): Home lists servers
 //       in order with a Leader badge and drag/up/down to reorder; server
 //       pages say "Make leader"; precaches lib/serverOrder.js.
-//  v75: a server's outbound proxy (docs/outbound-proxy.md): set under
+//  v80: a server's outbound proxy (docs/outbound-proxy.md): set under
 //       Advanced when creating a server, changed on the server's page;
-//       precaches lib/boxProxy.js.
-const SHELL_VERSION = "v75";
+//       precaches lib/boxProxy.js. (feat/outbound-proxy only; main had
+//       reached v79 when this was picked, so re-pick the next free version
+//       when the branch is rebased.)
+const SHELL_VERSION = "v80";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
