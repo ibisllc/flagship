@@ -173,7 +173,11 @@
 //       (/invite#server=<box>&k=…) is accepted against that box.
 //  v82: Settings and the AI-key step read Flagship Inference's status
 //      without asking for a username first.
-const SHELL_VERSION = "v82";
+//  v83: a retried account creation presents the same device and grant ids
+//       (never a second device); an app's page ends in "Remove app" (the signed
+//       uninstall to the server the page reads, the only copy included) and shows
+//       the box's "Recent logs" when it sends some.
+const SHELL_VERSION = "v83";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
