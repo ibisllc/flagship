@@ -217,7 +217,11 @@
 //  v97: feat/marketplace only: main's shell plus the branch's files
 //       (marketplace, tier status, allowance, install, developer views), so
 //       it runs a version above main's; bump it past main's on rebase.
-const SHELL_VERSION = "v97";
+//  v100: feat/outbound-proxy's own shell (feat/marketplace's v97 plus a
+//       server's outbound proxy, docs/outbound-proxy.md): set under
+//       Advanced when creating a server, changed on the server's page;
+//       precaches lib/boxProxy.js.
+const SHELL_VERSION = "v100";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -265,6 +269,7 @@ const OPTIONAL_SHELL = [
   "/lib/auditLog.js",
   "/lib/accountRead.js",
   "/lib/serverOrder.js",
+  "/lib/boxProxy.js",
   "/lib/totp.js",
   "/lib/edToMont.js",
   "/lib/bootApproval.js",
