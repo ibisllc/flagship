@@ -53,6 +53,7 @@ import {
   onServerOrderChange,
   orderAckOf,
   rankPods,
+  serverOrderFailureText,
   serverOrderOf,
 } from "../lib/serverOrder.js";
 import { podShortName } from "../lib/podSwitcher.js";
@@ -662,7 +663,7 @@ function wireMakeLeader(body) {
       preferLeaderAsCurrent(await loadAccountPods(getSession().username));
       toast(`${body.serverFqdn} is first in your server order`, "ok");
     } catch (e) {
-      toast(humanError(e), "err");
+      toast(serverOrderFailureText(e, humanError), "err");
     } finally {
       btn.textContent = "Make leader";
       void paint();
