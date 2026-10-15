@@ -46,24 +46,51 @@ final class ModelMenuTests: XCTestCase {
 
     // MARK: Flagship Inference
 
-    func test_flagship_defaultsAndThinkHarder() {
+    /// A catalog whose Low model lists effort levels (Medium lists none).
+    private var catalogWithEfforts: InferenceCatalogResponse {
+        var models = catalog.models
+        let low = models[0]
+        models[0] = InferenceModel(id: low.id, tier: low.tier, model: low.model, multiplier: low.multiplier,
+                                   label: low.label, descriptor: low.descriptor, contextTokens: low.contextTokens,
+                                   modalities: low.modalities, reasoning: true,
+                                   efforts: ["low", "medium", "high"], defaultEffort: "medium", default: true)
+        return InferenceCatalogResponse(models: models, defaultModel: "low")
+    }
+
+    func test_flagship_noEffortUnlessTheCatalogListsOne() {
         let m = ModelMenuModel(source: .flagship(catalog))
         XCTAssertEqual(m.shortName, "Low 1×")
         XCTAssertEqual(m.wireModel, "low")
-        XCTAssertNil(m.wireEffort)
-        XCTAssertTrue(m.offersThinkHarder)
-        m.thinkHarder = true
-        XCTAssertEqual(m.wireEffort, "high", "Think harder sends effort high")
+        XCTAssertTrue(catalog.models[0].reasoning)
+        XCTAssertNil(m.efforts, "a model that reasons but lists no efforts gets no control")
+        XCTAssertNil(m.wireEffort, "no effort is assumed for Flagship Inference")
         m.select("high")
-        XCTAssertFalse(m.offersThinkHarder, "High doesn't reason")
-        XCTAssertFalse(m.thinkHarder)
+        XCTAssertNil(m.efforts)
         XCTAssertNil(m.wireEffort)
+    }
+
+    func test_flagship_effortsFromTheCatalog() {
+        let m = ModelMenuModel(source: .flagship(catalogWithEfforts))
+        XCTAssertEqual(m.efforts, ["low", "medium", "high"])
+        XCTAssertEqual(m.wireEffort, "medium", "starts on the catalog's defaultEffort")
+        m.setEffort("high")
+        XCTAssertEqual(m.wireEffort, "high")
+        m.select("medium")
+        XCTAssertNil(m.efforts, "Medium lists none")
+        XCTAssertNil(m.wireEffort)
+        m.select("low")
+        XCTAssertEqual(m.wireEffort, "medium", "picking a model resets to its default")
+        m.setEffort("low")
+        m.pick("low")
+        XCTAssertEqual(m.wireEffort, "medium", "picking the same model again resets too")
     }
 
     func test_flagship_resumesTheSessionsModel() {
         let m = ModelMenuModel(source: .flagship(catalog), initial: ModelChoice(model: "medium", effort: "high"))
         XCTAssertEqual(m.wireModel, "medium")
-        XCTAssertEqual(m.wireEffort, "high")
+        XCTAssertNil(m.wireEffort, "an effort the model doesn't list is dropped")
+        let withEfforts = ModelMenuModel(source: .flagship(catalogWithEfforts), initial: ModelChoice(model: "low", effort: "high"))
+        XCTAssertEqual(withEfforts.wireEffort, "high", "the session's effort is kept when the model lists it")
         let stale = ModelMenuModel(source: .flagship(catalog), initial: ModelChoice(model: "flagship-free", effort: nil))
         XCTAssertEqual(stale.wireModel, "low", "an id the catalog lacks falls back to its default")
     }
@@ -72,7 +99,7 @@ final class ModelMenuTests: XCTestCase {
         let m = ModelMenuModel(source: .flagship(nil))
         XCTAssertEqual(m.shortName, "Flagship Inference")
         XCTAssertNil(m.wireModel, "no model sent; the box uses the default")
-        XCTAssertFalse(m.offersThinkHarder)
+        XCTAssertNil(m.efforts)
         XCTAssertEqual(m.visionDecision(hasImage: true), .send)
     }
 
@@ -101,7 +128,7 @@ final class ModelMenuTests: XCTestCase {
         m.select("brand-new")
         XCTAssertNil(m.efforts, "unknown model: no effort control")
         XCTAssertNil(m.wireEffort)
-        XCTAssertFalse(m.offersThinkHarder)
+        XCTAssertNil(m.contextTokens, "unknown model: context unknown")
         XCTAssertEqual(m.visionDecision(hasImage: true), .send, "vision unknown: no alert")
     }
 
@@ -130,13 +157,16 @@ final class ModelMenuTests: XCTestCase {
 
     func test_onChangeFiresOnlyForOwnerChanges() async {
         var seen: [ModelChoice] = []
-        let m = ModelMenuModel(initial: nil) { .flagship(InferenceCatalogResponse.mock) }
+        let withEfforts = catalogWithEfforts
+        let m = ModelMenuModel(initial: nil) { .flagship(withEfforts) }
         m.onChange = { seen.append($0) }
         await m.ensureLoaded()
         XCTAssertTrue(seen.isEmpty, "loading isn't a change")
         m.select("medium")
-        m.thinkHarder = true
-        XCTAssertEqual(seen, [ModelChoice(model: "medium", effort: nil), ModelChoice(model: "medium", effort: "high")])
+        m.select("low")
+        m.setEffort("high")
+        XCTAssertEqual(seen, [ModelChoice(model: "medium", effort: nil), ModelChoice(model: "low", effort: "medium"),
+                              ModelChoice(model: "low", effort: "high")])
     }
 
     func test_defaultModelStore() {
@@ -217,6 +247,36 @@ final class ModelMenuTests: XCTestCase {
         let lines = VibeTranscript.lines(s.messages).lines
         XCTAssertEqual(lines[0].credits, 2.8)
         XCTAssertEqual(lines[1].attachments?.count, 1)
+        XCTAssertNil(s.canContinue, "an older box omits the new fields")
+        XCTAssertNil(s.provider)
+        XCTAssertNil(s.conversationTokens)
+        XCTAssertNil(f.catalog?.models.first?.efforts)
+    }
+
+    func test_decodesContinueProviderAndEfforts() throws {
+        let state = """
+        {"id":"s","appId":"u--plants","status":"failed","messages":[],"failureReason":"build failed",
+         "needsCredential":true,"model":"gpt-5.4-mini","provider":"openai","canContinue":true,"conversationTokens":42000}
+        """
+        let s = try JSONDecoder().decode(VibeCodeSessionPublicState.self, from: Data(state.utf8))
+        XCTAssertEqual(s.canContinue, true)
+        XCTAssertEqual(s.provider, "openai")
+        XCTAssertEqual(s.conversationTokens, 42_000)
+        XCTAssertEqual(s.needsCredential, true)
+        let catalogJson = """
+        {"models":[{"id":"low","tier":"Low","model":"Q","multiplier":1,"label":"Low 1× (Q)","descriptor":"d",
+          "contextTokens":262144,"modalities":["text"],"reasoning":true,"efforts":["low","high"],"defaultEffort":"low"}],
+         "defaultModel":"low","creditTokens":1000,"inputWeight":1,"outputWeight":4}
+        """
+        let c = try JSONDecoder().decode(InferenceCatalogResponse.self, from: Data(catalogJson.utf8))
+        XCTAssertEqual(c.models[0].efforts, ["low", "high"])
+        XCTAssertEqual(c.models[0].defaultEffort, "low")
+        let sessions = """
+        {"sessions":[{"sessionId":"a","startedAt":1,"status":"failed","updatedAt":9},{"sessionId":"b","startedAt":5,"status":"deployed"}]}
+        """
+        let list = try JSONDecoder().decode(VibeCodeSessionsResponse.self, from: Data(sessions.utf8))
+        XCTAssertEqual(list.sessions[0].lastActivity, 9)
+        XCTAssertEqual(list.sessions[1].lastActivity, 5, "no updatedAt: startedAt")
     }
 
     func test_mockClientsAnswerTheMenus() async throws {

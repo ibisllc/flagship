@@ -838,7 +838,7 @@ public struct BuildJournalScreen: View {
                                 }
                             }
                         ) {
-                            Text(session.isActive ? "Resume" : "Open")
+                            Text(Self.sessionAction(session.status))
                                 .font(.system(size: 14, weight: .semibold))
                                 .foregroundColor(session.isActive ? c.success : c.primary)
                         }
@@ -935,7 +935,17 @@ public struct BuildJournalScreen: View {
         case "deploying": return "Deploying"
         case "deployed": return "Deployed"
         case "cancelled": return "Cancelled"
+        case "failed": return "Failed"
         default: return "Stopped"
+        }
+    }
+
+    /// What opening the chat does: carry on with it, watch it run, or look.
+    static func sessionAction(_ status: String) -> String {
+        switch status {
+        case "awaiting-tool-response", "ready-to-deploy", "failed": return "Continue"
+        case "streaming", "deploying": return "Resume"
+        default: return "Open"
         }
     }
 

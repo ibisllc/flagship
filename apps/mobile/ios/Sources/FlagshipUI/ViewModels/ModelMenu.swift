@@ -42,7 +42,7 @@ public enum ModelMenuText {
     }
 
     public static let flagshipInference = "Flagship Inference"
-    public static let thinkHarder = "Think harder"
+    public static let contextNotice = "Older messages will be summarised to fit this model."
     public static let capabilitiesUnknown = "capabilities unknown"
     public static let keyRefused = "The key was refused"
     public static let boxPicks = "Your server picks the model."
@@ -138,10 +138,8 @@ public final class ModelMenuModel {
     public private(set) var source: Source = .idle
     /// Catalog id (Flagship) or the provider's model id (own key, listed).
     public private(set) var selectedId: String?
-    /// Own-key effort.
+    /// The chosen effort, when the model lists effort levels.
     public private(set) var effort: String?
-    /// Flagship Inference "Think harder".
-    public var thinkHarder = false { didSet { if oldValue != thinkHarder { changed() } } }
     /// The model typed when the key's list couldn't be read.
     public var customModel = "" { didSet { if oldValue != customModel { changed() } } }
 
@@ -156,7 +154,6 @@ public final class ModelMenuModel {
         if let initial {
             selectedId = initial.model
             effort = initial.effort
-            thinkHarder = initial.effort != nil
         }
     }
 
@@ -172,7 +169,6 @@ public final class ModelMenuModel {
         if source == .idle, let initial {
             selectedId = initial.model
             effort = initial.effort
-            withoutChange { thinkHarder = initial.effort != nil }
         }
     }
 
@@ -198,20 +194,18 @@ public final class ModelMenuModel {
             case .flagship(let catalog?):
                 if selectedId == nil || !catalog.models.contains(where: { $0.id == selectedId }) {
                     selectedId = catalog.defaultModel
+                    effort = nil
                 }
-                if catalogModel?.reasoning != true { thinkHarder = false }
+                effort = ModelEffort.start(efforts: catalogModel?.efforts, defaultEffort: catalogModel?.defaultEffort,
+                                           wanted: effort)
             case .own(let r) where r.listed == true:
                 let models = r.models ?? []
                 if selectedId == nil || !models.contains(where: { $0.id == selectedId }) {
                     selectedId = models.first(where: { $0.id == r.defaultModel })?.id ?? models.first?.id
                     effort = nil
                 }
-                if let o = ownOption {
-                    if let e = effort, o.efforts?.contains(e) != true { effort = nil }
-                    if effort == nil { effort = o.defaultEffort }
-                } else {
-                    effort = nil
-                }
+                effort = ModelEffort.start(efforts: ownOption?.efforts, defaultEffort: ownOption?.defaultEffort,
+                                           wanted: effort)
             case .own(let r):
                 if customModel.isEmpty { customModel = selectedId ?? r.defaultModel ?? "" }
             default:
@@ -262,13 +256,29 @@ public final class ModelMenuModel {
         }
     }
 
-    /// Show "Think harder" (a Flagship model that reasons).
-    public var offersThinkHarder: Bool { catalogModel?.reasoning == true }
-
-    /// The own-key effort levels to offer, nil ⇒ no control.
+    /// The effort levels the chosen model lists, nil ⇒ no control. Flagship
+    /// Inference offers only what its catalog lists, never an assumed level.
     public var efforts: [String]? {
-        guard let e = ownOption?.efforts, !e.isEmpty else { return nil }
+        let e: [String]?
+        switch source {
+        case .flagship: e = catalogModel?.efforts
+        case .own: e = ownOption?.efforts
+        case .idle, .loading: e = nil
+        }
+        guard let e, !e.isEmpty else { return nil }
         return e
+    }
+
+    /// The chosen model's context window, when known.
+    public var contextTokens: Int? {
+        let n: Int?
+        switch source {
+        case .flagship: n = catalogModel?.contextTokens
+        case .own: n = ownOption?.contextTokens
+        case .idle, .loading: n = nil
+        }
+        guard let n, n > 0 else { return nil }
+        return n
     }
 
     /// The wire `model`; nil ⇒ let the box pick.
@@ -286,8 +296,7 @@ public final class ModelMenuModel {
     /// The wire `effort`; nil ⇒ the provider's default.
     public var wireEffort: String? {
         switch source {
-        case .flagship: return offersThinkHarder && thinkHarder ? "high" : nil
-        case .own: return efforts == nil ? nil : effort
+        case .flagship, .own: return efforts == nil ? nil : effort
         case .idle, .loading: return initial?.effort
         }
     }
@@ -296,15 +305,28 @@ public final class ModelMenuModel {
 
     // MARK: Changes
 
+    /// Pick a model; effort goes back to that model's default (or none).
     public func select(_ id: String) {
         guard id != selectedId else { return }
         selectedId = id
-        if isFlagship {
-            if !offersThinkHarder { withoutChange { thinkHarder = false } }
-        } else {
-            effort = ownOption?.defaultEffort
-        }
+        resetEffort()
         changed()
+    }
+
+    func resetEffort() {
+        switch source {
+        case .flagship:
+            effort = ModelEffort.start(efforts: catalogModel?.efforts, defaultEffort: catalogModel?.defaultEffort, wanted: nil)
+        case .own:
+            effort = ModelEffort.start(efforts: ownOption?.efforts, defaultEffort: ownOption?.defaultEffort, wanted: nil)
+        case .idle, .loading:
+            effort = nil
+        }
+    }
+
+    /// Pick a model even if it's already chosen: effort back to its default.
+    public func pick(_ id: String) {
+        if id == selectedId { resetEffort(); changed() } else { select(id) }
     }
 
     public func setEffort(_ e: String?) {
@@ -328,6 +350,17 @@ public final class ModelMenuModel {
         default:
             return .send
         }
+    }
+}
+
+/// Which effort a model starts on. MIRRORS the webapp `effortFor`.
+public enum ModelEffort {
+    /// The wanted level if the model takes it, else its default, else none.
+    public static func start(efforts: [String]?, defaultEffort: String?, wanted: String?) -> String? {
+        guard let efforts, !efforts.isEmpty else { return nil }
+        if let wanted, efforts.contains(wanted) { return wanted }
+        if let defaultEffort, efforts.contains(defaultEffort) { return defaultEffort }
+        return nil
     }
 }
 

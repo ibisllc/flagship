@@ -328,11 +328,12 @@ private struct ModelRow: View {
         FSColorReader { c in
             HStack(spacing: FS.space.s2) {
                 Text("AI model").font(FS.font.bodySm()).foregroundColor(c.textMuted)
-                ModelMenuButton(menu: menu, identifier: "describe-model-menu")
-                Spacer(minLength: 0)
-                if menu.offersThinkHarder {
-                    ThinkHarderChip(isOn: $menu.thinkHarder)
+                ModelMenuButton(menu: menu, identifier: "describe-model-menu", effortInPanel: false)
+                if let efforts = menu.efforts {
+                    EffortMenuButton(efforts: efforts, selected: menu.effort, onPick: { menu.setEffort($0) },
+                                     identifier: "describe-effort-menu")
                 }
+                Spacer(minLength: 0)
             }
         }
     }

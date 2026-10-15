@@ -65,6 +65,16 @@ public final class VibeCodeStreamViewModel {
         }
     }
 
+    /// A new message on a chat that had stopped (ready to deploy, failed):
+    /// drop the last run's live text and follow the new one.
+    public func restart() {
+        transcript = ""
+        buildLogs = []
+        errorMessage = nil
+        status = .streaming
+        start()
+    }
+
     public func cancel() {
         streamTask?.cancel()
         streamTask = nil

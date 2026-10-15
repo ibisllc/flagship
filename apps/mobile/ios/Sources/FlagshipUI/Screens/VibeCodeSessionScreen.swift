@@ -40,20 +40,24 @@ public struct VibeCodeSessionScreen: View {
     /// Follow new output only while the owner is at the bottom; scrolling up to
     /// read stops the box from jumping away under their finger.
     @State private var followTail = true
-    @State private var menu: ModelMenuModel
+    @State private var menu: GroupedModelMenu
     @State private var stager: ChatAttachmentStager
     @State private var visionAlert: VisionDecision?
 
     public let serverFqdn: String
     public let client: any ScreensClient
     public let signEnvelope: @MainActor (ServiceEnvSetEnvelope) async throws -> String
-    /// The owner's saved AI key, sent with a reply only when the box says it
-    /// has none for this session.
+    /// The owner's default saved AI key, which an older box's chat (one that
+    /// doesn't name its provider) is assumed to use.
     public let savedCredential: () -> LlmProviderCredential?
+    /// The AI keys saved on this device, in saved order: one menu group each.
+    public let savedKeys: () -> [SavedKeyStore.Entry]
     /// Mints a fresh free-AI credential for this box (nil ⇒ not offered).
     public let freeAiCredential: (@MainActor () async throws -> LlmProviderCredential)?
     /// The Flagship Inference catalog from `.com` (nil ⇒ not offered).
     public let inferenceCatalog: (@MainActor () async -> InferenceCatalogResponse?)?
+    /// Whether the owner can use Flagship Inference now (read when the menu opens).
+    public let flagshipUsable: (@MainActor () async -> Bool)?
 
     public init(
         stream: VibeCodeStreamViewModel,
@@ -61,34 +65,50 @@ public struct VibeCodeSessionScreen: View {
         client: any ScreensClient,
         signEnvelope: @escaping @MainActor (ServiceEnvSetEnvelope) async throws -> String,
         savedCredential: @escaping () -> LlmProviderCredential? = { nil },
+        savedKeys: @escaping () -> [SavedKeyStore.Entry] = { [] },
         freeAiCredential: (@MainActor () async throws -> LlmProviderCredential)? = nil,
         inferenceCatalog: (@MainActor () async -> InferenceCatalogResponse?)? = nil,
-        menu: ModelMenuModel? = nil,
+        flagshipUsable: (@MainActor () async -> Bool)? = nil,
+        menu: GroupedModelMenu? = nil,
         attachments: ChatAttachmentStager? = nil
     ) {
-        _menu = State(initialValue: menu ?? ModelMenuModel())
+        _menu = State(initialValue: menu ?? GroupedModelMenu())
         _stager = State(initialValue: attachments ?? ChatAttachmentStager())
         self.stream = stream
         self.serverFqdn = serverFqdn
         self.client = client
         self.signEnvelope = signEnvelope
         self.savedCredential = savedCredential
+        self.savedKeys = savedKeys
         self.freeAiCredential = freeAiCredential
         self.inferenceCatalog = inferenceCatalog
+        self.flagshipUsable = flagshipUsable
     }
 
-    /// The key a reply carries: a fresh free-AI credential when the session
-    /// runs on free AI (tokens expire, so every send re-mints); otherwise a
-    /// saved key only when the box lacks one (or its relay setting just
-    /// changed), falling back to free AI when nothing is saved. Throws
-    /// `FreeAiError` (used up, busy today, …) so the owner sees why nothing was sent.
-    private func replyCredential() async throws -> LlmProviderCredential? {
-        try await VibeCodeReplyCredential.resolve(
-            sessionId: sessionId,
-            boxNeedsKey: state?.needsCredential == true || relayTurnedOff,
-            saved: savedCredential,
-            freeAi: freeAiCredential
-        )
+    /// The key a message carries. With the grouped menu: a fresh Flagship
+    /// Inference pass whenever that group is chosen; an own key when the
+    /// owner picked another group here, the box holds no key, or the relay
+    /// setting just changed. Without one (no group fits): the older rules.
+    /// Throws `FreeAiError` (used up, busy today, …) so the owner sees why
+    /// nothing was sent. `switching` false keeps the box's group (an env-var
+    /// answer carries no model).
+    private func messageCredential(switching: Bool = true) async throws -> LlmProviderCredential? {
+        let boxNeedsKey = state?.needsCredential == true || relayTurnedOff
+        guard (switching ? menu.currentGroup : menu.boxGroup) != nil else {
+            return try await VibeCodeReplyCredential.resolve(
+                sessionId: sessionId, boxNeedsKey: boxNeedsKey, saved: savedCredential, freeAi: freeAiCredential)
+        }
+        return try await VibeCodeReplyCredential.resolve(
+            choice: menu.credentialChoice(needsCredential: boxNeedsKey, switching: switching),
+            switchingProvider: switching && menu.picked,
+            freeAi: freeAiCredential)
+    }
+
+    /// After a message went through: the box holds the chosen group's key.
+    private func noteSent() {
+        menu.didSend()
+        guard let g = menu.boxGroup else { return }
+        if g.spec.isFlagship { FreeAiSessions.mark(sessionId) } else { FreeAiSessions.unmark(sessionId) }
     }
 
     /// The failure on show is the Flagship relay being unavailable.
@@ -152,8 +172,11 @@ public struct VibeCodeSessionScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if menu.isActive {
-                ToolbarItem(placement: .topBarTrailing) {
-                    ModelMenuButton(menu: menu, identifier: "vibecode-model-menu")
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    if let efforts = menu.efforts {
+                        EffortMenuButton(efforts: efforts, selected: menu.effort, onPick: { menu.setEffort($0) })
+                    }
+                    GroupedModelMenuButton(menu: menu, identifier: "vibecode-model-menu")
                 }
             }
         }
@@ -181,7 +204,8 @@ public struct VibeCodeSessionScreen: View {
         case "ready-to-deploy": return "Ready to deploy"
         case "deploying": return "Deploying"
         case "deployed": return "Live"
-        case "failed", "cancelled": return "Stopped"
+        case "failed": return "Failed"
+        case "cancelled": return "Stopped"
         default: return "Vibe code"
         }
     }
@@ -290,27 +314,7 @@ public struct VibeCodeSessionScreen: View {
         if let pending = state?.pendingRequest {
             switch pending {
             case .talkToUser:
-                VStack(alignment: .leading, spacing: FS.space.s2) {
-                    StagedAttachmentsBar(stager: stager)
-                    HStack(spacing: FS.space.s2) {
-                        AttachButton(stager: stager)
-                        TextField("Reply to the AI", text: $replyDraft, axis: .vertical)
-                            .font(FS.font.mono())
-                            .lineLimit(1...4)
-                            .submitLabel(.send)
-                            .onSubmit { Task { await submitReply() } }
-                            .accessibilityIdentifier("vibecode-reply-field")
-                        Button { Task { await submitReply() } } label: {
-                            Image(systemName: submitting ? "ellipsis.circle" : "arrow.up.circle.fill")
-                                .font(.system(size: 26)).foregroundColor(c.primary)
-                        }
-                        .disabled(submitting || replyDraft.isEmpty)
-                        .accessibilityIdentifier("vibecode-reply-send-btn")
-                    }
-                    if menu.offersThinkHarder {
-                        ThinkHarderChip(isOn: $menu.thinkHarder)
-                    }
-                }
+                composer(placeholder: VibeCodeComposer.replyPlaceholder, c: c)
             case .requestEnvVar(_, let name, _, _, _, _):
                 VStack(alignment: .leading, spacing: FS.space.s2) {
                     HStack(spacing: FS.space.s2) {
@@ -366,6 +370,9 @@ public struct VibeCodeSessionScreen: View {
                 if let err = errorMessage {
                     Text("✗ \(err)").font(FS.font.mono()).foregroundColor(c.danger)
                 }
+                if let placeholder = VibeCodeComposer.placeholder(status: status, canContinue: state?.canContinue == true) {
+                    composer(placeholder: placeholder, c: c)
+                }
                 FSPrimaryButton("Deploy", enabled: true, block: true) {
                     Task { await deploy() }
                 }
@@ -378,6 +385,9 @@ public struct VibeCodeSessionScreen: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
                 relayAction(c: c)
+                if let placeholder = VibeCodeComposer.placeholder(status: status, canContinue: state?.canContinue == true) {
+                    composer(placeholder: placeholder, c: c)
+                }
                 if status == "failed", state?.appId != nil {
                     FSPrimaryButton("Try deploying again", enabled: true, block: true) {
                         Task { await deploy() }
@@ -395,6 +405,35 @@ public struct VibeCodeSessionScreen: View {
         }
     }
 
+    /// The message field: an answer to the AI's question, or a new request on
+    /// a chat that is ready to deploy or failed.
+    private func composer(placeholder: String, c: FSColors) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s2) {
+            if let notice = menu.contextNotice(for: state) {
+                Text(notice)
+                    .font(.system(size: 12)).foregroundColor(c.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("vibecode-context-notice")
+            }
+            StagedAttachmentsBar(stager: stager)
+            HStack(spacing: FS.space.s2) {
+                AttachButton(stager: stager)
+                TextField(placeholder, text: $replyDraft, axis: .vertical)
+                    .font(FS.font.mono())
+                    .lineLimit(1...4)
+                    .submitLabel(.send)
+                    .onSubmit { Task { await submitReply() } }
+                    .accessibilityIdentifier("vibecode-reply-field")
+                Button { Task { await submitReply() } } label: {
+                    Image(systemName: submitting ? "ellipsis.circle" : "arrow.up.circle.fill")
+                        .font(.system(size: 26)).foregroundColor(c.primary)
+                }
+                .disabled(submitting || replyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .accessibilityIdentifier("vibecode-reply-send-btn")
+            }
+        }
+    }
+
     /// "Turn the relay off for this key" under a relay failure.
     @ViewBuilder
     private func relayAction(c: FSColors) -> some View {
@@ -408,7 +447,9 @@ public struct VibeCodeSessionScreen: View {
 
     private func turnRelayOff() {
         let store = SavedKeyStore()
-        if let cred = savedCredential(), let entry = store.entry(for: cred) {
+        if let entry = menu.boxGroup?.spec.entry {
+            try? store.setRelay(id: entry.id, relay: false)
+        } else if let cred = savedCredential(), let entry = store.entry(for: cred) {
             try? store.setRelay(id: entry.id, relay: false)
         } else if let active = store.active() {
             try? store.setRelay(id: active.id, relay: false)
@@ -466,7 +507,13 @@ public struct VibeCodeSessionScreen: View {
         errorMessage = nil
         do {
             let deployCredential: LlmProviderCredential?
-            if FreeAiSessions.isFreeAi(sessionId), let freeAiCredential {
+            if let g = menu.boxGroup {
+                if let entry = g.spec.entry {
+                    deployCredential = menu.keyLookup(entry.id).map(ModelGroups.wireCredential)
+                } else {
+                    deployCredential = try? await freeAiCredential?()
+                }
+            } else if FreeAiSessions.isFreeAi(sessionId), let freeAiCredential {
                 deployCredential = try? await freeAiCredential()
             } else {
                 deployCredential = savedCredential()
@@ -506,24 +553,26 @@ public struct VibeCodeSessionScreen: View {
         return String(e.prefix(600))
     }
 
-    /// Where the menu reads its models: Flagship Inference's catalog for a
-    /// free-AI session, else the models the saved key can use (asked of the box).
+    /// The menu's groups: Flagship Inference (when the chat uses it; added
+    /// on opening the menu when the owner can use it), then each saved key.
+    /// The chat's provider picks the group it starts on.
     private func configureMenu(_ s: VibeCodeSessionPublicState) {
-        guard !menu.isActive else { return }
-        let initial = ModelChoice(model: s.model, effort: s.effort)
-        if FreeAiSessions.isFreeAi(sessionId) {
-            guard let inferenceCatalog else { return }
-            menu.setLoader({ .flagship(await inferenceCatalog()) }, initial: initial)
-        } else if let cred = savedCredential() {
-            menu.setLoader({ [client] in
-                let r = await ModelMenuCache.models(for: cred) { try await client.aiModels($0) }
-                return r.kind == "flagship" ? .flagship(r.catalog) : .own(r)
-            }, initial: initial)
-        }
+        guard !menu.isConfigured else { return }
+        menu.configure(
+            entries: savedKeys(),
+            provider: s.provider,
+            freeAiSession: FreeAiSessions.isFreeAi(sessionId),
+            fallbackCredential: savedCredential(),
+            initial: ModelChoice(model: s.model, effort: s.effort),
+            flagshipCatalog: inferenceCatalog,
+            ownModels: { [client] cred in await ModelMenuCache.models(for: cred) { try await client.aiModels($0) } },
+            flagshipUsable: flagshipUsable)
+        Task { await menu.loadCurrent() }
     }
 
     private func submitReply(checkedVision: Bool = false) async {
-        guard !replyDraft.isEmpty, !submitting else { return }
+        let text = replyDraft
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !submitting else { return }
         if !checkedVision {
             let decision = menu.visionDecision(hasImage: stager.hasImage)
             if decision != .send {
@@ -533,20 +582,26 @@ public struct VibeCodeSessionScreen: View {
         }
         submitting = true
         defer { submitting = false }
+        let continuing = state?.pendingRequest == nil
         do {
-            let credential = try await replyCredential()
+            let credential = try await messageCredential()
             let model = menu.isActive ? menu.wireModel : nil
             _ = try await client.vibeCodeSessionReply(
                 sessionId: sessionId,
-                VibeCodeReplyRequest(text: replyDraft, envVarStatus: nil, credential: credential,
+                VibeCodeReplyRequest(text: text, envVarStatus: nil, credential: credential,
                                      model: model, effort: model == nil ? nil : menu.wireEffort,
                                      attachments: stager.wire))
+            noteSent()
             replyDraft = ""
             stager.clear()
+            errorMessage = nil
             followTail = true
+            if continuing { stream.restart() }
             await reload()
+        } catch let e as ModelGroups.KeyGone {
+            errorMessage = e.errorDescription
         } catch {
-            errorMessage = ScreensClientError.userFacing(error)
+            errorMessage = ScreensClientError.boxReason(error) ?? ScreensClientError.userFacing(error)
         }
     }
 
@@ -572,7 +627,8 @@ public struct VibeCodeSessionScreen: View {
                 appId: appId,
                 ServiceEnvSetRequest(name: name, value: envValueDraft, request: envelope, signature: signature))
             _ = try await client.vibeCodeSessionReply(
-                sessionId: sessionId, VibeCodeReplyRequest(text: nil, envVarStatus: "set", credential: try await replyCredential()))
+                sessionId: sessionId,
+                VibeCodeReplyRequest(text: nil, envVarStatus: "set", credential: try await messageCredential(switching: false)))
             envValueDraft = ""
             await reload()
         } catch {
@@ -585,7 +641,8 @@ public struct VibeCodeSessionScreen: View {
         defer { submitting = false }
         do {
             _ = try await client.vibeCodeSessionReply(
-                sessionId: sessionId, VibeCodeReplyRequest(text: nil, envVarStatus: "declined", credential: try await replyCredential()))
+                sessionId: sessionId,
+                VibeCodeReplyRequest(text: nil, envVarStatus: "declined", credential: try await messageCredential(switching: false)))
             await reload()
         } catch {
             errorMessage = ScreensClientError.userFacing(error)
@@ -621,5 +678,55 @@ enum VibeCodeReplyCredential {
         let fresh = try await freeAi()
         FreeAiSessions.mark(sessionId)
         return fresh
+    }
+
+    /// The grouped menu's choice made concrete. A Flagship Inference pass
+    /// that can't be minted stops the send when it says why (used up, busy
+    /// today, …) or when the message switches to it; otherwise the box keeps
+    /// the pass it holds.
+    static func resolve(
+        choice: ModelGroups.CredentialChoice,
+        switchingProvider: Bool,
+        freeAi: (@MainActor () async throws -> LlmProviderCredential)?
+    ) async throws -> LlmProviderCredential? {
+        switch choice {
+        case .keep:
+            return nil
+        case .send(let c):
+            return c
+        case .keyGone:
+            throw ModelGroups.KeyGone()
+        case .mintFlagship:
+            guard let freeAi else {
+                if switchingProvider { throw FreeAiError.unavailable(message: FreeAiCopy.unavailable) }
+                return nil
+            }
+            do {
+                return try await freeAi()
+            } catch let e as FreeAiError {
+                if e.opensAddKey || switchingProvider { throw e }
+                return nil
+            } catch {
+                if switchingProvider { throw error }
+                return nil
+            }
+        }
+    }
+}
+
+/// The build chat's message field. MIRRORS the webapp `views/vibe-code.js`.
+enum VibeCodeComposer {
+    static let replyPlaceholder = "Reply to the AI"
+    static let changePlaceholder = "Ask for a change…"
+    static let retryPlaceholder = "Tell the AI what to try next…"
+
+    /// The placeholder for a chat that takes a new message, nil when it takes none.
+    static func placeholder(status: String, canContinue: Bool) -> String? {
+        guard canContinue else { return nil }
+        switch status {
+        case "ready-to-deploy": return changePlaceholder
+        case "failed": return retryPlaceholder
+        default: return nil
+        }
     }
 }
