@@ -69,6 +69,8 @@ export * from "./deviceCapabilityGrants.js";
 export * from "./accountDirectory.js";
 export * from "./accountReadToken.js";
 export * from "./serverOrder.js";
+export * from "./ohttpGateway.js";
+export * from "./relayHealth.js";
 export * from "./accountBootstrap.js";
 export * from "./watchDelegates.js";
 export * from "./acmeAccountKeys.js";
