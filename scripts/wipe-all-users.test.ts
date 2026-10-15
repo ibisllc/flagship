@@ -177,9 +177,9 @@ describe("wipe-all-users SQL table list — in sync with migrations", () => {
     expect(readFileSync(SQL, "utf8")).toContain("DELETE FROM meter_batches;");
   });
 
-  it("includes the server-share tables (0087)", () => {
+  it("includes the server-share tables (0087, 0097)", () => {
     const sql = readFileSync(SQL, "utf8");
-    for (const t of ["server_shares", "server_share_unlocks", "share_inbox"]) {
+    for (const t of ["server_shares", "server_share_unlocks", "share_inbox", "server_share_push"]) {
       expect(sql).toContain(`DELETE FROM ${t};`);
     }
   });

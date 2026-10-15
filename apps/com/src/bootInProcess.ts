@@ -136,14 +136,39 @@ export interface InProcessNotifyDeps {
    * no push (the box still polls; the request is still parked by the router).
    */
   pushUserDevices?: (username: string, category: string, payload?: Uint8Array) => Promise<void>;
+  /**
+   * Wakes the devices of people the server is shared with who may approve
+   * its start-up and asked to be told (docs/share-a-server.md §5.4). Absent ⇒
+   * they find out when they open their app.
+   */
+  shareStartup?: {
+    shares: ServerShareStorage;
+    forward: (args: ShareStartupPush) => Promise<unknown>;
+  };
 }
+
+/** What a co-manager's device gets: the owner's category and alert, no content. */
+export interface ShareStartupPush {
+  targets: Array<{ tokenId: string; platform: "apns" | "fcm" | "webpush"; providerToken: string }>;
+  category: string;
+  sealedPayloadHex: string;
+  webpushPayloadBytes: Uint8Array;
+  displayData: Record<string, string>;
+}
+
+export const SHARE_STARTUP_KIND = "share-start-up";
+const SHARE_STARTUP_WEBPUSH = JSON.stringify({
+  kind: SHARE_STARTUP_KIND,
+  body: "A server shared with you is asking you to unlock it.",
+});
 
 /**
  * The in-process NOTIFY PIPE. Where the standalone boot worker POSTs to
  * `/api/internal/notify-owner` (which then re-verifies + parks + pushes),
  * here the router has ALREADY parked + re-verified the request against the
  * same directory, so this pipe only has to fire the push for the owning
- * account. The box's STK signature was verified by the gate AND the router
+ * account, and for a disk unlock also the devices of shares that may approve
+ * it. The box's STK signature was verified by the gate AND the router
  * before this runs, so there is nothing to re-authenticate — the shared
  * secret has no job on this path and is gone.
  */
@@ -154,10 +179,12 @@ export class InProcessNotifyPipe implements NotifyPipe {
     category: string,
     payload?: Uint8Array,
   ) => Promise<void>;
+  private readonly shareStartup: InProcessNotifyDeps["shareStartup"];
 
   constructor(deps: InProcessNotifyDeps) {
     this.servers = deps.servers;
     this.pushUserDevices = deps.pushUserDevices;
+    this.shareStartup = deps.shareStartup;
   }
 
   async notifyOwner(args: {
@@ -165,9 +192,37 @@ export class InProcessNotifyPipe implements NotifyPipe {
     signedRequest: unknown;
     purpose: string;
   }): Promise<boolean> {
-    if (!this.pushUserDevices) return false;
     const reg = await this.servers.get(args.serverDomain.toLowerCase());
     if (!reg || reg.revokedAt) return false;
+    const shared = args.purpose === "unlock-key" ? this.pushShareStartup(reg.serverDomain) : Promise.resolve(false);
+    const owner = this.pushOwner(reg.username, args);
+    const [a, b] = await Promise.all([owner, shared]);
+    return a || b;
+  }
+
+  private async pushShareStartup(serverDomain: string): Promise<boolean> {
+    if (!this.shareStartup) return false;
+    try {
+      const rows = await this.shareStartup.shares.pushTargetsForServer(serverDomain.toLowerCase());
+      if (rows.length === 0) return false;
+      await this.shareStartup.forward({
+        targets: rows.map((r) => ({ tokenId: r.tokenSha256.slice(0, 32), platform: r.platform, providerToken: r.providerToken })),
+        category: "secret-request",
+        sealedPayloadHex: "",
+        webpushPayloadBytes: new TextEncoder().encode(SHARE_STARTUP_WEBPUSH),
+        displayData: { kind: SHARE_STARTUP_KIND },
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async pushOwner(
+    username: string,
+    args: { serverDomain: string; signedRequest: unknown; purpose: string },
+  ): Promise<boolean> {
+    if (!this.pushUserDevices) return false;
     const sr = args.signedRequest as
       | { request?: Record<string, unknown>; signature?: unknown; deviceInfo?: unknown }
       | undefined;
@@ -188,7 +243,7 @@ export class InProcessNotifyPipe implements NotifyPipe {
       }),
     );
     try {
-      await this.pushUserDevices(reg.username, "secret-request", payload);
+      await this.pushUserDevices(username, "secret-request", payload);
       return true;
     } catch {
       return false;

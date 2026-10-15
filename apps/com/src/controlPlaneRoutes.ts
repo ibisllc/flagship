@@ -34,6 +34,7 @@ import {
   handleGetServerShare,
   handleAcceptServerShare,
   handleLeaveServerShare,
+  handleServerSharePush,
   handleServerShareEnds,
   handleShareInbox,
   handleFetchServiceInviteCreate,
@@ -545,6 +546,7 @@ const ROUTE_RE = {
   SERVER_SHARE: /^\/api\/server-shares\/([0-9a-f]{32})$/,
   SERVER_SHARE_ACCEPT: /^\/api\/server-shares\/([0-9a-f]{32})\/accept$/,
   SERVER_SHARE_LEAVE: /^\/api\/server-shares\/([0-9a-f]{32})\/leave$/,
+  SERVER_SHARE_PUSH: /^\/api\/server-shares\/([0-9a-f]{32})\/push$/,
   SERVER_SHARE_ENDS: /^\/api\/server\/([^/]+)\/share-ends$/,
   SHARE_INBOX: /^\/api\/share-inbox$/,
   RCK_REGISTER: /^\/api\/routing\/register-rck$/,
@@ -843,7 +845,10 @@ export async function tryBootHost(
   const notify = new InProcessNotifyPipe({
     servers: storage.servers,
     ...(forwarder
-      ? { pushUserDevices: buildPushUserDevices(storage.pushTokens, forwarder) }
+      ? {
+          pushUserDevices: buildPushUserDevices(storage.pushTokens, forwarder),
+          shareStartup: { shares: storage.serverShares, forward: forwarder },
+        }
       : {}),
   });
 
@@ -1451,6 +1456,9 @@ export async function tryControlPlane(
     }
     if (method === "POST" && (m = path.match(ROUTE_RE.SERVER_SHARE_LEAVE))) {
       return finish(await handleLeaveServerShare(shareDeps, m[1]!, shareToken, await readJson(request)));
+    }
+    if (method === "POST" && (m = path.match(ROUTE_RE.SERVER_SHARE_PUSH))) {
+      return finish(await handleServerSharePush(shareDeps, m[1]!, shareToken, await readJson(request)));
     }
     if (method === "GET" && (m = path.match(ROUTE_RE.SERVER_SHARE_ENDS))) {
       const since = Number(url.searchParams.get("since") ?? "0");

@@ -92,6 +92,45 @@ describe.each(["InMemory", "D1"] as const)("ServerShareStorage (%s)", (adapter) 
     done();
   });
 
+  it("wakes a share's devices only while its boot copy stands for the same key", async () => {
+    const { s, done } = fresh(adapter);
+    const push = (tokenSha256: string, over: Partial<{ shareId: string; memberPubHex: string; serverDomain: string }> = {}) => ({
+      shareId: over.shareId ?? ID,
+      serverDomain: over.serverDomain ?? S,
+      memberPubHex: over.memberPubHex ?? "bb".repeat(32),
+      tokenSha256,
+      platform: "apns" as const,
+      providerToken: `tok-${tokenSha256.slice(0, 4)}`,
+      registeredAt: 7,
+    });
+    await s.create(share());
+    await s.create(share({ shareId: ID2, tokenHash: "ab".repeat(32) }));
+    await s.putUnlock(unlock(ID));
+    expect(await s.putPush(push("01".repeat(32)), 2)).toBe(true);
+    expect(await s.putPush(push("02".repeat(32)), 2)).toBe(true);
+    expect(await s.putPush(push("03".repeat(32)), 2)).toBe(false);
+    expect(await s.putPush({ ...push("01".repeat(32)), providerToken: "fresh" }, 2)).toBe(true);
+    // A row for a share with no boot copy, or for another key, wakes nobody.
+    expect(await s.putPush(push("04".repeat(32), { shareId: ID2 }), 2)).toBe(true);
+    const targets = await s.pushTargetsForServer(S);
+    expect(targets.map((t) => t.providerToken).sort()).toEqual(["fresh", `tok-0202`]);
+    expect(await s.pushTargetsForServer("media.harry.flagship.services")).toEqual([]);
+
+    expect(await s.deletePush(ID, "02".repeat(32))).toBe(true);
+    expect(await s.deletePush(ID, "02".repeat(32))).toBe(false);
+    expect((await s.pushTargetsForServer(S)).map((t) => t.tokenSha256)).toEqual(["01".repeat(32)]);
+
+    // Withdrawing the boot copy drops the tokens with it; so does ending the share.
+    await s.deleteUnlock(ID);
+    expect(await s.pushTargetsForServer(S)).toEqual([]);
+    await s.putUnlock(unlock(ID));
+    expect(await s.putPush(push("05".repeat(32)), 2)).toBe(true);
+    await s.end(ID, "revoke", "{}", 9000);
+    await s.putUnlock(unlock(ID));
+    expect(await s.pushTargetsForServer(S)).toEqual([]);
+    done();
+  });
+
   it("keeps an inbox, capped, per inbox id", async () => {
     const { s, done } = fresh(adapter);
     const e = (entryId: string, createdAt: number) => ({ inboxId: "11".repeat(32), entryId, ctHex: `ct${entryId}`, createdAt });

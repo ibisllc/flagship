@@ -14,12 +14,14 @@ import {
   signServerShareLeave,
   signServerShareList,
   signServerShareOffer,
+  signServerSharePush,
   signServerShareRevoke,
   signServerShareUnlock,
   signShareInboxRequest,
   SHARE_OFFER_TTL_MS,
   type Keypair,
   type ServerShareOffer,
+  type ServerSharePush,
 } from "@flagship/protocol";
 import { InMemoryStorage } from "@flagship/storage";
 import {
@@ -30,6 +32,7 @@ import {
   handleListServerShares,
   handleRevokeServerShare,
   handleServerShareEnds,
+  handleServerSharePush,
   handleServerShareUnlock,
   handleShareInbox,
   SHARE_INBOX_CAP,
@@ -160,6 +163,76 @@ describe("unlock at boot", () => {
     const off = deposit(NOW + 1, "off");
     expect((await handleServerShareUnlock(d, "alice", SHARE, { unlock: off, signature: hex(signServerShareUnlock(off, owner)) })).status).toBe(200);
     expect(await storage.serverShares.unlockForMember(S, hex(member.publicKey))).toBeNull();
+  });
+});
+
+describe("start-up notices", () => {
+  const APNS = "a0".repeat(32);
+  const deposit = async (storage: InMemoryStorage, memberPubHex = hex(member.publicKey)) =>
+    storage.serverShares.putUnlock({ shareId: SHARE, serverDomain: S, memberPubHex, sealedKeyHex: "aa", depositJson: "{}", signatureHex: "bb", issuedAt: 1 });
+  const body = (op: "put" | "delete", signer: Keypair = member, over: Partial<ServerSharePush> = {}, providerToken: string | null = APNS) => {
+    const push: ServerSharePush = {
+      serverDomain: S,
+      shareId: SHARE,
+      memberPubHex: hex(signer.publicKey),
+      op,
+      platform: "apns",
+      tokenSha256: shareSha256Hex(APNS),
+      issuedAt: NOW,
+      ...over,
+    };
+    return { push, signature: hex(signServerSharePush(push, signer)), ...(op === "put" && providerToken !== null ? { providerToken } : {}) };
+  };
+
+  it("registers a device only while the owner's unlock deposit names the same key", async () => {
+    const { d, storage } = await offered();
+    const none = await handleServerSharePush(d, SHARE, token, body("put"));
+    expect(none.status).toBe(403);
+    expect((none.body as { code: string }).code).toBe("unlock-not-shared");
+
+    await deposit(storage);
+    expect((await handleServerSharePush(d, SHARE, token, body("put"))).status).toBe(200);
+    expect((await storage.serverShares.pushTargetsForServer(S)).map((t) => t.providerToken)).toEqual([APNS]);
+
+    const other = deriveShareMemberKey({ seed: new Uint8Array(32).fill(23) }, SHARE);
+    const forOther = await handleServerSharePush(d, SHARE, token, body("put", other));
+    expect((forOther.body as { code: string }).code).toBe("unlock-not-shared");
+  });
+
+  it("refuses a missing token, a swapped provider token, a forged or stale signature", async () => {
+    const { d, storage } = await offered();
+    await deposit(storage);
+    expect((await handleServerSharePush(d, SHARE, null, body("put"))).status).toBe(404);
+    expect((await handleServerSharePush(d, SHARE, token, { ...body("put"), providerToken: "b1".repeat(32) })).status).toBe(403);
+    expect((await handleServerSharePush(d, SHARE, token, body("put", member, {}, null))).status).toBe(400);
+    const b = body("put");
+    expect((await handleServerSharePush(d, SHARE, token, { ...b, signature: hex(signServerSharePush(b.push, owner)) })).status).toBe(403);
+    expect((await handleServerSharePush(d, SHARE, token, body("put", member, { issuedAt: NOW - 10 * 60_000 }))).status).toBe(403);
+    expect((await handleServerSharePush(d, SHARE, token, body("put", member, { serverDomain: "media.alice.flagship.services" }))).status).toBe(403);
+    expect(await storage.serverShares.pushTargetsForServer(S)).toEqual([]);
+  });
+
+  it("drops the device when it turns notices off, and every device when the share ends", async () => {
+    const { d, storage } = await offered();
+    await deposit(storage);
+    await handleServerSharePush(d, SHARE, token, body("put"));
+    expect((await handleServerSharePush(d, SHARE, token, body("delete"))).body).toMatchObject({ ok: true, deleted: true });
+    expect(await storage.serverShares.pushTargetsForServer(S)).toEqual([]);
+
+    await handleServerSharePush(d, SHARE, token, body("put"));
+    const revoke = { serverDomain: S, shareId: SHARE, issuedAt: NOW };
+    await handleRevokeServerShare(d, "alice", SHARE, { revoke, signature: hex(signServerShareRevoke(revoke, owner)) });
+    expect(await storage.serverShares.pushTargetsForServer(S)).toEqual([]);
+    expect((await handleServerSharePush(d, SHARE, token, body("put"))).status).toBe(410);
+  });
+
+  it("drops the devices when the owner withdraws the unlock copy", async () => {
+    const { d, storage } = await offered();
+    await deposit(storage);
+    await handleServerSharePush(d, SHARE, token, body("put"));
+    const off = { serverDomain: S, shareId: SHARE, memberPubHex: hex(member.publicKey), sealedSha256: "off", issuedAt: NOW + 1 };
+    expect((await handleServerShareUnlock(d, "alice", SHARE, { unlock: off, signature: hex(signServerShareUnlock(off, owner)) })).status).toBe(200);
+    expect(await storage.serverShares.pushTargetsForServer(S)).toEqual([]);
   });
 });
 

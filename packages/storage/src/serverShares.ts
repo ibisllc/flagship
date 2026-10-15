@@ -1,8 +1,10 @@
 /**
- * Share this server (docs/share-a-server.md, migration 0087). `.com` keeps
- * an opaque share id, a hash of the link's bearer token, and ciphertext; the
- * second account's boot copy (sealed to its per-share key); and its "Shared
- * with me" inbox (sealed entries under an inbox key unrelated to its account).
+ * Share this server (docs/share-a-server.md, migrations 0087 and 0097).
+ * `.com` keeps an opaque share id, a hash of the link's bearer token, and
+ * ciphertext; the second account's boot copy (sealed to its per-share key);
+ * its "Shared with me" inbox (sealed entries under an inbox key unrelated to
+ * its account); and the push tokens of its devices that asked to be woken for
+ * the server's start-up, which live and die with the boot copy.
  */
 import type { D1Database } from "./d1.js";
 
@@ -42,6 +44,18 @@ export interface ServerShareUnlockRecord {
   issuedAt: number;
 }
 
+export type SharePushPlatform = "apns" | "fcm" | "webpush";
+
+export interface ServerSharePushRecord {
+  shareId: string;
+  serverDomain: string;
+  memberPubHex: string;
+  tokenSha256: string;
+  platform: SharePushPlatform;
+  providerToken: string;
+  registeredAt: number;
+}
+
 export interface ShareInboxRecord {
   inboxId: string;
   entryId: string;
@@ -68,7 +82,13 @@ export interface ServerShareStorage {
   getUnlock(shareId: string): Promise<ServerShareUnlockRecord | null>;
   /** The boot copy whose key is `memberPubHex` on `serverDomain`, for a share still running. */
   unlockForMember(serverDomain: string, memberPubHex: string): Promise<ServerShareUnlockRecord | null>;
+  /** Drops the boot copy and, with it, every push token registered for the share. */
   deleteUnlock(shareId: string): Promise<boolean>;
+  /** False when the share already holds `cap` tokens (and this one is new). */
+  putPush(rec: ServerSharePushRecord, cap: number): Promise<boolean>;
+  deletePush(shareId: string, tokenSha256: string): Promise<boolean>;
+  /** Tokens to wake for this server: shares still running whose boot copy names the same key. */
+  pushTargetsForServer(serverDomain: string): Promise<ServerSharePushRecord[]>;
   /** False when the inbox already holds `cap` entries (and this id is new). */
   inboxPut(rec: ShareInboxRecord, cap: number): Promise<boolean>;
   inboxList(inboxId: string): Promise<ShareInboxRecord[]>;
@@ -99,6 +119,28 @@ interface UnlockRow {
   deposit_json: string;
   signature_hex: string;
   issued_at: number;
+}
+
+interface PushRow {
+  share_id: string;
+  server_domain: string;
+  member_pub_hex: string;
+  token_sha256: string;
+  platform: string;
+  provider_token: string;
+  registered_at: number;
+}
+
+function pushFromRow(r: PushRow): ServerSharePushRecord {
+  return {
+    shareId: r.share_id,
+    serverDomain: r.server_domain,
+    memberPubHex: r.member_pub_hex,
+    tokenSha256: r.token_sha256,
+    platform: r.platform as SharePushPlatform,
+    providerToken: r.provider_token,
+    registeredAt: r.registered_at,
+  };
 }
 
 interface InboxRow {
@@ -239,7 +281,57 @@ export class D1ServerShareStorage implements ServerShareStorage {
 
   async deleteUnlock(shareId: string): Promise<boolean> {
     const res = await this.db.prepare(`DELETE FROM server_share_unlocks WHERE share_id = ?1`).bind(shareId).run();
+    await this.db.prepare(`DELETE FROM server_share_push WHERE share_id = ?1`).bind(shareId).run();
     return (res.meta.changes ?? 0) > 0;
+  }
+
+  async putPush(rec: ServerSharePushRecord, cap: number): Promise<boolean> {
+    const existing = await this.db
+      .prepare(`SELECT 1 AS x FROM server_share_push WHERE share_id = ?1 AND token_sha256 = ?2`)
+      .bind(rec.shareId, rec.tokenSha256)
+      .first<{ x: number }>();
+    if (!existing) {
+      const n = await this.db
+        .prepare(`SELECT COUNT(*) AS n FROM server_share_push WHERE share_id = ?1`)
+        .bind(rec.shareId)
+        .first<{ n: number }>();
+      if ((n?.n ?? 0) >= cap) return false;
+    }
+    await this.db
+      .prepare(
+        `INSERT INTO server_share_push
+           (share_id, server_domain, member_pub_hex, token_sha256, platform, provider_token, registered_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+         ON CONFLICT(share_id, token_sha256) DO UPDATE SET
+           server_domain = excluded.server_domain, member_pub_hex = excluded.member_pub_hex,
+           platform = excluded.platform, provider_token = excluded.provider_token,
+           registered_at = excluded.registered_at`,
+      )
+      .bind(rec.shareId, rec.serverDomain, rec.memberPubHex, rec.tokenSha256, rec.platform, rec.providerToken, rec.registeredAt)
+      .run();
+    return true;
+  }
+
+  async deletePush(shareId: string, tokenSha256: string): Promise<boolean> {
+    const res = await this.db
+      .prepare(`DELETE FROM server_share_push WHERE share_id = ?1 AND token_sha256 = ?2`)
+      .bind(shareId, tokenSha256)
+      .run();
+    return (res.meta.changes ?? 0) > 0;
+  }
+
+  async pushTargetsForServer(serverDomain: string): Promise<ServerSharePushRecord[]> {
+    const rs = await this.db
+      .prepare(
+        `SELECT p.* FROM server_share_push p
+           JOIN server_shares s ON s.share_id = p.share_id
+           JOIN server_share_unlocks u ON u.share_id = p.share_id AND u.member_pub_hex = p.member_pub_hex
+           WHERE p.server_domain = ?1 AND s.ended_at IS NULL
+           LIMIT 200`,
+      )
+      .bind(serverDomain)
+      .all<PushRow>();
+    return (rs.results ?? []).map(pushFromRow);
   }
 
   async inboxPut(rec: ShareInboxRecord, cap: number): Promise<boolean> {
@@ -282,6 +374,7 @@ export class InMemoryServerShareStorage implements ServerShareStorage {
   private readonly shares = new Map<string, ServerShareRecord>();
   private readonly unlocks = new Map<string, ServerShareUnlockRecord>();
   private readonly inbox = new Map<string, ShareInboxRecord>();
+  private readonly pushes = new Map<string, ServerSharePushRecord>();
 
   async create(rec: Omit<ServerShareRecord, "acceptHex" | "acceptedAt" | "endKind" | "endJson" | "endedAt">): Promise<{ ok: boolean }> {
     if (this.shares.has(rec.shareId)) return { ok: false };
@@ -351,7 +444,30 @@ export class InMemoryServerShareStorage implements ServerShareStorage {
   }
 
   async deleteUnlock(shareId: string): Promise<boolean> {
+    for (const [k, p] of this.pushes) if (p.shareId === shareId) this.pushes.delete(k);
     return this.unlocks.delete(shareId);
+  }
+
+  async putPush(rec: ServerSharePushRecord, cap: number): Promise<boolean> {
+    const key = `${rec.shareId}|${rec.tokenSha256}`;
+    if (!this.pushes.has(key) && [...this.pushes.values()].filter((p) => p.shareId === rec.shareId).length >= cap) return false;
+    this.pushes.set(key, { ...rec });
+    return true;
+  }
+
+  async deletePush(shareId: string, tokenSha256: string): Promise<boolean> {
+    return this.pushes.delete(`${shareId}|${tokenSha256}`);
+  }
+
+  async pushTargetsForServer(serverDomain: string): Promise<ServerSharePushRecord[]> {
+    return [...this.pushes.values()]
+      .filter((p) => {
+        if (p.serverDomain !== serverDomain) return false;
+        const s = this.shares.get(p.shareId);
+        const u = this.unlocks.get(p.shareId);
+        return !!s && s.endedAt === null && !!u && u.memberPubHex === p.memberPubHex;
+      })
+      .map((p) => ({ ...p }));
   }
 
   async inboxPut(rec: ShareInboxRecord, cap: number): Promise<boolean> {

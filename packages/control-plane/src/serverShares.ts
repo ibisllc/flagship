@@ -4,13 +4,15 @@
  * `.com` stores an opaque share id, a hash of the link's bearer token and
  * ciphertext it cannot open; it never learns who the second account is. The
  * owner's writes are signed with the owner's sensitive key; the second
- * account authenticates with the link token (and, for leaving, its per-share
- * key). The box re-verifies every revoke and leave it reads back.
+ * account authenticates with the link token (and, for leaving or registering
+ * a device for start-up notices, its per-share key). The box re-verifies
+ * every revoke and leave it reads back.
  */
 import {
   parseServerShareLeave,
   parseServerShareList,
   parseServerShareOffer,
+  parseServerSharePush,
   parseServerShareRevoke,
   parseServerShareUnlock,
   parseShareInboxRequest,
@@ -19,6 +21,7 @@ import {
   verifyServerShareLeave,
   verifyServerShareList,
   verifyServerShareOffer,
+  verifyServerSharePush,
   verifyServerShareRevoke,
   verifyServerShareUnlock,
   verifyShareInboxRequest,
@@ -53,6 +56,10 @@ const SEALED_HEX = /^([0-9a-f]{2})+$/;
 /** Bounds on what `.com` keeps per row; a share carries a few hundred bytes. */
 const MAX_SEALED_HEX = 16_384;
 const MAX_UNLOCK_HEX = 4_096;
+/** An APNs token is 64 hex, FCM's ~160 chars, a Web Push subscription JSON a few hundred. */
+const MAX_PROVIDER_TOKEN = 4_096;
+/** Devices one share may wake (a person's phone, tablet, browsers). */
+export const SHARE_PUSH_CAP = 10;
 export const SHARE_INBOX_CAP = 200;
 const MAX_ENDS = 200;
 
@@ -307,6 +314,53 @@ export async function handleLeaveServerShare(
   if (row.endedAt !== null) return ok({ ok: true, alreadyEnded: true });
   await deps.shares.end(shareId, "leave", JSON.stringify({ leave, signature: b.signature }), clock(deps));
   return ok({ ok: true });
+}
+
+// POST /api/server-shares/:id/push — the second account registers (or drops)
+// one device's push token for start-up notices. Part of the unlock-at-boot
+// opt-in: accepted only while the owner's deposit for the same per-share key
+// stands, and dropped with it.
+export async function handleServerSharePush(
+  deps: ServerShareDeps,
+  shareId: string,
+  token: string | null,
+  body: unknown,
+): Promise<Res> {
+  if (!HEX32.test(shareId)) return malformed("bad share id");
+  const b = (body ?? {}) as Record<string, unknown>;
+  const push = parseServerSharePush(b.push);
+  const s = sig(b.signature);
+  if (!push || !s || push.shareId !== shareId) return malformed("malformed push registration");
+  if (!fresh(deps, push.issuedAt)) return forbidden("stale request");
+  const row = await deps.shares.get(shareId);
+  if (!row || !tokenMatches(row, token)) return notFound("no such share");
+  if (push.serverDomain.toLowerCase() !== row.serverDomain) return forbidden("registration is for another server");
+  if (!verifyServerSharePush(push, s, hexToBytes(push.memberPubHex))) return forbidden("invalid signature");
+  if (push.op === "delete") {
+    const deleted = await deps.shares.deletePush(shareId, push.tokenSha256);
+    return ok({ ok: true, push: false, deleted });
+  }
+  if (row.endedAt !== null) return gone("this share has ended");
+  const copy = await deps.shares.getUnlock(shareId);
+  if (!copy || copy.memberPubHex !== push.memberPubHex) {
+    return { status: 403, body: { error: "the owner hasn't let this share approve the server's start-up", code: "unlock-not-shared" } };
+  }
+  const providerToken = typeof b.providerToken === "string" ? b.providerToken : "";
+  if (providerToken.length === 0 || providerToken.length > MAX_PROVIDER_TOKEN) return malformed("providerToken required");
+  if (shareSha256Hex(providerToken) !== push.tokenSha256) return forbidden("token is not the one that was signed");
+  const put = await deps.shares.putPush(
+    {
+      shareId,
+      serverDomain: row.serverDomain,
+      memberPubHex: push.memberPubHex,
+      tokenSha256: push.tokenSha256,
+      platform: push.platform,
+      providerToken,
+      registeredAt: clock(deps),
+    },
+    SHARE_PUSH_CAP,
+  );
+  return put ? ok({ ok: true, push: true }) : conflict("too many devices for this share");
 }
 
 // GET /api/server/:domain/share-ends?since= — public; the box verifies each.

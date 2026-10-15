@@ -59,6 +59,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0095",
   // The owner's server order (who leads, who's next).
   "0096",
+  // A co-manager's devices to wake when a shared server waits to start.
+  "0097",
 ];
 
 export interface SchemaStatusDeps {
