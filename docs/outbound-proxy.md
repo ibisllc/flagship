@@ -399,9 +399,8 @@ boot, ~10–40 per phone-approved boot). Carrying the daemon's own calls
 proxy carries them.
 
 Rate limiting: every OHTTP request reaches the Worker from the relay's
-addresses, so IP-keyed limits see all proxy boxes as one client. The limiter
-is not enforcing today; when it is, key the gateway's inner requests on the
-signed identity they carry instead.
+addresses, so IP-keyed limits would see all proxy boxes as one client. Key
+the gateway's inner requests on the signed identity they carry instead.
 
 **Launch item (later):** when proxying and paid features launch, use OHTTP for
 **every** box during setup (cheap: setup is a few dozen requests), not only
@@ -413,25 +412,36 @@ The outbound proxy is a **Pro** feature (owner, 2026-10-15), which is also
 why it doesn't launch now. Per AGENTS.md, Pro features branch off
 `feat/marketplace` (the payment rail), like `feat/custom-domains`.
 
-- **Rebase onto `feat/marketplace`: not done.** `feat/marketplace` was last
-  moved 2026-10-09 and is 336 commits behind `main` (30 ahead); this branch
-  is built on `main` 2026-10-14 and uses what landed since (the server
-  order's exports, `authorizeSensitiveOrder` call sites, the webapp shell
-  numbering, the server page). A trial rebase conflicts on its first commit
-  (`packages/protocol/src/index.ts`) and the daemon commit would conflict in
-  `index.ts`. Rebase when `feat/marketplace` is brought up to `main`.
-- **Gating plan, for that rebase:** the apps show the create-flow block and
-  the server page's section only when the account's effective tier is Pro
-  (`hobby`) or Pro Max (`maker`), using the tier the marketplace branch
-  serves (`effectiveTierOf` in `control-plane/src/metering.ts`, surfaced to
-  the apps the way `customDomainEntitlement.ts` surfaces the custom-domain
-  allowance). Free accounts see a short "Part of Pro" row instead, like
-  custom domains. **The box refuses nothing by tier:** the owner-signed order
-  is the authority, and the marketplace branch has no box-side entitlement
-  pattern to follow. The OHTTP gateway doesn't check tier either (it can't
-  tell which box is asking, by design).
-- **Webapp shell version:** this branch uses **v80** (main was at v79 when it
-  was picked, 2026-10-15); re-pick the next free version at rebase time.
+- **Rebased onto `feat/marketplace` (2026-10-15)**, once marketplace was
+  brought up to `main`. The pre-rebase tip is kept as
+  `backup/outbound-proxy-pre-rebase-2026-10-15`.
+- **How Pro is enforced.** The plan is the account's effective tier
+  (`effectiveTierOf`: `free`, `hobby` = Pro, `maker` = Pro Max; a lapsed
+  subscription counts as Free).
+  - **The box:** `.com` returns `tier` in the daemon-status reply. Once the
+    box has heard `free` it refuses a new or changed proxy order
+    (`403 pro-required`, "An outbound proxy is part of Pro. You can still
+    turn this one off.") and reports `available: false` in the proxy
+    summary. Turning a proxy off always works. A proxy already set stays on
+    when a plan lapses: dropping it would expose the box's address without
+    the owner asking. Until `.com` has answered, the box refuses nothing,
+    because a new box needs its proxy to reach `.com` at all.
+  - **The create flow (all three apps):** the order is signed into the
+    recipe on the phone and never passes `.com`, so nothing server-side can
+    stop it. The apps read the plan from `GET /api/users/:u/allowance` (account
+    read token) and show "An outbound proxy is part of Pro." with a link to
+    the Pro page instead of the fields. An unknown plan (the read failed)
+    shows the fields; the box's own check then applies to later changes.
+  - **The server page (all three apps):** reads `available` from the box.
+    `false` shows the Pro row; only "Turn off" remains, when a proxy is set.
+  - **The OHTTP gateway doesn't check the plan** (it can't tell which box is
+    asking, by design). Setup calls go through it only when the recipe
+    carries a proxy, which the create flow allows only on Pro.
+- **At launch of paid features:** OHTTP for every box during setup, free
+  for everyone (see "Launch item" above), is not built.
+- **Webapp shell version:** this branch uses **v93** (`feat/marketplace`
+  v90, `feat/custom-domains` v91, `feat/custom-names` v92, `main` v89 at
+  rebase time). Take the next free number whenever a parent passes it.
 
 ## Failure UX: the proxy stops working
 
