@@ -233,7 +233,7 @@ describe("API keys in a server backup", () => {
     const key = String(created.json.key);
     const archived = src.store.exportService(SVC);
     expect(archived).toHaveLength(1);
-    expect(JSON.stringify(archived)).not.toContain(key.split("_").pop()!);
+    expect(JSON.stringify(archived)).not.toContain(key.split("_").slice(2).join("_"));
 
     const CLONE = "clone.harry.flagship.services";
     const dir = mkdtempSync(join(tmpdir(), "apikeys-import-"));
