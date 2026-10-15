@@ -140,7 +140,7 @@ keeps the display names in one place (webapp `lib/memberRoles.js`, iOS
 `AppMemberRole`, Android `AppMemberRole`).
 
 **Grants.** Every redemption of an invite is its own grant, with its own role
-(its own, else the invite's, else the app's default) and revocation: a group
+(its own, else the invite's, else the app's default; Member for a member-tier invite, see "Who can invite") and revocation: a group
 link's joins are separate per-person bindings. A person can hold several
 grants for one app (a personal invite and group links all bind their
 per-author contact AID). Their role is the **highest** of their live grants;
@@ -172,6 +172,65 @@ there; private routes still show the knock page themselves.
 (an order naming a single grant for revocation; today a person is removed from
 the box entirely, or a whole invite is revoked). Anonymous visitors are never
 given a rank (decided 2026-10-14, above).
+
+## Who can invite (owner decision, 2026-10-15)
+
+**Only admins grant higher access; any device of the account may invite at
+Member, and admins are told.** Before this, an account with a pinned admin
+root (every real account) accepted invite creates only from an admin device,
+so a phone without the admin root could not invite anyone.
+
+| | admin device (holds the admin root) | any other device of the account |
+|---|---|---|
+| create an invite | yes, any rank (signs with the admin root) | yes, at **Member** (signs with the account's membership key, AID or IRK) |
+| change a rank (`flagship/app-member-role/v1`) | yes | no: the box refuses anything but the admin root |
+| revoke an invite | any | only the invites it created itself |
+| open/members-only, remove a person, delete | as before (the clients offer them on admin devices) | as before |
+
+- **`.com`** (`serviceInvites.ts`): the create goes through the admin gate
+  first (admin root, or a device with an admin-root-signed `admin` grant:
+  tier `admin`). On an admin-pinned account a create the gate refused is
+  accepted when the account's AID or IRK signed it: tier `member`. On an
+  account with no admin root the AID/IRK create is `admin`, as before. The
+  invite row records `creator_tier`, `creator_pub_hex` (the key it verified
+  under) and `creator_device_id` (the account device id the request named,
+  kept only when it is a live device of the account; unsigned, attribution
+  only); migration 0100. The owner-signed list returns `creatorTier` and
+  `creatorDeviceId`. A revoke is accepted from the admin gate, or, for a
+  member invite, from the very key that created it while that key is still
+  the account's. `scripts/admin-authority-guard.sh` lists these two paths
+  (`memberInviteSigner`, `revokedByCreator`) as its only membership-key
+  exceptions.
+- **Admins are told.** A member-tier create pushes every admin device (the
+  devices holding a live admin-root-signed `admin` grant) a content-free
+  `invite-created` notice: "A device on your account invited someone to one
+  of your apps.", opening `https://<apex>/app/account/activity`. No app,
+  person, server or device name rides it. The same line is logged to the
+  account activity (`invite-created` audit row).
+- **The box caps it** (`serviceAccess.ts`). The box never takes the tier
+  from `.com`: it reads it from the key that signed the create it verifies
+  on redeem or manual accept. With a pinned admin root, the admin root makes
+  an `admin` invite and the owner's AID or IRK a `member` invite; with none,
+  the owner key is the authority (`admin`). The tier is stored per invite
+  (`roles.tiers`) before anyone is bound, and `member` never turns back into
+  `admin`. A join through a member invite is Member unless an admin-signed
+  role order set its invite's or its own rank, whatever the manifest's
+  `default_role` (an old `admin` default maps to master, so falling back to
+  it would leak). Rank orders on an admin-pinned box verify only under the
+  admin root, so the IRK every device holds can't lift anyone. Effective
+  rank stays the highest live grant, so an admin can raise a member-invited
+  person later (or invite them again at a higher rank). The members list
+  returns each invite's and grant's `tier`.
+- **Clients.** Admin devices sign creates and revokes with the admin root
+  (one biometric per unlocked session); other devices with the AID, and their
+  rank picker is locked to Member ("Only an admin device can give a higher
+  rank"). Rank changes are offered only on admin devices. Every member row
+  shows "Invited by <device>", the name resolved on the device from the
+  encrypted account directory (never sent to `.com` or the box), with a
+  one-tap revoke for admins.
+- **Not changed:** the box still verifies the open/members-only mode and
+  allow-remove envelopes under the owner IRK (they were never moved to the
+  admin root), so "admin only" for those is a client rule today.
 
 ## Per-app identity (owner rule, 2026-10-13)
 

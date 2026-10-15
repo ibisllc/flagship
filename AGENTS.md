@@ -117,6 +117,9 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   long-lived id may be shared between contexts. App ranks are fixed and
   ordered: Member < Manager < Master (crown) < the box owner; apps decide
   what each rank may do, the box never blocks writes by rank.
+- **Only admins grant higher access; any device of the account may invite at
+  Member, and admins are told** (owner rule, 2026-10-15;
+  `docs/service-access-gating.md` "Who can invite").
 - **Unlaunched features live entirely on their own branch; `main` ships clean.**
   Every not-yet-launched feature — site literature, app code (iOS/Android/
   webapp), backend logic, AND tests — lives ONLY on its feature branch, so
@@ -167,7 +170,7 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > when done. History up to 2026-10-10 is frozen verbatim in
 > `docs/archive/status-log-through-2026-10-10.md`; read it for the why behind
 > anything below. Keep this section short: it loads into every agent session.
-> Last updated **2026-10-12**.
+> Last updated **2026-10-15**.
 
 ### Launch
 
@@ -369,6 +372,20 @@ owners: `docs/runbooks/release-readiness.md`; feature matrix:
   anonymous visitors only on `access.public_routes` (normalised, dot segments
   refused), knock elsewhere; unknown mode = members-only (docs/app-apis.md §2,
   2026-10-14; needs an endorsed box release).
+- **Who can invite (2026-10-15).** `docs/service-access-gating.md` "Who can
+  invite". Real (admin-pinned) accounts could only invite from an admin
+  device; now any device invites at Member (AID/IRK-signed create = tier
+  `member` on `.com`, recorded with the device id, migration 0100) and every
+  admin device gets a content-free `invite-created` push plus an activity
+  row; the box reads the tier from the create's signing key and caps those
+  joins at Member whatever `default_role` says; rank orders stay
+  admin-root-only on pinned boxes; a device may revoke its own member
+  invites. Clients: admin devices sign with the admin root, others' rank
+  picker is locked to Member, "Invited by <device>" from the decrypted
+  directory, one-tap revoke for admins, route `app/account/activity`.
+  Needs: migration 0100 then a `.com` deploy, an endorsed box release (the
+  cap), iOS/Android builds. Open: the box still takes mode and allow-remove
+  orders under the owner IRK (admin-only is a client rule there).
 - **Per-app visitor identity (2026-10-13).** A visitor signs redeem / visit /
   knock / acceptance with `deriveAppAccountId(UMK, serviceRef)`
   (`flagship/app-aid/v1|<serviceRef>`), replacing the per-author contact AID;
