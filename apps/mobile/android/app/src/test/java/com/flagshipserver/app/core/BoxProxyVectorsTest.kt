@@ -99,6 +99,13 @@ class BoxProxyVectorsTest {
         }
     }
 
+    @Test fun saysTheSameThingAboutTypedHosts() {
+        for (h in root["hostErrors"]!!.jsonArray.map { it.jsonObject }) {
+            val want = h["error"]?.let { if (it is kotlinx.serialization.json.JsonNull) null else it.jsonPrimitive.content }
+            assertEquals(h.s("host"), want, BoxProxyProtocol.hostError(h.s("host")))
+        }
+    }
+
     @Test fun checksCredentialsTheSameWay() {
         val creds = root.o("credentials")
         for (c in creds["accept"]!!.jsonArray.map { it.jsonObject }) {

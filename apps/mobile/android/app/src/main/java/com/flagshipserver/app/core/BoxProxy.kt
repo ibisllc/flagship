@@ -52,7 +52,7 @@ object BoxProxyProtocol {
         if (host.isEmpty()) return "Enter the proxy's address."
         if (host.length > 253) return "That address is too long."
         if (host.contains(':')) {
-            return if (IPV6.matches(host) && host.split(":").size >= 3) null else "That isn't a valid IPv6 address."
+            return if (IPV6.matches(host) && host.split(":").size >= 3) null else "Use a host name or an IP address, without a scheme, path or port."
         }
         if (IPV4.matches(host)) return null
         if (DIGITS_DOTS.matches(host)) return "That isn't a valid IPv4 address."

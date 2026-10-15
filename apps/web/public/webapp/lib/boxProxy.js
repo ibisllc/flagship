@@ -38,7 +38,7 @@ export function boxProxyHostError(host) {
   if (host.length === 0) return "Enter the proxy's address.";
   if (host.length > 253) return "That address is too long.";
   if (host.includes(":")) {
-    return IPV6.test(host) && host.split(":").length >= 3 ? null : "That isn't a valid IPv6 address.";
+    return IPV6.test(host) && host.split(":").length >= 3 ? null : "Use a host name or an IP address, without a scheme, path or port.";
   }
   if (IPV4.test(host)) return null;
   if (/^[0-9.]+$/.test(host)) return "That isn't a valid IPv4 address.";

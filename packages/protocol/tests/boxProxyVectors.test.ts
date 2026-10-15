@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   boxProxyCredentialsError,
+  boxProxyHostError,
   canonicalBoxProxy,
   deriveIRK,
   normalizeBoxProxyHost,
@@ -40,6 +41,7 @@ describe("box proxy vectors", () => {
 
   it("normalizes typed hosts", () => {
     for (const n of V.normalize) expect(normalizeBoxProxyHost(n.input)).toBe(n.host);
+    for (const h of V.hostErrors) expect(boxProxyHostError(h.host), h.host).toBe(h.error);
   });
 
   it("checks credentials the same way everywhere", () => {
