@@ -41,6 +41,7 @@ modules:
       - install -Dm644 container_env.py     ${FLATPAK_DEST}/share/flagship-builder/container_env.py
       - install -Dm644 elevation.py         ${FLATPAK_DEST}/share/flagship-builder/elevation.py
       - install -Dm644 pair_session.py      ${FLATPAK_DEST}/share/flagship-builder/pair_session.py
+      - install -Dm644 pairing_watch.py     ${FLATPAK_DEST}/share/flagship-builder/pairing_watch.py
       - mkdir -p ${FLATPAK_DEST}/share/flagship-builder/vm
       - install -m644 -t ${FLATPAK_DEST}/share/flagship-builder/vm vm/*.py
       - install -Dm755 disk_write.py        ${FLATPAK_DEST}/share/flagship-builder/disk_write.py

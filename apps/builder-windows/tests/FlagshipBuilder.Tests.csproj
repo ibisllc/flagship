@@ -36,6 +36,7 @@
     <Compile Include="..\src\IsoBaseCache.cs" />
     <!-- Phone-pairing subprocess glue: the pure event parser is WPF-free. -->
     <Compile Include="..\src\PairSession.cs" />
+    <Compile Include="..\src\PairingWatch.cs" />
     <Compile Include="..\src\BuildLog.cs" />
     <Compile Include="..\src\NativePairingCrypto.cs" />
     <Compile Include="..\src\NativeIsoRemaster.cs" />
@@ -89,6 +90,7 @@
     <Compile Include="NativePreseedEngineTests.cs" />
     <Compile Include="SshLaunchTests.cs" />
     <Compile Include="ApplianceCacheTests.cs" />
+    <Compile Include="PairingWatchTests.cs" />
   </ItemGroup>
 
   <ItemGroup>

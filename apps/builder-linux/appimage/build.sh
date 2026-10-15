@@ -60,6 +60,7 @@ install -Dm644 "${LINUX_DIR}/elevation.py"         "${APPDIR}/usr/share/flagship
 # The phone-pairing session + the VM appliance host layer — wizard.py imports
 # both at module scope, so a bundle without them dies at startup.
 install -Dm644 "${LINUX_DIR}/pair_session.py"      "${APPDIR}/usr/share/flagship-builder/pair_session.py"
+install -Dm644 "${LINUX_DIR}/pairing_watch.py"     "${APPDIR}/usr/share/flagship-builder/pairing_watch.py"
 mkdir -p "${APPDIR}/usr/share/flagship-builder/vm"
 install -m644 -t "${APPDIR}/usr/share/flagship-builder/vm" "${LINUX_DIR}"/vm/*.py
 # disk_write.py is the script pkexec elevates for the raw write — install it

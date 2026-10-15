@@ -56,7 +56,7 @@ public partial class MainWindow : Window
         // WMIC returns.
         Loaded += (_, _) =>
         {
-            _wizard.StartPairing();
+            _wizard.LaunchPairing();
             _ = _wizard.RefreshDisksAsync();
         };
         // Auto-scroll the log when new lines arrive.

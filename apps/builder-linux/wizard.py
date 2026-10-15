@@ -52,6 +52,7 @@ from cli_runner import (
     parse_verify_json,
 )
 from pair_session import PairEvent, PairSession
+from pairing_watch import PairingWatch, timer_schedule
 from vm import host_arch, recipe_info, resource_plan, ssh_launch
 from vm.appliance_cache import ApplianceCache, ApplianceCacheError, backing_files_in_use
 from vm.config import VMConfig, VMProvisioningMode
@@ -347,6 +348,10 @@ class WizardModel:
         handoff_seconds: int = 5,
         # Fetches the published prebuilt server image (tests pass a fake).
         ensure_appliance_fn: Optional[Callable[..., str]] = None,
+        # Keep a live pairing code up on its own (the app passes True; tests
+        # drive pairing by hand unless they opt in).
+        auto_pair: bool = False,
+        schedule: Callable[[float, Callable[[], None]], Callable[[], None]] = timer_schedule,
     ) -> None:
         self.state = WizardState(mode=mode)
         self.on_change = on_change or (lambda: None)
@@ -358,6 +363,16 @@ class WizardModel:
         self._ensure_base = ensure_base_fn or iso_base_cache.ensure
         self._ensure_appliance = ensure_appliance_fn or _live_ensure_appliance
         self._appliance_failed = False
+        self._auto_pair = auto_pair
+        # Set when the owner cancels pairing; "Add a server" or the pair
+        # button clears it.
+        self._pairing_opted_out = False
+        self.pairing_watch = PairingWatch(
+            wants_pairing=self._wants_pairing,
+            start=self.start_pairing,
+            stop=self._pause_pairing_offline,
+            schedule=schedule,
+        )
         self._builder_version = builder_version
         self.vm = vm_manager if vm_manager is not None else VMManager.create_default()
         self.vm.on_change = self._notify
@@ -672,7 +687,8 @@ class WizardModel:
         self._notify()
 
     def reset_to_new_server(self) -> None:
-        """The "+ Add a server" sidebar entry: back to a fresh wizard."""
+        """The "+ Add a server" sidebar entry: back to a fresh wizard, with a
+        fresh pairing code when pairing runs on its own."""
         if self.state.is_pairing:
             self.cancel_pairing()
         self.state.selected_server_name = None
@@ -682,7 +698,9 @@ class WizardModel:
         self.state.verified = None
         self.state.recipe_error = None
         self.state.is_finished = False
+        self._pairing_opted_out = False
         self._notify()
+        self.pairing_watch.launch()
 
     # ---- Host on this PC ----
 
@@ -1021,12 +1039,40 @@ class WizardModel:
 
     # ---- phone pairing ----
 
+    def _wants_pairing(self) -> bool:
+        s = self.state
+        return (
+            self._auto_pair
+            and self._pair is None
+            and not self._pairing_opted_out
+            and not s.is_running
+            and s.recipe_path is None
+            and s.verified is None
+        )
+
+    def _pause_pairing_offline(self) -> None:
+        """Offline: drop the session so the code doesn't churn against a dead
+        relay, and say why. The watch starts a new one when the network
+        returns."""
+        pair, self._pair = self._pair, None
+        if pair is not None:
+            pair.cancel()
+        s = self.state
+        if s.is_pairing or self._wants_pairing():
+            s.is_pairing = True
+            s.pair_qr = None
+            s.pair_code = None
+            s.pair_sas = None
+            s.pair_status = "Waiting for an internet connection…"
+        self._notify()
+
     def start_pairing(self) -> None:
         """Spawn `flagship-build pair --emit-events`, surface the QR / code /
         SAS / status, and on delivery load the received recipe (identical to a
         dropped-in recipe file) -> the destination chooser."""
-        if self.state.is_pairing:
+        if self.state.is_pairing and self._pair is not None:
             return
+        self._pairing_opted_out = False
         s = self.state
         s.selected_server_name = None
         s.destination = None
@@ -1051,7 +1097,8 @@ class WizardModel:
                 )
             except (CLILocateError, FileNotFoundError, OSError) as e:
                 self._append_log("stderr", f"pair failed: {e}")
-                self._end_pairing("Pairing couldn't start — is Node installed?")
+                if self._pair is session:
+                    self._end_pairing("Pairing couldn't start — is Node installed?", failed=True)
 
         threading.Thread(target=run, daemon=True).start()
 
@@ -1059,13 +1106,14 @@ class WizardModel:
         pair = self._pair
         if pair is not None:
             pair.cancel()
+        self._pairing_opted_out = True
         self._end_pairing(None)
 
     def set_pair_debug(self, value: bool) -> None:
         self.state.pair_debug = bool(value)
         self._notify()
 
-    def _end_pairing(self, status: Optional[str]) -> None:
+    def _end_pairing(self, status: Optional[str], failed: bool = False) -> None:
         self._pair = None
         self.state.is_pairing = False
         if status is not None:
@@ -1073,10 +1121,13 @@ class WizardModel:
         self.state.pair_qr = None
         self.state.pair_sas = None
         self._notify()
+        if failed:
+            self.pairing_watch.on_failed()
 
     def _handle_pair_event(self, ev: PairEvent) -> None:
         s = self.state
         if ev.event == "ready":
+            self.pairing_watch.on_ready()
             s.pair_qr = ev.qr_terminal
             s.pair_code = ev.human_code
             s.pair_status = "Scan the QR with the Flagship app, or type the code."
@@ -1107,8 +1158,12 @@ class WizardModel:
                 # destination chooser.
                 self.accept_recipe_file(Path(ev.recipe_path))
                 return  # accept_recipe_file notified
+            # Ended without a recipe: put a fresh code up.
+            self._notify()
+            self.pairing_watch.on_failed()
+            return
         elif ev.event == "error":
-            self._end_pairing(ev.message or "Pairing failed.")
+            self._end_pairing(ev.message or "Pairing failed.", failed=True)
             return
         self._notify()
 
@@ -1198,7 +1253,7 @@ def build_window(application, model: Optional[WizardModel] = None):
     gi.require_version("Adw", "1")
     from gi.repository import Adw, Gtk, GLib, Gio  # type: ignore  # noqa: E402
 
-    wizard_model = model if model is not None else WizardModel(mode=MODE_SIMPLE)
+    wizard_model = model if model is not None else WizardModel(mode=MODE_SIMPLE, auto_pair=True)
 
     window = Adw.ApplicationWindow(application=application)
     window.set_title("Flagship Studio")
@@ -2238,6 +2293,19 @@ def build_window(application, model: Optional[WizardModel] = None):
 
     # Kick off the initial disk scan once the window is shown.
     GLib.idle_add(wizard_model.refresh_disks)
+
+    # Put a pairing code up at once and keep one up: paused while the relay's
+    # host can't be reached, back when it can (Mac NWPathMonitor).
+    from pairing_watch import ConnectivityMonitor, relay_reachable
+
+    relay_host = os.environ.get("FLAGSHIP_CONTROL_HOST", "flagshipserver.com")
+    monitor = ConnectivityMonitor(
+        wizard_model.pairing_watch.on_connectivity,
+        probe=lambda: relay_reachable(relay_host),
+    )
+    GLib.idle_add(lambda: wizard_model.pairing_watch.launch() and False)
+    monitor.start()
+    window.connect("destroy", lambda _w: monitor.stop())
 
     return window
 

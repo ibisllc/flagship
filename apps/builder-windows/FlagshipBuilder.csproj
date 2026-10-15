@@ -43,6 +43,7 @@
     <Compile Include="src\IsoManifestClient.cs" />
     <Compile Include="src\IsoBaseCache.cs" />
     <Compile Include="src\PairSession.cs" />
+    <Compile Include="src\PairingWatch.cs" />
     <Compile Include="src\NativePairingCrypto.cs" />
     <Compile Include="src\NativeIsoRemaster.cs" />
     <Compile Include="src\NativePreseedEngine.cs" />

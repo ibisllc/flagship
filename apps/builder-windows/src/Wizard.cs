@@ -65,6 +65,9 @@ public sealed class Wizard : INotifyPropertyChanged
         Vm = VMManager.CreateDefault();
         Vm.Log = m => AppendLog(LogStream.Stdout, m);
         Vm.WakeHoldChanged = on => OnUi(() => HostPower.KeepAwake(on));
+        _pairingWatch = new PairingWatch(WantsPairing, StartPairing, PausePairingOffline, ScheduleOnUi);
+        System.Net.NetworkInformation.NetworkChange.NetworkAvailabilityChanged += (_, e) =>
+            OnUi(() => _pairingWatch.OnConnectivity(e.IsAvailable));
         Vm.Servers.CollectionChanged += (_, _) => FireBag();
         if (Vm.Toolchain is { } tc) _ = ProbeWhpxAsync(tc);
     }
@@ -80,6 +83,48 @@ public sealed class Wizard : INotifyPropertyChanged
     private bool _pairDebug;
     private PairingStage _pairingStage = PairingStage.Qr;
     private bool _manualRecipeMode;
+    private readonly PairingWatch _pairingWatch;
+    /// <summary>Set when the owner cancels pairing; New Server or the pair
+    /// button clears it.</summary>
+    private bool _pairingOptedOut;
+
+    /// <summary>Put a pairing code up at launch and keep one up (paused while
+    /// offline, retried after a failure). Mirrors the Mac's beginPairing.</summary>
+    public void LaunchPairing()
+    {
+        _pairingWatch.OnConnectivity(System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable());
+        _pairingWatch.Launch();
+    }
+
+    private bool WantsPairing() => _pair is null && !_pairingOptedOut && !IsRunning && !ManualRecipeMode
+        && _recipePath is null && Verified is null;
+
+    /// <summary>Offline: drop the session so the code doesn't churn against a
+    /// dead relay, and say why; the watch starts a new one when the network
+    /// returns.</summary>
+    private void PausePairingOffline()
+    {
+        var pair = _pair;
+        _pair = null;
+        pair?.Cancel();
+        if (!IsPairing && !WantsPairing()) return;
+        IsPairing = true;
+        PairingStage = PairingStage.Qr;
+        PairQr = null;
+        PairCode = null;
+        PairSas = null;
+        PairStatus = "Waiting for an internet connection…";
+    }
+
+    private static Action ScheduleOnUi(TimeSpan delay, Action action)
+    {
+        var cts = new System.Threading.CancellationTokenSource();
+        _ = Task.Delay(delay, cts.Token).ContinueWith(t =>
+        {
+            if (!t.IsCanceled) OnUi(action);
+        }, TaskScheduler.Default);
+        return cts.Cancel;
+    }
 
     /// <summary>True while the pairing relay session is live (cover is showing
     /// the QR + waiting for / talking to the phone).</summary>
@@ -138,7 +183,8 @@ public sealed class Wizard : INotifyPropertyChanged
     /// </summary>
     public void StartPairing()
     {
-        if (IsPairing) return;
+        if (IsPairing && _pair is not null) return;
+        _pairingOptedOut = false;
         SelectedServerName = null;
         Destination = null;
         RecipeError = null;
@@ -164,17 +210,26 @@ public sealed class Wizard : INotifyPropertyChanged
         _ = Task.Run(async () =>
         {
             try { await session.RunAsync(); }
-            catch (Exception e) { OnUi(() => { AppendLog(LogStream.Stderr, $"pair failed: {e.Message}"); EndPairing("Pairing couldn't start — check your network connection."); }); }
+            catch (Exception e)
+            {
+                OnUi(() =>
+                {
+                    AppendLog(LogStream.Stderr, $"pair failed: {e.Message}");
+                    if (ReferenceEquals(_pair, session))
+                        EndPairing("Pairing couldn't start — check your network connection.", failed: true);
+                });
+            }
         });
     }
 
     public void CancelPairing()
     {
         _pair?.Cancel();
+        _pairingOptedOut = true;
         EndPairing(null);
     }
 
-    private void EndPairing(string? status)
+    private void EndPairing(string? status, bool failed = false)
     {
         _pair = null;
         IsPairing = false;
@@ -182,6 +237,7 @@ public sealed class Wizard : INotifyPropertyChanged
         PairQr = null;
         PairSas = null;
         FireBag();
+        if (failed) _pairingWatch.OnFailed();
     }
 
     private void HandlePairEvent(PairEvent ev)
@@ -189,6 +245,7 @@ public sealed class Wizard : INotifyPropertyChanged
         switch (ev.Event)
         {
             case "ready":
+                _pairingWatch.OnReady();
                 PairingStage = PairingStage.Qr;
                 PairQr = ev.Payload;
                 PairCode = ev.HumanCode;
@@ -226,10 +283,15 @@ public sealed class Wizard : INotifyPropertyChanged
                     // go to the destination chooser.
                     AcceptRecipeFile(p);
                 }
+                else
+                {
+                    // Ended without a recipe: put a fresh code up.
+                    _pairingWatch.OnFailed();
+                }
                 FireBag();
                 break;
             case "error":
-                EndPairing(ev.Message ?? "Pairing failed.");
+                EndPairing(ev.Message ?? "Pairing failed.", failed: true);
                 break;
         }
     }
@@ -546,6 +608,7 @@ public sealed class Wizard : INotifyPropertyChanged
         RecipePath = null;
         Verified = null;
         _parsedRecipe = null;
+        _pairingWatch.Launch();
         SelectedServerName = Vm.Server(name) is null ? null : name;
     }
 
