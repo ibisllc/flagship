@@ -1,14 +1,16 @@
 import Foundation
 
-// Access control — members' roles (docs/service-access-gating.md, "Open mode +
-// members"). Wire parity with packages/server-daemon/src/memberRoles.ts.
+// Access control — members' ranks (docs/service-access-gating.md, "Open mode +
+// members" and "Account members, ranks and who may change them"). Wire parity
+// with packages/server-daemon/src/memberRoles.ts.
 //
-// Ranks are Flagship's member < manager < master, ordered and cumulative
-// (the box owner is always owner and never given); apps enforce them. Every redemption of an invite is its own grant with a
-// role (its own, else the invite's, else the app's default); a person holding
-// several has the highest.
+// Ranks are exactly member < manager < master, ordered and cumulative; there
+// is no owner rank. Apps enforce them. Every redemption of an invite is its
+// own grant with a role (its own, else the invite's, else the app's default);
+// a person holding several has the highest. The account's own devices and
+// co-managing accounts have a rank by default (`accountMembers`).
 
-/// The ranks an owner can give, lowest first. Raw values are the wire names;
+/// The ranks an admin can give, lowest first. Raw values are the wire names;
 /// `label` is the ONE place their display names live on iOS.
 public enum AppMemberRole: String, Codable, CaseIterable, Sendable, Identifiable {
     case member, manager, master
@@ -22,11 +24,17 @@ public enum AppMemberRole: String, Codable, CaseIterable, Sendable, Identifiable
     }
     /// Master is shown with a crown (`crown.fill`).
     public var crowned: Bool { self == .master }
-    /// A role name as the box sends it; anything off the ladder is nil.
+    /// A role name as the box sends it; anything off the ladder is nil. A
+    /// legacy `owner` reads as master.
     public init?(wire: String?) {
+        if wire == "owner" { self = .master; return }
         guard let wire, let r = AppMemberRole(rawValue: wire) else { return nil }
         self = r
     }
+
+    /// Manager or master: a non-admin device may invite at Member and
+    /// withdraw its own invites.
+    public var isManagerClass: Bool { self != .member }
 }
 
 /// Who created an invite, as the box decided from the key that signed it:
@@ -68,11 +76,74 @@ public struct AppMemberInviteRole: Codable, Equatable, Sendable {
     public let role: String
     public let set: Bool
     public let tier: String?
-    public init(inviteId: String, role: String, set: Bool, tier: String? = nil) {
+    /// The key the box recorded as the invite's creator (lowercase hex).
+    public let creatorPub: String?
+    /// The account device that key belongs to, from the box's device book.
+    public let creatorDeviceId: String?
+    public init(inviteId: String, role: String, set: Bool, tier: String? = nil,
+                creatorPub: String? = nil, creatorDeviceId: String? = nil) {
         self.inviteId = inviteId
         self.role = role
         self.set = set
         self.tier = tier
+        self.creatorPub = creatorPub
+        self.creatorDeviceId = creatorDeviceId
+    }
+}
+
+/// One of the account's devices, or an account that co-manages the server,
+/// with its rank in this app. The box knows device ids and keys only; names
+/// are resolved on the phone.
+public struct AppAccountMember: Codable, Equatable, Sendable, Identifiable {
+    /// "device" | "co-manager".
+    public let kind: String
+    public let deviceId: String?
+    /// The device's account device key (lowercase hex).
+    public let devicePub: String?
+    /// "admin" | "member" (devices only).
+    public let tier: String?
+    public let shareId: String?
+    /// The server owner's own label for a co-managing account.
+    public let label: String?
+    /// The effective rank; nil when refused.
+    public let rank: String?
+    /// An admin order set it (else it is the default for its kind).
+    public let set: Bool
+    public let refused: Bool
+
+    public init(kind: String, deviceId: String? = nil, devicePub: String? = nil, tier: String? = nil,
+                shareId: String? = nil, label: String? = nil, rank: String?, set: Bool = false, refused: Bool = false) {
+        self.kind = kind
+        self.deviceId = deviceId
+        self.devicePub = devicePub
+        self.tier = tier
+        self.shareId = shareId
+        self.label = label
+        self.rank = rank
+        self.set = set
+        self.refused = refused
+    }
+
+    public static func device(id: String, pub: String, admin: Bool, rank: String?, set: Bool = false,
+                              refused: Bool = false) -> AppAccountMember {
+        AppAccountMember(kind: "device", deviceId: id, devicePub: pub, tier: admin ? "admin" : "member",
+                         rank: rank, set: set, refused: refused)
+    }
+
+    public static func coManager(shareId: String, label: String, rank: String?, set: Bool = false,
+                                 refused: Bool = false) -> AppAccountMember {
+        AppAccountMember(kind: "co-manager", shareId: shareId, label: label, rank: rank, set: set, refused: refused)
+    }
+
+    public var isDevice: Bool { kind == "device" }
+    public var isAdminDevice: Bool { isDevice && tier == "admin" }
+    public var id: String { isDevice ? (deviceId ?? devicePub ?? "") : (shareId ?? "") }
+    public var role: AppMemberRole? { refused ? nil : AppMemberRole(wire: rank) }
+
+    /// Where an admin's rank order for this row goes; nil when it names no key.
+    public var rankTarget: String? {
+        if isDevice { return devicePub.map(AppRankOrder.deviceTarget) }
+        return shareId.map(AppRankOrder.shareTarget)
     }
 }
 
@@ -84,19 +155,40 @@ public struct AppMembersResponse: Codable, Equatable, Sendable {
     public let defaultRole: String
     /// The app's one line per rank (its manifest's `role_descriptions`).
     public let descriptions: [String: String]?
+    /// The account's devices and co-managing accounts (nil from an older box).
+    public let accountMembers: [AppAccountMember]?
     public let members: [AppMember]
     public let invites: [AppMemberInviteRole]
 
     public init(serviceId: String, mode: String, roles: [String] = AppMemberRole.allCases.map(\.rawValue),
                 defaultRole: String, descriptions: [String: String]? = nil,
+                accountMembers: [AppAccountMember]? = nil,
                 members: [AppMember], invites: [AppMemberInviteRole]) {
         self.serviceId = serviceId
         self.mode = mode
         self.roles = roles
         self.defaultRole = defaultRole
         self.descriptions = descriptions
+        self.accountMembers = accountMembers
         self.members = members
         self.invites = invites
+    }
+
+    public var account: [AppAccountMember] { accountMembers ?? [] }
+
+    /// This device's own row: by its account device key, else by its id.
+    public func me(devicePub: String?, deviceId: String?) -> AppAccountMember? {
+        let devices = account.filter(\.isDevice)
+        if let pub = devicePub?.lowercased(), !pub.isEmpty,
+           let row = devices.first(where: { $0.devicePub?.lowercased() == pub }) {
+            return row
+        }
+        guard let id = deviceId?.lowercased(), !id.isEmpty else { return nil }
+        return devices.first { $0.deviceId?.lowercased() == id }
+    }
+
+    public func invite(_ inviteId: String) -> AppMemberInviteRole? {
+        invites.first { $0.inviteId == inviteId }
     }
 
     /// The app's one line for a rank, or nil.
@@ -115,9 +207,9 @@ public struct AppMembersResponse: Codable, Equatable, Sendable {
     /// addressed by their AID.
     public func roleTarget(inviteId: String, boundAID: String?) -> String {
         if let m = member(boundAID), !m.grants.contains(where: { $0.inviteId == inviteId }) {
-            return AppMemberRoleOrder.aidTarget(m.aid)
+            return AppRankOrder.aidTarget(m.aid)
         }
-        return AppMemberRoleOrder.inviteTarget(inviteId)
+        return AppRankOrder.inviteTarget(inviteId)
     }
 
     /// The role one row shows.
@@ -159,9 +251,9 @@ public struct AppMembersResponse: Codable, Equatable, Sendable {
 }
 
 /// `flagship/app-member-role/v1|<serverDomain>|<serviceId>|<target>|<role>|<issuedAt>`:
-/// the owner's order giving an invite (`invite:<inviteId>`), one person's join
-/// through it (`grant:<inviteId>/<aid>`) or a member (`aid:<hex>`) a role. Signed by the sensitive-order key.
-/// Must pass packages/protocol/test-vectors/app-member-role/vectors.json.
+/// the server-named predecessor of `AppRankOrder`. The box still accepts it;
+/// iOS sends `AppRankOrder` and keeps this to pass
+/// packages/protocol/test-vectors/app-member-role/vectors.json.
 public struct AppMemberRoleOrder: Codable, Equatable, Sendable {
     public static let canonicalTag = "flagship/app-member-role/v1"
 
@@ -184,32 +276,11 @@ public struct AppMemberRoleOrder: Codable, Equatable, Sendable {
         self.issuedAt = issuedAt
     }
 
-    public static func aidTarget(_ aidHex: String) -> String { "aid:\(aidHex.lowercased())" }
-    public static func inviteTarget(_ inviteId: String) -> String { "invite:\(inviteId)" }
-
-    public static func grantTarget(inviteId: String, aidHex: String) -> String {
-        "grant:\(inviteId)/\(aidHex.lowercased())"
-    }
-
-    private static func isAidHex<S: StringProtocol>(_ h: S) -> Bool {
-        h.count == 64 && h.allSatisfy { ("0"..."9").contains($0) || ("a"..."f").contains($0) }
-    }
-
-    private static func isInviteId<S: StringProtocol>(_ id: S) -> Bool {
-        (1...128).contains(id.count) && id.allSatisfy { c in
-            c.isASCII && (c.isLetter || c.isNumber || c == "." || c == "_" || c == "-")
-        }
-    }
-
     private static func validTarget(_ t: String) -> Bool {
-        if t.hasPrefix("aid:") { return isAidHex(t.dropFirst(4)) }
-        if t.hasPrefix("invite:") { return isInviteId(t.dropFirst(7)) }
-        if t.hasPrefix("grant:") {
-            let rest = t.dropFirst(6)
-            guard let slash = rest.lastIndex(of: "/") else { return false }
-            return isInviteId(rest[rest.startIndex..<slash]) && isAidHex(rest[rest.index(after: slash)...])
+        switch AppRankOrder.targetKind(t) {
+        case .aid, .invite, .grant: return true
+        default: return false
         }
-        return false
     }
 
     private static func fieldOK(_ v: String) -> Bool {
@@ -225,26 +296,5 @@ public struct AppMemberRoleOrder: Codable, Equatable, Sendable {
         guard issuedAt >= 0 else { throw Invalid(reason: "issuedAt") }
         return Data([Self.canonicalTag, serverDomain, serviceId, target, role, String(issuedAt)]
             .joined(separator: "|").utf8)
-    }
-}
-
-/// `POST /api/screens/services/<id>/members/role` body.
-public struct AppMemberRoleRequest: Codable, Equatable, Sendable {
-    public let order: AppMemberRoleOrder
-    public let signature: String
-    public init(order: AppMemberRoleOrder, signature: String) {
-        self.order = order
-        self.signature = signature
-    }
-}
-
-public struct AppMemberRoleResponse: Codable, Equatable, Sendable {
-    public let ok: Bool
-    public let target: String
-    public let role: String
-    public init(ok: Bool, target: String, role: String) {
-        self.ok = ok
-        self.target = target
-        self.role = role
     }
 }

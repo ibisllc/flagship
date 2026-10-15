@@ -3,18 +3,23 @@ import PhotosUI
 import FlagshipAPI
 import FlagshipCore
 
-/// Admin "Access control" screen (docs/service-access-gating.md, "Open mode +
-/// members"). Mirrors the webapp `views/service-access.js`:
+/// "Access control" screen (docs/service-access-gating.md, "Open mode +
+/// members" and "Account members, ranks and who may change them"). Mirrors
+/// the webapp `views/service-access.js`:
 ///   - a two-way Open to all | Members only toggle (reads the TRUE mode from
-///     the box; sets it with an owner-IRK envelope; rolls back on failure),
-///   - in both modes, Members (n): people and groups with a rank picker each
-///     (a signed `flagship/app-member-role/v1` order), + Add person / + Add
-///     group (the rank chosen at creation), remove (revoke), and who invited
+///     the box; an admin sets it with a signed order; rolls back on failure),
+///   - Account members: this account's devices (names decrypted on the
+///     phone) and the accounts co-managing the server, each with its rank;
+///     on an admin device a rank menu and Refuse per row,
+///   - in both modes, Members (n): people and groups with a rank each
+///     (a signed `flagship/app-rank/v1` order), + Add person / + Add group
+///     (the rank chosen at creation), remove (withdraw), and who invited
 ///     each one ("Invited by <device>").
 ///
 /// Only an admin device (it holds the admin root) gives a rank above Member,
-/// changes ranks or revokes anyone; another device invites at Member and may
-/// withdraw only its own member invites.
+/// changes ranks, the mode or revokes anyone; another device that is Manager
+/// or Master in the app invites at Member and may withdraw only its own
+/// invites; below that it sees why it can't invite.
 ///
 /// Self-contained: reads the box+`.com` access client from the environment.
 public struct ServiceAccessScreen: View {
@@ -67,6 +72,7 @@ public struct ServiceAccessScreen: View {
             VStack(alignment: .leading, spacing: FS.space.s4) {
                 headerCard(c: c)
                 modeCard(c: c)
+                accountMembersSection(c: c)
                 membersSection(c: c)
                 Spacer().frame(height: FS.space.s12)
             }
@@ -156,9 +162,15 @@ public struct ServiceAccessScreen: View {
                     ForEach(Mode.allCases) { m in Text(m.label).tag(m) }
                 }
                 .pickerStyle(.segmented)
-                .disabled(vm == nil || vm?.busyMode == true || applyingMode)
+                .disabled(vm == nil || vm?.canChangeMode == false || vm?.busyMode == true || applyingMode)
                 .accessibilityIdentifier("service-access-restrict-toggle")
                 statusLine(c: c)
+                if vm?.canChangeMode == false {
+                    Text(ServiceAccessViewModel.modeAdminOnly)
+                        .font(FS.font.caption())
+                        .foregroundColor(c.textMuted)
+                        .accessibilityIdentifier("service-access-mode-admin-only")
+                }
             }
         }
     }
@@ -184,6 +196,111 @@ public struct ServiceAccessScreen: View {
         }
     }
 
+    // MARK: account members
+
+    @ViewBuilder
+    private func accountMembersSection(c: FSColors) -> some View {
+        let rows = vm?.members?.account ?? []
+        if !rows.isEmpty {
+            VStack(alignment: .leading, spacing: FS.space.s3) {
+                Text("ACCOUNT MEMBERS (\(rows.count))")
+                    .font(FS.font.caption())
+                    .fontWeight(.semibold)
+                    .foregroundColor(c.textMuted)
+                    .accessibilityIdentifier("service-access-account-members-title")
+                ForEach(rows) { row in accountRow(row, c: c) }
+            }
+        }
+    }
+
+    private func accountRow(_ a: AppAccountMember, c: FSColors) -> some View {
+        FSCard {
+            HStack(spacing: FS.space.s3) {
+                Circle()
+                    .fill(c.surfaceSunken)
+                    .frame(width: 36, height: 36)
+                    .overlay(Image(systemName: a.isDevice ? "iphone" : "person.2.fill")
+                        .font(.system(size: 14)).foregroundColor(c.textMuted))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(vm?.accountName(a) ?? "")
+                        .font(FS.font.body()).foregroundColor(c.text).lineLimit(1)
+                        .accessibilityIdentifier("service-access-account-name-\(a.id)")
+                    Text(vm?.accountDetail(a) ?? "")
+                        .font(FS.font.caption()).foregroundColor(c.textMuted).lineLimit(1)
+                        .accessibilityIdentifier("service-access-account-detail-\(a.id)")
+                }
+                Spacer(minLength: FS.space.s2)
+                if vm?.canChangeRanks == true, a.rankTarget != nil {
+                    accountRankMenu(a, c: c)
+                } else if let role = a.role {
+                    rankLabel(role, id: "service-access-account-rank-\(a.id)")
+                } else {
+                    refusedLabel(id: "service-access-account-rank-\(a.id)", c: c)
+                }
+            }
+        }
+    }
+
+    /// Member, Manager, Master, then Refuse; picking a rank on a refused row
+    /// lets it back in.
+    private func accountRankMenu(_ a: AppAccountMember, c: FSColors) -> some View {
+        let busy = vm?.busyAccount.contains(a.id) == true
+        let current = a.role
+        return Menu {
+            ForEach(AppMemberRole.allCases) { r in
+                Button { Task { await pickAccountRank(AppRankValue(r), for: a) } } label: {
+                    Text(r.label)
+                    if let d = vm?.members?.description(of: r) { Text(d) }
+                    if r == current { Image(systemName: "checkmark") }
+                    else if r.crowned { Image(systemName: "crown.fill") }
+                }
+            }
+            Divider()
+            Button(role: .destructive) { Task { await pickAccountRank(.refused, for: a) } } label: {
+                Text("Refuse")
+                Text("Kept out of this app until an admin gives a rank again")
+                if a.refused { Image(systemName: "checkmark") }
+            }
+            .accessibilityIdentifier("service-access-account-refuse-\(a.id)")
+        } label: {
+            HStack(spacing: 4) {
+                if busy { ProgressView().controlSize(.mini) }
+                if let current {
+                    if current.crowned {
+                        Image(systemName: "crown.fill").font(.system(size: 12)).foregroundColor(Self.crownGold)
+                    }
+                    Text(current.label).font(.system(size: 14, weight: .semibold))
+                } else {
+                    Text("Refused").font(.system(size: 14, weight: .semibold))
+                }
+                Image(systemName: "chevron.up.chevron.down").font(.system(size: 11, weight: .semibold))
+            }
+            .foregroundColor(current == nil ? c.danger : c.primary)
+            .padding(.horizontal, FS.space.s3)
+            .frame(minHeight: 32)
+            .background(c.surfaceSunken)
+            .clipShape(Capsule())
+        }
+        .disabled(busy)
+        .accessibilityIdentifier("service-access-account-rank-\(a.id)")
+        .accessibilityLabel("Rank: \(current?.label ?? "Refused")")
+    }
+
+    private func refusedLabel(id: String, c: FSColors) -> some View {
+        Text("Refused")
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundColor(c.danger)
+            .padding(.horizontal, FS.space.s3)
+            .frame(minHeight: 32)
+            .background(c.surfaceSunken)
+            .clipShape(Capsule())
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Rank: Refused")
+            .accessibilityIdentifier(id)
+    }
+
+    private static let crownGold = Color(red: 0.79, green: 0.64, blue: 0.15)
+
     // MARK: members
 
     @ViewBuilder
@@ -195,16 +312,23 @@ public struct ServiceAccessScreen: View {
                 .fontWeight(.semibold)
                 .foregroundColor(c.textMuted)
                 .accessibilityIdentifier("service-access-members-title")
-            HStack(spacing: FS.space.s3) {
-                FSSecondaryButton("+ Add person", block: true) { openAdd(.person) }
-                    .accessibilityIdentifier("service-access-add-person")
-                FSSecondaryButton("+ Add group", block: true) { openAdd(.group) }
-                    .accessibilityIdentifier("service-access-add-group")
+            if vm?.canInvite == true {
+                HStack(spacing: FS.space.s3) {
+                    FSSecondaryButton("+ Add person", block: true) { openAdd(.person) }
+                        .accessibilityIdentifier("service-access-add-person")
+                    FSSecondaryButton("+ Add group", block: true) { openAdd(.group) }
+                        .accessibilityIdentifier("service-access-add-group")
+                }
+            } else if let why = vm?.inviteBlockedReason {
+                Text(why)
+                    .font(FS.font.caption())
+                    .foregroundColor(c.textMuted)
+                    .accessibilityIdentifier("service-access-invite-why")
             }
-            if let adding { addCard(adding, c: c) }
+            if let adding, vm?.canInvite == true { addCard(adding, c: c) }
             if people.isEmpty {
                 FSCard {
-                    Text("No members yet. Add a person or a group.")
+                    Text(vm?.canInvite == true ? "No members yet. Add a person or a group." : "No members yet.")
                         .font(FS.font.body())
                         .foregroundColor(c.textMuted)
                 }
@@ -495,12 +619,12 @@ public struct ServiceAccessScreen: View {
             serviceRef: serviceRef,
             username: username,
             authorAidKeys: keys?.authorAidKeys,
-            irkSigner: keys?.irkSigner,
             screens: screens,
-            roleSigner: keys?.roleSigner,
             isAdminDevice: keys?.isAdminDevice,
-            adminSigner: keys?.roleSigner,
+            adminSigner: keys?.adminSigner,
             deviceId: deviceId,
+            deviceSigner: keys?.deviceSigner,
+            ownDeviceKey: keys?.ownDeviceKey,
             deviceNames: {
                 if let fixtureNames { return fixtureNames }
                 return await AccountDeviceNames.load(username: account, deviceId: deviceId, server: directory)
@@ -583,6 +707,21 @@ public struct ServiceAccessScreen: View {
         guard let vm, role != vm.role(for: p) else { return }
         if await vm.setRole(role, for: p) {
             toasts.success("\(p.name) is now \(role.label).")
+        } else if case .failed(let msg) = vm.phase {
+            toasts.error(msg)
+        }
+    }
+
+    @MainActor
+    private func pickAccountRank(_ rank: AppRankValue, for a: AppAccountMember) async {
+        guard let vm else { return }
+        let unchanged = rank == .refused ? a.refused : (!a.refused && a.rank == rank.rawValue)
+        guard !unchanged else { return }
+        let name = vm.accountName(a)
+        if await vm.setAccountRank(rank, for: a) {
+            toasts.success(rank == .refused
+                ? "\(name) is refused in this app."
+                : "\(name) is now \(AppMemberRole(rawValue: rank.rawValue)?.label ?? rank.rawValue).")
         } else if case .failed(let msg) = vm.phase {
             toasts.error(msg)
         }

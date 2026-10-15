@@ -302,9 +302,9 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     public func appMembers(serviceId: String) async throws -> AppMembersResponse {
         try await request("/api/screens/services/\(segment(serviceId))/members")
     }
-    public func setAppMemberRole(serviceId: String, _ req: AppMemberRoleRequest) async throws -> AppMemberRoleResponse {
+    public func setAppRank(serviceId: String, _ req: AppRankRequest) async throws -> AppRankResponse {
         let body = try JSONEncoder().encode(req)
-        return try await request("/api/screens/services/\(segment(serviceId))/members/role", method: "POST", body: body)
+        return try await request("/api/screens/services/\(segment(serviceId))/members/rank", method: "POST", body: body)
     }
     @discardableResult
     public func deliverServerOrder(_ order: SignedServerOrderWire) async throws -> ServerOrderAck {

@@ -96,31 +96,101 @@ final class AppMemberRoleTests: XCTestCase {
         try! Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: b, count: 32))
     }
 
+    private let device = String(repeating: "d0", count: 16)
+
     private func makeVM(_ access: MockServiceAccessClient, _ screens: MockScreensClient,
                         roleKey: Curve25519.Signing.PrivateKey, isAdmin: Bool = true) -> ServiceAccessViewModel {
-        let a = key(5); let i = key(9); let hh = Data(repeating: 0x33, count: 32)
+        let a = key(5); let hh = Data(repeating: 0x33, count: 32); let d = key(0xd0)
         access.listsCreatedInvites = true
         return ServiceAccessViewModel(
             client: access, serverDomain: server, serviceRef: serviceRef, username: "alice",
             controlBase: URL(string: "https://flagshipserver.com")!,
-            authorAidKeys: { _ in (a, hh) }, irkSigner: { _ in i },
-            screens: screens, roleSigner: { _ in roleKey }, isAdminDevice: isAdmin,
-            adminSigner: { _ in roleKey }, now: { 1_700_000_000_000 })
+            authorAidKeys: { _ in (a, hh) },
+            screens: screens, isAdminDevice: isAdmin,
+            adminSigner: { _ in roleKey }, deviceId: device,
+            deviceSigner: { _ in d }, ownDeviceKey: { d }, now: { 1_700_000_000_000 })
+    }
+
+    private func seatThisDevice(_ screens: MockScreensClient, admin: Bool, rank: String) {
+        screens.mockMembers[serviceRef] = AppMembersResponse(
+            serviceId: serviceRef, mode: "open", defaultRole: "member",
+            accountMembers: [.device(id: device, pub: HexUtil.encode(key(0xd0).publicKey.rawRepresentation),
+                                     admin: admin, rank: rank)],
+            members: [], invites: [])
     }
 
     func test_nonAdminDeviceSendsNoRankOrderAndCannotChangeRanks() async {
         let access = MockServiceAccessClient()
         let screens = MockScreensClient()
+        seatThisDevice(screens, admin: false, rank: "manager")
         let vm = makeVM(access, screens, roleKey: key(7), isAdmin: false)
         await vm.load()
         XCTAssertFalse(vm.canChangeRanks)
+        XCTAssertTrue(vm.canInvite)
         _ = await vm.addPerson(name: "Club", photo: nil, tier: .group(maxRedemptions: 5, expiresAt: nil), role: .manager)
         XCTAssertEqual(access.createCalls.count, 1)
-        XCTAssertTrue(screens.setAppMemberRoleCalls.isEmpty, "a member invite never sends a rank order")
+        XCTAssertTrue(screens.setAppRankCalls.isEmpty, "a member invite never sends a rank order")
         guard let p = vm.people.first else { return XCTFail("no row") }
         let ok = await vm.setRole(.master, for: p)
         XCTAssertFalse(ok)
-        XCTAssertTrue(screens.setAppMemberRoleCalls.isEmpty, "a non-admin device never changes a rank")
+        XCTAssertTrue(screens.setAppRankCalls.isEmpty, "a non-admin device never changes a rank")
+        guard let me = vm.me else { return XCTFail("this device is listed") }
+        let refused = await vm.setAccountRank(.refused, for: me)
+        XCTAssertFalse(refused)
+        XCTAssertTrue(screens.setAppRankCalls.isEmpty)
+    }
+
+    func test_adminChangesAndRefusesAccountMembersWithAppRankOrders() async throws {
+        let access = MockServiceAccessClient()
+        let screens = MockScreensClient()
+        let share = "0f1e2d3c4b5a69788796a5b4c3d2e1f0"
+        let other = HexUtil.encode(key(0x1a).publicKey.rawRepresentation)
+        screens.mockMembers[serviceRef] = AppMembersResponse(
+            serviceId: serviceRef, mode: "open", defaultRole: "member",
+            accountMembers: [
+                .device(id: String(repeating: "1a", count: 16), pub: other, admin: false, rank: "manager"),
+                .coManager(shareId: share, label: "Mum", rank: "manager"),
+            ],
+            members: [], invites: [])
+        let rk = key(7)
+        let vm = makeVM(access, screens, roleKey: rk)
+        await vm.load()
+        let rows = vm.members?.account ?? []
+        XCTAssertEqual(rows.count, 2)
+
+        let refusedOK = await vm.setAccountRank(.refused, for: rows[0])
+        let masterOK = await vm.setAccountRank(.master, for: rows[1])
+        XCTAssertTrue(refusedOK)
+        XCTAssertTrue(masterOK)
+        XCTAssertEqual(screens.setAppRankCalls.map(\.req.order.target), ["device:\(other)", "share:\(share)"])
+        XCTAssertEqual(screens.setAppRankCalls.map(\.req.order.rank), ["refused", "master"])
+        for call in screens.setAppRankCalls {
+            let bytes = try call.req.order.canonicalBytes()
+            XCTAssertTrue(String(data: bytes, encoding: .utf8)!.hasPrefix("flagship/app-rank/v1|\(serviceRef)|"))
+            XCTAssertTrue(rk.publicKey.isValidSignature(HexUtil.decode(call.req.signature)!, for: bytes),
+                          "rank orders are signed with the admin root")
+        }
+        let after = vm.members?.account ?? []
+        XCTAssertTrue(after[0].refused)
+        XCTAssertNil(after[0].role)
+        XCTAssertEqual(after[1].role, .master)
+        let back = await vm.setAccountRank(.member, for: after[0])
+        XCTAssertTrue(back, "picking a rank lets a refused device back in")
+        XCTAssertEqual(vm.members?.account.first?.role, .member)
+    }
+
+    func test_staleRankOrderIsSignedAgainOnce() async {
+        let access = MockServiceAccessClient()
+        let screens = MockScreensClient()
+        seatThisDevice(screens, admin: true, rank: "master")
+        let vm = makeVM(access, screens, roleKey: key(7))
+        await vm.load()
+        guard let me = vm.me else { return XCTFail("this device is listed") }
+        screens.mockMemberRoleStatus = 409
+        let ok = await vm.setAccountRank(.manager, for: me)
+        XCTAssertTrue(ok)
+        XCTAssertEqual(screens.setAppRankCalls.count, 2)
+        XCTAssertGreaterThan(screens.setAppRankCalls[1].req.order.issuedAt, screens.setAppRankCalls[0].req.order.issuedAt)
     }
 
     func test_inviteTierFromTheBox() {
@@ -147,14 +217,14 @@ final class AppMemberRoleTests: XCTestCase {
         await vm.load()
         XCTAssertNotNil(vm.members)
         _ = await vm.addPerson(name: "Alex", photo: nil, tier: .personalAuto, role: .member)
-        XCTAssertTrue(screens.setAppMemberRoleCalls.isEmpty, "the app's default role needs no order")
+        XCTAssertTrue(screens.setAppRankCalls.isEmpty, "the app's default role needs no order")
         _ = await vm.addPerson(name: "Club", photo: nil, tier: .group(maxRedemptions: 5, expiresAt: nil), role: .manager)
-        XCTAssertEqual(screens.setAppMemberRoleCalls.count, 1)
-        let sent = screens.setAppMemberRoleCalls[0].req
+        XCTAssertEqual(screens.setAppRankCalls.count, 1)
+        let sent = screens.setAppRankCalls[0].req
         let inviteId = try XCTUnwrap(access.createCalls.last?.request["inviteId"])
         XCTAssertEqual(sent.order.target, "invite:\(inviteId)")
-        XCTAssertEqual(sent.order.role, "manager")
-        XCTAssertEqual(sent.order.serverDomain, server)
+        XCTAssertEqual(sent.order.rank, "manager")
+        XCTAssertEqual(sent.order.serviceRef, serviceRef)
         XCTAssertTrue(rk.publicKey.isValidSignature(HexUtil.decode(sent.signature)!, for: try sent.order.canonicalBytes()))
     }
 

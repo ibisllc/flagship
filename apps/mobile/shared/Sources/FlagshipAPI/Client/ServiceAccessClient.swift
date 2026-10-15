@@ -3,13 +3,15 @@ import Foundation
 /// Box- AND `.com`-direct delivery for per-service access gating
 /// (docs/service-access-gating.md).
 ///
-/// BOX (pinned canonical pipe, owner-IRK or friend-AID signed):
+/// BOX (pinned canonical pipe; admin-root, device-key or visitor signed):
 ///   GET  https://<serverDomain>/api/service-access/<serviceRef>   → { mode, allowCount }
-///   POST https://<serverDomain>/api/service-access                (set-service-access-mode envelope)
+///   POST https://<serverDomain>/api/service-access                (service-access-mode/v2, admin)
+///   POST https://<serverDomain>/api/service-access/allow-remove   (service-allow-remove/v2, admin)
+///   POST https://<serverDomain>/api/service-access/invite-withdraw ({ revoke, signature })
 ///   POST https://<serverDomain>/api/service-invites/redeem        ({ secret, visitorAID, aidSig, redeemedAt })
 ///
-/// `.com` (public CA — no pinning), author IRK-signed create/revoke + a
-/// metadata list:
+/// `.com` (public CA — no pinning), signed create/revoke (admin root, or a
+/// non-admin device's account device key) + an AID-signed metadata list:
 ///   POST https://<control>/api/users/<u>/service-invites          (create envelope)
 ///   GET  https://<control>/api/users/<u>/service-invites?authorAID=…
 ///   POST https://<control>/api/users/<u>/service-invites/revoke    (revoke envelope)
@@ -21,13 +23,17 @@ public protocol ServiceAccessClient: Sendable {
     // box
     func getAccessState(serverDomain: String, serviceRef: String) async throws -> ServiceAccessState
     func setAccessMode(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> String
-    /// Owner-IRK prune of one friend's AID from a service allow-list (the box
-    /// half of "remove person"). The `request` dict is already built
-    /// (serverId/serviceRef/aid/issuedAt); `signatureHex` is the owner-IRK
-    /// Ed25519 sig over the canonical remove-allow bytes. POSTs to the box's
-    /// pinned pipe; returns whether an entry was actually removed (idempotent —
-    /// a no-op prune still returns 200). 403 on a bad/stale/mismatch sig.
+    /// Admin prune of one person's id from a service allow-list. The `request`
+    /// dict is already built (serviceRef/aid/issuedAt); `signatureHex` is the
+    /// admin root's sig over the canonical `service-allow-remove/v2` bytes.
+    /// Returns whether an entry was actually removed (idempotent — a no-op
+    /// prune still returns 200). 403 when not an admin's, 409 when stale.
     func removeServiceAllow(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> RemoveAllowResult
+    /// The box half of withdrawing an invite: the same signed revoke `.com`
+    /// takes (`{inviteId, issuedAt}`), so the box drops everyone who joined
+    /// through it at once. An admin's, or the creating device's own while it
+    /// is manager-class in the app. Returns how many people it removed.
+    func withdrawInvite(serverDomain: String, revoke: [String: Any], signatureHex: String) async throws -> Int
     func redeemInvite(serverDomain: String, secretHex: String, visitorAidHex: String, aidSigHex: String, redeemedAt: Int64) async throws -> RedeemResult
     /// MANUAL-approve finalize (v2 tier 2): the AUTHOR POSTs ONLY the consumer's
     /// `AcceptServiceInvite` (`accept` + `acceptSig`) to the box. The box FETCHES the
@@ -288,6 +294,20 @@ public final class LiveServiceAccessClient: ServiceAccessClient, @unchecked Send
         )
     }
 
+    public func withdrawInvite(serverDomain: String, revoke: [String: Any], signatureHex: String) async throws -> Int {
+        guard let url = URL(string: Self.boxBase(serverDomain) + "/api/service-access/invite-withdraw") else {
+            throw ScreensClientError.http(status: 0, message: "bad URL")
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.httpBody = try JSONSerialization.data(withJSONObject: ["revoke": revoke, "signature": signatureHex.lowercased()], options: [])
+        let (data, status) = try await send(req, on: boxSession)
+        let body = try ok(data, status)
+        let obj = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any]
+        return (obj?["pruned"] as? NSNumber)?.intValue ?? 0
+    }
+
     public func redeemInvite(serverDomain: String, secretHex: String, visitorAidHex: String, aidSigHex: String, redeemedAt: Int64) async throws -> RedeemResult {
         guard let url = URL(string: Self.boxBase(serverDomain) + "/api/service-invites/redeem") else {
             throw ScreensClientError.http(status: 0, message: "bad URL")
@@ -479,6 +499,7 @@ public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Send
     public struct RemoveAllowCall: Sendable { public let serverDomain: String; public let request: [String: String]; public let signatureHex: String }
     public struct CreateCall: Sendable { public let username: String; public let request: [String: String]; public let signatureHex: String }
     public struct RevokeCall: Sendable { public let username: String; public let inviteId: String; public let signatureHex: String }
+    public struct WithdrawCall: Sendable { public let serverDomain: String; public let revoke: [String: String]; public let signatureHex: String }
     public struct RedeemCall: Sendable { public let serverDomain: String; public let secretHex: String; public let visitorAidHex: String }
     public struct AcceptCall: Sendable { public let serverDomain: String; public let accept: [String: String]; public let acceptSigHex: String }
     public struct ListCall: Sendable { public let username: String; public let query: [String: String]; public let signatureHex: String }
@@ -491,6 +512,7 @@ public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Send
     private var _removeAllow: [RemoveAllowCall] = []
     private var _create: [CreateCall] = []
     private var _revoke: [RevokeCall] = []
+    private var _withdraw: [WithdrawCall] = []
     private var _redeem: [RedeemCall] = []
     private var _accept: [AcceptCall] = []
     private var _list: [ListCall] = []
@@ -501,6 +523,7 @@ public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Send
     public var removeAllowCalls: [RemoveAllowCall] { lock.withLock { _removeAllow } }
     public var createCalls: [CreateCall] { lock.withLock { _create } }
     public var revokeCalls: [RevokeCall] { lock.withLock { _revoke } }
+    public var withdrawCalls: [WithdrawCall] { lock.withLock { _withdraw } }
     public var redeemCalls: [RedeemCall] { lock.withLock { _redeem } }
     public var acceptCalls: [AcceptCall] { lock.withLock { _accept } }
     public var listCalls: [ListCall] { lock.withLock { _list } }
@@ -549,6 +572,16 @@ public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Send
         if let e = removeAllowError { removeAllowError = nil; throw e }
         try maybeThrow()
         return removeAllowResult
+    }
+
+    /// Targets ONLY the box withdraw (thrown once, then cleared).
+    public var withdrawError: Error?
+
+    public func withdrawInvite(serverDomain: String, revoke: [String: Any], signatureHex: String) async throws -> Int {
+        lock.withLock { _withdraw.append(WithdrawCall(serverDomain: serverDomain, revoke: flatten(revoke), signatureHex: signatureHex)) }
+        if let e = withdrawError { withdrawError = nil; throw e }
+        try maybeThrow()
+        return 0
     }
 
     public func redeemInvite(serverDomain: String, secretHex: String, visitorAidHex: String, aidSigHex: String, redeemedAt: Int64) async throws -> RedeemResult {

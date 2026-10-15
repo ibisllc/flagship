@@ -316,6 +316,29 @@ public struct Keystore {
         return try AccountMetadata.deriveAccountDeviceKey(umk: umk, accountId: accountId, deviceId: deviceId)
     }
 
+    /// This device's account device key: the stored one, else derived from
+    /// the UMK (one biometric unless the session already holds it).
+    public static func deriveAccountDeviceKey(
+        accountId: String,
+        deviceId: String,
+        reason: String
+    ) async throws -> Curve25519.Signing.PrivateKey {
+        let u = accountId.lowercased()
+        if let stored = storedAccountDeviceSigningKey(accountId: u, deviceId: deviceId) { return stored }
+        let umk = try await unwrappedUMK(reason: reason)
+        return try AccountMetadata.deriveAccountDeviceKey(
+            umk: umk.withUnsafeBytes { Data($0) }, accountId: u, deviceId: deviceId)
+    }
+
+    /// The account device key without a prompt (stored, or from the UMK this
+    /// session holds), or nil.
+    public static func sessionAccountDeviceKey(accountId: String, deviceId: String) -> Curve25519.Signing.PrivateKey? {
+        let u = accountId.lowercased()
+        if let stored = storedAccountDeviceSigningKey(accountId: u, deviceId: deviceId) { return stored }
+        guard let umk = sessionUMKIfCached() else { return nil }
+        return try? AccountMetadata.deriveAccountDeviceKey(umk: umk, accountId: u, deviceId: deviceId)
+    }
+
     // MARK: - Derivation
 
     /// Per-server symmetric wrap key (SWK). Used by app-backup encryption.

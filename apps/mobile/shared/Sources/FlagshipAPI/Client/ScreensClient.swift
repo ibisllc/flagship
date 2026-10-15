@@ -167,10 +167,12 @@ public protocol ScreensClient: Sendable {
 
     // Access control — members' roles (docs/service-access-gating.md, "Open
     // mode + members"). Owner sessions only: companions get 403.
-    /// `GET /api/screens/services/<id>/members`: the members, their grants and ranks.
+    /// `GET /api/screens/services/<id>/members`: the account's devices and
+    /// co-managers, the members, their grants and ranks.
     func appMembers(serviceId: String) async throws -> AppMembersResponse
-    /// `POST …/members/role`: the owner's signed `flagship/app-member-role/v1` order.
-    func setAppMemberRole(serviceId: String, _ req: AppMemberRoleRequest) async throws -> AppMemberRoleResponse
+    /// `POST …/members/rank`: an admin's signed `flagship/app-rank/v1` order.
+    /// 403 = not an admin, 409 = a newer order already applied (sign again).
+    func setAppRank(serviceId: String, _ req: AppRankRequest) async throws -> AppRankResponse
 
     // Copying an app between the owner's servers (docs/app-placement.md §5).
     /// `POST /api/screens/services/copy` to the TARGET box: the owner's signed
@@ -441,7 +443,7 @@ public extension ScreensClient {
     func appMembers(serviceId: String) async throws -> AppMembersResponse {
         throw ScreensClientError.notImplemented("app members")
     }
-    func setAppMemberRole(serviceId: String, _ req: AppMemberRoleRequest) async throws -> AppMemberRoleResponse {
+    func setAppRank(serviceId: String, _ req: AppRankRequest) async throws -> AppRankResponse {
         throw ScreensClientError.notImplemented("app members")
     }
     func accessRequestEvents() -> AsyncStream<Void> {

@@ -414,8 +414,8 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
 
     /// Per-service members the box would list (nil: none yet, default editor).
     public var mockMembers: [String: AppMembersResponse] = [:]
-    public private(set) var setAppMemberRoleCalls: [(serviceId: String, req: AppMemberRoleRequest)] = []
-    /// Status to answer the next role change with (e.g. 403), once.
+    public private(set) var setAppRankCalls: [(serviceId: String, req: AppRankRequest)] = []
+    /// Status to answer the next rank change with (e.g. 403), once.
     public var mockMemberRoleStatus: Int?
 
     public func appMembers(serviceId: String) async throws -> AppMembersResponse {
@@ -424,35 +424,48 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             ?? AppMembersResponse(serviceId: serviceId, mode: "open", defaultRole: "member", members: [], invites: [])
     }
 
-    /// Mirrors the box: records the order and updates the listed role.
-    public func setAppMemberRole(serviceId: String, _ req: AppMemberRoleRequest) async throws -> AppMemberRoleResponse {
+    /// Mirrors the box: records the order and updates the listed rank.
+    public func setAppRank(serviceId: String, _ req: AppRankRequest) async throws -> AppRankResponse {
         try await tick()
-        setAppMemberRoleCalls.append((serviceId, req))
+        setAppRankCalls.append((serviceId, req))
         if let status = mockMemberRoleStatus {
             mockMemberRoleStatus = nil
             throw ScreensClientError.http(status: status, message: #"{"error":"refused"}"#)
         }
         let cur = try await appMembers(serviceId: serviceId)
         let t = req.order.target
+        let rank = req.order.rank
         var invites = cur.invites
         var members = cur.members
-        if t.hasPrefix("invite:") {
+        var account = cur.account
+        if t.hasPrefix("device:") || t.hasPrefix("share:") {
+            let refused = rank == "refused"
+            account = account.map { a in
+                guard a.rankTarget == t else { return a }
+                return AppAccountMember(kind: a.kind, deviceId: a.deviceId, devicePub: a.devicePub, tier: a.tier,
+                                        shareId: a.shareId, label: a.label, rank: refused ? nil : rank,
+                                        set: true, refused: refused)
+            }
+        } else if t.hasPrefix("invite:") {
             let id = String(t.dropFirst(7))
+            let old = invites.first { $0.inviteId == id }
             invites.removeAll { $0.inviteId == id }
-            invites.append(AppMemberInviteRole(inviteId: id, role: req.order.role, set: true))
+            invites.append(AppMemberInviteRole(inviteId: id, role: rank, set: true, tier: old?.tier,
+                                               creatorPub: old?.creatorPub, creatorDeviceId: old?.creatorDeviceId))
             members = members.map { m in
                 AppMember(aid: m.aid, role: m.role,
-                          grants: m.grants.map { $0.inviteId == id ? AppMemberGrant(inviteId: id, role: req.order.role) : $0 },
+                          grants: m.grants.map { $0.inviteId == id ? AppMemberGrant(inviteId: id, role: rank, tier: $0.tier) : $0 },
                           direct: m.direct)
             }
         } else if t.hasPrefix("aid:") {
             let aid = String(t.dropFirst(4))
-            members = members.map { $0.aid == aid ? AppMember(aid: aid, role: req.order.role, grants: $0.grants, direct: req.order.role) : $0 }
+            members = members.map { $0.aid == aid ? AppMember(aid: aid, role: rank, grants: $0.grants, direct: rank) : $0 }
         }
         mockMembers[serviceId] = AppMembersResponse(serviceId: serviceId, mode: cur.mode, roles: cur.roles,
                                                    defaultRole: cur.defaultRole, descriptions: cur.descriptions,
+                                                   accountMembers: cur.accountMembers == nil ? nil : account,
                                                    members: members, invites: invites)
-        return AppMemberRoleResponse(ok: true, target: t, role: req.order.role)
+        return AppRankResponse(ok: true, target: t, rank: rank)
     }
 
     /// When set, a signed query is refused unless this key made the signature.
