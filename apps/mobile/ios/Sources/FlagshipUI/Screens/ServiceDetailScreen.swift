@@ -563,22 +563,57 @@ public struct ServiceDetailScreen: View {
                     }
                 }
             }
-            if let backup = d.lastBackup {
+            if let backup = vm.backup {
                 section("BACKUP", c: c) {
-                    FSCard {
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text("Last backup").foregroundColor(c.text)
-                                Text("\(backup.bytes / 1024 / 1024) MB · \(relative(ms: backup.createdAt))")
-                                    .font(FS.font.caption())
-                                    .foregroundColor(c.textMuted)
-                            }
-                            Spacer()
-                            FSGhostButton("Back up now") {}
-                        }
-                    }
+                    FSCard { backupCard(backup, last: d.lastBackup, c: c) }
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func backupCard(_ backup: AppBackupController, last: AppDetailResponse.BackupSummary?, c: FSColors) -> some View {
+        @Bindable var backup = backup
+        VStack(alignment: .leading, spacing: FS.space.s3) {
+            if let last {
+                Text("Last backup: \(last.bytes / 1024 / 1024) MB · \(relative(ms: last.createdAt))")
+                    .font(FS.font.caption())
+                    .foregroundColor(c.textMuted)
+            }
+            Text("The app's code, and its data if you include it. It comes straight from your server to this phone.")
+                .font(FS.font.bodySm())
+                .foregroundColor(c.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
+            Toggle("Include the app's data", isOn: $backup.includeData)
+                .font(FS.font.bodySm())
+                .disabled(backup.isBusy)
+                .accessibilityIdentifier("service-detail-backup-data")
+            SecureField("Password to encrypt it (optional)", text: $backup.password)
+                .textContentType(.newPassword)
+                .font(FS.font.bodySm())
+                .disabled(backup.isBusy)
+            switch backup.phase {
+            case .ready(let file, let bytes, let encrypted):
+                Text("Ready: \(ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file))\(encrypted ? ", encrypted" : "")")
+                    .font(FS.font.caption())
+                    .foregroundColor(c.success)
+                ShareLink(item: file) {
+                    Label("Save backup", systemImage: "square.and.arrow.down")
+                }
+                .accessibilityIdentifier("service-detail-backup-save")
+            case .failed(let message):
+                Text(message).font(FS.font.caption()).foregroundColor(c.danger)
+            default:
+                EmptyView()
+            }
+            FSSecondaryButton(
+                backup.phase == .creating ? "Packing…" : backup.phase == .downloading ? "Downloading…" : "Back up now",
+                block: true
+            ) {
+                Task { await backup.backUp() }
+            }
+            .disabled(backup.isBusy)
+            .accessibilityIdentifier("service-detail-backup-now")
         }
     }
 

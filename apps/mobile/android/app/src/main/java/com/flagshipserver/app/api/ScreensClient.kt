@@ -58,6 +58,11 @@ interface ScreensClient {
     // P1.19 app-backup/start
     suspend fun appBackupStart(req: AppBackupStartRequest): AppBackupStartResponse
 
+    /** The finished archive at `fetchPath` (`/api/backups/<id>`). The box hands
+     *  it out once and deletes it. */
+    suspend fun appBackupFetch(fetchPath: String): ByteArray =
+        throw ScreensError.NotImplemented("app backup download")
+
     // P1.21 server-metrics (extension)
     suspend fun serverMetrics(podId: String): ServerMetricsResponse
 

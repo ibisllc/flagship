@@ -148,6 +148,12 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
         let body = try JSONEncoder().encode(req)
         return try await request("/api/screens/app-backup/start", method: "POST", body: body)
     }
+    public func appBackupFetch(fetchPath: String) async throws -> Data {
+        guard fetchPath.hasPrefix("/api/backups/") else {
+            throw ScreensClientError.http(status: 0, message: "unexpected backup path")
+        }
+        return try await requestData(fetchPath, timeout: 300)
+    }
     public func serverMetrics(podId: String) async throws -> ServerMetricsResponse {
         try await request("/api/screens/server-metrics/\(podId)")
     }

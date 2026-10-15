@@ -380,24 +380,14 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                     }
                 }
 
-                // ── Last backup ────────────────────────────────────────
-                resp.lastBackup?.let { backup ->
-                    Spacer(Modifier.height(FS.space.s4))
-                    SectionHeader("Backup")
-                    FSCard(padding = PaddingValues(FS.space.s4)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text("Last backup", color = FS.colors.text, style = TextStyle(fontSize = 16.sp))
-                                Text(
-                                    "${backup.bytes / 1024 / 1024} MB · ${relativeTime(backup.createdAt)}",
-                                    color = FS.colors.textMuted,
-                                    style = TextStyle(fontSize = 13.sp),
-                                )
-                            }
-                            FSGhostButton(label = "Back up now", onClick = { /* P1.19 — wired separately */ })
-                        }
-                    }
-                }
+                // ── Backup ─────────────────────────────────────────────
+                Spacer(Modifier.height(FS.space.s4))
+                SectionHeader("Backup")
+                AppBackupCard(
+                    serviceId = serviceId,
+                    client = client,
+                    lastBackup = resp.lastBackup?.let { "Last backup: ${it.bytes / 1024 / 1024} MB · ${relativeTime(it.createdAt)}" },
+                )
 
                 // ── Uninstall (this server's copy) ─────────────────────
                 Spacer(Modifier.height(FS.space.s8))

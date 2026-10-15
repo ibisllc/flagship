@@ -226,6 +226,9 @@ public final class ServiceDetailViewModel {
     /// (403) or doesn't have it (404, an older box).
     public private(set) var database: AppDatabaseController?
 
+    /// "Back up now": the box packs the app and hands the archive to this phone.
+    public private(set) var backup: AppBackupController?
+
     public var showsDatabase: Bool {
         guard let database, !database.isHidden else { return false }
         switch database.state {
@@ -334,6 +337,7 @@ public final class ServiceDetailViewModel {
             async let u = client.urlControllerOwned()
             let (di, uo) = try await (d, u)
             detail = .loaded(di)
+            if backup == nil { backup = AppBackupController(serviceId: serviceId, client: client) }
             egressOverride = nil
             ownedUrls = .loaded(uo.urls.filter { $0.fqdn.contains(serviceId) })
             async let accessSync: Void = syncAccess(di.app)

@@ -46,6 +46,9 @@ public protocol ScreensClient: Sendable {
 
     // P1.19 app-backup/start
     func appBackupStart(_ req: AppBackupStartRequest) async throws -> AppBackupStartResponse
+    /// The finished archive at `fetchPath` (`/api/backups/<id>`). The box hands
+    /// it out once and deletes it.
+    func appBackupFetch(fetchPath: String) async throws -> Data
 
     // P1.21 server-metrics (extension; daemon side pending)
     func serverMetrics(podId: String) async throws -> ServerMetricsResponse
@@ -367,6 +370,9 @@ public enum ScreensClientError: Error, LocalizedError, Sendable {
 }
 
 public extension ScreensClient {
+    func appBackupFetch(fetchPath: String) async throws -> Data {
+        throw ScreensClientError.notImplemented("app backup download")
+    }
     func serverUpdates(refresh: Bool) async throws -> ReleaseCatalogResponse {
         throw ScreensClientError.decoding("release list unavailable")
     }

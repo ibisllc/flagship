@@ -6,4 +6,6 @@
     <cache-path name="adapters" path="adapters/" />
     <!-- A table exported from an app's Database section (only the newest is kept). -->
     <cache-path name="exports" path="exports/" />
+    <!-- An app backup brought from the box by "Back up now" (only the newest is kept). -->
+    <cache-path name="backups" path="backups/" />
 </paths>

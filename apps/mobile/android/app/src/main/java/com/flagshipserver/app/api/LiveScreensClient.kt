@@ -188,6 +188,11 @@ class LiveScreensClient(
         return request("/api/screens/app-backup/start", AppBackupStartResponse.serializer(), "POST", body)
     }
 
+    override suspend fun appBackupFetch(fetchPath: String): ByteArray {
+        if (!fetchPath.startsWith("/api/backups/")) throw ScreensError.Decoding("unexpected backup path")
+        return requestBytes(fetchPath, readTimeoutSeconds = 300)
+    }
+
     override suspend fun serverMetrics(podId: String): ServerMetricsResponse =
         request("/api/screens/server-metrics/$podId", ServerMetricsResponse.serializer())
 

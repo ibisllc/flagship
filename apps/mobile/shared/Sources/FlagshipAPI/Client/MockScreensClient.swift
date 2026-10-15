@@ -975,11 +975,18 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         return AppBackupStartResponse(
             backupId: "bk-\(UUID().uuidString.prefix(8).lowercased())",
-            fetchPath: "/api/screens/app-backup/\(req.serviceId)/fetch",
+            fetchPath: "/api/backups/" + String(format: "%08x", UInt32.random(in: 0...UInt32.max)),
             expiresAt: now + 3600 * 1000,
             bytes: 4_812_000,
             encrypted: req.password != nil
         )
+    }
+
+    public private(set) var appBackupFetches: [String] = []
+    public func appBackupFetch(fetchPath: String) async throws -> Data {
+        try await tick()
+        appBackupFetches.append(fetchPath)
+        return Data("mock app backup".utf8)
     }
 
     private static func relativeTime(_ secondsAgo: Int) -> String {

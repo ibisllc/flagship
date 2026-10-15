@@ -606,11 +606,18 @@ class MockScreensClient(
         tick()
         return AppBackupStartResponse(
             backupId = "bk-${UUID.randomUUID().toString().take(8).lowercase()}",
-            fetchPath = "/api/screens/app-backup/${req.serviceId}/fetch",
+            fetchPath = "/api/backups/" + UUID.randomUUID().toString().replace("-", "").take(16),
             expiresAt = now() + 3600L * 1000,
             bytes = 4_812_000,
             encrypted = req.password != null,
         )
+    }
+
+    val appBackupFetches = mutableListOf<String>()
+    override suspend fun appBackupFetch(fetchPath: String): ByteArray {
+        tick()
+        appBackupFetches.add(fetchPath)
+        return "mock app backup".toByteArray()
     }
 
     override suspend fun serverMetrics(podId: String): ServerMetricsResponse {
