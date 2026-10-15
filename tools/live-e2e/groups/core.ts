@@ -226,12 +226,12 @@ export const core: Group = {
       const raw = rawTlsGet(`${slug}.${fqdn}`, `${slug}.${fqdn}`, "/");
       throw new Error(`not 200 in 180s: ${last} | raw ${raw.status} ${short(raw.text, 120)}`);
     });
-    await rec.check("uninstall the app (owner-IRK signed) → 200", async () => {
+    await rec.check("uninstall the app (admin-root signed) → 200", async () => {
       const req: UninstallServiceRequest = { serverId: fqdn, creator: user, slug, issuedAt: Date.now() };
       const r = await http(`https://${fqdn}/api/services/${encodeURIComponent(serviceId)}`, {
         method: "DELETE",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ request: req, signature: bytesToHex(signUninstallService(req, irk)) }),
+        body: JSON.stringify({ request: req, signature: bytesToHex(signUninstallService(req, A.keys.adminRoot)) }),
       }, 90_000);
       assert(r.status === 200, `uninstall ${r.status}: ${short(r.text)}`);
       return "uninstalled";

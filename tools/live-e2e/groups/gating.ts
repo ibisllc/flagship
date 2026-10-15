@@ -23,6 +23,10 @@ import {
   signRemoveServiceAllow,
   signRevokeServiceInvite,
   signSetServiceAccessMode,
+  signServiceAccessModeV2,
+  signServiceAllowRemoveV2,
+  type ServiceAccessModeOrder,
+  type ServiceAllowRemoveOrder,
   type AppMemberRoleOrder,
   type CreateServiceInvite,
   type InstallServiceRequest,
@@ -73,10 +77,17 @@ export async function waitServing(url: string, seconds = 180): Promise<Resp> {
   throw new Error(`not serving in ${seconds}s: ${last}`);
 }
 
+/** Admin-only (docs/service-access-gating.md "Account members"): the v2 order, signed with the admin root. */
 export async function setMode(acct: Account, box: Box, serviceRef: string, mode: "open" | "restricted"): Promise<void> {
-  const order: SetServiceAccessMode = { serverId: box.fqdn, serviceRef, mode, issuedAt: Date.now() };
-  const r = await postJson(`https://${box.fqdn}/api/service-access`, { request: order, signature: bytesToHex(signSetServiceAccessMode(order, acct.keys.irk)) });
+  const order: ServiceAccessModeOrder = { serviceRef, mode, issuedAt: Date.now() };
+  const r = await postJson(`https://${box.fqdn}/api/service-access`, { request: order, signature: bytesToHex(signServiceAccessModeV2(order, acct.keys.adminRoot)) });
   assert(r.status === 200, `set-mode ${mode} ${r.status}: ${short(r.text)}`);
+}
+
+/** The v1 mode order under the IRK every device holds: refused on an admin-pinned box. */
+export async function setModeWithIrk(acct: Account, box: Box, serviceRef: string, mode: "open" | "restricted") {
+  const order: SetServiceAccessMode = { serverId: box.fqdn, serviceRef, mode, issuedAt: Date.now() };
+  return postJson(`https://${box.fqdn}/api/service-access`, { request: order, signature: bytesToHex(signSetServiceAccessMode(order, acct.keys.irk)) });
 }
 
 export const gating: Group = {
@@ -257,9 +268,12 @@ export const gating: Group = {
       assert(/Access is restricted/i.test(g.text), "closed cookie still reaches the app");
       return "closed";
     });
-    await rec.check("owner removes the friend (allow-remove, owner IRK) → re-authorize is 401", async () => {
-      const order: RemoveServiceAllow = { serverId: fqdn, serviceRef, aid: friendHex, issuedAt: Date.now() };
-      const r = await postJson(`https://${fqdn}/api/service-access/allow-remove`, { request: order, signature: bytesToHex(signRemoveServiceAllow(order, irk)) });
+    await rec.check("an IRK removal is refused (403); the admin root removes the friend (v2) → re-authorize is 401", async () => {
+      const v1: RemoveServiceAllow = { serverId: fqdn, serviceRef, aid: friendHex, issuedAt: Date.now() };
+      const refused = await postJson(`https://${fqdn}/api/service-access/allow-remove`, { request: v1, signature: bytesToHex(signRemoveServiceAllow(v1, irk)) });
+      assert(refused.status === 403, `IRK allow-remove: expected 403, got ${refused.status}: ${short(refused.text)}`);
+      const order: ServiceAllowRemoveOrder = { serviceRef, aid: friendHex, issuedAt: Date.now() };
+      const r = await postJson(`https://${fqdn}/api/service-access/allow-remove`, { request: order, signature: bytesToHex(signServiceAllowRemoveV2(order, adminRoot)) });
       assert(r.status === 200 && r.json?.removed === true, `allow-remove ${r.status}: ${short(r.text)}`);
       await knock();
       const k: KnockAuthorization = { serverId: fqdn, serviceRef, pageId, visitorAID: friend.publicKey, issuedAt: Date.now() };

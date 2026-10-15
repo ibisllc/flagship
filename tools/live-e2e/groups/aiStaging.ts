@@ -121,7 +121,7 @@ export const aiStaging: Group = {
         await http(`https://${b1.fqdn}/api/services/${encodeURIComponent(`${B!.username}--${STUB}`)}`, {
           method: "DELETE",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ request: req, signature: bytesToHex(signUninstallService(req, B!.keys.irk)) }),
+          body: JSON.stringify({ request: req, signature: bytesToHex(signUninstallService(req, B!.keys.adminRoot)) }),
         }, 120_000);
       }
       const c = await mcpOpen(b1, bSession, "gym-aistub");

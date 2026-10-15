@@ -71,7 +71,7 @@ export const appCopy: Group = {
       const r = await http(`https://${dst.fqdn}/api/services/${encodeURIComponent(serviceId)}`, {
         method: "DELETE",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ request: req, signature: bytesToHex(signUninstallService(req, A.keys.irk)) }),
+        body: JSON.stringify({ request: req, signature: bytesToHex(signUninstallService(req, A.keys.adminRoot)) }),
       }, 120_000);
       assert(r.status === 200, `${r.status}: ${short(r.text)}`);
       const list = await http(`https://${dst.fqdn}/api/services`);

@@ -7,7 +7,7 @@
  *   GYM_ADMIN_SECRET=… GYM_DEMO_IRK_KEK=… LIVE_E2E_REUSE_USER=gymdbg \
  *     npx tsx tools/live-e2e/install-probe.ts [--port 80|8080] [--uninstall]
  */
-import { deriveDemoUserIrk } from "@flagship/control-plane";
+import { deriveDemoAdminRoot, deriveDemoUserIrk } from "@flagship/control-plane";
 import { signInstallService, signUninstallService, type InstallServiceRequest, type UninstallServiceRequest } from "@flagship/protocol";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils";
 
@@ -34,11 +34,13 @@ async function http(url: string, opts: RequestInit, ms = 90000) {
 async function main() {
   if (!KEK) throw new Error("GYM_DEMO_IRK_KEK required");
   const irk = deriveDemoUserIrk(hexToBytes(KEK), user);
+  // Uninstall is admin-only on an admin-pinned box (docs/service-access-gating.md).
+  const adminRoot = deriveDemoAdminRoot(hexToBytes(KEK), user);
   const serviceId = `${user}-${slug}`;
 
   if (doUninstall) {
     const req: UninstallServiceRequest = { serverId: fqdn, creator: user, slug, issuedAt: Date.now() };
-    const sig = bytesToHex(signUninstallService(req, irk));
+    const sig = bytesToHex(signUninstallService(req, adminRoot));
     const r = await http(`https://${fqdn}/api/services/${encodeURIComponent(serviceId)}`, {
       method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ request: req, signature: sig }),
     }, 60000);
