@@ -195,18 +195,21 @@ owners: `docs/runbooks/release-readiness.md`; feature matrix:
 ### In flight
 
 - **Backup/clone server, Add/Import a server, Migrate wipes, Activity (2026-10-15,
-  uncommitted until the owner OKs):** `docs/server-backup-and-clone.md`. One
+  `72e889fd`, `.com` deployed with webapp shell v84):** `docs/server-backup-and-clone.md`. One
   sealed archive of all apps (`serverArchive/`), downloadable and importable
   onto any server of the account; Home's button is "Add/Import a server";
   Replace and the install Timeline are gone; Migrate always retires and wipes
   the old server (staged `awaiting-confirm` wipe, leases dropped at take-over);
   the box activity log records updates, apps, migration, decommission, backups
   and imports, and all three Activity tabs merge it with the account events.
-  Needs `.com` deploy (webapp shell v84), an endorsed box release, and
-  iOS/Android builds. Not run on a real box: the docker save/load and
+  Needs an endorsed box release and iOS/Android store builds (until then
+  the apps' new buttons 404 on boxes). Not run on a real box: the docker save/load and
   pg_dump/restore paths (fake ops in tests), a phone on a real archive.
   Open: peer-backup shards of the old name aren't carried; Forgejo repos and
-  API keys aren't in the archive; webapp downloads buffer the file in memory.
+  API keys aren't in the archive; webapp downloads buffer the file in memory;
+  an old box that stays off more than 30 days after take-over is bricked but
+  not wiped (`.com` GCs the eviction order); the backup's disk check is a flat
+  1 GB, not the archive's size.
 
 - **Build cost measurement (2026-10-14, `infra/inference/build-eval`):**
   scripted app builds, edits and fix rounds through the box's own build loop
