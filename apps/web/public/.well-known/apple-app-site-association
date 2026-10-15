@@ -2,26 +2,46 @@
   "applinks": {
     "details": [
       {
-        "appIDs": ["8G8RHBU9BN.com.flagshipserver.app"],
+        "appIDs": [
+          "8G8RHBU9BN.com.flagshipserver.app"
+        ],
         "components": [
           {
             "/": "/qr",
-            "?": { "s": "?*", "k": "?*" },
+            "?": {
+              "s": "?*",
+              "k": "?*"
+            },
             "comment": "Apex QR-relay URLs. When the user scans /qr?s=...&k=... with their phone camera, the OS routes the URL into the installed Flagship app (Universal Link) before Safari ever loads the fallback page."
           },
           {
             "/": "/qr/",
-            "?": { "s": "?*", "k": "?*" },
+            "?": {
+              "s": "?*",
+              "k": "?*"
+            },
             "comment": "Trailing-slash variant of the same QR-relay URL."
           },
           {
+            "/": "/join",
+            "?": {
+              "sid": "?*",
+              "pk": "?*"
+            },
+            "comment": "Add-a-device pairing. /join?sid=...&pk=... is the QR another device of the account shows; the camera opens it in the app (DeepLink.joinAccount) instead of the browser's open-in-app page."
+          },
+          {
             "/": "/transfer",
-            "?": { "o": "?*" },
+            "?": {
+              "o": "?*"
+            },
             "comment": "Transfer-a-box take-over offer. /transfer?o=<b64url> is the acquirer universal link — a phone Camera opening the giver's offer (or an in-app deep link). The OS routes it into the installed Flagship app so the take-over claim flow opens natively before Safari loads the webapp fallback."
           },
           {
             "/": "/transfer/",
-            "?": { "o": "?*" },
+            "?": {
+              "o": "?*"
+            },
             "comment": "Trailing-slash variant of the same transfer take-over URL."
           },
           {
@@ -31,12 +51,48 @@
           {
             "/": "/share/",
             "comment": "Trailing-slash variant of the same share link."
+          },
+          {
+            "/": "/remote",
+            "?": {
+              "s": "?*",
+              "k": "?*"
+            },
+            "comment": "Remote sign-in. remote.flagshipserver.com shows /remote?s=<sid>&k=<browser key> as a QR; the phone approves the browser."
+          },
+          {
+            "/": "/builder",
+            "?": {
+              "c": "?*",
+              "k": "?*"
+            },
+            "comment": "Studio pairing. Flagship Studio shows /builder?c=<code>&k=<builder key> as a QR."
+          },
+          {
+            "/": "/access",
+            "?": {
+              "server": "?*",
+              "ref": "?*",
+              "page": "?*"
+            },
+            "comment": "App sign-in. A private app's knock page links /access?server=&svc=&ref=&page= to sign that browser in."
+          },
+          {
+            "/": "/invite-accept",
+            "?": {
+              "server": "?*",
+              "iid": "?*",
+              "sig": "?*"
+            },
+            "comment": "An invitee's acceptance reply, opened by the app's owner to grant access."
           }
         ]
       }
     ]
   },
   "webcredentials": {
-    "apps": ["8G8RHBU9BN.com.flagshipserver.app"]
+    "apps": [
+      "8G8RHBU9BN.com.flagshipserver.app"
+    ]
   }
 }

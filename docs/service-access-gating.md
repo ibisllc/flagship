@@ -223,7 +223,7 @@ A restricted service's WEBSITE must gate plain browser visitors (a browser can't
 A visitor hitting a restricted service with no valid session gets a non-threatening knock page: *"This page
 is on a Flagship cloud and access is restricted — authenticate to view."* (minimal disclosure — NO owner/
 content). It carries a high-entropy, short-lived, single-use **pageId** (re-rolled per load / ~minute), a
-**button** (same-device deeplink `flagship://access?pageId=…&svc=…`), and a **QR** (cross-device: same
+**button** (same-device app link `https://flagshipserver.com/access?server=…&svc=…&ref=…&page=…`), and a **QR** (cross-device: same
 deeplink). The page POLLS the box for `pageId` authorization.
 
 ### Authorize (phone)
@@ -278,7 +278,7 @@ webapp 1392 · tsc clean.
   mirroring `revoked-since`); the author submits only `{accept, acceptSig}`, and the per-client create caches
   (webapp `CREATE_STORE_KEY`, iOS `InviteCreateStore`, Android) were deleted. Finalize from any of the author's
   devices.
-- ✅ **Acceptance-reply link** canonicalized — `flagship://invite-accept?server=&iid=&ref=&aid=&sig=&at=`, all
+- ✅ **Acceptance-reply link** canonicalized — `https://flagshipserver.com/invite-accept?server=&iid=&ref=&aid=&sig=&at=` (older apps sent `flagship://invite-accept?…`, still parsed), all
   3 surfaces build+parse the identical frozen string (round-trip tests); legacy forms still decode.
 - ✅ **`/invite` web page** parses + forwards the canonical `#<secret>&a=<authorAID>&i=<inviteId>` (verified +
   test-pinned).
@@ -415,7 +415,7 @@ default-offline) + the Settings list.
 - **`ServiceSessionStore`** gained the `secretId` index + `closeBySecretId` + `lookupBySecretId`.
 
 ### Clients — in flight (iOS / Android / webapp)
-The deeplink the knock page hands the phone is `flagship://access?server=&svc=&ref=&page=`. Each client adds:
+The app link the knock page hands the phone is `https://<control apex>/access?server=&svc=&ref=&page=` (2026-10-14; it was `flagship://access?…`, still parsed). Each client adds:
 `signKnockAuthorization` (mirror, fixture-pinned) + the deeplink/paste → KnockAuthorize confirm → authorize
 call + a local `SecuredSession` store + a Settings **"Open secured sessions"** list (status/close). The webapp
 authorizes via a pasted link ("Process URL") since a browser can't own the `flagship://` scheme.

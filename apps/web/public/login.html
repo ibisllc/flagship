@@ -93,8 +93,9 @@
       <details>
         <summary>No primary device yet?</summary>
         <p>
-          The native iOS / Android apps are in development. You can use the
-          <a href="https://webapp.flagshipserver.com/">installable webapp</a> as a primary device today.
+          Get the Flagship app on the <span data-app-store="ios"><span data-app-store-label>App Store</span></span>
+          or <span data-app-store="android"><span data-app-store-label>Google Play</span></span>, or use the
+          <a href="https://webapp.flagshipserver.com/">installable webapp</a> as your primary device.
         </p>
       </details>
     </main>
@@ -180,6 +181,7 @@
         status.textContent = "error: " + (e?.message ?? e);
       });
     </script>
+  <script src="/app-stores.js" defer></script>
   <script src="/motion.js" defer></script>
 </body>
 </html>

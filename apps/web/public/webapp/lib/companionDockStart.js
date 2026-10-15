@@ -1,6 +1,6 @@
 // The browser side of the remote ceremony.
 //
-// The page shows a QR straight away: flagship://remote?s=<sid>&k=<pk>, where
+// The page shows a QR straight away: https://<apex>/remote?s=<sid>&k=<pk>, where
 // sid names a QR-relay session and pk is this browser's ephemeral X25519 key.
 // The phone scans it, joins the relay as the phone, and both screens show the
 // same 6-digit code. When the owner approves, the phone mints a single-use
@@ -8,14 +8,14 @@
 // the browser redeems it on that server. The browser never names an account,
 // and the relay never sees the account, the server or the ticket.
 
-import { controlHost, dataApex } from "./apex.js";
+import { appLinkUrl, controlHost, dataApex } from "./apex.js";
 import { redeemCompanionAndPersist } from "./companionReceiver.js";
 import { aeadOpen, deriveMaterial, freshKeypair, freshSid } from "./pairingRelay.js";
 
 export const REMOTE_TICKET_KIND = "flagship/remote-ticket/v1";
 
 export function buildRemoteApprovalUrl({ sid, pkB64u }) {
-  return `flagship://remote?${new URLSearchParams({ s: sid, k: pkB64u })}`;
+  return appLinkUrl("/remote", { s: sid, k: pkB64u });
 }
 
 /** Validate the phone's sealed payload. The server must be on the data apex,

@@ -5,7 +5,7 @@
 // be the deeplink target. Instead the visitor copies the knock page's link
 // ("Get link to paste in the app") and pastes it here. We:
 //
-//   1. parse the `flagship://access?server=&svc=&ref=&page=` link,
+//   1. parse the `…/access?server=&svc=&ref=&page=` link,
 //   2. show a confirm ("Open <app> on <server>?"),
 //   3. require the webapp to be unlocked (its in-page UMK),
 //   4. sign the KnockAuthorization + POST it to the box (lib/knockIdentity.js):
@@ -57,7 +57,7 @@ function renderPaste(prefill = "", error = "") {
         page, choose "Get link to paste in the app", then paste the link below
         to sign that browser in.
       </p>
-      <textarea id="aa-link" rows="3" class="mt-2" placeholder="flagship://access?server=…&amp;svc=…&amp;ref=…&amp;page=…" autocomplete="off" autocapitalize="off" spellcheck="false">${escapeHtml(prefill)}</textarea>
+      <textarea id="aa-link" rows="3" class="mt-2" placeholder="https://flagshipserver.com/access?server=…" autocomplete="off" autocapitalize="off" spellcheck="false">${escapeHtml(prefill)}</textarea>
       ${error ? `<p class="err-text mt-2">${escapeHtml(error)}</p>` : ""}
       <button id="aa-process" class="full-width mt-2">Process URL</button>
     </div>`;

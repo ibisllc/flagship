@@ -152,7 +152,9 @@
 //  v74: the owner's server order (docs/server-order.md): Home lists servers
 //       in order with a Leader badge and drag/up/down to reorder; server
 //       pages say "Make leader"; precaches lib/serverOrder.js.
-const SHELL_VERSION = "v74";
+//  v75: app links are https (/remote, /access, /invite-accept on the control
+//       apex); the webapp opens an /access link handed over by the site.
+const SHELL_VERSION = "v75";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

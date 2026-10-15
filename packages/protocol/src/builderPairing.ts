@@ -122,8 +122,9 @@ export function codeBytesFromHuman(raw: string): Bytes | null {
   return bytes && bytes.length === CODE_BYTE_COUNT ? bytes : null;
 }
 
-export function qrPayload(human: string, builderPub: Bytes): string {
-  return `flagship://builder?c=${human}&k=${base64UrlEncode(builderPub)}`;
+/** The phone opens this app link (older apps also read `flagship://builder?…`). */
+export function qrPayload(human: string, builderPub: Bytes, host = "flagshipserver.com"): string {
+  return `https://${host}/builder?c=${human}&k=${base64UrlEncode(builderPub)}`;
 }
 
 // ── handshake ───────────────────────────────────────────────────────────

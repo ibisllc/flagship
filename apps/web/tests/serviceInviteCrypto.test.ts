@@ -785,15 +785,23 @@ describe("webapp serviceInvite — wire helpers", () => {
     expect(closed.closed).toBe(true);
   });
 
-  it("parseAccessDeepLink parses a flagship://access link (tolerating pasted whitespace) + rejects junk", async () => {
+  it("parseAccessDeepLink parses the /access app link and the older flagship://access form (tolerating pasted whitespace) + rejects junk", async () => {
     const si = await loadServiceInvite();
-    const link = `flagship://access?server=${encodeURIComponent(VECTORS.serverId)}&svc=notes&ref=${encodeURIComponent(VECTORS.serviceRef)}&page=${VECTORS.knock.pageId}`;
-    expect(si.parseAccessDeepLink(`  \n${link}\t `)).toEqual({
+    const query = `server=${encodeURIComponent(VECTORS.serverId)}&svc=notes&ref=${encodeURIComponent(VECTORS.serviceRef)}&page=${VECTORS.knock.pageId}`;
+    const link = `https://flagshipserver.com/access?${query}`;
+    const want = {
       serverId: VECTORS.serverId,
       svc: "notes",
       serviceRef: VECTORS.serviceRef,
       pageId: VECTORS.knock.pageId,
-    });
+    };
+    expect(si.parseAccessDeepLink(`  \n${link}\t `)).toEqual(want);
+    expect(si.parseAccessDeepLink(`flagship://access?${query}`)).toEqual(want);
+    // The open-in-app page hands the webapp its own copy of the link.
+    expect(si.parseAccessDeepLink(`https://webapp.flagshipserver.com/access/?${query}`)).toEqual(want);
+    expect(si.parseAccessDeepLink(`https://evil.example/access?${query}`)).toBeNull();
+    expect(si.parseAccessDeepLink(`http://flagshipserver.com/access?${query}`)).toBeNull();
+    expect(si.parseAccessDeepLink(`https://flagshipserver.com/accessx?${query}`)).toBeNull();
     expect(si.serviceUrlFromDeepLink(si.parseAccessDeepLink(link))).toBe(`https://notes.${VECTORS.serverId}`);
     // Wrong scheme / missing required fields / not a link → null.
     expect(si.parseAccessDeepLink("https://example.com/?server=x&ref=y&page=z")).toBeNull();
@@ -859,14 +867,14 @@ describe("webapp serviceInvite — wire helpers", () => {
       k.signWithAppAccountId,
     );
     expect(bytesToHex(acceptSig)).toBe(VECTORS.acceptApp.sigHex);
-    // Canonical reply = the `flagship://invite-accept?…` deep-link carrying ONLY
+    // Canonical reply = the `…/invite-accept?…` app link carrying ONLY
     // {accept, acceptSig} (no create — the box fetches it from .com).
     const reply = si.buildAcceptReply(
       "home.alice.flagship.services",
       { inviteId: VECTORS.accept.inviteId, serviceRef: VECTORS.accept.serviceRef, contactAID: bytesToHex(contact.publicKey), acceptedAt: VECTORS.accept.acceptedAt },
       bytesToHex(acceptSig),
     );
-    expect(reply.startsWith("flagship://invite-accept?")).toBe(true);
+    expect(reply.startsWith("https://flagshipserver.com/invite-accept?")).toBe(true);
     // AUTHOR parses the reply (tolerating pasted whitespace).
     const parsed = si.parseAcceptReply(`  \n${reply}\t `);
     expect(parsed.serverDomain).toBe("home.alice.flagship.services");
@@ -1017,7 +1025,7 @@ describe("webapp serviceInvite — wire helpers", () => {
     const si = await loadServiceInvite();
     // ── FROZEN cross-client acceptance reply (interop lock; the identical
     // string is asserted on iOS DeepLink + Android InviteLink). The canonical
-    // form is `flagship://invite-accept?server=&iid=&ref=&aid=&sig=&at=`,
+    // form is `https://flagshipserver.com/invite-accept?server=&iid=&ref=&aid=&sig=&at=`,
     // carrying ONLY {accept, acceptSig} (the box fetches the create from .com). ──
     const SERVER = "home.alice.flagship.services";
     const IID = "ea4ab8be66710610842cf6ef0d7e56bd91a4f03c7a5633fde4a66482cc292890";
@@ -1025,8 +1033,8 @@ describe("webapp serviceInvite — wire helpers", () => {
     const AID = "086abb1c191c86e7cb68d4736f73c68f8b0c55c2a3fafa6a2c770fc308ab242a";
     const SIG = "1f".repeat(64);
     const AT = 1700006000000;
-    const FROZEN_REPLY =
-      `flagship://invite-accept?server=${SERVER}&iid=${IID}&ref=${REF}&aid=${AID}&sig=${SIG}&at=${AT}`;
+    const QUERY = `server=${SERVER}&iid=${IID}&ref=${REF}&aid=${AID}&sig=${SIG}&at=${AT}`;
+    const FROZEN_REPLY = `https://flagshipserver.com/invite-accept?${QUERY}`;
     // build === the frozen string.
     expect(
       si.buildAcceptReply(SERVER, { inviteId: IID, serviceRef: REF, contactAID: AID, acceptedAt: AT }, SIG),
@@ -1039,5 +1047,10 @@ describe("webapp serviceInvite — wire helpers", () => {
     });
     // Tolerates surrounding whitespace + an https:// prefix on the server param.
     expect(si.parseAcceptReply(`  ${FROZEN_REPLY}  `)!.accept.inviteId).toBe(IID);
+    // Replies from older apps (`flagship://invite-accept?…`) still parse.
+    expect(si.parseAcceptReply(`flagship://invite-accept?${QUERY}`)!.accept.inviteId).toBe(IID);
+    // Only our control apex: a lookalike host or path is not a reply.
+    expect(si.parseAcceptReply(`https://evil.example/invite-accept?${QUERY}`)).toBeNull();
+    expect(si.parseAcceptReply(`https://flagshipserver.com/invite?${QUERY}`)).toBeNull();
   });
 });

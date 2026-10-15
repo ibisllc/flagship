@@ -100,6 +100,20 @@ export function controlHost() {
   }
 }
 
+/** An app link: `https://<control apex><path>`, also reached through `www.`
+ *  or a sub-origin (the open-in-app page hands the webapp its own copy). */
+export function appLinkUrl(path, params) {
+  return `${controlApex()}${path}?${new URLSearchParams(params)}`;
+}
+
+/** Is `url` (a URL) the app link for `path` on our control apex? */
+export function isAppLink(url, path) {
+  if (url.protocol !== "https:" || url.pathname.replace(/\/+$/, "") !== path) return false;
+  const apex = controlHost();
+  const host = url.host.toLowerCase();
+  return host === apex || host === `www.${apex}` || KNOWN_SUBORIGIN_PREFIXES.some((p) => host === `${p}${apex}`);
+}
+
 /** A sub-origin of the control apex: e.g. subOrigin("boot") →
  *  https://boot.flagshipserver.com (prod) / https://boot.gym.flagshipserver.com
  *  (gym). */

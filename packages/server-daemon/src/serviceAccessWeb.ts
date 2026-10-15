@@ -152,6 +152,8 @@ export interface ServiceAccessWebOptions {
   statusRateMs?: number;
   /** M5 — max knock authorize/close requests per client per minute. Default 30. */
   rateLimitPerMin?: number;
+  /** The control apex the app link points at. Default https://flagshipserver.com. */
+  controlBaseUrl?: string;
 }
 
 export interface ServiceAccessWeb {
@@ -174,6 +176,7 @@ export function buildServiceAccessWeb(opts: ServiceAccessWebOptions): ServiceAcc
   const now = opts.now ?? (() => Date.now());
   const maxAgeMs = opts.maxAgeMs ?? 5 * 60_000;
   const knockTtlMs = opts.knockTtlMs ?? DEFAULT_KNOCK_TTL_MS;
+  const controlBaseUrl = (opts.controlBaseUrl ?? "https://flagshipserver.com").replace(/\/+$/, "");
   const sessionTtlMs = opts.sessionTtlMs ?? DEFAULT_SESSION_TTL_MS;
   const statusRateMs = opts.statusRateMs ?? DEFAULT_STATUS_RATE_MS;
   const knocks = opts.knocks ?? new PendingKnockStore();
@@ -217,9 +220,12 @@ export function buildServiceAccessWeb(opts: ServiceAccessWebOptions): ServiceAcc
     const label = host.endsWith(suffix) ? host.slice(0, host.length - suffix.length) : "";
     const ua = req.headers["user-agent"] ?? "";
     const { pageId, holderToken } = knocks.mint(serviceRef, ua, now(), knockTtlMs);
-    const deeplink = `flagship://access?server=${encodeURIComponent(opts.serverId)}&svc=${encodeURIComponent(
-      label,
-    )}&ref=${encodeURIComponent(serviceRef)}&page=${encodeURIComponent(pageId)}`;
+    const deeplink = `${controlBaseUrl}/access?${new URLSearchParams({
+      server: opts.serverId,
+      svc: label,
+      ref: serviceRef,
+      page: pageId,
+    })}`;
     return {
       status: 200,
       headers: {
@@ -478,6 +484,7 @@ function renderKnockPage(args: { pageId: string; deeplink: string; next: string 
   var LINK = ${deeplinkJson};
   var NEXT = ${nextJson};
   document.getElementById('access').setAttribute('href', LINK);
+  document.getElementById('access').setAttribute('target', '_blank');
   document.getElementById('getlink').addEventListener('click', function(){
     var box = document.getElementById('codebox');
     box.textContent = LINK;

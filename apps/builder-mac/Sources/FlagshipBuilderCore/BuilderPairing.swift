@@ -92,9 +92,10 @@ public enum BuilderPairing {
 
     /// The QR payload the builder displays. Carries the short code AND the
     /// builder's ephemeral X25519 pubkey so a scanning phone needs no relay
-    /// round-trip to derive the SAS.
+    /// round-trip to derive the SAS. An https app link, so the phone's own
+    /// camera opens it in the Flagship app (or the get-the-app page).
     public static func qrPayload(humanCode: String, builderPublicKey: Data) -> String {
-        "flagship://builder?c=\(humanCode)&k=\(Base64URLBuilder.encode(builderPublicKey))"
+        "https://flagshipserver.com/builder?c=\(humanCode)&k=\(Base64URLBuilder.encode(builderPublicKey))"
     }
 
     // MARK: - Handshake

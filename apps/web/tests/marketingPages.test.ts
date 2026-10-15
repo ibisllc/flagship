@@ -94,20 +94,44 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
 
   it("every app-promotion fallback points to the live web app without dead native links", async () => {
     const app = buildServer();
-    for (const path of ["/", "/qr/"]) {
+    for (const path of ["/", "/open/"]) {
       const r = await app.inject({ method: "GET", url: path });
       expect(r.statusCode).toBe(200);
       expect(r.body).toContain('href="https://webapp.flagshipserver.com/"');
-      expect(r.body).toContain('target="_blank"');
       expect(r.body).toContain("iOS soon");
       expect(r.body).toContain("Android soon");
       expect(r.body).not.toMatch(/href="#install-(ios|android)"/);
     }
+    const home = await app.inject({ method: "GET", url: "/" });
+    expect(home.body).toContain('target="_blank"');
 
     const notFound = await app.inject({ method: "GET", url: "/404.html" });
     expect(notFound.statusCode).toBe(200);
     expect(notFound.body).toContain('href="https://webapp.flagshipserver.com/"');
     expect(notFound.body).not.toContain("Get the mobile app");
+  });
+
+  it("the homepage and the open-in-app page take their store buttons from /app-stores.js", async () => {
+    const app = buildServer();
+    for (const path of ["/", "/open/"]) {
+      const r = await app.inject({ method: "GET", url: path });
+      expect(r.body, path).toContain('<script src="/app-stores.js"></script>');
+      expect(r.body, path).toContain('data-app-store="ios"');
+      expect(r.body, path).toContain('data-app-store="android"');
+    }
+    const stores = await app.inject({ method: "GET", url: "/app-stores.js" });
+    expect(stores.statusCode).toBe(200);
+    expect(stores.body).toContain("[data-app-store]");
+  });
+
+  it("the open-in-app page puts the webapp behind an opt-in link carrying the whole app link", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/open/" });
+    expect(r.body).toContain('id="web-alt" hidden');
+    expect(r.body).toContain("path + location.search + location.hash");
+    for (const path of ["/join", "/share", "/transfer", "/qr", "/remote", "/builder", "/access", "/invite-accept"]) {
+      expect(r.body).toContain(`"${path}": {`);
+    }
   });
 
   it("never promotes one available desktop build without the other", async () => {

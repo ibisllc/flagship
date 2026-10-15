@@ -68,7 +68,7 @@ final class BuilderPairingTests: XCTestCase {
         let builderPriv = try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: hex(builderPrivHex))
         let payload = BuilderPairing.qrPayload(humanCode: expectedHuman,
                                               builderPublicKey: builderPriv.publicKey.rawRepresentation)
-        XCTAssertEqual(payload, "flagship://builder?c=\(expectedHuman)&k=\(builderPubB64u)")
+        XCTAssertEqual(payload, "https://flagshipserver.com/builder?c=\(expectedHuman)&k=\(builderPubB64u)")
     }
 
     /// End-to-end interop: a simulated phone derives the same key, seals a
@@ -188,6 +188,6 @@ final class BuilderPairingTests: XCTestCase {
         XCTAssertEqual(e.humanCode, expectedHuman)
         XCTAssertEqual(e.humanCodeDisplay, "AEBA-GBAF")
         XCTAssertEqual(e.publicKeyB64, builderPubB64u)
-        XCTAssertTrue(e.qrPayload.hasPrefix("flagship://builder?c=\(expectedHuman)&k="))
+        XCTAssertTrue(e.qrPayload.hasPrefix("https://flagshipserver.com/builder?c=\(expectedHuman)&k="))
     }
 }

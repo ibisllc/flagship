@@ -1010,44 +1010,21 @@ describe("webapp host — client-route SPA fallback (the /join pairing bug)", ()
     expect(await r.text()).toBe("asset:/webapp/manifest.json");
   });
 
-  // The CONTROL apex must be UNCHANGED: there /join is the native universal
-  // link and the web fallback is the marketing surface — it must NEVER route
-  // into serveWebapp / the webapp index.html.
-  it("/join on the CONTROL apex (flagshipserver.com) is NOT the webapp — coming-soon without the preview cookie", async () => {
+  // On the CONTROL apex /join is the native universal link; its browser
+  // fallback is the open-in-app page, never the webapp shell.
+  it("/join on the CONTROL apex serves the open-in-app page, ungated and NOT the webapp", async () => {
     const r = await route(
-      new Request("https://flagshipserver.com/join"),
-      makeEnv(),
-    );
-    // Pre-launch gate: an un-cookied visitor sees the coming-soon page, not
-    // the webapp shell.
-    expect(await r.text()).toBe("asset:/coming-soon.html");
-  });
-
-  it("/join on the CONTROL apex with the preview cookie falls through to the marketing asset, NOT /webapp/index.html", async () => {
-    const r = await route(
-      new Request("https://flagshipserver.com/join", {
-        headers: { cookie: "flagship_preview=1" },
-      }),
+      new Request("https://flagshipserver.com/join?sid=relay123&pk=abc"),
       makeEnv(),
     );
     expect(r.status).toBe(200);
-    // The marketing SPA fallback (asset binding) — explicitly NOT the webapp.
-    const body = await r.text();
-    expect(body).toBe("asset:/join");
-    expect(body).not.toBe("asset:/webapp/index.html");
+    expect(await r.text()).toBe("asset:/open/index.html");
   });
 
-  it("/join on the GYM control apex (gym.flagshipserver.com) is also NOT the webapp", async () => {
+  it("/join on the GYM control apex (gym.flagshipserver.com) is also the open-in-app page", async () => {
     const env = makeEnv({ CONTROL_APEX: "gym.flagshipserver.com" });
-    const r = await route(
-      new Request("https://gym.flagshipserver.com/join", {
-        headers: { cookie: "flagship_preview=1" },
-      }),
-      env,
-    );
-    const body = await r.text();
-    expect(body).toBe("asset:/join");
-    expect(body).not.toBe("asset:/webapp/index.html");
+    const r = await route(new Request("https://gym.flagshipserver.com/join"), env);
+    expect(await r.text()).toBe("asset:/open/index.html");
   });
 });
 
@@ -1156,83 +1133,42 @@ describe("www.flagshipserver.com — redirect-only, never served", () => {
   });
 });
 
-describe("/transfer — take-over universal-link browser fallback", () => {
-  // On the CONTROL apex the app (when installed) intercepts /transfer?o=… as a
-  // universal link / App-Link and never hits the Worker. When it's NOT installed
-  // the browser lands here; the Worker 308-redirects to the webapp's own origin,
-  // preserving ?o= so the PWA boots into the claim view. Placed before the
-  // coming-soon gate → works with no preview cookie (a real acquirer's case).
+describe("app links — open-in-app page on the control apex", () => {
+  // With the app installed the OS opens these links in it and the Worker never
+  // sees them. Otherwise the browser gets the open-in-app page at the same URL
+  // (store buttons + an opt-in webapp link). It must NOT redirect into the
+  // webapp origin: an installed Android webapp claims every navigation there.
 
-  it("308-redirects /transfer?o=… to the webapp origin, preserving the offer payload", async () => {
-    const r = await route(
-      new Request("https://flagshipserver.com/transfer?o=eyJhIjoxfQ"),
-      makeEnv(),
-    );
-    expect(r.status).toBe(308);
-    expect(r.headers.get("location")).toBe(
-      "https://webapp.flagshipserver.com/transfer?o=eyJhIjoxfQ",
-    );
-  });
+  const appLinks = ["/join", "/share", "/transfer", "/qr", "/remote", "/builder", "/access", "/invite-accept"];
+  for (const path of [...appLinks, ...appLinks.map((p) => `${p}/`)]) {
+    it(`${path} serves /open/index.html with no redirect, ungated`, async () => {
+      const r = await route(new Request(`https://flagshipserver.com${path}?o=x`), makeEnv());
+      expect(r.status).toBe(200);
+      expect(r.headers.get("location")).toBeNull();
+      expect(await r.text()).toBe("asset:/open/index.html");
+      expect(calls).toEqual([]);
+    });
+  }
 
-  it("redirects the trailing-slash variant too", async () => {
-    const r = await route(
-      new Request("https://flagshipserver.com/transfer/?o=abc"),
-      makeEnv(),
-    );
-    expect(r.status).toBe(308);
-    expect(r.headers.get("location")).toBe(
-      "https://webapp.flagshipserver.com/transfer?o=abc",
-    );
-  });
-
-  it("fires WITHOUT the preview cookie (ungated — before the coming-soon gate)", async () => {
-    // A real acquirer opening the link has no preview cookie; the fallback
-    // must still reach the webapp, not the coming-soon page.
-    const r = await route(
-      new Request("https://flagshipserver.com/transfer?o=xyz"),
-      makeEnv(),
-    );
-    expect(r.status).toBe(308);
-    expect(r.headers.get("location")).toBe(
-      "https://webapp.flagshipserver.com/transfer?o=xyz",
-    );
-  });
-
-  it("does not hit the proxy fall-through (no upstream fetch)", async () => {
-    await route(
-      new Request("https://flagshipserver.com/transfer?o=xyz"),
-      makeEnv(),
-    );
-    expect(calls).toEqual([]);
-  });
-
-  it("/transfer on the web. host serves the webapp index.html (client route → SPA boots)", async () => {
-    // The redirect target: an extensionless client route on the webapp host
-    // hands back the webapp shell so dispatchInitialView() can read ?o=.
-    const r = await route(
-      new Request("https://webapp.flagshipserver.com/transfer?o=xyz"),
-      makeEnv(),
-    );
-    expect(r.status).toBe(200);
-    expect(await r.text()).toBe("asset:/webapp/index.html");
-  });
-});
-
-describe("/share — share-a-server link browser fallback", () => {
-  it("308-redirects /share and /share/ to the webapp origin, ungated", async () => {
-    for (const path of ["/share", "/share/"]) {
+  it("the page's own assets pass the coming-soon gate", async () => {
+    for (const path of ["/tokens.css", "/components.css", "/theme-ui.css", "/theme.js", "/app-stores.js"]) {
       const r = await route(new Request(`https://flagshipserver.com${path}`), makeEnv());
-      expect(r.status).toBe(308);
-      expect(r.headers.get("location")).toBe("https://webapp.flagshipserver.com/share");
+      expect(await r.text(), path).toBe(`asset:${path}`);
     }
-    expect(calls).toEqual([]);
   });
 
-  it("/share on the webapp host serves the webapp shell", async () => {
-    const r = await route(new Request("https://webapp.flagshipserver.com/share"), makeEnv());
-    expect(r.status).toBe(200);
-    expect(await r.text()).toBe("asset:/webapp/index.html");
+  it("/joined (a lookalike) is not an app link", async () => {
+    const r = await route(new Request("https://flagshipserver.com/joined"), makeEnv());
+    expect(await r.text()).toBe("asset:/coming-soon.html");
   });
+
+  for (const path of ["/transfer?o=xyz", "/share", "/join?sid=a&pk=b"]) {
+    it(`${path} on the webapp host still serves the webapp shell (the opt-in link's target)`, async () => {
+      const r = await route(new Request(`https://webapp.flagshipserver.com${path}`), makeEnv());
+      expect(r.status).toBe(200);
+      expect(await r.text()).toBe("asset:/webapp/index.html");
+    });
+  }
 });
 
 describe("CORS — cross-origin webapp → apex /api/* calls", () => {

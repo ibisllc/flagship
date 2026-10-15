@@ -52,6 +52,12 @@ import {
 const WEBAPP_HOST = "webapp.flagshipserver.com";
 const WEBAPP_ORIGIN = `https://${WEBAPP_HOST}`;
 
+/** Control-apex paths the native apps claim as universal links / App Links. */
+const APP_LINK_PATHS: ReadonlySet<string> = new Set(
+  ["/join", "/share", "/transfer", "/qr", "/remote", "/builder", "/access", "/invite-accept"]
+    .flatMap((p) => [p, `${p}/`]),
+);
+
 /**
  * remote.flagshipserver.com — the browser-remote surface.
  *
@@ -719,34 +725,19 @@ async function routeImpl(
     });
   }
 
-  // `/transfer?o=<b64url>` — the transfer-a-box take-over universal link.
-  // When the native app is installed iOS/Android intercept this URL at the OS
-  // level (AASA `/transfer` component + Android App-Links `/transfer` path) and
-  // open the in-app acquirer claim flow — the request never reaches the Worker.
-  // When the app is NOT installed the browser lands here; we 308-redirect to the
-  // webapp's own origin, preserving the `?o=` offer payload. The webapp boots,
-  // `dispatchInitialView()` reads `?o=` (lib/deepLink.js → serverTransfer.js) and
-  // opens the claim view. Placed with the other webapp redirects — BEFORE the
-  // coming-soon gate — so the fallback works for a real acquirer with no preview
-  // cookie. The webapp is on a different associated domain (webapp.flagshipserver.com
-  // is not in the app's applinks), so the redirect target won't re-trigger a
-  // universal-link bounce.
-  if (url.pathname === "/transfer" || url.pathname === "/transfer/") {
-    return new Response(null, {
-      status: 308,
-      headers: { location: `${WEBAPP_ORIGIN}/transfer${url.search}` },
-    });
-  }
-
-  // `/share#s=…&k=…` — a "Share this server" link (docs/share-a-server.md
-  // §5.1). Same fallback as `/transfer`: the app takes it when installed;
-  // otherwise the webapp opens it. The secret is in the fragment, which never
-  // reaches this Worker and which the browser carries across the redirect.
-  if (url.pathname === "/share" || url.pathname === "/share/") {
-    return new Response(null, {
-      status: 308,
-      headers: { location: `${WEBAPP_ORIGIN}/share${url.search}` },
-    });
+  // App links (`APP_LINK_PATHS`: add a device, share or take over a server,
+  // remote sign-in, Studio pairing, app sign-in, invite replies). With the app
+  // installed the OS opens them in it (AASA + Android App Links) and the
+  // request never gets here. Otherwise the browser gets the open-in-app page
+  // AT THE SAME URL: store buttons first, the webapp as an opt-in link. Never
+  // a redirect into the webapp origin: on Android an installed webapp claims
+  // every navigation into its origin, so the redirect opened it unasked.
+  // Before the coming-soon gate, so a real recipient always gets the page.
+  if (APP_LINK_PATHS.has(url.pathname)) {
+    return env.ASSETS.fetch(new Request(new URL("/open/index.html", url), {
+      method: request.method,
+      headers: request.headers,
+    }));
   }
 
   // The standalone "how to assemble your server" explainer was folded into
@@ -861,7 +852,7 @@ async function routeImpl(
   // Pre-launch stealth gate. By this point every explicit Worker handler
   // (api, build/iso, og, me/webapp/recovery redirects, .well-known/aasa)
   // has already returned — so the only requests reaching here are
-  // static-asset fallbacks (marketing HTML, /docs, /blog, /status, /qr,
+  // static-asset fallbacks (marketing HTML, /docs, /blog, /status,
   // /deck, CSS/JS/fonts). Show coming-soon to those unless the request
   // carries the preview cookie set by /wip_.
   //
@@ -1686,9 +1677,12 @@ const COMING_SOON_EXEMPT_PATHS = new Set<string>([
   // Shared assets used by public utility pages remain available through the
   // pre-launch gate. Download/API routes are handled before static fallback.
   "/site.css",
+  "/tokens.css",
+  "/components.css",
   "/theme-ui.css",
   "/theme.js",
   "/motion.js",
+  "/app-stores.js",
 ]);
 const COMING_SOON_EXEMPT_PREFIXES = ["/.well-known/", "/downloads/"];
 

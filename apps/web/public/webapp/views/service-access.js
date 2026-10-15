@@ -189,7 +189,7 @@ export async function renderServiceAccess(service) {
         friend sent back. It never reveals who they are — you're just
         confirming it really came from them.
       </p>
-      <textarea id="sa-accept-input" rows="2" placeholder="flagship-accept:…" class="mt-1"></textarea>
+      <textarea id="sa-accept-input" rows="2" placeholder="https://flagshipserver.com/invite-accept?…" class="mt-1"></textarea>
       <button id="sa-accept-go" class="full-width mt-2">Finalize &amp; grant access</button>
       <div id="sa-accept-status" class="mt-2 text-sm"></div>
     </div>

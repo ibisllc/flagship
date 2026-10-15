@@ -53,6 +53,8 @@ export const ACCESS_MODES = ["open", "restricted"];
 // identity"): nothing is shared between apps, nothing depends on the inviter.
 export { deriveAppAccountIdFromSeed as deriveAppAccountId } from "../keystore.js";
 
+import { appLinkUrl, isAppLink } from "./apex.js";
+
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
@@ -873,9 +875,11 @@ export async function redeemInvite(args, deps = {}) {
 
 // ──────────────────────────────────────────────────────────────────────
 // CANONICAL acceptance-reply form (cross-client): the friend's app emits, and
-// the AUTHOR opens, a deep-link
+// the AUTHOR opens, an app link
 //
-//   flagship://invite-accept?server=&iid=&ref=&aid=&sig=&at=
+//   https://<control apex>/invite-accept?server=&iid=&ref=&aid=&sig=&at=
+//
+// (older apps sent `flagship://invite-accept?…`, still accepted).
 //
 // carrying ONLY `{accept, acceptSig}` — the friend's contact-AID-signed
 // `AcceptServiceInvite` (inviteId/serviceRef/contactAID/acceptedAt + sig) + the
@@ -912,11 +916,11 @@ export function buildAcceptReply(serverDomain, accept, acceptSig) {
     sig: acceptSig.toLowerCase(),
     at: String(accept.acceptedAt),
   });
-  return `flagship://invite-accept?${q.toString()}`;
+  return appLinkUrl("/invite-accept", q);
 }
 
 /**
- * AUTHOR: parse a `flagship://invite-accept?…` reply (tolerating pasted
+ * AUTHOR: parse an `…/invite-accept?…` reply (tolerating pasted
  * whitespace). Returns `{ serverDomain, accept, acceptSig }` or null when it
  * isn't a valid acceptance reply. (`accept.contactAID` stays hex; the caller
  * binds it.) Back-compat: also accepts the legacy `flagship-accept:<base64url>`
@@ -949,10 +953,11 @@ export function parseAcceptReply(raw) {
   } catch {
     return null;
   }
-  if (url.protocol !== "flagship:") return null;
   // `new URL("flagship://invite-accept?…")` puts `invite-accept` in host.
-  const kind = (url.host || url.pathname.replace(/^\/+/, "")).toLowerCase();
-  if (kind !== "invite-accept") return null;
+  const isReply = url.protocol === "flagship:"
+    ? (url.host || url.pathname.replace(/^\/+/, "")).toLowerCase() === "invite-accept"
+    : isAppLink(url, "/invite-accept");
+  if (!isReply) return null;
   const p = url.searchParams;
   const accept = {
     inviteId: p.get("iid"),
@@ -1083,7 +1088,8 @@ export async function buildVisitHeader(args, deps = {}) {
 // ──────────────────────────────────────────────────────────────────────
 
 /**
- * Parse a `flagship://access?server=&svc=&ref=&page=` deeplink. Tolerates
+ * Parse an `https://<control apex>/access?server=&svc=&ref=&page=` app link
+ * (or the older `flagship://access?…` form). Tolerates
  * surrounding whitespace (it's pasted) and percent-encoded params. Returns
  * `{ serverId, svc, serviceRef, pageId }` or null when it isn't an access link
  * or is missing a required field.
@@ -1094,16 +1100,22 @@ export async function buildVisitHeader(args, deps = {}) {
 export function parseAccessDeepLink(raw) {
   if (typeof raw !== "string") return null;
   const s = raw.trim();
-  // Scheme check (case-insensitive) before handing to URL — `flagship:` is a
-  // non-special scheme, so URLSearchParams over the query is the reliable path.
-  if (!/^flagship:\/\/access\b/i.test(s)) return null;
-  const q = s.indexOf("?");
-  if (q < 0) return null;
   let params;
-  try {
+  // `flagship:` is a non-special scheme, so URLSearchParams over the query is
+  // the reliable path for it.
+  if (/^flagship:\/\/access\b/i.test(s)) {
+    const q = s.indexOf("?");
+    if (q < 0) return null;
     params = new URLSearchParams(s.slice(q + 1));
-  } catch {
-    return null;
+  } else {
+    let url;
+    try {
+      url = new URL(s);
+    } catch {
+      return null;
+    }
+    if (!isAppLink(url, "/access")) return null;
+    params = url.searchParams;
   }
   const serverId = (params.get("server") || "").trim();
   const svc = (params.get("svc") || "").trim();

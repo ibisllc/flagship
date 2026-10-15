@@ -99,7 +99,7 @@
 
     <ol class="steps">
       <li><div><strong>Install and open Studio.</strong><p>Studio shows a QR code and a short pairing code.</p></div></li>
-      <li><div><strong>Pair from your phone.</strong><p>In Flagship, choose Add server → Pair with Studio, then scan the QR or enter the short code.</p></div></li>
+      <li><div><strong>Pair from your phone.</strong><p>In the Flagship app (<span data-app-store="ios"><span data-app-store-label>App Store</span></span> · <span data-app-store="android"><span data-app-store-label>Google Play</span></span>), choose Add server → Pair with Studio, then scan the QR or enter the short code.</p></div></li>
       <li><div><strong>Write and boot the USB.</strong><p>Choose the target drive in Studio. Your phone approves the recipe; Studio handles the operating-system image and USB.</p></div></li>
     </ol>
 
@@ -117,6 +117,7 @@
       if (preferred) document.querySelector(`[data-platform="${preferred}"]`)?.classList.add("is-preferred");
     })();
   </script>
+  <script src="/app-stores.js" defer></script>
   <script src="/motion.js" defer></script>
 </body>
 </html>

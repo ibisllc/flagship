@@ -56,7 +56,7 @@ public static class NativePairingCrypto
     public static string FormatSas(string code) =>
         code.Length == 6 ? $"{code[..3]} {code[3..]}" : code;
     public static string QrPayload(string human, ReadOnlySpan<byte> publicKey) =>
-        $"flagship://builder?c={human}&k={Base64UrlEncode(publicKey)}";
+        $"https://flagshipserver.com/builder?c={human}&k={Base64UrlEncode(publicKey)}";
 
     public static NativeSessionMaterial DeriveSessionMaterial(
         Key privateKey, ReadOnlySpan<byte> peerPublicKey)

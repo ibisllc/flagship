@@ -4,7 +4,7 @@ import CoreImage
 import CoreImage.CIFilterBuiltins
 
 /// Renders a string as a QR code. Used on the locked cover so the phone
-/// can scan the builder's pairing payload (`flagship://builder?c=…&k=…`).
+/// can scan the builder's pairing payload (`https://flagshipserver.com/builder?c=…&k=…`).
 struct QRCodeView: View {
     let payload: String
     var size: CGFloat = 200

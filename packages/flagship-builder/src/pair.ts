@@ -143,7 +143,7 @@ export async function runPair(opts: PairOptions = {}): Promise<PairResult> {
   const code = opts.codeBytes ?? newCodeBytes();
   const sid = sessionId(code);
   const human = humanCode(code);
-  const payload = qrPayload(human, kp.publicKey);
+  const payload = qrPayload(human, kp.publicKey, host);
 
   // Render the QR + announce readiness AFTER the transport handlers are
   // registered synchronously below (QRCode.toString is async; awaiting it here

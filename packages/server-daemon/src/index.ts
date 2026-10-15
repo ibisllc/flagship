@@ -3345,6 +3345,7 @@ async function wireOwnerHandlers(deps: {
     serverId: env.serverFqdn,
     store: accessStore,
     sessions: sessionStore,
+    controlBaseUrl: env.controlPlaneBaseUrl,
   });
   runtime.addHandler(accessWeb.handle);
   // Enforcement: a restricted service's per-label reverse proxy is fronted by

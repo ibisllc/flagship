@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Flagship — get the app</title>
+  <meta name="description" content="Open this link in the Flagship app.">
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#FFFFFF">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="stylesheet" href="/tokens.css">
+  <link rel="stylesheet" href="/components.css">
+  <!-- Every app link (route.ts APP_LINK_PATHS) lands here when the OS
+       didn't hand it to the installed app. The Worker serves this page at the
+       link's own URL, never a redirect to the webapp origin: on Android an
+       installed webapp claims every navigation into its origin, so a redirect
+       there opened the webapp without asking. The web-app option below is a
+       plain link the visitor chooses. -->
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: var(--gutter);
+      min-height: 100dvh;
+      text-align: center;
+    }
+    .open-card {
+      max-width: 460px;
+      width: 100%;
+      border: 1px solid var(--rule-strong);
+      background: var(--canvas-2);
+      border-radius: 8px;
+      padding: clamp(24px, 4vw, 40px);
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .open-wordmark {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--ink);
+      display: inline-flex;
+      align-items: baseline;
+      gap: 10px;
+      justify-content: center;
+      border-bottom: none;
+    }
+    .open-wordmark .fs-logo {
+      position: relative;
+      top: -4px;
+    }
+    .open-card h1 {
+      font-size: clamp(22px, 3vw, 28px);
+      line-height: 1.18;
+      letter-spacing: -0.014em;
+      margin: 0;
+      color: var(--ink);
+      text-wrap: balance;
+    }
+    .open-card p {
+      color: var(--ink-soft);
+      font-size: 14px;
+      max-width: 40ch;
+      margin: 0 auto;
+    }
+    .store-row {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+    }
+    .store-row .install {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      height: 46px;
+      min-width: 160px;
+      padding: 0 18px;
+      background: var(--teal);
+      color: var(--canvas);
+      border: 1px solid var(--teal);
+      border-radius: var(--radius-sm);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 500;
+      text-decoration: none;
+      transition: background var(--motion-state);
+      border-bottom: none;
+    }
+    .store-row a.install:hover { background: var(--teal-bright); }
+    .store-row .install svg { width: 16px; height: 16px; }
+    .store-row .install.pending {
+      background: color-mix(in srgb, var(--ink-muted) 14%, var(--canvas));
+      border-color: var(--rule-strong);
+      color: var(--ink-muted);
+      cursor: not-allowed;
+    }
+    body[data-platform="android"] .store-row [data-app-store="android"] { order: -1; }
+    .open-card p.web-alt {
+      font-size: 12.5px;
+      color: var(--ink-muted);
+    }
+    .web-alt a { color: var(--ink-soft); }
+    .web-alt a:hover { color: var(--teal-bright); }
+    .home-link {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--ink-muted);
+      margin-top: var(--space-4);
+      border-bottom: none;
+    }
+    .home-link:hover { color: var(--teal-bright); border-bottom: none; }
+  </style>
+  <link rel="stylesheet" href="/theme-ui.css">
+  <script src="/theme.js"></script>
+</head>
+<body>
+  <main class="open-card" role="main">
+    <a href="/" class="open-wordmark" aria-label="Flagship — home">
+      <svg class="fs-logo" viewBox="0 0 64 64" aria-hidden="true">
+        <rect class="lg-frame" x="7" y="7" width="50" height="50" rx="7"/>
+        <circle class="lg-ring" cx="32" cy="32" r="18"/>
+        <circle class="lg-core" cx="32" cy="32" r="16"/>
+      </svg>
+      <span>Flagship</span>
+    </a>
+
+    <h1 id="hl">Open this in the Flagship app</h1>
+    <p id="sub">This link is meant for the Flagship app. Get the app, then open the link again.</p>
+
+    <div class="store-row" aria-label="Get the Flagship app">
+      <span class="install pending" data-app-store="ios" aria-disabled="true" title="The iOS app is not ready yet">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.05 13.27c-.02-2.36 1.93-3.49 2.02-3.55-1.1-1.61-2.81-1.83-3.42-1.85-1.45-.15-2.85.85-3.59.85-.74 0-1.89-.83-3.11-.81-1.6.02-3.08.93-3.9 2.36-1.67 2.89-.43 7.16 1.2 9.51.8 1.15 1.74 2.45 2.97 2.4 1.2-.05 1.65-.78 3.1-.78s1.85.78 3.11.75c1.28-.02 2.09-1.17 2.87-2.33.91-1.33 1.29-2.63 1.31-2.7-.03-.01-2.52-.97-2.55-3.85zM14.66 5.66c.66-.8 1.1-1.91.98-3.02-.95.04-2.1.63-2.78 1.43-.61.7-1.14 1.83-1 2.92 1.06.08 2.14-.54 2.8-1.33z"/></svg>
+        <span data-app-store-label>iOS soon</span>
+      </span>
+      <span class="install pending" data-app-store="android" aria-disabled="true" title="The Android app is not ready yet">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.6 9.48l1.84-3.18a.4.4 0 0 0-.69-.4l-1.87 3.22a11.34 11.34 0 0 0-9.76 0L5.25 5.9a.4.4 0 0 0-.69.4L6.4 9.48A10.83 10.83 0 0 0 1 18h22a10.83 10.83 0 0 0-5.4-8.52zM7 15.25a.96.96 0 1 1 .96-.96.96.96 0 0 1-.96.96zm10 0a.96.96 0 1 1 .96-.96.96.96 0 0 1-.96.96z"/></svg>
+        <span data-app-store-label>Android soon</span>
+      </span>
+    </div>
+
+    <p class="web-alt" id="web-alt" hidden>
+      or <a id="web-link" href="https://webapp.flagshipserver.com/">continue with the web app</a>
+    </p>
+
+    <a class="home-link" href="/">← flagshipserver.com</a>
+  </main>
+
+  <script src="/app-stores.js"></script>
+  <script>
+    (function () {
+      "use strict";
+      const ua = navigator.userAgent;
+      let platform = "desktop";
+      if (/iPad|iPhone|iPod/.test(ua)) platform = "ios";
+      else if (/Android/i.test(ua)) platform = "android";
+      else if (navigator.maxTouchPoints > 1 && /Macintosh/.test(ua)) platform = "ios";
+      document.body.dataset.platform = platform;
+
+      // `web`: the webapp opens this same path itself (lib/deepLink.js), so
+      // the fallback link carries the whole link over, fragment included
+      // (a share link's secret rides there and never reaches a server).
+      const LINKS = {
+        "/join": {
+          hl: "Add this device in the Flagship app",
+          sub: "This code pairs a device with a Flagship account. Get the app, then scan the code again.",
+          web: true,
+        },
+        "/share": {
+          hl: "A server was shared with you",
+          sub: "Accept it in the Flagship app. Get the app, then open this link again.",
+          web: true,
+        },
+        "/transfer": {
+          hl: "A server is being handed to you",
+          sub: "Take it over in the Flagship app. Get the app, then open this link again.",
+          web: true,
+        },
+        "/qr": {
+          hl: "Pair with the Flagship app",
+          sub: "This code is for the Flagship app. Get the app, then scan the code again.",
+          web: false,
+        },
+        "/remote": {
+          hl: "Let a browser in with the Flagship app",
+          sub: "A browser is asking to use your Flagship account. Approve it in the Flagship app. Get the app, then scan the code again.",
+          web: false,
+        },
+        "/builder": {
+          hl: "Pair Flagship Studio with the app",
+          sub: "Flagship Studio is waiting for your phone. Get the app, then scan the code in Studio again.",
+          web: false,
+        },
+        "/access": {
+          hl: "Sign in to this app with Flagship",
+          sub: "A private app is asking who you are. Confirm it in the Flagship app. Get the app, then open this link again.",
+          web: true,
+        },
+        "/invite-accept": {
+          hl: "Someone accepted your invite",
+          sub: "Let them in from the Flagship app. Get the app, then open this link again. In the web app, paste this link into the app's Access control page.",
+          web: false,
+        },
+      };
+      const path = location.pathname.replace(/\/+$/, "");
+      const link = Object.prototype.hasOwnProperty.call(LINKS, path) ? LINKS[path] : null;
+      if (!link) return;
+      document.getElementById("hl").textContent = link.hl;
+      document.getElementById("sub").textContent = link.sub;
+      if (!link.web) return;
+      const webappHost = "webapp." + location.host.replace(/^www\./, "");
+      document.getElementById("web-link").href =
+        "https://" + webappHost + path + location.search + location.hash;
+      document.getElementById("web-alt").hidden = false;
+    })();
+  </script>
+</body>
+</html>

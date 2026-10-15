@@ -62,6 +62,15 @@ export async function dispatchInitialView() {
     toast(humanError(e), "err");
   }
 
+  // App sign-in link: `/access?server=&svc=&ref=&page=`, handed over by the
+  // open-in-app page. The view parses it and asks before signing anything.
+  if (window.location.pathname.replace(/\/+$/, "") === "/access" && window.location.search) {
+    const raw = window.location.href;
+    window.history.replaceState({}, "", "/");
+    const { enterAccessAuthorize } = await import("../views/access-authorize.js");
+    return enterAccessAuthorize(raw);
+  }
+
   // Service-access friend deep-link: if this load was a /invite#<secret>
   // landing that detoured through bootstrap/unlock/PIN/recovery to get the
   // friend's key, resume the redeem now instead of the normal dispatch

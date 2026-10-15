@@ -87,7 +87,7 @@ async function open() {
 describe("remote: QR first", () => {
   it("shows a QR naming only a relay session and a browser key", async () => {
     const { request, ws, sid, pk } = await open();
-    expect(request.approvalUrl).toMatch(/^flagship:\/\/remote\?s=[\w-]+&k=[\w-]+$/);
+    expect(request.approvalUrl).toMatch(/^https:\/\/flagshipserver\.com\/remote\?s=[\w-]+&k=[\w-]+$/);
     expect(ws.url).toBe(`wss://flagshipserver.com/qr-pipe/${sid}?role=browser`);
     expect(Buffer.from(pk, "base64url")).toHaveLength(32);
     request.close();

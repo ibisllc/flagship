@@ -17,7 +17,7 @@ public sealed class NativePairingCryptoTests
         using var builder = NativePairingCrypto.ImportTestKey(Hex(new string('0', 0) + string.Concat(Enumerable.Repeat("01", 32))));
         Assert.Equal("pOCSkrZRwni5dyxWn1-puxPZBrRqtoyd-dwrRAn4ogk",
             NativePairingCrypto.Base64UrlEncode(builder.PublicKey));
-        Assert.Equal("flagship://builder?c=AEBAGBAF&k=pOCSkrZRwni5dyxWn1-puxPZBrRqtoyd-dwrRAn4ogk",
+        Assert.Equal("https://flagshipserver.com/builder?c=AEBAGBAF&k=pOCSkrZRwni5dyxWn1-puxPZBrRqtoyd-dwrRAn4ogk",
             NativePairingCrypto.QrPayload("AEBAGBAF", builder.PublicKey));
     }
 
@@ -55,7 +55,7 @@ public sealed class NativePairingCryptoTests
     {
         using var session = new PairSession(debug: false);
         Assert.Matches("^[A-Z2-7]{4}-[A-Z2-7]{4}$", session.HumanCodeDisplay);
-        Assert.StartsWith("flagship://builder?c=", session.QrPayload);
+        Assert.StartsWith("https://flagshipserver.com/builder?c=", session.QrPayload);
         Assert.Contains("&k=", session.QrPayload);
         Assert.Equal(32, session.SessionId.Length);
     }}

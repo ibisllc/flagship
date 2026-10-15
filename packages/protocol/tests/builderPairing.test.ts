@@ -68,6 +68,6 @@ describe("builder pairing (TS)", () => {
 
   it("qr payload format", () => {
     const p = qrPayload("AEBAGBAF", x25519.getPublicKey(BUILDER_PRIV));
-    expect(p).toBe(`flagship://builder?c=AEBAGBAF&k=${BUILDER_PUB_B64}`);
+    expect(p).toBe(`https://flagshipserver.com/builder?c=AEBAGBAF&k=${BUILDER_PUB_B64}`);
   });
 });
