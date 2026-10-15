@@ -48,7 +48,7 @@ import type { BudgetGuard } from "./budget.js";
 import { callContext, type CallContext } from "./context.js";
 import { MAX_OWNER_ANSWERS, ownerAnswer } from "./ownerScript.js";
 import type { Scenario } from "./scenarios.js";
-import type { ShimHost } from "./shimHost.js";
+import { upstreamMessage, type ShimHost } from "./shimHost.js";
 import type { StageOutcome } from "./staticStaging.js";
 
 /** The neutral owner and box the runs pretend to be. */
@@ -391,6 +391,10 @@ export async function runOne(o: RunOptions): Promise<RunResult> {
   } finally {
     await rm(join(o.workDir, o.runId), { recursive: true, force: true }).catch(() => {});
   }
+
+  // The shim hides the upstream's words from the box; the report shouldn't.
+  const refused = [...calls].reverse().find((c) => c.error && c.status >= 400);
+  if (failure && refused) failure += ` (upstream HTTP ${refused.status}: ${upstreamMessage(refused.error!)})`;
 
   const reports = o.host.usageReports.filter((r) => r.runId === o.runId);
   const tripped = o.guard.tripped();

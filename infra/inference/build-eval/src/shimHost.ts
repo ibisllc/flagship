@@ -37,6 +37,18 @@ export const INFERENCE_BASE = "https://inference.build-eval.test";
 
 const SUMMARISER_HEAD = "You condense the earlier part";
 const ERROR_CHARS = 300;
+const ACCOUNT_REFUSALS = new Set([401, 402, 403]);
+
+/** The upstream's own error message, from an OpenAI-shaped body or the raw text. */
+export function upstreamMessage(detail: string): string {
+  try {
+    const m = (JSON.parse(detail) as { error?: { message?: unknown } }).error?.message;
+    if (typeof m === "string" && m.length > 0) return m.slice(0, ERROR_CHARS);
+  } catch {
+    // not JSON
+  }
+  return detail.slice(0, ERROR_CHARS) || "no detail";
+}
 
 export interface ShimHostOptions {
   /** "deepinfra" calls the real API with `apiKey`; "mock" answers in-process. */
@@ -256,6 +268,10 @@ export class ShimHost {
     if (!res.ok) {
       const detail = await res.text().catch(() => "");
       settle(null, res.status, this.opts.redact(detail.slice(0, ERROR_CHARS)));
+      // Every later call would be refused the same way (no credit, bad key).
+      if (ACCOUNT_REFUSALS.has(res.status)) {
+        this.opts.guard.halt(`stopped: DeepInfra refused the account (HTTP ${res.status}): ${this.opts.redact(upstreamMessage(detail))}`);
+      }
       return new Response(detail, { status: res.status, headers: res.headers });
     }
     if (!stream || !res.body) {

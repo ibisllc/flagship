@@ -4,6 +4,7 @@ import { planRuns, runMatrix } from "../src/matrix.js";
 import { totalsOf } from "../src/accounting.js";
 import type { RunResult } from "../src/runBuild.js";
 import { loadScenarios } from "../src/scenarios.js";
+import { upstreamMessage } from "../src/shimHost.js";
 
 describe("BudgetGuard", () => {
   it("refuses to start a run whose estimate would pass the limit", () => {
@@ -108,5 +109,23 @@ describe("runMatrix", () => {
     expect(skipped).toHaveLength(1);
     expect(notStarted).toBe(plan.length - ran.length);
     expect(guard.spentUsd()).toBeLessThanOrEqual(0.5);
+  });
+});
+
+describe("account refusals", () => {
+  it("halt stops new runs and keeps the first reason", () => {
+    const g = new BudgetGuard(5);
+    g.halt("stopped: DeepInfra refused the account (HTTP 402): no balance");
+    g.halt("a later reason");
+    expect(g.tripped()).toBe("stopped: DeepInfra refused the account (HTTP 402): no balance");
+    expect(g.tryStartRun("a", 0.01)).toBe(false);
+  });
+
+  it("reads the upstream's own message out of an OpenAI-shaped error", () => {
+    expect(upstreamMessage('{"error":{"message":"You need positive balance to do inference."}}')).toBe(
+      "You need positive balance to do inference.",
+    );
+    expect(upstreamMessage("Bad Gateway")).toBe("Bad Gateway");
+    expect(upstreamMessage("")).toBe("no detail");
   });
 });

@@ -42,6 +42,11 @@ export class BudgetGuard {
     return this.trippedReason;
   }
 
+  /** Stops starting runs for a reason that isn't money, such as an account the upstream refuses. */
+  halt(reason: string): void {
+    this.trippedReason ??= reason;
+  }
+
   private reserved(): number {
     let r = 0;
     for (const v of this.reservations.values()) r += v;
