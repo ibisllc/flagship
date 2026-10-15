@@ -18,6 +18,7 @@
     { "path": "./apps/web" },
     { "path": "./tools/vps-e2e" },
     { "path": "./tools/unseal-crosscheck" },
-    { "path": "./tools/gym" }
+    { "path": "./tools/gym" },
+    { "path": "./infra/inference/build-eval" }
   ]
 }

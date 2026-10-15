@@ -14,7 +14,8 @@
     "apps/com",
     "apps/boot",
     "apps/dns-broker",
-    "tools/gym"
+    "tools/gym",
+    "infra/inference/build-eval"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
@@ -33,7 +34,8 @@
     "gym:live": "npm --workspace=@flagship/gym run gym -- live",
     "live-e2e": "tsx tools/live-e2e/run.ts",
     "live-e2e:web": "playwright test --config apps/web/e2e/live/playwright.live.config.ts",
-    "judge-smoke": "tsx tools/gym/judge-smoke.ts"
+    "judge-smoke": "tsx tools/gym/judge-smoke.ts",
+    "build-eval": "npm --workspace=@flagship/build-eval run eval --"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

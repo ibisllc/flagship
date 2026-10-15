@@ -1,0 +1,15 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "outDir": "./dist",
+    "composite": true
+  },
+  "references": [
+    { "path": "../../../packages/protocol" },
+    { "path": "../../../packages/llm-providers" },
+    { "path": "../../../packages/control-plane" },
+    { "path": "../../../packages/server-daemon" }
+  ],
+  "include": ["src/**/*", "../shim/src/**/*"]
+}

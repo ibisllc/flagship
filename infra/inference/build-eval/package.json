@@ -1,0 +1,13 @@
+{
+  "name": "@flagship/build-eval",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Measures what an AI app build costs: scripted builds through the box's own build loop against Flagship Inference's upstream (DeepInfra), or a mock. See README.md.",
+  "scripts": {
+    "build": "tsc -b",
+    "test": "vitest run --dir tests",
+    "eval": "tsc -b && tsx src/cli.ts"
+  },
+  "license": "BUSL-1.1"
+}
