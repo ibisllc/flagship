@@ -52,3 +52,9 @@ jobs:
 
       - name: Run the unit suite
         run: npx vitest run
+
+      # Cross-client parity (docs/runbooks/release-readiness.md). Report-only
+      # while the known gaps it lists get fixed; make it a gate once it is green.
+      - name: Cross-client parity (report only)
+        continue-on-error: true
+        run: npm run parity -- --report >> "$GITHUB_STEP_SUMMARY"

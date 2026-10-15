@@ -1,0 +1,507 @@
+{
+  "about": "Per-surface feature status, pinned to source anchors. scripts/parity-check.mjs fails when a present/partial anchor stops matching and warns when every anchor of a missing surface starts matching. Anchors are [repo path, JS regex (multiline)]. Seeded from the 2026-10-14 parity audit (iOS and Mac Studio are the reference); each anchor was checked against main that day. Update a status in the same commit that changes it.",
+  "features": [
+    {
+      "id": "shell-tabs",
+      "title": "Shell: four tabs and app lock",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Shell/RootShell.swift", "TabView"], ["apps/mobile/ios/Sources/FlagshipUI/Shell/BiometricLockScreen.swift", "struct BiometricLockScreen"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/shell/RootShell.kt", "NavigationBar"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/shell/BiometricLockScreen.kt", "fun BiometricLockScreen"]] },
+        "web": { "status": "present", "reason": "A PIN stands in for biometrics.", "anchors": [["apps/web/public/webapp/app.js", "function wireTabBar"], ["apps/web/public/webapp/lib/pinLock.js", "flagship/pin-wrap/v1"]] }
+      }
+    },
+    {
+      "id": "home-server-order",
+      "title": "Home: drag server order (server-order/v1), leader badge, Add/connect",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/ServerOrder.swift", "flagship/server-order/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerOrderCard.swift", "Make leader"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerOrder.kt", "flagship/server-order/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServerOrderList.kt", "fun leaderConfirmed"]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/serverOrder.js", "flagship/server-order/v1"], ["apps/web/public/webapp/views/home.js", "serverOrder"]] }
+      }
+    },
+    {
+      "id": "locked-show-my-servers",
+      "title": "Locked Home offers \"Show my servers\"",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift", "Show my servers"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/HomeScreen.kt", "Show my servers"]] },
+        "web": { "status": "missing", "reason": "Only a text hint in index.html; no button.", "anchors": [["apps/web/public/webapp/views/home.js", "Show my servers"]] }
+      }
+    },
+    {
+      "id": "server-page",
+      "title": "Server page: monitoring, Make leader, lock/power, dead-man, update, delete/revoke/un-revoke, migrate/replace",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift", "DeadMan"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/MonitoringPane.swift", "struct MonitoringPane"], ["apps/mobile/shared/Sources/FlagshipAPI/Client/SecretMailboxClient.swift", "api/releases"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/MigrateServerScreen.swift", "struct MigrateServerScreen"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServerDetailScreen.kt", "Make leader"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServerMonitoringSection.kt", "fun "], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/api/SecretMailboxClient.kt", "api/releases"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/MigrateServerScreen.kt", "fun MigrateServerScreen"]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/views/server-detail.js", "Make leader"], ["apps/web/public/webapp/lib/serverUpdate.js", "api/releases"], ["apps/web/public/webapp/lib/lockAndPower.js", "deadMan|DeadMan|dead-man"], ["apps/web/public/webapp/lib/serverMigration.js", "export"]] }
+      }
+    },
+    {
+      "id": "server-unreachable",
+      "title": "Server page when the box doesn't answer (offline, never online, not paired + Pair this server)",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift", "This server isn't paired with this device yet"]] },
+        "android": { "status": "partial", "reason": "Only Loaded / Failed / skeleton states (ServerDetailScreen.kt); PodPairViewModel is unused.", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServerDetailScreen.kt", "is LoadingState\\.Failed -> ErrorCard"]] },
+        "web": { "status": "partial", "reason": "A separate views/pod-pair.js; no not-paired card on the server page.", "anchors": [["apps/web/public/webapp/views/pod-pair.js", "export (async )?function enterPodPair"]] }
+      }
+    },
+    {
+      "id": "transfer-server",
+      "title": "Transfer a server (giver offer + acquirer claim)",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/TransferServerScreens.swift", "struct "]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/TransferServerScreens.kt", "fun "]] },
+        "web": { "status": "partial", "reason": "The giver's offer is a textarea with no QR (server-detail.js).", "anchors": [["apps/web/public/webapp/views/transfer-claim.js", "export (async )?function enterTransferClaim"], ["apps/web/public/webapp/lib/serverTransfer.js", "export function transferLinkFromLocation"]] }
+      }
+    },
+    {
+      "id": "share-server",
+      "title": "Share a server (server-share/v1), incl. the shared server's apps",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/ServerShare.swift", "flagship/server-share/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift", "SharedApp"]] },
+        "android": { "status": "partial", "reason": "No SharedAppScreen; a shared server's app rows aren't tappable (ShareServerScreens.kt).", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerShare.kt", "flagship/server-share/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ShareServerScreens.kt", "fun "]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/serverShare.js", "flagship/server-share/v1"], ["apps/web/public/webapp/views/shared-server.js", "export"], ["apps/web/public/webapp/views/share-accept.js", "export (async )?function enterShareAccept"]] }
+      }
+    },
+    {
+      "id": "server-apps",
+      "title": "A server's apps list, Create app here, gVisor notice",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift", "Create app here"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerDetailScreen.swift", "appSandbox"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServerDetailScreen.kt", "Create app here"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServerDetailScreen.kt", "appSandbox"]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/appPlacement.js", "Create app here"], ["apps/web/public/webapp/views/server-detail.js", "appSandbox"]] }
+      }
+    },
+    {
+      "id": "app-runs-on",
+      "title": "App page: runs-on boxes (app-copy/v1)",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipAPI/Models/AppCopyModels.swift", "flagship/app-copy/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/AppPlacementViews.swift", "struct "]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AppCopy.kt", "flagship/app-copy/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/viewmodels/AppPlacementViewModel.kt", "flagship/app-copy/v1"]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/appPlacement.js", "flagship/app-copy/v1"]] }
+      }
+    },
+    {
+      "id": "app-api-keys",
+      "title": "App page: API keys (app-api-key/v1)",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipAPI/Models/AppApiKeyModels.swift", "flagship/app-api-key/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/AppApiKeysScreens.swift", "struct "]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AppApiKey.kt", "flagship/app-api-key/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ApiKeysSection.kt", "fun "]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/appApiKeys.js", "flagship/app-api-key/v1"]] }
+      }
+    },
+    {
+      "id": "app-database",
+      "title": "App page: live database view and signed writes (app-db-write/v1)",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipAPI/Models/AppDbModels.swift", "flagship/app-db-write/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/AppDatabaseScreens.swift", "struct "]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AppDbWrite.kt", "flagship/app-db-write/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/AppDatabaseScreens.kt", "fun "]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/appDb.js", "flagship/app-db-write/v1"], ["apps/web/public/webapp/views/app-db.js", "export"]] }
+      }
+    },
+    {
+      "id": "app-access-list",
+      "title": "App page: internet access list (app-access/v1) and access-request alerts",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipAPI/Models/AppAccessModels.swift", "flagship/app-access/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/AppAccessScreens.swift", "struct "]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AppAccessList.kt", "flagship/app-access/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/AccessListScreens.kt", "fun "]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/appAccess.js", "flagship/app-access/v1"], ["apps/web/public/webapp/views/app-access.js", "export"]] }
+      }
+    },
+    {
+      "id": "app-members-ranks",
+      "title": "App page: access control, members and ranks (app-member-role/v1)",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipAPI/Models/AppMemberModels.swift", "flagship/app-member-role/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift", "struct "]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AppMemberRoles.kt", "flagship/app-member-role/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServiceAccessScreen.kt", "flagship/app-member-role/v1"]] },
+        "web": { "status": "present", "reason": "Also still shows the legacy raw Members list (service-detail.js).", "anchors": [["apps/web/public/webapp/lib/memberRoles.js", "flagship/app-member-role/v1"]] }
+      }
+    },
+    {
+      "id": "remove-app",
+      "title": "Remove an app (uninstall-service/v1)",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/UninstallServiceOrder.swift", "uninstall-service/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Shell/ServicesTab.swift", "Remove this service\\?"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/viewmodels/ServiceDetailViewModel.kt", "flagship/uninstall-service/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServiceDetailScreen.kt", "showUninstallDialog"]] },
+        "web": { "status": "missing", "reason": "Only by unticking runs-on, which refuses the last copy (lib/appPlacement.js RUNS_ON_LAST_COPY).", "anchors": [["apps/web/public/webapp/views/service-detail.js", "Remove this (app|service)"]] }
+      }
+    },
+    {
+      "id": "app-recent-logs",
+      "title": "Recent logs on the app page",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceDetailScreen.swift", "Recent logs|recentLogs"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServiceDetailScreen.kt", "Recent logs|recentLogs"]] },
+        "web": { "status": "missing", "reason": "The app page has no logs section.", "anchors": [["apps/web/public/webapp/views/service-detail.js", "Recent logs|recentLogs"]] }
+      }
+    },
+    {
+      "id": "build-chat-models",
+      "title": "Build chat: model menu and \"used N credits\"",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/ViewModels/ModelMenu.swift", "used [^\\n]*credits|usedCredits"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ModelMenuViews.swift", "struct "]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AiModelMenu.kt", "usedCredits|used .* credits"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ModelMenuUi.kt", "fun "]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/modelMenu.js", "usedCredits|used .* credits"]] }
+      }
+    },
+    {
+      "id": "build-chat-attachments",
+      "title": "Build chat: CSV/JSON/PDF attachments",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChatAttachments.swift", "pdf"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ChatAttachments.kt", "application/pdf"]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/modelMenu.js", "application/pdf"], ["apps/web/public/webapp/views/vibe-code.js", "MAX_ATTACHMENTS"]] }
+      }
+    },
+    {
+      "id": "build-chat-long-transcript",
+      "title": "Build chat: long transcript collapsed, Jump to latest",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeSessionScreen.swift", "Jump to latest"]] },
+        "android": { "status": "missing", "reason": "The chat renders every message; no cap or Jump to latest.", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/VibeCodeChatScreen.kt", "Jump to latest"]] },
+        "web": { "status": "missing", "reason": "The audit listed it present, but no transcript cap or Jump to latest was found in views/vibe-code.js on 2026-10-14; only the summary marker (SUMMARISED_NOTE).", "anchors": [["apps/web/public/webapp/views/vibe-code.js", "Jump to latest"]] }
+      }
+    },
+    {
+      "id": "flagship-inference",
+      "title": "Flagship Inference: credits, built-in provider, AI keys",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipAPI/Models/FreeAiModels.swift", "flagship/llm-promo-issue/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/AiKeysScreen.swift", "Flagship Inference"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/FreeAiCredits.kt", "flagship/llm-promo-issue/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AiKeyStore.kt", "Flagship Inference"]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/freeAi.js", "flagship/llm-promo-issue/v1"], ["apps/web/public/webapp/views/build-key.js", "export"]] }
+      }
+    },
+    {
+      "id": "remote-approval",
+      "title": "Remote: approve a browser by QR (remote-ticket/v1)",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/CompanionTicketURL.swift", "flagship/remote-ticket/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/CompanionDockScreen.swift", "struct "]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/CompanionTicketUrl.kt", "flagship/remote-ticket/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/CompanionDockScreen.kt", "fun "]] },
+        "web": { "status": "na", "reason": "The webapp is the browser side of Remote.", "anchors": [] }
+      }
+    },
+    {
+      "id": "https-app-links",
+      "title": "https app links (join, share, transfer, qr, remote, builder, access, invite-accept)",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "partial", "reason": "The AASA claims /qr but DeepLink.parse drops it; see the app-links derived check.", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/DeepLink.swift", "case \"/remote\""]] },
+        "android": { "status": "partial", "reason": "The manifest lacks /qr and the trailing-slash /join/ /share/ /transfer/; see the app-links derived check.", "anchors": [["apps/mobile/android/app/src/main/AndroidManifest.xml", "android:path=\"/share\""]] },
+        "web": { "status": "partial", "reason": "By design the webapp opens only /join, /share, /transfer and /access; the rest are app-only or pasted (/invite-accept).", "anchors": [["apps/web/public/webapp/lib/deepLink.js", "\"/access\""]] }
+      }
+    },
+    {
+      "id": "invite-per-app-id",
+      "title": "Invites carry &s=; per-app visitor id (app-aid/v1)",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/ServiceInvite.swift", "flagship/app-aid/v1"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerKeys.kt", "flagship/app-aid/v1"]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/keystore.js", "flagship/app-aid/v1"]] }
+      }
+    },
+    {
+      "id": "recovery",
+      "title": "Recovery (passkey PRF, keyfile)",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/RecoveryScreen.swift", "struct RecoveryScreen"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/KeyfileExportScreen.swift", "struct "]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/RecoveryScreen.kt", "fun RecoveryScreen"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/keystore/Keyfile.kt", "object Keyfile|class Keyfile"]] },
+        "web": { "status": "partial", "reason": "Still shows the post-recovery choice screen iOS removed (views/post-recovery-choice.js).", "anchors": [["apps/web/public/webapp/lib/recovery.js", "export"], ["apps/web/public/webapp/views/post-recovery-choice.js", "export"]] }
+      }
+    },
+    {
+      "id": "devices",
+      "title": "Add a device, replace a device, trusted devices, paired sessions",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/AddDeviceScreen.swift", "struct AddDeviceScreen"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ReplaceDeviceFinalizeScreen.swift", "struct "], ["apps/mobile/ios/Sources/FlagshipUI/Screens/SecuredSessionsScreen.swift", "struct "]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/AddDeviceScreen.kt", "fun AddDeviceScreen"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ReplaceDeviceFinalizeScreen.kt", "fun "], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/TrustedDevicesScreen.kt", "fun "]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/views/add-device.js", "export"], ["apps/web/public/webapp/lib/replaceDeviceCeremony.js", "export"], ["apps/web/public/webapp/views/trusted-devices.js", "export"]] }
+      }
+    },
+    {
+      "id": "account-lifecycle",
+      "title": "Wipe & restart, delete account",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/AccountDeletionScreen.swift", "struct AccountDeletionScreen"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/AccountDeletionScreen.kt", "fun AccountDeletionScreen"]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/views/account-delete.js", "export"], ["apps/web/public/webapp/lib/accountDeletion.js", "export"]] }
+      }
+    },
+    {
+      "id": "account-security",
+      "title": "TOTP two-factor, audit log, peer backup",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/AccountSecurityScreen.swift", "TOTP|[Tt]wo-factor"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/AuditLogScreen.swift", "struct "], ["apps/mobile/ios/Sources/FlagshipUI/Screens/PeerBackupScreen.swift", "struct "]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/AccountSecurityScreen.kt", "TOTP|[Tt]wo-factor"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/AuditLogScreen.kt", "fun "], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/PeerBackupScreen.kt", "fun "]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/totp.js", "export"], ["apps/web/public/webapp/views/audit-log.js", "export"], ["apps/web/public/webapp/views/peer-backup.js", "export"]] }
+      }
+    },
+    {
+      "id": "join-another-account",
+      "title": "Join another account while signed in",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift", "case \\.joinAccount"]] },
+        "android": { "status": "partial", "reason": "Only from Welcome or an opened link, not from a signed-in Settings.", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/onboarding/JoinAccountContainer.kt", "fun "]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/views/join.js", "export"]] }
+      }
+    },
+    {
+      "id": "account-read-tokens",
+      "title": "Account read tokens for /pods, /stream, /audit",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/AccountReadTokenProvider.swift", "read"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AccountReadTokens.kt", "read-token"]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/accountRead.js", "read-token"]] }
+      }
+    },
+    {
+      "id": "native-surfaces",
+      "title": "Widgets, Live Activity, App Intents",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/App/WidgetExtension/PodStatusWidget.swift", "Widget"], ["apps/mobile/ios/App/WidgetExtension/InstallProgressLiveActivity.swift", "ActivityConfiguration"], ["apps/mobile/ios/App/Sources/Intents/FlagshipAppIntents.swift", "AppIntent"]] },
+        "android": { "status": "missing", "reason": "Owner wants widgets (and Wear OS) if feasible.", "anchors": [["apps/mobile/android/app/src/main/AndroidManifest.xml", "APPWIDGET_UPDATE"]] },
+        "web": { "status": "na", "reason": "No platform equivalent for a web app.", "anchors": [] }
+      }
+    },
+    {
+      "id": "watch-boot-approval",
+      "title": "Watch: approve a boot from the wrist (watch delegate key)",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/WatchDelegateKey.swift", "flagship/watch-delegate-key/v1"]] },
+        "watch": { "status": "present", "anchors": [["apps/mobile/ios/App/WatchApp/WatchConnectivityClient.swift", "WCSession"], ["apps/mobile/shared/Sources/FlagshipCore/WatchApproval.swift", "boot|Boot"]] },
+        "android": { "status": "missing", "reason": "No Wear OS app; the delegate-key code exists (core/WatchDelegateKey.kt) without a watch to hold it.", "anchors": [] },
+        "web": { "status": "na", "reason": "No watch for a web app.", "anchors": [] }
+      }
+    },
+    {
+      "id": "push-secret-request",
+      "title": "Push: secret-request (boot/unlock approval) tap opens the approvals list",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "missing", "reason": "PushNotifications.link(forPush:) reads top-level kind/category, but .com's APNs push carries the category only in aps.category (pushUserDevices sends no displayData).", "anchors": [] },
+        "android": { "status": "missing", "reason": "SecretRequestPush.parse needs serverFqdn and purpose, which the FCM data never carries, so the push shows an empty body and routes nowhere.", "anchors": [] },
+        "web": { "status": "missing", "reason": "service-worker.js has no secret-request branch: generic text, no deep link.", "anchors": [["apps/web/public/webapp/service-worker.js", "secret-request"]] }
+      }
+    },
+    {
+      "id": "push-account-alerts",
+      "title": "Push: re-pair, quarantine, TOTP and CT alerts open their screen",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/DeepLink.swift", "case \"account\":"], ["apps/mobile/shared/Sources/FlagshipCore/PushNotifications.swift", "func link\\(forPush"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/DeepLink.kt", "\"account\" -> when"]] },
+        "web": { "status": "partial", "reason": "service-worker.js webappDeepLink opens Home for account/ and settings/ links instead of the matching settings view.", "anchors": [["apps/web/public/webapp/service-worker.js", "function webappDeepLink"]] }
+      }
+    },
+    {
+      "id": "push-provision-status",
+      "title": "Push: provision-status drives install progress",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/ProvisionPhaseBridge.swift", "provision-status"], ["apps/mobile/ios/App/WidgetExtension/InstallProgressLiveActivity.swift", "ActivityConfiguration"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/push/ProvisionPhasePush.kt", "provision-status"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/DeepLink.kt", "\"install-progress\" -> InstallProgress"]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/service-worker.js", "provision-status"], ["apps/web/public/webapp/service-worker.js", "view=install-progress"]] }
+      }
+    },
+    {
+      "id": "push-app-access",
+      "title": "Push: app-access / generic alert opens the access requests",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipAPI/Models/AppAccessModels.swift", "genericPushCategory = \"generic\""]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/push/FlagshipFcmService.kt", "GENERIC_CATEGORY"]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/service-worker.js", "ACCESS_REQUESTS"]] }
+      }
+    },
+    {
+      "id": "push-ai-chat",
+      "title": "Push/local alert: an AI build chat needs you",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/PushNotifications.swift", "vibecode-needs-you"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/push/FlagshipFcmService.kt", "appRoute\\(\"vibecode/"]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/service-worker.js", "vibecode-needs-you"]] }
+      }
+    },
+
+    {
+      "id": "studio-pairing",
+      "title": "Studio: pair with the phone (https QR, auto-start, offline watch, re-QR)",
+      "ref": "mac",
+      "surfaces": {
+        "mac": { "status": "present", "anchors": [["apps/builder-mac/Sources/FlagshipBuilderCore/BuilderPairingEngine.swift", "builder"], ["apps/builder-mac/Sources/FlagshipBuilder/BuilderPairingViews.swift", "struct "]] },
+        "win": { "status": "partial", "reason": "Pairs, but without the Mac's auto-start, offline watch and re-QR.", "anchors": [["apps/builder-windows/src/PairSession.cs", "class PairSession"]] },
+        "linux": { "status": "partial", "reason": "Only a Pair button in the wizard (wizard.py); none of the Mac's auto-start, offline watch or re-QR.", "anchors": [["apps/builder-linux/pair_session.py", "class PairSession"], ["apps/builder-linux/wizard.py", "pair_qr"]] }
+      }
+    },
+    {
+      "id": "studio-verify-recipe",
+      "title": "Studio: verify a signed recipe",
+      "ref": "mac",
+      "surfaces": {
+        "mac": { "status": "present", "anchors": [["apps/builder-mac/Sources/FlagshipBuilderCore/Recipe.swift", "func verify"]] },
+        "win": { "status": "present", "anchors": [["apps/builder-windows/src/Recipe.cs", "Verify"]] },
+        "linux": { "status": "present", "anchors": [["apps/builder-linux/cli_runner.py", "verify"]] }
+      }
+    },
+    {
+      "id": "studio-burn-usb",
+      "title": "Studio: burn a USB installer",
+      "ref": "mac",
+      "surfaces": {
+        "mac": { "status": "present", "anchors": [["apps/builder-mac/Sources/FlagshipBuilderCore/DiskWrite.swift", "DiskWrite"]] },
+        "win": { "status": "present", "reason": "Restarting as admin stops hosted VMs.", "anchors": [["apps/builder-windows/src/DiskWrite.cs", "class DiskWrite"]] },
+        "linux": { "status": "present", "reason": "xorriso dependency is undocumented.", "anchors": [["apps/builder-linux/disk_write.py", "def "]] }
+      }
+    },
+    {
+      "id": "studio-host-appliance",
+      "title": "Studio: host a VM from the prebuilt appliance",
+      "ref": "mac",
+      "surfaces": {
+        "mac": { "status": "present", "anchors": [["apps/builder-mac/Sources/FlagshipBuilderCore/VM/ApplianceCache.swift", "ApplianceCache"], ["apps/builder-mac/Sources/FlagshipBuilderCore/VM/Qcow2Expander.swift", "Qcow2Expander"], ["apps/builder-mac/Sources/FlagshipBuilderCore/VM/ApplianceProvisioner.swift", "ApplianceProvisioner"]] },
+        "win": { "status": "missing", "reason": "Wizard.cs always plans provisioningMode: InstallerISO.", "anchors": [["apps/builder-windows/src/Wizard.cs", "VMProvisioningMode\\.Appliance"]] },
+        "linux": { "status": "partial", "reason": "Only when FLAGSHIP_VM_APPLIANCE_BASE is set (wizard.py); no download or verify.", "anchors": [["apps/builder-linux/wizard.py", "FLAGSHIP_VM_APPLIANCE_BASE"]] }
+      }
+    },
+    {
+      "id": "studio-resource-plan",
+      "title": "Studio: VM resource plan",
+      "ref": "mac",
+      "surfaces": {
+        "mac": { "status": "present", "anchors": [["apps/builder-mac/Sources/FlagshipBuilderCore/VM/VMResourcePlan.swift", "VMResourcePlan"]] },
+        "win": { "status": "present", "anchors": [["apps/builder-windows/src/VM/VMResourcePlan.cs", "ResourcePlan"]] },
+        "linux": { "status": "present", "anchors": [["apps/builder-linux/vm/resource_plan.py", "def "]] }
+      }
+    },
+    {
+      "id": "studio-graceful-stop",
+      "title": "Studio: graceful Stop / Restart / Quit",
+      "ref": "mac",
+      "surfaces": {
+        "mac": { "status": "present", "anchors": [["apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift", "shutDownAll"]] },
+        "win": { "status": "present", "reason": "Also from the tray.", "anchors": [["apps/builder-windows/src/VM/VMManager.cs", "ShutDownAll|Graceful|graceful"], ["apps/builder-windows/src/TrayIcon.cs", "\"Restart\""]] },
+        "linux": { "status": "partial", "reason": "Graceful stop, but no Restart and no tray.", "anchors": [["apps/builder-linux/vm/manager.py", "graceful|system_powerdown"]] }
+      }
+    },
+    {
+      "id": "studio-stalled-boot",
+      "title": "Studio: stalled-boot advisory",
+      "ref": "mac",
+      "surfaces": {
+        "mac": { "status": "present", "anchors": [["apps/builder-mac/Sources/FlagshipBuilderCore/VM/VMLifecycle.swift", "comingUpIsStalled"]] },
+        "win": { "status": "present", "anchors": [["apps/builder-windows/src/VM/VMLifecycle.cs", "ComingUpIsStalled|IsStalled"]] },
+        "linux": { "status": "present", "anchors": [["apps/builder-linux/vm/lifecycle.py", "coming_up_is_stalled|is_stalled"]] }
+      }
+    },
+    {
+      "id": "studio-unlocking-last-connected",
+      "title": "Studio: \"Unlocking…\" state and last connected",
+      "ref": "mac",
+      "surfaces": {
+        "mac": { "status": "present", "anchors": [["apps/builder-mac/Sources/FlagshipBuilderCore/VM/VMInventoryStore.swift", "Unlocking"], ["apps/builder-mac/Sources/FlagshipBuilder/HostedServersViews.swift", "lastConnected"]] },
+        "win": { "status": "present", "anchors": [["apps/builder-windows/src/VM/VMInventoryStore.cs", "Unlocking"], ["apps/builder-windows/src/VM/VMInventoryStore.cs", "LastConnectedAt"]] },
+        "linux": { "status": "present", "anchors": [["apps/builder-linux/vm/inventory.py", "[Uu]nlocking"], ["apps/builder-linux/vm/inventory.py", "last_connected"]] }
+      }
+    },
+    {
+      "id": "studio-disk-cache",
+      "title": "Studio: VM disk caching (.cached + .full sync; the home2/leticia corruption fix)",
+      "ref": "mac",
+      "surfaces": {
+        "mac": { "status": "present", "anchors": [["apps/builder-mac/Sources/FlagshipBuilder/VZHost.swift", "VMDiskDurability\\.cachingMode"]] },
+        "win": { "status": "present", "reason": "QEMU cache=writeback (guest flushes honoured); the policy is pinned by the diskDurability vectors.", "anchors": [["apps/builder-windows/src/VM/QemuCommandLine.cs", "cache=writeback"]] },
+        "linux": { "status": "present", "reason": "QEMU cache=writeback (guest flushes honoured); the policy is pinned by the diskDurability vectors.", "anchors": [["apps/builder-linux/vm/qemu_command_line.py", "cache=writeback"]] }
+      }
+    },
+    {
+      "id": "studio-prune-isos",
+      "title": "Studio: prune cached ISOs unused for 30 days",
+      "ref": "mac",
+      "surfaces": {
+        "mac": { "status": "present", "anchors": [["apps/builder-mac/Sources/FlagshipBuilderCore/IsoBaseCache.swift", "func pruneUnused"]] },
+        "win": { "status": "missing", "reason": "Not built.", "anchors": [["apps/builder-windows/src/IsoBaseCache.cs", "[Pp]rune"]] },
+        "linux": { "status": "partial", "reason": "The audit marks it partial; iso_base_cache.py prunes the base ISO cache, check its rule against the Mac's.", "anchors": [["apps/builder-linux/iso_base_cache.py", "prune_unused\\(keep_arch"]] }
+      }
+    },
+    {
+      "id": "studio-health-readout",
+      "title": "Studio: hosted server health from /api/order/<serial>/health",
+      "ref": "mac",
+      "surfaces": {
+        "mac": { "status": "present", "anchors": [["apps/builder-mac/Sources/FlagshipBuilderCore/VM/VMServerHealth.swift", "api/order/.*health"]] },
+        "win": { "status": "present", "anchors": [["apps/builder-windows/src/VM/VMServerHealth.cs", "api/order/.*health"]] },
+        "linux": { "status": "present", "anchors": [["apps/builder-linux/vm/server_health.py", "api/order/.*health"]] }
+      }
+    },
+    {
+      "id": "studio-keep-awake",
+      "title": "Studio: keep the host awake while it hosts a server",
+      "ref": "mac",
+      "surfaces": {
+        "mac": { "status": "present", "anchors": [["apps/builder-mac/Sources/FlagshipBuilder/VMManager.swift", "idleSystemSleepDisabled"]] },
+        "win": { "status": "missing", "reason": "Not built.", "anchors": [["apps/builder-windows/src/VM/VMManager.cs", "SetThreadExecutionState"]] },
+        "linux": { "status": "missing", "reason": "Not built.", "anchors": [["apps/builder-linux/vm/manager.py", "systemd-inhibit|Inhibit"]] }
+      }
+    },
+    {
+      "id": "studio-wifi-credentials",
+      "title": "Studio: remembered Wi-Fi credentials",
+      "ref": "mac",
+      "surfaces": {
+        "mac": { "status": "present", "anchors": [["apps/builder-mac/Sources/FlagshipBuilder/WifiCredentialStore.swift", "WifiCredentialStore"]] },
+        "win": { "status": "partial", "reason": "Asked for but not persisted.", "anchors": [["apps/builder-windows/src/Wizard.cs", "Wifi|WiFi"]] },
+        "linux": { "status": "missing", "reason": "Not built.", "anchors": [["apps/builder-linux/wizard.py", "[Ww]ifi|Wi-Fi"]] }
+      }
+    },
+    {
+      "id": "studio-host-here",
+      "title": "Studio: one-click Host here, open the server after create, progress",
+      "ref": "mac",
+      "surfaces": {
+        "mac": { "status": "present", "anchors": [["apps/builder-mac/Sources/FlagshipBuilder/WizardModel.swift", "Host [Hh]ere"]] },
+        "win": { "status": "partial", "reason": "A Host here path exists, but not the Mac's one click, open-after-create or progress.", "anchors": [["apps/builder-windows/src/Wizard.cs", "Host [Hh]ere"]] },
+        "linux": { "status": "partial", "reason": "A Host here path exists, but not the Mac's one click, open-after-create or progress.", "anchors": [["apps/builder-linux/wizard.py", "Host [Hh]ere"]] }
+      }
+    },
+    {
+      "id": "studio-version",
+      "title": "Studio: version stamped from the release",
+      "ref": "mac",
+      "surfaces": {
+        "mac": { "status": "present", "anchors": [["apps/builder-mac/Info.plist", "CFBundleShortVersionString"]] },
+        "win": { "status": "partial", "reason": "FlagshipBuilder.csproj says 0.0.1 while the release is studio-v0.1.1.", "anchors": [["apps/builder-windows/FlagshipBuilder.csproj", "<Version>"]] },
+        "linux": { "status": "partial", "reason": "Hard-coded 0.1.0 in wizard.py.", "anchors": [["apps/builder-linux/wizard.py", "BUILDER_VERSION = \"0\\.1\\.0\""]] }
+      }
+    }
+  ]
+}
