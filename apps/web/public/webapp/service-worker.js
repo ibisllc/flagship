@@ -370,7 +370,9 @@
 //       the Pro "Separate list on each server" switch: lib/listScope.js, an
 //       access-lists push that opens the activity), so it runs a version
 //       above its parent's; bump it past the parent's on rebase.
-const SHELL_VERSION = "v160";
+//  v162: feat/custom-names only: feat/marketplace's v160 plus the paid name
+//       change (v161 is feat/custom-domains').
+const SHELL_VERSION = "v162";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -551,6 +553,7 @@ const OPTIONAL_SHELL = [
   "/lib/allowance.js",
   "/lib/marketplaceLlmKey.js",
   "/lib/proBanner.js",
+  "/lib/nameDibs.js",
   "/views/bootstrap.js",
   "/views/wizard.js",
   "/views/unlock.js",
@@ -572,6 +575,7 @@ const OPTIONAL_SHELL = [
   "/views/tier-status.js",
   "/views/marketplace.js",
   "/views/developer.js",
+  "/views/name-dibs.js",
   "/views/vibe-code.js",
   "/views/edit-service.js",
   "/views/service-env.js",
