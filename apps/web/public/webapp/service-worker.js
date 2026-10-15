@@ -713,6 +713,12 @@ const WEBAPP_ROUTES = {
   "install-progress": "/?view=install-progress",
   "secret-requests": "/?view=boot-approval",
   "secret-request": "/?view=boot-approval",
+  // As the phones route them: certificate watch and two-factor open account
+  // security; a quarantined device and a re-pair open the device list.
+  "account/security": "/?view=account-security",
+  "settings/two-factor": "/?view=account-security",
+  "account/devices": "/?view=trusted-devices",
+  "account/re-pair": "/?view=trusted-devices",
 };
 function webappDeepLink(link) {
   if (typeof link !== "string") return null;
