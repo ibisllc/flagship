@@ -267,22 +267,27 @@ libraries and the CA bundle, and bakes `/boot` facts (boot host, unlock mode).
 The earlier plan (bake the proxy, maybe its password, into `/boot`) is
 dropped: **a proxy password never goes on `/boot`** (owner, 2026-10-15). The
 initramfs uses OHTTP instead, which needs nothing secret: only the relay URL
-and the gateway's public key configuration. Design (not built, see below):
+and the gateway's public key configuration. The crypto is built; wiring it
+into the initramfs script is design only (see below):
 
 - **What's baked:** for a recipe with `outboundProxy`, the bootstrap writes
   `/boot/flagship-ohttp` (relay URL + hex key configuration, both public) next
   to `/boot/flagship-boot-host`, and the hook copies it into the initramfs.
   Boxes without a proxy get no file and unlock exactly as today.
-- **The client:** the initramfs has curl, openssl and the Go `flagship-unseal`
-  helper, but no Node. The client becomes a second mode of that Go helper
-  (`flagship-unseal ohttp --relay … --key-config … --method … --url … --header
-  … --body-file …`): X25519 + HKDF-SHA256 from `golang.org/x/crypto` (already
-  a dependency) and AES-128-GCM from the standard library, Binary HTTP
-  known-length encoding, about 200 lines, tested against RFC 9458 Appendix A
-  like the TS one. The three unlock calls (`GET /api/boot/lease/<d>`, `POST
+- **The client (built):** the initramfs has curl, openssl and the Go
+  `flagship-unseal` helper, but no Node, so the helper gained two modes:
+  `flagship-unseal ohttp-seal --key-config-hex … --method … --url … [--header
+  'name: value']… [--body-file …] --out-request … --out-context …` and
+  `flagship-unseal ohttp-open --context … --response-file … --out-body …`
+  (prints the inner status, like `curl -w %{http_code}`). The network stays in
+  the initramfs's curl (`curl --data-binary @req -H 'content-type:
+  message/ohttp-req' "$RELAY"`). `installer/unseal-helper/internal/ohttp`
+  reproduces RFC 9458 Appendix A; `packages/control-plane/tests/ohttpGoInterop.test.ts`
+  builds the binary and runs a signed boot-response poll through `.com`'s TS
+  gateway. The three unlock calls (`GET /api/boot/lease/<d>`, `POST
   /api/boot/request`, `GET /api/boot/response/<d>/<nonce>`) keep their
   box-signed `Authorization: Flagship-Boot-v1` header inside the encrypted
-  request; the gateway already accepts exactly these paths on
+  request; the gateway accepts exactly these paths on
   `boot.flagshipserver.com`.
 - **Fallback, never a brick:** each call tries the relay (10 s timeout); on a
   timeout, network error, 402/403/5xx or an undecryptable answer it sends the
@@ -301,10 +306,11 @@ and the gateway's public key configuration. Design (not built, see below):
   only if the relay or key ever changes for that box; key rotation keeps the
   old key valid on the gateway, so this is rare.
 
-Why it's design only: it adds a mode to the Go helper and changes the
-initramfs script, which reach a box only on a new burn, can't be exercised
-here (it needs a Studio VM booting the real initramfs against a relay), and a
-mistake fails at the one step with no daemon to report it. Until it ships,
+Why the script wiring is design only: it changes the initramfs unlock script
+(and, for the appliance, needs a rebuilt base image carrying the new helper),
+which reach a box only on a new burn, can't be exercised here (it needs a
+Studio VM booting the real initramfs against a relay), and a mistake fails at
+the one step with no daemon to report it. Until it ships,
 **a proxy box's unlock request goes to `boot.flagshipserver.com` directly**,
 once per boot; it is the largest remaining leak.
 
@@ -534,7 +540,8 @@ Phase 2, built: OHTTP (protocol, client, `.com` gateway, arrival counting,
 setup calls through it, silent d-i beacons for proxy recipes, the health
 timer through the proxy.
 
-Design only: the initramfs OHTTP client (above), the Wi-Fi initramfs log
+Design only: wiring the (built) Go OHTTP client into the initramfs unlock
+script and baking `/boot/flagship-ohttp` (above), the Wi-Fi initramfs log
 upload left out for proxy recipes, Docker pulls via the bridge, the update
 guard's `npm ci`, per-box strict mode, a second relay, OHTTP for every box's
 setup at launch, the tunnel on 443.
@@ -547,7 +554,7 @@ Later: HTTPS proxies, WireGuard full tunnel, a Flagship-run Tor option
 1. **OHTTP** for proxy boxes' setup POSTs and boot unlock, through a
    non-Cloudflare third-party relay (Oblivious Network planned), with our own
    gateway in the Worker and a direct, counted fallback. Built except the
-   initramfs client.
+   initramfs script wiring (the Go client itself is built and tested).
 2. **Pro only**; branches off `feat/marketplace`. Rebase deferred (above).
 3. **Port 8443 only** for now; the 443 tunnel name is recommended future work.
 4. **Password in the create flow** allowed, with the setup-file warning.
