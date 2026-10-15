@@ -3,7 +3,7 @@
 # "Unlaunched features live entirely on their own branch").
 #
 # Each branch is its parent plus one feature: main for most, feat/marketplace
-# for the two that need its payment rail. A child is rebased onto its parent's
+# for the ones that need its payment rail (Pro features). A child is rebased onto its parent's
 # tip only after the parent itself moved, so run the whole list in one go.
 #
 #   scripts/rebase-features.sh            report: behind/ahead + predicted conflicts
@@ -38,6 +38,7 @@ BRANCHES=(
   "feat/marketplace:main"
   "feat/custom-names:feat/marketplace"
   "feat/custom-domains:feat/marketplace"
+  "feat/outbound-proxy:feat/marketplace"
 )
 
 APPLY=0 PUSH=1 TSC=1 REMOTE=origin ONLY=() SCRATCH="${TMPDIR:-/tmp}"
