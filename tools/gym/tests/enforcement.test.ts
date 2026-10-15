@@ -177,37 +177,38 @@ describe("control 1 — restricted-mode on the real request path (GAP-1)", () =>
 
 describe("control 2 — admin gate rejects a non-admin on the real path", () => {
   const keys = makeKeys();
-  // ENFORCING box: verifies the dead-man policy signature under the pinned owner.
+  // ENFORCING box: verifies the dead-man policy signature under the pinned admin root.
   const enforcingHttp: HttpFn = async (_url, init) => {
+    const body = JSON.parse(init!.body!);
+    if (body.signature === ZERO_SIG) return R(401, "bad sig");
+    const ok = verifySetDeadManPolicy(body.request, hexToBytes(body.signature), keys.adminRoot.publicKey);
+    return ok ? R(200, JSON.stringify({ enabled: false })) : R(403, "requires master-admin authority");
+  };
+  // A box still on the legacy owner-IRK path despite the pin.
+  const legacyHttp: HttpFn = async (_url, init) => {
     const body = JSON.parse(init!.body!);
     if (body.signature === ZERO_SIG) return R(401, "bad sig");
     const ok = verifySetDeadManPolicy(body.request, hexToBytes(body.signature), keys.ownerIrk.publicKey);
     return ok ? R(200, JSON.stringify({ enabled: false })) : R(403, "not the owner");
   };
-  // BYPASSED box: accepts ANY signature (the gate doesn't verify the signer).
   const bypassHttp: HttpFn = async () => R(200, JSON.stringify({ enabled: false }));
 
-  it("ENFORCED: owner accepted, non-owner + forged rejected, admin-root boundary holds", async () => {
+  it("ENFORCED: admin root accepted; membership IRK, stranger and forged rejected", async () => {
     const o = await checkAdminGate(ctx(enforcingHttp, gatedRaw, keys));
     expect(o.status).toBe("enforced");
     expect(o.assertions.every((a) => a.ok)).toBe(true);
-    // The deterministic admin-root boundary is present + carried as a deferred TODO.
-    expect(o.deferred?.deterministic).toBe(true);
-    expect(o.assertions.some((a) => a.label.includes("membership IRK is NOT master admin"))).toBe(true);
   });
 
-  it("BYPASSED when a non-owner signature is accepted by the box", async () => {
+  it("BYPASSED when the membership IRK still authorizes a sensitive op", async () => {
+    const o = await checkAdminGate(ctx(legacyHttp, gatedRaw, keys));
+    expect(o.status).toBe("bypassed");
+    expect(o.assertions.some((a) => a.label.includes("membership owner IRK is REJECTED") && !a.ok)).toBe(true);
+  });
+
+  it("BYPASSED when any signature is accepted", async () => {
     const o = await checkAdminGate(ctx(bypassHttp, gatedRaw, keys));
     expect(o.status).toBe("bypassed");
     expect(o.assertions.some((a) => a.label.includes("NON-owner") && !a.ok)).toBe(true);
-  });
-
-  it("BYPASSED (boundary broken) if a membership IRK equals the pinned admin root", async () => {
-    // If the owner IRK IS the admin root, a membership signer would be master
-    // admin — the deterministic boundary assertion must flip to red.
-    const broken = makeKeys({ adminRoot: makeKeys().ownerIrk });
-    const o = await checkAdminGate(ctx(enforcingHttp, gatedRaw, broken));
-    expect(o.status).toBe("bypassed");
   });
 
   it("SKIPPED (not passed) when the box is unreachable", async () => {

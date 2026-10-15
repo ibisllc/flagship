@@ -61,7 +61,7 @@ export interface EnforcementKeys {
   readonly author: { readonly aid: Keypair; readonly device: Keypair; readonly householdKey: Uint8Array };
   /** A hypothetical transfer acquirer (control 5 deterministic proof). */
   readonly acquirerIrk: Keypair;
-  /** A hypothetical pinned admin MASTER ROOT (controls 2 & 4 deterministic proof). */
+  /** The account's pinned admin MASTER ROOT (demo accounts: deriveDemoAdminRoot). */
   readonly adminRoot: Keypair;
 }
 
@@ -188,14 +188,9 @@ export async function checkRestrictedMode(ctx: EnforcementContext): Promise<Chec
 
 /**
  * A sensitive box order (dead-man policy — a real gated op that leaves NO lasting
- * state when `enabled:false`) is authorized ONLY by the pinned owner IRK on a
- * legacy box; a non-owner / forged signature is rejected (401/403).
- *
- * The admin-ROOT case ("a membership-IRK-signed order is rejected when a root is
- * pinned; an admin-root order is accepted") needs a box provisioned with a pinned
- * admin master root — which the gym's legacy demo boxes don't have — so that
- * authority boundary is proven deterministically here via `requireMasterAdmin`,
- * with the live pin recorded as a TODO.
+ * state when `enabled:false`) is authorized ONLY by the account's pinned admin
+ * master root. The membership owner IRK, a stranger and a forged signature are
+ * all rejected (401/403).
  */
 export async function checkAdminGate(ctx: EnforcementContext): Promise<CheckOutcome> {
   const { http, target, keys, now } = ctx;
@@ -216,43 +211,28 @@ export async function checkAdminGate(ctx: EnforcementContext): Promise<CheckOutc
     });
   const adminRootHex = bytesToHex(keys.adminRoot.publicKey);
   const ownerHex = bytesToHex(keys.ownerIrk.publicKey);
+  const rejected = (r: WireResponse) => r.status === 401 || r.status === 403;
   return runCheck(
     {
       id: "admin-gate-nonadmin-rejected",
       control: "2. Admin gate rejects a non-admin on the real path",
-      title: "the pinned owner IRK authorizes a sensitive op; a non-owner / forged signature is rejected",
-      deferred: {
-        reason:
-          "the admin-ROOT boundary (membership-IRK order REJECTED under a pinned root; admin-root order ACCEPTED) needs a box with a pinned admin master root, which the gym's legacy demo boxes lack",
-        todo:
-          "once the gym can reburn a box with a pinned adminRootPub: sign the dead-man policy with a membership IRK → expect 401/403; sign with the admin master root → expect 200",
-        deterministic: true,
-      },
+      title: "the pinned admin root authorizes a sensitive op; the membership IRK, a stranger and a forged signature are rejected",
     },
     async () => {
-      const owner = await post(bytesToHex(signSetDeadManPolicy(policy, keys.ownerIrk)));
-      const nonOwner = await post(bytesToHex(signSetDeadManPolicy(policy, keys.attacker)));
+      const admin = await post(bytesToHex(signSetDeadManPolicy(policy, keys.adminRoot)));
+      const membership = await post(bytesToHex(signSetDeadManPolicy(policy, keys.ownerIrk)));
+      const stranger = await post(bytesToHex(signSetDeadManPolicy(policy, keys.attacker)));
       const forged = await post(ZERO_SIG);
-      // Deterministic admin-root authority boundary (no box needed):
       const membershipUnderRoot = requireMasterAdmin(ownerHex, target.user, adminRootHex, [], now());
-      const rootUnderRoot = requireMasterAdmin(adminRootHex, target.user, adminRootHex, [], now());
       return [
-        { label: "owner-IRK-signed sensitive op is ACCEPTED (legacy path)", ok: owner.status === 200, detail: `${owner.status}` },
+        { label: "admin-root-signed sensitive op is ACCEPTED", ok: admin.status === 200, detail: `${admin.status}` },
+        { label: "the membership owner IRK is REJECTED (not master admin)", ok: rejected(membership), detail: `${membership.status}` },
+        { label: "a NON-owner signature is rejected", ok: rejected(stranger), detail: `${stranger.status}` },
+        { label: "a forged signature is rejected", ok: rejected(forged), detail: `${forged.status}` },
         {
-          label: "a NON-owner (membership) signature is rejected",
-          ok: nonOwner.status === 401 || nonOwner.status === 403,
-          detail: `${nonOwner.status}`,
-        },
-        { label: "a forged signature is rejected", ok: forged.status === 401 || forged.status === 403, detail: `${forged.status}` },
-        {
-          label: "[deterministic] a membership IRK is NOT master admin under a pinned root",
+          label: "[deterministic] a membership IRK is NOT master admin under the pinned root",
           ok: membershipUnderRoot.ok === false,
           detail: reasonOf(membershipUnderRoot),
-        },
-        {
-          label: "[deterministic] the admin master root IS authorized under a pinned root",
-          ok: rootUnderRoot.ok === true,
-          detail: reasonOf(rootUnderRoot),
         },
       ];
     },
@@ -285,7 +265,8 @@ export async function checkRevocationReachesBox(ctx: EnforcementContext): Promis
       encryptedBundle: bundle,
       issuedAt: now(),
     };
-    const sig = bytesToHex(signCreateServiceInvite(create, keys.ownerIrk));
+    // .com accepts an admin-pinned account's invite create/revoke only from its admin root.
+    const sig = bytesToHex(signCreateServiceInvite(create, keys.adminRoot));
     const r = await http(`https://${control}/api/users/${user}/service-invites`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -329,7 +310,7 @@ export async function checkRevocationReachesBox(ctx: EnforcementContext): Promis
       const revSecret = randomBytes(32);
       const revInviteId = await mint(revSecret);
       const revoke: RevokeServiceInvite = { inviteId: revInviteId, issuedAt: now() };
-      const revSig = bytesToHex(signRevokeServiceInvite(revoke, keys.ownerIrk));
+      const revSig = bytesToHex(signRevokeServiceInvite(revoke, keys.adminRoot));
       const revResp = await http(`https://${control}/api/users/${user}/service-invites/revoke`, {
         method: "POST",
         headers: { "content-type": "application/json" },
