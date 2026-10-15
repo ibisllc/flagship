@@ -40,11 +40,13 @@ import type {
   SecretMailboxStorage,
   SecretMailboxPurpose,
   ServerOrderStorage,
+  TierStorage,
   UsernameStorage,
 } from "@flagship/storage";
 import { HEX64, HEX128, bytesToHex, hexToBytes } from "./hex.js";
 import { healthForPods, type BoxHealthReport } from "./serverHealth.js";
 import { readServerOrder } from "./serverOrder.js";
+import { effectiveTierOf } from "./meter.js";
 import {
   forbidden,
   malformed,
@@ -85,6 +87,9 @@ export interface PodInventoryDeps {
   /** The owner's server order (docs/server-order.md): relayed on `/pods` and
    *  in the daemon-status reply; the apps and boxes verify it themselves. */
   serverOrders?: ServerOrderStorage;
+  /** The account's plan, returned in the daemon-status reply so a box can
+   *  refuse Pro-only owner orders (docs/outbound-proxy.md "Pro only"). */
+  tiers?: TierStorage;
   now?: () => number;
 }
 
@@ -712,5 +717,8 @@ export async function handlePostDaemonStatus(
   const serverOrder = deps.serverOrders
     ? await readServerOrder(deps.serverOrders, server.username).catch(() => null)
     : null;
-  return ok({ ok: true, serverOrder });
+  const tier = deps.tiers
+    ? await effectiveTierOf(deps.tiers, server.username, (deps.now ?? (() => Date.now()))()).catch(() => null)
+    : null;
+  return ok({ ok: true, serverOrder, ...(tier ? { tier } : {}) });
 }
