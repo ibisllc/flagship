@@ -20,6 +20,7 @@ constructed inside `WizardWindow.__init__`, which raises a clear error
 if the libraries are missing."""
 from __future__ import annotations
 
+import contextlib
 import os
 import shlex
 import subprocess
@@ -53,6 +54,7 @@ from cli_runner import (
 )
 from pair_session import PairEvent, PairSession
 from pairing_watch import PairingWatch, timer_schedule
+from wifi_store import WifiStore, default_backend
 from vm import host_arch, recipe_info, resource_plan, ssh_launch
 from vm.appliance_cache import ApplianceCache, ApplianceCacheError, backing_files_in_use
 from vm.config import VMConfig, VMProvisioningMode
@@ -241,6 +243,9 @@ class WizardState:
     pair_status: Optional[str] = None
     # Advanced: request an owner-signed debug-access grant during pairing.
     pair_debug: bool = False
+    # Optional Wi-Fi baked into a USB installer (never part of the recipe).
+    wifi_ssid: str = ""
+    wifi_password: str = ""
 
     @property
     def requires_user_iso(self) -> bool:
@@ -352,6 +357,7 @@ class WizardModel:
         # drive pairing by hand unless they opt in).
         auto_pair: bool = False,
         schedule: Callable[[float, Callable[[], None]], Callable[[], None]] = timer_schedule,
+        wifi_store: Optional[WifiStore] = None,
     ) -> None:
         self.state = WizardState(mode=mode)
         self.on_change = on_change or (lambda: None)
@@ -363,6 +369,8 @@ class WizardModel:
         self._ensure_base = ensure_base_fn or iso_base_cache.ensure
         self._ensure_appliance = ensure_appliance_fn or _live_ensure_appliance
         self._appliance_failed = False
+        self._wifi_store = wifi_store or WifiStore(keyring=default_backend())
+        self.state.wifi_ssid, self.state.wifi_password = self._wifi_store.load()
         self._auto_pair = auto_pair
         # Set when the owner cancels pairing; "Add a server" or the pair
         # button clears it.
@@ -560,17 +568,18 @@ class WizardModel:
             self.state.progress = None
             self._notify()
 
-            def build(entry: str) -> list[str]:
-                return args_write(
-                    entry,
-                    str(recipe),
-                    str(base),
-                    device=disk.device_path,
-                    yes=True,
-                    keep_recipe=False,
-                )
+            with self._wifi_flags() as wifi:
+                def build(entry: str) -> list[str]:
+                    return args_write(
+                        entry,
+                        str(recipe),
+                        str(base),
+                        device=disk.device_path,
+                        yes=True,
+                        keep_recipe=False,
+                    ) + wifi
 
-            self._run_cli_core(build, on_success=self._on_bake_ok, use_pkexec=True)
+                self._run_cli_core(build, on_success=self._on_bake_ok, use_pkexec=True)
         finally:
             self._cancel_download = None
             self.state.phase = None
@@ -581,16 +590,54 @@ class WizardModel:
             self._notify()
 
     def _cli_write(self, recipe: Path, iso: Path, disk: DeviceInfo) -> None:
-        def build(entry: str) -> list[str]:
-            return args_write(
-                entry,
-                str(recipe),
-                str(iso),
-                device=disk.device_path,
-                yes=True,
-                keep_recipe=False,
-            )
-        self._run_cli(build, on_success=self._on_bake_ok, use_pkexec=True)
+        with self._wifi_flags() as wifi:
+            def build(entry: str) -> list[str]:
+                return args_write(
+                    entry,
+                    str(recipe),
+                    str(iso),
+                    device=disk.device_path,
+                    yes=True,
+                    keep_recipe=False,
+                ) + wifi
+            self._run_cli(build, on_success=self._on_bake_ok, use_pkexec=True)
+
+    def set_wifi(self, ssid: str, password: str) -> None:
+        """Remember the Wi-Fi a USB installer bakes in; blank forgets it."""
+        if (ssid, password) == (self.state.wifi_ssid, self.state.wifi_password):
+            return
+        self.state.wifi_ssid = ssid
+        self.state.wifi_password = password
+        try:
+            self._wifi_store.save(ssid, password)
+        except OSError as e:
+            self._append_log("stderr", f"Couldn't remember the Wi-Fi details: {e}")
+
+    @contextlib.contextmanager
+    def _wifi_flags(self):
+        """CLI flags for the remembered Wi-Fi. The password goes through a
+        0600 file removed afterwards, never onto the command line, where any
+        local user could read it."""
+        ssid = self.state.wifi_ssid.strip()
+        if not ssid:
+            yield []
+            return
+        flags = ["--wifi-ssid", ssid]
+        path = None
+        if self.state.wifi_password:
+            fd, path = tempfile.mkstemp(prefix="flagship-wifi-")
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(self.state.wifi_password)
+            os.chmod(path, 0o600)
+            flags += ["--wifi-password-file", path]
+        try:
+            yield flags
+        finally:
+            if path is not None:
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass
 
     def _on_bake_ok(self, _stdout_text: str) -> None:
         self.state.is_finished = True
@@ -612,9 +659,10 @@ class WizardModel:
         out = derive_out_iso_path(iso)
         self.state.out_iso_path = out
         self._notify()
-        def build(entry: str) -> list[str]:
-            return args_prepare(entry, str(recipe), str(iso), str(out), keep_recipe=True)
-        self._run_cli(build, on_success=self._on_prepare_ok)
+        with self._wifi_flags() as wifi:
+            def build(entry: str) -> list[str]:
+                return args_prepare(entry, str(recipe), str(iso), str(out), keep_recipe=True) + wifi
+            self._run_cli(build, on_success=self._on_prepare_ok)
 
     def _on_prepare_ok(self, _stdout_text: str) -> None:
         self.state.is_finished = True
@@ -1535,6 +1583,35 @@ def build_window(application, model: Optional[WizardModel] = None):
     readiness = Gtk.Label(xalign=0.0)
     readiness.set_wrap(True)
     step4["body"].append(readiness)
+
+    # Optional Wi-Fi for a box without Ethernet (a burn-time input, never in
+    # the signed recipe); remembered for this user.
+    wifi_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+    wifi_ssid = Gtk.Entry()
+    wifi_ssid.set_placeholder_text("Wi-Fi network (optional)")
+    wifi_ssid.set_hexpand(True)
+    wifi_ssid.set_text(wizard_model.state.wifi_ssid)
+    wifi_row.append(wifi_ssid)
+    wifi_password = Gtk.PasswordEntry()
+    wifi_password.set_show_peek_icon(True)
+    wifi_password.set_property("placeholder-text", "Wi-Fi password")
+    wifi_password.set_text(wizard_model.state.wifi_password)
+    wifi_row.append(wifi_password)
+
+    def _on_wifi_changed(*_a) -> None:
+        wizard_model.set_wifi(wifi_ssid.get_text(), wifi_password.get_text())
+
+    wifi_ssid.connect("changed", _on_wifi_changed)
+    wifi_password.connect("changed", _on_wifi_changed)
+    step4["body"].append(wifi_row)
+    wifi_caption = Gtk.Label(
+        label="Optional Wi-Fi for a server without Ethernet. Baked into this single-use "
+        "installer, and remembered on this PC for your account only.",
+        xalign=0.0,
+    )
+    wifi_caption.set_wrap(True)
+    wifi_caption.add_css_class("dim-label")
+    step4["body"].append(wifi_caption)
 
     bake_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
     bake_btn = Gtk.Button(label="Flash to USB")

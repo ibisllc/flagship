@@ -45,6 +45,7 @@ import {
 } from "./index.js";
 
 import { runPair } from "./pair.js";
+import { resolveWifiPassword } from "./wifiArgs.js";
 
 const args = process.argv.slice(2);
 const subcommand = args[0];
@@ -166,7 +167,7 @@ async function cmdUserData(rest: string[]): Promise<void> {
     // escape (bisect a boot failure against the proven unencrypted path).
     encryptRoot: !rest.includes("--plaintext-root"),
     wifiSSID: extractFlagValue(rest, "--wifi-ssid"),
-    wifiPassword: extractFlagValue(rest, "--wifi-password"),
+    wifiPassword: await resolveWifiPassword(rest),
   };
   // Emit a Debian d-i preseed.cfg with --debian (or --family debian); default
   // stays the Ubuntu autoinstall user-data (this command is for inspection;
@@ -227,7 +228,7 @@ async function cmdPrepare(rest: string[]): Promise<void> {
     // escape (bisect a boot failure against the proven unencrypted path).
     encryptRoot: !rest.includes("--plaintext-root"),
     wifiSSID: extractFlagValue(rest, "--wifi-ssid"),
-    wifiPassword: extractFlagValue(rest, "--wifi-password"),
+    wifiPassword: await resolveWifiPassword(rest),
   };
   // Detect Ubuntu vs Debian from the ISO and bake the matching unattended
   // mechanism (NoCloud autoinstall vs d-i preseed). --family overrides.
@@ -437,7 +438,7 @@ async function cmdWrite(rest: string[]): Promise<void> {
     // escape (bisect a boot failure against the proven unencrypted path).
     encryptRoot: !rest.includes("--plaintext-root"),
     wifiSSID: extractFlagValue(rest, "--wifi-ssid"),
-    wifiPassword: extractFlagValue(rest, "--wifi-password"),
+    wifiPassword: await resolveWifiPassword(rest),
   });
   if (!result.ok) {
     console.error(`write failed: ${result.reason}`);
@@ -578,6 +579,7 @@ usage:
 
 Wi-Fi (for a target box with no Ethernet) — pass to user-data/prepare/write:
   --wifi-ssid <name> --wifi-password <pass>   bake netplan Wi-Fi into the image
+  --wifi-password-file <path>                 the password from a file (keeps it out of ps)
   (a burn-time local input; NEVER part of the signed recipe)
 
 Debug remote-access image (bring-up / diagnosis only) — pass to user-data/prepare:

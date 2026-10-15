@@ -121,7 +121,7 @@ jobs:
           # The CLI must run with no node_modules anywhere above it.
           node "$root/cli-dist/cli.mjs" --help | head -3
           # Every module wizard.py imports at startup must be in the bundle.
-          PYTHONPATH="$root" xvfb-run -a python3 -c "import wizard, cli_runner, pair_session, pairing_watch, vm.manager, vm.appliance_cache, vm.host_power; print('python imports ok')"
+          PYTHONPATH="$root" xvfb-run -a python3 -c "import wizard, cli_runner, pair_session, pairing_watch, wifi_store, vm.manager, vm.appliance_cache, vm.host_power; print('python imports ok')"
 
       - name: Rename
         run: mv apps/builder-linux/dist/FlagshipBuilder-x86_64.AppImage "FlagshipStudio-Linux-x86_64-${{ inputs.version }}.AppImage"
