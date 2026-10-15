@@ -1093,6 +1093,19 @@ scenario, red) if not. At Tier-2 this rides the existing demo-classification
 - **webapp:** addressed by `id` (no `data-testid` convention) — 500+ ids
   (`bootstrap-go`, `unlock-go`, `pin-set-go`, `build-src-scratch`, `vc-send`,
   `service-env-save`, `sd-*` mirrors). Playwright locates by `id`/role/text.
+- **Shared October handles (2026-10-15)** — the same name on iOS
+  (`accessibilityIdentifier`) and Android (`testTag`), used by
+  `GymOctoberTests` / `GymOctoberTest`: `home-add-server` →
+  `home-add-new-server` / `home-import-backup`; `sd-make-leader`,
+  `sd-leader-pending`; `service-detail-access-allow` / `-deny` / `-ignore`,
+  `access-list-editor`; `service-access-mode-status`,
+  `service-access-members-title`; `service-detail-api-keys-create`;
+  `sd-update-available`, `sd-update-last-outcome`; `server-detail-offline`;
+  `server-create-app-here`; `free-ai-card`. iOS only so far:
+  `access-alert-*` (the app-wide sheet), `runs-on-<fqdn>`, `share-*`,
+  `home-shared-*`, `shared-*`. A SwiftUI id on a plain stack is copied onto
+  every element inside it and replaces theirs, so identified sections use
+  `.accessibilityElement(children: .contain)`.
 
 ---
 
