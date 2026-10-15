@@ -33,7 +33,7 @@ import type {
 import type { LlmCredential, LlmHarness } from "../llmHarness.js";
 import { alternateTurns, compactIfNeeded } from "./contextCompaction.js";
 import type { ModelRedactor } from "./modelPrivacy.js";
-import type { VibeCodeSession } from "./vibeCodeSession.js";
+import { HIDDEN_NOTE_PREFIX, type VibeCodeSession } from "./vibeCodeSession.js";
 import type { BuildCredentialStore } from "./buildCredentialStore.js";
 import type { AppEnvStore } from "../serviceEnvStore.js";
 import type { VibeCodeSessionRegistry } from "./vibeCodeSession.js";
@@ -118,8 +118,23 @@ export interface BuildVibeCodeStartStreamingArgs {
   defaultModels: Readonly<Record<string, string>>;
   /** The active model's context window (for compaction), when known. */
   contextTokens?: (provider: string, model: string) => Promise<number | undefined>;
-  /** Applied to what the compaction summariser reads and writes. */
+  /**
+   * Applied to what the compaction summariser reads and writes, and to the
+   * box's own hidden notes in the conversation (a failure's reason can name
+   * the server or the account).
+   */
   redact?: ModelRedactor;
+  /**
+   * The effort levels a model takes ([] none, null can't tell). After a
+   * switch of model or provider an effort the new model doesn't take is
+   * dropped.
+   */
+  modelEfforts?: (provider: string, model: string) => Promise<string[] | null>;
+}
+
+/** Options for resuming: the message switched the model or provider. */
+export interface ResumeOptions {
+  switched?: boolean;
 }
 
 export interface StartStreamingArgs {
@@ -307,10 +322,11 @@ async function streamTurn(
  */
 export function buildVibeCodeResumeStreaming(
   args: BuildVibeCodeStartStreamingArgs,
-): (sessionId: string, model?: string) => Promise<void> {
+): (sessionId: string, model?: string, opts?: ResumeOptions) => Promise<void> {
   return async function resumeStreaming(
     sessionId: string,
     model?: string,
+    opts: ResumeOptions = {},
   ): Promise<void> {
     const session = args.registry.get(sessionId);
     if (!session) return;
@@ -328,6 +344,11 @@ export function buildVibeCodeResumeStreaming(
       session.fail((e as Error).message, true);
       return;
     }
+    if ((opts.switched || model) && session.meta.effort && args.modelEfforts) {
+      const efforts = await args.modelEfforts(credential.provider, resolvedModel).catch(() => null);
+      if (efforts && !efforts.includes(session.meta.effort)) session.setModel(undefined, null);
+    }
+    const redact = args.redact ?? ((t: string) => t);
 
     // The prior turn marked the parser `done` (endAssistant → parser.end);
     // reset it so the resumed file output is actually parsed (otherwise the
@@ -357,7 +378,7 @@ export function buildVibeCodeResumeStreaming(
       ...alternateTurns(
         history.map((h) => ({
           role: h.role,
-          content: h.content,
+          content: h.content.startsWith(HIDDEN_NOTE_PREFIX) ? redact(h.content) : h.content,
           ...(h.attachments && h.attachments.length > 0
             ? { attachments: h.attachments }
             : {}),

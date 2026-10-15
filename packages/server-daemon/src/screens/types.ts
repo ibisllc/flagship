@@ -643,6 +643,9 @@ export interface ServiceEnvOpResponse {
 // /api/screens/llm/sessions/:sessionId  → { id, appId, status, messages,
 //                                            pendingRequest? }
 // /api/screens/llm/sessions/:sessionId/reply  body { text }
+//   - If the chat is ready to deploy or failed (`canContinue`): a new owner
+//     message; the chat runs again on its files (409 while it runs or
+//     deploys, once deployed, or when stopped).
 //   - If `pendingRequest.kind === "talkToUser"`: relays to pushUserReply.
 //   - If `pendingRequest.kind === "requestEnvVar"`: the caller has
 //     ALREADY POSTed `value` to /api/screens/services/<appId>/env/set
@@ -711,15 +714,33 @@ export interface VibeCodeSessionPublicState {
   /** Why the session failed, when status === "failed". */
   failureReason?: string;
   /**
-   * The AI is waiting but the box holds no key for this session (keys stay
-   * in memory only, so a restart drops them): the reply must carry one.
+   * The chat can take a message but the box holds no key for it (a deploy
+   * forgets the key before going live; an old session may have none): the
+   * next message must carry one.
    */
   needsCredential?: boolean;
   /** The model and effort the conversation uses now (the owner can change them per message). */
   model?: string;
   effort?: string;
+  /**
+   * The NAME of the provider whose key the chat uses ("flagship", "openai",
+   * …), so a reopened chat shows the right group in the model menu. Never
+   * the key.
+   */
+  provider?: string;
   /** Older turns were summarised to fit the model's context (show a muted marker). */
   summarised?: boolean;
+  /**
+   * The owner can send a new message that isn't an answer: the chat is
+   * ready to deploy (it reopens) or failed. Absent on older boxes, which
+   * take a message only while the AI is waiting on a question.
+   */
+  canContinue?: boolean;
+  /**
+   * A rough size of the conversation the model is sent now, in tokens. A
+   * model whose context is smaller gets older turns summarised.
+   */
+  conversationTokens?: number;
 }
 
 export interface VibeCodeReplyRequest {
@@ -737,11 +758,13 @@ export interface VibeCodeReplyRequest {
    */
   attachments?: VibeCodeAttachment[];
   /**
-   * BYOK provider credential. Normally the credential delivered on
-   * `start` is reused for the whole session, so a reply need NOT carry
-   * one. Supplied here only to seed a session that started without a
-   * credential (the `needsCredential` case) before resuming it. Same
-   * box-only, never-echoed, never-logged contract as the start path.
+   * BYOK provider credential. The credential delivered on `start` is
+   * reused for the whole session, so a reply need not carry one. One here
+   * replaces the session's key: to switch provider (pick a model from
+   * another key; without `model` the new provider's default is used and the
+   * effort is dropped), to seed a chat that has none (`needsCredential`),
+   * or a fresh Flagship Inference pass. Same box-only, sealed,
+   * never-echoed, never-logged contract as the start path.
    */
   credential?: LlmProviderCredential;
   /**

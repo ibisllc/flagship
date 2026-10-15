@@ -301,6 +301,7 @@ export function buildVibeCodeHttpHandlers(deps: VibeCodeHttpDeps) {
         } catch {
           return jerr(500, "failed to store credential");
         }
+        session.setProvider(cred.provider);
         deps.onCredentialReplaced?.({ sessionId: session.meta.sessionId, provider: cred.provider, relay: cred.relay !== false });
       }
       session.markDeploying("staging");

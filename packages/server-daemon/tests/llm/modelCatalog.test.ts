@@ -42,6 +42,16 @@ describe("the box's model catalog", () => {
     expect(await c.contextTokens("openai", "unknown-model")).toBeUndefined();
   });
 
+  it("knows each model's effort levels: none unless the catalog or table lists them", async () => {
+    const { c } = catalog();
+    expect(await c.efforts("flagship", "low")).toEqual([]);
+    expect(await c.efforts("openai", "gpt-5.4-mini")).toEqual(["low", "high"]);
+    expect(await c.efforts("openai", "unknown-model")).toEqual([]);
+    const offline = new ModelCatalog({ baseUrl: "https://com.example", fetch: async () => { throw new Error("offline"); } });
+    expect(await offline.efforts("flagship", "low")).toBeNull();
+    expect(await offline.efforts("openai", "gpt-5.4-mini")).toBeNull();
+  });
+
   it("caches for hours and keeps a stale copy when .com can't answer", async () => {
     const { c, fetched, setFail, now } = catalog();
     await c.inference();

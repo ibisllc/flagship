@@ -47,7 +47,7 @@ import { randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Attachment } from "@flagship/llm-providers";
-import { SUMMARY_PREFIX } from "./contextCompaction.js";
+import { SUMMARY_PREFIX, estimateTokens } from "./contextCompaction.js";
 import { tidyAiManifest } from "./manifestTidy.js";
 import type { SampleFile } from "./vibeCodeAttachments.js";
 
@@ -181,6 +181,12 @@ export interface VibeCodeSessionMeta {
    */
   model?: string;
   effort?: string;
+  /**
+   * The NAME of the provider whose key the session holds now ("flagship",
+   * "openai", …). Never the key. Changes when a message brings a key from
+   * another provider.
+   */
+  provider?: string;
 }
 
 /** One turn of the conversation as the box keeps it. */
@@ -388,6 +394,26 @@ export function misroutedFileContent(name: string, input: Record<string, unknown
 
 export const INTERRUPTED_REASON = "The server restarted while this build was running. Its files are kept; deploy again, or start a new build.";
 
+/** Box-written notes in the conversation that only the model sees. */
+export const HIDDEN_NOTE_PREFIX = "[tool_result:";
+/** How much of a failure's reason the model is told when the owner carries on. */
+const CONTINUE_REASON_CHARS = 2_000;
+
+/**
+ * Why a chat in `status` can't take a new owner message, or null when it can
+ * (waiting on the owner, ready to deploy, failed). A deployed app is changed
+ * from its own page, in a new chat on its live files.
+ */
+export function continueRefusal(status: VibeCodeSessionMeta["status"]): string | null {
+  switch (status) {
+    case "streaming": return "The AI is still working on this build. Wait for it to finish.";
+    case "deploying": return "This build is deploying. Wait for it to finish.";
+    case "deployed": return "This app is deployed. To change it, open the app and choose Change this app.";
+    case "cancelled": return "This build was stopped. Start a new build.";
+    default: return null;
+  }
+}
+
 /**
  * One end-to-end session. Holds the parser, the conversation history,
  * the deploy phase emitter, and the pending tool-use slot.
@@ -494,6 +520,82 @@ export class VibeCodeSession extends EventEmitter {
     if (effort === null || effort === "") delete this.meta.effort;
     else if (typeof effort === "string") this.meta.effort = effort;
     this.emit("persist");
+  }
+
+  /**
+   * The session now holds a key from `provider`. A different provider than
+   * before drops the model and effort chosen for the old one (unless this
+   * message picks a model), so the new provider's default applies. Returns
+   * whether the provider changed.
+   */
+  setProvider(provider: string, opts: { keepModel?: boolean } = {}): boolean {
+    const before = this.meta.provider;
+    this.meta.provider = provider;
+    const switched = before !== undefined && before !== provider;
+    if (switched && !opts.keepModel) {
+      delete this.meta.model;
+      delete this.meta.effort;
+    }
+    this.emit("persist");
+    return switched;
+  }
+
+  /** Whether the owner can send a new message that isn't an answer (ready to deploy, failed). */
+  canContinue(): boolean {
+    return !this.cancelled && (this.meta.status === "ready-to-deploy" || this.meta.status === "failed");
+  }
+
+  /**
+   * A new owner message on a chat the AI isn't waiting on: one that is ready
+   * to deploy (it reopens, and the owner deploys again once the AI is done)
+   * or one that failed (a stopped turn, a deploy that didn't work, a
+   * restart). The files written so far carry over. The model is told, in a
+   * hidden note before the message, why the chat stopped (the driver redacts
+   * the note before a model reads it) and to write only what changes.
+   */
+  pushContinuation(args: { text: string; attachments?: Attachment[] }): { ok: boolean; reason?: string } {
+    if (!this.canContinue()) {
+      return { ok: false, reason: continueRefusal(this.meta.status) ?? "this chat can't take a message now" };
+    }
+    const why =
+      this.meta.status === "failed"
+        ? `The last attempt stopped: ${clipText(this.meta.failureReason ?? "it stopped before the app was ready.", CONTINUE_REASON_CHARS)} `
+        : "The owner hasn't deployed this yet and has a new request. ";
+    this.pendingTools.clear();
+    this.pendingNudge = null;
+    this.cutOffs = 0;
+    this.misroutedTools = 0;
+    this.history.push({
+      role: "user",
+      content:
+        `${HIDDEN_NOTE_PREFIX}continue] ${why}` +
+        "The files written so far are kept. Do what the owner's next message asks: write only the files you change or add, " +
+        "each one complete, as `=== path ===` blocks (files you don't write stay as they are), and end with `=== END ===`. " +
+        "If you need to ask something first, ask.",
+    });
+    this.historyTimestamps.push(Date.now());
+    this.history.push({
+      role: "user",
+      content: args.text,
+      ...(args.attachments && args.attachments.length > 0 ? { attachments: args.attachments } : {}),
+    });
+    this.historyTimestamps.push(Date.now());
+    this.meta.status = "streaming";
+    delete this.meta.failureReason;
+    delete this.meta.deployPhase;
+    this.emit("persist");
+    return { ok: true };
+  }
+
+  /** A rough token count of what the model is sent now (for "may drop older context"). */
+  conversationTokens(): number {
+    return estimateTokens(
+      this.modelConversation().map((h) => ({
+        role: h.role,
+        content: h.content,
+        ...(h.attachments && h.attachments.length > 0 ? { attachments: h.attachments } : {}),
+      })),
+    );
   }
 
   /** Charge a Flagship Inference call's credits to the latest reply. */
@@ -922,7 +1024,7 @@ export class VibeCodeSession extends EventEmitter {
     for (let i = 0; i < this.history.length; i++) {
       const h = this.history[i];
       if (!h) continue;
-      if (h.content.startsWith("[tool_result:")) continue;
+      if (h.content.startsWith(HIDDEN_NOTE_PREFIX)) continue;
       out.push({
         role: h.role,
         text: h.content,
@@ -953,6 +1055,11 @@ export class VibeCodeSession extends EventEmitter {
     }
     return null;
   }
+}
+
+function clipText(s: string, max: number): string {
+  const t = s.trim();
+  return t.length <= max ? t : `${t.slice(0, max)}…`;
 }
 
 function round1(n: number): number {

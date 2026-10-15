@@ -107,6 +107,23 @@ export class ModelCatalog {
     return c?.contextTokens || undefined;
   }
 
+  /**
+   * The effort levels `model` on `provider` takes: [] when it takes none (or
+   * isn't known, so no effort control is offered for it), null when the
+   * catalog or table can't be read.
+   */
+  async efforts(provider: string, model: string): Promise<string[] | null> {
+    if (provider === "flagship") {
+      const cat = await this.inference();
+      if (!cat) return null;
+      const m = cat.models.find((x) => x.id === model);
+      return Array.isArray(m?.efforts) ? m.efforts.filter((e) => typeof e === "string") : [];
+    }
+    const idx = await this.capabilities();
+    if (!idx) return null;
+    return findCapability(idx, provider, model)?.reasoning?.efforts ?? [];
+  }
+
   /** The model menu for a credential: the catalog, or the key's live list joined with the table. */
   async menu(
     provider: string,
