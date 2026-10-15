@@ -22,7 +22,16 @@ import { buildPairingOrder } from "../lib/bootApproval.js";
 import { markSwkDepositPending, clearSwkDeposit } from "../lib/swkDeposit.js";
 import { markPairingDepositPending, clearPairingDeposit } from "../lib/pairingDeposit.js";
 import { setSessionToken } from "../lib/api.js";
-import { proxyFieldsHtml, readProxyFields, readProxyForm, recipeProxySiblings, wireProxyFields } from "../lib/boxProxy.js";
+import {
+  proxyAllowedForTier,
+  proxyFieldsHtml,
+  proxyProHtml,
+  readProxyFields,
+  readProxyForm,
+  recipeProxySiblings,
+  wireProxyFields,
+} from "../lib/boxProxy.js";
+import { fetchAllowance } from "../lib/allowance.js";
 
 registerView("view-create-server");
 
@@ -801,11 +810,28 @@ function syncAdvancedVisibility() {
   }
 }
 
+// The account's plan, read when the view opens: the proxy is part of Pro.
+// null until known (or when the read fails), which shows the fields.
+let accountTier = null;
+
 function resetProxyFields() {
   const block = $("cs-proxy-block");
   if (!block) return;
+  if (!proxyAllowedForTier(accountTier)) {
+    block.innerHTML = proxyProHtml();
+    return;
+  }
   block.innerHTML = proxyFieldsHtml("cs-proxy");
   wireProxyFields("cs-proxy");
+}
+
+async function refreshAccountTier() {
+  const username = getSession().username;
+  const a = username ? await fetchAllowance(username) : null;
+  const tier = a?.tier ?? null;
+  if (tier === accountTier) return;
+  accountTier = tier;
+  resetProxyFields();
 }
 
 export function initCreateServerView() {
@@ -834,5 +860,6 @@ export function initCreateServerView() {
 
 export async function enterCreateServer() {
   show("view-create-server");
+  void refreshAccountTier();
   await refreshDrafts();
 }
