@@ -215,20 +215,133 @@ export function renderDangerZoneCard({ serverFqdn, username, revoked, canTransfe
       </div>`;
 }
 
+const COMING_UP_GRACE_MS = 20 * 60_000;
+const OFFLINE_AFTER_MS = 15 * 60_000;
+
+/**
+ * Why the box's own screen didn't load, from what `.com` knows (iOS
+ * ServerDetailScreen): "revoked"; "offline" (it checked in before, not now);
+ * "coming-up" (registered, no first check-in yet, still within the grace
+ * window, or waiting for an approval); "never-online" (past that window);
+ * "not-paired" (online, but this browser holds no session for it); else
+ * "connecting" (online, its daemon just didn't answer this time).
+ */
+export function unreachableKind({ pod, revoked = false, error = null, now = Date.now() } = {}) {
+  if (revoked) return "revoked";
+  const liveness = pod?.liveness;
+  const reported = typeof pod?.lastReported === "number" ? pod.lastReported : null;
+  if (liveness === "unreachable" || (liveness == null && reported != null && now - reported > OFFLINE_AFTER_MS)) return "offline";
+  if (liveness === "never" || (pod && liveness == null && reported == null)) {
+    if ((pod?.pendingRequests?.length ?? 0) > 0) return "coming-up";
+    const registeredAt = typeof pod?.registeredAt === "number" ? pod.registeredAt : null;
+    return registeredAt != null && now - registeredAt <= COMING_UP_GRACE_MS ? "coming-up" : "never-online";
+  }
+  if (error?.status === 0) return "not-paired";
+  return "connecting";
+}
+
+/** A human "N min ago" for an offline box's last check-in, or "". */
+function lastSeenText(pod, now) {
+  const ms = typeof pod?.lastSeenMsAgo === "number"
+    ? pod.lastSeenMsAgo
+    : typeof pod?.lastReported === "number" ? now - pod.lastReported : null;
+  if (ms == null || ms < 0) return "";
+  const min = Math.round(ms / 60_000);
+  if (min < 60) return `${Math.max(1, min)} min ago`;
+  const h = Math.round(min / 60);
+  if (h < 48) return `${h} h ago`;
+  return `${Math.round(h / 24)} days ago`;
+}
+
+/** Each state's words, as iOS shows them (same accessibility ids). */
+export function unreachableCopy(kind, { message = "", lastSeen = "" } = {}) {
+  switch (kind) {
+    case "revoked":
+      return {
+        id: "server-detail-revoked",
+        title: "This server is revoked",
+        status: "This server is revoked. It can't connect or unlock until you un-revoke it.",
+        note: "Its name stays reserved. Un-revoke it below if you got the box back, or delete it to free the name.",
+      };
+    case "offline":
+      return {
+        id: "server-detail-offline",
+        title: lastSeen ? `Offline — last seen ${lastSeen}` : "Offline",
+        status: "This server has gone offline: its software isn't checking in right now. Its data is safe; it'll reconnect when the box is back online.",
+        note: "Refresh to re-check. You can still revoke or delete it below.",
+      };
+    case "coming-up":
+      return {
+        id: "server-detail-coming-up",
+        title: "Still coming up…",
+        status: "This server is registered and powering on, but hasn't checked in for the first time yet. This can take a few minutes after a fresh install.",
+        note: "Refresh to re-check.",
+      };
+    case "never-online":
+      return {
+        id: "server-detail-never-online",
+        title: "This server never came online",
+        status: "The install reserved this name and registered the box, but its software never checked in.",
+        note: "If the install failed, you can delete it below: that frees the name so you can try again.",
+      };
+    case "not-paired":
+      return {
+        id: "server-detail-not-paired",
+        title: "This server isn't paired with this browser yet",
+        status: "Pair it to manage this server here.",
+        note: "",
+      };
+    default:
+      return {
+        id: "server-detail-connecting",
+        title: "Connecting to your server…",
+        status: `Your server is online, but it didn't answer just now${message ? ` (${message})` : ""}. This can take a moment right after it comes up.`,
+        note: "Refresh to try again. You can still revoke or delete it below.",
+      };
+  }
+}
+
 /** The page when the box's own screen didn't load (offline, never came online,
- *  revoked, or no paired session): what we know from `.com`, plus the actions
- *  that don't need the box. */
-export function renderUnreachableDetail({ serverFqdn, username, revoked, message }) {
-  const status = revoked
-    ? "This server is revoked. It can't connect or unlock until you un-revoke it."
-    : `Couldn't reach this server${message ? ` (${message})` : ""}. You can still revoke or delete it below.`;
+ *  revoked, not paired here, or just not answering): what we know from `.com`,
+ *  plus the actions that don't need the box. */
+export function renderUnreachableDetail({ serverFqdn, username, revoked, message = "", kind = "", pod = null, now = Date.now() }) {
+  const k = kind || (revoked ? "revoked" : "connecting");
+  const copy = unreachableCopy(k, { message, lastSeen: lastSeenText(pod, now) });
+  const pairButton = k === "not-paired"
+    ? '<button class="primary full-width mt-3" id="sd-pair-server" type="button">Pair this server</button>'
+    : "";
   return `
-      <div class="card">
-        <div class="row"><span class="label">FQDN</span><span class="value">${escapeHtml(serverFqdn)}</span></div>
-        <p class="${revoked ? "note" : "err-text"} mt-2" data-detail-unreachable>${escapeHtml(status)}</p>
+      <div class="card" id="${copy.id}" data-unreachable-kind="${escapeHtml(k)}">
+        <div class="card-title">${escapeHtml(copy.title)}</div>
+        <div class="row mt-2"><span class="label">FQDN</span><span class="value">${escapeHtml(serverFqdn)}</span></div>
+        <p class="note mt-2" data-detail-unreachable>${escapeHtml(copy.status)}</p>
+        ${copy.note ? `<p class="faint-sm mt-1">${escapeHtml(copy.note)}</p>` : ""}
+        ${pairButton}
       </div>
       ${renderMonitoringSection()}
       ${renderDangerZoneCard({ serverFqdn, username, revoked })}`;
+}
+
+/** "Pair this server": sign the same add-paired-session order auto-pair signs
+ *  for this box, then reload its page. */
+function wirePairServer(fqdn, pod) {
+  const btn = $("sd-pair-server");
+  if (!btn) return;
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    btn.textContent = "Pairing…";
+    try {
+      const { autoPairPods } = await import("../lib/autoPair.js");
+      const out = await autoPairPods([{ ...(pod ?? {}), serverDomain: fqdn, liveness: "live" }]);
+      if (!out.paired.includes(fqdn)) throw new Error("The server didn't accept the pairing. Try again in a moment.");
+      toast("Paired", "ok");
+      await renderServerDetail();
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = "Pair this server";
+      toast(humanError(e), "err");
+    }
+  });
 }
 
 // Bumped on every render: a slow answer from the server shown before must not
@@ -262,8 +375,11 @@ export async function renderServerDetail() {
       serverFqdn: knownFqdn,
       username,
       revoked,
-      message: e?.status === 0 ? "this device isn't paired with it yet" : e instanceof ScreensError ? e.message : humanError(e),
+      kind: unreachableKind({ pod, revoked, error: e }),
+      pod,
+      message: e instanceof ScreensError ? e.message : humanError(e),
     });
+    wirePairServer(knownFqdn, pod);
     wireDangerZone(knownFqdn, username, { revoked, pod });
     wireMonitoringPane(root);
     healthPaint?.();
