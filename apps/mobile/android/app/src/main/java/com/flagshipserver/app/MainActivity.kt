@@ -580,7 +580,7 @@ class MainActivity : FragmentActivity() {
             LaunchedEffect(liveSyncPaired) {
                 if (liveSyncPaired) liveSync.start(this) else liveSync.stop()
             }
-            com.flagshipserver.app.companion.CompanionSurfaces(appState, effectiveMailbox)
+            com.flagshipserver.app.companion.CompanionSurfaces(appState, effectiveMailbox) { foreground.value }
 
             val sizeClass = calculateWindowSizeClass(this)
 
@@ -809,6 +809,10 @@ private fun AppRoot(
                     DeepLink.AccessList(alert.request.serviceId, draft = alert.isDraft, podId = alert.box.podId),
                 )
             }
+        }
+        // The watch's Approve reached a session without its biometric yet.
+        if (isPaired && isUnlocked) {
+            com.flagshipserver.app.ui.shell.WatchWaitingDialog()
         }
         if (isPaired && !isUnlocked) {
             com.flagshipserver.app.ui.shell.BiometricLockScreen()

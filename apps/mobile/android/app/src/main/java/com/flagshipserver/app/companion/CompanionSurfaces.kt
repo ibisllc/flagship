@@ -17,6 +17,7 @@ import com.flagshipserver.app.api.SecretMailboxClient
 import com.flagshipserver.app.core.AppState
 import com.flagshipserver.app.core.Endpoints
 import com.flagshipserver.app.core.SecretRequestCoordinator
+import com.flagshipserver.app.core.WatchApprovalPrompt
 import com.flagshipserver.app.core.WatchApprovalResponder
 import com.flagshipserver.app.core.asWatchApprovalSource
 import com.flagshipserver.app.keystore.Keystore
@@ -24,7 +25,7 @@ import com.flagshipserver.app.keystore.SessionIrkAccess
 import com.flagshipserver.companion.PodStatusSnapshot
 
 @Composable
-fun CompanionSurfaces(app: AppState, mailbox: SecretMailboxClient) {
+fun CompanionSurfaces(app: AppState, mailbox: SecretMailboxClient, inForeground: () -> Boolean) {
     val context = LocalContext.current.applicationContext
     val paired by app.isPaired.collectAsState()
     val user by app.currentUser.collectAsState()
@@ -32,7 +33,7 @@ fun CompanionSurfaces(app: AppState, mailbox: SecretMailboxClient) {
     val leader by app.leaderPodId.collectAsState()
     DisposableEffect(mailbox) {
         WatchBridge.attach(context)
-        WatchBridge.responder = watchResponder(app, mailbox)
+        WatchBridge.responder = watchResponder(app, mailbox, inForeground)
         onDispose { WatchBridge.responder = null }
     }
     LaunchedEffect(paired, user, pods, leader) {
@@ -44,11 +45,14 @@ fun CompanionSurfaces(app: AppState, mailbox: SecretMailboxClient) {
 
 /** The watch's Approve, answered with the phone's own approval: never a
  *  biometric prompt, only while this session is unlocked and Quick approve
- *  is on, signed with the watch-delegate key. */
-fun watchResponder(app: AppState, mailbox: SecretMailboxClient): WatchApprovalResponder =
+ *  is on, signed with the watch-delegate key. Before the session's first
+ *  biometric it leaves the app an ask to show once in front. */
+fun watchResponder(app: AppState, mailbox: SecretMailboxClient, inForeground: () -> Boolean): WatchApprovalResponder =
     WatchApprovalResponder(
         delegateEnrolled = { Keystore.hasWatchDelegateKey() },
         hasSessionKey = { app.isUnlocked.value && SessionIrkAccess.isSessionUnlocked() },
+        appInForeground = inForeground,
+        onNeedsUnlock = { cmd -> WatchApprovalPrompt.shared.watchIsWaiting(cmd.serverFqdn) },
         makeSource = {
             val user = app.currentUser.value?.takeIf { it.isNotEmpty() }
             if (user == null || !app.isPaired.value) {

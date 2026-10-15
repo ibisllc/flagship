@@ -206,6 +206,8 @@ public struct RootShell: View {
                 }
             }
         }
+        // The watch's Approve reached a session without its Face ID yet.
+        .watchWaitingPrompt()
         // B12 — re-lock when the app moves to background. The .inactive
         // intermediate state happens during transitions (notification
         // pull-down, control center) — we DON'T relock on .inactive

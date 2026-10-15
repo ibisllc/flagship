@@ -75,6 +75,12 @@ class BiometricAuthority internal constructor(
      */
     fun isFresh(): Boolean = fresh
 
+    /** The lock screen's unlock runs the same prompt [ensureFresh] would, so it
+     *  opens the session too (iOS keeps the account key from that unlock). */
+    fun markFresh() {
+        fresh = true
+    }
+
     /** Clear the session freshness latch. Wired to isUnlocked -> false (lock /
      *  background / sign-out) so the next derive re-authenticates. */
     fun invalidate() {

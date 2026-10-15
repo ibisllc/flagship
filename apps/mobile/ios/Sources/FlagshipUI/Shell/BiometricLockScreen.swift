@@ -23,6 +23,8 @@ struct BiometricLockScreen: View {
     @State private var status: Status = .idle
     @State private var attemptedAuto = false
     @State private var showStartOver = false
+    @Environment(ToastCenter.self) private var toasts
+    private let watchPrompt = WatchApprovalPrompt.shared
 
     enum Status: Equatable {
         case idle
@@ -45,6 +47,14 @@ struct BiometricLockScreen: View {
                 Text("Unlock to continue.")
                     .font(FS.font.bodySm())
                     .foregroundColor(c.textMuted)
+                if watchPrompt.current != nil {
+                    Text(WatchApprovalPrompt.lockScreenNote)
+                        .font(FS.font.bodySm())
+                        .foregroundColor(c.text)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, FS.space.s6)
+                        .accessibilityIdentifier("lock-watch-waiting")
+                }
                 Spacer()
                 if case let .failed(msg) = status {
                     Text(msg)
@@ -144,6 +154,10 @@ struct BiometricLockScreen: View {
             // status read token mints without a second prompt
             // (docs/account-read-token.md). Demo accounts hold no keys.
             if !app.isDemoAccount { Keystore.cacheSessionUMK(authenticatedBy: context) }
+            if watchPrompt.current != nil, Keystore.hasSessionKey() {
+                watchPrompt.clear()
+                toasts.success(WatchApprovalPrompt.afterUnlock)
+            }
             app.markUnlocked()
             status = .idle
         } catch {

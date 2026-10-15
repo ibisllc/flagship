@@ -22,25 +22,37 @@ extension SecretRequestCoordinator: WatchApprovalSource {}
 /// It never starts a Face ID prompt: the phone may be in a pocket with the app
 /// in the background, so it proceeds only when the owner opted into quick
 /// approve (a delegate key is enrolled) and this app session already holds the
-/// account key; otherwise it tells the watch what to do on the phone.
+/// account key. Otherwise it tells the watch exactly what to do on the phone
+/// (turn on Quick approve, unlock the open app once, or open the app and
+/// unlock it) and calls `onNeedsUnlock`, so the app, once in front, can say
+/// the watch is waiting.
 @MainActor
 public struct WatchApprovalResponder {
     public static let notEnrolled = "Turn on Quick approve from Apple Watch in Flagship on your iPhone first."
-    public static let phoneLocked = "Open Flagship on your iPhone, then approve again."
+    /// The app is in front on the iPhone but hasn't used Face ID this session.
+    public static let unlockOnce = "Unlock Flagship on your iPhone once, then approve again."
+    /// The app is closed or in the background.
+    public static let openAndUnlock = "Open Flagship on your iPhone and unlock it once, then approve again."
     public static let signedOut = "Sign in to Flagship on your iPhone first."
     public static let gone = "This server isn't waiting any more."
 
     let delegateEnrolled: () -> Bool
     let hasSessionKey: () -> Bool
+    let appInForeground: () -> Bool
+    let onNeedsUnlock: (_ requestId: String) -> Void
     let makeSource: () -> (any WatchApprovalSource)?
 
     public init(
         delegateEnrolled: @escaping () -> Bool,
         hasSessionKey: @escaping () -> Bool,
+        appInForeground: @escaping () -> Bool = { false },
+        onNeedsUnlock: @escaping (_ requestId: String) -> Void = { _ in },
         makeSource: @escaping () -> (any WatchApprovalSource)?
     ) {
         self.delegateEnrolled = delegateEnrolled
         self.hasSessionKey = hasSessionKey
+        self.appInForeground = appInForeground
+        self.onNeedsUnlock = onNeedsUnlock
         self.makeSource = makeSource
     }
 
@@ -50,7 +62,10 @@ public struct WatchApprovalResponder {
         }
         guard cmd.kind == "approve-unlock" else { return fail("The watch asked for something this iPhone can't do.") }
         guard delegateEnrolled() else { return fail(Self.notEnrolled) }
-        guard hasSessionKey() else { return fail(Self.phoneLocked) }
+        guard hasSessionKey() else {
+            onNeedsUnlock(cmd.requestId)
+            return fail(appInForeground() ? Self.unlockOnce : Self.openAndUnlock)
+        }
         guard let source = makeSource() else { return fail(Self.signedOut) }
         do {
             let pending = try await source.fetchVerifiedRequests()

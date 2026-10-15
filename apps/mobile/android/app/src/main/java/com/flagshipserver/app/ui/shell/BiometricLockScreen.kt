@@ -40,11 +40,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.fragment.app.FragmentActivity
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.NetworkErrorHumanizer
+import com.flagshipserver.app.core.WatchApprovalPrompt
+import com.flagshipserver.app.keystore.BiometricAuthority
 import com.flagshipserver.app.keystore.BiometricCancelled
 import com.flagshipserver.app.keystore.BiometricGate
 import com.flagshipserver.app.keystore.Keystore
@@ -64,6 +67,17 @@ fun BiometricLockScreen() {
     // severity adapt on cloud recovery (same framing as Settings).
     var showSignOut by remember { mutableStateOf(false) }
     val hasRecovery by app.hasCloudRecovery.collectAsState()
+    val toasts = com.flagshipserver.app.core.LocalToastCenter.current
+    val watchWaiting by WatchApprovalPrompt.shared.waiting.collectAsState()
+    // Unlocking here is the session's biometric, so a waiting watch can now
+    // approve: say so.
+    fun unlocked() {
+        app.markUnlocked()
+        if (WatchApprovalPrompt.shared.current() != null && BiometricAuthority.current()?.isFresh() == true) {
+            WatchApprovalPrompt.shared.clear()
+            toasts.success(WatchApprovalPrompt.AFTER_UNLOCK)
+        }
+    }
 
     val activity = ctx as? FragmentActivity
     Box(
@@ -102,6 +116,15 @@ fun BiometricLockScreen() {
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 14.sp),
             )
+            if (watchWaiting != null && WatchApprovalPrompt.shared.current() != null) {
+                Text(
+                    WatchApprovalPrompt.LOCK_SCREEN_NOTE,
+                    color = FS.colors.text,
+                    style = TextStyle(fontSize = 14.sp),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.testTag("lock-watch-waiting"),
+                )
+            }
             Spacer(Modifier.weight(1f))
             (status as? Status.Failed)?.let {
                 Text(
@@ -120,7 +143,7 @@ fun BiometricLockScreen() {
                     }
                     scope.launch { tryUnlock(activity) { newStatus ->
                         status = newStatus
-                        if (newStatus == Status.Idle) app.markUnlocked()
+                        if (newStatus == Status.Idle) unlocked()
                     } }
                 },
                 enabled = status != Status.Authenticating,
@@ -197,7 +220,7 @@ fun BiometricLockScreen() {
             attemptedAuto = true
             tryUnlock(activity) { newStatus ->
                 status = newStatus
-                if (newStatus == Status.Idle) app.markUnlocked()
+                if (newStatus == Status.Idle) unlocked()
             }
         }
     }
@@ -216,6 +239,7 @@ private suspend fun tryUnlock(
     setStatus(Status.Authenticating)
     try {
         BiometricGate.evaluate(activity, title = "Unlock Flagship", subtitle = "Use biometrics to continue")
+        BiometricAuthority.current()?.markFresh()
         setStatus(Status.Idle)
     } catch (_: BiometricCancelled) {
         setStatus(Status.Failed("Cancelled. Tap above to try again."))

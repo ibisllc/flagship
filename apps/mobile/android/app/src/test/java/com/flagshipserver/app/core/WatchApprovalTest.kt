@@ -136,7 +136,7 @@ class WatchApprovalTest {
             responder(m1, enrolled = false, made = made).respond(ApproveCommand(serverFqdn = domain)).errorMessage,
         )
         assertEquals(
-            WatchApprovalResponder.PHONE_LOCKED,
+            WatchApprovalResponder.OPEN_AND_UNLOCK,
             responder(m1, unlocked = false, made = made).respond(ApproveCommand(serverFqdn = domain)).errorMessage,
         )
         assertTrue("no relay call before both checks pass", made.isEmpty())
@@ -149,6 +149,58 @@ class WatchApprovalTest {
             responder(m1).respond(ApproveCommand(kind = "wipe", serverFqdn = domain)).errorMessage,
         )
         assertTrue(m1.postedResponses.isEmpty())
+    }
+
+    /** Before the session's first biometric the watch is told precisely what to
+     *  do, and the phone learns the watch is waiting, without relaying, signing
+     *  or prompting anything. */
+    @Test fun beforeTheFirstBiometricTheWatchIsToldWhatToDo() = runBlocking {
+        val m = mailbox()
+        val waiting = mutableListOf<String>()
+        val made = mutableListOf<Unit>()
+        fun responder(enrolled: Boolean = true, inFront: Boolean) = WatchApprovalResponder(
+            delegateEnrolled = { enrolled },
+            hasSessionKey = { false },
+            makeSource = { made += Unit; coordinator(m).asWatchApprovalSource() },
+            now = { issuedAt },
+            appInForeground = { inFront },
+            onNeedsUnlock = { waiting += it.serverFqdn },
+        )
+        val open = responder(inFront = true).respond(ApproveCommand(serverFqdn = domain))
+        assertFalse(open.ok)
+        assertEquals(WatchApprovalResponder.UNLOCK_ONCE, open.errorMessage)
+        assertEquals(
+            WatchApprovalResponder.OPEN_AND_UNLOCK,
+            responder(inFront = false).respond(ApproveCommand(serverFqdn = domain)).errorMessage,
+        )
+        assertEquals(listOf(domain, domain), waiting)
+        assertEquals(
+            WatchApprovalResponder.NOT_ENROLLED,
+            responder(enrolled = false, inFront = true).respond(ApproveCommand(serverFqdn = domain)).errorMessage,
+        )
+        assertEquals("Quick approve off: nothing for the app to unlock", 2, waiting.size)
+        assertTrue("no relay call without the session", made.isEmpty())
+        assertTrue(m.postedResponses.isEmpty())
+    }
+
+    @Test fun theWaitingPromptAsksOnlyInFrontUnlockedAndWithoutTheSession() {
+        var clock = 1_000L
+        val prompt = WatchApprovalPrompt(now = { clock })
+        assertFalse(prompt.shouldAsk(inFront = true, appUnlocked = true, sessionUnlocked = false))
+        prompt.watchIsWaiting(domain)
+        assertEquals(domain, prompt.current()?.serverFqdn)
+        assertTrue(prompt.shouldAsk(inFront = true, appUnlocked = true, sessionUnlocked = false))
+        assertFalse("never from the background", prompt.shouldAsk(inFront = false, appUnlocked = true, sessionUnlocked = false))
+        assertFalse("the lock screen says it instead", prompt.shouldAsk(inFront = true, appUnlocked = false, sessionUnlocked = false))
+        assertFalse("already unlocked once", prompt.shouldAsk(inFront = true, appUnlocked = true, sessionUnlocked = true))
+        clock += WatchApprovalPrompt.LIFETIME_MS
+        assertEquals("an old ask expires with the boot request", null, prompt.current())
+        prompt.watchIsWaiting(" ")
+        assertEquals(null, prompt.current()?.serverFqdn)
+        prompt.clear()
+        assertEquals(null, prompt.waiting.value)
+        assertTrue(WatchApprovalPrompt.message("Kitchen").contains("Kitchen's start-up"))
+        assertTrue(WatchApprovalPrompt.message(null).contains("a server's start-up"))
     }
 
     @Test fun thePhonesOwnApproveStaysOwnerSigned() = runBlocking {

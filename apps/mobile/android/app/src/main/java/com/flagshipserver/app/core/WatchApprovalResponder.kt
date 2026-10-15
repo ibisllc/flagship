@@ -9,7 +9,10 @@
 // It never opens a biometric prompt: the phone may be in a pocket with the app
 // in the background, so it proceeds only when the owner turned on Quick
 // approve (a delegate key is enrolled here) and this app session is already
-// unlocked; otherwise it tells the watch what to do on the phone.
+// unlocked. Otherwise it tells the watch exactly what to do on the phone (turn
+// on Quick approve, unlock the open app once, or open the app and unlock it)
+// and calls onNeedsUnlock, so the app, once in front, can say the watch is
+// waiting.
 
 package com.flagshipserver.app.core
 
@@ -37,10 +40,15 @@ class WatchApprovalResponder(
     private val hasSessionKey: () -> Boolean,
     private val makeSource: () -> WatchApprovalSource?,
     private val now: () -> Long = { System.currentTimeMillis() },
+    private val appInForeground: () -> Boolean = { false },
+    private val onNeedsUnlock: (ApproveCommand) -> Unit = {},
 ) {
     companion object {
         const val NOT_ENROLLED = "Turn on Quick approve from watch in Flagship on your phone first."
-        const val PHONE_LOCKED = "Open Flagship on your phone, then approve again."
+        /** The app is in front on the phone but hasn't used biometrics this session. */
+        const val UNLOCK_ONCE = "Unlock Flagship on your phone once, then approve again."
+        /** The app is closed or in the background. */
+        const val OPEN_AND_UNLOCK = "Open Flagship on your phone and unlock it once, then approve again."
         const val SIGNED_OUT = "Sign in to Flagship on your phone first."
         const val GONE = "This server isn't waiting any more."
         const val UNSUPPORTED = "The watch asked for something this phone can't do."
@@ -50,7 +58,10 @@ class WatchApprovalResponder(
         fun fail(message: String) = ApproveReply(cmd.serverFqdn, ok = false, errorMessage = message)
         if (cmd.kind != ApproveCommand.KIND || cmd.serverFqdn.isBlank()) return fail(UNSUPPORTED)
         if (!delegateEnrolled()) return fail(NOT_ENROLLED)
-        if (!hasSessionKey()) return fail(PHONE_LOCKED)
+        if (!hasSessionKey()) {
+            onNeedsUnlock(cmd)
+            return fail(if (appInForeground()) UNLOCK_ONCE else OPEN_AND_UNLOCK)
+        }
         val source = makeSource() ?: return fail(SIGNED_OUT)
         return try {
             val live = source.fetchVerifiedRequests().filter {

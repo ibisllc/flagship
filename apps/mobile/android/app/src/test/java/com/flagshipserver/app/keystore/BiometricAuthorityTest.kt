@@ -112,6 +112,17 @@ class BiometricAuthorityTest {
         assertEquals(2, prompter.calls)
     }
 
+    @Test fun lockScreenUnlock_opensTheSessionWithoutASecondPrompt() = runTest {
+        val prompter = CountingPrompter()
+        val authority = BiometricAuthority.forTest(prompter)
+        authority.markFresh()
+        assertTrue(authority.isFresh())
+        authority.ensureFresh("A", "S")
+        assertEquals("the lock screen's unlock covers the session", 0, prompter.calls)
+        authority.invalidate()
+        assertFalse(authority.isFresh())
+    }
+
     @Test fun staticHolder_setAndCurrent() {
         val a = BiometricAuthority.forTest(prompter = null)
         BiometricAuthority.set(a)

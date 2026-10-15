@@ -53,6 +53,14 @@ final class WatchBridge: NSObject {
             approvals = WatchApprovalResponder(
                 delegateEnrolled: { Keystore.watchDelegateKey() != nil },
                 hasSessionKey: { Keystore.hasSessionKey() },
+                appInForeground: { Self.appInForeground() },
+                onNeedsUnlock: { requestId in
+                    // The app asks for the unlock once it is in front
+                    // (ContentView); nothing here opens Face ID.
+                    let fqdn = WatchBridge.shared.alerts?.pendingApprovals
+                        .first(where: { $0.requestId == requestId })?.serverFqdn
+                    WatchApprovalPrompt.shared.watchIsWaiting(serverFqdn: fqdn)
+                },
                 makeSource: {
                     guard let username = currentUser(), !username.isEmpty else { return nil }
                     return SecretRequestCoordinator(
@@ -79,6 +87,14 @@ final class WatchBridge: NSObject {
             WCSession.default.delegate = self
             WCSession.default.activate()
         }
+    }
+
+    private static func appInForeground() -> Bool {
+        #if canImport(UIKit)
+        return UIApplication.shared.applicationState == .active
+        #else
+        return false
+        #endif
     }
 
     /// Publish a new provision-timeline snapshot to the paired watch.

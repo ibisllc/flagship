@@ -730,12 +730,65 @@ final class SecretRequestCoordinatorTests: XCTestCase {
         let notEnrolled = await reply(enrolled: false, session: true)
         XCTAssertEqual(notEnrolled.errorMessage, WatchApprovalResponder.notEnrolled)
         let locked = await reply(enrolled: true, session: false)
-        XCTAssertEqual(locked.errorMessage, WatchApprovalResponder.phoneLocked)
+        XCTAssertEqual(locked.errorMessage, WatchApprovalResponder.openAndUnlock)
         let stale = await reply(enrolled: true, session: true, requestId: "other.alice.flagship.services#00")
         XCTAssertEqual(stale.errorMessage, WatchApprovalResponder.gone)
         XCTAssertTrue(mailbox.postedResponses.isEmpty)
         let signedOut = await WatchApprovalResponder(delegateEnrolled: { true }, hasSessionKey: { true }, makeSource: { nil })
             .respond(to: .init(requestId: id))
         XCTAssertEqual(signedOut.errorMessage, WatchApprovalResponder.signedOut)
+    }
+
+    /// Before the session's first Face ID the watch is told precisely what to
+    /// do, and the phone learns the watch is waiting, without relaying, signing
+    /// or prompting anything.
+    @MainActor
+    func testWatchApproveBeforeTheFirstFaceIdSaysWhatToDo() async throws {
+        let (mailbox, coord, id) = try watchFixture()
+        var waiting: [String] = []
+        var sourcesMade = 0
+        func reply(enrolled: Bool = true, inFront: Bool) async -> WatchProtocol.ApproveReply {
+            await WatchApprovalResponder(
+                delegateEnrolled: { enrolled },
+                hasSessionKey: { false },
+                appInForeground: { inFront },
+                onNeedsUnlock: { waiting.append($0) },
+                makeSource: { sourcesMade += 1; return coord }
+            ).respond(to: .init(requestId: id))
+        }
+        let open = await reply(inFront: true)
+        XCTAssertFalse(open.ok)
+        XCTAssertEqual(open.errorMessage, WatchApprovalResponder.unlockOnce)
+        let away = await reply(inFront: false)
+        XCTAssertEqual(away.errorMessage, WatchApprovalResponder.openAndUnlock)
+        XCTAssertEqual(waiting, [id, id])
+        let off = await reply(enrolled: false, inFront: true)
+        XCTAssertEqual(off.errorMessage, WatchApprovalResponder.notEnrolled)
+        XCTAssertEqual(waiting.count, 2, "Quick approve off: nothing for the app to unlock")
+        XCTAssertEqual(sourcesMade, 0, "no relay call without the session key")
+        XCTAssertTrue(mailbox.postedResponses.isEmpty)
+    }
+
+    @MainActor
+    func testWatchWaitingPromptAsksOnlyInFrontUnlockedAndKeyless() {
+        var clock = Date(timeIntervalSince1970: 1_000)
+        let prompt = WatchApprovalPrompt(now: { clock })
+        XCTAssertFalse(prompt.shouldAsk(inFront: true, appUnlocked: true, hasSessionKey: false))
+        prompt.watchIsWaiting(serverFqdn: "home.alice.flagship.services")
+        XCTAssertEqual(prompt.current?.serverFqdn, "home.alice.flagship.services")
+        XCTAssertTrue(prompt.shouldAsk(inFront: true, appUnlocked: true, hasSessionKey: false))
+        XCTAssertFalse(prompt.shouldAsk(inFront: false, appUnlocked: true, hasSessionKey: false), "never from the background")
+        XCTAssertFalse(prompt.shouldAsk(inFront: true, appUnlocked: false, hasSessionKey: false), "the lock screen says it instead")
+        XCTAssertFalse(prompt.shouldAsk(inFront: true, appUnlocked: true, hasSessionKey: true), "already unlocked once")
+        clock = clock.addingTimeInterval(WatchApprovalPrompt.lifetime)
+        XCTAssertNil(prompt.current, "an old ask expires with the boot request")
+        XCTAssertFalse(prompt.shouldAsk(inFront: true, appUnlocked: true, hasSessionKey: false))
+        prompt.watchIsWaiting(serverFqdn: "")
+        XCTAssertNotNil(prompt.current)
+        XCTAssertNil(prompt.current?.serverFqdn)
+        prompt.clear()
+        XCTAssertNil(prompt.current)
+        XCTAssertTrue(WatchApprovalPrompt.message(serverName: "Home").contains("Home's start-up"))
+        XCTAssertTrue(WatchApprovalPrompt.message(serverName: nil).contains("a server's start-up"))
     }
 }
