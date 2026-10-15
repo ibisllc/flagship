@@ -156,6 +156,9 @@ export function fileMarkerStore(markerPath: string): SelfDeleteMarkerStore {
 export interface ClaimAndRunSelfDeleteOptions {
   /** This box's canonical FQDN. */
   serverDomain: string;
+  /** This box's STK (hex). Given ⇒ `.com` returns THIS box's order without
+   *  consuming it, so it still waits however late the box comes back. */
+  myStkHex?: string;
   /** The owner IRK pubkey (baked into the config) — the order is verified
    *  against THIS, never against anything `.com` asserts. */
   ownerIrkPub: Uint8Array;
@@ -205,7 +208,9 @@ export async function claimAndRunSelfDelete(
   }
 
   const base = opts.controlPlaneBaseUrl.replace(/\/+$/, "");
-  const url = `${base}/api/server/${encodeURIComponent(opts.serverDomain)}/self-delete`;
+  const url =
+    `${base}/api/server/${encodeURIComponent(opts.serverDomain)}/self-delete` +
+    (opts.myStkHex ? `?stk=${encodeURIComponent(opts.myStkHex.toLowerCase())}` : "");
 
   let sealedHex: string | undefined;
   try {

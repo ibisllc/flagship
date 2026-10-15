@@ -3,7 +3,7 @@ import { connect as netConnect, type Socket } from "node:net";
 import { createServer as createTlsServer, type Server as TlsServer, type TLSSocket } from "node:tls";
 import acme from "acme-client";
 import { readFile } from "node:fs/promises";
-import { ed, egressSuggestions, type Bytes, type Keypair } from "@flagship/protocol";
+import { ed, egressSuggestions, type AppApiKeyGrant, type Bytes, type Keypair } from "@flagship/protocol";
 import type { BoxSigner, SwkOps } from "./keyCustodian.js";
 import { ServicePlatform, buildServiceHttpHandlers, type InstalledService } from "./servicePlatform.js";
 import { AliasReconciler } from "./aliasReconciler.js";
@@ -380,6 +380,12 @@ export interface HttpResponse {
   status: number;
   headers?: Record<string, string>;
   body: string | Buffer;
+  /**
+   * A body too large to hold in memory (a server backup): `length` bytes
+   * piped from `open()` after the head, instead of `body`. Only the daemon's
+   * own HTTP surface writes it.
+   */
+  stream?: { length: number; open: () => NodeJS.ReadableStream };
 }
 
 /**
@@ -479,6 +485,9 @@ export interface DaemonRuntime {
   egress: EgressRuntime;
   /** API keys apps accept from machine clients: the screens handler (`/services/:id/api-keys`). */
   appApiKeys: AppApiKeysHttp;
+  /** The key store itself and its owner check (server backups carry the keys). */
+  appApiKeyStore: AppApiKeyStore;
+  apiKeyAuthority: ((grant: AppApiKeyGrant, sig: Uint8Array) => boolean) | null;
   /**
    * Box-initiated outbound streams over the tunnel (the AI provider relay,
    * docs/ai-privacy-and-staging.md §4). Available only while the live hub
@@ -1582,6 +1591,8 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     relayLockdown,
     egress,
     appApiKeys,
+    appApiKeyStore,
+    apiKeyAuthority,
     outboundRelay: {
       outboundAvailable: () => tunnel.outboundAvailable(),
       openOutbound: (host, port) => tunnel.openOutbound(host, port),
@@ -2120,6 +2131,12 @@ interface HandleHttpOptions {
   }) => boolean;
 }
 
+/** Tests drive the daemon's HTTP/1.1 writer over a plain Duplex. */
+export const _handleHttpConnectionForTest = (
+  socket: import("node:stream").Duplex,
+  handler: (req: HttpRequest) => Promise<HttpResponse>,
+): void => handleHttpConnection(socket as unknown as TLSSocket, handler);
+
 function handleHttpConnection(
   socket: TLSSocket,
   handler: (req: HttpRequest) => Promise<HttpResponse>,
@@ -2200,14 +2217,25 @@ function handleHttpConnection(
     const hdrs = resp.headers ?? { "content-type": "text/plain" };
     const head = [
       `HTTP/1.1 ${resp.status} ${statusText(resp.status)}`,
-      `Content-Length: ${body.length}`,
+      `Content-Length: ${resp.stream ? resp.stream.length : body.length}`,
       "Connection: close",
       ...Object.entries(hdrs).map(([k, v]) => `${k}: ${v}`),
       "",
       "",
     ].join("\r\n");
     socket.write(head);
-    socket.write(body);
+    if (resp.stream) {
+      if (req.method.toUpperCase() === "HEAD" || resp.stream.length === 0) {
+        socket.end();
+        return;
+      }
+      const src = resp.stream.open();
+      src.on("error", () => socket.destroy());
+      socket.on("close", () => (src as NodeJS.ReadableStream & { destroy?: () => void }).destroy?.());
+      src.pipe(socket);
+      return;
+    }
+    if (req.method.toUpperCase() !== "HEAD") socket.write(body);
     socket.end();
   }
 }
@@ -2390,6 +2418,7 @@ function statusText(s: number): string {
   if (s === 200) return "OK";
   if (s === 201) return "Created";
   if (s === 204) return "No Content";
+  if (s === 206) return "Partial Content";
   if (s === 301) return "Moved Permanently";
   if (s === 302) return "Found";
   if (s === 304) return "Not Modified";
@@ -2397,6 +2426,10 @@ function statusText(s: number): string {
   if (s === 401) return "Unauthorized";
   if (s === 403) return "Forbidden";
   if (s === 404) return "Not Found";
+  if (s === 405) return "Method Not Allowed";
+  if (s === 409) return "Conflict";
+  if (s === 412) return "Precondition Failed";
+  if (s === 416) return "Range Not Satisfiable";
   if (s === 500) return "Internal Server Error";
   if (s === 502) return "Bad Gateway";
   if (s === 503) return "Service Unavailable";

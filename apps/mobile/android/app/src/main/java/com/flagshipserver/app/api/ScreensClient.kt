@@ -232,6 +232,9 @@ interface ScreensClient {
         throw ScreensError.NotImplemented("server backup")
     suspend fun serverArchiveForget(): Unit =
         throw ScreensError.NotImplemented("server backup")
+    /** The owner's signed approval for one browser download request. */
+    suspend fun serverArchiveApprove(req: ServerArchiveApproveRequest): Unit =
+        throw ScreensError.NotImplemented("server backup")
     suspend fun serverRestoreStart(req: ServerRestoreStartRequest): Unit =
         throw ScreensError.NotImplemented("server import")
     suspend fun serverRestoreChunk(offset: Long, data: ByteArray): Unit =

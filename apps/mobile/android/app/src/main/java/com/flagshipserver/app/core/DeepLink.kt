@@ -93,6 +93,10 @@ sealed interface DeepLink {
         val pageId: String,
     ) : DeepLink
 
+    /** A backup's browser download page (`https://<apex>/app/backup-download#s=&a=&r=`):
+     *  approve downloading that server's backup in that browser (biometric + signature). */
+    data class ApproveBackupDownload(val serverFqdn: String, val archiveId: String, val requestId: String) : DeepLink
+
     /** A browser asking to become a remote: the QR on remote.<apex>, naming
      *  only a relay session and the browser's key (see [RemoteApprovalLink]). */
     data class CompanionDockApproval(val rawLink: String) : DeepLink
@@ -214,7 +218,7 @@ sealed interface DeepLink {
         }
 
         private fun parseHost(host: String, uri: Uri): DeepLink? {
-            if (host == "access" || host == "invite") fragmentAsQuery(uri)?.let { return parseHost(host, it) }
+            if (host == "access" || host == "invite" || host == "backup-download") fragmentAsQuery(uri)?.let { return parseHost(host, it) }
             val params = uri.queryParameterNames.associateWith { uri.getQueryParameter(it) ?: "" }
             return when (host) {
                 // Back-compat: legacy `unlock-approve(s)` links (old pushes /
@@ -224,6 +228,15 @@ sealed interface DeepLink {
                 "app" -> params["appId"]?.let { AppDetail(it) }
                 "create-server" -> CreateServer
                 "share" -> ServerShare.parseShareLink(uri.toString())?.let { ShareOffer(it.shareId, it.secretHex) }
+                "backup-download" -> {
+                    val s = (params["s"] ?: "").lowercase()
+                    val a = params["a"] ?: ""
+                    val r = params["r"] ?: ""
+                    if (s.endsWith(".${Endpoints.dataApex}") &&
+                        com.flagshipserver.app.api.ArchiveDownloadApproval.isId(a) &&
+                        com.flagshipserver.app.api.ArchiveDownloadApproval.isId(r)
+                    ) ApproveBackupDownload(s, a, r) else null
+                }
                 "transfer" -> {
                     // flagship://transfer?o=<b64url> — the custom-scheme twin of
                     // the /transfer universal link (Slice C take-over).

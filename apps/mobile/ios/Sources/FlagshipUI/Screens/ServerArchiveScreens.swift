@@ -74,6 +74,10 @@ struct ServerBackupSheet: View {
         case .ready(let bytes):
             VStack(alignment: .leading, spacing: FS.space.s2) {
                 Text("Backup ready (\(ServerArchive.formatBytes(bytes))). Save it somewhere safe.").foregroundColor(c.text)
+                if !vm.leftOut.isEmpty {
+                    Text("Left out (no source to rebuild them from): \(vm.leftOut.joined(separator: ", ")).")
+                        .font(FS.font.caption()).foregroundColor(c.danger)
+                }
                 FSPrimaryButton("Download backup", block: true) { Task { await vm.download() } }
                     .accessibilityIdentifier("backup-download")
             }
@@ -179,5 +183,50 @@ struct ImportBackupSheet: View {
                 .accessibilityIdentifier("import-backup-choose")
             if let e = vm.fileError { Text(e).foregroundColor(c.danger) }
         }
+    }
+}
+
+/// Opened by the QR on a backup's browser download page.
+struct BackupDownloadApprovalScreen: View {
+    @Environment(\.colorScheme) private var scheme
+    @State var vm: BackupDownloadApprovalViewModel
+    var onDone: () -> Void = {}
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        ScrollView {
+            VStack(alignment: .leading, spacing: FS.space.s4) {
+                Text("Download a backup in a browser?")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundColor(c.text)
+                Text("A browser is asking to download the backup of \(vm.serverFqdn). Approve only if this code is on the page in front of you:")
+                    .foregroundColor(c.textMuted)
+                Text(vm.code)
+                    .font(.system(size: 34, weight: .semibold, design: .monospaced))
+                    .tracking(6)
+                    .foregroundColor(c.text)
+                    .accessibilityIdentifier("backup-approve-code")
+                Text("The file opens only on your own devices, but anyone at that browser can save it.")
+                    .font(FS.font.caption())
+                    .foregroundColor(c.textMuted)
+                switch vm.phase {
+                case .idle, .working:
+                    FSPrimaryButton(vm.phase == .working ? "Approving…" : "Approve with Face ID", block: true) {
+                        Task { await vm.approve() }
+                    }
+                    .disabled(vm.phase == .working)
+                    .accessibilityIdentifier("backup-approve")
+                    FSSecondaryButton("Don't approve", block: true) { onDone() }
+                case .approved:
+                    Text("Approved. The download starts in that browser.").foregroundColor(c.success)
+                    FSPrimaryButton("Done", block: true) { onDone() }
+                case .failed(let message):
+                    Text(message).foregroundColor(c.danger)
+                    FSSecondaryButton("Try again", block: true) { Task { await vm.approve() } }
+                }
+            }
+            .padding(FS.space.s4)
+        }
+        .background(c.bg.ignoresSafeArea())
     }
 }

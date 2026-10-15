@@ -31,6 +31,7 @@ import {
   type ServerDecommission,
 } from "@flagship/protocol";
 import {
+  successorRestored,
   buildDecommissionPoller,
   runDecommissionConsumer,
   decodeAndVerifyDecommissionOrder,
@@ -485,5 +486,25 @@ describe("runDecommissionConsumer", () => {
     expect(out).toMatchObject({ decommissioned: true, wiped: false });
     expect(marker.marked).toBe(true);
     expect(spy.powers).toBe(1);
+  });
+});
+
+describe("successorRestored (the replacement-path hand-off evidence)", () => {
+  const row = (stk: string, issuedAt: number, epochCompleteAt: number | null) => ({
+    orderJson: JSON.stringify({ retiredStkPubHex: stk, issuedAt }),
+    epochCompleteAt,
+  });
+  const ME = "aa".repeat(32);
+  it("a later order that retired a flushed successor counts", () => {
+    expect(successorRestored([row(ME, 100, 150), row("bb".repeat(32), 200, 250)], ME)).toBe(true);
+  });
+  it("an EARLIER tenant's flushed row never counts (old rows outlive the GC)", () => {
+    expect(successorRestored([row("cc".repeat(32), 50, 60), row(ME, 100, 150)], ME)).toBe(false);
+  });
+  it("without this box's own row there is no evidence", () => {
+    expect(successorRestored([row("bb".repeat(32), 200, 250)], ME)).toBe(false);
+  });
+  it("a later row that never flushed doesn't count", () => {
+    expect(successorRestored([row(ME, 100, 150), row("bb".repeat(32), 200, null)], ME)).toBe(false);
   });
 });

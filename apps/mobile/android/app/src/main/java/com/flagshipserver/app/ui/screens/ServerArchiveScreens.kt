@@ -97,7 +97,7 @@ private fun ServerBackupDialog(serverDomain: String, onDismiss: () -> Unit) {
             serverFqdn = serverDomain,
             client = (pod?.let { podClients.screens(it) }) ?: screens,
             keyProvider = { id -> Keystore.deriveServerArchiveKey(id, "Back up $serverDomain") },
-            downloadFile = { File(context.cacheDir, "server-backup.${ServerArchive.FILE_EXTENSION}") },
+            downloadDir = { File(context.cacheDir, "server-backups") },
         )
     }
     val phase by vm.phase.collectAsState()
@@ -129,6 +129,9 @@ private fun ServerBackupDialog(serverDomain: String, onDismiss: () -> Unit) {
                     }
                     is ServerBackupViewModel.Phase.Ready -> {
                         Text("Backup ready (${ServerArchive.formatBytes(p.bytes)}). Save it somewhere safe.", color = FS.colors.text)
+                        if (vm.leftOut.isNotEmpty()) {
+                            Text("Left out (no source to rebuild them from): ${vm.leftOut.joinToString(", ")}.", color = FS.colors.danger)
+                        }
                         FSPrimaryButton(label = "Download backup", onClick = { scope.launch { vm.download() } }, block = true)
                     }
                     is ServerBackupViewModel.Phase.Downloading -> {
@@ -298,5 +301,71 @@ internal fun ImportBackupDialog(onDismiss: () -> Unit) {
             }
         },
         confirmButton = { TextButton(onClick = onDismiss, enabled = !busy) { Text("Done") } },
+    )
+}
+
+/** Opened by the QR on a backup's browser download page. */
+@Composable
+internal fun BackupDownloadApprovalDialog(serverFqdn: String, archiveId: String, requestId: String, onDismiss: () -> Unit) {
+    val app = LocalAppState.current
+    val podClients = LocalPodClients.current
+    val scope = rememberCoroutineScope()
+    val vm = remember(requestId) {
+        val pod = app.pods.value.firstOrNull { it.fqdn.equals(serverFqdn, ignoreCase = true) }
+        com.flagshipserver.app.viewmodels.BackupDownloadApprovalViewModel(
+            serverFqdn = serverFqdn,
+            archiveId = archiveId,
+            requestId = requestId,
+            client = pod?.let { podClients.screens(it) },
+            sign = { bytes -> Keystore.adminSigningKey("Approve downloading the backup of $serverFqdn").sign(bytes) },
+        )
+    }
+    val phase by vm.phase.collectAsState()
+    AlertDialog(
+        onDismissRequest = { if (phase != com.flagshipserver.app.viewmodels.BackupDownloadApprovalViewModel.Phase.Working) onDismiss() },
+        title = { Text("Download a backup in a browser?") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                Text(
+                    "A browser is asking to download the backup of $serverFqdn. Approve only if this code is on the page in front of you:",
+                    color = FS.colors.textMuted,
+                )
+                Text(
+                    vm.code,
+                    color = FS.colors.text,
+                    style = TextStyle(fontSize = 32.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 6.sp,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+                    modifier = Modifier.semantics { contentDescription = "backup-approve-code" },
+                )
+                Text(
+                    "The file opens only on your own devices, but anyone at that browser can save it.",
+                    color = FS.colors.textMuted,
+                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                )
+                when (val p = phase) {
+                    com.flagshipserver.app.viewmodels.BackupDownloadApprovalViewModel.Phase.Approved ->
+                        Text("Approved. The download starts in that browser.", color = FS.colors.success)
+                    is com.flagshipserver.app.viewmodels.BackupDownloadApprovalViewModel.Phase.Failed ->
+                        Text(p.message, color = FS.colors.danger)
+                    else -> {}
+                }
+            }
+        },
+        confirmButton = {
+            if (phase == com.flagshipserver.app.viewmodels.BackupDownloadApprovalViewModel.Phase.Approved) {
+                TextButton(onClick = onDismiss) { Text("Done") }
+            } else {
+                TextButton(
+                    onClick = { scope.launch { vm.approve() } },
+                    enabled = phase != com.flagshipserver.app.viewmodels.BackupDownloadApprovalViewModel.Phase.Working,
+                    modifier = Modifier.semantics { contentDescription = "backup-approve" },
+                ) { Text(if (phase == com.flagshipserver.app.viewmodels.BackupDownloadApprovalViewModel.Phase.Working) "Approving…" else "Approve") }
+            }
+        },
+        dismissButton = {
+            if (phase != com.flagshipserver.app.viewmodels.BackupDownloadApprovalViewModel.Phase.Approved) {
+                TextButton(onClick = onDismiss) { Text("Don't approve") }
+            }
+        },
     )
 }

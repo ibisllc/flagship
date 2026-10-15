@@ -3,7 +3,10 @@
  * server"). The archive is opened with the key the owner's phone derives for
  * it, unpacked into a scratch folder with every path checked, every part's
  * SHA-256 verified, and then each app is installed the way an app copy
- * installs one (appCopy/target.ts): image loaded, env written, fresh stores
+ * installs one (appCopy/target.ts), except that no image comes with it: this
+ * box rebuilds the app from its working tree with its own runtime catalog
+ * (or pulls the public image an app was installed from), so a backup made on
+ * any Flagship install, on any CPU, imports here. Then env written, fresh stores
  * restored from the dumps before the container first starts, members and
  * working tree brought over, the access list kept as a draft for the owner.
  *
@@ -37,7 +40,7 @@ import { openToTar, ArchiveError } from "./format.js";
 import type { ArchiveAppMeta, ArchiveManifest } from "./build.js";
 
 const IMAGE_RE = /^[A-Za-z0-9][A-Za-z0-9._/:@-]{0,254}$/;
-const ENTRY_RE = /^(manifest\.json|apps\/[a-z0-9][a-z0-9-]*--[a-z0-9][a-z0-9-]*\/(meta\.json|image\.tar|files\.tar|source\.json|db-\d{1,3}\.dump))$/;
+const ENTRY_RE = /^(manifest\.json|apps\/[a-z0-9][a-z0-9-]*--[a-z0-9][a-z0-9-]*\/(meta\.json|files\.tar|source\.json|db-\d{1,3}\.dump))$/;
 
 export type RestoreAppState = "waiting" | "restoring" | "done" | "skipped" | "failed";
 
@@ -61,6 +64,15 @@ export interface ArchiveRestoreDeps {
   egress: { noteCopied(serviceId: string, list: string, declared: ReturnType<typeof egressSuggestions>): Promise<void> } | null;
   sourceDir?: string | null;
   workDir: string;
+  /** Build an app's image from its tree (deployArtifact.buildAppImage: the box
+   *  writes the Dockerfile from the manifest's runtime, then `docker build`). */
+  buildImage: (a: { contextDir: string; files: Record<string, string>; binaries: Record<string, Buffer>; image: string }) => Promise<{ ok: true } | { ok: false; reason: string }>;
+  /** `docker pull` a public image an app was installed from. */
+  pullImage: (image: string) => Promise<void>;
+  /** Take an app's API keys onto this server (grants still checked against the owner). */
+  apiKeys?: { importService(serviceId: string, keys: unknown): Promise<{ imported: number; dropped: number }> } | null;
+  /** The server's front page: set from the backup when this server has none. */
+  frontPage?: { get(): string | null; set(label: string): Promise<void>; installed(label: string): boolean } | null;
   now?: () => number;
   log?: (m: string) => void;
 }
@@ -117,10 +129,12 @@ function validMeta(v: unknown, serviceId: string): ArchiveAppMeta {
   const parsed = parseManifest(manifest);
   if (!parsed.ok) bad(`manifest: ${parsed.errors.join("; ")}`);
   if (!IMAGE_RE.test(String((manifest as { runtime?: { image?: unknown } }).runtime?.image ?? ""))) bad("image name");
-  if (!Array.isArray(m!.parts) || !m!.parts.some((p) => p.name === "image")) bad("parts");
+  if (m!.rebuild !== "source" && m!.rebuild !== "pull") bad("rebuild");
+  if (!Array.isArray(m!.parts)) bad("parts");
+  if (m!.rebuild === "source" && !m!.parts!.some((p) => p?.name === "source")) bad("no source to rebuild from");
   for (const p of m!.parts!) {
     if (typeof p?.name !== "string" || typeof p.file !== "string") bad("part");
-    if (!/^(image|files|source|db:[A-Za-z0-9_-]{1,63})$/.test(p.name)) bad("part name");
+    if (!/^(files|source|db:[A-Za-z0-9_-]{1,63})$/.test(p.name)) bad("part name");
     if (!p.file.startsWith(`apps/${serviceId}/`) || !ENTRY_RE.test(p.file)) bad("part file");
     if (typeof p.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(p.sha256)) bad("part hash");
   }
@@ -168,6 +182,8 @@ export async function unpackArchive(deps: ArchiveRestoreDeps, archivePath: strin
 
 interface Held {
   image?: string;
+  /** The working tree this import wrote (removed again if the app fails). */
+  tree?: string;
   env?: boolean;
   postgres?: Record<string, { database: string; role: string }>;
   filesVolume?: string;
@@ -192,10 +208,21 @@ async function installOne(
   };
   try {
     const manifest = JSON.parse(meta.manifestJson) as { runtime: { image: string }; network?: Parameters<typeof egressSuggestions>[0] };
-    const image = manifest.runtime.image;
-    if (!(await deps.ops.imageExists(image))) held.image = image;
-    await deps.ops.loadImage(path("image")!);
-    if (!(await deps.ops.imageExists(image))) throw new Error(`the image didn't load as ${image}`);
+    let image = manifest.runtime.image;
+    if (meta.rebuild === "source") {
+      if (!deps.sourceDir) throw new Error("this server can't rebuild apps (no working-tree folder)");
+      const tree = await readTree(path("source")!);
+      image = `flagship-vibe-${meta.serviceId}:${now()}`.toLowerCase();
+      held.tree = join(deps.sourceDir, meta.serviceId);
+      held.image = image;
+      const built = await deps.buildImage({ contextDir: held.tree, files: tree.files, binaries: tree.binaries, image });
+      if (!built.ok) throw new Error(`rebuilding it here failed: ${built.reason}`);
+    } else if (!(await deps.ops.imageExists(image))) {
+      held.image = image;
+      await deps.pullImage(image);
+    }
+    if (!(await deps.ops.imageExists(image))) throw new Error(`its image ${image} isn't here after ${meta.rebuild === "source" ? "the build" : "the pull"}`);
+    const manifestJson = JSON.stringify({ ...(JSON.parse(meta.manifestJson) as object), runtime: { ...manifest.runtime, image } });
 
     if (Object.keys(meta.env).length > 0) {
       if (!deps.envStore) {
@@ -214,7 +241,7 @@ async function installOne(
       serverId: deps.serverFqdn,
       creator: id.creator,
       slug: id.slug,
-      manifestJson: meta.manifestJson,
+      manifestJson,
       addOwnerToMembership: false,
       issuedAt: now(),
     };
@@ -247,11 +274,19 @@ async function installOne(
     if (meta.access && deps.access) {
       await deps.access.importEntry(meta.serviceId, meta.access).catch((e: Error) => log(`[server-archive] ${meta.serviceId}: couldn't take the members' access: ${e.message}`));
     }
+    // A pulled app's tree, when it had one, still comes along so it can be edited here.
     const tree = path("source");
-    if (tree && deps.sourceDir) {
+    if (tree && deps.sourceDir && meta.rebuild !== "source") {
       await writeTree(join(deps.sourceDir, meta.serviceId), tree).catch((e: Error) =>
         log(`[server-archive] ${meta.serviceId}: couldn't write its working tree (it runs, but can't be edited here): ${e.message}`),
       );
+    }
+    if (deps.apiKeys && Array.isArray(meta.apiKeys) && meta.apiKeys.length > 0) {
+      const r = await deps.apiKeys.importService(meta.serviceId, meta.apiKeys).catch((e: Error) => {
+        log(`[server-archive] ${meta.serviceId}: couldn't take its API keys: ${e.message}`);
+        return null;
+      });
+      if (r && r.dropped > 0) log(`[server-archive] ${meta.serviceId}: ${r.dropped} API key(s) no longer verify; left out`);
     }
     if (meta.accessList && deps.egress) {
       await deps.egress.noteCopied(meta.serviceId, meta.accessList, egressSuggestions(manifest.network)).catch(() => {});
@@ -263,12 +298,16 @@ async function installOne(
   }
 }
 
-async function writeTree(appDir: string, path: string): Promise<void> {
+async function readTree(path: string): Promise<{ files: Record<string, string>; binaries: Record<string, Buffer> }> {
   const t = JSON.parse(await readFile(path, "utf8")) as Partial<CopySourceTree>;
   const strings = (v: unknown): v is Record<string, string> => typeof v === "object" && v !== null && Object.values(v).every((x) => typeof x === "string");
   if (!strings(t.files) || !strings(t.binaries)) throw new Error("malformed working tree");
-  const binaries = Object.fromEntries(Object.entries(t.binaries).map(([k, v]) => [k, Buffer.from(v, "base64")]));
-  const w = await writeSourceTree(appDir, t.files, { binaries });
+  return { files: t.files, binaries: Object.fromEntries(Object.entries(t.binaries).map(([k, v]) => [k, Buffer.from(v, "base64")])) };
+}
+
+async function writeTree(appDir: string, path: string): Promise<void> {
+  const t = await readTree(path);
+  const w = await writeSourceTree(appDir, t.files, { binaries: t.binaries });
   if (!w.ok) throw new Error(`unsafe path ${w.unsafePath}`);
 }
 
@@ -286,6 +325,7 @@ async function release(deps: ArchiveRestoreDeps, serviceId: string, held: Held, 
   }
   if (held.env && deps.envStore) await deps.envStore.forget(serviceId).catch(() => {});
   if (held.image) await deps.ops.removeImage(held.image).catch(() => {});
+  if (held.tree) await rm(held.tree, { recursive: true, force: true }).catch(() => {});
 }
 
 /** Install every app of an unpacked archive; one failing app doesn't stop the rest. */
@@ -306,6 +346,11 @@ export async function installArchive(
     log(`[server-archive] ${meta.serviceId}: ${results[i]!.state}${results[i]!.reason ? ` (${results[i]!.reason})` : ""}`);
     // Free this app's scratch as soon as it is in.
     await rm(join(dir, "apps", meta.serviceId), { recursive: true, force: true }).catch(() => {});
+  }
+  // The front page, when this server has none and the app came back here.
+  const fp = contents.manifest.frontPage;
+  if (fp && deps.frontPage && !deps.frontPage.get() && deps.frontPage.installed(fp)) {
+    await deps.frontPage.set(fp).catch((e: Error) => log(`[server-archive] couldn't set the front page: ${e.message}`));
   }
   return results;
 }

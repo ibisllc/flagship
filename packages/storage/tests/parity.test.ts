@@ -988,6 +988,19 @@ describe("D1 ↔ InMemory parity", () => {
       expect(r.d1).toEqual({ putOk: true, firstSealed: "deadbeef", secondDefined: false });
     });
 
+    it("a box reads its own order by STK without consuming it; another STK reads nothing", async () => {
+      const r = await bothAdapters(async (s) => {
+        await s.secretMailbox.putSelfDeleteDeposit(mk("dd".repeat(16), "mine"));
+        const a = await s.secretMailbox.getSelfDeleteDeposit("home.alice.flagship.services", "AB".repeat(32), 10);
+        const b = await s.secretMailbox.getSelfDeleteDeposit("home.alice.flagship.services", "AB".repeat(32), 11);
+        const other = await s.secretMailbox.getSelfDeleteDeposit("home.alice.flagship.services", "cd".repeat(32), 12);
+        const late = await s.secretMailbox.getSelfDeleteDeposit("home.alice.flagship.services", "ab".repeat(32), 5000);
+        return { a: a?.sealedHex, b: b?.sealedHex, other: other !== undefined, late: late !== undefined };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ a: "mine", b: "mine", other: false, late: false });
+    });
+
     it("duplicate nonce rejected; expired rows never served", async () => {
       const r = await bothAdapters(async (s) => {
         await s.secretMailbox.putSelfDeleteDeposit(mk("bb".repeat(16), "one", 1000));
@@ -1548,6 +1561,23 @@ describe("D1 ↔ InMemory parity", () => {
       });
       expectParity(r);
       expect(r.d1).toEqual({ removed: 1, pod1Len: 0, pod2Len: 1 });
+    });
+
+    it("gcEvictions never deletes a wipe order, however old (the retired box may come back)", async () => {
+      const r = await bothAdapters(async (s) => {
+        for (const [stk, d] of [["aa", "wipe-after-handoff"], ["bb", "wipe-now"], ["cc", "keep"]] as const) {
+          await s.serverEvictions.recordEviction({
+            ...mkEvict(stk.repeat(32), 100),
+            orderJson: JSON.stringify({ retire: stk, diskDisposition: d }),
+          });
+        }
+        await s.serverEvictions.markNewAcked(pod, 1000);
+        const removed = await s.serverEvictions.gcEvictions(10_000_000, 5000);
+        const chain = await s.serverEvictions.listEvictions(pod);
+        return { removed, left: chain.map((e) => e.retiredStkPubHex.slice(0, 2)).sort() };
+      });
+      expectParity(r);
+      expect(r.d1).toEqual({ removed: 1, left: ["aa", "bb"] });
     });
 
     it("gcEvictions keeps an acked row still within its TTL", async () => {

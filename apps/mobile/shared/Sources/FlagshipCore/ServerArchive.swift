@@ -13,7 +13,7 @@ public enum ServerArchive {
         "Makes one file with all of this server's apps and their data. Keep it safe: only your own devices can open it. "
         + "To clone this server, add the new server first, then choose Add/Import a server → Import a backup."
     public static let excludesNote =
-        "Not included: API keys, the server's name and certificate, peer backups, and the Git host."
+        "Holds your apps' source, data and settings, never system images: the server you import onto rebuilds each app, so any Flagship server can open it. Not included: API keys, the server's name and certificate, peer backups, and the Git host."
     public static let cloneHint =
         "To clone a server under a new name: add the new server first, then import the backup onto it."
 

@@ -23,7 +23,7 @@ import { mkdir, rename, rm } from "node:fs/promises";
 import { dirname } from "node:path";
 import { APP_PG_EXTENSIONS } from "../dataLayer/naming.js";
 import type { PostgresStore } from "../dataLayer/provisioner.js";
-import { filesArchiveDockerArgs } from "../volumeDump.js";
+import { filesArchiveDockerArgs, filesSizeDockerArgs } from "../volumeDump.js";
 import { describe, dockerFailure, dockerRepaired, wakeDocker } from "../dockerHealth.js";
 import { realCommandRunner, type CommandRunner } from "../serviceRunner.js";
 
@@ -37,6 +37,17 @@ export interface AppCopyOps {
   /** `container` is paused while the folder is read, when it runs. */
   archiveFiles(volume: string, container: string, outPath: string): Promise<void>;
   restoreFiles(volume: string, inPath: string): Promise<void>;
+  /** Sizes, in bytes, for sizing a whole-server backup before it starts
+   *  (serverArchive/build.ts). Each is an upper bound of what the matching
+   *  save/dump/archive writes. Optional: without them the backup can't be sized. */
+  databaseBytes?(store: PostgresStore): Promise<number>;
+  filesBytes?(volume: string): Promise<number>;
+}
+
+function bytesFrom(out: string, what: string): number {
+  const n = Number.parseInt(out.trim().split(/\s+/)[0] ?? "", 10);
+  if (!Number.isSafeInteger(n) || n < 0) throw new Error(`couldn't read the size of ${what}`);
+  return n;
 }
 
 const TIMEOUT_MS = 60 * 60_000;
@@ -213,5 +224,15 @@ export function realAppCopyOps(opts: { postgresContainer?: string; helperImage?:
     restoreFiles: async (volume, inPath) => {
       await exec("docker", filesArchiveDockerArgs(volume, "restore", opts.helperImage), { stdinFrom: inPath });
     },
+    databaseBytes: async (store) => {
+      const { role, password } = credsOf(store);
+      const out = await exec(
+        "docker",
+        ["exec", "-e", "PGPASSWORD", pg, "psql", ...pgArgs(role, store.database), "-tAc", "SELECT pg_database_size(current_database())"],
+        { env: { PGPASSWORD: password } },
+      );
+      return bytesFrom(out, "a database");
+    },
+    filesBytes: async (volume) => bytesFrom(await exec("docker", filesSizeDockerArgs(volume, opts.helperImage)), "a files folder"),
   };
 }

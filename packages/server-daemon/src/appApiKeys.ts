@@ -52,6 +52,22 @@ interface StoredKey extends ApiKeyView {
   secretSha256: string;
   grant: AppApiKeyGrant;
   signature: string;
+  /**
+   * Set when the key arrived in an owner-sealed server backup made on another
+   * server (its grant names that one): the server it now lives on. Only the
+   * owner can open a backup, so the import is the owner's say-so; the grant's
+   * own owner signature is still checked at every load.
+   */
+  importedFor?: string;
+}
+
+/** One key as a server backup carries it: the grant, its signature and the secret's hash (never the secret). */
+export interface ArchivedApiKey {
+  grant: AppApiKeyGrant;
+  signature: string;
+  secretSha256: string;
+  label: string;
+  createdAt: number;
 }
 
 export type ApiKeyAuth =
@@ -146,7 +162,7 @@ export class AppApiKeyStore implements ApiKeyAuthenticator {
       if (
         !grant ||
         !sig ||
-        grant.serverDomain !== serverDomain ||
+        (grant.serverDomain !== serverDomain && k.importedFor !== serverDomain) ||
         typeof k.secretSha256 !== "string" ||
         !/^[0-9a-f]{64}$/.test(k.secretSha256) ||
         typeof k.label !== "string" ||
@@ -168,6 +184,7 @@ export class AppApiKeyStore implements ApiKeyAuthenticator {
         secretSha256: k.secretSha256,
         grant,
         signature: k.signature as string,
+        ...(k.importedFor === serverDomain && grant.serverDomain !== serverDomain ? { importedFor: serverDomain } : {}),
       });
       if (lastUsedAt !== null) this.persistedLastUsed.set(grant.keyId, lastUsedAt);
     }
@@ -212,6 +229,62 @@ export class AppApiKeyStore implements ApiKeyAuthenticator {
     this.keys.set(grant.keyId, stored);
     await this.save();
     return { key: formatAppApiKey(grant.keyId, secret), view: view(stored) };
+  }
+
+  /** A service's keys for a server backup. */
+  exportService(serviceId: string): ArchivedApiKey[] {
+    return [...this.keys.values()]
+      .filter((k) => k.serviceId === serviceId)
+      .map((k) => ({ grant: k.grant, signature: k.signature, secretSha256: k.secretSha256, label: k.label, createdAt: k.createdAt }));
+  }
+
+  /**
+   * Take a service's keys from a server backup onto THIS server (`serverDomain`),
+   * so the clients that hold them keep working. Each grant must still verify
+   * under the owner and name the service; a keyId already here is skipped.
+   */
+  async importService(
+    serviceId: string,
+    keys: unknown,
+    authorize: (grant: AppApiKeyGrant, sig: Uint8Array) => boolean,
+    serverDomain: string,
+  ): Promise<{ imported: number; dropped: number }> {
+    let imported = 0;
+    let dropped = 0;
+    for (const raw of Array.isArray(keys) ? keys : []) {
+      const k = raw as Partial<ArchivedApiKey>;
+      const grant = parseAppApiKeyGrant(k.grant);
+      const sig = typeof k.signature === "string" && /^[0-9a-f]{128}$/.test(k.signature) ? Buffer.from(k.signature, "hex") : null;
+      if (
+        !grant ||
+        !sig ||
+        grant.serviceId !== serviceId ||
+        this.keys.has(grant.keyId) ||
+        typeof k.secretSha256 !== "string" ||
+        !/^[0-9a-f]{64}$/.test(k.secretSha256) ||
+        typeof k.label !== "string" ||
+        !authorize(grant, new Uint8Array(sig))
+      ) {
+        dropped++;
+        continue;
+      }
+      this.keys.set(grant.keyId, {
+        serviceId,
+        keyId: grant.keyId,
+        label: k.label,
+        scope: grant.scope,
+        createdAt: typeof k.createdAt === "number" ? k.createdAt : this.now(),
+        lastUsedAt: null,
+        expiresAt: grant.expiresAt,
+        secretSha256: k.secretSha256,
+        grant,
+        signature: k.signature!.toLowerCase(),
+        ...(grant.serverDomain !== serverDomain ? { importedFor: serverDomain } : {}),
+      });
+      imported++;
+    }
+    if (imported > 0) await this.save();
+    return { imported, dropped };
   }
 
   async revoke(serviceId: string, keyId: string): Promise<boolean> {

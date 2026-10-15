@@ -80,15 +80,15 @@ export interface AccountDeletionDeps {
   secretMailbox?: SecretMailboxStorage;
   dns?: DnsDeleteClient;
   freshnessMs?: number;
-  /** TTL for a deposited self-delete order (ms). Default 14 days — long enough
-   *  that an online-but-slow box still catches it; an offline box never polls
-   *  (orphan-and-lapse, the accepted model). */
+  /** TTL for a deposited self-delete order (ms). Default 10 years: the box
+   *  reads its own order without consuming it, so a box that comes back long
+   *  after the account died still finds it and wipes. */
   selfDeleteTtlMs?: number;
   now?: () => number;
 }
 
-/** Default self-delete deposit TTL: 14 days (mirrors the pairing-deposit window). */
-const DEFAULT_SELF_DELETE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+/** Default self-delete deposit TTL: 10 years (in effect, until the box acts on it). */
+const DEFAULT_SELF_DELETE_TTL_MS = 10 * 365 * 24 * 60 * 60 * 1000;
 
 function utf8ToHex(s: string): string {
   const bytes = new TextEncoder().encode(s);

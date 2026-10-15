@@ -1757,12 +1757,13 @@ export async function tryControlPlane(
         await handleConsumeUpdateDeposit(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
       );
     }
-    // Account-death content-wipe — box consume-once read of the owner-IRK-signed
-    // servers-self-delete order .com deposited at the last-device deletion (the
-    // consume is revoke-tolerant; the box re-verifies the order under the owner IRK).
+    // Account-death content-wipe — the box's read of the owner-IRK-signed
+    // servers-self-delete order .com deposited at the last-device deletion:
+    // non-consuming when the box names its STK (`?stk=`), consume-once for older
+    // boxes; revoke-tolerant; the box re-verifies the order under the owner IRK.
     if (method === "GET" && (m = path.match(ROUTE_RE.SELF_DELETE_DEPOSIT))) {
       return finishPlain(
-        await handleConsumeSelfDeleteDeposit(buildSecretMailboxDeps(), decodeURIComponent(m[1]!)),
+        await handleConsumeSelfDeleteDeposit(buildSecretMailboxDeps(), decodeURIComponent(m[1]!), url.searchParams.get("stk")),
       );
     }
     // Graceful server-replacement decommission (docs/server-replacement-graceful-

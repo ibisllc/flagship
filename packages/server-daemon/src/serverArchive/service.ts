@@ -5,6 +5,15 @@
  *   POST   /api/screens/server-archive/start   { archiveId, key }   → 202   (key = the phone's derived 32-byte key, hex)
  *   GET    /api/screens/server-archive                              → { archive: {...} | null }
  *   GET    /api/screens/server-archive/chunk?offset=N               → ≤ 4 MiB of the sealed file
+ *   POST   /api/screens/server-archive/link                         → { path, fileName, bytes, sha256, expiresAt }
+ *   POST   /api/screens/server-archive/approve  { approval, signature }  (flagship/archive-download/v1)
+ *   GET    /api/archive-download/<token>            → the download page (QR + code); never the file
+ *   GET    /api/archive-download/<token>/status?r=  → { approved }
+ *   GET    /api/archive-download/<token>/file?r=    → the file, only for a request the owner approved
+ *          (signed `flagship/archive-download/v1`, checked under this box's
+ *          authority), streamed from disk with HTTP Range (206, Accept-Ranges,
+ *          ETag = the file's SHA-256): straight to disk, resumable, in parts.
+ *          The token and the approvals live as long as the backup does.
  *   DELETE /api/screens/server-archive                              → forget it (and delete the file)
  * Import onto THIS server (any name; the apps install under it):
  *   POST   /api/screens/server-restore/start   { archiveId, bytes } → 202
@@ -19,20 +28,32 @@
  * chunked upload puts it on the server it is imported into.
  */
 import { createReadStream } from "node:fs";
+import { randomBytes, timingSafeEqual } from "node:crypto";
+import { archiveDownloadCode, parseArchiveDownloadApproval, type ArchiveDownloadApproval } from "@flagship/protocol";
+import { renderDownloadPage } from "./downloadPage.js";
 import { mkdir, open, rm, statfs } from "node:fs/promises";
 import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
-import { buildServerArchive, type ArchiveBuildDeps } from "./build.js";
+import { buildServerArchive, estimateServerArchive, type ArchiveBuildDeps } from "./build.js";
 import { ArchiveError, readHeader } from "./format.js";
 import { installArchive, unpackArchive, type ArchiveRestoreDeps, type RestoreAppResult } from "./restore.js";
 import { createHash } from "node:crypto";
 
 export const ARCHIVE_PATH = "/api/screens/server-archive";
+export const DOWNLOAD_PATH = "/api/archive-download/";
 export const RESTORE_PATH = "/api/screens/server-restore";
 export const ARCHIVE_CHUNK_BYTES = 4 * 1024 * 1024;
 const KEEP_MS = 24 * 60 * 60_000;
 const MIN_FREE_BYTES = 1024 * 1024 * 1024;
+/** Left free after a backup, so the apps and Postgres keep working while it runs. */
+const HEADROOM_BYTES = 1024 * 1024 * 1024;
+
+function gb(n: number): string {
+  return `${(n / 1024 ** 3).toFixed(n < 10 * 1024 ** 3 ? 1 : 0)} GB`;
+}
+
+export class NotEnoughSpace extends Error {}
 
 export function isServerArchivePath(path: string): boolean {
   return path === ARCHIVE_PATH || path.startsWith(`${ARCHIVE_PATH}/`) || path === RESTORE_PATH || path.startsWith(`${RESTORE_PATH}/`);
@@ -46,6 +67,11 @@ export interface ServerArchiveServiceOptions {
   /** Activity feed: kind, one readable line, ok. */
   note?: (kind: string, detail: string, ok?: boolean) => void;
   freeBytes?: (dir: string) => Promise<number>;
+  /** Check an owner's `flagship/archive-download/v1` under this box's sensitive-order authority.
+   *  Absent ⇒ no browser download is ever approved (fail closed). */
+  authorizeDownload?: (a: ArchiveDownloadApproval, sig: Uint8Array) => boolean;
+  /** `https://<control apex>`: the download page's QR is `<this>/app/backup-download#…`. */
+  appLinkBase?: string;
   now?: () => number;
   log?: (m: string) => void;
 }
@@ -56,9 +82,43 @@ interface BackupJob {
   startedAt: number;
   progress: { done: number; total: number; app: string };
   bytes?: number;
+  /** What the box expects the file to take, once it has sized it. */
+  estimatedBytes?: number;
   sha256?: string;
   apps?: Array<{ serviceId: string; name: string }>;
+  /** Apps that couldn't go in (no source, no public image), with why. */
+  left?: Array<{ serviceId: string; name: string; reason: string }>;
   reason?: string;
+  /** Download-link token (hex), minted on request; dies with the backup. */
+  linkToken?: string;
+  downloadedNoted?: boolean;
+  /** Browser requests the owner approved with a signature. */
+  approved?: Set<string>;
+}
+
+/** `bytes=a-b` / `bytes=a-` / `bytes=-n` against `size`; null = no usable Range (serve it all). */
+export function parseRange(header: string | undefined, size: number): { start: number; end: number } | "unsatisfiable" | null {
+  if (!header) return null;
+  const m = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (!m || (m[1] === "" && m[2] === "")) return null;
+  let start: number;
+  let end: number;
+  if (m[1] === "") {
+    const n = Number(m[2]);
+    if (n === 0) return "unsatisfiable";
+    start = Math.max(0, size - n);
+    end = size - 1;
+  } else {
+    start = Number(m[1]);
+    end = m[2] === "" ? size - 1 : Math.min(Number(m[2]), size - 1);
+  }
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start > end || start >= size) return "unsatisfiable";
+  return { start, end };
+}
+
+export function backupFileName(sourceServer: string, at: number): string {
+  const label = (sourceServer.split(".")[0] ?? "").replace(/[^A-Za-z0-9-]/g, "") || "server";
+  return `${label}-${new Date(at).toISOString().slice(0, 10)}.flagship-backup`;
 }
 
 interface RestoreJob {
@@ -128,24 +188,48 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
       await rm(archiveFile, { force: true }).catch(() => {});
       note("server.backup.started", "Started a backup of this server.");
       const key = Buffer.from(b.key, "hex");
-      void buildServerArchive(
-        { ...opts.build, workDir: scratch },
-        {
-          archiveId: b.archiveId,
-          key,
-          outPath: archiveFile,
-          onProgress: (done, total, app) => {
-            job.progress = { done, total, app };
+      const archiveId = b.archiveId;
+      void (async () => {
+        // Size it first: the sealed file, one app's scratch, and headroom so
+        // the apps keep working. A box that can't size something goes ahead
+        // on the flat minimum it already passed.
+        job.progress = { done: 0, total: 0, app: "Checking free space" };
+        const est = await estimateServerArchive({ ...opts.build, workDir: scratch });
+        if (est) {
+          job.estimatedBytes = est.archiveBytes;
+          const need = est.archiveBytes + est.largestAppBytes + HEADROOM_BYTES;
+          const have = await free(opts.dir);
+          if (have < need) {
+            throw new NotEnoughSpace(
+              `this server needs about ${gb(need)} free to make this backup and has ${gb(have)}. Free some space (or remove apps you don't need) and try again`,
+            );
+          }
+        }
+        return buildServerArchive(
+          { ...opts.build, workDir: scratch },
+          {
+            archiveId,
+            key,
+            outPath: archiveFile,
+            onProgress: (done, total, app) => {
+              job.progress = { done, total, app };
+            },
           },
-        },
-      )
+        );
+      })()
         .then((r) => {
           job.state = "ready";
           job.bytes = r.bytes;
           job.sha256 = r.sha256;
           job.apps = r.apps;
+          job.left = r.left;
           key.fill(0);
-          note("server.backup.created", `Backup ready: ${r.apps.length} app${r.apps.length === 1 ? "" : "s"}.`);
+          note(
+            "server.backup.created",
+            `Backup ready: ${r.apps.length} app${r.apps.length === 1 ? "" : "s"}.` +
+              (r.left.length > 0 ? ` Left out: ${r.left.map((x) => x.name).join(", ")} (no source to rebuild from).` : ""),
+            r.left.length === 0,
+          );
           log(`[server-archive] backup ready (${r.bytes} bytes)`);
         })
         .catch((e: Error) => {
@@ -182,7 +266,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     } finally {
       await fh.close();
     }
-    if (offset + len >= (backup.bytes ?? 0)) note("server.backup.downloaded", "The backup was downloaded.");
+    if (offset + len >= (backup.bytes ?? 0)) noteDownloaded(backup);
     return {
       status: 200,
       headers: {
@@ -195,6 +279,130 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     };
   }
 
+  function noteDownloaded(job: BackupJob): void {
+    if (job.downloadedNoted) return;
+    job.downloadedNoted = true;
+    note("server.backup.downloaded", "The backup was downloaded.");
+  }
+
+  function mintLink(): HttpResponse {
+    if (!backup || backup.state !== "ready") return err(404, "no backup is ready");
+    backup.linkToken ??= randomBytes(32).toString("hex");
+    return json(200, {
+      path: `${DOWNLOAD_PATH}${backup.linkToken}`,
+      fileName: backupFileName(opts.build.serverFqdn, backup.startedAt),
+      bytes: backup.bytes,
+      sha256: backup.sha256,
+      expiresAt: backup.startedAt + KEEP_MS,
+    });
+  }
+
+  function tokenMatches(job: BackupJob | null, token: string): job is BackupJob & { linkToken: string } {
+    if (!job?.linkToken || !/^[0-9a-f]{64}$/.test(token)) return false;
+    return timingSafeEqual(Buffer.from(job.linkToken, "hex"), Buffer.from(token, "hex"));
+  }
+
+  /** `POST .../approve`: the owner's signed approval for one browser request. */
+  async function approve(req: HttpRequest): Promise<HttpResponse> {
+    let b: { approval?: unknown; signature?: unknown };
+    try {
+      b = JSON.parse(req.body.toString("utf8")) as typeof b;
+    } catch {
+      return err(400, "invalid json");
+    }
+    const a = parseArchiveDownloadApproval(b.approval);
+    if (!a || typeof b.signature !== "string" || !/^[0-9a-f]{128}$/.test(b.signature)) return err(400, "malformed approval");
+    if (!backup || backup.state !== "ready" || a.archiveId !== backup.archiveId) return err(404, "that backup isn't ready on this server any more");
+    if (a.serverDomain !== opts.build.serverFqdn) return err(403, "the approval is for a different server");
+    if (Math.abs(now() - a.issuedAt) > 5 * 60_000) return err(403, "the approval is stale: approve again");
+    if (!opts.authorizeDownload || !opts.authorizeDownload(a, Buffer.from(b.signature, "hex"))) return err(403, "invalid signature");
+    (backup.approved ??= new Set()).add(a.requestId);
+    note("server.backup.download-approved", "A browser download of the backup was approved.");
+    return json(200, { ok: true });
+  }
+
+  const html = (status: number, body: string, extra: Record<string, string> = {}): HttpResponse => ({
+    status,
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "DENY",
+      "referrer-policy": "no-referrer",
+      ...extra,
+    },
+    body,
+  });
+
+  /** The download link: the page, its status, and (approved only) the file. */
+  async function handleDownload(req: HttpRequest): Promise<HttpResponse | null> {
+    const path = req.path.split("?")[0]!;
+    if (!path.startsWith(DOWNLOAD_PATH)) return null;
+    const [token = "", kind = "", ...more] = path.slice(DOWNLOAD_PATH.length).split("/");
+    if (more.length > 0 || !["", "status", "file"].includes(kind)) return err(404, "not found");
+    const method = req.method.toUpperCase();
+    if (method !== "GET" && (method !== "HEAD" || kind !== "file")) return err(405, "method not allowed");
+    const q = new URLSearchParams(req.path.includes("?") ? req.path.slice(req.path.indexOf("?") + 1) : "");
+    const r = q.get("r") ?? "";
+    const validR = /^[0-9a-f]{32}$/.test(r);
+    await sweep();
+    const job = backup;
+    if (!tokenMatches(job, token) || job.state !== "ready" || job.bytes === undefined) {
+      return kind === ""
+        ? html(404, "<!doctype html><meta charset=utf-8><title>Link expired</title><p>This download link has expired or was replaced by a newer backup.</p>")
+        : err(404, "this download link has expired or was replaced by a newer backup");
+    }
+    const base = `${DOWNLOAD_PATH}${token}`;
+    if (kind === "") {
+      // A fresh request id per page, kept in the URL so a reload or a retry
+      // keeps its approval.
+      if (!validR) return { status: 303, headers: { location: `${base}?r=${randomBytes(16).toString("hex")}`, "cache-control": "no-store" }, body: "" };
+      const appLinkBase = (opts.appLinkBase ?? "https://flagshipserver.com").replace(/\/+$/, "");
+      return html(
+        200,
+        renderDownloadPage({
+          appLink: `${appLinkBase}/app/backup-download#s=${encodeURIComponent(opts.build.serverFqdn)}&a=${job.archiveId}&r=${r}`,
+          code: archiveDownloadCode(r),
+          fileName: backupFileName(opts.build.serverFqdn, job.startedAt),
+          sizeText: gb(job.bytes),
+          statusUrl: `${base}/status?r=${r}`,
+          fileUrl: `${base}/file?r=${r}`,
+          expiresText: new Date(job.startedAt + KEEP_MS).toUTCString(),
+        }),
+      );
+    }
+    if (!validR) return err(400, "r must be 16 bytes of lowercase hex");
+    const approved = job.approved?.has(r) === true;
+    if (kind === "status") return json(200, { approved });
+    if (!approved) return err(403, "this download hasn't been approved: scan the QR on the download page with the Flagship app");
+    const size = job.bytes;
+    const etag = `"${job.sha256 ?? job.archiveId}"`;
+    const fileHeaders: Record<string, string> = {
+      "content-type": "application/octet-stream",
+      "content-disposition": `attachment; filename="${backupFileName(opts.build.serverFqdn, job.startedAt)}"`,
+      "accept-ranges": "bytes",
+      etag,
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff",
+    };
+    const ifRange = req.headers["if-range"];
+    const range = ifRange && ifRange !== etag ? null : parseRange(req.headers["range"], size);
+    if (range === "unsatisfiable") {
+      return { status: 416, headers: { ...fileHeaders, "content-range": `bytes */${size}` }, body: "" };
+    }
+    const { start, end } = range ?? { start: 0, end: size - 1 };
+    if (method === "GET" && end === size - 1) noteDownloaded(job);
+    return {
+      status: range ? 206 : 200,
+      headers: { ...fileHeaders, ...(range ? { "content-range": `bytes ${start}-${end}/${size}` } : {}) },
+      body: "",
+      stream: {
+        length: size === 0 ? 0 : end - start + 1,
+        open: () => createReadStream(archiveFile, { start, end }),
+      },
+    };
+  }
+
   function backupView() {
     if (!backup) return null;
     return {
@@ -203,8 +411,10 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
       startedAt: backup.startedAt,
       progress: backup.progress,
       ...(backup.bytes !== undefined ? { bytes: backup.bytes } : {}),
+      ...(backup.estimatedBytes !== undefined ? { estimatedBytes: backup.estimatedBytes } : {}),
       ...(backup.sha256 ? { sha256: backup.sha256 } : {}),
       ...(backup.apps ? { apps: backup.apps } : {}),
+      ...(backup.left ? { left: backup.left } : {}),
       ...(backup.reason ? { reason: backup.reason } : {}),
     };
   }
@@ -318,6 +528,10 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
           return json(200, { archive: backupView() });
         case `GET ${ARCHIVE_PATH}/chunk`:
           return chunk(req);
+        case `POST ${ARCHIVE_PATH}/link`:
+          return mintLink();
+        case `POST ${ARCHIVE_PATH}/approve`:
+          return approve(req);
         case `DELETE ${ARCHIVE_PATH}`:
           if (backup?.state === "building") return err(409, "the backup is still being made");
           backup = null;
@@ -335,6 +549,8 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
           return err(405, "method not allowed");
       }
     },
+    /** `GET|HEAD /api/archive-download/<token>`: mount OUTSIDE the session gate. */
+    handleDownload,
     /** Drop any file a previous run left behind (a restart ends a running job). */
     async init(): Promise<void> {
       await rm(opts.dir, { recursive: true, force: true }).catch(() => {});

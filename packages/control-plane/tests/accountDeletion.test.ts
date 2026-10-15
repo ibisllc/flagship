@@ -438,6 +438,29 @@ describe("box-side content-wipe delivery (self-delete deposit)", () => {
     expect(again.status).toBe(404);
   });
 
+  it("a box that names its STK reads its order without consuming it, years later, and nobody can burn it", async () => {
+    const storage = new InMemoryStorage();
+    const irk = makeKey(53);
+    await seedAccount(storage, "wes", irk);
+    const stk = makeKey(54);
+    const domain = "home.wes.flagship.services";
+    await storage.servers.put({ serverDomain: domain, username: "wes", identityPubKeyHex: hex(stk.publicKey), registeredAt: NOW });
+    const res = await handleAccountDeletionBundle(deps(storage), {
+      accountSelfDelete: acctEnvelope("wes", irk),
+      serversSelfDelete: serversEnvelope("wes", irk),
+    });
+    expect(res.status).toBe(200);
+    const fiveYears = NOW + 5 * 365 * 24 * 60 * 60 * 1000;
+    // A stranger asking with some other key gets nothing, and burns nothing.
+    expect((await handleConsumeSelfDeleteDeposit(mailboxDeps(storage, fiveYears), domain, "cd".repeat(32))).status).toBe(404);
+    for (let i = 0; i < 2; i++) {
+      const got = await handleConsumeSelfDeleteDeposit(mailboxDeps(storage, fiveYears), domain, hex(stk.publicKey));
+      expect(got.status).toBe(200);
+      expect(typeof (got.body as { sealed: string }).sealed).toBe("string");
+    }
+    expect((await handleConsumeSelfDeleteDeposit(mailboxDeps(storage), domain, "zz")).status).toBe(400);
+  });
+
   it("a bare account-self-delete (no content-wipe) deposits nothing", async () => {
     const storage = new InMemoryStorage();
     const irk = makeKey(52);

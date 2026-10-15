@@ -198,7 +198,10 @@
 //      saves it (lib/appBackup.js) instead of a link the box refused.
 //  v91: The build chat answers an env var the AI asks for, ahead of the
 //      live link when the app is already live (an edit session).
-const SHELL_VERSION = "v91";
+//  v92: Backup/clone server downloads through the box's own link (straight
+//       to disk, resumable), approved with this device's key; a backup is
+//       sized first and carries no images.
+const SHELL_VERSION = "v92";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

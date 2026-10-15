@@ -228,11 +228,18 @@ owners: `docs/runbooks/release-readiness.md`; feature matrix:
   Needs an endorsed box release and iOS/Android store builds (until then
   the apps' new buttons 404 on boxes). Not run on a real box: the docker save/load and
   pg_dump/restore paths (fake ops in tests), a phone on a real archive.
+  Follow-up (2026-10-15): the backup is sized before it starts (refuses with
+  "needs about X GB"); downloads stream from disk via a token link with HTTP
+  Range (browser resumes; phones fetch 4 parts at once, resume, check the
+  SHA-256); wipe orders no longer expire (`keep` orders only are GC'd) and the
+  self-delete order is read by STK without being consumed (10-year TTL).
+  Backups carry no images, OS or Flagship: the importing box rebuilds each
+  app from its working tree with its own runtime catalog (or pulls a public
+  image by name), so any install imports any backup on any CPU; an app with
+  neither is left out and named.
   Open: peer-backup shards of the old name aren't carried; Forgejo repos and
-  API keys aren't in the archive; webapp downloads buffer the file in memory;
-  an old box that stays off more than 30 days after take-over is bricked but
-  not wiped (`.com` GCs the eviction order); the backup's disk check is a flat
-  1 GB, not the archive's size.
+  API keys aren't in the archive; a late wipe still needs the old box's
+  daemon to run (it can't unlock remotely after take-over).
 
 - **Build cost measurement (2026-10-14, `infra/inference/build-eval`):**
   scripted app builds, edits and fix rounds through the box's own build loop

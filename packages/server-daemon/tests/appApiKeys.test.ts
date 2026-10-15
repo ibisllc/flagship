@@ -225,3 +225,34 @@ describe("AppApiKeyStore persistence", () => {
     expect(fresh.store.list(SVC)).toEqual([]);
   });
 });
+
+describe("API keys in a server backup", () => {
+  it("move to a server with another name, keep working across restarts there, and only verified ones come in", async () => {
+    const src = harness();
+    const created = await src.call("POST", KEYS, body(grant()));
+    const key = String(created.json.key);
+    const archived = src.store.exportService(SVC);
+    expect(archived).toHaveLength(1);
+    expect(JSON.stringify(archived)).not.toContain(key.split("_").pop()!);
+
+    const CLONE = "clone.harry.flagship.services";
+    const dir = mkdtempSync(join(tmpdir(), "apikeys-import-"));
+    const path = join(dir, "app-api-keys.sealed");
+    const swk = swkOps(new Uint8Array(32).fill(9));
+    const dst = new AppApiKeyStore(path, swk, { now: () => NOW });
+    const forged = { ...archived[0]!, grant: { ...archived[0]!.grant, keyId: "2222222222222222" } };
+    const r = await dst.importService(SVC, [...archived, forged, { junk: true }], authorize, CLONE);
+    expect(r).toEqual({ imported: 1, dropped: 2 });
+    expect(dst.authenticate(SVC, "GET", { authorization: `Bearer ${key}` }).kind).toBe("ok");
+    // Another app's keys never land on this one.
+    expect((await dst.importService("harry-other", archived, authorize, CLONE)).imported).toBe(0);
+
+    await dst.flush();
+    const restarted = new AppApiKeyStore(path, swk, { now: () => NOW });
+    expect(await restarted.load(authorize, CLONE)).toEqual({ dropped: 0 });
+    expect(restarted.authenticate(SVC, "GET", { authorization: `Bearer ${key}` }).kind).toBe("ok");
+    // The import is bound to the server it was made on.
+    const elsewhere = new AppApiKeyStore(path, swk, { now: () => NOW });
+    expect(await elsewhere.load(authorize, "third.harry.flagship.services")).toEqual({ dropped: 1 });
+  });
+});

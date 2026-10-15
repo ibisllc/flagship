@@ -187,6 +187,8 @@ public protocol ScreensClient: Sendable {
     func serverArchiveStatus() async throws -> ServerArchiveStatus?
     func serverArchiveChunk(offset: Int64) async throws -> Data
     func serverArchiveForget() async throws
+    /// The owner's signed approval for one browser download request.
+    func serverArchiveApprove(_ req: ServerArchiveApproveRequest) async throws
     func serverRestoreStart(_ req: ServerRestoreStartRequest) async throws
     func serverRestoreChunk(offset: Int64, data: Data) async throws
     func serverRestoreCommit(_ req: ServerRestoreCommitRequest) async throws
@@ -480,6 +482,9 @@ public extension ScreensClient {
         throw ScreensClientError.notImplemented("server backup")
     }
     func serverArchiveForget() async throws {
+        throw ScreensClientError.notImplemented("server backup")
+    }
+    func serverArchiveApprove(_ req: ServerArchiveApproveRequest) async throws {
         throw ScreensClientError.notImplemented("server backup")
     }
     func serverRestoreStart(_ req: ServerRestoreStartRequest) async throws {

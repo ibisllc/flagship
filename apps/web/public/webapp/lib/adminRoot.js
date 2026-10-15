@@ -51,6 +51,7 @@ export const SENSITIVE_TAGS = new Set([
   "flagship/app-api-key/v1", //            a live app's API key
   "flagship/app-db-write/v1", //           a write to a live app's database
   "flagship/app-copy/v1", //               copy an app to another server
+  "flagship/archive-download/v1", //       download a server backup in a browser
   // `.com`-side (authorizeSensitiveComOp)
   "flagship/server-update/v1", //          in-place server update (2-of-2)
   "flagship/account-self-delete/v1", //    account deletion

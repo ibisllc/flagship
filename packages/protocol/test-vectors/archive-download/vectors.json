@@ -1,0 +1,51 @@
+{
+  "about": "flagship/archive-download/v1 (docs/server-backup-and-clone.md): the owner's approval to download a server backup in a browser. Canonical: tag|serverDomain|archiveId|requestId|issuedAt (ids: 16 bytes lowercase hex). Code: (first 8 hex of requestId as an integer) mod 1,000,000, zero-padded to 6. Key: the protocol IRK derived from the UMK seed.",
+  "umkSeedHex": "2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a",
+  "pub": "c49775473bf9dcf5ad1608c8e66823d55dc6889be27e42a029fd9de195c8d7e4",
+  "cases": [
+    {
+      "serverDomain": "home.harry.flagship.services",
+      "archiveId": "00112233445566778899aabbccddeeff",
+      "requestId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+      "issuedAt": 1700000000000,
+      "canonical": "flagship/archive-download/v1|home.harry.flagship.services|00112233445566778899aabbccddeeff|0f1e2d3c4b5a69788796a5b4c3d2e1f0|1700000000000",
+      "code": "635900",
+      "signature": "df5a9ccb1fa9e15775e2cb1040b2bd6c51eb50a78723d7d21842d8879836da34ddb131afc1ea2fd77885e2446c72e7b005254244b02e72dc27f33171dbaed901"
+    },
+    {
+      "serverDomain": "clone.harry.flagship.services",
+      "archiveId": "ffeeddccbbaa99887766554433221100",
+      "requestId": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+      "issuedAt": 1792000000000,
+      "canonical": "flagship/archive-download/v1|clone.harry.flagship.services|ffeeddccbbaa99887766554433221100|a0a1a2a3a4a5a6a7a8a9aaabacadaeaf|1792000000000",
+      "code": "947491",
+      "signature": "1cc8d8f1fb97f9e82e6de984c2eb2dff616245ea9b786db610d74bd73aa23eb6951b658e7ee57f134214c21584aae76873bd3945c49b76a9b8c7406059bedd01"
+    }
+  ],
+  "invalid": [
+    {
+      "serverDomain": "",
+      "archiveId": "00112233445566778899aabbccddeeff",
+      "requestId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+      "issuedAt": 1
+    },
+    {
+      "serverDomain": "home.harry.flagship.services",
+      "archiveId": "ZZ",
+      "requestId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+      "issuedAt": 1
+    },
+    {
+      "serverDomain": "home.harry.flagship.services",
+      "archiveId": "00112233445566778899aabbccddeeff",
+      "requestId": "0F1E2D3C4B5A69788796A5B4C3D2E1F0",
+      "issuedAt": 1
+    },
+    {
+      "serverDomain": "a|b",
+      "archiveId": "00112233445566778899aabbccddeeff",
+      "requestId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+      "issuedAt": 1
+    }
+  ]
+}

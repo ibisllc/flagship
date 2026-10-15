@@ -369,6 +369,11 @@ class LiveScreensClient(
         request<Unit>("/api/screens/server-archive", null, "DELETE", null, readTimeoutSeconds = 30)
     }
 
+    override suspend fun serverArchiveApprove(req: ServerArchiveApproveRequest) {
+        val body = json.encodeToString(ServerArchiveApproveRequest.serializer(), req).toByteArray()
+        request<Unit>("/api/screens/server-archive/approve", null, "POST", body, readTimeoutSeconds = 30)
+    }
+
     override suspend fun serverRestoreStart(req: ServerRestoreStartRequest) {
         val body = json.encodeToString(ServerRestoreStartRequest.serializer(), req).toByteArray()
         request<Unit>("/api/screens/server-restore/start", null, "POST", body, readTimeoutSeconds = 30)

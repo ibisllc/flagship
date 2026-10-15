@@ -8,6 +8,7 @@ import {
   ed,
   signServerRevokeBySelf,
   verifyRootEntitlement,
+  verifyArchiveDownloadApproval,
   verifyServerShareGrant,
   verifyServerShareRevoke,
   type Keypair,
@@ -136,7 +137,7 @@ import { GitImporter } from "./buildmodes/gitImport.js";
 import { httpAdapterIndex } from "./buildmodes/adapterIndex.js";
 import { FileAdapterOrigins } from "./buildmodes/adapterOrigins.js";
 import { combineNameHolders, type NameHolders } from "./llm/serviceName.js";
-import { buildArtifactPipeline } from "./buildmodes/deployArtifact.js";
+import { buildAppImage, buildArtifactPipeline } from "./buildmodes/deployArtifact.js";
 import { StagingRunner } from "./buildmodes/staging.js";
 import type { AgentRunner } from "./buildmodes/buildAgent.js";
 import { BuildOrchestrator } from "./buildmodes/buildOrchestrator.js";
@@ -186,7 +187,7 @@ import {
   defaultShareSessionPath,
   startShareEndsPoller,
 } from "./shares/sharesHttp.js";
-import { realAppCopyOps } from "./appCopy/ops.js";
+import { ensureDocker, realAppCopyOps } from "./appCopy/ops.js";
 import { buildAppCopySource } from "./appCopy/source.js";
 import { AppCopyStore } from "./appCopy/store.js";
 import { buildAppCopyTarget } from "./appCopy/target.js";
@@ -564,6 +565,9 @@ async function main(): Promise<void> {
   // process; shares, migration, updates, backups and app changes all write to it.
   const activityLog = new ActivityLog(defaultActivityLogPath(dataDir));
   await activityLog.load().catch((e: Error) => console.warn(`[activity] load failed: ${e.message}`));
+  // The owner-assigned front page (its own route below, and server backups).
+  const frontPage = new FrontPageStore();
+  await frontPage.load();
   onUpdateOutcome((r) => {
     const to = r.targetCommit ? ` ${r.targetCommit.slice(0, 8)}` : "";
     if (r.outcome === "applied") activityLog.note("server.update.applied", `Updated to${to}.`);
@@ -1324,6 +1328,7 @@ async function main(): Promise<void> {
     // threading ~15 values through separate builders. Also starts the
     // update-pack scheduler. Same order + side effects as before.
     await wireRuntimeSurfaces({
+      frontPage,
       activityLog,
       serverOrder,
       serviceAccessRef,
@@ -1368,6 +1373,7 @@ async function main(): Promise<void> {
   // no timer, no behavior change. Mounts onto the live runtime + arms the
   // dead-man SIGTERM/SIGINT stop hooks.
   await wireOwnerHandlers({
+    frontPage,
     activityLog,
     serviceAccessRef,
     runtime,
@@ -2075,6 +2081,7 @@ async function loadEntitlementsOrExit(deps: {
  * original inline block.
  */
 async function wireRuntimeSurfaces(deps: {
+  frontPage: FrontPageStore;
   activityLog: ActivityLog;
   serviceAccessRef: { current: ServiceAccessStore | null };
   serverOrder: ServerOrderHolder | null;
@@ -2726,6 +2733,8 @@ async function wireRuntimeSurfaces(deps: {
         access: { exportEntry: (id) => deps.serviceAccessRef.current?.exportEntry(id) ?? null },
         accessList: (id) => runtime.egress.exportList(id),
         sourceDir: vibeAppDir,
+        apiKeys: runtime.appApiKeyStore,
+        frontPage: () => deps.frontPage.get(),
         log: (m) => console.log(m),
       },
       restore: {
@@ -2742,12 +2751,49 @@ async function wireRuntimeSurfaces(deps: {
         },
         egress: { noteCopied: (id, list, declared) => runtime.egress.noteCopied(id, list, declared) },
         sourceDir: vibeAppDir,
+        // No image travels in a backup: rebuild here with this box's runtime
+        // catalog, exactly as a deploy builds (the same sandboxed docker build).
+        buildImage: async (a) => {
+          await ensureDocker();
+          return buildAppImage(serviceRunnerMod.realCommandRunner, { ...a, keepBinaries: false });
+        },
+        pullImage: async (image) => {
+          await ensureDocker();
+          await serviceRunnerMod.realCommandRunner.run("docker", ["pull", image]);
+        },
+        ...(runtime.apiKeyAuthority
+          ? {
+              apiKeys: {
+                importService: (id: string, keys: unknown) =>
+                  runtime.appApiKeyStore.importService(id, keys, runtime.apiKeyAuthority!, env.serverFqdn),
+              },
+            }
+          : {}),
+        frontPage: {
+          get: () => deps.frontPage.get(),
+          set: (label: string) => deps.frontPage.set(label),
+          installed: (label: string) => platform.byLabel(label) !== undefined,
+        },
         log: (m) => console.log(m),
       },
       note: (kind, detail, ok) => deps.activityLog.note(kind, detail, { ok: ok ?? true }),
+      // A browser download needs the owner's signed approval (QR + Face ID).
+      authorizeDownload: (approval, sig) =>
+        authorizeSensitiveOrder({
+          ownerIrkPub: cfg.irkPublicKey,
+          ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+          username: cfg.userId,
+          order: approval,
+          signature: sig,
+          verify: verifyArchiveDownloadApproval,
+        }),
+      ...(env.controlPlaneBaseUrl ? { appLinkBase: env.controlPlaneBaseUrl } : {}),
       log: (m) => console.log(m),
     });
     await service.init();
+    // The backup's download link carries its own token (no session), so a
+    // browser or download manager can fetch it straight to disk.
+    runtime.addHandler((req) => service.handleDownload(req));
     return service;
   })();
 
@@ -3119,6 +3165,7 @@ async function wireRuntimeSurfaces(deps: {
  * SIGTERM/SIGINT stop hooks. No-op (and no behavior change) when cfg is null.
  */
 async function wireOwnerHandlers(deps: {
+  frontPage: FrontPageStore;
   activityLog: ActivityLog;
   serviceAccessRef: { current: ServiceAccessStore | null };
   runtime: DaemonRuntime;
@@ -3157,8 +3204,7 @@ async function wireOwnerHandlers(deps: {
     }),
   );
   // Owner-assignable apex: GET/POST /api/front-page + the 302 itself.
-  const frontPage = new FrontPageStore();
-  await frontPage.load();
+  const frontPage = deps.frontPage;
   runtime.addHandler(
     buildFrontPageHttp({
       serverId: env.serverFqdn,
@@ -3252,6 +3298,7 @@ async function wireOwnerHandlers(deps: {
     const dataDir = process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship";
     const selfDeletePoller = buildSelfDeletePoller({
       serverDomain: env.serverFqdn,
+      myStkHex: bytesToHexLocal(identityKeypair.publicKey),
       ownerIrkPub: cfg.irkPublicKey,
       ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
       username: cfg.userId,

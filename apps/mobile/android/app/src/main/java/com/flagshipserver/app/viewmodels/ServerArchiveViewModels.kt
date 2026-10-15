@@ -12,6 +12,7 @@ import com.flagshipserver.app.api.ServerArchiveStatus
 import com.flagshipserver.app.api.ServerRestoreApp
 import com.flagshipserver.app.api.ServerRestoreCommitRequest
 import com.flagshipserver.app.api.ServerRestoreStartRequest
+import com.flagshipserver.app.core.ArchiveDownloader
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.ServerArchive
 import kotlinx.coroutines.CancellationException
@@ -22,6 +23,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
 
 private fun message(t: Throwable, fallback: String): String = when {
+    t is ArchiveDownloader.DownloadException -> t.message ?: fallback
     t is ScreensError.Http -> t.boxError() ?: t.userFacing()
     t is ScreensError -> t.userFacing()
     t is IllegalStateException -> t.message ?: fallback
@@ -34,7 +36,8 @@ class ServerBackupViewModel(
     private val client: ScreensClient,
     /** The key this device derives for an archive id (biometric-gated). */
     private val keyProvider: suspend (archiveId: String) -> ByteArray,
-    private val downloadFile: () -> File,
+    /** Where parts land while downloading (resumes from here) and the file ends up. */
+    private val downloadDir: () -> File,
     private val pollMs: Long = 1_500,
 ) {
     sealed interface Phase {
@@ -50,6 +53,9 @@ class ServerBackupViewModel(
     val phase: StateFlow<Phase> = _phase.asStateFlow()
     private var status: ServerArchiveStatus? = null
 
+    /** Apps the backup couldn't include (no source to rebuild from), by name. */
+    val leftOut: List<String> get() = status?.left?.map { it.name } ?: emptyList()
+
     val isBusy: Boolean get() = _phase.value is Phase.Building || _phase.value is Phase.Downloading
 
     suspend fun start() {
@@ -57,7 +63,16 @@ class ServerBackupViewModel(
         _phase.value = Phase.Building("Making the backup…", 0.0)
         try {
             // One already being made (the dialog was closed and reopened): follow it.
-            if (runCatching { client.serverArchiveStatus() }.getOrNull()?.state != "building") {
+            // One already made whose download was interrupted here: resume it.
+            val current = runCatching { client.serverArchiveStatus() }.getOrNull()
+            if (current != null && current.state == "ready" && current.bytes != null &&
+                File(downloadDir(), "${current.archiveId}.json").exists()
+            ) {
+                status = current
+                _phase.value = Phase.Ready(current.bytes)
+                return
+            }
+            if (current?.state != "building") {
                 val id = ServerArchive.newArchiveId()
                 val key = keyProvider(id)
                 client.serverArchiveStart(ServerArchiveStartRequest(id, HexUtil.encode(key)))
@@ -86,33 +101,88 @@ class ServerBackupViewModel(
         }
     }
 
+    /** 4 MiB parts, several at once, each written straight to the file; an
+     *  interrupted download resumes from the parts already in; the result is
+     *  checked against the server's SHA-256. */
     suspend fun download() {
         val s = status
         val total = s?.bytes
         if (_phase.value !is Phase.Ready || s == null || total == null) return
         _phase.value = Phase.Downloading(0.0)
-        val file = downloadFile()
+        val dir = downloadDir().apply { mkdirs() }
+        val part = File(dir, "${s.archiveId}.part")
+        val state = File(dir, "${s.archiveId}.json")
+        val name = ServerArchive.fileName(serverFqdn, s.startedAt)
         try {
-            file.delete()
-            file.outputStream().use { out ->
-                var offset = 0L
-                while (offset < total) {
-                    val chunk = client.serverArchiveChunk(offset)
-                    check(chunk.isNotEmpty()) { "The server sent an empty piece of the backup." }
-                    out.write(chunk)
-                    offset += chunk.size
-                    _phase.value = Phase.Downloading(offset.toDouble() / total)
-                }
-                check(offset == total) { "The backup arrived with the wrong size." }
-            }
+            ArchiveDownloader.download(
+                total = total,
+                sha256 = s.sha256,
+                file = part,
+                stateFile = state,
+                fetch = { offset -> client.serverArchiveChunk(offset) },
+                progress = { received ->
+                    if (_phase.value is Phase.Downloading) {
+                        _phase.value = Phase.Downloading(if (total > 0) received.toDouble() / total else 1.0)
+                    }
+                },
+            )
+            val final = File(dir, name)
+            final.delete()
+            check(part.renameTo(final)) { "The backup couldn't be saved on this device." }
             runCatching { client.serverArchiveForget() }
-            _phase.value = Phase.Saved(file, ServerArchive.fileName(serverFqdn, System.currentTimeMillis()))
+            _phase.value = Phase.Saved(final, name)
         } catch (e: CancellationException) {
-            file.delete()
+            // The parts already in stay for the next try.
+            _phase.value = Phase.Ready(total)
             throw e
         } catch (t: Throwable) {
-            file.delete()
             _phase.value = Phase.Failed(message(t, "The download didn't finish."))
+        }
+    }
+}
+
+/** The browser download page's QR: approve downloading that server's backup in
+ *  that browser. Shows the page's 6-digit code; the biometric unlocks the
+ *  sensitive-order key that signs `flagship/archive-download/v1`, which the
+ *  server checks before it serves the file. */
+class BackupDownloadApprovalViewModel(
+    val serverFqdn: String,
+    val archiveId: String,
+    val requestId: String,
+    private val client: ScreensClient?,
+    /** Signs canonical bytes with the sensitive-order key (biometric-gated). */
+    private val sign: suspend (bytes: ByteArray) -> ByteArray,
+    private val now: () -> Long = { System.currentTimeMillis() },
+) {
+    sealed interface Phase {
+        data object Idle : Phase
+        data object Working : Phase
+        data object Approved : Phase
+        data class Failed(val message: String) : Phase
+    }
+
+    private val _phase = MutableStateFlow<Phase>(Phase.Idle)
+    val phase: StateFlow<Phase> = _phase.asStateFlow()
+    val code: String = com.flagshipserver.app.api.ArchiveDownloadApproval.code(requestId)
+
+    suspend fun approve() {
+        if (_phase.value == Phase.Working || _phase.value == Phase.Approved) return
+        val c = client
+        if (c == null) {
+            _phase.value = Phase.Failed("This phone has no session for ${serverFqdn}. Open it on Home first.")
+            return
+        }
+        _phase.value = Phase.Working
+        try {
+            val approval = com.flagshipserver.app.api.ArchiveDownloadApproval(serverFqdn.lowercase(), archiveId, requestId, now())
+            val sig = sign(approval.canonicalBytes())
+            c.serverArchiveApprove(com.flagshipserver.app.api.ServerArchiveApproveRequest(approval, HexUtil.encode(sig)))
+            _phase.value = Phase.Approved
+        } catch (e: CancellationException) {
+            _phase.value = Phase.Idle
+            throw e
+        } catch (t: Throwable) {
+            _phase.value = Phase.Failed(message(t, "Couldn't approve the download."))
         }
     }
 }

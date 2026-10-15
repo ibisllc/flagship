@@ -349,6 +349,31 @@ function filesTarArgs(cfg: VolumeDumpConfig, volume: string, mode: "dump" | "res
  * writes the folder to stdout read-only, `restore` unpacks stdin into it.
  * Shared with an app copy (appCopy/ops.ts).
  */
+/** `du -sb` of a files folder, read-only, in the same locked-down helper. */
+export function filesSizeDockerArgs(volume: string, helperImage?: string): string[] {
+  return [
+    "run",
+    "--rm",
+    "--network",
+    "none",
+    "--cap-drop",
+    "ALL",
+    "--cap-add",
+    "DAC_READ_SEARCH",
+    "--security-opt",
+    "no-new-privileges",
+    "--read-only",
+    "--user",
+    "0:0",
+    ...filesMountArgs(volume, { readonly: true }),
+    "--entrypoint",
+    "du",
+    helperImage ?? FILES_HELPER_IMAGE,
+    "-sb",
+    "/data",
+  ];
+}
+
 export function filesArchiveDockerArgs(volume: string, mode: "dump" | "restore", helperImage?: string): string[] {
   const caps =
     mode === "dump"

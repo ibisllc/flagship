@@ -570,6 +570,30 @@ export function buildDecommissionPoller(
 }
 
 /**
+ * Whether the eviction chain proves a successor took over from `myStk`: a
+ * LATER order (issued after this box's, and only the owner can deposit one)
+ * retired a successor that had flushed. Older rows (this name's earlier
+ * tenants, kept because wipe orders outlive the GC) never count. `newAckedAt`
+ * is not evidence: the ack-new report is unauthenticated.
+ */
+export function successorRestored(
+  chain: Array<{ orderJson?: string; epochCompleteAt?: number | null }>,
+  myStk: string,
+): boolean {
+  const parsed = chain.map((ev) => {
+    try {
+      const o = JSON.parse(ev.orderJson ?? "{}") as Partial<ServerDecommission>;
+      return { stk: String(o.retiredStkPubHex ?? "").toLowerCase(), issuedAt: Number(o.issuedAt ?? NaN), ev };
+    } catch {
+      return { stk: "", issuedAt: NaN, ev };
+    }
+  });
+  const mine = parsed.find((p) => p.stk === myStk.toLowerCase());
+  if (!mine || !Number.isFinite(mine.issuedAt)) return false;
+  return parsed.some((p) => p.stk && p.stk !== mine.stk && p.ev.epochCompleteAt != null && p.issuedAt > mine.issuedAt);
+}
+
+/**
  * The production "replacement restored" confirm poll for `wipe-after-handoff`.
  * Polls `GET /api/server/:domain/eviction-chain` a bounded number of times,
  * looking for evidence the SUCCESSOR is up: a chain entry for a DIFFERENT STK
@@ -607,20 +631,9 @@ export async function pollReplacementRestored(args: {
         const body = (await res.json()) as {
           evictions?: Array<{ orderJson?: string; epochCompleteAt?: number | null }>;
         };
-        for (const ev of body?.evictions ?? []) {
-          if (ev.epochCompleteAt == null) continue;
-          // A completed epoch on a row whose retired STK is NOT us means a LATER
-          // tenant flushed — the successor restored and is running.
-          let stk = "";
-          try {
-            stk = String((JSON.parse(ev.orderJson ?? "{}") as ServerDecommission).retiredStkPubHex ?? "").toLowerCase();
-          } catch {
-            /* unparseable row — ignore it */
-          }
-          if (stk && stk !== myStk) {
-            log("[decommission] eviction-chain shows a restored successor; handoff confirmed");
-            return true;
-          }
+        if (successorRestored(body?.evictions ?? [], myStk)) {
+          log("[decommission] eviction-chain shows a restored successor; handoff confirmed");
+          return true;
         }
       }
     } catch (e) {

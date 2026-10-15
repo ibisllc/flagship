@@ -35,6 +35,9 @@ public struct RootShell: View {
     /// site) is presented the same way: a full-screen cover, account-agnostic,
     /// gated behind the lock screen until the visitor unlocks (they AID-sign).
     @State private var pendingKnock: KnockTarget?
+    /// A backup's browser download page asked this phone to approve (QR).
+    @State private var pendingBackupApproval: BackupApprovalTarget?
+    @Environment(\.podScreensClients) private var podClients
     /// v2 manual-approve — the AUTHOR finalizing a consumer's acceptance reply
     /// (`https://flagshipserver.com/invite-accept#…`), presented as a full-screen cover.
     @State private var pendingAccept: AcceptTarget?
@@ -56,6 +59,13 @@ public struct RootShell: View {
         let acceptSigHex: String
         let acceptedAt: Int64
         var id: String { "\(serverDomain)#\(inviteId)#\(contactAidHex)" }
+    }
+
+    private struct BackupApprovalTarget: Identifiable, Equatable {
+        let serverFqdn: String
+        let archiveId: String
+        let requestId: String
+        var id: String { requestId }
     }
 
     private struct KnockTarget: Identifiable, Equatable {
@@ -158,6 +168,24 @@ public struct RootShell: View {
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
                         Button("Close") { pendingAccept = nil }
+                    }
+                }
+            }
+        }
+        .fullScreenCover(item: $pendingBackupApproval) { target in
+            NavigationStack {
+                BackupDownloadApprovalScreen(
+                    vm: BackupDownloadApprovalViewModel(
+                        serverFqdn: target.serverFqdn,
+                        archiveId: target.archiveId,
+                        requestId: target.requestId,
+                        clients: podClients
+                    ),
+                    onDone: { pendingBackupApproval = nil }
+                )
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("Close") { pendingBackupApproval = nil }
                     }
                 }
             }
@@ -275,6 +303,13 @@ public struct RootShell: View {
             pendingKnock = KnockTarget(serverDomain: serverDomain, svc: svc, serviceRef: serviceRef, pageId: pageId)
             return
         }
+        if case let .approveBackupDownload(serverFqdn, archiveId, requestId) = link {
+            // Signs with this account's keys: wait for unlock.
+            guard app.isUnlocked else { return }
+            _ = linker.consume()
+            pendingBackupApproval = BackupApprovalTarget(serverFqdn: serverFqdn, archiveId: archiveId, requestId: requestId)
+            return
+        }
         if case .shareServer = link {
             // Accepting signs with this account's keys: wait for unlock, then
             // let HomeTab push the accept screen from the same pending link.
@@ -318,7 +353,7 @@ public struct RootShell: View {
         case .recoverySetup, .joinAccount, .companionDockApproval,
              .accountSecurity, .accountDevices: return .settings
         case .transferOffer, .shareServer, .builderPair, .sharedWithMe: return .home
-        case .inviteRedeem, .inviteAccept, .knockAuthorize: return selected
+        case .inviteRedeem, .inviteAccept, .knockAuthorize, .approveBackupDownload: return selected
         }
     }
 }

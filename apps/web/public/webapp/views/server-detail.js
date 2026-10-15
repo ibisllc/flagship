@@ -88,7 +88,8 @@ import {
   BACKUP_NOTE,
   BACKUP_TITLE,
   backupFileName,
-  downloadBackup,
+  backupDownloadLink,
+  downloadHere,
   formatBytes,
   forgetBackup,
   startServerBackup,
@@ -1498,10 +1499,15 @@ async function openBackupDialog(body) {
     <p class="modal-message" data-bk-status>Making the backup…</p>
     <progress class="full-width" data-bk-bar max="100" value="0"></progress>
     <p class="note small">${escapeHtml(BACKUP_EXCLUDES_NOTE)}</p>
+    <p class="note small hidden" data-bk-hint></p>
     <p class="modal-error err-text hidden" data-bk-error></p>
     <div class="row-2 mt-3">
       <button class="secondary" data-bk-close>Close</button>
-      <button class="hidden" data-bk-save>Save backup</button>
+      <button class="hidden" data-bk-save>Download backup</button>
+    </div>
+    <div class="row-2 mt-2">
+      <button class="secondary hidden" data-bk-copy>Copy download link</button>
+      <button class="secondary hidden" data-bk-remove>Delete from server</button>
     </div>
   `;
   document.body.appendChild(dlg);
@@ -1510,6 +1516,9 @@ async function openBackupDialog(body) {
   const barEl = dlg.querySelector("[data-bk-bar]");
   const errEl = dlg.querySelector("[data-bk-error]");
   const saveBtn = dlg.querySelector("[data-bk-save]");
+  const copyBtn = dlg.querySelector("[data-bk-copy]");
+  const removeBtn = dlg.querySelector("[data-bk-remove]");
+  const hintEl = dlg.querySelector("[data-bk-hint]");
   const closeBtn = dlg.querySelector("[data-bk-close]");
   let closed = false;
   const cleanup = () => {
@@ -1532,35 +1541,58 @@ async function openBackupDialog(body) {
       },
     });
     barEl.value = 100;
-    statusEl.textContent = `Backup ready (${formatBytes(archive.bytes)}). Save it somewhere safe.`;
+    statusEl.textContent = `Backup ready (${formatBytes(archive.bytes)}). Your browser saves it straight to disk.`;
+    if (Array.isArray(archive.left) && archive.left.length > 0) {
+      errEl.textContent = `Left out (no source to rebuild them from): ${archive.left.map((a) => a.name).join(", ")}.`;
+      errEl.classList.remove("hidden");
+    }
+    const link = await backupDownloadLink({ client });
     saveBtn.classList.remove("hidden");
+    copyBtn.classList.remove("hidden");
+    removeBtn.classList.remove("hidden");
+    hintEl.textContent =
+      `Download here, or copy the link to open it on another computer: that page asks the Flagship app on your phone to approve. ` +
+      `The link works until ${new Date(link.expiresAt).toLocaleString()}; a download that stops picks up where it left off.`;
+    hintEl.classList.remove("hidden");
     saveBtn.addEventListener("click", async () => {
       saveBtn.disabled = true;
-      errEl.classList.add("hidden");
       try {
-        statusEl.textContent = "Downloading…";
-        const blob = await downloadBackup({
+        await downloadHere({
           client,
-          archive,
-          onBytes: (n, total) => { barEl.value = Math.round((n / total) * 100); },
+          serverDomain: serverFqdn,
+          archiveId: archive.archiveId,
+          umk: session.umk,
+          signWithIrk: sensitiveSigner(),
         });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = backupFileName(serverFqdn, Date.now());
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 60_000);
-        await forgetBackup({ client }).catch(() => {});
-        statusEl.textContent = "Saved. The server has removed its copy.";
-        saveBtn.classList.add("hidden");
-        toast("Backup saved", "ok");
+        toast("Download started", "ok");
       } catch (e) {
         errEl.textContent = humanError(e);
         errEl.classList.remove("hidden");
-        statusEl.textContent = "The download didn't finish.";
+      } finally {
         saveBtn.disabled = false;
+      }
+    });
+    copyBtn.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(link.url);
+        toast("Download link copied", "ok");
+      } catch {
+        toast("Couldn't copy the link", "err");
+      }
+    });
+    removeBtn.addEventListener("click", async () => {
+      removeBtn.disabled = true;
+      try {
+        await forgetBackup({ client });
+        statusEl.textContent = "The server's copy is removed; the link no longer works.";
+        saveBtn.classList.add("hidden");
+        copyBtn.classList.add("hidden");
+        removeBtn.classList.add("hidden");
+        hintEl.classList.add("hidden");
+      } catch (e) {
+        errEl.textContent = humanError(e);
+        errEl.classList.remove("hidden");
+        removeBtn.disabled = false;
       }
     });
   } catch (e) {

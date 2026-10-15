@@ -130,6 +130,9 @@ public enum DeepLink: Equatable, Sendable {
     /// (failed codes) pushes. Their `u=` names the account; the screen
     /// opens for the active one.
     case accountSecurity
+    /// The browser download page's QR (`https://<apex>/app/backup-download#s=&a=&r=`):
+    /// approve downloading that server's backup in that browser (Face ID + signature).
+    case approveBackupDownload(serverFqdn: String, archiveId: String, requestId: String)
 
     /// Settings, which lists this account's devices and any pending re-pair:
     /// the `account/devices` (quarantined device) and `account/re-pair` pushes.
@@ -297,6 +300,12 @@ public enum DeepLink: Equatable, Sendable {
                 return .transferOffer(offerJSON: json)
             }
             return nil
+        case "backup-download":
+            let f = fragmentParams(url)
+            guard let s = f["s"]?.lowercased(), s.hasSuffix(".\(Endpoints.dataApex)"),
+                  let a = f["a"], ArchiveDownloadApproval.isId(a),
+                  let r = f["r"], ArchiveDownloadApproval.isId(r) else { return nil }
+            return .approveBackupDownload(serverFqdn: s, archiveId: a, requestId: r)
         case "share":
             guard let parts = ServerShare.parseShareLink(url.absoluteString) else { return nil }
             return .shareServer(shareId: parts.shareId, secretHex: parts.secretHex)

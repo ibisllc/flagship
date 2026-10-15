@@ -1,4 +1,5 @@
 import XCTest
+import CryptoKit
 import FlagshipAPI
 import FlagshipCore
 @testable import FlagshipUI
@@ -40,6 +41,17 @@ final class ServerArchiveViewModelTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: url), c.archiveBytes)
         XCTAssertTrue(c.archiveForgotten, "the server drops its copy once the file is safe here")
         XCTAssertTrue(url.lastPathComponent.hasSuffix(".flagship-backup"))
+    }
+
+    func testBackupDownloadIsPartsAtOnceAndChecked() async throws {
+        let c = client()
+        c.archiveBytes = Data((0..<(9 * 1024 * 1024)).map { UInt8($0 & 0xff) })
+        let vm = ServerBackupViewModel(serverFqdn: "home.alice.flagship.services", clients: .shared(c),
+                                       keyProvider: { _ in Data(count: 32) }, pollNs: 1_000, directory: tmp())
+        await vm.start()
+        await vm.download()
+        guard case .saved(let url) = vm.phase else { return XCTFail("expected saved, got \(vm.phase)") }
+        XCTAssertEqual(try Data(contentsOf: url), c.archiveBytes)
     }
 
     func testBackupFailureIsShownNotThrown() async {
@@ -111,5 +123,40 @@ final class ServerArchiveViewModelTests: XCTestCase {
         XCTAssertNil(BoxEventLabels.title(BoxActivityEntry(ts: 1, action: "post /api/screens/x")))
         XCTAssertEqual(BoxEventLabels.title(BoxActivityEntry(ts: 1, action: "server.backup.created", kind: "server.backup.created")), "Backup ready")
         XCTAssertEqual(BoxEventLabels.title(BoxActivityEntry(ts: 1, action: "x", kind: "server.something.new")), "Server something new")
+    }
+}
+
+@MainActor
+final class BackupDownloadApprovalViewModelTests: XCTestCase {
+    func testApprovesWithASignatureTheServerCanCheck() async throws {
+        let c = MockScreensClient()
+        c.simulatedLatency = 0
+        let key = Curve25519.Signing.PrivateKey()
+        let vm = BackupDownloadApprovalViewModel(
+            serverFqdn: "Home.harry.flagship.services",
+            archiveId: "00112233445566778899aabbccddeeff",
+            requestId: "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+            clients: .shared(c),
+            signer: { _ in key },
+            now: { 1_700_000_000_000 }
+        )
+        XCTAssertEqual(vm.code, ArchiveDownloadApproval.code(requestId: "0f1e2d3c4b5a69788796a5b4c3d2e1f0"))
+        await vm.approve()
+        XCTAssertEqual(vm.phase, .approved)
+        let sent = try XCTUnwrap(c.archiveApprovals.first)
+        XCTAssertEqual(sent.approval, ArchiveDownloadApproval(serverDomain: "home.harry.flagship.services",
+                                                              archiveId: "00112233445566778899aabbccddeeff",
+                                                              requestId: "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+                                                              issuedAt: 1_700_000_000_000))
+        XCTAssertTrue(key.publicKey.isValidSignature(try XCTUnwrap(HexUtil.decode(sent.signature)), for: sent.approval.canonicalBytes()))
+    }
+
+    func testAFailedSignIsShownNotThrown() async {
+        struct Cancelled: Error {}
+        let vm = BackupDownloadApprovalViewModel(serverFqdn: "home.harry.flagship.services", archiveId: String(repeating: "0", count: 32),
+                                                 requestId: String(repeating: "1", count: 32), clients: .shared(MockScreensClient()),
+                                                 signer: { _ in throw Cancelled() })
+        await vm.approve()
+        if case .failed = vm.phase {} else { XCTFail("expected failed, got \(vm.phase)") }
     }
 }

@@ -31,10 +31,13 @@ public struct ServerArchiveStatus: Codable, Equatable, Sendable {
     public let bytes: Int64?
     public let sha256: String?
     public let apps: [ServerArchiveApp]?
+    /** Apps that couldn't go in (no source to rebuild from), with why. */
+    public let left: [ServerArchiveLeftApp]?
     public let reason: String?
 
     public init(archiveId: String, state: String, startedAt: Int64 = 0, progress: ServerArchiveProgress? = nil,
-                bytes: Int64? = nil, sha256: String? = nil, apps: [ServerArchiveApp]? = nil, reason: String? = nil) {
+                bytes: Int64? = nil, sha256: String? = nil, apps: [ServerArchiveApp]? = nil,
+                left: [ServerArchiveLeftApp]? = nil, reason: String? = nil) {
         self.archiveId = archiveId
         self.state = state
         self.startedAt = startedAt
@@ -42,6 +45,18 @@ public struct ServerArchiveStatus: Codable, Equatable, Sendable {
         self.bytes = bytes
         self.sha256 = sha256
         self.apps = apps
+        self.left = left
+        self.reason = reason
+    }
+}
+
+public struct ServerArchiveLeftApp: Codable, Equatable, Sendable {
+    public let serviceId: String
+    public let name: String
+    public let reason: String
+    public init(serviceId: String, name: String, reason: String) {
+        self.serviceId = serviceId
+        self.name = name
         self.reason = reason
     }
 }
@@ -144,4 +159,48 @@ public struct BoxActivityEntry: Codable, Equatable, Sendable {
 public struct BoxActivityResponse: Codable, Equatable, Sendable {
     public let entries: [BoxActivityEntry]
     public init(entries: [BoxActivityEntry]) { self.entries = entries }
+}
+
+/// The owner's approval to download a server backup in a browser
+/// (`flagship/archive-download/v1`): the browser page's QR names the server,
+/// the backup and a one-time request; the app signs this after Face ID.
+/// Must pass packages/protocol/test-vectors/archive-download/vectors.json.
+public struct ArchiveDownloadApproval: Codable, Equatable, Sendable {
+    public static let canonicalTag = "flagship/archive-download/v1"
+
+    public let serverDomain: String
+    public let archiveId: String
+    public let requestId: String
+    public let issuedAt: Int64
+
+    public init(serverDomain: String, archiveId: String, requestId: String, issuedAt: Int64) {
+        self.serverDomain = serverDomain
+        self.archiveId = archiveId
+        self.requestId = requestId
+        self.issuedAt = issuedAt
+    }
+
+    public static func isId(_ s: String) -> Bool {
+        s.count == 32 && s.utf8.allSatisfy { ($0 >= 48 && $0 <= 57) || ($0 >= 97 && $0 <= 102) }
+    }
+
+    public func canonicalBytes() -> Data {
+        Data([Self.canonicalTag, serverDomain, archiveId, requestId, String(issuedAt)].joined(separator: "|").utf8)
+    }
+
+    /// The 6-digit code the browser page shows for this request.
+    public static func code(requestId: String) -> String {
+        let n = UInt64(requestId.prefix(8), radix: 16) ?? 0
+        return String(format: "%06llu", n % 1_000_000)
+    }
+}
+
+/// `POST /api/screens/server-archive/approve` body.
+public struct ServerArchiveApproveRequest: Codable, Equatable, Sendable {
+    public let approval: ArchiveDownloadApproval
+    public let signature: String
+    public init(approval: ArchiveDownloadApproval, signature: String) {
+        self.approval = approval
+        self.signature = signature
+    }
 }

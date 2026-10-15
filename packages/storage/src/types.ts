@@ -977,6 +977,11 @@ export interface SecretMailboxStorage {
    * the order undeliverable; it is safe because the order is owner-IRK-signed.
    */
   consumeSelfDeleteDeposit(serverDomain: string, now: number): Promise<PairingDepositRecord | undefined>;
+  /** The newest unexpired self-delete order deposited for THIS box (its STK),
+   *  WITHOUT consuming it: the order is public and owner-signed, and a box that
+   *  comes back much later must still find it (a consume-once read could be
+   *  burnt by anyone who asks first). */
+  getSelfDeleteDeposit(serverDomain: string, stkPubHex: string, now: number): Promise<PairingDepositRecord | undefined>;
   /**
    * Secret-free-recipe SWK delivery (docs/recipe-delivery-and-remote-install.md)
    * — the PHONE seals the box's Service Workload Key to the box's OWN identity
@@ -1266,7 +1271,7 @@ export interface ServerEvictionStorage {
   markOldAcked(podCanonical: string, retiredStkPubHex: string, now: number): Promise<boolean>;
   markNewAcked(podCanonical: string, now: number): Promise<number>;          // marks all rows for the pod; returns count
   markEpochComplete(podCanonical: string, retiredStkPubHex: string, now: number): Promise<boolean>;
-  gcEvictions(now: number, ttlMs: number): Promise<number>;                  // delete rows where newAckedAt IS NOT NULL AND newAckedAt <= now - ttlMs; returns count
+  gcEvictions(now: number, ttlMs: number): Promise<number>;                  // delete `keep` rows where newAckedAt IS NOT NULL AND newAckedAt <= now - ttlMs (wipe orders are kept); returns count
   /**
    * Server-migration abort: neutralize a deposited-but-not-yet-honored
    * eviction so an aborted migration's decommission order is never served to

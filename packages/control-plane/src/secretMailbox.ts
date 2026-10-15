@@ -1328,13 +1328,22 @@ function bytesToHexLocal(b: Uint8Array): string {
 export async function handleConsumeSelfDeleteDeposit(
   deps: SecretMailboxDeps,
   host: string,
+  stkHex: string | null = null,
 ): Promise<HandlerResponse> {
   const now = deps.now ?? (() => Date.now());
   const reg = await deps.servers.get(host);
   if (!reg) return notFound("unknown server");
   // NB: NO `reg.revokedAt` guard — see the revoke-tolerance note above.
 
-  const row = await deps.secretMailbox.consumeSelfDeleteDeposit(host, now());
+  // A box that names itself (`?stk=`) gets its own order without consuming
+  // it, so the order is still there however late the box comes back and
+  // nobody else can burn it. The bare consume-once read is for older boxes.
+  if (stkHex !== null && !/^[0-9a-f]{64}$/.test(stkHex.toLowerCase())) {
+    return malformed("stk query param must be 32 bytes hex");
+  }
+  const row = stkHex !== null
+    ? await deps.secretMailbox.getSelfDeleteDeposit(host, stkHex.toLowerCase(), now())
+    : await deps.secretMailbox.consumeSelfDeleteDeposit(host, now());
   if (!row) return notFound("no self-delete order ready");
   return {
     status: 200,

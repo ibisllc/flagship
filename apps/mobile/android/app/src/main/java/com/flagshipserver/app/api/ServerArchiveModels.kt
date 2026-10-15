@@ -22,8 +22,13 @@ data class ServerArchiveStatus(
     val bytes: Long? = null,
     val sha256: String? = null,
     val apps: List<ServerArchiveApp>? = null,
+    /** Apps that couldn't go in (no source to rebuild from), with why. */
+    val left: List<ServerArchiveLeftApp>? = null,
     val reason: String? = null,
 )
+
+@Serializable
+data class ServerArchiveLeftApp(val serviceId: String, val name: String, val reason: String)
 
 @Serializable
 data class ServerArchiveStatusResponse(val archive: ServerArchiveStatus? = null)
@@ -79,3 +84,30 @@ data class BoxActivityEntry(
 
 @Serializable
 data class BoxActivityResponse(val entries: List<BoxActivityEntry> = emptyList())
+
+/** The owner's approval to download a server backup in a browser
+ *  (`flagship/archive-download/v1`). Must pass
+ *  packages/protocol/test-vectors/archive-download/vectors.json. */
+@Serializable
+data class ArchiveDownloadApproval(
+    val serverDomain: String,
+    val archiveId: String,
+    val requestId: String,
+    val issuedAt: Long,
+) {
+    fun canonicalBytes(): ByteArray =
+        listOf(TAG, serverDomain, archiveId, requestId, issuedAt.toString()).joinToString("|").toByteArray(Charsets.UTF_8)
+
+    companion object {
+        const val TAG = "flagship/archive-download/v1"
+        private val ID = Regex("^[0-9a-f]{32}$")
+        fun isId(s: String) = ID.matches(s)
+
+        /** The 6-digit code the browser page shows for this request. */
+        fun code(requestId: String): String =
+            (requestId.take(8).toLong(16) % 1_000_000).toString().padStart(6, '0')
+    }
+}
+
+@Serializable
+data class ServerArchiveApproveRequest(val approval: ArchiveDownloadApproval, val signature: String)

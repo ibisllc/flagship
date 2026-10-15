@@ -341,6 +341,9 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     public func serverArchiveForget() async throws {
         _ = try await requestData("/api/screens/server-archive", method: "DELETE", timeout: 30)
     }
+    public func serverArchiveApprove(_ req: ServerArchiveApproveRequest) async throws {
+        _ = try await requestData("/api/screens/server-archive/approve", method: "POST", body: try JSONEncoder().encode(req), timeout: 30)
+    }
     public func serverRestoreStart(_ req: ServerRestoreStartRequest) async throws {
         _ = try await requestData("/api/screens/server-restore/start", method: "POST", body: try JSONEncoder().encode(req), timeout: 30)
     }

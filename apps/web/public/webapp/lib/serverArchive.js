@@ -22,7 +22,7 @@ export const BACKUP_NOTE =
   "Makes one file with all of this server's apps and their data. Keep it safe: only your own devices can open it. " +
   "To clone this server, add the new server first, then choose Add/Import a server → Import a backup.";
 export const BACKUP_EXCLUDES_NOTE =
-  "Not included: API keys, the server's name and certificate, peer backups, and the Git host.";
+  "Holds your apps' source, data and settings, never system images: the server you import onto rebuilds each app, so any Flagship server can open it. Not included: API keys, the server's name and certificate, peer backups, and the Git host.";
 
 const toHex = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 
@@ -87,26 +87,80 @@ export async function waitForBackup({ client, onProgress, sleep = (ms) => new Pr
   }
 }
 
-/** Download the ready backup in chunks → `Blob`. */
-export async function downloadBackup({ client, archive, onBytes, fetchImpl = fetch }) {
-  const parts = [];
-  let offset = 0;
-  while (offset < archive.bytes) {
-    const res = await fetchImpl(`${client.baseUrl.replace(/\/+$/, "")}${ARCHIVE_PATH}/chunk?offset=${offset}`, {
-      headers: { "x-flagship-session": client.token() },
-    });
-    if (!res.ok) throw new Error(`the server answered ${res.status} while sending the backup`);
-    const buf = new Uint8Array(await res.arrayBuffer());
-    if (buf.length === 0) throw new Error("the server sent an empty piece of the backup");
-    parts.push(buf);
-    offset += buf.length;
-    onBytes?.(offset, archive.bytes);
-  }
-  if (offset !== archive.bytes) throw new Error("the backup arrived with the wrong size");
-  return new Blob(parts, { type: "application/octet-stream" });
+/**
+ * A link that downloads the ready backup straight from the server: the browser
+ * saves it to disk as it arrives (nothing is held in this page), and the
+ * server answers byte ranges, so the browser or a download manager can resume
+ * it or fetch parts of it at once. The link carries its own token and works
+ * until the backup expires (or a newer backup replaces it).
+ */
+export async function backupDownloadLink({ client }) {
+  const r = await client.fetch(`${ARCHIVE_PATH}/link`, { method: "POST" });
+  return {
+    url: `${client.baseUrl.replace(/\/+$/, "")}${r.path}`,
+    fileName: r.fileName,
+    bytes: r.bytes,
+    expiresAt: r.expiresAt,
+  };
 }
 
-/** Tell the server it can drop the file it kept for the download. */
+export const TAG_ARCHIVE_DOWNLOAD = "flagship/archive-download/v1";
+
+/** `flagship/archive-download/v1|<serverDomain>|<archiveId>|<requestId>|<issuedAt>`.
+ *  Must pass packages/protocol/test-vectors/archive-download/vectors.json. */
+export function archiveDownloadCanonicalBytes({ serverDomain, archiveId, requestId, issuedAt }) {
+  if (!serverDomain || /[|\r\n]/.test(serverDomain)) throw new Error("archive-download: bad serverDomain");
+  if (!/^[0-9a-f]{32}$/.test(archiveId) || !/^[0-9a-f]{32}$/.test(requestId)) throw new Error("archive-download: bad id");
+  if (!Number.isSafeInteger(issuedAt) || issuedAt < 0) throw new Error("archive-download: bad issuedAt");
+  return new TextEncoder().encode([TAG_ARCHIVE_DOWNLOAD, serverDomain, archiveId, requestId, String(issuedAt)].join("|"));
+}
+
+/** The 6-digit code the download page and the approving app both show. */
+export function archiveDownloadCode(requestId) {
+  return String(Number.parseInt(requestId.slice(0, 8), 16) % 1_000_000).padStart(6, "0");
+}
+
+/**
+ * Approve one browser request for the ready backup: sign
+ * `flagship/archive-download/v1` with the sensitive-order key and hand it to
+ * the server, which checks it before serving the file to that request.
+ */
+export async function approveArchiveDownload({ client, serverDomain, archiveId, requestId, umk, signWithIrk, now = Date.now }) {
+  if (!umk) throw new Error("unlock the webapp first");
+  const approval = { serverDomain: serverDomain.toLowerCase(), archiveId, requestId, issuedAt: now() };
+  const sig = await signWithIrk(umk, archiveDownloadCanonicalBytes(approval));
+  await client.fetch(`${ARCHIVE_PATH}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ approval, signature: toHex(sig) }),
+  });
+}
+
+/**
+ * Download the ready backup in THIS browser: approve a fresh request with this
+ * device's own key, then let the browser fetch the file straight to disk
+ * (resumable). The plain link (for another device) opens the server's page,
+ * which asks the Flagship app to approve instead.
+ */
+export async function downloadHere({ client, serverDomain, archiveId, umk, signWithIrk, rng, doc }) {
+  const link = await backupDownloadLink({ client });
+  const requestId = newArchiveId(rng);
+  await approveArchiveDownload({ client, serverDomain, archiveId, requestId, umk, signWithIrk });
+  startBrowserDownload(`${link.url}/file?r=${requestId}`, link.fileName, doc);
+  return link;
+}
+
+/** Start the browser's own download of `url` (no in-page buffering). */
+export function startBrowserDownload(url, fileName, doc = document) {
+  const a = doc.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  a.rel = "noopener";
+  doc.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+/** Remove the server's copy (the link stops working). */
 export async function forgetBackup({ client }) {
   await client.fetch(ARCHIVE_PATH, { method: "DELETE" });
 }

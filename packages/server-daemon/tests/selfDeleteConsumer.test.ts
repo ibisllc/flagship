@@ -151,6 +151,27 @@ describe("claimAndRunSelfDelete", () => {
     expect(marker.marked).toBe(true);
   });
 
+  it("names its own STK so .com hands back THIS box's order without consuming it", async () => {
+    const irk = makeKey(1);
+    const urls: string[] = [];
+    const inner = fetchReturning(carrier(USERNAME, irk));
+    const out = await claimAndRunSelfDelete({
+      serverDomain: DOMAIN,
+      myStkHex: "AB".repeat(32),
+      ownerIrkPub: irk.publicKey,
+      username: USERNAME,
+      controlPlaneBaseUrl: "https://flagshipserver.com",
+      fetchImpl: (async (u: string, init?: RequestInit) => {
+        urls.push(String(u));
+        return inner(u, init);
+      }) as unknown as typeof fetch,
+      wipeContent: async () => {},
+      markerStore: inMemMarker(),
+    });
+    expect(out).toEqual({ wiped: true });
+    expect(urls[0]).toBe(`https://flagshipserver.com/api/server/${encodeURIComponent(DOMAIN)}/self-delete?stk=${"ab".repeat(32)}`);
+  });
+
   it("never re-wipes once the marker is present (idempotent)", async () => {
     const irk = makeKey(1);
     let wipes = 0;

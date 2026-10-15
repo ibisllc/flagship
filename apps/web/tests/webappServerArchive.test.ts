@@ -110,6 +110,27 @@ describe("backup and import calls", () => {
     await expect(archive.importBackup({ client, file: headerFile({ archiveId: V.cases[0]!.archiveIdHex }), umk: seed(V.cases[0]!.umkSeedHex), fetchImpl })).rejects.toThrow("chunk out of order");
   });
 
+  it("downloads through a server link the browser saves to disk (no in-page buffering)", async () => {
+    const client = {
+      baseUrl: "https://home.alice.flagship.services/",
+      fetch: async (path: string, init: any) => {
+        expect(path).toBe("/api/screens/server-archive/link");
+        expect(init.method).toBe("POST");
+        return { path: `/api/archive-download/${"ab".repeat(32)}`, fileName: "home-2026-10-15.flagship-backup", bytes: 9, expiresAt: 5 };
+      },
+    };
+    const link = await archive.backupDownloadLink({ client });
+    expect(link.url).toBe(`https://home.alice.flagship.services/api/archive-download/${"ab".repeat(32)}`);
+    const clicked: any[] = [];
+    const doc = {
+      body: { appendChild: () => {} },
+      createElement: () => ({ click() { clicked.push({ href: this.href, download: this.download }); }, remove() {} }),
+    };
+    archive.startBrowserDownload(link.url, link.fileName, doc);
+    expect(clicked).toEqual([{ href: link.url, download: "home-2026-10-15.flagship-backup" }]);
+    expect((archive as any).downloadBackup).toBeUndefined();
+  });
+
   it("names the saved file after the server and the day", () => {
     expect(archive.backupFileName("Home.alice.flagship.services", Date.UTC(2026, 9, 15))).toBe("Home-2026-10-15.flagship-backup");
   });
@@ -150,5 +171,61 @@ describe("the Activity list", () => {
     });
     expect(rows.map((r: any) => r.at)).toEqual([40, 30, 10]);
     expect(rows[1]).toMatchObject({ source: "server", server: "home" });
+  });
+});
+
+describe("browser download approval (flagship/archive-download/v1)", () => {
+  const AD = JSON.parse(
+    readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../../packages/protocol/test-vectors/archive-download/vectors.json"), "utf8"),
+  ) as { umkSeedHex: string; pub: string; cases: Array<{ serverDomain: string; archiveId: string; requestId: string; issuedAt: number; canonical: string; code: string; signature: string }>; invalid: any[] };
+
+  it("matches the shared vectors: canonical bytes, code, and the IRK signature", async () => {
+    // @ts-expect-error plain JS module
+    const { signWithIrk } = await import("../public/webapp/keystore.js");
+    for (const c of AD.cases) {
+      const a = { serverDomain: c.serverDomain, archiveId: c.archiveId, requestId: c.requestId, issuedAt: c.issuedAt };
+      expect(new TextDecoder().decode(archive.archiveDownloadCanonicalBytes(a))).toBe(c.canonical);
+      expect(archive.archiveDownloadCode(c.requestId)).toBe(c.code);
+      const posted: any[] = [];
+      await archive.approveArchiveDownload({
+        client: { fetch: async (path: string, init: any) => void posted.push({ path, body: JSON.parse(init.body) }) },
+        ...a,
+        umk: seed(AD.umkSeedHex),
+        signWithIrk,
+        now: () => c.issuedAt,
+      });
+      expect(posted).toEqual([{ path: "/api/screens/server-archive/approve", body: { approval: a, signature: c.signature } }]);
+    }
+    for (const bad of AD.invalid) expect(() => archive.archiveDownloadCanonicalBytes(bad)).toThrow();
+  });
+
+  it("downloading here approves a fresh request, then lets the browser fetch the file", async () => {
+    const calls: string[] = [];
+    const client = {
+      baseUrl: "https://home.alice.flagship.services",
+      fetch: async (path: string) => {
+        calls.push(path);
+        return path.endsWith("/link") ? { path: `/api/archive-download/${"ab".repeat(32)}`, fileName: "home.flagship-backup", expiresAt: 1 } : {};
+      },
+    };
+    const clicked: string[] = [];
+    const doc = { body: { appendChild: () => {} }, createElement: () => ({ click() { clicked.push(this.href); }, remove() {} }) };
+    await archive.downloadHere({
+      client,
+      serverDomain: "home.alice.flagship.services",
+      archiveId: "00112233445566778899aabbccddeeff",
+      umk: seed(AD.umkSeedHex),
+      signWithIrk: async () => new Uint8Array(64),
+      rng: () => seed("0f1e2d3c4b5a69788796a5b4c3d2e1f0"),
+      doc,
+    });
+    expect(calls).toEqual(["/api/screens/server-archive/link", "/api/screens/server-archive/approve"]);
+    expect(clicked).toEqual([`https://home.alice.flagship.services/api/archive-download/${"ab".repeat(32)}/file?r=0f1e2d3c4b5a69788796a5b4c3d2e1f0`]);
+  });
+
+  it("routes the approval to the admin root like every owner order", async () => {
+    // @ts-expect-error plain JS module
+    const { SENSITIVE_TAGS } = await import("../public/webapp/lib/adminRoot.js");
+    expect(SENSITIVE_TAGS.has("flagship/archive-download/v1")).toBe(true);
   });
 });

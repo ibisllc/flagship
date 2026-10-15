@@ -1146,17 +1146,23 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public func serverArchiveStatus() async throws -> ServerArchiveStatus? {
         try await tick()
         guard let id = archiveStarts.last?.archiveId, !archiveForgotten else { return nil }
-        return ServerArchiveStatus(archiveId: id, state: "ready", startedAt: 1, bytes: Int64(archiveBytes.count),
+        let sha = SHA256.hash(data: archiveBytes).map { String(format: "%02x", $0) }.joined()
+        return ServerArchiveStatus(archiveId: id, state: "ready", startedAt: 1, bytes: Int64(archiveBytes.count), sha256: sha,
                                    apps: [ServerArchiveApp(serviceId: "alice--wiki", name: "Wiki")])
     }
     public func serverArchiveChunk(offset: Int64) async throws -> Data {
         try await tick()
         let start = Int(offset)
-        return archiveBytes.subdata(in: start..<min(start + 2_000, archiveBytes.count))
+        return archiveBytes.subdata(in: start..<min(start + 4 * 1024 * 1024, archiveBytes.count))
     }
     public func serverArchiveForget() async throws {
         try await tick()
         archiveForgotten = true
+    }
+    public private(set) var archiveApprovals: [ServerArchiveApproveRequest] = []
+    public func serverArchiveApprove(_ req: ServerArchiveApproveRequest) async throws {
+        try await tick()
+        archiveApprovals.append(req)
     }
     public func serverRestoreStart(_ req: ServerRestoreStartRequest) async throws {
         try await tick()

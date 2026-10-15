@@ -1617,6 +1617,28 @@ export class D1SecretMailboxStorage implements SecretMailboxStorage {
     }
   }
 
+  async getSelfDeleteDeposit(serverDomain: string, stkPubHex: string, now: number) {
+    const r = await this.db
+      .prepare(
+        `SELECT * FROM secret_mailbox
+         WHERE server_domain = ?1 AND purpose = 'self-delete' AND stk_pub_hex = ?2
+           AND expires_at > ?3 AND response_sealed_hex IS NOT NULL
+         ORDER BY posted_at DESC LIMIT 1`,
+      )
+      .bind(serverDomain, stkPubHex.toLowerCase(), now)
+      .first<SecretMailboxRow>();
+    if (!r || r.response_sealed_hex === null) return undefined;
+    return {
+      serverDomain: r.server_domain,
+      username: r.username,
+      requestNonceHex: r.request_nonce_hex,
+      stkPubHex: r.stk_pub_hex,
+      sealedHex: r.response_sealed_hex,
+      issuedAt: r.request_issued_at,
+      expiresAt: r.expires_at,
+    };
+  }
+
   async consumeSelfDeleteDeposit(serverDomain: string, now: number) {
     // GC expired self-delete rows for this domain first (best-effort).
     await this.db
@@ -2209,10 +2231,14 @@ export class D1ServerEvictionStorage implements ServerEvictionStorage {
   }
 
   async gcEvictions(now: number, ttlMs: number): Promise<number> {
-    // Delete rows acked by the successor past their TTL.
+    // Delete rows acked by the successor past their TTL, except wipe orders:
+    // those stay until the retired box comes back and acts on them, however
+    // long that takes (a few hundred bytes each).
     const w = await this.db
       .prepare(
-        "DELETE FROM server_evictions WHERE new_acked_at IS NOT NULL AND new_acked_at <= ?1",
+        `DELETE FROM server_evictions
+          WHERE new_acked_at IS NOT NULL AND new_acked_at <= ?1
+            AND COALESCE(json_extract(order_json, '$.diskDisposition'), 'keep') = 'keep'`,
       )
       .bind(now - ttlMs)
       .run();

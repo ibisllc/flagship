@@ -1089,6 +1089,26 @@ export class InMemorySecretMailboxStorage implements SecretMailboxStorage {
     return { ok: true as const };
   }
 
+  async getSelfDeleteDeposit(serverDomain: string, stkPubHex: string, now: number) {
+    let best: SecretMailboxRecord | undefined;
+    for (const r of this.rows.values()) {
+      if (r.purpose !== "self-delete" || r.serverDomain !== serverDomain) continue;
+      if (r.stkPubHex.toLowerCase() !== stkPubHex.toLowerCase() || r.expiresAt <= now) continue;
+      if (r.responseSealedHex === null) continue;
+      if (!best || r.postedAt > best.postedAt) best = r;
+    }
+    if (!best || best.responseSealedHex === null) return undefined;
+    return {
+      serverDomain: best.serverDomain,
+      username: best.username,
+      requestNonceHex: best.requestNonceHex,
+      stkPubHex: best.stkPubHex,
+      sealedHex: best.responseSealedHex,
+      issuedAt: best.requestIssuedAt,
+      expiresAt: best.expiresAt,
+    };
+  }
+
   async consumeSelfDeleteDeposit(serverDomain: string, now: number) {
     let bestKey: string | undefined;
     let best: SecretMailboxRecord | undefined;
@@ -1427,7 +1447,7 @@ export class InMemoryServerEvictionStorage implements ServerEvictionStorage {
     const cutoff = now - ttlMs;
     let count = 0;
     for (const [k, r] of this.rows) {
-      if (r.newAckedAt !== null && r.newAckedAt <= cutoff) {
+      if (r.newAckedAt !== null && r.newAckedAt <= cutoff && evictionDisposition(r.orderJson) === "keep") {
         this.rows.delete(k);
         count += 1;
       }
@@ -2781,5 +2801,15 @@ export class InMemoryServiceInviteStorage implements ServiceInviteStorage {
         boundAIDs: [...r.boundAIDs],
         revokedAt: r.revokedAt!,
       }));
+  }
+}
+
+/** A wipe order outlives the eviction GC; see D1ServerEvictionStorage.gcEvictions. */
+function evictionDisposition(orderJson: string): string {
+  try {
+    const d = (JSON.parse(orderJson) as { diskDisposition?: unknown }).diskDisposition;
+    return typeof d === "string" ? d : "keep";
+  } catch {
+    return "keep";
   }
 }

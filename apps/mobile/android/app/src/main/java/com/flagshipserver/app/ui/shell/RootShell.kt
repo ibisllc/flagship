@@ -67,9 +67,17 @@ fun RootShell(
     val deepLinker = com.flagshipserver.app.core.LocalDeepLinker.current
     val pending by deepLinker.pending.collectAsState()
 
+    var backupApproval by remember { mutableStateOf<com.flagshipserver.app.core.DeepLink.ApproveBackupDownload?>(null) }
     androidx.compose.runtime.LaunchedEffect(pending) {
         val link = pending ?: return@LaunchedEffect
+        if (link is com.flagshipserver.app.core.DeepLink.ApproveBackupDownload) {
+            // A backup's browser download page: approve over this phone's own keys.
+            deepLinker.consume()
+            backupApproval = link
+            return@LaunchedEffect
+        }
         selected = when (link) {
+            is com.flagshipserver.app.core.DeepLink.ApproveBackupDownload -> selected
             com.flagshipserver.app.core.DeepLink.SecretRequests -> RootDestination.ACTIVITY
             is com.flagshipserver.app.core.DeepLink.ServerDetail -> RootDestination.HOME
             is com.flagshipserver.app.core.DeepLink.AppDetail -> RootDestination.APPS
@@ -107,6 +115,15 @@ fun RootShell(
         // The tab's NavHost picks the link up via its own LaunchedEffect
         // on LocalDeepLinker.pending. We leave the queue populated so
         // both layers can see it; the tab clears via deepLinker.consume().
+    }
+
+    backupApproval?.let { a ->
+        com.flagshipserver.app.ui.screens.BackupDownloadApprovalDialog(
+            serverFqdn = a.serverFqdn,
+            archiveId = a.archiveId,
+            requestId = a.requestId,
+            onDismiss = { backupApproval = null },
+        )
     }
 
     if (widthSizeClass == WindowWidthSizeClass.EXPANDED) {

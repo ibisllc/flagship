@@ -11,7 +11,7 @@ import { join, relative, sep } from "node:path";
 
 export const MAX_SOURCE_FILES = 2000;
 export const MAX_SOURCE_FILE_BYTES = 1024 * 1024;
-const SKIP_DIRS = new Set([".git", "node_modules", ".next", "__pycache__", ".venv"]);
+const SKIP_DIRS = new Set([".git", "node_modules", ".next", "__pycache__", ".venv", "venv"]);
 
 const isText = (buf: Buffer) => buf.length <= MAX_SOURCE_FILE_BYTES && !buf.includes(0);
 
