@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ohttpRelayFrom, parseOhttpKeys, sendPrivately } from "@flagship/protocol";
 import { route, type RouteEnv } from "../src/route.js";
 import { relayFromEnv } from "../src/ohttpRoutes.js";
+import { memoryRateLimits } from "./rateLimitFakes.js";
 
 const KEYS = `1:${"42".repeat(32)}`;
 
@@ -54,8 +55,8 @@ describe("the Worker's OHTTP endpoints", () => {
   });
 
   it("keys relayed rate limits on the order or the signer, never one shared address", async () => {
-    const keys: string[] = [];
-    const env = makeEnv({ RATE_LIMITER: { limit: async ({ key }) => (keys.push(key), { success: false }) } });
+    const { ns, calls } = memoryRateLimits({ policy: () => false });
+    const env = makeEnv({ RATE_LIMITS: ns });
     const relay = relayFromEnv(env)!;
     const status = await sendPrivately(
       {
@@ -77,9 +78,10 @@ describe("the Worker's OHTTP endpoints", () => {
       },
       { relay, fetch: relayInto(env) },
     );
-    expect(keys).toEqual([
-      "provision-status|ip|60|relay:order:ORDER123",
-      `server-register|ip|3600|relay:irk:${irk}`,
+    expect([...calls].sort()).toEqual([
+      "provision-status|ip|relay:order:ORDER123",
+      `server-register|ip|relay:irk:${irk}`,
+      `server-register|irk|${irk}`,
     ]);
   });
 });
