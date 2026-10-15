@@ -56,8 +56,8 @@ class GymOctoberTest : GymBase() {
             .getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }.orEmpty()
 
     /** Services → the demo Plants app's page (opened by its unique summary line). */
-    private fun openPlants() {
-        launch(tab = "apps")
+    private fun openPlants(adminRoot: Boolean = false, deviceRank: String? = null) {
+        launch(tab = "apps", adminRoot = adminRoot, deviceRank = deviceRank)
         waitUntilTextExists("Houseplant watering tracker", timeoutMs = 20_000)
         composeRule.onNodeWithText("Houseplant watering tracker").performClick()
         composeRule.waitForIdle()
@@ -91,9 +91,10 @@ class GymOctoberTest : GymBase() {
 
     // ─── Access control: Open to all / Members only ──────────────────────────
 
+    /** Only an admin device changes the mode. */
     @Test
     fun accessControlSwitchesToMembersOnly() {
-        openPlants()
+        openPlants(adminRoot = true)
         waitUntilExists("service-detail-access-row", timeoutMs = 20_000)
         composeRule.onNodeWithTag("service-detail-access-row").performScrollTo().performClick()
         waitUntilExists("service-access-restrict-toggle", timeoutMs = 15_000)
@@ -110,11 +111,56 @@ class GymOctoberTest : GymBase() {
         gymShot("access-control-members-only")
     }
 
-    private fun openAccessControl() {
-        openPlants()
+    private fun openAccessControl(adminRoot: Boolean = false, deviceRank: String? = null, waitFor: String = "service-access-add-person") {
+        openPlants(adminRoot, deviceRank)
         waitUntilExists("service-detail-access-row", timeoutMs = 20_000)
         composeRule.onNodeWithTag("service-detail-access-row").performScrollTo().performClick()
-        waitUntilExists("service-access-add-person", timeoutMs = 15_000)
+        waitUntilExists("service-access-account-members-title", timeoutMs = 15_000)
+        waitUntilExists(waitFor, timeoutMs = 15_000)
+    }
+
+    private val otherDeviceRank = "service-access-account-rank-device-${com.flagshipserver.app.api.MockScreensClient.OTHER_DEVICE_ID}"
+    private val selfDeviceRank = "service-access-account-rank-device-${com.flagshipserver.app.api.MockScreensClient.SELF_DEVICE_ID}"
+
+    /** An admin device: every account member has a rank menu with Refuse, each one signed order. */
+    @Test
+    fun accountMembersAdminRanksAndRefuses() {
+        openAccessControl(adminRoot = true)
+        composeRule.onNodeWithText("Kitchen iPad").assertExists()
+        composeRule.onNodeWithText("Sam's family").assertExists()
+        composeRule.onNodeWithText("This device · Admin").assertExists()
+        composeRule.onNodeWithTag("service-access-account-members-title").performScrollTo()
+        gymShot("access-account-members-admin")
+        composeRule.onNodeWithTag(otherDeviceRank).performScrollTo().performClick()
+        waitUntilExists("$otherDeviceRank-refuse")
+        gymShot("access-account-rank-menu")
+        composeRule.onNodeWithTag("$otherDeviceRank-refuse").performClick()
+        composeRule.waitUntil(15_000) {
+            composeRule.onAllNodesWithContentDescription("Rank: Refused").fetchSemanticsNodes().isNotEmpty()
+        }
+        gymShot("access-account-refused")
+    }
+
+    /** A non-admin device at Manager (the default): its rank shows read-only, it invites at Member. */
+    @Test
+    fun accountMembersNonAdminManagerInvitesAtMember() {
+        openAccessControl()
+        composeRule.onNodeWithTag(selfDeviceRank).assertIsNotEnabled()
+        composeRule.onNodeWithTag(otherDeviceRank).assertIsNotEnabled()
+        composeRule.onNodeWithTag("service-access-mode-admin-only").assertExists()
+        assertEquals(0, count("service-access-cant-invite"))
+        composeRule.onNodeWithTag("service-access-add-person").assertExists()
+        gymShot("access-account-members-manager")
+    }
+
+    /** A non-admin device at Member: no "+ Add", one line saying why. */
+    @Test
+    fun accountMembersMemberRankSeesWhy() {
+        openAccessControl(deviceRank = "member", waitFor = "service-access-cant-invite")
+        composeRule.onNodeWithText("Only an admin can let you invite people to this app.").assertExists()
+        assertEquals(0, count("service-access-add-person"))
+        assertEquals(0, count("service-access-add-group"))
+        gymShot("access-account-members-member")
     }
 
     /** The demo device holds no admin root: a new invite is Member, and says why. */

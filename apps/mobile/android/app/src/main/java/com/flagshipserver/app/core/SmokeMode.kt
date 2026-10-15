@@ -45,6 +45,8 @@ data class SmokeModeConfig(
     /** Provide the in-memory share runtime (iOS `-smoke-shares`): Home's
      *  "Shared with" card and the servers shared with this phone. */
     val seedShares: Boolean = false,
+    /** This device's rank in the mock box's apps when not an admin (GymSeams.deviceRank). */
+    val deviceRank: String? = null,
 ) {
     companion object {
         const val EXTRA_SMOKE_MODE = "flagship.smokeMode"
@@ -56,6 +58,7 @@ data class SmokeModeConfig(
         const val EXTRA_SMOKE_USERNAME = "flagship.smokeUsername"
         const val EXTRA_SMOKE_ACCESS_ALERT = "flagship.smokeAccessAlert"
         const val EXTRA_SMOKE_SHARES = "flagship.smokeShares"
+        const val EXTRA_SMOKE_DEVICE_RANK = "flagship.smokeDeviceRank"
 
         const val SMOKE_USERNAME = "smoketest"
 
@@ -76,6 +79,8 @@ data class SmokeModeConfig(
                     ?.takeIf { it.matches(Regex("^[a-z0-9-]{1,40}$")) } ?: SMOKE_USERNAME,
                 seedAccessAlert = intent.getBooleanExtra(EXTRA_SMOKE_ACCESS_ALERT, false),
                 seedShares = intent.getBooleanExtra(EXTRA_SMOKE_SHARES, false),
+                deviceRank = intent.getStringExtra(EXTRA_SMOKE_DEVICE_RANK)?.trim()?.lowercase()
+                    ?.takeIf { it in setOf("member", "manager", "master", "refused") },
             )
         }
     }
@@ -135,6 +140,7 @@ object SmokeMode {
         // Treat this device as an admin (Slice D) — set BOTH ways so a prior
         // same-process launch's seed can never leak into an unflagged run.
         GymSeams.forceAdminRoot = config.seedAdminRoot
+        GymSeams.deviceRank = config.deviceRank
         GymSeams.bypassBiometricGates = true
 
         if (config.seedTrustUntrusted) {

@@ -471,6 +471,63 @@ const OCTOBER: readonly Scenario[] = [
     },
   ),
   androidTotal(
+    "android-oct-access-account-members-admin",
+    "D3: Account members on an admin device: this account's devices (names from the directory) and the co-managing family, each with a rank menu that also offers Refuse; refusing a device shows it Refused.",
+    O + "accountMembersAdminRanksAndRefuses",
+    {
+      steps: [
+        { kind: "launch", describe: "Plants → Access control as an admin device (smokeAdminRoot)." },
+        { kind: "assert", describe: "The Account members section.", handle: "service-access-account-members-title" },
+        { kind: "tap", describe: "Kitchen iPad's rank → Refuse.", handle: "service-access-account-rank-device-*" },
+      ],
+      assertions: [
+        { describe: "Account members section", handle: "service-access-account-members-title", expect: "present" },
+        { describe: "Refuse in the rank menu", handle: "service-access-account-rank-device-*-refuse", expect: "present" },
+      ],
+      screenshots: [
+        shot("access-account-members-admin", "Account members, admin."),
+        shot("access-account-rank-menu", "Rank menu with Refuse."),
+        shot("access-account-refused", "Refused."),
+      ],
+      dimension: "D3",
+    },
+  ),
+  androidTotal(
+    "android-oct-access-account-members-manager",
+    "D3: a non-admin device at Manager sees the account members' ranks read-only and the mode as admin-only, and keeps + Add person (at Member).",
+    O + "accountMembersNonAdminManagerInvitesAtMember",
+    {
+      steps: [
+        { kind: "launch", describe: "Plants → Access control as a non-admin device (default rank Manager)." },
+        { kind: "assert", describe: "Ranks read-only, + Add present.", handle: "service-access-add-person" },
+      ],
+      assertions: [
+        { describe: "+ Add person", handle: "service-access-add-person", expect: "present" },
+        { describe: "Mode is admin-only", handle: "service-access-mode-admin-only", expect: "present" },
+        { describe: "No why-line", handle: "service-access-cant-invite", expect: "absent" },
+      ],
+      screenshots: [shot("access-account-members-manager", "Manager, non-admin.")],
+      dimension: "D3",
+    },
+  ),
+  androidTotal(
+    "android-oct-access-account-members-member",
+    "D3: a non-admin device at Member gets no + Add, only 'Only an admin can let you invite people to this app.'",
+    O + "accountMembersMemberRankSeesWhy",
+    {
+      steps: [
+        { kind: "launch", describe: "Plants → Access control as a non-admin device at Member (smokeDeviceRank=member)." },
+        { kind: "assert", describe: "The why-line instead of + Add.", handle: "service-access-cant-invite" },
+      ],
+      assertions: [
+        { describe: "Why it can't invite", handle: "service-access-cant-invite", expect: "present" },
+        { describe: "+ Add person", handle: "service-access-add-person", expect: "absent" },
+      ],
+      screenshots: [shot("access-account-members-member", "Member rank.")],
+      dimension: "D3",
+    },
+  ),
+  androidTotal(
     "android-oct-api-key-create",
     "D6: Plants' API keys list its key; creating one shows the secret.",
     O + "apiKeyCreateShowsTheSecretOnce",
