@@ -93,6 +93,12 @@ public struct RootShell: View {
                     GlobalOperationsBar()
                 }
             }
+            // Covering the shell is not enough: the lock screen's background
+            // is not an accessibility element, so VoiceOver (and any
+            // accessibility hit test) would still reach and activate the
+            // controls underneath while locked.
+            .accessibilityHidden(!app.isUnlocked)
+            .allowsHitTesting(app.isUnlocked)
             // B12 — top overlay. The lock screen renders ABOVE the
             // shell whenever the runtime unlock latch is false. Putting
             // it inside the shell's ZStack (not as a presentation-style

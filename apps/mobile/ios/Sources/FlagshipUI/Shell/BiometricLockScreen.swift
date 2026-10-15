@@ -79,6 +79,7 @@ struct BiometricLockScreen: View {
             }
         }
         .accessibilityIdentifier("biometric-lock-screen")
+        .accessibilityAddTraits(.isModal)
         .confirmationDialog(
             app.hasCloudRecovery ? "Sign out of this device?" : "Sign out without recovery?",
             isPresented: $showStartOver,
