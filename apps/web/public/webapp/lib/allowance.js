@@ -1,7 +1,8 @@
 // #6 / #7 — usage/allowance dashboard + over-allowance upgrade alert.
 //
-// Reads the public, UNAUTHENTICATED `GET /api/users/:u/allowance` on .com
-// (the only usage-metered thing is PUBLIC-BANDWIDTH egress) and renders a
+// Reads `GET /api/users/:u/allowance` on .com with the account's read token
+// (docs/account-read-token.md; the only usage-metered thing is
+// PUBLIC-BANDWIDTH egress) and renders a
 // Home card: tier, a labeled GB progress bar, % used, remaining, and the
 // monthly reset date. When usage is approaching/over the quota the same card
 // carries a prominent upgrade CTA to /pro.
@@ -10,6 +11,8 @@
 // formatting + copy + colour selection is unit-testable without a browser.
 // The fetch path is deliberately best-effort: a failure / `!ok` / missing
 // endpoint resolves to null so Home never breaks.
+
+import { accountReadFetch } from "./accountRead.js";
 
 const COM_BASE = "https://flagshipserver.com";
 
@@ -248,7 +251,7 @@ export function allowanceCardHtml(a) {
 }
 
 /**
- * Best-effort fetch of the public allowance status for `username`. Resolves to
+ * Best-effort fetch of the account's allowance status for `username`. Resolves to
  * a NORMALIZED status object, or null on any failure / `!ok` / missing
  * endpoint so the caller can no-op cleanly.
  *
@@ -258,7 +261,7 @@ export function allowanceCardHtml(a) {
 export async function fetchAllowance(username, deps = {}) {
   if (!username) return null;
   const base = deps.comBase ?? COM_BASE;
-  const f = deps.fetch ?? fetch;
+  const f = deps.fetch ?? accountReadFetch;
   try {
     const r = await f(
       `${base}/api/users/${encodeURIComponent(username)}/allowance`,

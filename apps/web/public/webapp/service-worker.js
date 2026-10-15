@@ -416,6 +416,8 @@ const OPTIONAL_SHELL = [
   "/lib/usersCheck.js",
   "/lib/wipeRestartCeremony.js",
   "/lib/allowance.js",
+  "/lib/marketplaceLlmKey.js",
+  "/lib/proBanner.js",
   "/views/bootstrap.js",
   "/views/wizard.js",
   "/views/unlock.js",

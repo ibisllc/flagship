@@ -844,6 +844,7 @@ struct MarketplaceDetailContainer: View {
     let slug: String
     @Binding var path: [AppsRoute]
     @Environment(\.screensClient) private var client
+    @Environment(\.screensServerFqdn) private var bound
     @Environment(\.colorScheme) private var scheme
     @Environment(AppState.self) private var app
     @State private var listing: MarketplaceListing?
@@ -930,7 +931,10 @@ struct MarketplaceDetailContainer: View {
 
     /// Sign + POST the install (shared by the normal and override buttons).
     private func startInstall() {
-        if let l = listing, let vm, let serverFqdn = app.currentPod?.fqdn {
+        // The signed order names the box the screens client talks to (the
+        // creation flow's server), not the current pod.
+        if let l = listing, let vm {
+            let serverFqdn = app.screensFqdn(bound: bound)
             Task { await vm.install(creator: l.creator, slug: l.slug, serverId: serverFqdn) }
         }
     }
