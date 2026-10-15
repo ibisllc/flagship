@@ -98,6 +98,7 @@ async function reachHome(page: Page): Promise<void> {
 
 interface Seen {
   method: string;
+  host: string;
   path: string;
   body: any;
 }
@@ -120,7 +121,7 @@ async function stub(page: Page, rules: Rule[]): Promise<Seen[]> {
       } catch {
         body = null;
       }
-      seen.push({ method: req.method(), path: url.pathname, body });
+      seen.push({ method: req.method(), host: url.host, path: url.pathname, body });
       for (const [needle, answer] of rules) {
         if (!`${url.pathname}${url.search}`.includes(needle)) continue;
         const r = answer(body, url, req.method());
@@ -496,5 +497,112 @@ test.describe("gym webapp inference", () => {
     ]);
     // Sent: the composer clears for the next turn.
     await expect(chips).toHaveCount(0);
+  });
+
+  // An AI-needs-you notification names only the session (and the server it
+  // came from): the build chat opens on that server, signs the env value for
+  // it, and the reply carries a fresh pass for it and the model choice.
+  const OFFICE = "office.smoketest.flagship.services";
+  const ENV_STATE = {
+    id: "gym-sess-9",
+    appId: "smoketest--weather",
+    status: "awaiting-tool-response",
+    model: "medium",
+    messages: [
+      { role: "user", text: "Add the forecast for tomorrow" },
+      { role: "assistant", text: "The forecast needs a weather API key.", credits: 0.6 },
+    ],
+    pendingRequest: {
+      kind: "requestEnvVar",
+      toolUseId: "t9",
+      payload: { name: "WEATHER_API_KEY", description: "The weather service's key", why: "To fetch the forecast" },
+    },
+    files: {},
+  };
+
+  /** The session lives on OFFICE only; every other box answers 404. */
+  function officeRules(onReply: () => void): Rule[] {
+    return [
+      ["/api/free-ai/status", () => ok(statusBody())],
+      ["/api/free-ai/token", () => ok({ ok: true, credential: PASS, model: "low", expiresAt: Date.now() + 43_200_000, credits: CREDITS })],
+      ["/api/inference/models", () => ok(CATALOG)],
+      ["/read-token", () => ok({ token: "art1.e2e.mac", expiresAt: Date.now() + 86_400_000 })],
+      ["/api/users/smoketest/pods", () => ok({ pods: [{ serverDomain: BOX }, { serverDomain: OFFICE }] })],
+      ["/api/screens/services/smoketest--weather/env/set", (_b, url) => (url.host === OFFICE ? ok({ ok: true }) : null)],
+      [
+        "/api/screens/llm/sessions/gym-sess-9/reply",
+        (_b, url) => {
+          if (url.host !== OFFICE) return null;
+          onReply();
+          return ok({ ok: true });
+        },
+      ],
+      ["/api/screens/llm/sessions/gym-sess-9", (_b, url) => (url.host === OFFICE ? ok(ENV_STATE) : null)],
+    ];
+  }
+
+  async function openFromLink(page: Page, query: string): Promise<void> {
+    await page.evaluate(async (q) => {
+      window.history.replaceState({}, "", `/index.html?${q}`);
+      const { dispatchInitialView } = await import("/lib/deepLink.js");
+      await dispatchInitialView();
+    }, query);
+  }
+
+  test("gym inference a notification opens the build chat on the session's server", async ({ page }, testInfo) => {
+    await reachHome(page);
+    await page.evaluate(async (office) => {
+      (await import("/lib/api.js")).setSessionTokenForPod(office, "gym-office-session-token");
+      // This device started the build on Flagship Inference.
+      (await import("/lib/freeAiSessions.js")).markFreeAiSession("gym-sess-9");
+    }, OFFICE);
+    let replied = 0;
+    const seen = await stub(page, officeRules(() => replied++));
+    await openFromLink(page, `view=vibecode-chat&sessionId=gym-sess-9&server=${OFFICE}`);
+    await expect(page.locator("#view-vibe-code")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("#vc-status")).toHaveText("The AI has a question", { timeout: 10_000 });
+    const card = page.locator("#vc-envvar");
+    await expect(card).toContainText("WEATHER_API_KEY");
+    // The session's model on the Flagship Inference menu.
+    await expect(page.locator("#vc-model-bar .mm-trigger-text")).toHaveText("Medium 1×", { timeout: 10_000 });
+    await shot(page, testInfo, "notification-chat");
+    await page.fill("#vc-envvar-value", "wx-secret-123");
+    await page.click("#vc-envvar-send");
+    await expect.poll(() => replied, { timeout: 10_000 }).toBe(1);
+    // The value went to OFFICE, signed for OFFICE.
+    const set = seen.find((s) => s.path.endsWith("/env/set"))!;
+    expect(set.host).toBe(OFFICE);
+    expect(set.body).toMatchObject({
+      name: "WEATHER_API_KEY",
+      value: "wx-secret-123",
+      request: { serverId: OFFICE, creator: "smoketest", slug: "weather", env: { WEATHER_API_KEY: "wx-secret-123" } },
+    });
+    expect(set.body.signature).toMatch(/^[0-9a-f]{128}$/);
+    // The ack carries a fresh pass minted for OFFICE and the model choice.
+    const reply = seen.find((s) => s.path.endsWith("/reply"))!;
+    expect(reply.host).toBe(OFFICE);
+    expect(reply.body).toMatchObject({ envVarStatus: "set", credential: PASS, model: "medium", effort: null });
+    const mints = seen.filter((s) => s.path === "/api/free-ai/token");
+    expect(mints).toHaveLength(1);
+    expectSigned(mints[0]!.body, OFFICE);
+    // Nothing about this session went to the current server.
+    expect(seen.filter((s) => s.path.includes("gym-sess-9") && s.host !== OFFICE)).toHaveLength(0);
+    await expect(page.locator("#vc-envvar-value")).toHaveValue("");
+  });
+
+  test("gym inference a link without a server finds the one holding the session", async ({ page }, testInfo) => {
+    await reachHome(page);
+    await page.evaluate(async (office) => {
+      (await import("/lib/api.js")).setSessionTokenForPod(office, "gym-office-session-token");
+    }, OFFICE);
+    const seen = await stub(page, officeRules(() => {}));
+    await openFromLink(page, "view=vibecode-chat&sessionId=gym-sess-9");
+    await expect(page.locator("#view-vibe-code")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("#vc-envvar")).toContainText("WEATHER_API_KEY", { timeout: 10_000 });
+    // The current server was asked first, then the account's other server.
+    const probes = seen.filter((s) => s.path === "/api/screens/llm/sessions/gym-sess-9");
+    expect(probes[0]!.host).toBe(BOX);
+    expect(probes.some((s) => s.host === OFFICE)).toBe(true);
+    await shot(page, testInfo, "notification-chat-found");
   });
 });

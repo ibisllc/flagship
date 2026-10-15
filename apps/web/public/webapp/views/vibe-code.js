@@ -21,6 +21,11 @@
 //      which (lib/chatDeploy.js). After a deploy the session's AI key is gone,
 //      so a later turn meets the usual needsCredential prompt.
 //
+// A chat reopened by id (the build list, a notification, the operations
+// sliver) finds the server that holds the session, and its replies carry the
+// key lib/freeAiSessions.js picks: a fresh pass for a Flagship Inference
+// session, else the saved key only when the box has none.
+//
 // Attachments are inlined as base64 or text (no upload endpoint): images,
 // text/code, CSV/JSON sample data and PDFs. The client mirrors the server
 // caps so a violation is a friendly inline error, not a 400. The chat is NOT
@@ -31,8 +36,9 @@
 // messages. A chat starts on the default model saved in Settings.
 
 import { $, registerView, show } from "../lib/router.js";
-import { ScreensError, boxClient } from "../lib/api.js";
-import { creationTarget, mountCreationPicker } from "../lib/appPlacement.js";
+import { ScreensError, boxClient, currentPodFqdn } from "../lib/api.js";
+import { creationTarget, loadAccountPods, mountCreationPicker, sessionServers } from "../lib/appPlacement.js";
+import { findSessionServer } from "../lib/vibeSessions.js";
 import { activeOperations } from "../lib/activeOperations.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
@@ -57,8 +63,9 @@ import { turnRelayOffForCredential } from "../providers.js";
 import { getSession } from "../lib/state.js";
 import { bytesToHex, signWithIrk } from "../keystore.js";
 import { canonicalSetServiceEnv } from "./service-env.js";
-import { freshCredential } from "../lib/freeAi.js";
-import { defaultModelFor, loadProviders } from "../providers.js";
+import { freshCredential, isFreeAiCredential, mintFreeAiCredential } from "../lib/freeAi.js";
+import { markFreeAiSession, menuCredential, replyCredential } from "../lib/freeAiSessions.js";
+import { credentialFor, defaultModelFor, loadProviders } from "../providers.js";
 import {
   MAX_ATTACHMENTS,
   attachNotice,
@@ -114,6 +121,8 @@ let leftOpen = false;
 let deployedUrl = null;
 // The relay was turned off for this build's key after a relay failure.
 let relayTurnedOff = false;
+// The box holds no key for this session (it restarted): a reply must carry one.
+let boxNeedsKey = false;
 // Where Back goes instead of the chooser: an edit session returns to the
 // service it changes.
 let backTo = null;
@@ -290,9 +299,8 @@ async function send() {
     if (pendingTalkToolId) {
       // Follow-up turn answering the AI's talkToUser question.
       const replyBody = { text, attachments };
-      // A free AI pass is swapped for a fresh one on every reply.
-      buildCredential = await freshCredential(buildCredential, client().fqdn);
-      if (buildCredential) replyBody.credential = buildCredential;
+      const credential = await credentialForReply();
+      if (credential) replyBody.credential = credential;
       Object.assign(replyBody, wireChoice(modelMenu, modelChoice, { reply: true }));
       await boxFetch(
         `/api/screens/llm/sessions/${encodeURIComponent(activeSessionId)}/reply`,
@@ -342,17 +350,24 @@ function setBuildCredential(credential) {
 async function refreshModelMenu() {
   const bar = $("vc-model-bar");
   const load = ++menuLoad;
-  if (!buildCredential) {
+  const credential = await menuCredential({
+    known: buildCredential,
+    sessionId: activeSessionId,
+    boxNeedsKey,
+    saved: savedKey,
+  });
+  if (load !== menuLoad) return;
+  if (!credential) {
     modelMenu = null;
     bar?.classList.add("hidden");
     return;
   }
-  const menu = await loadModelMenu(buildCredential, boxFetch);
+  const menu = await loadModelMenu(credential, boxFetch);
   let saved = {};
   const session = getSession();
   if (session?.umk) {
     try {
-      saved = defaultModelFor(await loadProviders(session.umk), buildCredential);
+      saved = defaultModelFor(await loadProviders(session.umk), credential);
     } catch {
       saved = {};
     }
@@ -380,6 +395,33 @@ function renderModelBar() {
       choiceTouched = true;
     },
   });
+}
+
+/** The owner's last-used saved key (not Flagship Inference), or null. */
+async function savedKey() {
+  const umk = getSession()?.umk;
+  if (!umk) return null;
+  try {
+    const list = await loadProviders(umk);
+    const entry = list.entries.find((e) => e.id === list.activeId);
+    return entry ? credentialFor(entry) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The key the next reply carries (lib/freeAiSessions.js), or null. */
+async function credentialForReply() {
+  const credential = await replyCredential({
+    known: buildCredential,
+    sessionId: activeSessionId,
+    boxNeedsKey: boxNeedsKey || relayTurnedOff,
+    saved: savedKey,
+    mintFree: async () => (await mintFreeAiCredential(client().fqdn)).credential,
+  });
+  // A pass this chat holds is swapped for the fresh one.
+  if (credential && buildCredential) buildCredential = credential;
+  return credential;
 }
 
 /** The session says which model it uses: show that until the owner picks. */
@@ -582,6 +624,7 @@ async function startBuild(text) {
       return;
     }
     activeSessionId = r.sessionId;
+    if (isFreeAiCredential(buildCredential)) markFreeAiSession(r.sessionId);
     // The build is really running now — surface it in the global operations
     // sliver as "building <subject> on <server>" until it deploys or fails.
     buildSubject = subjectFromPrompt(text);
@@ -696,6 +739,12 @@ export function creditsMarkup(m) {
 
 function render(state) {
   $("vc-status").textContent = statusLabel(state.status, state.deployPhase);
+  const needsKey = state.needsCredential === true;
+  if (needsKey !== boxNeedsKey) {
+    boxNeedsKey = needsKey;
+    // The key a reply will carry changed: so may the models on offer.
+    if (!buildCredential) void refreshModelMenu();
+  }
   adoptSessionModel(state);
 
   // Message list — user right, assistant left.
@@ -872,9 +921,9 @@ async function answerEnvVar(status) {
   if (!activeSessionId) return;
   try {
     const body = { envVarStatus: status };
-    // A free AI pass is swapped for a fresh one on every reply.
-    buildCredential = await freshCredential(buildCredential, client().fqdn);
-    if (buildCredential) body.credential = buildCredential;
+    const credential = await credentialForReply();
+    if (credential) body.credential = credential;
+    Object.assign(body, wireChoice(modelMenu, modelChoice, { reply: true }));
     await boxFetch(`/api/screens/llm/sessions/${encodeURIComponent(activeSessionId)}/reply`, {
       method: "POST",
       body: JSON.stringify(body),
@@ -893,7 +942,7 @@ async function relayOff() {
   const session = getSession();
   if (!session.umk) return toast("Unlock first", "err");
   try {
-    if (!(await turnRelayOffForCredential(session.umk, buildCredential))) {
+    if (!(await turnRelayOffForCredential(session.umk, buildCredential ?? (await savedKey())))) {
       return toast("That key isn't saved on this device.", "err");
     }
   } catch (e) {
@@ -990,6 +1039,7 @@ function reset() {
   leftOpen = false;
   deployedUrl = null;
   relayTurnedOff = false;
+  boxNeedsKey = false;
   backTo = null;
   box = boxClient(creationTarget().fqdn);
   starting = false;
@@ -1103,9 +1153,37 @@ export async function openVibeCodeSession(sessionId, { back = null, credential =
   // unless named).
   box = boxClient(server);
   activeSessionId = sessionId;
-  if (credential) void setBuildCredential(credential);
+  if (isFreeAiCredential(credential)) markFreeAiSession(sessionId);
+  // Without a key in hand the menu still shows the session's models.
+  void setBuildCredential(credential);
   setFirstTurnVisible(false);
   const sendBtn = $("vc-send");
   if (sendBtn) sendBtn.textContent = "Send";
   await poll().catch(() => {});
+}
+
+export const SESSION_NOT_FOUND = "That build isn't open on any of your servers any more.";
+
+/**
+ * Open a session named only by its id (an AI-needs-you notification, the
+ * operations sliver): on `server` when that box holds it, else on whichever
+ * of this device's servers does.
+ */
+export async function openVibeCodeSessionById(sessionId, { server = "" } = {}) {
+  const current = currentPodFqdn();
+  const fqdn = await findSessionServer(sessionId, {
+    first: [server, current],
+    more: async () => sessionServers(await loadAccountPods(getSession()?.username ?? "")).map((s) => s.fqdn),
+    probe: async (candidate) => {
+      const c = boxClient(candidate);
+      if (!c.hasSession()) return false;
+      await c.fetch(`/api/screens/llm/sessions/${encodeURIComponent(sessionId)}`);
+      return true;
+    },
+  });
+  if (!fqdn) {
+    toast(SESSION_NOT_FOUND, "err");
+    return enterBuildJournal();
+  }
+  return openVibeCodeSession(sessionId, { server: fqdn });
 }

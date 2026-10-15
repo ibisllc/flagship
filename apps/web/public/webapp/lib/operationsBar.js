@@ -51,10 +51,10 @@ async function navigateToTarget(target) {
       return;
     }
     if (target.view === "view-vibecode-chat") {
-      // #91 — an AI-chat-needs-you alert: open the W10 chat at that session
+      // #91 — an AI-chat-needs-you alert: open the build chat at that session
       // so the owner can answer the AI's question / set the env var.
-      const { enterVibeCodeChat } = await import("../views/vibecode-chat.js");
-      await enterVibeCodeChat(params.sessionId);
+      const { openVibeCodeSessionById } = await import("../views/vibe-code.js");
+      await openVibeCodeSessionById(params.sessionId, { server: params.server || "" });
       return;
     }
     // Fallback — just show the view id if it's a plain router target.

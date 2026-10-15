@@ -198,7 +198,7 @@
 //      saves it (lib/appBackup.js) instead of a link the box refused.
 //  v91: The build chat answers an env var the AI asks for, ahead of the
 //      live link when the app is already live (an edit session).
-const SHELL_VERSION = "v91";
+const SHELL_VERSION = "v92";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -265,6 +265,7 @@ const OPTIONAL_SHELL = [
   "/lib/pushSetting.js",
   "/lib/appApiKeys.js",
   "/lib/freeAi.js",
+  "/lib/freeAiSessions.js",
   "/lib/modelMenu.js",
   "/lib/appDb.js",
   "/lib/knockIdentity.js",
@@ -356,7 +357,6 @@ const OPTIONAL_SHELL = [
   "/views/app-db.js",
   "/views/paired-sessions.js",
   "/views/vibe-code.js",
-  "/views/vibecode-chat.js",
   "/views/edit-service.js",
   "/views/service-env.js",
   "/views/recovery.js",
@@ -573,9 +573,10 @@ self.addEventListener("push", (event) => {
     const body = which === "requestEnvVar"
       ? "The AI needs an environment variable to continue."
       : "The AI is asking you a question.";
+    const server = typeof data.server === "string" && data.server ? `&server=${encodeURIComponent(data.server)}` : "";
     const deepLink = typeof data.deepLink === "string"
       ? data.deepLink
-      : `/?view=vibecode-chat&sessionId=${encodeURIComponent(data.sessionId)}`;
+      : `/?view=vibecode-chat&sessionId=${encodeURIComponent(data.sessionId)}${server}`;
     event.waitUntil(
       self.registration.showNotification("Flagship", {
         body,

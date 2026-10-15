@@ -96,8 +96,10 @@ export function parseViewQuery() {
       serviceId: params.get("serviceId") ?? null,
       // The W10 `vibecode-needs-you` push deep-links to
       // `?view=vibecode-chat&sessionId=<id>` (service-worker.js); carry the
-      // session id so the cold-start dispatcher can open that session's chat.
+      // session id (and the server holding it, when known) so the cold-start
+      // dispatcher can open that session's chat.
       sessionId: params.get("sessionId") ?? null,
+      server: params.get("sessionId") ? params.get("server") ?? null : null,
       debug: params.get("debug") === "1",
     };
   } catch {
@@ -152,7 +154,9 @@ export function clearViewQuery() {
   try {
     const u = new URL(window.location.href);
     let touched = false;
-    for (const k of ["view", "serverId", "serviceId", "sessionId"]) {
+    const keys = ["view", "serverId", "serviceId", "sessionId"];
+    if (u.searchParams.has("sessionId")) keys.push("server");
+    for (const k of keys) {
       if (u.searchParams.has(k)) {
         u.searchParams.delete(k);
         touched = true;

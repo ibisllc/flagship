@@ -166,8 +166,6 @@ describe("build chooser and build sessions screens", () => {
   it("Back from a session lands on the build chooser", async () => {
     const vibe = await asset("/webapp/views/vibe-code.js");
     expect(vibe).toMatch(/vibe-code-back[\s\S]{0,120}show\("view-build-source"\)/);
-    const chat = await asset("/webapp/views/vibecode-chat.js");
-    expect(chat).toMatch(/vibecode-chat-back[\s\S]{0,80}show\("view-build-source"\)/);
   });
 });
 

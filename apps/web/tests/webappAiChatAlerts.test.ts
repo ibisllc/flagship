@@ -177,6 +177,63 @@ describe("aiChatAlerts — drainAiChatAlertsOnce", () => {
   });
 });
 
+describe("aiChatAlerts — the server an alert came from", () => {
+  it("tags the sliver op and the notification with the box that was drained", async () => {
+    const { drainAiChatAlertsOnce, makeAiChatNotifier } = await load();
+    const ops = fakeOps();
+    const shown: any[] = [];
+    const { fetcher } = fakeFetcher([aiChatEnvelope(9, "sess-c", "requestEnvVar", "tool-3")]);
+    await drainAiChatAlertsOnce({
+      since: 0,
+      fetcher,
+      operations: ops,
+      server: "office.alice.flagship.services",
+      notify: makeAiChatNotifier({ show: (n: any) => shown.push(n) }),
+    });
+    expect(ops.upserts[0]?.target).toEqual({
+      view: "view-vibecode-chat",
+      params: { sessionId: "sess-c", server: "office.alice.flagship.services" },
+    });
+    expect(shown[0]).toMatchObject({ sessionId: "sess-c", server: "office.alice.flagship.services" });
+  });
+
+  it("the notification's link names the session and its server", async () => {
+    const { aiChatDeepLink } = await load();
+    expect(aiChatDeepLink({ sessionId: "s 1", server: "home.alice.flagship.services" })).toBe(
+      "/?view=vibecode-chat&sessionId=s%201&server=home.alice.flagship.services",
+    );
+    expect(aiChatDeepLink({ sessionId: "s1" })).toBe("/?view=vibecode-chat&sessionId=s1");
+  });
+
+  it("the poll asks which box it reaches on every tick", async () => {
+    const { startAiChatAlertPoll } = await load();
+    const ops = fakeOps();
+    let box = "home.alice.flagship.services";
+    const { fetcher } = fakeFetcher([aiChatEnvelope(1, "sess-d", "talkToUser", "t")]);
+    const timers: Array<() => void> = [];
+    const stop = startAiChatAlertPoll({
+      fetcher,
+      operations: ops,
+      server: () => box,
+      setTimeout: (fn: () => void) => {
+        timers.push(fn);
+        return timers.length;
+      },
+      clearTimeout: () => {},
+    });
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(ops.upserts[0]?.target.params.server).toBe("home.alice.flagship.services");
+    // The owner switched servers: the next drain reaches (and names) that one.
+    box = "office.alice.flagship.services";
+    timers.shift()!();
+    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(ops.upserts.at(-1)?.target.params.server).toBe("office.alice.flagship.services");
+    stop();
+  });
+});
+
 describe("aiChatAlerts — makeAiChatNotifier dedup", () => {
   it("shows once per (sessionId, toolUseId); re-drain of the same tool is silent", async () => {
     const { makeAiChatNotifier } = await load();

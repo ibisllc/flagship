@@ -82,7 +82,8 @@ describe("webapp AI-key step", () => {
     expect(body).toContain("buildCredential");
     // credential rides the start (and reply) request bodies.
     expect(body).toContain("startBody.credential = buildCredential");
-    expect(body).toContain("replyBody.credential = buildCredential");
+    expect(body).toContain("known: buildCredential");
+    expect(body).toContain("replyBody.credential = credential");
     // A skipped key surfaces a gentle nudge back into the key step.
     expect(body).toContain("r.needsCredential");
     expect(body).toContain("enterBuildKey");

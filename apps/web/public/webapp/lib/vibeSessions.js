@@ -224,3 +224,39 @@ export async function fetchBuildsOnServers(servers, { fetchImpl = globalThis.fet
     failed: results.filter((r) => r.error).map((r) => ({ fqdn: r.fqdn, error: r.error })),
   };
 }
+
+/**
+ * The server holding `sessionId`: the `first` candidates in order (a hint,
+ * then the current server), then `more()` (every server this device has a
+ * session for, read only when those miss). `probe(fqdn)` resolves true when
+ * that box holds the session; a throw or false moves on. Null when none does.
+ */
+export async function findSessionServer(sessionId, { first = [], more = async () => [], probe }) {
+  if (!sessionId) return null;
+  const tried = new Set();
+  const tryOne = async (fqdn) => {
+    const f = String(fqdn ?? "").trim().toLowerCase();
+    if (!f || tried.has(f)) return null;
+    tried.add(f);
+    try {
+      return (await probe(f)) ? f : null;
+    } catch {
+      return null;
+    }
+  };
+  for (const f of first) {
+    const hit = await tryOne(f);
+    if (hit) return hit;
+  }
+  let rest = [];
+  try {
+    rest = (await more()) ?? [];
+  } catch {
+    rest = [];
+  }
+  for (const f of rest) {
+    const hit = await tryOne(f);
+    if (hit) return hit;
+  }
+  return null;
+}

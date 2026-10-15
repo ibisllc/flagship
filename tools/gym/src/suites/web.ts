@@ -1505,6 +1505,39 @@ const TOTAL: readonly Scenario[] = [
       dimension: "D2",
     },
   ),
+  webTotal(
+    "web-total-inference-notification-chat",
+    "An AI-needs-you notification (?view=vibecode-chat&sessionId=…&server=…) opens the build chat on the server holding the session, not the current one: the env-var card asks for the value, /env/set goes to that box signed with its serverId, and the ack carries a fresh Flagship Inference pass minted for that box plus the session's model on the menu (iOS VibeCodeSessionScreen, Android vibecode chat).",
+    "gym inference a notification opens the build chat on the session's server",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Home on Home; pair Office too; this device started gym-sess-9 on free AI." },
+        { kind: "assert", describe: "The link opens the build chat at the env-var request.", handle: "#vc-envvar" },
+        { kind: "type", describe: "Paste the value.", handle: "#vc-envvar-value" },
+        { kind: "tap", describe: "Send value.", handle: "#vc-envvar-send" },
+      ],
+      assertions: [
+        { describe: "AI waiting", handle: "#vc-status", expect: "text", text: "The AI has a question" },
+        { describe: "The session's model on the menu", handle: "#vc-model-bar .mm-trigger-text", expect: "text", text: "Medium 1×" },
+      ],
+      screenshots: [shot("notification-chat", "The build chat opened from a notification.")],
+      dimension: "D2",
+    },
+  ),
+  webTotal(
+    "web-total-inference-notification-find-server",
+    "A chat link with only a session id asks the current server first, then the account's other servers, and opens the chat on the one that holds the session.",
+    "gym inference a link without a server finds the one holding the session",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Home on Home; pair Office, which holds gym-sess-9." },
+        { kind: "assert", describe: "The chat opens on Office at the env-var request.", handle: "#vc-envvar" },
+      ],
+      assertions: [{ describe: "Env-var card", handle: "#vc-envvar", expect: "text", text: "WEATHER_API_KEY" }],
+      screenshots: [shot("notification-chat-found", "The chat found on the other server.")],
+      dimension: "D2",
+    },
+  ),
 
   // ── Browser remote, QR-first (remote.<apex>) — gym-remote.spec.ts ──
   webTotal(

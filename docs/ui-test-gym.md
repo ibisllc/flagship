@@ -531,8 +531,8 @@ Column), `GlobalTrustBar.kt`, `Toaster.kt`, `SecureWindow.kt` (FLAG_SECURE),
 - **Pairing/device:** `pair.js`, `pod-pair.js`, `create-server.js`,
   `trusted-devices.js`, `add-device.js` (QR + SAS).
 - **Services:** `services-list.js`, `service-detail.js`, `service-env.js`.
-- **Build-a-service:** `build-source.js`, `vibe-code.js`, `vibecode-chat.js`,
-  `build-git.js`, `build-mcp.js`, `build-key.js`, `build-journal.js`.
+- **Build-a-service:** `build-source.js`, `vibe-code.js` (also opened by
+  session id from an AI-needs-you notification), `build-git.js`, `build-mcp.js`, `build-key.js`, `build-journal.js`.
 - **Activity:** `activity.js`, `boot-approval.js`, `account-audit.js`,
   `install-progress.js`, `browser-viewer.js`.
 - **Settings/security:** `settings.js`, `account-security.js`, `paired-sessions.js`.
