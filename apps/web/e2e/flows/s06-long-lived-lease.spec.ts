@@ -3,16 +3,16 @@
  *
  * Home → tap the server card → server detail → "Enable for 7 days". The
  * webapp fetches the LUKS key `.com` holds sealed FOR the account IRK,
- * unseals it locally, signs an AutoUnlockLease (multiUse, ~7 d) with the IRK
- * and POSTs it to .com. `.com` is stubbed, but the seal and the signature are
- * real @flagship/protocol crypto: the test asserts the POST carries the exact
- * unsealed key under a signature that verifies against the IRK. The full
- * deposit → consume roundtrip is asserted live by smoke-lease-unlock.ts.
+ * unseals it locally, re-seals it FOR the box's directory STK and signs a
+ * box-sealed AutoUnlockLease v2 (~7 d) with the IRK. `.com` is stubbed, but
+ * the seals and the signature are real @flagship/protocol crypto: the test
+ * asserts the POST never carries the key, that the signature verifies against
+ * the IRK, and that only the box's STK opens the sealed key.
  */
 
 import { test, expect, bootstrapToHome, syncWebappPubkey } from "../fixtures/pod-sim.js";
 import { bytesToHex } from "../fixtures/identity.js";
-import { sealForEd25519Recipient, verifyAutoUnlockLease } from "@flagship/protocol";
+import { openAutoUnlockLeaseV2, sealForEd25519Recipient, verifyAutoUnlockLeaseV2 } from "@flagship/protocol";
 
 const PASSPHRASE = "correct-horse-battery-staple-test";
 
@@ -57,11 +57,19 @@ test("S6 — enable long-lived auto-unlock + assert wire-side POST shape", async
       body: JSON.stringify({ serverDomain: identity.serverFqdn, sealedKey: bytesToHex(sealedForIrk), sealedAt: Date.now() }),
     }),
   );
-  await page.route("**/api/server/*/unlock-key/leases", (route) =>
+  // The box's STK comes from the account's directory.
+  await page.route("**/api/users/*/pods", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ pods: [{ serverDomain: identity.serverFqdn, identityPubKey: bytesToHex(identity.stk.publicKey), revokedAt: null }] }),
+    }),
+  );
+  await page.route("**/api/server/*/unlock-key/leases-v2", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ leases: [] }) }),
   );
   let leasePost: string | null = null;
-  await page.route("**/api/server/*/unlock-key/lease", async (route, request) => {
+  await page.route("**/api/server/*/unlock-key/lease-v2", async (route, request) => {
     if (request.method() === "POST") {
       leasePost = request.postData() ?? "";
       return route.fulfill({
@@ -90,21 +98,18 @@ test("S6 — enable long-lived auto-unlock + assert wire-side POST shape", async
   await expect.poll(() => leasePost, { timeout: 10_000 }).not.toBeNull();
   await expect(page.locator("#toast")).toContainText("Auto-unlock on");
   const posted = JSON.parse(leasePost!) as {
-    request: { serverId: string; leaseId: string; unlockKey: string; multiUse: boolean; expiresAt: number; issuedAt: number };
+    lease: { serverDomain: string; stkPub: string; leaseId: string; sealedKey: string; expiresAt: number; issuedAt: number };
     signature: string;
   };
-  expect(posted.request.serverId).toBe(identity.serverFqdn);
-  expect(posted.request.multiUse).toBe(true);
-  expect(posted.request.unlockKey).toBe(bytesToHex(luksKey));
-  const ttl = posted.request.expiresAt - posted.request.issuedAt;
+  expect(posted.lease.serverDomain).toBe(identity.serverFqdn);
+  expect(posted.lease.stkPub).toBe(bytesToHex(identity.stk.publicKey));
+  expect(leasePost).not.toContain(bytesToHex(luksKey));
+  const ttl = posted.lease.expiresAt - posted.lease.issuedAt;
   expect(ttl).toBe(7 * 24 * 60 * 60 * 1000);
-  expect(posted.request.issuedAt).toBeGreaterThanOrEqual(before - 1000);
-  const verified = verifyAutoUnlockLease(
-    { ...posted.request, unlockKey: hexToBytes(posted.request.unlockKey) },
-    hexToBytes(posted.signature),
-    hexToBytes(irkPubHex),
-  );
-  expect(verified).toBe(true);
+  expect(posted.lease.issuedAt).toBeGreaterThanOrEqual(before - 1000);
+  const lease = { ...posted.lease, stkPub: hexToBytes(posted.lease.stkPub), sealedKey: hexToBytes(posted.lease.sealedKey) };
+  expect(verifyAutoUnlockLeaseV2(lease, hexToBytes(posted.signature), hexToBytes(irkPubHex))).toBe(true);
+  expect(bytesToHex(openAutoUnlockLeaseV2(lease, identity.stk.privateKey))).toBe(bytesToHex(luksKey));
 });
 
 test("S7 — auto-renewer fires on home enter when a lease is close to expiry", async ({
@@ -124,7 +129,7 @@ test("S7 — auto-renewer fires on home enter when a lease is close to expiry", 
   await page.click("#pod-pair-back");
 
   // The renewer queries /api/me/servers (apex), then for each server
-  // queries /api/server/<fqdn>/unlock-key/leases. We intercept both.
+  // queries /api/server/<fqdn>/unlock-key/leases-v2. We intercept both.
   // Return ONE lease that's 12h from expiry (within the 24h renewal
   // window) so the renewer should re-issue.
   const leasesResponses: Array<unknown> = [];
@@ -137,12 +142,11 @@ test("S7 — auto-renewer fires on home enter when a lease is close to expiry", 
       }),
     }),
   );
-  await page.route("**/api/server/*/unlock-key/leases", (route) => {
+  await page.route("**/api/server/*/unlock-key/leases-v2", (route) => {
     const body = JSON.stringify({
       leases: [
         {
           leaseId: "11".repeat(8),
-          multiUse: true,
           depositedAt: Date.now() - 6 * 24 * 60 * 60_000,
           expiresAt: Date.now() + 12 * 60 * 60_000, // within renewal window
         },
@@ -164,7 +168,7 @@ test("S7 — auto-renewer fires on home enter when a lease is close to expiry", 
   // The home view's renderServers() early-returns when no
   // flagship.sessionId is in localStorage (the webapp's apex-device-
   // pair flow is what normally sets it, separate from pod-pair).
-  // Seed it so scheduleRenewals → /api/me/servers → /unlock-key/leases
+  // Seed it so scheduleRenewals → /api/me/servers → /unlock-key/leases-v2
   // actually fires under the rig.
   await page.evaluate(() => {
     ((globalThis as unknown) as { localStorage: { setItem(k: string, v: string): void } })

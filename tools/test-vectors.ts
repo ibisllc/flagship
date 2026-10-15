@@ -59,6 +59,8 @@ import {
   signServerRegister,
   signServerTransferClaim,
   signSetRoutingTarget,
+  signAutoUnlockLeaseV2,
+  signLeaseRevocation,
   signTunnelHello,
   signUninstallService,
   signWatchDelegateKey,
@@ -88,6 +90,8 @@ import {
   type ServerRevocation,
   type ServerTransferClaim,
   type SetRoutingTarget,
+  type AutoUnlockLeaseV2,
+  type LeaseRevocation,
   type TunnelHello,
   type UninstallServiceRequest,
   type WatchDelegateKey,
@@ -873,6 +877,46 @@ function buildVectors(): Vector[] {
     ),
   );
 
+  // ---- AutoUnlockLease v2 (IRK) — the box-sealed lease: pins the box STK
+  // and carries only the key sealed for it. The seal is randomized, so the
+  // vector fixes a sealed blob; canonical bytes only hex it. ----
+  const sealedKey = new Uint8Array(76);
+  for (let i = 0; i < sealedKey.length; i++) sealedKey[i] = (i * 37 + 11) & 0xff;
+  const leaseV2: AutoUnlockLeaseV2 = {
+    serverDomain: "home.harry.flagship.services",
+    stkPub: stk.publicKey,
+    leaseId: "0123456789abcdef0123456789abcdef",
+    sealedKey,
+    issuedAt: ISSUED_AT,
+    expiresAt: ISSUED_AT + 7 * 24 * 60 * 60_000,
+  };
+  const leaseV2Input = { ...leaseV2, stkPub: hex(leaseV2.stkPub), sealedKey: hex(leaseV2.sealedKey) };
+  vectors.push(
+    makeVector(
+      "auto-unlock-lease-v2",
+      "irk",
+      leaseV2Input,
+      signAutoUnlockLeaseV2(leaseV2, irk),
+      payloadByName("auto-unlock-lease-v2", leaseV2Input),
+      ["ts", "webapp"],
+    ),
+  );
+  const leaseRevoke: LeaseRevocation = {
+    serverDomain: "home.harry.flagship.services",
+    leaseId: "0123456789abcdef0123456789abcdef",
+    issuedAt: ISSUED_AT,
+  };
+  vectors.push(
+    makeVector(
+      "auto-unlock-lease-revoke",
+      "irk",
+      { ...leaseRevoke },
+      signLeaseRevocation(leaseRevoke, irk),
+      payloadByName("auto-unlock-lease-revoke", { ...leaseRevoke }),
+      ["ts", "webapp"],
+    ),
+  );
+
   return vectors;
 }
 
@@ -1131,6 +1175,21 @@ function payloadByName(name: string, i: Record<string, unknown>): Uint8Array {
           i.issuedAt,
         ].join("|"),
       );
+    case "auto-unlock-lease-v2":
+      return enc(
+        [
+          "flagship/auto-unlock-lease/v2",
+          i.serverDomain,
+          i.stkPub,
+          i.leaseId,
+          i.sealedKey,
+          i.issuedAt,
+          i.expiresAt,
+          (i.maxUses as number | undefined) ?? -1,
+        ].join("|"),
+      );
+    case "auto-unlock-lease-revoke":
+      return enc(["flagship/auto-unlock-lease-revoke/v1", i.serverDomain, i.leaseId, i.issuedAt].join("|"));
     case "uninstall-service":
       return enc(["flagship/uninstall-service/v1", i.serverId, i.creator, i.slug, i.issuedAt].join("|"));
     case "daemon-status":

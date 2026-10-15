@@ -50,6 +50,8 @@ import {
   verifyServerTransferClaim,
   verifySetRoutingTarget,
   verifyTunnelHello,
+  verifyAutoUnlockLeaseV2,
+  verifyLeaseRevocation,
   verifyUninstallService,
   verifyWatchDelegateKey,
   type DeviceScope,
@@ -500,6 +502,29 @@ describe("cross-language canonical-bytes vectors (shared fixture)", () => {
           },
           sig,
           adminRootPub,
+        );
+      case "auto-unlock-lease-v2":
+        return verifyAutoUnlockLeaseV2(
+          {
+            serverDomain: i.serverDomain as string,
+            stkPub: fromHex("stkPub"),
+            leaseId: i.leaseId as string,
+            sealedKey: fromHex("sealedKey"),
+            issuedAt: i.issuedAt as number,
+            expiresAt: i.expiresAt as number,
+          },
+          sig,
+          irkPub,
+        );
+      case "auto-unlock-lease-revoke":
+        return verifyLeaseRevocation(
+          {
+            serverDomain: i.serverDomain as string,
+            leaseId: i.leaseId as string,
+            issuedAt: i.issuedAt as number,
+          },
+          sig,
+          irkPub,
         );
       case "uninstall-service":
         return verifyUninstallService(

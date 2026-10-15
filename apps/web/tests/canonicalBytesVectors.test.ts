@@ -19,6 +19,7 @@ import { canonicalRevokeBytes } from "../public/webapp/lib/revokeServer.js";
 import { canonicalRePairInitiateBytes } from "../public/webapp/lib/replaceDeviceCeremony.js";
 import { canonicalClaimBytes } from "../public/webapp/lib/serverTransfer.js";
 import { canonicalUninstallServiceBytes } from "../public/webapp/lib/appPlacement.js";
+import { canonicalLeaseRevokeBytes, canonicalLeaseV2Bytes } from "../public/webapp/lib/leases.js";
 
 const PATH = resolve(__dirname, "..", "..", "..", "test-vectors", "canonical-bytes.json");
 
@@ -116,6 +117,22 @@ const WEBAPP_ENCODERS: Record<string, (i: Record<string, unknown>) => Uint8Array
       acquirerUsername: i.acquirerUsername as string,
       acquirerIrkPubHex: i.acquirerIrkPub as string,
       acquirerAdminRootPubHex: i.acquirerAdminRootPubHex as string,
+      issuedAt: i.issuedAt as number,
+    }),
+  "auto-unlock-lease-v2": (i) =>
+    canonicalLeaseV2Bytes({
+      serverDomain: i.serverDomain as string,
+      stkPubHex: i.stkPub as string,
+      leaseId: i.leaseId as string,
+      sealedKeyHex: i.sealedKey as string,
+      issuedAt: i.issuedAt as number,
+      expiresAt: i.expiresAt as number,
+      maxUses: i.maxUses as number | undefined,
+    }),
+  "auto-unlock-lease-revoke": (i) =>
+    canonicalLeaseRevokeBytes({
+      serverDomain: i.serverDomain as string,
+      leaseId: i.leaseId as string,
       issuedAt: i.issuedAt as number,
     }),
   "uninstall-service": (i) =>
