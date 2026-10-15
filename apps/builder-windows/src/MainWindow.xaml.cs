@@ -37,6 +37,7 @@ public partial class MainWindow : Window
         _wizard = new Wizard();
         DataContext = _wizard;
         InitializeComponent();
+        WifiPasswordBox.Password = _wizard.WifiPassword;
         _trayIcon = new TrayIcon(this, _wizard.Vm);
         // Every exit path (window X, File > Exit, tray Quit, restart elevated)
         // closes this window, and closing the last window ends the app. QEMU

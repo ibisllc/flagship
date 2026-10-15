@@ -305,9 +305,9 @@
                         <StackPanel Margin="4,8,4,0">
                             <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="160"/></Grid.ColumnDefinitions>
                                 <TextBox Grid.Column="0" Text="{Binding WifiSsid, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,8,0" ToolTip="Wi-Fi network name (optional)"/>
-                                <PasswordBox Grid.Column="1" PasswordChanged="WifiPassword_Changed" ToolTip="Wi-Fi password (optional)"/>
+                                <PasswordBox x:Name="WifiPasswordBox" Grid.Column="1" PasswordChanged="WifiPassword_Changed" ToolTip="Wi-Fi password (optional)"/>
                             </Grid>
-                            <TextBlock Text="Optional Wi-Fi for a server without Ethernet. Baked into this single-use installer." Style="{StaticResource Caption}" Margin="0,4,0,0"/>
+                            <TextBlock Text="Optional Wi-Fi for a server without Ethernet. Baked into this single-use installer, and remembered on this PC for your account only." Style="{StaticResource Caption}" Margin="0,4,0,0"/>
                         </StackPanel>
                         <!-- Bake button -->
                         <StackPanel Margin="0,18,0,12" HorizontalAlignment="Center">

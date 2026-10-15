@@ -65,6 +65,7 @@ public sealed class Wizard : INotifyPropertyChanged
         Vm = VMManager.CreateDefault();
         Vm.Log = m => AppendLog(LogStream.Stdout, m);
         Vm.WakeHoldChanged = on => OnUi(() => HostPower.KeepAwake(on));
+        (_wifiSsid, _wifiPassword) = _wifiStore.Load();
         _pairingWatch = new PairingWatch(WantsPairing, StartPairing, PausePairingOffline, ScheduleOnUi);
         System.Net.NetworkInformation.NetworkChange.NetworkAvailabilityChanged += (_, e) =>
             OnUi(() => _pairingWatch.OnConnectivity(e.IsAvailable));
@@ -682,8 +683,16 @@ public sealed class Wizard : INotifyPropertyChanged
     /// user-supplied Debian/Ubuntu ISO through the native installer pipeline.
     /// </summary>
     public bool UseSystemIso { get => _useSystemIso; set { if (_useSystemIso != value) { _useSystemIso = value; FireBag(); } } }
-    public string WifiSsid { get => _wifiSsid; set { if (_wifiSsid != value) { _wifiSsid = value; FireBag(); } } }
-    public string WifiPassword { get => _wifiPassword; set { if (_wifiPassword != value) { _wifiPassword = value; FireBag(); } } }
+    public string WifiSsid { get => _wifiSsid; set { if (_wifiSsid != value) { _wifiSsid = value; SaveWifi(); FireBag(); } } }
+    public string WifiPassword { get => _wifiPassword; set { if (_wifiPassword != value) { _wifiPassword = value; SaveWifi(); FireBag(); } } }
+
+    private readonly WifiCredentialStore _wifiStore = new();
+
+    private void SaveWifi()
+    {
+        try { _wifiStore.Save(_wifiSsid, _wifiPassword); }
+        catch (Exception e) { AppendLog(LogStream.Stderr, $"Couldn't remember the Wi-Fi details: {e.Message}"); }
+    }
     public bool IsSimpleMode => Mode == BuilderMode.Simple;
     public bool IsAdvancedMode => Mode == BuilderMode.Advanced;
     public BuilderMode Mode
