@@ -177,6 +177,12 @@ public struct ServiceDetailScreen: View {
 
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s4) {
+                    // CUSTOM DOMAIN sits at the very top, only when one
+                    // is bound. It's the user's own name — show it first.
+                    if let cd = vm.customDomain {
+                        customDomainGroup(fqdn: cd, c: c)
+                        Divider().background(c.border)
+                    }
                     shortRedirectGroup(c: c)
                     Divider().background(c.border)
                     canonicalGroup(c: c, defaultLabel: d.app.urlLabel)
@@ -184,6 +190,27 @@ public struct ServiceDetailScreen: View {
                     instancesGroup(c: c, defaultLabel: d.app.urlLabel)
                 }
             }
+
+            setCustomDomainSection(c: c)
+        }
+        .alert(
+            vm.customDomainPrompt?.title ?? "",
+            isPresented: Binding(
+                get: { vm.customDomainPrompt != nil },
+                set: { if !$0 { vm.customDomainPrompt = nil } }
+            ),
+            presenting: vm.customDomainPrompt
+        ) { prompt in
+            if let confirmTitle = prompt.confirmTitle, let onConfirm = prompt.onConfirm {
+                Button(confirmTitle, role: prompt.destructive ? .destructive : nil) {
+                    onConfirm()
+                }
+                Button("Cancel", role: .cancel) {}
+            } else {
+                Button("OK", role: .cancel) {}
+            }
+        } message: { prompt in
+            Text(prompt.message)
         }
         .sheet(isPresented: $showReplaceSheet) {
             ReplaceServiceStemSheet(
@@ -354,6 +381,73 @@ public struct ServiceDetailScreen: View {
                         Image(systemName: "xmark.circle.fill").foregroundColor(c.textMuted)
                     }
                     .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    /// Top group in WEB DOMAINS — only when a domain is bound. Same
+    /// row treatment (wrap-at-dots + copy) as the other groups.
+    private func customDomainGroup(fqdn: String, c: FSColors) -> some View {
+        VStack(alignment: .leading, spacing: FS.space.s2) {
+            sectionLabel("CUSTOM DOMAIN", c: c)
+            urlRow(url: "https://\(fqdn)", style: .prominent, c: c)
+        }
+    }
+
+    private var customDomainRoot: String { Endpoints.userZoneHost(username ?? "you") }
+
+    private func cooldownLabel(_ remaining: TimeInterval) -> String {
+        let s = max(0, Int(remaining.rounded(.up)))
+        return String(format: "%d:%02d", s / 60, s % 60)
+    }
+
+    private func setCustomDomainSection(c: FSColors) -> some View {
+        // Tick every second so the cooldown countdown + disabled state
+        // stay live without a manual timer.
+        TimelineView(.periodic(from: .now, by: 1)) { ctx in
+            let remaining = vm.customDomainCooldownUntil?
+                .timeIntervalSince(ctx.date) ?? 0
+            let cooling = remaining > 0
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s3) {
+                    HStack {
+                        sectionLabel("SET CUSTOM DOMAIN", c: c)
+                        Spacer()
+                        if cooling {
+                            // Same treatment as the section label, but
+                            // right-floated on the same line.
+                            Text(cooldownLabel(remaining))
+                                .font(.system(size: 11, weight: .semibold))
+                                .tracking(1)
+                                .foregroundColor(c.textMuted)
+                                .monospacedDigit()
+                        }
+                    }
+                    // Inline input (not FSField) so there's no empty
+                    // label row reserving height — that's what made the
+                    // Add button sit a few px above the box. Both are
+                    // h=40 and center-aligned, so they line up exactly.
+                    HStack(alignment: .center, spacing: FS.space.s2) {
+                        TextField("www.mydomain.com", text: $vm.customDomainDraft)
+                            .font(FS.font.body())
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                            .keyboardType(.URL)
+                            .padding(.horizontal, 14)
+                            .frame(height: 40)
+                            .background(c.surfaceSunken)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: FS.radius.sm)
+                                    .stroke(c.border, lineWidth: 1)
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
+                        FSPrimaryButton("Add", enabled: !cooling, block: false) {
+                            Task { await vm.submitCustomDomain(rootDomain: customDomainRoot) }
+                        }
+                    }
+                    Text("Prior to claiming a FQDN, you must set a CNAME record targeting \(customDomainRoot).")
+                        .font(FS.font.caption()).foregroundColor(c.textMuted)
                 }
             }
         }

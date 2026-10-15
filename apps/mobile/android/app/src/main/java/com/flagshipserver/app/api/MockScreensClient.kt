@@ -858,6 +858,32 @@ class MockScreensClient(
         )
     }
 
+    private val verifyCallCount = mutableMapOf<String, Int>()
+
+    override suspend fun verifyCustomDomain(req: VerifyCustomDomainRequest): VerifyCustomDomainResponse {
+        tick()
+        val count = (verifyCallCount[req.fqdn] ?: 0) + 1
+        verifyCallCount[req.fqdn] = count
+        val expected = "flagship-verify=${abs(req.fqdn.hashCode())}"
+        return if (count == 1) {
+            VerifyCustomDomainResponse(
+                fqdn = req.fqdn,
+                status = VerifyCustomDomainResponse.Status.PENDING,
+                expectedTxtRecord = expected,
+                observedTxtRecord = null,
+                reason = "Waiting for DNS propagation (typical: 1–5 minutes).",
+            )
+        } else {
+            VerifyCustomDomainResponse(
+                fqdn = req.fqdn,
+                status = VerifyCustomDomainResponse.Status.VERIFIED,
+                expectedTxtRecord = expected,
+                observedTxtRecord = expected,
+                reason = null,
+            )
+        }
+    }
+
     // W10 — per-app env vars + vibe-code session mock state.
     //
     // Values are SECRET — held only in this in-memory map and never
