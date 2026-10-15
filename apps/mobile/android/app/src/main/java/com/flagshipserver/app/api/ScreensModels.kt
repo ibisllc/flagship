@@ -73,6 +73,15 @@ data class AppCopyRequest(
     val signature: String,
 )
 
+/** The box's answer to a delivered server order: [heldIssuedAt] is the
+ *  `issuedAt` of the order it holds now (0 when none). */
+@Serializable
+data class ServerOrderDeliveryResponse(
+    val ok: Boolean = false,
+    val adopted: Boolean = false,
+    val heldIssuedAt: Long = 0,
+)
+
 /** 202 from the copy endpoint. */
 @Serializable
 data class AppCopyResponse(val copyId: String = "")

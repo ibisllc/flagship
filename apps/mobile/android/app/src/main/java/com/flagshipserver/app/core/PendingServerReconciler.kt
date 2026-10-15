@@ -111,6 +111,7 @@ class PendingServerReconciler(
                     )
                 )
         }
+        val acks = HashMap<String, Long>()
         for (entry in registeredEntries) {
             val fqdn = entry.serverDomain
             val pendingName = app.pods.value.firstOrNull {
@@ -119,7 +120,7 @@ class PendingServerReconciler(
             // `cameOnline` — a registered box with no daemon check-in + no cert
             // is "registered but never came online"; the UI marks it + offers
             // the decommission/free-the-name delete instead of the revoke.
-            app.upsertRegisteredPod(
+            val podId = app.upsertRegisteredPod(
                 fqdn = fqdn,
                 name = pendingName ?: serverNameFromFqdn(fqdn),
                 cameOnline = entry.cameOnline,
@@ -145,6 +146,7 @@ class PendingServerReconciler(
                 revokedAt = entry.revokedAt,
                 revocationReason = entry.revocationReason,
             )
+            entry.orderIssuedAt?.let { acks[podId] = it }
             // Secret-free recipe: a registered box now has a directory identity
             // to seal the SWK to. The handler no-ops unless a deposit is owed for
             // this fqdn (idempotent via PendingSwkDepositStore).
@@ -152,6 +154,8 @@ class PendingServerReconciler(
                 onRegistered(fqdn, entry.identityPubKey)
             }
         }
+
+        app.recordServerOrderAcks(acks)
 
         // The non-pending pods are the live ones now (including the ones we
         // just flipped online).

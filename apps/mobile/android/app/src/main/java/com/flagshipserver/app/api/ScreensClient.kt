@@ -204,6 +204,12 @@ interface ScreensClient {
     /** The FQDN of the box this client talks to, which a signed grant names. */
     suspend fun boxFqdn(): String? = null
 
+    /** `POST /api/screens/server-order` (docs/server-order.md): the owner's
+     *  signed order, the same wire posted to `.com`. 200 `{ok, adopted,
+     *  heldIssuedAt}`; 422 when it doesn't verify; a box from before answers 404. */
+    suspend fun deliverServerOrder(wire: com.flagshipserver.app.core.ServerOrderWire): ServerOrderDeliveryResponse =
+        throw ScreensError.NotImplemented("server order")
+
     /** `POST /api/screens/services/copy` (docs/app-placement.md §5), sent to
      *  the TARGET box with the owner's signed grant: 202 `{copyId}`; 400
      *  malformed, 403 bad signature / not this box / stale, 409 already there

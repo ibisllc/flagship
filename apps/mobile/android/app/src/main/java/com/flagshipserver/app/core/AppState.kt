@@ -13,6 +13,7 @@ import com.flagshipserver.app.keystore.Keystore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.serialization.Serializable
 
 // W8 NOTE: Android doesn't have iCloud-style auto-sync of secrets across
@@ -80,9 +81,17 @@ class AppState(
      *  leader. Null until `/pods` carries one or the owner reorders. */
     private val _serverOrder = MutableStateFlow(serverOrder)
     val serverOrder: StateFlow<List<String>?> = _serverOrder.asStateFlow()
-    /** issuedAt of the order held in [serverOrder]; a `/pods` copy that isn't
-     *  newer never replaces it (a reorder in flight stays on screen). */
-    private var serverOrderIssuedAt: Long = 0
+    /** issuedAt of the order held in [serverOrder] (0 when the owner never
+     *  ordered); a `/pods` copy that isn't newer never replaces it (a reorder
+     *  in flight stays on screen). */
+    private val _serverOrderIssuedAt = MutableStateFlow(0L)
+    val serverOrderIssuedAt: StateFlow<Long> = _serverOrderIssuedAt.asStateFlow()
+
+    /** Per pod id, the issuedAt of the order that box says it holds (from
+     *  `/pods` `orderIssuedAt` and the boxes' answers to a delivered order).
+     *  Home's Leader badge stays gray until the leader holds the order shown. */
+    private val _serverOrderAcks = MutableStateFlow<Map<String, Long>>(emptyMap())
+    val serverOrderAcks: StateFlow<Map<String, Long>> = _serverOrderAcks.asStateFlow()
 
     /** [pods] ranked by the server order: what Home lists. */
     private val _orderedPods = MutableStateFlow(ServerOrderProtocol.rank(pods, serverOrder))
@@ -482,19 +491,28 @@ class AppState(
      *  only replaces it when newer. */
     fun setServerOrder(stks: List<String>?, issuedAt: Long) {
         _serverOrder.value = stks?.map { it.lowercase() }
-        serverOrderIssuedAt = issuedAt
+        _serverOrderIssuedAt.value = issuedAt
         refreshOrder()
     }
 
     /** The order and its issuedAt as held now, to put back after a failed save. */
-    fun serverOrderSnapshot(): Pair<List<String>?, Long> = _serverOrder.value to serverOrderIssuedAt
+    fun serverOrderSnapshot(): Pair<List<String>?, Long> = _serverOrder.value to _serverOrderIssuedAt.value
+
+    /** Fold in what boxes say they hold. A box's ack only moves forward: a
+     *  `/pods` report older than a box's direct answer never undoes it. */
+    fun recordServerOrderAcks(acks: Map<String, Long>) {
+        if (acks.isEmpty()) return
+        _serverOrderAcks.update { held ->
+            held + acks.filter { (podId, issuedAt) -> issuedAt > (held[podId] ?: 0) }
+        }
+    }
 
     /** Take `/pods`' order when it is newer than the one held. A missing
      *  order never clears one (the owner's reorder may not have landed yet). */
     fun applyDirectoryServerOrder(wire: ServerOrderWire?) {
         val order = wire?.order ?: return
         if (!order.user.equals(_currentUser.value, ignoreCase = true)) return
-        if (order.issuedAt <= serverOrderIssuedAt) return
+        if (order.issuedAt <= _serverOrderIssuedAt.value) return
         setServerOrder(order.stks, order.issuedAt)
     }
 
@@ -506,7 +524,8 @@ class AppState(
 
     private fun clearServerOrder() {
         _serverOrder.value = null
-        serverOrderIssuedAt = 0
+        _serverOrderIssuedAt.value = 0
+        _serverOrderAcks.value = emptyMap()
     }
 
     /** #56 — registration is AUTHORITATIVE for online. A server present in the

@@ -286,11 +286,12 @@ fun HomeTab() {
                 accountDisplayName = app.activeProfile?.accountDisplayName,
                 deviceDisplayName = app.activeProfile?.deviceDisplayName,
                 pods = orderedPods,
-                leaderPodId = app.leaderPodId.collectAsState().value,
+                serverOrderIssuedAt = app.serverOrderIssuedAt.collectAsState().value,
+                serverOrderAcks = app.serverOrderAcks.collectAsState().value,
                 onOpenPod = { pod ->
                     nav.navigate("server-detail/${pod.podId}")
                 },
-                // Slice A — "Add a server" goes STRAIGHT to provisioning a new
+                // Slice A — "Add/connect a server" goes STRAIGHT to provisioning a new
                 // box (no chooser). Pairing an existing box is automatic
                 // (Slice B); taking over a transferred box is a link/QR
                 // ingestion (Slice C, via the deep link / "Process a link").

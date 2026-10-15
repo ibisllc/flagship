@@ -780,14 +780,17 @@ private fun LeaderCard(serverDomain: String) {
     val saver = com.flagshipserver.app.core.rememberServerOrderSaver()
 
     val ordered by app.orderedPods.collectAsState()
-    val leaderPodId by app.leaderPodId.collectAsState()
+    val orderIssuedAt by app.serverOrderIssuedAt.collectAsState()
+    val acks by app.serverOrderAcks.collectAsState()
 
     val orderable = ordered.filter(com.flagshipserver.app.core.ServerOrderProtocol::orderable)
     val pod = orderable.firstOrNull { it.fqdn.equals(serverDomain, ignoreCase = true) }
     // Only meaningful among two or more servers this one can be ranked against.
     if (pod == null || orderable.size < 2) return
-    val position = orderable.indexOf(pod) + 1
-    val isLeader = leaderPodId == pod.podId
+    val index = orderable.indexOf(pod)
+    // The same leader Home badges: the first server in the order that is online.
+    val isLeader = leaderLabel(ordered)?.podId == pod.podId
+    val confirmed = leaderConfirmed(false, orderIssuedAt, acks, pod.podId)
 
     var working by remember(serverDomain) { mutableStateOf(false) }
 
@@ -800,17 +803,21 @@ private fun LeaderCard(serverDomain: String) {
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             Text(
-                when {
-                    position == 1 && isLeader -> "This server leads. New apps are created here, and it serves each app it runs."
-                    position == 1 -> "This server is first in line. While it's down, the next server that's up leads."
-                    isLeader -> "This server is #$position in line and leads while the servers above it are down."
-                    else -> "This server is #$position in line to lead. Make it the leader to move it to the top of your server list."
-                },
+                if (isLeader) "This server leads"
+                else successionLine(orderable.take(index).map { it.name }),
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 13.sp),
                 modifier = Modifier.testTag("sd-leader-status"),
             )
-            if (position != 1) {
+            if (isLeader && !confirmed) {
+                Text(
+                    "Waiting for it to confirm the new order.",
+                    color = FS.colors.textMuted,
+                    style = TextStyle(fontSize = 12.sp),
+                    modifier = Modifier.testTag("sd-leader-pending"),
+                )
+            }
+            if (index != 0) {
                 FSPrimaryButton(
                     label = if (working) "Saving…" else "Make leader",
                     onClick = {

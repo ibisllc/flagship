@@ -162,7 +162,6 @@ class ShareScreenshotsTest {
             ),
             username = "sam",
             pods = listOf(PodInfo(podId = "p1", name = "Lab", fqdn = "lab.sam.flagship.services", status = PodInfo.Status.ONLINE)),
-            leaderPodId = "p1",
             onOpenPod = {}, onAddServer = {}, onMakeLeader = {}, onRefresh = {},
             sharedWithMe = {
                 SharedWithMeContent(

@@ -137,13 +137,15 @@ fun canonicalSetServiceEnv(req: com.flagshipserver.app.api.ServiceEnvSetEnvelope
 fun rememberServerOrderSaver(): ServerOrderSaver {
     val app = LocalAppState.current
     val mailbox = LocalSecretMailboxClient.current
-    return androidx.compose.runtime.remember(app, mailbox) {
+    val podClients = LocalPodClients.current
+    return androidx.compose.runtime.remember(app, mailbox, podClients) {
         ServerOrderSaver(
             app = app,
             post = { u, wire -> mailbox.postServerOrder(u, wire) },
             fetchOrder = { u -> mailbox.fetchPods(u).serverOrder },
             signer = { reason -> com.flagshipserver.app.keystore.Keystore.adminSigningKey(reason) },
             isDemo = { app.isDemoAccountNow() },
+            screensFor = podClients::screens,
         )
     }
 }

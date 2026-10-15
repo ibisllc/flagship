@@ -332,6 +332,11 @@ class LiveScreensClient(
     override suspend fun boxFqdn(): String? =
         store.podBaseUrl.first()?.toHttpUrlOrNull()?.host
 
+    override suspend fun deliverServerOrder(wire: com.flagshipserver.app.core.ServerOrderWire): ServerOrderDeliveryResponse {
+        val body = json.encodeToString(com.flagshipserver.app.core.ServerOrderWire.serializer(), wire).toByteArray()
+        return request("/api/screens/server-order", ServerOrderDeliveryResponse.serializer(), "POST", body)
+    }
+
     override suspend fun serviceCopy(req: AppCopyRequest): AppCopyResponse {
         val body = json.encodeToString(AppCopyRequest.serializer(), req).toByteArray()
         return request("/api/screens/services/copy", AppCopyResponse.serializer(), "POST", body)

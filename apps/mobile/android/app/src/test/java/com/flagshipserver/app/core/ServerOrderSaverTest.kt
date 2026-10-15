@@ -7,8 +7,14 @@ import com.flagshipserver.app.keystore.BiometricCancelled
 import com.google.crypto.tink.subtle.Ed25519Sign
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import com.flagshipserver.app.api.MockScreensClient
+import com.flagshipserver.app.api.ScreensClient
+import com.flagshipserver.app.api.ScreensError
+import com.flagshipserver.app.api.ServerOrderDeliveryResponse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -35,7 +41,14 @@ class ServerOrderSaverTest {
         var signGate: CompletableDeferred<Unit>? = null
     }
 
-    private fun saver(app: AppState, f: Fake, demo: Boolean = false, now: Long = 1_000) = ServerOrderSaver(
+    private fun saver(
+        app: AppState,
+        f: Fake,
+        demo: Boolean = false,
+        now: Long = 1_000,
+        screensFor: (PodInfo) -> ScreensClient? = { null },
+        deliveryScope: CoroutineScope? = null,
+    ) = ServerOrderSaver(
         app = app,
         post = { _, wire -> f.postError?.let { throw it }; f.posted.add(wire) },
         fetchOrder = { f.latest },
@@ -43,7 +56,18 @@ class ServerOrderSaverTest {
         isDemo = { demo },
         now = { now },
         randomBytes = { n -> ByteArray(n) { 1 } },
+        screensFor = screensFor,
+        deliveryScope = deliveryScope ?: CoroutineScope(kotlinx.coroutines.Dispatchers.Unconfined),
     )
+
+    /** A box's screens client that answers a delivered order. */
+    private class FakeBox(private val answer: () -> Long) : ScreensClient by MockScreensClient(simulatedLatencyMs = 0) {
+        val received = mutableListOf<ServerOrderWire>()
+        override suspend fun deliverServerOrder(wire: ServerOrderWire): ServerOrderDeliveryResponse {
+            received.add(wire)
+            return ServerOrderDeliveryResponse(ok = true, adopted = true, heldIssuedAt = answer())
+        }
+    }
 
     private fun AppState.homeOrder() = orderedPods.value.map { it.podId }
 
@@ -109,6 +133,8 @@ class ServerOrderSaverTest {
         assertEquals(listOf("b", "a"), app.homeOrder())
         assertEquals(0, f.signed)
         assertTrue(f.posted.isEmpty())
+        // No box will ever acknowledge it, so the leader isn't left gray.
+        assertEquals(app.serverOrderIssuedAt.value, app.serverOrderAcks.value["b"])
     }
 
     @Test fun droppingAServerWhereItWas_changesNothing() = runTest {
@@ -126,5 +152,47 @@ class ServerOrderSaverTest {
         saver(app, f).reorder(listOf("p", "r", "b", "a"))
         assertEquals(listOf(stk(2), stk(1)), f.posted.single().order.stks)
         assertEquals(listOf("b", "a", "r", "p"), app.homeOrder())
+    }
+
+    @Test fun aSavedOrder_goesToEveryServerThatIsUp_andRecordsWhatEachHolds() = runTest {
+        val app = app(
+            pod("a", 1),
+            pod("b", 2),
+            pod("c", 3, PodInfo.Status.OFFLINE),
+            pod("d", 4).copy(revokedAt = 9),
+            pod("e", 5),
+        )
+        val f = Fake()
+        val boxA = FakeBox { 1_000 }
+        val boxB = FakeBox { throw ScreensError.Http(404, "not found") }
+        val boxC = FakeBox { 1_000 }
+        val boxD = FakeBox { 1_000 }
+        val boxes = mapOf("a" to boxA, "b" to boxB, "c" to boxC, "d" to boxD)
+        app.recordServerOrderAcks(mapOf("b" to 500L))
+
+        val outcome = saver(app, f, now = 1_000, screensFor = { boxes[it.podId] }, deliveryScope = this)
+            .reorder(listOf("b", "a"))
+        assertEquals(ServerOrderSaver.Outcome.Saved, outcome)
+        advanceUntilIdle()
+
+        val posted = f.posted.single()
+        assertEquals(listOf(posted), boxA.received)
+        assertEquals(listOf(posted), boxB.received)
+        // Offline and revoked servers aren't asked; "e" has no session here.
+        assertTrue(boxC.received.isEmpty())
+        assertTrue(boxD.received.isEmpty())
+        // The 404 box keeps its earlier ack from `/pods`.
+        assertEquals(mapOf("a" to 1_000L, "b" to 500L), app.serverOrderAcks.value)
+    }
+
+    @Test fun aFailedOrLocalSave_isNeverDelivered() = runTest {
+        val box = FakeBox { 1_000 }
+        val failing = app(pod("a", 1), pod("b", 2))
+        saver(failing, Fake().apply { postError = HttpException(500, "boom") }, screensFor = { box }, deliveryScope = this)
+            .reorder(listOf("b", "a"))
+        val demo = app(pod("a", 1), pod("b", 2))
+        saver(demo, Fake(), demo = true, screensFor = { box }, deliveryScope = this).reorder(listOf("b", "a"))
+        advanceUntilIdle()
+        assertTrue(box.received.isEmpty())
     }
 }

@@ -544,6 +544,9 @@ data class PodDirectoryEntry(
     val leadsServices: List<String> = emptyList(),
     /** Latest box health report; null on a box that doesn't send one yet. */
     val health: BoxHealthWire? = null,
+    /** `issuedAt` of the server order this box last reported holding
+     *  (docs/server-order.md); null when none or unknown. */
+    val orderIssuedAt: Long? = null,
 ) {
     /** A box that has reported daemon status OR holds a cert has come online
      *  at least once. Mirror of iOS PodDirectoryEntry.cameOnline. */

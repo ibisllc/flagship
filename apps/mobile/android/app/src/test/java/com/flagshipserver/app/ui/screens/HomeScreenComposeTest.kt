@@ -8,8 +8,11 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import com.flagshipserver.app.api.RecentInstallEvent
 import com.flagshipserver.app.api.ServerDetailResponse
 import com.flagshipserver.app.core.PodInfo
@@ -35,7 +38,6 @@ class HomeScreenComposeTest {
                     accountDisplayName = "Harry's cloud",
                     deviceDisplayName = "Pixel",
                     pods = emptyList(),
-                    leaderPodId = null,
                     onOpenPod = {},
                     onAddServer = {},
                     onMakeLeader = {},
@@ -72,7 +74,6 @@ class HomeScreenComposeTest {
                     username = "harry",
                     deviceDisplayName = "Pixel",
                     pods = listOf(pod),
-                    leaderPodId = "pod-x",
                     onOpenPod = {},
                     onAddServer = {},
                     onMakeLeader = {},
@@ -98,7 +99,6 @@ class HomeScreenComposeTest {
                     state = LoadingState.Failed("backend ate the request"),
                     username = "harry",
                     pods = emptyList(),
-                    leaderPodId = null,
                     onOpenPod = {},
                     onAddServer = {},
                     onMakeLeader = {},
@@ -117,7 +117,6 @@ class HomeScreenComposeTest {
                     state = LoadingState.Loading,
                     username = "harry",
                     pods = emptyList(),
-                    leaderPodId = null,
                     onOpenPod = {},
                     onAddServer = {},
                     onMakeLeader = {},
@@ -133,33 +132,63 @@ class HomeScreenComposeTest {
         org.junit.Assert.assertEquals(1, asked)
     }
 
-    @Test fun orderedServers_showTheLeaderAndThePlaceInLine() {
-        fun stk(n: Int) = com.flagshipserver.app.core.HexUtil.encode(
-            com.google.crypto.tink.subtle.Ed25519Sign.KeyPair.newKeyPairFromSeed(ByteArray(32) { n.toByte() }).publicKey,
-        )
-        val pods = listOf(
-            PodInfo(podId = "a", name = "home3", fqdn = "home3.harry.flagship.services",
-                status = PodInfo.Status.OFFLINE, registeredAt = 1, identityPubKeyHex = stk(1)),
-            PodInfo(podId = "b", name = "leticia", fqdn = "leticia.harry.flagship.services",
-                status = PodInfo.Status.ONLINE, registeredAt = 2, identityPubKeyHex = stk(2)),
-        )
+    private fun stk(n: Int) = com.flagshipserver.app.core.HexUtil.encode(
+        com.google.crypto.tink.subtle.Ed25519Sign.KeyPair.newKeyPairFromSeed(ByteArray(32) { n.toByte() }).publicKey,
+    )
+
+    private val orderedPods = listOf(
+        PodInfo(podId = "a", name = "home3", fqdn = "home3.harry.flagship.services",
+            status = PodInfo.Status.OFFLINE, registeredAt = 1, identityPubKeyHex = stk(1)),
+        PodInfo(podId = "b", name = "leticia", fqdn = "leticia.harry.flagship.services",
+            status = PodInfo.Status.ONLINE, registeredAt = 2, identityPubKeyHex = stk(2)),
+    )
+
+    private fun setOrdered(issuedAt: Long = 0, acks: Map<String, Long> = emptyMap(), showRecoveryNudge: Boolean = false) {
         composeRule.setContent {
             FlagshipTheme {
                 HomeScreen(
                     state = LoadingState.Loading,
                     username = "harry",
-                    pods = pods,
-                    leaderPodId = "b",
+                    pods = orderedPods,
+                    serverOrderIssuedAt = issuedAt,
+                    serverOrderAcks = acks,
                     onOpenPod = {},
                     onAddServer = {},
                     onMakeLeader = {},
                     onRefresh = {},
+                    showRecoveryNudge = showRecoveryNudge,
                 )
             }
         }
-        composeRule.onNodeWithText("Leader").assertIsDisplayed()
-        composeRule.onNodeWithText("#1").assertIsDisplayed()
-        composeRule.onNodeWithText("Standing in for home3 while it's down").assertIsDisplayed()
-        composeRule.onNodeWithText("Touch and hold a server", substring = true).assertExists()
+    }
+
+    @Test fun orderedServers_showOnlyTheLeader_noPlaceInLine() {
+        setOrdered()
+        composeRule.onNodeWithTag("pod-leader-badge", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Standing in for home3").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("#1").assertDoesNotExist()
+        composeRule.onNodeWithText("#2").assertDoesNotExist()
+        composeRule.onNodeWithText("Touch and hold a server", substring = true).assertDoesNotExist()
+        composeRule.onNodeWithTag("home-server-handle-a").assertExists()
+        composeRule.onNodeWithTag("home-server-handle-b").assertExists()
+        composeRule.onNodeWithText("Add/connect a server").assertIsDisplayed()
+    }
+
+    @Test fun theLeaderBadge_isGrayUntilTheLeaderHoldsTheOrder() {
+        setOrdered(issuedAt = 10, acks = mapOf("b" to 5L))
+        composeRule.onNodeWithTag("pod-leader-badge", useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Leader, waiting for the server to confirm").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test fun theLeaderBadge_isConfirmedOnceTheLeaderAcks() {
+        setOrdered(issuedAt = 10, acks = mapOf("b" to 10L))
+        composeRule.onNodeWithTag("pod-leader-badge", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("pod-leader-badge-pending", useUnmergedTree = true).assertDoesNotExist()
+    }
+
+    @Test fun theRecoveryNudge_asksForAPasskey() {
+        setOrdered(showRecoveryNudge = true)
+        composeRule.onNodeWithText("Set up recovery").assertIsDisplayed()
+        composeRule.onNodeWithText("Save a passkey so you can recover your account if you get a new device.").assertIsDisplayed()
     }
 }

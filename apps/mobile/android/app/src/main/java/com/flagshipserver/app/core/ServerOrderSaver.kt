@@ -2,11 +2,20 @@
 // server page's "Make leader" both come through here, so both read and write
 // the same AppState order: the new order shows at once, is signed (silently
 // when the session already holds the key, else one prompt), posted, and put
-// back if anything fails.
+// back if anything fails. Once `.com` has it, every server that is up gets the
+// same signed order straight away (each still gets it from `.com` otherwise).
 
 package com.flagshipserver.app.core
 
+import com.flagshipserver.app.api.ScreensClient
 import com.google.crypto.tink.subtle.Ed25519Sign
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import java.security.SecureRandom
 
 class ServerOrderSaver(
@@ -19,6 +28,10 @@ class ServerOrderSaver(
     private val isDemo: () -> Boolean,
     private val now: () -> Long = { System.currentTimeMillis() },
     private val randomBytes: (Int) -> ByteArray = { n -> ByteArray(n).also(SecureRandom()::nextBytes) },
+    /** A screens client bound to that server's own session, or null. */
+    private val screensFor: (PodInfo) -> ScreensClient? = { null },
+    /** Where a saved order is handed to the servers; outlives the screen that saved it. */
+    private val deliveryScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) {
     sealed interface Outcome {
         data object Saved : Outcome
@@ -59,13 +72,17 @@ class ServerOrderSaver(
         val order = ServerOrder(username, stks, now(), HexUtil.encode(randomBytes(32)))
         app.setServerOrder(stks, order.issuedAt)
         if (isDemo()) {
+            // A demo order never leaves the phone: no box will acknowledge it.
+            app.recordServerOrderAcks(app.pods.value.associate { it.podId to order.issuedAt })
             app.makeLeaderCurrent()
             return Outcome.Local
         }
         return try {
             val signature = ServerOrderProtocol.sign(order, signer(REASON))
-            post(username, ServerOrderWire(order, signature))
+            val wire = ServerOrderWire(order, signature)
+            post(username, wire)
             app.makeLeaderCurrent()
+            deliveryScope.launch { deliver(wire) }
             Outcome.Saved
         } catch (e: HttpException) {
             if (e.status == 409) {
@@ -87,5 +104,26 @@ class ServerOrderSaver(
                 else "Couldn't save the new order. Your servers are back in their old order.",
             )
         }
+    }
+
+    /** Hand [wire] to every server that is up and record the order each says
+     *  it holds. A box that can't be reached, or is too old to take it (404),
+     *  is skipped: it still gets the order from `.com`. */
+    suspend fun deliver(wire: ServerOrderWire) {
+        val targets = app.pods.value.filter {
+            it.status == PodInfo.Status.ONLINE && !it.isRevoked && it.fqdn.isNotEmpty()
+        }
+        val acks = coroutineScope {
+            targets.map { pod ->
+                async {
+                    val client = screensFor(pod) ?: return@async null
+                    runCatching { client.deliverServerOrder(wire).heldIssuedAt }
+                        .getOrNull()
+                        ?.takeIf { it > 0 }
+                        ?.let { pod.podId to it }
+                }
+            }.awaitAll().filterNotNull().toMap()
+        }
+        app.recordServerOrderAcks(acks)
     }
 }
