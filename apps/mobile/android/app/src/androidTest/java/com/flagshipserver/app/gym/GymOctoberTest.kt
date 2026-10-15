@@ -1,16 +1,21 @@
 // GYM Android mock tier — the October 2026 features, twins of iOS
 // GymOctoberTests (handles shared where the surfaces name them alike;
 // docs/ui-test-gym.md §8): an app's Internet access requests, access control,
-// API keys, the Database browser, where an app runs, the update card, and the
-// Flagship Inference entry. NO BACKEND: smoke mode seeds DemoFixtures and the
-// mock clients; the smoke seam passes the biometric prompts, so signed orders
-// reach the mock, which accepts any signature.
+// API keys, the Database browser, where an app runs, the update card, the
+// Flagship Inference entry, the app-wide access dialogs and sharing a server
+// (owner and co-manager). NO BACKEND: smoke mode seeds DemoFixtures and the
+// mock clients (and, with `shares`, an in-memory share world); the smoke seam
+// passes the biometric prompts, so signed orders reach the mock, which
+// accepts any signature.
 
 package com.flagshipserver.app.gym
 
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -22,6 +27,9 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.test.espresso.Espresso
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -36,6 +44,15 @@ class GymOctoberTest : GymBase() {
             composeRule.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty()
         }
     }
+
+    private fun count(tag: String, unmerged: Boolean = false) =
+        composeRule.onAllNodesWithTag(tag, useUnmergedTree = unmerged).fetchSemanticsNodes().size
+
+    private fun countPrefix(prefix: String) = composeRule.onAllNodes(tagStartsWith(prefix)).fetchSemanticsNodes().size
+
+    private fun textOf(tag: String): String =
+        composeRule.onNodeWithTag(tag).fetchSemanticsNode().config
+            .getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }.orEmpty()
 
     /** Services → the demo Plants app's page (opened by its unique summary line). */
     private fun openPlants() {
@@ -156,6 +173,18 @@ class GymOctoberTest : GymBase() {
         waitUntilExists("sd-leader-pending", timeoutMs = 15_000)
         composeRule.onNodeWithTag("sd-leader-status").assertTextContains("This server leads")
         gymShot("server-order-pending")
+
+        // Home shows Office as the leader, in gray, until it confirms.
+        Espresso.pressBack()
+        waitUntilTextExists("Office tower, work failover", timeoutMs = 15_000)
+        composeRule.waitUntil(10_000) { count("leader-badge-pending", unmerged = true) == 1 }
+        assertEquals("Only the gray badge shows while Office hasn't confirmed", 0, count("leader-badge", unmerged = true))
+        assertTrue(
+            "The gray badge says it's waiting",
+            composeRule.onAllNodesWithContentDescription("Leader, waiting for the server to confirm", useUnmergedTree = true)
+                .fetchSemanticsNodes().isNotEmpty(),
+        )
+        gymShot("server-order-home-gray")
     }
 
     // ─── Offline server ──────────────────────────────────────────────────────
@@ -196,5 +225,124 @@ class GymOctoberTest : GymBase() {
         waitUntilTextExists("Flagship Inference")
         waitUntilTextExists("1,840 free credits left · 500 added each week", timeoutMs = 15_000)
         gymShot("flagship-inference-credits")
+    }
+
+    // ─── App access requests: the app-wide dialogs ───────────────────────────
+
+    /** Plants has two hosts waiting. The dialog asks about each in turn; Allow
+     *  and Deny sign the edited list and say what happened, and once both are
+     *  answered nothing covers Home. */
+    @Test
+    fun appAccessAlertAllowThenDeny() {
+        launch(tab = "home", username = "bright-maple", accessAlert = true)
+        waitUntilExists("access-alert-title", timeoutMs = 20_000)
+        val ask = "Plants wants to reach "
+        val first = textOf("access-alert-title")
+        assertTrue("Got: $first", first.startsWith(ask))
+        val firstHost = first.removePrefix(ask)
+        gymShot("access-alert-ask")
+
+        composeRule.onNodeWithTag("access-alert-allow").performClick()
+        waitUntilExists("access-alert-done", timeoutMs = 15_000)
+        waitUntilTextExists("Plants can now reach $firstHost")
+        gymShot("access-alert-allowed")
+        composeRule.onNodeWithTag("access-alert-close").performClick()
+
+        waitUntilExists("access-alert-title", timeoutMs = 15_000)
+        val secondHost = textOf("access-alert-title").removePrefix(ask)
+        assertNotEquals(firstHost, secondHost)
+        composeRule.onNodeWithTag("access-alert-deny").performClick()
+        waitUntilExists("access-alert-done", timeoutMs = 15_000)
+        waitUntilTextExists("Plants won't reach $secondHost")
+        composeRule.onNodeWithTag("access-alert-close").performClick()
+
+        composeRule.waitUntil(10_000) { count("access-alert-title") == 0 && count("access-alert-done") == 0 }
+        composeRule.onNodeWithTag("home-add-server").performScrollTo().assertIsDisplayed()
+        gymShot("access-alert-answered")
+    }
+
+    /** "Not now" closes the dialog and leaves the request on the box. */
+    @Test
+    fun appAccessAlertNotNowCloses() {
+        launch(tab = "home", username = "bright-maple", accessAlert = true)
+        waitUntilExists("access-alert-title", timeoutMs = 20_000)
+        composeRule.onNodeWithTag("access-alert-not-now").performClick()
+        composeRule.waitForIdle()
+        // The next waiting host follows; not-now it too.
+        if (count("access-alert-title") > 0) composeRule.onNodeWithTag("access-alert-not-now").performClick()
+        composeRule.waitUntil(10_000) { count("access-alert-title") == 0 }
+        composeRule.onNodeWithTag("home-add-server").performScrollTo().assertIsDisplayed()
+        gymShot("access-alert-closed")
+    }
+
+    // ─── Share this server ───────────────────────────────────────────────────
+
+    /** The owner's "Shared with" card on Home's page: Alex accepted (compare
+     *  the code, then confirm), Sam is active, and sharing again walks the
+     *  sheet to a real link. */
+    @Test
+    fun shareServerOwnerSeesSharesAndConfirmsCode() {
+        launch(tab = "home", username = "bright-maple", shares = true)
+        waitUntilTextExists("Living-room mini-PC", timeoutMs = 20_000)
+        composeRule.onNodeWithText("Living-room mini-PC").performScrollTo().performClick()
+        waitUntilExists("share-server-card", timeoutMs = 30_000)
+        composeRule.waitUntil(30_000) { countPrefix("share-sas-") == 1 }
+        val sasNode = composeRule.onAllNodes(tagStartsWith("share-sas-")).onFirst()
+        sasNode.performScrollTo()
+        val sas = sasNode.fetchSemanticsNode().config
+            .getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }.orEmpty()
+        assertTrue("Alex's code reads as six digits; got $sas", sas.matches(Regex("\\d{3} \\d{3}")))
+        assertEquals("Alex (accepted) and Sam (active)", 2, countPrefix("share-row-"))
+        gymShot("share-owner")
+
+        composeRule.onNodeWithTag("share-confirm").performScrollTo().performClick()
+        composeRule.waitUntil(15_000) { countPrefix("share-sas-") == 0 }
+        assertEquals("Alex is active once confirmed", 2, countPrefix("share-row-"))
+
+        composeRule.onNodeWithTag("share-server-open").performScrollTo().performClick()
+        waitUntilExists("share-sheet")
+        composeRule.onNodeWithTag("share-label").performTextInput("Robin")
+        composeRule.onNodeWithTag("share-next").performClick()
+        // The active rows offer the same choice; take the sheet's.
+        val sheetManage = hasTestTag("share-level-manage") and hasAnyAncestor(hasTestTag("share-sheet"))
+        composeRule.waitUntil(10_000) { composeRule.onAllNodes(sheetManage).fetchSemanticsNodes().isNotEmpty() }
+        composeRule.onNode(sheetManage).performClick()
+        composeRule.onNodeWithTag("share-next").performClick()
+        waitUntilExists("share-create")
+        gymShot("share-sheet")
+        composeRule.onNodeWithTag("share-create").performClick()
+        waitUntilExists("share-link", timeoutMs = 15_000)
+        assertTrue("A share link", textOf("share-link").contains("/share#s="))
+        gymShot("share-link")
+    }
+
+    /** Servers shared with this phone: Home lists them, and a co-manager can
+     *  approve the shared server's start-up and leave it, but never delete or
+     *  revoke it. */
+    @Test
+    fun sharedServerCoManagerView() {
+        launch(tab = "home", username = "bright-maple", shares = true)
+        waitUntilExists("home-shared-with-me", timeoutMs = 30_000)
+        composeRule.onNodeWithTag("home-shared-with-me").performScrollTo()
+        composeRule.waitUntil(15_000) { countPrefix("home-shared-") == 3 }
+        waitUntilTextExists("Waiting for the owner")
+        gymShot("shared-with-me")
+
+        composeRule.onNodeWithText("Garage").performScrollTo().performClick()
+        waitUntilExists("shared-approve-startup", timeoutMs = 20_000)
+        composeRule.onNodeWithTag("shared-leave").performScrollTo().assertIsDisplayed()
+        assertEquals(
+            "A co-manager can never delete the server", 0,
+            composeRule.onAllNodesWithContentDescription("sd-delete-server").fetchSemanticsNodes().size,
+        )
+        assertEquals(
+            "…nor revoke it", 0,
+            composeRule.onAllNodesWithContentDescription("sd-revoke-server").fetchSemanticsNodes().size,
+        )
+        gymShot("shared-server-member")
+
+        composeRule.onNodeWithTag("shared-approve-startup").performScrollTo().performClick()
+        composeRule.waitUntil(15_000) { count("shared-approve-startup") == 0 }
+        gymShot("shared-server-unlocked")
     }
 }

@@ -1103,9 +1103,15 @@ scenario, red) if not. At Tier-2 this rides the existing demo-classification
   `sd-update-available`, `sd-update-last-outcome`; `server-detail-offline`;
   `server-create-app-here`; `free-ai-card`; `watch-delegate-toggle`
   (Account security's Quick approve from watch; Android `GymWatchTest`
-  drives it, with `watch-delegate-active`). iOS only so far:
-  `access-alert-*` (the app-wide sheet), `runs-on-<fqdn>`, `share-*`,
-  `home-shared-*`, `shared-*`. A SwiftUI id on a plain stack is copied onto
+  drives it, with `watch-delegate-active`); `leader-badge` /
+  `leader-badge-pending` (Home); `access-alert-title` / `-allow` / `-deny` /
+  `-not-now` / `-done` (the app-wide sheet; Android raises it in smoke mode
+  only with `flagship.smokeAccessAlert`); `share-server-card`,
+  `share-server-open`, `share-row-<id>`, `share-sas-<id>`, `share-level-*`,
+  `share-create`; `home-shared-with-me`, `home-shared-<id>`; `shared-leave`,
+  `shared-approve-startup` (Android's share world needs
+  `flagship.smokeShares`, iOS's `-smoke-shares`). iOS only so far:
+  `runs-on-<fqdn>`. A SwiftUI id on a plain stack is copied onto
   every element inside it and replaces theirs, so identified sections use
   `.accessibilityElement(children: .contain)`.
 

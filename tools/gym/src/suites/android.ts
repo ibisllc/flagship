@@ -487,15 +487,24 @@ const OCTOBER: readonly Scenario[] = [
   ),
   androidTotal(
     "android-oct-server-order-leader-pending",
-    "D1: Make leader on Office's page; until the box confirms, the page says it is waiting.",
+    "D1: Make leader on Office's page; until the box confirms, the page and Home show the leader in gray.",
     O + "makeLeaderWaitsForTheServerToConfirm",
     {
       steps: [
         { kind: "tap", describe: "Office → Make leader.", handle: "sd-make-leader" },
         { kind: "assert", describe: "Waiting to confirm.", handle: "sd-leader-pending" },
+        { kind: "assert", describe: "Gray Leader badge on Home.", handle: "leader-badge-pending" },
       ],
-      assertions: [{ describe: "Leader pending until ack", handle: "sd-leader-pending", expect: "present" }],
-      screenshots: [shot("server-order-card", "The card."), shot("server-order-pending", "Waiting.")],
+      assertions: [
+        { describe: "Leader pending until ack", handle: "sd-leader-pending", expect: "present" },
+        { describe: "Gray badge on Home", handle: "leader-badge-pending", expect: "present" },
+        { describe: "No confirmed badge yet", handle: "leader-badge", expect: "absent" },
+      ],
+      screenshots: [
+        shot("server-order-card", "The card."),
+        shot("server-order-pending", "Waiting."),
+        shot("server-order-home-gray", "Gray badge."),
+      ],
       dimension: "D1",
     },
   ),
@@ -529,6 +538,69 @@ const OCTOBER: readonly Scenario[] = [
       steps: [{ kind: "assert", describe: "Flagship Inference card.", handle: "free-ai-card" }],
       assertions: [{ describe: "Credits line", handle: "free-ai-card", expect: "present" }],
       screenshots: [shot("flagship-inference-credits", "The credits line.")],
+      dimension: "D3",
+    },
+  ),
+  androidTotal(
+    "android-oct-access-alert-answer",
+    "D5: the app-wide '<App> wants to reach <host>' dialog (flagship.smokeAccessAlert): Allow then Deny sign the list and confirm; then nothing covers Home.",
+    O + "appAccessAlertAllowThenDeny",
+    {
+      steps: [
+        { kind: "assert", describe: "The dialog asks.", handle: "access-alert-title" },
+        { kind: "tap", describe: "Allow.", handle: "access-alert-allow" },
+        { kind: "assert", describe: "Answered.", handle: "access-alert-done" },
+        { kind: "tap", describe: "Deny the next host.", handle: "access-alert-deny" },
+      ],
+      assertions: [
+        { describe: "Allow confirmed", handle: "access-alert-done", expect: "present" },
+        { describe: "Home usable afterwards", handle: "home-add-server", expect: "enabled" },
+      ],
+      screenshots: [shot("access-alert-ask", "The question."), shot("access-alert-allowed", "The answer.")],
+      dimension: "D5",
+    },
+  ),
+  androidTotal(
+    "android-oct-access-alert-not-now",
+    "D5: 'Not now' closes the access dialog and leaves the request on the box.",
+    O + "appAccessAlertNotNowCloses",
+    {
+      steps: [{ kind: "tap", describe: "Not now.", handle: "access-alert-not-now" }],
+      assertions: [{ describe: "Dialog closed", handle: "access-alert-title", expect: "absent" }],
+      screenshots: [shot("access-alert-closed", "Home after Not now.")],
+      dimension: "D5",
+    },
+  ),
+  androidTotal(
+    "android-oct-share-owner",
+    "D3: the owner's Shared with card (flagship.smokeShares, an in-memory share world): Alex's code to compare and confirm, Sam active; the share sheet walks to a link.",
+    O + "shareServerOwnerSeesSharesAndConfirmsCode",
+    {
+      steps: [
+        { kind: "assert", describe: "Shared with card.", handle: "share-server-card" },
+        { kind: "tap", describe: "Confirm Alex's code.", handle: "share-confirm" },
+        { kind: "tap", describe: "Share this server.", handle: "share-server-open" },
+        { kind: "tap", describe: "Can manage → Create link.", handle: "share-create" },
+      ],
+      assertions: [{ describe: "Share link", handle: "share-link", expect: "present" }],
+      screenshots: [shot("share-owner", "The card."), shot("share-sheet", "The sheet."), shot("share-link", "The link.")],
+      dimension: "D3",
+    },
+  ),
+  androidTotal(
+    "android-oct-share-co-manager",
+    "D3: a co-manager sees 'Shared with me' on Home and the shared server's page: approve start-up, leave, never delete or revoke.",
+    O + "sharedServerCoManagerView",
+    {
+      steps: [
+        { kind: "assert", describe: "Shared with me.", handle: "home-shared-with-me" },
+        { kind: "tap", describe: "Approve start-up.", handle: "shared-approve-startup" },
+      ],
+      assertions: [
+        { describe: "Leave offered", handle: "shared-leave", expect: "present" },
+        { describe: "No delete", handle: "sd-delete-server", expect: "absent" },
+      ],
+      screenshots: [shot("shared-with-me", "Home."), shot("shared-server-member", "Shared server.")],
       dimension: "D3",
     },
   ),

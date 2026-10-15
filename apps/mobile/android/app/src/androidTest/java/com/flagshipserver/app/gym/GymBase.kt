@@ -76,6 +76,8 @@ abstract class GymBase {
      * @param ops seed one in-flight build so the operations sliver renders
      * @param trustUntrusted seed an untrusted verdict so the trust sliver renders
      * @param podsVariant "awaiting-unlock" | "dead" | null
+     * @param accessAlert raise the app-wide access dialogs from the mock box
+     * @param shares provide the in-memory share world (owner card, shared with me)
      */
     protected fun launch(
         tab: String,
@@ -84,6 +86,8 @@ abstract class GymBase {
         podsVariant: String? = null,
         adminRoot: Boolean = false,
         username: String? = null,
+        accessAlert: Boolean = false,
+        shares: Boolean = false,
     ) {
         // A test may relaunch with different seeds (e.g. the admin/non-admin
         // state pair) — close the prior scenario so activities never stack.
@@ -98,6 +102,8 @@ abstract class GymBase {
             if (podsVariant != null) putExtra(SmokeModeConfig.EXTRA_SMOKE_PODS, podsVariant)
             if (adminRoot) putExtra(SmokeModeConfig.EXTRA_SMOKE_ADMIN_ROOT, true)
             if (username != null) putExtra(SmokeModeConfig.EXTRA_SMOKE_USERNAME, username)
+            if (accessAlert) putExtra(SmokeModeConfig.EXTRA_SMOKE_ACCESS_ALERT, true)
+            if (shares) putExtra(SmokeModeConfig.EXTRA_SMOKE_SHARES, true)
         }
         scenario = ActivityScenario.launch(intent)
         composeRule.waitForIdle()
