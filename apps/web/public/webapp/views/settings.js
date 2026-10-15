@@ -205,7 +205,6 @@ function mountEntryDefaultModel(host, entry) {
   mountModelMenu(host, {
     load: () => loadModelMenu(credentialFor(entry), (path, init) => boxClient().fetch(path, init)),
     choice: { model: entry.defaultModel ?? null, effort: entry.defaultEffort ?? null },
-    thinkHarder: false,
     onChange: saveDefault(entry.id),
   });
 }
@@ -222,7 +221,7 @@ async function mountFlagshipDefaultModel(saved) {
   mountModelMenu(host, {
     menu,
     choice: initialChoice(menu, { model: saved }),
-    thinkHarder: false,
+    effort: false,
     onChange: saveDefault(PROMO_ID),
   });
 }

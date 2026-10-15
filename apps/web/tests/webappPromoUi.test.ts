@@ -160,9 +160,11 @@ describe("webapp Flagship Inference", () => {
   it("builds refresh a free AI pass on every send and send the chosen model, not the pass's", async () => {
     const app = buildServer();
     const vibe = (await app.inject({ method: "GET", url: "/webapp/views/vibe-code.js" })).body;
-    expect(vibe).toContain("buildCredential = await freshCredential(buildCredential, client().fqdn)");
+    // A Flagship Inference group mints a fresh pass for every message.
+    expect(vibe).toContain("mintFlagship: async () => (await mintFreeAiCredential(client().fqdn)).credential");
+    expect(vibe).toContain("freshCredential(buildCredential, client().fqdn)");
     expect(vibe).not.toMatch(/buildCredential\.model/);
-    expect(vibe).toContain("Object.assign(startBody, wireChoice(modelMenu, modelChoice))");
+    expect(vibe).toContain("Object.assign(startBody, wireChoice(currentMenu(), modelChoice))");
     const { errorText } = await load("views", "vibe-code.js");
     expect(errorText(Object.assign(new Error("Your free AI credits are used up."), { code: "free-ai-used-up" }))).toBe(
       "Your free AI credits are used up.",

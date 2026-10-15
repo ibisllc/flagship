@@ -18,17 +18,23 @@
 //   4. When status becomes ready-to-deploy, surface Deploy →
 //      /api/llm/sessions/<id>/deploy {background:true}. The box tests the app
 //      on a private copy, then installs it; the session's deployPhase says
-//      which (lib/chatDeploy.js). After a deploy the session's AI key is gone,
-//      so a later turn meets the usual needsCredential prompt.
+//      which (lib/chatDeploy.js).
+//   5. A chat that is ready to deploy or failed (`canContinue`) takes a new
+//      message on the same /reply endpoint: the AI changes the files and the
+//      owner deploys again. A key the box no longer holds (a deploy forgets it
+//      before going live) rides that message (`needsCredential`). A deployed
+//      app is changed from its page instead (edit-service.js).
 //
 // Attachments are inlined as base64 or text (no upload endpoint): images,
 // text/code, CSV/JSON sample data and PDFs. The client mirrors the server
 // caps so a violation is a friendly inline error, not a 400. The chat is NOT
 // a secret channel, and the AI sees what's attached; the composer says so.
 //
-// The header's model menu (lib/modelMenu.js) picks the model and effort;
-// both ride start and every reply, so the owner can change them between
-// messages. A chat starts on the default model saved in Settings.
+// The header's model menu (lib/modelGroups.js) lists Flagship Inference and
+// every saved key, each with its models, and an effort when the model offers
+// effort levels; model and effort ride start and every reply. Picking a model
+// under another key switches the chat to that provider: its key rides the
+// next message. A chat starts on the default model saved in Settings.
 
 import { $, registerView, show } from "../lib/router.js";
 import { ScreensError, boxClient } from "../lib/api.js";
@@ -57,8 +63,8 @@ import { turnRelayOffForCredential } from "../providers.js";
 import { getSession } from "../lib/state.js";
 import { bytesToHex, signWithIrk } from "../keystore.js";
 import { canonicalSetServiceEnv } from "./service-env.js";
-import { freshCredential } from "../lib/freeAi.js";
-import { defaultModelFor, loadProviders } from "../providers.js";
+import { fetchFreeAiStatus, freeAiEntryView, freshCredential, mintFreeAiCredential } from "../lib/freeAi.js";
+import { credentialFor, defaultModelFor, loadProviders } from "../providers.js";
 import {
   MAX_ATTACHMENTS,
   attachNotice,
@@ -66,13 +72,22 @@ import {
   classifyFile,
   creditsUsedText,
   dataTextError,
+  fetchInferenceCatalog,
   initialChoice,
   loadModelMenu,
-  mountModelMenu,
   visionCheck,
   wireChoice,
   withModel,
 } from "../lib/modelMenu.js";
+import {
+  buildGroups,
+  contextNotice,
+  credentialForMessage,
+  groupById,
+  groupForCredential,
+  groupForProvider,
+  mountGroupedModelMenu,
+} from "../lib/modelGroups.js";
 
 registerView("view-vibe-code");
 
@@ -80,6 +95,7 @@ const POLL_INTERVAL_MS = 800;
 const TERMINAL_STATUSES = new Set(["deployed", "failed", "cancelled"]);
 
 export const SUMMARISED_NOTE = "Earlier conversation summarised";
+const FIRST_TURN_PLACEHOLDER = "A simple habit tracker — checkboxes per day, last 30 days visible.";
 
 let activeSessionId = null;
 let pollTimer = null;
@@ -120,14 +136,21 @@ let backTo = null;
 // The box this build runs on (docs/app-placement.md §2): the server picked
 // for a new app, or the box holding a reopened session. Every call goes there.
 let box = null;
-// The model menu for this build's key, the owner's choice in it, and whether
-// the owner changed it here (else a reopened session shows what it uses).
-let modelMenu = null;
-let modelChoice = { model: null, effort: null, thinkHarder: false };
+// The model menu, grouped by provider (lib/modelGroups.js): Flagship
+// Inference, then each saved key. The owner's choice in it ({ group, model,
+// effort }), whether they changed it here (else a reopened session shows what
+// it uses), and the group whose key the box holds now: picking a model in
+// another group sends that group's key with the next message.
+let groups = [];
+let modelChoice = { group: null, model: null, effort: null };
 let choiceTouched = false;
 let sessionModel = null;
+let boxGroupId = null;
 let menuHandle = null;
+let menuSignature = "";
 let menuLoad = 0;
+// The session's latest public state (needsCredential, canContinue, size).
+let lastState = null;
 
 const client = () => box ?? boxClient();
 const boxFetch = (path, init) => client().fetch(path, init);
@@ -276,36 +299,79 @@ function renderChips() {
 
 // ---- send / poll ---------------------------------------------------------
 
+/**
+ * What the composer offers for a session's state: whether it takes a message
+ * and the hint in it. The AI's question is answered; a chat that is ready to
+ * deploy or failed takes a new message (`canContinue`).
+ */
+export function composerMode(state) {
+  if (state?.pendingRequest?.kind === "talkToUser") return { enabled: true, placeholder: "Reply to the AI…" };
+  if (state?.canContinue === true) {
+    return {
+      enabled: true,
+      placeholder: state.status === "failed" ? "Tell the AI what to try next…" : "Ask for a change…",
+    };
+  }
+  return { enabled: false, placeholder: "" };
+}
+
+/** The credential this message carries, or null to keep the box's key. */
+async function messageCredential({ starting = false } = {}) {
+  const group = groupById(groups, modelChoice.group);
+  if (!group) return freshCredential(buildCredential, client().fqdn);
+  return credentialForMessage(group, {
+    starting,
+    picked: group.id !== boxGroupId,
+    needsCredential: lastState?.needsCredential === true,
+    mintFlagship: async () => (await mintFreeAiCredential(client().fqdn)).credential,
+  });
+}
+
+/** The current group's menu (for the wire choice and the vision check). */
+function currentMenu() {
+  return groupById(groups, modelChoice.group)?.menu ?? null;
+}
+
 async function send() {
   const promptEl = $("vc-prompt");
   const text = promptEl.value.trim();
   if (!activeSessionId) return startBuild(text);
   if (!text && staged.length === 0) return toast("Type a message first.", "err");
+  if (!composerMode(lastState).enabled) {
+    toast("Wait for the AI to finish this turn.", "info");
+    return;
+  }
   const attachments = staged.slice();
   if (!(await checkVision(attachments))) return;
   const sendBtn = $("vc-send");
   sendBtn.disabled = true;
   sendBtn.textContent = "Sending…";
   try {
-    if (pendingTalkToolId) {
-      // Follow-up turn answering the AI's talkToUser question.
-      const replyBody = { text, attachments };
-      // A free AI pass is swapped for a fresh one on every reply.
-      buildCredential = await freshCredential(buildCredential, client().fqdn);
-      if (buildCredential) replyBody.credential = buildCredential;
-      Object.assign(replyBody, wireChoice(modelMenu, modelChoice, { reply: true }));
-      await boxFetch(
-        `/api/screens/llm/sessions/${encodeURIComponent(activeSessionId)}/reply`,
-        { method: "POST", body: JSON.stringify(replyBody) },
-      );
-      pendingTalkToolId = null;
-    } else if (pendingEnvVar) {
+    if (pendingEnvVar) {
       toast(`Answer the request for ${pendingEnvVar} above first.`, "info");
       return;
-    } else {
-      toast("Wait for the AI to finish this turn.", "info");
+    }
+    // An answer to the AI's question, or a new message on a chat that is
+    // ready to deploy or failed: the same endpoint. A model from another
+    // provider brings that provider's key; a Flagship pass is always fresh.
+    const replyBody = { text, attachments };
+    const credential = await messageCredential();
+    if (!credential && lastState?.needsCredential) {
+      askForKey();
       return;
     }
+    if (credential) {
+      replyBody.credential = credential;
+      buildCredential = credential;
+    }
+    Object.assign(replyBody, wireChoice(currentMenu(), modelChoice, { reply: true }));
+    await boxFetch(
+      `/api/screens/llm/sessions/${encodeURIComponent(activeSessionId)}/reply`,
+      { method: "POST", body: JSON.stringify(replyBody) },
+    );
+    if (credential) boxGroupId = modelChoice.group;
+    pendingTalkToolId = null;
+    registerBuildOp();
     clearComposer();
     schedulePoll();
     await poll();
@@ -333,61 +399,127 @@ function clearComposer() {
 
 // ---- model menu ----------------------------------------------------------
 
-/** Use `credential` for this build and load its model menu. */
+/** No key can drive this chat: add or pick one, then send again. */
+function askForKey() {
+  toast("Add an AI key to carry on.", "warn");
+  enterBuildKey({
+    back: "view-vibe-code",
+    serverFqdn: client().fqdn,
+    onChosen: (credential) => {
+      show("view-vibe-code");
+      void setBuildCredential(credential).then(send);
+    },
+  });
+}
+
+/** Use `credential` for this build: its group is chosen in the menu. */
 function setBuildCredential(credential) {
   buildCredential = credential;
+  choiceTouched = false;
   return refreshModelMenu();
 }
 
+/** A group's models: Flagship Inference's catalog, or the key's list from the box. */
+function loadGroupMenu(group) {
+  if (group.kind === "flagship") return fetchInferenceCatalog().then((catalog) => ({ kind: "flagship", catalog }));
+  return loadModelMenu(credentialFor(group.entry), boxFetch);
+}
+
+const groupCredential = (group) => (group.kind === "flagship" ? { provider: "flagship" } : credentialFor(group.entry));
+
+/** Build the grouped menu: Flagship Inference (when usable or in use), then each saved key. */
 async function refreshModelMenu() {
-  const bar = $("vc-model-bar");
   const load = ++menuLoad;
-  if (!buildCredential) {
-    modelMenu = null;
-    bar?.classList.add("hidden");
-    return;
-  }
-  const menu = await loadModelMenu(buildCredential, boxFetch);
-  let saved = {};
   const session = getSession();
+  let list = { entries: [] };
   if (session?.umk) {
     try {
-      saved = defaultModelFor(await loadProviders(session.umk), buildCredential);
+      list = await loadProviders(session.umk);
     } catch {
-      saved = {};
+      list = { entries: [] };
     }
   }
+  const [catalog, status] = await Promise.all([
+    fetchInferenceCatalog(),
+    session?.umk ? fetchFreeAiStatus() : Promise.resolve(null),
+  ]);
   if (load !== menuLoad) return;
-  modelMenu = menu;
-  modelChoice = initialChoice(menu, sessionModel ?? saved);
+  const currentProvider = buildCredential?.provider ?? lastState?.provider ?? null;
+  groups = buildGroups({
+    entries: list.entries,
+    flagshipUsable: freeAiEntryView(status).usable,
+    flagshipMenu: { kind: "flagship", catalog },
+    currentProvider,
+    unsaved: buildCredential,
+  });
+  const group =
+    groupForCredential(groups, buildCredential) ??
+    groupForProvider(groups, lastState?.provider) ??
+    (activeSessionId ? null : groups[0] ?? null);
+  if (buildCredential && group) boxGroupId = activeSessionId ? group.id : null;
+  else if (lastState?.provider && group) boxGroupId = group.id;
+  await chooseGroup(group, sessionModel ?? defaultModelFor(list, group ? groupCredential(group) : null), load);
+}
+
+/** Select `group` with its saved (or the session's) model. */
+async function chooseGroup(group, wanted, load = menuLoad) {
+  if (group && !group.menu) group.menu = await loadGroupMenu(group);
+  if (load !== menuLoad) return;
+  modelChoice = group ? { group: group.id, ...initialChoice(group.menu, wanted ?? {}) } : { group: null, model: null, effort: null };
   renderModelBar();
 }
 
 function renderModelBar() {
   const bar = $("vc-model-bar");
   if (!bar) return;
-  bar.classList.toggle("hidden", !modelMenu);
-  if (!modelMenu) return;
+  const empty = groups.length === 0;
+  bar.classList.toggle("hidden", empty);
+  if (empty) return;
+  const notice = activeSessionId
+    ? contextNotice({
+        menu: currentMenu(),
+        choice: modelChoice,
+        sessionModel: lastState?.model ?? null,
+        conversationTokens: lastState?.conversationTokens,
+      })
+    : null;
+  // Polls re-render the chat often; the menu only when something it shows
+  // changed (an open panel or a model being typed stays as it is).
+  const signature = JSON.stringify([modelChoice, notice, groups.map((g) => [g.id, !!g.menu])]);
   if (menuHandle && bar.firstElementChild) {
-    menuHandle.update(modelMenu, modelChoice);
+    if (signature === menuSignature) return;
+    menuSignature = signature;
+    menuHandle.update(groups, modelChoice, notice);
     return;
   }
-  menuHandle = mountModelMenu(bar, {
-    menu: modelMenu,
+  menuSignature = signature;
+  menuHandle = mountGroupedModelMenu(bar, {
+    groups,
     choice: modelChoice,
+    notice,
+    loadGroup: loadGroupMenu,
     onChange: (next) => {
       modelChoice = next;
       choiceTouched = true;
+      renderModelBar();
     },
   });
 }
 
-/** The session says which model it uses: show that until the owner picks. */
+/** The session says which provider and model it uses: show that until the owner picks. */
 function adoptSessionModel(state) {
-  if (!state?.model) return;
-  sessionModel = { model: state.model, effort: state.effort };
-  if (choiceTouched || !modelMenu || state.model === modelChoice.model) return;
-  modelChoice = initialChoice(modelMenu, sessionModel);
+  const providerChanged = state?.provider && state.provider !== lastState?.provider;
+  lastState = state;
+  if (state?.model) sessionModel = { model: state.model, effort: state.effort };
+  if (choiceTouched) return renderModelBar();
+  if (providerChanged && !buildCredential) {
+    // A reopened chat: rebuild the menu around the provider it uses.
+    void refreshModelMenu();
+    return;
+  }
+  const group = groupById(groups, modelChoice.group);
+  if (!group?.menu || !state?.model || state.model === modelChoice.model) return renderModelBar();
+  modelChoice = { group: group.id, ...initialChoice(group.menu, sessionModel) };
   renderModelBar();
 }
 
@@ -396,7 +528,7 @@ function adoptSessionModel(state) {
  * Resolves whether to send.
  */
 async function checkVision(attachments) {
-  const check = visionCheck(modelMenu, modelChoice, attachments);
+  const check = visionCheck(currentMenu(), modelChoice, attachments);
   if (check.kind === "ok") return true;
   if (check.kind === "blocked") {
     await inlineAlert({ message: check.message, okLabel: "OK" });
@@ -404,7 +536,7 @@ async function checkVision(attachments) {
   }
   const ok = await inlineConfirm({ message: check.message, okLabel: "Switch", cancelLabel: "Cancel" });
   if (!ok) return false;
-  modelChoice = withModel(modelMenu, modelChoice, check.to);
+  modelChoice = { group: modelChoice.group, ...withModel(currentMenu(), modelChoice, check.to) };
   choiceTouched = true;
   renderModelBar();
   return true;
@@ -542,9 +674,12 @@ async function startBuild(text) {
     // box can drive the build with the owner's chosen key. YOU decide the
     // name (→ slug/web address) + who can see it; both ride the start.
     const startBody = { prompt: text, attachments, name: slug };
-    buildCredential = await freshCredential(buildCredential, client().fqdn);
-    if (buildCredential) startBody.credential = buildCredential;
-    Object.assign(startBody, wireChoice(modelMenu, modelChoice));
+    const credential = await messageCredential({ starting: true });
+    if (credential) {
+      buildCredential = credential;
+      startBody.credential = credential;
+    }
+    Object.assign(startBody, wireChoice(currentMenu(), modelChoice));
     const visEl = $("vc-visibility");
     if (visEl && (visEl.value === "just-me" || visEl.value === "link")) {
       startBody.visibility = visEl.value;
@@ -582,6 +717,7 @@ async function startBuild(text) {
       return;
     }
     activeSessionId = r.sessionId;
+    if (credential) boxGroupId = modelChoice.group;
     // The build is really running now — surface it in the global operations
     // sliver as "building <subject> on <server>" until it deploys or fails.
     buildSubject = subjectFromPrompt(text);
@@ -729,15 +865,15 @@ function render(state) {
     log.scrollTop = log.scrollHeight;
   }
 
-  // The composer is a reply box only when the AI asked a question, ready
-  // for a fresh build, or pre-session. While the AI is writing, the Send
-  // button is disabled to make the turn-taking obvious.
-  const sendBtn = $("vc-send");
-  if (state.status === "streaming" || state.status === "deploying") {
-    sendBtn.disabled = true;
-  } else {
-    sendBtn.disabled = false;
-  }
+  // The composer takes a message when the AI asked a question, or when the
+  // chat is ready to deploy or failed (the owner carries on from there).
+  // While the AI is writing or deploying, and once deployed or stopped, it
+  // is disabled to make the turn-taking obvious.
+  const mode = composerMode(state);
+  $("vc-send").disabled = !mode.enabled;
+  const promptEl = $("vc-prompt");
+  promptEl.disabled = !mode.enabled;
+  promptEl.placeholder = mode.placeholder;
 
   // Files tree.
   const files = state.files || {};
@@ -900,6 +1036,10 @@ async function relayOff() {
     return toast(e instanceof Error ? e.message : String(e), "err");
   }
   relayTurnedOff = true;
+  // The next message carries the key again, so the box stores the new setting.
+  const group = groupForCredential(groups, { ...buildCredential, relay: true });
+  if (group?.entry) group.entry.relay = false;
+  boxGroupId = null;
   $("vc-relay-off")?.remove();
   toast(RELAY_TURNED_OFF, "ok");
 }
@@ -974,11 +1114,14 @@ function reset() {
   pendingAppId = null;
   lastResultHtml = "";
   buildCredential = null;
-  modelMenu = null;
-  modelChoice = { model: null, effort: null, thinkHarder: false };
+  groups = [];
+  modelChoice = { group: null, model: null, effort: null };
   choiceTouched = false;
   sessionModel = null;
+  boxGroupId = null;
+  lastState = null;
   menuHandle = null;
+  menuSignature = "";
   menuLoad++;
   const bar = $("vc-model-bar");
   if (bar) {
@@ -1001,6 +1144,7 @@ function reset() {
   const promptEl = $("vc-prompt");
   promptEl.disabled = false;
   promptEl.value = "";
+  promptEl.placeholder = FIRST_TURN_PLACEHOLDER;
   // Restore the first-turn name + visibility settings for a fresh build.
   setFirstTurnVisible(true);
   const nameEl = $("vc-name");
@@ -1058,8 +1202,9 @@ export async function enterVibeCode(opts = {}) {
   show("view-vibe-code");
   reset();
   // The AI-key step hands the chosen credential in here; reset() clears it,
-  // so apply it after.
+  // so apply it after. Without one the menu starts on its first group.
   if (opts.credential) void setBuildCredential(opts.credential);
+  else void refreshModelMenu();
 }
 
 // The owner picked another server: names are per server, so check again.
@@ -1103,7 +1248,9 @@ export async function openVibeCodeSession(sessionId, { back = null, credential =
   // unless named).
   box = boxClient(server);
   activeSessionId = sessionId;
+  // Without a key handed in, the menu follows the provider the box reports.
   if (credential) void setBuildCredential(credential);
+  else void refreshModelMenu();
   setFirstTurnVisible(false);
   const sendBtn = $("vc-send");
   if (sendBtn) sendBtn.textContent = "Send";

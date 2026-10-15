@@ -70,28 +70,28 @@ describe("webapp model menu", () => {
   });
 
   it("starts on the saved default when the menu has it, else the menu's own", () => {
-    expect(mm.initialChoice(FLAGSHIP, {})).toEqual({ model: "low", effort: null, thinkHarder: false });
+    expect(mm.initialChoice(FLAGSHIP, {})).toEqual({ model: "low", effort: null });
     expect(mm.initialChoice(FLAGSHIP, { model: "medium" }).model).toBe("medium");
     expect(mm.initialChoice(FLAGSHIP, { model: "gone" }).model).toBe("low");
-    expect(mm.initialChoice(FLAGSHIP, { model: "medium", effort: "high" }).thinkHarder).toBe(true);
+    // A reasoning Flagship model offers no effort unless its catalog lists levels.
+    expect(mm.initialChoice(FLAGSHIP, { model: "medium", effort: "high" }).effort).toBeNull();
+    const withEfforts = { kind: "flagship", catalog: { ...CATALOG, models: [{ ...CATALOG.models[0], efforts: ["low", "high"], defaultEffort: "low" }] } };
+    expect(mm.initialChoice(withEfforts, { model: "low", effort: "high" }).effort).toBe("high");
+    expect(mm.initialChoice(withEfforts, { model: "low" }).effort).toBe("low");
     expect(mm.initialChoice({ kind: "flagship", catalog: null }, { model: "medium" }).model).toBeNull();
-    expect(mm.initialChoice(OWN, {})).toEqual({ model: "gpt-5.4-mini", effort: "medium", thinkHarder: false });
+    expect(mm.initialChoice(OWN, {})).toEqual({ model: "gpt-5.4-mini", effort: "medium" });
     expect(mm.initialChoice(OWN, { model: "gpt-5.4-mini", effort: "xhigh" }).effort).toBe("xhigh");
-    expect(mm.initialChoice(OWN, { model: "brand-new" })).toEqual({ model: "brand-new", effort: null, thinkHarder: false });
+    expect(mm.initialChoice(OWN, { model: "brand-new" })).toEqual({ model: "brand-new", effort: null });
     const unlisted = { kind: "own", listed: false, models: [], reason: "rejected", defaultModel: "gpt-5" };
     expect(mm.initialChoice(unlisted, {}).model).toBe("gpt-5");
     expect(mm.initialChoice(unlisted, { model: "o9" }).model).toBe("o9");
   });
 
   it("sends model and effort on start, and always says the effort on a reply", () => {
-    const low = { model: "low", effort: null, thinkHarder: false };
+    const low = { model: "low", effort: null };
     expect(mm.wireChoice(FLAGSHIP, low)).toEqual({ model: "low" });
     expect(mm.wireChoice(FLAGSHIP, low, { reply: true })).toEqual({ model: "low", effort: null });
-    expect(mm.wireChoice(FLAGSHIP, { ...low, thinkHarder: true })).toEqual({ model: "low", effort: "high" });
-    expect(mm.wireChoice(FLAGSHIP, { ...low, thinkHarder: true }, { reply: true })).toEqual({ model: "low", effort: "high" });
-    // No reasoning ⇒ no "Think harder", nothing extra sent.
-    expect(mm.canThinkHarder(FLAGSHIP, { model: "plain" })).toBe(false);
-    expect(mm.wireChoice(FLAGSHIP, { model: "plain", thinkHarder: true })).toEqual({ model: "plain" });
+    expect(mm.wireChoice(FLAGSHIP, { ...low, effort: "high" }, { reply: true })).toEqual({ model: "low", effort: "high" });
     // Catalog unreadable ⇒ nothing sent; the box uses its default.
     expect(mm.wireChoice({ kind: "flagship", catalog: null }, low, { reply: true })).toEqual({});
     expect(mm.wireChoice(OWN, { model: "gpt-5.4-mini", effort: "high" })).toEqual({ model: "gpt-5.4-mini", effort: "high" });
@@ -101,11 +101,10 @@ describe("webapp model menu", () => {
 
   it("picking another model resets the effort to that model's default", () => {
     expect(mm.withModel(OWN, { model: "brand-new", effort: null }, "gpt-5.4-mini")).toEqual({
-      model: "gpt-5.4-mini", effort: "medium", thinkHarder: false,
+      model: "gpt-5.4-mini", effort: "medium",
     });
     expect(mm.withModel(OWN, { model: "gpt-5.4-mini", effort: "high" }, "brand-new").effort).toBeNull();
-    expect(mm.withModel(FLAGSHIP, { model: "low", thinkHarder: true }, "medium").thinkHarder).toBe(true);
-    expect(mm.withModel(FLAGSHIP, { model: "low", thinkHarder: true }, "plain").thinkHarder).toBe(false);
+    expect(mm.withModel(FLAGSHIP, { model: "low", effort: "high" }, "medium")).toEqual({ model: "medium", effort: null });
   });
 
   it("asks to switch before sending images to a model that can't see them, in the contract's words", () => {
@@ -178,15 +177,17 @@ describe("webapp model menu", () => {
     expect(mm.unknownNoteHtml(OWN, { model: "gpt-5.4-mini" })).toBe("");
   });
 
-  it("offers an effort picker only for own-key models with efforts, and Think harder only for reasoning Flagship models", () => {
+  it("offers an effort picker only for a model that lists effort levels, Flagship Inference included", () => {
     const picker = mm.effortPickerHtml(OWN, { model: "gpt-5.4-mini", effort: "medium" });
     expect(picker).toContain(">Extra high<");
     expect(picker).toMatch(/value="medium" selected/);
     expect(mm.effortPickerHtml(OWN, { model: "brand-new" })).toBe("");
+    // Reasoning alone offers nothing: no level is assumed for Flagship Inference.
     expect(mm.effortPickerHtml(FLAGSHIP, { model: "low" })).toBe("");
-    expect(mm.thinkHarderHtml(FLAGSHIP, { model: "low" })).toContain("Think harder");
-    expect(mm.thinkHarderHtml(FLAGSHIP, { model: "plain" })).toBe("");
-    expect(mm.thinkHarderHtml(OWN, { model: "gpt-5.4-mini" })).toBe("");
+    const listed = { kind: "flagship", catalog: { ...CATALOG, models: [{ ...CATALOG.models[0], efforts: ["low", "high"] }] } };
+    expect(mm.effortPickerHtml(listed, { model: "low", effort: "high" })).toMatch(/value="high" selected/);
+    expect(mm.thinkHarderHtml).toBeUndefined();
+    expect(src("lib", "modelMenu.js")).not.toContain("Think harder");
   });
 
   it("reads Flagship Inference's catalog from .com and an own key's list from the box once per key", async () => {
@@ -241,8 +242,8 @@ describe("webapp model menu", () => {
 describe("webapp build chat sends the choice", () => {
   it("rides start and every reply, checks vision first and shows credits", async () => {
     const vibe = src("views", "vibe-code.js");
-    expect(vibe).toContain("Object.assign(startBody, wireChoice(modelMenu, modelChoice))");
-    expect(vibe).toContain("Object.assign(replyBody, wireChoice(modelMenu, modelChoice, { reply: true }))");
+    expect(vibe).toContain("Object.assign(startBody, wireChoice(currentMenu(), modelChoice))");
+    expect(vibe).toContain("Object.assign(replyBody, wireChoice(currentMenu(), modelChoice, { reply: true }))");
     expect(vibe.match(/await checkVision\(attachments\)/g)).toHaveLength(2);
     expect(vibe).toContain('okLabel: "Switch", cancelLabel: "Cancel"');
     expect(vibe).not.toContain("flagship-free");

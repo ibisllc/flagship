@@ -56,7 +56,26 @@ describe("vibe-code sessions helpers", () => {
     expect(sessionStatusLabel("deploying")).toBe("Deploying");
     expect(sessionStatusLabel("deployed")).toBe("Deployed");
     expect(sessionStatusLabel("cancelled")).toBe("Cancelled");
-    expect(sessionStatusLabel("failed")).toBe("Stopped");
+    expect(sessionStatusLabel("failed")).toBe("Failed");
+  });
+
+  it("offers to continue a chat that takes a message, resume one that runs, open one that's done", async () => {
+    const { sessionActionLabel } = await loadSessions();
+    expect(["awaiting-tool-response", "ready-to-deploy", "failed"].map(sessionActionLabel)).toEqual(["Continue", "Continue", "Continue"]);
+    expect(["streaming", "deploying"].map(sessionActionLabel)).toEqual(["Resume", "Resume"]);
+    expect(["deployed", "cancelled"].map(sessionActionLabel)).toEqual(["Open", "Open"]);
+  });
+
+  it("lists the most recently active chats first, finished and failed ones included", async () => {
+    const { decodeSessions, sortSessionsNewestFirst } = await loadSessions();
+    const sessions = decodeSessions({
+      sessions: [
+        { sessionId: "old-but-touched", startedAt: 1, updatedAt: 500, status: "failed" },
+        { sessionId: "new", startedAt: 300, status: "ready-to-deploy" },
+        { sessionId: "done", startedAt: 100, updatedAt: 200, status: "deployed" },
+      ],
+    });
+    expect(sortSessionsNewestFirst(sessions).map((s: { sessionId: string }) => s.sessionId)).toEqual(["old-but-touched", "new", "done"]);
   });
 
   it("names a session from itself, then its journal, then its service, then a fallback", async () => {

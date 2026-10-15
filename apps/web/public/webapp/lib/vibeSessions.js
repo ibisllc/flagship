@@ -1,6 +1,7 @@
-// The box's live vibe-code sessions (GET /api/llm/sessions): what the build
-// chooser counts and the build list offers to resume. A session missing from
-// this list ended with a daemon restart and survives only as its journal.
+// The box's vibe-code sessions (GET /api/llm/sessions): what the build
+// chooser counts and the build list offers to continue. The box keeps a chat,
+// finished or failed, for 30 days after its last change (restarts included);
+// after that it survives only as its journal.
 //
 // MIRRORS: iOS VibeCodeSessionMeta + BuildJournalViewModel, Android
 // VibeCodeSessions.kt.
@@ -22,8 +23,24 @@ export function sessionStatusLabel(status) {
     case "ready-to-deploy": return "Ready to deploy";
     case "deploying": return "Deploying";
     case "deployed": return "Deployed";
+    case "failed": return "Failed";
     case "cancelled": return "Cancelled";
     default: return "Stopped";
+  }
+}
+
+/**
+ * The row's action: carry on a chat that takes a message (the AI's question,
+ * ready to deploy, failed), follow one that runs, open one that's done.
+ */
+export function sessionActionLabel(status) {
+  switch (status) {
+    case "awaiting-tool-response":
+    case "ready-to-deploy":
+    case "failed": return "Continue";
+    case "streaming":
+    case "deploying": return "Resume";
+    default: return "Open";
   }
 }
 
@@ -39,8 +56,10 @@ export function sessionPillClass(status) {
   }
 }
 
+/** Most recent activity first (the last change, else the start). */
 export function sortSessionsNewestFirst(sessions) {
-  return (sessions || []).slice().sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
+  const at = (s) => s.updatedAt || s.startedAt || 0;
+  return (sessions || []).slice().sort((a, b) => at(b) - at(a));
 }
 
 function serviceSlug(serviceId) {
@@ -142,6 +161,7 @@ export function decodeSessions(body) {
     .map((s) => ({
       sessionId: s.sessionId,
       startedAt: typeof s.startedAt === "number" ? s.startedAt : 0,
+      ...(typeof s.updatedAt === "number" ? { updatedAt: s.updatedAt } : {}),
       status: s.status,
       serviceId: typeof s.serviceId === "string" ? s.serviceId : null,
       url: typeof s.url === "string" ? s.url : null,
