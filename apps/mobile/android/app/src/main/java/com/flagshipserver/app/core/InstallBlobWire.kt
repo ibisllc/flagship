@@ -36,6 +36,14 @@ data class InstallBlobBundle(
     // for the production default; omitted from JSON when null (encodeDefaults=
     // false) so a non-debug recipe is byte-identical.
     val debugGrant: String? = null,
+    // The owner-signed outbound proxy order (docs/outbound-proxy.md): an
+    // UNSIGNED recipe sibling carrying its own signature, which the box checks
+    // before it uses the proxy. Omitted when null, so a recipe without a proxy
+    // is byte-identical.
+    val outboundProxy: BoxProxyWire? = null,
+    // The proxy's username and password, only when the owner typed them into
+    // the create flow (the recipe is otherwise secret-free). Omitted when null.
+    val outboundProxyCredentials: BoxProxyCredentials? = null,
 )
 
 @Serializable
