@@ -43,8 +43,11 @@ import kotlinx.coroutines.delay
 fun InstallProgressScreen(
     serial: String,
     onFinish: (resolvedFqdn: String?, live: Boolean) -> Unit,
+    /** The new server's name, shown on the ongoing setup notification. */
+    podName: String? = null,
 ) {
     val flagshipServer = LocalFlagshipServerClient.current
+    val context = androidx.compose.ui.platform.LocalContext.current
     // Raw canonical phase wire string (null until the box reports), the
     // latest history-derived prev phase for error attribution, the latest
     // detail, and the resolved serverDomain once registration lands.
@@ -67,6 +70,13 @@ fun InstallProgressScreen(
                 phase = rec.phase
                 detail = rec.detail
                 if (rec.serverDomain != null) resolvedFqdn = rec.serverDomain
+                com.flagshipserver.app.companion.ProvisionProgressCenter.report(
+                    context,
+                    com.flagshipserver.app.companion.ProvisionUpdate(
+                        key = serial, serial = serial, podName = podName?.takeIf { it.isNotBlank() },
+                        phase = rec.phase, detail = rec.detail, serverDomain = rec.serverDomain,
+                    ),
+                )
                 if (ProvisionStatusPhase.fromWire(rec.phase).isTerminal) break
             }
             delay(2000)

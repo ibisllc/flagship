@@ -1,5 +1,5 @@
 // Schedules the dead-man affirmation reminders on the platform AlarmManager
-// and re-posts them through the existing `flagship.alerts` notification
+// and re-posts them through the `flagship.reminders` notification
 // channel. The reminder OFFSETS come from the pure
 // core/DeadManReminders.due so they stay unit-testable; this file is the
 // thin Android shell. See docs/lock-and-poweroff.md.
@@ -37,7 +37,7 @@ class DeadManReminderReceiver : BroadcastReceiver() {
             launch,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val notif = NotificationCompat.Builder(context, "flagship.alerts")
+        val notif = NotificationCompat.Builder(context, NotificationChannels.REMINDERS.id)
             .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
             .setContentTitle("Keep $serverDomain unlocked?")
             .setContentText("$label — tap to affirm.")

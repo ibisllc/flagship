@@ -7,12 +7,10 @@
 
 package com.flagshipserver.app.push
 
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.net.toUri
 import com.flagshipserver.app.MainActivity
@@ -83,11 +81,28 @@ class FlagshipFcmService : FirebaseMessagingService() {
         // has already been woken above.
         if (!com.flagshipserver.app.core.PrivacySettings.fromContext(this).pushNotificationsEnabled.value) return
 
+        // An install's checkpoints update its one ongoing setup notification
+        // instead of each posting a new one.
+        if (provisionEvent != null) {
+            com.flagshipserver.app.companion.ProvisionProgressCenter.report(
+                this,
+                com.flagshipserver.app.companion.ProvisionUpdate(
+                    key = provisionEvent.serial.ifEmpty { "provision" },
+                    serial = provisionEvent.serial.ifEmpty { null },
+                    podName = null,
+                    phase = provisionEvent.phase,
+                    detail = provisionEvent.detail,
+                ),
+            )
+            return
+        }
+
         val title = data["title"] ?: message.notification?.title ?: "Flagship"
         val body = data["body"] ?: message.notification?.body ?: ""
         val deepLink = data["deepLink"]
 
         ensureChannel(this)
+        val channel = NotificationChannels.forPush(data["category"], data["kind"])
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             if (!deepLink.isNullOrEmpty()) {
@@ -98,7 +113,7 @@ class FlagshipFcmService : FirebaseMessagingService() {
         val pendingFlags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         val pending = PendingIntent.getActivity(this, 0, intent, pendingFlags)
 
-        val notif = NotificationCompat.Builder(this, CHANNEL_ID)
+        val notif = NotificationCompat.Builder(this, channel.id)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
             .setContentText(body)
@@ -110,23 +125,14 @@ class FlagshipFcmService : FirebaseMessagingService() {
     }
 
     companion object {
-        private const val CHANNEL_ID = "flagship.alerts"
         const val GENERIC_CATEGORY = "generic"
         const val GENERIC_TEXT = "Open Flagship to see what's new."
         const val APP_ACCESS_CATEGORY = "app-access"
         const val APP_ACCESS_TEXT = "One of your apps wants to reach the internet"
         private const val NOTIF_ID_BASE = 1000
 
-        fun ensureChannel(context: Context) {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-            val mgr = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            if (mgr.getNotificationChannel(CHANNEL_ID) != null) return
-            mgr.createNotificationChannel(
-                NotificationChannel(
-                    CHANNEL_ID, "Flagship alerts", NotificationManager.IMPORTANCE_DEFAULT,
-                ).apply { description = "Unlock requests, deploy events, and other phone alerts." }
-            )
-        }
+        /** Every channel (one per kind of push, see NotificationChannels). */
+        fun ensureChannel(context: Context) = NotificationChannels.ensureAll(context)
 
         /**
          * #91 — raise an app-initiated LOCAL notification that an AI build chat
@@ -152,7 +158,7 @@ class FlagshipFcmService : FirebaseMessagingService() {
             } else {
                 "The AI is asking you a question."
             }
-            val notif = NotificationCompat.Builder(context, CHANNEL_ID)
+            val notif = NotificationCompat.Builder(context, NotificationChannels.BUILDS.id)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setContentTitle("Flagship")
                 .setContentText(body)

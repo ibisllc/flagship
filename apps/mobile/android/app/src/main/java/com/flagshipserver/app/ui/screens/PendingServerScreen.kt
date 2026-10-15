@@ -75,6 +75,22 @@ fun PendingServerScreen(pod: PodInfo, username: String? = null, onCancel: () -> 
         }
     }
     LaunchedEffect(timeline) { timeline?.runUntilTerminal() }
+    // Mirror each checkpoint onto the ongoing setup notification (and watch).
+    val context = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(timeline) {
+        val serial = pod.pendingAuthCodeSerial?.takeIf { it.isNotEmpty() }
+        val key = serial ?: pod.fqdn
+        timeline?.status?.collect { rec ->
+            if (rec == null) return@collect
+            com.flagshipserver.app.companion.ProvisionProgressCenter.report(
+                context,
+                com.flagshipserver.app.companion.ProvisionUpdate(
+                    key = key, serial = serial, podName = pod.name,
+                    phase = rec.phase, detail = rec.detail, serverDomain = rec.serverDomain ?: pod.fqdn,
+                ),
+            )
+        }
+    }
 
     Column(
         Modifier

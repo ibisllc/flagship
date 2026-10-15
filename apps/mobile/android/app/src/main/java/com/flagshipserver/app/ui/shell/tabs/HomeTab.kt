@@ -524,6 +524,7 @@ fun HomeTab() {
             val fqdn = URLDecoder.decode(entry.arguments?.getString("fqdn") ?: "", "UTF-8")
             InstallProgressScreen(
                 serial = serial,
+                podName = name,
                 onFinish = { resolvedFqdn, live ->
                     // The pod is already on Home (upserted at delivery).
                     // Leaving the screen just re-upserts idempotently —

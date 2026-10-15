@@ -1,6 +1,7 @@
 // Keeps the app's glanceable surfaces in step with AppState: whenever the
 // account, its servers or the leader change, the server-status snapshot is
-// rewritten and the home-screen widget redrawn. Hosted once at the app root
+// rewritten, the home-screen widget redrawn and the launcher shortcuts
+// refreshed. Hosted once at the app root
 // (MainActivity), the Android twin of iOS's PodStatusPublisher.
 
 package com.flagshipserver.app.companion
@@ -36,5 +37,6 @@ object CompanionPublisher {
         if (store.read().copy(updatedAt = 0) == snapshot.copy(updatedAt = 0)) return
         store.write(snapshot)
         PodStatusWidget.refresh(context)
+        CompanionShortcuts.publish(context, snapshot)
     }
 }
