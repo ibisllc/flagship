@@ -982,6 +982,9 @@ class WizardModel:
     def stop_server(self, name: str) -> None:
         threading.Thread(target=lambda: self.vm.power_off(name), daemon=True).start()
 
+    def restart_server(self, name: str) -> None:
+        threading.Thread(target=lambda: self.vm.restart(name), daemon=True).start()
+
     def retry_install(self, name: str) -> None:
         threading.Thread(target=lambda: self.vm.begin_install(name), daemon=True).start()
 
@@ -1720,6 +1723,8 @@ def build_window(application, model: Optional[WizardModel] = None):
     detail_actions.append(detail_start)
     detail_stop = Gtk.Button(label="Stop")
     detail_actions.append(detail_stop)
+    detail_restart = Gtk.Button(label="Restart")
+    detail_actions.append(detail_restart)
     detail_retry = Gtk.Button(label="Retry install")
     detail_retry.add_css_class("suggested-action")
     detail_actions.append(detail_retry)
@@ -1769,6 +1774,9 @@ def build_window(application, model: Optional[WizardModel] = None):
     )
     detail_stop.connect(
         "clicked", lambda _b: wizard_model.stop_server(_selected_name()) if _selected_name() else None
+    )
+    detail_restart.connect(
+        "clicked", lambda _b: wizard_model.restart_server(_selected_name()) if _selected_name() else None
     )
     detail_retry.connect(
         "clicked", lambda _b: wizard_model.retry_install(_selected_name()) if _selected_name() else None
@@ -1899,6 +1907,7 @@ def build_window(application, model: Optional[WizardModel] = None):
                 _action("Start", server.name, wizard_model.start_server)
             if server.can_stop:
                 _action("Stop", server.name, wizard_model.stop_server)
+                _action("Restart", server.name, wizard_model.restart_server)
             if server.can_retry_install:
                 _action("Retry install", server.name, wizard_model.retry_install)
             if server.can_cancel_install:
@@ -2044,6 +2053,7 @@ def build_window(application, model: Optional[WizardModel] = None):
             )
             detail_start.set_visible(server.can_start)
             detail_stop.set_visible(server.can_stop)
+            detail_restart.set_visible(server.can_stop)
             detail_retry.set_visible(server.can_retry_install)
             detail_cancel_install.set_visible(server.can_cancel_install)
             detail_ssh.set_visible(server.console_enabled)

@@ -456,6 +456,18 @@ class VMManager:
         so call it off the UI thread."""
         self._apply(VMEvent.power_off(), name)
 
+    def restart(self, name: str) -> None:
+        """Graceful power-off, then power on again once it is down (the
+        Windows tray's and the Mac menubar's Restart). Blocks; call it off
+        the UI thread."""
+        server = self.server(name)
+        if server is None or not server.can_stop:
+            return
+        self.power_off(name)
+        server = self.server(name)
+        if server is not None and server.can_start:
+            self.power_on(name)
+
     @property
     def has_live_servers(self) -> bool:
         """True while quitting now would cut power to a guest: one is booted,

@@ -613,3 +613,24 @@ def test_server_without_an_order_serial_shows_no_health(store):
     assert m.servers[0].record.state.kind == VMStateKind.RUNNING
     assert "a.h.flagship.services" not in m._health_polls
     assert called == []
+
+
+def test_restart_powers_off_gracefully_then_boots_again(store):
+    host = FakeHost()
+    seed(store, "a.h.flagship.services", VMState.stopped())
+    m = manager(store, host=host)
+    m.power_on("a.h.flagship.services")
+    assert m.servers[0].record.state.kind == VMStateKind.AWAITING_PHONE_UNLOCK
+    m.restart("a.h.flagship.services")
+    assert host.graceful_stops == [STOP_GRACE_SECONDS]
+    assert host.started == [("a.h.flagship.services", False), ("a.h.flagship.services", False)]
+    assert m.servers[0].record.state.kind == VMStateKind.AWAITING_PHONE_UNLOCK
+    m._cancel_unlock_poll("a.h.flagship.services")
+
+
+def test_restart_of_a_stopped_server_does_nothing(store):
+    host = FakeHost()
+    seed(store, "a.h.flagship.services", VMState.stopped())
+    m = manager(store, host=host)
+    m.restart("a.h.flagship.services")
+    assert host.started == [] and host.graceful_stops == []
