@@ -411,6 +411,26 @@ class ServiceAccessViewModel(
         return AppListScope.OFF_TITLE to AppListScope.offConfirm(serverLabel(leader))
     }
 
+    /**
+     * The invites the shown server's list holds. `.com` keeps one invite list
+     * per app, so while each server keeps its own list a row stays only if
+     * the shown box knows the invite (its own invites, or a grant through it)
+     * or the link is still unused; with one list (or no members answer) every
+     * row stays.
+     */
+    fun peopleOnShownServer(
+        people: List<AccessPerson> = _people.value,
+        members: AppMembersResponse? = _members.value,
+        scope: AppListScopeState? = _listScope.value,
+    ): List<AccessPerson> {
+        if (scope?.separate != true || members == null) return people
+        val known = members.invites.map { it.inviteId }.toSet() +
+            members.members.flatMap { m -> m.grants.map { it.inviteId } }
+        return people.filter { p ->
+            p.inviteId in known || (!p.bound && p.boundAidHex == null && p.memberAids.isEmpty() && p.redemptions == 0)
+        }
+    }
+
     /** Best-effort: an older box (404) or an offline one hides the switch. */
     suspend fun refreshListScope() {
         val s = box ?: run { _listScope.value = null; return }

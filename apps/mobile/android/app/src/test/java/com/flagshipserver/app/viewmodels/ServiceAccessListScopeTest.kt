@@ -218,4 +218,34 @@ class ServiceAccessListScopeTest {
         assertFalse(v.showsListScopeToggle)
         assertFalse(v.showsServerPicker)
     }
+
+    private val rows = listOf(
+        AccessPerson("known", "Alex", null, bound = true, boundAidHex = "ab".repeat(32)),
+        AccessPerson("granted", "Chess club", null, bound = true, isGroup = true, redemptions = 2, memberAids = listOf("cd".repeat(32))),
+        AccessPerson("unused", "Sam", null, bound = false),
+        AccessPerson("elsewhere", "Jo", null, bound = true, boundAidHex = "ef".repeat(32)),
+        AccessPerson("elsewhere-group", "Club", null, bound = false, isGroup = true, redemptions = 1),
+    )
+    private val shownBox = com.flagshipserver.app.api.AppMembersResponse(
+        serviceId = serviceRef, mode = "open", defaultRole = "member",
+        members = listOf(com.flagshipserver.app.api.AppMember("cd".repeat(32), "member", listOf(com.flagshipserver.app.api.AppMemberGrant("granted", "member")))),
+        invites = listOf(com.flagshipserver.app.api.AppMemberInviteRole("known", "member")),
+    )
+    private fun scope(s: String) = com.flagshipserver.app.api.AppListScopeState(serviceRef = serviceRef, scope = s, plan = "pro", self = home)
+
+    @Test fun separateListsKeepOnlyTheShownServersInvitesAndUnusedLinks() {
+        val v = vm(box())
+        assertEquals(listOf("known", "granted", "unused"), v.peopleOnShownServer(rows, shownBox, scope("server")).map { it.inviteId })
+    }
+
+    @Test fun oneListKeepsEveryInvite() {
+        val v = vm(box())
+        assertEquals(rows, v.peopleOnShownServer(rows, shownBox, scope("account")))
+    }
+
+    @Test fun noMembersAnswerKeepsEveryInvite() {
+        val v = vm(box())
+        assertEquals(rows, v.peopleOnShownServer(rows, null, scope("server")))
+        assertEquals(rows, v.peopleOnShownServer(rows, shownBox, null))
+    }
 }
