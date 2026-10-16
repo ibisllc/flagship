@@ -32,6 +32,12 @@ struct InternetAccessSection: View {
                                 .accessibilityIdentifier("service-detail-access-rules")
                         }
                         ForEach(controller.pending) { p in pendingRow(p, c: c) }
+                        if let note = controller.readOnlyNote {
+                            Text(note)
+                                .font(FS.font.caption()).foregroundColor(c.textMuted)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .accessibilityIdentifier("service-detail-access-read-only")
+                        }
                         if let answer = controller.lastAnswer {
                             Text(AppAccessCopy.answered(app: controller.appName, host: answer.host, action: answer.action))
                                 .font(FS.font.bodySm()).foregroundColor(c.textMuted)

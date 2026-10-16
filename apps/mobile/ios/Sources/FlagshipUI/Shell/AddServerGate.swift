@@ -34,6 +34,24 @@ public enum AddServerGate {
     }
 }
 
+/// Orders a box checks under the account's admin root once the box pins one
+/// (docs/service-access-gating.md "Account members"): removing an app, ticking
+/// or unticking "Runs on", answering or saving an access list, creating or
+/// revoking API keys and changing an app's data. Same rule as adding servers;
+/// any other device sees the control read-only with the sentence below, so it
+/// never signs an order the box refuses. Mirrors the webapp's
+/// lib/addServerGate.js rule.
+public enum AdminOrderGate {
+    @MainActor
+    public static func allows(_ app: AppState) -> Bool { AddServerGate.allows(app) }
+
+    public static let removeApp = "Only an admin device can remove an app."
+    public static let runsOn = "Only an admin device can change where this app runs."
+    public static let accessList = "Only an admin device can change what this app may reach."
+    public static let apiKeys = "Only an admin device can create or revoke API keys."
+    public static let dataWrite = "Only an admin device can change this app's data."
+}
+
 public struct AddServerRefused: LocalizedError, Equatable {
     public init() {}
     public var errorDescription: String? { AddServerGate.adminOnlyMessage }

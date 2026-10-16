@@ -620,7 +620,7 @@ public struct ServiceAccessScreen: View {
             username: username,
             authorAidKeys: keys?.authorAidKeys,
             screens: screens,
-            isAdminDevice: keys?.isAdminDevice,
+            isAdminDevice: keys?.isAdminDevice ?? AdminOrderGate.allows(app),
             adminSigner: keys?.adminSigner,
             deviceId: deviceId,
             deviceSigner: keys?.deviceSigner,

@@ -484,7 +484,7 @@ struct ServiceDetailContainer: View {
     @Environment(AppState.self) private var app
     @Environment(ToastCenter.self) private var toasts
     @State private var vm: ServiceDetailViewModel?
-    /// Drives the destructive "Remove service" confirm dialog.
+    /// Drives the destructive "Remove app" confirm dialog.
     @State private var confirmRemove = false
 
     /// The box this service runs on — the daemon there pins the owner IRK as
@@ -515,18 +515,18 @@ struct ServiceDetailContainer: View {
                     onOpenAccess: { path.append(.serviceAccess(serviceId: serviceId)) },
                     onOpenDatabase: { path.append(.appDatabase(serviceId: serviceId)) },
                     onEdit: { path.append(.editService(serviceId: serviceId)) },
-                    canApproveEgress: !app.isRestrictedDevice
+                    canApproveEgress: !app.isRestrictedDevice && AdminOrderGate.allows(app)
                 )
             } else {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .confirmationDialog(
-            "Remove this service?",
+            "Remove this app?",
             isPresented: $confirmRemove,
             titleVisibility: .visible
         ) {
-            Button("Remove service", role: .destructive) {
+            Button("Remove app", role: .destructive) {
                 if let vm { Task { await remove(vm: vm) } }
             }
             Button("Cancel", role: .cancel) {}
@@ -568,8 +568,8 @@ struct ServiceDetailContainer: View {
                     serverDomain: serverDomain,
                     egressServerDomain: sessionServerDomain,
                     accessCanChange: !app.isRestrictedDevice,
-                    canUninstall: !app.isRestrictedDevice
-                        && (Keystore.hasAdminRoot || GymSeams.forceAdminRoot || app.isDemoAccount)
+                    adminOrders: AdminOrderGate.allows(app),
+                    canUninstall: !app.isRestrictedDevice && AdminOrderGate.allows(app)
                 )
             }
             await vm?.load()
@@ -596,7 +596,7 @@ struct ServiceDetailContainer: View {
         } else if case .failed(let msg) = vm.removePhase {
             toasts.error(msg)
         } else {
-            toasts.error("Couldn't remove the service. Try again in a moment.")
+            toasts.error("Couldn't remove the app. Try again in a moment.")
         }
     }
 }

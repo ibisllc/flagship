@@ -42,9 +42,10 @@ struct ApiKeysSection: View {
                             FSSecondaryButton(AppApiKeysCopy.create, block: true) { showCreate = true }
                                 .accessibilityIdentifier("service-detail-api-keys-create")
                         } else {
-                            Text(AppApiKeysCopy.readOnlyNote)
+                            Text(controller.readOnlyNote)
                                 .font(FS.font.caption()).foregroundColor(c.textMuted)
                                 .fixedSize(horizontal: false, vertical: true)
+                                .accessibilityIdentifier("service-detail-api-keys-read-only")
                         }
                     }
                 }

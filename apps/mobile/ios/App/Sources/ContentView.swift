@@ -248,7 +248,8 @@ struct ContentView: View {
     }
 
     /// Build the access-alert center once; while the app is in front, paired,
-    /// unlocked and holding the owner key (a restricted profile can't sign),
+    /// unlocked and on an admin device (a restricted profile can't sign, and
+    /// an admin-pinned box takes access answers from the admin root only),
     /// ask every managed box for waiting requests and listen on its events
     /// socket; otherwise stop listening. With push notifications off it shows
     /// no sheet. Also brings each box's access-alert setting and the `.com`
@@ -262,7 +263,7 @@ struct ContentView: View {
                 boxes: managedBoxes(),
                 isActive: { [weak app] in
                     guard let app else { return false }
-                    return app.isPaired && app.isUnlocked && !app.isRestrictedDevice
+                    return app.isPaired && app.isUnlocked && !app.isRestrictedDevice && AdminOrderGate.allows(app)
                 },
                 alertsEnabled: { privacy.pushNotificationsEnabled && !GymSeams.suppressAccessAlerts }
             )
@@ -291,7 +292,7 @@ struct ContentView: View {
         if inFront, let prefs = pushPrefs {
             Task { await prefs.resync() }
         }
-        if inFront && !app.isRestrictedDevice && privacy.pushNotificationsEnabled {
+        if inFront && !app.isRestrictedDevice && AdminOrderGate.allows(app) && privacy.pushNotificationsEnabled {
             Task {
                 await center.refresh()
                 await center.startListening()

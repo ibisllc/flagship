@@ -153,8 +153,11 @@ public final class AppApiKeysController {
     /// The box has no API keys (404 on the list, or a client without them):
     /// the page shows nothing.
     public private(set) var isHidden = false
-    /// Create and Revoke (off on a restricted profile: the box refuses them).
+    /// Create and Revoke (off on a restricted profile or a non-admin device:
+    /// the box refuses them).
     public let canChange: Bool
+    /// Why `canChange` is off, shown under the list.
+    public let readOnlyNote: String
     public private(set) var isCreating = false
     public private(set) var revokingKeyId: String?
     public private(set) var errorMessage: String?
@@ -166,12 +169,14 @@ public final class AppApiKeysController {
     private let signer: AppAccessSigner
 
     public init(serviceId: String, appName: String, client: any ScreensClient, serverDomain: String?,
-                canChange: Bool = true, signer: AppAccessSigner? = nil) {
+                canChange: Bool = true, readOnlyNote: String = AppApiKeysCopy.readOnlyNote,
+                signer: AppAccessSigner? = nil) {
         self.serviceId = serviceId
         self.appName = appName
         self.client = client
         self.fallbackServerDomain = serverDomain
         self.canChange = canChange
+        self.readOnlyNote = readOnlyNote
         self.signer = signer ?? AppAccessOrder.defaultSigner
     }
 

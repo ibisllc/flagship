@@ -23,7 +23,7 @@ public enum AppPlacementCopy {
     public static let notPaired = "This device isn't paired with this server"
     public static let checking = "Checking…"
     public static let noSource = "No server has a finished copy of this app to copy from."
-    public static let adminOnlyRemove = "Only an admin device can remove an app."
+    public static let adminOnlyRemove = AdminOrderGate.removeApp
 
     /// "Copying… 40%", "Installing…".
     public static func copying(state: String, progress: Double?) -> String {
@@ -33,7 +33,7 @@ public enum AppPlacementCopy {
     }
 
     public static func lastCopy(_ app: String) -> String {
-        "This is the only copy of \(app). To delete it, use Remove service."
+        "This is the only copy of \(app). To delete it, use Remove app."
     }
 
     public static func confirmRemoveTitle(_ app: String, _ server: String) -> String {
@@ -367,6 +367,8 @@ public final class AppRunsOnController {
     public let canChange: Bool
     /// Unticking (uninstalling) is an admin device's alone.
     public let canUninstall: Bool
+    /// The line under the list when `canChange` is off.
+    public let readOnlyNote: String
 
     private let pageFqdn: String
     private let clients: PodScreensClientFactory
@@ -380,9 +382,11 @@ public final class AppRunsOnController {
     public init(serviceId: String, appName: String, pods: [PodInfo], pageFqdn: String,
                 clients: PodScreensClientFactory, uninstallClient: any ServiceUninstallClient,
                 canChange: Bool = true, canUninstall: Bool = true,
+                readOnlyNote: String = AppPlacementCopy.runsOnReadOnly,
                 signer: AppAccessSigner? = nil, irkSigner: AppAccessSigner? = nil,
                 now: @escaping () -> Date = Date.init) {
         self.canUninstall = canUninstall
+        self.readOnlyNote = readOnlyNote
         self.serviceId = serviceId
         self.appName = appName
         self.rows = CreationTarget.eligible(pods).map { Row(pod: $0, presence: .checking) }

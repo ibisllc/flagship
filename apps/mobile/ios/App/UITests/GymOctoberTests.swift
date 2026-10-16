@@ -114,7 +114,7 @@ final class GymOctoberTests: XCTestCase {
     // ─── App access list on the service page ─────────────────────────────────
 
     func test_serviceAccessPendingAllowFromServicePage() throws {
-        let app = launch(tab: "apps")
+        let app = launch(tab: "apps", ["-smoke-admin-root"])
         openPlants(app)
         let allow = app.buttons["service-detail-access-allow"].firstMatch
         XCTAssertTrue(reveal(app, allow), "Plants' Internet access section should list its waiting hosts.")
@@ -360,7 +360,7 @@ final class GymOctoberTests: XCTestCase {
     // ─── API keys + Database ─────────────────────────────────────────────────
 
     func test_apiKeyCreateShowsTheSecretOnce() throws {
-        let app = launch(tab: "apps")
+        let app = launch(tab: "apps", ["-smoke-admin-root"])
         openPlants(app)
         let create = app.buttons["service-detail-api-keys-create"]
         XCTAssertTrue(reveal(app, create), "Plants' page should have an API keys section.")
@@ -497,5 +497,39 @@ final class GymOctoberTests: XCTestCase {
         XCTAssertFalse(app.buttons["sd-delete-server"].exists, "A co-manager can never delete the server.")
         XCTAssertFalse(app.buttons["sd-revoke-server"].exists, "…nor revoke it.")
         gymShot(app, "shared-server-member")
+    }
+
+    // ─── Admin-only orders on a non-admin device (MVP sweep) ────────────────
+
+    /// A device without the admin root sees Plants' page read-only: no Allow,
+    /// no Create key, no Remove, the "Runs on" boxes locked, each with the
+    /// sentence that says why. An admin device gets the controls.
+    func test_servicePageAdminOnlyOrdersOnANonAdminDevice() throws {
+        var app = launch(tab: "apps")
+        openPlants(app)
+        let accessNote = app.staticTexts["service-detail-access-read-only"]
+        XCTAssertTrue(reveal(app, accessNote), "The access list says why it can't be changed here.")
+        XCTAssertEqual(accessNote.label, "Only an admin device can change what this app may reach.")
+        XCTAssertFalse(app.buttons["service-detail-access-allow"].exists, "No Allow on a non-admin device.")
+        let keysNote = app.staticTexts["service-detail-api-keys-read-only"]
+        XCTAssertTrue(reveal(app, keysNote))
+        XCTAssertEqual(keysNote.label, "Only an admin device can create or revoke API keys.")
+        XCTAssertFalse(app.buttons["service-detail-api-keys-create"].exists)
+        let runsOn = app.staticTexts["runs-on-note"]
+        XCTAssertTrue(reveal(app, runsOn))
+        XCTAssertEqual(runsOn.label, "Only an admin device can change where this app runs.")
+        let removeNote = app.staticTexts["service-detail-remove-admin-only"]
+        XCTAssertTrue(reveal(app, removeNote))
+        XCTAssertEqual(removeNote.label, "Only an admin device can remove an app.")
+        XCTAssertFalse(app.buttons["service-detail-remove-btn"].exists)
+        gymShot(app, "service-page-non-admin")
+
+        app = launch(tab: "apps", ["-smoke-admin-root"])
+        openPlants(app)
+        XCTAssertTrue(reveal(app, app.buttons["service-detail-access-allow"].firstMatch), "An admin device answers.")
+        XCTAssertTrue(reveal(app, app.buttons["service-detail-api-keys-create"]))
+        XCTAssertTrue(reveal(app, app.buttons["service-detail-remove-btn"]))
+        XCTAssertEqual(app.buttons["service-detail-remove-btn"].label, "Remove app")
+        XCTAssertFalse(app.staticTexts["service-detail-remove-admin-only"].exists)
     }
 }

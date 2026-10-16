@@ -189,10 +189,11 @@ struct RunsOnSection: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("runs-on-message")
             }
-            Text(controller.canChange ? AppPlacementCopy.runsOnNote : AppPlacementCopy.runsOnReadOnly)
+            Text(controller.canChange ? AppPlacementCopy.runsOnNote : controller.readOnlyNote)
                 .font(FS.font.caption()).foregroundColor(c.textMuted)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 4)
+                .accessibilityIdentifier("runs-on-note")
         }
         .task(id: controller.hasCopying) {
             if controller.hasCopying { await controller.pollWhileCopying() }

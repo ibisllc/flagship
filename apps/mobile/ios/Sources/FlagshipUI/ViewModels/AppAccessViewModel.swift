@@ -186,20 +186,24 @@ public final class AppAccessController {
     public private(set) var errorMessage: String?
     /// The last answer, for the confirmation line.
     public private(set) var lastAnswer: (host: String, action: AppAccessAction)?
-    /// Answers and Save (off on a restricted profile: the box refuses it).
+    /// Answers and Save (off on a restricted profile or a non-admin device:
+    /// the box refuses it).
     public let canChange: Bool
+    /// Why `canChange` is off, shown under the list; nil shows nothing.
+    public let readOnlyNote: String?
 
     private let client: any ScreensClient
     private let fallbackServerDomain: String?
     private let signer: AppAccessSigner
 
     public init(serviceId: String, appName: String, client: any ScreensClient, serverDomain: String?,
-                canChange: Bool = true, signer: AppAccessSigner? = nil) {
+                canChange: Bool = true, readOnlyNote: String? = nil, signer: AppAccessSigner? = nil) {
         self.serviceId = serviceId
         self.appName = appName
         self.client = client
         self.fallbackServerDomain = serverDomain
         self.canChange = canChange
+        self.readOnlyNote = canChange ? nil : readOnlyNote
         self.signer = signer ?? AppAccessOrder.defaultSigner
     }
 
@@ -222,7 +226,7 @@ public final class AppAccessController {
 
     @discardableResult
     public func answer(host: String, action: AppAccessAction) async -> Bool {
-        guard busyHost == nil else { return false }
+        guard canChange, busyHost == nil else { return false }
         busyHost = host
         errorMessage = nil
         defer { busyHost = nil }

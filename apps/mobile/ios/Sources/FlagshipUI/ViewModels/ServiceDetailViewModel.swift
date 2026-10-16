@@ -190,7 +190,8 @@ public final class ServiceDetailViewModel {
         let name = app.slug.capitalized
         if access == nil {
             access = AppAccessController(serviceId: serviceId, appName: name, client: client,
-                                         serverDomain: egressServerDomain, canChange: accessCanChange,
+                                         serverDomain: egressServerDomain, canChange: ordersCanChange,
+                                         readOnlyNote: accessCanChange ? AdminOrderGate.accessList : nil,
                                          signer: egressSigner)
         } else {
             access?.setAppName(name)
@@ -211,7 +212,8 @@ public final class ServiceDetailViewModel {
             // Same rules as the access list: signed by the sensitive-order
             // key, for the box the client talks to, read-only when restricted.
             apiKeys = AppApiKeysController(serviceId: serviceId, appName: name, client: client,
-                                           serverDomain: egressServerDomain, canChange: accessCanChange,
+                                           serverDomain: egressServerDomain, canChange: ordersCanChange,
+                                           readOnlyNote: accessCanChange ? AdminOrderGate.apiKeys : AppApiKeysCopy.readOnlyNote,
                                            signer: egressSigner)
         } else {
             apiKeys?.setAppName(name)
@@ -263,8 +265,10 @@ public final class ServiceDetailViewModel {
         if runsOn == nil {
             runsOn = AppRunsOnController(
                 serviceId: serviceId, appName: name, pods: allPods, pageFqdn: page, clients: clients,
-                uninstallClient: uninstallClient, canChange: accessCanChange,
-                canUninstall: canUninstall, signer: egressSigner, irkSigner: irkSigner)
+                uninstallClient: uninstallClient, canChange: ordersCanChange,
+                canUninstall: canUninstall,
+                readOnlyNote: accessCanChange ? AdminOrderGate.runsOn : AppPlacementCopy.runsOnReadOnly,
+                signer: egressSigner, irkSigner: irkSigner)
         } else {
             runsOn?.setAppName(name)
         }
@@ -296,8 +300,13 @@ public final class ServiceDetailViewModel {
     /// The sensitive-order key (admin root when held, else the owner IRK),
     /// behind Face ID; the same key Delete/Revoke sign with.
     private let egressSigner: @MainActor (String) async throws -> Curve25519.Signing.PrivateKey
-    /// Answers and Save on the access list (false on a restricted profile).
+    /// The owner's surfaces (false on a restricted profile).
     private let accessCanChange: Bool
+    /// This device may sign admin-only orders ([AdminOrderGate]): access-list
+    /// answers, API keys, "Runs on" and data writes.
+    public let adminOrders: Bool
+    /// Access list, API keys and "Runs on" take orders from this device.
+    public var ordersCanChange: Bool { accessCanChange && adminOrders }
     /// Fallback `serverDomain` for the internet grant / access list when the
     /// client can't say which box it talks to: the session pod, never the
     /// leader (the box checks the grant names itself).
@@ -316,9 +325,11 @@ public final class ServiceDetailViewModel {
         egressSigner: (@MainActor (String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
         egressServerDomain: String? = nil,
         accessCanChange: Bool = true,
+        adminOrders: Bool = true,
         canUninstall: Bool = true
     ) {
         self.accessCanChange = accessCanChange
+        self.adminOrders = adminOrders
         self.canUninstall = canUninstall
         self.egressServerDomain = egressServerDomain ?? serverDomain
         self.serviceId = serviceId

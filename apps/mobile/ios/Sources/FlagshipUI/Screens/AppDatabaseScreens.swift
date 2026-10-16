@@ -85,7 +85,8 @@ struct AppDbQueryContainer: View {
             if controller == nil {
                 controller = AppDbQueryController(serviceId: serviceId, store: store, appName: appLabel(serviceId),
                                                   client: client,
-                                                  serverDomain: bound ?? app.sessionPod?.fqdn ?? app.currentPod?.fqdn)
+                                                  serverDomain: bound ?? app.sessionPod?.fqdn ?? app.currentPod?.fqdn,
+                                                  canWrite: AdminOrderGate.allows(app))
             }
         }
     }

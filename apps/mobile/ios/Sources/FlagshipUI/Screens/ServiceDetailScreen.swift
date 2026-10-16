@@ -90,7 +90,16 @@ public struct ServiceDetailScreen: View {
                     }
                     if vm.showsDatabase, let db = vm.database { databaseRow(db, c: c) }
                     logsAndBackup(d: d, c: c)
-                    if vm.canUninstall { removeButton(c: c) }
+                    if vm.canUninstall {
+                        removeButton(c: c)
+                    } else if !vm.adminOrders {
+                        Text(AdminOrderGate.removeApp)
+                            .font(FS.font.caption()).foregroundColor(c.textMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, FS.space.s4)
+                            .accessibilityIdentifier("service-detail-remove-admin-only")
+                    }
                 }
                 Spacer().frame(height: FS.space.s12)
             }
@@ -620,7 +629,7 @@ public struct ServiceDetailScreen: View {
     private func removeButton(c: FSColors) -> some View {
         VStack(spacing: FS.space.s3) {
             FSDangerButton(
-                vm.isRemoving ? "Removing…" : "Remove service",
+                vm.isRemoving ? "Removing…" : "Remove app",
                 block: true,
                 action: onRemove
             )

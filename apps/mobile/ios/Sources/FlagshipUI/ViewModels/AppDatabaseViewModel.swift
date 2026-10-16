@@ -293,6 +293,10 @@ public final class AppDbQueryController {
     /// The exact text the box asked to have signed.
     private var pendingSql: String?
 
+    /// Writes need the admin root on an admin-pinned box: off, a write is
+    /// refused here with `AdminOrderGate.dataWrite` instead of asking Face ID.
+    public let canWrite: Bool
+
     private let client: any ScreensClient
     private let fallbackServerDomain: String?
     private let signer: AppAccessSigner
@@ -300,7 +304,9 @@ public final class AppDbQueryController {
     private var lastIssuedAt: Int64 = 0
 
     public init(serviceId: String, store: String, appName: String, client: any ScreensClient,
-                serverDomain: String?, signer: AppAccessSigner? = nil, now: @escaping () -> Date = Date.init) {
+                serverDomain: String?, canWrite: Bool = true, signer: AppAccessSigner? = nil,
+                now: @escaping () -> Date = Date.init) {
+        self.canWrite = canWrite
         self.serviceId = serviceId
         self.store = store
         self.appName = appName
@@ -327,8 +333,12 @@ public final class AppDbQueryController {
             phase = .done(try await client.serviceDbQuery(serviceId: serviceId, store: store, AppDbQueryRequest(sql: text)))
         } catch {
             if AppDbCopy.needsGrant(error) {
-                pendingSql = text
-                phase = .needsConfirm
+                if canWrite {
+                    pendingSql = text
+                    phase = .needsConfirm
+                } else {
+                    phase = .failed(AdminOrderGate.dataWrite)
+                }
             } else {
                 phase = .failed(AppDbCopy.message(for: error))
             }

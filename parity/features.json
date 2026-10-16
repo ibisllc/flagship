@@ -86,7 +86,7 @@
       "title": "App page: runs-on boxes (app-copy/v1)",
       "ref": "ios",
       "surfaces": {
-        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipAPI/Models/AppCopyModels.swift", "flagship/app-copy/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/AppPlacementViews.swift", "struct "]] },
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipAPI/Models/AppCopyModels.swift", "flagship/app-copy/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/AppPlacementViews.swift", "struct "], ["apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServiceDetailViewModel.swift", "AdminOrderGate.runsOn"]] },
         "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AppCopy.kt", "flagship/app-copy/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/viewmodels/AppPlacementViewModel.kt", "flagship/app-copy/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServiceDetailScreen.kt", "AdminOrderGate.RUNS_ON"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/appPlacement.js", "flagship/app-copy/v1"]] }
       }
@@ -136,7 +136,7 @@
       "title": "Remove an app (uninstall-service/v1)",
       "ref": "ios",
       "surfaces": {
-        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/UninstallServiceOrder.swift", "uninstall-service/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Shell/ServicesTab.swift", "Remove this service\\?"]] },
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/UninstallServiceOrder.swift", "uninstall-service/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Shell/ServicesTab.swift", "Remove this app\\?"], ["apps/mobile/ios/Sources/FlagshipUI/Shell/ServicesTab.swift", "canUninstall: !app.isRestrictedDevice && AdminOrderGate.allows\\(app\\)"]] },
         "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/viewmodels/ServiceDetailViewModel.kt", "flagship/uninstall-service/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServiceDetailScreen.kt", "showUninstallDialog"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/appPlacement.js", "Remove this app\\?"], ["apps/web/public/webapp/views/service-detail.js", "service-detail-remove-btn"]] }
       }
@@ -508,7 +508,7 @@
       "title": "Backup/clone server: two files (passcode + account slots), and Import a backup onto a new server that waits for it",
       "ref": "ios",
       "surfaces": {
-        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/ServerBackupFormat.swift", "flagship/server-restore/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerArchiveScreens.swift", "Backup/clone server"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerArchiveScreens.swift", "struct ImportBackupScreen"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift", "Add/Import a server"], ["apps/mobile/shared/Sources/FlagshipAPI/Models/ServerArchiveModels.swift", "flagship/archive-download/v1"]] },
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/ServerBackupFormat.swift", "flagship/server-restore/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerArchiveScreens.swift", "Backup/clone server"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerArchiveScreens.swift", "struct ImportBackupScreen"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerArchiveScreens.swift", "isDemoAccount: app.isDemoAccount"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift", "Add/Import a server"], ["apps/mobile/shared/Sources/FlagshipAPI/Models/ServerArchiveModels.swift", "flagship/archive-download/v1"]] },
         "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerArchive.kt", "flagship/server-archive/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServerArchiveScreens.kt", "Backup/clone server"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/HomeScreen.kt", "Add/Import a server"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/api/ServerArchiveModels.kt", "flagship/archive-download/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerBackupFormat.kt", "flagship/server-restore/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServerArchiveScreens.kt", "fun ImportBackupScreen"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/HomeScreen.kt", "Waiting for its backup"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/serverBackupFormat.js", "flagship/server-restore/v1"], ["apps/web/public/webapp/views/server-detail.js", "Backup/clone server"], ["apps/web/public/webapp/views/import-backup.js", "createServerForRestore"], ["apps/web/public/webapp/views/home.js", "ADD_IMPORT_LABEL"], ["apps/web/public/webapp/lib/serverArchive.js", "flagship/archive-download/v1"]] }
       }
