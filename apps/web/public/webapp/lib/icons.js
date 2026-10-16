@@ -76,6 +76,9 @@ export const unlockIcon = `<svg ${COMMON}><rect x="3" y="11" width="18" height="
 // announcement-card + search-field dismiss control).
 export const searchIcon = `<svg ${COMMON}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`;
 
+// A QR scan frame (Settings → Scan a pairing code).
+export const scanIcon = `<svg ${COMMON}><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></svg>`;
+
 export const chevronRightIcon = `<svg ${COMMON}><polyline points="9 18 15 12 9 6"/></svg>`;
 
 export const xIcon = `<svg ${COMMON}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;

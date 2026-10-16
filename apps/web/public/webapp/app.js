@@ -63,6 +63,7 @@ import {
   chevronRightIcon,
   alertCircleIcon,
   downloadIcon,
+  scanIcon,
 } from "./lib/icons.js";
 import { getSession, unlockSession } from "./lib/state.js";
 import { dispatchInitialView } from "./lib/deepLink.js";
@@ -212,6 +213,7 @@ const SETTINGS_ROW_ICONS = {
   backupkey: downloadIcon,
   devices: usersIcon,
   sessions: monitorIcon,
+  scan: scanIcon,
   secured: shieldIcon,
   processurl: monitorIcon,
   backup: hardDriveIcon,
@@ -328,6 +330,10 @@ function wireSettingsTabEntries() {
   });
   wire("settings-tab-trusted-devices", () => show("view-trusted-devices"));
   wire("settings-tab-account-security", () => show("view-account-security"));
+  wire("settings-tab-join-account", async () => {
+    const { openJoinAnotherAccount } = await import("./views/join.js");
+    await openJoinAnotherAccount();
+  });
   wire("settings-tab-sessions", enterPairedSessions);
   wire("settings-tab-secured-sessions", enterSecuredSessions);
   wire("settings-tab-process-url", () => enterAccessAuthorize());

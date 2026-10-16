@@ -57,6 +57,7 @@ const UNAVAILABLE_IDS = [
   "settings-tab-providers",
   "settings-tab-recovery",
   "settings-tab-trusted-devices",
+  "settings-tab-join-account",
   "settings-reset",
   "settings-tab-account-delete",
   "settings-tab-create-server",

@@ -40,6 +40,7 @@ import { toast } from "../lib/toast.js";
 import { failureText } from "../lib/rateLimited.js";
 import { escapeHtml } from "../lib/util.js";
 import {
+  parseJoinLink,
   runIncomingJoin,
   quarantineTimeline,
   INCOMING_RISK_WARNING,
@@ -220,9 +221,10 @@ function waitForSasConfirm() {
   });
 }
 
-/** Called by the router boot when this load is a /join deep-link. */
+/** Called by the router boot when this load is a /join deep-link (`{sid, pk}`),
+ *  or with a pasted or scanned link (a string). */
 export function enterJoin(link) {
-  pendingLink = link ?? null;
+  pendingLink = typeof link === "string" ? parseJoinLink(link) : link ?? null;
   show("view-join");
   renderJoin();
 }
@@ -255,4 +257,92 @@ function renderJoin() {
 
 export function initJoinView() {
   // No router event needed — enterJoin() is called from the boot path.
+}
+
+// Settings → "Scan a pairing code": add this browser to another account (or
+// another of yours) while signed in, as iOS and Android do. The join makes a
+// new profile; the current one stays as it is.
+
+export const JOIN_ANOTHER_TITLE = "Scan a pairing code";
+export const JOIN_ANOTHER_MESSAGE =
+  "Add this browser to another account. On a device of that account, open Settings → Trusted devices → Add device, then scan the code it shows or paste its link here.";
+export const JOIN_LINK_INVALID = "That isn't a pairing link. It looks like https://flagshipserver.com/join?sid=…";
+export const JOIN_SCAN_FAILED = "Couldn't scan. Paste the pairing link instead.";
+
+/** The pairing link in what was pasted or scanned, or an error sentence. */
+export function readJoinInput(text) {
+  const raw = String(text ?? "").trim();
+  return parseJoinLink(raw) ? { link: raw, error: "" } : { link: null, error: JOIN_LINK_INVALID };
+}
+
+export async function openJoinAnotherAccount({ canScan = null } = {}) {
+  const { scanWithCamera, hasBarcodeDetector } = await import("../qrScanner.js");
+  const scan = canScan ?? hasBarcodeDetector();
+  const dlg = document.createElement("dialog");
+  dlg.className = "modal-card";
+  dlg.setAttribute("aria-label", JOIN_ANOTHER_TITLE);
+  dlg.innerHTML = `
+    <h3 class="modal-title">${escapeHtml(JOIN_ANOTHER_TITLE)}</h3>
+    <p class="modal-message">${escapeHtml(JOIN_ANOTHER_MESSAGE)}</p>
+    <input class="full-width mt-2" data-join-input placeholder="https://flagshipserver.com/join?…" autocomplete="off" />
+    ${scan
+      ? `<button class="secondary full-width mt-2" data-join-scan>Scan QR with camera</button>
+         <video class="full-width mt-2 hidden" data-join-video playsinline muted style="border-radius:8px;max-height:320px;background:#000"></video>`
+      : ""}
+    <p class="modal-error err-text hidden" data-join-error></p>
+    <div class="row-2 mt-3">
+      <button class="secondary" data-join-cancel>Cancel</button>
+      <button data-join-continue>Continue</button>
+    </div>`;
+  document.body.appendChild(dlg);
+  dlg.showModal();
+  const q = (s) => dlg.querySelector(s);
+  const input = q("[data-join-input]");
+  const err = q("[data-join-error]");
+  const video = q("[data-join-video]");
+  const showError = (text) => {
+    err.textContent = text;
+    err.classList.remove("hidden");
+  };
+  const stopScan = () => {
+    const stream = video?.srcObject;
+    stream?.getTracks?.().forEach((t) => t.stop());
+    if (video) video.srcObject = null;
+  };
+  const close = () => {
+    stopScan();
+    if (dlg.open) dlg.close();
+    dlg.remove();
+  };
+  const go = (text) => {
+    const { link, error } = readJoinInput(text);
+    if (!link) return showError(error);
+    close();
+    enterJoin(link);
+  };
+  q("[data-join-cancel]").addEventListener("click", close);
+  q("[data-join-continue]").addEventListener("click", () => go(input.value));
+  input.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      go(input.value);
+    }
+  });
+  q("[data-join-scan]")?.addEventListener("click", async (ev) => {
+    const btn = ev.currentTarget;
+    btn.disabled = true;
+    btn.textContent = "Scanning…";
+    video?.classList.remove("hidden");
+    try {
+      go(String(await scanWithCamera(video, { timeoutMs: 30_000 })));
+    } catch {
+      showError(JOIN_SCAN_FAILED);
+    } finally {
+      stopScan();
+      video?.classList.add("hidden");
+      btn.disabled = false;
+      btn.textContent = "Scan QR with camera";
+    }
+  });
+  input.focus();
 }
