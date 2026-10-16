@@ -45,26 +45,31 @@ final class CreateServerAdvancedToggleTests: XCTestCase {
         XCTAssertFalse(vm.debugFriendly, "debug-friendly snaps back off when Advanced is off")
     }
 
-    /// The minter bakes a VERIFIABLE owner-IRK debug-access grant in the EXACT
-    /// `{grant:{serverDomain,sshAuthorizedKey,issuedAt},signatureHex}` JSON the
-    /// box-side gate (debugAccessGate.ts) consumes.
-    func test_debugGrantEnvelope_isVerifiableAndMatchesBoxGateShape() throws {
-        let irk = try Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 0x07, count: 32))
+    /// The minter bakes a VERIFIABLE admin-signed v2 grant (the pasted key, 7
+    /// days) in the EXACT `{grant:{serverDomain,sshPublicKey,issuedAt,expiresAt},
+    /// signatureHex}` JSON the box (debugAccessGate.ts) consumes.
+    func test_debugGrantEnvelope_isVerifiableAndMatchesBoxShape() throws {
+        let admin = try Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 0x5a, count: 32))
         let serverDomain = "home.harry.flagship.services"
         let now: Int64 = 1_750_000_000_000
-        let envelope = CreateServerViewModel.debugGrantEnvelope(serverDomain: serverDomain, irk: irk, now: now)
+        let key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINBKsjJ0K7SrOhNovUYV5ObQIkq3GgFrr4UgozLJd4c3"
+        let grant = try CreateServerViewModel.debugGrant(serverDomain: serverDomain, rawKey: "\(key) harry@laptop\n", now: now)
+        let envelope = try CreateServerViewModel.debugGrantEnvelope(grant, key: admin)
 
         let obj = try JSONSerialization.jsonObject(with: Data(envelope.utf8)) as! [String: Any]
-        let grant = obj["grant"] as! [String: Any]
-        XCTAssertEqual(grant["serverDomain"] as? String, serverDomain)
-        XCTAssertEqual(grant["sshAuthorizedKey"] as? String, "", "console-only grant carries an empty SSH key")
-        XCTAssertEqual((grant["issuedAt"] as? NSNumber)?.int64Value, now)
+        let g = obj["grant"] as! [String: Any]
+        XCTAssertEqual(g["serverDomain"] as? String, serverDomain)
+        XCTAssertEqual(g["sshPublicKey"] as? String, key, "the comment is dropped")
+        XCTAssertEqual((g["issuedAt"] as? NSNumber)?.int64Value, now)
+        XCTAssertEqual((g["expiresAt"] as? NSNumber)?.int64Value, now + DebugAccess.maxMs)
         let sigHex = obj["signatureHex"] as! String
+        XCTAssertTrue(DebugAccess.verify(grant, signatureHex: sigHex, pub: admin.publicKey.rawRepresentation))
+    }
 
-        // The signature verifies under the owner IRK over the canonical bytes —
-        // exactly the box-side check.
-        let g = DebugAccess.Grant(serverDomain: serverDomain, sshAuthorizedKey: "", issuedAt: now)
-        XCTAssertTrue(DebugAccess.verify(g, signatureHex: sigHex, irkPub: irk.publicKey.rawRepresentation))
+    func test_debugFriendlyNeedsAKey() {
+        XCTAssertThrowsError(try CreateServerViewModel.debugGrant(serverDomain: "home.harry.flagship.services", rawKey: "")) {
+            XCTAssertEqual($0.localizedDescription, "Debug access needs an SSH public key.")
+        }
     }
 }
 

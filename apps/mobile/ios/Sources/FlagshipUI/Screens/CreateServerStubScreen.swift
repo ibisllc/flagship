@@ -488,7 +488,16 @@ public struct CreateServerStubScreen: View {
                 .tint(c.primary)
                 .accessibilityIdentifier("cs-debug-friendly-toggle")
                 .padding(.leading, FS.space.s3)
-                Text("Anyone with physical access to this server can log into its console. Only turn this on for a server you're actively debugging.")
+                if vm.debugFriendly {
+                    TextField("SSH public key (ssh-ed25519 AAAA…)", text: $vm.debugSshKey, axis: .vertical)
+                        .font(.caption.monospaced())
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .lineLimit(1...4)
+                        .accessibilityIdentifier("cs-debug-ssh-key")
+                        .padding(.leading, FS.space.s3)
+                }
+                Text(CreateServerViewModel.debugFriendlyWarning)
                     .font(.caption)
                     .foregroundColor(c.textMuted)
                     .padding(.leading, FS.space.s3)

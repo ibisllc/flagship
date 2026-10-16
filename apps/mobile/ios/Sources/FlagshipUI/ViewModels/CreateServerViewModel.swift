@@ -100,15 +100,19 @@ public final class CreateServerViewModel {
     /// a secret).
     public var embedSecrets: Bool = false
     /// ADVANCED — make this a debug-friendly server. Default OFF: a production
-    /// box (no console login). ON (only reachable under Advanced mode) bakes an
-    /// owner-IRK-signed `flagship/debug-access/v1` grant into the recipe as the
-    /// UNSIGNED `debugGrant` sibling (mirroring `swkHex`/`pairingOrder`); the
-    /// box-side gate (`debugAccessGate.ts`) verifies it under the config-pinned
-    /// owner IRK + this box's FQDN before enabling the debug console user. The
-    /// grant carries an EMPTY `sshAuthorizedKey` (console-only) and is signed at
-    /// MINT time behind the SAME create biometric — no extra Face ID, no
-    /// over-the-session consent round-trip. Snaps back OFF when Advanced is off.
+    /// box (no login at all). ON (only reachable under Advanced mode) bakes an
+    /// admin-signed `flagship/debug-access/v2` grant for `debugSshKey`, ending
+    /// 7 days after minting, into the recipe as the UNSIGNED `debugGrant`
+    /// sibling (mirroring `swkHex`/`pairingOrder`); the box verifies it under
+    /// its pinned admin root and lets that key in as `debug` until it ends
+    /// (docs/recipe-delivery-and-remote-install.md "Debug access"). Signed with
+    /// the admin root the create already unseals. Snaps back OFF when Advanced
+    /// is off.
     public var debugFriendly: Bool = false
+    /// The SSH public key a debug-friendly server lets in (pasted).
+    public var debugSshKey: String = ""
+    public static let debugFriendlyWarning =
+        "Anyone with this key can read everything on this server while it's on. It turns off by itself 7 days from now."
     /// Draft-only metadata — backup policy the user wants applied to this
     /// server once it's up. NOT signed into the InstallBlob (the audit
     /// against InstallBlob.swift confirmed `backupPolicy` does not appear
@@ -385,6 +389,10 @@ public final class CreateServerViewModel {
         // slugify). Normalize case only — domains are case-insensitive.
         let serverName = ServerLabel.normalized(name)
         let serverDomain = Endpoints.serverFqdn(server: serverName, user: username)
+        // A debug-friendly server needs a usable SSH key: refuse before any prompt.
+        let debugGrant: DebugAccess.Grant? = debugFriendly
+            ? try Self.debugGrant(serverDomain: serverDomain, rawKey: debugSshKey)
+            : nil
         // ONE biometric ceremony yields the IRK AND the new box's STK
         // pubkey. The STK pub is cached in the pin registry so later
         // (biometric-free) /pods refreshes can verify the box's STK-signed
@@ -553,14 +561,12 @@ public final class CreateServerViewModel {
         // independent of the embed-secrets choice.
         cgkDepositStore.markPending(for: serverDomain)
 
-        // Debug-friendly server (Advanced): bake an owner-IRK-signed debug-access
-        // grant into the recipe as the UNSIGNED `debugGrant` sibling. Signed here
-        // behind the SAME create biometric (the IRK is already in hand) — no
-        // extra Face ID, no over-the-session consent round-trip. The box-side
-        // gate verifies it under the config-pinned owner IRK + this box's FQDN.
-        let debugGrantSibling = debugFriendly
-            ? Self.debugGrantEnvelope(serverDomain: serverDomain, irk: irk)
-            : nil
+        // Debug-friendly server (Advanced): the debug-access grant rides as the
+        // UNSIGNED `debugGrant` sibling, signed with the admin root this create
+        // already unsealed (the IRK only on a demo account, whose box pins none).
+        let debugGrantSibling = try debugGrant.map {
+            try Self.debugGrantEnvelope($0, key: adminKey ?? irk)
+        }
 
         return SignedInstallBlob(
             blob: blob,
@@ -571,19 +577,21 @@ public final class CreateServerViewModel {
         )
     }
 
-    /// Build the recipe's `debugGrant` sibling: an owner-IRK-signed
-    /// `flagship/debug-access/v1` grant (console-only — empty `sshAuthorizedKey`)
-    /// serialized to the EXACT `{grant:{serverDomain,sshAuthorizedKey,issuedAt},
-    /// signatureHex}` JSON the box-side gate consumes (`debugAccessGate.ts`).
-    /// No box STK in the canonical bytes, so it's signable at mint.
-    static func debugGrantEnvelope(
+    /// The install-time debug grant: the pasted key, from now for 7 days.
+    /// Throws the sentence to show when the key is missing or unusable.
+    static func debugGrant(
         serverDomain: String,
-        irk: Curve25519.Signing.PrivateKey,
+        rawKey: String,
         now: Int64 = Int64(Date().timeIntervalSince1970 * 1000)
-    ) -> String {
-        let grant = DebugAccess.Grant(serverDomain: serverDomain, sshAuthorizedKey: "", issuedAt: now)
-        let sig = (try? DebugAccess.sign(grant, irk: irk)) ?? ""
-        return DebugAccess.envelopeJSON(grant, signatureHex: sig)
+    ) throws -> DebugAccess.Grant {
+        try DebugAccess.makeGrant(serverDomain: serverDomain, rawKey: rawKey, issuedAt: now, duration: DebugAccess.maxMs)
+    }
+
+    /// The recipe's `debugGrant` sibling: `{grant:{serverDomain,sshPublicKey,
+    /// issuedAt,expiresAt}, signatureHex}`, the JSON the box consumes
+    /// (`debugAccessGate.ts`).
+    static func debugGrantEnvelope(_ grant: DebugAccess.Grant, key: Curve25519.Signing.PrivateKey) throws -> String {
+        DebugAccess.envelopeJSON(grant, signatureHex: try DebugAccess.sign(grant, key: key))
     }
 }
 
