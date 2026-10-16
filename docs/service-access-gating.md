@@ -460,10 +460,14 @@ holds the IRK. A demo account (`isDemo`, operator-run) keeps the checks it
 had. Vectors: `packages/protocol/test-vectors/add-server/` (TS, webapp,
 Swift, Kotlin).
 
-Not enforced by a server: **co-managing** (accepting a share). `.com` and
-the shared box never learn who the second account is (`share-a-server.md`
-§2), so neither can check that the acceptance came from that account's admin
-device without learning the account; only the apps gate it.
+**Co-managing** (accepting a share) is enforced by the shared server, not
+`.com` (owner decision 2026-10-16, `share-a-server.md` §5.1): the joining
+account's admin root signs `flagship/server-share-accept-admin/v1` and
+`.com`'s CA attests that key without naming the account; the box checks
+both before the share goes live. `.com` learns nothing new and the box never
+learns the account's name, only its admin root public key. An account with
+no admin root signs with its IRK (`authorizeSensitiveOrder`'s fallback); a
+demo account's acceptance is signed by `.com` with its derived root.
 
 ### Orders
 

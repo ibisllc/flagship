@@ -72,6 +72,16 @@
       }
     },
     {
+      "id": "share-accept-admin",
+      "title": "Only an admin device accepts a co-manage share: admin-root-signed server-share-accept-admin/v1 + .com's attestation, checked by the shared server (docs/share-a-server.md §5.1)",
+      "ref": "web",
+      "surfaces": {
+        "ios": { "status": "missing", "reason": "Built on the box, .com and the webapp first (2026-10-16); the iOS port follows docs/share-a-server.md §5.1.", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/ServerShare.swift", "flagship/server-share-accept-admin/v1"]] },
+        "android": { "status": "missing", "reason": "Built on the box, .com and the webapp first (2026-10-16); the Android port follows docs/share-a-server.md §5.1.", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerShare.kt", "flagship/server-share-accept-admin/v1"]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/serverShare.js", "flagship/server-share-accept-admin/v1"], ["apps/web/public/webapp/lib/serverShares.js", "account-key-attestation"], ["apps/web/public/webapp/views/share-accept.js", "SHARE_ACCEPT_ADMIN_ONLY"]] }
+      }
+    },
+    {
       "id": "share-co-manager-invites",
       "title": "Co-manager invites: invite at Member from a shared server's app, withdraw your own (docs/service-access-gating.md \"Co-manager invites\")",
       "ref": "web",
