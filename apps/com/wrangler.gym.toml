@@ -148,6 +148,11 @@ CONTROL_APEX = "gym.flagshipserver.com"
 # its own anycast IPs. The :443 listener does SNI passthrough; the Worker proxies
 # unhandled /api/* to the :8443 TLS-term endpoint.
 SERVICES_BASE_URL = "https://flagship-services-gym.fly.dev:8443"
+
+# Peer backup between accounts (docs/peer-backup.md §2): the gym fleet has two
+# accounts, all on one cloud's networks, so a backup goes to one holder of the
+# other account (prod: 4 of 8, distinct accounts and networks).
+PB_NETWORK = '{"k":1,"n":1,"diversity":"account"}'
 TUNNEL_HUB_URL = "wss://flagship-services-gym.fly.dev:8443/tunnel"
 # Scripted gym runs come from one address; scale the rate limits so a run
 # doesn't trip budgets sized for one person (apps/com/src/rateLimit.ts).

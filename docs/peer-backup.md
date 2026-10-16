@@ -429,5 +429,42 @@ this server yet."
 - Filler comes from Cloudflare (no egress fee), capped at 25 GB a day per
   holder. A 1 TB disk takes about four weeks to fill. Until then the server
   can place only what it has proved (`3 × provenSlots + 8` tokens).
+- Worker cost of filler: each 4 MiB brick is one WebCrypto AES-CTR pass
+  (measured at about 1 ms on Apple silicon; allow 2 to 5 ms on a Worker)
+  plus one Ed25519 verify. 25 GB a day is 6,400 requests and about 30 s of
+  CPU per filling server per day: about $0.002 in requests and $0.0006 in
+  CPU at Workers paid rates. `.com` caps it in the handler: only the next
+  index, or the last one again within 15 minutes; at most 25 GB per server
+  per UTC day (429 with a sentence); never past the pool the server
+  declared; none for a server that is leaving.
 - Hub routing is per machine, like SNI. A mailbox on the other Fly machine
   answers 404 and the owner retries.
+
+## 15. Turning it on (owner)
+
+`.com` needs migration 0104 and three secrets. Until then the routes answer
+503 and Peer servers say peer backup isn't set up. Run once, from `apps/com`:
+
+```sh
+npx wrangler d1 execute flagship-state --remote \
+  --file=../../packages/storage/migrations/0104_peer_backup_network.sql
+node -e 'process.stdout.write(JSON.stringify(require("node:crypto").generateKeyPairSync("rsa",{modulusLength:2048}).privateKey.export({format:"jwk"})))' \
+  | npx wrangler secret put PB_TOKEN_RSA_JWK
+openssl rand -hex 32 | npx wrangler secret put PB_FILLER_SECRET
+openssl rand -hex 32 | npx wrangler secret put PB_TAG_SECRET
+npm run deploy
+```
+
+Then deploy `.services` (the mailbox relay) and endorse a box release.
+
+- Never rotate `PB_FILLER_SECRET`: every filler brick on every holder
+  would stop matching, and holders would fail their proofs until they
+  fetched their filler again.
+- Rotating `PB_TAG_SECRET` only re-tags the directory.
+- Rotating `PB_TOKEN_RSA_JWK` voids every unspent token. Owners then ask
+  for new ones.
+
+The gym gets its own values from `scripts/gym-setup-live-env.sh` (or
+`scripts/gym-refresh.sh`, which keeps them as gym-only secrets). It runs
+with `PB_NETWORK = {"k":1,"n":1,"diversity":"account"}` (set in
+`wrangler.gym.toml`).
