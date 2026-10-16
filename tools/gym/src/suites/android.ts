@@ -725,6 +725,57 @@ const OCTOBER: readonly Scenario[] = [
       dimension: "D3",
     },
   ),
+  androidTotal(
+    "android-oct-share-co-manager-invites",
+    "Co-manager invites (docs/service-access-gating.md \"Co-manager invites\"): at Can manage, Plants on the shared server offers Invite people; add a person at Member, the link names the shared server, Your invites lists them, Withdraw asks first and empties the list.",
+    O + "coManagerInvitesAPersonAndWithdraws",
+    {
+      steps: [
+        { kind: "tap", describe: "Open Plants on Garage.", handle: "shared-app-row-bright-maple--plants" },
+        { kind: "tap", describe: "Invite people.", handle: "co-invite-open" },
+        { kind: "tap", describe: "+ Add person, name them, Create invite link.", handle: "co-invite-create" },
+        { kind: "tap", describe: "Withdraw, confirm.", handle: "co-invite-withdraw-confirm" },
+      ],
+      assertions: [
+        { describe: "Member-only line", handle: "co-invite-line", expect: "text", text: "People you invite join as Member. You can withdraw your own invites." },
+        { describe: "Link on the shared server", handle: "co-invite-link", expect: "present" },
+        { describe: "Empty after withdraw", handle: "co-invite-none", expect: "present" },
+      ],
+      screenshots: [shot("co-invite-created", "The new invite and its link.")],
+      dimension: "D3",
+    },
+  ),
+  androidTotal(
+    "android-oct-share-co-manager-demoted",
+    "Co-manager invites: in Wiki an admin made the co-manager a Member, so the panel shows the box's sentence and their invite (Jo · 1 person joined) without Withdraw or add.",
+    O + "coManagerDemotedSeesWhyAndNoWithdraw",
+    {
+      steps: [
+        { kind: "tap", describe: "Open Wiki on Garage.", handle: "shared-app-row-bright-maple--wiki" },
+        { kind: "tap", describe: "Invite people.", handle: "co-invite-open" },
+      ],
+      assertions: [
+        { describe: "The box's sentence", handle: "co-invite-why", expect: "text", text: "An admin made you a Member of this app, so you can't invite people to it." },
+        { describe: "No add", handle: "co-invite-add-person", expect: "absent" },
+      ],
+      screenshots: [shot("co-invite-demoted", "Demoted panel.")],
+      dimension: "D3",
+    },
+  ),
+  androidTotal(
+    "android-oct-share-co-manager-view-only",
+    "Co-manager invites: Cabin, shared at Can view, says why there's no Invite people, and its apps offer none.",
+    O + "coManagerViewOnlyCantInvite",
+    {
+      steps: [{ kind: "tap", describe: "Open Cabin.", handle: "co-invite-view-only" }],
+      assertions: [
+        { describe: "View-only line", handle: "co-invite-view-only", expect: "text", text: "You can view this server but not manage it, so you can't invite people to its apps." },
+        { describe: "No Invite people", handle: "co-invite-open", expect: "absent" },
+      ],
+      screenshots: [shot("co-invite-view-only", "The view-only line.")],
+      dimension: "D3",
+    },
+  ),
 ];
 
 export const ANDROID_GYM_SCENARIOS: readonly Scenario[] = [

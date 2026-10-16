@@ -77,7 +77,7 @@
       "ref": "web",
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/ServerShare.swift", "flagship/share-invite-bundle/v1"], ["apps/mobile/shared/Sources/FlagshipCore/ShareCoInvites.swift", "public func createCoInvite"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/CoInviteSection.swift", "co-invite-open"]] },
-        "android": { "status": "missing", "reason": "Built on the box, .com and the webapp first (2026-10-16); the native port follows docs/service-access-gating.md \"Co-manager invites\".", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerShare.kt", "flagship/share-invite-bundle/v1"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerShare.kt", "flagship/share-invite-bundle/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerShareClient.kt", "suspend fun createCoInvite"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/CoInviteSection.kt", "co-invite-open"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/serverShare.js", "flagship/share-invite-bundle/v1"], ["apps/web/public/webapp/lib/serverShares.js", "export async function createShareInvite"], ["apps/web/public/webapp/views/shared-server.js", "data-invite-open"]] }
       }
     },

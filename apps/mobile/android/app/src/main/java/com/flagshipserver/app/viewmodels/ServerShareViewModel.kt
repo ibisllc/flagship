@@ -27,6 +27,7 @@ import com.flagshipserver.app.core.PendingShare
 import com.flagshipserver.app.core.ServerShare
 import com.flagshipserver.app.core.ServerShareClient
 import com.flagshipserver.app.core.ShareException
+import com.flagshipserver.app.core.ShareInviteRefusal
 import com.flagshipserver.app.core.ShareOptions
 import com.flagshipserver.app.core.ShareSession
 import com.flagshipserver.app.core.ShareSignIn
@@ -150,6 +151,7 @@ object ShareCopy {
 
 private fun Throwable.shareMessage(): String = when (this) {
     is ShareException -> message ?: "Something went wrong. Try again."
+    is ShareInviteRefusal -> message ?: "Something went wrong. Try again."
     else -> userFacing()
 }
 
@@ -653,6 +655,9 @@ class SharedAppViewModel(
 
     /** The share's member key signs this app's orders (never the account's admin key). */
     suspend fun memberSigner(reason: String) = client.memberSigner(entry, reason)
+
+    /** This app's "Invite people" panel (co-manager invites, at Can manage). */
+    fun coInvites(): CoInviteViewModel = CoInviteViewModel(client, entry, serviceId, appName)
 
     private suspend fun signedIn(fresh: Boolean): ScreensClient? =
         when (val r = client.signIn(entry, reuse = !fresh)) {

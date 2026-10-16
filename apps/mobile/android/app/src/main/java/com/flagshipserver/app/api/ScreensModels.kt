@@ -1352,6 +1352,9 @@ data class AppMemberInviteRole(
     val tier: String? = null,
     val creatorPub: String? = null,
     val creatorDeviceId: String? = null,
+    /** A co-manager's invite (tier `co-manager`): the share it came through and the owner's label for it. */
+    val creatorShareId: String? = null,
+    val creatorLabel: String? = null,
 )
 
 /** One of the account's devices (`kind` "device") or a co-managing account

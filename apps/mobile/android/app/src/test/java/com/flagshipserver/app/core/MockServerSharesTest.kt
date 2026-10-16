@@ -36,13 +36,14 @@ class MockServerSharesTest {
 
     @Test fun phoneHasGarageToManageAndPhotosWaiting() = runBlocking {
         val entries = client.inbox().associateBy { it.serverName }
-        assertEquals(setOf("Garage", "Photos"), entries.keys)
+        assertEquals(setOf("Garage", "Photos", "Cabin"), entries.keys)
         val garage = entries.getValue("Garage")
         val signedIn = client.signIn(garage)
         assertTrue(signedIn is ShareSignIn.In)
         assertEquals(ServerShare.LEVEL_MANAGE, (signedIn as ShareSignIn.In).session.level)
         assertTrue(signedIn.session.unlockAtBoot)
         assertEquals(ShareSignIn.Waiting, client.signIn(entries.getValue("Photos")))
+        assertEquals(ServerShare.LEVEL_VIEW, (client.signIn(entries.getValue("Cabin")) as ShareSignIn.In).session.level)
 
         val startup = client.pendingStartups(garage).single()
         client.approveStartup(garage, startup)
@@ -50,6 +51,6 @@ class MockServerSharesTest {
         assertNotNull(client.me(garage))
 
         client.leave(garage)
-        assertEquals(listOf("Photos"), client.inbox().map { it.serverName })
+        assertEquals(setOf("Photos", "Cabin"), client.inbox().map { it.serverName }.toSet())
     }
 }

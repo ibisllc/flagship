@@ -2,9 +2,11 @@
 // mirror of iOS ServerShareDemo): an in-memory `.com`, boot worker and boxes
 // that answer ServerShareClient the way the real ones do, seeded by running
 // the real client flows. The phone owns Home: Alex accepted a link (compare
-// the code), Sam can manage it. Two servers are shared with the phone:
-// Garage (can manage and approve its start-up, which is waiting) and Photos
-// (accepted, the owner hasn't confirmed yet).
+// the code), Sam can manage it. Three servers are shared with the phone:
+// Garage (can manage and approve its start-up, which is waiting), Photos
+// (accepted, the owner hasn't confirmed yet) and Cabin (can view). On Garage
+// the co-manager invites (docs/service-access-gating.md "Co-manager
+// invites"): Plants takes invites, in Wiki an admin made them a Member.
 
 package com.flagshipserver.app.core
 
@@ -15,7 +17,9 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
@@ -28,6 +32,9 @@ object MockServerShares {
     const val OWNER_SESSION = "mock-owner-session"
     const val GARAGE_DOMAIN = "garage.jordan-reyes.flagship.services"
     const val PHOTOS_DOMAIN = "photos.mina-park.flagship.services"
+    const val CABIN_DOMAIN = "cabin.jordan-reyes.flagship.services"
+    /** The AID the shared boxes name as their owner (the authorAID of co-manager invites). */
+    val OWNER_AID = "c4".repeat(32)
 
     /** The share runtime the smoke shell provides: [username] owns [homeDomain]. */
     fun runtime(username: String, homeDomain: String, homeStkPubHex: String, memberScreens: ScreensClient): ServerShareRuntime {
@@ -42,7 +49,7 @@ object MockServerShares {
 
 /** Fixed account keys: an obviously fake UMK and IRK per account. */
 class MockShareKeys(seed: Byte) : ShareKeys {
-    private val umkSeed = ByteArray(32) { seed }
+    val umkSeed = ByteArray(32) { seed }
     val irk = ByteArray(32) { (seed + 1).toByte() }
     val irkPub: ByteArray = Ed25519Sign.KeyPair.newKeyPairFromSeed(irk).publicKey
     override suspend fun umk(reason: String): ByteArray = umkSeed
@@ -142,6 +149,15 @@ class MockShareWorld(
             ShareOptions("Bright", ServerShare.LEVEL_VIEW, unlockAtBoot = false, seeAppData = false),
         )
         accept(phone, photos.link)
+
+        val cabin = jordanOwner.createOffer(
+            "jordan-reyes", MockServerShares.CABIN_DOMAIN, "Cabin", HexUtil.encode(jordan.irkPub),
+            ShareOptions("Bright", ServerShare.LEVEL_VIEW, unlockAtBoot = false, seeAppData = false),
+        )
+        accept(phone, cabin.link)
+        jordanOwner.ownerShares("jordan-reyes", MockServerShares.CABIN_DOMAIN, MockServerShares.OWNER_SESSION).accepted
+            .firstOrNull { it.shareId == cabin.shareId }
+            ?.let { jordanOwner.confirm("jordan-reyes", MockServerShares.CABIN_DOMAIN, MockServerShares.OWNER_SESSION, it) }
     }
 
     private suspend fun accept(keys: ShareKeys, link: String) {
@@ -349,6 +365,7 @@ class MockShareWorld(
                     put("seeAppData", g.seeAppData); put("serverDomain", domain); put("canUpdate", false)
                 })
             }
+            path == "/api/shares/invites" || path == "/api/shares/invites/withdraw" -> coInvite(m, path, uri.rawQuery, b, h)
             path == "/api/shares/leave" -> {
                 val l = ServerShare.parseServerShareLeave(b?.get("leave")) ?: return err(400, "malformed")
                 held[host]?.remove(l.shareId)
@@ -357,6 +374,89 @@ class MockShareWorld(
             }
             else -> err(404, "unrouted $m $path")
         }
+    }
+
+    // ── Co-manager invites: the box's wire (`/api/shares/invites`, its codes and sentences) ──
+
+    private class CoInviteApp(val canInvite: Boolean, val why: String?, val rank: String?, val invites: MutableList<JsonObject>)
+
+    private val coInviteApps = HashMap<String, CoInviteApp>()
+
+    private fun refusal(status: Int, code: String, error: String) = status to buildJsonObject { put("error", error); put("code", code) }
+
+    /** Plants takes invites; in Wiki an admin made the co-manager a Member (one invite, "Jo", one joined). */
+    private fun coInviteApp(domain: String, shareId: String, ref: String): CoInviteApp? {
+        val key = "$domain|$ref"
+        coInviteApps[key]?.let { return it }
+        val app = when (ref.substringAfter("--", "")) {
+            "plants" -> CoInviteApp(true, null, "manager", mutableListOf())
+            "wiki" -> {
+                val joId = "a7".repeat(32)
+                val jo = ServiceInvite.sealBundle(ServiceInvite.Bundle("Jo"), ServerShare.deriveShareInviteBundleKey(phone.umkSeed, shareId), joId)
+                CoInviteApp(false, "demoted", "member", mutableListOf(buildJsonObject {
+                    put("inviteId", joId); put("createdAt", System.currentTimeMillis() - 86_400_000L); put("encryptedBundle", jo)
+                    put("maxRedemptions", JsonNull); put("expiresAt", JsonNull); put("joined", 1)
+                }))
+            }
+            else -> return null
+        }
+        coInviteApps[key] = app
+        return app
+    }
+
+    private fun coInvite(m: String, path: String, query: String?, b: JsonObject?, h: Map<String, String>): Pair<Int, JsonElement> {
+        val (domain, id) = tokens[h[ServerShareClient.SESSION_HEADER]] ?: return err(401, "share-session")
+        val g = held[domain]?.get(id) ?: return err(401, "share-session")
+        val view = g.level != ServerShare.LEVEL_MANAGE
+        fun standing(app: CoInviteApp): String? = if (view) "view-only" else if (!app.canInvite) app.why else null
+        val malformed = refusal(400, "malformed", "That request isn't complete.")
+        val noApp = refusal(404, "no-such-app", "That app isn't on this server.")
+        if (path == "/api/shares/invites" && m == "GET") {
+            val ref = query.orEmpty().split("&").firstOrNull { it.startsWith("service=") }
+                ?.substringAfter("=")?.let { java.net.URLDecoder.decode(it, "UTF-8") }.orEmpty()
+            val app = coInviteApp(domain, id, ref) ?: return noApp
+            val why = standing(app)
+            return ok(buildJsonObject {
+                put("serviceRef", ref); put("canInvite", why == null); put("why", why)
+                put("whyText", why?.let { ShareCoInviteCopy.WHY[it] }); put("rank", app.rank)
+                put("ownerAid", MockServerShares.OWNER_AID); put("invites", JsonArray(app.invites.toList()))
+            })
+        }
+        if (path == "/api/shares/invites" && m == "POST") {
+            val req = b?.get("request") as? JsonObject ?: return malformed
+            val sig = str(b, "signature")?.let(HexUtil::decode) ?: return malformed
+            if (req["approvalMode"] != null) return refusal(422, "manual-not-offered", "Co-managers can't make approve-first invites.")
+            val app = coInviteApp(domain, id, str(req, "serviceRef").orEmpty()) ?: return noApp
+            standing(app)?.let { return refusal(403, it, ShareCoInviteCopy.WHY[it] ?: it) }
+            if (str(req, "authorAID") != MockServerShares.OWNER_AID) return refusal(403, "wrong-author", "The invite must name the server's owner.")
+            val create = runCatching { ServerShareClient.json.decodeFromJsonElement(ShareInviteCreateRequest.serializer(), req) }.getOrNull()
+                ?: return malformed
+            if (!ServiceInvite.verify(sig, create.canonicalBytes(), HexUtil.decode(g.memberPubHex)!!)) {
+                return refusal(403, "invalid-signature", "invalid-signature")
+            }
+            if (app.invites.any { str(it, "inviteId") == create.inviteId }) return refusal(409, "exists", "That invite already exists.")
+            app.invites += buildJsonObject {
+                put("inviteId", create.inviteId); put("createdAt", create.issuedAt); put("encryptedBundle", create.encryptedBundle)
+                put("maxRedemptions", create.maxRedemptions); put("expiresAt", create.expiresAt); put("joined", 0)
+            }
+            return ok(buildJsonObject { put("created", true); put("inviteId", create.inviteId); put("tier", "co-manager") })
+        }
+        if (path == "/api/shares/invites/withdraw" && m == "POST") {
+            val revoke = b?.get("revoke") as? JsonObject ?: return malformed
+            val inviteId = str(revoke, "inviteId").orEmpty()
+            val app = coInviteApps.filterKeys { it.startsWith("$domain|") }.values
+                .firstOrNull { a -> a.invites.any { str(it, "inviteId") == inviteId } }
+                ?: return refusal(404, "not-yours", "That isn't one of your invites.")
+            standing(app)?.let { return refusal(403, it, ShareCoInviteCopy.WHY[it] ?: it) }
+            val sig = str(b, "signature")?.let(HexUtil::decode) ?: return malformed
+            val issuedAt = str(revoke, "issuedAt")?.toLongOrNull() ?: 0L
+            if (!ServiceInvite.verify(sig, ServiceInvite.canonicalRevoke(inviteId, issuedAt), HexUtil.decode(g.memberPubHex)!!)) {
+                return refusal(403, "invalid-signature", "invalid-signature")
+            }
+            app.invites.removeAll { str(it, "inviteId") == inviteId }
+            return ok(buildJsonObject { put("ok", true); put("pruned", 0); put("comNotified", true) })
+        }
+        return err(404, "unrouted $m $path")
     }
 
     private fun activity(ts: Long, shareId: String, label: String, action: String, target: String?) = buildJsonObject {

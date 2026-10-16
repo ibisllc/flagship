@@ -45,6 +45,7 @@ object ServerShare {
     private const val INFO_LINK_KEY = "flagship/server-share/link-key/v1"
     private const val INFO_INBOX = "flagship/share-inbox/v1"
     private const val INFO_INBOX_KEY = "flagship/share-inbox-key/v1"
+    const val INFO_INVITE_BUNDLE = "flagship/share-invite-bundle/v1"
     private const val SAS_TAG = "flagship/server-share/sas/v1"
     const val AAD_SHARE_OFFER = "flagship/server-share/offer/v1"
     const val AAD_SHARE_ACCEPTANCE = "flagship/server-share/acceptance/v1"
@@ -102,6 +103,13 @@ object ServerShare {
 
     /** Seals B's inbox entries. */
     fun deriveShareInboxSealKey(umkSeed: ByteArray): ByteArray = hk(umkSeed, INFO_INBOX_KEY)
+
+    /** Seals the names of the people B invites to the shared server's apps
+     *  (AES-256-GCM key). Only B's devices derive it; the owner can't read them. */
+    fun deriveShareInviteBundleKey(umkSeed: ByteArray, shareId: String): ByteArray {
+        checkShareId(shareId)
+        return hk(umkSeed, "$INFO_INVITE_BUNDLE|$shareId")
+    }
 
     /** Seals A's owner records: the household key (ServerKeys.deriveHouseholdKey). */
     fun deriveShareOwnerRecordKey(umkSeed: ByteArray): ByteArray = ServerKeys.deriveHouseholdKey(umkSeed)

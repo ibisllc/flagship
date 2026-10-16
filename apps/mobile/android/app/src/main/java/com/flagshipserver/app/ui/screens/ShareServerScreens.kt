@@ -73,6 +73,7 @@ import com.flagshipserver.app.core.PendingShare
 import com.flagshipserver.app.core.QrImage
 import com.flagshipserver.app.core.ServerShare
 import com.flagshipserver.app.core.ShareOptions
+import com.flagshipserver.app.core.ShareCoInviteCopy
 import com.flagshipserver.app.core.ShareStartup
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSDangerButton
@@ -904,20 +905,23 @@ private fun ReadySections(
         when {
             apps == null -> ServerCardSkeleton()
             apps.isEmpty() -> Muted(ServerAppsViewModel.EMPTY, size = 14)
-            else -> apps.forEach { row ->
-                FSListRow(
-                    leading = FSListLeading.Icon(icon = Icons.Outlined.Apps, color = FS.colors.primary),
-                    title = row.name,
-                    subtitle = row.status,
-                    detail = row.address.ifEmpty { null },
-                    onClick = if (row.opens) { { onOpenApp(row.serviceId) } } else null,
-                    modifier = Modifier.testTag("shared-app-row-${row.serviceId}"),
-                    below = if (row.membersOnly) {
-                        { Muted(ShareCopy.MEMBERS_ONLY_HINT, size = 12, modifier = Modifier.testTag("shared-members-only-${row.serviceId}")) }
-                    } else {
-                        null
-                    },
-                )
+            else -> {
+                if (!ui.manage) Muted(ShareCoInviteCopy.VIEW_ONLY, size = 13, modifier = Modifier.testTag("co-invite-view-only"))
+                apps.forEach { row ->
+                    FSListRow(
+                        leading = FSListLeading.Icon(icon = Icons.Outlined.Apps, color = FS.colors.primary),
+                        title = row.name,
+                        subtitle = row.status,
+                        detail = row.address.ifEmpty { null },
+                        onClick = if (row.opens) { { onOpenApp(row.serviceId) } } else null,
+                        modifier = Modifier.testTag("shared-app-row-${row.serviceId}"),
+                        below = if (row.membersOnly) {
+                            { Muted(ShareCopy.MEMBERS_ONLY_HINT, size = 12, modifier = Modifier.testTag("shared-members-only-${row.serviceId}")) }
+                        } else {
+                            null
+                        },
+                    )
+                }
             }
         }
     }

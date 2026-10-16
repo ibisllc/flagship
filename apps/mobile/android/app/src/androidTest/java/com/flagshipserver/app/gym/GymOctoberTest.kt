@@ -470,7 +470,7 @@ class GymOctoberTest : GymBase() {
         launch(tab = "home", username = "bright-maple", shares = true)
         waitUntilExists("home-shared-with-me", timeoutMs = 30_000)
         composeRule.onNodeWithTag("home-shared-with-me").performScrollTo()
-        composeRule.waitUntil(15_000) { countPrefix("home-shared-") == 3 }
+        composeRule.waitUntil(15_000) { countPrefix("home-shared-") == 4 }
         waitUntilTextExists("Waiting for the owner")
         gymShot("shared-with-me")
 
@@ -490,5 +490,74 @@ class GymOctoberTest : GymBase() {
         composeRule.onNodeWithTag("shared-approve-startup").performScrollTo().performClick()
         composeRule.waitUntil(15_000) { count("shared-approve-startup") == 0 }
         gymShot("shared-server-unlocked")
+    }
+
+    // ─── Co-manager invites (docs/service-access-gating.md "Co-manager invites") ──
+
+    /** Home → a shared server → one of its apps. */
+    private fun openSharedApp(server: String, serviceId: String) {
+        launch(tab = "home", username = "bright-maple", shares = true)
+        waitUntilExists("home-shared-with-me", timeoutMs = 30_000)
+        waitUntilTextExists(server, timeoutMs = 15_000)
+        composeRule.onNodeWithText(server).performScrollTo().performClick()
+        waitUntilExists("shared-app-row-$serviceId", timeoutMs = 20_000)
+        composeRule.onNodeWithTag("shared-app-row-$serviceId").performScrollTo().performClick()
+        waitUntilExists("shared-app-card", timeoutMs = 20_000)
+    }
+
+    /** At Can manage, Plants offers Invite people: add a person at Member,
+     *  the link names the shared server, Your invites lists them, Withdraw
+     *  asks first and empties the list. */
+    @Test
+    fun coManagerInvitesAPersonAndWithdraws() {
+        openSharedApp("Garage", "bright-maple--plants")
+        composeRule.onNodeWithTag("co-invite-open").performScrollTo().assertTextContains("Invite people").performClick()
+        waitUntilExists("co-invite-line", timeoutMs = 15_000)
+        assertEquals("People you invite join as Member. You can withdraw your own invites.", textOf("co-invite-line"))
+        assertEquals(1, count("co-invite-none"))
+        composeRule.onNodeWithTag("co-invite-add-person").performScrollTo().performClick()
+        waitUntilExists("co-invite-name")
+        composeRule.onNodeWithTag("co-invite-name").performTextInput("Alex")
+        composeRule.onNodeWithTag("co-invite-create").performScrollTo().performClick()
+        waitUntilExists("co-invite-link", timeoutMs = 15_000)
+        val link = textOf("co-invite-link")
+        assertTrue(link, link.startsWith("https://garage.jordan-reyes.flagship.services/invite#"))
+        assertTrue(link, link.endsWith("&s=bright-maple--plants"))
+        waitUntilTextExists("Alex · Not opened yet")
+        gymShot("co-invite-created")
+        composeRule.onAllNodes(tagStartsWith("co-invite-withdraw-")).onFirst().performScrollTo().performClick()
+        waitUntilTextExists("Withdraw this invite?")
+        composeRule.onNodeWithTag("co-invite-withdraw-confirm").performClick()
+        waitUntilExists("co-invite-none", timeoutMs = 15_000)
+    }
+
+    /** Wiki: an admin made the co-manager a Member there, so the panel shows
+     *  the box's sentence, their old invite without Withdraw, and no add. */
+    @Test
+    fun coManagerDemotedSeesWhyAndNoWithdraw() {
+        openSharedApp("Garage", "bright-maple--wiki")
+        composeRule.onNodeWithTag("co-invite-open").performScrollTo().performClick()
+        waitUntilExists("co-invite-why", timeoutMs = 15_000)
+        assertEquals("An admin made you a Member of this app, so you can't invite people to it.", textOf("co-invite-why"))
+        waitUntilTextExists("Jo · 1 person joined")
+        assertEquals(0, count("co-invite-add-person"))
+        assertEquals(0, count("co-invite-add-group"))
+        assertEquals(0, countPrefix("co-invite-withdraw-"))
+        gymShot("co-invite-demoted")
+    }
+
+    /** Can view: the Apps card says why there's no Invite people, and an app has none. */
+    @Test
+    fun coManagerViewOnlyCantInvite() {
+        launch(tab = "home", username = "bright-maple", shares = true)
+        waitUntilExists("home-shared-with-me", timeoutMs = 30_000)
+        waitUntilTextExists("Cabin", timeoutMs = 15_000)
+        composeRule.onNodeWithText("Cabin").performScrollTo().performClick()
+        waitUntilExists("co-invite-view-only", timeoutMs = 20_000)
+        assertEquals("You can view this server but not manage it, so you can't invite people to its apps.", textOf("co-invite-view-only"))
+        gymShot("co-invite-view-only")
+        composeRule.onNodeWithTag("shared-app-row-bright-maple--plants").performScrollTo().performClick()
+        waitUntilExists("shared-app-card", timeoutMs = 20_000)
+        assertEquals(0, count("co-invite-open"))
     }
 }

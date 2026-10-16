@@ -52,6 +52,7 @@ import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.ui.theme.FSLayout
 import com.flagshipserver.app.viewmodels.LocalServerShares
+import com.flagshipserver.app.viewmodels.CoInviteViewModel
 import com.flagshipserver.app.viewmodels.ShareCopy
 import com.flagshipserver.app.viewmodels.SharedAppUi
 import com.flagshipserver.app.viewmodels.SharedAppViewModel
@@ -84,10 +85,11 @@ fun SharedAppScreen(shareId: String, serviceId: String, onBack: () -> Unit) {
     val signing = remember(vm) { AppOrderSigning(entry.serverDomain) { reason -> vm.memberSigner(reason) } }
     val scope = rememberCoroutineScope()
     val nav = rememberNavController()
+    val invites = remember(vm) { vm.coInvites() }
     CompositionLocalProvider(LocalScreensClient provides client, LocalAppOrderSigning provides signing) {
         NavHost(navController = nav, startDestination = "app") {
             composable("app") {
-                SharedAppContent(vm.appName, ui, nav, onBack = onBack, onRetry = { scope.launch { vm.load() } })
+                SharedAppContent(vm.appName, ui, nav, onBack = onBack, onRetry = { scope.launch { vm.load() } }, invites = invites)
             }
             composable(
                 route = "service-access-list/{serviceId}?draft={draft}",
@@ -134,6 +136,7 @@ internal fun SharedAppContent(
     nav: NavController?,
     onBack: () -> Unit,
     onRetry: (() -> Unit)?,
+    invites: CoInviteViewModel? = null,
 ) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
         Column(
@@ -146,7 +149,7 @@ internal fun SharedAppContent(
             Spacer(Modifier.height(FS.space.s6))
             val detail = ui.detail
             when {
-                detail != null && nav != null -> AppSections(appName, detail, ui, nav)
+                detail != null && nav != null -> AppSections(appName, detail, ui, nav, invites)
                 ui.phase == SharedAppUi.Phase.Waiting -> Line("Waiting for the owner to confirm this share.")
                 ui.phase == SharedAppUi.Phase.Ended -> Line("The owner stopped sharing this server.")
                 ui.phase == SharedAppUi.Phase.Failed -> ErrorCard(ui.message ?: "Couldn't open this app.", onRetry = onRetry)
@@ -158,7 +161,7 @@ internal fun SharedAppContent(
 }
 
 @Composable
-private fun AppSections(appName: String, detail: AppDetailResponse, ui: SharedAppUi, nav: NavController) {
+private fun AppSections(appName: String, detail: AppDetailResponse, ui: SharedAppUi, nav: NavController, invites: CoInviteViewModel?) {
     val app = detail.app
     val uri = LocalUriHandler.current
     val running = app.status == "running"
@@ -193,6 +196,7 @@ private fun AppSections(appName: String, detail: AppDetailResponse, ui: SharedAp
             fallbackServerDomain = { null },
         )
     }
+    if (ui.manage && invites != null) CoInviteSection(invites)
     if (ui.seeAppData) DatabaseEntrySection(nav, app.serviceId, detail, restricted = false)
 }
 
