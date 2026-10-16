@@ -231,6 +231,10 @@ public struct ServerDetailScreen: View {
                         connecting(c: c)
                     }
                 case .loaded(let d):
+                    if let dbg = d.debugAccess, dbg.on, let until = dbg.expiresAt,
+                       until > Int64(Date().timeIntervalSince1970 * 1000) {
+                        DebugAccessBanner(expiresAt: until)
+                    }
                     overview(d: d, c: c)
                     if let apps {
                         if let n = d.appSandbox?.notice {
@@ -253,6 +257,10 @@ public struct ServerDetailScreen: View {
                     JournalCard(serverDomain: d.serverFqdn)
                     BackupMigrateCard(serverDomain: d.serverFqdn)
                     UpdateServerCard(serverDomain: d.serverFqdn, currentCommit: d.currentCommit, lastUpdate: d.lastUpdate, onRefreshDetail: onRefreshDetail)
+                    // An older box doesn't report debug access and can't take a grant.
+                    if d.debugAccess != nil {
+                        DebugAccessCard(serverDomain: d.serverFqdn, view: d.debugAccess, onChanged: onRefreshDetail)
+                    }
                 }
                 // The health report comes from the directory, not the box, so
                 // it still shows when the box's own detail can't load.

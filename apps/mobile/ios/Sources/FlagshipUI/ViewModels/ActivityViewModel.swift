@@ -109,6 +109,10 @@ public enum BoxEventLabels {
         "server.update.applied": "Server updated",
         "server.update.rolled-back": "Update rolled back",
         "server.update.refused": "Update refused",
+        "server.debug-access.granted": "Debug access turned on",
+        "server.debug-access.renewed": "Debug access renewed",
+        "server.debug-access.expired": "Debug access ended",
+        "server.debug-access.revoked": "Debug access turned off",
         "server.migration.taken-over": "Took over from the old server",
         "server.decommission.released": "Stopped serving",
         "server.decommission.awaiting-handoff": "Waiting to be wiped",
@@ -155,6 +159,7 @@ public enum BoxEventLabels {
         if key.hasPrefix("server.backup") || key.hasPrefix("server.restore") { return "externaldrive.fill" }
         if key.hasPrefix("server.decommission") || key.hasPrefix("server.migration") { return "shippingbox.fill" }
         if key.hasPrefix("server.update") { return "arrow.up.circle.fill" }
+        if key.hasPrefix("server.debug-access") { return "terminal.fill" }
         if key.hasPrefix("app.") { return "app.badge.fill" }
         if key.hasPrefix("share.") { return "person.2.fill" }
         return "circle.fill"

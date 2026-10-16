@@ -134,6 +134,12 @@ public protocol ScreensClient: Sendable {
     /// An older box answers 404 and gets the order from `.com` instead.
     @discardableResult
     func deliverServerOrder(_ order: SignedServerOrderWire) async throws -> ServerOrderAck
+    /// `POST /api/screens/debug-access {grant, signatureHex}`: turn debug
+    /// access on or renew it. `body` is `DebugAccess.envelopeJSON`. A refusal
+    /// is `.http` with the box's `{error}` sentence.
+    func debugAccessGrant(body: String) async throws -> DebugAccessChange
+    /// `POST /api/screens/debug-access/revoke {revoke, signatureHex}`.
+    func debugAccessRevoke(body: String) async throws -> DebugAccessChange
     /// `GET /api/screens/settings/access-alerts`. An older box answers 404.
     func accessAlertsSetting() async throws -> AccessAlertsSetting
     /// `POST /api/screens/settings/access-alerts {enabled}` (owner session;
@@ -379,6 +385,12 @@ public enum ScreensClientError: Error, LocalizedError, Sendable {
 }
 
 public extension ScreensClient {
+    func debugAccessGrant(body: String) async throws -> DebugAccessChange {
+        throw ScreensClientError.notImplemented("debug access")
+    }
+    func debugAccessRevoke(body: String) async throws -> DebugAccessChange {
+        throw ScreensClientError.notImplemented("debug access")
+    }
     func appBackupFetch(fetchPath: String) async throws -> Data {
         throw ScreensClientError.notImplemented("app backup download")
     }
