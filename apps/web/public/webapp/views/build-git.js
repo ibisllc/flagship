@@ -33,6 +33,7 @@ import {
   deployFailure,
   exportAdapter,
   followAdapt,
+  adaptFinished,
   gitRequestBody,
   notReadyText,
   startAndFollowAdapt,
@@ -110,9 +111,11 @@ export function enterBuildGit() {
 }
 
 /**
- * Reopen a git build the box brought back failed (Build sessions → Open): say
- * the box's reason and offer what the card offers, running the AI again
- * (unless the build is sealed) or installing the files it holds.
+ * Reopen an open git build from Build sessions where it stands: one the box
+ * brought back failed (a restart cut it off) says the box's reason and offers
+ * the AI again (unless sealed, or the box has no model) or installing its
+ * files; a running adapt is followed; a finished one shows its result; one
+ * the AI hasn't touched shows its verdict card again.
  */
 export async function resumeBuildGit({ buildId: id, server = "", state, fileCount = 0, reason, canAdapt = true }) {
   await enterBuildGit();
@@ -123,6 +126,27 @@ export async function resumeBuildGit({ buildId: id, server = "", state, fileCoun
   buildId = id;
   assignedName = state?.name ?? null;
   closed = state?.sealed === true;
+  $("build-git-verdict").classList.remove("hidden");
+  const a = state?.adapt;
+  if (a?.status !== "failed") {
+    lastVerdict = { buildId: id, fit: state?.gitFit === true, reason: state?.gitFit ? RESUMED_FIT : "no flagship.app.json", fileCount, name: assignedName };
+    if (a?.status === "running") {
+      adaptPhase = a.phase ?? null;
+      adaptProgress = null;
+      renderAdapting();
+      return followRunning(id);
+    }
+    if (a?.status === "done") {
+      const out = adaptFinished(a);
+      if (out.phase === "installed") return renderInstalled(out.url);
+      if (out.phase === "not-live") {
+        closed = true;
+        return renderNotLive(out.reason);
+      }
+      return renderAdapted(out.fileCount);
+    }
+    return renderVerdict(lastVerdict);
+  }
   lastVerdict = { buildId: id, fit: false, reason, fileCount, name: assignedName };
   // No AI for a sealed build, or on a box with no model to adapt with.
   const offerAi = canAdapt && !closed;
@@ -456,6 +480,34 @@ function showAdaptOutcome(outcome) {
     renderNotLive(outcome.reason);
   } else {
     failAdapt(outcome.reason, { sealed: outcome.sealed === true });
+  }
+}
+
+/** What a reopened Flagship-ready build says (the box's verdict isn't kept). */
+const RESUMED_FIT = "Ready to install";
+
+// Follow an adapt the box is already running (a build reopened from Build
+// sessions) to its end.
+async function followRunning(id) {
+  const path = `/api/build/sessions/${encodeURIComponent(id)}`;
+  try {
+    const outcome = await followAdapt({
+      fetchState: () => boxFetch(path),
+      fetchJournal: () => boxFetch(`${path}/journal`),
+      onProgress: (p) => {
+        if (buildId !== id) return;
+        adaptProgress = p;
+        renderAdapting();
+      },
+      onPhase: (phase) => {
+        if (buildId !== id || phase === adaptPhase) return;
+        adaptPhase = phase;
+        renderAdapting();
+      },
+    });
+    if (buildId === id) showAdaptOutcome(outcome);
+  } catch (e) {
+    if (buildId === id) failAdapt(boxReason(e) ?? (e instanceof ScreensError ? e.message : String(e)));
   }
 }
 

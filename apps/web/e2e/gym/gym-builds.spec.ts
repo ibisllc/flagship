@@ -549,6 +549,47 @@ test.describe("gym webapp builds", () => {
     await expect(page.locator("#toast")).toContainText(`Deployed → https://notes.${HOME}`, { timeout: 10_000 });
   });
 
+  test("gym builds an open git build reopens where it stands: its verdict, or the adapt still running", async ({ page }, testInfo) => {
+    await reachHome(page, { kind: "admin", servers: [HOME] });
+    const FRESH = "gym-git-f";
+    const RUNNING = "gym-git-w";
+    let running: Record<string, unknown> = { status: "running", startedAt: Date.now(), phase: "staging" };
+    const m = aiRules(await mock(page));
+    m.get(onBox("/api/llm/sessions"), { sessions: [] });
+    m.get(onBox("/api/build/sessions"), {
+      builds: [
+        { buildId: FRESH, mode: "git", name: "blog", startedAt: Date.now(), open: true },
+        { buildId: RUNNING, mode: "git", name: "wiki", startedAt: Date.now() - 1000, open: true },
+      ],
+    });
+    m.get(onBox(`/api/build/sessions/${FRESH}`), {
+      state: { buildId: FRESH, mode: "git", serverFqdn: HOME, createdAt: 1, gitFit: false, name: "blog" },
+      files: ["a", "b"],
+    });
+    m.get(onBox(`/api/build/sessions/${RUNNING}/journal`), { entries: [{ ts: Date.now(), kind: "adapt-step", actor: "ai", summary: "Testing the app" }] });
+    m.get(onBox(`/api/build/sessions/${RUNNING}`), () => ({
+      json: { state: { buildId: RUNNING, mode: "git", serverFqdn: HOME, createdAt: 1, gitFit: false, name: "wiki", adapt: running }, files: ["a"] },
+    }));
+
+    // Untouched by the AI: its not-ready card again, with the AI offered.
+    await openBuildSessions(page);
+    await page.locator(`#build-journal-list .build-session-row[data-build="${FRESH}"]`).click();
+    await expect(page.locator("#view-build-git")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("#build-git-verdict")).toContainText("This repo is not yet adapted for Flagship.");
+    await expect(page.locator("#build-git-adapt")).toHaveText("Use AI to adapt and deploy");
+    await shot(page, testInfo, "git-resumed-verdict");
+
+    // Still adapting: followed until the box says it's live.
+    await page.click("#build-git-back");
+    await page.click("#build-source-journal-link");
+    await page.locator(`#build-journal-list .build-session-row[data-build="${RUNNING}"]`).click();
+    await expect(page.locator("#build-git-verdict .build-git-adapting")).toBeVisible({ timeout: 10_000 });
+    await shot(page, testInfo, "git-resumed-running");
+    running = { status: "done", fileCount: 1, deployed: true, deployedUrl: `https://wiki.${HOME}` };
+    await expect(page.locator("#build-git-verdict")).toContainText("Installed ✓", { timeout: 20_000 });
+    expect(m.sent(`/api/build/sessions/${RUNNING}/adapt`)).toHaveLength(0);
+  });
+
   test("gym builds a git import installs, checks again, exports its adapter and opens its journal", async ({ page }, testInfo) => {
     await reachHome(page, { kind: "admin", servers: [HOME] });
     const ID = "gym-git-fit";

@@ -155,7 +155,9 @@ async function renderList() {
     if (build) el.addEventListener("click", () => void confirmDiscardBuild(build));
   }
   for (const el of list.querySelectorAll("[data-build]")) {
-    el.addEventListener("click", () => renderDetail(el.getAttribute("data-build"), el.getAttribute("data-server") || ""));
+    // An open git build reopens where it stands; anything else shows its journal.
+    const open = el.classList.contains("build-session-row");
+    el.addEventListener("click", () => renderDetail(el.getAttribute("data-build"), el.getAttribute("data-server") || "", { open }));
   }
 }
 
@@ -195,13 +197,21 @@ async function confirmDiscard(session) {
   await renderList();
 }
 
-async function renderDetail(buildId, server = "") {
+async function renderDetail(buildId, server = "", { open = false } = {}) {
   const c = clientOf(server);
   const path = `/api/build/sessions/${encodeURIComponent(buildId)}`;
   // A build the box brought back failed (a restart cut it off) says why and
   // offers the AI again or deploying; an ended build has no state any more.
   const held = await clientOf(server).fetch(path).catch(() => null);
   const failed = failedBuild(held?.state);
+  if (open && !failed && held?.state?.mode === "git") {
+    return resumeBuildGit({
+      buildId,
+      server: c.fqdn,
+      state: held.state,
+      fileCount: Array.isArray(held.files) ? held.files.length : 0,
+    });
+  }
   if (failed?.mode === "git") {
     return resumeBuildGit({
       buildId,

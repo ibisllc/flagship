@@ -256,4 +256,21 @@ export const WEB_BUILDS: readonly Scenario[] = [
       dimension: "D3",
     },
   ),
+  webTotal(
+    "web-total-builds-resume-open-git",
+    "Build sessions reopens any open git build where it stands: one the AI hasn't touched shows its not-ready card with the AI offered; one still adapting is followed (no new adapt is started) until the box says it's live.",
+    "gym builds an open git build reopens where it stands: its verdict, or the adapt still running",
+    {
+      steps: [
+        { kind: "tap", describe: "Build sessions → the untouched git build.", handle: ".build-session-row[data-build]" },
+        { kind: "tap", describe: "Back → Build sessions → the build still adapting.", handle: ".build-session-row[data-build]" },
+      ],
+      assertions: [
+        { describe: "Verdict card", handle: "#build-git-adapt", expect: "present" },
+        { describe: "Installed after following", handle: "#build-git-verdict", expect: "text", text: "Installed ✓" },
+      ],
+      screenshots: [shot("git-resumed-verdict", "The verdict again."), shot("git-resumed-running", "Following the adapt.")],
+      dimension: "D3",
+    },
+  ),
 ];
