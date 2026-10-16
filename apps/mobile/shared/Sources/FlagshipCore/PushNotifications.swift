@@ -79,6 +79,11 @@ public final class PushNotifications: NSObject {
     /// account activity; older payloads without one still land there.
     public nonisolated static let inviteCreatedCategory = "invite-created"
 
+    /// Pro ended, so apps that kept a separate access list on each server use
+    /// one list again (content-free; the app's lead server sends it). A tap
+    /// opens the activity, where the box's row says what happened.
+    public nonisolated static let accessListsCategory = "access-lists"
+
     /// Where a tapped push leads: its app link when it carries one, else
     /// what its `kind` / `category` names.
     public nonisolated static func link(forPush info: [AnyHashable: Any]) -> DeepLink? {
@@ -94,7 +99,7 @@ public final class PushNotifications: NSObject {
         let category = info["category"] as? String
             ?? (info["aps"] as? [AnyHashable: Any])?["category"] as? String
         if (kind ?? category) == "secret-request" { return .secretRequests }
-        if (kind ?? category) == inviteCreatedCategory { return .accountActivity }
+        if let k = kind ?? category, k == inviteCreatedCategory || k == accessListsCategory { return .accountActivity }
         if let category, accountNoticeCategories.contains(category) { return nil }
         if kind == "vibecode-needs-you", let sessionId = info["sessionId"] as? String, !sessionId.isEmpty {
             return .vibeCodeChat(sessionId: sessionId)
