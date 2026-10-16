@@ -33,6 +33,7 @@ import {
   shareErrorText,
 } from "../lib/serverShares.js";
 import { accountReadFetch } from "../lib/accountRead.js";
+import { SHARE_ADMIN_ONLY, canSignAdminOrders } from "../lib/addServerGate.js";
 
 const hasDisk = (body) => body?.diskEncryption !== "none";
 const serverNameOf = (fqdn) => String(fqdn ?? "").split(".")[0] || String(fqdn ?? "");
@@ -43,7 +44,11 @@ export function serverSharingHtml(body) {
       <h2 class="mt-4">Shared with</h2>
       <div class="card" id="shared-with-card" data-server-fqdn="${fqdn}">
         <div id="shared-with-list"><p class="faint-sm">Loading…</p></div>
-        ${isCompanionProfile() ? "" : `<button id="share-server-btn" class="full-width mt-2">Share this server</button>`}
+        ${isCompanionProfile()
+          ? ""
+          : canSignAdminOrders()
+            ? `<button id="share-server-btn" class="full-width mt-2">Share this server</button>`
+            : `<p class="note small mt-2" data-share-admin-only>${escapeHtml(SHARE_ADMIN_ONLY)}</p>`}
       </div>
       <h2 class="mt-4">Activity</h2>
       <div class="card" id="server-activity-card" data-server-fqdn="${fqdn}">
@@ -164,7 +169,8 @@ async function refreshShares(body) {
   const fqdn = String(body.serverFqdn).toLowerCase();
   const slot = $("shared-with-list");
   if (!slot) return;
-  const canEdit = !isCompanionProfile() && !!getSession()?.umk;
+  // Every change here signs under the admin root (lib/adminRoot.js).
+  const canEdit = !isCompanionProfile() && !!getSession()?.umk && canSignAdminOrders();
   let state;
   try {
     state = await loadOwnerShares(fqdn);

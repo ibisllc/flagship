@@ -130,7 +130,7 @@ import {
 } from "../lib/serverMonitoring.js";
 import { serverSharingHtml, wireServerSharing } from "./server-sharing.js";
 import { accountReadFetch } from "../lib/accountRead.js";
-import { canSignAdminOrders } from "../lib/addServerGate.js";
+import { SERVER_ADMIN_ONLY, canSignAdminOrders } from "../lib/addServerGate.js";
 import { isAdminDevice } from "../lib/memberRoles.js";
 import { debugAccessBannerHtml, debugAccessCardHtml, wireDebugAccess } from "./debug-access.js";
 
@@ -353,6 +353,45 @@ function wirePairServer(fqdn, pod) {
   });
 }
 
+/** The server page's controls that send an order only the admin root signs
+ *  (lib/adminRoot.js SENSITIVE_TAGS); Make leader and sharing have their own. */
+export const SERVER_ADMIN_ONLY_IDS = [
+  "front-page-select",
+  "front-page-save",
+  "power-off-btn",
+  "power-restart-btn",
+  "deadman-window",
+  "deadman-lockout",
+  "deadman-enable-btn",
+  "deadman-disable-btn",
+  "deadman-tighten-btn",
+  "deadman-affirm-btn",
+  "backup-start-btn",
+  "migrate-start-btn",
+  "update-server-btn",
+  "transfer-start-btn",
+  "revoke-server-btn",
+  "unrevoke-server-btn",
+  "delete-server-btn",
+];
+
+/** A device that can't sign server orders (a non-admin device of an
+ *  admin-pinned account) sees the page with those controls off and one line
+ *  saying why, instead of sending orders `.com` and the box refuse. */
+function applyServerAdminOnly(root) {
+  if (canSignAdminOrders()) return;
+  for (const id of SERVER_ADMIN_ONLY_IDS) {
+    const el = $(id);
+    if (!el) continue;
+    el.disabled = true;
+    el.setAttribute("data-admin-only", "");
+    el.setAttribute("title", SERVER_ADMIN_ONLY);
+  }
+  if (typeof root.insertAdjacentHTML === "function" && !root.querySelector("[data-server-admin-only]")) {
+    root.insertAdjacentHTML("afterbegin", `<p class="note" data-server-admin-only>${escapeHtml(SERVER_ADMIN_ONLY)}</p>`);
+  }
+}
+
 // Bumped on every render: a slow answer from the server shown before must not
 // paint over the one now open.
 let renderSeq = 0;
@@ -391,6 +430,7 @@ export async function renderServerDetail() {
     wirePairServer(knownFqdn, pod);
     wireDangerZone(knownFqdn, username, { revoked, pod });
     wireMonitoringPane(root);
+    applyServerAdminOnly(root);
     healthPaint?.();
     return;
   }
@@ -579,6 +619,7 @@ export async function renderServerDetail() {
       pod: detailPod,
     });
     wireMonitoringPane(root);
+    applyServerAdminOnly(root);
     healthPaint?.();
     startMetricsPolling(body.serverFqdn);
   } catch (e) {
@@ -902,8 +943,8 @@ function wireFrontPage(body) {
         select.appendChild(opt);
       }
       select.value = current;
-      select.disabled = false;
-      save.disabled = false;
+      select.disabled = !canSignAdminOrders();
+      save.disabled = !canSignAdminOrders();
     } catch {
       if (status) {
         status.classList.remove("hidden");
@@ -1756,7 +1797,7 @@ function paintUpdateCard(card) {
     pendingEl.classList.add("hidden");
     if (btn) {
       btn.classList.remove("hidden");
-      btn.disabled = !d.currentCommit || btn.getAttribute("data-companion-unavailable") === "true";
+      btn.disabled = !d.currentCommit || btn.getAttribute("data-companion-unavailable") === "true" || !canSignAdminOrders();
     }
     hint?.classList.toggle("hidden", !!d.currentCommit);
     stopPendingUpdatePoll(card);
