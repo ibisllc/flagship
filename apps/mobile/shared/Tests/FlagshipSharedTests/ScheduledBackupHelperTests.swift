@@ -53,10 +53,12 @@ final class ScheduledBackupHelperTests: XCTestCase {
     func testScheduleSummary() {
         let en = Locale(identifier: "en_US")
         let utc = TimeZone(identifier: "UTC")!
-        XCTAssertEqual(BackupScheduleClock.summary(.boxDefault, timeZone: utc, locale: en, reference: october),
+        // Formatters put a narrow no-break space before AM/PM.
+        func plain(_ s: String) -> String { s.replacingOccurrences(of: "\u{202F}", with: " ") }
+        XCTAssertEqual(plain(BackupScheduleClock.summary(.boxDefault, timeZone: utc, locale: en, reference: october)),
                        "Daily at 3:00 AM · keeps 7 daily and 4 weekly")
         let weekly = BackupSchedule(frequency: "weekly", minuteOfDayUtc: 2 * 60 + 30, weekdayUtc: 1, keepDaily: 0, keepWeekly: 8)
-        XCTAssertEqual(BackupScheduleClock.summary(weekly, timeZone: chicago, locale: en, reference: october),
+        XCTAssertEqual(plain(BackupScheduleClock.summary(weekly, timeZone: chicago, locale: en, reference: october)),
                        "Weekly on Sunday at 9:30 PM · keeps 0 daily and 8 weekly")
         XCTAssertEqual(BackupScheduleClock.summary(BackupSchedule(frequency: "off", minuteOfDayUtc: 0, weekdayUtc: 0, keepDaily: 1, keepWeekly: 0)),
                        "Scheduled backups are off.")
@@ -214,8 +216,9 @@ final class ScheduledBackupHelperTests: XCTestCase {
             fileName: saved.fileName, into: d)
         XCTAssertEqual(url.lastPathComponent, saved.fileName)
         XCTAssertEqual(try Data(contentsOf: url), mock.archiveBundle)
-        let opened = try ServerBackupBundle.read(url)
-        XCTAssertEqual(opened.layout.dataLength, Int64(mock.archiveBytes.count))
+        let whole = try Data(contentsOf: url)
+        let layout = try ServerBackupBundle.parseHeader(whole, fileBytes: Int64(whole.count))
+        XCTAssertEqual(layout.dataLength, Int64(mock.archiveBytes.count))
         XCTAssertFalse(FileManager.default.fileExists(atPath: d.appendingPathComponent("\(saved.fileName).part").path))
     }
 }

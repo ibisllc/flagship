@@ -268,4 +268,45 @@ final class CreateServerNoReclaimTests: XCTestCase {
         let issued = try XCTUnwrap(server.issuedAuthCodes.values.first)
         XCTAssertEqual(issued.userPubKey, expectedPubHex, "mint must reuse the existing UMK's IRK")
     }
+
+    /// The create form's backup policy is signed by the admin root and rides
+    /// beside the pairing order (`backupPolicy: {order, signatureHex}`).
+    func test_addServerMint_attachesTheSignedBackupPolicy() async throws {
+        Keystore.wipe()
+        try await Keystore.generateUMK(reason: "test open account")
+        try await Keystore.generateAdminRoot(reason: "test open account")
+        let adminPub = try XCTUnwrap(Keystore.adminRootPubHex().flatMap(HexUtil.decode))
+        let suite = "create-policy-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let server = MockFlagshipServerClient()
+        server.simulatedLatency = 0
+        let vm = CreateServerViewModel(
+            username: "harry",
+            server: server,
+            relay: MockQrRelayClient(),
+            draftStore: CreateServerDraftStore(defaults: defaults),
+            pairingDepositStore: PendingPairingDepositStore(defaults: defaults),
+            isDemoAccount: false
+        )
+        vm.backupPolicy = .phoneOnly
+        vm.phoneReserveBytes = 16 << 30
+        try await driveToDelivered(vm)
+        guard case .delivered = vm.phase else { return XCTFail("expected .delivered, got \(vm.phase)") }
+
+        let domain = Endpoints.serverFqdn(server: "home", user: "harry")
+        let json = try XCTUnwrap(PendingPairingDepositStore(defaults: defaults).pendingOrder(for: domain))
+        let obj = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+        let bp = try XCTUnwrap(obj["backupPolicy"] as? [String: Any], "the policy rides beside the pairing order")
+        let o = try XCTUnwrap(bp["order"] as? [String: Any])
+        let order = BackupPolicyOrder(serverDomain: o["serverDomain"] as! String, policy: o["policy"] as! String,
+                                      phoneReserveBytes: (o["phoneReserveBytes"] as! NSNumber).int64Value,
+                                      issuedAt: (o["issuedAt"] as! NSNumber).int64Value)
+        XCTAssertEqual(order.serverDomain, domain)
+        XCTAssertEqual(order.policy, "phone", "the draft's phone-only is the wire's phone")
+        XCTAssertEqual(order.phoneReserveBytes, 16 << 30)
+        let sig = try XCTUnwrap(HexUtil.decode(bp["signatureHex"] as! String))
+        let key = try Curve25519.Signing.PublicKey(rawRepresentation: adminPub)
+        XCTAssertTrue(key.isValidSignature(sig, for: try order.canonicalBytes()), "signed with the admin root")
+    }
 }
