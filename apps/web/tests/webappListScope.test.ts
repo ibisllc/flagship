@@ -186,3 +186,10 @@ describe("invites on the shown server", () => {
     expect(m.invitesOnShownServer(invites, null, { scope: "server" })).toHaveLength(5);
   });
 });
+
+describe("the activity row", () => {
+  it("labels the merge the same on every app", async () => {
+    const { BOX_EVENT_LABELS } = await import(webapp("lib", "activityFeed.js"));
+    expect(BOX_EVENT_LABELS["access.lists.merged"].label).toBe("Back to one access list");
+  });
+});

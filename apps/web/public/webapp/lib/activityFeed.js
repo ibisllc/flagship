@@ -32,6 +32,8 @@ export const BOX_EVENT_LABELS = Object.freeze({
   "share.signed-in": { label: "A shared person signed in", icon: "🤝" },
   "server.update": { label: "Server updated by a co-manager", icon: "⬆️" },
   "server.state.corrupt": { label: "This server found a damaged settings file and locked it down", icon: "⚠️" },
+  // feat/marketplace: Pro ended and apps with separate lists went back to one.
+  "access.lists.merged": { label: "Back to one access list", icon: "👥" },
 });
 
 function humanize(s) {
