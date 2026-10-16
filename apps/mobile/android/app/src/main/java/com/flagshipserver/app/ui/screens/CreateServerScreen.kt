@@ -943,7 +943,7 @@ private fun BootUnlockOption(
             .padding(end = FS.space.s3, top = FS.space.s1, bottom = FS.space.s3),
     ) {
         RadioButton(selected = selected, onClick = null, modifier = Modifier.padding(FS.space.s3))
-        Column(Modifier.weight(1f).padding(top = FS.space.s3), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(Modifier.weight(1f).padding(top = FS.space.s3), verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(2.dp)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
             Text(
                 subtitle,

@@ -362,7 +362,7 @@ fun SettingsScreen(nav: NavController) {
                                 selected = themeMode == mode,
                                 onClick = { privacy?.setThemeMode(mode) },
                                 shape = SegmentedButtonDefaults.itemShape(index = i, count = modes.size),
-                                icon = { SegmentedButtonDefaults.Icon(active = themeMode == mode) { Icon(icon, contentDescription = null, modifier = Modifier.size(SegmentedButtonDefaults.IconSize)) } },
+                                icon = { SegmentedButtonDefaults.Icon(active = themeMode == mode) { androidx.compose.material3.Icon(icon, contentDescription = null, modifier = Modifier.size(SegmentedButtonDefaults.IconSize)) } },
                                 modifier = Modifier.testTag("settings-theme-${mode.name.lowercase()}"),
                             ) { Text(label) }
                         }

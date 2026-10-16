@@ -40,6 +40,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -167,11 +168,12 @@ fun ServicesListScreen(nav: NavController) {
         else -> if (allApps.isEmpty()) "Nothing installed yet." else "${allApps.size} installed"
     }
 
+    val refreshScope = androidx.compose.runtime.rememberCoroutineScope()
     FSScreen(
         title = "Services",
         titleTag = "services-title",
         subtitle = subtitle,
-        onRefresh = { vm.refresh() },
+        onRefresh = { refreshScope.launch { vm.refresh() } },
         refreshing = state is LoadingState.Loading,
     ) {
         if (allApps.isEmpty() && state !is LoadingState.Loading) {

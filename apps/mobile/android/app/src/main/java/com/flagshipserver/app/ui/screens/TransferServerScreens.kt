@@ -205,7 +205,7 @@ fun TransferAcquirerScreen(
 
     FSScreen(
         title = "Take over a server",
-        onBack = onBack ?: { backDispatcher?.onBackPressed() },
+        onBack = onBack ?: { backDispatcher?.onBackPressed(); Unit },
     ) {
         when (val p = phase) {
             is TransferAcquirerPhase.Idle -> {

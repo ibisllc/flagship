@@ -108,7 +108,7 @@ fun PendingServerScreen(
     // the address in another, then Cancel order.
     FSScreen(
         title = pod.name,
-        onBack = onBack ?: { backDispatcher?.onBackPressed() },
+        onBack = onBack ?: { backDispatcher?.onBackPressed(); Unit },
         subtitle = pod.description?.takeIf { it.isNotBlank() },
     ) {
         FSCard(padding = PaddingValues(FS.space.s4)) {
