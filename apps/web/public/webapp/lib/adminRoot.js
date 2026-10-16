@@ -56,6 +56,7 @@ export const SENSITIVE_TAGS = new Set([
   "flagship/service-access-mode/v2", //    open to all / members only
   "flagship/service-allow-remove/v2", //   remove a person from an app
   "flagship/uninstall-service/v1", //      uninstall an app
+  "flagship/server-restore/v1", //         a new server waits for one backup (adding a server)
   // `.com`-side (authorizeSensitiveComOp)
   "flagship/server-update/v1", //          in-place server update (2-of-2)
   "flagship/account-self-delete/v1", //    account deletion
@@ -66,6 +67,7 @@ export const SENSITIVE_TAGS = new Set([
   "flagship/server-migration-control/v1", // migration confirm-ready / abort
   "flagship/release-server-name/v1", //    release server name
   "flagship/server-unrevoke/v1", //        un-revoke a lost/stolen server
+  "flagship/rck-register/v1", //           a new server's routing key (adding a server)
   "flagship/service-invite/create/v1", //  service collaborator invite (D-2)
   "flagship/service-invite/revoke/v1", //  service collaborator revoke (D-2)
   // Share this server (docs/share-a-server.md): who the server is shared with

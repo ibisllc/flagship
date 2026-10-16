@@ -21,6 +21,7 @@
 // device-endpoint mailbox-auth (the same bytes the broker re-derives + verifies).
 
 import { controlApex } from "./apex.js";
+import { AddServerRefusedError, isAddServerRefusal } from "./addServerGate.js";
 import { ed25519PubToX25519 } from "./edToMont.js";
 import { sealForBrowserKey } from "./buildDraft.js";
 import { openSealedWithIrk } from "./leases.js";
@@ -515,6 +516,8 @@ export async function submitTransferClaim(args, deps = {}) {
     throw err(`network error: ${(e && e.message) || e}`);
   }
   const body = await resp.json().catch(() => ({}));
+  // Taking a box over adds a server: `.com` refuses a non-admin device.
+  if (isAddServerRefusal(resp.status, body)) throw new AddServerRefusedError();
   if (!resp.ok) throw err((body && body.error) || `HTTP ${resp.status}`, resp.status);
   return { ok: true, body };
 }

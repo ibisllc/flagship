@@ -49,3 +49,26 @@ export async function refuseAddServer({ home = false } = {}) {
   const { inlineAlert } = await import("./modal.js");
   void inlineAlert({ title: "Admin devices only", message: ADD_SERVERS_ADMIN_ONLY });
 }
+
+/** `.com` enforces the rule too (owner rule 2026-10-16): a non-admin
+ *  device's create, RCK or take-over is refused with a 403
+ *  `{"error": …, "code": "add-server-admin-only"}`. */
+export const ADD_SERVER_REFUSAL_CODE = "add-server-admin-only";
+
+export function isAddServerRefusal(status, body) {
+  return status === 403 && !!body && typeof body === "object" && body.code === ADD_SERVER_REFUSAL_CODE;
+}
+
+/** Throw the apps' own refusal for `.com`'s, reading a clone of the Response
+ *  so the caller can still read the body when it is something else. */
+export async function throwIfAddServerRefused(resp) {
+  if (!resp || resp.status !== 403) return;
+  let body = null;
+  try {
+    const copy = typeof resp.clone === "function" ? resp.clone() : resp;
+    body = JSON.parse(await copy.text());
+  } catch {
+    return;
+  }
+  if (isAddServerRefusal(403, body)) throw new AddServerRefusedError();
+}

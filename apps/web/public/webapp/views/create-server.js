@@ -4,9 +4,15 @@
 import { $, registerView, show } from "../lib/router.js";
 import { humanError } from "../lib/humanError.js";
 import { getSession, ensureUsername } from "../lib/state.js";
-import { bytesToHex, signWithIrk, deriveSwkFromSeed, adminRootPubHex as ksAdminRootPubHex } from "../keystore.js";
+import {
+  bytesToHex,
+  signWithIrk,
+  deriveSwkFromSeed,
+  adminRootPubHex as ksAdminRootPubHex,
+  signWithAdminRoot as ksSignWithAdminRoot,
+} from "../keystore.js";
 import { sensitiveSigner } from "../lib/adminRoot.js";
-import { canAddServers, recipeAdminRootPin, refuseAddServer } from "../lib/addServerGate.js";
+import { canAddServers, recipeAdminRootPin, refuseAddServer, throwIfAddServerRefused } from "../lib/addServerGate.js";
 import { getActiveProfile } from "../lib/profiles.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
@@ -54,6 +60,7 @@ export function isValidServerName(name) {
 }
 const TAG_CLAIM = "flagship/claim-username/v1";
 const TAG_AUTH_CODE = "flagship/auth-code/v1";
+const TAG_AUTH_CODE_ADMIN = "flagship/auth-code-admin/v1";
 const TAG_RCK_REGISTER = "flagship/rck-register/v1";
 
 let activeDraftId = null;
@@ -510,6 +517,30 @@ function setStatus(kind, text) {
   el.textContent = text;
 }
 
+/** The AuthCode's canonical bytes (byte-identical to @flagship/protocol
+ *  canonicalAuthCode; `ar=<root>` appended when the code pins one). */
+export function authCodeCanonicalBytes(code, adminRootPubHex) {
+  const parts = [
+    TAG_AUTH_CODE, code.version, code.serial, code.username, code.serverName,
+    code.serverDomain, bytesToHex(code.delegatedPubKey), bytesToHex(code.userPubKey),
+    code.issuedAt, code.expiresAt,
+  ];
+  if (adminRootPubHex) parts.push(`ar=${adminRootPubHex}`);
+  return canonical(parts);
+}
+
+/** What the admin root signs to approve a new server:
+ *  `flagship/auth-code-admin/v1|<the AuthCode's canonical bytes>`, which
+ *  commit to the root the box will pin. A code with no root has no admin
+ *  form. Pinned by packages/protocol/test-vectors/add-server/vectors.json. */
+export function authCodeAdminCanonicalBytes(code, adminRootPubHex) {
+  if (!/^[0-9a-f]{64}$/.test(String(adminRootPubHex ?? ""))) {
+    throw new Error("auth-code admin approval needs the AuthCode's admin root");
+  }
+  const inner = new TextDecoder().decode(authCodeCanonicalBytes(code, adminRootPubHex));
+  return new TextEncoder().encode(`${TAG_AUTH_CODE_ADMIN}|${inner}`);
+}
+
 // Exported so the GYM-ONLY `window.__gymCreate` seam can drive the same
 // compose-and-sign path as the download action.
 export async function mintInstallBlobBundle(session, username, inputs, opts = {}) {
@@ -579,14 +610,16 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
   // exactly as before, so legacy (no-admin-root) recipes are unchanged. The IRK
   // still signs the AuthCode (membership); the admin root only RIDES it, so a
   // compromised network/.com cannot swap the box's admin anchor in transit.
-  const acParts = [
-    TAG_AUTH_CODE, code.version, code.serial, code.username, code.serverName,
-    code.serverDomain, bytesToHex(code.delegatedPubKey), bytesToHex(code.userPubKey),
-    code.issuedAt, code.expiresAt,
-  ];
-  if (adminRootPubHex) acParts.push(`ar=${adminRootPubHex}`);
-  const acMsg = canonical(acParts);
+  const acMsg = authCodeCanonicalBytes(code, adminRootPubHex);
   const acSig = await signWithIrk(session.umk, acMsg);
+  // Adding a server is admin-only, and `.com` checks it: the admin root
+  // approves this AuthCode. A demo account pins none and signs nothing.
+  const acAdminSig = adminRootPubHex
+    ? await (opts.signWithAdminRoot ?? ksSignWithAdminRoot)(
+      session.adminRootSeed,
+      authCodeAdminCanonicalBytes(code, adminRootPubHex),
+    )
+    : null;
   // Absolute control-plane URL — a relative POST hits the webapp origin
   // (web.<apex>, GET/HEAD-only assets) and 405s. Matches the claim call above
   // and the sibling controlApex() calls in this file.
@@ -603,9 +636,11 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
         ...(adminRootPubHex ? { adminRootPubKey: adminRootPubHex } : {}),
       },
       signature: bytesToHex(acSig),
+      ...(acAdminSig ? { adminSignature: bytesToHex(acAdminSig) } : {}),
     }),
   });
   if (!issueResp.ok) {
+    await throwIfAddServerRefused(issueResp);
     await throwIfRateLimited(issueResp);
     throw new Error(`auth-code/issue failed (${issueResp.status})`);
   }
@@ -626,7 +661,10 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
       signature: bytesToHex(rckRegSig),
     }),
   });
-  if (!rckResp.ok) throw new Error(`RCK register failed (${rckResp.status})`);
+  if (!rckResp.ok) {
+    await throwIfAddServerRefused(rckResp);
+    throw new Error(`RCK register failed (${rckResp.status})`);
+  }
 
   // v2: blob.issuedAt + blob.expiresAt dropped. The authCode's own
   // expiresAt is the sole TTL on the recipe (gated by .com at
@@ -710,7 +748,8 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
       archiveId: inputs.restore.archiveId,
       bytes: inputs.restore.bytes,
       sha256: inputs.restore.sha256,
-      sign: (bytes) => signWithIrk(session.umk, bytes),
+      // An admin-pinned box takes a restore order only from the admin root.
+      sign: (bytes) => sensitiveSigner()(session.umk, bytes),
     });
   }
 

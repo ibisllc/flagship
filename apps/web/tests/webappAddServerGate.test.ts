@@ -169,3 +169,117 @@ describe("every way into a flow that adds a server", () => {
     expect(js.indexOf("refuseAddServer({ home: true })")).toBeLessThan(js.indexOf("enterTransferClaim(offer)"));
   });
 });
+
+// `.com` enforces the rule too (owner rule 2026-10-16): the issue carries the
+// admin root's approval of the AuthCode, which test-vectors/add-server pins.
+describe("what `.com` checks", () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const V = JSON.parse(
+    readFileSync(resolve(__dirname, "../../../packages/protocol/test-vectors/add-server/vectors.json"), "utf8"),
+  ) as any;
+  const fromHex = (h: string) => Uint8Array.from(Buffer.from(h, "hex"));
+  const text = (b: Uint8Array) => new TextDecoder().decode(b);
+  const codeOf = (f: Record<string, unknown>) => ({
+    ...f,
+    delegatedPubKey: fromHex(f.delegatedPubKey as string),
+    userPubKey: fromHex(f.userPubKey as string),
+  });
+
+  it("builds the vectors' AuthCode and admin forms, and signs the pinned approval", async () => {
+    const { authCodeCanonicalBytes, authCodeAdminCanonicalBytes } = await import(
+      "../public/webapp/views/create-server.js"
+    );
+    const ks = await import("../public/webapp/keystore.js");
+    const { ed } = await import("@flagship/protocol");
+    const f = V.authCode.fields;
+    const c = codeOf(f);
+    expect(text(authCodeCanonicalBytes(c, f.adminRootPubKey))).toBe(V.authCode.canonical);
+    const adminBytes = authCodeAdminCanonicalBytes(c, f.adminRootPubKey);
+    expect(text(adminBytes)).toBe(V.authCode.adminCanonical);
+    const seed = fromHex(V.keys.adminRootSeedHex);
+    expect(await ks.adminRootPubHex(seed)).toBe(V.keys.adminRootPubHex);
+    expect(Buffer.from(await ks.signWithAdminRoot(seed, adminBytes)).toString("hex")).toBe(V.authCode.adminSignatureHex);
+    for (const r of V.reject) {
+      expect(ed.verify(fromHex(r.signatureHex), adminBytes, fromHex(V.keys.adminRootPubHex)), r.why).toBe(false);
+    }
+    const w = V.wrongRoot.fields;
+    expect(text(authCodeAdminCanonicalBytes(codeOf(w), w.adminRootPubKey))).toBe(V.wrongRoot.adminCanonical);
+    for (const r of V.refuse) expect(() => authCodeAdminCanonicalBytes(codeOf(r.fields), undefined), r.why).toThrow();
+  });
+
+  it("the restore order and the RCK sign under the admin root", async () => {
+    const { SENSITIVE_TAGS } = await import("../public/webapp/lib/adminRoot.js");
+    expect(SENSITIVE_TAGS.has("flagship/server-restore/v1")).toBe(true);
+    expect(SENSITIVE_TAGS.has("flagship/rck-register/v1")).toBe(true);
+    const { serverRestoreCanonicalBytes } = await import("../public/webapp/lib/serverBackupFormat.js");
+    expect(text(serverRestoreCanonicalBytes(V.restore.order))).toBe(V.restore.canonical);
+  });
+
+  describe("minting", () => {
+    const fetchSpy = vi.fn();
+    beforeEach(() => {
+      fetchSpy.mockReset();
+      vi.stubGlobal("fetch", fetchSpy);
+    });
+    afterEach(() => vi.unstubAllGlobals());
+
+    it("the issue carries the admin root's approval of the AuthCode it pins", async () => {
+      const ks = await import("../public/webapp/keystore.js");
+      const { ed } = await import("@flagship/protocol");
+      const { authCodeAdminCanonicalBytes } = await import("../public/webapp/views/create-server.js");
+      const seed = new Uint8Array(32).fill(9);
+      const pub = await ks.adminRootPubHex(seed);
+      let issued: { code: Record<string, unknown>; adminSignature?: string } | null = null;
+      fetchSpy.mockImplementation(async (url: string, init: { body: string }) => {
+        if (String(url).endsWith("/api/auth-code/issue")) issued = JSON.parse(init.body);
+        return { ok: false, status: 500, text: async () => "stop here", json: async () => ({}) };
+      });
+      const session = { ...nonAdminSession(), adminRootSeed: seed };
+      await expect(mintInstallBlobBundle(session, "harry", INPUTS, { skipClaim: true })).rejects.toThrow();
+      const sent = issued as unknown as { code: Record<string, unknown>; adminSignature?: string };
+      expect(sent.code.adminRootPubKey).toBe(pub);
+      const bytes = authCodeAdminCanonicalBytes(codeOf(sent.code), pub);
+      expect(ed.verify(fromHex(sent.adminSignature!), bytes, fromHex(pub))).toBe(true);
+    });
+
+    it("`.com`'s refusal reads as the apps' sentence", async () => {
+      const refusal = JSON.stringify({ error: ADD_SERVERS_ADMIN_ONLY, code: "add-server-admin-only" });
+      fetchSpy.mockImplementation(async () => ({
+        ok: false,
+        status: 403,
+        text: async () => refusal,
+        json: async () => JSON.parse(refusal),
+      }));
+      const session = { ...nonAdminSession(), adminRootSeed: new Uint8Array(32).fill(9) };
+      const e = await mintInstallBlobBundle(session, "harry", INPUTS, { skipClaim: true }).catch((x) => x);
+      expect(e).toBeInstanceOf(AddServerRefusedError);
+      expect(humanError(e)).toBe(ADD_SERVERS_ADMIN_ONLY);
+    });
+  });
+
+  it("a take-over refused by `.com` reads as the same sentence", async () => {
+    const { submitTransferClaim } = await import("../public/webapp/lib/serverTransfer.js");
+    const refusal = { error: ADD_SERVERS_ADMIN_ONLY, code: "add-server-admin-only" };
+    const offer = {
+      kind: "flagship-transfer-offer",
+      serverDomain: "home.alice.flagship.services",
+      transferNonce: "ab".repeat(32),
+      issuedAt: 1,
+      expiresAt: Date.now() + 60_000,
+      giverIrkPub: "cd".repeat(32),
+      offerSignature: "00".repeat(64),
+    };
+    const e = await submitTransferClaim(
+      {
+        offer,
+        acquirerUsername: "harry",
+        umk: new Uint8Array(32),
+        acquirerIrkPubHex: "ef".repeat(32),
+        acquirerAdminRootPubHex: "12".repeat(32),
+        signWithIrk: async () => new Uint8Array(64),
+      },
+      { fetch: async () => ({ ok: false, status: 403, json: async () => refusal }), origin: "https://x" },
+    ).catch((x: unknown) => x);
+    expect(e).toBeInstanceOf(AddServerRefusedError);
+  });
+});

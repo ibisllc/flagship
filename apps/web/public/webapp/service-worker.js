@@ -259,7 +259,11 @@
 //       hardware"); Activity names a damaged settings file the server
 //       locked down (server.state.corrupt), and failed or warning rows get
 //       the warning card and a ⚠️ when their kind is unknown.
-const SHELL_VERSION = "v115";
+//  v116: `.com` enforces adding a server as admin-only: the create flow
+//       sends the admin root's approval of the AuthCode, the RCK and a
+//       restore order sign under the admin root, and `.com`'s refusal
+//       (code add-server-admin-only) reads as the apps' sentence.
+const SHELL_VERSION = "v116";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
