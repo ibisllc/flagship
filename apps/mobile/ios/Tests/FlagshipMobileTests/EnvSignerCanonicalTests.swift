@@ -2,34 +2,26 @@ import XCTest
 import FlagshipAPI
 import FlagshipUI
 
-/// Pins the SetServiceEnv canonical bytes to the SAME cross-surface vector the
-/// webapp (`canonicalSetServiceEnv` in service-env.js), Android
-/// (`EnvSignerCanonicalTest`), and `@flagship/protocol` produce. The daemon
-/// re-derives these bytes to verify the owner-IRK signature, so any drift in
-/// field order, the `|` separator, key sorting, the `key=value` pair shape, or
-/// the pair-count / issuedAt stringification would break live service-env
-/// writes. The previous production signer returned 128 zeros.
+/// The env-change signer signs exactly `ServiceEnvChange.canonicalBytes()`
+/// (flagship/service-env-change/v1; the bytes themselves are pinned to the
+/// shared vectors in FlagshipSharedTests/ServiceEnvChangeVectorTests). The
+/// daemon re-derives these bytes to verify the owner-IRK signature.
 final class EnvSignerCanonicalTests: XCTestCase {
-    func testCanonicalBytesMatchCrossSurfaceVector() {
-        let env = ServiceEnvSetEnvelope(
-            serverId: "srv1",
-            creator: "alice",
-            slug: "blog",
-            // Unsorted insertion order to prove keys are sorted.
-            env: ["B": "2", "A": "1"],
-            issuedAt: 1700000000
-        )
-        let expected = "flagship/set-service-env/v1|srv1|alice|blog|2|A=1|B=2|1700000000"
-        XCTAssertEqual(String(data: canonicalSetServiceEnv(env), encoding: .utf8), expected)
-    }
-
-    func testEmptyEnvHasZeroPairCount() {
-        let env = ServiceEnvSetEnvelope(
-            serverId: "s", creator: "c", slug: "g", env: [:], issuedAt: 42
+    func testCanonicalBytesNameTheOneVariable() throws {
+        let change = ServiceEnvChange(
+            serverId: "srv1", serviceId: "alice--blog", op: "unset", name: "API_KEY",
+            valueSha256: "", issuedAt: 1700000000, nonce: String(repeating: "ab", count: 16)
         )
         XCTAssertEqual(
-            String(data: canonicalSetServiceEnv(env), encoding: .utf8),
-            "flagship/set-service-env/v1|s|c|g|0|42"
+            String(data: try change.canonicalBytes(), encoding: .utf8),
+            "flagship/service-env-change/v1|srv1|alice--blog|unset|API_KEY||1700000000|" + String(repeating: "ab", count: 16)
         )
+    }
+
+    func testASetSignsTheValuesHashNotTheValue() throws {
+        let change = ServiceEnvChange.make(serverId: "srv1", serviceId: "alice--blog", set: "API_KEY", value: "s|cret")
+        let text = String(data: try change.canonicalBytes(), encoding: .utf8) ?? ""
+        XCTAssertFalse(text.contains("s|cret"))
+        XCTAssertTrue(text.contains(ServiceEnvChange.valueSha256("s|cret")))
     }
 }

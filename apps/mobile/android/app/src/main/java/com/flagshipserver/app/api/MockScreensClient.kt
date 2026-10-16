@@ -725,16 +725,38 @@ class MockScreensClient(
         )
     }
 
+    /** Nonces the mock box has spent: a replayed change is refused, as on a box. */
+    private val spentEnvNonces = mutableSetOf<String>()
+
+    /** Every env change the mock box took, in order (gym and test assertions). */
+    val envChanges = mutableListOf<ServiceEnvChange>()
+
+    /** The box's checks on one signed change (signatures aside: the mock holds
+     *  no IRK pub): the route's app and op, a well-formed change, the value's
+     *  hash, and a nonce not spent before. Same refusal words as the box. */
+    private fun acceptEnvChange(appId: String, op: String, c: ServiceEnvChange, value: String?) {
+        fun refuse(reason: String): Nothing = throw ScreensError.Http(400, """{"error":"$reason"}""")
+        if (c.serviceId != appId) refuse("the change names another app")
+        if (c.op != op) refuse("the change is not an $op")
+        runCatching { c.canonicalBytes() }.getOrElse { refuse("malformed env change") }
+        if (op == "set" && ServiceEnvChange.valueSha256(value ?: "") != c.valueSha256) {
+            refuse("the value doesn't match the signed change")
+        }
+        if (!spentEnvNonces.add(c.nonce)) refuse("this change was already applied")
+        envChanges.add(c)
+    }
+
     override suspend fun serviceEnvSet(appId: String, req: ServiceEnvSetRequest): ServiceEnvOpResponse {
         tick()
-        val set = mockEnvNames.getOrPut(appId) { mutableSetOf() }
-        set.add(req.name)
+        acceptEnvChange(appId, "set", req.change, req.value)
+        mockEnvNames.getOrPut(appId) { mutableSetOf() }.add(req.change.name)
         return ServiceEnvOpResponse(ok = true)
     }
 
     override suspend fun serviceEnvUnset(appId: String, req: ServiceEnvUnsetRequest): ServiceEnvOpResponse {
         tick()
-        mockEnvNames[appId]?.remove(req.name)
+        acceptEnvChange(appId, "unset", req.change, null)
+        mockEnvNames[appId]?.remove(req.change.name)
         return ServiceEnvOpResponse(ok = true)
     }
 

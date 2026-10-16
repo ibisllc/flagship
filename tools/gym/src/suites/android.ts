@@ -431,6 +431,23 @@ const O = `${PKG}.GymOctoberTest#`;
 
 const OCTOBER: readonly Scenario[] = [
   androidTotal(
+    "android-oct-service-env",
+    "D6: Configure environment on Plants: a name the box can't take is refused in the dialog; saving PLANT_TOKEN keeps WEATHER_API_KEY; removing WEATHER_API_KEY leaves PLANT_TOKEN. Each is one signed service-env-change the mock box checks (app, op, value hash, nonce spent once).",
+    O + "serviceEnvSetsAndRemovesOneVariable",
+    {
+      steps: [
+        { kind: "tap", describe: "Plants → Configure environment.", handle: "service-detail-env-row" },
+        { kind: "tap", describe: "Save a bad name, then PLANT_TOKEN; remove WEATHER_API_KEY.", handle: "service-env-save-btn" },
+      ],
+      assertions: [
+        { describe: "New variable listed", handle: "service-env-row-PLANT_TOKEN", expect: "present" },
+        { describe: "Removed variable gone", handle: "service-env-row-WEATHER_API_KEY", expect: "absent" },
+      ],
+      screenshots: [shot("service-env-saved", "Both variables."), shot("service-env-removed", "Only the new one.")],
+      dimension: "D6",
+    },
+  ),
+  androidTotal(
     "android-oct-access-list-service-page",
     "D6: Plants' Internet access section answers a waiting host; the request leaves the page.",
     O + "serviceAccessPendingAllow",

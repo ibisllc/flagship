@@ -64,6 +64,52 @@ final class GymOctoberTests: XCTestCase {
 
     private func label(_ el: XCUIElement) -> String { el.label }
 
+    // ─── Configure environment: one signed change per variable ──────────────
+
+    /// Plants' Configure environment: a name the box can't take is refused
+    /// before signing; saving a variable keeps the one already there; removing
+    /// that one leaves the new one. Each save and remove is one signed
+    /// service-env-change the mock box checks like a box (app, op, value hash,
+    /// a nonce spent once), so a refusal would show on the screen.
+    func test_serviceEnvSetsAndRemovesOneVariable() throws {
+        let app = launch(tab: "apps")
+        openPlants(app)
+        let more = app.buttons["service-detail-more-menu"]
+        XCTAssertTrue(more.waitForExistence(timeout: 15), "Plants' page has its More menu.")
+        more.tap()
+        let item = app.buttons["service-detail-env-menu-item"]
+        XCTAssertTrue(item.waitForExistence(timeout: 10), "The menu offers Configure environment.")
+        item.tap()
+        let weather = app.staticTexts["service-env-row-WEATHER_API_KEY"]
+        XCTAssertTrue(weather.waitForExistence(timeout: 15), "The variable already set on Plants is listed.")
+
+        app.buttons["service-env-add-btn"].tap()
+        let name = app.textFields["service-env-name-field"]
+        XCTAssertTrue(name.waitForExistence(timeout: 10))
+        name.tap()
+        name.typeText("plant-token")
+        let value = app.secureTextFields["service-env-value-field"]
+        value.tap()
+        value.typeText("tok-gym-1")
+        app.buttons["service-env-save-btn"].tap()
+        let bad = app.staticTexts["Use letters, digits and _ only, not starting with a digit (like API_KEY)."]
+        XCTAssertTrue(bad.waitForExistence(timeout: 10), "A name the box can't take is refused on the phone.")
+
+        name.tap()
+        name.buttons["Clear text"].firstMatch.tap()
+        name.typeText("PLANT_TOKEN")
+        app.buttons["service-env-save-btn"].tap()
+        let token = app.staticTexts["service-env-row-PLANT_TOKEN"]
+        XCTAssertTrue(token.waitForExistence(timeout: 15), "The saved variable is listed.")
+        XCTAssertTrue(weather.exists, "Saving a second variable keeps the first.")
+        gymShot(app, "service-env-saved")
+
+        app.buttons["service-env-remove-WEATHER_API_KEY"].tap()
+        XCTAssertTrue(weather.waitForNonExistence(timeout: 15), "Remove takes away just that variable.")
+        XCTAssertTrue(token.exists, "The other variable stays.")
+        gymShot(app, "service-env-removed")
+    }
+
     // ─── App access requests: the app-wide sheet ─────────────────────────────
 
     /// The box has two hosts waiting for Plants. The sheet asks about each in

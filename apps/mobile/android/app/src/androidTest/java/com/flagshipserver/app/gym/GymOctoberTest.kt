@@ -27,6 +27,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.test.espresso.Espresso
 import org.junit.Assert.assertEquals
@@ -68,6 +69,44 @@ class GymOctoberTest : GymBase() {
         waitUntilTextExists("Living-room mini-PC", timeoutMs = 20_000)
         composeRule.onNodeWithText("Living-room mini-PC").performScrollTo().performClick()
         composeRule.waitForIdle()
+    }
+
+    // ─── Configure environment: one signed change per variable ──────────────
+
+    /** Plants' Configure environment: a name the box can't take is refused in
+     *  the dialog; saving PLANT_TOKEN keeps WEATHER_API_KEY; removing
+     *  WEATHER_API_KEY leaves PLANT_TOKEN. Each is one signed
+     *  service-env-change the mock box checks (app, op, value hash, nonce
+     *  spent once), so a refusal would show on the screen. Twin of iOS
+     *  test_serviceEnvSetsAndRemovesOneVariable. */
+    @Test
+    fun serviceEnvSetsAndRemovesOneVariable() {
+        openPlants()
+        waitUntilExists("service-detail-env-row", timeoutMs = 20_000)
+        composeRule.onNodeWithTag("service-detail-env-row").performScrollTo().performClick()
+        waitUntilExists("service-env-row-WEATHER_API_KEY", timeoutMs = 15_000)
+
+        composeRule.onNodeWithTag("service-env-add-btn").performScrollTo().performClick()
+        waitUntilExists("service-env-name-field")
+        composeRule.onNodeWithTag("service-env-name-field").performTextInput("plant-token")
+        composeRule.onNodeWithTag("service-env-value-field").performTextInput("tok-gym-1")
+        composeRule.onNodeWithTag("service-env-save-btn").performClick()
+        waitUntilExists("service-env-name-error")
+        assertTrue(
+            textOf("service-env-name-error").startsWith("Use letters, digits and _ only"),
+        )
+
+        composeRule.onNodeWithTag("service-env-name-field").performTextClearance()
+        composeRule.onNodeWithTag("service-env-name-field").performTextInput("PLANT_TOKEN")
+        composeRule.onNodeWithTag("service-env-save-btn").performClick()
+        waitUntilExists("service-env-row-PLANT_TOKEN", timeoutMs = 15_000)
+        assertEquals("Saving a second variable keeps the first", 1, count("service-env-row-WEATHER_API_KEY"))
+        gymShot("service-env-saved")
+
+        composeRule.onNodeWithTag("service-env-remove-WEATHER_API_KEY", useUnmergedTree = true).performScrollTo().performClick()
+        composeRule.waitUntil(15_000) { count("service-env-row-WEATHER_API_KEY") == 0 }
+        assertEquals("The other variable stays", 1, count("service-env-row-PLANT_TOKEN"))
+        gymShot("service-env-removed")
     }
 
     // ─── App access list on the service page ─────────────────────────────────

@@ -3,24 +3,15 @@ import FlagshipAPI
 import FlagshipCore
 import Flagship
 
-/// W10 — environment key for the SetServiceEnvRequest envelope signer.
-///
-/// Production wires this to the platform Keystore (`deriveIRK` →
-/// `signature(for: canonicalBytes)`), with the canonical-bytes shape
-/// mirroring `@flagship/protocol/auth.ts` signSetServiceEnv:
-///
-///     "flagship/set-service-env/v1"
-///         | serverId
-///         | creator
-///         | slug
-///         | <pairCount>
-///         | <sortedKey>=<value>...
-///         | issuedAt
+/// W10 — environment key for the env-change signer: the owner IRK signs one
+/// `ServiceEnvChange` (flagship/service-env-change/v1, canonical bytes in
+/// FlagshipAPI `ServiceEnvChange.canonicalBytes()`), which names the one
+/// variable it sets or unsets and a nonce the box spends once.
 ///
 /// Previews + tests inject a stub that returns a fixed hex string —
 /// the daemon rejects the signature on a mismatch, which is the
 /// correct behavior for offline preview surfaces.
-public typealias VibeCodeEnvelopeSigner = @MainActor (ServiceEnvSetEnvelope) async throws -> String
+public typealias VibeCodeEnvelopeSigner = @MainActor (ServiceEnvChange) async throws -> String
 
 private struct VibeCodeEnvelopeSignerKey: EnvironmentKey {
     // `EnvironmentKey.defaultValue` is a `nonisolated` protocol requirement,
@@ -45,32 +36,15 @@ public extension EnvironmentValues {
     }
 }
 
-/// Canonical bytes for a `SetServiceEnvRequest`, byte-identical to the webapp's
-/// `canonicalSetServiceEnv` and `@flagship/protocol/auth.ts` `signSetServiceEnv`.
-/// Keys sorted; pairs `key=value`; `|` separator. The daemon re-derives these
-/// to verify the owner-IRK signature, so the layout must match exactly.
-public func canonicalSetServiceEnv(_ envelope: ServiceEnvSetEnvelope) -> Data {
-    let pairs = envelope.env.keys.sorted().map { "\($0)=\(envelope.env[$0] ?? "")" }
-    var parts = [
-        "flagship/set-service-env/v1",
-        envelope.serverId,
-        envelope.creator,
-        envelope.slug,
-        String(pairs.count),
-    ]
-    parts.append(contentsOf: pairs)
-    parts.append(String(envelope.issuedAt))
-    return Data(parts.joined(separator: "|").utf8)
-}
-
 /// Production signer: derive the owner IRK from the Keystore and sign the
 /// canonical bytes. Bound at the app root via
 /// `.environment(\.vibeCodeEnvelopeSigner, keystoreVibeCodeEnvelopeSigner())`.
 /// Replaces the 128-zero placeholder the daemon always rejected.
 @MainActor public func keystoreVibeCodeEnvelopeSigner() -> VibeCodeEnvelopeSigner {
-    return { envelope in
+    return { change in
+        let bytes = try change.canonicalBytes()
         let irk = try await Keystore.deriveIRK(reason: "Sign service configuration")
-        let sig = try irk.signature(for: canonicalSetServiceEnv(envelope))
+        let sig = try irk.signature(for: bytes)
         return HexUtil.encode(sig)
     }
 }

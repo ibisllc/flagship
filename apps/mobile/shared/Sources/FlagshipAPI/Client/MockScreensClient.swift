@@ -1045,17 +1045,42 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         try await tick()
         return ServiceEnvListResponse(names: (mockEnvNames[appId] ?? []).sorted())
     }
+    /// Nonces the mock box has spent: a replayed change is refused, as on a box.
+    private var spentEnvNonces: Set<String> = []
+    /// Every env change the mock box took, in order (gym and test assertions).
+    public private(set) var envChanges: [ServiceEnvChange] = []
+
+    /// The box's checks on one signed change (signatures aside: the mock holds
+    /// no IRK pub): the route's app and op, a well-formed change, the value's
+    /// hash, and a nonce not spent before. Same refusal words as the box.
+    private func acceptEnvChange(appId: String, op: String, _ c: ServiceEnvChange, value: String?) throws {
+        func refuse(_ reason: String) -> ScreensClientError {
+            .http(status: 400, message: #"{"error":"\#(reason)"}"#)
+        }
+        guard c.serviceId == appId else { throw refuse("the change names another app") }
+        guard c.op == op else { throw refuse("the change is not an \(op)") }
+        guard (try? c.canonicalBytes()) != nil else { throw refuse("malformed env change") }
+        if op == "set", ServiceEnvChange.valueSha256(value ?? "") != c.valueSha256 {
+            throw refuse("the value doesn't match the signed change")
+        }
+        guard !spentEnvNonces.contains(c.nonce) else { throw refuse("this change was already applied") }
+        spentEnvNonces.insert(c.nonce)
+        envChanges.append(c)
+    }
+
     public func serviceEnvSet(appId: String, _ req: ServiceEnvSetRequest) async throws -> ServiceEnvOpResponse {
         try await tick()
+        try acceptEnvChange(appId: appId, op: "set", req.change, value: req.value)
         var names = Set(mockEnvNames[appId] ?? [])
-        names.insert(req.name)
+        names.insert(req.change.name)
         mockEnvNames[appId] = Array(names).sorted()
         return ServiceEnvOpResponse(ok: true)
     }
     public func serviceEnvUnset(appId: String, _ req: ServiceEnvUnsetRequest) async throws -> ServiceEnvOpResponse {
         try await tick()
+        try acceptEnvChange(appId: appId, op: "unset", req.change, value: nil)
         var names = Set(mockEnvNames[appId] ?? [])
-        names.remove(req.name)
+        names.remove(req.change.name)
         mockEnvNames[appId] = Array(names).sorted()
         return ServiceEnvOpResponse(ok: true)
     }
