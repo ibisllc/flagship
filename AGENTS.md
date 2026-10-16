@@ -243,8 +243,10 @@ of the last check here: **not yet checked**.
 - **Per-app disk limits (2026-10-16, `appQuota/`, docs/app-runtimes.md §5.3).**
   Hold each app to its share of the backup policy's limit: a files folder is
   its own sparse ext4 image (ENOSPC for that app only; a lower limit is a
-  preallocated ballast), a database at its budget loses INSERT/UPDATE until
-  it's back under, a 90 % disk brake applies with no policy. server-detail
+  preallocated ballast), a database at its budget loses INSERT/UPDATE (and
+  lo_* writes) until it's back under, app roles have connection/timeout/
+  temp-file limits, orphaned images are set aside a day, deleted a week
+  later, and a 90 % disk brake applies with no policy. server-detail
   and app-detail carry `storage`; a full app is Activity `app.storage.full`
   + `app-storage-full` phone alert + content-free push. Tested on a real
   Postgres 18 and real loop images on a Debian 13 VM (CI runs both). Needs

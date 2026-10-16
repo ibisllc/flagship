@@ -182,9 +182,18 @@ volume bound to a folder inside a sparse ext4 image, loop-mounted by the box
 - An older plain volume is moved into an image (`cp -a`, labels kept) the
   next time its app starts with nothing holding it (if that fails, it stays
   plain and the app still starts); an image whose volume went missing is
-  bound again, never replaced by an empty folder. Uninstall and self-delete
-  drop the images. Backups, copies and archives mount the volume
-  as before, so the image and its ballast never travel.
+  bound again, never replaced by an empty folder (a move cut short after
+  the old volume went fails that start rather than let Docker make an empty
+  volume). Uninstall and self-delete drop the images. Backups, copies and
+  archives mount the volume as before, so the image and its ballast never
+  travel.
+- Orphans: once a day (first after the installed apps are back at boot), an
+  image with no Docker volume, no installed app naming it, no `<volume>.pending`
+  mark (written while an image is made or a plain volume is moved, cleared
+  when its volume is bound) and unchanged for a day is unmounted and moved to
+  `/var/lib/flagship-files/orphaned/<volume>.<ms>.img`; nothing is deleted on
+  that pass, and moving it back restores it. Set-aside images are deleted a
+  week later. Nothing happens while Docker doesn't answer.
 - `FLAGSHIP_FILES_QUOTA=0` keeps plain volumes (no limit of their own).
 
 **Postgres: writes revoked at the limit** (`appQuota/pgQuota.ts`). Postgres
@@ -206,7 +215,21 @@ that grows by more than 64 MiB (or 10 %) past where it was blocked is
 stopped (NOLOGIN, its sessions ended) until it's back under. The box's own
 work runs as the admin and is never affected (backups, the owner's signed
 database writes, copies, staging seeds); an app's own SQL migrations run as
-its role and fail while it's blocked. Large objects aren't covered.
+its role and fail while it's blocked.
+
+Large objects live in the database's own `pg_largeobject`, so its size
+counts them; writing one needs only EXECUTE on `lo_creat`, `lo_create`,
+`lo_from_bytea`, `lowrite` and `lo_put` (PUBLIC has it), so while blocked
+those are revoked in that database too (`lo_unlink` and `lo_truncate` stay,
+to make room) and given back with the rest.
+
+Role limits (`APP_ROLE_LIMITS`), set when a role is made and on older roles
+the first time the box sees them after a boot: `CONNECTION LIMIT 20`,
+`statement_timeout 30s`, `idle_in_transaction_session_timeout 60s` (defaults
+the app may change for itself) and `temp_file_limit 1GB` (superuser-set, so
+it can't). The box's own connections as the role lift the two timeouts: a
+migration is bounded by its own timeout instead (`PGOPTIONS` for psql, `SET`
+in `runAppSql`).
 
 **The box's own disk: a brake that applies whatever the policy (`none`
 included).** On the disk that holds Docker, Postgres and the images: at 90 %
@@ -237,12 +260,7 @@ clients don't show `storage` or the alert yet; per-app limits set by the
 owner; the live gym group `quota` (fill a gym app's folder and database on a
 real box, under gVisor) hasn't run yet.
 
-Other limits, unchanged:
-
-- `/tmp`: tmpfs, 64 MB.
-- Postgres, per app role (not built yet): `CONNECTION LIMIT 20`,
-  `statement_timeout 30s`, `idle_in_transaction_session_timeout 60s`,
-  `temp_file_limit 1GB`.
+`/tmp` stays a 64 MB tmpfs.
 
 ## 6. Builds
 
@@ -351,8 +369,8 @@ refused with "update this server first" (no compatibility needed yet).
 3. Install in a locked-down container; COPY-only assembly; bundle hashing.
 4. Copies send bundles (§8); runtime prefetch and pruning.
 5. **Built 2026-10-16**: disk quotas (§5.3): files images, database write
-   limits, the disk brake, staging and build limits. Postgres role limits
-   (connections, timeouts) still to do.
+   limits (large objects included), Postgres role limits, the disk brake,
+   staging and build limits, the orphaned-image sweep.
 6. Vetted packages (tier 2).
 7. Tier 3 behind an owner-signed import approval; marketplace review on
    `feat/marketplace`.
