@@ -409,6 +409,7 @@ test.describe("gym webapp apps", () => {
     // No admin root: no Remove app, and Runs on is locked.
     await expect(page.locator("#service-detail-remove-btn")).toHaveCount(0);
     await expect(page.locator("#sd-runs-on-card")).toContainText("Only an admin device can change where this app runs.");
+    await expect(page.locator("[data-remove-app-locked]")).toHaveText("Only an admin device can remove an app.");
     await page.click("#sd-access");
     await expect(page.locator("#sa-members-title")).toHaveText("Members (2)", { timeout: 10_000 });
 
@@ -716,6 +717,8 @@ test.describe("gym webapp apps", () => {
 
   test("gym apps internet access requests are allowed and denied with a signed access list", async ({ page }, testInfo) => {
     await reachHome(page);
+    // An admin-pinned box takes this order only under the admin root (lib/addServerGate.js canSignAdminOrders).
+    await asDevice(page, { admin: true });
     let list = "allow api.github.com\n";
     let pending = [
       { host: "api.openai.com", source: "attempt", attempts: 3, firstSeen: Date.now() - 60_000, lastSeen: Date.now() },
@@ -770,6 +773,8 @@ test.describe("gym webapp apps", () => {
 
   test("gym apps access list editor reviews a suggested list, flags bad lines and saves it signed", async ({ page }, testInfo) => {
     await reachHome(page);
+    // An admin-pinned box takes this order only under the admin root (lib/addServerGate.js canSignAdminOrders).
+    await asDevice(page, { admin: true });
     let list = "# Uncomment the following line to allow all hosts\n#allow all\n";
     const draftList = "allow api.stripe.com\nallow *.tiles.example.com\n";
     let draft: unknown = {
@@ -835,6 +840,8 @@ test.describe("gym webapp apps", () => {
 
   test("gym apps API key is created signed, its secret shown once, and a key revoked", async ({ page }, testInfo) => {
     await reachHome(page);
+    // An admin-pinned box takes this order only under the admin root (lib/addServerGate.js canSignAdminOrders).
+    await asDevice(page, { admin: true });
     const OLD = { keyId: "0123456789abcdef", label: "Old script", scope: "write", createdAt: Date.now() - 5 * 86_400_000, lastUsedAt: Date.now() - 3_600_000, expiresAt: 0 };
     let keys: Array<Record<string, unknown>> = [OLD];
     let secret = "";
@@ -913,6 +920,8 @@ test.describe("gym webapp apps", () => {
 
   test("gym apps database browses read-only and a write runs only after a signed confirm", async ({ page }, testInfo) => {
     await reachHome(page);
+    // An admin-pinned box takes this order only under the admin root (lib/addServerGate.js canSignAdminOrders).
+    await asDevice(page, { admin: true });
     const SQL = "UPDATE items SET done = true WHERE done IS NULL";
     const calls = await stub(page, [
       ...baseRules(appDetail(), { db: true }),
@@ -999,6 +1008,45 @@ test.describe("gym webapp apps", () => {
       await signedBy(page, ["flagship/app-db-write/v1", gr.serverDomain, gr.serviceId, gr.store, gr.sqlSha256, gr.issuedAt].join("|"), signed.signature),
     ).toBe(true);
     await shot(page, testInfo, "db-write-ran");
+  });
+
+  test("gym apps a non-admin device sees the admin-only app orders read-only, with the reason", async ({ page }, testInfo) => {
+    await reachHome(page);
+    await asDevice(page, { admin: false });
+    const list = "allow api.github.com\n";
+    const pending = [{ host: "api.openai.com", source: "attempt", attempts: 3, firstSeen: Date.now() - 60_000, lastSeen: Date.now() }];
+    const KEY = { keyId: "0123456789abcdef", label: "Old script", scope: "write", createdAt: Date.now() - 86_400_000, lastUsedAt: 0, expiresAt: 0 };
+    const calls = await stub(page, [
+      ...baseRules(appDetail({ rules: 1, pending: 1, draft: false }), { apiKeys: true, db: true }),
+      { method: "GET", match: on(HOME, svc("/access")), answer: () => ({ json: { access: { list, listSha256: sha256(list), pending, draft: null } } }) },
+      { method: "GET", match: on(HOME, svc("/api-keys")), answer: () => ({ json: { keys: [KEY] } }) },
+      { method: "GET", match: on(HOME, svc("/db")), answer: () => ({ json: { stores: [{ store: "default", tables: [{ name: "items", kind: "table", rows: 2, bytes: 16_384 }] }] } }) },
+      { method: "POST", match: on(HOME, svc("/db/default/query")), answer: () => ({ status: 400, json: { error: "this statement changes data", needsGrant: true } }) },
+    ]);
+    await openApp(page);
+    const section = page.locator("#sd-egress");
+    await expect(section.locator('[data-access-host="api.openai.com"]')).toBeVisible({ timeout: 10_000 });
+    await expect(section.locator("[data-access-act]")).toHaveCount(0);
+    await expect(section.locator("[data-access-locked]")).toHaveText("Only an admin device can change this app's internet access.");
+    const keys = page.locator("#sd-api-keys");
+    await expect(keys).toContainText("Old script", { timeout: 10_000 });
+    await expect(keys.locator("[data-api-key-revoke]")).toHaveCount(0);
+    await expect(page.locator("#sd-api-key-new")).toHaveCount(0);
+    await expect(keys.locator("[data-api-keys-locked]")).toHaveText("Only an admin device can create or revoke API keys.");
+    await expect(page.locator("[data-remove-app-locked]")).toHaveText("Only an admin device can remove an app.");
+    await shot(page, testInfo, "admin-only-read-only");
+
+    await page.click("#sd-db-open");
+    await page.click("#app-db-sql", { timeout: 10_000 });
+    await page.fill("#app-db-sql-text", "DELETE FROM items");
+    await page.click("#app-db-run");
+    await expect(page.locator("[data-db-write-refused]")).toContainText("Only an admin device can change this app's data.", { timeout: 10_000 });
+    await expect(page.locator("#app-db-confirm")).toHaveCount(0);
+    // Only the unsigned read-only run went out: nothing was signed or sent for the box to refuse.
+    const posts = calls.filter((c) => c.method === "POST" && c.url.host === HOME);
+    expect(posts.map((c) => c.url.pathname)).toEqual([svc("/db/default/query")]);
+    expect(posts[0]!.body.signature).toBeUndefined();
+    await shot(page, testInfo, "admin-only-db-write");
   });
 
   test("gym apps runs-on ticks a copy to another server and unticks it with a signed uninstall", async ({ page }, testInfo) => {

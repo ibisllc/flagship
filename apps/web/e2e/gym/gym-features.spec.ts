@@ -558,4 +558,26 @@ test.describe("gym webapp features", () => {
     await expect(page.locator('[data-section="promote-admin-warning"]')).toContainText(/full admin authority/i);
     await shot(page, testInfo, "promote-toggle-admin");
   });
+
+  test("gym total webapp settings joins another account from a pasted pairing link", async ({ page }, testInfo) => {
+    // As iOS/Android Settings → "Scan a pairing code": a signed-in browser joins
+    // another account from the link that account's device shows.
+    await routeAnyJson(page, "/api/users/smoketest/pods", { pods: [] });
+    await reachHome(page);
+    await page.click('[data-tab-target="settings"]');
+    await expect(page.locator("#view-settings-tab")).toBeVisible();
+    await page.click("#settings-tab-join-account");
+    const dlg = page.locator('dialog[aria-label="Scan a pairing code"]');
+    await expect(dlg).toBeVisible({ timeout: 10_000 });
+    await dlg.locator("[data-join-input]").fill("https://flagshipserver.com/share#s=1");
+    await dlg.locator("[data-join-continue]").click();
+    await expect(dlg.locator("[data-join-error]")).toContainText("That isn't a pairing link.");
+    await shot(page, testInfo, "join-another-refused");
+    await dlg.locator("[data-join-input]").fill("https://flagshipserver.com/join?sid=gymsid0123456789&pk=AAAA");
+    await dlg.locator("[data-join-continue]").click();
+    await expect(dlg).toHaveCount(0);
+    await expect(page.locator("#view-join")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("#join-sas")).toBeVisible();
+    await expect(page.locator("#join-status")).not.toContainText("no pairing link");
+  });
 });

@@ -1062,6 +1062,26 @@ const TOTAL: readonly Scenario[] = [
     },
   ),
 
+  webTotal(
+    "web-total-settings-join-another-account",
+    "Join another account while signed in (iOS settings-scan-pairing-code, Android 'Scan a pairing code'): Settings → Scan a pairing code takes a pasted /join link (or a scan where the browser can), refuses anything else in words, and opens the pairing screen for that link.",
+    "gym total webapp settings joins another account from a pasted pairing link",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Settings signed in." },
+        { kind: "tap", describe: "Scan a pairing code.", handle: "#settings-tab-join-account" },
+        { kind: "type", describe: "Paste a /share link, Continue: refused in words." },
+        { kind: "type", describe: "Paste a /join link, Continue: the pairing screen opens." },
+      ],
+      assertions: [
+        { describe: "Not a pairing link", handle: "[data-join-error]", expect: "text", text: "That isn't a pairing link." },
+        { describe: "Pairing screen", handle: "#view-join", expect: "present" },
+      ],
+      screenshots: [shot("join-another-refused", "A pasted link that isn't a pairing link.")],
+      dimension: "D6",
+    },
+  ),
+
   // ── Share this server (docs/share-a-server.md §8) — gym-share.spec.ts ──
   webTotal(
     "web-total-share-owner",
@@ -1212,7 +1232,7 @@ const TOTAL: readonly Scenario[] = [
       ],
       assertions: [
         { describe: "Standing-in subtitle", handle: "#servers-list", expect: "text", text: "standing in for media" },
-        { describe: "Newer-order toast", handle: "#toast", expect: "text", text: "Your server order changed on another device" },
+        { describe: "Newer-order toast", handle: "#toast", expect: "text", text: "Another device changed the order" },
         { describe: "Leader back on home", handle: "#servers-list [data-order-leader]", expect: "text", text: "Leader" },
       ],
       screenshots: [shot("order-standing-in", "Leader standing in for a down server."), shot("order-reverted", "The order put back after a 409.")],
@@ -1482,6 +1502,69 @@ const TOTAL: readonly Scenario[] = [
         shot("db-table", "A table page."),
         shot("db-needs-grant", "The write asks to confirm."),
         shot("db-write-ran", "The signed write ran."),
+      ],
+      dimension: "D6",
+    },
+  ),
+  webTotal(
+    "web-total-build-chat-long-transcript",
+    "A long build chat (iOS VibeTranscript / Jump to latest, Android VibeTranscript.kt): only the newest 40 messages show, with '… N earlier messages not shown', and each file block the AI wrote is one 'wrote <path> (n lines)' line; scrolled up, the polls keep the owner's place and Jump to latest shows; tapping it returns to the newest message.",
+    "gym inference a long build chat shows the newest messages and keeps the owner's place",
+    {
+      steps: [
+        { kind: "launch", describe: "Open a 45-message chat that is still generating." },
+        { kind: "assert", describe: "40 messages, the hidden-count line, file blocks collapsed." },
+        { kind: "tap", describe: "Scroll the transcript to the top; polls continue." },
+        { kind: "tap", describe: "Jump to latest.", handle: "#vc-jump-latest" },
+      ],
+      assertions: [
+        { describe: "Hidden count", handle: "[data-vc-hidden]", expect: "text", text: "… 5 earlier messages not shown" },
+        { describe: "Jump to latest after scrolling up", handle: "#vc-jump-latest", expect: "present" },
+      ],
+      screenshots: [shot("long-chat-scrolled-up", "Scrolled up while the AI works.")],
+      dimension: "D6",
+    },
+  ),
+  webTotal(
+    "web-total-share-app-database",
+    "Share this server with Can see app data (docs/share-a-server.md §5.5; iOS shared-app-database): the shared page offers each app's Database, which opens over the share session; at Can see (view) a writing statement gets 'Only someone who can manage this server…' instead of Confirm and run; Back returns to the shared page; Leave reads 'Leave this server' as on iOS.",
+    "gym share member opens an app's Database with Can see app data",
+    {
+      steps: [
+        { kind: "launch", describe: "Member Home with a share at view + Can see app data; open it." },
+        { kind: "tap", describe: "Database on notes.", handle: '[data-db-open="notes"]' },
+        { kind: "tap", describe: "Run SQL with a DELETE.", handle: "#app-db-run" },
+        { kind: "tap", describe: "Back twice.", handle: "#app-db-back" },
+      ],
+      assertions: [
+        { describe: "Tables over the share session", handle: '[data-db-table="items"]', expect: "present" },
+        { describe: "Write refused at view", handle: "[data-db-write-refused]", expect: "text", text: "Only someone who can manage this server can change its apps' data." },
+        { describe: "Leave wording", handle: "#shared-leave-btn", expect: "text", text: "Leave this server" },
+      ],
+      screenshots: [shot("shared-db-tables", "A shared app's tables.")],
+      dimension: "D6",
+    },
+  ),
+  webTotal(
+    "web-total-apps-admin-only-orders",
+    "Admin-only app orders (lib/addServerGate.js canSignAdminOrders; the box takes them only under the admin root): on a device without the admin root the app page shows waiting hosts with no Allow/Deny, API keys with no Create/Revoke, no Remove app, each with its one-line reason, and a writing SQL statement gets the reason instead of Confirm and run; nothing is signed or sent for the box to refuse.",
+    "gym apps a non-admin device sees the admin-only app orders read-only, with the reason",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach the app page as a device without the admin root; one waiting host, one API key, one table." },
+        { kind: "assert", describe: "Access, API keys and Remove app read-only with their reasons." },
+        { kind: "tap", describe: "Database → Run SQL → a DELETE.", handle: "#app-db-run" },
+        { kind: "assert", describe: "The write is refused in words, no Confirm and run." },
+      ],
+      assertions: [
+        { describe: "Access reason", handle: "[data-access-locked]", expect: "text", text: "Only an admin device can change this app's internet access." },
+        { describe: "API keys reason", handle: "[data-api-keys-locked]", expect: "text", text: "Only an admin device can create or revoke API keys." },
+        { describe: "Remove app reason", handle: "[data-remove-app-locked]", expect: "text", text: "Only an admin device can remove an app." },
+        { describe: "Database write reason", handle: "[data-db-write-refused]", expect: "text", text: "Only an admin device can change this app's data." },
+      ],
+      screenshots: [
+        shot("admin-only-read-only", "The app page on a non-admin device."),
+        shot("admin-only-db-write", "A write refused on a non-admin device."),
       ],
       dimension: "D6",
     },

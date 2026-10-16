@@ -320,4 +320,43 @@ test.describe("gym webapp share", () => {
     await page.evaluate(() => window.scrollTo(0, 0));
     await shot(page, testInfo, "member-server-page", { fullPage: true });
   });
+
+  test("gym share member opens an app's Database with Can see app data", async ({ page }, testInfo) => {
+    await reachHome(page);
+    const fx = await fixtures(page);
+    const me = { shareId: fx.alice.shareId, level: "view", unlockAtBoot: false, seeAppData: true, serverDomain: SHARED_BOX };
+    await stub(page, [
+      ["/api/share-inbox", (b) => ({ json: (b as { request: { op: string } }).request.op === "list" ? { entries: [{ entryId: fx.alice.entryId, ct: fx.alice.ct, createdAt: 1 }] } : { ok: true } })],
+      [`${SHARED_BOX}/api/shares/nonce`, { nonce: "11".repeat(32) }],
+      [`${SHARED_BOX}/api/shares/session`, { token: "fss_gym", expiresAt: Date.now() + 3_600_000, level: "view", unlockAtBoot: false, seeAppData: true }],
+      [`${SHARED_BOX}/api/shares/me`, me],
+      [`/api/server-shares/${fx.alice.shareId}`, { shareId: fx.alice.shareId, serverDomain: SHARED_BOX, state: "accepted", offer: fx.alice.offer, unlock: false }],
+      [`${SHARED_BOX}/api/screens/server-detail`, serverDetail(SHARED_BOX, "alice")],
+      [`${SHARED_BOX}/api/screens/apps-list`, APPS],
+      [`${SHARED_BOX}/api/screens/server-metrics`, METRICS],
+      [`${SHARED_BOX}/api/screens/services/notes/db/default/query`, () => ({ status: 400, json: { error: "this statement changes data", needsGrant: true } })],
+      [`${SHARED_BOX}/api/screens/services/notes/db`, { stores: [{ store: "default", tables: [{ name: "items", kind: "table", rows: 2, bytes: 16_384 }] }] }],
+      ["/api/users/smoketest/pods", { pods: [] }],
+    ]);
+    await page.evaluate(async () => {
+      const { renderHome } = await import("/views/home.js");
+      await renderHome();
+    });
+    await page.locator("#shared-with-me [data-open-share]", { hasText: "home" }).click({ position: { x: 20, y: 20 } });
+    await expect(page.locator("#view-shared-server")).toBeVisible();
+    await expect(page.locator("#shared-leave-btn")).toHaveText("Leave this server", { timeout: 10_000 });
+    await expect(page.locator('[data-access-open="notes"]')).toHaveCount(0);
+    await page.locator('[data-db-open="notes"]').click();
+    await expect(page.locator("#view-app-db")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('[data-db-table="items"]')).toContainText("~2 rows", { timeout: 10_000 });
+    await shot(page, testInfo, "shared-db-tables");
+    await page.click("#app-db-sql");
+    await page.fill("#app-db-sql-text", "DELETE FROM items");
+    await page.click("#app-db-run");
+    await expect(page.locator("[data-db-write-refused]")).toContainText("Only someone who can manage this server can change its apps' data.", { timeout: 10_000 });
+    await expect(page.locator("#app-db-confirm")).toHaveCount(0);
+    await page.click("#app-db-back");
+    await page.click("#app-db-back");
+    await expect(page.locator("#view-shared-server")).toBeVisible({ timeout: 10_000 });
+  });
 });

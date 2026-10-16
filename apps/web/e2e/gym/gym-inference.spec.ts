@@ -602,4 +602,42 @@ test.describe("gym webapp inference", () => {
     expect(probes.some((s) => s.host === OFFICE)).toBe(true);
     await shot(page, testInfo, "notification-chat-found");
   });
+
+  test("gym inference a long build chat shows the newest messages and keeps the owner's place", async ({ page }, testInfo) => {
+    await reachHome(page);
+    await page.evaluate(async (office) => {
+      (await import("/lib/api.js")).setSessionTokenForPod(office, "gym-office-session-token");
+    }, OFFICE);
+    let polls = 0;
+    const messages = Array.from({ length: 45 }, (_, i) =>
+      i % 2
+        ? { role: "assistant", text: `Step ${i}.\n=== src/step${i}.js ===\nline a\nline b\nline c\n=== END ===` }
+        : { role: "user", text: `Ask ${i}` },
+    );
+    const LONG = { ...ENV_STATE, status: "generating", pendingRequest: null, messages };
+    await stub(page, [
+      ...officeRules(() => {}).filter(([needle]) => needle !== "/api/screens/llm/sessions/gym-sess-9"),
+      ["/api/screens/llm/sessions/gym-sess-9", (_b, url) => (url.host === OFFICE ? (polls++, ok(LONG)) : null)],
+    ]);
+    await openFromLink(page, `view=vibecode-chat&sessionId=gym-sess-9&server=${OFFICE}`);
+    const log = page.locator("#vc-messages");
+    await expect(log.locator("[data-vc-hidden]")).toHaveText("… 5 earlier messages not shown", { timeout: 10_000 });
+    await expect(log.locator(".vc-msg")).toHaveCount(40);
+    await expect(log).toContainText("wrote src/step43.js (3 lines)");
+    await expect(log).not.toContainText("line b");
+    await expect(page.locator("#vc-jump-latest")).toBeHidden();
+    // Scroll up to read: the next polls leave the owner where they are.
+    await log.evaluate((el) => {
+      el.scrollTop = 0;
+      el.dispatchEvent(new Event("scroll"));
+    });
+    await expect(page.locator("#vc-jump-latest")).toBeVisible();
+    const before = polls;
+    await expect.poll(() => polls, { timeout: 10_000 }).toBeGreaterThan(before + 1);
+    expect(await log.evaluate((el) => el.scrollTop)).toBe(0);
+    await shot(page, testInfo, "long-chat-scrolled-up");
+    await page.click("#vc-jump-latest");
+    await expect(page.locator("#vc-jump-latest")).toBeHidden();
+    expect(await log.evaluate((el) => el.scrollTop + el.clientHeight >= el.scrollHeight - 48)).toBe(true);
+  });
 });
