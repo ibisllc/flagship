@@ -123,5 +123,8 @@ function sameIdentity(a: PhoneAlert, b: PhoneAlert): boolean {
     // in the same session is a genuinely new "the AI needs you" event.
     return a.toolUseId === b.toolUseId;
   }
+  if (a.kind === "app-storage-full" && b.kind === "app-storage-full") {
+    return a.store === b.store;
+  }
   return false;
 }

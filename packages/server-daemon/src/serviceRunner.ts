@@ -5,6 +5,7 @@ import { appSandboxRunArgs } from "./appSandbox/state.js";
 import { networkCreateArgs } from "./egress/networks.js";
 import { notifyContainersChanged, sandboxBuildArgs, sandboxRunArgs } from "./egress/sandboxNetworking.js";
 import { FILES_MOUNT, isFilesVolume } from "./dataLayer/naming.js";
+import type { BuildDiskWatch } from "./appQuota/buildGuard.js";
 
 export interface AppSpec {
   serviceId: string;
@@ -28,6 +29,22 @@ export interface AppSpec {
   filesVolume?: string;
 }
 
+/**
+ * Called before any app or staging container mounts its files volume: the
+ * box mounts the volume's disk image (appQuota/loopVolumes.ts), or moves an
+ * older plain volume into one. Unset in tests and tools.
+ */
+let filesVolumeGuard: ((volume: string) => Promise<unknown>) | null = null;
+export function setFilesVolumeGuard(guard: ((volume: string) => Promise<unknown>) | null): void {
+  filesVolumeGuard = guard;
+}
+
+/** Watches the disk while a `docker build` runs (appQuota/buildGuard.ts). Unset in tests and tools. */
+let buildDiskWatch: BuildDiskWatch | null = null;
+export function setBuildDiskWatch(watch: BuildDiskWatch | null): void {
+  buildDiskWatch = watch;
+}
+
 /** The one mount an app container may have: its own files volume at `/data`. */
 export function filesMountArgs(volume: string, opts: { readonly?: boolean } = {}): string[] {
   if (!isFilesVolume(volume)) throw new Error(`not a files volume name ${JSON.stringify(volume)}`);
@@ -47,6 +64,8 @@ export interface CommandRunnerOpts {
   timeoutMs?: number;
   /** Written to the child's stdin (then closed). `capture` only. */
   input?: Buffer | string;
+  /** Kill the child (SIGKILL) when this aborts: a build over its disk limit. */
+  signal?: AbortSignal;
 }
 
 export interface CommandRunner {
@@ -198,6 +217,20 @@ function resolveLimits(limits: Partial<ContainerLimits> | undefined): ContainerL
   return { ...DEFAULT_CONTAINER_LIMITS, ...(limits ?? {}) };
 }
 
+function armSignal(child: ReturnType<typeof spawn>, opts: CommandRunnerOpts | undefined): void {
+  const signal = opts?.signal;
+  if (!signal) return;
+  const kill = () => {
+    try {
+      child.kill("SIGKILL");
+    } catch {
+      /* already gone */
+    }
+  };
+  if (signal.aborted) kill();
+  else signal.addEventListener("abort", kill, { once: true });
+}
+
 /** Arm a kill-timer for a spawned child; returns the timer (or null when no
  *  bound is requested). On expiry the child is SIGKILLed and the promise rejects. */
 function armTimeout(
@@ -226,6 +259,7 @@ export const realCommandRunner: CommandRunner = {
     return new Promise((resolve, reject) => {
       const p = spawn(cmd, args, { stdio: "inherit" });
       const timer = armTimeout(p, opts, reject);
+      armSignal(p, opts);
       // A spawn failure (e.g. the binary is missing — `docker` ENOENT) emits
       // an 'error' event, not 'exit'. Without this listener Node treats it as
       // an unhandled error and crashes the daemon; reject so callers can swallow.
@@ -249,6 +283,7 @@ export const realCommandRunner: CommandRunner = {
       let stdout = "";
       let stderr = "";
       const timer = armTimeout(p, opts, reject);
+      armSignal(p, opts);
       p.on("error", (e) => {
         if (timer) clearTimeout(timer);
         reject(e);
@@ -387,9 +422,15 @@ export async function runDockerBuild(
   const policy = await checkBuildContextDockerfile(contextDir);
   if (policy && !policy.ok) throw new Error(`the Dockerfile is not allowed on this box:\n${policy.problems.join("\n")}`);
   const args = dockerBuildArgs(image, contextDir, limits);
-  const runOpts: CommandRunnerOpts = { timeoutMs: limits.timeoutMs };
-  if (!cmd.capture) return cmd.run("docker", args, runOpts);
+  const abort = new AbortController();
+  let overDisk: string | null = null;
+  const stopWatch = buildDiskWatch?.((reason) => {
+    overDisk = reason;
+    abort.abort();
+  });
+  const runOpts: CommandRunnerOpts = { timeoutMs: limits.timeoutMs, signal: abort.signal };
   try {
+    if (!cmd.capture) return await cmd.run("docker", args, runOpts);
     const { stdout, stderr } = await cmd.capture("docker", args, runOpts);
     if (stdout) process.stdout.write(stdout);
     if (stderr) process.stderr.write(stderr);
@@ -397,9 +438,11 @@ export async function runDockerBuild(
     const err = e as Error & { stdout?: string; stderr?: string };
     if (err.stdout) process.stdout.write(err.stdout);
     if (err.stderr) process.stderr.write(err.stderr);
-    const why = dockerBuildFailure(err.stdout ?? "", err.stderr ?? "");
+    const why = overDisk ?? dockerBuildFailure(err.stdout ?? "", err.stderr ?? "");
     if (why) err.message = why;
     throw err;
+  } finally {
+    stopWatch?.();
   }
 }
 
@@ -516,6 +559,7 @@ export class AppRunner {
   }
 
   async deploy(spec: AppSpec): Promise<string[]> {
+    if (spec.filesVolume) await filesVolumeGuard?.(spec.filesVolume);
     const args = [
       "run",
       "-d",

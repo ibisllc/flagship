@@ -137,6 +137,34 @@ export interface ServerDetailResponse {
   serviceCount: number;
   pairedSessionCount: number;
   recentInstallEvents: RecentInstallEvent[];
+  /**
+   * Disk use and per-app limits (docs/app-runtimes.md §5.3). `capped`:
+   * the backup policy sets a limit; otherwise only the disk brake applies
+   * (`brake` "on": apps can't write more, "hard": their folders are
+   * read-only). Older daemons omit the field.
+   */
+  storage?: ServerStorage;
+}
+
+/** One store's use and limit (`limitBytes` null: no limit but the disk). */
+export interface StoreUsage {
+  usedBytes: number;
+  limitBytes: number | null;
+  /** At its limit: new writes fail (ENOSPC, or Postgres refuses INSERT/UPDATE). */
+  full: boolean;
+}
+
+export interface AppStorage {
+  files?: StoreUsage & { enforced: boolean };
+  /** `stopped`: it grew past its limit while blocked, so its database is closed until it's under again. */
+  postgres?: StoreUsage & { writesBlocked: boolean; stopped: boolean };
+}
+
+export interface ServerStorage {
+  disk: { totalBytes: number; usedBytes: number } | null;
+  brake: "off" | "on" | "hard";
+  capped: boolean;
+  apps: Array<{ serviceId: string } & AppStorage>;
 }
 
 // ---------- P1.2 — /api/screens/apps-list ------------------------------
@@ -157,6 +185,8 @@ export interface AppDetailResponse {
    * folder's size in `bytes` when the box can tell.
    */
   dataLayerInstances: Array<{ store: string; instanceName: string; bytes?: number }>;
+  /** The app's use and limits (docs/app-runtimes.md §5.3); absent until first measured and on older daemons. */
+  storage?: AppStorage;
   /** App membership view (count + list of stable-id prefixes). */
   members: Array<{ stableIdPrefix: string; role: string; addedAt: number }>;
   /** Browser tab handles owned by this app (empty when no browser bundle). */

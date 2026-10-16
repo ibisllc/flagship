@@ -47,6 +47,8 @@ import type {
   AppBackupStartRequest,
   AppBackupStartResponse,
   AppDetailResponse,
+  AppStorage,
+  ServerStorage,
   AppsListResponse,
   AppSummary,
   VibeCodeNameCheckResponse,
@@ -164,6 +166,11 @@ export interface ScreensHttpDeps {
   accessMode?: ((serviceId: string) => "open" | "members-only" | null) | null;
   /** Bytes an app's files volume uses (null when unknown); shown on its page. */
   filesBytes?: ((volume: string) => Promise<number | null>) | null;
+  /** Per-app disk limits (appQuota/manager.ts) for server-detail and app-detail. */
+  storage?: {
+    app: (serviceId: string) => AppStorage | null;
+    server: () => ServerStorage;
+  } | null;
   /**
    * Live apps' internet access (egress/approvals.ts): the signed access-list
    * endpoints (`/services/:id/access`, `.../access/dismiss`,
@@ -1523,6 +1530,7 @@ function serverDetail(deps: ScreensHttpDeps, now: () => number): ServerDetailRes
     serviceCount: deps.servicePlatform?.list().length ?? 0,
     pairedSessionCount: deps.pairedSessions?.list().length ?? 0,
     recentInstallEvents,
+    ...(deps.storage ? { storage: deps.storage.server() } : {}),
   };
 }
 
@@ -1575,6 +1583,7 @@ function toSummary(
 
 async function appDetail(app: InstalledService, deps: ScreensHttpDeps): Promise<AppDetailResponse> {
   const dataLayerInstances = await collectDataLayerInstances(app, deps.filesBytes);
+  const storage = deps.storage?.app(app.serviceId) ?? null;
   const members = collectMembers(app.membership);
   const browserTabs = (deps.tabRegistry?.tabsForApp(app.serviceId) ?? []).map((tabId) => ({
     tabId,
@@ -1583,6 +1592,7 @@ async function appDetail(app: InstalledService, deps: ScreensHttpDeps): Promise<
     app: toSummary(app, deps.serverFqdn, deps.appEgress, await liveStates([app.serviceId], deps), deps.accessMode),
     manifest: app.manifest as unknown as Record<string, unknown>,
     dataLayerInstances,
+    ...(storage && (storage.files || storage.postgres) ? { storage } : {}),
     members,
     browserTabs,
     recentLogs: [],

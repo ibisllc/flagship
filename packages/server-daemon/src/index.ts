@@ -185,6 +185,8 @@ import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 import { appSqlRunner } from "./dataLayer/appSql.js";
 import { DbWriteLedger, buildOwnerDbHttp } from "./dataLayer/ownerDb.js";
 import { ActivityLog, defaultActivityLogPath } from "./shares/activityLog.js";
+import { quotaNotices } from "./appQuota/notices.js";
+import { withQuotaUsage } from "./appQuota/usage.js";
 import { ShareStore, defaultShareStorePath } from "./shares/shareStore.js";
 import { buildShareUpdate } from "./shares/shareUpdate.js";
 import { ShareInviteStore, buildShareInvites, defaultShareInviteStorePath } from "./shares/shareInvites.js";
@@ -2841,7 +2843,14 @@ async function wireRuntimeSurfaces(deps: {
     const ops = realAppCopyOps();
     const cap = new BackupCap({
       policy: deps.backupPolicy,
-      measure: () => measureAppArchiveBytes({ apps: () => platform.list(), ops, sourceDir: vibeAppDir, log: (m) => console.log(m) }),
+      // The quota manager's own numbers where it has them (statfs of each
+      // files image, pg_database_size), so the budgets and their enforcement
+      // count the same bytes.
+      measure: async () =>
+        withQuotaUsage(
+          await measureAppArchiveBytes({ apps: () => platform.list(), ops, sourceDir: vibeAppDir, log: (m) => console.log(m) }),
+          runtime.appQuota.measured(),
+        ),
       diskBytes: async () => {
         const s = await statfs(join(dataDir, "data")).catch(() => statfs(dataDir));
         return Number(s.blocks) * Number(s.bsize);
@@ -2852,7 +2861,16 @@ async function wireRuntimeSurfaces(deps: {
     platform.setAdmitNewApp(() => cap.admit());
     void cap.refresh();
     setInterval(() => void cap.refresh(), 10 * 60_000).unref();
-    deps.backupPolicy.onChange(() => void cap.refresh());
+    // A new limit holds at once: re-measure, then re-apply every app's share.
+    deps.backupPolicy.onChange(() => void cap.refresh().then(() => runtime.appQuota.kick()));
+    runtime.appQuota.setBudgets(
+      () => cap.appBudgets(),
+      () => {
+        const limit = cap.limitBytes();
+        const used = cap.usedBytes();
+        return limit === null || used === null ? null : limit - used;
+      },
+    );
     return cap;
   })();
   const backupPolicyHttp =
@@ -2863,6 +2881,27 @@ async function wireRuntimeSurfaces(deps: {
           note: (kind, detail, ok) => deps.activityLog.note(kind, detail, { ok: ok ?? true }),
         })
       : null;
+  // Per-app disk limits (docs/app-runtimes.md §5.3): an app that fills up
+  // is an Activity entry, a phone alert and a content-free wake.
+  runtime.appQuota.setEvents(
+    quotaNotices({
+      note: (kind, detail, o) => deps.activityLog.note(kind, detail, o),
+      alert: (a) => void deps.alertInbox.emit(a),
+      ...(accessPushCfg
+        ? {
+            wake: () =>
+              sendPushRelay({
+                category: "generic",
+                targetUsername: accessPushCfg.userId,
+                signer: custodian,
+                controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
+                logTag: "[app-quota] storage push",
+                log: (l) => console.log(l),
+              }),
+          }
+        : {}),
+    }),
+  );
 
   // Copying an app between the account's servers (docs/app-placement.md §5):
   // this box as source (the public export endpoint) and as target (the
@@ -3268,6 +3307,10 @@ async function wireRuntimeSurfaces(deps: {
     startedAt: Date.now(),
     servicePlatform: runtime.servicePlatform,
     filesBytes: runtime.dataProvisioner ? (v: string) => runtime.dataProvisioner!.filesBytes(v) : null,
+    storage: {
+      app: (id: string) => runtime.appQuota.appView(id),
+      server: () => runtime.appQuota.serverView(),
+    },
     pairedSessions,
     ...(adapterIndex
       ? {

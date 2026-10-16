@@ -1,5 +1,6 @@
 import { normalizeStoreFlag, isSingletonStore, wantsFiles, type AppDataStores } from "@flagship/protocol";
 import type { FilesAdmin, PostgresAdmin } from "./admin.js";
+import type { PgQuotaAdmin } from "../appQuota/pgQuota.js";
 import {
   APP_PG_EXTENSIONS,
   DEFAULT_STORE_NAME,
@@ -66,6 +67,14 @@ export interface DataProvisionerOptions {
    * fast with its reason. Files never wait on it.
    */
   ready?: () => Promise<void>;
+  /**
+   * A new files folder's limit (appQuota/: its budget, a staging copy's
+   * quota or the safety size), read when the folder is made. Absent: no
+   * limit of its own.
+   */
+  filesSizeBytes?: (volume: string) => number | undefined | Promise<number | undefined>;
+  /** Database size limits (appQuota/pgQuota.ts), set with the Postgres admin. */
+  pgQuota?: PgQuotaAdmin;
 }
 
 /** The Postgres store names a spec asks for (an older `kv` asks for the default one). */
@@ -93,8 +102,25 @@ export class DataProvisioner {
    * provisioner with files only and attaches Postgres when the stack turns
    * healthy.
    */
-  attach(admins: Pick<DataProvisionerOptions, "postgres" | "files" | "endpoints" | "nameKey">): void {
+  attach(admins: Pick<DataProvisionerOptions, "postgres" | "files" | "endpoints" | "nameKey" | "pgQuota">): void {
     this.opts = { ...this.opts, ...admins };
+  }
+
+  /** Set how big a new files folder may be (the runtime, once its quota manager exists). */
+  setFilesSize(fn: (volume: string) => number | undefined | Promise<number | undefined>): void {
+    this.opts = { ...this.opts, filesSizeBytes: fn };
+  }
+
+  /** The database size limiter, once Postgres is attached. */
+  pgQuota(): PgQuotaAdmin | null {
+    return this.opts.postgres ? (this.opts.pgQuota ?? null) : null;
+  }
+
+  /** Staging databases (`__dev_…`), for their own small limit. */
+  async devDatabases(): Promise<string[]> {
+    const pg = this.opts.postgres;
+    if (!pg?.listNamed) return [];
+    return (await pg.listNamed(DEV_PG_PREFIX)).filter((n) => n.startsWith(DEV_PG_PREFIX));
   }
 
   /** Resolves when Postgres can be used; throws why not (see `ready`). */
@@ -158,9 +184,11 @@ export class DataProvisioner {
       }
       if (files) {
         const volume = filesVolume({ creator, slug, space });
+        const sizeBytes = await this.opts.filesSizeBytes?.(volume);
         await this.opts.files!.createVolume({
           volume,
           labels: { "flagship.files": space, "flagship.app": `${creator}--${slug}` },
+          ...(sizeBytes !== undefined ? { sizeBytes } : {}),
         });
         out.files = { volume };
       }

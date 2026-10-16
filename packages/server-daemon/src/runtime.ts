@@ -19,7 +19,7 @@ import {
   type AppApiKeysHttp,
 } from "./appApiKeys.js";
 import { FileAppEnvStore, type AppEnvStore } from "./serviceEnvStore.js";
-import { AppRunner, buildStartCheck, realCommandRunner, type CommandRunner } from "./serviceRunner.js";
+import { AppRunner, buildStartCheck, realCommandRunner, setBuildDiskWatch, setFilesVolumeGuard, type CommandRunner } from "./serviceRunner.js";
 import { ensureGvisor } from "./appSandbox/gvisor.js";
 import { keepAppSandbox, setEgressFence } from "./appSandbox/state.js";
 import { dockerRepaired, wakeDocker } from "./dockerHealth.js";
@@ -61,6 +61,7 @@ import { acceptSiblingUpgrade } from "./sibling/wsServer.js";
 import type { UpdateServer } from "./updateServer.js";
 import { bootEgress, type EgressRuntime } from "./egress/boot.js";
 import { ensureUnfencedNetworks } from "./egress/networks.js";
+import { AppQuotaManager, LoopVolumes, RealPgQuota, buildDiskWatcher, hostDiskUse } from "./appQuota/index.js";
 
 export interface DaemonRuntimeOptions {
   /** Server FQDN, e.g. "home.alice.flagship.services". */
@@ -466,6 +467,8 @@ export interface DaemonRuntime {
    */
   appRunner: AppRunner;
   dataProvisioner: DataProvisioner | null;
+  /** Per-app disk limits (appQuota/manager.ts): budgets and events are wired by index.ts. */
+  appQuota: AppQuotaManager;
   servicePlatform: ServicePlatform | null;
   /**
    * App-claim primitives: add/remove FQDNs from this pod's
@@ -1358,13 +1361,54 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   // provisioner asks it before every provision (dataLayer/stack.ts).
   const dataEnvFile = opts.servicePlatform?.dataServicesEnvFile;
   const dataStack = dataEnvFile ? new DataStack({ cmd: realCommandRunner, envFile: dataEnvFile }) : null;
+  // Per-app disk limits (appQuota/): each files folder is its own sized
+  // disk image, mounted here before any app starts; only on a real box
+  // (Linux, root), and FLAGSHIP_FILES_QUOTA=0 keeps plain volumes.
+  const loopVolumes =
+    process.platform === "linux" && process.getuid?.() === 0 && process.env.FLAGSHIP_FILES_QUOTA !== "0"
+      ? new LoopVolumes(realCommandRunner)
+      : null;
+  if (loopVolumes) {
+    const mounted = await loopVolumes.mountAll().catch((e: Error) => {
+      console.warn(`[app-quota] couldn't mount the files images: ${e.message}`);
+      return 0;
+    });
+    if (mounted > 0) console.log(`[app-quota] mounted ${mounted} files image(s)`);
+  }
   const dataProvisioner = await maybeBuildDataProvisioner(
     dataEnvFile,
     appRunner.dataHostAlias,
     dataStack,
-    new RealFilesAdmin(realCommandRunner),
+    new RealFilesAdmin(realCommandRunner, loopVolumes),
   );
   dataStack?.start();
+  const appQuota = new AppQuotaManager({
+    apps: () =>
+      (servicePlatformRef.current?.list() ?? []).map((a) => ({
+        serviceId: a.serviceId,
+        files: a.data?.files,
+        postgres: Object.values(a.data?.postgres ?? {}).map((p) => ({ database: p.database, role: p.role })),
+      })),
+    budgets: () => null,
+    files: loopVolumes,
+    pg: () => dataProvisioner?.pgQuota() ?? null,
+    ...(dataProvisioner ? { devDatabases: () => dataProvisioner.devDatabases() } : {}),
+    hostDisk: () => hostDiskUse(),
+    statePath: opts.dataDir ? `${opts.dataDir}/data/app-quota.json` : null,
+  });
+  await appQuota.load();
+  if (loopVolumes) {
+    dataProvisioner?.setFilesSize((volume) => appQuota.imageSizeFor(volume));
+    setFilesVolumeGuard(async (volume) => {
+      if ((await appQuota.prepareVolume(volume)) === "plain") {
+        console.warn(`[app-quota] ${volume} is still a plain volume (a container holds it); it has no limit until the app restarts`);
+      }
+    });
+  }
+  if (process.platform === "linux") {
+    setBuildDiskWatch(buildDiskWatcher({ disk: () => hostDiskUse() }));
+    appQuota.start();
+  }
 
   const apOpts = opts.servicePlatform;
   let aliasReconciler: AliasReconciler | null = null;
@@ -1590,6 +1634,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     ready: () => Promise.resolve(),
     close: async () => {
       certRetryLoop?.stop();
+      appQuota.stop();
       relayLockdown.stop();
       if (renewalTimer) clearInterval(renewalTimer);
       aliasReconciler?.stop();
@@ -1600,6 +1645,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     certManager,
     appRunner,
     dataProvisioner,
+    appQuota,
     servicePlatform: servicePlatformRef.current,
     urlController,
     relayLockdown,
@@ -1722,7 +1768,7 @@ async function loadDataAdmins(
   envFile: string,
   appDataHost: string | undefined,
   quietOnMissing: boolean,
-): Promise<Pick<DataProvisionerOptions, "postgres" | "endpoints" | "nameKey"> | null> {
+): Promise<Pick<DataProvisionerOptions, "postgres" | "endpoints" | "nameKey" | "pgQuota"> | null> {
   let env: Record<string, string>;
   try {
     env = parseEnvFile(await readFile(envFile, "utf8"));
@@ -1751,6 +1797,7 @@ async function loadDataAdmins(
   console.log(`[runtime] data layer wired (postgres admin ready); app data host = ${appHost}`);
   return {
     postgres: new RealPostgresAdmin({ adminUrl: pgUrl }),
+    pgQuota: new RealPgQuota({ adminUrl: pgUrl }),
     nameKey: env.DATA_NAME_KEY!,
     endpoints: { postgresHost: appHost },
   };
