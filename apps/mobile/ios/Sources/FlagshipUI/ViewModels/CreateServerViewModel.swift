@@ -176,6 +176,8 @@ public final class CreateServerViewModel {
     private let adminRootPubHex: @MainActor () -> String?
     /// Unseals the admin root (one biometric) to approve the new server.
     private let adminRootSigner: (String) async throws -> Curve25519.Signing.PrivateKey
+    /// A fresh Face ID and the sensitive-order key, for the Debug-friendly grant.
+    private let debugGrantKey: (String) async throws -> Curve25519.Signing.PrivateKey
     private let isDemoAccount: Bool
 
     public init(
@@ -194,6 +196,9 @@ public final class CreateServerViewModel {
         adminRootSigner: @escaping (String) async throws -> Curve25519.Signing.PrivateKey = { reason in
             try await Keystore.adminRootKey(reason: reason)
         },
+        debugGrantKey: @escaping (String) async throws -> Curve25519.Signing.PrivateKey = { reason in
+            try await DebugAccessViewModel.freshSensitiveKey(reason: reason)
+        },
         // No default: a flow that forgets it refuses demo accounts (the
         // store reviewers' account) as non-admin devices.
         isDemoAccount: Bool
@@ -201,6 +206,7 @@ public final class CreateServerViewModel {
         self.username = username
         self.adminRootPubHex = adminRootPubHex
         self.adminRootSigner = adminRootSigner
+        self.debugGrantKey = debugGrantKey
         self.isDemoAccount = isDemoAccount
         self.server = server
         self.relay = relay
@@ -390,9 +396,14 @@ public final class CreateServerViewModel {
         let serverName = ServerLabel.normalized(name)
         let serverDomain = Endpoints.serverFqdn(server: serverName, user: username)
         // A debug-friendly server needs a usable SSH key: refuse before any prompt.
-        let debugGrant: DebugAccess.Grant? = debugFriendly
-            ? try Self.debugGrant(serverDomain: serverDomain, rawKey: debugSshKey)
-            : nil
+        // The grant gets its own fresh Face ID (one per grant, never the
+        // unlocked session), asked first so a cancel leaves nothing half done.
+        var debugGrant: DebugAccess.Grant?
+        var debugKey: Curve25519.Signing.PrivateKey?
+        if debugFriendly {
+            debugGrant = try Self.debugGrant(serverDomain: serverDomain, rawKey: debugSshKey)
+            debugKey = try await debugGrantKey("Turn on debug access for \(name)")
+        }
         // ONE biometric ceremony yields the IRK AND the new box's STK
         // pubkey. The STK pub is cached in the pin registry so later
         // (biometric-free) /pods refreshes can verify the box's STK-signed
@@ -562,10 +573,11 @@ public final class CreateServerViewModel {
         cgkDepositStore.markPending(for: serverDomain)
 
         // Debug-friendly server (Advanced): the debug-access grant rides as the
-        // UNSIGNED `debugGrant` sibling, signed with the admin root this create
-        // already unsealed (the IRK only on a demo account, whose box pins none).
-        let debugGrantSibling = try debugGrant.map {
-            try Self.debugGrantEnvelope($0, key: adminKey ?? irk)
+        // UNSIGNED `debugGrant` sibling, signed with the key its own Face ID
+        // unsealed above (the admin root; the IRK on a demo account).
+        var debugGrantSibling: String?
+        if let debugGrant, let debugKey {
+            debugGrantSibling = try Self.debugGrantEnvelope(debugGrant, key: debugKey)
         }
 
         return SignedInstallBlob(

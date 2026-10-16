@@ -24,15 +24,23 @@ final class DebugAccessViewModelTests: XCTestCase {
         return m
     }
 
-    private func vm(_ client: MockScreensClient, canManage: Bool = true, cancel: Bool = false) -> DebugAccessViewModel {
+    /// Prompts the grant signer and the revoke signer asked for.
+    private var grantPrompts: [String] = []
+    private var revokePrompts: [String] = []
+
+    private func vm(_ client: MockScreensClient, canManage: Bool = true, domain: String? = nil) -> DebugAccessViewModel {
         DebugAccessViewModel(
-            serverDomain: domain,
+            serverDomain: domain ?? self.domain,
             view: nil,
             client: client,
             canManage: canManage,
-            signer: { [admin] _ in
-                if cancel { throw CancellationError() }
-                return admin
+            grantSigner: { [unowned self] reason in
+                self.grantPrompts.append(reason)
+                return self.admin
+            },
+            revokeSigner: { [unowned self] reason in
+                self.revokePrompts.append(reason)
+                return self.admin
             },
             now: { [unowned self] in self.clock },
             defaults: defaults
@@ -76,7 +84,13 @@ final class DebugAccessViewModelTests: XCTestCase {
         m.duration = .sevenDays
         await m.turnOn()
         XCTAssertEqual(m.view.expiresAt, clock + DebugAccess.maxMs)
+        // One fresh biometric per grant (turn on, then renew); turning off may
+        // use the unlocked session's signer.
+        XCTAssertEqual(grantPrompts, ["Turn on debug access", "Renew debug access"])
+        XCTAssertTrue(revokePrompts.isEmpty)
         await m.turnOff()
+        XCTAssertEqual(grantPrompts.count, 2)
+        XCTAssertEqual(revokePrompts, ["Turn off debug access"])
         XCTAssertNil(m.error)
         XCTAssertFalse(m.isOn)
         XCTAssertNil(m.bannerText)
@@ -96,15 +110,12 @@ final class DebugAccessViewModelTests: XCTestCase {
         await m.turnOn()
         XCTAssertEqual(m.error, "That isn't an SSH public key this server can use.")
         XCTAssertTrue(client.debugAccessBodies.isEmpty)
+        XCTAssertTrue(grantPrompts.isEmpty, "A bad key is refused before Face ID.")
     }
 
     func test_showsTheBoxSentence() async {
         let client = mock()
-        client.simulatedFailureStatus = nil
-        let m = DebugAccessViewModel(
-            serverDomain: "other.bright-maple.flagship.services", view: nil, client: client, canManage: true,
-            signer: { [admin] _ in admin }, now: { [unowned self] in self.clock }, defaults: defaults
-        )
+        let m = vm(client, domain: "other.bright-maple.flagship.services")
         m.keyText = key
         await m.turnOn()
         XCTAssertEqual(m.error, "That debug access grant is for another server.")
@@ -117,16 +128,13 @@ final class DebugAccessViewModelTests: XCTestCase {
         await m.turnOn()
         await m.turnOff()
         XCTAssertTrue(client.debugAccessBodies.isEmpty)
+        XCTAssertTrue(grantPrompts.isEmpty && revokePrompts.isEmpty, "No prompt on a device that can't change it.")
         XCTAssertEqual(DebugAccessViewModel.adminOnly, "Only an admin device can turn debug access on or off.")
     }
 
     func test_anEndedGrantIsOff() {
-        let m = DebugAccessViewModel(
-            serverDomain: domain,
-            view: DebugAccessView(on: true, expiresAt: clock - 1, keyFingerprint: "SHA256:x", grantedBy: "admin"),
-            client: mock(), canManage: true, signer: { [admin] _ in admin }, now: { [unowned self] in self.clock },
-            defaults: defaults
-        )
+        let m = vm(mock())
+        m.adopt(DebugAccessView(on: true, expiresAt: clock - 1, keyFingerprint: "SHA256:x", grantedBy: "admin"))
         XCTAssertFalse(m.isOn)
         XCTAssertNil(m.bannerText)
     }
