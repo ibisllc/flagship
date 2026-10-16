@@ -97,9 +97,21 @@ else
     say "gym already contains $BASE ($(git -C "$WT" rev-parse --short "$BASE"))"
   else
     say "rebasing gym ($(git -C "$WT" rev-list --count HEAD.."$BASE") commits behind) onto $BASE"
-    if ! git -C "$WT" rebase -q "$BASE"; then
-      git -C "$WT" rebase --abort || true
-      die "gym does not rebase cleanly onto main; resolve by hand (docs/runbooks/gym-test-env.md, 'Keeping the gym branch current')"
+    # A conflict resolved once (anywhere in this repo) is replayed by rerere;
+    # the rebase only stops for one nobody has resolved yet.
+    rr() { git -C "$WT" -c rerere.enabled=true -c rerere.autoupdate=true "$@"; }
+    if ! rr rebase -q "$BASE"; then
+      tries=0
+      while [ "$tries" -lt 50 ] && [ -d "$(git -C "$WT" rev-parse --path-format=absolute --git-path rebase-merge)" ] && [ -z "$(git -C "$WT" diff --name-only --diff-filter=U)" ]; do
+        tries=$((tries + 1))
+        say "conflict resolved from rerere; continuing"
+        GIT_EDITOR=true rr rebase --continue >/dev/null 2>&1 || true
+      done
+      if [ -d "$(git -C "$WT" rev-parse --path-format=absolute --git-path rebase-merge)" ]; then
+        git -C "$WT" diff --name-only --diff-filter=U | sed 's/^/  unresolved: /'
+        git -C "$WT" rebase --abort || true
+        die "gym does not rebase cleanly onto main; resolve by hand (docs/runbooks/gym-test-env.md, 'Keeping the gym branch current')"
+      fi
     fi
     if [ "$push" = "1" ]; then
       git -C "$WT" push -q --force-with-lease="gym:$old_gym" origin HEAD:gym
