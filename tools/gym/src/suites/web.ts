@@ -1311,6 +1311,50 @@ const TOTAL: readonly Scenario[] = [
     },
   ),
   webTotal(
+    "web-total-apps-list-scope-per-server",
+    "Separate list on each server (docs/service-access-gating.md 'Separate lists per server (Pro)', feat/marketplace): on a Pro account an admin device turns on 'Separate list on each server', confirms once, and sends an admin-root-signed flagship/app-list-scope/v1 (names the app, no server) to list-scope; a server picker appears (servers in the owner's order), each server shows only its own members plus unused links, and picking another server re-targets every call (members, orders, invite links) to that server with its own session.",
+    "gym apps separate list on each server is a Pro switch with a server picker",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Access control on a Pro account as an admin device.", handle: "#sd-access" },
+        { kind: "assert", describe: "One list: the switch is off, no picker, Members (3).", handle: "#sa-scope-card" },
+        { kind: "tap", describe: "Turn on Separate list on each server, confirm.", handle: "#sa-scope-toggle" },
+        { kind: "assert", describe: "The admin-root-signed app-list-scope/v1 order; the picker on home shows Sam only.", handle: "#sa-server-picker" },
+        { kind: "tap", describe: "Pick media.", handle: "#sa-server-picker [data-server]" },
+        { kind: "assert", describe: "media's list (Lee), read with media's session.", handle: "#sa-people" },
+      ],
+      assertions: [
+        { describe: "Server picker", handle: "#sa-server-picker", expect: "present" },
+        { describe: "Switch", handle: "#sa-scope-toggle", expect: "present" },
+      ],
+      screenshots: [
+        shot("list-scope-one-list", "One list, switch off."),
+        shot("list-scope-home", "Separate lists, home's."),
+        shot("list-scope-media", "Separate lists, media's."),
+      ],
+      dimension: "D6",
+    },
+  ),
+  webTotal(
+    "web-total-apps-list-scope-needs-pro",
+    "Separate list on each server without Pro (feat/marketplace): the switch is off and locked with 'Comes with Pro.' and a 'See Pro membership' link to flagshipserver.com/pro; on a Pro account the plan screen warns before Pro ends: '<n> apps have a separate access list on each server. When Pro ends they'll all use <lead server>'s list.'",
+    "gym apps separate list switch is locked without Pro and the plan screen warns before Pro ends",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Access control on a free account as an admin device.", handle: "#sd-access" },
+        { kind: "assert", describe: "Locked switch with the Pro line and link.", handle: "#sa-scope-pro" },
+        { kind: "launch", describe: "Open Tier & usage on a Pro account with two apps on separate lists.", handle: "#tier-status-content" },
+        { kind: "assert", describe: "The warning names the lead server.", handle: "#tier-status-separate-lists-warning" },
+      ],
+      assertions: [
+        { describe: "Pro line", handle: "#sa-scope-pro", expect: "text", text: "Comes with Pro." },
+        { describe: "Warning", handle: "#tier-status-separate-lists-warning", expect: "text", text: "When Pro ends they'll all use home's list." },
+      ],
+      screenshots: [shot("list-scope-needs-pro", "Locked without Pro."), shot("plan-separate-lists-warning", "The plan screen's warning.")],
+      dimension: "D6",
+    },
+  ),
+  webTotal(
     "web-total-apps-rank-locked-non-admin",
     "Who can invite ('Account members', owner decision 2026-10-15): a non-admin device that is a Manager in the app sees Account members read-only (This device: Manager), the mode toggle locked ('Only an admin device can change who can open it'), no Remove app and a locked Runs on; its rank picker is locked to Member with 'Only an admin device can give a higher rank'; Remove appears only on its own member invite; the create carries this device's id and is signed with its account device key (not the AID), no rank order follows; withdrawing its own invite sends the device-key-signed revoke to .com and the same revoke to the box's invite-withdraw.",
     "gym apps rank picker is locked to Member on a non-admin device",
