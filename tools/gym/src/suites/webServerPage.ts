@@ -21,7 +21,7 @@ const ROWS: Row[] = [
   ["web-total-ops-bar-keyboard", "The operations bar is a keyboard button: Enter and Space open its operation's screen.", "gym serverpage the operations bar opens its operation from the keyboard", "#global-operations-bar", "ops-bar", "D3"],
   ["web-total-home-drag-cancel", "A drag cancelled by pointercancel or a window blur puts the order back, and a press without moving saves nothing; no server order is sent.", "gym serverpage a drag that's cancelled or dropped in place changes nothing", ".js-order-handle", "drag-cancelled"],
   ["web-total-home-provider-chip", "Home's AI provider chip (Flagship Inference, 'settings') opens AI keys.", "gym serverpage Home's AI provider chip opens AI keys", "#chip-settings", "home-provider-chip", "D3"],
-  ["web-total-server-not-paired", "A server this browser has no session for opens to 'This server isn't paired with this browser yet' with Pair this server; the press ends with a message and the button back (pairing itself is blocked by a product bug; the fixed flow is a parked test).", "gym serverpage a server this browser has no session for offers Pair this server", "#sd-pair-server", "server-not-paired"],
+  ["web-total-server-not-paired", "A server this browser has no session for opens to 'This server isn't paired with this browser yet' with Pair this server; a box that refuses the pairing gets its own sentence and the button back.", "gym serverpage a server this browser has no session for offers Pair this server", "#sd-pair-server", "server-not-paired"],
   ["web-total-server-monitoring", "The Monitoring rows show the box's numbers (CPU, memory, disk with its warn tone, network, certificate); an unhealthy Health row opens itself; every row opens and closes its detail.", "gym serverpage Monitoring rows open and close and show the box's numbers", "#monitor-pane", "monitoring-open"],
   ["web-total-server-power-restart", "Lock and restart asks first (Cancel sends nothing), counts down on the button, then sends an admin-root-signed power-off order with mode restart and says the server is restarting.", "gym serverpage Lock and restart asks, counts down and sends a signed restart", "#power-restart-btn", "power-restart-confirm", "D4"],
   ["web-total-server-deadman", "The dead-man lock: window and lockout selects, Enable, Affirm (fresh nonce, countdown), Tighten now (5 minutes) and Disable each send an admin-root-signed order with the chosen values.", "gym serverpage the dead-man lock enables, affirms, tightens and disables under the admin root", "#deadman-card", "deadman-on", "D4"],
@@ -33,17 +33,7 @@ const ROWS: Row[] = [
   ["web-total-server-non-admin-controls", "A non-admin device sees power, dead-man and front page off with the page's admin-only line, while reads (journal, monitoring) stay on; nothing is sent.", "gym serverpage a non-admin device sees power, dead-man and front page off", "[data-server-admin-only]", "server-non-admin-controls", "D4"],
   ["web-total-finalize-replace", "Trusted devices' Replace pending banner keeps Finalize now off inside the grace window; after it, Finalize posts the next key's completion and moves this device to it.", "gym serverpage Trusted devices finalizes a replacement once its grace is over", "#finalize-replace-btn", "finalize-waiting", "D4"],
   ["web-total-browser-viewer", "An app with a browser bundle opens its browser viewer, which lists the box's tabs and Refresh tabs re-reads them.", "gym serverpage an app's browser viewer lists its tabs and refreshes them", "#sd-open-browser", "browser-viewer"],
-  webTotal(
-    "web-total-serverpage-pair-server",
-    "Pair this server on a server this browser has no session for signs an add-paired-session order to that box, stores its token and reloads the page with it (auto-pair used to read a field /pods doesn't send, so it never paired anything).",
-    "gym serverpage Pair this server pairs a server this browser has no session for",
-    {
-      steps: [{ kind: "tap", describe: "Pair this server.", handle: "#sd-pair-server" }],
-      assertions: [{ describe: "The page loads with the new session", handle: "#leader-card", expect: "present" }],
-      screenshots: [shot("server-not-paired", "Before pairing.")],
-      dimension: "D3",
-    },
-  ),
+  ["web-total-serverpage-pair-server", "Pair this server on a server this browser has no session for signs an add-paired-session order to that box, stores its token and reloads the page with it (auto-pair used to read a field /pods doesn't send, so it never paired anything).", "gym serverpage Pair this server pairs a server this browser has no session for", "#sd-pair-server", "server-not-paired", "D3"],
 ];
 
 export const WEB_SERVER_PAGE: readonly Scenario[] = ROWS.map(([id, goal, title, handle, point, dimension]) =>

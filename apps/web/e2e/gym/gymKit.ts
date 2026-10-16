@@ -140,6 +140,9 @@ export async function seedSession(page: Page, seed: SessionSeed = {}): Promise<K
       const store = await import("/lib/profilesStore.js");
       const { getSession } = await import("/lib/state.js");
       const api = await import("/lib/api.js");
+      // As opening the account does: the device key (under the passphrase)
+      // moves onto the account's own keystore record, so a reload unlocks it.
+      await ks.adoptProfileKeys(USER);
       profiles.addProfile({
         cloudName: USER,
         accountId: ACCOUNT_ID,
