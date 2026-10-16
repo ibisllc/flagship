@@ -57,6 +57,9 @@ data class SmokeModeConfig(
     val live: Boolean = false,
     /** A fake passkey app with no PRF output on create (GymSeams). */
     val fakePasskeys: Boolean = false,
+    /** Real biometric prompts and the lock-on-background setting, for the
+     *  app-lock scenarios (the other scenarios pass every prompt). */
+    val realBiometrics: Boolean = false,
 ) {
     companion object {
         const val EXTRA_SMOKE_MODE = "flagship.smokeMode"
@@ -71,6 +74,7 @@ data class SmokeModeConfig(
         const val EXTRA_SMOKE_DEVICE_RANK = "flagship.smokeDeviceRank"
         const val EXTRA_SMOKE_LIVE = "flagship.smokeLive"
         const val EXTRA_SMOKE_FAKE_PASSKEYS = "flagship.smokeFakePasskeys"
+        const val EXTRA_SMOKE_REAL_BIOMETRICS = "flagship.smokeRealBiometrics"
 
         const val SMOKE_USERNAME = "smoketest"
 
@@ -95,6 +99,7 @@ data class SmokeModeConfig(
                     ?.takeIf { it in setOf("member", "manager", "master", "refused") },
                 live = intent.getBooleanExtra(EXTRA_SMOKE_LIVE, false),
                 fakePasskeys = intent.getBooleanExtra(EXTRA_SMOKE_FAKE_PASSKEYS, false),
+                realBiometrics = intent.getBooleanExtra(EXTRA_SMOKE_REAL_BIOMETRICS, false),
             )
         }
     }
@@ -165,7 +170,8 @@ object SmokeMode {
         // same-process launch's seed can never leak into an unflagged run.
         GymSeams.forceAdminRoot = config.seedAdminRoot
         GymSeams.deviceRank = config.deviceRank
-        GymSeams.bypassBiometricGates = true
+        GymSeams.bypassBiometricGates = !config.realBiometrics
+        if (config.realBiometrics) appState.setRequireBiometricAtLaunch(true)
         GymSeams.fakePasskeysNoPrfOnCreate = config.fakePasskeys
 
         if (config.seedTrustUntrusted) {

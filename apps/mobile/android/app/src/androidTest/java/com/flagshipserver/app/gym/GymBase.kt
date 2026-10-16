@@ -94,6 +94,7 @@ abstract class GymBase {
         live: Boolean = false,
         apexHost: String? = null,
         fakePasskeys: Boolean = false,
+        realBiometrics: Boolean = false,
     ) {
         // A test may relaunch with different seeds (e.g. the admin/non-admin
         // state pair) — close the prior scenario so activities never stack.
@@ -114,6 +115,7 @@ abstract class GymBase {
             if (live) putExtra(SmokeModeConfig.EXTRA_SMOKE_LIVE, true)
             if (apexHost != null) putExtra("flagship.apexHost", apexHost)
             if (fakePasskeys) putExtra(SmokeModeConfig.EXTRA_SMOKE_FAKE_PASSKEYS, true)
+            if (realBiometrics) putExtra(SmokeModeConfig.EXTRA_SMOKE_REAL_BIOMETRICS, true)
         }
         scenario = ActivityScenario.launch(intent)
         composeRule.waitForIdle()
