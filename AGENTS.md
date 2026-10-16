@@ -664,6 +664,17 @@ of the last check here: **not yet checked**.
   use this app." `.com` deployed 2026-10-14 (migration 0097 applied, webapp
   shell v78). Needs an endorsed box release and iOS/Android store builds.
   Not yet run on a device or a real box.
+  **Only an admin device accepts (2026-10-16, shell v130):** the shared box
+  takes a first grant only with `flagship/server-share-accept-admin/v1`
+  signed by the joining account's admin root (IRK if it pins none) and
+  `.com`'s CA `flagship/account-key-attestation/v1` of that key, which names
+  no account (`share-a-server.md` §5.1; refusals `accept-not-admin`,
+  `accept-signature`, `accept-stale`, `accept-unverifiable` with sentences).
+  New `.com` routes `GET /api/users/:u/account-key-attestation` and the demo
+  signer `POST /api/dev/sample-user/:u/share-accept`. Webapp done; iOS and
+  Android ports in progress (parity `share-accept-admin`). Needs a `.com`
+  deploy, an endorsed box release (a box needs a live CA lease to accept),
+  store builds; live gym `share` group updated, not yet run.
 - **Docker containers unreachable on VM appliances (fixed in `e81df698`).**
   The appliance's `Type=ether` networkd rule pulled every container's veth off
   its bridge: every app 502'd with "read ECONNRESET" after a 3 s ARP timeout
