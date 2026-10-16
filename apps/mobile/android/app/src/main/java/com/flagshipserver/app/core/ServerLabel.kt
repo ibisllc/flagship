@@ -44,4 +44,13 @@ object ServerLabel {
 
     /** The normalized (lowercased) label; the caller validates before minting. */
     fun normalized(input: String): String = input.trim().lowercase()
+
+    /** The label a new server starts with: "home", else "home2", "home3"…,
+     *  the first one none of [taken] uses. */
+    fun firstFree(taken: Collection<String>): String {
+        val used = taken.map { it.lowercase() }.toSet()
+        return generateSequence(1) { it + 1 }
+            .map { if (it == 1) "home" else "home$it" }
+            .first { it !in used }
+    }
 }

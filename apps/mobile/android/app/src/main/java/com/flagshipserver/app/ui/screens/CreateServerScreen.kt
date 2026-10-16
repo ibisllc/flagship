@@ -39,6 +39,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -120,8 +121,19 @@ data class CreateServerPreset(
 internal class RestoreNeedsPairingException :
     Exception("This server couldn't be prepared to receive the backup. Try again.")
 
-private fun createError(t: Throwable): String =
-    if (t is RestoreNeedsPairingException) t.message!! else NetworkErrorHumanizer.humanize(t)
+/** Saves the design and chooser phases; the live ones restore as the chooser. */
+private val PhaseSaver = androidx.compose.runtime.saveable.Saver<androidx.compose.runtime.MutableState<Phase>, String>(
+    save = { if (it.value == Phase.Design) Phase.Design.name else Phase.DeliveryChooser.name },
+    restore = { mutableStateOf(Phase.valueOf(it)) },
+)
+
+private fun createError(t: Throwable): String {
+    if (t is RestoreNeedsPairingException) {
+        com.flagshipserver.app.core.ErrorLog.caught("create-server", t, NetworkErrorHumanizer.errorCode(t))
+        return t.message!!
+    }
+    return NetworkErrorHumanizer.humanize(t, "create-server")
+}
 
 @Composable
 fun CreateServerScreen(
@@ -149,14 +161,23 @@ fun CreateServerScreen(
     // into the InstallBlob; reset on delivery. Mirror of iOS's draftStore.
     val draftStore = remember { CreateServerDraftStore.from(context) }
 
-    var phase by remember { mutableStateOf(if (preset != null) Phase.DeliveryChooser else Phase.Design) }
+    // The draft survives the activity being recreated or the process being
+    // killed while the person is away (device bug M9). A phase that holds a
+    // live session (scan, match, pair, burn) comes back as the chooser.
+    var phase by rememberSaveable(stateSaver = PhaseSaver) {
+        mutableStateOf(if (preset != null) Phase.DeliveryChooser else Phase.Design)
+    }
     // Which sub-step of the design phase is showing — the long single form is
     // split into one decision per page (0 identity, 1 boot unlock, 2 backups),
     // matching the iOS wizard.
-    var designStep by remember { mutableStateOf(0) }
+    var designStep by rememberSaveable { mutableStateOf(0) }
     val designStepCount = 3
-    var name by remember { mutableStateOf(preset?.name ?: "") }
-    var description by remember { mutableStateOf("") }
+    // Prefilled with the address the preview shows ("home", or the next
+    // free one), so Next never says "Enter a subdomain." under a preview
+    // that already names one (device bug M6).
+    val takenLabels = LocalAppState.current.pods.value.map { it.fqdn.substringBefore('.').lowercase() }
+    var name by rememberSaveable { mutableStateOf(preset?.name ?: ServerLabel.firstFree(takenLabels)) }
+    var description by rememberSaveable { mutableStateOf("") }
     var qrText by remember { mutableStateOf("") }
     var matchCode by remember { mutableStateOf<String?>(null) }
     var pendingDelivery by remember { mutableStateOf<PendingDelivery?>(null) }
@@ -164,26 +185,26 @@ fun CreateServerScreen(
     var error by remember { mutableStateOf<String?>(null) }
     // Recipe TTL in MILLIS — default 6h, clamped 5min..24h. Single
     // user-facing TTL on the recipe; drives authCode.expiresAt.
-    var recipeTtlMs by remember { mutableStateOf(DEFAULT_RECIPE_TTL_MS) }
+    var recipeTtlMs by rememberSaveable { mutableStateOf(DEFAULT_RECIPE_TTL_MS) }
     // Boot-unlock policy — "auto" default (self-unlock via box-sealed lease) vs
     // "approve" (phone-gated every boot). Only "approve" rides the wire.
-    var bootUnlockMode by remember {
+    var bootUnlockMode by rememberSaveable {
         mutableStateOf(if (preset?.bootUnlockMode == "approve") ServerSettingsStore.Mode.APPROVE else ServerSettingsStore.Mode.AUTO)
     }
     // Disk encryption — ON (default) = "luks" (omitted from the wire). OFF =
     // "none": plaintext disk, for boxes that can't keep network at boot.
-    var encryptDisk by remember { mutableStateOf(preset?.encryptDisk ?: true) }
+    var encryptDisk by rememberSaveable { mutableStateOf(preset?.encryptDisk ?: true) }
     // ADVANCED MODE — one toggle, OFF by default ("for people who know what
     // they're doing"). On mobile it gates the offline path: embed-secrets (the
     // box SWK in the recipe), so a box installs fully offline with no
     // post-registration phone step. (Choose-your-own-ISO + debug/local-CLI have
     // no mobile analogue — they live on the website/webapp.) When OFF, the
     // offline sub-options snap back to the secret-free default.
-    var advancedMode by remember { mutableStateOf(false) }
+    var advancedMode by rememberSaveable { mutableStateOf(false) }
     // Whether the recipe EMBEDS the box's SWK (the offline path). Default OFF:
     // the recipe is secret-free of the SWK and the phone DEPOSITS it once the box
     // registers (docs/recipe-delivery-and-remote-install.md).
-    var embedSecrets by remember { mutableStateOf(false) }
+    var embedSecrets by rememberSaveable { mutableStateOf(false) }
     // ADVANCED — make this a debug-friendly server. Default OFF (a production box
     // with no console login). ON (only reachable under Advanced mode) bakes an
     // owner-IRK-signed `flagship/debug-access/v1` grant into the recipe as the
@@ -191,7 +212,7 @@ fun CreateServerScreen(
     // config-pinned owner IRK + this box's FQDN before enabling the debug console
     // user. Signed at MINT behind the SAME create biometric. Snaps back when
     // Advanced mode is turned off.
-    var debugFriendly by remember { mutableStateOf(false) }
+    var debugFriendly by rememberSaveable { mutableStateOf(false) }
     val swkDepositStore = remember { PendingSwkDepositStore.from(context) }
     val pairingDepositStore = remember { PendingPairingDepositStore.from(context) }
     // Per-service leadership (Phase 6): the per-cloud CGK is NEVER embedded in the

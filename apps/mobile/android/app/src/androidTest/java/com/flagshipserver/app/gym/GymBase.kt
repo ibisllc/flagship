@@ -31,6 +31,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.junit4.ComposeTestRule
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
@@ -92,6 +93,7 @@ abstract class GymBase {
         deviceRank: String? = null,
         live: Boolean = false,
         apexHost: String? = null,
+        fakePasskeys: Boolean = false,
     ) {
         // A test may relaunch with different seeds (e.g. the admin/non-admin
         // state pair) — close the prior scenario so activities never stack.
@@ -111,8 +113,16 @@ abstract class GymBase {
             if (deviceRank != null) putExtra(SmokeModeConfig.EXTRA_SMOKE_DEVICE_RANK, deviceRank)
             if (live) putExtra(SmokeModeConfig.EXTRA_SMOKE_LIVE, true)
             if (apexHost != null) putExtra("flagship.apexHost", apexHost)
+            if (fakePasskeys) putExtra(SmokeModeConfig.EXTRA_SMOKE_FAKE_PASSKEYS, true)
         }
         scenario = ActivityScenario.launch(intent)
+        composeRule.waitForIdle()
+    }
+
+    /** Recreate the activity (what Android does after a configuration change
+     *  or when it reclaims a backgrounded app), keeping saved state. */
+    protected fun recreateActivity() {
+        scenario?.recreate()
         composeRule.waitForIdle()
     }
 
@@ -151,8 +161,9 @@ abstract class GymBase {
     protected fun nameServerAndNext(name: String = "gymbox") {
         waitUntilExists("cs-name-field")
         // The tag sits on the field's wrapper; type into the text input inside it.
+        // The field starts prefilled ("home"): replace it.
         composeRule.onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag("cs-name-field")))
-            .performTextInput(name)
+            .performTextReplacement(name)
         composeRule.onNodeWithTag("cs-next-button").performScrollTo().performClick()
         composeRule.waitForIdle()
     }
