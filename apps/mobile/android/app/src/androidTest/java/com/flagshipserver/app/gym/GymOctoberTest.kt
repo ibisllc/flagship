@@ -169,7 +169,8 @@ class GymOctoberTest : GymBase() {
         openAccessControl()
         composeRule.onNodeWithTag("service-access-add-person").performClick()
         waitUntilExists("service-access-rank-locked")
-        composeRule.onNodeWithText("Only an admin device can give a higher rank").assertIsDisplayed()
+        composeRule.onNodeWithTag("service-access-rank-locked").performScrollTo()
+            .assertTextContains("Only an admin device can give a higher rank", substring = true)
         composeRule.onNodeWithTag("service-access-new-role").assertIsNotEnabled()
         gymShot("access-rank-locked")
     }
