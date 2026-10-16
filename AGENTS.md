@@ -114,12 +114,23 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   from their account root and that app only, whoever invited them, so a
   server owner can link two grants for the SAME app ("John" and "Chess
   Club") but never the same person across two apps or servers. No
-  long-lived id may be shared between contexts. App ranks are fixed and
-  ordered: Member < Manager < Master (crown) < the box owner; apps decide
-  what each rank may do, the box never blocks writes by rank.
-- **Only admins grant higher access; any device of the account may invite at
-  Member, and admins are told** (owner rule, 2026-10-15;
-  `docs/service-access-gating.md` "Who can invite").
+  long-lived id may be shared between contexts. Apps decide what each rank
+  may do; the box never blocks writes by rank.
+- **Three ranks, and only admins change them** (owner rule, 2026-10-15;
+  `docs/service-access-gating.md` "Account members"). Exactly member <
+  manager < master (no owner rank). In every app, by default: the owning
+  account's admin devices are master, its other devices and co-managing
+  accounts manager, people they invite member. Invite and withdraw rights
+  come from being manager-class in that app (a non-admin device invites only
+  at Member and withdraws only its own invites; a demoted one's links stop
+  letting new people in). Only admins change ranks (demotion and refusal
+  included), modes, or remove others, and the box enforces it: the admin root
+  on admin-pinned boxes, never the IRK. Admins keep one biometric per invite.
+- **One access list per app across the account's servers** (owner rule,
+  2026-10-15; `docs/service-access-gating.md` "One list per app"). The app's
+  lead server distributes signed changes box to box in server order; every
+  box verifies every entry itself; nothing about members goes through
+  `.com`. Separate per-server lists are a later Pro option (branch only).
 - **Only `main` is deployed** (owner rule, 2026-10-15). `main` is the sole
   source of truth: every `.com`, `.services`, shim or box release is built
   from a commit that is already on `main`, or lands on `main` (pushed)
@@ -225,8 +236,8 @@ of the last check here: **not yet checked**.
   failed, ~11 min, 3 STARTER-4xCPU-8GB boxes. Fixed on `main` from what it
   found: gym boxes never showed online (`daemon_status` matched a hard-coded
   apex), invites of admin-pinned accounts could never be redeemed (box now
-  accepts the admin root; the apps' AID/IRK creates now count as Member
-  invites, see "Who can invite"), gVisor apps had
+  accepts the admin root; non-admin devices now invite with their own
+  device key, see "Account members"), gVisor apps had
   no DNS so egress approvals never worked (resolv.conf now names the gateway),
   app backup "include user data" always failed, concurrent pairings 500'd, and
   the `.services` Fly image didn't build (build-eval). Leftover gym DNS had
@@ -369,13 +380,13 @@ of the last check here: **not yet checked**.
   box's `/api/screens/app-invite/*`; `inviteHandler.ts`/`serviceAccessGate.ts`
   remain as unwired library code). The service page's "Access control": Open
   to all | Members only (independent of the list) and Members (n) with a rank
-  each. Ranks are member < manager < master (+ owner), cumulative; apps
+  each. Ranks are member < manager < master, cumulative; apps
   enforce them, the box never blocks by rank; manifests carry one line per
   rank (`access.role_descriptions`, the AI must write them). Every invite
-  redemption is its own grant; effective rank = highest live grant; the
-  owner's signed `flagship/app-member-role/v1` order (targets `invite:`,
-  `grant:<invite>/<aid>`, `aid:`) via `GET/POST
-  /api/screens/services/:id/members[/role]`. Open apps get
+  redemption is its own grant; effective rank = highest live grant (an
+  admin's `aid:` order replaces it); admin-signed `flagship/app-rank/v1`
+  orders via `GET /api/screens/services/:id/members` and
+  `POST …/members/rank` ("Account members" below). Open apps get
   `/__flagship/sign-in?next=` / `sign-out` on the app's host. Box changes need
   the next endorsed release. Open: removing ONE person's join from a group
   (needs a grant-revoke order; today it's per AID or per invite).
@@ -388,26 +399,47 @@ of the last check here: **not yet checked**.
   anonymous visitors only on `access.public_routes` (normalised, dot segments
   refused), knock elsewhere; unknown mode = members-only (docs/app-apis.md §2,
   2026-10-14; needs an endorsed box release).
-- **Who can invite (2026-10-15, through `226e92ed8`).**
-  `docs/service-access-gating.md` "Who can invite". Real (admin-pinned)
-  accounts could only invite from an admin device; now any device invites at
-  Member (AID/IRK-signed create = tier `member` on `.com`, recorded with the
-  device id, migration 0100) and every admin device gets a content-free
-  `invite-created` push plus an activity row; the box reads the tier from the
-  create's signing key and caps those joins at Member whatever `default_role`
-  says; rank orders stay admin-root-only on pinned boxes; a device may revoke
-  its own member invites. All three apps (webapp shell v95): admin devices
-  sign create/revoke with the admin root (one Face ID per create: owner,
-  2026-10-15, each invite is its own link sent by hand, so neither batching
-  nor caching the admin root for the session), others' rank picker is locked to Member,
-  ranks read-only off admin devices, "Invited by <device>" from the decrypted
-  directory, Revoke on the row, route `app/account/activity`. Live gym group
-  `invites` green (`live-run-2026-10-15T21-33-02-638Z`, 11 checks); mock gym
-  scenarios on iOS and Android (locked picker, "Invited by") green. `.com`
-  live with 0100 applied (shell v96); iPhone dev build of `62ff3e917`
-  installed. Needs: an endorsed box release (the cap), iOS/Android store
-  builds. Open: the box still takes mode and
-  allow-remove orders under the owner IRK (admin-only is a client rule there).
+- **Account members, ranks, admin-only access (2026-10-15).**
+  `docs/service-access-gating.md` "Account members" (replaces "Who can
+  invite"). Three ranks (no owner rank: apps see master). The box keeps the
+  account's device book (every device grant from `.com`
+  `GET /api/users/<u>/device-grants`, read token, verified on the box under
+  the pinned admin root / IRK) and classifies every sign-in key: admin device
+  master, other devices and co-managers manager, invitees of non-admins
+  member; admin orders `flagship/app-rank/v1` override per app (demote,
+  refuse). Devices sign app sign-ins with their account device key on the
+  account's own servers and the share key on shared ones. Mode, removal
+  (`service-access-mode/v2`, `service-allow-remove/v2`), rank orders and
+  uninstall need the admin key on pinned boxes (IRK refused). Non-admin
+  manager-class devices invite at Member with their device key (`.com`
+  verifies the named device; AID/IRK refused on pinned accounts) and
+  withdraw only their own (`POST /api/service-access/invite-withdraw`;
+  `.com` keeps signed revokes, migration 0102; the box prunes only for
+  revokes it verifies); a demoted creator's links stop admitting new people.
+  Access state moved to `<dataDir>/data/flagship-access/` (Migrate carries
+  it), uninstall drops it. Clients at parity (webapp shell v101):
+  webapp `0c86ea9ab`/`d24323173`, Android `559ec1694`..`4125224cc`, iOS
+  `e8209c1de`..`62db48867` (mock gym scenarios for admin, Manager and Member
+  devices on all three); `flagship/app-member-role/v1` retired
+  (`109ab06de`). Live gym groups `invites` + `gating` green
+  (`live-run-2026-10-16T00-50-30-999Z`: 14 + 21 checks).
+- **One access list per app (2026-10-15).** "One list per app" in the same
+  doc: per-app journal of signed entries, the app's lead server distributes
+  box to box (`/api/access-sync/push|pull`, CGK-derived MAC; nothing via
+  `.com`), every box verifies every entry, catch-up holds invited people and
+  co-managers after a restart until the list is pulled; each box finds the
+  app's leader itself (`/pods` + its server order + asking the others).
+  Live gym group `one-list` (home + home2): 6 checks green in the same run. Found on the way:
+  cross-box gossip never reaches a sibling (the hub has no TLS terminator
+  for `broadcast--<user>.<apex>` on :443, and prod has no DNS for it), so
+  per-app gossip leadership has never formed live: open; gossip now at
+  least uses the box's own zone (`ffc9a64c1`). Needs, for both: `.com` deploy with migration
+  0102 (and shell v101), an endorsed box release, iOS/Android store builds.
+  Open: a box-internal mode change (an AI-built app deployed members-only)
+  isn't handed over; co-managers and guests at Manager don't invite yet;
+  non-admin device keys are UMK-derived, so one non-admin device's rank
+  versus another's isn't enforceable against a hostile device of the same
+  person.
 - **Per-app visitor identity (2026-10-13).** A visitor signs redeem / visit /
   knock / acceptance with `deriveAppAccountId(UMK, serviceRef)`
   (`flagship/app-aid/v1|<serviceRef>`), replacing the per-author contact AID;

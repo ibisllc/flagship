@@ -143,7 +143,7 @@ export const gating: Group = {
       return "signed + pubkey published";
     });
 
-    await rec.check("owner sets members-only (owner-IRK signed)", async () => {
+    await rec.check("an admin sets members-only (admin-root signed, v2)", async () => {
       await setMode(A, b, serviceRef, "restricted");
       const r = await http(`https://${fqdn}/api/service-access/${serviceRef}`);
       assert(r.json?.mode === "restricted", `mode=${r.json?.mode}`);
