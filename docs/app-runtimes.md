@@ -130,16 +130,119 @@ approval says otherwise (some vendor images need to start as root and drop).
 
 ### 5.3 Disk and Postgres limits
 
-- Files folder: `data.stores.files.quota` (default 2 GiB, owner can raise),
-  enforced with ext4 project quotas on `/var/lib/docker/volumes` (the box's
-  data filesystem is ext4; `prjquota` mount option added by the installer and
-  the update).
-- `/tmp`: tmpfs, 64 MB (today).
-- Postgres, per app role: `CONNECTION LIMIT 20`, `statement_timeout 30s`,
-  `idle_in_transaction_session_timeout 60s`, `temp_file_limit 1GB`. Database
-  size has no native limit: the box measures it with `pg_database_size` every
-  10 minutes and, over the app's quota, revokes the role's write privileges until
-  the owner raises it or the app shrinks.
+**Built 2026-10-16** (`packages/server-daemon/src/appQuota/`). The limits
+make the server's backup policy hold (docs/server-backup-and-clone.md,
+"Backup policy"): with phone-side backups the server's app data can't grow
+past the space the phone reserved; with peer backups it may use a third of
+its own disk. `backupPolicy/cap.ts` turns the policy into a limit and the
+limit into per-app budgets (what each app holds plus an equal share of the
+room left); the quota manager (`appQuota/manager.ts`) holds every app to its
+budget, every 2 minutes and at once when the policy changes.
+
+Budgets: each app's Postgres + files budget is re-split between the stores
+it has (`limits.ts splitStores`): growth follows what each store holds, but
+no store gets less than a quarter of it (a new app's empty files folder next
+to a database that starts with its extensions would otherwise get nothing).
+A folder made before its app has a budget (an install, a copy or an import
+arriving) may use all the room left under the limit until the next tick. The
+owner setting per-app limits is for later.
+
+**Files folder: its own disk image.** Every app's files volume is a Docker
+volume bound to a folder inside a sparse ext4 image, loop-mounted by the box
+(`appQuota/loopVolumes.ts`):
+
+```
+/var/lib/flagship-files/<volume>.img     sparse ext4 (4 KiB blocks, no reserved blocks)
+/var/lib/flagship-files/<volume>/        mount point, chattr +i while unmounted
+/var/lib/flagship-files/<volume>/data    what the volume binds at /data
+/var/lib/flagship-files/<volume>/.flagship-ballast   outside data/, never seen by the app
+```
+
+- Why images: the box's root is ext4 on LUKS (the appliance and the USB
+  installer alike) made without ext4's `quota`/`project` features, which
+  can't be switched on while it's mounted, and xfs isn't used. Images need
+  only e2fsprogs and util-linux, which every Debian has. A full folder is
+  ENOSPC for that app alone; the box's disk is untouched.
+- Size: the budget (64 MiB at least); with no limit, 90 % of the disk. The
+  image is sparse (a 400 GB one allocates ~11 MB) and mounted with `discard`,
+  so deleting files gives the room back to the box.
+- A higher budget grows the image online (`truncate`, `losetup -c`,
+  `resize2fs`; 64 MiB → 20 GiB tested). A lower one is held by the ballast: a
+  preallocated file (`fallocate`, never written, costs the box nothing) sized
+  to what's above the limit. It binds every writer, root included (ext4's
+  reserved blocks don't, and `tune2fs` refuses more than half the
+  filesystem). An app already over a lower limit gets the room it frees
+  taken until it's down to it.
+- Fail closed: the volume binds `<mount>/data`, which exists only inside the
+  mounted image, so a container whose image isn't mounted doesn't start. The
+  box mounts every image at boot before any app starts (no Docker needed),
+  and checks again before each `docker run` of an app or staging copy
+  (`setFilesVolumeGuard`); an image that's gone refuses the app with "this
+  app's files folder is missing its disk image".
+- An older plain volume is moved into an image (`cp -a`, labels kept) the
+  next time its app starts with nothing holding it (if that fails, it stays
+  plain and the app still starts); an image whose volume went missing is
+  bound again, never replaced by an empty folder. Uninstall and self-delete
+  drop the images. Backups, copies and archives mount the volume
+  as before, so the image and its ballast never travel.
+- `FLAGSHIP_FILES_QUOTA=0` keeps plain volumes (no limit of their own).
+
+**Postgres: writes revoked at the limit** (`appQuota/pgQuota.ts`). Postgres
+has no quota. The box sums `pg_database_size` over the app's databases and,
+at its budget, takes the role's write privileges away: INSERT and UPDATE on
+every table (and from PUBLIC if that's where they came from), CREATE on its
+schemas (`public`'s comes through `pg_database_owner`, which the app role
+is, so it's revoked there too), CREATE and TEMPORARY on its database. Reads,
+DELETE and TRUNCATE still work, so the app can make room; existing sessions
+feel it at once. Each tick re-blocks (tables made since). What was taken is
+recorded (`<dataDir>/data/app-quota.json`) and given back exactly once the
+database is 1 % under its budget. "Under" counts the room Postgres can reuse:
+deleted rows leave space the next INSERT takes without growing the files,
+and the size only falls after a VACUUM FULL, so while blocked the box runs a
+plain VACUUM every 10 minutes and reads the free space map
+(`pg_freespacemap`, in an admin-owned schema, dropped on unblock). The app
+role owns its database and can grant itself the privileges back: an app
+that grows by more than 64 MiB (or 10 %) past where it was blocked is
+stopped (NOLOGIN, its sessions ended) until it's back under. The box's own
+work runs as the admin and is never affected (backups, the owner's signed
+database writes, copies, staging seeds); an app's own SQL migrations run as
+its role and fail while it's blocked. Large objects aren't covered.
+
+**The box's own disk: a brake that applies whatever the policy (`none`
+included).** On the disk that holds Docker, Postgres and the images: at 90 %
+used, every app's folder is frozen (the ballast takes all that's free) and
+every database is blocked; at 95 % the folders are remounted read-only
+(EROFS); under 88 % it lifts. Per-app limits stay as they were.
+
+**Staging copies and builds**: a staging copy's files folder is 512 MiB and
+its database 256 MiB (`DEV_*_QUOTA_BYTES`). A `docker build` writes to
+Docker's own storage, which no image can hold, so the box watches the disk
+while it runs and kills it once it has added 4 GB or the disk reaches the
+brake ("the build wrote more than 4.0 GB to the server's disk, so it was
+stopped").
+
+**Visibility**: `server-detail.storage` (`disk`, `brake`, `capped`, and each
+app's `files`/`postgres` with `usedBytes`, `limitBytes`, `full`) and
+`app-detail.storage` (the app's own; `postgres.writesBlocked`, `stopped`).
+When an app fills up, the box writes an Activity entry (`app.storage.full`,
+`app.storage.room` when it has room again; `server.disk.full` /
+`server.disk.room` for the brake), queues an `app-storage-full` phone alert
+(serviceId + store) and sends a content-free push (category `generic`, at
+most one per 10 minutes): the phone shows "An app on this server is full".
+
+Tested: unit tests over fakes, the database limiter on a real Postgres 18
+(CI runs the box's image), and the images on a Debian 13 arm64 VM as root
+(CI runs them with sudo, plus a container on the volume). Still to do: the
+clients don't show `storage` or the alert yet; per-app limits set by the
+owner; the live gym group `quota` (fill a gym app's folder and database on a
+real box, under gVisor) hasn't run yet.
+
+Other limits, unchanged:
+
+- `/tmp`: tmpfs, 64 MB.
+- Postgres, per app role (not built yet): `CONNECTION LIMIT 20`,
+  `statement_timeout 30s`, `idle_in_transaction_session_timeout 60s`,
+  `temp_file_limit 1GB`.
 
 ## 6. Builds
 
@@ -247,7 +350,9 @@ refused with "update this server first" (no compatibility needed yet).
    Build `RUN` steps still use runc until phase 3.
 3. Install in a locked-down container; COPY-only assembly; bundle hashing.
 4. Copies send bundles (§8); runtime prefetch and pruning.
-5. Disk quotas and Postgres role limits (§5.3).
+5. **Built 2026-10-16**: disk quotas (§5.3): files images, database write
+   limits, the disk brake, staging and build limits. Postgres role limits
+   (connections, timeouts) still to do.
 6. Vetted packages (tier 2).
 7. Tier 3 behind an owner-signed import approval; marketplace review on
    `feat/marketplace`.
