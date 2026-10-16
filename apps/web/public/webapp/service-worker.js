@@ -269,7 +269,12 @@
 //       Jump to latest (lib/vibeTranscript.js); a shared app's Database;
 //       Settings → Scan a pairing code; access alerts from every server;
 //       Flagship Inference refusals in .com's words.
-const SHELL_VERSION = "v117";
+//  v118: a tapped generic push also drains the AI-chat alerts and opens the
+//       waiting build chat (?wake=1 when no tab is open); the firewall-
+//       down sandbox notice in the box's words; Build sessions reopens a
+//       git or IDE build a restart cut off; the server order only on
+//       devices that can sign it.
+const SHELL_VERSION = "v118";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
