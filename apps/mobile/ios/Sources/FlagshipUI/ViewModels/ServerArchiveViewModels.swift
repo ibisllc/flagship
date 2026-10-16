@@ -498,7 +498,8 @@ public final class ImportBackupViewModel {
     /// Show the progress of a send that started under the create screen.
     public func leaveCreate(fqdn: String) {
         createTarget = nil
-        if case .creating = phase { phase = .waiting(fqdn: fqdn.lowercased()) }
+        if case .creating = phase { phase = heldPhase ?? .waiting(fqdn: fqdn.lowercased()) }
+        heldPhase = nil
     }
 
     public func stop() {
@@ -508,10 +509,17 @@ public final class ImportBackupViewModel {
         scoped = []
     }
 
+    /// The send's latest step while the create screen is still up.
+    private var heldPhase: Phase?
+
     private func setPhase(_ p: Phase) {
-        // While the create screen is up its delivered page stays visible; the
-        // send carries on underneath and shows once the user taps Done.
-        if case .creating = phase, case .waiting = p { return }
+        // While the create screen is up (its delivered page, or a Studio
+        // pairing still running) the send carries on underneath and shows
+        // once the user taps Done.
+        if case .creating = phase {
+            heldPhase = p
+            return
+        }
         phase = p
     }
 
@@ -546,7 +554,7 @@ public final class ImportBackupViewModel {
                 if r.state == "failed" { throw ImportError.failed(r.reason ?? "unknown reason") }
                 if r.state == "done" {
                     onRestored(fqdn)
-                    phase = .done(fqdn: fqdn, apps: r.apps)
+                    setPhase(.done(fqdn: fqdn, apps: r.apps))
                     return
                 }
                 setPhase(.restoring(fqdn: fqdn, apps: r.apps))
@@ -555,7 +563,7 @@ public final class ImportBackupViewModel {
         } catch is CancellationError {
             return
         } catch {
-            phase = .failed(message: Self.message(error), keepsWaiting: true)
+            setPhase(.failed(message: Self.message(error), keepsWaiting: true))
         }
     }
 

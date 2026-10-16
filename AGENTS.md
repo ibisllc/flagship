@@ -247,29 +247,41 @@ of the last check here: **not yet checked**.
   an older endorsed release; `/api/dev/sample-user/<u>/order-update` assumes
   the prod apex.
 
-- **Backup/clone server, Add/Import a server, Migrate wipes, Activity (2026-10-15,
-  `72e889fd`, `.com` deployed with webapp shell v84):** `docs/server-backup-and-clone.md`. One
-  sealed archive of all apps (`serverArchive/`), downloadable and importable
-  onto any server of the account; Home's button is "Add/Import a server";
-  Replace and the install Timeline are gone; Migrate always retires and wipes
-  the old server (staged `awaiting-confirm` wipe, leases dropped at take-over);
-  the box activity log records updates, apps, migration, decommission, backups
-  and imports, and all three Activity tabs merge it with the account events.
-  Needs an endorsed box release and iOS/Android store builds (until then
-  the apps' new buttons 404 on boxes). Not run on a real box: the docker save/load and
-  pg_dump/restore paths (fake ops in tests), a phone on a real archive.
-  Follow-up (2026-10-15): the backup is sized before it starts (refuses with
-  "needs about X GB"); downloads stream from disk via a token link with HTTP
-  Range (browser resumes; phones fetch 4 parts at once, resume, check the
-  SHA-256); wipe orders no longer expire (`keep` orders only are GC'd) and the
-  self-delete order is read by STK without being consumed (10-year TTL).
-  Backups carry no images, OS or Flagship: the importing box rebuilds each
-  app from its working tree with its own runtime catalog (or pulls a public
-  image by name), so any install imports any backup on any CPU; an app with
-  neither is left out and named.
-  Open: peer-backup shards of the old name aren't carried; Forgejo repos and
-  API keys aren't in the archive; a late wipe still needs the old box's
-  daemon to run (it can't unlock remotely after take-over).
+- **Backup/clone server, Add/Import a server, Migrate wipes, Activity
+  (2026-10-15):** `docs/server-backup-and-clone.md`. A backup is two files:
+  a small `.flagship-backup` (key slots + the saved server's settings, apps,
+  and the data file's size and SHA-256, sealed under a random content key)
+  and the `.flagship-data` (the apps in AES-GCM frames). Slots: a passcode
+  slot (Argon2id; the apps suggest a 100-bit passcode or take one with 20
+  chars / 12 with three kinds) and an account slot (the UMK archive key), so
+  backups can be shared or restored after the account is lost. Vectors
+  `packages/protocol/test-vectors/server-backup` + `server-restore` (TS,
+  webapp, Swift, Kotlin). **Import a backup** is one flow: pick
+  both files (read in place), open (account slot, else passcode), stream-check
+  the data file, pick a name (saved one filled in unless taken; checked as
+  typed), the existing create/burn screen makes the server with the saved
+  settings and an IRK-signed `flagship/server-restore/v1` beside the pairing
+  order; the box adopts it only if it verifies, then accepts that one data
+  file from an owner session, reports `awaitingBackup` on its heartbeat
+  (`/pods`, Home: "Waiting for its backup" with Send / Delete), resumes
+  uploads across restarts, checks size + SHA-256 before the key opens it,
+  and stops waiting once the apps are restored. Boxes no longer accept a
+  backup they weren't created for. Webapp,
+  iOS (`cc951258`..`01b0db0a`; mock gym: import screen, waiting server,
+  passcode step) and Android (`4be9a598`; saves both files into a
+  picked folder) at parity. `.com` (relays `awaitingBackup` on `/pods`, no
+  migration) and the webapp are live since the `3e8fef1de` deploy (shell
+  v113). Needs an endorsed box release and iOS/Android store builds. Not run on a real box or phone: the whole
+  restore, docker save/load and pg_dump/restore (fake ops in tests).
+  Migrate always retires and wipes the old server (staged `awaiting-confirm`
+  wipe, leases dropped at take-over); the box activity log records updates,
+  apps, migration, decommission, backups and restores, merged into all
+  three Activity tabs. Open: the server's description isn't carried (it
+  lives on the phones); a restore whose apps partly fail still ends the
+  waiting (the failures are listed); only the creating device holds a
+  session for the new box until another device pairs; peer-backup shards,
+  Forgejo repos aren't in a backup; a late wipe still needs the old box's
+  daemon to run.
 
 - **Build cost measurement (2026-10-14, `infra/inference/build-eval`):**
   scripted app builds, edits and fix rounds through the box's own build loop

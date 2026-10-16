@@ -171,6 +171,21 @@ final class ServerArchiveViewModelTests: XCTestCase {
         XCTAssertEqual(restored, ["home.alice.flagship.services"])
     }
 
+    func testTheCreateScreenStaysUpUntilDoneWhileTheSendRunsUnderIt() async throws {
+        let b = try makeBackup()
+        let c = client()
+        c.restoreWaiting = ServerRestoreWaiting(archiveId: b.archiveId, bytes: b.dataBytes, sha256: b.sha256)
+        let vm = importVM(c)
+        await vm.choose([b.backupURL, b.dataURL])
+        vm.create()
+        vm.send(to: "home.alice.flagship.services")
+        try await waitFor { !c.restoreCommits.isEmpty }
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(vm.phase, .creating, "the delivered page (or a Studio pairing) stays up")
+        vm.leaveCreate(fqdn: "home.alice.flagship.services")
+        try await waitFor { if case .done = vm.phase { return true }; return false }
+    }
+
     func testANameTheAccountUsesIsNotSuggestedAndIsRefused() async throws {
         let b = try makeBackup()
         let vm = importVM(client(), taken: ["home"])
