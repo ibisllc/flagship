@@ -20,6 +20,7 @@ import {
   shareTokenHash,
   signKnockAuthorization,
   signServerShareAccept,
+  signServerShareAcceptAdmin,
   signServerShareGrant,
   signServerShareLeave,
   signServerShareOffer,
@@ -34,6 +35,7 @@ import {
   type Keypair,
   type KnockAuthorization,
   type ServerShareAccept,
+  type ShareAcceptAdminProof,
   type ServerShareGrant,
   type ServerShareLeave,
   type ServerShareOffer,
@@ -65,13 +67,35 @@ function grantFor(b: Box, sh: Share, level: ShareLevel): ServerShareGrant {
   return { serverDomain: b.fqdn, shareId: sh.shareId, memberPubHex: sh.memberPubHex, level, unlockAtBoot: level === "manage", seeAppData: false, label: "gym co-manager", issuedAt: Date.now() };
 }
 
-/** Posts a share grant (admin root unless `signer`), with B's acceptance on the first one. */
-function postGrant(b: Box, ownerSession: string, sh: Share, level: ShareLevel, signer: Keypair, withAccept: boolean) {
+/**
+ * B's admin proof for an acceptance (docs/share-a-server.md §5.1): `.com`'s
+ * attestation of B's admin root, fetched about B's own account, and #12
+ * signed with `signer` (B's admin root unless a test forges it).
+ */
+async function adminProof(B: Account, accept: ServerShareAccept, signer: Keypair = B.keys.adminRoot): Promise<ShareAcceptAdminProof> {
+  const r = await http(`https://${CONTROL}/api/users/${B.username}/account-key-attestation`);
+  assert(r.status === 200 && r.json?.attestation, `attestation ${r.status}: ${short(r.text)}`);
+  const attestation = r.json.attestation;
+  assert(attestation.keyKind === "admin-root" && attestation.keyPubHex === bytesToHex(B.keys.adminRoot.publicKey), `attestation names ${short(attestation)}`);
+  const admit = { ...accept, keyKind: "admin-root" as const, keyPubHex: attestation.keyPubHex as string };
+  return { admit, signature: bytesToHex(signServerShareAcceptAdmin(admit, signer)), attestation };
+}
+
+type Proof = "admin" | "none" | ((accept: ServerShareAccept) => Promise<ShareAcceptAdminProof>);
+
+/** Posts a share grant (admin root unless `signer`), with B's acceptance (and its admin proof) on the first one. */
+async function postGrant(b: Box, ownerSession: string, sh: Share, level: ShareLevel, signer: Keypair, withAccept: boolean, B?: Account, proof: Proof = "admin") {
   const grant = grantFor(b, sh, level);
   const accept: ServerShareAccept = { serverDomain: b.fqdn, shareId: sh.shareId, memberPubHex: sh.memberPubHex, acceptedAt: Date.now() };
+  const acceptAdmin = !withAccept || proof === "none" ? undefined : proof === "admin" ? (B ? await adminProof(B, accept) : undefined) : await proof(accept);
   return postJson(
     `https://${b.fqdn}/api/screens/shares`,
-    { grant, signature: bytesToHex(signServerShareGrant(grant, signer)), ...(withAccept ? { accept, acceptSignature: bytesToHex(signServerShareAccept(accept, sh.member)) } : {}) },
+    {
+      grant,
+      signature: bytesToHex(signServerShareGrant(grant, signer)),
+      ...(withAccept ? { accept, acceptSignature: bytesToHex(signServerShareAccept(accept, sh.member)) } : {}),
+      ...(acceptAdmin ? { acceptAdmin } : {}),
+    },
     { "x-flagship-session": ownerSession },
   );
 }
@@ -129,12 +153,39 @@ async function manageOnHome2(A: Account, B: Account, rec: Rec, b: Box): Promise<
     .then(() => true, (e: unknown) => String(e));
 
   await rec.check("a share grant signed by A's owner IRK is refused", async () => {
-    const r = await postGrant(b, ownerSession, sh, "manage", A.keys.irk, true);
+    const r = await postGrant(b, ownerSession, sh, "manage", A.keys.irk, true, B);
     assert(r.status === 403 || r.status === 400, `expected refusal, got ${r.status}: ${short(r.text)}`);
     return `${r.status}`;
   });
-  const shared = await rec.check("A shares home2 with B (admin-root grant + B's acceptance)", async () => {
-    const r = await postGrant(b, ownerSession, sh, "manage", A.keys.adminRoot, true);
+  // Only an admin device of B's account accepts (docs/share-a-server.md §5.1): the box checks it.
+  await rec.check("an acceptance with no admin proof is refused: 403 accept-not-admin, in words", async () => {
+    const r = await postGrant(b, ownerSession, sh, "manage", A.keys.adminRoot, true, B, "none");
+    assert(r.status === 403 && r.json?.code === "accept-not-admin", `${r.status}: ${short(r.text)}`);
+    assert(String(r.json?.error).startsWith("Only an admin device of their account can accept"), `sentence: ${short(r.text)}`);
+    return "403 accept-not-admin";
+  });
+  await rec.check("a proof signed by a key B's account doesn't hold, or replayed from another share, is refused: accept-signature", async () => {
+    const forged = await postGrant(b, ownerSession, sh, "manage", A.keys.adminRoot, true, B, (acc) => adminProof(B, acc, A.keys.irk));
+    assert(forged.status === 403 && forged.json?.code === "accept-signature", `forged ${forged.status}: ${short(forged.text)}`);
+    const other = newShare(B);
+    const replayed = await postGrant(b, ownerSession, sh, "manage", A.keys.adminRoot, true, B, (acc) =>
+      adminProof(B, { ...acc, shareId: other.shareId, memberPubHex: other.memberPubHex }),
+    );
+    assert(replayed.status === 403 && replayed.json?.code === "accept-signature", `replayed ${replayed.status}: ${short(replayed.text)}`);
+    const list = await http(`https://${b.fqdn}/api/screens/shares`, { headers: os });
+    assert(!(list.json?.shares ?? []).some((s: { shareId: string }) => s.shareId === sh.shareId), "a refused share went live");
+    return "forged 403, replayed 403, nothing live";
+  });
+  await rec.check("B is a demo account: .com's demo signer signs #12 under B's admin root (no device holds it)", async () => {
+    const accept: ServerShareAccept = { serverDomain: b.fqdn, shareId: sh.shareId, memberPubHex: sh.memberPubHex, acceptedAt: Date.now() };
+    const admit = { ...accept, keyKind: "admin-root" as const, keyPubHex: bytesToHex(B.keys.adminRoot.publicKey) };
+    const r = await postJson(`https://${CONTROL}/api/dev/sample-user/${B.username}/share-accept`, { admit });
+    assert(r.status === 200 && typeof r.json?.signature === "string", `${r.status}: ${short(r.text)}`);
+    assert(r.json.signature === bytesToHex(signServerShareAcceptAdmin(admit, B.keys.adminRoot)), "the demo signer's signature isn't B's admin root's");
+    return "signed under B's root";
+  });
+  const shared = await rec.check("A shares home2 with B (admin-root grant + B's acceptance + B's admin proof)", async () => {
+    const r = await postGrant(b, ownerSession, sh, "manage", A.keys.adminRoot, true, B);
     assert(r.status === 200 && r.json?.ok, `${r.status}: ${short(r.text)}`);
     return `share ${sh.shareId.slice(0, 8)}… level=manage`;
   });
@@ -226,7 +277,7 @@ async function viewOnHome(A: Account, B: Account, rec: Rec, b: Box): Promise<voi
   const os = { "x-flagship-session": ownerSession };
   const sh = newShare(B);
   const view = await rec.check("A shares home with B at the VIEW level; B's session says view", async () => {
-    const g = await postGrant(b, ownerSession, sh, "view", A.keys.adminRoot, true);
+    const g = await postGrant(b, ownerSession, sh, "view", A.keys.adminRoot, true, B);
     assert(g.status === 200, `grant ${g.status}: ${short(g.text)}`);
     const s = await openSession(b, sh);
     assert(s.status === 200 && s.json?.level === "view", `session ${s.status}: ${short(s.text)}`);
