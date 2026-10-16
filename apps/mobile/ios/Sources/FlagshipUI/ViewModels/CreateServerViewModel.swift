@@ -190,7 +190,9 @@ public final class CreateServerViewModel {
         adminRootSigner: @escaping (String) async throws -> Curve25519.Signing.PrivateKey = { reason in
             try await Keystore.adminRootKey(reason: reason)
         },
-        isDemoAccount: Bool = false
+        // No default: a flow that forgets it refuses demo accounts (the
+        // store reviewers' account) as non-admin devices.
+        isDemoAccount: Bool
     ) {
         self.username = username
         self.adminRootPubHex = adminRootPubHex

@@ -57,7 +57,8 @@ final class CreateServerBootUnlockTests: XCTestCase {
         CreateServerViewModel(
             username: "harry",
             server: MockFlagshipServerClient(),
-            relay: MockQrRelayClient()
+            relay: MockQrRelayClient(),
+            isDemoAccount: false
         )
     }
 

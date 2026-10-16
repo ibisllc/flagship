@@ -14,7 +14,8 @@ final class BuilderPairViewModelTests: XCTestCase {
         let minter = CreateServerViewModel(
             username: "tester",
             server: MockFlagshipServerClient(),
-            relay: MockQrRelayClient()
+            relay: MockQrRelayClient(),
+            isDemoAccount: false
         )
         return BuilderPairViewModel(client: client, minter: minter)
     }

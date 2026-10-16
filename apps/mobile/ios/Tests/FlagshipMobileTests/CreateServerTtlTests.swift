@@ -21,7 +21,8 @@ final class CreateServerTtlTests: XCTestCase {
         CreateServerViewModel(
             username: "harry",
             server: MockFlagshipServerClient(),
-            relay: MockQrRelayClient()
+            relay: MockQrRelayClient(),
+            isDemoAccount: false
         )
     }
 

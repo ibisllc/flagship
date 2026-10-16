@@ -65,7 +65,7 @@ final class AddServerGateTests: XCTestCase {
 
         let server = MockFlagshipServerClient()
         server.simulatedLatency = 0
-        let vm = CreateServerViewModel(username: "harry", server: server, relay: MockQrRelayClient())
+        let vm = CreateServerViewModel(username: "harry", server: server, relay: MockQrRelayClient(), isDemoAccount: false)
         vm.name = "home"
         do {
             _ = try await vm.mintRecipeJSON()
@@ -87,7 +87,7 @@ final class AddServerGateTests: XCTestCase {
 
         let server = MockFlagshipServerClient()
         server.simulatedLatency = 0
-        let vm = CreateServerViewModel(username: "harry", server: server, relay: MockQrRelayClient())
+        let vm = CreateServerViewModel(username: "harry", server: server, relay: MockQrRelayClient(), isDemoAccount: false)
         vm.name = "home"
         _ = try await vm.mintRecipeJSON()
 

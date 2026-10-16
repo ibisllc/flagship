@@ -13,7 +13,8 @@ final class CreateServerAdvancedToggleTests: XCTestCase {
         CreateServerViewModel(
             username: "harry",
             server: MockFlagshipServerClient(),
-            relay: MockQrRelayClient()
+            relay: MockQrRelayClient(),
+            isDemoAccount: false
         )
     }
 

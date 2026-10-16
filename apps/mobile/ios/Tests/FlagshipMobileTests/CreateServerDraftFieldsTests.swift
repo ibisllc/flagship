@@ -35,7 +35,8 @@ final class CreateServerDraftFieldsTests: XCTestCase {
             username: "harry",
             server: MockFlagshipServerClient(),
             relay: MockQrRelayClient(),
-            draftStore: store
+            draftStore: store,
+            isDemoAccount: false
         )
         return (vm, d)
     }

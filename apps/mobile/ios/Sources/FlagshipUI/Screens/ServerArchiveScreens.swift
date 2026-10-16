@@ -198,7 +198,8 @@ struct ImportBackupContainer: View {
                 server: serverClient,
                 relay: qrRelay,
                 mailbox: mailbox,
-                sessionStore: sessionStore
+                sessionStore: sessionStore,
+                isDemoAccount: app.isDemoAccount
             )
             m.name = target.name
             m.bootUnlockMode = target.bootUnlockMode == "approve" ? .approve : .auto

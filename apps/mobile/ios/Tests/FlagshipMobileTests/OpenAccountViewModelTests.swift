@@ -225,7 +225,8 @@ final class CreateServerNoReclaimTests: XCTestCase {
         let vm = CreateServerViewModel(
             username: "harry",
             server: server,
-            relay: MockQrRelayClient()
+            relay: MockQrRelayClient(),
+            isDemoAccount: false
         )
         try await driveToDelivered(vm)
 
@@ -256,7 +257,8 @@ final class CreateServerNoReclaimTests: XCTestCase {
         let vm = CreateServerViewModel(
             username: "harry",
             server: server,
-            relay: MockQrRelayClient()
+            relay: MockQrRelayClient(),
+            isDemoAccount: false
         )
         try await driveToDelivered(vm)
         guard case .delivered = vm.phase else { return XCTFail("expected .delivered") }
