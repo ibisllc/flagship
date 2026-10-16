@@ -21,7 +21,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -38,33 +47,30 @@ import com.flagshipserver.app.api.DemoServerBlock
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.ProvisionProgress
 import com.flagshipserver.app.ui.components.FSCard
+import com.flagshipserver.app.ui.components.FSDivider
+import com.flagshipserver.app.ui.components.FSGroup
+import com.flagshipserver.app.ui.components.FSRow
+import com.flagshipserver.app.ui.components.FSScreen
 import com.flagshipserver.app.ui.theme.FS
 
-/** Thin determinate progress bar. `failed` renders in the danger colour;
- *  the detail page frames it as "retrying" because the daemon retries. */
+/** Thin determinate progress bar (Material's linear indicator). `failed`
+ *  renders in the error colour; the detail page frames it as "retrying"
+ *  because the daemon retries. */
 @Composable
 fun DemoProgressBar(fraction: Double, failed: Boolean, modifier: Modifier = Modifier) {
     val f = fraction.coerceIn(0.0, 1.0).toFloat()
-    Box(
-        modifier
-            .fillMaxWidth()
-            .height(4.dp)
-            .clip(RoundedCornerShape(2.dp))
-            .background(FS.colors.border.copy(alpha = 0.5f)),
-    ) {
-        Box(
-            Modifier
-                .fillMaxWidth(f)
-                .height(4.dp)
-                .clip(RoundedCornerShape(2.dp))
-                .background(if (failed) FS.colors.danger else FS.colors.fill),
-        )
-    }
+    LinearProgressIndicator(
+        progress = { f },
+        modifier = modifier.fillMaxWidth(),
+        color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+    )
 }
 
 @Composable
 fun DemoInstallProgressScreen(podId: String, onAfterCancel: () -> Unit) {
     val app = LocalAppState.current
+    val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
 
     val pods by app.pods.collectAsState()
     val pod = pods.firstOrNull { it.podId == podId }
@@ -75,25 +81,11 @@ fun DemoInstallProgressScreen(podId: String, onAfterCancel: () -> Unit) {
     }
     val block = pod.demoServer
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .background(FS.colors.bg)
-            .verticalScroll(rememberScrollState())
-            .padding(FS.space.s4),
-        verticalArrangement = Arrangement.spacedBy(FS.space.s4),
+    FSScreen(
+        title = pod.name,
+        onBack = { backDispatcher?.onBackPressed() },
+        subtitle = "Your server is being installed",
     ) {
-        Text(
-            pod.name,
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.SemiBold),
-        )
-        Text(
-            "Your server is being installed",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 15.sp),
-        )
-
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                 DemoProgressBar(
@@ -106,8 +98,6 @@ fun DemoInstallProgressScreen(podId: String, onAfterCancel: () -> Unit) {
         }
 
         DeviceInfo(block)
-
-        Spacer(Modifier.height(FS.space.s8))
     }
 }
 
@@ -126,22 +116,22 @@ private fun StepList(block: DemoServerBlock?) {
                     Text(
                         step.label,
                         color = if (step.state == ProvisionProgress.StepState.PENDING)
-                            FS.colors.textMuted else FS.colors.text,
-                        style = TextStyle(fontSize = 15.sp),
+                            MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                        style = MaterialTheme.typography.bodyLarge,
                     )
                     val detail = step.detail
                     if (detail != null) {
                         if (step.state == ProvisionProgress.StepState.FAILED) {
                             Text(
-                                "Retrying — last error: $detail",
-                                color = FS.colors.danger,
-                                style = TextStyle(fontSize = 13.sp),
+                                "Retrying. Last error: $detail",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodyMedium,
                             )
                         } else {
                             Text(
                                 detail,
-                                color = FS.colors.textMuted,
-                                style = TextStyle(fontSize = 13.sp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodyMedium,
                             )
                         }
                     }
@@ -153,16 +143,16 @@ private fun StepList(block: DemoServerBlock?) {
 
 @Composable
 private fun StepIcon(state: ProvisionProgress.StepState) {
-    Box(Modifier.size(18.dp), contentAlignment = Alignment.Center) {
+    Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
         when (state) {
             ProvisionProgress.StepState.DONE ->
-                Text("✓", color = FS.colors.success, style = TextStyle(fontWeight = FontWeight.Bold))
+                Icon(Icons.Filled.CheckCircle, contentDescription = "Done", tint = FS.colors.success)
             ProvisionProgress.StepState.ACTIVE ->
-                CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = FS.colors.primary)
+                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
             ProvisionProgress.StepState.FAILED ->
-                Text("!", color = FS.colors.danger, style = TextStyle(fontWeight = FontWeight.Bold))
+                Icon(Icons.Filled.Warning, contentDescription = "Failed", tint = MaterialTheme.colorScheme.error)
             ProvisionProgress.StepState.PENDING ->
-                Text("○", color = FS.colors.textMuted)
+                Icon(Icons.Outlined.RadioButtonUnchecked, contentDescription = null, tint = MaterialTheme.colorScheme.outline)
         }
     }
 }
@@ -171,25 +161,31 @@ private fun StepIcon(state: ProvisionProgress.StepState) {
 private fun DeviceInfo(block: DemoServerBlock?) {
     if (block == null) return
     if (block.ip == null && block.region == null && block.image == null && block.serverType == null) return
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Text(
-                "THIS DEVICE",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
-            )
-            block.ip?.let { InfoRow("IP", it) }
-            block.region?.let { InfoRow("Location", it) }
-            block.image?.let { InfoRow("OS", it) }
-            block.serverType?.let { InfoRow("Size", it) }
+    FSGroup(header = "This device", modifier = Modifier.testTag("install-device-info")) {
+        val rows = listOfNotNull(
+            block.ip?.let { Triple("IP", it, true) },
+            block.region?.let { Triple("Location", it, false) },
+            block.image?.let { Triple("OS", it, false) },
+            block.serverType?.let { Triple("Size", it, false) },
+        )
+        rows.forEachIndexed { i, (label, value, mono) ->
+            if (i > 0) FSDivider(inset = FS.space.s4)
+            InfoRow(label, value, mono)
         }
     }
 }
 
 @Composable
-private fun InfoRow(label: String, value: String) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp))
-        Text(value, color = FS.colors.text, style = TextStyle(fontSize = 14.sp))
-    }
+private fun InfoRow(label: String, value: String, mono: Boolean) {
+    FSRow(
+        title = label,
+        trailing = {
+            Text(
+                value,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = if (mono) MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace)
+                        else MaterialTheme.typography.bodyMedium,
+            )
+        },
+    )
 }

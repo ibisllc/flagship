@@ -2,7 +2,11 @@ package com.flagshipserver.app.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -30,11 +34,12 @@ fun DeleteServerDialog(
     if (pod.status == PodInfo.Status.PENDING) {
         AlertDialog(
             onDismissRequest = onDismiss,
+            icon = { Icon(Icons.Outlined.DeleteForever, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
             title = { Text("Delete ${pod.name}?") },
             text = {
-                Text("This frees the name for reuse and the box can no longer come online. This install hasn't completed.")
+                Text("This frees the name for reuse and the server can no longer come online. This install hasn't completed.")
             },
-            confirmButton = { TextButton(onClick = onConfirm) { Text("Delete") } },
+            confirmButton = { TextButton(onClick = onConfirm) { Text("Delete", color = MaterialTheme.colorScheme.error) } },
             dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
         )
         return
@@ -44,14 +49,15 @@ fun DeleteServerDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         modifier = Modifier.testTag("delete-server-dialog"),
+        icon = { Icon(Icons.Outlined.DeleteForever, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
         title = { Text("Delete ${pod.name}?") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                 Text(
-                    "Deletes ${pod.name} for good. If the box is online it erases its data and powers off; " +
+                    "Deletes ${pod.name} for good. If the server is online it erases its data and powers off; " +
                         "if it's offline it can never come back online. The name becomes free to reuse.",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
                 )
                 FSField(
                     value = typed,
@@ -67,7 +73,7 @@ fun DeleteServerDialog(
                 onClick = onConfirm,
                 enabled = matches,
                 modifier = Modifier.testTag("delete-server-confirm"),
-            ) { Text("Delete server", color = if (matches) FS.colors.danger else FS.colors.textMuted) }
+            ) { Text("Delete server", color = if (matches) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )

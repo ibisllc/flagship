@@ -152,7 +152,7 @@ class ServiceAccessComposeTest {
         composeRule.waitUntil(10_000) { vm.members.value != null && vm.people.value.size == 4 }
         composeRule.waitForIdle()
         composeRule.onNodeWithText("Open to all").assertIsDisplayed()
-        composeRule.onNodeWithText("MEMBERS (4)").assertIsDisplayed()
+        composeRule.onNodeWithText("Members (4)").assertIsDisplayed()
         composeRule.onNodeWithText("also in Family: Member").assertIsDisplayed()
         composeRule.onNodeWithTag("service-access-role-priya").assertIsDisplayed()
         composeRule.onNodeWithText("2 of 5 joined").assertIsDisplayed()
@@ -162,7 +162,7 @@ class ServiceAccessComposeTest {
         for (id in listOf("sam", "priya", "family", "jordan")) {
             composeRule.onNodeWithTag("service-access-remove-$id").assertExists()
         }
-        composeRule.onNodeWithText("ACCOUNT MEMBERS (3)").assertIsDisplayed()
+        composeRule.onNodeWithText("Account members (3)").assertIsDisplayed()
         composeRule.onNodeWithText("Pixel 9").assertIsDisplayed()
         composeRule.onNodeWithText("This device · Admin").assertIsDisplayed()
         composeRule.onNodeWithText("Kitchen iPad").assertIsDisplayed()
@@ -191,7 +191,7 @@ class ServiceAccessComposeTest {
         composeRule.waitForIdle()
         assertTrue(t.lastPostUrl!!.endsWith("/api/service-access"))
         // The members list never changes with the mode.
-        composeRule.onNodeWithText("MEMBERS (4)").assertIsDisplayed()
+        composeRule.onNodeWithText("Members (4)").assertIsDisplayed()
         composeRule.onNodeWithText("Only members and you can open it. Anyone else is asked to sign in.").assertIsDisplayed()
         shot("access-android-members-only")
 

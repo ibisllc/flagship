@@ -31,6 +31,9 @@ sealed interface DeepLink {
      *  that server (docs/app-placement.md §3). Internal-only. */
     data class CreateApp(val podId: String) : DeepLink
     data object CreateServer : DeepLink
+    /** Home's "Build a service": the Services tab's build chooser, on no
+     *  particular server. Internal-only — not parsed from a URI. */
+    data object StartBuild : DeepLink
     /** Open the recovery-setup flow on the Settings tab. Triggered
      *  in-app from the Home nudge (C9). Internal-only — not parsed
      *  from a URI. */

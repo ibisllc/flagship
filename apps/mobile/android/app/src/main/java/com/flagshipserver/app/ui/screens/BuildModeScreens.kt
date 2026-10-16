@@ -14,31 +14,37 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
-import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.CloudDownload
+import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Laptop
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Verified
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -53,20 +59,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -84,11 +87,19 @@ import com.flagshipserver.app.core.LocalBuildClient
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.ui.components.FSCard
+import com.flagshipserver.app.ui.components.FSCardDivider
+import com.flagshipserver.app.ui.components.FSEmptyState
 import com.flagshipserver.app.ui.components.FSGhostButton
+import com.flagshipserver.app.ui.components.FSListLeading
+import com.flagshipserver.app.ui.components.FSListRow
 import com.flagshipserver.app.ui.components.FSPill
 import com.flagshipserver.app.ui.components.FSPillKind
 import com.flagshipserver.app.ui.components.FSPrimaryButton
+import com.flagshipserver.app.ui.components.FSRow
+import com.flagshipserver.app.ui.components.FSScreen
 import com.flagshipserver.app.ui.components.FSSecondaryButton
+import com.flagshipserver.app.ui.components.FSSectionHeader
+import com.flagshipserver.app.ui.components.plural
 import com.flagshipserver.app.ui.shell.tabs.openBuildSessions
 import com.flagshipserver.app.ui.shell.tabs.navigateOnPod
 import com.flagshipserver.app.ui.shell.tabs.openVibeSession
@@ -120,72 +131,90 @@ private fun copyToClipboard(ctx: Context, label: String, text: String) {
     cm.setPrimaryClip(ClipData.newPlainText(label, text))
 }
 
+/** The build screens' frame: a pushed [FSScreen] with a back arrow and room
+ *  for an app-bar action (the chooser's help). */
 @Composable
 private fun ScreenScaffold(
     title: String,
     subtitle: String?,
     onBack: () -> Unit,
-    action: (@Composable () -> Unit)? = null,
-    content: @Composable () -> Unit,
+    actions: @Composable RowScope.() -> Unit = {},
+    content: @Composable ColumnScope.() -> Unit,
 ) {
-    val scroll = rememberScrollState()
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(scroll)
-            .padding(horizontal = FS.space.s6),
+    FSScreen(
+        title = title,
+        onBack = onBack,
+        subtitle = subtitle,
+        actions = actions,
+        content = content,
+    )
+}
+
+/** A Material outlined field in monospace (URLs, branch names, app names). */
+@Composable
+private fun MonoField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    placeholder: String,
+    testTag: String? = null,
+    keyboardType: KeyboardType = KeyboardType.Text,
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        placeholder = { Text(placeholder, fontFamily = FontFamily.Monospace) },
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        shape = MaterialTheme.shapes.small,
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (testTag != null) Modifier.testTag(testTag) else Modifier),
+    )
+}
+
+/** A card's headline: an optional status icon and a title. */
+@Composable
+private fun CardHeadline(text: String, icon: ImageVector? = null, modifier: Modifier = Modifier) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
+        modifier = modifier,
     ) {
-        Spacer(Modifier.height(FS.space.s12))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = title,
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
-                modifier = Modifier.weight(1f),
-            )
-            action?.invoke()
-        }
-        if (subtitle != null) {
-            Spacer(Modifier.height(FS.space.s3))
-            Text(
-                text = subtitle,
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 16.sp, lineHeight = 22.sp),
-            )
-        }
-        Spacer(Modifier.height(FS.space.s6))
-        content()
-        Spacer(Modifier.height(FS.space.s6))
-        FSGhostButton("Back", onClick = onBack, block = true)
-        Spacer(Modifier.height(FS.space.s12))
+        if (icon != null) Icon(icon, contentDescription = null, tint = FS.colors.success, modifier = Modifier.size(22.dp))
+        Text(text, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
     }
 }
 
 @Composable
-private fun MonoField(value: String, onValueChange: (String) -> Unit, placeholder: String, testTag: String? = null) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(44.dp)
-            .clip(RoundedCornerShape(FS.radius.sm))
-            .background(FS.colors.surfaceSunken)
-            .border(1.dp, FS.colors.border, RoundedCornerShape(FS.radius.sm))
-            .padding(horizontal = 14.dp),
-        contentAlignment = Alignment.CenterStart,
-    ) {
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            singleLine = true,
-            cursorBrush = SolidColor(FS.colors.primary),
-            textStyle = TextStyle(color = FS.colors.text, fontSize = 15.sp, fontFamily = FontFamily.Monospace),
-            modifier = Modifier.fillMaxWidth().then(if (testTag != null) Modifier.testTag(testTag) else Modifier),
-        ) { inner ->
-            if (value.isEmpty()) {
-                Text(placeholder, color = FS.colors.textMuted, style = TextStyle(fontSize = 15.sp))
-            }
-            inner()
-        }
+private fun MutedText(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = MaterialTheme.typography.bodyMedium,
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun NoteText(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = MaterialTheme.typography.bodySmall,
+        modifier = modifier,
+    )
+}
+
+/** A line under a field: an icon in the line's colour and the words. */
+@Composable
+private fun StatusLine(text: String, icon: ImageVector, ok: Boolean, textModifier: Modifier = Modifier) {
+    val color = if (ok) FS.colors.success else MaterialTheme.colorScheme.error
+    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
+        Text(text, color = color, style = MaterialTheme.typography.bodyMedium, modifier = textModifier)
     }
 }
 
@@ -212,43 +241,45 @@ fun BuildSourceChooserScreen(nav: NavController) {
         title = "Build a service",
         subtitle = null,
         onBack = { nav.popBackStack() },
-        action = {
+        actions = {
             IconButton(onClick = { showHelp = true }, modifier = Modifier.testTag("build-source-help")) {
-                Icon(Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = "Help", tint = FS.colors.textMuted)
+                Icon(Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = "Help")
             }
         },
     ) {
         com.flagshipserver.app.ui.components.RunsOnRow()
-        Spacer(Modifier.height(FS.space.s4))
         val podScope = com.flagshipserver.app.core.LocalPodScope.current
         ResumeRow(activeSessions) {
             // The sessions listed are this server's.
             podScope?.let { it.choose?.invoke(it.pod.podId) }
             nav.navigate("build/journal")
         }
-        Spacer(Modifier.height(FS.space.s5))
-        Text("New build", color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium))
-        Spacer(Modifier.height(FS.space.s2))
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-            SourceTile(
-                title = "Start from scratch with AI",
-                body = "Describe what you want. The AI writes it and the box runs it.",
-                // The box's model drives this build, so confirm an AI key first.
-                onClick = { nav.navigate("vibe/key") },
-                testTag = "build-src-scratch",
-            )
-            SourceTile(
-                title = "Import from a Git repo",
-                body = "Paste a repo URL. If it's Flagship-ready we install it as-is; if not, the AI can adapt it.",
-                onClick = { nav.navigate("build/git") },
-                testTag = "build-src-git",
-            )
-            SourceTile(
-                title = "Connect your IDE (Cursor/Cline)",
-                body = "Build from your editor using your own AI. No model key lives on the box.",
-                onClick = { nav.navigate("build/mcp") },
-                testTag = "build-src-mcp",
-            )
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            FSSectionHeader("New build")
+            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+                SourceTile(
+                    icon = Icons.Outlined.AutoAwesome,
+                    title = "Start from scratch with AI",
+                    body = "Describe it in plain English. The AI writes it and deploys it for you.",
+                    // The server's model drives this build, so confirm an AI key first.
+                    onClick = { nav.navigate("vibe/key") },
+                    testTag = "build-src-scratch",
+                )
+                SourceTile(
+                    icon = Icons.Outlined.CloudDownload,
+                    title = "Import from a Git repo",
+                    body = "Paste a repo URL. If it's Flagship-ready we install it as-is, otherwise the AI adapts it.",
+                    onClick = { nav.navigate("build/git") },
+                    testTag = "build-src-git",
+                )
+                SourceTile(
+                    icon = Icons.Outlined.Laptop,
+                    title = "Connect your IDE",
+                    body = "Build from Cursor or Cline using your own AI. No model key is stored on your server.",
+                    onClick = { nav.navigate("build/mcp") },
+                    testTag = "build-src-mcp",
+                )
+            }
         }
     }
     if (showHelp) BuildHelpDialog { showHelp = false }
@@ -256,50 +287,49 @@ fun BuildSourceChooserScreen(nav: NavController) {
 
 @Composable
 private fun ResumeRow(activeSessions: Int, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(FS.radius.md)
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(FS.colors.surface)
-            .border(1.dp, if (activeSessions > 0) FS.colors.success else FS.colors.border, shape)
-            .clickable(onClick = onClick)
-            .padding(FS.space.s4)
-            .testTag("build-source-journal-link"),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(FS.space.s3),
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().testTag("build-source-journal-link"),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        border = BorderStroke(1.dp, if (activeSessions > 0) FS.colors.success else MaterialTheme.colorScheme.outlineVariant),
     ) {
-        Icon(Icons.Outlined.History, contentDescription = null, tint = FS.colors.primary)
-        Text(
-            "Resume or view past builds",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
-            modifier = Modifier.weight(1f),
+        FSRow(
+            title = "Resume or view past builds",
+            icon = Icons.Outlined.History,
+            iconTint = MaterialTheme.colorScheme.primary,
+            trailing = if (activeSessions > 0) ({
+                androidx.compose.material3.Badge(
+                    containerColor = FS.colors.success,
+                    contentColor = FS.colors.onAccent,
+                    modifier = Modifier.semantics { contentDescription = "$activeSessions active" },
+                ) {
+                    Text("$activeSessions", style = MaterialTheme.typography.labelMedium)
+                }
+            }) else null,
         )
-        if (activeSessions > 0) {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(FS.radius.pill))
-                    .background(FS.colors.success)
-                    .padding(horizontal = 8.dp, vertical = 2.dp)
-                    .semantics { contentDescription = "$activeSessions active" },
-            ) {
-                Text("$activeSessions", color = Color.White, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold))
-            }
-        }
-        Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null, tint = FS.colors.textMuted)
     }
 }
 
+private data class BuildHelpItem(val icon: ImageVector, val title: String, val body: String)
+
 private val BUILD_HELP_ITEMS = listOf(
-    "Resume or view past builds" to
+    BuildHelpItem(
+        Icons.Outlined.History, "Resume or view past builds",
         "Builds still open on your server can be picked up where you left off: answer the AI, deploy, or retry a failed deploy. Older builds keep a timeline of what happened. A build stays open until your server restarts.",
-    "Start from scratch with AI" to
+    ),
+    BuildHelpItem(
+        Icons.Outlined.AutoAwesome, "Start from scratch with AI",
         "Describe the app you want in plain English. An AI model writes the code on your server, asks you questions when it needs to, and you deploy it with one tap. You need a key from an AI provider (OpenAI, Anthropic, OpenRouter…); it is sent only to your server.",
-    "Import from a Git repo" to
+    ),
+    BuildHelpItem(
+        Icons.Outlined.CloudDownload, "Import from a Git repo",
         "Paste the address of a code repository, for example on GitHub. If it is already set up for Flagship it installs as-is; otherwise the AI can adapt it for you.",
-    "Connect your IDE" to
+    ),
+    BuildHelpItem(
+        Icons.Outlined.Laptop, "Connect your IDE",
         "For developers: work in Cursor or Cline on your computer with your own AI, connected to your server over MCP. No AI key is stored on the server.",
+    ),
 )
 
 @Composable
@@ -313,16 +343,14 @@ private fun BuildHelpDialog(onDismiss: () -> Unit) {
                 Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(FS.space.s4),
             ) {
-                Text(
-                    "Every option ends the same way: the app is installed and running on your own server, at its own web address.",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
-                )
-                BUILD_HELP_ITEMS.forEach { (title, body) ->
-                    Column {
-                        Text(title, color = FS.colors.text, style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
-                        Spacer(Modifier.height(FS.space.s1))
-                        Text(body, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp))
+                MutedText("Every option ends the same way: the app is installed and running on your own server, at its own web address.")
+                BUILD_HELP_ITEMS.forEach { item ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s3), verticalAlignment = Alignment.Top) {
+                        Icon(item.icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+                        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
+                            Text(item.title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+                            NoteText(item.body)
+                        }
                     }
                 }
             }
@@ -330,25 +358,23 @@ private fun BuildHelpDialog(onDismiss: () -> Unit) {
     )
 }
 
+/** A way to start a build: a card row with the option's icon. */
 @Composable
-private fun SourceTile(title: String, body: String, onClick: () -> Unit, testTag: String? = null) {
-    FSCard(
+private fun SourceTile(icon: ImageVector, title: String, body: String, onClick: () -> Unit, testTag: String? = null) {
+    Surface(
+        onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
             .then(if (testTag != null) Modifier.testTag(testTag) else Modifier),
-        padding = PaddingValues(FS.space.s5),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
-        Text(
-            text = title,
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 18.sp, lineHeight = 24.sp, fontWeight = FontWeight.SemiBold),
-        )
-        Spacer(Modifier.height(FS.space.s2))
-        Text(
-            text = body,
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+        FSRow(
+            title = title,
+            subtitle = body,
+            icon = icon,
+            iconTint = MaterialTheme.colorScheme.primary,
         )
     }
 }
@@ -454,49 +480,33 @@ fun BuildGitScreen(nav: NavController) {
         onBack = { nav.popBackStack() },
     ) {
         com.flagshipserver.app.ui.components.RunsOnRow(locked = phase !is BuildGitViewModel.GitPhase.Idle)
-        Spacer(Modifier.height(FS.space.s4))
-        FieldLabel("Repository URL")
-        MonoField(url, { url = it }, "https://github.com/you/app")
-        Spacer(Modifier.height(FS.space.s4))
-        FieldLabel("Branch or tag (optional)")
-        MonoField(ref, { ref = it }, "main")
-        Spacer(Modifier.height(FS.space.s4))
-        FieldLabel("Name (optional)")
-        MonoField(name, { name = it }, "From the repo's name", testTag = "build-git-name")
-        Spacer(Modifier.height(FS.space.s2))
-        Text(
-            text = buildAnnotatedString {
-                withStyle(SpanStyle(color = FS.colors.textMuted)) { append("https://") }
-                withStyle(SpanStyle(color = FS.colors.primary, fontWeight = FontWeight.SemiBold)) {
-                    append(BuildGitViewModel.addressLabel(slug, assignedName))
-                }
-                withStyle(SpanStyle(color = FS.colors.textMuted)) { append(".$server") }
-            },
-            style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
-            maxLines = 2,
-            modifier = Modifier.testTag("build-git-address"),
-        )
-        val warning = VibeCodeDescribe.warning(currentCheck, slug)
-        if (warning != null) {
-            Spacer(Modifier.height(FS.space.s2))
+        MonoField(url, { url = it }, label = "Repository URL", placeholder = "https://github.com/you/app", keyboardType = KeyboardType.Uri)
+        MonoField(ref, { ref = it }, label = "Branch or tag (optional)", placeholder = "main")
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            MonoField(name, { name = it }, label = "Name (optional)", placeholder = "From the repo's name", testTag = "build-git-name")
+            val primary = MaterialTheme.colorScheme.primary
+            val muted = MaterialTheme.colorScheme.onSurfaceVariant
             Text(
-                text = "⚠ $warning",
-                color = FS.colors.danger,
-                style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
-                modifier = Modifier.testTag("build-git-name-taken"),
+                text = buildAnnotatedString {
+                    withStyle(SpanStyle(color = muted)) { append("https://") }
+                    withStyle(SpanStyle(color = primary, fontWeight = FontWeight.SemiBold)) {
+                        append(BuildGitViewModel.addressLabel(slug, assignedName))
+                    }
+                    withStyle(SpanStyle(color = muted)) { append(".$server") }
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 2,
+                modifier = Modifier.padding(horizontal = FS.space.s1).testTag("build-git-address"),
             )
-        } else if (currentCheck != null && currentCheck.ok && currentCheck.name != null) {
-            Spacer(Modifier.height(FS.space.s2))
-            Text("✓ Available", color = FS.colors.success, style = TextStyle(fontSize = 14.sp))
-        } else if (slug.isEmpty()) {
-            Spacer(Modifier.height(FS.space.s2))
-            Text(
-                BuildGitViewModel.blankNameHint(ref),
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
-            )
+            val warning = VibeCodeDescribe.warning(currentCheck, slug)
+            if (warning != null) {
+                StatusLine(warning, Icons.Outlined.ErrorOutline, ok = false, textModifier = Modifier.testTag("build-git-name-taken"))
+            } else if (currentCheck != null && currentCheck.ok && currentCheck.name != null) {
+                StatusLine("Available", Icons.Outlined.CheckCircle, ok = true)
+            } else if (slug.isEmpty()) {
+                MutedText(BuildGitViewModel.blankNameHint(ref), Modifier.padding(horizontal = FS.space.s1))
+            }
         }
-        Spacer(Modifier.height(FS.space.s4))
 
         val checkRepo = {
             if (url.isBlank()) {
@@ -516,7 +526,6 @@ fun BuildGitScreen(nav: NavController) {
                 block = true,
                 modifier = Modifier.testTag("build-git-check"),
             )
-            Spacer(Modifier.height(FS.space.s4))
         }
         when (val p = phase) {
             is BuildGitViewModel.GitPhase.Verdict -> VerdictCard(p, vm, nav, adaptError, recheckEnabled = !nameRefused) { checkRepo() }
@@ -524,7 +533,7 @@ fun BuildGitScreen(nav: NavController) {
             is BuildGitViewModel.GitPhase.NotLive -> NotLiveCard(p.reason, nav, vm, recheckEnabled = !nameRefused) { checkRepo() }
             is BuildGitViewModel.GitPhase.Sealed -> SealedCard(p.message, nav, vm, recheckEnabled = !nameRefused) { checkRepo() }
             is BuildGitViewModel.GitPhase.Adapted -> AdaptedCard(p, vm, nav)
-            is BuildGitViewModel.GitPhase.Deploying -> InfoCard("Installing…", "Building and deploying to your box.")
+            is BuildGitViewModel.GitPhase.Deploying -> InfoCard("Installing…", "Building and deploying to your server.", busy = true)
             is BuildGitViewModel.GitPhase.Deployed -> DeployedCard(p.url, vm)
             is BuildGitViewModel.GitPhase.Failed -> {
                 ErrorCardSimple(p.message)
@@ -571,12 +580,6 @@ internal class BuildGitHolder : ViewModel() {
 }
 
 @Composable
-private fun FieldLabel(text: String) {
-    Text(text, color = FS.colors.text, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium))
-    Spacer(Modifier.height(FS.space.s2))
-}
-
-@Composable
 private fun VerdictCard(
     p: BuildGitViewModel.GitPhase.Verdict,
     vm: BuildGitViewModel,
@@ -585,60 +588,54 @@ private fun VerdictCard(
     recheckEnabled: Boolean,
     onCheckAgain: () -> Unit,
 ) {
-    FSCard(padding = PaddingValues(FS.space.s5)) {
-        if (p.fit) {
-            VerdictHead(recheckEnabled, onCheckAgain) {
-                Text("Flagship-ready ✓", color = FS.colors.success, style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold))
-            }
-            Spacer(Modifier.height(FS.space.s2))
-            Text("${p.reason} — ${p.fileCount} file(s).", color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
-            Spacer(Modifier.height(FS.space.s4))
-            FSPrimaryButton("Install it", onClick = { vm.deploy() }, block = true)
-        } else {
-            val share by vm.share.collectAsState()
-            VerdictHead(recheckEnabled, onCheckAgain) {
-                Text(
-                    BuildGitViewModel.notReadyText(p.reason),
-                    color = FS.colors.text,
-                    style = TextStyle(fontSize = 15.sp, lineHeight = 22.sp),
+    FSCard {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            if (p.fit) {
+                VerdictHead(recheckEnabled, onCheckAgain) {
+                    CardHeadline("Flagship-ready", Icons.Outlined.Verified)
+                }
+                MutedText("${p.reason} — ${plural(p.fileCount, "file")}.")
+                FSPrimaryButton("Install it", onClick = { vm.deploy() }, block = true)
+            } else {
+                val share by vm.share.collectAsState()
+                VerdictHead(recheckEnabled, onCheckAgain) {
+                    Text(
+                        BuildGitViewModel.notReadyText(p.reason),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
+                adaptError?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                    RelayFailureAction(it)
+                }
+                // The server's model rewrites the repo, so confirm an AI key
+                // first; the git screen runs the adapt pass on return with it.
+                FSPrimaryButton(
+                    BuildGitViewModel.ADAPT_BUTTON,
+                    onClick = { nav.navigate("build/git/key") },
+                    block = true,
+                    modifier = Modifier.testTag("build-git-adapt"),
                 )
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            BuildGitViewModel.SHARE_LABEL,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Switch(
+                            checked = share,
+                            onCheckedChange = { vm.setShare(it) },
+                            modifier = Modifier.testTag("build-git-share"),
+                        )
+                    }
+                    NoteText(BuildGitViewModel.SHARE_NOTE)
+                }
             }
-            adaptError?.let {
-                Spacer(Modifier.height(FS.space.s3))
-                Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
-                RelayFailureAction(it)
-            }
-            Spacer(Modifier.height(FS.space.s4))
-            // The box's model rewrites the repo, so confirm an AI key first;
-            // the git screen runs the adapt pass on return with it.
-            FSPrimaryButton(
-                BuildGitViewModel.ADAPT_BUTTON,
-                onClick = { nav.navigate("build/git/key") },
-                block = true,
-                modifier = Modifier.testTag("build-git-adapt"),
-            )
-            Spacer(Modifier.height(FS.space.s4))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    BuildGitViewModel.SHARE_LABEL,
-                    color = FS.colors.text,
-                    style = TextStyle(fontSize = 15.sp),
-                    modifier = Modifier.weight(1f),
-                )
-                Switch(
-                    checked = share,
-                    onCheckedChange = { vm.setShare(it) },
-                    modifier = Modifier.testTag("build-git-share"),
-                )
-            }
-            Text(
-                BuildGitViewModel.SHARE_NOTE,
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-            )
+            JournalLink(nav, vm.buildId)
         }
-        Spacer(Modifier.height(FS.space.s2))
-        JournalLink(nav, vm.buildId)
     }
 }
 
@@ -647,19 +644,19 @@ private fun VerdictCard(
 @Composable
 private fun VerdictHead(recheckEnabled: Boolean, onCheckAgain: () -> Unit, content: @Composable () -> Unit) {
     Row(verticalAlignment = Alignment.Top) {
-        Box(Modifier.weight(1f).padding(top = FS.space.s2)) { content() }
+        Box(Modifier.weight(1f).padding(top = FS.space.s3)) { content() }
         IconButton(
             onClick = onCheckAgain,
             enabled = recheckEnabled,
             modifier = Modifier.testTag("build-git-recheck"),
         ) {
-            Icon(Icons.Default.Refresh, contentDescription = BuildGitViewModel.CHECK_AGAIN, tint = FS.colors.textMuted)
+            Icon(Icons.Outlined.Refresh, contentDescription = BuildGitViewModel.CHECK_AGAIN, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
-/** The AI's tested app didn't go live: the box's reason, a new AI run (on a
- *  new build, since this one is closed to the AI), and "Check again". */
+/** The AI's tested app didn't go live: the server's reason, a new AI run (on
+ *  a new build, since this one is closed to the AI), and "Check again". */
 @Composable
 private fun NotLiveCard(
     reason: String,
@@ -668,31 +665,21 @@ private fun NotLiveCard(
     recheckEnabled: Boolean,
     onCheckAgain: () -> Unit,
 ) {
-    FSCard(padding = PaddingValues(FS.space.s5)) {
-        VerdictHead(recheckEnabled, onCheckAgain) {
-            Text(
-                BuildGitViewModel.NOT_LIVE_TITLE,
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
+    FSCard {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            VerdictHead(recheckEnabled, onCheckAgain) {
+                CardHeadline(BuildGitViewModel.NOT_LIVE_TITLE)
+            }
+            MutedText(reason, Modifier.testTag("build-git-not-live-reason"))
+            RelayFailureAction(reason)
+            FSPrimaryButton(
+                BuildGitViewModel.RETRY_ADAPT,
+                onClick = { nav.navigate("build/git/key") },
+                block = true,
+                modifier = Modifier.testTag("build-git-retry-adapt"),
             )
+            JournalLink(nav, vm.buildId)
         }
-        Spacer(Modifier.height(FS.space.s2))
-        Text(
-            reason,
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
-            modifier = Modifier.testTag("build-git-not-live-reason"),
-        )
-        RelayFailureAction(reason)
-        Spacer(Modifier.height(FS.space.s4))
-        FSPrimaryButton(
-            BuildGitViewModel.RETRY_ADAPT,
-            onClick = { nav.navigate("build/git/key") },
-            block = true,
-            modifier = Modifier.testTag("build-git-retry-adapt"),
-        )
-        Spacer(Modifier.height(FS.space.s2))
-        JournalLink(nav, vm.buildId)
     }
 }
 
@@ -705,72 +692,73 @@ private fun SealedCard(
     recheckEnabled: Boolean,
     onCheckAgain: () -> Unit,
 ) {
-    FSCard(padding = PaddingValues(FS.space.s5)) {
-        Text(message, color = FS.colors.text, style = TextStyle(fontSize = 15.sp, lineHeight = 22.sp))
-        Spacer(Modifier.height(FS.space.s4))
-        FSPrimaryButton(
-            BuildGitViewModel.CHECK_AGAIN,
-            onClick = onCheckAgain,
-            enabled = recheckEnabled,
-            block = true,
-            modifier = Modifier.testTag("build-git-sealed-check-again"),
-        )
-        Spacer(Modifier.height(FS.space.s2))
-        JournalLink(nav, vm.buildId)
+    FSCard {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            Text(message, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge)
+            FSPrimaryButton(
+                BuildGitViewModel.CHECK_AGAIN,
+                onClick = onCheckAgain,
+                enabled = recheckEnabled,
+                block = true,
+                modifier = Modifier.testTag("build-git-sealed-check-again"),
+            )
+            JournalLink(nav, vm.buildId)
+        }
     }
 }
 
 @Composable
 private fun AdaptingCard(progress: String?, phase: String?) {
-    FSCard(padding = PaddingValues(FS.space.s5)) {
-        Text(
-            BuildGitViewModel.adaptingHeadline(phase),
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
-            modifier = Modifier.testTag("build-git-adapting"),
-        )
-        if (!progress.isNullOrEmpty()) {
-            Spacer(Modifier.height(FS.space.s1))
-            Text(
-                progress,
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
-                maxLines = 2,
-                modifier = Modifier.testTag("build-git-progress"),
-            )
+    FSCard {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                Text(
+                    BuildGitViewModel.adaptingHeadline(phase),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.testTag("build-git-adapting"),
+                )
+            }
+            if (!progress.isNullOrEmpty()) {
+                Text(
+                    progress,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 2,
+                    modifier = Modifier.testTag("build-git-progress"),
+                )
+            }
+            NoteText("This can take several minutes. You can leave this screen; Build sessions shows how it went.")
         }
-        Spacer(Modifier.height(FS.space.s2))
-        Text(
-            "This can take several minutes. You can leave this screen; Build sessions shows how it went.",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-        )
     }
 }
 
 @Composable
 private fun AdaptedCard(p: BuildGitViewModel.GitPhase.Adapted, vm: BuildGitViewModel, nav: NavController) {
-    FSCard(padding = PaddingValues(FS.space.s5)) {
-        Text("Adapted ✓", color = FS.colors.success, style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold))
-        Spacer(Modifier.height(FS.space.s2))
-        Text("The AI rewrote this repo into a Flagship service (${p.fileCount} file(s)).", color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
-        Spacer(Modifier.height(FS.space.s4))
-        FSPrimaryButton("Install it", onClick = { vm.deploy() }, block = true)
-        Spacer(Modifier.height(FS.space.s2))
-        AdapterExport(vm)
-        Spacer(Modifier.height(FS.space.s2))
-        JournalLink(nav, vm.buildId)
+    FSCard {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            CardHeadline("Adapted", Icons.Outlined.Verified)
+            MutedText("The AI rewrote this repo into a Flagship service (${plural(p.fileCount, "file")}).")
+            FSPrimaryButton("Install it", onClick = { vm.deploy() }, block = true)
+            AdapterExport(vm)
+            JournalLink(nav, vm.buildId)
+        }
     }
 }
 
 @Composable
 private fun DeployedCard(url: String, vm: BuildGitViewModel) {
-    FSCard(padding = PaddingValues(FS.space.s5)) {
-        Text("Installed ✓", color = FS.colors.success, style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold))
-        Spacer(Modifier.height(FS.space.s2))
-        Text(url, color = FS.colors.primary, style = TextStyle(fontSize = 14.sp, fontFamily = FontFamily.Monospace))
-        Spacer(Modifier.height(FS.space.s4))
-        AdapterExport(vm)
+    FSCard {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            CardHeadline("Installed", Icons.Outlined.CheckCircle)
+            Text(
+                url,
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+            )
+            AdapterExport(vm)
+        }
     }
 }
 
@@ -781,22 +769,18 @@ private fun AdapterExport(vm: BuildGitViewModel) {
     val ctx = LocalContext.current
     val exporting by vm.exportingAdapter.collectAsState()
     val error by vm.exportError.collectAsState()
-    FSSecondaryButton(
-        if (exporting) "Preparing…" else "Get flagship.app.json",
-        onClick = { vm.exportAdapter(File(ctx.cacheDir, "adapters")) },
-        enabled = !exporting,
-        block = true,
-        modifier = Modifier.testTag("build-git-export"),
-    )
-    Spacer(Modifier.height(FS.space.s2))
-    Text(
-        "Is this your repo? Commit this file at its root and every Flagship server will run it this way.",
-        color = FS.colors.textMuted,
-        style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-    )
-    error?.let {
-        Spacer(Modifier.height(FS.space.s2))
-        Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
+    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+        FSSecondaryButton(
+            if (exporting) "Preparing…" else "Get flagship.app.json",
+            onClick = { vm.exportAdapter(File(ctx.cacheDir, "adapters")) },
+            enabled = !exporting,
+            block = true,
+            modifier = Modifier.testTag("build-git-export"),
+        )
+        NoteText("Is this your repo? Commit this file at its root and every Flagship server will run it this way.")
+        error?.let {
+            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+        }
     }
 }
 
@@ -815,10 +799,11 @@ private fun shareAdapterFile(ctx: Context, file: File) {
     ctx.startActivity(chooser)
 }
 
+/** A quiet inline link to the build's timeline. */
 @Composable
 private fun JournalLink(nav: NavController, buildId: String?) {
     if (buildId == null) return
-    FSGhostButton("View build journal →", onClick = { nav.navigate("build/journal/$buildId") }, block = true)
+    FSGhostButton("View build journal", onClick = { nav.navigate("build/journal/$buildId") })
 }
 
 // ── mcp ─────────────────────────────────────────────────────────
@@ -840,13 +825,12 @@ fun BuildMcpScreen(nav: NavController, editServiceId: String? = null) {
     ScreenScaffold(
         title = "Connect your IDE",
         subtitle = vm.editingName?.let { EditService.ideIntro(it) }
-            ?: "Build from Cursor or Cline using your own AI. The box runs an MCP server scoped to just this build — no model key on the box.",
+            ?: "Build from Cursor or Cline using your own AI. Your server runs an MCP server for just this build, and no model key is stored on it.",
         onBack = { nav.popBackStack() },
     ) {
         val creating = phase is BuildMcpViewModel.McpPhase.Creating
         val conn = connection
         com.flagshipserver.app.ui.components.RunsOnRow(locked = creating || conn != null)
-        Spacer(Modifier.height(FS.space.s4))
         if (conn == null) {
             FSPrimaryButton(
                 label = if (creating) "Creating…" else "Create a connection",
@@ -860,7 +844,6 @@ fun BuildMcpScreen(nav: NavController, editServiceId: String? = null) {
                 modifier = Modifier.testTag("build-mcp-create"),
             )
             (phase as? BuildMcpViewModel.McpPhase.Failed)?.let {
-                Spacer(Modifier.height(FS.space.s4))
                 ErrorCardSimple(it.message)
             }
         } else {
@@ -897,98 +880,92 @@ private fun ConnectionCard(
     envRequests: List<BuildEnvRequest>,
     deployStatus: String?,
 ) {
-    FSCard(padding = PaddingValues(FS.space.s5)) {
-        Text(
-            "Paste this into your IDE's MCP settings (Cursor: Settings → MCP; Cline: MCP servers). The key works only for this build.",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
-        )
-        Spacer(Modifier.height(FS.space.s3))
-        KeyValueRow("URL", conn.url)
-        Spacer(Modifier.height(FS.space.s2))
-        KeyValueRow("Key", conn.key)
-        Spacer(Modifier.height(FS.space.s3))
-        Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            FSSecondaryButton("Copy key", onClick = onCopyKey)
-            FSSecondaryButton("Copy IDE config", onClick = onCopyConfig)
-        }
-        Spacer(Modifier.height(FS.space.s3))
-        CodeBlock(ideConfigString(conn.ideConfig))
-        Spacer(Modifier.height(FS.space.s3))
-        Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            FSSecondaryButton("Regenerate key", onClick = onRotate)
-            FSSecondaryButton("View journal", onClick = onJournal)
-        }
-        Spacer(Modifier.height(FS.space.s4))
-        Text(
-            "Your editor's agent writes files, validates, requests any secrets (value-free), and deploys. You can also deploy here once it's done:",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-        )
-        Spacer(Modifier.height(FS.space.s2))
-        FSPrimaryButton("Deploy now", onClick = onDeploy, block = true)
-        deployStatus?.let {
-            Spacer(Modifier.height(FS.space.s2))
-            Text(it, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+    FSCard {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            MutedText("Paste this into your IDE's MCP settings (Cursor: Settings → MCP; Cline: MCP servers). The key works only for this build.")
+            KeyValueRow("URL", conn.url)
+            KeyValueRow("Key", conn.key)
+            Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                FSSecondaryButton("Copy key", onClick = onCopyKey, modifier = Modifier.weight(1f))
+                FSSecondaryButton("Copy IDE config", onClick = onCopyConfig, modifier = Modifier.weight(1f))
+            }
+            CodeBlock(ideConfigString(conn.ideConfig))
+            Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                FSSecondaryButton("Regenerate key", onClick = onRotate, modifier = Modifier.weight(1f))
+                FSSecondaryButton("View journal", onClick = onJournal, modifier = Modifier.weight(1f))
+            }
+            FSCardDivider()
+            NoteText("Your editor's agent writes files, validates, requests any secrets (value-free), and deploys. You can also deploy here once it's done:")
+            FSPrimaryButton("Deploy now", onClick = onDeploy, block = true)
+            deployStatus?.let { NoteText(it) }
         }
     }
     if (envRequests.isNotEmpty()) {
-        Spacer(Modifier.height(FS.space.s3))
         EnvRequestsCard(envRequests, onRefreshEnv)
     }
 }
 
 @Composable
 private fun EnvRequestsCard(requests: List<BuildEnvRequest>, onRefresh: () -> Unit) {
-    FSCard(padding = PaddingValues(FS.space.s5)) {
-        Text("Your IDE asked for these secrets", color = FS.colors.text, style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
-        Spacer(Modifier.height(FS.space.s2))
-        Text(
-            "The editor and its AI never see the value — you set it here on your box. Open Configure environment on the service after it's deployed and enter each value there; it never travels through your IDE.",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-        )
-        Spacer(Modifier.height(FS.space.s3))
-        requests.forEach { q ->
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = FS.space.s1),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(q.name, color = FS.colors.text, style = TextStyle(fontSize = 14.sp, fontFamily = FontFamily.Monospace))
-                Text(
-                    if (q.currentlySet) "set ✓" else "needs you",
-                    color = if (q.currentlySet) FS.colors.success else FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp),
-                )
-            }
-            q.why?.let {
-                Text(it, color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp))
+    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+        FSSectionHeader("Your IDE asked for these secrets")
+        FSCard {
+            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+                NoteText("The editor and its AI never see the value: you set it here on your server. Open Configure environment on the service after it's deployed and enter each value there; it never travels through your IDE.")
+                requests.forEachIndexed { i, q ->
+                    if (i > 0) FSCardDivider()
+                    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                q.name,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                                modifier = Modifier.weight(1f, fill = false),
+                            )
+                            if (q.currentlySet) {
+                                FSPill("Set", FSPillKind.Online)
+                            } else {
+                                FSPill("Needs you", FSPillKind.Pending)
+                            }
+                        }
+                        q.why?.let { NoteText(it) }
+                    }
+                }
+                FSSecondaryButton("Refresh", onClick = onRefresh, block = true)
             }
         }
-        Spacer(Modifier.height(FS.space.s3))
-        FSSecondaryButton("Refresh", onClick = onRefresh, block = true)
     }
 }
 
 @Composable
 private fun KeyValueRow(label: String, value: String) {
     Column(Modifier.fillMaxWidth()) {
-        Text(label, color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium))
-        Text(value, color = FS.colors.text, style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp, fontFamily = FontFamily.Monospace))
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
+        Text(
+            value,
+            color = MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+        )
     }
 }
 
 @Composable
 private fun CodeBlock(text: String) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(FS.radius.sm))
-            .background(FS.colors.surfaceSunken)
-            .border(1.dp, FS.colors.border, RoundedCornerShape(FS.radius.sm))
-            .padding(12.dp),
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
     ) {
-        Text(text, color = FS.colors.text, style = TextStyle(fontSize = 12.sp, lineHeight = 17.sp, fontFamily = FontFamily.Monospace))
+        Text(
+            text,
+            color = MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+            modifier = Modifier.padding(FS.space.s3),
+        )
     }
 }
 
@@ -1024,7 +1001,7 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
     }
 
     ScreenScaffold(
-        title = "Build sessions",
+        title = if (buildId != null) "Build timeline" else "Build sessions",
         subtitle = if (buildId != null) "How this service was built." else null,
         onBack = { nav.popBackStack() },
     ) {
@@ -1032,7 +1009,7 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
             when (val d = detail) {
                 is LoadingState.Loaded -> TimelineCard(buildId, d.value)
                 is LoadingState.Failed -> ErrorCardSimple(d.message)
-                else -> InfoCard("Loading…", "Fetching the build timeline.")
+                else -> InfoCard("Loading…", "Fetching the build timeline.", busy = true)
             }
         } else {
             when (val l = list) {
@@ -1042,24 +1019,21 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
                     val open = BuildSessions.openBuilds(builds, liveSessions)
                     val anyOpen = liveSessions.isNotEmpty() || open.isNotEmpty()
                     if (builds.isEmpty() && liveSessions.isEmpty()) {
-                        InfoCard("No builds yet.", "Builds you start will show up here.")
+                        FSEmptyState(
+                            title = "No builds yet.",
+                            message = "Builds you start will show up here.",
+                            icon = Icons.Outlined.History,
+                        )
                     } else {
-                        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                            if (anyOpen) {
-                                SectionCaption("Open on your server")
+                        if (anyOpen) {
+                            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                                FSSectionHeader(if (multiServer) "Open on your servers" else "Open on your server")
                                 open.forEach { b ->
                                     val on = vm.serverOfBuild(b.buildId)
                                     BuildTile(b, startedOnly = true, server = on?.name?.takeIf { multiServer }) {
                                         nav.navigateOnPod("build/journal/${b.buildId}", on?.podId)
                                     }
-                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                        TextButton(
-                                            onClick = { confirmDiscardBuild = b },
-                                            modifier = Modifier.testTag("build-discard-${b.buildId}"),
-                                        ) {
-                                            Text("Discard…", color = FS.colors.danger, style = TextStyle(fontSize = 14.sp))
-                                        }
-                                    }
+                                    DiscardLink(Modifier.testTag("build-discard-${b.buildId}")) { confirmDiscardBuild = b }
                                 }
                                 liveSessions.forEach { session ->
                                     val on = vm.serverOfSession(session.sessionId)
@@ -1067,41 +1041,35 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
                                         nav.openVibeSession(vibeSessionChatRoute(session.sessionId), on?.podId)
                                     }
                                     if (session.canDiscard) {
-                                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                                            TextButton(
-                                                onClick = { confirmDiscard = session },
-                                                modifier = Modifier.testTag("build-session-discard-${session.sessionId}"),
-                                            ) {
-                                                Text("Discard…", color = FS.colors.danger, style = TextStyle(fontSize = 14.sp))
-                                            }
-                                        }
+                                        DiscardLink(Modifier.testTag("build-session-discard-${session.sessionId}")) { confirmDiscard = session }
                                     }
                                 }
                                 discardError?.let { ErrorCardSimple(it) }
                             }
-                            if (ended.isNotEmpty()) {
-                                if (anyOpen) Spacer(Modifier.height(FS.space.s2))
-                                SectionCaption("Past builds")
-                                ended.forEach { b ->
-                                    val on = vm.serverOfBuild(b.buildId)
-                                    BuildTile(b, server = on?.name?.takeIf { multiServer }) {
-                                        nav.navigateOnPod("build/journal/${b.buildId}", on?.podId)
+                        }
+                        if (ended.isNotEmpty()) {
+                            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                                FSSectionHeader("Past builds")
+                                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+                                    ended.forEach { b ->
+                                        val on = vm.serverOfBuild(b.buildId)
+                                        BuildTile(b, server = on?.name?.takeIf { multiServer }) {
+                                            nav.navigateOnPod("build/journal/${b.buildId}", on?.podId)
+                                        }
                                     }
                                 }
                             }
-                            if (failedServers.isNotEmpty()) {
-                                Text(
-                                    BuildSessions.unreadServersLine(failedServers),
-                                    color = FS.colors.textMuted,
-                                    style = TextStyle(fontSize = 13.sp),
-                                    modifier = Modifier.testTag("build-sessions-unread-servers"),
-                                )
-                            }
+                        }
+                        if (failedServers.isNotEmpty()) {
+                            NoteText(
+                                BuildSessions.unreadServersLine(failedServers),
+                                Modifier.padding(horizontal = FS.space.s1).testTag("build-sessions-unread-servers"),
+                            )
                         }
                     }
                 }
                 is LoadingState.Failed -> ErrorCardSimple(l.message)
-                else -> InfoCard("Loading…", "Fetching your builds.")
+                else -> InfoCard("Loading…", "Fetching your builds.", busy = true)
             }
         }
     }
@@ -1115,7 +1083,7 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
                 TextButton(onClick = {
                     confirmDiscard = null
                     vm.discard(session)
-                }) { Text("Discard build", color = FS.colors.danger) }
+                }) { Text("Discard build", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { confirmDiscard = null }) { Text("Cancel") } },
         )
@@ -1130,55 +1098,60 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
                 TextButton(onClick = {
                     confirmDiscardBuild = null
                     vm.discard(b)
-                }) { Text("Discard build", color = FS.colors.danger) }
+                }) { Text("Discard build", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { confirmDiscardBuild = null }) { Text("Cancel") } },
         )
     }
 }
 
+/** The small red "Discard…" under an open build, right-aligned. */
 @Composable
-private fun SectionCaption(text: String) {
-    Text(text, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium))
+private fun DiscardLink(modifier: Modifier, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        TextButton(onClick = onClick, modifier = modifier) {
+            Text("Discard…", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
+
+private fun modeIcon(mode: String): ImageVector = when (mode) {
+    "git" -> Icons.Outlined.CloudDownload
+    "mcp" -> Icons.Outlined.Laptop
+    else -> Icons.Outlined.AutoAwesome
 }
 
 @Composable
 private fun SessionTile(session: VibeCodeSessionMeta, title: String, server: String? = null, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(FS.radius.md)
     val active = session.isActive
-    Row(
+    val action = BuildSessions.action(session.status)
+    FSListRow(
+        leading = FSListLeading.Icon(
+            Icons.Outlined.AutoAwesome,
+            if (active) FS.colors.success else MaterialTheme.colorScheme.onSurfaceVariant,
+        ),
+        title = title,
+        subtitle = listOfNotNull("Started ${fmtTimestamp(session.startedAt)}", server?.let { "on $it" }).joinToString(" "),
+        onClick = onClick,
         modifier = Modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(FS.colors.surface)
-            .border(1.dp, if (active) FS.colors.success.copy(alpha = 0.6f) else FS.colors.border, shape)
-            .clickable(onClick = onClick)
-            .padding(FS.space.s5)
-            .testTag("build-session-${session.sessionId}"),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(FS.space.s3),
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(title, color = FS.colors.text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
-            Spacer(Modifier.height(FS.space.s1))
-            Text(
-                listOfNotNull("Started ${fmtTimestamp(session.startedAt)}", server?.let { "on $it" }).joinToString(" "),
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp),
+            .then(
+                if (active) Modifier.border(1.dp, FS.colors.success.copy(alpha = 0.6f), MaterialTheme.shapes.medium) else Modifier,
             )
-            Spacer(Modifier.height(FS.space.s2))
+            .testTag("build-session-${session.sessionId}"),
+        below = {
             Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 FSPill(BuildSessions.label(session.status), sessionPill(session.status))
                 FSPill(BuildSummary.methodLabel("scratch"), FSPillKind.Idle)
             }
-        }
-        val action = BuildSessions.action(session.status)
-        Text(
-            action,
-            color = if (action == "Open") FS.colors.primary else FS.colors.success,
-            style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
-        )
-    }
+        },
+        trailing = {
+            Text(
+                action,
+                color = if (action == "Open") MaterialTheme.colorScheme.primary else FS.colors.success,
+                style = MaterialTheme.typography.labelLarge,
+            )
+        },
+    )
 }
 
 private fun sessionPill(status: String): FSPillKind = when (status) {
@@ -1191,47 +1164,39 @@ private fun sessionPill(status: String): FSPillKind = when (status) {
 
 @Composable
 private fun BuildTile(b: BuildSummary, startedOnly: Boolean = false, server: String? = null, onClick: () -> Unit) {
-    FSCard(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        padding = PaddingValues(FS.space.s5),
-    ) {
-        Text(
-            b.displayName,
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-        )
-        Spacer(Modifier.height(FS.space.s1))
-        Text(
-            (if (startedOnly) "Started ${fmtTimestamp(b.startedAt)}" else BuildSessions.pastBuildSubtitle(b, fmtTimestamp(b.startedAt))) +
-                (server?.let { " on $it" } ?: ""),
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 13.sp),
-        )
-        Spacer(Modifier.height(FS.space.s2))
-        FSPill(b.methodLabel, FSPillKind.Idle)
-    }
+    FSListRow(
+        leading = FSListLeading.Icon(modeIcon(b.mode), MaterialTheme.colorScheme.primary),
+        title = b.displayName,
+        subtitle = (if (startedOnly) "Started ${fmtTimestamp(b.startedAt)}" else BuildSessions.pastBuildSubtitle(b, fmtTimestamp(b.startedAt))) +
+            (server?.let { " on $it" } ?: ""),
+        onClick = onClick,
+        below = { FSPill(b.methodLabel, FSPillKind.Idle) },
+    )
 }
 
 @Composable
 private fun TimelineCard(buildId: String, entries: List<BuildJournalEntry>) {
-    FSCard(padding = PaddingValues(FS.space.s5)) {
-        Text("Build $buildId", color = FS.colors.text, style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
-        Spacer(Modifier.height(FS.space.s3))
-        if (entries.isEmpty()) {
-            Text("No steps recorded yet.", color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp))
-        } else {
-            entries.forEach { e ->
-                Column(Modifier.fillMaxWidth().padding(vertical = FS.space.s2)) {
+    if (entries.isEmpty()) {
+        com.flagshipserver.app.ui.components.FSNote("No steps recorded for this build yet.")
+        return
+    }
+    FSCard {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            Text(
+                "Build $buildId",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelMedium.copy(fontFamily = FontFamily.Monospace),
+            )
+            entries.forEachIndexed { i, e ->
+                if (i > 0) FSCardDivider()
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2), verticalAlignment = Alignment.CenterVertically) {
-                        Badge(e.kind)
-                        Badge(e.actor)
+                        Text(fmtTimestamp(e.ts), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall)
+                        JournalBadge(e.kind)
+                        JournalBadge(e.actor)
                     }
-                    Spacer(Modifier.height(FS.space.s1))
-                    Text(e.summary, color = FS.colors.text, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
-                    e.detail?.let {
-                        Text(it, color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp))
-                    }
-                    Text(fmtTimestamp(e.ts), color = FS.colors.textMuted, style = TextStyle(fontSize = 11.sp))
+                    Text(e.summary, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium)
+                    e.detail?.takeIf { it.isNotEmpty() }?.let { NoteText(it) }
                 }
             }
         }
@@ -1239,14 +1204,17 @@ private fun TimelineCard(buildId: String, entries: List<BuildJournalEntry>) {
 }
 
 @Composable
-private fun Badge(text: String) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(FS.radius.pill))
-            .background(FS.colors.surfaceSunken)
-            .padding(horizontal = 10.dp, vertical = 3.dp),
+private fun JournalBadge(text: String) {
+    Surface(
+        shape = MaterialTheme.shapes.extraSmall,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
     ) {
-        Text(text, color = FS.colors.textMuted, style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium))
+        Text(
+            text,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+        )
     }
 }
 
@@ -1258,19 +1226,27 @@ private fun fmtTimestamp(ms: Long): String {
 // ── small shared cards ──────────────────────────────────────────
 
 @Composable
-private fun InfoCard(title: String, body: String) {
-    FSCard(padding = PaddingValues(FS.space.s5)) {
-        Text(title, color = FS.colors.text, style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
-        Spacer(Modifier.height(FS.space.s1))
-        Text(body, color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
+private fun InfoCard(title: String, body: String, busy: Boolean = false) {
+    FSCard {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            if (busy) CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
+                Text(title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
+                MutedText(body)
+            }
+        }
     }
 }
 
 @Composable
 private fun ErrorCardSimple(message: String) {
-    FSCard(padding = PaddingValues(FS.space.s5)) {
-        Text("Something went wrong", color = FS.colors.danger, style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
-        Spacer(Modifier.height(FS.space.s1))
-        Text(message, color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
+    FSCard {
+        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            Icon(Icons.Outlined.ErrorOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
+                Text("Something went wrong", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.titleMedium)
+                MutedText(message)
+            }
+        }
     }
 }

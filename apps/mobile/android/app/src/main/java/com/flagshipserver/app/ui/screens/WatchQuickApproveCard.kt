@@ -6,7 +6,12 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Watch
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -23,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
@@ -31,6 +37,7 @@ import com.flagshipserver.app.api.FlagshipServerClient
 import com.flagshipserver.app.core.AppState
 import com.flagshipserver.app.core.FlagshipDateFormat
 import com.flagshipserver.app.ui.components.FSCard
+import com.flagshipserver.app.ui.components.FSRow
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.WatchDelegatePhase
 import com.flagshipserver.app.viewmodels.WatchDelegateViewModel
@@ -50,47 +57,47 @@ fun WatchQuickApproveCard(server: FlagshipServerClient, app: AppState) {
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) { vm.load() }
 
-    FSCard(padding = PaddingValues(FS.space.s4)) {
+    FSCard(padding = PaddingValues(0.dp)) {
         Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "Quick approve from watch",
-                    color = FS.colors.text,
-                    style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-                    modifier = Modifier.weight(1f),
-                )
-                Switch(
-                    checked = enabled,
-                    onCheckedChange = { want -> scope.launch { if (want) vm.enable() else vm.disable() } },
-                    enabled = phase != WatchDelegatePhase.Enabling && phase != WatchDelegatePhase.Disabling,
-                    modifier = Modifier.testTag("watch-delegate-toggle"),
-                )
-            }
-            Spacer(Modifier.height(FS.space.s2))
-            Text(
-                "Approve a server boot from your Wear OS watch while Flagship is unlocked on this phone. " +
-                    "Other actions (revoke server, wipe & restart, replace device) always need your phone. Off by default.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp),
+            FSRow(
+                title = "Quick approve from watch",
+                icon = Icons.Outlined.Watch,
+                trailing = {
+                    Switch(
+                        checked = enabled,
+                        onCheckedChange = { want -> scope.launch { if (want) vm.enable() else vm.disable() } },
+                        enabled = phase != WatchDelegatePhase.Enabling && phase != WatchDelegatePhase.Disabling,
+                        modifier = Modifier.testTag("watch-delegate-toggle"),
+                    )
+                },
             )
-            val exp = expiresAt
-            if (enabled && exp != null) {
-                Spacer(Modifier.height(FS.space.s2))
+            Column(
+                verticalArrangement = Arrangement.spacedBy(FS.space.s2),
+                modifier = Modifier.padding(start = FS.space.s4, end = FS.space.s4, bottom = FS.space.s4),
+            ) {
                 Text(
-                    "Active — renews by ${FlagshipDateFormat.format(exp)}",
-                    color = FS.colors.success,
-                    style = TextStyle(fontSize = 13.sp),
-                    modifier = Modifier.testTag("watch-delegate-active"),
+                    "Approve a server boot from your Wear OS watch while Flagship is unlocked on this phone. " +
+                        "Other actions (revoke server, wipe & restart, replace device) always need your phone. Off by default.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
                 )
-            }
-            (phase as? WatchDelegatePhase.Failed)?.let {
-                Spacer(Modifier.height(FS.space.s2))
-                Text(
-                    it.message,
-                    color = FS.colors.danger,
-                    style = TextStyle(fontSize = 13.sp),
-                    modifier = Modifier.testTag("watch-delegate-failed-msg"),
-                )
+                val exp = expiresAt
+                if (enabled && exp != null) {
+                    Text(
+                        "Active — renews by ${FlagshipDateFormat.format(exp)}",
+                        color = FS.colors.success,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.testTag("watch-delegate-active"),
+                    )
+                }
+                (phase as? WatchDelegatePhase.Failed)?.let {
+                    Text(
+                        it.message,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.testTag("watch-delegate-failed-msg"),
+                    )
+                }
             }
         }
     }

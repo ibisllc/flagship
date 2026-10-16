@@ -29,8 +29,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Laptop
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -58,6 +62,10 @@ import com.flagshipserver.app.api.boxError
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.NetworkErrorHumanizer
 import com.flagshipserver.app.ui.components.FSCard
+import com.flagshipserver.app.ui.components.FSDivider
+import com.flagshipserver.app.ui.components.FSGroup
+import com.flagshipserver.app.ui.components.FSRow
+import com.flagshipserver.app.ui.components.FSScreen
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.shell.tabs.openBuildSessions
@@ -134,80 +142,39 @@ sealed interface EditStartRefusal {
 }
 
 @Composable
-private fun EditScaffold(title: String, onBack: () -> Unit, content: @Composable () -> Unit) {
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = FS.space.s6),
-    ) {
-        Spacer(Modifier.height(FS.space.s12))
-        Text(
-            text = title,
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
-        )
-        Spacer(Modifier.height(FS.space.s6))
-        content()
-        Spacer(Modifier.height(FS.space.s6))
-        FSGhostButton("Back", onClick = onBack, block = true)
-        Spacer(Modifier.height(FS.space.s12))
-    }
+private fun EditScaffold(title: String, onBack: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+    FSScreen(title = title, onBack = onBack, content = content)
 }
 
 /** The chooser: the AI chat or the owner's IDE. */
 @Composable
 fun EditServiceScreen(nav: NavController, serviceId: String) {
     EditScaffold(title = EditService.title(EditService.slug(serviceId)), onBack = { nav.popBackStack() }) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-            EditOption(
-                icon = Icons.Outlined.AutoAwesome,
+        FSGroup {
+            FSRow(
                 title = EditService.AI_TITLE,
                 subtitle = EditService.AI_SUBTITLE,
-                testTag = "edit-service-ai",
+                icon = Icons.Outlined.AutoAwesome,
+                iconTint = MaterialTheme.colorScheme.primary,
                 onClick = { nav.navigate(EditService.keyRoute(serviceId)) },
+                modifier = Modifier.testTag("edit-service-ai"),
             )
-            EditOption(
-                icon = Icons.Outlined.Laptop,
+            FSDivider()
+            FSRow(
                 title = EditService.IDE_TITLE,
                 subtitle = EditService.IDE_SUBTITLE,
-                testTag = "edit-service-ide",
+                icon = Icons.Outlined.Laptop,
+                iconTint = MaterialTheme.colorScheme.primary,
                 onClick = { nav.navigate(EditService.mcpRoute(serviceId)) },
+                modifier = Modifier.testTag("edit-service-ide"),
             )
         }
-        Spacer(Modifier.height(FS.space.s4))
         Text(
             EditService.REPLACE_NOTE,
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(horizontal = FS.space.s1),
         )
-    }
-}
-
-@Composable
-private fun EditOption(
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    testTag: String,
-    onClick: () -> Unit,
-) {
-    FSCard(
-        padding = PaddingValues(FS.space.s4),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .testTag(testTag),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, contentDescription = null, tint = FS.colors.primary, modifier = Modifier.width(28.dp))
-            Spacer(Modifier.width(FS.space.s3))
-            Column(Modifier.weight(1f)) {
-                Text(title, color = FS.colors.text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
-                Text(subtitle, color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
-            }
-            Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null, tint = FS.colors.textMuted)
-        }
     }
 }
 
@@ -227,32 +194,19 @@ fun EditDescribeScreen(nav: NavController, serviceId: String) {
     val freeAiServer = currentBuildServerFqdn()
 
     EditScaffold(title = EditService.title(name), onBack = { nav.popBackStack() }) {
-        Text(
-            EditService.PROMPT_LABEL,
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium),
-        )
-        Spacer(Modifier.height(FS.space.s2))
-        Box(
+        OutlinedTextField(
+            value = prompt,
+            onValueChange = { prompt = it },
+            label = { Text(EditService.PROMPT_LABEL) },
+            supportingText = { Text(EditService.PROMPT_HINT) },
+            textStyle = MaterialTheme.typography.bodyLarge,
+            shape = MaterialTheme.shapes.small,
+            minLines = 6,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(180.dp)
-                .clip(RoundedCornerShape(FS.radius.sm))
-                .background(FS.colors.surfaceSunken)
-                .border(1.dp, FS.colors.border, RoundedCornerShape(FS.radius.sm))
-                .padding(14.dp),
-        ) {
-            BasicTextField(
-                value = prompt,
-                onValueChange = { prompt = it },
-                cursorBrush = SolidColor(FS.colors.primary),
-                textStyle = TextStyle(color = FS.colors.text, fontSize = 16.sp, lineHeight = 22.sp),
-                modifier = Modifier.fillMaxSize().testTag("edit-describe-prompt"),
-            )
-        }
-        Spacer(Modifier.height(FS.space.s2))
-        Text(EditService.PROMPT_HINT, color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
-        Spacer(Modifier.height(FS.space.s6))
+                .heightIn(min = 180.dp)
+                .testTag("edit-describe-prompt"),
+        )
         FSPrimaryButton(
             label = if (starting) "Starting…" else "Start",
             modifier = Modifier.testTag("edit-describe-start"),

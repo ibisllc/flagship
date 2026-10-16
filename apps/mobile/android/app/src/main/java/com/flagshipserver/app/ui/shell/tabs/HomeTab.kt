@@ -323,6 +323,7 @@ fun HomeTab() {
                 // over a transferred box is a link/QR ingestion (Slice C).
                 onAddServer = { nav.navigate("create-server") },
                 onImportBackup = { nav.navigate("import-backup") },
+                onBuildService = { deepLinker.enqueue(DeepLink.StartBuild) },
                 onCoManage = { nav.navigate("share-accept") },
                 onMakeLeader = { pod -> saveOrder { orderSaver.makeLeader(pod.podId) } },
                 onReorder = { ids -> saveOrder { orderSaver.reorder(ids) } },
@@ -464,6 +465,7 @@ fun HomeTab() {
                             app.removePod(pod.podId)
                             nav.popBackStack()
                         },
+                        onBack = { nav.popBackStack() },
                     )
                 }
             } else {
@@ -504,7 +506,7 @@ fun HomeTab() {
             val transferClient = LocalServerTransferClient.current
             val user = app.currentUser.collectAsState().value ?: ""
             val acquirerVm = remember(user) { TransferAcquirerViewModel(username = user, client = transferClient) }
-            TransferAcquirerScreen(vm = acquirerVm, preIngestedOffer = offer)
+            TransferAcquirerScreen(vm = acquirerVm, preIngestedOffer = offer, onBack = { nav.popBackStack() })
         }
         composable(
             route = "create-server?builder={builder}",

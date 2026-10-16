@@ -9,6 +9,7 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -29,11 +30,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSField
-import com.flagshipserver.app.ui.components.FSGhostButton
+import com.flagshipserver.app.ui.components.FSRow
+import com.flagshipserver.app.ui.components.FSScreen
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.theme.FS
 
@@ -58,28 +61,12 @@ fun ProvidersScreen(nav: NavController, onSave: ((List<ProviderConfig>) -> Unit)
         )
     }
 
-    val scroll = rememberScrollState()
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(scroll)
-            .padding(horizontal = FS.space.s6),
+    FSScreen(
+        title = "AI providers",
+        onBack = { nav.popBackStack() },
+        subtitle = "Plug in your own keys. Flagship never proxies LLM traffic — calls go direct from your server to the provider you pick.",
+        spacing = FS.space.s3,
     ) {
-        Spacer(Modifier.height(FS.space.s8))
-        FSGhostButton(label = "← Back", onClick = { nav.popBackStack() })
-        Spacer(Modifier.height(FS.space.s3))
-        Text(
-            "AI providers",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
-        )
-        Text(
-            "Plug in your own keys. Flagship never proxies LLM traffic — calls go direct from your pod to the provider you pick.",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
-        )
-        Spacer(Modifier.height(FS.space.s4))
-
         providers.forEach { p ->
             ProviderCard(
                 provider = p,
@@ -87,7 +74,6 @@ fun ProvidersScreen(nav: NavController, onSave: ((List<ProviderConfig>) -> Unit)
                 onApiKey = { p.apiKey = it },
                 onBaseUrl = { p.baseUrl = it },
             )
-            Spacer(Modifier.height(FS.space.s3))
         }
 
         FSPrimaryButton(
@@ -105,8 +91,8 @@ fun ProvidersScreen(nav: NavController, onSave: ((List<ProviderConfig>) -> Unit)
                 nav.popBackStack()
             },
             block = true,
+            modifier = Modifier.padding(top = FS.space.s3),
         )
-        Spacer(Modifier.height(FS.space.s12))
     }
 }
 
@@ -121,41 +107,37 @@ private fun ProviderCard(
     var apiKey by remember { mutableStateOf(provider.apiKey) }
     var baseUrl by remember { mutableStateOf(provider.baseUrl) }
 
-    FSCard(padding = PaddingValues(FS.space.s4)) {
+    FSCard(padding = PaddingValues(0.dp)) {
         Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        provider.displayName,
-                        color = FS.colors.text,
-                        style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+            FSRow(
+                title = provider.displayName,
+                subtitle = provider.defaultBaseUrl,
+                onClick = { enabled = !enabled; onToggle(enabled) },
+                trailing = {
+                    Switch(
+                        checked = enabled,
+                        onCheckedChange = { enabled = it; onToggle(it) },
                     )
-                    Text(
-                        provider.defaultBaseUrl,
-                        color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 12.sp),
+                },
+            )
+            if (enabled) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(FS.space.s2),
+                    modifier = Modifier.padding(start = FS.space.s4, end = FS.space.s4, bottom = FS.space.s4),
+                ) {
+                    FSField(
+                        value = apiKey,
+                        onValueChange = { apiKey = it; onApiKey(it) },
+                        label = "API key",
+                        placeholder = "sk-…",
+                    )
+                    FSField(
+                        value = baseUrl,
+                        onValueChange = { baseUrl = it; onBaseUrl(it) },
+                        label = "Custom base URL (optional)",
+                        placeholder = provider.defaultBaseUrl,
                     )
                 }
-                Switch(
-                    checked = enabled,
-                    onCheckedChange = { enabled = it; onToggle(it) },
-                )
-            }
-            if (enabled) {
-                Spacer(Modifier.height(FS.space.s3))
-                FSField(
-                    value = apiKey,
-                    onValueChange = { apiKey = it; onApiKey(it) },
-                    label = "API key",
-                    placeholder = "sk-…",
-                )
-                Spacer(Modifier.height(FS.space.s2))
-                FSField(
-                    value = baseUrl,
-                    onValueChange = { baseUrl = it; onBaseUrl(it) },
-                    label = "Custom base URL (optional)",
-                    placeholder = provider.defaultBaseUrl,
-                )
             }
         }
     }

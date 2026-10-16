@@ -9,6 +9,17 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Usb
+import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
+import androidx.compose.foundation.layout.width
+import com.flagshipserver.app.ui.components.FSScreen
 import android.app.Application
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
@@ -101,43 +112,19 @@ fun BuilderOnDeviceScreen(recipeJson: String, onDone: () -> Unit) {
         UsbHost.requestPermission(UsbHost.manager(context), sel.device, pi)
     }
 
-    val scroll = rememberScrollState()
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(scroll),
-        horizontalAlignment = Alignment.CenterHorizontally,
+    FSScreen(
+        title = "Burn to USB",
+        onBack = onDone,
+        subtitle = "Connect a USB drive with an OTG adapter, then write the bootable installer right here — no computer needed.",
+        spacing = 0.dp,
     ) {
-      // Reading column — clamp + center on expanded panes; a no-op on phones.
-      Column(
-        modifier = Modifier
-            .widthIn(max = FSLayout.readingMaxWidth)
-            .fillMaxWidth()
-            .padding(horizontal = FS.space.s6),
-      ) {
-        Spacer(Modifier.height(FS.space.s8))
-        FSGhostButton(label = "← Back", onClick = onDone)
-        Spacer(Modifier.height(FS.space.s3))
-        Text(
-            "Burn to USB on this device",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
-        )
-        Spacer(Modifier.height(FS.space.s2))
-        Text(
-            "Connect a USB drive with an OTG adapter, then write the bootable installer right here — no computer needed.",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
-        )
-        Spacer(Modifier.height(FS.space.s5))
-
+        Spacer(Modifier.height(FS.space.s4))
         state.recipe?.let { r ->
             FSCard {
-                Text("Server", color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium))
+                Text("Server", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
                 Spacer(Modifier.height(FS.space.s1))
-                Text(r.serverName, color = FS.colors.text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
-                Spacer(Modifier.height(FS.space.s1))
-                Text(r.serverDomain, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+                Text(r.serverName, style = MaterialTheme.typography.titleMedium)
+                Text(r.serverDomain, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
             }
             Spacer(Modifier.height(FS.space.s4))
         }
@@ -178,8 +165,6 @@ fun BuilderOnDeviceScreen(recipeJson: String, onDone: () -> Unit) {
             }
         }
 
-        Spacer(Modifier.height(FS.space.s10))
-      }
     }
 }
 
@@ -189,43 +174,43 @@ private fun DrivePicker(
     onSelect: (UsbMassStorageDevice) -> Unit,
     onRefresh: () -> Unit,
 ) {
-    Text("USB drive", color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium))
+    com.flagshipserver.app.ui.components.FSSectionHeader("USB drive")
     Spacer(Modifier.height(FS.space.s2))
-    state.devices.forEach { d ->
-        val selected = state.selected?.device?.deviceId == d.device.deviceId
-        FSCard(modifier = Modifier.fillMaxWidth()) {
+    com.flagshipserver.app.ui.components.FSGroup {
+        state.devices.forEachIndexed { i, d ->
+            val selected = state.selected?.device?.deviceId == d.device.deviceId
             Row(
-                Modifier.fillMaxWidth().clickable(
-                    interactionSource = MutableInteractionSource(),
-                    indication = null,
-                    onClick = { onSelect(d) },
-                ),
+                Modifier
+                    .fillMaxWidth()
+                    .selectable(selected = selected, onClick = { onSelect(d) }, role = androidx.compose.ui.semantics.Role.RadioButton)
+                    .padding(horizontal = FS.space.s2, vertical = FS.space.s1),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    if (selected) "●" else "○",
-                    color = if (selected) FS.colors.primary else FS.colors.textMuted,
-                    modifier = Modifier.padding(end = FS.space.s3),
-                )
-                Text(d.displayName, color = FS.colors.text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Medium))
+                RadioButton(selected = selected, onClick = null, modifier = Modifier.padding(FS.space.s3))
+                Icon(Icons.Outlined.Usb, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.width(FS.space.s3))
+                Text(d.displayName, style = MaterialTheme.typography.bodyLarge)
             }
+            if (i < state.devices.size - 1) com.flagshipserver.app.ui.components.FSDivider()
         }
-        Spacer(Modifier.height(FS.space.s2))
     }
-    FSGhostButton(label = "Rescan", onClick = onRefresh)
+    Spacer(Modifier.height(FS.space.s2))
+    FSSecondaryButton(label = "Rescan", onClick = onRefresh)
 }
 
 @Composable
 private fun WarningCard(text: String) {
-    Box(
+    Row(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(FS.radius.md))
+            .clip(MaterialTheme.shapes.medium)
             .background(FS.colors.warning.copy(alpha = 0.10f))
-            .border(1.dp, FS.colors.warning.copy(alpha = 0.4f), RoundedCornerShape(FS.radius.md))
+            .border(1.dp, FS.colors.warning.copy(alpha = 0.4f), MaterialTheme.shapes.medium)
             .padding(FS.space.s4),
+        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(FS.space.s3),
     ) {
-        Text(text, color = FS.colors.warning, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
+        Icon(Icons.Outlined.WarningAmber, contentDescription = null, tint = FS.colors.warning)
+        Text(text, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -239,25 +224,25 @@ private fun ProgressBlock(state: BuilderOnDeviceViewModel.State) {
         else -> ""
     }
     FSCard {
-        Text(label, color = FS.colors.text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
+        Text(label, style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(FS.space.s2))
         if (state.progress > 0.0) {
             LinearProgressIndicator(
                 progress = { state.progress.toFloat() },
                 modifier = Modifier.fillMaxWidth().height(6.dp),
                 color = FS.colors.primary,
-                trackColor = FS.colors.surfaceSunken,
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
             )
         } else {
             LinearProgressIndicator(
                 modifier = Modifier.fillMaxWidth().height(6.dp),
                 color = FS.colors.primary,
-                trackColor = FS.colors.surfaceSunken,
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
             )
         }
         if (state.statusLine.isNotBlank()) {
             Spacer(Modifier.height(FS.space.s2))
-            Text(state.statusLine, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+            Text(state.statusLine, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
@@ -265,9 +250,12 @@ private fun ProgressBlock(state: BuilderOnDeviceViewModel.State) {
 @Composable
 private fun DoneBlock(message: String, onDone: () -> Unit) {
     FSCard {
-        Text("All done", color = FS.colors.success, style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(FS.space.s2)) {
+            Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = FS.colors.success)
+            Text("All done", style = MaterialTheme.typography.titleMedium)
+        }
         Spacer(Modifier.height(FS.space.s2))
-        Text(message, color = FS.colors.text, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
+        Text(message, style = MaterialTheme.typography.bodyMedium)
     }
     Spacer(Modifier.height(FS.space.s4))
     FSPrimaryButton(label = "Done", onClick = onDone, block = true)
@@ -276,9 +264,12 @@ private fun DoneBlock(message: String, onDone: () -> Unit) {
 @Composable
 private fun ErrorBlock(error: String?, onRetry: () -> Unit) {
     FSCard {
-        Text("Something went wrong", color = FS.colors.danger, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(FS.space.s2)) {
+            Icon(Icons.Outlined.ErrorOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+            Text("Couldn't write the drive", style = MaterialTheme.typography.titleMedium)
+        }
         Spacer(Modifier.height(FS.space.s2))
-        Text(error ?: "Unknown error.", color = FS.colors.text, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
+        Text(error ?: "Unknown error.", style = MaterialTheme.typography.bodyMedium)
     }
     Spacer(Modifier.height(FS.space.s4))
     FSSecondaryButton(label = "Try again", onClick = onRetry, block = true)
@@ -287,12 +278,15 @@ private fun ErrorBlock(error: String?, onRetry: () -> Unit) {
 @Composable
 private fun NoUsbBlock(onRefresh: () -> Unit) {
     FSCard {
-        Text("No USB drive detected", color = FS.colors.text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(FS.space.s2)) {
+            Icon(Icons.Outlined.Usb, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("No USB drive detected", style = MaterialTheme.typography.titleMedium)
+        }
         Spacer(Modifier.height(FS.space.s2))
         Text(
             "Plug a USB drive into this phone with a USB-OTG adapter, then tap Rescan.",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium,
         )
     }
     Spacer(Modifier.height(FS.space.s4))

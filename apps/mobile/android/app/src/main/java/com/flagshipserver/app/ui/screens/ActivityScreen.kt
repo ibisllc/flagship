@@ -1,25 +1,26 @@
-// Activity tab landing: merged feed of pending unlock-approvals,
-// recent install events, and post-recovery progress, sorted by time.
-// Mirrors FlagshipUI/Screens/ActivityScreen.swift.
+// Activity tab landing, organised like iOS ActivityScreen: box approvals
+// (always reachable), post-recovery, account events with the full audit
+// log, then what happened on the servers.
 
 package com.flagshipserver.app.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ListAlt
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Circle
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Sync
+import androidx.compose.material.icons.outlined.SystemUpdateAlt
+import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -28,19 +29,23 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.flagshipserver.app.core.FlagshipDateFormat
 import com.flagshipserver.app.core.LocalScreensClient
+import com.flagshipserver.app.ui.components.FSBarAction
 import com.flagshipserver.app.ui.components.FSCard
-import com.flagshipserver.app.ui.components.FSGhostButton
-import com.flagshipserver.app.ui.components.FSPill
-import com.flagshipserver.app.ui.components.FSPillKind
+import com.flagshipserver.app.ui.components.FSDivider
+import com.flagshipserver.app.ui.components.FSGroup
+import com.flagshipserver.app.ui.components.FSNote
+import com.flagshipserver.app.ui.components.FSPrimaryButton
+import com.flagshipserver.app.ui.components.FSRow
+import com.flagshipserver.app.ui.components.FSScreen
+import com.flagshipserver.app.ui.components.FSSecondaryButton
+import com.flagshipserver.app.ui.components.FSSectionHeader
 import com.flagshipserver.app.ui.components.PodSwitcher
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.ActivityFeed
@@ -48,9 +53,6 @@ import com.flagshipserver.app.viewmodels.ActivityFeedFilter
 import com.flagshipserver.app.viewmodels.ActivityItem
 import com.flagshipserver.app.viewmodels.ActivityViewModel
 import com.flagshipserver.app.viewmodels.LoadingState
-import com.flagshipserver.app.core.FlagshipDateFormat
-import java.util.Date
-import java.util.Locale
 
 @Composable
 fun ActivityScreen(nav: NavController) {
@@ -77,39 +79,20 @@ fun ActivityScreen(nav: NavController) {
     val effectiveServerFilter = serverFilter?.takeIf { id -> pods.any { it.podId == id } }
     val filterPodName = pods.firstOrNull { it.podId == effectiveServerFilter }?.name
 
-    val scroll = rememberScrollState()
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(scroll)
-            .padding(horizontal = FS.space.s6),
+    FSScreen(
+        title = "Activity",
+        titleTag = "activity-title",
+        onRefresh = { vm.load() },
+        refreshing = state is LoadingState.Loading,
+        spacing = FS.space.s6,
+        actions = {
+            FSBarAction(Icons.Outlined.Refresh, "Refresh", onClick = { vm.load() })
+        },
     ) {
-        Spacer(Modifier.height(FS.space.s8))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    "Activity",
-                    color = FS.colors.text,
-                    // Match the Home/Services large-title size (32/40) so the
-                    // tab headers are consistent — was 28sp here.
-                    style = TextStyle(fontSize = 32.sp, lineHeight = 40.sp, fontWeight = FontWeight.Medium),
-                    modifier = Modifier.testTag("activity-title"),
-                )
-                Text(
-                    "Pending approvals, install timelines, and recovery progress.",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 14.sp),
-                )
-            }
-            FSGhostButton(label = "Refresh", onClick = { vm.load() })
-        }
-
-        // Server filter — shown only when the user owns more than one pod
-        // (matches the Services list rule). "All servers" shows the full feed;
-        // a specific server narrows the pod-attributable rows (install events)
-        // while account-wide rows (audit, recovery) always stay visible.
+        // Server filter — shown only when the user owns more than one pod.
+        // A specific server narrows the pod-attributable rows while
+        // account-wide rows (audit, recovery) always stay visible.
         if (pods.size > 1) {
-            Spacer(Modifier.height(FS.space.s4))
             PodSwitcher(
                 pods = pods,
                 currentPodId = effectiveServerFilter,
@@ -120,12 +103,27 @@ fun ActivityScreen(nav: NavController) {
             )
         }
 
-        Spacer(Modifier.height(FS.space.s4))
-
         // ALWAYS visible, OUTSIDE the loaded-state branch: a box waiting for an
         // unlock/entitlement approval is exactly when the daemon BFF (this feed)
         // can't load, so gating it behind Loaded hid it precisely when needed.
-        ApprovalsEntryCard(nav)
+        Section("Box approvals") {
+            FSCard {
+                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                    Text("Approve a box's boot", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Servers set to ask on every boot wait here for you to release their disk key.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    FSPrimaryButton(
+                        label = "Open approvals",
+                        onClick = { nav.navigate("secret-requests") },
+                        block = true,
+                        modifier = Modifier.testTag("activity-open-approvals"),
+                    )
+                }
+            }
+        }
 
         when (val s = state) {
             is LoadingState.Loaded -> FeedBody(
@@ -135,120 +133,116 @@ fun ActivityScreen(nav: NavController) {
             is LoadingState.Failed -> ErrorCard(s.message, onRetry = { vm.load() })
             else -> ServerCardSkeleton()
         }
-        Spacer(Modifier.height(FS.space.s12))
     }
 }
 
 @Composable
-private fun ApprovalsEntryCard(nav: NavController) {
-    // The in-app way to reach the relay approval list — ALWAYS available, since a
-    // box waiting on an unlock/entitlement approval can't load its BFF feed.
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Text(
-                "Approve a box's boot",
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-            )
-            Text(
-                "Servers set to ask on every boot wait here for you to release their disk key.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp),
-            )
-            FSGhostButton(label = "Open approvals", onClick = { nav.navigate("secret-requests") })
-        }
+private fun Section(title: String, content: @Composable () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+        FSSectionHeader(title)
+        content()
     }
-    Spacer(Modifier.height(FS.space.s3))
 }
 
 @Composable
 private fun FeedBody(feed: ActivityFeed, nav: NavController) {
-    if (feed.items.any { it is ActivityItem.RecoverySnapshot }) {
-        FSCard(padding = PaddingValues(FS.space.s4)) {
-            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                Text(
-                    "Post-recovery",
-                    color = FS.colors.text,
-                    style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-                )
-                Text(
-                    "Membership re-attach snapshot from the most recent account key swap.",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp),
-                )
-                FSGhostButton(label = "View report", onClick = { nav.navigate("post-recovery") })
-            }
-        }
-        Spacer(Modifier.height(FS.space.s4))
-    }
-
-    Text(
-        "Recent",
-        color = FS.colors.text,
-        style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
-    )
-    Spacer(Modifier.height(FS.space.s2))
-
-    val recentRows = feed.items
-        .filter { it !is ActivityItem.RecoverySnapshot }
-    // P5 — always-present entry into the dedicated full-page audit log.
-    // Mirrors the webapp's "see all activity" + iOS
-    // ActivityScreen.viewFullAuditLogRow.
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Text(
-                "View full audit log",
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-            )
-            Text(
-                "Every signed account action — device changes, recovery rotations, URL renames.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp),
-            )
-            FSGhostButton(label = "Open audit log", onClick = { nav.navigate("audit-log") })
-        }
-    }
-    Spacer(Modifier.height(FS.space.s3))
-    if (recentRows.isEmpty()) {
-        FSCard(padding = PaddingValues(FS.space.s4)) {
-            Text("No recent activity.", color = FS.colors.textMuted)
-        }
-    } else {
-        recentRows.forEach { item ->
-            FSCard(padding = PaddingValues(FS.space.s3)) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (item.warning) {
-                            Icon(
-                                Icons.Filled.Warning,
-                                contentDescription = "Warning",
-                                tint = FS.colors.warning,
-                                modifier = Modifier.size(18.dp).testTag("activity-row-warning"),
-                            )
-                            Spacer(Modifier.width(FS.space.s2))
-                        }
-                        Text(
-                            item.title,
-                            color = if (item.warning) FS.colors.warning else FS.colors.text,
-                            style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
-                        )
-                    }
-                    item.subtitle?.let { sub ->
-                        Text(
-                            sub,
-                            color = FS.colors.textMuted,
-                            style = TextStyle(fontSize = 12.sp),
-                        )
-                    }
-                    Text(
-                        FlagshipDateFormat.format(item.at, includeTime = true),
-                        color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 11.sp),
+    val snapshot = feed.items.filterIsInstance<ActivityItem.RecoverySnapshot>().firstOrNull()?.snapshot
+    if (snapshot != null) {
+        Section("Post-recovery") {
+            FSCard {
+                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                    val done = snapshot.lastReissue != null
+                    FSRowHeadline(
+                        icon = if (done) Icons.Outlined.CheckCircle else Icons.Outlined.Schedule,
+                        tint = if (done) FS.colors.success else FS.colors.primary,
+                        text = if (done) "Re-attach finished." else "Re-attach in progress.",
                     )
+                    snapshot.lastReissue?.let { r ->
+                        Text(
+                            "${com.flagshipserver.app.ui.components.plural(r.totalRewritten, "row")} rewritten · " +
+                                com.flagshipserver.app.ui.components.plural(r.reattachedCount, "app"),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                    FSSecondaryButton(label = "View report", onClick = { nav.navigate("post-recovery") }, block = true)
                 }
             }
-            Spacer(Modifier.height(FS.space.s2))
         }
     }
+
+    val account = feed.items.filterIsInstance<ActivityItem.AuditEntry>()
+    Section("Account events") {
+        FSGroup {
+            account.forEach { item ->
+                FeedRow(item, icon = Icons.Outlined.History)
+                FSDivider()
+            }
+            FSRow(
+                title = "View full audit log",
+                icon = Icons.AutoMirrored.Outlined.ListAlt,
+                iconTint = MaterialTheme.colorScheme.primary,
+                onClick = { nav.navigate("audit-log") },
+                modifier = Modifier.testTag("activity-open-audit-log"),
+            )
+        }
+    }
+
+    val onServers = feed.items.filter { it is ActivityItem.BoxEvent || it is ActivityItem.InstallEvent }
+    Section("On your servers") {
+        if (onServers.isEmpty()) {
+            FSNote("Nothing has happened yet.")
+        } else {
+            FSGroup {
+                onServers.forEachIndexed { i, item ->
+                    when (item) {
+                        is ActivityItem.InstallEvent -> {
+                            val (icon, verb) = installVerb(item.event.kind)
+                            FeedRow(item, icon = icon, title = "$verb ${item.event.serviceId}")
+                        }
+                        else -> FeedRow(item, icon = Icons.Outlined.Dns)
+                    }
+                    if (i < onServers.size - 1) FSDivider()
+                }
+            }
+        }
+    }
+}
+
+private fun installVerb(kind: String): Pair<ImageVector, String> = when (kind) {
+    "installed" -> Icons.Outlined.Download to "Deployed"
+    "uninstalled" -> Icons.Outlined.Delete to "Removed"
+    "deploy" -> Icons.Outlined.Sync to "Redeployed"
+    "update-pulled" -> Icons.Outlined.SystemUpdateAlt to "Updated"
+    else -> Icons.Outlined.Circle to "Event:"
+}
+
+@Composable
+private fun FSRowHeadline(icon: ImageVector, tint: Color, text: String) {
+    androidx.compose.foundation.layout.Row(
+        horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = tint)
+        Text(text, style = MaterialTheme.typography.titleMedium)
+    }
+}
+
+@Composable
+private fun FeedRow(item: ActivityItem, icon: ImageVector, title: String = item.title) {
+    FSRow(
+        title = title,
+        subtitle = item.subtitle,
+        icon = if (item.warning) Icons.Filled.Warning else icon,
+        iconTint = if (item.warning) FS.colors.warning else MaterialTheme.colorScheme.onSurfaceVariant,
+        titleColor = if (item.warning) FS.colors.warning else null,
+        modifier = if (item.warning) Modifier.testTag("activity-row-warning") else Modifier,
+        trailing = {
+            Text(
+                FlagshipDateFormat.format(item.at),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelMedium,
+            )
+        },
+    )
 }

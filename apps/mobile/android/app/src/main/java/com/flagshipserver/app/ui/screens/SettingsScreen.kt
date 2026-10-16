@@ -4,6 +4,19 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.material.icons.outlined.BrightnessAuto
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.VerifiedUser
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import com.flagshipserver.app.ui.components.FSDivider
+import com.flagshipserver.app.ui.components.FSGroup
+import com.flagshipserver.app.ui.components.FSRow
+import com.flagshipserver.app.ui.components.FSScreen
+import com.flagshipserver.app.ui.components.FSSectionHeader
+import com.flagshipserver.app.ui.components.FSSettingsRow
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -97,6 +110,7 @@ import com.flagshipserver.app.ui.theme.FSLayout
 import com.flagshipserver.app.viewmodels.AccountSecurityViewModel
 import kotlinx.coroutines.launch
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(nav: NavController) {
     val app = LocalAppState.current
@@ -177,32 +191,15 @@ fun SettingsScreen(nav: NavController) {
     }
     val sessionGated = signOutPolicy == SignOutPolicy.BLOCKED_NO_RECOVERY
 
-    val scroll = rememberScrollState()
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(scroll),
-        horizontalAlignment = Alignment.CenterHorizontally,
+    FSScreen(
+        title = "Settings",
+        titleTag = "settings-title",
+        subtitle = "@${username.removePrefix("@")}",
+        subtitleTag = "settings-cloud-username",
+        spacing = FS.space.s6,
     ) {
-      // Reading column — clamp + center on expanded panes; a no-op on phones.
-      Column(
-        Modifier
-            .widthIn(max = FSLayout.readingMaxWidth)
-            .fillMaxWidth()
-            .padding(horizontal = FS.space.s6),
-      ) {
-        Spacer(Modifier.height(FS.space.s8))
-
-        Text(
-            "@${username.removePrefix("@")}",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
-            modifier = Modifier.testTag("settings-title"),
-        )
-
         // Optional promo slot (empty unless flipped on).
         if (showPromo) {
-            Spacer(Modifier.height(FS.space.s4))
             FSAnnouncementCard(
                 icon = Icons.Outlined.AutoAwesome,
                 title = "Welcome to Flagship",
@@ -211,74 +208,65 @@ fun SettingsScreen(nav: NavController) {
             )
         }
 
-        Spacer(Modifier.height(FS.space.s6))
-
-        // Settings taxonomy (spec S1): Account · Devices · Companions ·
-        // Web access · Backup & peers · App · Danger zone · Developer (hidden).
-        // One tap to any row; account security leads the Account group. Matches
-        // the iOS six-group result so the surfaces stay isomorphic.
-
-        // 1 — ACCOUNT: account security · AI keys · Recovery · Back up account
-        //     key · Profiles.
+        // Settings taxonomy (spec S1), in iOS's order: Account · Devices ·
+        // Companions · Web access · Backup & peers · App · session actions ·
+        // Danger zone · Developer (hidden) · About.
         FSSettingsGroup(
-            header = "ACCOUNT",
+            header = "Account",
             rows = listOf(
-                // Account security leads; title is stable, the live account
-                // type (single vs multi-device + 2FA) rides the subtitle. The
-                // last branch is the load-pending fallback.
+                // Account security leads; the live account type (single vs
+                // multi-device + 2FA) rides the subtitle.
                 FSSettingsRowData(
-                    icon = Icons.Outlined.Shield,
+                    icon = if (accountType == "multi") Icons.Outlined.VerifiedUser else Icons.Outlined.Shield,
+                    iconTint = if (accountType == "multi") FS.colors.success else null,
                     title = "Account security",
                     subtitle = when (accountType) {
                         "multi" -> "Multi-device + 2FA — recovery needs a code."
                         "single" -> "Single-device — recovery is a 3-day wait."
-                        else -> "Single-device vs multi-device + 2FA."
+                        else -> "Single-device or multi-device + 2FA."
                     },
                     onClick = { nav.navigate("account-security") },
                     testTag = "settings-open-account-security",
                 ),
                 FSSettingsRowData(
-                    icon = Icons.Outlined.VpnKey,
+                    icon = Icons.Outlined.AutoAwesome,
                     title = "AI keys",
-                    subtitle = "BYO LLM keys, saved on this device (Anthropic, OpenAI, Google…).",
+                    subtitle = "Bring-your-own keys for building apps",
                     onClick = { nav.navigate("ai-keys") },
                     testTag = "settings-ai-keys",
                 ),
             ) + (if (isDemoAccountSession) emptyList() else listOf(
                 FSSettingsRowData(
-                    icon = Icons.Outlined.Autorenew,
+                    icon = Icons.Outlined.VpnKey,
                     title = "Cloud recovery",
-                    subtitle = "Recover with your passphrase and cloud passkey.",
+                    subtitle = "Recover on a new device",
                     onClick = { nav.navigate("recovery") },
                 ),
                 FSSettingsRowData(
                     icon = Icons.Outlined.Save,
                     title = "Back up account key",
-                    subtitle = "Save an encrypted key file to recover or move your account.",
+                    subtitle = "Save an encrypted key file",
                     onClick = { nav.navigate("keyfile-export") },
                 ),
             )) + listOf(
                 FSSettingsRowData(
                     icon = Icons.Outlined.Cloud,
                     title = "Profiles",
-                    subtitle = "Switch between your clouds.",
+                    subtitle = "Switch between your clouds",
                     onClick = { nav.navigate("profiles") },
                 ),
             ),
         )
 
-        Spacer(Modifier.height(FS.space.s4))
-
-        // 2 — DEVICES: the single home for Add / Replace / Wipe / Remove device
-        //     is the Trusted devices screen (the old standalone "Add a control
-        //     device" row merged in there), plus the browser sessions list.
+        // The single home for Add / Replace / Wipe / Remove device is the
+        // Trusted devices screen, plus the browser sessions list.
         FSSettingsGroup(
-            header = "DEVICES",
+            header = "Devices",
             rows = (if (isDemoAccountSession) emptyList() else listOf(
                 FSSettingsRowData(
                     icon = Icons.Outlined.Devices,
                     title = "Trusted devices",
-                    subtitle = "Phones and tablets that hold your account keys — add, replace, or remove.",
+                    subtitle = "Add, replace or remove the devices that hold your keys",
                     onClick = { nav.navigate("trusted-devices") },
                 ),
             )) + listOf(
@@ -287,33 +275,27 @@ fun SettingsScreen(nav: NavController) {
                 FSSettingsRowData(
                     icon = Icons.Outlined.QrCodeScanner,
                     title = "Scan a pairing code",
-                    subtitle = "Add this phone to another account from a code its device shows.",
+                    subtitle = "Add this phone to another account",
                     onClick = { nav.navigate("join-device-scan") },
                 ),
                 FSSettingsRowData(
                     icon = Icons.Outlined.Computer,
                     title = "Browser sessions",
-                    subtitle = "Browsers you opened through Remote.",
+                    subtitle = "Browsers you opened through Remote",
                     onClick = { nav.navigate("paired-sessions") },
                 ),
             ),
         )
 
-        Spacer(Modifier.height(FS.space.s4))
-
-        // 3 — REMOTE: read-only browser sessions + the requests they raise.
         FSSettingsGroup(
-            header = "COMPANIONS",
+            header = "Companions",
             rows = listOf(
-                // P14 — companion-dock: mint a 60s pairing ticket → 4h read-only browser.
                 FSSettingsRowData(
                     icon = Icons.Outlined.ScreenShare,
                     title = "Remote",
-                    subtitle = "Scan a one-time QR for a 4-hour read-only desktop view.",
+                    subtitle = "Read-only browser session (4h)",
                     onClick = { nav.navigate("companion-dock") },
                 ),
-                // P14 Phase 2 — companion-requests inbox. Badge reflects
-                // the pending count fetched once when this screen appears.
                 FSSettingsRowData(
                     icon = Icons.Outlined.Inbox,
                     title = "Companion requests",
@@ -324,165 +306,112 @@ fun SettingsScreen(nav: NavController) {
             ),
         )
 
-        Spacer(Modifier.height(FS.space.s4))
-
-        // 4 — WEB ACCESS: the QR-login surfaces (authorize a browser for a
-        //     private app + manage the sessions you signed in).
         FSSettingsGroup(
-            header = "WEB ACCESS",
+            header = "Web access",
             rows = listOf(
                 FSSettingsRowData(
                     icon = Icons.Outlined.Public,
                     title = "Open secured sessions",
-                    subtitle = "Browsers you signed in to private apps.",
+                    subtitle = "Sites you've signed a browser into",
                     onClick = { nav.navigate("secured-sessions") },
                     testTag = "settings-secured-sessions",
                 ),
                 FSSettingsRowData(
                     icon = Icons.Outlined.Link,
                     title = "Process URL",
-                    subtitle = "Paste a site's access link to authorize it from here.",
+                    subtitle = "Open a sign-in link you copied",
                     onClick = { nav.navigate("process-url") },
                     testTag = "settings-process-url",
                 ),
             ),
         )
 
-        Spacer(Modifier.height(FS.space.s4))
-
-        // 5 — BACKUP & PEERS.
         FSSettingsGroup(
-            header = "BACKUP & PEERS",
+            header = "Backup & peers",
             rows = listOf(
-                // P9 — peer-backup management.
                 FSSettingsRowData(
                     icon = Icons.Outlined.Backup,
                     title = "Peer-backup",
-                    subtitle = "Shard health across peers + repair status.",
+                    subtitle = "Shard health across peers",
                     onClick = { nav.navigate("peer-backup") },
                 ),
             ),
         )
 
-        Spacer(Modifier.height(FS.space.s4))
-
-        // NOTIFICATIONS: one switch for every push to this device (§3a).
+        // One switch for every push to this device (§3a).
         PushNotificationsCard()
 
-        Spacer(Modifier.height(FS.space.s4))
-
-        // 6 — APP: appearance (Light / Dark / Auto segmented control), Privacy,
-        //     About. Appearance writes straight to PrivacySettings; MainActivity
-        //     applies it app-wide.
-        Text(
-            "APP",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp),
-        )
-        Spacer(Modifier.height(FS.space.s2))
-        Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            ThemeSegment(Modifier.weight(1f), icon = Icons.Outlined.LightMode, selected = themeMode == ThemeMode.LIGHT) {
-                privacy?.setThemeMode(ThemeMode.LIGHT)
-            }
-            ThemeSegment(Modifier.weight(1f), icon = Icons.Outlined.DarkMode, selected = themeMode == ThemeMode.DARK) {
-                privacy?.setThemeMode(ThemeMode.DARK)
-            }
-            ThemeSegment(Modifier.weight(1f), label = "AUTO", small = true, selected = themeMode == ThemeMode.AUTO) {
-                privacy?.setThemeMode(ThemeMode.AUTO)
-            }
-        }
-        Spacer(Modifier.height(FS.space.s3))
-        Text(
-            "App icon",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp),
-        )
-        Spacer(Modifier.height(FS.space.s2))
-        Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            ThemeSegment(Modifier.weight(1f), label = "Classic", small = true, selected = iconVariant == AppIconVariant.CLASSIC) {
-                AppIconSwitcher.set(ctx, AppIconVariant.CLASSIC)
-                iconVariant = AppIconVariant.CLASSIC
-            }
-            ThemeSegment(Modifier.weight(1f), label = "Legacy", small = true, selected = iconVariant == AppIconVariant.LEGACY) {
-                AppIconSwitcher.set(ctx, AppIconVariant.LEGACY)
-                iconVariant = AppIconVariant.LEGACY
-            }
-        }
-        Spacer(Modifier.height(FS.space.s2))
-        FSSettingsGroup(
-            rows = listOf(
-                FSSettingsRowData(
-                    icon = Icons.Outlined.Lock,
-                    title = "Privacy",
-                    subtitle = "Require unlock at launch, app-level gating.",
-                    onClick = { nav.navigate("privacy") },
-                ),
-                // About — Android has no separate About screen, so the version /
-                // license card below IS the About surface (it also carries the
-                // 3-tap developer unlock). This row scrolls to nothing extra; it
-                // exists for group parity with iOS/web and taps the same unlock.
-                FSSettingsRowData(
-                    icon = Icons.Outlined.Info,
-                    title = "About Flagship",
-                    subtitle = "Version, license, source.",
-                    showsChevron = false,
-                    onClick = {
-                        // Debug builds only: a shipped build has no hidden
-                        // mode that swaps in fake data.
-                        if (BuildConfig.DEBUG) {
-                            versionTaps += 1
-                            if (versionTaps >= 3) dev?.setUnlocked(true)
+        // APP: appearance, app icon, Privacy and About. Appearance writes
+        // straight to PrivacySettings; MainActivity applies it app-wide.
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            FSSectionHeader("App")
+            FSGroup {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(FS.space.s3),
+                    modifier = Modifier.padding(FS.space.s4),
+                ) {
+                    Text("Appearance", style = MaterialTheme.typography.bodyLarge)
+                    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                        val modes = listOf(
+                            Triple(ThemeMode.LIGHT, "Light", Icons.Outlined.LightMode),
+                            Triple(ThemeMode.DARK, "Dark", Icons.Outlined.DarkMode),
+                            Triple(ThemeMode.AUTO, "Auto", Icons.Outlined.BrightnessAuto),
+                        )
+                        modes.forEachIndexed { i, (mode, label, icon) ->
+                            SegmentedButton(
+                                selected = themeMode == mode,
+                                onClick = { privacy?.setThemeMode(mode) },
+                                shape = SegmentedButtonDefaults.itemShape(index = i, count = modes.size),
+                                icon = { SegmentedButtonDefaults.Icon(active = themeMode == mode) { Icon(icon, contentDescription = null, modifier = Modifier.size(SegmentedButtonDefaults.IconSize)) } },
+                                modifier = Modifier.testTag("settings-theme-${mode.name.lowercase()}"),
+                            ) { Text(label) }
                         }
-                    },
-                ),
-            ),
-        )
-
-        Spacer(Modifier.height(FS.space.s4))
-
-        FSCard(padding = PaddingValues(FS.space.s4)) {
-            Column {
-                Text(
-                    "Flagship Android",
-                    color = FS.colors.text,
-                    style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
-                )
-                Text(
-                    "v${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) · BUSL-1.1 · Patent Pending",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 12.sp),
-                    modifier = Modifier
-                        .padding(top = FS.space.s1),
-                )
-                if (BuildConfig.DEBUG) {
-                    FSGhostButton(
-                        label = if (devUnlocked) "Developer unlocked" else "Tap version to unlock developer",
-                        onClick = {
-                            versionTaps += 1
-                            if (versionTaps >= 3) dev?.setUnlocked(true)
-                        },
-                    )
+                    }
+                    Text("App icon", style = MaterialTheme.typography.bodyLarge)
+                    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                        val icons = listOf(AppIconVariant.CLASSIC to "Classic", AppIconVariant.LEGACY to "Legacy")
+                        icons.forEachIndexed { i, (variant, label) ->
+                            SegmentedButton(
+                                selected = iconVariant == variant,
+                                onClick = {
+                                    AppIconSwitcher.set(ctx, variant)
+                                    iconVariant = variant
+                                },
+                                shape = SegmentedButtonDefaults.itemShape(index = i, count = icons.size),
+                            ) { Text(label) }
+                        }
+                    }
                 }
+                FSDivider(inset = 0.dp)
+                FSSettingsRow(
+                    FSSettingsRowData(
+                        icon = Icons.Outlined.Lock,
+                        title = "Privacy",
+                        subtitle = "App lock, app-level gating",
+                        onClick = { nav.navigate("privacy") },
+                    ),
+                )
+                FSDivider()
+                // About — Android has no separate About screen: the version
+                // line at the foot of this page is the About surface.
+                FSSettingsRow(
+                    FSSettingsRowData(
+                        icon = Icons.Outlined.Info,
+                        title = "About Flagship",
+                        subtitle = "v${BuildConfig.VERSION_NAME} · BUSL-1.1 · Patent Pending",
+                        showsChevron = false,
+                        onClick = {
+                            // Debug builds only: a shipped build has no hidden
+                            // mode that swaps in fake data.
+                            if (BuildConfig.DEBUG) {
+                                versionTaps += 1
+                                if (versionTaps >= 3) dev?.setUnlocked(true)
+                            }
+                        },
+                    ),
+                )
             }
         }
-
-        // 8 — DEVELOPER (hidden behind the 3-tap version unlock).
-        if (devUnlocked) {
-            Spacer(Modifier.height(FS.space.s4))
-            FSSettingsGroup(
-                header = "DEVELOPER",
-                rows = listOf(
-                    FSSettingsRowData(
-                        icon = Icons.Outlined.Build,
-                        title = "Developer",
-                        subtitle = "Toggle the live screens client + dev fixtures.",
-                        onClick = { nav.navigate("developer") },
-                    ),
-                ),
-            )
-        }
-
-        Spacer(Modifier.height(FS.space.s6))
 
         // The three-tier "leave the app" cluster, ordered by increasing
         // severity (mirror of iOS SettingsScreen.sessionActions). Tier 3
@@ -492,16 +421,13 @@ fun SettingsScreen(nav: NavController) {
         //     NOTHING — no network, the key + session stay in the
         //     AndroidKeyStore. Cheapest; re-entry is the lock screen.
         //   - SIGN OUT (tier 2): erase this device's local key material
-        //     from the Keystore WITHOUT revoking server-side. The device
-        //     stays a valid account member; this just hardens against an
-        //     at-rest / memory snoop while signed out. Re-entry is a
-        //     recovery sign-in that restores the SAME key (instant
-        //     re-pair, no rotation). Gated on cloud recovery — see the
-        //     confirmation dialog below.
+        //     from the Keystore WITHOUT revoking server-side. Re-entry is a
+        //     recovery sign-in that restores the SAME key. Gated on cloud
+        //     recovery — see the confirmation dialog below.
         //
         // Both share one box and one look (owner, 2026-10-15); the sign-out
         // confirmation carries the warning.
-        FSCard(padding = PaddingValues(FS.space.s4)) {
+        FSCard {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                 FSDangerButton(
                     label = "Lock the app",
@@ -532,43 +458,51 @@ fun SettingsScreen(nav: NavController) {
             }
         }
 
-        Spacer(Modifier.height(FS.space.s6))
-
-        // C6a — danger zone, boxed like a server page's. Same UX semantics as
-        // iOS SettingsScreen dangerZone(): the confirmations carry the
-        // warnings, and their copy adapts to whether cloud recovery is
-        // enrolled. Delete account opens the guarded deletion ceremony, which
-        // does the last-device + recovery gating and the final confirm.
-        Text(
-            "DANGER ZONE",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp),
-        )
-        Spacer(Modifier.height(FS.space.s2))
-        FSCard(padding = PaddingValues(FS.space.s4)) {
-            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                FSDangerButton(
-                    label = "Remove this device from account",
-                    muted = sessionGated,
-                    onClick = {
-                        when {
-                            sessionGated -> showRecoveryRequiredToast()
-                            signOutPolicy == SignOutPolicy.DELETION_CEREMONY -> nav.navigate("delete-account")
-                            else -> showRemoveConfirm = true
-                        }
-                    },
-                    block = true,
-                    modifier = Modifier.testTag("settings-remove-device-btn"),
-                )
-                FSDangerButton(
-                    label = "Delete account",
-                    onClick = {
-                        if (isDemoAccountSession) showDemoDeleteNotice = true else nav.navigate("delete-account")
-                    },
-                    block = true,
-                    modifier = Modifier.testTag("settings-delete-account-btn"),
-                )
+        // C6a — danger zone, boxed like a server page's. The confirmations
+        // carry the warnings; their copy adapts to whether cloud recovery is
+        // enrolled. Delete account opens the guarded deletion ceremony.
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            FSSectionHeader("Danger zone")
+            FSCard {
+                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+                    FSDangerButton(
+                        label = "Remove this device from account",
+                        muted = sessionGated,
+                        onClick = {
+                            when {
+                                sessionGated -> showRecoveryRequiredToast()
+                                signOutPolicy == SignOutPolicy.DELETION_CEREMONY -> nav.navigate("delete-account")
+                                else -> showRemoveConfirm = true
+                            }
+                        },
+                        block = true,
+                        modifier = Modifier.testTag("settings-remove-device-btn"),
+                    )
+                    FSDangerButton(
+                        label = "Delete account",
+                        onClick = {
+                            if (isDemoAccountSession) showDemoDeleteNotice = true else nav.navigate("delete-account")
+                        },
+                        block = true,
+                        modifier = Modifier.testTag("settings-delete-account-btn"),
+                    )
+                }
             }
+        }
+
+        // DEVELOPER (debug builds only, hidden behind the 3-tap About unlock).
+        if (devUnlocked) {
+            FSSettingsGroup(
+                header = "Developer",
+                rows = listOf(
+                    FSSettingsRowData(
+                        icon = Icons.Outlined.Build,
+                        title = "Developer",
+                        subtitle = "Toggle the live screens client + dev fixtures.",
+                        onClick = { nav.navigate("developer") },
+                    ),
+                ),
+            )
         }
 
         if (showDemoDeleteNotice) {
@@ -711,8 +645,6 @@ fun SettingsScreen(nav: NavController) {
             )
         }
 
-        Spacer(Modifier.height(FS.space.s12))
-      }
     }
 }
 
@@ -724,74 +656,25 @@ private fun companionRequestsSubtitle(pending: Int): String = when {
     else -> "$pending pending writes from remote browsers."
 }
 
-/** One segment of the APPEARANCE control: a sun / moon / "AUTO" pill that
- *  highlights when selected. */
-@Composable
-private fun ThemeSegment(
-    modifier: Modifier = Modifier,
-    label: String? = null,
-    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
-    small: Boolean = false,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    val fg = if (selected) FS.colors.onAccent else FS.colors.text
-    Box(
-        modifier
-            .height(46.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(if (selected) FS.colors.fill else FS.colors.surfaceSunken)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (icon != null) {
-            androidx.compose.material3.Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(20.dp))
-        } else if (label != null) {
-            Text(
-                label,
-                color = fg,
-                style = TextStyle(
-                    fontSize = if (small) 11.sp else 18.sp,
-                    fontWeight = if (small) FontWeight.Bold else FontWeight.Medium,
-                    letterSpacing = if (small) 1.5.sp else 0.sp,
-                ),
-            )
-        }
-    }
-}
-
 /** Settings → Push notifications: on by default; off drops this device's
  *  push registration and tells every box to send no access-request push. */
 @Composable
 private fun PushNotificationsCard() {
     val pushSwitch = LocalPushNotificationsSwitch.current ?: return
     val on by pushSwitch.enabled.collectAsState()
-    Text(
-        "NOTIFICATIONS",
-        color = FS.colors.textMuted,
-        style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp),
-    )
-    Spacer(Modifier.height(FS.space.s2))
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    PushNotificationsSwitch.TITLE,
-                    color = FS.colors.text,
-                    style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-                    modifier = Modifier.weight(1f).padding(end = FS.space.s4),
-                )
+    FSGroup(header = "Notifications") {
+        FSRow(
+            title = PushNotificationsSwitch.TITLE,
+            subtitle = PushNotificationsSwitch.SUBTEXT,
+            icon = Icons.Outlined.Notifications,
+            onClick = { pushSwitch.toggle(!on) },
+            trailing = {
                 Switch(
                     checked = on,
                     onCheckedChange = { v -> pushSwitch.toggle(v) },
                     modifier = Modifier.testTag("settings-push-notifications"),
                 )
-            }
-            Text(
-                PushNotificationsSwitch.SUBTEXT,
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-            )
-        }
+            },
+        )
     }
 }

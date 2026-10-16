@@ -1,63 +1,72 @@
 package com.flagshipserver.app.ui.components
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.indication
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material3.ripple
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.flagshipserver.app.ui.theme.FS
 
 /**
- * Compose primitives mirroring the web `components.css` set.
+ * Flagship's Compose primitives, drawn with Material 3's own components so
+ * the app reads as Android: the site's palette and squarer corners are the
+ * brand's touch (docs/design-system.md §8).
  *
- * Available:
- *   - FSPrimaryButton / FSSecondaryButton / FSGhostButton / FSDangerButton
- *   - FSCard
- *   - FSField (text input with label + helper + error)
- *   - FSPill (status indicator)
- *   - FSStack (spacing helpers)
- *   - FSTopAppBar
+ *   - FSPrimaryButton   — filled (the one main action on a screen or card)
+ *   - FSSecondaryButton — outlined (a second action beside or under it)
+ *   - FSGhostButton     — text button (dialogs, app bars, a quiet inline link)
+ *   - FSDangerButton    — outlined in the error colour
+ *   - FSCard            — a full-width outlined surface
+ *   - FSField           — an outlined text field with label, helper and error
+ *   - FSPill            — a status tag
  */
+
+private val ButtonHeight = 40.dp
+private val ButtonHeightLarge = 48.dp
+
+private fun Modifier.buttonSize(block: Boolean, large: Boolean): Modifier =
+    this
+        .then(if (block) Modifier.fillMaxWidth() else Modifier)
+        .heightIn(min = if (large || block) ButtonHeightLarge else ButtonHeight)
+
+private val ButtonPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp)
+
+@Composable
+private fun ButtonLabel(label: String) {
+    Text(label, style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.Center)
+}
 
 // ── Button ─────────────────────────────────────────────────────
 
+/** The teal fill with dark ink (the site's primary button), as a Material
+ *  filled button. */
 @Composable
 fun FSPrimaryButton(
     label: String,
@@ -66,17 +75,18 @@ fun FSPrimaryButton(
     enabled: Boolean = true,
     block: Boolean = false,
     large: Boolean = false,
-) = FSButtonBase(
-    label = label,
-    onClick = onClick,
-    modifier = modifier,
-    enabled = enabled,
-    block = block,
-    large = large,
-    bg = FS.colors.fill,
-    fg = FS.colors.onAccent,
-    border = null,
-)
+) {
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.buttonSize(block, large),
+        contentPadding = ButtonPadding,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = FS.colors.fill,
+            contentColor = FS.colors.onAccent,
+        ),
+    ) { ButtonLabel(label) }
+}
 
 @Composable
 fun FSSecondaryButton(
@@ -86,18 +96,20 @@ fun FSSecondaryButton(
     enabled: Boolean = true,
     block: Boolean = false,
     large: Boolean = false,
-) = FSButtonBase(
-    label = label,
-    onClick = onClick,
-    modifier = modifier,
-    enabled = enabled,
-    block = block,
-    large = large,
-    bg = FS.colors.surface,
-    fg = FS.colors.text,
-    border = FS.colors.border,
-)
+) {
+    OutlinedButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.buttonSize(block, large),
+        contentPadding = ButtonPadding,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = if (enabled) 1f else 0.4f)),
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurface),
+    ) { ButtonLabel(label) }
+}
 
+/** A Material text button in the accent colour. For dialogs, app bars and
+ *  quiet inline links; a card's main action is [FSPrimaryButton] or
+ *  [FSSecondaryButton]. */
 @Composable
 fun FSGhostButton(
     label: String,
@@ -106,17 +118,14 @@ fun FSGhostButton(
     enabled: Boolean = true,
     block: Boolean = false,
     large: Boolean = false,
-) = FSButtonBase(
-    label = label,
-    onClick = onClick,
-    modifier = modifier,
-    enabled = enabled,
-    block = block,
-    large = large,
-    bg = Color.Transparent,
-    fg = FS.colors.text,
-    border = null,
-)
+) {
+    TextButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.buttonSize(block, large),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+    ) { ButtonLabel(label) }
+}
 
 @Composable
 fun FSDangerButton(
@@ -131,79 +140,36 @@ fun FSDangerButton(
     muted: Boolean = false,
     block: Boolean = false,
     large: Boolean = false,
-) = FSButtonBase(
-    label = label,
-    onClick = onClick,
-    modifier = modifier,
-    enabled = enabled,
-    block = block,
-    large = large,
-    bg = Color.Transparent,
-    fg = if (muted) FS.colors.textMuted else FS.colors.danger,
-    border = if (muted) FS.colors.textMuted else FS.colors.danger,
-)
-
-@Composable
-private fun FSButtonBase(
-    label: String,
-    onClick: () -> Unit,
-    modifier: Modifier,
-    enabled: Boolean,
-    block: Boolean,
-    large: Boolean,
-    bg: Color,
-    fg: Color,
-    border: Color?,
 ) {
-    // Min touch target 44dp (spec S3). A short label still gets 44; a wrapped
-    // label grows instead of clipping. On-grid horizontal padding only (S4).
-    val height = if (large) 48.dp else 44.dp
-    val padH = if (large) FS.space.s6 else FS.space.s5
-    val interaction = remember { MutableInteractionSource() }
-    val alpha by animateFloatAsState(if (enabled) 1f else 0.4f, tween(durationMillis = 200), label = "btn-alpha")
-    Box(
-        modifier = modifier
-            .then(if (block) Modifier.fillMaxWidth() else Modifier)
-            .heightIn(min = height)
-            .clip(RoundedCornerShape(FS.radius.md))
-            .background(bg.copy(alpha = bg.alpha * alpha))
-            .let { if (border != null) it.border(BorderStroke(1.dp, border.copy(alpha = border.alpha * alpha)), RoundedCornerShape(FS.radius.md)) else it }
-            .clickable(
-                interactionSource = interaction,
-                indication = ripple(bounded = true, color = fg),
-                enabled = enabled,
-                onClick = onClick,
-            )
-            .padding(horizontal = padH, vertical = 0.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = label,
-            color = fg.copy(alpha = fg.alpha * alpha),
-            style = TextStyle(
-                fontWeight = FontWeight.SemiBold,
-                fontSize = if (large) 16.sp else 14.sp,
-            ),
-        )
-    }
+    val fg = if (muted) FS.colors.textMuted else MaterialTheme.colorScheme.error
+    OutlinedButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.buttonSize(block, large),
+        contentPadding = ButtonPadding,
+        border = BorderStroke(1.dp, fg.copy(alpha = if (enabled) 1f else 0.4f)),
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = fg),
+    ) { ButtonLabel(label) }
 }
 
 // ── Card ───────────────────────────────────────────────────────
 
+/** A full-width outlined card: separation by a hairline, never a shadow
+ *  (docs/design-system.md §8.3). Every card spans the column, so edges line up. */
 @Composable
 fun FSCard(
     modifier: Modifier = Modifier,
     padding: PaddingValues = PaddingValues(FS.space.s4),
     content: @Composable () -> Unit,
 ) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(FS.radius.md))
-            .background(FS.colors.surface)
-            .border(1.dp, FS.colors.border, RoundedCornerShape(FS.radius.md))
-            .padding(padding),
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
-        Column { content() }
+        Column(Modifier.padding(padding)) { content() }
     }
 }
 
@@ -221,56 +187,30 @@ fun FSField(
     keyboardType: KeyboardType = KeyboardType.Text,
     visualTransformation: VisualTransformation = VisualTransformation.None,
     enabled: Boolean = true,
-    // Optional testTag applied to the editable BasicTextField itself (where the
-    // RequestFocus / SetText semantics live) — a tag on the outer Column can't
-    // receive performTextInput. Inert in release.
+    // Optional testTag applied to the editable text field itself (where the
+    // RequestFocus / SetText semantics live). Inert in release.
     fieldTag: String? = null,
 ) {
-    Column(modifier = modifier.fillMaxWidth()) {
-        Text(
-            text = label,
-            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium),
-            color = FS.colors.text,
-        )
-        Spacer(Modifier.height(FS.space.s2))
-        val borderColor = if (error != null) FS.colors.danger else FS.colors.border
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(40.dp)
-                .clip(RoundedCornerShape(FS.radius.sm))
-                .background(FS.colors.surfaceSunken)
-                .border(1.dp, borderColor, RoundedCornerShape(FS.radius.sm))
-                .padding(horizontal = 14.dp),
-            contentAlignment = Alignment.CenterStart,
-        ) {
-            BasicTextField(
-                value = value,
-                onValueChange = onValueChange,
-                singleLine = true,
-                enabled = enabled,
-                cursorBrush = SolidColor(FS.colors.primary),
-                textStyle = TextStyle(color = FS.colors.text, fontSize = 16.sp),
-                visualTransformation = visualTransformation,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .then(if (fieldTag != null) Modifier.testTag(fieldTag) else Modifier),
-            ) { inner ->
-                if (value.isEmpty() && placeholder.isNotEmpty()) {
-                    Text(placeholder, color = FS.colors.textMuted, style = TextStyle(fontSize = 16.sp))
-                }
-                inner()
-            }
-        }
-        val sub = error ?: helper
-        if (sub != null) {
-            Spacer(Modifier.height(FS.space.s2))
-            Text(
-                text = sub,
-                color = if (error != null) FS.colors.danger else FS.colors.textMuted,
-                style = TextStyle(fontSize = 14.sp),
-            )
-        }
+    val sub = error ?: helper
+    // The caller's modifier (and any testTag on it) sits on a wrapper, so
+    // the editable node is its descendant, as gym tests expect.
+    Box(modifier.fillMaxWidth()) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        placeholder = if (placeholder.isNotEmpty()) ({ Text(placeholder) }) else null,
+        supportingText = if (sub != null) ({ Text(sub) }) else null,
+        isError = error != null,
+        singleLine = true,
+        enabled = enabled,
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        visualTransformation = visualTransformation,
+        shape = MaterialTheme.shapes.small,
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (fieldTag != null) Modifier.testTag(fieldTag) else Modifier),
+    )
     }
 }
 
@@ -286,6 +226,9 @@ fun com.flagshipserver.app.core.AppStatus.Tone.pillKind(): FSPillKind = when (th
     com.flagshipserver.app.core.AppStatus.Tone.Warning -> FSPillKind.Pending
 }
 
+/** A status tag: a dot and a short label on the tone's soft tint, small
+ *  corners (docs/design-system.md §8.7). Never truncates its label; callers
+ *  give the row's title the room first. */
 @Composable
 fun FSPill(
     label: String,
@@ -300,16 +243,16 @@ fun FSPill(
         FSPillKind.Offline -> FS.colors.danger to FS.colors.danger.copy(alpha = 0.12f)
         FSPillKind.Provisioning -> FS.colors.primary to FS.colors.primary.copy(alpha = 0.12f)
         FSPillKind.Pending -> FS.colors.warning to FS.colors.warning.copy(alpha = 0.12f)
-        FSPillKind.Idle -> FS.colors.textMuted to FS.colors.surfaceSunken
+        FSPillKind.Idle -> FS.colors.textMuted to FS.colors.textMuted.copy(alpha = 0.10f)
     }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         modifier = modifier
-            .clip(RoundedCornerShape(FS.radius.pill))
+            .clip(MaterialTheme.shapes.extraSmall)
             .background(bg)
-            .padding(horizontal = 10.dp, vertical = 2.dp)
-            .defaultMinSize(minHeight = 22.dp),
+            .padding(horizontal = 8.dp, vertical = 2.dp)
+            .defaultMinSize(minHeight = 20.dp),
     ) {
         Box(
             modifier = Modifier
@@ -317,23 +260,20 @@ fun FSPill(
                 .clip(CircleShape)
                 .background(fg),
         )
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(3.dp),
-        ) {
-            Text(
-                text = label,
-                color = fg,
-                style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium),
+        Text(
+            text = label,
+            color = fg,
+            maxLines = 1,
+            softWrap = false,
+            style = MaterialTheme.typography.labelMedium,
+        )
+        if (trailingIcon != null) {
+            androidx.compose.material3.Icon(
+                trailingIcon,
+                contentDescription = null,
+                tint = FS.colors.textMuted,
+                modifier = Modifier.size(12.dp),
             )
-            if (trailingIcon != null) {
-                androidx.compose.material3.Icon(
-                    trailingIcon,
-                    contentDescription = null,
-                    tint = FS.colors.textMuted,
-                    modifier = Modifier.size(12.dp),
-                )
-            }
         }
     }
 }

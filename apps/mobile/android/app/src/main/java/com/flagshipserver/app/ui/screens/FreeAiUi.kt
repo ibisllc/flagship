@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -19,9 +20,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
 import com.flagshipserver.app.core.AppState
 import com.flagshipserver.app.core.FlagshipInferenceEntry
 import com.flagshipserver.app.core.FreeAiCopy
@@ -32,7 +30,6 @@ import com.flagshipserver.app.core.LocalDeveloperSettings
 import com.flagshipserver.app.core.MockFreeAiClient
 import com.flagshipserver.app.core.LocalPodScope
 import com.flagshipserver.app.ui.components.FSCard
-import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.theme.FS
@@ -79,19 +76,19 @@ private fun FlagshipInferenceText(
     ) {
         Text(
             FreeAiCopy.PROVIDER_TITLE,
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+            color = MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.titleMedium,
         )
         Text(
             FreeAiCopy.PROVIDER_SUBTITLE,
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium,
         )
         Spacer(Modifier.height(FS.space.s1))
         Text(
             entry.status,
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.testTag(
                 when {
                     entry.loading -> "free-ai-checking"
@@ -101,7 +98,7 @@ private fun FlagshipInferenceText(
             ),
         )
         if (default != null) {
-            Text(default, color = FS.colors.primary, style = TextStyle(fontSize = 12.sp))
+            Text(default, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium)
         }
     }
 }
@@ -128,8 +125,8 @@ fun FlagshipInferenceSettingsRow(
                 defaultModel()
             }
             if (entry.usable && !isDefault) {
-                Spacer(Modifier.height(FS.space.s2))
-                FSGhostButton(
+                Spacer(Modifier.height(FS.space.s3))
+                FSSecondaryButton(
                     label = "Make default",
                     onClick = onMakeDefault,
                     modifier = Modifier.testTag("free-ai-make-default"),

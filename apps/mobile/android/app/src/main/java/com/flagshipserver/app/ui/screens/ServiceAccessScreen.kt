@@ -39,7 +39,11 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Smartphone
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -84,6 +88,11 @@ import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.QrImage
 import com.flagshipserver.app.ui.components.FSCard
+import com.flagshipserver.app.ui.components.FSCardDivider
+import com.flagshipserver.app.ui.components.FSMonogram
+import com.flagshipserver.app.ui.components.FSNote
+import com.flagshipserver.app.ui.components.FSScreen
+import com.flagshipserver.app.ui.components.FSSectionHeader
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.theme.FS
@@ -157,6 +166,7 @@ fun ServiceAccessScreen(nav: NavController, serviceId: String) {
         onShare = { link -> shareViaSystemSheet(ctx, link) },
         onCopy = { link -> copyToClipboard(ctx, link); toasts.success("Link copied.") },
         pickPhoto = null,
+        onBack = { nav.popBackStack() },
     )
 }
 
@@ -171,6 +181,7 @@ internal fun ServiceAccessContent(
     onCopy: (String) -> Unit,
     pickPhoto: (() -> Unit)?,
     loadOnStart: Boolean = true,
+    onBack: (() -> Unit)? = null,
 ) {
     val toasts = LocalToastCenter.current
     val ctx = LocalContext.current
@@ -227,24 +238,17 @@ internal fun ServiceAccessContent(
         }
     }
 
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
-            .padding(FS.space.s4),
-        verticalArrangement = Arrangement.spacedBy(FS.space.s4),
+    FSScreen(
+        title = "Access control",
+        onBack = onBack,
+        largeTitle = false,
+        titleTag = "service-access-title",
     ) {
-        Text(
-            "Access control",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
-            modifier = Modifier.semantics { testTag = "service-access-title" },
-        )
         // header
         FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.fillMaxWidth()) {
-            Column {
-                Text(serviceLabel, color = FS.colors.text, style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold))
-                Text("id: $serviceId", color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp))
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(serviceLabel, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
+                Text("id: $serviceId", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
             }
         }
 
@@ -257,14 +261,7 @@ internal fun ServiceAccessContent(
                         .semantics { testTag = "service-access-restrict-toggle" },
                 ) {
                     val enabled = vm.isAdmin && !busyMode && phase !is ServiceAccessPhase.Loading
-                    val colors = SegmentedButtonDefaults.colors(
-                        activeContainerColor = FS.colors.primary.copy(alpha = 0.14f),
-                        activeContentColor = FS.colors.text,
-                        activeBorderColor = FS.colors.primary,
-                        inactiveContainerColor = FS.colors.surface,
-                        inactiveContentColor = FS.colors.textMuted,
-                        inactiveBorderColor = FS.colors.border,
-                    )
+                    val colors = SegmentedButtonDefaults.colors()
                     SegmentedButton(
                         selected = !restricted,
                         onClick = { if (restricted) applyMode(false) },
@@ -293,16 +290,16 @@ internal fun ServiceAccessContent(
                             restricted -> "Only members and you can open it. Anyone else is asked to sign in."
                             else -> "Anyone can open it. Members who sign in get their rank."
                         },
-                        color = if (failed != null && !busyMode) FS.colors.danger else FS.colors.textMuted,
-                        style = TextStyle(fontSize = 12.sp, lineHeight = 17.sp),
+                        color = if (failed != null && !busyMode) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.semantics { testTag = "service-access-mode-status" },
                     )
                 }
                 if (!vm.isAdmin) {
                     Text(
                         MODE_ADMIN_ONLY_LINE,
-                        color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 12.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.semantics { testTag = "service-access-mode-admin-only" },
                     )
                 }
@@ -311,16 +308,15 @@ internal fun ServiceAccessContent(
 
         // Account members: this account's devices and the co-managing accounts.
         val accountMembers = members?.accountMembers.orEmpty()
-        if (accountMembers.isNotEmpty()) {
-            Text(
-                "ACCOUNT MEMBERS (${accountMembers.size})",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.6.sp),
+        if (accountMembers.isNotEmpty()) Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            FSSectionHeader(
+                "Account members (${accountMembers.size})",
                 modifier = Modifier.semantics { testTag = "service-access-account-members-title" },
             )
             FSCard(padding = PaddingValues(FS.space.s4)) {
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                    accountMembers.forEach { m ->
+                    accountMembers.forEachIndexed { idx, m ->
+                        if (idx > 0) FSCardDivider()
                         AccountMemberRow(
                             member = m,
                             name = vm.accountMemberName(m, deviceNames),
@@ -342,23 +338,21 @@ internal fun ServiceAccessContent(
         }
 
         // Members (n) — in both modes.
-        Text(
-            "MEMBERS (${people.size})",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.6.sp),
+        FSSectionHeader(
+            "Members (${people.size})",
             modifier = Modifier.semantics { testTag = "service-access-members-title" },
         )
         vm.inviteBlockedLine?.let { line ->
             Text(
                 line,
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-                modifier = Modifier.semantics { testTag = "service-access-cant-invite" },
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(horizontal = FS.space.s1).semantics { testTag = "service-access-cant-invite" },
             )
         }
         if (vm.canInvite) Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             FSSecondaryButton(
-                label = "+ Add person",
+                label = "Add person",
                 onClick = {
                     adding = InviteTier.PERSONAL_AUTO; vm.clearLink(); name = ""; approveFirst = false; photoDataUri = null
                     newRole = AppMemberRole.fromWire(members?.defaultRole) ?: AppMemberRole.MEMBER
@@ -367,7 +361,7 @@ internal fun ServiceAccessContent(
                 block = true,
             )
             FSSecondaryButton(
-                label = "+ Add group",
+                label = "Add group",
                 onClick = {
                     adding = InviteTier.GROUP; vm.clearLink(); name = ""
                     newRole = AppMemberRole.fromWire(members?.defaultRole) ?: AppMemberRole.MEMBER
@@ -384,29 +378,32 @@ internal fun ServiceAccessContent(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             if (isGroup) "Add a group" else "Add a person",
-                            color = FS.colors.text,
-                            style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+                            color = MaterialTheme.colorScheme.onSurface,
+                            style = MaterialTheme.typography.titleMedium,
                             modifier = Modifier.weight(1f),
                         )
-                        androidx.compose.material3.TextButton(onClick = { adding = null; vm.clearLink() }) { Text("Close") }
+                        androidx.compose.material3.IconButton(onClick = { adding = null; vm.clearLink() }) {
+                            Icon(Icons.Outlined.Close, contentDescription = "Close")
+                        }
                     }
                     Text(
                         "Names & photos stay encrypted to your account — flagshipserver.com stores only ciphertext. Send the link over a private channel.",
-                        color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it },
                         label = { Text(if (isGroup) "Group name (only you + your servers see it)" else "Name (only you + your servers see it)") },
                         singleLine = true,
+                        shape = MaterialTheme.shapes.small,
                         modifier = Modifier
                             .fillMaxWidth()
                             .semantics { testTag = "service-access-name-field" },
                     )
                     val pickedRole = if (vm.isAdmin) newRole else AppMemberRole.MEMBER
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Rank", color = FS.colors.text, modifier = Modifier.weight(1f))
+                        Text("Rank", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                         RolePicker(
                             selected = pickedRole,
                             tag = "service-access-new-role",
@@ -417,19 +414,19 @@ internal fun ServiceAccessContent(
                     if (!vm.isAdmin) {
                         Text(
                             RANK_LOCKED_LINE,
-                            color = FS.colors.textMuted,
-                            style = TextStyle(fontSize = 12.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall,
                             modifier = Modifier.semantics { testTag = "service-access-rank-locked" },
                         )
                     }
                     members?.description(pickedRole.wire)?.let {
-                        Text(it, color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp))
+                        Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                     }
                     if (isGroup) {
                         Text(
                             "Everyone who joins through the link gets this rank.",
-                            color = FS.colors.textMuted,
-                            style = TextStyle(fontSize = 12.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                             OutlinedTextField(
@@ -455,16 +452,17 @@ internal fun ServiceAccessContent(
                         }
                     } else {
                         Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s3), verticalAlignment = Alignment.CenterVertically) {
-                            OutlinedButton(onClick = {
-                                pickPhoto?.invoke()
-                                    ?: photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                            }) {
-                                Text(if (photoDataUri == null) "Add photo (optional)" else "Change photo")
-                            }
+                            FSSecondaryButton(
+                                label = if (photoDataUri == null) "Add photo (optional)" else "Change photo",
+                                onClick = {
+                                    pickPhoto?.invoke()
+                                        ?: photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                                },
+                            )
                             if (photoDataUri != null) TextButtonClear { photoDataUri = null }
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("I approve them before they get in", color = FS.colors.text, modifier = Modifier.weight(1f))
+                            Text("I approve them before they get in", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                             Switch(
                                 checked = approveFirst,
                                 onCheckedChange = { approveFirst = it },
@@ -495,16 +493,14 @@ internal fun ServiceAccessContent(
                         },
                         modifier = Modifier.semantics { testTag = "service-access-create-invite" },
                     )
-                    roleNotice?.let { Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 12.sp)) }
+                    roleNotice?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
                     lastLink?.let { link -> ResultBlock(link = link, onShare = { onShare(link) }, onCopy = { onCopy(link) }) }
                 }
             }
         }
 
         if (people.isEmpty()) {
-            FSCard(padding = PaddingValues(FS.space.s4)) {
-                Text("No members yet. Add a person or a group.", color = FS.colors.textMuted)
-            }
+            FSNote("No members yet. Add a person or a group.")
         } else {
             people.forEach { person ->
                 PersonRow(
@@ -538,17 +534,18 @@ internal fun ServiceAccessContent(
         // confirm a manual-approve reply (the author finalizes the loop)
         FSCard(padding = PaddingValues(FS.space.s4)) {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                Text("Confirm someone you approve", color = FS.colors.text, style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
+                Text("Confirm someone you approve", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleMedium)
                 Text(
                     "For a person you approve first: paste the confirmation they sent back to let them in.",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 12.sp, lineHeight = 17.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
                 )
                 OutlinedTextField(
                     value = replyText,
                     onValueChange = { replyText = it },
                     label = { Text("Paste the confirmation reply") },
                     singleLine = false,
+                    shape = MaterialTheme.shapes.small,
                     modifier = Modifier
                         .fillMaxWidth()
                         .semantics { testTag = "service-access-accept-reply-field" },
@@ -568,8 +565,6 @@ internal fun ServiceAccessContent(
                 )
             }
         }
-
-        Spacer(Modifier.height(FS.space.s12))
     }
 
     confirmRemove?.let { person ->
@@ -670,7 +665,7 @@ private fun RolePicker(
                         Column {
                             Text(r.label)
                             descriptions[r.wire]?.takeIf { it.isNotEmpty() }?.let {
-                                Text(it, color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp))
+                                Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     },
@@ -686,7 +681,7 @@ private fun RolePicker(
             if (onRefuse != null) {
                 androidx.compose.material3.HorizontalDivider()
                 DropdownMenuItem(
-                    text = { Text("Refuse", color = FS.colors.danger) },
+                    text = { Text("Refuse", color = MaterialTheme.colorScheme.error) },
                     onClick = { open = false; if (selected != null) onRefuse() },
                     leadingIcon = if (selected == null) { { Icon(Icons.Filled.Check, contentDescription = null) } } else null,
                     modifier = Modifier.semantics { testTag = "$tag-refuse" },
@@ -714,21 +709,21 @@ private fun AccountMemberRow(
     ) {
         Box(
             Modifier
-                .size(36.dp)
-                .background(FS.colors.surfaceSunken, CircleShape),
+                .size(40.dp)
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 if (member.isDevice) Icons.Filled.Smartphone else Icons.Filled.Groups,
                 contentDescription = null,
-                tint = FS.colors.textMuted,
-                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp),
             )
         }
         Column(Modifier.weight(1f)) {
-            Text(name, color = FS.colors.text, style = TextStyle(fontSize = 16.sp), maxLines = 1)
+            Text(name, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
             if (detail.isNotEmpty()) {
-                Text(detail, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+                Text(detail, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
             }
         }
         RolePicker(
@@ -763,32 +758,32 @@ private fun PersonRow(
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                Box(
-                    Modifier
-                        .size(36.dp)
-                        .background(FS.colors.surfaceSunken, CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    if (person.isGroup) {
-                        Icon(Icons.Filled.Groups, contentDescription = null, tint = FS.colors.textMuted, modifier = Modifier.size(18.dp))
-                    } else {
-                        Text(person.name.firstOrNull()?.uppercase() ?: "?", color = FS.colors.text, style = TextStyle(fontSize = 13.sp))
+                if (person.isGroup) {
+                    Box(
+                        Modifier
+                            .size(40.dp)
+                            .background(MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Icons.Filled.Groups, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
                     }
+                } else {
+                    FSMonogram(name = person.name, size = 40.dp)
                 }
                 Column(Modifier.weight(1f)) {
-                    Text(person.name, color = FS.colors.text, style = TextStyle(fontSize = 16.sp), maxLines = 1)
+                    Text(person.name, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyLarge, maxLines = 1)
                     val sub = if (person.isGroup) {
                         if (person.maxRedemptions == 0) "${person.redemptions} joined"
                         else "${person.redemptions} of ${person.maxRedemptions} joined"
                     } else if (person.bound) "active" else "invite sent — not opened yet"
                     Text(
                         sub,
-                        color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 13.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.semantics { testTag = if (person.isGroup) "service-access-group-row" else "service-access-person-row" },
                     )
                     if (alsoIn.isNotEmpty()) {
-                        Text(alsoIn, color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp))
+                        Text(alsoIn, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                     }
                 }
                 role?.let {
@@ -806,8 +801,8 @@ private fun PersonRow(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         invitedBy.orEmpty(),
-                        color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 12.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier
                             .weight(1f)
                             .semantics { testTag = "service-access-invited-by-${person.inviteId}" },
@@ -821,8 +816,8 @@ private fun PersonRow(
                                 contentDescription = "Revoke ${person.name}"
                             },
                         ) {
-                            if (busyRemove) CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 2.dp, color = FS.colors.danger)
-                            else Text("Revoke", color = FS.colors.danger)
+                            if (busyRemove) CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.error)
+                            else Text("Revoke", color = MaterialTheme.colorScheme.error)
                         }
                     }
                 }
@@ -831,13 +826,20 @@ private fun PersonRow(
                 androidx.compose.material3.TextButton(
                     onClick = { expanded = !expanded },
                     modifier = Modifier.semantics { testTag = "service-access-group-members-toggle" },
-                ) { Text(if (expanded) "Hide members" else "Manage members (${person.memberAids.size})") }
+                ) {
+                    Text(if (expanded) "Hide members" else "Manage members (${person.memberAids.size})")
+                    Icon(
+                        if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                        contentDescription = null,
+                        modifier = Modifier.padding(start = FS.space.s1).size(18.dp),
+                    )
+                }
                 if (expanded) {
                     person.memberAids.forEach { aid ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 "member ${aid.take(8)}…",
-                                color = FS.colors.textMuted,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 style = TextStyle(fontSize = 12.sp, fontFamily = FontFamily.Monospace),
                                 modifier = Modifier.weight(1f),
                             )
@@ -858,7 +860,7 @@ private fun TextButtonClear(onClick: () -> Unit) {
 @Composable
 private fun ResultBlock(link: String, onShare: () -> Unit, onCopy: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-        Text("Shareable link", color = FS.colors.text, style = TextStyle(fontSize = 13.sp))
+        Text("Shareable link", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleSmall)
         // Inline QR (the rich-channel artifact; the link text below is the fallback).
         QrImage(
             payload = link,
@@ -868,19 +870,23 @@ private fun ResultBlock(link: String, onShare: () -> Unit, onCopy: () -> Unit) {
         )
         Text(
             link,
-            color = FS.colors.text,
+            color = MaterialTheme.colorScheme.onSurface,
             style = TextStyle(fontSize = 13.sp, fontFamily = FontFamily.Monospace),
             modifier = Modifier
                 .fillMaxWidth()
                 .semantics { testTag = "service-access-share-url" },
         )
         Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-            OutlinedButton(onClick = onShare, modifier = Modifier.semantics { testTag = "service-access-share-sheet" }) {
-                Text("Share…")
-            }
-            OutlinedButton(onClick = onCopy, modifier = Modifier.semantics { testTag = "service-access-copy-btn" }) {
-                Text("Copy link")
-            }
+            FSPrimaryButton(
+                label = "Share",
+                onClick = onShare,
+                modifier = Modifier.weight(1f).semantics { testTag = "service-access-share-sheet" },
+            )
+            FSSecondaryButton(
+                label = "Copy link",
+                onClick = onCopy,
+                modifier = Modifier.weight(1f).semantics { testTag = "service-access-copy-btn" },
+            )
         }
     }
 }

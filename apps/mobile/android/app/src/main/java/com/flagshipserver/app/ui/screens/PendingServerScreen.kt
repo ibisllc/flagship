@@ -21,7 +21,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -45,7 +49,8 @@ import com.flagshipserver.app.api.AuthCodeRevokeRequest
 import com.flagshipserver.app.api.ReleaseServerNameRequest
 import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.ui.components.FSCard
-import com.flagshipserver.app.ui.components.FSGhostButton
+import com.flagshipserver.app.ui.components.FSDangerButton
+import com.flagshipserver.app.ui.components.FSScreen
 import com.flagshipserver.app.ui.components.FSPill
 import com.flagshipserver.app.ui.components.FSPillKind
 import com.flagshipserver.app.ui.theme.FS
@@ -53,7 +58,14 @@ import com.flagshipserver.app.viewmodels.ProvisionTimelineViewModel
 import kotlinx.coroutines.launch
 
 @Composable
-fun PendingServerScreen(pod: PodInfo, username: String? = null, onCancel: () -> Unit) {
+fun PendingServerScreen(
+    pod: PodInfo,
+    username: String? = null,
+    onCancel: () -> Unit,
+    /** The app bar's back arrow; defaults to the system back. */
+    onBack: (() -> Unit)? = null,
+) {
+    val backDispatcher = androidx.activity.compose.LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
     val flagshipServer = LocalFlagshipServerClient.current
     val mailbox = LocalSecretMailboxClient.current
     val app = LocalAppState.current
@@ -92,61 +104,70 @@ fun PendingServerScreen(pod: PodInfo, username: String? = null, onCancel: () -> 
         }
     }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .padding(horizontal = FS.space.s6),
+    // Mirror of iOS PendingServerScreen: the install checklist in one card,
+    // the address in another, then Cancel order.
+    FSScreen(
+        title = pod.name,
+        onBack = onBack ?: { backDispatcher?.onBackPressed() },
+        subtitle = pod.description?.takeIf { it.isNotBlank() },
     ) {
-        Spacer(Modifier.height(FS.space.s8))
-        Text(
-            pod.name,
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
-        )
-        FSPill("Pending", kind = FSPillKind.Pending)
-        Spacer(Modifier.height(FS.space.s4))
         FSCard(padding = PaddingValues(FS.space.s4)) {
-            Column {
+            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+                FSPill("Pending", kind = FSPillKind.Pending)
                 Text(
-                    "Plug in the USB and power on — this screen tracks the install live and flips to Online at the end.",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+                    "Plug in the USB and power on. This screen tracks the install live and turns Online at the end.",
+                    color = MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.bodyLarge,
                 )
-                Spacer(Modifier.height(FS.space.s2))
-                Text(
-                    "Subdomain: ${pod.fqdn}",
-                    color = FS.colors.text,
-                    style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium),
-                )
-                if (pod.pendingAuthCodeSerial != null) {
-                    Text(
-                        "Auth-code serial: ${pod.pendingAuthCodeSerial}",
-                        color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 12.sp),
-                    )
-                }
             }
-        }
-        Spacer(Modifier.height(FS.space.s4))
-        // The canonical provisioning ladder — same projection the
-        // InstallProgressScreen renders, fed by the timeline poller above.
-        if (timeline != null) {
-            val status by timeline.status.collectAsState()
-            FSCard(padding = PaddingValues(FS.space.s4)) {
-                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            // The canonical provisioning ladder — same projection the
+            // InstallProgressScreen renders, fed by the timeline poller above.
+            if (timeline != null) {
+                val status by timeline.status.collectAsState()
+                Column(Modifier.padding(top = FS.space.s2)) {
                     if (status == null) {
-                        Text("Waiting for the box to phone home…", color = FS.colors.textMuted)
+                        Text(
+                            "Waiting for the server to phone home…",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(vertical = FS.space.s2),
+                        )
                     }
                     val prevPhase = status?.history?.dropLast(1)?.lastOrNull()?.phase
                     val steps = ProvisionProgress.stepStates(status?.phase, status?.detail, prevPhase)
                     for (step in steps) {
-                        InstallStepRow(step)
+                        // The card's own gutter already insets the rows.
+                        InstallStepRow(step, horizontalPadding = 0.dp)
                     }
                 }
             }
         }
-        Spacer(Modifier.height(FS.space.s6))
-        FSGhostButton(
+        if (pod.fqdn.isNotEmpty()) {
+            FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.testTag("pending-server-domain")) {
+                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
+                    Text(
+                        "Address",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    androidx.compose.foundation.text.selection.SelectionContainer {
+                        Text(
+                            pod.fqdn,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            style = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
+                        )
+                    }
+                    if (pod.pendingAuthCodeSerial != null) {
+                        Text(
+                            "Order ${pod.pendingAuthCodeSerial}",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            }
+        }
+        FSDangerButton(
             label = "Cancel order",
             onClick = {
                 scope.launch {
@@ -210,6 +231,8 @@ fun PendingServerScreen(pod: PodInfo, username: String? = null, onCancel: () -> 
                 }
             },
             block = true,
+            large = true,
+            modifier = Modifier.testTag("pending-cancel-order-button"),
         )
     }
 }

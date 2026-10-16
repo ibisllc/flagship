@@ -21,7 +21,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
@@ -41,12 +45,15 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flagshipserver.app.api.AppApiKeyInfo
 import com.flagshipserver.app.core.AppApiKey
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.ui.components.FSCard
+import com.flagshipserver.app.ui.components.FSCardDivider
+import com.flagshipserver.app.ui.components.FSSectionHeader
 import com.flagshipserver.app.ui.components.FSDangerButton
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPill
@@ -84,40 +91,32 @@ fun ApiKeysSection(
     if (phase is AppApiKeysViewModel.Phase.Unsupported) return
     val now = System.currentTimeMillis()
 
-    Spacer(Modifier.height(FS.space.s4))
+    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+    FSSectionHeader(AppApiKeysViewModel.TITLE)
     FSCard(
         padding = PaddingValues(FS.space.s4),
         modifier = Modifier.fillMaxWidth().testTag("service-detail-api-keys"),
     ) {
-        Column {
-            Text(
-                AppApiKeysViewModel.TITLE,
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-            )
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             when (val p = phase) {
                 is AppApiKeysViewModel.Phase.Loading, AppApiKeysViewModel.Phase.Unsupported -> {
-                    Spacer(Modifier.height(FS.space.s1))
-                    Text("Loading…", color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+                    Text("Loading…", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                 }
                 is AppApiKeysViewModel.Phase.Failed -> {
-                    Spacer(Modifier.height(FS.space.s1))
-                    Text(p.message, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp))
-                    Spacer(Modifier.height(FS.space.s2))
-                    FSGhostButton("Try again", onClick = { scope.launch { vm.load() } })
+                    Text(p.message, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+                    FSSecondaryButton("Try again", onClick = { scope.launch { vm.load() } })
                 }
                 is AppApiKeysViewModel.Phase.Loaded -> {
                     if (p.keys.isEmpty()) {
-                        Spacer(Modifier.height(FS.space.s1))
                         Text(
                             AppApiKeysViewModel.EMPTY,
-                            color = FS.colors.textMuted,
-                            style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.testTag("service-detail-api-keys-empty"),
                         )
                     }
-                    p.keys.forEach { key ->
-                        Spacer(Modifier.height(FS.space.s3))
+                    p.keys.forEachIndexed { idx, key ->
+                        if (idx > 0) FSCardDivider()
                         ApiKeyRow(
                             key = key,
                             now = now,
@@ -127,15 +126,13 @@ fun ApiKeysSection(
                         )
                     }
                     if (restricted) {
-                        Spacer(Modifier.height(FS.space.s2))
                         Text(
                             readOnlyNote,
-                            color = FS.colors.textMuted,
-                            style = TextStyle(fontSize = 13.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall,
                             modifier = Modifier.testTag("service-detail-api-keys-read-only"),
                         )
                     } else {
-                        Spacer(Modifier.height(FS.space.s3))
                         FSSecondaryButton(
                             label = AppApiKeysViewModel.CREATE,
                             block = true,
@@ -148,11 +145,11 @@ fun ApiKeysSection(
             }
             if (!creating && revoking == null) {
                 error?.let {
-                    Spacer(Modifier.height(FS.space.s2))
-                    Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp))
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
                 }
             }
         }
+    }
     }
 
     if (creating) {
@@ -175,7 +172,7 @@ fun ApiKeysSection(
                     Text(vm.revokeConfirmText(key))
                     error?.let {
                         Spacer(Modifier.height(FS.space.s2))
-                        Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp))
+                        Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
             },
@@ -191,7 +188,7 @@ fun ApiKeysSection(
                         }
                     },
                     modifier = Modifier.testTag("api-key-revoke-confirm"),
-                ) { Text(if (busy) "Revoking…" else AppApiKeysViewModel.REVOKE, color = FS.colors.danger) }
+                ) { Text(if (busy) "Revoking…" else AppApiKeysViewModel.REVOKE, color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
                 TextButton(enabled = !busy, onClick = { revoking = null; vm.clearError() }) { Text("Cancel") }
@@ -209,23 +206,23 @@ fun ApiKeysSection(
                 Column {
                     Text(
                         AppApiKeysViewModel.ONCE_WARNING,
-                        color = FS.colors.danger,
-                        style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.titleSmall,
                     )
                     Spacer(Modifier.height(FS.space.s3))
                     SelectionContainer {
                         Text(
                             c.key,
-                            color = FS.colors.text,
+                            color = MaterialTheme.colorScheme.onSurface,
                             style = TextStyle(fontSize = 13.sp, fontFamily = FontFamily.Monospace),
                             modifier = Modifier.testTag("api-key-created-value"),
                         )
                     }
                     Spacer(Modifier.height(FS.space.s3))
-                    Text("Send it with each request:", color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+                    Text("Send it with each request:", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                     Text(
                         AppApiKeysViewModel.usageLine("<key>"),
-                        color = FS.colors.text,
+                        color = MaterialTheme.colorScheme.onSurface,
                         style = TextStyle(fontSize = 12.sp, fontFamily = FontFamily.Monospace),
                         modifier = Modifier.testTag("api-key-created-usage"),
                     )
@@ -262,14 +259,20 @@ private fun ApiKeyRow(
     val expired = AppApiKeysViewModel.isExpired(key, now)
     Row(
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(FS.space.s3),
         modifier = Modifier.fillMaxWidth().testTag("service-detail-api-key-${key.keyId}"),
     ) {
-        Column(Modifier.weight(1f)) {
+        Icon(
+            Icons.Outlined.Key,
+            contentDescription = null,
+            tint = if (expired) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
+        )
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 Text(
                     AppApiKeysViewModel.displayLabel(key),
-                    color = FS.colors.text,
-                    style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.titleSmall,
                     modifier = Modifier.weight(1f, fill = false),
                 )
                 FSPill(
@@ -283,8 +286,8 @@ private fun ApiKeyRow(
             }
             Text(
                 AppApiKeysViewModel.detailText(key, now),
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
             )
         }
         if (canRevoke) {
@@ -292,7 +295,7 @@ private fun ApiKeyRow(
                 label = AppApiKeysViewModel.REVOKE,
                 onClick = onRevoke,
                 enabled = !busy,
-                modifier = Modifier.padding(start = FS.space.s2).testTag("service-detail-api-key-revoke"),
+                modifier = Modifier.testTag("service-detail-api-key-revoke"),
             )
         }
     }
@@ -322,7 +325,7 @@ private fun CreateApiKeyDialog(
                     modifier = Modifier.fillMaxWidth().testTag("api-key-create-label"),
                 )
                 Spacer(Modifier.height(FS.space.s3))
-                Text("Access", color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold))
+                Text("Access", color = MaterialTheme.colorScheme.onSurfaceVariant, style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold))
                 AppApiKeysViewModel.SCOPES.forEach { s ->
                     Choice(
                         selected = keyScope == s,
@@ -335,7 +338,7 @@ private fun CreateApiKeyDialog(
                 }
                 error?.let {
                     Spacer(Modifier.height(FS.space.s2))
-                    Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp))
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
                 }
             }
         },
@@ -371,8 +374,8 @@ private fun Choice(
     ) {
         RadioButton(selected = selected, onClick = onSelect, enabled = enabled)
         Column {
-            Text(title, color = FS.colors.text, style = TextStyle(fontSize = 14.sp))
-            detail?.let { Text(it, color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp)) }
+            Text(title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium)
+            detail?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall) }
         }
     }
 }

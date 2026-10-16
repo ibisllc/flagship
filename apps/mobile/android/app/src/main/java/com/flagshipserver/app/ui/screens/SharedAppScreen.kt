@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -45,6 +46,9 @@ import com.flagshipserver.app.core.AppOrderSigning
 import com.flagshipserver.app.core.LocalAppOrderSigning
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.ui.components.FSCard
+import com.flagshipserver.app.ui.components.FSNote
+import com.flagshipserver.app.ui.components.FSPrimaryButton
+import com.flagshipserver.app.ui.components.FSScreen
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPill
 import com.flagshipserver.app.ui.components.FSPillKind
@@ -135,24 +139,14 @@ internal fun SharedAppContent(
     onBack: () -> Unit,
     onRetry: (() -> Unit)?,
 ) {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
-        Column(
-            Modifier.widthIn(max = FSLayout.readingMaxWidth).fillMaxWidth().padding(horizontal = FS.space.s6).testTag("shared-app"),
-        ) {
-            Spacer(Modifier.height(FS.space.s8))
-            FSGhostButton(label = "← Back", onClick = onBack)
-            Spacer(Modifier.height(FS.space.s3))
-            Text(appName, color = FS.colors.text, style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium))
-            Spacer(Modifier.height(FS.space.s6))
-            val detail = ui.detail
-            when {
-                detail != null && nav != null -> AppSections(appName, detail, ui, nav)
-                ui.phase == SharedAppUi.Phase.Waiting -> Line("Waiting for the owner to confirm this share.")
-                ui.phase == SharedAppUi.Phase.Ended -> Line("The owner stopped sharing this server.")
-                ui.phase == SharedAppUi.Phase.Failed -> ErrorCard(ui.message ?: "Couldn't open this app.", onRetry = onRetry)
-                else -> ServerCardSkeleton()
-            }
-            Spacer(Modifier.height(FS.space.s12))
+    FSScreen(title = appName, onBack = onBack, modifier = Modifier.testTag("shared-app")) {
+        val detail = ui.detail
+        when {
+            detail != null && nav != null -> AppSections(appName, detail, ui, nav)
+            ui.phase == SharedAppUi.Phase.Waiting -> FSNote("Waiting for the owner to confirm this share.")
+            ui.phase == SharedAppUi.Phase.Ended -> FSNote("The owner stopped sharing this server.")
+            ui.phase == SharedAppUi.Phase.Failed -> ErrorCard(ui.message ?: "Couldn't open this app.", onRetry = onRetry)
+            else -> ServerCardSkeleton()
         }
     }
 }
@@ -164,8 +158,8 @@ private fun AppSections(appName: String, detail: AppDetailResponse, ui: SharedAp
     val running = app.status == "running"
     FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.fillMaxWidth().testTag("shared-app-card")) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(appName, color = FS.colors.text, style = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.SemiBold), modifier = Modifier.weight(1f))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                Text(appName, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
                 FSPill(if (running) "Running" else app.status.replaceFirstChar { it.uppercase() }, kind = if (running) FSPillKind.Online else FSPillKind.Idle)
             }
             app.summary?.takeIf { it.isNotBlank() }?.let { Line(it, size = 14) }
@@ -173,7 +167,7 @@ private fun AppSections(appName: String, detail: AppDetailResponse, ui: SharedAp
                 Line(ShareCopy.MEMBERS_ONLY_HINT, size = 13, modifier = Modifier.testTag("shared-app-members-only"))
             }
             if (app.url.isNotEmpty()) {
-                FSSecondaryButton(
+                FSPrimaryButton(
                     label = "Open $appName",
                     block = true,
                     modifier = Modifier.testTag("shared-app-open"),
@@ -198,5 +192,10 @@ private fun AppSections(appName: String, detail: AppDetailResponse, ui: SharedAp
 
 @Composable
 private fun Line(text: String, modifier: Modifier = Modifier, size: Int = 15) {
-    Text(text, color = FS.colors.textMuted, style = TextStyle(fontSize = size.sp, lineHeight = (size + 6).sp), modifier = modifier)
+    Text(
+        text,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = if (size >= 15) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.bodyMedium,
+        modifier = modifier,
+    )
 }

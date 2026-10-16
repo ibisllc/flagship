@@ -17,7 +17,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -34,6 +40,7 @@ import com.flagshipserver.app.core.LocalSecretMailboxClient
 import com.flagshipserver.app.keystore.BiometricAuthority
 import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.ui.components.FSCard
+import com.flagshipserver.app.ui.components.FSScreen
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.theme.FS
@@ -91,22 +98,19 @@ fun KnockAuthorizeScreen(
     }
     val phase by vm.phase.collectAsState()
 
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
-            .padding(FS.space.s4),
-        verticalArrangement = Arrangement.spacedBy(FS.space.s4),
-    ) {
+    FSScreen(title = "Open app", onBack = onDone) {
         when (val p = phase) {
             is KnockAuthorizePhase.Done -> FSCard(padding = PaddingValues(FS.space.s4)) {
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                    Text("Signed in", color = FS.colors.text, style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold))
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                        Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = FS.colors.success)
+                        Text("Signed in", color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge)
+                    }
                     Text(
                         "Go back to that page: it opens ${svc.ifBlank { "the app" }} on its own." +
                             if (p.browserAgent.isNotBlank()) "\n\nBrowser: ${p.browserAgent}" else "",
-                        color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 15.sp, lineHeight = 20.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyLarge,
                     )
                     FSPrimaryButton(
                         label = "Done",
@@ -119,18 +123,18 @@ fun KnockAuthorizeScreen(
             }
             else -> FSCard(padding = PaddingValues(FS.space.s4)) {
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                    Text(vm.title, color = FS.colors.text, style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold))
+                    Text(vm.title, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.titleLarge)
                     Text(
                         vm.target,
-                        color = FS.colors.text,
-                        style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.Medium),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        style = MaterialTheme.typography.titleSmall,
                         modifier = Modifier.semantics { testTag = "knock-authorize-target" },
                     )
                     Text(
                         "This signs the browser at ${vm.target} in as you. " +
                             "Only do this for a browser you opened yourself.",
-                        color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 15.sp, lineHeight = 20.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyLarge,
                     )
                     val busy = p is KnockAuthorizePhase.Authorizing
                     FSPrimaryButton(
@@ -145,14 +149,13 @@ fun KnockAuthorizeScreen(
                     (p as? KnockAuthorizePhase.Failed)?.let {
                         Text(
                             it.message,
-                            color = FS.colors.danger,
-                            style = TextStyle(fontSize = 14.sp),
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.semantics { testTag = "knock-authorize-error" },
                         )
                     }
                 }
             }
         }
-        Spacer(Modifier.height(FS.space.s12))
     }
 }

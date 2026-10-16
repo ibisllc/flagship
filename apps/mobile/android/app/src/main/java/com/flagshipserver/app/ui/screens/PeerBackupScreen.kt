@@ -23,6 +23,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,12 +36,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.flagshipserver.app.api.PeerBackupPeerHostingYou
@@ -48,7 +54,13 @@ import com.flagshipserver.app.api.PeerBackupStats
 import com.flagshipserver.app.api.PeerBackupStatusResponse
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.ui.components.FSCard
-import com.flagshipserver.app.ui.components.FSGhostButton
+import com.flagshipserver.app.ui.components.FSDivider
+import com.flagshipserver.app.ui.components.FSGroup
+import com.flagshipserver.app.ui.components.FSNote
+import com.flagshipserver.app.ui.components.FSRow
+import com.flagshipserver.app.ui.components.FSScreen
+import com.flagshipserver.app.ui.components.FSSectionHeader
+import com.flagshipserver.app.ui.components.plural
 import com.flagshipserver.app.ui.components.FSPill
 import com.flagshipserver.app.ui.components.FSPillKind
 import com.flagshipserver.app.ui.theme.FS
@@ -66,104 +78,93 @@ fun PeerBackupScreen(nav: NavController) {
 
     LaunchedEffect(Unit) { vm.load() }
 
-    val scroll = rememberScrollState()
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(scroll)
-            .padding(horizontal = FS.space.s6),
+    FSScreen(
+        title = "Peer-backup",
+        onBack = { nav.popBackStack() },
+        subtitle = "Shard health across peers, and repair status.",
+        onRefresh = { vm.load() },
     ) {
-        Spacer(Modifier.height(FS.space.s8))
-        Text(
-            "Peer-backup",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
-        )
-        Text(
-            "Shard health across peers + repair status.",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 14.sp),
-        )
-        Spacer(Modifier.height(FS.space.s4))
-
         when (val s = state) {
             is LoadingState.Loaded -> Body(s.value, togglePending = togglePending, onToggle = { vm.toggle() })
             is LoadingState.Failed -> ErrorCard(s.message, onRetry = { vm.load() })
             else -> {
                 ServerCardSkeleton()
-                Spacer(Modifier.height(FS.space.s2))
                 ServerCardSkeleton()
             }
         }
-        Spacer(Modifier.height(FS.space.s6))
-        FSGhostButton(label = "Back", onClick = { nav.popBackStack() })
-        Spacer(Modifier.height(FS.space.s12))
     }
 }
 
 @Composable
 private fun Body(s: PeerBackupStatusResponse, togglePending: Boolean, onToggle: () -> Unit) {
     ParticipationCard(s, togglePending = togglePending, onToggle = onToggle)
-    Spacer(Modifier.height(FS.space.s4))
 
-    SectionHeader("Shard health")
-    Spacer(Modifier.height(FS.space.s2))
-    StatsCard(s.stats)
+    FSGroup(header = "Shard health") {
+        StatsRows(s.stats)
+    }
 
-    Spacer(Modifier.height(FS.space.s4))
-    SectionHeader("Peers backing you up")
-    Spacer(Modifier.height(FS.space.s2))
     if (s.peersBackingYouUp.isEmpty()) {
-        PlaceholderCard("No peers backing you up yet — your server will recruit some soon.")
+        PeerSection("Peers backing you up") {
+            FSNote("No peers backing you up yet — your server will recruit some soon.")
+        }
     } else {
-        s.peersBackingYouUp.forEach { p ->
-            PeerHostingYouRow(p)
-            Spacer(Modifier.height(FS.space.s2))
+        FSGroup(header = "Peers backing you up") {
+            s.peersBackingYouUp.forEachIndexed { idx, p ->
+                PeerHostingYouRow(p)
+                if (idx < s.peersBackingYouUp.size - 1) FSDivider(inset = FS.space.s4)
+            }
         }
     }
 
-    Spacer(Modifier.height(FS.space.s4))
-    SectionHeader("Peers you back up")
-    Spacer(Modifier.height(FS.space.s2))
     if (s.peersYouBackUp.isEmpty()) {
-        PlaceholderCard("Not hosting any peer shards yet — matchmaker hasn't paired you with anyone yet.")
+        PeerSection("Peers you back up") {
+            FSNote("Not hosting any peer shards yet — nobody has been paired with you yet.")
+        }
     } else {
-        s.peersYouBackUp.forEach { p ->
-            PeerYouHostRow(p)
-            Spacer(Modifier.height(FS.space.s2))
+        FSGroup(header = "Peers you back up") {
+            s.peersYouBackUp.forEachIndexed { idx, p ->
+                PeerYouHostRow(p)
+                if (idx < s.peersYouBackUp.size - 1) FSDivider(inset = FS.space.s4)
+            }
         }
     }
 
     if (s.shards.isNotEmpty()) {
-        Spacer(Modifier.height(FS.space.s4))
-        SectionHeader("Your shards")
-        Spacer(Modifier.height(FS.space.s2))
-        s.shards.take(20).forEach { sh ->
-            ShardRow(sh)
-            Spacer(Modifier.height(FS.space.s2))
-        }
-        if (s.shards.size > 20) {
-            PlaceholderCard("+ ${s.shards.size - 20} more shards (not rendered)")
+        PeerSection("Your shards") {
+            val shown = s.shards.take(20)
+            FSGroup {
+                shown.forEachIndexed { idx, sh ->
+                    ShardRow(sh)
+                    if (idx < shown.size - 1) FSDivider(inset = FS.space.s4)
+                }
+            }
+            if (s.shards.size > 20) {
+                FSNote("${plural(s.shards.size - 20, "more shard", "more shards")} not shown")
+            }
         }
     }
 
-    Spacer(Modifier.height(FS.space.s4))
-    SectionHeader("Repair status")
-    Spacer(Modifier.height(FS.space.s2))
-    RepairCard(s.repair)
+    FSGroup(header = "Repair status") {
+        RepairRows(s.repair)
+    }
+}
+
+@Composable
+private fun PeerSection(header: String, content: @Composable () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+        FSSectionHeader(header)
+        content()
+    }
 }
 
 @Composable
 private fun ParticipationCard(s: PeerBackupStatusResponse, togglePending: Boolean, onToggle: () -> Unit) {
-    FSCard(padding = PaddingValues(FS.space.s4)) {
+    FSCard {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Peer-backup pool",
-                    color = FS.colors.text,
-                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
-                Spacer(Modifier.width(FS.space.s2))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                Text("Peer-backup pool", style = MaterialTheme.typography.titleMedium)
                 FSPill(
-                    label = if (s.participating) "participating" else "unenrolled",
+                    label = if (s.participating) "Participating" else "Not enrolled",
                     kind = if (s.participating) FSPillKind.Online else FSPillKind.Idle,
                     modifier = Modifier.semantics { testTag = "peer-backup-participation-pill" },
                 )
@@ -172,20 +173,22 @@ private fun ParticipationCard(s: PeerBackupStatusResponse, togglePending: Boolea
                 if (s.participating)
                     "You host shards for peers and they host yours. Opt out to leave the pool."
                 else
-                    "You're not in the peer-backup pool — enable to get started.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp),
+                    "You're not in the peer-backup pool — turn it on to get started.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
             )
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(min = 48.dp)
                     .semantics { testTag = "peer-backup-toggle" },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(if (s.participating) "Participating" else "Off",
-                    color = FS.colors.text,
-                    style = TextStyle(fontSize = 14.sp))
-                Spacer(Modifier.weight(1f))
+                Text(
+                    if (s.participating) "Participating" else "Off",
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f),
+                )
                 Switch(
                     checked = s.participating,
                     enabled = !togglePending,
@@ -197,125 +200,98 @@ private fun ParticipationCard(s: PeerBackupStatusResponse, togglePending: Boolea
 }
 
 @Composable
-private fun StatsCard(stats: PeerBackupStats) {
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            LabelValueRow("total shards", stats.total.toString())
-            LabelValueRow("durable", stats.durable.toString())
-            LabelValueRow("at risk", stats.atRisk.toString())
-            LabelValueRow("your bytes stored", fmtBytes(stats.yourBytesStored))
-            LabelValueRow("peer bytes hosted", fmtBytes(stats.peerBytesHosted))
-        }
-    }
+private fun StatsRows(stats: PeerBackupStats) {
+    LabelValueRow("Total shards", stats.total.toString())
+    FSDivider(inset = FS.space.s4)
+    LabelValueRow("Durable", stats.durable.toString())
+    FSDivider(inset = FS.space.s4)
+    LabelValueRow("At risk", stats.atRisk.toString())
+    FSDivider(inset = FS.space.s4)
+    LabelValueRow("Your bytes stored", fmtBytes(stats.yourBytesStored))
+    FSDivider(inset = FS.space.s4)
+    LabelValueRow("Peer bytes hosted", fmtBytes(stats.peerBytesHosted))
 }
 
 @Composable
 private fun PeerHostingYouRow(p: PeerBackupPeerHostingYou) {
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(p.peerFqdn,
-                    color = FS.colors.text,
-                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
-                Text(
-                    "${p.shardsHosted} shard${if (p.shardsHosted == 1) "" else "s"} · last seen ${fmtDate(p.lastSeenMs)}",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp),
-                )
-            }
+    FSRow(
+        title = p.peerFqdn,
+        subtitle = "${plural(p.shardsHosted, "shard")} · last seen ${fmtDate(p.lastSeenMs)}",
+        trailing = {
             FSPill(
-                label = if (p.online) "online" else "offline",
+                label = if (p.online) "Online" else "Offline",
                 kind = if (p.online) FSPillKind.Online else FSPillKind.Offline,
             )
-        }
-    }
+        },
+    )
 }
 
 @Composable
 private fun PeerYouHostRow(p: PeerBackupPeerYouHost) {
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Column {
-            Text(p.peerFqdn,
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
-            Text(
-                "hosting ${p.shardsHosted} shard${if (p.shardsHosted == 1) "" else "s"} · ${fmtBytes(p.bytesHosted)} · last fetched ${fmtDate(p.lastFetchedMs)}",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp),
-            )
-        }
-    }
+    FSRow(
+        title = p.peerFqdn,
+        subtitle = "hosting ${plural(p.shardsHosted, "shard")} · ${fmtBytes(p.bytesHosted)} · last fetched ${fmtDate(p.lastFetchedMs)}",
+    )
 }
 
 @Composable
 private fun ShardRow(s: PeerBackupShardSummary) {
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    s.shardId,
-                    color = FS.colors.text,
-                    style = TextStyle(fontSize = 13.sp, fontFamily = FontFamily.Monospace),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    "${s.replicas}/${s.minReplicas} replicas · ${fmtBytes(s.bytes)}",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp),
-                )
-            }
-            FSPill(label = shardPillLabel(s), kind = shardPillKind(s))
-        }
+    ListItem(
+        headlineContent = {
+            Text(
+                s.shardId,
+                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+        supportingContent = {
+            Text(
+                "${s.replicas}/${s.minReplicas} replicas · ${fmtBytes(s.bytes)}",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        },
+        trailingContent = { FSPill(label = shardPillLabel(s), kind = shardPillKind(s)) },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+    )
+}
+
+@Composable
+private fun RepairRows(repair: PeerBackupRepairStatus) {
+    LabelValueRow("State", repair.state)
+    FSDivider(inset = FS.space.s4)
+    LabelValueRow("Last tick", repair.lastTickMs?.let(::fmtDate) ?: "—")
+    FSDivider(inset = FS.space.s4)
+    LabelValueRow("Repairs queued", repair.queued.toString())
+    FSDivider(inset = FS.space.s4)
+    LabelValueRow("Repairs done (24h)", repair.completed24h.toString())
+    val err = repair.lastError
+    if (!err.isNullOrEmpty()) {
+        FSDivider(inset = FS.space.s4)
+        LabelValueRow("Last error", err, valueColor = MaterialTheme.colorScheme.error)
     }
 }
 
 @Composable
-private fun RepairCard(repair: PeerBackupRepairStatus) {
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            LabelValueRow("state", repair.state)
-            LabelValueRow("last tick", repair.lastTickMs?.let(::fmtDate) ?: "—")
-            LabelValueRow("repairs queued", repair.queued.toString())
-            LabelValueRow("repairs done (24h)", repair.completed24h.toString())
-            val err = repair.lastError
-            if (!err.isNullOrEmpty()) {
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("last error", color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp))
-                    Spacer(Modifier.weight(1f))
-                    Text(err, color = FS.colors.danger, style = TextStyle(fontSize = 14.sp))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SectionHeader(title: String) {
-    Text(title, color = FS.colors.text, style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold))
-}
-
-@Composable
-private fun PlaceholderCard(text: String) {
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Text(text, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
-    }
-}
-
-@Composable
-private fun LabelValueRow(label: String, value: String) {
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp))
-        Spacer(Modifier.weight(1f))
-        Text(value, color = FS.colors.text, style = TextStyle(fontSize = 14.sp))
-    }
+private fun LabelValueRow(label: String, value: String, valueColor: Color? = null) {
+    FSRow(
+        title = label,
+        trailing = {
+            Text(
+                value,
+                color = valueColor ?: MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        },
+    )
 }
 
 private fun shardPillLabel(s: PeerBackupShardSummary): String = when {
-    s.replicas >= s.minReplicas * 2 -> "redundant"
-    s.replicas >= s.minReplicas -> "durable"
-    s.replicas > 0 -> "at risk"
-    else -> "lost"
+    s.replicas >= s.minReplicas * 2 -> "Redundant"
+    s.replicas >= s.minReplicas -> "Durable"
+    s.replicas > 0 -> "At risk"
+    else -> "Lost"
 }
 
 private fun shardPillKind(s: PeerBackupShardSummary): FSPillKind = when {

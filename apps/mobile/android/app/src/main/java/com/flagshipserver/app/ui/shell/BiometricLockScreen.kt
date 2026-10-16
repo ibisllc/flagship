@@ -204,7 +204,7 @@ fun BiometricLockScreen() {
                             "you to the start. Sign back in with your recovery passkey to " +
                             "restore it — your account and servers stay put."
                     else
-                        "⚠️ You have NO cloud recovery enrolled. Erasing this device's key with " +
+                        "You have no cloud recovery set up. Erasing this device's key with " +
                             "no backup means there's no way to sign back in — your account " +
                             "access is lost for good.",
                 )

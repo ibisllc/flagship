@@ -21,7 +21,18 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.RadioButtonUnchecked
+import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -41,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flagshipserver.app.core.ServerMigrationFlow
 import com.flagshipserver.app.core.ServerMigrationTimeline
+import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.theme.FS
@@ -48,18 +60,28 @@ import com.flagshipserver.app.viewmodels.MigrationMode
 import com.flagshipserver.app.viewmodels.MigrationViewModel
 import kotlinx.coroutines.launch
 
+/** A tinted callout: the tone's icon and a line on its soft fill. */
 @Composable
 private fun MigrateCallout(text: String, color: Color) {
-    Text(
-        text,
-        color = FS.colors.text,
-        style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+    val palette = FS.colors
+    val icon = when (color) {
+        palette.success -> Icons.Outlined.CheckCircle
+        palette.danger -> Icons.Outlined.ErrorOutline
+        palette.warning -> Icons.Outlined.Warning
+        else -> Icons.Outlined.Info
+    }
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(FS.space.s3),
+        verticalAlignment = Alignment.Top,
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(FS.radius.sm))
+            .clip(MaterialTheme.shapes.small)
             .background(color.copy(alpha = 0.12f))
             .padding(FS.space.s3),
-    )
+    ) {
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(20.dp))
+        Text(text, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium)
+    }
 }
 
 @Composable
@@ -74,16 +96,25 @@ fun MigrateServerScreen(vm: MigrationViewModel) {
         if (mode == MigrationMode.Progress) vm.pollLoop()
     }
 
+    // Shown in a full-screen sheet under the server page's "Migrate server"
+    // bar (iOS's sheet with its navigation title).
     Column(
-        Modifier.fillMaxSize().verticalScroll(scroll).padding(FS.space.s6),
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(scroll)
+            .padding(horizontal = FS.space.s4, vertical = FS.space.s2),
         verticalArrangement = Arrangement.spacedBy(FS.space.s4),
     ) {
         when (val m = mode) {
             is MigrationMode.Loading -> {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator()
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                     Spacer(Modifier.width(FS.space.s3))
-                    Text("Checking for a migration in progress…", color = FS.colors.textMuted)
+                    Text(
+                        "Checking for a migration in progress…",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
                 }
             }
             is MigrationMode.Initiate -> InitiateMode(vm)
@@ -103,17 +134,17 @@ private fun InitiateMode(vm: MigrationViewModel) {
 
     Text(
         "Migrate ${vm.serverFqdn}",
-        color = FS.colors.text,
-        style = TextStyle(fontSize = 24.sp, fontWeight = FontWeight.Medium),
+        color = MaterialTheme.colorScheme.onSurface,
+        style = MaterialTheme.typography.titleLarge,
     )
     if (vm.backupMissing) {
         MigrateCallout(
-            "No backup is enrolled for this server. The migration moves data through backup — enable backup first.",
+            "No backup is set up for this server. The migration moves data through backup, so turn backup on first.",
             FS.colors.warning,
         )
     } else {
         MigrateCallout(
-            "Peer-backup is enrolled — the new box restores from it while this one keeps serving.",
+            "Peer backup is on. The new server restores from it while this one keeps serving.",
             FS.colors.primary,
         )
     }
@@ -121,15 +152,15 @@ private fun InitiateMode(vm: MigrationViewModel) {
     if (vm.backupMissing) {
         Text(
             "This server has no backup yet, so it can't be migrated. Enable backup first, or use Backup/clone server and import the file onto the new server.",
-            color = FS.colors.danger,
-            style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodyMedium,
         )
     }
 
     Text(
         "The old server is retired and wiped only after the new one has restored the data and taken over the name: from then on it can't unlock or connect, and it wipes itself as soon as it is reachable. If anything fails first, the old server keeps serving with all its data.",
-        color = FS.colors.textMuted,
-        style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = MaterialTheme.typography.bodyMedium,
     )
 
     errorMessage?.let { MigrateCallout(it, FS.colors.danger) }
@@ -155,25 +186,18 @@ private fun ProgressMode(vm: MigrationViewModel) {
 
     Text(
         "Migrating ${vm.serverFqdn}",
-        color = FS.colors.text,
-        style = TextStyle(fontSize = 24.sp, fontWeight = FontWeight.Medium),
+        color = MaterialTheme.colorScheme.onSurface,
+        style = MaterialTheme.typography.titleLarge,
     )
 
     if (session?.phase == "initiated") {
         MigrateCallout(
-            "Next: add the NEW box via Add a server (any name — it becomes ${vm.serverFqdn} at take-over). It attaches here automatically once online.",
+            "Next: add the NEW server with Add a server (any name: it becomes ${vm.serverFqdn} at take-over). It attaches here by itself once it's online.",
             FS.colors.primary,
         )
     }
 
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(FS.radius.sm))
-            .background(FS.colors.surface)
-            .padding(FS.space.s3),
-        verticalArrangement = Arrangement.spacedBy(FS.space.s2),
-    ) {
+    FSCard(padding = PaddingValues(vertical = FS.space.s2)) {
         for (step in vm.steps) {
             MigrateStepRow(step)
         }
@@ -183,8 +207,8 @@ private fun ProgressMode(vm: MigrationViewModel) {
     if (copy.isNotEmpty()) {
         Text(
             copy,
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.semantics { contentDescription = "migrate-wait-copy" },
         )
     }
@@ -193,7 +217,7 @@ private fun ProgressMode(vm: MigrationViewModel) {
 
     when (session?.phase) {
         "pre-seeded" -> FSPrimaryButton(
-            label = if (working) "Signing…" else "Hand off to the new box now",
+            label = if (working) "Signing…" else "Hand off to the new server now",
             onClick = { if (!working) scope.launch { vm.handOff() } },
             enabled = !working,
             block = true,
@@ -212,12 +236,12 @@ private fun ProgressMode(vm: MigrationViewModel) {
 
     if (session?.abortedAt != null) {
         MigrateCallout(
-            "Migration aborted — your old server stays active with all its data.",
+            "Migration stopped. Your old server stays active with all its data.",
             FS.colors.warning,
         )
     } else if (session?.done == true) {
         MigrateCallout(
-            "Migration complete — ${vm.serverFqdn} now runs on the new box.",
+            "Migration complete. ${vm.serverFqdn} now runs on the new server.",
             FS.colors.success,
         )
     }
@@ -226,7 +250,7 @@ private fun ProgressMode(vm: MigrationViewModel) {
         // Secondary, not danger — aborting is the SAFE exit (mirrors the
         // webapp): the old server stays active with all its data.
         FSSecondaryButton(
-            label = if (working) "Working…" else "Abort migration — old server stays active with all data",
+            label = if (working) "Working…" else "Stop the migration (the old server keeps all its data)",
             onClick = { if (!working) scope.launch { vm.abort() } },
             enabled = !working,
             block = true,
@@ -243,25 +267,29 @@ private fun MigrateStepRow(step: ServerMigrationTimeline.Step) {
         ServerMigrationTimeline.StepState.PENDING -> "pending"
     }
     Row(
-        horizontalArrangement = Arrangement.spacedBy(FS.space.s3),
+        horizontalArrangement = Arrangement.spacedBy(FS.space.s4),
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.semantics { contentDescription = "migrate-step-${step.key}-$stateName" },
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 40.dp)
+            .padding(horizontal = FS.space.s4, vertical = FS.space.s1)
+            .semantics { contentDescription = "migrate-step-${step.key}-$stateName" },
     ) {
-        Box(Modifier.size(18.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
             when (step.state) {
                 ServerMigrationTimeline.StepState.DONE ->
-                    Text("✓", color = FS.colors.success, style = TextStyle(fontWeight = FontWeight.Bold))
+                    Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = FS.colors.success)
                 ServerMigrationTimeline.StepState.ACTIVE ->
-                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = FS.colors.primary)
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
                 ServerMigrationTimeline.StepState.PENDING ->
-                    Text("○", color = FS.colors.textMuted)
+                    Icon(Icons.Outlined.RadioButtonUnchecked, contentDescription = null, tint = MaterialTheme.colorScheme.outline)
             }
         }
         Text(
             step.label,
             color = if (step.state == ServerMigrationTimeline.StepState.PENDING)
-                FS.colors.textMuted else FS.colors.text,
-            style = TextStyle(fontSize = 15.sp),
+                MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.bodyLarge,
         )
     }
 }

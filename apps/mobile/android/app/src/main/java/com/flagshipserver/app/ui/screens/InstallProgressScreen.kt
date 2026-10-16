@@ -17,7 +17,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -35,7 +43,9 @@ import com.flagshipserver.app.api.ProvisionStatusPhase
 import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.core.ProvisionProgress
 import com.flagshipserver.app.ui.components.FSCard
-import com.flagshipserver.app.ui.components.FSGhostButton
+import com.flagshipserver.app.ui.components.FSPrimaryButton
+import com.flagshipserver.app.ui.components.FSScreen
+import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.theme.FS
 import kotlinx.coroutines.delay
 
@@ -83,79 +93,84 @@ fun InstallProgressScreen(
         }
     }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .padding(horizontal = FS.space.s6),
+    val isLive = phase == "live"
+    FSScreen(
+        title = "Provisioning",
+        onBack = { onFinish(resolvedFqdn, isLive) },
+        subtitle = "Watching the new server come online. Don't put your phone away, it's almost done.",
     ) {
-        Spacer(Modifier.height(FS.space.s8))
-        Text(
-            "Provisioning",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
-        )
-        Text(
-            "Watching the new box come online. Don't put your phone away — it's almost done.",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 15.sp),
-        )
-        Spacer(Modifier.height(FS.space.s4))
-
-        FSCard(padding = PaddingValues(FS.space.s4)) {
-            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                if (!hadFirstReport) {
-                    Text("Waiting for the box to phone home…", color = FS.colors.textMuted)
-                }
-                val steps = ProvisionProgress.stepStates(phase, detail, prevPhase)
-                for (step in steps) {
-                    InstallStepRow(step)
-                }
+        FSCard(padding = PaddingValues(vertical = FS.space.s2)) {
+            if (!hadFirstReport) {
+                Text(
+                    "Waiting for the server to phone home…",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(horizontal = FS.space.s4, vertical = FS.space.s2),
+                )
+            }
+            val steps = ProvisionProgress.stepStates(phase, detail, prevPhase)
+            for (step in steps) {
+                InstallStepRow(step)
             }
         }
 
-        Spacer(Modifier.height(FS.space.s6))
-
-        val isLive = phase == "live"
-        FSGhostButton(
-            label = if (isLive) "Continue" else "Run in background",
-            onClick = { onFinish(resolvedFqdn, isLive) },
-            block = true,
-        )
+        if (isLive) {
+            FSPrimaryButton(
+                label = "Continue",
+                onClick = { onFinish(resolvedFqdn, isLive) },
+                block = true,
+            )
+        } else {
+            FSSecondaryButton(
+                label = "Run in background",
+                onClick = { onFinish(resolvedFqdn, isLive) },
+                block = true,
+            )
+        }
     }
 }
 
-// Shared with PendingServerScreen — both render the same canonical ladder.
+// Shared with PendingServerScreen — both render the same canonical ladder:
+// one list row per step with a Material status icon (iOS ProvisionTimelineView).
 @Composable
-internal fun InstallStepRow(step: ProvisionProgress.StepView) {
+internal fun InstallStepRow(
+    step: ProvisionProgress.StepView,
+    /** The row's side inset: a card's own gutter when it sits in a padded card. */
+    horizontalPadding: androidx.compose.ui.unit.Dp = FS.space.s4,
+) {
     Row(
-        horizontalArrangement = Arrangement.spacedBy(FS.space.s3),
+        horizontalArrangement = Arrangement.spacedBy(FS.space.s4),
         verticalAlignment = Alignment.Top,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 40.dp)
+            .padding(horizontal = horizontalPadding, vertical = FS.space.s2),
     ) {
-        Box(Modifier.size(18.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
             when (step.state) {
                 ProvisionProgress.StepState.DONE ->
-                    Text("✓", color = FS.colors.success, style = TextStyle(fontWeight = FontWeight.Bold))
+                    Icon(Icons.Filled.CheckCircle, contentDescription = "Done", tint = FS.colors.success)
                 ProvisionProgress.StepState.ACTIVE ->
-                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = FS.colors.primary)
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
                 ProvisionProgress.StepState.FAILED ->
-                    Text("!", color = FS.colors.danger, style = TextStyle(fontWeight = FontWeight.Bold))
+                    Icon(Icons.Filled.Error, contentDescription = "Failed", tint = MaterialTheme.colorScheme.error)
                 ProvisionProgress.StepState.PENDING ->
-                    Text("○", color = FS.colors.textMuted)
+                    Icon(Icons.Outlined.RadioButtonUnchecked, contentDescription = null, tint = MaterialTheme.colorScheme.outline)
             }
         }
-        Column {
+        Column(Modifier.padding(top = 2.dp)) {
             Text(
                 step.label,
                 color = if (step.state == ProvisionProgress.StepState.PENDING)
-                    FS.colors.textMuted else FS.colors.text,
-                style = TextStyle(fontSize = 15.sp),
+                    MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.bodyLarge,
             )
             val d = step.detail
             if (d != null) {
                 if (step.state == ProvisionProgress.StepState.FAILED) {
-                    Text("Failed — $d", color = FS.colors.danger, style = TextStyle(fontSize = 13.sp))
+                    Text("Failed: $d", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
                 } else {
-                    Text(d, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+                    Text(d, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                 }
             }
         }

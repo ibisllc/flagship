@@ -17,8 +17,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -48,6 +54,11 @@ import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.LocalVibeCodeEnvelopeSigner
 import com.flagshipserver.app.ui.components.FSCard
+import com.flagshipserver.app.ui.components.FSDivider
+import com.flagshipserver.app.ui.components.FSEmptyState
+import com.flagshipserver.app.ui.components.FSGroup
+import com.flagshipserver.app.ui.components.FSRow
+import com.flagshipserver.app.ui.components.FSScreen
 import com.flagshipserver.app.ui.components.FSDangerButton
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
@@ -93,105 +104,81 @@ fun ServiceEnvScreen(
 
     LaunchedEffect(Unit) { reload() }
 
-    val scroll = rememberScrollState()
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(scroll)
-            .padding(horizontal = FS.space.s6),
+    FSScreen(
+        title = "Configure environment",
+        onBack = { nav.popBackStack() },
     ) {
-        Spacer(Modifier.height(FS.space.s8))
-        FSGhostButton(label = "← Back", onClick = { nav.popBackStack() })
-        Spacer(Modifier.height(FS.space.s3))
-        Text(
-            "Configure environment",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
-        )
-        Spacer(Modifier.height(FS.space.s4))
-
         FSCard {
-            Column {
+            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 Text(
                     "Environment variables",
-                    color = FS.colors.text,
-                    style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.titleMedium,
                 )
-                Spacer(Modifier.height(FS.space.s2))
                 Text(
-                    "Names appear here; values stay on this server. They're sealed at rest and never leave your pod.",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp),
+                    "Names appear here; values stay on this server. They're sealed at rest and never leave it.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
                 )
             }
         }
-        Spacer(Modifier.height(FS.space.s4))
 
-        if (errorMessage != null) {
-            ErrorCard(message = errorMessage!!)
-            Spacer(Modifier.height(FS.space.s3))
-        }
+        errorMessage?.let { ErrorCard(message = it) }
 
         if (loading) {
             ServerCardSkeleton()
         } else if (names.isEmpty()) {
-            FSCard {
-                Column {
-                    Text("No env vars set", color = FS.colors.text)
-                    Spacer(Modifier.height(FS.space.s1))
-                    Text("Tap below to add one.", color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
-                }
-            }
+            FSEmptyState(
+                title = "No env vars set",
+                message = "Tap below to add one.",
+                icon = Icons.Outlined.Key,
+            )
         } else {
-            names.forEach { name ->
-                FSCard(modifier = Modifier.semantics { testTag = "service-env-row-$name" }) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(
-                            name,
-                            color = FS.colors.text,
-                            modifier = Modifier.weight(1f),
-                            style = TextStyle(fontSize = 14.sp),
-                        )
-                        FSDangerButton(
-                            label = "Remove",
-                            onClick = {
-                                scope.launch {
-                                    val issuedAt = System.currentTimeMillis()
-                                    val envelope = ServiceEnvSetEnvelope(
-                                        serverId = serverFqdn,
-                                        creator = creator, slug = slug,
-                                        env = emptyMap(),
-                                        issuedAt = issuedAt,
-                                    )
-                                    try {
-                                        val signature = signer(envelope)
-                                        client.serviceEnvUnset(
-                                            appId,
-                                            ServiceEnvUnsetRequest(name = name, request = envelope, signature = signature),
+            FSGroup {
+                names.forEachIndexed { idx, name ->
+                    if (idx > 0) FSDivider()
+                    FSRow(
+                        title = name,
+                        icon = Icons.Outlined.Key,
+                        modifier = Modifier.semantics { testTag = "service-env-row-$name" },
+                        trailing = {
+                            IconButton(
+                                onClick = {
+                                    scope.launch {
+                                        val issuedAt = System.currentTimeMillis()
+                                        val envelope = ServiceEnvSetEnvelope(
+                                            serverId = serverFqdn,
+                                            creator = creator, slug = slug,
+                                            env = emptyMap(),
+                                            issuedAt = issuedAt,
                                         )
-                                        reload()
-                                    } catch (t: Throwable) {
-                                        errorMessage = t.message
+                                        try {
+                                            val signature = signer(envelope)
+                                            client.serviceEnvUnset(
+                                                appId,
+                                                ServiceEnvUnsetRequest(name = name, request = envelope, signature = signature),
+                                            )
+                                            reload()
+                                        } catch (t: Throwable) {
+                                            errorMessage = t.message
+                                        }
                                     }
-                                }
-                            },
-                        )
-                    }
+                                },
+                            ) {
+                                Icon(Icons.Outlined.Delete, contentDescription = "Remove $name", tint = MaterialTheme.colorScheme.error)
+                            }
+                        },
+                    )
                 }
-                Spacer(Modifier.height(FS.space.s2))
             }
         }
 
-        Spacer(Modifier.height(FS.space.s4))
         FSPrimaryButton(
             label = "Add environment variable",
             onClick = { showAddDialog = true },
+            block = true,
             modifier = Modifier.semantics { testTag = "service-env-add-btn" },
         )
-        Spacer(Modifier.height(FS.space.s10))
     }
 
     if (showAddDialog) {
@@ -258,8 +245,8 @@ private fun AddEnvVarDialog(
                 Spacer(Modifier.height(FS.space.s2))
                 Text(
                     "The value is sent once to your server. The Flagship phone app does not save it.",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 11.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
                 )
             }
         },

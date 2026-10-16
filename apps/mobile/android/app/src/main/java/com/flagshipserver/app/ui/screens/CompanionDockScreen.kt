@@ -22,7 +22,18 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Laptop
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -37,7 +48,9 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -57,7 +70,15 @@ import com.flagshipserver.app.core.QrRelay
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSGhostButton
+import com.flagshipserver.app.ui.components.FSDangerButton
+import com.flagshipserver.app.ui.components.FSDivider
+import com.flagshipserver.app.ui.components.FSEmptyState
+import com.flagshipserver.app.ui.components.FSGroup
 import com.flagshipserver.app.ui.components.FSPrimaryButton
+import com.flagshipserver.app.ui.components.FSRow
+import com.flagshipserver.app.ui.components.FSScreen
+import com.flagshipserver.app.ui.components.FSSecondaryButton
+import com.flagshipserver.app.ui.components.FSSectionHeader
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.CompanionDockViewModel
 import com.flagshipserver.app.viewmodels.RemoteServer
@@ -111,155 +132,158 @@ fun CompanionDockScreen(nav: NavController, initialLink: String = "") {
         if (initialLink.isNotBlank()) vm.stageApproval(initialLink)
     }
 
-    val scroll = rememberScrollState()
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(scroll)
-            .padding(horizontal = FS.space.s6),
+    FSScreen(
+        title = "Remote",
+        onBack = { nav.popBackStack() },
+        subtitle = "Open ${Endpoints.remoteHost} on your computer and scan the code it shows. " +
+            "The browser gets four hours on the server you pick, without a key. Disconnect it anytime.",
     ) {
-        Spacer(Modifier.height(FS.space.s8))
-        FSGhostButton(label = "← Back", onClick = { nav.popBackStack() })
-        Spacer(Modifier.height(FS.space.s3))
-        Text(
-            "REMOTE",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
-        )
-        Text(
-            "Open ${Endpoints.remoteHost} on your computer and scan the code it shows. " +
-                "The browser gets four hours on the server you pick, without a key. Disconnect it anytime.",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 13.sp),
-        )
-
-        Spacer(Modifier.height(FS.space.s4))
-
-        FSCard(padding = PaddingValues(FS.space.s4)) {
-            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                FSPrimaryButton(
-                    label = if (scanning) "Close scanner" else "Scan the browser's code",
-                    onClick = { scanning = !scanning },
-                    block = true,
-                )
-                if (scanning) {
-                    QRScanner(onScanned = { raw ->
-                        if (vm.stageApproval(raw)) {
-                            pastedLink = raw
-                            scanning = false
-                        }
-                    })
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            FSSectionHeader("Connect a browser")
+            FSCard {
+                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+                    FSPrimaryButton(
+                        label = if (scanning) "Close scanner" else "Scan the browser's code",
+                        onClick = { scanning = !scanning },
+                        block = true,
+                    )
+                    if (scanning) {
+                        QRScanner(onScanned = { raw ->
+                            if (vm.stageApproval(raw)) {
+                                pastedLink = raw
+                                scanning = false
+                            }
+                        })
+                    }
+                    OutlinedTextField(
+                        value = pastedLink,
+                        onValueChange = { pastedLink = it },
+                        label = { Text("Or paste its link") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2,
+                        maxLines = 4,
+                    )
+                    FSSecondaryButton(
+                        label = "Use pasted link",
+                        onClick = { vm.stageApproval(pastedLink) },
+                        enabled = pastedLink.isNotBlank(),
+                        block = true,
+                    )
                 }
-                OutlinedTextField(
-                    value = pastedLink,
-                    onValueChange = { pastedLink = it },
-                    label = { Text("Or paste its link") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2,
-                    maxLines = 4,
-                )
-                FSGhostButton(
-                    label = "Use pasted link",
-                    onClick = { vm.stageApproval(pastedLink) },
-                    enabled = pastedLink.isNotBlank(),
-                    block = true,
-                )
             }
         }
 
         when (val p = phase) {
             is CompanionDockViewModel.Phase.Connecting -> {
-                Spacer(Modifier.height(FS.space.s3))
-                FSCard(padding = PaddingValues(FS.space.s4)) {
-                    Text("Connecting to the browser…", color = FS.colors.textMuted)
+                FSCard {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+                        CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                        Text(
+                            "Connecting to the browser…",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
                 }
             }
             is CompanionDockViewModel.Phase.Matching, CompanionDockViewModel.Phase.Approving -> {
                 val code = (p as? CompanionDockViewModel.Phase.Matching)?.matchCode
                 val gateOpen = (p as? CompanionDockViewModel.Phase.Matching)?.gateOpen == true
-                Spacer(Modifier.height(FS.space.s3))
-                FSCard(padding = PaddingValues(FS.space.s4)) {
-                    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                        Text("Let this browser in?", color = FS.colors.text, fontWeight = FontWeight.SemiBold)
-                        Text(
-                            "Check the browser shows this code:",
-                            color = FS.colors.textMuted,
-                            style = TextStyle(fontSize = 13.sp),
-                        )
+                val approving = p is CompanionDockViewModel.Phase.Approving
+                FSCard {
+                    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+                        Text("Let this browser in?", style = MaterialTheme.typography.titleMedium)
                         if (code != null) {
                             Text(
+                                "Check the browser shows this code:",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
                                 QrRelay.formatMatchCode(code),
-                                color = FS.colors.text,
-                                style = TextStyle(fontSize = 32.sp, fontFamily = FontFamily.Monospace, letterSpacing = 4.sp),
+                                color = MaterialTheme.colorScheme.onSurface,
+                                style = MaterialTheme.typography.displaySmall.copy(fontFamily = FontFamily.Monospace, letterSpacing = 4.sp),
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth(),
                             )
                         }
-                        Text("SERVER", color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold))
-                        vm.servers.forEach { server ->
-                            val picked = server.pod.podId == selectedPodId
-                            FSGhostButton(
-                                label = (if (picked) "● " else "○ ") + server.pod.name,
-                                onClick = { vm.selectServer(server.pod.podId) },
-                                enabled = p !is CompanionDockViewModel.Phase.Approving,
-                                block = true,
-                            )
+                        Text("Server", style = MaterialTheme.typography.titleSmall)
+                        Column(Modifier.selectableGroup()) {
+                            vm.servers.forEach { server ->
+                                val picked = server.pod.podId == selectedPodId
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 48.dp)
+                                        .selectable(
+                                            selected = picked,
+                                            enabled = !approving,
+                                            role = Role.RadioButton,
+                                            onClick = { vm.selectServer(server.pod.podId) },
+                                        ),
+                                ) {
+                                    RadioButton(selected = picked, onClick = null, enabled = !approving)
+                                    Text(server.pod.name, style = MaterialTheme.typography.bodyLarge)
+                                }
+                            }
                         }
                         Text(
                             "It gets a keyless session for four hours. Protected actions still need this phone.",
-                            color = FS.colors.textMuted,
-                            style = TextStyle(fontSize = 13.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium,
                         )
                         FSPrimaryButton(
-                            label = if (p is CompanionDockViewModel.Phase.Approving) "Approving…" else "Codes match: approve",
+                            label = if (approving) "Approving…" else "Codes match: approve",
                             onClick = { vm.approve() },
                             enabled = gateOpen && selectedPodId != null,
                             block = true,
                         )
-                        FSGhostButton(label = "Cancel", onClick = { vm.cancel() }, block = true)
+                        FSSecondaryButton(label = "Cancel", onClick = { vm.cancel() }, block = true)
                     }
                 }
             }
             is CompanionDockViewModel.Phase.Connected -> {
-                Spacer(Modifier.height(FS.space.s3))
-                FSCard(padding = PaddingValues(FS.space.s4)) {
-                    Text("Browser connected to ${p.serverName}", color = FS.colors.text, fontWeight = FontWeight.SemiBold)
+                FSCard {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                        Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = FS.colors.success)
+                        Text("Browser connected to ${p.serverName}", style = MaterialTheme.typography.titleSmall)
+                    }
                 }
             }
             CompanionDockViewModel.Phase.Idle -> Unit
         }
         approvalError?.let {
-            Spacer(Modifier.height(FS.space.s2))
-            Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp))
+            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
         }
 
-        Spacer(Modifier.height(FS.space.s6))
-        Text(
-            "CONNECTED BROWSERS" +
-                (vm.servers.firstOrNull { it.pod.podId == selectedPodId }?.let { " · ${it.pod.name.uppercase()}" } ?: ""),
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp),
-        )
-        Spacer(Modifier.height(FS.space.s2))
-
-        when (val s = state) {
-            is LoadingState.Loaded -> {
-                if (s.value.companions.isEmpty()) {
-                    EmptyCompanionsCard()
-                } else {
-                    s.value.companions.forEach { c ->
-                        CompanionRow(
-                            companion = c,
-                            revoking = c.tokenPrefix in revokePending,
-                            onRevokeRequest = { pendingRevoke = c },
-                        )
-                        Spacer(Modifier.height(FS.space.s2))
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            FSSectionHeader(
+                "Connected browsers" +
+                    (vm.servers.firstOrNull { it.pod.podId == selectedPodId }?.let { " on ${it.pod.name}" } ?: ""),
+            )
+            when (val s = state) {
+                is LoadingState.Loaded -> {
+                    if (s.value.companions.isEmpty()) {
+                        EmptyCompanionsCard()
+                    } else {
+                        FSGroup {
+                            s.value.companions.forEachIndexed { idx, c ->
+                                CompanionRow(
+                                    companion = c,
+                                    revoking = c.tokenPrefix in revokePending,
+                                    onRevokeRequest = { pendingRevoke = c },
+                                )
+                                if (idx < s.value.companions.size - 1) FSDivider()
+                            }
+                        }
                     }
                 }
+                is LoadingState.Failed -> ErrorCard(message = s.message, onRetry = { vm.load() })
+                else -> ServerCardSkeleton()
             }
-            is LoadingState.Failed -> ErrorCard(message = s.message, onRetry = { vm.load() })
-            else -> ServerCardSkeleton()
         }
-
-        Spacer(Modifier.height(FS.space.s12))
     }
 
     pendingRevoke?.let { c ->
@@ -279,7 +303,7 @@ fun CompanionDockScreen(nav: NavController, initialLink: String = "") {
                     vm.revoke(target)
                     toasts.success("Browser disconnected.")
                 }) {
-                    Text("Disconnect", color = FS.colors.danger)
+                    Text("Disconnect", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
@@ -302,50 +326,31 @@ private fun CompanionRow(
         }
     }
     val remaining = (companion.expiresAt - now).coerceAtLeast(0L)
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Row(verticalAlignment = Alignment.Top) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    "Session ${companion.tokenPrefix}",
-                    color = FS.colors.text,
-                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
-                )
-                Text(
-                    "last seen ${fmtRelative(companion.lastSeenMs, now)} · expires in ${formatRemaining(remaining)}",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp),
-                )
-                Text(
-                    "token ${companion.tokenPrefix}…",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 12.sp, fontFamily = FontFamily.Monospace),
-                )
-                companion.userAgent?.let {
-                    Text(
-                        it,
-                        color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 12.sp),
-                    )
-                }
-            }
-            FSGhostButton(
+    val lines = buildList {
+        add("last seen ${fmtRelative(companion.lastSeenMs, now)} · expires in ${formatRemaining(remaining)}")
+        companion.userAgent?.let { add(it) }
+    }
+    FSRow(
+        title = "Session ${companion.tokenPrefix}",
+        subtitle = lines.joinToString("\n"),
+        icon = Icons.Outlined.Laptop,
+        trailing = {
+            FSDangerButton(
                 label = if (revoking) "Disconnecting…" else "Disconnect",
                 onClick = onRevokeRequest,
                 enabled = !revoking,
             )
-        }
-    }
+        },
+    )
 }
 
 @Composable
 private fun EmptyCompanionsCard() {
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Text(
-            "No browsers connected yet. Open ${Endpoints.remoteHost} on a computer to add one.",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 13.sp),
-        )
-    }
+    FSEmptyState(
+        title = "No browsers connected",
+        message = "Open ${Endpoints.remoteHost} on a computer to add one.",
+        icon = Icons.Outlined.Laptop,
+    )
 }
 
 private fun msUntil(expiresAt: Long): Long =

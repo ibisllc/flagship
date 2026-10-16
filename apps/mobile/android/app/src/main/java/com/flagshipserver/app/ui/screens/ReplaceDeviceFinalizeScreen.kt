@@ -19,7 +19,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -45,6 +49,7 @@ import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSPrimaryButton
+import com.flagshipserver.app.ui.components.FSScreen
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.ReplaceDevicePhase
 import com.flagshipserver.app.viewmodels.ReplaceDeviceViewModel
@@ -100,27 +105,14 @@ fun ReplaceDeviceFinalizeScreen(nav: NavController, completesAt: Long) {
 
     val elapsed = ReplaceDeviceViewModel.graceElapsed(completesAt, nowTick)
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = FS.space.s6, vertical = FS.space.s8),
-        verticalArrangement = Arrangement.spacedBy(FS.space.s4),
+    FSScreen(
+        title = "Replacing this device",
+        onBack = { nav.popBackStack() },
+        subtitle = "This rotates your account's identity key. Once the grace window " +
+            "ends, every other device on the account must re-pair the next " +
+            "time it opens — including this phone. Your servers keep running " +
+            "and your apps stay installed.",
     ) {
-        Text(
-            "Replacing this device",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
-        )
-        Text(
-            "This rotates your account's identity key. Once the grace window " +
-                "ends, every other device on the account must re-pair the next " +
-                "time it opens — including this phone. Your pods keep running " +
-                "and your services stay installed.",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 14.sp),
-        )
-
         when (phase) {
             is ReplaceDevicePhase.Completed -> CompletedCard(onDone = { nav.popBackStack() })
             is ReplaceDevicePhase.Completing -> WorkingCard("Finishing the swap…")
@@ -150,51 +142,49 @@ private fun PendingBody(
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             Text(
                 if (elapsed) "Grace window complete" else "Takes effect in",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 12.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelLarge,
             )
             Text(
                 if (elapsed) "Ready to complete" else remainingLabel(completesAt, nowTick),
-                color = if (elapsed) FS.colors.success else FS.colors.text,
-                style = TextStyle(fontSize = 30.sp, fontWeight = FontWeight.SemiBold),
+                color = if (elapsed) FS.colors.success else MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.headlineMedium,
                 modifier = Modifier.semantics { contentDescription = "replace-finalize-countdown" },
             )
             Text(
                 "Your other devices are notified during this window. Only this " +
                     "device can cancel the replacement.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 12.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
             )
             FSPrimaryButton(
                 label = "Complete replacement",
                 onClick = onComplete,
                 enabled = elapsed && !inFlight,
                 block = true,
-                large = true,
                 modifier = Modifier.semantics { contentDescription = "replace-finalize-complete" },
             )
             if (!elapsed) {
                 Text(
                     "Available once the countdown reaches zero.",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 12.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
                 )
             }
         }
     }
     if (failure != null) {
-        Spacer(Modifier.height(FS.space.s3))
         FSCard {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                 Text(
                     "Couldn't complete",
-                    color = FS.colors.danger,
-                    style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.titleMedium,
                 )
                 Text(
                     failure,
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.semantics { contentDescription = "replace-finalize-error" },
                 )
             }
@@ -206,18 +196,17 @@ private fun PendingBody(
 private fun CompletedCard(onDone: () -> Unit) {
     FSCard {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Text(
-                "Replacement complete",
-                color = FS.colors.success,
-                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = FS.colors.success)
+                Text("Replacement complete", style = MaterialTheme.typography.titleMedium)
+            }
             Text(
                 "Your identity key has rotated. Other devices on this account " +
                     "will be asked to re-pair the next time they open the app.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
             )
-            FSPrimaryButton(label = "Done", onClick = onDone, block = true, large = true)
+            FSPrimaryButton(label = "Done", onClick = onDone, block = true)
         }
     }
 }
@@ -230,7 +219,7 @@ private fun WorkingCard(label: String) {
             horizontalArrangement = Arrangement.spacedBy(FS.space.s3),
         ) {
             CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
-            Text(label, color = FS.colors.text, style = TextStyle(fontSize = 15.sp))
+            Text(label, style = MaterialTheme.typography.bodyLarge)
         }
     }
 }

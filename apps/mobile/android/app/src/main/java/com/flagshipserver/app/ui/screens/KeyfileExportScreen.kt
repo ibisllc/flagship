@@ -12,24 +12,20 @@ package com.flagshipserver.app.ui.screens
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckBox
-import androidx.compose.material.icons.filled.CheckBoxOutlineBlank
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.outlined.Verified
+import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -40,20 +36,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSField
-import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
+import com.flagshipserver.app.ui.components.FSScreen
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.KeyfileExportPhase
 import com.flagshipserver.app.viewmodels.KeyfileExportViewModel
@@ -105,38 +100,24 @@ fun KeyfileExportScreen(
 
     val working = phase is KeyfileExportPhase.Working
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = FS.space.s6)
-            .semantics { contentDescription = "keyfile-export" },
+    FSScreen(
+        title = "Account backup",
+        onBack = { nav.popBackStack() },
+        modifier = Modifier.semantics { contentDescription = "keyfile-export" },
     ) {
-        Spacer(Modifier.height(FS.space.s8))
-        FSGhostButton(label = "← Back", onClick = { nav.popBackStack() })
-        Spacer(Modifier.height(FS.space.s3))
-        Text(
-            "ACCOUNT BACKUP",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
-        )
-        Spacer(Modifier.height(FS.space.s4))
-
         // Danger callout.
-        FSCard(padding = PaddingValues(FS.space.s4)) {
-            Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                Icon(Icons.Filled.Warning, contentDescription = null, tint = FS.colors.danger, modifier = Modifier.size(20.dp))
+        FSCard {
+            Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+                Icon(Icons.Outlined.WarningAmber, contentDescription = null, tint = FS.colors.danger, modifier = Modifier.size(24.dp))
                 Text(
                     "Anyone with both this file and its passphrase can take over your account and lock you out.",
-                    color = FS.colors.text,
-                    style = TextStyle(fontSize = 13.sp, lineHeight = 19.sp),
+                    style = MaterialTheme.typography.bodyMedium,
                 )
             }
         }
-        Spacer(Modifier.height(FS.space.s3))
 
         // Passphrase.
-        FSCard(padding = PaddingValues(FS.space.s4)) {
+        FSCard {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                 FSField(
                     value = passphrase,
@@ -151,33 +132,26 @@ fun KeyfileExportScreen(
                 FSField(
                     value = confirm,
                     onValueChange = vm::setConfirmPassphrase,
-                    label = "Confirm Passphrase",
+                    label = "Confirm passphrase",
                     error = if (confirm.isEmpty() || vm.passphrasesMatch) null else "Passphrases don't match.",
                     visualTransformation = PasswordVisualTransformation(),
                     modifier = Modifier.semantics { contentDescription = "keyfile-export-confirm" },
                 )
             }
         }
-        Spacer(Modifier.height(FS.space.s3))
 
         // Acknowledgment.
-        FSCard(padding = PaddingValues(FS.space.s4)) {
-            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                AckCheckbox(
-                    checked = ackControl,
-                    onToggle = { vm.setAckControl(!ackControl) },
-                    text = "I understand anyone with this file and passphrase controls my entire account.",
-                    cd = "keyfile-export-ack-control",
-                )
-            }
+        FSCard(padding = PaddingValues(vertical = FS.space.s2, horizontal = FS.space.s2)) {
+            AckCheckbox(
+                checked = ackControl,
+                onToggle = { vm.setAckControl(!ackControl) },
+                text = "I understand anyone with this file and passphrase controls my entire account.",
+                cd = "keyfile-export-ack-control",
+            )
         }
-        Spacer(Modifier.height(FS.space.s4))
 
         (phase as? KeyfileExportPhase.Failed)?.let { f ->
-            FSCard(padding = PaddingValues(FS.space.s3)) {
-                Text(f.message, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp))
-            }
-            Spacer(Modifier.height(FS.space.s2))
+            ErrorCard(f.message)
         }
 
         FSPrimaryButton(
@@ -190,20 +164,17 @@ fun KeyfileExportScreen(
         )
 
         if (saved) {
-            Spacer(Modifier.height(FS.space.s3))
-            FSCard(padding = PaddingValues(FS.space.s4)) {
-                Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                    Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = FS.colors.success, modifier = Modifier.size(20.dp))
+            FSCard {
+                Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+                    Icon(Icons.Outlined.Verified, contentDescription = null, tint = FS.colors.success, modifier = Modifier.size(24.dp))
                     Text(
                         "Backup saved. Keep it somewhere safe and offline.",
-                        color = FS.colors.text,
-                        style = TextStyle(fontSize = 13.sp),
+                        style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.semantics { contentDescription = "keyfile-export-saved" },
                     )
                 }
             }
             if (onSaved != null) {
-                Spacer(Modifier.height(FS.space.s3))
                 FSPrimaryButton(
                     label = "Continue into the app",
                     onClick = onSaved,
@@ -213,7 +184,6 @@ fun KeyfileExportScreen(
                 )
             }
         }
-        Spacer(Modifier.height(FS.space.s8))
     }
 }
 
@@ -221,21 +191,18 @@ fun KeyfileExportScreen(
 private fun AckCheckbox(checked: Boolean, onToggle: () -> Unit, text: String, cd: String) {
     Row(
         modifier = Modifier
-            .clickable { onToggle() }
-            .semantics { contentDescription = cd },
-        verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.small)
+            .toggleable(value = checked, role = Role.Checkbox, onValueChange = { onToggle() })
+            .semantics { contentDescription = cd }
+            .padding(end = FS.space.s2),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(
-            if (checked) Icons.Filled.CheckBox else Icons.Filled.CheckBoxOutlineBlank,
-            contentDescription = null,
-            tint = if (checked) FS.colors.primary else FS.colors.textMuted,
-            modifier = Modifier.size(22.dp),
-        )
+        Checkbox(checked = checked, onCheckedChange = null, modifier = Modifier.padding(FS.space.s3))
         Text(
             text,
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 13.sp, lineHeight = 19.sp),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f),
         )
     }
 }

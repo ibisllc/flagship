@@ -37,8 +37,9 @@ import com.flagshipserver.app.ui.theme.FSLayout
  */
 @Composable
 fun WelcomeScreen(nav: NavController) {
+    // Edge-to-edge: keep the buttons and the footer above the navigation bar.
     Column(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().navigationBarsPadding(),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
       // Reading column — clamp + center on expanded panes; a no-op on phones.
@@ -75,7 +76,7 @@ fun WelcomeScreen(nav: NavController) {
             )
             Spacer(Modifier.height(FS.space.s4))
             Text(
-                text = "A personal cloud you actually own. Your phone holds the keys; your box runs the services.",
+                text = "A personal cloud you actually own. Your phone holds the keys; your server runs the services.",
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 17.sp, lineHeight = 26.sp),
             )

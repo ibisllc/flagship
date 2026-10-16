@@ -48,10 +48,10 @@ class HomeScreenComposeTest {
         composeRule.onNodeWithText("Add/Import a server").assertIsDisplayed()
         composeRule.onNodeWithText("Harry's cloud > Pixel").assertIsDisplayed()
         composeRule.onNodeWithText("Build a service").assertDoesNotExist()
-        composeRule.onNodeWithText("YOUR SERVERS").assertDoesNotExist()
+        composeRule.onNodeWithText("Your servers").assertDoesNotExist()
     }
 
-    @Test fun loadedPods_rendersServerOverviewCard() {
+    @Test fun loadedPods_rendersTheServerAndRecentActivity() {
         val pod = PodInfo(
             podId = "pod-x", name = "Home", fqdn = "home.harry.flagship.services",
             status = PodInfo.Status.ONLINE,
@@ -81,10 +81,10 @@ class HomeScreenComposeTest {
                 )
             }
         }
-        // The server renders as an FSListRow (name title + fqdn subtitle) and
-        // the state-driven overview card repeats the fqdn — assert the
-        // unambiguous greeting + that the fqdn appears at least once.
+        // The server renders as a row (name title + fqdn subtitle); under the
+        // list, iOS's recent-activity section (no overview card).
         composeRule.onNodeWithText("harry > Pixel").assertIsDisplayed()
+        composeRule.onNodeWithText("No recent activity.").performScrollTo().assertIsDisplayed()
         composeRule.onAllNodesWithText("home.harry.flagship.services")
             .onFirst().assertIsDisplayed()
         // The status pill now renders in the row's stacked `below` slot (under
@@ -92,7 +92,7 @@ class HomeScreenComposeTest {
         composeRule.onAllNodesWithText("Online").onFirst().assertIsDisplayed()
     }
 
-    @Test fun failedState_rendersErrorCardWithMessage() {
+    @Test fun failedState_showsNoErrorCardOnHome() {
         composeRule.setContent {
             FlagshipTheme {
                 HomeScreen(
@@ -106,7 +106,9 @@ class HomeScreenComposeTest {
                 )
             }
         }
-        composeRule.onNodeWithText("backend ate the request").performScrollTo().assertIsDisplayed()
+        // Like iOS: Home never shows "couldn't load"; the empty state still does its job.
+        composeRule.onNodeWithText("backend ate the request").assertDoesNotExist()
+        composeRule.onNodeWithText("Your account is ready").assertIsDisplayed()
     }
 
     @Test fun aRefusedServerList_isLockedNotEmpty() {

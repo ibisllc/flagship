@@ -8,8 +8,7 @@ package com.flagshipserver.app.ui.screens
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,10 +19,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Close
@@ -38,7 +38,9 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -49,13 +51,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.flagshipserver.app.api.VibeCodeAttachment
 import com.flagshipserver.app.core.AttachKind
 import com.flagshipserver.app.core.ChatAttachments
@@ -89,7 +90,6 @@ fun ModelMenuChip(
             expanded = open,
             onDismissRequest = { open = false },
             modifier = Modifier.widthIn(min = 240.dp, max = 320.dp),
-            containerColor = FS.colors.surface,
         ) {
             ModelMenuItems(menu, choice, onChoice = onChoice, onClose = { open = false })
         }
@@ -144,7 +144,7 @@ fun ModelMenuItems(
                     )
                     if (menu.reason == "rejected") {
                         Spacer(Modifier.height(FS.space.s1))
-                        Text(ModelMenus.KEY_REFUSED, color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp))
+                        Text(ModelMenus.KEY_REFUSED, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
@@ -160,23 +160,24 @@ private fun MenuRow(title: String, subtitle: String?, selected: Boolean, tag: St
             Column(Modifier.padding(vertical = FS.space.s1)) {
                 Text(
                     title,
-                    color = FS.colors.text,
-                    style = TextStyle(fontSize = 14.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal),
                 )
                 if (subtitle != null) {
-                    Text(subtitle, color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp))
+                    Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 }
             }
         },
         trailingIcon = {
-            if (selected) Icon(Icons.Outlined.Check, contentDescription = "Selected", tint = FS.colors.primary, modifier = Modifier.size(18.dp))
+            if (selected) Icon(Icons.Outlined.Check, contentDescription = "Selected", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
         },
         onClick = onClick,
         modifier = Modifier.testTag(tag),
     )
 }
 
-/** A small rounded control in the app's chip style. */
+/** A small control in Material's chip style (8 dp corners, 32 dp tall,
+ *  an outline, a tonal fill when selected). */
 @Composable
 fun Pill(
     label: String,
@@ -186,27 +187,34 @@ fun Pill(
     trailing: ImageVector? = null,
     onClick: (() -> Unit)? = null,
 ) {
-    val shape = RoundedCornerShape(FS.radius.pill)
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        modifier = modifier
-            .clip(shape)
-            .background(if (selected) FS.colors.primary.copy(alpha = 0.14f) else FS.colors.surfaceSunken)
-            .border(1.dp, if (selected) FS.colors.primary else FS.colors.border, shape)
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-    ) {
-        val tint = if (selected) FS.colors.primary else FS.colors.textMuted
-        if (leading != null) Icon(leading, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
-        Text(
-            label,
-            color = if (selected) FS.colors.primary else FS.colors.text,
-            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        if (trailing != null) Icon(trailing, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
+    val scheme = MaterialTheme.colorScheme
+    val shape = MaterialTheme.shapes.small
+    val container = if (selected) scheme.secondaryContainer else Color.Transparent
+    val content = if (selected) scheme.onSecondaryContainer else scheme.onSurfaceVariant
+    val border = BorderStroke(1.dp, if (selected) Color.Transparent else scheme.outline)
+    val body: @Composable () -> Unit = {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
+            modifier = Modifier
+                .heightIn(min = 32.dp)
+                .padding(start = if (leading != null) 8.dp else 12.dp, end = if (trailing != null) 8.dp else 12.dp),
+        ) {
+            if (leading != null) Icon(leading, contentDescription = null, tint = if (selected) content else scheme.primary, modifier = Modifier.size(18.dp))
+            Text(
+                label,
+                color = if (selected) content else scheme.onSurface,
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (trailing != null) Icon(trailing, contentDescription = null, tint = content, modifier = Modifier.size(18.dp))
+        }
+    }
+    if (onClick != null) {
+        Surface(onClick = onClick, modifier = modifier, shape = shape, color = container, contentColor = content, border = border) { body() }
+    } else {
+        Surface(modifier = modifier, shape = shape, color = container, contentColor = content, border = border) { body() }
     }
 }
 
@@ -224,7 +232,6 @@ fun EffortChip(efforts: List<String>, effort: String?, onEffort: (String) -> Uni
         DropdownMenu(
             expanded = open,
             onDismissRequest = { open = false },
-            containerColor = FS.colors.surface,
         ) {
             EffortItems(efforts, effort) {
                 onEffort(it)
@@ -279,7 +286,6 @@ fun GroupedModelMenuChip(
             expanded = open,
             onDismissRequest = { open = false },
             modifier = Modifier.widthIn(min = 240.dp, max = 320.dp),
-            containerColor = FS.colors.surface,
         ) {
             GroupedModelMenuItems(groups, menus, groupId, choice, onPick, onClose = { open = false })
         }
@@ -297,11 +303,11 @@ fun GroupedModelMenuItems(
     onClose: () -> Unit,
 ) {
     groups.forEachIndexed { i, g ->
-        if (i > 0) HorizontalDivider(color = FS.colors.border)
+        if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Text(
             g.title,
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium),
+            color = MaterialTheme.colorScheme.primary,
+            style = MaterialTheme.typography.titleSmall,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier
@@ -317,8 +323,8 @@ fun GroupedModelMenuItems(
         if (m == null || note != null) {
             Text(
                 note.orEmpty(),
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(horizontal = FS.space.s4, vertical = FS.space.s2),
             )
         } else {
@@ -337,41 +343,46 @@ private fun iconFor(kind: AttachKind): ImageVector = when (kind) {
     AttachKind.DOCUMENT -> Icons.Outlined.PictureAsPdf
 }
 
-/** A staged or sent attachment: its name and an icon by kind. */
+/** A staged or sent attachment: its name and an icon by kind (Material's
+ *  input-chip look). */
 @Composable
 fun AttachmentChip(a: VibeCodeAttachment, onRemove: (() -> Unit)? = null) {
-    val shape = RoundedCornerShape(FS.radius.sm)
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = Modifier
-            .clip(shape)
-            .background(FS.colors.surfaceSunken)
-            .border(1.dp, FS.colors.border, shape)
-            .padding(start = 10.dp, end = if (onRemove != null) 4.dp else 10.dp, top = 6.dp, bottom = 6.dp)
-            .widthIn(max = 220.dp),
+    val scheme = MaterialTheme.colorScheme
+    Surface(
+        shape = MaterialTheme.shapes.small,
+        color = scheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, scheme.outlineVariant),
+        modifier = Modifier.widthIn(max = 240.dp),
     ) {
-        Icon(iconFor(ChatAttachments.kindOf(a)), contentDescription = null, tint = FS.colors.primary, modifier = Modifier.size(16.dp))
-        Text(
-            ChatAttachments.displayName(a),
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 13.sp),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f, fill = false),
-        )
-        if (onRemove != null) {
-            Icon(
-                Icons.Outlined.Close,
-                contentDescription = "Remove ${ChatAttachments.displayName(a)}",
-                tint = FS.colors.textMuted,
-                modifier = Modifier
-                    .size(24.dp)
-                    .clip(RoundedCornerShape(FS.radius.pill))
-                    .clickable(onClick = onRemove)
-                    .padding(4.dp)
-                    .testTag("attachment-remove"),
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
+            modifier = Modifier
+                .heightIn(min = 32.dp)
+                .padding(start = 8.dp, end = if (onRemove != null) 2.dp else 12.dp),
+        ) {
+            Icon(iconFor(ChatAttachments.kindOf(a)), contentDescription = null, tint = scheme.primary, modifier = Modifier.size(18.dp))
+            Text(
+                ChatAttachments.displayName(a),
+                color = scheme.onSurface,
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
             )
+            if (onRemove != null) {
+                Icon(
+                    Icons.Outlined.Close,
+                    contentDescription = "Remove ${ChatAttachments.displayName(a)}",
+                    tint = scheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onRemove)
+                        .padding(5.dp)
+                        .testTag("attachment-remove"),
+                )
+            }
         }
     }
 }
@@ -392,12 +403,12 @@ fun AttachmentChips(list: List<VibeCodeAttachment>, onRemove: ((Int) -> Unit)? =
 @Composable
 fun AttachmentNotice(staged: List<VibeCodeAttachment>) {
     Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Icon(Icons.Outlined.Visibility, contentDescription = null, tint = FS.colors.textMuted, modifier = Modifier.size(16.dp).padding(top = 1.dp))
+        Icon(Icons.Outlined.Visibility, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(16.dp).padding(top = 1.dp))
         Text(
             ChatAttachments.NOTICE +
                 if (ChatAttachments.hasSampleData(staged)) " " + ChatAttachments.SAMPLE_DATA_NOTE else "",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.testTag("attachment-notice"),
         )
     }
@@ -408,8 +419,8 @@ fun AttachmentNotice(staged: List<VibeCodeAttachment>) {
 fun CreditsLine(credits: Double) {
     Text(
         ModelMenus.creditsLine(credits),
-        color = FS.colors.textMuted,
-        style = TextStyle(fontSize = 11.sp),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = MaterialTheme.typography.labelSmall,
         modifier = Modifier.testTag("message-credits"),
     )
 }

@@ -6,21 +6,12 @@
 
 package com.flagshipserver.app.ui.screens
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -29,29 +20,22 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.rememberCoroutineScope
-import com.flagshipserver.app.keystore.BiometricAuthority
-import com.flagshipserver.app.viewmodels.SavedKeyRow
-import kotlinx.coroutines.launch
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.flagshipserver.app.core.AiCredential
@@ -60,17 +44,25 @@ import com.flagshipserver.app.core.AiRelay
 import com.flagshipserver.app.core.FreeAiMint
 import com.flagshipserver.app.core.FreeAiService
 import com.flagshipserver.app.core.LocalToastCenter
+import com.flagshipserver.app.keystore.BiometricAuthority
 import com.flagshipserver.app.ui.components.FSCard
+import com.flagshipserver.app.ui.components.FSChip
 import com.flagshipserver.app.ui.components.FSDangerButton
 import com.flagshipserver.app.ui.components.FSField
-import com.flagshipserver.app.ui.components.FSGhostButton
+import com.flagshipserver.app.ui.components.FSGroup
+import com.flagshipserver.app.ui.components.FSNote
 import com.flagshipserver.app.ui.components.FSPrimaryButton
+import com.flagshipserver.app.ui.components.FSRow
+import com.flagshipserver.app.ui.components.FSScreen
 import com.flagshipserver.app.ui.components.FSSecondaryButton
+import com.flagshipserver.app.ui.components.FSSectionHeader
 import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.viewmodels.AiKeysViewModel
+import com.flagshipserver.app.viewmodels.SavedKeyRow
+import kotlinx.coroutines.launch
 
 private const val REASSURANCE =
-    "Your key stays on this device and your own server. flagshipserver.com never sees it."
+    "AI keys power app builds but stay on this phone. Your server sends them only to the provider; Flagship never sees them."
 
 /** Copy for the build-flow key step. Mirror of iOS BuildKeyScreen. */
 object AiKeyStep {
@@ -146,30 +138,13 @@ fun AiKeyStepScreen(
         if (vm.shouldAutoUseFreeAi()) useFreeAi()
     }
 
-    val scroll = rememberScrollState()
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(scroll)
-            .padding(horizontal = FS.space.s6),
-    ) {
-        Spacer(Modifier.height(FS.space.s8))
-        FSGhostButton(label = "← Back", onClick = onBack)
-        Spacer(Modifier.height(FS.space.s3))
-        Text(
-            AiKeyStep.TITLE,
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
-        )
-        Spacer(Modifier.height(FS.space.s4))
-
+    FSScreen(title = AiKeyStep.TITLE, onBack = onBack) {
         FlagshipInferenceStepRow(
             state = freeAi,
             busy = minting,
             lastUsed = activeId == AiKeyStore.FLAGSHIP_INFERENCE_ID,
             onUse = { scope.launch { useFreeAi() } },
         )
-        Spacer(Modifier.height(FS.space.s4))
 
         if (showForm) {
             AiKeyEntryForm(
@@ -182,62 +157,52 @@ fun AiKeyStepScreen(
                 confirmTag = "build-key-add-save",
             )
         } else {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
-                modifier = Modifier
-                    .clip(RoundedCornerShape(FS.radius.sm))
-                    .clickable { showForm = true }
-                    .padding(vertical = FS.space.s2)
-                    .testTag("build-key-add"),
-            ) {
-                Icon(Icons.Filled.Add, contentDescription = null, tint = FS.colors.primary, modifier = Modifier.size(20.dp))
-                Text(
-                    AiKeyStep.ADD_LABEL,
-                    color = FS.colors.primary,
-                    style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+            FSGroup {
+                FSRow(
+                    title = AiKeyStep.ADD_LABEL,
+                    icon = Icons.Filled.Add,
+                    iconTint = MaterialTheme.colorScheme.primary,
+                    titleColor = MaterialTheme.colorScheme.primary,
+                    onClick = { showForm = true },
+                    modifier = Modifier.testTag("build-key-add"),
                 )
             }
         }
 
         if (keys.isNotEmpty()) {
-            Spacer(Modifier.height(FS.space.s5))
-            Text(
-                "Saved keys",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium),
-            )
-            Spacer(Modifier.height(FS.space.s2))
-            AiKeysViewModel.ordered(keys, activeId).forEach { row ->
-                SavedKeyStepRow(
-                    row = row,
-                    lastUsed = row.id == activeId,
-                    onUse = { vm.choose(row.id)?.let(onConfirm) },
-                    onDelete = { confirmDelete = row },
-                )
-                Spacer(Modifier.height(FS.space.s2))
-            }
-            deleteError?.let {
-                Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 14.sp))
+            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                FSSectionHeader("Saved keys")
+                AiKeysViewModel.ordered(keys, activeId).forEach { row ->
+                    SavedKeyStepRow(
+                        row = row,
+                        lastUsed = row.id == activeId,
+                        onUse = { vm.choose(row.id)?.let(onConfirm) },
+                        onDelete = { confirmDelete = row },
+                    )
+                }
+                deleteError?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                }
             }
         }
 
-        Spacer(Modifier.height(FS.space.s4))
-        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+        Row(
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
+            modifier = Modifier.padding(horizontal = FS.space.s1),
+        ) {
             Icon(
                 Icons.Outlined.Lock,
                 contentDescription = null,
-                tint = FS.colors.primary,
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(18.dp),
             )
             Text(
                 AiKeyStep.SECURITY_NOTE,
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyMedium,
             )
         }
-
-        Spacer(Modifier.height(FS.space.s12))
     }
 
     confirmDelete?.let { row ->
@@ -264,7 +229,7 @@ fun AiKeyStepScreen(
                         }
                     },
                     modifier = Modifier.testTag("build-key-delete-confirm"),
-                ) { Text("Delete key", color = FS.colors.danger) }
+                ) { Text("Delete key", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { confirmDelete = null }) { Text("Cancel") } },
         )
@@ -273,33 +238,28 @@ fun AiKeyStepScreen(
 
 @Composable
 private fun SavedKeyStepRow(row: SavedKeyRow, lastUsed: Boolean, onUse: () -> Unit, onDelete: () -> Unit) {
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    row.label,
-                    color = FS.colors.text,
-                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
-                    maxLines = 1,
-                )
+    FSCard {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(row.label, style = MaterialTheme.typography.titleMedium, maxLines = 1)
                 Text(
                     row.maskedSlug,
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
                     maxLines = 1,
                 )
                 Text(
                     AiRelay.caption(row.relay),
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 12.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
                     modifier = Modifier.testTag("build-key-relay-caption"),
                 )
                 if (lastUsed) {
-                    Text("Last used", color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp))
+                    Text("Last used", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodySmall)
                 }
             }
             IconButton(onClick = onDelete, modifier = Modifier.testTag("build-key-delete")) {
-                Icon(Icons.Outlined.Delete, contentDescription = "Delete ${row.label}", tint = FS.colors.danger)
+                Icon(Icons.Outlined.Delete, contentDescription = "Delete ${row.label}", tint = MaterialTheme.colorScheme.error)
             }
             FSPrimaryButton(
                 label = "Use this",
@@ -316,6 +276,7 @@ private fun SavedKeyStepRow(row: SavedKeyRow, lastUsed: Boolean, onUse: () -> Un
  * (on by default). `onSubmit` carries (provider, apiKey, label, baseUrl?,
  * save, relay).
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AiKeyEntryForm(
     confirmLabel: String,
@@ -331,28 +292,28 @@ fun AiKeyEntryForm(
     var save by remember { mutableStateOf(true) }
     var relay by remember { mutableStateOf(true) }
 
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Column {
-            Text(
-                "Provider",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium),
-            )
-            Spacer(Modifier.height(FS.space.s2))
-            Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-                AiKeyStore.SUPPORTED_PROVIDERS.forEach { p ->
-                    ProviderPickChip(
-                        label = p,
-                        selected = p == provider,
-                        onClick = { provider = p },
-                        // Stable per-provider tag so a UI test can pick e.g.
-                        // "openai" (`ai-key-provider-openai`).
-                        modifier = Modifier.testTag("ai-key-provider-$p"),
-                    )
+    FSCard {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
+                Text(
+                    "Provider",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                    AiKeyStore.SUPPORTED_PROVIDERS.forEach { p ->
+                        FSChip(
+                            label = p,
+                            selected = p == provider,
+                            onClick = { provider = p },
+                            // Stable per-provider tag so a UI test can pick e.g.
+                            // "openai" (`ai-key-provider-openai`).
+                            modifier = Modifier.testTag("ai-key-provider-$p"),
+                        )
+                    }
                 }
             }
 
-            Spacer(Modifier.height(FS.space.s3))
             FSField(
                 value = apiKey,
                 onValueChange = { apiKey = it },
@@ -362,14 +323,12 @@ fun AiKeyEntryForm(
                 // test's performTextInput finds a focusable node.
                 fieldTag = "ai-key-field",
             )
-            Spacer(Modifier.height(FS.space.s2))
             FSField(
                 value = label,
                 onValueChange = { label = it },
                 label = "Label (optional)",
                 placeholder = "Personal",
             )
-            Spacer(Modifier.height(FS.space.s2))
             FSField(
                 value = baseUrl,
                 onValueChange = { baseUrl = it },
@@ -378,28 +337,16 @@ fun AiKeyEntryForm(
             )
 
             if (showSaveToggle) {
-                Spacer(Modifier.height(FS.space.s3))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            "Save on this device",
-                            color = FS.colors.text,
-                            style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
-                        )
-                        Text(
-                            "Recall it next time without re-typing. Stored encrypted on this device only.",
-                            color = FS.colors.textMuted,
-                            style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp),
-                        )
-                    }
-                    Switch(checked = save, onCheckedChange = { save = it })
-                }
+                ToggleRow(
+                    title = "Save on this device",
+                    note = "Recall it next time without re-typing. Stored encrypted on this device only.",
+                    checked = save,
+                    onCheckedChange = { save = it },
+                )
             }
 
-            Spacer(Modifier.height(FS.space.s3))
             RelayToggleRow(checked = relay, onCheckedChange = { relay = it }, tag = "ai-key-relay")
 
-            Spacer(Modifier.height(FS.space.s4))
             FSPrimaryButton(
                 label = confirmLabel,
                 onClick = { onSubmit(provider, apiKey, label, baseUrl, save, relay) },
@@ -408,30 +355,42 @@ fun AiKeyEntryForm(
                 modifier = Modifier.testTag(confirmTag),
             )
             if (onCancel != null) {
-                Spacer(Modifier.height(FS.space.s2))
-                FSGhostButton(label = "Cancel", onClick = onCancel, block = true)
+                FSSecondaryButton(label = "Cancel", onClick = onCancel, block = true)
             }
         }
     }
 }
 
 @Composable
-private fun RelayToggleRow(checked: Boolean, onCheckedChange: (Boolean) -> Unit, tag: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
+private fun ToggleRow(
+    title: String,
+    note: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    switchModifier: Modifier = Modifier,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
             Text(
-                AiRelay.TOGGLE_LABEL,
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
-            )
-            Text(
-                AiRelay.TOGGLE_NOTE,
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp),
+                note,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
             )
         }
-        Switch(checked = checked, onCheckedChange = onCheckedChange, modifier = Modifier.testTag(tag))
+        Switch(checked = checked, onCheckedChange = onCheckedChange, modifier = switchModifier)
     }
+}
+
+@Composable
+private fun RelayToggleRow(checked: Boolean, onCheckedChange: (Boolean) -> Unit, tag: String) {
+    ToggleRow(
+        title = AiRelay.TOGGLE_LABEL,
+        note = AiRelay.TOGGLE_NOTE,
+        checked = checked,
+        onCheckedChange = onCheckedChange,
+        switchModifier = Modifier.testTag(tag),
+    )
 }
 
 /**
@@ -444,12 +403,15 @@ fun RelayFailureAction(message: String?) {
     var keyId by remember(message) { mutableStateOf(AiRelay.keyToTurnOff(message)) }
     var turnedOff by remember(message) { mutableStateOf(false) }
     if (turnedOff) {
-        Spacer(Modifier.height(FS.space.s2))
-        Text(AiRelay.TURNED_OFF, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp))
+        Text(
+            AiRelay.TURNED_OFF,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(top = FS.space.s2),
+        )
         return
     }
     val id = keyId ?: return
-    Spacer(Modifier.height(FS.space.s2))
     FSSecondaryButton(
         AiRelay.TURN_OFF_ACTION,
         onClick = {
@@ -458,28 +420,8 @@ fun RelayFailureAction(message: String?) {
             turnedOff = true
         },
         block = true,
-        modifier = Modifier.testTag("ai-relay-turn-off"),
+        modifier = Modifier.padding(top = FS.space.s2).testTag("ai-relay-turn-off"),
     )
-}
-
-@Composable
-private fun ProviderPickChip(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val bg = if (selected) FS.colors.fill else FS.colors.surfaceSunken
-    val fg = if (selected) FS.colors.onAccent else FS.colors.textMuted
-    Box(
-        modifier
-            .clip(RoundedCornerShape(FS.radius.pill))
-            .background(bg)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-    ) {
-        Text(label, color = fg, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium))
-    }
 }
 
 /**
@@ -498,30 +440,12 @@ fun AiKeysManagerScreen(
     var showForm by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { vm.loadFreeAi(freeAiService) }
 
-    val scroll = rememberScrollState()
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(scroll)
-            .padding(horizontal = FS.space.s6),
+    FSScreen(
+        title = "AI keys",
+        titleTag = "ai-keys-title",
+        onBack = { nav.popBackStack() },
+        subtitle = REASSURANCE,
     ) {
-        Spacer(Modifier.height(FS.space.s8))
-        FSGhostButton(label = "← Back", onClick = { nav.popBackStack() })
-        Spacer(Modifier.height(FS.space.s3))
-        Text(
-            "AI keys",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
-            modifier = Modifier.testTag("ai-keys-title"),
-        )
-        Spacer(Modifier.height(FS.space.s2))
-        Text(
-            REASSURANCE,
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
-        )
-        Spacer(Modifier.height(FS.space.s5))
-
         FlagshipInferenceSettingsRow(
             state = freeAi,
             isDefault = activeId == AiKeyStore.FLAGSHIP_INFERENCE_ID,
@@ -529,86 +453,69 @@ fun AiKeysManagerScreen(
             onAddOwnKey = { showForm = true },
             defaultModel = { DefaultModelRow(AiKeyStore.FLAGSHIP_INFERENCE_ID, null) },
         )
-        Spacer(Modifier.height(FS.space.s4))
 
         if (keys.isEmpty()) {
-            Text(
-                "No keys saved yet.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 14.sp),
-            )
+            FSNote("No keys saved yet.")
         } else {
             keys.forEach { row ->
                 val isActive = row.id == activeId
-                FSCard(padding = PaddingValues(FS.space.s4)) {
-                    Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    row.maskedSlug,
-                                    color = FS.colors.text,
-                                    style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
-                                )
-                                Spacer(Modifier.height(2.dp))
+                FSCard {
+                    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(row.maskedSlug, style = MaterialTheme.typography.titleMedium, maxLines = 1)
                                 Text(
                                     AiRelay.caption(row.relay),
-                                    color = FS.colors.textMuted,
-                                    style = TextStyle(fontSize = 12.sp),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.bodySmall,
                                 )
                                 if (isActive) {
-                                    Spacer(Modifier.height(2.dp))
                                     Text(
                                         "Default for new builds",
-                                        color = FS.colors.primary,
-                                        style = TextStyle(fontSize = 12.sp),
+                                        color = MaterialTheme.colorScheme.primary,
+                                        style = MaterialTheme.typography.bodySmall,
                                     )
                                 }
                             }
                             FSDangerButton(label = "Delete", onClick = { vm.delete(row.id) })
                         }
-                        Spacer(Modifier.height(FS.space.s3))
                         RelayToggleRow(
                             checked = row.relay,
                             onCheckedChange = { vm.setRelay(row.id, it) },
                             tag = "ai-key-relay-${row.id}",
                         )
-                        Spacer(Modifier.height(FS.space.s3))
                         DefaultModelRow(row.id, remember(row.id) { vm.credentialFor(row.id) })
                         // "Make default" on every non-active row — mirrors iOS's
                         // AiKeysScreen + the webapp providers manager.
                         if (!isActive) {
-                            Spacer(Modifier.height(FS.space.s2))
-                            FSGhostButton(
+                            FSSecondaryButton(
                                 label = "Make default",
                                 onClick = { vm.setActive(row.id) },
                             )
                         }
                     }
                 }
-                Spacer(Modifier.height(FS.space.s2))
             }
         }
 
-        Spacer(Modifier.height(FS.space.s4))
         if (showForm) {
             AiKeyEntryForm(
                 confirmLabel = "Save key",
                 // Settings always saves the key on this device, so no toggle.
                 showSaveToggle = false,
+                onCancel = { showForm = false },
                 onSubmit = { provider, apiKey, label, baseUrl, _, relay ->
                     if (vm.add(provider, apiKey, label, baseUrl, relay)) showForm = false
                 },
             )
         } else {
-            FSSecondaryButton(
-                label = "Add a key",
+            FSPrimaryButton(
+                label = "Add an AI key",
                 onClick = { showForm = true },
                 block = true,
                 modifier = Modifier.testTag("ai-key-add"),
             )
         }
-
-        Spacer(Modifier.height(FS.space.s12))
     }
 }
 
@@ -630,12 +537,11 @@ fun DefaultModelRow(keyId: String, credential: AiCredential?) {
         choice = c
         AiKeyStore.setDefaultModel(keyId, c)
     }
-    Column(Modifier.testTag("default-model-$keyId")) {
-        Text("Default model", color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium))
-        Spacer(Modifier.height(FS.space.s1))
+    Column(Modifier.testTag("default-model-$keyId"), verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
+        Text("Default model", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge)
         val m = menu
         if (m == null) {
-            Text(com.flagshipserver.app.core.FreeAiCopy.CHECKING, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+            Text(com.flagshipserver.app.core.FreeAiCopy.CHECKING, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         } else {
             ChatModelBar(m, choice, onChoice = ::save)
         }

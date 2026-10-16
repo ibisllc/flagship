@@ -99,7 +99,7 @@ class GymOctoberTest : GymBase() {
         composeRule.onNodeWithTag("service-detail-access-row").performScrollTo().performClick()
         waitUntilExists("service-access-restrict-toggle", timeoutMs = 15_000)
         waitUntilTextExists("Anyone can open it", timeoutMs = 15_000)
-        waitUntilTextExists("MEMBERS (")
+        waitUntilTextExists("Members (")
         gymShot("access-control-open")
         composeRule.onNodeWithTag("service-access-mode-members").performClick()
         waitUntilExists("service-access-members-only-confirm")
