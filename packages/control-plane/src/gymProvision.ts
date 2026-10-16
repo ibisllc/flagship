@@ -84,6 +84,10 @@ export interface GymProvisionBody {
   ownerAidPubHex?: unknown;
   region?: unknown;
   size?: unknown;
+  /** The box's SWK (64 hex) instead of a random one: a migration's two boxes share it. */
+  swkHex?: unknown;
+  /** FLAGSHIP_BACKUP_INTERVAL_MS for the box (≥ 60000). */
+  backupIntervalMs?: unknown;
 }
 
 interface ParsedAuthCode {
@@ -371,12 +375,23 @@ export async function handleGymProvision(
   //    the box self-mints entitlements (the gym-only affordance). Reuses the
   //    exact builder the demo path uses; the blob JSON is passed through
   //    verbatim so what the box installs is byte-for-byte what the app signed.
+  if (body.swkHex !== undefined && (typeof body.swkHex !== "string" || !HEX64.test(body.swkHex))) {
+    return malformed("swkHex must be 64-hex");
+  }
+  if (
+    body.backupIntervalMs !== undefined &&
+    (typeof body.backupIntervalMs !== "number" || !Number.isSafeInteger(body.backupIntervalMs) || body.backupIntervalMs < 60_000)
+  ) {
+    return malformed("backupIntervalMs must be an integer ≥ 60000");
+  }
   const userData = buildCloudConfigUserData({
     installBlobJson: JSON.stringify(body.installBlob),
     installerGitRef: blob.installerGitRef || "main",
     demoUserIrkPrivHex: body.irkPrivHex,
     ...(ownerAidPubHex ? { ownerAidPubHex } : {}),
     ...(adminRoot ? { adminRootPubHex: adminRoot.pubHex, adminRootPrivHex: adminRoot.privHex } : {}),
+    ...(typeof body.swkHex === "string" ? { swkHex: body.swkHex } : {}),
+    ...(typeof body.backupIntervalMs === "number" ? { backupIntervalMs: body.backupIntervalMs } : {}),
   });
 
   // 7. Provision the box — mirrors the demo create path, INCLUDING the SSH

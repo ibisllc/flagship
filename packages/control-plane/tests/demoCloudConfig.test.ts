@@ -34,6 +34,24 @@ describe("buildCloudConfigUserData", () => {
     expect(irk).toBe(DEMO_IRK_PRIV);
   });
 
+  it("gym: pins a given SWK and backup interval instead of a random SWK", () => {
+    const swk = "ab".repeat(32);
+    const bootstrapOf = (extra: Record<string, unknown>) => {
+      const yaml = buildCloudConfigUserData({ installBlobJson: "{}", installerGitRef: "main", demoUserIrkPrivHex: DEMO_IRK_PRIV, ...extra });
+      const all = [...yaml.matchAll(/content:\s*([A-Za-z0-9+/=]+)/g)];
+      return Buffer.from(all[1]![1]!, "base64").toString("utf8");
+    };
+    const pinned = bootstrapOf({ swkHex: swk, backupIntervalMs: 60_000 });
+    expect(pinned).toContain(`printf '%s' '${swk}' > /var/flagship/swk.hex`);
+    expect(pinned).not.toContain("openssl rand -hex 32 > /var/flagship/swk.hex");
+    expect(pinned).toMatch(/FLAGSHIP_LLM_DEFAULT_MODEL_OPENAI=gpt-4o-mini\nFLAGSHIP_BACKUP_INTERVAL_MS=60000\nENVEOF/);
+    const random = bootstrapOf({});
+    expect(random).toContain("openssl rand -hex 32 > /var/flagship/swk.hex");
+    expect(random).not.toContain("FLAGSHIP_BACKUP_INTERVAL_MS");
+    expect(() => bootstrapOf({ swkHex: "zz" })).toThrow(/swkHex/);
+    expect(() => bootstrapOf({ backupIntervalMs: 5 })).toThrow(/backupIntervalMs/);
+  });
+
   it("rejects a demoUserIrkPrivHex that is not 32-byte hex", () => {
     expect(() =>
       buildCloudConfigUserData({

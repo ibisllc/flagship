@@ -390,6 +390,21 @@ describe("handleGymProvision (Phase 1)", () => {
       (await handleGymProvision(deps, { installBlob: bj2, blobSignature: blobSigHex, irkPrivHex: "ff" }))
         .status,
     ).toBe(400);
+    // A migration seam that isn't a key / a sane interval.
+    const { blobJson: bj3, blobSigHex: sig3 } = composeRecipe();
+    expect((await handleGymProvision(deps, { installBlob: bj3, blobSignature: sig3, irkPrivHex: IRK_PRIV_HEX, swkHex: "xyz" })).status).toBe(400);
+    expect((await handleGymProvision(deps, { installBlob: bj3, blobSignature: sig3, irkPrivHex: IRK_PRIV_HEX, backupIntervalMs: 1000 })).status).toBe(400);
+  });
+
+  it("passes a shared SWK and a backup interval to the box (migration's two boxes)", async () => {
+    const { deps, hetzner } = await mkDeps();
+    const { blobJson, blobSigHex } = composeRecipe();
+    const swkHex = "5a".repeat(32);
+    const r = await handleGymProvision(deps, { installBlob: blobJson, blobSignature: blobSigHex, irkPrivHex: IRK_PRIV_HEX, swkHex, backupIntervalMs: 90_000 });
+    expect(r.status).toBe(200);
+    const userData = String((hetzner.calls[0] as { userData?: string }).userData ?? "");
+    const blocks = [...userData.matchAll(/content:\s*([A-Za-z0-9+/=]+)/g)].map((m) => Buffer.from(m[1]!, "base64").toString("utf8"));
+    expect(blocks.some((b) => b.includes(`printf '%s' '${swkHex}' > /var/flagship/swk.hex`) && b.includes("FLAGSHIP_BACKUP_INTERVAL_MS=90000"))).toBe(true);
   });
 
   it("rejects an expired authCode (400)", async () => {

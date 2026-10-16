@@ -68,6 +68,15 @@ export function buildCloudConfigUserData(args: {
    */
   adminRootPubHex?: string;
   adminRootPrivHex?: string;
+  /**
+   * GYM ONLY: the box's sealing key (SWK) instead of a random one. A migration's
+   * new box must hold the old box's SWK to open its backup; a real phone derives
+   * both from the account (deriveSWK), so the gym passes the same derived value
+   * to both boxes. Absent ⇒ a random SWK, as before.
+   */
+  swkHex?: string;
+  /** GYM ONLY: FLAGSHIP_BACKUP_INTERVAL_MS (the peer-backup pass; ≥ 60 s, default 6 h). */
+  backupIntervalMs?: number;
 }): string {
   const blobB64 = b64Utf8(args.installBlobJson);
   if (!/^[0-9a-f]{64}$/i.test(args.demoUserIrkPrivHex)) {
@@ -88,6 +97,17 @@ export function buildCloudConfigUserData(args: {
   if (args.adminRootPrivHex !== undefined && !/^[0-9a-f]{64}$/i.test(args.adminRootPrivHex)) {
     throw new Error("buildCloudConfigUserData: adminRootPrivHex must be 32-byte hex");
   }
+  if (args.swkHex !== undefined && !/^[0-9a-f]{64}$/i.test(args.swkHex)) {
+    throw new Error("buildCloudConfigUserData: swkHex must be 32-byte hex");
+  }
+  if (args.backupIntervalMs !== undefined && (!Number.isSafeInteger(args.backupIntervalMs) || args.backupIntervalMs < 60_000)) {
+    throw new Error("buildCloudConfigUserData: backupIntervalMs must be an integer ≥ 60000");
+  }
+  const swkLine = args.swkHex
+    ? `printf '%s' '${args.swkHex.toLowerCase()}' > /var/flagship/swk.hex`
+    : `openssl rand -hex 32 > /var/flagship/swk.hex 2>/dev/null \\
+    || head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \\n' > /var/flagship/swk.hex`;
+  const backupEnvLine = args.backupIntervalMs !== undefined ? `\nFLAGSHIP_BACKUP_INTERVAL_MS=${args.backupIntervalMs}` : "";
   // Pinned at TEMPLATE time (deterministic-from-KEK, like the git-ref) — it is
   // NOT in the install blob the bootstrap reads on the VPS.
   const ownerAidConfigField = args.ownerAidPubHex
@@ -354,8 +374,7 @@ chmod 600 /etc/flagship/config.json
 # generate a random 32-byte SWK here: this is what flips a demo box from
 # "cert+serve only" (GET /api/services → 503) to a full app-hosting box. (The
 # demo root is plaintext, so this is a TEST sealing key, not a real at-rest key.)
-openssl rand -hex 32 > /var/flagship/swk.hex 2>/dev/null \\
-    || head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \\n' > /var/flagship/swk.hex
+${swkLine}
 chmod 600 /var/flagship/swk.hex
 cat > /etc/flagship/daemon.env <<ENVEOF
 FLAGSHIP_SUBDOMAIN=$SERVER_DOMAIN
@@ -364,7 +383,7 @@ FLAGSHIP_CONTROL_PLANE_BASE_URL=$CTRL_BASE
 FLAGSHIP_CONFIG=/etc/flagship/config.json
 FLAGSHIP_SWK_HEX=$(cat /var/flagship/swk.hex)
 FLAGSHIP_PSK_PUB_HEX=$PHONE_DELEGATED_PUBKEY
-FLAGSHIP_LLM_DEFAULT_MODEL_OPENAI=gpt-4o-mini
+FLAGSHIP_LLM_DEFAULT_MODEL_OPENAI=gpt-4o-mini${backupEnvLine}
 ENVEOF
 chmod 600 /etc/flagship/daemon.env
 
