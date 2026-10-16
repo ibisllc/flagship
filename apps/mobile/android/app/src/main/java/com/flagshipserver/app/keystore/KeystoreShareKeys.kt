@@ -17,4 +17,8 @@ class KeystoreShareKeys : ShareKeys {
     override suspend fun irkSeed(reason: String): ByteArray = KeystoreIrkAccess().resolve(reason).seed
 
     override fun unlocked(): Boolean = BiometricAuthority.current()?.isFresh() ?: true
+
+    override fun adminRootPubHex(): String? = Keystore.adminRootPubHex()
+
+    override suspend fun adminRoot(reason: String): Ed25519Sign = Keystore.adminRootKey(reason)
 }

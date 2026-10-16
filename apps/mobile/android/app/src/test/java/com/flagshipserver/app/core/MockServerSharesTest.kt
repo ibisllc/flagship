@@ -34,6 +34,15 @@ class MockServerSharesTest {
         assertEquals("Robin", client.ownerShares("bright-maple", home, MockServerShares.OWNER_SESSION).pending.single().label)
     }
 
+    @Test fun studioTakesOnlyAnAdminSignedAcceptance() = runBlocking {
+        val link = ServerShare.parseShareLink(MockServerShares.STUDIO_LINK)!!
+        val opened = client.open(link)
+        assertEquals("Studio", opened.offer.serverName)
+        val (entry, sas) = client.accept(opened)
+        assertEquals("Studio", entry.serverName)
+        assertTrue(sas.matches(Regex("\\d{6}")))
+    }
+
     @Test fun phoneHasGarageToManageAndPhotosWaiting() = runBlocking {
         val entries = client.inbox().associateBy { it.serverName }
         assertEquals(setOf("Garage", "Photos"), entries.keys)

@@ -90,6 +90,8 @@ abstract class GymBase {
         accessAlert: Boolean = false,
         shares: Boolean = false,
         deviceRank: String? = null,
+        /** An App Link to open at launch (e.g. a share link). */
+        deepLink: String? = null,
     ) {
         // A test may relaunch with different seeds (e.g. the admin/non-admin
         // state pair) — close the prior scenario so activities never stack.
@@ -107,6 +109,7 @@ abstract class GymBase {
             if (accessAlert) putExtra(SmokeModeConfig.EXTRA_SMOKE_ACCESS_ALERT, true)
             if (shares) putExtra(SmokeModeConfig.EXTRA_SMOKE_SHARES, true)
             if (deviceRank != null) putExtra(SmokeModeConfig.EXTRA_SMOKE_DEVICE_RANK, deviceRank)
+            if (deepLink != null) data = android.net.Uri.parse(deepLink)
         }
         scenario = ActivityScenario.launch(intent)
         composeRule.waitForIdle()

@@ -26,6 +26,7 @@ import com.flagshipserver.app.core.OwnerShares
 import com.flagshipserver.app.core.PendingShare
 import com.flagshipserver.app.core.ServerShare
 import com.flagshipserver.app.core.ServerShareClient
+import com.flagshipserver.app.core.ShareAccount
 import com.flagshipserver.app.core.ShareException
 import com.flagshipserver.app.core.ShareOptions
 import com.flagshipserver.app.core.ShareSession
@@ -56,8 +57,14 @@ class ServerShareRuntime(
     val sharedWithMe = SharedWithMeModel(client)
 
     companion object {
-        fun live(okHttp: OkHttpClient, context: Context, isTrusted: () -> Boolean): ServerShareRuntime {
+        fun live(
+            okHttp: OkHttpClient,
+            context: Context,
+            account: () -> ShareAccount? = { null },
+            isTrusted: () -> Boolean,
+        ): ServerShareRuntime {
             val client = ServerShareClient(
+                account = account,
                 apex = TrustGatedTransport(OkHttpJsonTransport(okHttp), isTrusted),
                 box = OkHttpJsonTransport(okHttp),
                 keys = KeystoreShareKeys(),

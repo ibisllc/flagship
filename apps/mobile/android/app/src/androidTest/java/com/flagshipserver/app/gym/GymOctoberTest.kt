@@ -29,6 +29,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.test.espresso.Espresso
+import com.flagshipserver.app.core.MockServerShares
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -460,6 +461,33 @@ class GymOctoberTest : GymBase() {
         waitUntilExists("share-link", timeoutMs = 15_000)
         assertTrue("A share link", textOf("share-link").contains("/share#s="))
         gymShot("share-link")
+    }
+
+    /** Only an admin device of the account accepts a co-manage share
+     *  (docs/share-a-server.md §5.1): on this one, Mina's Studio link shows the
+     *  sentence and no Accept. */
+    @Test
+    fun shareLinkOnANonAdminDeviceShowsTheSentence() {
+        launch(tab = "home", username = "bright-maple", shares = true, deepLink = MockServerShares.STUDIO_LINK)
+        waitUntilExists("add-server-admin-only", timeoutMs = 30_000)
+        composeRule.onNodeWithText("Only an admin device of your account can accept a co-manage invitation.").assertIsDisplayed()
+        assertEquals("No Accept on a non-admin device", 0, count("share-accept-button"))
+        gymShot("share-accept-non-admin")
+    }
+
+    /** An admin device accepts Mina's Studio link: the mock `.com` takes the
+     *  acceptance only with #12 signed by this account's admin root and its
+     *  attestation, and the code to read to the owner shows. */
+    @Test
+    fun shareLinkOnAnAdminDeviceSignsTheAcceptance() {
+        launch(tab = "home", username = "bright-maple", shares = true, adminRoot = true, deepLink = MockServerShares.STUDIO_LINK)
+        waitUntilExists("share-accept-button", timeoutMs = 30_000)
+        gymShot("share-accept-offer")
+        composeRule.onNodeWithTag("share-accept-button").performScrollTo().performClick()
+        waitUntilExists("share-accept-sas", timeoutMs = 20_000)
+        val sas = textOf("share-accept-sas")
+        assertTrue("A six-digit code; got $sas", sas.replace(" ", "").matches(Regex("\\d{6}")))
+        gymShot("share-accept-code")
     }
 
     /** Servers shared with this phone: Home lists them, and a co-manager can

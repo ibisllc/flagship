@@ -694,6 +694,34 @@ const OCTOBER: readonly Scenario[] = [
     },
   ),
   androidTotal(
+    "android-oct-share-accept-non-admin",
+    "D4: only an admin device of the account accepts a co-manage share (the shared server checks the admin root's signature): on a non-admin device a share link reads 'Only an admin device of your account can accept a co-manage invitation.' with no Accept.",
+    O + "shareLinkOnANonAdminDeviceShowsTheSentence",
+    {
+      steps: [{ kind: "launch", describe: "Open Mina's Studio share link on a non-admin device." }],
+      assertions: [
+        { describe: "The sentence", handle: "add-server-admin-only", expect: "present" },
+        { describe: "No Accept", handle: "share-accept-button", expect: "absent" },
+      ],
+      screenshots: [shot("share-accept-non-admin", "The refusal.")],
+      dimension: "D4",
+    },
+  ),
+  androidTotal(
+    "android-oct-share-accept-admin",
+    "D3: an admin device accepts a share link: it signs flagship/server-share-accept-admin/v1 with the admin root and seals it with .com's attestation (the mock .com refuses the acceptance otherwise), then shows the code to read to the owner.",
+    O + "shareLinkOnAnAdminDeviceSignsTheAcceptance",
+    {
+      steps: [
+        { kind: "launch", describe: "Open Mina's Studio share link on an admin device." },
+        { kind: "tap", describe: "Accept.", handle: "share-accept-button" },
+      ],
+      assertions: [{ describe: "The code", handle: "share-accept-sas", expect: "present" }],
+      screenshots: [shot("share-accept-offer", "The offer."), shot("share-accept-code", "The code.")],
+      dimension: "D3",
+    },
+  ),
+  androidTotal(
     "android-oct-share-co-manager",
     "D3: a co-manager sees 'Shared with me' on Home and the shared server's page: approve start-up, leave, never delete or revoke.",
     O + "sharedServerCoManagerView",

@@ -1,11 +1,12 @@
 // Kotlin mirror of packages/protocol/src/serverShare.ts (docs/share-a-server.md):
 // sharing a server with another account. B's identity toward the server is a
-// per-share key derived from B's UMK; eleven '|'-joined envelopes; the link
+// per-share key derived from B's UMK; twelve '|'-joined envelopes; the link
 // secret's derivations; the six digits both phones show; and the sealed JSON
 // payloads `.com` relays without being able to read them.
 //
 // packages/protocol/test-vectors/server-share/vectors.json is the reference;
-// ServerShareVectorsTest runs every case.
+// ServerShareVectorsTest runs every case; test-vectors/server-share-accept-admin
+// (#12, ServerShareAcceptAdminVectorsTest) the admin-only acceptance.
 
 package com.flagshipserver.app.core
 
@@ -39,6 +40,10 @@ object ServerShare {
     const val TAG_SHARE_INBOX = "flagship/share-inbox/v1"
     const val TAG_SERVER_SHARE_PUSH = "flagship/server-share-push/v1"
     const val TAG_SERVER_SHARE_UPDATE = "flagship/server-share-update/v1"
+    const val TAG_SERVER_SHARE_ACCEPT_ADMIN = "flagship/server-share-accept-admin/v1"
+    const val KEY_KIND_ADMIN_ROOT = "admin-root"
+    const val KEY_KIND_IRK = "irk"
+    val KEY_KINDS: List<String> = listOf(KEY_KIND_ADMIN_ROOT, KEY_KIND_IRK)
 
     private const val INFO_MEMBER = "flagship/server-share-member/v1"
     private const val INFO_TOKEN = "flagship/server-share/token/v1"
@@ -209,11 +214,38 @@ object ServerShare {
         fun toJson(): String = json.encodeToString(OwnerRecord.serializer(), this)
     }
 
+    /**
+     * `.com`'s CA-signed attestation that [keyPubHex] is an account's current
+     * sensitive key (docs/share-a-server.md §4). It names no account. The app
+     * only carries it: the shared server checks the CA signature.
+     */
+    @Serializable
+    data class AccountKeyAttestation(
+        val kind: String = "AccountKeyAttestation",
+        val version: Int = 1,
+        val keyKind: String,
+        val keyPubHex: String,
+        val issuedAt: Long,
+        val expiresAt: Long,
+        val signedBy: String,
+        val signature: String,
+    )
+
+    /** The joining account's admin proof sealed with an acceptance (§5.1). */
+    @Serializable
+    data class AcceptAdminProof(
+        val admit: AcceptAdmin,
+        val signature: String,
+        val attestation: AccountKeyAttestation,
+    )
+
     @Serializable
     data class AcceptancePayload(
         val v: Int = 1,
         val accept: Accept,
         val signature: String,
+        /** Absent only from an app older than the admin-only rule; the box then refuses. */
+        val admin: AcceptAdminProof? = null,
     ) {
         fun toJson(): String = json.encodeToString(AcceptancePayload.serializer(), this)
     }
@@ -259,7 +291,30 @@ object ServerShare {
         if (!isOne(o["v"])) return null
         val signature = str(o["signature"])?.takeIf { HEX128.matches(it) } ?: return null
         val accept = parseServerShareAccept(o["accept"]) ?: return null
-        return AcceptancePayload(1, accept, signature)
+        if (!o.containsKey("admin")) return AcceptancePayload(1, accept, signature)
+        val admin = parseShareAcceptAdminProof(o["admin"]) ?: return null
+        return AcceptancePayload(1, accept, signature, admin)
+    }
+
+    /** Shape only: the shared server verifies the CA signature. */
+    fun parseAccountKeyAttestation(v: JsonElement?): AccountKeyAttestation? {
+        val o = obj(v) ?: return null
+        if (str(o["kind"]) != "AccountKeyAttestation" || !isOne(o["version"])) return null
+        val keyKind = str(o["keyKind"])?.takeIf { it in KEY_KINDS } ?: return null
+        val keyPubHex = str(o["keyPubHex"])?.takeIf { HEX64.matches(it) } ?: return null
+        val signedBy = str(o["signedBy"])?.takeIf { HEX64.matches(it) } ?: return null
+        val signature = str(o["signature"])?.takeIf { HEX128.matches(it) } ?: return null
+        val issuedAt = time(o["issuedAt"]) ?: return null
+        val expiresAt = time(o["expiresAt"])?.takeIf { it > issuedAt } ?: return null
+        return AccountKeyAttestation("AccountKeyAttestation", 1, keyKind, keyPubHex, issuedAt, expiresAt, signedBy, signature)
+    }
+
+    fun parseShareAcceptAdminProof(v: JsonElement?): AcceptAdminProof? {
+        val o = obj(v) ?: return null
+        val signature = str(o["signature"])?.takeIf { HEX128.matches(it) } ?: return null
+        val admit = parseServerShareAcceptAdmin(o["admit"]) ?: return null
+        val attestation = parseAccountKeyAttestation(o["attestation"]) ?: return null
+        return AcceptAdminProof(admit, signature, attestation)
     }
 
     fun parseShareInboxEntry(v: JsonElement?): InboxEntry? {
@@ -399,6 +454,31 @@ object ServerShare {
             checkHex64("memberPubHex", memberPubHex)
             checkTime("acceptedAt", acceptedAt)
             return join(TAG_SERVER_SHARE_ACCEPT, serverDomain, shareId, memberPubHex, acceptedAt.toString())
+        }
+    }
+
+    /**
+     * #12 — signed by the joining account's sensitive key (its admin root, or
+     * its IRK when it pins none): only an admin device accepts a share. #3's
+     * fields plus which key signs.
+     */
+    @Serializable
+    data class AcceptAdmin(
+        val serverDomain: String,
+        val shareId: String,
+        val memberPubHex: String,
+        val acceptedAt: Long,
+        val keyKind: String,
+        val keyPubHex: String,
+    ) : Envelope {
+        override fun canonicalBytes(): ByteArray {
+            domain(serverDomain)
+            checkShareId(shareId)
+            checkHex64("memberPubHex", memberPubHex)
+            checkTime("acceptedAt", acceptedAt)
+            require(keyKind in KEY_KINDS) { "server-share: keyKind must be admin-root or irk" }
+            checkHex64("keyPubHex", keyPubHex)
+            return join(TAG_SERVER_SHARE_ACCEPT_ADMIN, serverDomain, shareId, memberPubHex, acceptedAt.toString(), keyKind, keyPubHex)
         }
     }
 
@@ -633,6 +713,18 @@ object ServerShare {
             shareId = str(o["shareId"]) ?: return@checked null,
             memberPubHex = str(o["memberPubHex"]) ?: return@checked null,
             acceptedAt = time(o["acceptedAt"]) ?: return@checked null,
+        )
+    }
+
+    fun parseServerShareAcceptAdmin(v: JsonElement?): AcceptAdmin? = checked {
+        val o = obj(v) ?: return@checked null
+        AcceptAdmin(
+            serverDomain = str(o["serverDomain"]) ?: return@checked null,
+            shareId = str(o["shareId"]) ?: return@checked null,
+            memberPubHex = str(o["memberPubHex"]) ?: return@checked null,
+            acceptedAt = time(o["acceptedAt"]) ?: return@checked null,
+            keyKind = str(o["keyKind"])?.takeIf { it in KEY_KINDS } ?: return@checked null,
+            keyPubHex = str(o["keyPubHex"]) ?: return@checked null,
         )
     }
 
