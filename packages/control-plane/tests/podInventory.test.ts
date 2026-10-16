@@ -708,6 +708,30 @@ describe("POST /api/daemon-status — the server-order acknowledgement on /pods"
   });
 });
 
+describe("POST /api/daemon-status — a box waiting for its backup", () => {
+  it("relays awaitingBackup on /pods, drops a junk value, and clears it when the box stops sending it", async () => {
+    const storage = new InMemoryStorage();
+    await withStkServer(storage);
+    type Pods = PodsResponse & { pods: Array<{ awaitingBackup?: unknown }> };
+    const waiting = { archiveId: "00112233445566778899aabbccddeeff", state: "waiting" };
+    expect((await handlePostDaemonStatus(deps(storage), { ...signedBody(report()), awaitingBackup: waiting })).status).toBe(200);
+    let out = (await handleGetUserPods(deps(storage), "harry")).body as Pods;
+    expect(out.pods[0]?.awaitingBackup).toEqual(waiting);
+
+    expect((await handlePostDaemonStatus(deps(storage), { ...signedBody(report()), awaitingBackup: { archiveId: "x", state: "waiting" } })).status).toBe(200);
+    out = (await handleGetUserPods(deps(storage), "harry")).body as Pods;
+    expect(out.pods[0]?.awaitingBackup).toBeUndefined();
+
+    expect((await handlePostDaemonStatus(deps(storage), { ...signedBody(report()), awaitingBackup: { ...waiting, state: "restoring" } })).status).toBe(200);
+    out = (await handleGetUserPods(deps(storage), "harry")).body as Pods;
+    expect(out.pods[0]?.awaitingBackup).toEqual({ ...waiting, state: "restoring" });
+
+    expect((await handlePostDaemonStatus(deps(storage), signedBody(report()))).status).toBe(200);
+    out = (await handleGetUserPods(deps(storage), "harry")).body as Pods;
+    expect(out.pods[0]?.awaitingBackup).toBeUndefined();
+  });
+});
+
 describe("POST /api/daemon-status — box-trust-status (per-box relay verdict) relay on /pods", () => {
   function btsReport(over: Partial<BoxTrustStatusReport> = {}): BoxTrustStatusReport {
     return {

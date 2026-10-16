@@ -46,4 +46,5 @@ export * from "./serverOrder.js";
 export * from "./appApiKey.js";
 export * from "./appCopy.js";
 export * from "./archiveDownload.js";
+export * from "./serverBackup.js";
 export * from "./aiModels.js";

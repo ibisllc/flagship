@@ -192,6 +192,7 @@ import { buildAppCopySource } from "./appCopy/source.js";
 import { AppCopyStore } from "./appCopy/store.js";
 import { buildAppCopyTarget } from "./appCopy/target.js";
 import { buildServerArchiveService } from "./serverArchive/service.js";
+import { buildRestoreWait, type RestoreWait } from "./serverArchive/restoreWait.js";
 import {
   buildSelfDeletePoller,
   fileMarkerStore,
@@ -445,6 +446,22 @@ async function tryLoadConfig(): Promise<ServerConfig | null> {
     console.log("[daemon] owner config derived from /var/flagship/install-blob.json (no FLAGSHIP_CONFIG)");
   }
   return fromBlob;
+}
+
+/** How this server was created, for its backups (a restore makes the new server the same way). */
+async function installSettingsFromInstallBlob(): Promise<{ bootUnlockMode: "auto" | "approve"; diskEncryption: "luks" | "none" }> {
+  const blobPath = process.env.FLAGSHIP_INSTALL_BLOB ?? "/var/flagship/install-blob.json";
+  const raw = await tryReadFile(blobPath);
+  let b: { bootUnlockMode?: unknown; diskEncryption?: unknown } = {};
+  try {
+    b = raw ? (JSON.parse(raw) as typeof b) : {};
+  } catch {
+    b = {};
+  }
+  return {
+    bootUnlockMode: b.bootUnlockMode === "approve" ? "approve" : "auto",
+    diskEncryption: b.diskEncryption === "none" ? "none" : "luks",
+  };
 }
 
 /**
@@ -1089,6 +1106,21 @@ async function main(): Promise<void> {
     : null;
   await serverOrder?.load();
   const statusHeartbeatRef: { current: DaemonStatusHeartbeat | null } = { current: null };
+  // A server created to restore a backup waits for it (docs/server-backup-
+  // and-clone.md): the owner-signed restore order rides beside the pairing
+  // order, and Home shows "Waiting for its backup" from the heartbeat.
+  const restoreWait = cfg
+    ? buildRestoreWait({
+        path: `${dataDir}/restore-wait.json`,
+        donePath: `${dataDir}/restore-done.json`,
+        serverDomain: env.serverFqdn!,
+        ownerIrkPub: cfg.irkPublicKey,
+        onChange: () => statusHeartbeatRef.current?.backupWaitChanged(),
+        note: (kind, detail) => activityLog.note(kind, detail),
+        log: (m) => console.log(m),
+      })
+    : null;
+  await restoreWait?.load();
   const statusHeartbeat = startDaemonStatusHeartbeat({
     serverDomain: env.serverFqdn!,
     sign: (msg) => custodian.signAsBox(msg),
@@ -1102,6 +1134,7 @@ async function main(): Promise<void> {
     readLeads: () => gossipLoopRef.current?.currentLeads() ?? [],
     readRuns: () => servicePlatformRefForServer.current?.list().map((a) => a.slug),
     readTrustStatus: () => relayLockdownRef.current?.trustStatus() ?? null,
+    readAwaitingBackup: () => restoreWait?.heartbeatView() ?? null,
   });
   statusHeartbeatRef.current = statusHeartbeat;
   const liveCertInfoRef: {
@@ -1289,6 +1322,9 @@ async function main(): Promise<void> {
             ownerIrkPub: cfg.irkPublicKey,
             pairedSessions,
             markerStore: pairingMarker,
+            onVerified: async (json) => {
+              await restoreWait?.adoptFromPairingJson(json);
+            },
             onLog: (m) => console.log(m),
           });
           // An embedded order that doesn't verify falls through to the poller
@@ -1303,6 +1339,9 @@ async function main(): Promise<void> {
           unsealToBox: (blob) => custodian.unsealToBox(blob),
           pairedSessions,
           markerStore: pairingMarker,
+          onVerified: async (json) => {
+              await restoreWait?.adoptFromPairingJson(json);
+            },
           guard: restarts.guard,
           onLog: (m) => console.log(m),
         });
@@ -1349,6 +1388,7 @@ async function main(): Promise<void> {
     await wireRuntimeSurfaces({
       frontPage,
       activityLog,
+      restoreWait,
       serverOrder,
       serviceAccessRef,
       accessPrincipals,
@@ -2141,6 +2181,7 @@ async function loadEntitlementsOrExit(deps: {
 async function wireRuntimeSurfaces(deps: {
   frontPage: FrontPageStore;
   activityLog: ActivityLog;
+  restoreWait: RestoreWait | null;
   serviceAccessRef: { current: ServiceAccessStore | null };
   accessPrincipals: AccessPrincipals;
   accessSyncRef: { current: AccessSync | null };
@@ -2787,6 +2828,9 @@ async function wireRuntimeSurfaces(deps: {
     const ops = realAppCopyOps();
     const service = buildServerArchiveService({
       dir: join(dataDir, "archives"),
+      uploadDir: join(dataDir, "restore-upload"),
+      wait: deps.restoreWait,
+      serverSettings: installSettingsFromInstallBlob,
       build: {
         serverFqdn: env.serverFqdn,
         apps: () => platform.list(),

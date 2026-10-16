@@ -2,23 +2,26 @@
 
 > **Status: built on `main`, not yet run on a real box.** 2026-10-15.
 
-One button on a server's page makes one file with all of its apps and their
-data. The file is the user's: they download it, keep it anywhere, and later
-import it from Home (**Add/Import a server → Import a backup**) onto any server
-of the account. The server they import onto keeps its own name, so cloning
-under a new name is: add the new server, wait for it to come online, import.
+One button on a server's page makes a backup of all of its apps and their
+data: two files the user keeps anywhere (a USB drive, a cloud folder, another
+computer). Restoring is one step from Home (**Add/Import a server → Import a
+backup**): pick the two files, pick a name (the saved server's name is filled
+in when the account has no server called that), and burn or host the new
+server with the usual screen. Every other setting is copied from the saved
+server. The new server boots with one job: wait for the app to reach it and
+send it the backup. Once its apps are restored it is a normal server.
 
-## What is in the file
+## What is in a backup
 
 Only what the owner made. Per app: its working tree (the source it was built
 from), a consistent dump of each database, its files folder, its members, its
 access mode and allow-list, its owner env (plain inside the sealed file), and
-its signed internet access list (which becomes a draft on import). A
-`manifest.json` names the apps, any apps left out and why, and what is and
-isn't included.
+its signed internet access list (which becomes a draft on restore). A
+`manifest.json` inside names the apps, any apps left out and why, and what is
+and isn't included.
 
 **No images, no OS, no Flagship.** A backup never carries a container image,
-a Linux userland, Docker, Postgres or the daemon. The importing box rebuilds
+a Linux userland, Docker, Postgres or the daemon. The restoring box rebuilds
 each app from its working tree with its own runtime catalog
 (`runtimes/catalog.ts` writes the Dockerfile from the manifest's
 `runtime.base`; the same sandboxed `docker build` a deploy runs), on its own
@@ -26,7 +29,7 @@ CPU architecture. An app that was installed from a public image (a name not
 starting `flagship-`) is pulled by that name instead. An app with neither
 (no working tree on the box, and a box-local image) can't move to another
 server: the backup leaves it out and names it, and the apps show "Left out".
-That is the promise: every Flagship install can import every backup, and
+That is the promise: every Flagship install can restore every backup, and
 nobody carries their OS around.
 
 Database dumps are `pg_dump -Fc`, which every newer Postgres restores; files
@@ -35,67 +38,162 @@ folders are plain tar.
 **Saved config comes along:** each app's secrets (env), members and access,
 its internet access list (as a draft for the owner to approve on the new
 server), its API keys (the grant and the secret's hash, never the secret, so
-clients keep working; an imported key is bound to the server it was imported
-on and its owner signature is checked at every load), and the server's front
-page (set on import when the importing server has none).
+clients keep working; an imported key is bound to the server it was restored
+on and its owner signature is checked at every load), the server's front
+page, and how the server was made (its name, whether it asks the phone at
+every boot, whether its disk is encrypted), which the restore form copies.
 
 **Not included, on purpose:**
-- the server's own keys, certificate and address: the server you import onto
-  got its own when it was created (its SWK/STK from your account key and its
-  name, its identity key and certificate minted on the machine), and two
-  machines must never hold one server's keys;
+- the server's own keys, certificate and address: the new server gets its own
+  when it is created (its SWK/STK from the account key and its name, its
+  identity key and certificate minted on the machine), and two machines must
+  never hold one server's keys;
 - the dead-man switch: an owner-signed policy for one server that can lock or
   power it off; set it again on the new server;
 - AI provider keys: the box only ever holds a short-lived copy for one build;
   your saved keys live on your phone;
-- peer backups and the Git host.
+- the server's description (it lives on the owner's devices, not the box),
+  peer backups and the Git host.
 
-## Format (`packages/server-daemon/src/serverArchive/format.ts`)
+## The two files (`packages/protocol/src/serverBackup.ts`)
 
-`<JSON header line>\n` then AES-256-GCM frames of the tar stream. The header
-(`magic`, `v`, `archiveId`, `createdAt`, `sourceServer`, `apps`) is readable
-without the key so the importer can derive the key and show what is inside.
-Every frame is bound to the header (SHA-256 as AAD) and to its position (the
-nonce is the frame index), and the AAD carries a last-frame flag, so a
-reordered, edited, or truncated file fails to open.
+```
+home-2026-10-15.flagship-backup   the backup file: small JSON
+home-2026-10-15.flagship-data     the data file: the apps, sealed in frames
+```
 
-## Keys
+One random 32-byte **content key** seals both. The backup file is
 
-`deriveServerArchiveKey(UMK, archiveId)` = HKDF-SHA256(UMK seed, empty salt,
-`flagship/server-archive/v1|<archiveId>`). It depends on the UMK and the
-archive id only (no server id), so any device of the account can open an
-archive and import it onto a server with a different name. The phone derives
-it and hands it to the box over the pinned session, once to seal and once to
-open; the box wipes it from memory after use and never stores it. Vectors:
-`packages/protocol/test-vectors/server-archive/vectors.json` (TS, Swift,
-Kotlin, webapp all pass).
+```
+{"magic":"flagship-backup","v":2,"archiveId":"<16 bytes hex>",
+ "slots":[<passcode slot>,<account slot>],"bodyNonceHex":"…","bodyHex":"…"}
+```
+
+**Key slots** (like LUKS) each wrap the content key with AES-256-GCM:
+
+- **passcode**: key = Argon2id v1.3 of the passcode (NFC, surrounding spaces
+  dropped), with the salt and the cost recorded in the slot (m 64 MiB, t 3,
+  p 4, the keyfile's profile). AAD
+  `flagship/server-backup-slot/v2|passcode|<archiveId>|argon2id|m=…|t=…|p=…|<salt>`.
+  This is what makes a backup shareable, and restorable after the account is
+  lost. The files can be copied anywhere, so guesses are offline and
+  unlimited: the apps suggest a generated passcode (five groups of four from
+  `abcdefghijkmnpqrstuvwxyz23456789`, 100 bits) and accept the user's own only
+  if it has 20 characters, or 12 with three kinds of character. A lost
+  passcode can't be reset.
+- **account**: key = `deriveServerArchiveKey(UMK, archiveId)` (HKDF-SHA256,
+  info `flagship/server-archive/v1|<archiveId>`). AAD
+  `flagship/server-backup-slot/v2|account|<archiveId>`. Any device of the
+  account opens its own backups without the passcode, and a forgotten
+  passcode never loses the owner's own backup.
+
+The **body** is sealed under the content key (AAD
+`flagship/server-backup-body/v2|<archiveId>`): the saved server's settings
+(`name`, `domain`, `bootUnlockMode`, `diskEncryption`), the apps and the ones
+left out, what is and isn't included, and the data file's `fileName`, exact
+`bytes`, `sha256` and `frameBytes`. A changed size or hash fails to open, so
+an app that has opened the backup file knows exactly which data file belongs
+to it without reading it into memory: it streams it once and compares.
+
+The **data file** is `flagship-backup-data/v2\n` and then the tar of the
+apps in AES-256-GCM frames `[u32 BE length][ciphertext + tag]` (1 MiB
+plaintext each). Frame `i` has nonce `i` (12 bytes, big-endian) and AAD
+`flagship/server-backup-data/v2|<archiveId>|<1 if last else 0>`, so a
+reordered, edited or cut-short file fails to open instead of restoring half
+a server. Only the box ever opens frames.
+
+Vectors: `packages/protocol/test-vectors/server-backup/vectors.json` (slots,
+a whole backup file, the default Argon2id cost, passcode rules and the
+generator, tampered and malformed files) and
+`packages/protocol/test-vectors/server-archive/vectors.json` (the account
+key). TS, the webapp, Swift and Kotlin all pass them.
+
+## Making a backup
+
+The app asks for the passcode first (the suggested one, or the user's own),
+makes the content key and the archive id, and wraps the key in both slots on
+the device (the passcode never leaves it). It hands the box the content key
+and the slots over the pinned session; the box seals the data file, writes
+the backup file around the slots, wipes the key and never stores it.
+
+## Restore a backup
+
+1. **Pick the files.** Home → Add/Import a server → Import a backup. The user
+   picks the `.flagship-backup` and its `.flagship-data` (together, or one at
+   a time; the app says which is still missing). The app reads them where they
+   are (Files, a USB drive, a cloud folder) and never copies the data file in.
+2. **Unlock.** The account slot first, silently; a backup of another account
+   (or one the account slot can't open) asks for the passcode.
+3. **Check.** The app streams the data file once: its size and SHA-256 must
+   be the ones the backup file names.
+4. **Name.** Filled with the saved server's name unless the account already
+   has a server (or a pending one) of that name; the field checks names as
+   the user types, like the create form. Everything else is copied.
+5. **Create.** The app makes the server exactly as the create flow does
+   (same recipe, same burn/host screen: Studio, the recipe file, USB) and
+   signs, with the account's IRK, a **restore order**
+
+   `flagship/server-restore/v1|<serverDomain>|<archiveId>|<bytes>|<sha256>|<issuedAt>`
+
+   that rides beside the create-time pairing order
+   (`{request, signature, restore: {order, signatureHex}}`), in the recipe
+   (advanced/offline) or in the sealed pairing deposit (the default). Vectors:
+   `packages/protocol/test-vectors/server-restore/vectors.json`.
+6. **The box waits.** When the pairing order verifies, the box checks the
+   restore order under its pinned owner IRK and that it names this box, then
+   keeps it (`<dataDir>/restore-wait.json`, `serverArchive/restoreWait.ts`).
+   Its heartbeat carries `awaitingBackup: {archiveId, state}` (advisory,
+   unsigned), `.com` relays it on `/pods`, and Home shows **Waiting for its
+   backup** (or **Restoring its backup**). The box accepts that data file and
+   no other, and only from an owner session.
+7. **Send.** As soon as the app reaches the box it uploads the data file in
+   4 MiB chunks, in order, over the LAN when it can. The upload resumes where
+   it stopped (the box keeps it in `<dataDir>/restore-upload` across restarts
+   while it waits). Then the app hands the box the content key. The box
+   checks the file's size and SHA-256 against the restore order before
+   opening anything, unpacks it verifying every frame and every part's
+   SHA-256, and installs the apps one by one the way an app copy installs
+   one (rebuilt, env written, fresh stores restored before first start,
+   members and working tree brought over), under the new server's own name.
+   An app already on the server is skipped; an app that fails leaves nothing
+   behind and the rest go on.
+8. **Done.** Once every app has been tried, the box stops waiting for good (a
+   done marker keeps a replayed order from re-arming it) and is a normal
+   server. Apps that failed are listed on the result and in Activity.
+
+If anything fails on the way (the drive with the data file goes away, the
+phone closes, the check fails, the key is wrong), the server stays **Waiting
+for its backup** indefinitely. It can be deleted from Home like any server,
+and picking the backup again offers **Send it to <name>** for a server that
+is waiting for that backup.
 
 ## Routes (owner sessions only; companions and shares are refused)
 
 ```
-POST   /api/screens/server-archive/start    { archiveId, key }
-GET    /api/screens/server-archive          → { archive: { state: building|ready|failed, progress, bytes, ... } | null }
-GET    /api/screens/server-archive/chunk?offset=N      (≤ 4 MiB)
-POST   /api/screens/server-archive/link     → { path, fileName, bytes, sha256, expiresAt }
-GET    /api/archive-download/<token>        (no session; the token is the key)
+POST   /api/screens/server-archive/start    { archiveId, key, slots }
+GET    /api/screens/server-archive          → { archive: { state: building|ready|failed, progress, bytes, sha256, backupFileName, dataFileName, ... } | null }
+GET    /api/screens/server-archive/backup-file          (the backup file)
+GET    /api/screens/server-archive/chunk?offset=N       (≤ 4 MiB of the data file)
+POST   /api/screens/server-archive/link     → { path, backupFileName, dataFileName, bytes, sha256, expiresAt }
+GET    /api/archive-download/<token>        (no session; the page, see below)
 DELETE /api/screens/server-archive
-POST   /api/screens/server-restore/start    { archiveId, bytes }
+GET    /api/screens/server-restore          → { waiting: { archiveId, bytes, sha256 } | null, restore: { state, received, apps, reason } | null }
+POST   /api/screens/server-restore/start    { archiveId, bytes }  → { received }   (409 code not-waiting | other-backup)
 POST   /api/screens/server-restore/chunk?offset=N      (raw bytes, in order)
 POST   /api/screens/server-restore/commit   { key }
-GET    /api/screens/server-restore          → { restore: { state, received, apps: [...] } | null }
 ```
 
-One backup and one import at a time. The box's copy expires after 24 h (and at
-the next daemon start); the phones delete it once their download checks out,
-the webapp offers "Delete from server".
+One backup and one restore at a time. The box's copy of a backup expires
+after 24 h (and at the next daemon start); the phones delete it once their
+download checks out, the webapp offers "Delete from server".
 
 **Disk.** Before a backup the box sizes it from what each part will hold: the
 image (`docker image inspect`), each database (`pg_database_size`, more than
 its compressed dump), the files folder (`du -sb` in the locked-down helper)
-and the working tree. It needs the file, one app's scratch (parts are staged
-then packed) and 1 GB of headroom free, and otherwise refuses with "needs
-about X GB, has Y GB". If something can't be sized it goes ahead on a flat
-1 GB minimum. An import needs about 2.2× the file.
+and the working tree. It needs the data file, one app's scratch (parts are
+staged then packed) and 1 GB of headroom free, and otherwise refuses with
+"needs about X GB, has Y GB". If something can't be sized it goes ahead on a
+flat 1 GB minimum. A restore needs about 2.2× the data file.
 
 **Download in a browser.** The link opens a page served by the box itself
 (self-contained, no remote assets, `X-Frame-Options: DENY`). It shows a QR
@@ -105,33 +203,22 @@ on the owner's phone shows the same code, asks for Face ID and signs
 `flagship/archive-download/v1|<server>|<archive>|<request>|<issuedAt>` with
 the sensitive-order key (admin root, else IRK); the box verifies it under its
 pinned authority (`authorizeSensitiveOrder`, at most 5 minutes old, for this
-server and this backup) and only then serves `.../file?r=<request>` to that
-request, for as long as the backup lives. The link alone never returns the
-file. The webapp approves its own download the same way (it holds the
-account key) and starts it directly. Vectors:
-`packages/protocol/test-vectors/archive-download/vectors.json` (TS, Swift,
-Kotlin, webapp).
+server and this backup) and only then serves `.../backup?r=<request>` and
+`.../file?r=<request>` to that request, for as long as the backup lives. The
+page starts both downloads and keeps a button for each. The link alone never
+returns a file. The webapp approves its own download the same way (it holds
+the account key) and starts both directly. Vectors:
+`packages/protocol/test-vectors/archive-download/vectors.json`.
 
-**Download.** Nothing is held in memory. The download link is a plain HTTPS
-URL on the box, streamed from disk, with `Accept-Ranges`, `206` partial
+**Download.** Nothing is held in memory. The data file's link is a plain
+HTTPS URL on the box, streamed from disk, with `Accept-Ranges`, `206` partial
 responses and an `ETag` (the file's SHA-256, also checked by `If-Range`), so
-the browser saves it straight to disk and can resume it, a download manager
-can fetch parts at once, and it works on another computer until it expires.
-The token is 32 random bytes, compared in constant time, and dies with the
-backup; the file it serves is sealed anyway. The phones fetch the
-authenticated `chunk` route 4 parts at a time over the pinned session (over
-the LAN when the box is on it), write each part at its offset, keep a
-progress file so an interrupted download resumes, and check the SHA-256.
-
-## Import
-
-The importing box unpacks into a scratch folder (every entry name checked
-against a fixed pattern), verifies each part's SHA-256, then installs the apps
-one by one the way an app copy installs one: image loaded, env written, fresh
-stores restored before first start, members and working tree brought over. An
-app already on the server is skipped and reported; an app that fails leaves
-nothing behind and the rest go on. Apps are installed under the importing
-server's own name.
+the browser saves it straight to disk and can resume it. The token is 32
+random bytes, compared in constant time, and dies with the backup. The phones
+fetch the authenticated `chunk` route 4 parts at a time over the pinned
+session (over the LAN when the box is on it), write each part at its offset,
+keep a progress file so an interrupted download resumes, check the SHA-256,
+and save the two files together where the user chooses.
 
 ## Migrate always retires and wipes the old server
 

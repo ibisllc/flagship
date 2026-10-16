@@ -243,6 +243,30 @@ describe("daemon-status heartbeat", () => {
     expect(calls[1].request.orderIssuedAt).toBeUndefined();
   });
 
+  it("says when the box waits for its backup, and beats at once when that changes", async () => {
+    const calls: any[] = [];
+    const fetchImpl = (async (_url: any, init: any) => {
+      calls.push(JSON.parse(init.body));
+      return new Response("ok", { status: 200 });
+    }) as unknown as typeof fetch;
+    let wait: { archiveId: string; state: "waiting" | "restoring" } | null = { archiveId: "00".repeat(16), state: "waiting" };
+    const hb = startDaemonStatusHeartbeat({
+      serverDomain: "home1.harry.flagship.services",
+      sign: makeKeypair(9),
+      controlPlaneBaseUrl: "https://flagshipserver.com",
+      intervalMs: 60_000,
+      readAwaitingBackup: () => wait,
+      fetchImpl,
+    });
+    hb.update({ certPem: DUMMY_PEM, privateKeyPem: "x" }, 1_800_000_000_000, []);
+    wait = null;
+    hb.backupWaitChanged();
+    await new Promise((r) => setTimeout(r, 0));
+    hb.stop();
+    expect(calls.map((c) => c.awaitingBackup)).toEqual([{ archiveId: "00".repeat(16), state: "waiting" }, undefined]);
+    expect(calls[0].request.awaitingBackup).toBeUndefined();
+  });
+
   it("a network failure never throws (best-effort)", async () => {
     const id = makeKeypair(3);
     const fetchImpl = (async () => {

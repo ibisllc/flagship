@@ -36,7 +36,7 @@ import type { CopyAccessEntry, CopySourceTree } from "../appCopy/wire.js";
 import { writeSourceTree } from "../llm/serviceSource.js";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { openToTar, ArchiveError } from "./format.js";
+import { openDataFile, ArchiveError } from "./format.js";
 import type { ArchiveAppMeta, ArchiveManifest } from "./build.js";
 
 const IMAGE_RE = /^[A-Za-z0-9][A-Za-z0-9._/:@-]{0,254}$/;
@@ -85,8 +85,8 @@ async function sha256File(path: string): Promise<string> {
   return h.digest("hex");
 }
 
-/** Unpack the sealed archive into `dir`. Refuses any entry that isn't one of the expected files. */
-async function unpack(archivePath: string, key: Buffer, dir: string): Promise<void> {
+/** Unpack the sealed data file into `dir`. Refuses any entry that isn't one of the expected files. */
+async function unpack(archivePath: string, key: Buffer, archiveId: string, dir: string): Promise<void> {
   const extract = tar.extract();
   const done = new Promise<void>((resolve, reject) => {
     extract.on("entry", (header, stream, next) => {
@@ -104,7 +104,7 @@ async function unpack(archivePath: string, key: Buffer, dir: string): Promise<vo
     extract.on("finish", () => resolve());
     extract.on("error", reject);
   });
-  const src = openToTar(archivePath, key);
+  const src = openDataFile(archivePath, key, archiveId);
   src.on("error", (e) => extract.destroy(e));
   extract.on("error", () => src.destroy());
   src.pipe(extract);
@@ -148,18 +148,24 @@ export interface ArchiveContents {
   metas: ArchiveAppMeta[];
 }
 
-/** Unpack and check an archive; the folder is left for `installArchive`. */
-export async function unpackArchive(deps: ArchiveRestoreDeps, archivePath: string, key: Buffer, dir: string): Promise<ArchiveContents> {
+/** Unpack and check a data file; the folder is left for `installArchive`. */
+export async function unpackArchive(
+  deps: ArchiveRestoreDeps,
+  archivePath: string,
+  key: Buffer,
+  archiveId: string,
+  dir: string,
+): Promise<ArchiveContents> {
   await rm(dir, { recursive: true, force: true });
   await mkdir(dir, { recursive: true, mode: 0o700 });
-  await unpack(archivePath, key, dir);
+  await unpack(archivePath, key, archiveId, dir);
   let manifest: ArchiveManifest;
   try {
     manifest = JSON.parse(await readFile(join(dir, "manifest.json"), "utf8")) as ArchiveManifest;
   } catch {
     throw new ArchiveError("the archive has no manifest");
   }
-  if (manifest.v !== 1 || !Array.isArray(manifest.apps)) throw new ArchiveError("the archive manifest is damaged");
+  if (manifest.v !== 1 || !Array.isArray(manifest.apps) || manifest.archiveId !== archiveId) throw new ArchiveError("the archive manifest is damaged");
   const metas: ArchiveAppMeta[] = [];
   for (const a of manifest.apps) {
     if (!parseServiceId(a.serviceId)) throw new ArchiveError("the archive manifest is damaged");

@@ -85,6 +85,9 @@ export interface ClaimPairingDepositOptions {
   pairedSessions: PairingSessionSink;
   /** Idempotency marker store. */
   markerStore: PairingClaimMarkerStore;
+  /** Called with the order's JSON once it verifies: a restore order may ride
+   *  beside it (serverArchive/restoreWait.ts checks that one itself). */
+  onVerified?: (json: string) => Promise<void>;
   fetchImpl?: typeof fetch;
   onLog?: (m: string) => void;
 }
@@ -152,6 +155,7 @@ export async function claimPairingDeposit(
     log("[pairing-deposit] deposit rejected (signature/shape/wrong-box); keep polling");
     return { claimed: false, reason: "rejected" };
   }
+  await runOnVerified(opts.onVerified, json, log);
 
   // Idempotent: if the session is already present, just mark + stop.
   if (opts.pairedSessions.has(order.token)) {
@@ -246,6 +250,8 @@ export interface AddEmbeddedPairingOptions {
   pairedSessions: PairingSessionSink;
   /** Idempotency marker store. */
   markerStore: PairingClaimMarkerStore;
+  /** As for the deposit: called with the order's JSON once it verifies. */
+  onVerified?: (json: string) => Promise<void>;
   onLog?: (m: string) => void;
 }
 
@@ -277,6 +283,7 @@ export async function addEmbeddedPairing(
     log("[pairing-embed] embedded order rejected (signature/shape/wrong-box) — ignored");
     return { added: false, reason: "rejected" };
   }
+  await runOnVerified(opts.onVerified, opts.embeddedJson, log);
 
   if (opts.pairedSessions.has(order.token)) {
     try {
@@ -300,4 +307,13 @@ export async function addEmbeddedPairing(
   }
   log("[pairing-embed] verified owner-IRK embedded pairing order — paired offline (no .com)");
   return { added: true, token: order.token };
+}
+
+async function runOnVerified(fn: ((json: string) => Promise<void>) | undefined, json: string, log: (m: string) => void): Promise<void> {
+  if (!fn) return;
+  try {
+    await fn(json);
+  } catch (e) {
+    log(`[pairing] the order's restore sibling couldn't be kept: ${(e as Error).message}`);
+  }
 }

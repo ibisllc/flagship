@@ -13,8 +13,8 @@
  *
  * Apps are bundled one at a time and each app's scratch files are deleted as
  * soon as they are in the tar, so the scratch space needed is one app, not the
- * server. API keys are never part of it. The sealed archive is the only thing
- * left on disk.
+ * server. The sealed data file (and the small backup file next to it) is the
+ * only thing left on disk.
  */
 import { createReadStream } from "node:fs";
 import { lstat, mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
@@ -27,7 +27,7 @@ import type { AppCopyOps } from "../appCopy/ops.js";
 import { readCarriedBinaries, readServiceSource } from "../llm/serviceSource.js";
 import type { CopyAccessEntry, CopySourceTree } from "../appCopy/wire.js";
 import type { ArchivedApiKey } from "../appApiKeys.js";
-import { ARCHIVE_FRAME_BYTES, ARCHIVE_MAGIC, sealToFile, type ArchiveHeader } from "./format.js";
+import { sealDataFile } from "./format.js";
 import { createHash } from "node:crypto";
 
 /** How an importing box gets an app's image without the backup carrying it. */
@@ -122,8 +122,10 @@ export interface ArchiveBuildDeps {
 }
 
 export interface ArchiveBuildResult {
+  /** The data file's size and SHA-256. */
   bytes: number;
   sha256: string;
+  createdAt: number;
   apps: Array<{ serviceId: string; name: string }>;
   left: Array<{ serviceId: string; name: string; reason: string }>;
 }
@@ -232,22 +234,14 @@ export async function buildServerArchive(
   const apps = plan.take.map((t) => t.app);
   const rebuildOf = new Map(plan.take.map((t) => [t.app.serviceId, t.rebuild]));
   const list = apps.map((a) => ({ serviceId: a.serviceId, name: appName(a) }));
-  const header: ArchiveHeader = {
-    magic: ARCHIVE_MAGIC,
-    v: 1,
-    archiveId: args.archiveId,
-    createdAt: now(),
-    sourceServer: deps.serverFqdn,
-    frameBytes: ARCHIVE_FRAME_BYTES,
-    apps: list,
-  };
+  const createdAt = now();
   const pack = tar.pack();
 
   const produce = async (): Promise<void> => {
     const manifest: ArchiveManifest = {
       v: 1,
       archiveId: args.archiveId,
-      createdAt: header.createdAt,
+      createdAt,
       sourceServer: deps.serverFqdn,
       apps: list,
       left: plan.left,
@@ -326,9 +320,9 @@ export async function buildServerArchive(
     pack.destroy(e);
   });
   try {
-    const sealed = await sealToFile(pack, args.key, header, args.outPath);
+    const sealed = await sealDataFile(pack, args.key, args.archiveId, args.outPath);
     await producing;
-    return { ...sealed, apps: list, left: plan.left };
+    return { ...sealed, createdAt, apps: list, left: plan.left };
   } catch (e) {
     await rm(args.outPath, { force: true }).catch(() => {});
     throw e;

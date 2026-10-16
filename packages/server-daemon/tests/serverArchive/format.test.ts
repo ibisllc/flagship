@@ -3,7 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { ARCHIVE_MAGIC, ArchiveError, openToTar, readHeader, sealToFile, type ArchiveHeader } from "../../src/serverArchive/format.js";
+import { createHash } from "node:crypto";
+import { BACKUP_DATA_MAGIC, openBackupWithPasscode, parseBackupFile, wrapPasscodeSlot } from "@flagship/protocol";
+import { ArchiveError, openDataFile, sealDataFile, writeBackupFile } from "../../src/serverArchive/format.js";
 
 let dir: string;
 beforeEach(async () => {
@@ -14,78 +16,91 @@ afterEach(async () => {
 });
 
 const KEY = Buffer.alloc(32, 7);
-const header = (frameBytes = 4096): ArchiveHeader => ({
-  magic: ARCHIVE_MAGIC,
-  v: 1,
-  archiveId: "00112233445566778899aabbccddeeff",
-  createdAt: 1,
-  sourceServer: "home.alice.flagship.services",
-  frameBytes,
-  apps: [{ serviceId: "alice--wiki", name: "Wiki" }],
-});
+const ID = "00112233445566778899aabbccddeeff";
+const FRAME = 4096;
 
-async function collect(path: string, key = KEY): Promise<Buffer> {
+async function collect(path: string, key = KEY, id = ID): Promise<Buffer> {
   const parts: Buffer[] = [];
-  for await (const c of openToTar(path, key)) parts.push(c as Buffer);
+  for await (const c of openDataFile(path, key, id)) parts.push(c as Buffer);
   return Buffer.concat(parts);
 }
 const data = (n: number) => Buffer.from(Array.from({ length: n }, (_, i) => (i * 31 + 7) & 0xff));
 
-describe("server archive container", () => {
+describe("the backup's data file", () => {
   it.each([0, 1, 4095, 4096, 4097, 20000])("round-trips %i bytes", async (n) => {
-    const path = join(dir, "a.fsa");
+    const path = join(dir, "a.flagship-data");
     const plain = data(n);
-    const out = await sealToFile(Readable.from([plain]), KEY, header(), path);
-    expect(out.bytes).toBe((await readFile(path)).length);
+    const out = await sealDataFile(Readable.from([plain]), KEY, ID, path, FRAME);
+    const raw = await readFile(path);
+    expect(out.bytes).toBe(raw.length);
+    expect(out.sha256).toBe(createHash("sha256").update(raw).digest("hex"));
+    expect(raw.subarray(0, BACKUP_DATA_MAGIC.length).toString()).toBe(BACKUP_DATA_MAGIC);
     expect(await collect(path)).toEqual(plain);
   });
 
-  it("reads the header without the key", async () => {
-    const path = join(dir, "a.fsa");
-    await sealToFile(Readable.from([data(10)]), KEY, header(), path);
-    const { header: h } = await readHeader(path);
-    expect(h.archiveId).toBe("00112233445566778899aabbccddeeff");
-    expect(h.apps[0]?.name).toBe("Wiki");
-  });
-
-  it("refuses a wrong key", async () => {
-    const path = join(dir, "a.fsa");
-    await sealToFile(Readable.from([data(9000)]), KEY, header(), path);
+  it("refuses a wrong key, and another backup's id", async () => {
+    const path = join(dir, "a.flagship-data");
+    await sealDataFile(Readable.from([data(9000)]), KEY, ID, path, FRAME);
     await expect(collect(path, Buffer.alloc(32, 8))).rejects.toThrow(ArchiveError);
+    await expect(collect(path, KEY, "ff".repeat(16))).rejects.toThrow(ArchiveError);
   });
 
   it("refuses a flipped byte", async () => {
-    const path = join(dir, "a.fsa");
-    await sealToFile(Readable.from([data(9000)]), KEY, header(), path);
+    const path = join(dir, "a.flagship-data");
+    await sealDataFile(Readable.from([data(9000)]), KEY, ID, path, FRAME);
     const raw = await readFile(path);
     raw[raw.length - 40] ^= 1;
     await writeFile(path, raw);
     await expect(collect(path)).rejects.toThrow(ArchiveError);
   });
 
-  it("refuses a truncated archive (cut at a frame boundary too)", async () => {
-    const path = join(dir, "a.fsa");
-    await sealToFile(Readable.from([data(9000)]), KEY, header(), path);
+  it("refuses a truncated file (cut at a frame boundary too)", async () => {
+    const path = join(dir, "a.flagship-data");
+    await sealDataFile(Readable.from([data(9000)]), KEY, ID, path, FRAME);
     const raw = await readFile(path);
-    const nl = raw.indexOf(0x0a) + 1;
-    const first = 4 + raw.readUInt32BE(nl);
-    await writeFile(path, raw.subarray(0, nl + first));
+    const start = BACKUP_DATA_MAGIC.length;
+    const first = 4 + raw.readUInt32BE(start);
+    await writeFile(path, raw.subarray(0, start + first));
     await expect(collect(path)).rejects.toThrow(ArchiveError);
     await writeFile(path, raw.subarray(0, raw.length - 5));
     await expect(collect(path)).rejects.toThrow(ArchiveError);
   });
 
-  it("refuses an edited header (names, source server)", async () => {
-    const path = join(dir, "a.fsa");
-    await sealToFile(Readable.from([data(100)]), KEY, header(), path);
-    const raw = (await readFile(path)).toString("latin1").replace("Wiki", "Wikx");
-    await writeFile(path, Buffer.from(raw, "latin1"));
+  it("refuses frames in another order", async () => {
+    const path = join(dir, "a.flagship-data");
+    await sealDataFile(Readable.from([data(3 * FRAME)]), KEY, ID, path, FRAME);
+    const raw = await readFile(path);
+    const start = BACKUP_DATA_MAGIC.length;
+    const len = 4 + raw.readUInt32BE(start);
+    const swapped = Buffer.concat([raw.subarray(0, start), raw.subarray(start + len, start + 2 * len), raw.subarray(start, start + len), raw.subarray(start + 2 * len)]);
+    await writeFile(path, swapped);
     await expect(collect(path)).rejects.toThrow(ArchiveError);
   });
 
-  it("refuses a file that isn't an archive", async () => {
+  it("refuses a file that isn't a data file", async () => {
     const path = join(dir, "x");
-    await writeFile(path, "hello\n");
-    await expect(readHeader(path)).rejects.toThrow(/isn't a Flagship archive/);
+    await writeFile(path, "hello\n" + "x".repeat(64));
+    await expect(collect(path)).rejects.toThrow(/isn't a Flagship backup's data file/);
+  });
+});
+
+describe("the backup file the box writes", () => {
+  it("seals the body under the content key next to the app's slots", async () => {
+    const path = join(dir, "a.flagship-backup");
+    const slot = wrapPasscodeSlot(ID, KEY, "correct horse battery staple", new Uint8Array(16), new Uint8Array(12), { m: 64, t: 1, p: 1 });
+    const body = {
+      createdAt: 1,
+      server: { name: "home", domain: "home.alice.flagship.services", bootUnlockMode: "auto" as const, diskEncryption: "luks" as const },
+      apps: [{ serviceId: "alice--wiki", name: "Wiki" }],
+      left: [],
+      includes: [],
+      excludes: [],
+      data: { fileName: "home-1970-01-01.flagship-data", bytes: 100, sha256: "ab".repeat(32), frameBytes: FRAME },
+    };
+    const out = await writeBackupFile(path, { archiveId: ID, key: KEY, slots: [slot], body, nonce: Buffer.alloc(12, 1) });
+    const text = await readFile(path, "utf8");
+    expect(out.text).toBe(text);
+    expect(text).not.toContain("Wiki");
+    expect(openBackupWithPasscode(parseBackupFile(text), "correct horse battery staple").body).toEqual(body);
   });
 });

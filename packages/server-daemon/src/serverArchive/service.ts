@@ -1,44 +1,52 @@
 /**
  * "Backup/clone server" on the box (owner sessions only, behind the screens gate).
  *
- * Backup:
- *   POST   /api/screens/server-archive/start   { archiveId, key }   → 202   (key = the phone's derived 32-byte key, hex)
+ * Backup (two files, docs/server-backup-and-clone.md):
+ *   POST   /api/screens/server-archive/start   { archiveId, key, slots } → 202
+ *          key = the content key (hex) the owner's app made; slots = its key
+ *          slots (passcode, account), written into the backup file as they are
  *   GET    /api/screens/server-archive                              → { archive: {...} | null }
- *   GET    /api/screens/server-archive/chunk?offset=N               → ≤ 4 MiB of the sealed file
- *   POST   /api/screens/server-archive/link                         → { path, fileName, bytes, sha256, expiresAt }
+ *   GET    /api/screens/server-archive/backup-file                  → the backup file (small JSON)
+ *   GET    /api/screens/server-archive/chunk?offset=N               → ≤ 4 MiB of the data file
+ *   POST   /api/screens/server-archive/link                         → { path, backupFileName, dataFileName, bytes, sha256, expiresAt }
  *   POST   /api/screens/server-archive/approve  { approval, signature }  (flagship/archive-download/v1)
- *   GET    /api/archive-download/<token>            → the download page (QR + code); never the file
+ *   GET    /api/archive-download/<token>            → the download page (QR + code); never a file
  *   GET    /api/archive-download/<token>/status?r=  → { approved }
- *   GET    /api/archive-download/<token>/file?r=    → the file, only for a request the owner approved
- *          (signed `flagship/archive-download/v1`, checked under this box's
- *          authority), streamed from disk with HTTP Range (206, Accept-Ranges,
- *          ETag = the file's SHA-256): straight to disk, resumable, in parts.
- *          The token and the approvals live as long as the backup does.
- *   DELETE /api/screens/server-archive                              → forget it (and delete the file)
- * Import onto THIS server (any name; the apps install under it):
- *   POST   /api/screens/server-restore/start   { archiveId, bytes } → 202
+ *   GET    /api/archive-download/<token>/backup?r=  → the backup file   } only for a request the owner
+ *   GET    /api/archive-download/<token>/file?r=    → the data file     } approved (signed, checked under
+ *          this box's authority); the data file streams from disk with
+ *          HTTP Range (206, Accept-Ranges, ETag = its SHA-256).
+ *   DELETE /api/screens/server-archive                              → forget it (and delete the files)
+ * Restore, only on a server created to restore a backup (restoreWait.ts):
+ *   GET    /api/screens/server-restore                              → { waiting, restore }
+ *   POST   /api/screens/server-restore/start   { archiveId, bytes } → 202 { received } (resumes)
  *   POST   /api/screens/server-restore/chunk?offset=N  (raw bytes)  → { received }
  *   POST   /api/screens/server-restore/commit  { key }              → 202
- *   GET    /api/screens/server-restore                              → status
  *
- * One backup and one import at a time. The file is sealed on the box with a
- * key only the owner's devices can derive (the box sees it only for the
- * minutes it needs it and never keeps it); the phone downloads it in chunks
- * (over the LAN when it can), the user keeps it wherever they like, and a
- * chunked upload puts it on the server it is imported into.
+ * One backup and one restore at a time. The box sees the content key only for
+ * the minutes it needs it and never keeps it. A restore checks the uploaded
+ * data file against the owner-signed restore order (size and SHA-256) before
+ * the key opens it, then every frame as it unpacks.
  */
 import { createReadStream } from "node:fs";
-import { randomBytes, timingSafeEqual } from "node:crypto";
-import { archiveDownloadCode, parseArchiveDownloadApproval, type ArchiveDownloadApproval } from "@flagship/protocol";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import {
+  archiveDownloadCode,
+  parseArchiveDownloadApproval,
+  parseBackupSlots,
+  type ArchiveDownloadApproval,
+  type BackupBody,
+  type BackupSlot,
+} from "@flagship/protocol";
 import { renderDownloadPage } from "./downloadPage.js";
-import { mkdir, open, rm, statfs } from "node:fs/promises";
+import { mkdir, open, rm, stat, statfs } from "node:fs/promises";
 import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
-import { buildServerArchive, estimateServerArchive, type ArchiveBuildDeps } from "./build.js";
-import { ArchiveError, readHeader } from "./format.js";
+import { ARCHIVE_EXCLUDES, ARCHIVE_INCLUDES, buildServerArchive, estimateServerArchive, type ArchiveBuildDeps } from "./build.js";
+import { ARCHIVE_FRAME_BYTES, ArchiveError, writeBackupFile } from "./format.js";
 import { installArchive, unpackArchive, type ArchiveRestoreDeps, type RestoreAppResult } from "./restore.js";
-import { createHash } from "node:crypto";
+import type { RestoreWait } from "./restoreWait.js";
 
 export const ARCHIVE_PATH = "/api/screens/server-archive";
 export const DOWNLOAD_PATH = "/api/archive-download/";
@@ -60,10 +68,16 @@ export function isServerArchivePath(path: string): boolean {
 }
 
 export interface ServerArchiveServiceOptions {
-  /** `<dataDir>/archives`: the sealed file and the import's scratch. */
+  /** `<dataDir>/archives`: the two backup files and the scratch. Cleared at start. */
   dir: string;
+  /** `<dataDir>/restore-upload`: a restore's upload, kept across restarts so it resumes. */
+  uploadDir?: string;
   build: Omit<ArchiveBuildDeps, "workDir">;
   restore: Omit<ArchiveRestoreDeps, "workDir">;
+  /** How this server was created (from its install blob): a restore makes the new server the same way. */
+  serverSettings?: () => Promise<{ bootUnlockMode: "auto" | "approve"; diskEncryption: "luks" | "none" }>;
+  /** Whether this server waits for a backup; absent ⇒ it never accepts one. */
+  wait?: RestoreWait | null;
   /** Activity feed: kind, one readable line, ok. */
   note?: (kind: string, detail: string, ok?: boolean) => void;
   freeBytes?: (dir: string) => Promise<number>;
@@ -81,10 +95,13 @@ interface BackupJob {
   state: "building" | "ready" | "failed";
   startedAt: number;
   progress: { done: number; total: number; app: string };
+  /** The data file's size and SHA-256. */
   bytes?: number;
-  /** What the box expects the file to take, once it has sized it. */
-  estimatedBytes?: number;
   sha256?: string;
+  /** The backup file's size. */
+  backupBytes?: number;
+  /** What the box expects the data file to take, once it has sized it. */
+  estimatedBytes?: number;
   apps?: Array<{ serviceId: string; name: string }>;
   /** Apps that couldn't go in (no source, no public image), with why. */
   left?: Array<{ serviceId: string; name: string; reason: string }>;
@@ -116,14 +133,20 @@ export function parseRange(header: string | undefined, size: number): { start: n
   return { start, end };
 }
 
-export function backupFileName(sourceServer: string, at: number): string {
+function fileStem(sourceServer: string, at: number): string {
   const label = (sourceServer.split(".")[0] ?? "").replace(/[^A-Za-z0-9-]/g, "") || "server";
-  return `${label}-${new Date(at).toISOString().slice(0, 10)}.flagship-backup`;
+  return `${label}-${new Date(at).toISOString().slice(0, 10)}`;
+}
+export function backupFileName(sourceServer: string, at: number): string {
+  return `${fileStem(sourceServer, at)}.flagship-backup`;
+}
+export function dataFileName(sourceServer: string, at: number): string {
+  return `${fileStem(sourceServer, at)}.flagship-data`;
 }
 
 interface RestoreJob {
   archiveId: string;
-  state: "uploading" | "ready" | "opening" | "restoring" | "done" | "failed";
+  state: "uploading" | "ready" | "checking" | "restoring" | "done" | "failed";
   bytes: number;
   received: number;
   apps: RestoreAppResult[];
@@ -143,8 +166,10 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
       /* the feed never fails a backup */
     }
   };
-  const archiveFile = join(opts.dir, "server-archive.fsa");
-  const uploadFile = join(opts.dir, "import.fsa");
+  const dataFile = join(opts.dir, "server-backup.flagship-data");
+  const backupFile = join(opts.dir, "server-backup.flagship-backup");
+  const uploadDir = opts.uploadDir ?? join(opts.dir, "upload");
+  const uploadFile = join(uploadDir, "restore.flagship-data");
   const scratch = join(opts.dir, "scratch");
   const unpackDir = join(opts.dir, "import-unpacked");
   let backup: BackupJob | null = null;
@@ -158,20 +183,33 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     return Number(s.bavail) * Number(s.bsize);
   });
 
-  async function ensureDir(): Promise<void> {
-    await mkdir(opts.dir, { recursive: true, mode: 0o700 });
+  async function ensureDir(dir: string = opts.dir): Promise<void> {
+    await mkdir(dir, { recursive: true, mode: 0o700 });
+  }
+
+  async function dropBackupFiles(): Promise<void> {
+    await rm(dataFile, { force: true }).catch(() => {});
+    await rm(backupFile, { force: true }).catch(() => {});
   }
 
   async function sweep(): Promise<void> {
     if (backup && backup.state !== "building" && now() - backup.startedAt > KEEP_MS) {
       backup = null;
-      await rm(archiveFile, { force: true }).catch(() => {});
+      await dropBackupFiles();
+    }
+  }
+
+  async function settings(): Promise<{ bootUnlockMode: "auto" | "approve"; diskEncryption: "luks" | "none" }> {
+    try {
+      return (await opts.serverSettings?.()) ?? { bootUnlockMode: "auto", diskEncryption: "luks" };
+    } catch {
+      return { bootUnlockMode: "auto", diskEncryption: "luks" };
     }
   }
 
   function startBackup(req: HttpRequest): Promise<HttpResponse> {
     return (async () => {
-      let b: { archiveId?: unknown; key?: unknown };
+      let b: { archiveId?: unknown; key?: unknown; slots?: unknown };
       try {
         b = JSON.parse(req.body.toString("utf8")) as typeof b;
       } catch {
@@ -179,18 +217,20 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
       }
       if (typeof b.archiveId !== "string" || !/^[0-9a-f]{32}$/.test(b.archiveId)) return err(400, "archiveId must be 16 bytes of lowercase hex");
       if (typeof b.key !== "string" || !/^[0-9a-f]{64}$/.test(b.key)) return err(400, "key must be 32 bytes of lowercase hex");
-      if (running) return err(409, "a backup or import is already running here");
+      const slots: BackupSlot[] | null = parseBackupSlots(b.slots);
+      if (!slots) return err(400, "slots must hold a passcode slot, an account slot, or both");
+      if (running) return err(409, "a backup or restore is already running here");
       await ensureDir();
       if ((await free(opts.dir)) < MIN_FREE_BYTES) return err(507, "this server doesn't have enough free disk space to make a backup");
       running = true;
       const job: BackupJob = { archiveId: b.archiveId, state: "building", startedAt: now(), progress: { done: 0, total: 0, app: "" } };
       backup = job;
-      await rm(archiveFile, { force: true }).catch(() => {});
+      await dropBackupFiles();
       note("server.backup.started", "Started a backup of this server.");
       const key = Buffer.from(b.key, "hex");
       const archiveId = b.archiveId;
       void (async () => {
-        // Size it first: the sealed file, one app's scratch, and headroom so
+        // Size it first: the data file, one app's scratch, and headroom so
         // the apps keep working. A box that can't size something goes ahead
         // on the flat minimum it already passed.
         job.progress = { done: 0, total: 0, app: "Checking free space" };
@@ -205,22 +245,35 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
             );
           }
         }
-        return buildServerArchive(
+        const r = await buildServerArchive(
           { ...opts.build, workDir: scratch },
           {
             archiveId,
             key,
-            outPath: archiveFile,
+            outPath: dataFile,
             onProgress: (done, total, app) => {
               job.progress = { done, total, app };
             },
           },
         );
+        const fqdn = opts.build.serverFqdn;
+        const body: BackupBody = {
+          createdAt: r.createdAt,
+          server: { name: fqdn.split(".")[0] ?? fqdn, domain: fqdn, ...(await settings()) },
+          apps: r.apps,
+          left: r.left,
+          includes: ARCHIVE_INCLUDES,
+          excludes: ARCHIVE_EXCLUDES,
+          data: { fileName: dataFileName(fqdn, job.startedAt), bytes: r.bytes, sha256: r.sha256, frameBytes: ARCHIVE_FRAME_BYTES },
+        };
+        const written = await writeBackupFile(backupFile, { archiveId, key, slots, body, nonce: randomBytes(12) });
+        return { ...r, backupBytes: written.bytes };
       })()
         .then((r) => {
           job.state = "ready";
           job.bytes = r.bytes;
           job.sha256 = r.sha256;
+          job.backupBytes = r.backupBytes;
           job.apps = r.apps;
           job.left = r.left;
           key.fill(0);
@@ -232,10 +285,11 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
           );
           log(`[server-archive] backup ready (${r.bytes} bytes)`);
         })
-        .catch((e: Error) => {
+        .catch(async (e: Error) => {
           job.state = "failed";
           job.reason = e.message || "the backup couldn't be made";
           key.fill(0);
+          await dropBackupFiles();
           note("server.backup.failed", `The backup failed: ${job.reason}`, false);
           log(`[server-archive] backup failed: ${job.reason}`);
         })
@@ -254,7 +308,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     if (!Number.isSafeInteger(offset) || offset < 0 || offset > (backup.bytes ?? 0)) return err(400, "bad offset");
     const len = Math.min(ARCHIVE_CHUNK_BYTES, (backup.bytes ?? 0) - offset);
     const buf = Buffer.alloc(len);
-    const fh = await open(archiveFile, "r");
+    const fh = await open(dataFile, "r");
     try {
       let read = 0;
       while (read < len) {
@@ -279,6 +333,34 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     };
   }
 
+  async function readBackupFile(): Promise<Buffer | null> {
+    try {
+      const fh = await open(backupFile, "r");
+      try {
+        return await fh.readFile();
+      } finally {
+        await fh.close();
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  async function backupFileResponse(job: BackupJob): Promise<HttpResponse> {
+    const text = await readBackupFile();
+    if (!text) return err(404, "no backup is ready");
+    return {
+      status: 200,
+      headers: {
+        "content-type": "application/json",
+        "content-disposition": `attachment; filename="${backupFileName(opts.build.serverFqdn, job.startedAt)}"`,
+        "cache-control": "no-store",
+        "x-content-type-options": "nosniff",
+      },
+      body: text,
+    };
+  }
+
   function noteDownloaded(job: BackupJob): void {
     if (job.downloadedNoted) return;
     job.downloadedNoted = true;
@@ -290,7 +372,8 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     backup.linkToken ??= randomBytes(32).toString("hex");
     return json(200, {
       path: `${DOWNLOAD_PATH}${backup.linkToken}`,
-      fileName: backupFileName(opts.build.serverFqdn, backup.startedAt),
+      backupFileName: backupFileName(opts.build.serverFqdn, backup.startedAt),
+      dataFileName: dataFileName(opts.build.serverFqdn, backup.startedAt),
       bytes: backup.bytes,
       sha256: backup.sha256,
       expiresAt: backup.startedAt + KEEP_MS,
@@ -334,12 +417,12 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     body,
   });
 
-  /** The download link: the page, its status, and (approved only) the file. */
+  /** The download link: the page, its status, and (approved only) the two files. */
   async function handleDownload(req: HttpRequest): Promise<HttpResponse | null> {
     const path = req.path.split("?")[0]!;
     if (!path.startsWith(DOWNLOAD_PATH)) return null;
     const [token = "", kind = "", ...more] = path.slice(DOWNLOAD_PATH.length).split("/");
-    if (more.length > 0 || !["", "status", "file"].includes(kind)) return err(404, "not found");
+    if (more.length > 0 || !["", "status", "file", "backup"].includes(kind)) return err(404, "not found");
     const method = req.method.toUpperCase();
     if (method !== "GET" && (method !== "HEAD" || kind !== "file")) return err(405, "method not allowed");
     const q = new URLSearchParams(req.path.includes("?") ? req.path.slice(req.path.indexOf("?") + 1) : "");
@@ -363,9 +446,11 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
         renderDownloadPage({
           appLink: `${appLinkBase}/app/backup-download#s=${encodeURIComponent(opts.build.serverFqdn)}&a=${job.archiveId}&r=${r}`,
           code: archiveDownloadCode(r),
-          fileName: backupFileName(opts.build.serverFqdn, job.startedAt),
+          backupFileName: backupFileName(opts.build.serverFqdn, job.startedAt),
+          dataFileName: dataFileName(opts.build.serverFqdn, job.startedAt),
           sizeText: gb(job.bytes),
           statusUrl: `${base}/status?r=${r}`,
+          backupUrl: `${base}/backup?r=${r}`,
           fileUrl: `${base}/file?r=${r}`,
           expiresText: new Date(job.startedAt + KEEP_MS).toUTCString(),
         }),
@@ -375,11 +460,12 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     const approved = job.approved?.has(r) === true;
     if (kind === "status") return json(200, { approved });
     if (!approved) return err(403, "this download hasn't been approved: scan the QR on the download page with the Flagship app");
+    if (kind === "backup") return backupFileResponse(job);
     const size = job.bytes;
     const etag = `"${job.sha256 ?? job.archiveId}"`;
     const fileHeaders: Record<string, string> = {
       "content-type": "application/octet-stream",
-      "content-disposition": `attachment; filename="${backupFileName(opts.build.serverFqdn, job.startedAt)}"`,
+      "content-disposition": `attachment; filename="${dataFileName(opts.build.serverFqdn, job.startedAt)}"`,
       "accept-ranges": "bytes",
       etag,
       "cache-control": "no-store",
@@ -398,7 +484,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
       body: "",
       stream: {
         length: size === 0 ? 0 : end - start + 1,
-        open: () => createReadStream(archiveFile, { start, end }),
+        open: () => createReadStream(dataFile, { start, end }),
       },
     };
   }
@@ -410,13 +496,33 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
       state: backup.state,
       startedAt: backup.startedAt,
       progress: backup.progress,
+      backupFileName: backupFileName(opts.build.serverFqdn, backup.startedAt),
+      dataFileName: dataFileName(opts.build.serverFqdn, backup.startedAt),
       ...(backup.bytes !== undefined ? { bytes: backup.bytes } : {}),
+      ...(backup.backupBytes !== undefined ? { backupBytes: backup.backupBytes } : {}),
       ...(backup.estimatedBytes !== undefined ? { estimatedBytes: backup.estimatedBytes } : {}),
       ...(backup.sha256 ? { sha256: backup.sha256 } : {}),
       ...(backup.apps ? { apps: backup.apps } : {}),
       ...(backup.left ? { left: backup.left } : {}),
       ...(backup.reason ? { reason: backup.reason } : {}),
     };
+  }
+
+  // -------------------------------------------------------------------------
+  // Restore
+  // -------------------------------------------------------------------------
+
+  function waiting() {
+    const w = opts.wait?.current();
+    return w ? { archiveId: w.order.archiveId, bytes: w.order.bytes, sha256: w.order.sha256 } : null;
+  }
+
+  async function uploadedBytes(): Promise<number> {
+    try {
+      return (await stat(uploadFile)).size;
+    } catch {
+      return 0;
+    }
   }
 
   async function startRestore(req: HttpRequest): Promise<HttpResponse> {
@@ -426,29 +532,48 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     } catch {
       return err(400, "invalid json");
     }
-    if (typeof b.archiveId !== "string" || !/^[0-9a-f]{32}$/.test(b.archiveId)) return err(400, "archiveId must be 16 bytes of lowercase hex");
-    if (typeof b.bytes !== "number" || !Number.isSafeInteger(b.bytes) || b.bytes < 1) return err(400, "bytes required");
-    if (running) return err(409, "a backup or import is already running here");
-    await ensureDir();
-    // The sealed file, then the same again unpacked, with room to spare.
-    if ((await free(opts.dir)) < b.bytes * 2.2 + MIN_FREE_BYTES / 4) return err(507, "this server doesn't have enough free disk space to import that backup");
-    await rm(uploadFile, { force: true }).catch(() => {});
-    await rm(unpackDir, { recursive: true, force: true }).catch(() => {});
-    restore = { archiveId: b.archiveId, state: "uploading", bytes: b.bytes, received: 0, apps: [], startedAt: now() };
-    return json(202, { archiveId: b.archiveId });
+    const w = waiting();
+    if (!w) return err(409, "this server isn't waiting for a backup", { code: "not-waiting" });
+    if (b.archiveId !== w.archiveId || b.bytes !== w.bytes) {
+      return err(409, "this server is waiting for a different backup", { code: "other-backup" });
+    }
+    if (running) return err(409, "a backup or restore is already running here");
+    // An upload of this backup already under way (the app closed, or the box
+    // restarted): carry on from where it stopped.
+    if (restore && restore.archiveId === w.archiveId && (restore.state === "uploading" || restore.state === "ready")) {
+      return json(202, { archiveId: w.archiveId, received: restore.received });
+    }
+    await ensureDir(uploadDir);
+    const have = await uploadedBytes();
+    const received = have <= w.bytes ? have : 0;
+    if (received === 0) await rm(uploadFile, { force: true }).catch(() => {});
+    // The data file, then the same again unpacked, with room to spare.
+    if ((await free(uploadDir)) + received < w.bytes * 2.2 + MIN_FREE_BYTES / 4) {
+      return err(507, "this server doesn't have enough free disk space for that backup");
+    }
+    restore = {
+      archiveId: w.archiveId,
+      state: received === w.bytes ? "ready" : "uploading",
+      bytes: w.bytes,
+      received,
+      apps: [],
+      startedAt: now(),
+    };
+    return json(202, { archiveId: w.archiveId, received });
   }
 
   async function putChunk(req: HttpRequest): Promise<HttpResponse> {
-    if (!restore || restore.state !== "uploading") return err(409, "no import is waiting for data");
+    if (!restore || restore.state !== "uploading") return err(409, "no restore is waiting for data");
     const q = new URLSearchParams(req.path.includes("?") ? req.path.slice(req.path.indexOf("?") + 1) : "");
     const offset = Number(q.get("offset") ?? "");
     if (!Number.isSafeInteger(offset) || offset !== restore.received) {
       return err(409, "chunk out of order", { received: restore.received });
     }
-    if (req.body.length === 0 || offset + req.body.length > restore.bytes) return err(400, "bad chunk size");
+    if (req.body.length === 0 || req.body.length > ARCHIVE_CHUNK_BYTES || offset + req.body.length > restore.bytes) return err(400, "bad chunk size");
     const fh = await open(uploadFile, offset === 0 ? "w" : "r+", 0o600);
     try {
       await fh.write(req.body, 0, req.body.length, offset);
+      await fh.sync();
     } finally {
       await fh.close();
     }
@@ -457,8 +582,18 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     return json(200, { received: restore.received, ready: restore.state === "ready" });
   }
 
+  async function sha256Of(path: string): Promise<string> {
+    const h = createHash("sha256");
+    await pipeline(createReadStream(path), async function* (src: AsyncIterable<Buffer>) {
+      for await (const d of src) h.update(d);
+    });
+    return h.digest("hex");
+  }
+
   async function commitRestore(req: HttpRequest): Promise<HttpResponse> {
-    if (!restore || restore.state !== "ready") return err(409, "upload the whole backup first");
+    const w = waiting();
+    if (!w) return err(409, "this server isn't waiting for a backup", { code: "not-waiting" });
+    if (!restore || restore.state !== "ready" || restore.archiveId !== w.archiveId) return err(409, "upload the whole data file first");
     let b: { key?: unknown };
     try {
       b = JSON.parse(req.body.toString("utf8")) as typeof b;
@@ -466,23 +601,23 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
       return err(400, "invalid json");
     }
     if (typeof b.key !== "string" || !/^[0-9a-f]{64}$/.test(b.key)) return err(400, "key must be 32 bytes of lowercase hex");
-    // The header is public; the id in it must be the one the upload announced.
-    let header;
-    try {
-      header = (await readHeader(uploadFile)).header;
-    } catch (e) {
-      return err(400, (e as Error).message);
-    }
-    if (header.archiveId !== restore.archiveId) return err(400, "that isn't the backup you announced");
-    if (running) return err(409, "a backup or import is already running here");
+    if (running) return err(409, "a backup or restore is already running here");
     running = true;
     const job = restore;
-    job.state = "opening";
+    job.state = "checking";
+    job.reason = undefined;
     const key = Buffer.from(b.key, "hex");
-    note("server.restore.started", `Importing a backup from ${header.sourceServer}.`);
+    opts.wait?.setRestoring(true);
+    note("server.restore.started", "Restoring this server's backup.");
     void (async () => {
       try {
-        const contents = await unpackArchive({ ...opts.restore, workDir: scratch }, uploadFile, key, unpackDir);
+        // The file must be the one the owner signed for this server, before
+        // any of it is opened.
+        if ((await uploadedBytes()) !== w.bytes || (await sha256Of(uploadFile)) !== w.sha256) {
+          await rm(uploadFile, { force: true }).catch(() => {});
+          throw new ArchiveError("the data file isn't the one this server is waiting for (its size or SHA-256 differs): send it again");
+        }
+        const contents = await unpackArchive({ ...opts.restore, workDir: scratch }, uploadFile, key, w.archiveId, unpackDir);
         await rm(uploadFile, { force: true }).catch(() => {});
         job.apps = contents.metas.map((m) => ({ serviceId: m.serviceId, name: m.name, state: "waiting" as const }));
         job.state = "restoring";
@@ -491,19 +626,22 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
         });
         job.apps = results;
         job.state = "done";
+        await opts.wait?.finish(w.archiveId);
         const ok = results.filter((r) => r.state === "done").length;
         const failed = results.filter((r) => r.state === "failed").length;
-        note("server.restore.finished", `Import finished: ${ok} app${ok === 1 ? "" : "s"} restored${failed > 0 ? `, ${failed} failed` : ""}.`, failed === 0);
+        note("server.restore.finished", `Backup restored: ${ok} app${ok === 1 ? "" : "s"}${failed > 0 ? `, ${failed} failed` : ""}.`, failed === 0);
       } catch (e) {
         job.state = "failed";
-        job.reason = e instanceof ArchiveError ? e.message : `the import failed: ${(e as Error).message}`;
-        note("server.restore.failed", job.reason, false);
-        log(`[server-archive] import failed: ${job.reason}`);
+        job.reason = e instanceof ArchiveError ? e.message : `the restore failed: ${(e as Error).message}`;
+        // A data file that doesn't open has to be sent again.
+        await rm(uploadFile, { force: true }).catch(() => {});
+        opts.wait?.setRestoring(false);
+        note("server.restore.failed", `${job.reason}. This server is still waiting for its backup.`, false);
+        log(`[server-archive] restore failed: ${job.reason}`);
       } finally {
         key.fill(0);
         running = false;
         await rm(unpackDir, { recursive: true, force: true }).catch(() => {});
-        await rm(uploadFile, { force: true }).catch(() => {});
         await rm(scratch, { recursive: true, force: true }).catch(() => {});
       }
     })();
@@ -511,21 +649,32 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
   }
 
   function restoreView() {
-    if (!restore) return { restore: null };
-    const { archiveId, state, bytes, received, apps, reason, startedAt } = restore;
-    return { restore: { archiveId, state, bytes, received, apps, startedAt, ...(reason ? { reason } : {}) } };
+    const r = restore
+      ? {
+          archiveId: restore.archiveId,
+          state: restore.state,
+          bytes: restore.bytes,
+          received: restore.received,
+          apps: restore.apps,
+          startedAt: restore.startedAt,
+          ...(restore.reason ? { reason: restore.reason } : {}),
+        }
+      : null;
+    return { waiting: waiting(), restore: r };
   }
 
   return {
     async handle(path: string, method: string, req: HttpRequest, ctx: { companion: boolean }): Promise<HttpResponse | null> {
       if (!isServerArchivePath(path)) return null;
-      if (ctx.companion) return err(403, "companion sessions can't back up or import a server: open your owner app", { code: "companion-write-not-allowed" });
+      if (ctx.companion) return err(403, "companion sessions can't back up or restore a server: open your owner app", { code: "companion-write-not-allowed" });
       await sweep();
       switch (`${method} ${path}`) {
         case `POST ${ARCHIVE_PATH}/start`:
           return startBackup(req);
         case `GET ${ARCHIVE_PATH}`:
           return json(200, { archive: backupView() });
+        case `GET ${ARCHIVE_PATH}/backup-file`:
+          return backup?.state === "ready" ? backupFileResponse(backup) : err(404, "no backup is ready");
         case `GET ${ARCHIVE_PATH}/chunk`:
           return chunk(req);
         case `POST ${ARCHIVE_PATH}/link`:
@@ -535,7 +684,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
         case `DELETE ${ARCHIVE_PATH}`:
           if (backup?.state === "building") return err(409, "the backup is still being made");
           backup = null;
-          await rm(archiveFile, { force: true }).catch(() => {});
+          await dropBackupFiles();
           return json(200, { ok: true });
         case `POST ${RESTORE_PATH}/start`:
           return startRestore(req);
@@ -551,9 +700,11 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     },
     /** `GET|HEAD /api/archive-download/<token>`: mount OUTSIDE the session gate. */
     handleDownload,
-    /** Drop any file a previous run left behind (a restart ends a running job). */
+    /** Drop the files a previous run left behind (a restart ends a running backup).
+     *  A restore's upload survives while this server still waits for it. */
     async init(): Promise<void> {
       await rm(opts.dir, { recursive: true, force: true }).catch(() => {});
+      if (!opts.wait?.current()) await rm(uploadDir, { recursive: true, force: true }).catch(() => {});
     },
     /** Wait for a running job (tests). */
     async settle(): Promise<void> {
@@ -563,13 +714,3 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
 }
 
 export type ServerArchiveService = ReturnType<typeof buildServerArchiveService>;
-
-// Kept for tests that want the sealed file's hash without reading it twice.
-export async function fileSha256(path: string): Promise<string> {
-  const h = createHash("sha256");
-  await pipeline(createReadStream(path), async function* (src: AsyncIterable<Buffer>) {
-    for await (const d of src) h.update(d);
-  });
-  return h.digest("hex");
-}
-

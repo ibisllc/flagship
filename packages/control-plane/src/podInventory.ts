@@ -213,11 +213,31 @@ export interface OnlinePodEntry {
    * `leadsServices`; absent when the box never reported one.
    */
   orderIssuedAt?: number;
+  /**
+   * The box was created to restore a backup and is waiting for it (or
+   * restoring it): Home says "Waiting for its backup". UNSIGNED and advisory
+   * like `leadsServices`; absent once the backup is in.
+   */
+  awaitingBackup?: AwaitingBackupView;
   /** Latest box-signed health report (memory, OOM kills, daemon restarts,
    *  tunnel, disk), or absent when the box never sent one. */
   health?: BoxHealthReport & { receivedAt: number };
   pendingRequests: PendingRequestSummary[];
   state: "online";
+}
+
+export interface AwaitingBackupView {
+  archiveId: string;
+  state: "waiting" | "restoring";
+}
+
+/** The heartbeat's `awaitingBackup`, or null when absent or malformed. */
+export function parseAwaitingBackup(v: unknown): AwaitingBackupView | null {
+  if (typeof v !== "object" || v === null) return null;
+  const { archiveId, state } = v as { archiveId?: unknown; state?: unknown };
+  if (typeof archiveId !== "string" || !/^[0-9a-f]{32}$/.test(archiveId)) return null;
+  if (state !== "waiting" && state !== "restoring") return null;
+  return { archiveId, state };
 }
 
 /** The full pod-inventory projection (the `/pods` payload, sans HTTP wrapper). */
@@ -348,6 +368,7 @@ export async function buildPodInventory(
       // signedStatus; absent/corrupt → empty (additive, never fails the list).
       let leadsServices: string[] = [];
       let orderIssuedAt: number | undefined;
+      let awaitingBackup: AwaitingBackupView | null = null;
       // PER-BOX relay-trust verdict — the separately-signed box-trust-status
       // sibling the daemon stashed inside the report JSON. Relayed verbatim as
       // `trustStatus` ({ report, signatureHex }) so a client re-verifies the
@@ -368,6 +389,7 @@ export async function buildPodInventory(
           }
           const oi = (parsedReport as { orderIssuedAt?: unknown })?.orderIssuedAt;
           if (typeof oi === "number" && Number.isSafeInteger(oi) && oi >= 0) orderIssuedAt = oi;
+          awaitingBackup = parseAwaitingBackup((parsedReport as { awaitingBackup?: unknown })?.awaitingBackup);
           const rawTs = (
             parsedReport as {
               trustStatus?: { report?: unknown; signatureHex?: unknown };
@@ -424,6 +446,7 @@ export async function buildPodInventory(
         appsServed,
         leadsServices,
         ...(orderIssuedAt !== undefined ? { orderIssuedAt } : {}),
+        ...(awaitingBackup ? { awaitingBackup } : {}),
         // The Box Request Inbox digest for this pod (docs/box-request-inbox.md):
         // the typed list of approvals this box is currently asking its owner
         // for. The generic client inbox is the flatMap of this across pods.
@@ -520,6 +543,8 @@ interface DaemonStatusBody {
   runsServices?: string[];
   /** UNSIGNED advisory: `issuedAt` of the server order the box ranks by. */
   orderIssuedAt?: number;
+  /** UNSIGNED advisory: the box waits for (or is restoring) its backup. */
+  awaitingBackup?: unknown;
   /**
    * SIBLING signed envelope — the box's PER-BOX relay-trust verdict
    * (`flagship/box-trust-status/v1`). Signed independently of the daemon-status
@@ -587,6 +612,7 @@ export async function handlePostDaemonStatus(
     typeof body.orderIssuedAt === "number" && Number.isSafeInteger(body.orderIssuedAt) && body.orderIssuedAt >= 0
       ? body.orderIssuedAt
       : undefined;
+  const awaitingBackup = parseAwaitingBackup(body.awaitingBackup);
   const server = await deps.servers.get(r.serverDomain);
   if (!server) return forbidden("unknown serverDomain");
   if (server.revokedAt) return forbidden("server revoked");
@@ -647,6 +673,7 @@ export async function handlePostDaemonStatus(
     ...(leadsServices.length > 0 ? { leadsServices } : {}),
     ...(runsServices ? { runsServices } : {}),
     ...(orderIssuedAt !== undefined ? { orderIssuedAt } : {}),
+    ...(awaitingBackup ? { awaitingBackup } : {}),
     ...(trustStatusForStore ? { trustStatus: trustStatusForStore } : {}),
   };
   await deps.daemonStatus.put({

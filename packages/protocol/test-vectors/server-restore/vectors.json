@@ -1,0 +1,73 @@
+{
+  "about": "flagship/server-restore/v1 (docs/server-backup-and-clone.md): the owner's order that a new server waits for one backup. Canonical: tag|serverDomain|archiveId|bytes|sha256|issuedAt (archiveId 16 bytes, sha256 32 bytes, lowercase hex; bytes >= 1). Signed by the IRK derived from the UMK seed. It rides in the pairing order JSON as \"restore\": {\"order\": {...}, \"signatureHex\": \"...\"}.",
+  "umkSeedHex": "2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a",
+  "pub": "c49775473bf9dcf5ad1608c8e66823d55dc6889be27e42a029fd9de195c8d7e4",
+  "cases": [
+    {
+      "order": {
+        "serverDomain": "home2.harry.flagship.services",
+        "archiveId": "00112233445566778899aabbccddeeff",
+        "bytes": 123456789,
+        "sha256": "abababababababababababababababababababababababababababababababab",
+        "issuedAt": 1792000000000
+      },
+      "canonical": "flagship/server-restore/v1|home2.harry.flagship.services|00112233445566778899aabbccddeeff|123456789|abababababababababababababababababababababababababababababababab|1792000000000",
+      "signature": "f13ce904b419be8e1b1174656dac5f99b0ffbe7706c1714f15a858dd5857ee53361aea919003b9aaaa041e00ebb1258136bc648604f9e7652bf44586d7925b05"
+    },
+    {
+      "order": {
+        "serverDomain": "clone.harry.flagship.services",
+        "archiveId": "ffeeddccbbaa99887766554433221100",
+        "bytes": 24,
+        "sha256": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+        "issuedAt": 1700000000000
+      },
+      "canonical": "flagship/server-restore/v1|clone.harry.flagship.services|ffeeddccbbaa99887766554433221100|24|0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f|1700000000000",
+      "signature": "40cf576ce6578b8355edfad72c76aaa1cb5ce5994dfdf83d5fd2e2ac60f15252c1ea7098546350e915236c97ae8006f635d13335992782e5eb46e008955a8505"
+    }
+  ],
+  "invalid": [
+    {
+      "serverDomain": "",
+      "archiveId": "00112233445566778899aabbccddeeff",
+      "bytes": 123456789,
+      "sha256": "abababababababababababababababababababababababababababababababab",
+      "issuedAt": 1792000000000
+    },
+    {
+      "serverDomain": "a|b",
+      "archiveId": "00112233445566778899aabbccddeeff",
+      "bytes": 123456789,
+      "sha256": "abababababababababababababababababababababababababababababababab",
+      "issuedAt": 1792000000000
+    },
+    {
+      "serverDomain": "home2.harry.flagship.services",
+      "archiveId": "ABABABABABABABABABABABABABABABAB",
+      "bytes": 123456789,
+      "sha256": "abababababababababababababababababababababababababababababababab",
+      "issuedAt": 1792000000000
+    },
+    {
+      "serverDomain": "home2.harry.flagship.services",
+      "archiveId": "00112233445566778899aabbccddeeff",
+      "bytes": 0,
+      "sha256": "abababababababababababababababababababababababababababababababab",
+      "issuedAt": 1792000000000
+    },
+    {
+      "serverDomain": "home2.harry.flagship.services",
+      "archiveId": "00112233445566778899aabbccddeeff",
+      "bytes": 123456789,
+      "sha256": "ab",
+      "issuedAt": 1792000000000
+    },
+    {
+      "serverDomain": "home2.harry.flagship.services",
+      "archiveId": "00112233445566778899aabbccddeeff",
+      "bytes": 123456789,
+      "sha256": "abababababababababababababababababababababababababababababababab",
+      "issuedAt": -1
+    }
+  ]
+}

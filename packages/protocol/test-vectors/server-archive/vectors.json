@@ -1,5 +1,5 @@
 {
-  "about": "Server archive key (Backup/clone server): HKDF-SHA256(UMK seed, salt empty, info \"flagship/server-archive/v1|<archiveIdHex>\") -> 32 bytes. archiveIdHex is 16 random bytes, lowercase hex, public in the archive header. Server-id independent so an archive can be imported under a new name.",
+  "about": "Server archive key (Backup/clone server): HKDF-SHA256(UMK seed, salt empty, info \"flagship/server-archive/v1|<archiveIdHex>\") -> 32 bytes. archiveIdHex is 16 random bytes, lowercase hex, public in the backup file. It is the KEK of the backup file's account slot (test-vectors/server-backup). Server-id independent so a backup can be restored under a new name.",
   "info": "flagship/server-archive/v1",
   "cases": [
     {

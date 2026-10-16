@@ -1,102 +1,86 @@
 /**
- * The file a "Backup/clone server" makes: one JSON header line, then the tar
- * of the server (apps, databases, files folders, images) sealed in AES-256-GCM
- * frames.
+ * The two files a "Backup/clone server" makes (docs/server-backup-and-clone.md):
  *
- *   {"magic":"flagship-archive","v":1,"archiveId":"<32 hex>",...}\n
- *   [u32 BE n][n bytes: ciphertext + 16-byte tag]  × frames
+ *   the data file   "flagship-backup-data/v2\n", then the tar of the apps sealed
+ *                   in AES-256-GCM frames: [u32 BE n][n bytes: ciphertext + tag]
+ *   the backup file small JSON (@flagship/protocol serverBackup.ts): the key
+ *                   slots, and sealed under the content key the server's
+ *                   settings, the apps, and the data file's size and SHA-256
  *
- * Every frame is bound to the header (its SHA-256 is the AAD) and to its place
- * in the file (the nonce is the frame index), and the AAD carries a "last
- * frame" flag, so a reordered, edited, or truncated archive fails to open
- * instead of restoring half a server. The header is readable without the key
- * (the importing app needs `archiveId` to derive the key and shows the names);
- * it carries no secrets.
+ * Every frame is bound to the backup (its id is in the AAD) and to its place
+ * (the nonce is the frame index), and the AAD says whether it is the last
+ * frame, so a reordered, edited, or cut-short data file fails to open instead
+ * of restoring half a server. The box never reads the slots: the owner's app
+ * hands it the content key to seal, and again to open.
  */
 import { createCipheriv, createDecipheriv, createHash } from "node:crypto";
-import { createReadStream, createWriteStream } from "node:fs";
-import { open, stat } from "node:fs/promises";
+import { createWriteStream } from "node:fs";
+import { open, stat, writeFile } from "node:fs/promises";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import {
+  BACKUP_DATA_MAGIC,
+  BACKUP_FRAME_BYTES,
+  backupFrameAad,
+  backupFrameNonce,
+  sealBackupFile,
+  serializeBackupFile,
+  type BackupBody,
+  type BackupSlot,
+} from "@flagship/protocol";
 
-export const ARCHIVE_MAGIC = "flagship-archive";
-export const ARCHIVE_FRAME_BYTES = 1024 * 1024;
+export const ARCHIVE_FRAME_BYTES = BACKUP_FRAME_BYTES;
 const TAG_BYTES = 16;
-const MAX_HEADER_BYTES = 64 * 1024;
-
-export interface ArchiveHeader {
-  magic: typeof ARCHIVE_MAGIC;
-  v: 1;
-  /** 16 random bytes, hex: the public half of the key derivation. */
-  archiveId: string;
-  createdAt: number;
-  /** The server it was made on (for the importer's "from ..." line). */
-  sourceServer: string;
-  frameBytes: number;
-  apps: Array<{ serviceId: string; name: string }>;
-}
+const MAX_FRAME_BYTES = 16 * 1024 * 1024;
+const MAGIC = Buffer.from(BACKUP_DATA_MAGIC, "utf8");
 
 export class ArchiveError extends Error {}
 
-export function headerLine(h: ArchiveHeader): Buffer {
-  return Buffer.from(`${JSON.stringify(h)}\n`, "utf8");
-}
-
-function nonceFor(index: number): Buffer {
-  const n = Buffer.alloc(12);
-  n.writeBigUInt64BE(BigInt(index), 4);
-  return n;
-}
-
-function aadFor(headerBytes: Buffer, last: boolean): Buffer {
-  return Buffer.concat([createHash("sha256").update(headerBytes).digest(), Buffer.from([last ? 1 : 0])]);
-}
-
-function sealFrame(key: Buffer, headerBytes: Buffer, index: number, last: boolean, plain: Buffer): Buffer {
-  const c = createCipheriv("aes-256-gcm", key, nonceFor(index));
-  c.setAAD(aadFor(headerBytes, last));
+function sealFrame(key: Buffer, archiveId: string, index: number, last: boolean, plain: Buffer): Buffer {
+  const c = createCipheriv("aes-256-gcm", key, backupFrameNonce(index));
+  c.setAAD(backupFrameAad(archiveId, last));
   const body = Buffer.concat([c.update(plain), c.final(), c.getAuthTag()]);
   const len = Buffer.alloc(4);
   len.writeUInt32BE(body.length);
   return Buffer.concat([len, body]);
 }
 
-function openFrame(key: Buffer, headerBytes: Buffer, index: number, last: boolean, body: Buffer): Buffer {
-  if (body.length < TAG_BYTES) throw new ArchiveError("the archive is damaged");
-  const d = createDecipheriv("aes-256-gcm", key, nonceFor(index));
-  d.setAAD(aadFor(headerBytes, last));
+function openFrame(key: Buffer, archiveId: string, index: number, last: boolean, body: Buffer): Buffer {
+  if (body.length < TAG_BYTES) throw new ArchiveError("the backup's data file is damaged");
+  const d = createDecipheriv("aes-256-gcm", key, backupFrameNonce(index));
+  d.setAAD(backupFrameAad(archiveId, last));
   d.setAuthTag(body.subarray(body.length - TAG_BYTES));
   try {
     return Buffer.concat([d.update(body.subarray(0, body.length - TAG_BYTES)), d.final()]);
   } catch {
-    throw new ArchiveError("the archive can't be opened: wrong key, or it was changed or cut short");
+    throw new ArchiveError("the backup's data file can't be opened: wrong key, or it was changed or cut short");
   }
 }
 
 /**
- * Seal `plain` (the tar stream) into `outPath`. Returns the file's size and
- * SHA-256 (the downloader checks it).
+ * Seal `plain` (the tar stream) into the data file at `outPath`. Returns its
+ * size and SHA-256 (they go into the backup file and the restore order).
  */
-export async function sealToFile(
+export async function sealDataFile(
   plain: Readable,
   key: Buffer,
-  header: ArchiveHeader,
+  archiveId: string,
   outPath: string,
+  frameBytes: number = ARCHIVE_FRAME_BYTES,
 ): Promise<{ bytes: number; sha256: string }> {
-  if (key.length !== 32) throw new ArchiveError("the archive key must be 32 bytes");
-  const hb = headerLine(header);
-  const frameBytes = header.frameBytes;
+  if (key.length !== 32) throw new ArchiveError("the backup key must be 32 bytes");
+  if (frameBytes < 1024 || frameBytes > MAX_FRAME_BYTES) throw new ArchiveError("bad frame size");
   const hash = createHash("sha256");
   let bytes = 0;
   async function* frames(): AsyncGenerator<Buffer> {
-    hash.update(hb);
-    bytes += hb.length;
-    yield hb;
+    hash.update(MAGIC);
+    bytes += MAGIC.length;
+    yield MAGIC;
     let pending: Buffer = Buffer.alloc(0);
     let held: Buffer | null = null;
     let index = 0;
     const emit = (plainFrame: Buffer, last: boolean): Buffer => {
-      const out = sealFrame(key, hb, index++, last, plainFrame);
+      const out = sealFrame(key, archiveId, index++, last, plainFrame);
       hash.update(out);
       bytes += out.length;
       return out;
@@ -120,58 +104,30 @@ export async function sealToFile(
   return { bytes, sha256: hash.digest("hex") };
 }
 
-/** The header of an archive on disk, with the byte length of its line. */
-export async function readHeader(path: string): Promise<{ header: ArchiveHeader; bytes: Buffer }> {
-  const fh = await open(path, "r");
-  try {
-    const buf = Buffer.alloc(MAX_HEADER_BYTES);
-    const { bytesRead } = await fh.read(buf, 0, MAX_HEADER_BYTES, 0);
-    const nl = buf.subarray(0, bytesRead).indexOf(0x0a);
-    if (nl < 0) throw new ArchiveError("that isn't a Flagship archive");
-    return parseHeader(buf.subarray(0, nl + 1));
-  } finally {
-    await fh.close();
-  }
-}
-
-export function parseHeader(line: Buffer): { header: ArchiveHeader; bytes: Buffer } {
-  let h: Partial<ArchiveHeader>;
-  try {
-    h = JSON.parse(line.toString("utf8")) as Partial<ArchiveHeader>;
-  } catch {
-    throw new ArchiveError("that isn't a Flagship archive");
-  }
-  if (h.magic !== ARCHIVE_MAGIC) throw new ArchiveError("that isn't a Flagship archive");
-  if (h.v !== 1) throw new ArchiveError("this archive is from a newer version of Flagship");
-  if (typeof h.archiveId !== "string" || !/^[0-9a-f]{32}$/.test(h.archiveId)) throw new ArchiveError("the archive header is damaged");
-  if (!Number.isSafeInteger(h.frameBytes) || h.frameBytes! < 1024 || h.frameBytes! > 16 * 1024 * 1024) {
-    throw new ArchiveError("the archive header is damaged");
-  }
-  return { header: h as ArchiveHeader, bytes: line };
-}
-
-/** Open `path` into its tar stream, verifying every frame (and that the last one is last). */
-export function openToTar(path: string, key: Buffer): Readable {
-  if (key.length !== 32) throw new ArchiveError("the archive key must be 32 bytes");
+/** Open a data file into its tar stream, verifying every frame (and that the last one is last). */
+export function openDataFile(path: string, key: Buffer, archiveId: string): Readable {
+  if (key.length !== 32) throw new ArchiveError("the backup key must be 32 bytes");
   async function* plain(): AsyncGenerator<Buffer> {
-    const { header, bytes: hb } = await readHeader(path);
     const total = (await stat(path)).size;
     const fh = await open(path, "r");
     try {
-      let pos = hb.length;
+      const head = Buffer.alloc(MAGIC.length);
+      await fh.read(head, 0, MAGIC.length, 0);
+      if (!head.equals(MAGIC)) throw new ArchiveError("that isn't a Flagship backup's data file");
+      let pos = MAGIC.length;
       let index = 0;
       const lenBuf = Buffer.alloc(4);
       for (;;) {
-        if (pos + 4 > total) throw new ArchiveError("the archive was cut short");
+        if (pos + 4 > total) throw new ArchiveError("the backup's data file was cut short");
         await fh.read(lenBuf, 0, 4, pos);
         const n = lenBuf.readUInt32BE(0);
-        if (n < TAG_BYTES || n > header.frameBytes + TAG_BYTES) throw new ArchiveError("the archive is damaged");
-        if (pos + 4 + n > total) throw new ArchiveError("the archive was cut short");
+        if (n < TAG_BYTES || n > MAX_FRAME_BYTES + TAG_BYTES) throw new ArchiveError("the backup's data file is damaged");
+        if (pos + 4 + n > total) throw new ArchiveError("the backup's data file was cut short");
         const body = Buffer.alloc(n);
         await fh.read(body, 0, n, pos + 4);
         pos += 4 + n;
         const last = pos === total;
-        yield openFrame(key, hb, index++, last, body);
+        yield openFrame(key, archiveId, index++, last, body);
         if (last) return;
       }
     } finally {
@@ -181,7 +137,12 @@ export function openToTar(path: string, key: Buffer): Readable {
   return Readable.from(plain(), { objectMode: false });
 }
 
-/** Stream a sealed archive's bytes (for tests and local copies). */
-export function rawStream(path: string): Readable {
-  return createReadStream(path);
+/** Write the backup file: the slots the owner's app made, and the body sealed under the content key. */
+export async function writeBackupFile(
+  path: string,
+  a: { archiveId: string; key: Buffer; slots: BackupSlot[]; body: BackupBody; nonce: Buffer },
+): Promise<{ bytes: number; text: string }> {
+  const text = serializeBackupFile(sealBackupFile(a.archiveId, a.key, a.slots, a.body, a.nonce));
+  await writeFile(path, text, { mode: 0o600 });
+  return { bytes: Buffer.byteLength(text), text };
 }

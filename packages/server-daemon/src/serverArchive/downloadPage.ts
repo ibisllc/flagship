@@ -5,8 +5,9 @@
  *
  * It shows a QR for the owner's Flagship app and a 6-digit code; the app shows
  * the same code, asks for Face ID and signs the approval to the box. The page
- * polls until the box has a valid signature for its request, then starts the
- * download (straight to disk, resumable) and keeps a button to start it again.
+ * polls until the box has a valid signature for its request, then starts both
+ * downloads (the small backup file, then the data file straight to disk,
+ * resumable) and keeps a button for each to start it again.
  */
 import { renderQrSvg } from "../qrSvg.js";
 
@@ -17,14 +18,16 @@ function esc(s: string): string {
 export function renderDownloadPage(a: {
   appLink: string;
   code: string;
-  fileName: string;
+  backupFileName: string;
+  dataFileName: string;
   sizeText: string;
   statusUrl: string;
+  backupUrl: string;
   fileUrl: string;
   expiresText: string;
 }): string {
   const qr = renderQrSvg(a.appLink, { size: 220, foreground: "#0f172a" });
-  const cfg = JSON.stringify({ statusUrl: a.statusUrl, fileUrl: a.fileUrl }).replace(/</g, "\\u003c");
+  const cfg = JSON.stringify({ statusUrl: a.statusUrl, backupUrl: a.backupUrl, fileUrl: a.fileUrl }).replace(/</g, "\\u003c");
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -53,7 +56,7 @@ export function renderDownloadPage(a: {
 <body>
 <main class="card">
   <h1>Download a server backup</h1>
-  <p class="muted">${esc(a.fileName)} · ${esc(a.sizeText)}</p>
+  <p class="muted">Two files: ${esc(a.backupFileName)} and ${esc(a.dataFileName)} (${esc(a.sizeText)}). Keep them together.</p>
   <div id="ask">
     <p class="muted">Scan this with the Flagship app on your phone and approve with Face ID. The app shows the same code:</p>
     <div class="qr" aria-label="QR code for the Flagship app">${qr}</div>
@@ -61,22 +64,30 @@ export function renderDownloadPage(a: {
     <p class="muted">Only approve if the code in the app matches this one.</p>
   </div>
   <div id="go" class="hidden">
-    <p class="muted">Approved. Your download should start now; if it stops, start it again here and it picks up where it left off.</p>
-    <a class="btn" id="dl" href="#">Download backup</a>
+    <p class="muted">Approved. Both downloads should start now (your browser may ask to allow two files). If one stops, start it again here; the data file picks up where it left off.</p>
+    <a class="btn" id="bk" href="#">Download the backup file</a>
+    <p></p>
+    <a class="btn" id="dl" href="#">Download the data file</a>
   </div>
-  <p class="muted">This link works until ${esc(a.expiresText)}. Only your own devices can open the file.</p>
+  <p class="muted">This link works until ${esc(a.expiresText)}. The backup opens with its passcode or on your own devices.</p>
   <p class="err hidden" id="err"></p>
 </main>
 <script>
 (function () {
   var cfg = ${cfg};
   var started = false;
-  var dl = document.getElementById("dl");
-  dl.href = cfg.fileUrl;
+  document.getElementById("bk").href = cfg.backupUrl;
+  document.getElementById("dl").href = cfg.fileUrl;
+  function fetchTo(url) {
+    var f = document.createElement("iframe");
+    f.style.display = "none";
+    f.src = url;
+    document.body.appendChild(f);
+  }
   function show(approved) {
     document.getElementById("ask").classList.toggle("hidden", approved);
     document.getElementById("go").classList.toggle("hidden", !approved);
-    if (approved && !started) { started = true; location.href = cfg.fileUrl; }
+    if (approved && !started) { started = true; fetchTo(cfg.backupUrl); setTimeout(function () { fetchTo(cfg.fileUrl); }, 800); }
   }
   function fail(msg) { var e = document.getElementById("err"); e.textContent = msg; e.classList.remove("hidden"); }
   function poll() {

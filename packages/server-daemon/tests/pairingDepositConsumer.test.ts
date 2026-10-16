@@ -222,6 +222,43 @@ describe("claimPairingDeposit (online default — sealed to box identity)", () =
 });
 
 describe("addEmbeddedPairing (offline embed — plaintext order)", () => {
+  it("hands a verified order's JSON to onVerified (where a restore order rides), never a rejected one", async () => {
+    const irk = makeKey(1);
+    const seen: string[] = [];
+    const { json } = buildOrder({ irk });
+    const withRestore = JSON.stringify({ ...JSON.parse(json), restore: { order: {}, signatureHex: "" } });
+    await addEmbeddedPairing({
+      embeddedJson: withRestore,
+      serverFqdn: DOMAIN,
+      ownerIrkPub: irk.publicKey,
+      pairedSessions: inMemSink(),
+      markerStore: inMemMarker(),
+      onVerified: async (j) => void seen.push(j),
+    });
+    expect(seen).toEqual([withRestore]);
+    await addEmbeddedPairing({
+      embeddedJson: buildOrder({ irk: makeKey(2) }).json,
+      serverFqdn: DOMAIN,
+      ownerIrkPub: irk.publicKey,
+      pairedSessions: inMemSink(),
+      markerStore: inMemMarker(),
+      onVerified: async (j) => void seen.push(j),
+    });
+    expect(seen).toHaveLength(1);
+    // A failing hook never stops the pairing.
+    const out = await addEmbeddedPairing({
+      embeddedJson: json,
+      serverFqdn: DOMAIN,
+      ownerIrkPub: irk.publicKey,
+      pairedSessions: inMemSink(),
+      markerStore: inMemMarker(),
+      onVerified: async () => {
+        throw new Error("disk full");
+      },
+    });
+    expect(out).toEqual({ added: true, token: TOKEN });
+  });
+
   it("verified embedded order → adds the session locally", async () => {
     const irk = makeKey(1);
     const sink = inMemSink();

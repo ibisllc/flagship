@@ -1,15 +1,33 @@
 /**
- * Backup/clone server end to end on fake docker: make a backup on one server,
- * download it in chunks, upload it to a DIFFERENT server (a different name),
- * and import it. Plus the refusals: wrong key, a damaged upload, an app that
- * is already there, a companion session.
+ * Backup/clone server end to end on fake docker: make a backup (two files) on
+ * one server, download it, and restore it onto a DIFFERENT server (a different
+ * name) that was created to wait for exactly that backup. Plus the refusals:
+ * a server that isn't waiting, another backup, a changed data file, a wrong
+ * key, an app that is already there, a companion session.
  */
 import { mkdtempSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { archiveDownloadCode, deriveIRK, deriveServerArchiveKey, signArchiveDownloadApproval, signInstallService, verifyArchiveDownloadApproval, verifyInstallService } from "@flagship/protocol";
+import {
+  archiveDownloadCode,
+  deriveIRK,
+  deriveServerArchiveKey,
+  openBackupWithAccountKey,
+  openBackupWithPasscode,
+  parseBackupFile,
+  signArchiveDownloadApproval,
+  signInstallService,
+  signServerRestoreOrder,
+  verifyArchiveDownloadApproval,
+  verifyInstallService,
+  wrapAccountSlot,
+  wrapPasscodeSlot,
+  type ServerRestoreOrder,
+} from "@flagship/protocol";
+import { createHash } from "node:crypto";
+import { buildRestoreWait, type RestoreWait } from "../../src/serverArchive/restoreWait.js";
 import { AppCopyOps } from "../../src/appCopy/ops.js";
 import { DataProvisioner, InMemoryFilesAdmin, InMemoryPostgresAdmin } from "../../src/dataLayer/index.js";
 import { ServicePlatform } from "../../src/servicePlatform.js";
@@ -30,6 +48,41 @@ const DST = "clone.harry.flagship.services";
 const SERVICE = "harry--notes";
 const UMK = { seed: new Uint8Array(32).fill(9) };
 const ARCHIVE_ID = "00112233445566778899aabbccddeeff";
+const CONTENT_KEY = Buffer.alloc(32, 0x5a);
+const PASSCODE = "k7qm-2xhd-9twp-4frn-6cyb";
+const slots = () => [
+  wrapPasscodeSlot(ARCHIVE_ID, CONTENT_KEY, PASSCODE, new Uint8Array(16).fill(1), new Uint8Array(12).fill(2), { m: 64, t: 1, p: 1 }),
+  wrapAccountSlot(ARCHIVE_ID, CONTENT_KEY, deriveServerArchiveKey(UMK, ARCHIVE_ID), new Uint8Array(12).fill(3)),
+];
+
+/** A RestoreWait set later (once the test has the data file to sign for). */
+function lateWait(ref: { current: RestoreWait | null }): RestoreWait {
+  return {
+    load: async () => {},
+    current: () => ref.current?.current() ?? null,
+    adoptFromPairingJson: async () => false,
+    setRestoring: (on) => ref.current?.setRestoring(on),
+    finish: async (id) => ref.current?.finish(id),
+    heartbeatView: () => ref.current?.heartbeatView() ?? null,
+  };
+}
+
+/** A restore-wait that has adopted the owner's order for `file` on `domain`. */
+async function waitingFor(dir: string, domain: string, file: Buffer, over: Partial<ServerRestoreOrder> = {}): Promise<RestoreWait> {
+  const wait = buildRestoreWait({ path: join(dir, `wait-${domain}.json`), donePath: join(dir, `done-${domain}.json`), serverDomain: domain, ownerIrkPub: owner.publicKey });
+  await wait.load();
+  const order: ServerRestoreOrder = {
+    serverDomain: domain,
+    archiveId: ARCHIVE_ID,
+    bytes: file.length,
+    sha256: createHash("sha256").update(file).digest("hex"),
+    issuedAt: Date.now(),
+    ...over,
+  };
+  const signatureHex = Buffer.from(signServerRestoreOrder(order, owner)).toString("hex");
+  expect(await wait.adoptFromPairingJson(JSON.stringify({ request: {}, signature: "", restore: { order, signatureHex } }))).toBe(true);
+  return wait;
+}
 
 const MANIFEST = {
   schema_version: 1,
@@ -115,8 +168,10 @@ async function world() {
       ops.images.add(image);
     },
   });
+  const sourceWait: { current: RestoreWait | null } = { current: null };
   const sourceService = buildServerArchiveService({
     dir: join(dir, "src-archives"),
+    wait: lateWait(sourceWait),
     build: {
       serverFqdn: SRC,
       apps: () => [src.platform.byServiceId(SERVICE)!],
@@ -142,8 +197,12 @@ async function world() {
     note: (k) => void events.push(k),
     freeBytes: async () => 1e12,
   });
+  const targetWait: { current: RestoreWait | null } = { current: null };
   const targetService = buildServerArchiveService({
     dir: join(dir, "dst-archives"),
+    uploadDir: join(dir, "dst-upload"),
+    wait: lateWait(targetWait),
+    serverSettings: async () => ({ bootUnlockMode: "approve", diskEncryption: "luks" }),
     build: { serverFqdn: DST, apps: () => [], containerName: () => "", ops: tOps.ops, envStore: dstEnv, access: null, accessList: null },
     restore: {
       serverFqdn: DST,
@@ -160,11 +219,12 @@ async function world() {
     note: (k) => void events.push(k),
     freeBytes: async () => 1e12,
   });
-  return { dir, src, dst, srcEnv, dstEnv, sOps, tOps, sourceService, targetService, events, builds, pulls, srcClones, dstClones };
+  return { dir, src, dst, srcEnv, dstEnv, sOps, tOps, sourceService, targetService, targetWait, sourceWait, events, builds, pulls, srcClones, dstClones };
 }
 type World = Awaited<ReturnType<typeof world>>;
 
-const keyHex = () => Buffer.from(deriveServerArchiveKey(UMK, ARCHIVE_ID)).toString("hex");
+const keyHex = () => CONTENT_KEY.toString("hex");
+const startBody = () => ({ archiveId: ARCHIVE_ID, key: keyHex(), slots: slots() });
 
 async function call(svc: World["sourceService"], method: string, path: string, body?: unknown | Buffer, companion = false) {
   const r = await svc.handle(path.split("?")[0]!, method, req(method, path, body), { companion });
@@ -173,7 +233,7 @@ async function call(svc: World["sourceService"], method: string, path: string, b
 const asJson = (r: { body: string | Buffer }) => JSON.parse(String(r.body)) as Record<string, any>;
 
 async function backUp(w: World): Promise<Buffer> {
-  const start = await call(w.sourceService, "POST", `${ARCHIVE_PATH}/start`, { archiveId: ARCHIVE_ID, key: keyHex() });
+  const start = await call(w.sourceService, "POST", `${ARCHIVE_PATH}/start`, startBody());
   expect(start.status).toBe(202);
   await w.sourceService.settle();
   const status = asJson(await call(w.sourceService, "GET", ARCHIVE_PATH));
@@ -189,26 +249,47 @@ async function backUp(w: World): Promise<Buffer> {
   return Buffer.concat(parts);
 }
 
+async function download(svc: World["sourceService"]): Promise<Buffer> {
+  const a = asJson(await call(svc, "GET", ARCHIVE_PATH)).archive;
+  const parts: Buffer[] = [];
+  for (let o = 0; o < a.bytes; ) {
+    const c = (await call(svc, "GET", `${ARCHIVE_PATH}/chunk?offset=${o}`)).body as Buffer;
+    parts.push(c);
+    o += c.length;
+  }
+  return Buffer.concat(parts);
+}
+
 async function upload(svc: World["targetService"], file: Buffer, chunk = 600) {
-  expect((await call(svc, "POST", `${RESTORE_PATH}/start`, { archiveId: ARCHIVE_ID, bytes: file.length })).status).toBe(202);
-  for (let offset = 0; offset < file.length; offset += chunk) {
+  const start = await call(svc, "POST", `${RESTORE_PATH}/start`, { archiveId: ARCHIVE_ID, bytes: file.length });
+  expect(start.status).toBe(202);
+  for (let offset = asJson(start).received as number; offset < file.length; offset += chunk) {
     const r = await call(svc, "POST", `${RESTORE_PATH}/chunk?offset=${offset}`, file.subarray(offset, offset + chunk));
     expect(r.status).toBe(200);
   }
 }
 
 describe("Backup/clone server", () => {
-  it("backs a server up, downloads it, and imports it onto a server with a different name", async () => {
+  it("backs a server up as two files and restores it onto a new server created to wait for it", async () => {
     const w = await world();
     const file = await backUp(w);
     expect(w.events).toEqual(["server.backup.started", "server.backup.created", "server.backup.downloaded"]);
 
+    w.targetWait.current = await waitingFor(w.dir, DST, file);
+    expect(asJson(await call(w.targetService, "GET", RESTORE_PATH)).waiting).toEqual({
+      archiveId: ARCHIVE_ID,
+      bytes: file.length,
+      sha256: createHash("sha256").update(file).digest("hex"),
+    });
     await upload(w.targetService, file);
     expect((await call(w.targetService, "POST", `${RESTORE_PATH}/commit`, { key: keyHex() })).status).toBe(202);
     await w.targetService.settle();
 
-    const status = asJson(await call(w.targetService, "GET", RESTORE_PATH)).restore;
-    expect(status).toMatchObject({ state: "done", apps: [{ serviceId: SERVICE, name: "notes", state: "done" }] });
+    const view = asJson(await call(w.targetService, "GET", RESTORE_PATH));
+    expect(view.restore).toMatchObject({ state: "done", apps: [{ serviceId: SERVICE, name: "notes", state: "done" }] });
+    // Restored: it stops waiting, for good.
+    expect(view.waiting).toBeNull();
+    expect(w.targetWait.current.heartbeatView()).toBeNull();
     const app = w.dst.platform.byServiceId(SERVICE);
     expect(app).toBeDefined();
     // Rebuilt here from its working tree, under a fresh local tag; never loaded from the backup.
@@ -221,15 +302,38 @@ describe("Backup/clone server", () => {
     expect(w.tOps.restoredFiles.length).toBe(1);
     expect(await w.dstEnv.get(SERVICE)).toEqual({ OPENAI_KEY: "sk-secret", MODE: "prod" });
     expect(w.events).toContain("server.restore.finished");
+    // A second upload is refused: the server no longer waits.
+    expect(asJson(await call(w.targetService, "POST", `${RESTORE_PATH}/start`, { archiveId: ARCHIVE_ID, bytes: file.length })).code).toBe("not-waiting");
+  });
+
+  it("the backup file opens with the passcode or the account key, and names the data file exactly", async () => {
+    const w = await world();
+    const file = await backUp(w);
+    const r = await call(w.sourceService, "GET", `${ARCHIVE_PATH}/backup-file`);
+    expect(r.status).toBe(200);
+    expect(r.headers["content-disposition"]).toMatch(/home-\d{4}-\d{2}-\d{2}\.flagship-backup/);
+    const text = String(r.body);
+    expect(text).not.toContain("notes");
+    const f = parseBackupFile(text);
+    const viaPass = openBackupWithPasscode(f, PASSCODE);
+    const viaAccount = openBackupWithAccountKey(f, deriveServerArchiveKey(UMK, ARCHIVE_ID))!;
+    expect(Buffer.from(viaPass.contentKey)).toEqual(CONTENT_KEY);
+    expect(viaAccount.body).toEqual(viaPass.body);
+    expect(viaPass.body).toMatchObject({
+      server: { name: "home", domain: SRC, bootUnlockMode: "auto", diskEncryption: "luks" },
+      apps: [{ serviceId: SERVICE, name: "notes" }],
+      data: { bytes: file.length, sha256: createHash("sha256").update(file).digest("hex"), frameBytes: 1024 * 1024 },
+    });
+    expect(viaPass.body.data.fileName).toMatch(/^home-\d{4}-\d{2}-\d{2}\.flagship-data$/);
+    expect(() => openBackupWithPasscode(f, "k7qm-2xhd-9twp-4frn-6cyc")).toThrow();
   });
 
   it("carries no image, OS or Flagship: only the app's source, data and settings", async () => {
     const w = await world();
     const file = await backUp(w);
-    // Open it and list what's inside.
-    const { openToTar } = await import("../../src/serverArchive/format.js");
+    const { openDataFile } = await import("../../src/serverArchive/format.js");
     const tarStream = (await import("tar-stream")).default;
-    const path = join(w.dir, "check.fsa");
+    const path = join(w.dir, "check.flagship-data");
     await writeFile(path, file);
     const names: string[] = [];
     await new Promise<void>((resolve, reject) => {
@@ -241,7 +345,7 @@ describe("Backup/clone server", () => {
       });
       ex.on("finish", resolve);
       ex.on("error", reject);
-      openToTar(path, Buffer.from(keyHex(), "hex")).pipe(ex);
+      openDataFile(path, CONTENT_KEY, ARCHIVE_ID).pipe(ex);
     });
     expect(names.sort()).toEqual([
       "apps/harry--notes/db-0.dump",
@@ -261,7 +365,7 @@ describe("Backup/clone server", () => {
       restore: { serverFqdn: SRC, platform: w.src.platform, dataProvisioner: null, ops: w.sOps.ops, signInstall: (r) => srcBox.signInstallService(r), envStore: null, access: null, egress: null, buildImage: async () => ({ ok: true as const }), pullImage: async () => {} },
       freeBytes: async () => 1e12,
     });
-    await call(svc, "POST", `${ARCHIVE_PATH}/start`, { archiveId: ARCHIVE_ID, key: keyHex() });
+    await call(svc, "POST", `${ARCHIVE_PATH}/start`, startBody());
     await svc.settle();
     const a = asJson(await call(svc, "GET", ARCHIVE_PATH)).archive;
     expect(a.state).toBe("ready");
@@ -269,7 +373,7 @@ describe("Backup/clone server", () => {
     expect(a.left).toEqual([{ serviceId: SERVICE, name: "notes", reason: expect.stringContaining("source") }]);
   });
 
-  it("an app installed from a public image is pulled on import, not carried", async () => {
+  it("an app installed from a public image is pulled on restore, not carried", async () => {
     const w = await world();
     const app = w.src.platform.byServiceId(SERVICE)!;
     const pulled = { ...app, manifest: { ...app.manifest, runtime: { ...app.manifest.runtime, image: "ghcr.io/acme/notes@sha256:" + "a".repeat(64) } } } as typeof app;
@@ -279,16 +383,11 @@ describe("Backup/clone server", () => {
       restore: { serverFqdn: SRC, platform: w.src.platform, dataProvisioner: null, ops: w.sOps.ops, signInstall: (r) => srcBox.signInstallService(r), envStore: null, access: null, egress: null, buildImage: async () => ({ ok: true as const }), pullImage: async () => {} },
       freeBytes: async () => 1e12,
     });
-    await call(svc, "POST", `${ARCHIVE_PATH}/start`, { archiveId: ARCHIVE_ID, key: keyHex() });
+    await call(svc, "POST", `${ARCHIVE_PATH}/start`, startBody());
     await svc.settle();
-    const a = asJson(await call(svc, "GET", ARCHIVE_PATH)).archive;
-    const parts: Buffer[] = [];
-    for (let o = 0; o < a.bytes; ) {
-      const c = (await call(svc, "GET", `${ARCHIVE_PATH}/chunk?offset=${o}`)).body as Buffer;
-      parts.push(c);
-      o += c.length;
-    }
-    await upload(w.targetService, Buffer.concat(parts));
+    const file = await download(svc);
+    w.targetWait.current = await waitingFor(w.dir, DST, file);
+    await upload(w.targetService, file);
     await call(w.targetService, "POST", `${RESTORE_PATH}/commit`, { key: keyHex() });
     await w.targetService.settle();
     expect(asJson(await call(w.targetService, "GET", RESTORE_PATH)).restore.apps[0]).toMatchObject({ state: "done" });
@@ -296,7 +395,7 @@ describe("Backup/clone server", () => {
     expect(w.builds).toEqual([]);
   });
 
-  it("carries the app's API keys and the front page onto the clone", async () => {
+  it("carries the app's API keys and the front page onto the new server", async () => {
     const w = await world();
     const exported = [{ grant: { serverDomain: SRC, serviceId: SERVICE, keyId: "0123456789abcdef", scope: "read", expiresAt: 0, issuedAt: 1 }, signature: "ab".repeat(64), secretSha256: "cd".repeat(32), label: "cron", createdAt: 1 }];
     const imported: Array<{ id: string; keys: unknown }> = [];
@@ -312,8 +411,13 @@ describe("Backup/clone server", () => {
       restore: { serverFqdn: SRC, platform: w.src.platform, dataProvisioner: null, ops: w.sOps.ops, signInstall: (r) => srcBox.signInstallService(r), envStore: null, access: null, egress: null, buildImage: async () => ({ ok: true as const }), pullImage: async () => {} },
       freeBytes: async () => 1e12,
     });
+    await call(svc, "POST", `${ARCHIVE_PATH}/start`, startBody());
+    await svc.settle();
+    const file = await download(svc);
     const target = buildServerArchiveService({
       dir: join(w.dir, "cfg-dst"),
+      uploadDir: join(w.dir, "cfg-upload"),
+      wait: await waitingFor(w.dir, DST, file),
       build: { serverFqdn: DST, apps: () => [], containerName: () => "", ops: w.tOps.ops, envStore: null, access: null, accessList: null },
       restore: {
         serverFqdn: DST, platform: w.dst.platform, dataProvisioner: w.dst.provisioner, ops: w.tOps.ops, signInstall: (r) => dstBox.signInstallService(r),
@@ -328,16 +432,7 @@ describe("Backup/clone server", () => {
       },
       freeBytes: async () => 1e12,
     });
-    await call(svc, "POST", `${ARCHIVE_PATH}/start`, { archiveId: ARCHIVE_ID, key: keyHex() });
-    await svc.settle();
-    const a = asJson(await call(svc, "GET", ARCHIVE_PATH)).archive;
-    const parts: Buffer[] = [];
-    for (let o = 0; o < a.bytes; ) {
-      const c = (await call(svc, "GET", `${ARCHIVE_PATH}/chunk?offset=${o}`)).body as Buffer;
-      parts.push(c);
-      o += c.length;
-    }
-    await upload(target, Buffer.concat(parts));
+    await upload(target, file);
     await call(target, "POST", `${RESTORE_PATH}/commit`, { key: keyHex() });
     await target.settle();
     expect(asJson(await call(target, "GET", RESTORE_PATH)).restore.apps[0]).toMatchObject({ state: "done" });
@@ -345,44 +440,127 @@ describe("Backup/clone server", () => {
     expect(front).toBe("notes");
   });
 
-  it("the archive file holds none of the plain content", async () => {
+  it("the data file holds none of the plain content", async () => {
     const w = await world();
     const file = await backUp(w);
     const text = file.toString("latin1");
+    expect(text.startsWith("flagship-backup-data/v2\n")).toBe(true);
     expect(text).not.toContain("sk-secret");
     expect(text).not.toContain("rows-of-");
     expect(text).not.toContain("flagship-vibe-harry--notes");
-    // ...but the header is readable: the importer needs the id and shows the names.
-    expect(text.split("\n")[0]).toContain(ARCHIVE_ID);
+    expect(text).not.toContain(ARCHIVE_ID);
   });
 
-  it("a wrong key fails the import and installs nothing", async () => {
+  it("a server that isn't waiting, or waits for another backup, refuses the upload", async () => {
     const w = await world();
     const file = await backUp(w);
+    const notWaiting = await call(w.targetService, "POST", `${RESTORE_PATH}/start`, { archiveId: ARCHIVE_ID, bytes: file.length });
+    expect(notWaiting.status).toBe(409);
+    expect(asJson(notWaiting).code).toBe("not-waiting");
+    expect(asJson(await call(w.targetService, "GET", RESTORE_PATH))).toEqual({ waiting: null, restore: null });
+    w.targetWait.current = await waitingFor(w.dir, DST, file, { archiveId: "ff".repeat(16) });
+    const other = await call(w.targetService, "POST", `${RESTORE_PATH}/start`, { archiveId: ARCHIVE_ID, bytes: file.length });
+    expect(asJson(other).code).toBe("other-backup");
+  });
+
+  it("only the owner's signed order for THIS server puts it in the waiting state", async () => {
+    const w = await world();
+    const file = await backUp(w);
+    const paths = { path: join(w.dir, "w.json"), donePath: join(w.dir, "d.json"), serverDomain: DST, ownerIrkPub: owner.publicKey };
+    const wait = buildRestoreWait(paths);
+    await wait.load();
+    const order: ServerRestoreOrder = { serverDomain: DST, archiveId: ARCHIVE_ID, bytes: file.length, sha256: "ab".repeat(32), issuedAt: 1 };
+    const sig = (o: ServerRestoreOrder, k = owner) => Buffer.from(signServerRestoreOrder(o, k)).toString("hex");
+    const json = (o: ServerRestoreOrder, s: string) => JSON.stringify({ request: {}, signature: "", restore: { order: o, signatureHex: s } });
+    expect(await wait.adoptFromPairingJson(json(order, sig(order, deriveIRK({ seed: new Uint8Array(32).fill(7) }))))).toBe(false);
+    expect(await wait.adoptFromPairingJson(json({ ...order, serverDomain: SRC }, sig({ ...order, serverDomain: SRC })))).toBe(false);
+    expect(await wait.adoptFromPairingJson(json(order, sig({ ...order, bytes: 2 })))).toBe(false);
+    expect(wait.current()).toBeNull();
+    expect(await wait.adoptFromPairingJson(json(order, sig(order)))).toBe(true);
+    // It survives a restart, and a finished backup never re-arms it.
+    const again = buildRestoreWait(paths);
+    await again.load();
+    expect(again.current()?.order).toEqual(order);
+    await again.finish(ARCHIVE_ID);
+    expect(await again.adoptFromPairingJson(json(order, sig(order)))).toBe(false);
+    const third = buildRestoreWait(paths);
+    await third.load();
+    expect(third.current()).toBeNull();
+  });
+
+  it("a wrong key fails the restore, installs nothing, and leaves the server waiting", async () => {
+    const w = await world();
+    const file = await backUp(w);
+    w.targetWait.current = await waitingFor(w.dir, DST, file);
     await upload(w.targetService, file);
-    const wrong = Buffer.from(deriveServerArchiveKey({ seed: new Uint8Array(32).fill(1) }, ARCHIVE_ID)).toString("hex");
-    await call(w.targetService, "POST", `${RESTORE_PATH}/commit`, { key: wrong });
+    await call(w.targetService, "POST", `${RESTORE_PATH}/commit`, { key: "11".repeat(32) });
     await w.targetService.settle();
-    const status = asJson(await call(w.targetService, "GET", RESTORE_PATH)).restore;
-    expect(status.state).toBe("failed");
-    expect(status.reason).toMatch(/wrong key|changed or cut short/);
+    const view = asJson(await call(w.targetService, "GET", RESTORE_PATH));
+    expect(view.restore.state).toBe("failed");
+    expect(view.restore.reason).toMatch(/wrong key|changed or cut short/);
+    expect(view.waiting).toMatchObject({ archiveId: ARCHIVE_ID });
+    expect(w.targetWait.current.heartbeatView()).toEqual({ archiveId: ARCHIVE_ID, state: "waiting" });
     expect(w.dst.platform.byServiceId(SERVICE)).toBeUndefined();
-  });
-
-  it("a damaged upload fails and installs nothing", async () => {
-    const w = await world();
-    const file = await backUp(w);
-    file[file.length - 30] ^= 1;
+    // Sending it again with the right key works.
     await upload(w.targetService, file);
     await call(w.targetService, "POST", `${RESTORE_PATH}/commit`, { key: keyHex() });
     await w.targetService.settle();
-    expect(asJson(await call(w.targetService, "GET", RESTORE_PATH)).restore.state).toBe("failed");
+    expect(asJson(await call(w.targetService, "GET", RESTORE_PATH)).restore.state).toBe("done");
+  });
+
+  it("a changed data file is refused before it is opened, and the server keeps waiting", async () => {
+    const w = await world();
+    const file = await backUp(w);
+    w.targetWait.current = await waitingFor(w.dir, DST, file);
+    const damaged = Buffer.from(file);
+    damaged[damaged.length - 30] ^= 1;
+    await upload(w.targetService, damaged);
+    await call(w.targetService, "POST", `${RESTORE_PATH}/commit`, { key: keyHex() });
+    await w.targetService.settle();
+    const view = asJson(await call(w.targetService, "GET", RESTORE_PATH));
+    expect(view.restore.state).toBe("failed");
+    expect(view.restore.reason).toMatch(/isn't the one this server is waiting for/);
+    expect(view.waiting).not.toBeNull();
     expect(w.dst.platform.byServiceId(SERVICE)).toBeUndefined();
+  });
+
+  it("an upload resumes where it stopped, even after a restart", async () => {
+    const w = await world();
+    const file = await backUp(w);
+    w.targetWait.current = await waitingFor(w.dir, DST, file);
+    expect((await call(w.targetService, "POST", `${RESTORE_PATH}/start`, { archiveId: ARCHIVE_ID, bytes: file.length })).status).toBe(202);
+    await call(w.targetService, "POST", `${RESTORE_PATH}/chunk?offset=0`, file.subarray(0, 500));
+    // The app comes back: same service.
+    expect(asJson(await call(w.targetService, "POST", `${RESTORE_PATH}/start`, { archiveId: ARCHIVE_ID, bytes: file.length })).received).toBe(500);
+    // The daemon restarts: a new service over the same folders.
+    const restarted = buildServerArchiveService({
+      dir: join(w.dir, "dst-archives"),
+      uploadDir: join(w.dir, "dst-upload"),
+      wait: w.targetWait.current,
+      build: { serverFqdn: DST, apps: () => [], containerName: () => "", ops: w.tOps.ops, envStore: w.dstEnv, access: null, accessList: null },
+      restore: {
+        serverFqdn: DST, platform: w.dst.platform, dataProvisioner: w.dst.provisioner, ops: w.tOps.ops, signInstall: (r) => dstBox.signInstallService(r),
+        envStore: w.dstEnv, access: null, egress: null, sourceDir: w.dstClones,
+        buildImage: async (a) => (w.tOps.images.add(a.image), { ok: true as const }),
+        pullImage: async () => {},
+      },
+      freeBytes: async () => 1e12,
+    });
+    await restarted.init();
+    const resumed = await call(restarted, "POST", `${RESTORE_PATH}/start`, { archiveId: ARCHIVE_ID, bytes: file.length });
+    expect(asJson(resumed).received).toBe(500);
+    for (let o = 500; o < file.length; o += 700) {
+      expect((await call(restarted, "POST", `${RESTORE_PATH}/chunk?offset=${o}`, file.subarray(o, o + 700))).status).toBe(200);
+    }
+    await call(restarted, "POST", `${RESTORE_PATH}/commit`, { key: keyHex() });
+    await restarted.settle();
+    expect(asJson(await call(restarted, "GET", RESTORE_PATH)).restore.state).toBe("done");
   });
 
   it("an app that is already on the server is skipped, not overwritten", async () => {
     const w = await world();
     const file = await backUp(w);
+    w.sourceWait.current = await waitingFor(w.dir, SRC, file);
     await upload(w.sourceService, file);
     await call(w.sourceService, "POST", `${RESTORE_PATH}/commit`, { key: keyHex() });
     await w.sourceService.settle();
@@ -391,14 +569,18 @@ describe("Backup/clone server", () => {
     expect(status.apps[0]).toMatchObject({ state: "skipped", reason: "already on this server" });
   });
 
-  it("refuses out-of-order chunks, a second job at once, and companion sessions", async () => {
+  it("refuses out-of-order chunks, bad slots, and companion sessions", async () => {
     const w = await world();
     const file = await backUp(w);
+    w.targetWait.current = await waitingFor(w.dir, DST, file);
     expect((await call(w.targetService, "POST", `${RESTORE_PATH}/start`, { archiveId: ARCHIVE_ID, bytes: file.length })).status).toBe(202);
     const r = await call(w.targetService, "POST", `${RESTORE_PATH}/chunk?offset=100`, file.subarray(0, 50));
     expect(r.status).toBe(409);
     expect((await call(w.targetService, "GET", ARCHIVE_PATH, undefined, true)).status).toBe(403);
-    expect((await call(w.sourceService, "POST", `${ARCHIVE_PATH}/start`, { archiveId: "zz", key: "00" })).status).toBe(400);
+    expect((await call(w.targetService, "POST", `${RESTORE_PATH}/start`, { archiveId: ARCHIVE_ID, bytes: file.length }, true)).status).toBe(403);
+    expect((await call(w.sourceService, "POST", `${ARCHIVE_PATH}/start`, { archiveId: "zz", key: "00", slots: slots() })).status).toBe(400);
+    expect((await call(w.sourceService, "POST", `${ARCHIVE_PATH}/start`, { archiveId: ARCHIVE_ID, key: keyHex() })).status).toBe(400);
+    expect((await call(w.sourceService, "POST", `${ARCHIVE_PATH}/start`, { archiveId: ARCHIVE_ID, key: keyHex(), slots: [slots()[1], slots()[1]] })).status).toBe(400);
   });
 
   it("sizes the backup first and refuses one that wouldn't fit, saying how much it needs", async () => {
@@ -415,7 +597,7 @@ describe("Backup/clone server", () => {
       restore: { serverFqdn: SRC, platform: w.src.platform, dataProvisioner: null, ops: sized, signInstall: (r) => srcBox.signInstallService(r), envStore: null, access: null, egress: null, buildImage: async () => ({ ok: true as const }), pullImage: async () => {} },
       freeBytes: async () => 6 * GB,
     });
-    expect((await call(svc, "POST", `${ARCHIVE_PATH}/start`, { archiveId: ARCHIVE_ID, key: keyHex() })).status).toBe(202);
+    expect((await call(svc, "POST", `${ARCHIVE_PATH}/start`, startBody())).status).toBe(202);
     await svc.settle();
     const a = asJson(await call(svc, "GET", ARCHIVE_PATH)).archive;
     // 3 GB of parts (no image travels): the file (~3 GB) + one app's scratch (~3 GB) + 1 GB headroom > 6 GB.
@@ -433,16 +615,18 @@ describe("Backup/clone server", () => {
       restore: { serverFqdn: SRC, platform: w.src.platform, dataProvisioner: null, ops: sized, signInstall: (r) => srcBox.signInstallService(r), envStore: null, access: null, egress: null, buildImage: async () => ({ ok: true as const }), pullImage: async () => {} },
       freeBytes: async () => 5 * 1024 ** 3,
     });
-    await call(svc, "POST", `${ARCHIVE_PATH}/start`, { archiveId: ARCHIVE_ID, key: keyHex() });
+    await call(svc, "POST", `${ARCHIVE_PATH}/start`, startBody());
     await svc.settle();
     expect(asJson(await call(svc, "GET", ARCHIVE_PATH)).archive.state).toBe("ready");
   });
 
-  it("refuses an import when the disk is too full", async () => {
+  it("refuses a restore when the disk is too full", async () => {
     const w = await world();
     const file = await backUp(w);
     const full = buildServerArchiveService({
       dir: join(w.dir, "full"),
+      uploadDir: join(w.dir, "full-upload"),
+      wait: await waitingFor(w.dir, DST, file),
       build: { serverFqdn: DST, apps: () => [], containerName: () => "", ops: w.tOps.ops, envStore: null, access: null, accessList: null },
       restore: { serverFqdn: DST, platform: w.dst.platform, dataProvisioner: null, ops: w.tOps.ops, signInstall: (r) => dstBox.signInstallService(r), envStore: null, access: null, egress: null, buildImage: async () => ({ ok: true as const }), pullImage: async () => {} },
       freeBytes: async () => 10,
@@ -470,7 +654,7 @@ describe("the backup's download link (browser, approved with the app)", () => {
       authorizeDownload: (a, sig) => verifyArchiveDownloadApproval(a, sig, owner.publicKey),
       appLinkBase: "https://flagshipserver.com",
     });
-    await call(svc, "POST", `${ARCHIVE_PATH}/start`, { archiveId: ARCHIVE_ID, key: keyHex() });
+    await call(svc, "POST", `${ARCHIVE_PATH}/start`, startBody());
     await svc.settle();
     const status = asJson(await call(svc, "GET", ARCHIVE_PATH)).archive;
     const parts: Buffer[] = [];
@@ -517,7 +701,12 @@ describe("the backup's download link (browser, approved with the app)", () => {
     expect(r.status).toBe(200);
     expect(r.headers).toMatchObject({ "accept-ranges": "bytes", "content-type": "application/octet-stream" });
     expect(await body(r)).toEqual(file);
-    const part = await get(`${link.path}/file?r=${R}`, { range: "bytes=100-299" });
+    const bk = await get(`${link.path}/backup?r=${R}`);
+    expect(bk.status).toBe(200);
+    expect(parseBackupFile(String(bk.body)).archiveId).toBe(ARCHIVE_ID);
+    expect((await get(`${link.path}/backup?r=${"11".repeat(16)}`)).status).toBe(403);
+    expect(link).toMatchObject({ backupFileName: expect.stringMatching(/\.flagship-backup$/), dataFileName: expect.stringMatching(/\.flagship-data$/) });
+    const part =await get(`${link.path}/file?r=${R}`, { range: "bytes=100-299" });
     expect(part.status).toBe(206);
     expect(await body(part)).toEqual(file.subarray(100, 300));
     expect((await get(`${link.path}/file?r=${R}`, { range: `bytes=${file.length}-` })).status).toBe(416);
