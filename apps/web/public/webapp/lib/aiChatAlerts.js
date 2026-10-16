@@ -101,6 +101,17 @@ export async function drainAiChatAlertsOnce(args) {
   for (const env of events) {
     if (env && typeof env.id === "number" && env.id > cursor) cursor = env.id;
     const alert = env && env.alert;
+    // An app reached its disk limit: "An app on this server is full" (opens its page).
+    if (alert && alert.kind === "app-storage-full" && typeof alert.serviceId === "string") {
+      const tagged = args.server ? { ...alert, server: args.server } : alert;
+      try {
+        args.onStorageFull?.(tagged);
+      } catch {
+        /* a bad presenter must not wedge the drain */
+      }
+      handled += 1;
+      continue;
+    }
     if (!alert || alert.kind !== AI_CHAT_ALERT_KIND) continue;
     if (typeof alert.serviceId !== "string" || alert.serviceId.length === 0) continue;
     const tagged = args.server ? { ...alert, server: args.server } : alert;
@@ -209,6 +220,7 @@ export function startAiChatAlertPoll(deps = {}) {
         operations: deps.operations,
         fetcher: deps.fetcher,
         server: typeof deps.server === "function" ? deps.server() : undefined,
+        onStorageFull: deps.storageFull,
       });
       cursor = r.cursor;
       if (r.alerts.length > 0) last = { alert: r.alerts[0], at: now() };

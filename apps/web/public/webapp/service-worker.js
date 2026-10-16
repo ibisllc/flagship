@@ -394,6 +394,7 @@ const OPTIONAL_SHELL = [
   "/lib/serverArchive.js",
   "/lib/savedBackups.js",
   "/lib/migrateArchive.js",
+  "/lib/appStorage.js",
   "/lib/backupPolicy.js",
   "/lib/serverBackupFormat.js",
   "/lib/appBackup.js",
