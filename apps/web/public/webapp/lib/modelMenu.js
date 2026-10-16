@@ -354,6 +354,29 @@ export function unknownNoteHtml(menu, choice) {
   return optionFor(menu, choice?.model)?.known === false ? `<span class="note mm-muted mm-note">${escapeHtml(UNKNOWN_NOTE)}</span>` : "";
 }
 
+/** Whether a free model field's change leaves focus with the menu: Enter
+ *  keeps it on the field, and a click on nothing focusable drops it on the
+ *  page. Either way the re-render must hand focus back, or Escape stops
+ *  reaching the menu. A click on another control keeps its focus. */
+export function keepsFocus(input) {
+  const active = input.ownerDocument?.activeElement;
+  return !active || active === input || active === input.ownerDocument.body;
+}
+
+/** Focus the re-rendered free model field (of `group`, when given), caret at the end. */
+export function refocusFreeInput(host, group = null) {
+  const sel = group == null ? "[data-mm-free]" : `[data-mm-free][data-mm-group="${CSS.escape(group)}"]`;
+  const next = host.querySelector(sel);
+  if (!next) return;
+  next.focus();
+  const end = next.value.length;
+  try {
+    next.setSelectionRange(end, end);
+  } catch {
+    /* not a text field */
+  }
+}
+
 /**
  * Mount a compact model menu in `host`.
  *   menu        — a loaded menu, or null with `load` to fetch it on first open
@@ -409,13 +432,18 @@ export function mountModelMenu(host, { menu = null, load = null, choice = {}, on
       });
     });
     host.querySelector("[data-mm-free]")?.addEventListener("change", (ev) => {
+      const keep = keepsFocus(ev.target);
       set({ model: ev.target.value.trim() || null, effort: null });
+      if (keep) refocusFreeInput(host);
     });
     host.querySelector("[data-mm-effort]")?.addEventListener("change", (ev) => {
       set({ ...state.choice, effort: ev.target.value || null });
     });
     host.querySelector(".mm")?.addEventListener("keydown", (ev) => {
-      if (ev.key === "Escape") close();
+      if (ev.key === "Escape" && open) {
+        close();
+        host.querySelector(".mm-trigger")?.focus();
+      }
     });
   }
   render();
