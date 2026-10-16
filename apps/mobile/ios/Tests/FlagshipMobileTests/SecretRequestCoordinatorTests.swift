@@ -720,6 +720,17 @@ final class SecretRequestCoordinatorTests: XCTestCase {
         XCTAssertTrue(mailbox.deposited.isEmpty, "no auto-unlock lease rides a delegate approval")
     }
 
+    /// The watch's row may come from the account inbox, whose id lower-cases
+    /// the server: it still names the same request.
+    @MainActor
+    func testWatchApproveMatchesAnInboxRowWhateverTheCase() async throws {
+        let (mailbox, coord, id) = try watchFixture()
+        let responder = WatchApprovalResponder(delegateEnrolled: { true }, hasSessionKey: { true }, makeSource: { coord })
+        let reply = await responder.respond(to: .init(requestId: id.uppercased()))
+        XCTAssertTrue(reply.ok, reply.errorMessage ?? "")
+        XCTAssertEqual(mailbox.postedResponses.count, 1)
+    }
+
     @MainActor
     func testWatchApproveNeverPromptsAndNeverGuesses() async throws {
         let (mailbox, coord, id) = try watchFixture()

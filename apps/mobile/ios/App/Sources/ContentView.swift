@@ -120,6 +120,11 @@ struct ContentView: View {
             // Switching the selected server repoints the screens client.
             syncPodSession()
         }
+        .onChange(of: app.boxRequestInbox) { _, _ in
+            // A box started or stopped waiting for its unlock: the watch
+            // lists it without the Approvals screen having been opened.
+            WatchSecurityAlertsPublisher.shared.updateFromApp(app)
+        }
         .onChange(of: app.leaderPodId) { _, _ in
             PodStatusPublisher(app: app).publish()
             // The leader is the default server (docs/app-placement.md §1).

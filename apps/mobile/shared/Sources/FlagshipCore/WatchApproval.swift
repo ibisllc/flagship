@@ -216,4 +216,72 @@ public enum WatchProtocol {
             }
         }
     }
+
+    // MARK: - Server list (Watch parity with Wear OS)
+
+    /// One of the account's servers as the watch lists it. `state` is
+    /// "online", "offline", "waiting" (its boot unlock waits for approval),
+    /// "pending" (being set up) or "unknown".
+    public struct ServerStatus: Codable, Hashable, Identifiable, Sendable {
+        public let name: String
+        public let fqdn: String
+        public let state: String
+        public let isLeader: Bool
+
+        public var id: String { fqdn }
+
+        public init(name: String, fqdn: String, state: String, isLeader: Bool) {
+            self.name = name
+            self.fqdn = fqdn
+            self.state = state
+            self.isLeader = isLeader
+        }
+    }
+
+    /// applicationContext payload (key `servers`) — phone → watch. The
+    /// account's servers in the owner's order, published whenever the phone's
+    /// list or its waiting boxes change, whichever phone screen is open.
+    public struct ServersContext: Codable, Hashable, Sendable {
+        public let servers: [ServerStatus]
+        public let updatedAt: Date
+
+        public init(servers: [ServerStatus] = [], updatedAt: Date = .init()) {
+            self.servers = servers
+            self.updatedAt = updatedAt
+        }
+    }
+
+    /// The glanceable summary the server list and the complication show.
+    public enum ServersProjection {
+        public struct Summary: Equatable, Sendable {
+            public let total: Int
+            public let online: Int
+            public let waiting: Int
+        }
+
+        public static func summary(_ ctx: ServersContext?) -> Summary {
+            let servers = ctx?.servers ?? []
+            return Summary(total: servers.count,
+                           online: servers.filter { $0.state == "online" }.count,
+                           waiting: servers.filter { $0.state == "waiting" }.count)
+        }
+
+        /// "1 waiting", "2 of 3 online", "All 3 online", "No servers".
+        public static func line(_ s: Summary) -> String {
+            if s.total == 0 { return "No servers" }
+            if s.waiting > 0 { return "\(s.waiting) waiting" }
+            if s.online == s.total { return s.total == 1 ? "Online" : "All \(s.total) online" }
+            return "\(s.online) of \(s.total) online"
+        }
+
+        public static func label(for state: String) -> String {
+            switch state {
+            case "online":  return "Online"
+            case "offline": return "Offline"
+            case "waiting": return "Waiting to start"
+            case "pending": return "Setting up"
+            default:        return "Unknown"
+            }
+        }
+    }
 }

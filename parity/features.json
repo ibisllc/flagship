@@ -292,6 +292,17 @@
       }
     },
     {
+      "id": "watch-glance",
+      "title": "Watch: server list, boxes waiting to start and complication, from the phone's own state",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/ios/App/Sources/WatchSecurityAlertsPublisher.swift", "func updateFromApp"], ["apps/mobile/shared/Sources/FlagshipCore/WatchPhoneProjection.swift", "enum PhoneProjection"]] },
+        "watch": { "status": "present", "anchors": [["apps/mobile/ios/App/WatchApp/WatchSecurityAlertsView.swift", "struct ServerStatusRow"], ["apps/mobile/ios/App/WatchWidgets/ProvisionPhaseComplication.swift", "ServersProjection"]] },
+        "android": { "status": "present", "reason": "Wear OS app.", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/companion/WatchBridge.kt", "fun approvalsFrom"], ["apps/mobile/android/wear/src/main/java/com/flagshipserver/wear/StatusComplicationService.kt", "class StatusComplicationService"]] },
+        "web": { "status": "na", "reason": "No watch for a web app.", "anchors": [] }
+      }
+    },
+    {
       "id": "watch-boot-approval",
       "title": "Watch: approve a boot from the wrist (watch delegate key)",
       "ref": "ios",

@@ -69,7 +69,10 @@ public struct WatchApprovalResponder {
         guard let source = makeSource() else { return fail(Self.signedOut) }
         do {
             let pending = try await source.fetchVerifiedRequests()
-            guard let req = pending.first(where: { $0.id == cmd.requestId && $0.purpose == .unlockKey }) else {
+            // The watch's row may come from the account inbox (`<fqdn>#<nonce>`
+            // with the FQDN lower-cased) or the Approvals screen: same request.
+            let wanted = cmd.requestId.lowercased()
+            guard let req = pending.first(where: { $0.id.lowercased() == wanted && $0.purpose == .unlockKey }) else {
                 return fail(Self.gone)
             }
             // No auto-unlock lease: that deposit is signed with the owner IRK,

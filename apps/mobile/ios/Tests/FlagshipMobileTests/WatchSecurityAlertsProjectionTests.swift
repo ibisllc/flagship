@@ -124,4 +124,55 @@ final class WatchSecurityAlertsProjectionTests: XCTestCase {
         XCTAssertEqual(P.approvals(in: back).map(\.requestId), ["a"])
         XCTAssertEqual(P.events(in: back).map(\.seq), [7])
     }
+
+    // MARK: - What the phone publishes, whichever screen is open
+
+    private typealias Phone = WatchProtocol.PhoneProjection
+
+    func test_phone_waitingBoxesComeFromTheInbox_liveUnlocksOnly() {
+        let inbox = [
+            BoxRequest(nonceHex: "aa", serverDomain: "Home.alice.flagship.services", type: .unlockKey, issuedAt: 10, expiresAt: 2_000),
+            BoxRequest(nonceHex: "bb", serverDomain: "office.alice.flagship.services", type: .entitlement, issuedAt: 11, expiresAt: 2_000),
+            BoxRequest(nonceHex: "cc", serverDomain: "old.alice.flagship.services", type: .unlockKey, issuedAt: 1, expiresAt: 500),
+        ]
+        let rows = Phone.approvals(inbox: inbox, nowMs: 1_000)
+        XCTAssertEqual(rows.map(\.requestId), ["home.alice.flagship.services#aa"], "live unlock requests only")
+        XCTAssertEqual(rows.first?.serverFqdn, "Home.alice.flagship.services")
+        XCTAssertEqual(rows.first?.requestedAt, 10)
+    }
+
+    func test_phone_screenRowsEnrichTheInboxRows() {
+        let inbox = [WatchProtocol.PendingApproval(requestId: "home.x#aa", serverFqdn: "home.x", requestedAt: 5, ip: nil)]
+        let screen = [WatchProtocol.PendingApproval(requestId: "Home.x#aa", serverFqdn: "Home.x", requestedAt: 5, ip: "203.0.113.9")]
+        let merged = Phone.merged(inbox: inbox, screen: screen)
+        XCTAssertEqual(merged.count, 1, "the same request, whatever the case of its server")
+        XCTAssertEqual(merged.first?.ip, "203.0.113.9")
+    }
+
+    func test_phone_serverListNamesWaitingAndLeader_dropsRevoked() {
+        let pods = [
+            PodInfo(podId: "h", name: "Home", fqdn: "Home.x", status: .online),
+            PodInfo(podId: "o", name: "Office", fqdn: "office.x", status: .offline),
+            PodInfo(podId: "g", name: "Gone", fqdn: "gone.x", status: .offline, revokedAt: 1),
+        ]
+        let list = Phone.servers(pods: pods, leaderPodId: "o", isWaiting: { $0.podId == "o" })
+        XCTAssertEqual(list.map(\.fqdn), ["home.x", "office.x"])
+        XCTAssertEqual(list.map(\.state), ["online", "waiting"])
+        XCTAssertEqual(list.map(\.isLeader), [false, true])
+    }
+
+    func test_serverSummary_lines() {
+        typealias S = WatchProtocol.ServersProjection
+        func ctx(_ states: [String]) -> WatchProtocol.ServersContext {
+            .init(servers: states.enumerated().map { .init(name: "s\($0)", fqdn: "s\($0).x", state: $1, isLeader: false) })
+        }
+        XCTAssertEqual(S.line(S.summary(nil)), "No servers")
+        XCTAssertEqual(S.line(S.summary(ctx(["online"]))), "Online")
+        XCTAssertEqual(S.line(S.summary(ctx(["online", "online"]))), "All 2 online")
+        XCTAssertEqual(S.line(S.summary(ctx(["online", "offline", "online"]))), "2 of 3 online")
+        XCTAssertEqual(S.line(S.summary(ctx(["waiting", "online"]))), "1 waiting")
+        XCTAssertEqual(S.label(for: "waiting"), "Waiting to start")
+        let encoded = try! JSONEncoder().encode(ctx(["online"]))
+        XCTAssertEqual(try! JSONDecoder().decode(WatchProtocol.ServersContext.self, from: encoded).servers.first?.state, "online")
+    }
 }

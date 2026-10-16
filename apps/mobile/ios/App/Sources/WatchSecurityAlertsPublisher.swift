@@ -18,8 +18,13 @@ final class WatchSecurityAlertsPublisher {
 
     /// Most-recent inputs. Kept so an update to one half preserves the
     /// other when we recompute the published snapshot.
-    private var approvals: [WatchProtocol.PendingApproval] = []
+    /// Rows the Approvals screen loaded (they carry the box's IP).
+    private var screenApprovals: [WatchProtocol.PendingApproval] = []
+    /// Boxes waiting for their boot unlock in the account-level inbox the
+    /// phone polls whichever screen is open (AppState.boxRequestInbox).
+    private var inboxApprovals: [WatchProtocol.PendingApproval] = []
     private var events: [WatchProtocol.SecurityAlert] = []
+    private var servers: WatchProtocol.ServersContext?
 
     /// Currently-published context. Mirrored to WCSession's
     /// applicationContext on every `commit`.
@@ -38,9 +43,29 @@ final class WatchSecurityAlertsPublisher {
         }
     }
 
-    /// Replace the pending-boot-approvals half.
+    /// Replace the Approvals screen's rows.
     func updateApprovals(_ approvals: [WatchProtocol.PendingApproval]) {
-        self.approvals = approvals
+        screenApprovals = approvals
+        commit()
+    }
+
+    /// The account's servers and the boxes waiting to start, from the app's
+    /// own state: published on every server-list or inbox change, so the
+    /// watch doesn't wait for the phone's Approvals screen to be opened.
+    func updateFromApp(_ app: AppState, now: Date = Date()) {
+        guard app.isPaired else {
+            clear()
+            return
+        }
+        let nowMs = Int64(now.timeIntervalSince1970 * 1000)
+        inboxApprovals = WatchProtocol.PhoneProjection.approvals(inbox: app.boxRequests, nowMs: nowMs)
+        let list = WatchProtocol.PhoneProjection.servers(pods: app.pods, leaderPodId: app.leaderPodId,
+                                                         isWaiting: { app.isAwaitingUnlock($0) })
+        if list != servers?.servers {
+            let next = WatchProtocol.ServersContext(servers: list, updatedAt: now)
+            servers = next
+            WatchBridge.shared.updateServers(list.isEmpty ? nil : next)
+        }
         commit()
     }
 
@@ -53,15 +78,18 @@ final class WatchSecurityAlertsPublisher {
     /// Clear both surfaces — called on sign-out so a stale wrist glance
     /// doesn't outlive the session.
     func clear() {
-        approvals = []
+        screenApprovals = []
+        inboxApprovals = []
         events = []
         current = nil
+        servers = nil
         WatchBridge.shared.updateSecurityAlerts(nil)
+        WatchBridge.shared.updateServers(nil)
     }
 
     private func commit() {
         let ctx = WatchProtocol.SecurityAlertsContext(
-            pendingApprovals: approvals,
+            pendingApprovals: WatchProtocol.PhoneProjection.merged(inbox: inboxApprovals, screen: screenApprovals),
             recentEvents: events,
             updatedAt: Date()
         )

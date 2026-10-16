@@ -26,6 +26,8 @@ struct WatchSecurityAlertsView: View {
         WatchProtocol.SecurityAlertsProjection.events(in: session.securityAlerts)
     }
 
+    private var servers: [WatchProtocol.ServerStatus] { session.servers?.servers ?? [] }
+
     var body: some View {
         List {
             if !approvals.isEmpty {
@@ -37,6 +39,13 @@ struct WatchSecurityAlertsView: View {
                     }
                 }
             }
+            if !servers.isEmpty {
+                Section("Servers") {
+                    ForEach(servers) { server in
+                        ServerStatusRow(server: server)
+                    }
+                }
+            }
             if !events.isEmpty {
                 Section("Recent activity") {
                     ForEach(events) { event in
@@ -44,7 +53,7 @@ struct WatchSecurityAlertsView: View {
                     }
                 }
             }
-            if approvals.isEmpty && events.isEmpty {
+            if approvals.isEmpty && events.isEmpty && servers.isEmpty {
                 Section {
                     quietState
                 }
@@ -73,6 +82,35 @@ struct WatchSecurityAlertsView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 8)
+    }
+}
+
+/// One of the account's servers: a status dot, its name and its state.
+private struct ServerStatusRow: View {
+    let server: WatchProtocol.ServerStatus
+
+    private var color: Color {
+        switch server.state {
+        case "online": return .green
+        case "waiting": return .orange
+        case "offline": return .red
+        default: return .secondary
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Circle().fill(color).frame(width: 8, height: 8)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(server.name).font(.caption).lineLimit(1)
+                Text(WatchProtocol.ServersProjection.label(for: server.state) + (server.isLeader ? " · Leader" : ""))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("watch-server-\(server.fqdn)")
     }
 }
 

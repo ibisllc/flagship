@@ -33,5 +33,6 @@ struct PodStatusPublisher {
         )
         snap.write()
         WidgetCenter.shared.reloadAllTimelines()
+        WatchSecurityAlertsPublisher.shared.updateFromApp(app)
     }
 }

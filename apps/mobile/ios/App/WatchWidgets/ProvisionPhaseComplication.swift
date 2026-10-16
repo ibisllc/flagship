@@ -28,8 +28,8 @@ struct ProvisionPhaseComplication: Widget {
             ProvisionPhaseComplicationView(entry: entry)
                 .containerBackground(.fill.tertiary, for: .widget)
         }
-        .configurationDisplayName("Provision phase")
-        .description("Shows the current install phase of a Flagship server.")
+        .configurationDisplayName("Flagship servers")
+        .description("Shows a server's install while one is under way, else how your servers are doing.")
         .supportedFamilies([.accessoryInline, .accessoryCircular, .accessoryRectangular])
     }
 }
@@ -41,18 +41,34 @@ struct ProvisionPhaseEntry: TimelineEntry {
     /// "Flagship" placeholder so the user knows the slot belongs to us
     /// without claiming a phase that isn't running.
     let context: WatchProtocol.ProvisionTimelineContext?
+    /// The account's servers, shown when no install is under way.
+    var servers: WatchProtocol.ServersContext? = nil
+
+    /// The install the face shows: an active one always, a finished one
+    /// only while there's no server list to show instead.
+    var shownInstall: WatchProtocol.ProvisionTimelineContext? {
+        guard let context else { return nil }
+        return context.active || summary == nil ? context : nil
+    }
+
+    /// The server summary, when there are servers and no install to show.
+    var summary: WatchProtocol.ServersProjection.Summary? {
+        let s = WatchProtocol.ServersProjection.summary(servers)
+        return s.total > 0 ? s : nil
+    }
 }
 
 struct ProvisionPhaseProvider: TimelineProvider {
     static let defaultsSuiteName = "group.com.flagshipserver.app"
     static let timelineDefaultsKey = "flagship.watch.provision-timeline-v1"
+    static let serversDefaultsKey = "flagship.watch.servers-v1"
 
     func placeholder(in context: Context) -> ProvisionPhaseEntry {
         ProvisionPhaseEntry(date: Date(), context: nil)
     }
 
     func getSnapshot(in context: Context, completion: @escaping (ProvisionPhaseEntry) -> Void) {
-        completion(ProvisionPhaseEntry(date: Date(), context: loadCurrent()))
+        completion(ProvisionPhaseEntry(date: Date(), context: loadCurrent(), servers: loadServers()))
     }
 
     /// One-shot timeline. The widget reloads via
@@ -60,7 +76,7 @@ struct ProvisionPhaseProvider: TimelineProvider {
     /// writes a new context, so we don't need to schedule periodic
     /// refreshes here — the watch app drives the cadence.
     func getTimeline(in context: Context, completion: @escaping (Timeline<ProvisionPhaseEntry>) -> Void) {
-        let entry = ProvisionPhaseEntry(date: Date(), context: loadCurrent())
+        let entry = ProvisionPhaseEntry(date: Date(), context: loadCurrent(), servers: loadServers())
         completion(Timeline(entries: [entry], policy: .never))
     }
 
@@ -70,6 +86,14 @@ struct ProvisionPhaseProvider: TimelineProvider {
             return nil
         }
         return try? JSONDecoder().decode(WatchProtocol.ProvisionTimelineContext.self, from: data)
+    }
+
+    private func loadServers() -> WatchProtocol.ServersContext? {
+        guard let defaults = UserDefaults(suiteName: Self.defaultsSuiteName),
+              let data = defaults.data(forKey: Self.serversDefaultsKey) else {
+            return nil
+        }
+        return try? JSONDecoder().decode(WatchProtocol.ServersContext.self, from: data)
     }
 }
 
@@ -121,7 +145,10 @@ struct ProvisionPhaseComplicationView: View {
     // MARK: - Display strings
 
     private var inlineString: String {
-        guard let ctx = entry.context else { return "Flagship" }
+        if entry.shownInstall == nil, let s = entry.summary {
+            return "Flagship: \(WatchProtocol.ServersProjection.line(s).lowercased())"
+        }
+        guard let ctx = entry.shownInstall else { return "Flagship" }
         let title = WatchProtocol.ProvisionTimelineLadder.phases
             .first(where: { $0.phase == ctx.phase })?.title
             ?? ctx.phase
@@ -129,7 +156,8 @@ struct ProvisionPhaseComplicationView: View {
     }
 
     private var rectangularTitle: String {
-        guard let ctx = entry.context else { return "No install in flight" }
+        if entry.shownInstall == nil, let s = entry.summary { return WatchProtocol.ServersProjection.line(s) }
+        guard let ctx = entry.shownInstall else { return "No install in flight" }
         if ctx.phase == "error" { return "Install failed" }
         if ctx.phase == "live"  { return "Server is live" }
         let title = WatchProtocol.ProvisionTimelineLadder.phases
@@ -139,21 +167,30 @@ struct ProvisionPhaseComplicationView: View {
     }
 
     private var rectangularDetail: String? {
-        guard let ctx = entry.context else { return nil }
+        if entry.shownInstall == nil, let s = entry.summary {
+            return s.total == 1 ? "1 server" : "\(s.total) servers"
+        }
+        guard let ctx = entry.shownInstall else { return nil }
         if let d = ctx.detail, !d.isEmpty { return d }
         if let fqdn = ctx.serverDomain, !fqdn.isEmpty { return fqdn }
         return nil
     }
 
     private var circularAbbrev: String {
-        guard let ctx = entry.context else { return "FS" }
+        if entry.shownInstall == nil, let s = entry.summary {
+            return s.waiting > 0 ? "\(s.waiting)!" : "\(s.online)/\(s.total)"
+        }
+        guard let ctx = entry.shownInstall else { return "FS" }
         // 3-letter abbreviation from the phase rawValue, uppercased.
         let raw = ctx.phase
         return String(raw.prefix(3)).uppercased()
     }
 
     private var iconName: String {
-        guard let ctx = entry.context else { return "circle" }
+        if entry.shownInstall == nil, let s = entry.summary {
+            return s.waiting > 0 ? "lock.fill" : "server.rack"
+        }
+        guard let ctx = entry.shownInstall else { return "circle" }
         switch ctx.phase {
         case "live":  return "checkmark.circle.fill"
         case "error": return "exclamationmark.triangle.fill"
@@ -162,7 +199,11 @@ struct ProvisionPhaseComplicationView: View {
     }
 
     private var circleColor: Color {
-        guard let ctx = entry.context else { return .secondary }
+        if entry.shownInstall == nil, let s = entry.summary {
+            if s.waiting > 0 { return .orange }
+            return s.online == s.total ? .green : .red
+        }
+        guard let ctx = entry.shownInstall else { return .secondary }
         switch ctx.phase {
         case "live":  return .green
         case "error": return .red

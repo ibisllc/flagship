@@ -30,6 +30,9 @@ final class WatchConnectivityClient: NSObject, ObservableObject {
     /// Pending boot approvals + recent account security events. Drives
     /// `WatchSecurityAlertsView`.
     @Published var securityAlerts: WatchProtocol.SecurityAlertsContext?
+    /// The account's servers, in the owner's order. Drives the server list
+    /// and the complication's summary.
+    @Published var servers: WatchProtocol.ServersContext?
     @Published var inFlightRequestId: String? = nil
     @Published var lastError: String? = nil
     @Published var lastApprovedId: String? = nil
@@ -41,6 +44,8 @@ final class WatchConnectivityClient: NSObject, ObservableObject {
     /// this key from `UserDefaults(suiteName:)` to render the
     /// complication.
     static let timelineDefaultsKey = "flagship.watch.provision-timeline-v1"
+    /// Same App Group: the complication reads the server list from here.
+    static let serversDefaultsKey = "flagship.watch.servers-v1"
     static let appGroupSuiteName = "group.com.flagshipserver.app"
 
     private static var sharedDefaults: UserDefaults {
@@ -70,6 +75,10 @@ final class WatchConnectivityClient: NSObject, ObservableObject {
            let ctx = try? JSONDecoder().decode(WatchProtocol.SecurityAlertsContext.self, from: data) {
             self.securityAlerts = ctx
         }
+        if let data = Self.sharedDefaults.data(forKey: Self.serversDefaultsKey),
+           let ctx = try? JSONDecoder().decode(WatchProtocol.ServersContext.self, from: data) {
+            self.servers = ctx
+        }
     }
 
     #if DEBUG
@@ -93,6 +102,10 @@ final class WatchConnectivityClient: NSObject, ObservableObject {
                     .init(seq: 1, kind: "recovery-set-up", detail: "", devicePrefix: "", postedAt: now - 2 * 86_400_000),
                 ]
             )
+            servers = .init(servers: [
+                .init(name: "Home", fqdn: "home.bright-maple.flagship.services", state: "waiting", isLeader: true),
+                .init(name: "Office", fqdn: "office.bright-maple.flagship.services", state: "online", isLeader: false),
+            ])
         }
         if args.contains("-watch-showcase-install") {
             let phases = ["booting", "partitioning", "installing", "downloading", "registering"]
@@ -172,6 +185,20 @@ final class WatchConnectivityClient: NSObject, ObservableObject {
         } else if context["security-alerts"] == nil {
             self.securityAlerts = nil
             UserDefaults.standard.removeObject(forKey: Self.alertsDefaultsKey)
+        }
+        // Server list: absent means the phone has none to show (signed out).
+        let serversData = context["servers"] as? Data
+        let serversCtx = serversData.flatMap { try? JSONDecoder().decode(WatchProtocol.ServersContext.self, from: $0) }
+        if serversCtx?.servers != servers?.servers {
+            self.servers = serversCtx
+            if let serversData, serversCtx != nil {
+                Self.sharedDefaults.set(serversData, forKey: Self.serversDefaultsKey)
+            } else {
+                Self.sharedDefaults.removeObject(forKey: Self.serversDefaultsKey)
+            }
+            #if canImport(WidgetKit)
+            WidgetCenter.shared.reloadAllTimelines()
+            #endif
         }
         if let data = context["provision-timeline"] as? Data,
            let ctx = try? JSONDecoder().decode(WatchProtocol.ProvisionTimelineContext.self, from: data) {

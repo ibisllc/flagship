@@ -39,6 +39,9 @@ final class WatchBridge: NSObject {
     /// snapshot-replace reason as `timeline`.
     private var alerts: WatchProtocol.SecurityAlertsContext?
 
+    /// Last published server list, held for the same reason.
+    private var servers: WatchProtocol.ServersContext?
+
     private override init() { super.init() }
 
     /// Call once at app start to wire the bridge to the live screens
@@ -58,7 +61,7 @@ final class WatchBridge: NSObject {
                     // The app asks for the unlock once it is in front
                     // (ContentView); nothing here opens Face ID.
                     let fqdn = WatchBridge.shared.alerts?.pendingApprovals
-                        .first(where: { $0.requestId == requestId })?.serverFqdn
+                        .first(where: { $0.requestId.lowercased() == requestId.lowercased() })?.serverFqdn
                     WatchApprovalPrompt.shared.watchIsWaiting(serverFqdn: fqdn)
                 },
                 makeSource: {
@@ -113,6 +116,12 @@ final class WatchBridge: NSObject {
         pushApplicationContext()
     }
 
+    /// Publish the account's servers (nil clears the list on the watch).
+    func updateServers(_ ctx: WatchProtocol.ServersContext?) {
+        servers = ctx
+        pushApplicationContext()
+    }
+
     private func pushApplicationContext() {
         guard WCSession.isSupported() else { return }
         let session = WCSession.default
@@ -128,6 +137,10 @@ final class WatchBridge: NSObject {
         if let alerts, !alerts.isEmpty,
            let data = try? JSONEncoder().encode(alerts) {
             payload["security-alerts"] = data
+        }
+        if let servers, !servers.servers.isEmpty,
+           let data = try? JSONEncoder().encode(servers) {
+            payload["servers"] = data
         }
         // The applicationContext call REPLACES the prior snapshot, so an
         // empty payload (no timeline + no alerts) is the documented way
