@@ -10,6 +10,8 @@ import * as policy from "../public/webapp/lib/backupPolicy.js";
 // @ts-expect-error plain JS module
 import * as fmt from "../public/webapp/lib/serverBackupFormat.js";
 // @ts-expect-error plain JS module
+import * as mig from "../public/webapp/lib/migrateArchive.js";
+// @ts-expect-error plain JS module
 import { signWithIrk } from "../public/webapp/keystore.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -138,6 +140,18 @@ describe("the one .flagship file in the webapp (shared vectors)", () => {
     await expect(fmt.splitBundle(new Blob([b.subarray(0, BB.example.dataOffset)]))).rejects.toThrow(/cut short/);
     await expect(fmt.splitBundle(new Blob([new Uint8Array(4)]))).rejects.toThrow(/too short/);
     await expect(fmt.splitBundle(new Blob([new TextEncoder().encode('{"magic":"flagship-backup"}')]))).rejects.toThrow(/isn't a Flagship backup/);
+  });
+});
+
+describe("Migrate's downtime estimate", () => {
+  it("adds the backup, the transfer at the measured speed, the restore and a little per app", () => {
+    // 2 GiB: 34 s to back up, 102 s at 20 MiB/s, 51 s to restore, 2 apps × 30 s.
+    expect(mig.estimateDowntimeSec({ archiveBytes: 2 * GB, bytesPerSecond: 20 * 1024 * 1024, apps: 2 })).toBe(248);
+    expect(mig.downtimeText(248)).toBe("about 4 minutes");
+    expect(mig.downtimeText(30)).toBe("about a minute");
+    expect(mig.downtimeText(3 * 3600)).toBe("about 3 hours");
+    // A link too slow to measure still gives a (long) estimate, never infinity.
+    expect(Number.isFinite(mig.estimateDowntimeSec({ archiveBytes: GB, bytesPerSecond: 0, apps: 1 }))).toBe(true);
   });
 });
 

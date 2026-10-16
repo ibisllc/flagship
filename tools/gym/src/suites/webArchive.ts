@@ -156,18 +156,23 @@ export const WEB_ARCHIVE: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-archive-migrate-start",
-    "Migrate: without peer backup the dialog says the server has no backup and Start migration is off (Close closes); with it, Start migration posts an admin-root-signed flagship/server-migration/v1 (wipe after hand-off), toasts, shows the timeline with Abort, and holds the SWK for the new box.",
-    "gym archive migrate waits for a backup, then starts under the admin root",
+    "Migrate needs no peer backup: the dialog says the move pauses the apps, backs the server up and sends the backup to the new server; Start migration posts an admin-root-signed flagship/server-migration/v1 (wipe after hand-off), toasts, shows the timeline with Abort, and holds the SWK for the new box.",
+    "gym archive migrate starts under the admin root with no peer backup needed",
     {
-      steps: [
-        { kind: "tap", describe: "Migrate with no backup; Close.", handle: "[data-mig-cancel]" },
-        { kind: "tap", describe: "Migrate with backup; Start migration.", handle: "[data-mig-action]" },
-      ],
-      assertions: [
-        { describe: "Gate", handle: "[data-mig-gate]", expect: "present" },
-        { describe: "Timeline", handle: "[data-mig-steps]", expect: "text", text: "Migration authorized" },
-      ],
-      screenshots: [shot("migrate-gated", "No backup."), shot("migrate-started", "Started.")],
+      steps: [{ kind: "tap", describe: "Start migration.", handle: "[data-mig-action]" }],
+      assertions: [{ describe: "Timeline", handle: "[data-mig-steps]", expect: "text", text: "Migration authorized" }],
+      screenshots: [shot("migrate-start", "Start."), shot("migrate-started", "Started.")],
+      dimension: "D1",
+    },
+  ),
+  webTotal(
+    "web-total-archive-migrate-move",
+    "Migrate moves the data on the archive path: the estimate (size, measured link speed, downtime); Move the data now pauses and backs up the old server (purpose migrate), signs a restore order for the new box under the admin root, approves a download link, has the new box pull it and commits the key; progress per step; a failed app is named and the move ends.",
+    "gym archive migrate moves the data: estimate, pause and back up, the new box pulls and restores",
+    {
+      steps: [{ kind: "tap", describe: "Move the data now.", handle: "[data-mig-move-btn]" }],
+      assertions: [{ describe: "Estimate", handle: "[data-mig-estimate]", expect: "text", text: "Your apps pause for" }],
+      screenshots: [shot("migrate-estimate", "The estimate."), shot("migrate-moved", "Moved.")],
       dimension: "D1",
     },
   ),

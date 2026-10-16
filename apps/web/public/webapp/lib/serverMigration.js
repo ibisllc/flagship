@@ -55,6 +55,8 @@ export const TAG_SERVER_MIGRATION_CONTROL = "flagship/server-migration-control/v
 export const MIGRATION_DISPOSITIONS = ["keep", "wipe-after-handoff"];
 export const DEFAULT_MIGRATION_DISPOSITION = "wipe-after-handoff";
 export const MIGRATE_LABEL = "Migrate to new machine / VM";
+export const MIGRATE_DATA_NOTE =
+  "The move pauses this server's apps, backs it up and sends the backup straight to the new server, which restores it and then takes over the name. Until then your apps say they are moving.";
 
 function defaultBytesToHex(b) {
   let s = "";
@@ -393,10 +395,10 @@ export function migrationSteps(s, nowMs) {
   const rows = [
     ["initiate", "Migration authorized", s.initiatedAt],
     ["provision", "New box online + attached", s.attachedAt],
-    ["pre-seed", "Data restored to the new box", s.preSeededAt],
+    ["pre-seed", "Data moved to the new box", s.preSeededAt],
     ["ready", "Confirmed ready to take over", s.readyAt],
-    ["freeze", "Old server frozen — final backup", s.freezeAt],
-    ["final-delta", "Final backup flushed", s.finalDeltaAt],
+    ["freeze", "Old server frozen", s.freezeAt],
+    ["final-delta", "Old server handed off", s.finalDeltaAt],
     ["take-over", "New box took over the name", s.takenOverAt],
     ["close-out", "Old box closed out", s.oldClosedOutAt],
   ];
@@ -426,18 +428,15 @@ export function migrationWaitCopy(s, nowMs) {
     case "initiated":
       return "Waiting for the new box to come online. Apply the recipe on the new machine / VM; it will attach itself here.";
     case "provisioned":
-      if (s.attachedAt != null && now - s.attachedAt > PRESEED_STUCK_MS) {
-        return "The new box attached but hasn't restored any data yet. If this server has no backup enabled, enable backup first — the migration restores from it.";
-      }
-      return "New box attached — restoring this server's data from backup. The old server keeps serving meanwhile.";
+      return "New box attached. Move the data when you're ready: this server's apps pause until the new one takes over.";
     case "pre-seeded":
       return "Data restored. Confirm the hand-off when you're ready — the old server will briefly freeze writes while the name moves.";
     case "ready":
       return "Ready — freeze the old server to flush the final backup and hand the name over.";
     case "freezing":
       return s.finalDeltaAt == null
-        ? "Old server is frozen and flushing its final backup…"
-        : "Final backup flushed — the new box is applying it and claiming the name…";
+        ? "The old server is handing off…"
+        : "Handed off — the new box is claiming the name…";
     case "taken-over":
       return "The new box is serving the name. Waiting for the old box to close out.";
     default:

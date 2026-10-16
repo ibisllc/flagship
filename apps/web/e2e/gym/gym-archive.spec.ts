@@ -296,9 +296,6 @@ function session(phase: string, extra: Record<string, unknown> = {}) {
   };
 }
 
-async function enrollPeerBackup(page: Page): Promise<void> {
-  await page.evaluate(async () => (await import("/lib/profilesStore.js")).set("peerBackupChoice", "enabled"));
-}
 
 // ───────────────────────────── tests ─────────────────────────────
 
@@ -646,7 +643,7 @@ test.describe("gym webapp archive", () => {
     await shot(page, testInfo, "import-non-admin");
   });
 
-  test("gym archive migrate waits for a backup, then starts under the admin root", async ({ page }, testInfo) => {
+  test("gym archive migrate starts under the admin root with no peer backup needed", async ({ page }, testInfo) => {
     const keys = await reachHome(page, { kind: "admin", servers: [HOME] });
     const m = await mock(page);
     baseServer(m, [livePod(HOME)]);
@@ -656,20 +653,11 @@ test.describe("gym webapp archive", () => {
     const dlg = page.locator('dialog[aria-label="Migrate to new machine / VM"]');
     const action = dlg.locator("[data-mig-action]");
 
-    // No peer backup: the gate says so and Start migration is off.
-    await expect(dlg.locator("[data-mig-gate]")).toHaveText("This server has no backup yet, so it can't be migrated.", { timeout: 15_000 });
-    await expect(action).toHaveText("Start migration");
-    await expect(action).toBeDisabled();
-    await shot(page, testInfo, "migrate-gated");
-    await dlg.locator("[data-mig-cancel]").click();
-    await expect(dlg).toHaveCount(0);
-
-    // With peer backup: start.
-    await enrollPeerBackup(page);
-    await page.click("#migrate-start-btn");
-    await expect(dlg.locator("[data-mig-backup]")).toContainText("Peer-backup is enrolled", { timeout: 15_000 });
+    // No peer-backup gate any more: the move carries the server's own backup.
+    await expect(dlg.locator("[data-mig-backup]")).toContainText("backs it up and sends the backup straight to the new server", { timeout: 15_000 });
     await expect(dlg.locator("[data-mig-gate]")).toBeHidden();
     await expect(action).toBeEnabled();
+    await shot(page, testInfo, "migrate-start");
     await action.click();
     await sawToast(page, "Migration started — now add the new box");
     const init = m.last(`/api/server/${HOME}/migration`)!;
@@ -686,6 +674,93 @@ test.describe("gym webapp archive", () => {
     await shot(page, testInfo, "migrate-started");
     const hold = await page.evaluate(async () => (await import("/lib/serverMigration.js")).activeMigrationHolds());
     expect(hold).toEqual([HOME]);
+  });
+
+  test("gym archive migrate moves the data: estimate, pause and back up, the new box pulls and restores", async ({ page }, testInfo) => {
+    test.setTimeout(120_000);
+    const keys = await reachHome(page, { kind: "admin", servers: [HOME] });
+    const m = await mock(page);
+    baseServer(m, [livePod(HOME)]);
+    const NEW = "home2.smoketest.flagship.services";
+    migrationCom(page, m, keys, session("provisioned"));
+    const fx = await makeBackup(page, { account: true });
+    const SAVED = `${ARCHIVE}/backups`;
+    const old = { runs: [] as Call[], approved: [] as Call[], polls: 0 };
+    // The old box: estimate, speed-check link, keys in its pool, the move's backup, its file and link.
+    m.get(at(HOME, `${SAVED}/estimate`), { archiveBytes: 2 * 1024 ** 3, apps: 2 });
+    m.post(at(HOME, `${ARCHIVE}/probe-link`), { path: `/api/archive-probe/${"cd".repeat(32)}`, bytes: 8 * 1024 * 1024 });
+    m.get(at(HOME, SAVED), () => {
+      const done = old.runs.length > 0 && ++old.polls > 1;
+      return {
+        json: {
+          keysLeft: 300,
+          keysWanted: 0,
+          running: old.runs.length > 0 && !done ? { archiveId: fx.archiveId, progress: { done: 0, total: 2, app: "notes" } } : null,
+          lastRun: null,
+          backups: done ? [{ archiveId: fx.archiveId, createdAt: Date.now(), bytes: fx.bytes, backupBytes: fx.backupText.length, sha256: fx.sha256, apps: [], left: [] }] : [],
+        },
+      };
+    });
+    m.post(at(HOME, `${SAVED}/run`), (call) => {
+      old.runs.push(call);
+      return { status: 202, json: { archiveId: fx.archiveId } };
+    });
+    m.get(at(HOME, `${SAVED}/${fx.archiveId}/backup-file`), () => ({ raw: fx.backupText, contentType: "application/json" }));
+    m.post(at(HOME, `${SAVED}/${fx.archiveId}/link`), { path: `/api/archive-download/${"ab".repeat(32)}`, bundleFileName: "home.flagship", bundleBytes: fx.bytes + 16, expiresAt: null });
+    m.post(
+      at(HOME, `${ARCHIVE}/approve`),
+      sensitive(page, keys, DOWNLOAD_CANON, (b) => ({ arg: b.approval, sig: b.signature }), (call) => {
+        old.approved.push(call);
+        return { json: { ok: true } };
+      }),
+    );
+    // The new box: the speed check, the late restore order, the pull, then the restore.
+    const nb = { orders: [] as Call[], pulls: [] as Call[], committed: false, polls: 0 };
+    m.post(at(NEW, `${RESTORE}/probe`), { bytes: 8 * 1024 * 1024, ms: 400, bytesPerSecond: 20 * 1024 * 1024 });
+    m.post(
+      at(NEW, `${RESTORE}/order`),
+      sensitive(page, keys, RESTORE_CANON, (b) => ({ arg: b.order, sig: b.signatureHex }), (call) => {
+        nb.orders.push(call);
+        return { json: { waiting: { archiveId: fx.archiveId, bytes: fx.bytes, sha256: fx.sha256 }, restore: null } };
+      }),
+    );
+    m.post(at(NEW, `${RESTORE}/pull`), (call) => {
+      nb.pulls.push(call);
+      return { status: 202, json: { received: 0 } };
+    });
+    m.get(at(NEW, RESTORE), () => {
+      if (nb.committed) return { json: { waiting: null, restore: { state: "done", apps: [{ name: "notes", state: "done" }, { name: "blog", state: "failed", reason: "its image didn't build" }] } } };
+      const ready = ++nb.polls > 1;
+      return { json: { waiting: { archiveId: fx.archiveId }, restore: { state: ready ? "ready" : "uploading", bytes: fx.bytes, received: ready ? fx.bytes : fx.bytes / 2, pulling: !ready } } };
+    });
+    m.post(at(NEW, `${RESTORE}/commit`), () => {
+      nb.committed = true;
+      return { json: { ok: true } };
+    });
+    // This device created the new box, so it holds a session for it.
+    await page.evaluate(async (fqdn) => (await import("/lib/api.js")).setSessionTokenForPod(fqdn, "tok-new"), NEW);
+
+    await openServer(page, HOME);
+    await page.click("#migrate-start-btn");
+    const dlg = page.locator('dialog[aria-label="Migrate to new machine / VM"]');
+    await expect(dlg.locator("[data-mig-wait]")).toHaveText("New box attached. Move the data when you're ready: this server's apps pause until the new one takes over.", { timeout: 15_000 });
+    // The estimate: size, the measured link speed, the downtime.
+    await expect(dlg.locator("[data-mig-estimate]")).toContainText("About 2.0 GB to move at 20 MB/s between the servers.", { timeout: 15_000 });
+    await expect(dlg.locator("[data-mig-estimate]")).toContainText("Your apps pause for about 4 minutes");
+    await shot(page, testInfo, "migrate-estimate");
+    await dlg.locator("[data-mig-move-btn]").click();
+    await expect(dlg.locator("[data-mig-move-step]")).toHaveText("Restored 1 app. 1 couldn't be restored; the server works with the rest.", { timeout: 30_000 });
+    await expect(dlg.locator("[data-mig-move-apps]")).toContainText("Couldn't restore blog: its image didn't build.");
+    // The old box paused and backed up for the move; the new one got a signed order, an approved link, then the key.
+    expect(old.runs[0]!.body).toEqual({ purpose: "migrate" });
+    const order = nb.orders[0]!.body as { order: { serverDomain: string; archiveId: string; bytes: number; sha256: string }; signatureHex: string };
+    expect(order.order).toMatchObject({ serverDomain: NEW, archiveId: fx.archiveId, bytes: fx.bytes, sha256: fx.sha256 });
+    expect(await signer(page, keys, RESTORE_CANON, order.order, order.signatureHex)).toBe("admin");
+    const a = old.approved[0]!.body as { approval: { archiveId: string; requestId: string }; signature: string };
+    expect(a.approval.archiveId).toBe(fx.archiveId);
+    expect(nb.pulls[0]!.body).toEqual({ url: `https://${HOME}/api/archive-download/${"ab".repeat(32)}`, requestId: a.approval.requestId });
+    expect(m.last(`${RESTORE}/commit`)!.body.key).toMatch(/^[0-9a-f]{64}$/);
+    await shot(page, testInfo, "migrate-moved");
   });
 
   test("gym archive migrate hands off to the new box, then a ready one freezes", async ({ page }, testInfo) => {
@@ -709,7 +784,7 @@ test.describe("gym webapp archive", () => {
     const freeze = m.last("/migration/freeze")!;
     expect(freeze.body.order).toMatchObject({ retiredStkPubHex: STK[HOME], diskDisposition: "wipe-after-handoff" });
     expect(await signer(page, keys, DECOMMISSION_CANON, freeze.body.order, freeze.body.signature)).toBe("admin");
-    await expect(dlg.locator("[data-mig-wait]")).toHaveText("Old server is frozen and flushing its final backup…");
+    await expect(dlg.locator("[data-mig-wait]")).toHaveText("The old server is handing off…");
     await expect(action).toBeHidden();
     await dlg.locator("[data-mig-cancel]").click();
 
@@ -729,6 +804,11 @@ test.describe("gym webapp archive", () => {
     const m = await mock(page);
     baseServer(m, [livePod(HOME)]);
     const com = migrationCom(page, m, keys, session("provisioned"));
+    let resumed = 0;
+    m.post(at(HOME, `${ARCHIVE}/backups/resume`), () => {
+      resumed++;
+      return { json: { migratePause: null } };
+    });
     await page.evaluate(async (fqdn) => (await import("/lib/serverMigration.js")).setMigrationHold(fqdn), HOME);
     await openServer(page, HOME);
     await page.click("#migrate-start-btn");
@@ -739,6 +819,8 @@ test.describe("gym webapp archive", () => {
     await abort.click();
     await sawToast(page, "Migration aborted — your old server stays active");
     expect(com.posts).toEqual(["abort"]);
+    // The old server's apps run again.
+    await expect.poll(() => resumed).toBe(1);
     const sent = m.last("/migration/abort")!;
     expect(sent.body.control.action).toBe("abort");
     expect(await signer(page, keys, CONTROL_CANON, sent.body.control, sent.body.signature)).toBe("admin");
@@ -757,7 +839,6 @@ test.describe("gym webapp archive", () => {
     const m = await mock(page);
     baseServer(m, [livePod(HOME)]);
     const com = migrationCom(page, m, keys, null);
-    await enrollPeerBackup(page);
     await openServer(page, HOME);
     await page.click("#migrate-start-btn");
     const dlg = page.locator('dialog[aria-label="Migrate to new machine / VM"]');
