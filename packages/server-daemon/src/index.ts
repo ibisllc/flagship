@@ -6,6 +6,7 @@ import { basename, join } from "node:path";
 import { buildModelRedactor } from "./llm/modelPrivacy.js";
 import { X509Certificate } from "node:crypto";
 import {
+  derivePeerBackupKey,
   ed,
   signServerRevokeBySelf,
   verifyRootEntitlement,
@@ -205,6 +206,7 @@ import { buildRestoreWait, type RestoreWait } from "./serverArchive/restoreWait.
 import { buildMigratePause, movingPage, type MigratePause } from "./serverArchive/migratePause.js";
 import { BackupPolicyStore } from "./backupPolicy/policy.js";
 import { BackupCap } from "./backupPolicy/cap.js";
+import { PeerBackupEngine } from "./peerNet/engine.js";
 import { buildBackupPolicyHttp } from "./backupPolicy/http.js";
 import { measureAppArchiveBytes } from "./serverArchive/build.js";
 import {
@@ -1201,6 +1203,22 @@ async function main(): Promise<void> {
       })
     : null;
   await migratePause?.load();
+  // Peer backup between accounts (docs/peer-backup.md): runs while the policy
+  // is Peer. Its pool is 2/3 of the disk, from the backup cap once that's up.
+  const peerCapRef: { current: { reservedForPeersBytes(): number | null } | null } = { current: null };
+  const peerEngine =
+    cfg && backupPolicy && swkHex && env.controlPlaneBaseUrl && env.serverFqdn
+      ? new PeerBackupEngine({
+          serverId: env.serverFqdn,
+          dataDir,
+          pbk: derivePeerBackupKey(hexToBytes(swkHex.trim())),
+          sign: (msg) => custodian.signAsBox(msg),
+          comBaseUrl: env.controlPlaneBaseUrl,
+          policy: backupPolicy,
+          reservedForPeersBytes: () => peerCapRef.current?.reservedForPeersBytes() ?? null,
+          log: (m) => console.log(`[peer-backup] ${m}`),
+        })
+      : null;
   const adoptPairingSiblings = async (json: string) => {
     await restoreWait?.adoptFromPairingJson(json);
     await backupPolicy?.adoptFromPairingJson(json);
@@ -1247,6 +1265,9 @@ async function main(): Promise<void> {
       wildcard: env.wildcard,
       dataDir,
       entitlements: () => entitlementBundle,
+      ...(peerEngine
+        ? { peerMail: { announcements: () => peerEngine.mailboxAnnouncements(), onMail: (id: string, e: Uint8Array) => peerEngine.handleMail(id, e) } }
+        : {}),
       // LAN-direct (docs/lan-direct.md): on by default at :443 on the box's
       // private LAN addresses only; FLAGSHIP_LAN_DIRECT=0 keeps the box
       // relay-only.
@@ -1475,6 +1496,8 @@ async function main(): Promise<void> {
       restoreWait,
       backupPolicy,
       migratePause,
+      peerEngine,
+      peerCapRef,
       serverOrder,
       serviceAccessRef,
       accessPrincipals,
@@ -2258,6 +2281,8 @@ async function wireRuntimeSurfaces(deps: {
   restoreWait: RestoreWait | null;
   backupPolicy: BackupPolicyStore | null;
   migratePause: MigratePause | null;
+  peerEngine: PeerBackupEngine | null;
+  peerCapRef: { current: { reservedForPeersBytes(): number | null } | null };
   serviceAccessRef: { current: ServiceAccessStore | null };
   accessPrincipals: AccessPrincipals;
   accessSyncRef: { current: AccessSync | null };
@@ -2879,6 +2904,9 @@ async function wireRuntimeSurfaces(deps: {
           note: (kind, detail, ok) => deps.activityLog.note(kind, detail, { ok: ok ?? true }),
         })
       : null;
+  deps.peerCapRef.current = backupCap;
+  const peerEngine = deps.peerEngine;
+  if (peerEngine) backupPolicyHttp?.setPeerStatus(() => peerEngine.policyStatus());
   // Per-app disk limits (docs/app-runtimes.md §5.3): an app that fills up
   // is an Activity entry, a phone alert and a content-free wake.
   runtime.appQuota.setEvents(
@@ -3084,6 +3112,13 @@ async function wireRuntimeSurfaces(deps: {
     runtime.addHandler((req) => service.handleDownload(req));
     return service;
   })();
+  if (peerEngine && serverArchiveService) {
+    serverArchiveService.setSavedHooks({
+      onArchiveSaved: (meta, files) => peerEngine.onArchiveSaved(meta, files),
+      pinnedArchiveIds: () => peerEngine.pinnedArchiveIds(),
+    });
+  }
+  peerEngine?.start();
 
   // Share this server (docs/share-a-server.md): another account's per-share
   // sessions, gated by level on every screens route, and the activity log.
@@ -3405,6 +3440,7 @@ async function wireRuntimeSurfaces(deps: {
       backupLoop,
       repairStats: repairAccumulator,
     },
+    peerNet: peerEngine,
     // P14 — companion-browser dock. Owner-gated mint/list/revoke +
     // public redeem. Companions land in the same `pairedSessions`
     // store (flagged `companion: true` + 4h `expiresAt`); the gate

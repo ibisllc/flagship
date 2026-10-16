@@ -359,6 +359,15 @@ export interface ScreensHttpDeps {
    */
   peerBackup?: PeerBackupSnapshotDeps | null;
   /**
+   * Peer backup between accounts (docs/peer-backup.md). When set, the status
+   * route answers with its v2 status, and the root route opens a lost
+   * server's record with the PBK a device sends.
+   */
+  peerNet?: {
+    status(): Promise<unknown>;
+    describeRoot(serverId: string, pbk: Uint8Array): Promise<unknown>;
+  } | null;
+  /**
    * P14 — Companion-browser dock. Wires the four
    * /api/screens/companion/* endpoints + the PUBLIC /api/companion/
    * redeem endpoint into the screens dispatch. The redeem path is
@@ -1475,6 +1484,29 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
     // Snapshot of the daemon's peer-backup participation, shard health,
     // peer topology, and repair history. Empty/zero values stand in for
     // any underlying state the daemon hasn't wired yet — never fabricated.
+    if (path === "/api/screens/peer-backup/status" && method === "GET" && deps.peerNet) {
+      return jok(await deps.peerNet.status());
+    }
+
+    // ---- POST /api/screens/peer-backup/root ----
+    //
+    // A device (holding the account key) sends a lost server's PBK; the box
+    // fetches that server's sealed record from .com, opens it, and answers
+    // what's there: the archive (with its small backup file, so the device
+    // can open the account slot) and how its holders stand.
+    if (path === "/api/screens/peer-backup/root" && method === "POST" && deps.peerNet) {
+      const body = parseJson(req.body) as { serverId?: unknown; pbkHex?: unknown } | null;
+      if (!body || typeof body.serverId !== "string" || !/^[a-z0-9.-]{1,253}$/.test(body.serverId)) {
+        return jerr(400, "serverId is required");
+      }
+      if (typeof body.pbkHex !== "string" || !/^[0-9a-f]{64}$/.test(body.pbkHex)) return jerr(400, "pbkHex is required");
+      try {
+        return jok(await deps.peerNet.describeRoot(body.serverId, new Uint8Array(Buffer.from(body.pbkHex, "hex"))));
+      } catch (e) {
+        return jerr(404, (e as Error).message);
+      }
+    }
+
     if (path === "/api/screens/peer-backup/status" && method === "GET") {
       const out: PeerBackupStatusResponse = buildPeerBackupStatus(
         deps.peerBackup ?? {},

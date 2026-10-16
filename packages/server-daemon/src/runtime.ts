@@ -173,6 +173,14 @@ export interface DaemonRuntimeOptions {
    */
   onDomainGranted?: (e: { fqdn: string; ownerServerId: string }) => void;
   /**
+   * Peer-backup mailboxes (docs/peer-backup.md §5.3): what the tunnel
+   * announces to a hub offering pb-mail-v1, and who answers the mail.
+   */
+  peerMail?: {
+    announcements: () => Promise<Array<{ pikPubHex: string; epoch: number; sigHex: string }>>;
+    onMail: (mailboxId: string, envelope: Uint8Array) => Promise<Uint8Array>;
+  };
+  /**
    * Override the STK pubkey lookup used to verify inbound sibling-WS
    * handshakes. Production fetches from .com `/api/server/by-domain`;
    * tests inject a static map. Default: a fetcher pointed at
@@ -1103,6 +1111,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
     resolveBackend: () =>
       relayLockdown.isRelayAllowed() ? { host: "127.0.0.1", port: tlsPort } : null,
     onHelloAckTrust,
+    ...(opts.peerMail ? { mailboxAnnouncements: opts.peerMail.announcements, onMail: opts.peerMail.onMail } : {}),
     onDomainGranted: (e) => {
       siblingRouter.broadcastDomainGranted({
         fqdn: e.fqdn,

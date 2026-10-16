@@ -11,7 +11,7 @@ import { buildHttpPbCom, buildHttpPbTransport } from "./comClient.js";
 import { HolderEngine, type HolderState, type HolderStatus } from "./holder.js";
 import { fromHex, hex } from "./mailOps.js";
 import { OwnerEngine, type OwnerState } from "./owner.js";
-import { restoreFromPeers, type PeerRestoreResult } from "./restore.js";
+import { fetchPeerRoot, restoreFromPeers, type PeerRestoreResult } from "./restore.js";
 import { FsBlobStore, FsStateFile } from "./stores.js";
 import type { PbComClient, PbMailTransport } from "./types.js";
 
@@ -36,6 +36,18 @@ export interface PeerEngineOptions {
   now?: () => number;
   tickMs?: number;
   log?: (m: string) => void;
+}
+
+/** A lost server's record, as a restoring device sees it. */
+export interface PeerRootSummary {
+  serverId: string;
+  generation: number;
+  revision: number;
+  createdAt: number;
+  archive: { archiveId: string; createdAt: number; bytes: number; sha256: string; backupFile: string };
+  holders: number;
+  needed: number;
+  keepUntil: number;
 }
 
 export type PeerEngineState = "waiting-for-peers" | "filling" | "placing" | "protected" | "at-risk" | "leaving" | "off";
@@ -135,15 +147,9 @@ export class PeerBackupEngine {
     if (this.running) return;
     this.running = true;
     try {
-      if (!this.relayBase) {
-        try {
-          this.relayBase = (await this.com.network()).relayBase;
-        } catch (e) {
-          this.o.log?.(`peer backup: ${(e as Error).message}`);
-        }
-      }
       const hs = await this.holder.state();
       if (this.isPeer()) {
+        await this.ensureRelay();
         this.released = false;
         if (hs.leavingSince !== null) await this.holder.rejoin();
         await this.holder.tick();
@@ -151,6 +157,7 @@ export class PeerBackupEngine {
       } else {
         const has = Object.keys(hs.leases).length > 0 || hs.fillerHeld > 0 || (await this.owner.state()).current !== null;
         if (has && !this.released) {
+          await this.ensureRelay();
           await this.owner.release();
           await this.holder.leave();
           this.released = true;
@@ -162,6 +169,15 @@ export class PeerBackupEngine {
       this.o.log?.(`peer backup tick: ${(e as Error).message}`);
     } finally {
       this.running = false;
+    }
+  }
+
+  private async ensureRelay(): Promise<void> {
+    if (this.relayBase) return;
+    try {
+      this.relayBase = (await this.com.network()).relayBase;
+    } catch (e) {
+      this.o.log?.(`peer backup: ${(e as Error).message}`);
     }
   }
 
@@ -196,6 +212,35 @@ export class PeerBackupEngine {
   async restore(a: { serverId: string; pbk: Uint8Array; outPath: string; onProgress?: (done: number, total: number) => void }): Promise<PeerRestoreResult> {
     if (!this.relayBase) this.relayBase = (await this.com.network()).relayBase;
     return restoreFromPeers({ ...a, com: this.com, transport: this.transport, ...(this.o.now ? { now: this.o.now } : {}) });
+  }
+
+  /** What a lost server's record holds, for the device restoring it. */
+  async describeRoot(serverId: string, pbk: Uint8Array): Promise<PeerRootSummary> {
+    const root = await fetchPeerRoot(this.com, serverId, pbk);
+    return {
+      serverId,
+      generation: root.generation,
+      revision: root.revision,
+      createdAt: root.createdAt,
+      archive: root.archive,
+      holders: root.stripes.flat().length,
+      needed: root.network.k,
+      keepUntil: Math.min(...root.stripes.flat().map((m) => m.expiresAt)),
+    };
+  }
+
+  /**
+   * The restore fetcher the server-restore flow calls (`from-peers`): bring
+   * the named archive's data file back from peers into `outPath`. Refuses
+   * when the record on .com is for a different archive than the device chose.
+   */
+  async fetchArchive(a: { serverId: string; pbk: Uint8Array; archiveId: string; bytes: number; sha256: string; outPath: string; onProgress?: (done: number, total: number) => void }): Promise<{ dataPath: string }> {
+    const root = await fetchPeerRoot(this.com, a.serverId, a.pbk);
+    if (root.archive.archiveId !== a.archiveId || root.archive.sha256 !== a.sha256 || root.archive.bytes !== a.bytes) {
+      throw new Error("The backup on other servers isn't the one this restore names.");
+    }
+    const r = await this.restore({ serverId: a.serverId, pbk: a.pbk, outPath: a.outPath, ...(a.onProgress ? { onProgress: a.onProgress } : {}) });
+    return { dataPath: r.dataPath };
   }
 
   private engineState(own: Awaited<ReturnType<OwnerEngine["summary"]>>, h: HolderStatus): PeerEngineState {
