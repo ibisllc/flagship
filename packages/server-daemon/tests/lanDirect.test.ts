@@ -4,6 +4,7 @@ import type os from "node:os";
 import {
   buildSignedLanHint,
   lanAddressesFromInterfaces,
+  lanPortFromEnv,
   leafCertSha256,
   parseConnectRequest,
   startLanListener,
@@ -139,6 +140,88 @@ describe("startLanListener (live sockets)", () => {
     });
     first.destroy();
     expect(closed).toBe(true);
+  });
+
+  const closesWithin = (port: number, send: Buffer | null, ms: number) =>
+    new Promise<boolean>((resolve) => {
+      const c = net.connect(port, "127.0.0.1", () => send && c.write(send));
+      c.on("error", () => {});
+      c.on("close", () => resolve(true));
+      setTimeout(() => {
+        c.destroy();
+        resolve(false);
+      }, ms);
+    });
+
+  it("hangs up on a client that never says what it wants", async () => {
+    backend = net.createServer();
+    await new Promise<void>((r) => backend.listen(0, "127.0.0.1", () => r()));
+    lan = await startLanListener({
+      port: 0,
+      backendPort: (backend.address() as net.AddressInfo).port,
+      zone: ZONE,
+      listAddresses: () => ["127.0.0.1"],
+      headerTimeoutMs: 100,
+      log: () => {},
+    });
+    expect(await closesWithin(lan.endpoints()[0]!.port, null, 2_000)).toBe(true);
+  });
+
+  it("closes the device's connection at once when the box's TLS server is down", async () => {
+    const port = await setup();
+    await new Promise<void>((r) => backend.close(() => r()));
+    backend = net.createServer();
+    expect(await closesWithin(port, Buffer.from([0x16, 0x03, 0x01]), 2_000)).toBe(true);
+  });
+});
+
+describe("startLanListener never takes the box down", () => {
+  it("binds what it can, and says once why an address stays relay-only", async () => {
+    const logs: string[] = [];
+    const lan = await startLanListener({
+      port: 0,
+      backendPort: 1,
+      zone: ZONE,
+      // TEST-NET-1 isn't on any interface here, so its bind fails.
+      listAddresses: () => ["127.0.0.1", "192.0.2.77"],
+      rescanMs: 20,
+      log: (m) => logs.push(m),
+    });
+    await new Promise((r) => setTimeout(r, 120));
+    expect(lan.endpoints().map((e) => e.address)).toEqual(["127.0.0.1"]);
+    expect(logs.filter((m) => m.includes("cannot listen on 192.0.2.77"))).toHaveLength(1);
+    await lan.close();
+  });
+
+  it("stays relay-only when the interfaces can't be read or the port is unusable", async () => {
+    const logs: string[] = [];
+    const broken = await startLanListener({
+      port: 0,
+      backendPort: 1,
+      zone: ZONE,
+      listAddresses: () => {
+        throw new Error("uv_interface_addresses failed");
+      },
+      rescanMs: 20,
+      log: (m) => logs.push(m),
+    });
+    await new Promise((r) => setTimeout(r, 60));
+    expect(broken.endpoints()).toEqual([]);
+    expect(logs.some((m) => m.includes("cannot list network interfaces"))).toBe(true);
+    await broken.close();
+
+    const badPort = await startLanListener({ port: 70_000, backendPort: 1, zone: ZONE, listAddresses: () => ["127.0.0.1"], log: (m) => logs.push(m) });
+    expect(badPort.endpoints()).toEqual([]);
+    await badPort.close();
+  });
+
+  it("reads FLAGSHIP_LAN_PORT, falling back to 443 on anything that isn't a port", () => {
+    const said: string[] = [];
+    expect(lanPortFromEnv(undefined)).toBe(443);
+    expect(lanPortFromEnv("8443")).toBe(8443);
+    expect(lanPortFromEnv("https", (m) => said.push(m))).toBe(443);
+    expect(lanPortFromEnv("0", (m) => said.push(m))).toBe(443);
+    expect(said).toHaveLength(2);
   });
 });
 

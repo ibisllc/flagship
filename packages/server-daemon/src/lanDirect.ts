@@ -63,6 +63,15 @@ export function parseConnectRequest(
   return { ok: true, host };
 }
 
+/** `FLAGSHIP_LAN_PORT`, or 443 when unset or not a usable port. */
+export function lanPortFromEnv(v: string | undefined, log: (m: string) => void = (m) => console.warn(`[lan-direct] ${m}`)): number {
+  if (v === undefined || v === "") return 443;
+  const n = Number(v);
+  if (Number.isInteger(n) && n > 0 && n < 65536) return n;
+  log(`FLAGSHIP_LAN_PORT=${JSON.stringify(v)} isn't a port; using 443`);
+  return 443;
+}
+
 export interface LanListenerOptions {
   /** Port to listen on at each LAN address (443 keeps client URLs unchanged). */
   port: number;
@@ -139,13 +148,23 @@ export async function startLanListener(o: LanListenerOptions): Promise<LanListen
     client.on("data", onData);
   };
 
+  // A failed bind is retried on every rescan; say so once per address and
+  // reason, not every minute.
+  const lastBindError = new Map<string, string>();
   const rescan = async (): Promise<void> => {
     if (closed) return;
-    const want = new Set(listAddresses());
+    let want: Set<string>;
+    try {
+      want = new Set(listAddresses());
+    } catch (e) {
+      log(`cannot list network interfaces (${(e as Error).message}); staying on the relay`);
+      return;
+    }
     for (const [addr, srv] of servers) {
       if (!want.has(addr)) {
         srv.close();
         servers.delete(addr);
+        lastBindError.delete(addr);
         log(`stopped listening on ${addr}`);
       }
     }
@@ -153,21 +172,37 @@ export async function startLanListener(o: LanListenerOptions): Promise<LanListen
       if (servers.has(addr)) continue;
       const srv = net.createServer(handle);
       const bound = await new Promise<boolean>((resolve) => {
-        srv.once("error", (e) => {
-          log(`cannot listen on ${addr}:${o.port} (${(e as NodeJS.ErrnoException).code ?? e})`);
+        const fail = (e: unknown): void => {
+          const why = String((e as NodeJS.ErrnoException).code ?? (e as Error).message ?? e);
+          if (lastBindError.get(addr) !== why) log(`cannot listen on ${addr}:${o.port} (${why}); that address stays relay-only`);
+          lastBindError.set(addr, why);
+          srv.close();
           resolve(false);
-        });
-        srv.listen(o.port, addr, () => resolve(true));
+        };
+        srv.once("error", fail);
+        try {
+          srv.listen(o.port, addr, () => {
+            srv.removeListener("error", fail);
+            // Accept errors (EMFILE…) must never become an uncaught 'error'.
+            srv.on("error", (e) => log(`listener on ${addr} failed (${(e as NodeJS.ErrnoException).code ?? e})`));
+            resolve(true);
+          });
+        } catch (e) {
+          fail(e);
+        }
       });
-      if (bound) {
+      if (bound && !closed) {
         servers.set(addr, srv);
+        lastBindError.delete(addr);
         log(`listening on ${addr.includes(":") ? `[${addr}]` : addr}:${o.port}`);
+      } else if (bound) {
+        srv.close();
       }
     }
   };
 
   await rescan();
-  const timer = setInterval(() => void rescan(), o.rescanMs ?? 60_000);
+  const timer = setInterval(() => void rescan().catch((e: Error) => log(`rescan failed (${e.message})`)), o.rescanMs ?? 60_000);
   timer.unref();
 
   return {

@@ -992,12 +992,18 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   const tlsAddr = tls.address();
   if (!tlsAddr || typeof tlsAddr === "string") throw new Error("could not bind TLS backend");
   const tlsPort = tlsAddr.port;
+  // LAN-direct is an optimisation: if it can't start, the box is relay-only.
   const lan = opts.lanDirect
-    ? await (await import("./lanDirect.js")).startLanListener({
-        port: opts.lanDirect.port,
-        backendPort: tlsPort,
-        zone: opts.serverFqdn,
-      })
+    ? await (await import("./lanDirect.js"))
+        .startLanListener({
+          port: opts.lanDirect.port,
+          backendPort: tlsPort,
+          zone: opts.serverFqdn,
+        })
+        .catch((e: Error) => {
+          console.warn(`[lan-direct] could not start (${e.message}); relay only`);
+          return null;
+        })
     : null;
 
   // The same Ed25519 keypair the daemon uses for its server-identity

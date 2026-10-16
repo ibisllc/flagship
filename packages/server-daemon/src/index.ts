@@ -21,7 +21,7 @@ import {
   buildAlertInboxHandlers,
 } from "./alertInboxHttp.js";
 import { startDaemonStatusHeartbeat, type DaemonStatusHeartbeat } from "./daemonStatusHeartbeat.js";
-import { buildSignedLanHint } from "./lanDirect.js";
+import { buildSignedLanHint, lanPortFromEnv } from "./lanDirect.js";
 import { makeRelayTrustExceptionResolver } from "./relayTrustExceptions.js";
 import { sendPushRelay, sendRelayTrustAlert } from "./relaySos.js";
 import { buildOwnerWake } from "./ownerWake.js";
@@ -1200,7 +1200,7 @@ async function main(): Promise<void> {
       // relay-only.
       ...(process.env.FLAGSHIP_LAN_DIRECT === "0"
         ? {}
-        : { lanDirect: { port: Number(process.env.FLAGSHIP_LAN_PORT ?? 443) } }),
+        : { lanDirect: { port: lanPortFromEnv(process.env.FLAGSHIP_LAN_PORT) } }),
       // Every app in its own gVisor sandbox (docs/app-runtimes.md §5.1).
       appSandbox: true,
       healDocker: true,
