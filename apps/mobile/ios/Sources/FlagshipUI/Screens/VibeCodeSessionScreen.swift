@@ -172,11 +172,16 @@ public struct VibeCodeSessionScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if menu.isActive {
-                ToolbarItemGroup(placement: .topBarTrailing) {
-                    if let efforts = menu.efforts {
-                        EffortMenuButton(efforts: efforts, selected: menu.effort, onPick: { menu.setEffort($0) })
+                // One item, so picking a model that lists effort levels adds
+                // the effort control beside the menu without replacing the
+                // item its open popover hangs from (UIKit traps on that).
+                ToolbarItem(placement: .topBarTrailing) {
+                    HStack(spacing: 6) {
+                        if let efforts = menu.efforts {
+                            EffortMenuButton(efforts: efforts, selected: menu.effort, onPick: { menu.setEffort($0) })
+                        }
+                        GroupedModelMenuButton(menu: menu, identifier: "vibecode-model-menu")
                     }
-                    GroupedModelMenuButton(menu: menu, identifier: "vibecode-model-menu")
                 }
             }
         }

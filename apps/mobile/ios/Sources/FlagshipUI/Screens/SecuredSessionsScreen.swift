@@ -120,6 +120,8 @@ public struct SecuredSessionsScreen: View {
                 }
             }
         }
+        // `.contain` keeps Refresh's and Stop's own identifiers.
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("secured-session-row-\(session.secretId)")
     }
 

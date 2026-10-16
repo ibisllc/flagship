@@ -82,7 +82,20 @@ final class GymSweepBuildTests: GymSweepCase {
 
     /// Flip a SwiftUI Toggle: its switch sits at the trailing edge of the row.
     func flip(_ toggle: XCUIElement) {
-        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        let before = toggle.value as? String
+        let inner = toggle.switches.firstMatch
+        if inner.exists { inner.tap() } else { toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap() }
+        let changed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "value != %@", before ?? ""), object: toggle)
+        if XCTWaiter().wait(for: [changed], timeout: 3) != .completed { toggle.tap() }
+    }
+
+    /// Close a confirmation dialog without choosing: its Cancel button when
+    /// it shows one, else a tap outside it.
+    func dismissDialog(_ app: XCUIApplication) {
+        let cancel = app.buttons.matching(NSPredicate(format: "label == %@", "Cancel")).firstMatch
+        if cancel.exists { cancel.tap(); return }
+        let region = app.otherElements["PopoverDismissRegion"]
+        if region.exists { region.tap() } else { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08)).tap() }
     }
 
     func probeCount(_ app: XCUIApplication, _ line: String) -> Int {
@@ -168,7 +181,8 @@ final class GymSweepBuildTests: GymSweepCase {
         app.buttons["build-session-discard-gym-ready"].tap()
         XCTAssertTrue(text(app, containing: "\"recipe-box\", becomes free again").waitForExistence(timeout: 10),
                       "The dialog says what discarding frees.")
-        button(app, "Cancel").tap()
+        dismissDialog(app)
+        waitGone(text(app, containing: "\"recipe-box\", becomes free again"))
         XCTAssertTrue(ready.waitForExistence(timeout: 5))
         expectNoProbe(app, "discarded chat gym-ready")
 

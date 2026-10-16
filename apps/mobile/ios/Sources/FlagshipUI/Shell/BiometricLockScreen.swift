@@ -43,7 +43,9 @@ struct BiometricLockScreen: View {
                     .foregroundColor(c.primary)
                     // On the icon, not the whole screen: an identifier on a
                     // container covers its buttons' own.
-                    .accessibilityIdentifier("biometric-lock-screen")
+                    // .contain keeps Unlock's and Sign out's own ids under the screen's.
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("biometric-lock-screen")
                 Text("Flagship is locked")
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundColor(c.text)

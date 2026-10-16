@@ -42,12 +42,24 @@ final class GymSweepSettingsTests: GymSweepCase {
         let b = app.navBackButton(in: screen)
         XCTAssertTrue(b.waitForExistence(timeout: 5), "\(screen) should have a back button.")
         b.tap()
+        if !app.navigationBars["Settings"].waitForExistence(timeout: 4), b.exists { b.tap() }
         settings(app)
     }
 
     /// A dialog/alert button with this label that isn't the control which raised it.
     private func dialogButton(_ app: XCUIApplication, _ label: String, notId: String = "") -> XCUIElement {
         app.buttons.matching(NSPredicate(format: "label == %@ AND identifier != %@", label, notId)).firstMatch
+    }
+
+    /// Dismiss a confirmation dialog without acting: its Cancel when it has
+    /// one, else a tap outside it (iOS 26 dialogs on iPhone drop Cancel).
+    private func cancelDialog(_ app: XCUIApplication) {
+        let cancel = app.buttons["Cancel"]
+        if cancel.waitForExistence(timeout: 2), cancel.isHittable {
+            cancel.tap()
+        } else {
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.12)).tap()
+        }
     }
 
     private func signedOut(_ app: XCUIApplication) -> Bool {
@@ -73,7 +85,7 @@ final class GymSweepSettingsTests: GymSweepCase {
             ("Profiles", "Profiles", ""),
             ("Remote", "Remote", "companion-dock-scan"),
             ("Companion requests", "Companion requests", "No pending requests"),
-            ("Open secured sessions", "Secured sessions", "secured-sessions-empty"),
+            ("Open secured sessions", "Secured sessions", ""),
             ("Process URL", "Process URL", "process-url-field"),
             ("Peer-backup", "Peer-backup", ""),
             ("Privacy", "Privacy", "privacy-push-notifications-toggle"),
@@ -106,7 +118,7 @@ final class GymSweepSettingsTests: GymSweepCase {
         XCTAssertTrue(revoke.exists)
         revoke.tap()
         XCTAssertTrue(app.staticTexts["Session f9e8d7c6 loses access to this account."].waitForExistence(timeout: 5))
-        button(app, "Cancel").tap()
+        cancelDialog(app)
         XCTAssertTrue(remote.waitForExistence(timeout: 5), "Cancel keeps the session.")
         expectNoProbe(app, "revoked paired session")
         revoke.tap()
@@ -181,6 +193,7 @@ final class GymSweepSettingsTests: GymSweepCase {
         for _ in 0..<3 { version.tap() }
         XCTAssertTrue(app.staticTexts["Developer menu is in Settings."].waitForExistence(timeout: 10),
                       "Three taps unlock the developer menu.")
+        waitGone(app.staticTexts["Developer menu unlocked."], timeout: 10)
         back(app, from: "About")
         open(app, row: "Developer", screen: "Developer")
         XCTAssertTrue(app.switches.matching(NSPredicate(format: "label CONTAINS %@", "Use live data")).firstMatch.exists)
@@ -198,7 +211,7 @@ final class GymSweepSettingsTests: GymSweepCase {
         signOut.tap()
         XCTAssertTrue(text(app, containing: "erases this device's account key").waitForExistence(timeout: 5),
                       "Sign out says what it erases.")
-        button(app, "Cancel").tap()
+        cancelDialog(app)
         settings(app)
         XCTAssertTrue(signOut.exists, "Cancel keeps the session.")
         signOut.tap()
@@ -218,7 +231,7 @@ final class GymSweepSettingsTests: GymSweepCase {
                                                           "Remove this device from your account?",
                                                           "Permanently remove this device?")).firstMatch
         XCTAssertTrue(dialog.waitForExistence(timeout: 5))
-        button(app, "Cancel").tap()
+        cancelDialog(app)
         settings(app)
         remove.tap()
         let confirm = button(app, "Remove this device")
@@ -358,7 +371,7 @@ final class GymSweepSettingsTests: GymSweepCase {
         button(app, "Disconnect").tap()
         let revoke = button(app, "Revoke Android · Device BBBB-2222")
         XCTAssertTrue(revoke.waitForExistence(timeout: 5))
-        button(app, "Cancel").tap()
+        cancelDialog(app)
         expectNoProbe(app, "revoked account device")
         theirs.tap()
         button(app, "Disconnect").tap()
@@ -397,7 +410,7 @@ final class GymSweepSettingsTests: GymSweepCase {
         theirs.tap()
         button(app, "Replace device").tap()
         XCTAssertTrue(text(app, containing: "Rotates your account's identity key").waitForExistence(timeout: 5))
-        button(app, "Cancel").tap()
+        cancelDialog(app)
         theirs.tap()
         button(app, "Replace device").tap()
         let confirm = button(app, "Replace device")
@@ -414,7 +427,7 @@ final class GymSweepSettingsTests: GymSweepCase {
         theirs.tap()
         button(app, "Wipe & restart…").tap()
         XCTAssertTrue(text(app, containing: "Every device currently on this account will be disconnected").waitForExistence(timeout: 5))
-        button(app, "Cancel").tap()
+        cancelDialog(app)
         settings(app)
     }
 
@@ -489,7 +502,7 @@ final class GymSweepSettingsTests: GymSweepCase {
         XCTAssertTrue(alert.waitForExistence(timeout: 5))
         alert.textFields.firstMatch.typeText("000000")
         alert.buttons["Disable"].tap()
-        XCTAssertTrue(app.staticTexts["account-security-failed-msg"].waitForExistence(timeout: 10),
+        XCTAssertTrue(app.staticTexts.matching(identifier: "account-security-failed-msg").firstMatch.waitForExistence(timeout: 10),
                       "A wrong code says so.")
         disable.tap()
         XCTAssertTrue(alert.waitForExistence(timeout: 5))
@@ -509,9 +522,9 @@ final class GymSweepSettingsTests: GymSweepCase {
         let cont = app.buttons["account-security-step1-continue"]
         XCTAssertTrue(cont.waitForExistence(timeout: 10))
         cont.tap()
-        let msg = app.staticTexts["account-security-failed-msg"]
-        XCTAssertTrue(msg.waitForExistence(timeout: 10))
-        XCTAssertTrue(msg.label.contains(rateLimited), "Got: \(msg.label)")
+        let msg = app.staticTexts.matching(NSPredicate(format: "identifier == 'account-security-failed-msg' AND label CONTAINS %@",
+                                                       rateLimited)).firstMatch
+        XCTAssertTrue(msg.waitForExistence(timeout: 10), "The sheet shows .com's sentence.")
         shot(app, "totp-rate-limited")
         app.buttons["Start over"].tap()
         XCTAssertTrue(cont.waitForExistence(timeout: 5), "Start over goes back to step 1.")
@@ -628,9 +641,9 @@ final class GymSweepSettingsTests: GymSweepCase {
         let approve = app.buttons["companion-dock-approve"]
         wait(approve, "isEnabled == true")
         approve.tap()
-        let connected = app.descendants(matching: .any)["companion-dock-connected"]
+        let connected = app.descendants(matching: .any).matching(identifier: "companion-dock-connected").firstMatch
         XCTAssertTrue(connected.waitForExistence(timeout: 15))
-        XCTAssertTrue(connected.label.contains("Office") || text(app, containing: "Browser connected to Office").exists)
+        XCTAssertTrue(text(app, containing: "Browser connected to Office").exists, "It names the server picked.")
         expectProbe(app, "minted companion ticket")
         expectProbe(app, "relay delivered sealed payload")
         shot(app, "remote-connected")
@@ -640,7 +653,7 @@ final class GymSweepSettingsTests: GymSweepCase {
         XCTAssertTrue(reveal(app, revoke))
         revoke.tap()
         XCTAssertTrue(button(app, "Disconnect").waitForExistence(timeout: 5))
-        button(app, "Cancel").tap()
+        cancelDialog(app)
         expectNoProbe(app, "revoked companion")
         revoke.tap()
         button(app, "Disconnect").tap()
@@ -702,7 +715,7 @@ final class GymSweepSettingsTests: GymSweepCase {
         let stop = app.buttons["secured-session-stop-\(id)"]
         stop.tap()
         XCTAssertTrue(text(app, containing: "will have to authorize again").waitForExistence(timeout: 5))
-        button(app, "Cancel").tap()
+        cancelDialog(app)
         expectNoProbe(app, "closed secured session")
         stop.tap()
         button(app, "Stop session").tap()

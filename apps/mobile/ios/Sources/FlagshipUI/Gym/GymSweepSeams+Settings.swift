@@ -104,7 +104,11 @@ extension GymSweepSeams {
 
         // Add a device: the new phone has already scanned and sent its key.
         if args.contains("-smoke-pairing-peer") {
-            mocks.pairingRelay?.provideRawIncomingPubkey(Curve25519.KeyAgreement.PrivateKey().publicKey.rawRepresentation)
+            // X25519 key | device signing key | 16-byte device id, as the joiner sends it.
+            let raw = Curve25519.KeyAgreement.PrivateKey().publicKey.rawRepresentation
+                + Curve25519.Signing.PrivateKey().publicKey.rawRepresentation
+                + Data(repeating: 0xcd, count: 16)
+            mocks.pairingRelay?.provideRawIncomingPubkey(raw)
         }
     }
 }
