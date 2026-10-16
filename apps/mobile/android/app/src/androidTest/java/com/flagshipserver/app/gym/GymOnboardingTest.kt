@@ -42,6 +42,20 @@ class GymOnboardingTest : GymBase() {
         composeRule.onNodeWithText(ConnectInput.NAME_IN_CODE).performScrollTo().assertIsDisplayed()
     }
 
+    /** The lock screen ends like Welcome: Unlock, Sign out right below, a
+     *  gap, then Patent Pending above the navigation bar. */
+    @Test
+    fun lockScreenSharesTheWelcomeFooter() {
+        launch(tab = "settings")
+        waitUntilExists("settings-lock-btn")
+        composeRule.onNodeWithTag("settings-lock-btn").performScrollTo().performClick()
+        waitUntilExists("biometric-unlock-btn")
+        composeRule.onNodeWithTag("biometric-unlock-btn").assertIsDisplayed()
+        composeRule.onNodeWithTag("lock-sign-out-btn").assertIsDisplayed()
+        composeRule.onNodeWithTag("patent-pending", useUnmergedTree = true).assertIsDisplayed()
+        gymShot("lock-screen")
+    }
+
     @Test
     fun pairingLinkTypedAsTheNameOpensJoin() {
         openConnectPage()

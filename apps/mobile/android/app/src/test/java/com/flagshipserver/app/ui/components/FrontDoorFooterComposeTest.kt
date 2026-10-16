@@ -28,10 +28,10 @@ class FrontDoorFooterComposeTest {
     private fun assertFooter(primaryTag: String, primary: String, secondaryTag: String, secondary: String) {
         composeRule.onNodeWithTag(primaryTag).assertIsDisplayed()
         composeRule.onNodeWithTag(secondaryTag).assertIsDisplayed()
-        composeRule.onNodeWithTag("patent-pending").assertIsDisplayed().assertTextEquals("Patent Pending")
+        composeRule.onNodeWithTag("patent-pending", useUnmergedTree = true).assertIsDisplayed().assertTextEquals("Patent Pending")
         val p = composeRule.onNodeWithTag(primaryTag).getUnclippedBoundsInRoot()
         val s = composeRule.onNodeWithTag(secondaryTag).getUnclippedBoundsInRoot()
-        val pp = composeRule.onNodeWithTag("patent-pending").getUnclippedBoundsInRoot()
+        val pp = composeRule.onNodeWithTag("patent-pending", useUnmergedTree = true).getUnclippedBoundsInRoot()
         assertTrue("secondary sits right below the primary", s.top >= p.bottom && s.top - p.bottom < Dp(24f))
         assertTrue("a gap, then Patent Pending", pp.top - s.bottom >= Dp(24f))
         composeRule.onNodeWithTag(primaryTag).assertTextEquals(primary)
