@@ -55,7 +55,42 @@ every boot, whether its disk is encrypted), which the restore form copies.
 - the server's description (it lives on the owner's devices, not the box),
   peer backups and the Git host.
 
-## The two files (`packages/protocol/src/serverBackup.ts`)
+## The one file (owner, 2026-10-16)
+
+People only ever see, save and import ONE file, `<name>.flagship`. It is
+the two parts below glued together:
+
+```
+offset 0   8 bytes   "FLGSHBK1"
+offset 8   8 bytes   L, the metadata part's length (u64 big-endian, 1..262144)
+offset 16  L bytes   the metadata part: the backup file below, unchanged
+offset 16+L ...EOF   the data part: the data file below, unchanged
+```
+
+Nothing else, no padding (`backupBundleHeader` / `parseBackupBundleHeader`
+/ `backupBundleFileName` in `serverBackup.ts`; vectors
+`test-vectors/server-backup-bundle/vectors.json`). The box keeps the two
+parts as its storage and serves the one file as a concatenation, never a
+copy on disk: `GET .../bundle?offset=N` (≤ 4 MiB, for the phones'
+resumable downloader, with `x-flagship-bundle-bytes` and
+`x-flagship-bundle-sha256`, the SHA-256 of the whole file) and the browser
+link `.../bundle?r=` (HTTP Range, `ETag` = that SHA-256). An app imports
+the one file by reading its 16-byte header and the metadata part, then
+streaming the data part from offset 16+L (verification is unchanged: the
+data part's signed size and SHA-256). A file that isn't a backup, has a
+damaged header or ends before its data is refused with a sentence. No
+two-file backup is offered or accepted any more (pre-release).
+
+Splitting one for analysis needs only the shell:
+
+```sh
+L=$(dd if=home.flagship bs=1 skip=8 count=8 2>/dev/null | od -An -tu1 | awk '{for(i=1;i<=NF;i++) n=n*256+$i} END{print n}')
+tail -c +17 home.flagship | head -c "$L" > home.flagship-backup; tail -c +$((17 + L)) home.flagship > home.flagship-data
+```
+
+(`packages/protocol/tests/backupBundle.test.ts` runs exactly this.)
+
+## The two parts (`packages/protocol/src/serverBackup.ts`)
 
 ```
 home-2026-10-15.flagship-backup   the backup file: small JSON

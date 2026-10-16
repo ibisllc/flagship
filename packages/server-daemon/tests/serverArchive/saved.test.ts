@@ -5,7 +5,7 @@
  * schedule's retention, and restorable onto a new server like any backup.
  */
 import { mkdtempSync } from "node:fs";
-import { readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, readdir, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -389,16 +389,28 @@ describe("saved backups", () => {
     expect(link).toMatchObject({ expiresAt: null, dataFileName: expect.stringMatching(/\.flagship-data$/) });
     const R = "0f1e2d3c4b5a69788796a5b4c3d2e1f0";
     const get = async (path: string) => (await w.svc.handleDownload({ method: "GET", path, headers: {}, body: Buffer.alloc(0) }))!;
-    expect((await get(`${link.path}/file?r=${R}`)).status).toBe(403);
+    expect((await get(`${link.path}/bundle?r=${R}`)).status).toBe(403);
     const approval = { serverDomain: SRC, archiveId: id, requestId: R, issuedAt: w.clock.t };
     const signature = Buffer.from(signArchiveDownloadApproval(approval, owner)).toString("hex");
     expect((await call(w.svc, "POST", "/api/screens/server-archive/approve", { approval, signature })).status).toBe(200);
-    expect((await get(`${link.path}/file?r=${R}`)).status).toBe(200);
-    expect((await get(`${link.path}/backup?r=${R}`)).status).toBe(200);
+    const one = await get(`${link.path}/bundle?r=${R}`);
+    expect(one.status).toBe(200);
+    expect(one.headers!["content-disposition"]).toContain(link.bundleFileName);
+    expect(link.bundleFileName).toBe("home-2026-10-14-1200.flagship");
+    const parts: Buffer[] = [];
+    for await (const c of one.stream!.open() as AsyncIterable<Buffer>) parts.push(c);
+    const whole = Buffer.concat(parts);
+    expect(createHash("sha256").update(whole).digest("hex")).toBe(link.bundleSha256);
+    // The saved list carries the same one file's name, size and checksum.
+    const listed = (await call(w.svc, "GET", SAVED_PATH)).json().backups[0];
+    expect(listed).toMatchObject({ bundleFileName: link.bundleFileName, bundleBytes: whole.length, bundleSha256: link.bundleSha256 });
+    // The phones' 4 MiB pieces of the same file.
+    const piece = await call(w.svc, "GET", `${SAVED_PATH}/${id}/bundle?offset=0`);
+    expect(Buffer.from(piece.body as Buffer)).toEqual(whole);
     const del = await call(w.svc, "DELETE", `${SAVED_PATH}/${id}`);
     expect(del.status).toBe(200);
     expect(del.json().backups).toEqual([]);
-    expect((await get(`${link.path}/file?r=${R}`)).status).toBe(404);
+    expect((await get(`${link.path}/bundle?r=${R}`)).status).toBe(404);
     expect((await call(w.svc, "DELETE", `${SAVED_PATH}/${id}`)).status).toBe(404);
   });
 
@@ -472,6 +484,34 @@ describe("saved backups", () => {
     platform.setAdmitNewApp(() => null);
     const again = { ...request, issuedAt: Date.now() + 1 };
     expect((await platform.install({ request: again, signature: signInstallService(again, owner), verify: verifyInstallService })).ok).toBe(true);
+  });
+
+  it("serves a multi-GB one file from disk, piece by piece, past 4 GB offsets, without holding it", async () => {
+    const w = await world();
+    const id = "ab".repeat(16);
+    const dir = join(w.dir, "server-backups", id);
+    await mkdir(dir, { recursive: true });
+    const backupText = Buffer.from('{"magic":"flagship-backup","v":2}');
+    await writeFile(join(dir, "backup.flagship-backup"), backupText);
+    const DATA = 5 * GB + 123;
+    const fh = await open(join(dir, "data.flagship-data"), "w");
+    await fh.truncate(DATA);
+    await fh.write(Buffer.from("TAIL"), 0, 4, DATA - 4);
+    await fh.close();
+    const total = 16 + backupText.length + DATA;
+    await writeFile(
+      join(dir, "meta.json"),
+      JSON.stringify({ archiveId: id, createdAt: w.clock.t, trigger: "now", bytes: DATA, sha256: "00".repeat(32), backupBytes: backupText.length, backupFileName: "big.flagship-backup", dataFileName: "big.flagship-data", bundleFileName: "big.flagship", bundleBytes: total, bundleSha256: "11".repeat(32), apps: [], left: [] }),
+    );
+    const head = await call(w.svc, "GET", `${SAVED_PATH}/${id}/bundle?offset=0`);
+    expect(head.headers["x-flagship-bundle-bytes"]).toBe(String(total));
+    expect((head.body as Buffer).subarray(0, 8).toString()).toBe("FLGSHBK1");
+    expect((head.body as Buffer).length).toBe(4 * 1024 * 1024);
+    const before = process.memoryUsage().rss;
+    const tail = await call(w.svc, "GET", `${SAVED_PATH}/${id}/bundle?offset=${total - 1000}`);
+    expect((tail.body as Buffer).length).toBe(1000);
+    expect((tail.body as Buffer).subarray(996).toString()).toBe("TAIL");
+    expect(process.memoryUsage().rss - before).toBeLessThan(256 * 1024 * 1024);
   });
 
   it("companion sessions can't see or change saved backups", async () => {

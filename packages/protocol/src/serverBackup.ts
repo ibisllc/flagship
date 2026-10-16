@@ -33,6 +33,14 @@ export const BACKUP_VERSION = 2;
 export const BACKUP_DATA_MAGIC = "flagship-backup-data/v2\n";
 export const BACKUP_FILE_EXTENSION = ".flagship-backup";
 export const BACKUP_DATA_EXTENSION = ".flagship-data";
+/**
+ * The one file people keep (owner, 2026-10-16): `FLGSHBK1`, the metadata
+ * part's length L as a u64 big-endian, the metadata part (the backup file's
+ * bytes), then the data part (the data file's bytes) to the end. Nothing else.
+ */
+export const BACKUP_BUNDLE_EXTENSION = ".flagship";
+export const BACKUP_BUNDLE_MAGIC = "FLGSHBK1";
+export const BACKUP_BUNDLE_HEADER_BYTES = 16;
 export const BACKUP_FRAME_BYTES = 1024 * 1024;
 /** The backup file is small; anything bigger isn't one. */
 export const BACKUP_FILE_MAX_BYTES = 256 * 1024;
@@ -487,4 +495,47 @@ export function openRestoreFromPairingJson(
   const authorized = typeof ownerPub === "function" ? ownerPub(order, sig) : verifyServerRestoreOrder(order, sig, ownerPub);
   if (!authorized) return null;
   return { order, signatureHex };
+}
+
+// ---------------------------------------------------------------------------
+// The one file: header + metadata part + data part
+// ---------------------------------------------------------------------------
+
+/** The 16-byte header for a metadata part of `metaLength` bytes. */
+export function backupBundleHeader(metaLength: number): Bytes {
+  if (!Number.isSafeInteger(metaLength) || metaLength < 1 || metaLength > BACKUP_FILE_MAX_BYTES) {
+    throw new BackupFormatError("the backup's metadata part has a bad length", "malformed");
+  }
+  const out = new Uint8Array(BACKUP_BUNDLE_HEADER_BYTES);
+  out.set(new TextEncoder().encode(BACKUP_BUNDLE_MAGIC), 0);
+  new DataView(out.buffer).setBigUint64(8, BigInt(metaLength), false);
+  return out;
+}
+
+/**
+ * Read a `.flagship` file's header: where the metadata part ends and the data
+ * part starts. Throws a BackupFormatError with a sentence for anything that
+ * isn't a Flagship backup or is cut short (`fileBytes` is the whole file's size).
+ */
+export function parseBackupBundleHeader(
+  head: Bytes,
+  fileBytes: number,
+): { metaOffset: number; metaLength: number; dataOffset: number; dataLength: number } {
+  if (head.length < BACKUP_BUNDLE_HEADER_BYTES) throw new BackupFormatError("this file is too short to be a Flagship backup", "malformed");
+  if (new TextDecoder().decode(head.subarray(0, 8)) !== BACKUP_BUNDLE_MAGIC) {
+    throw new BackupFormatError("this file isn't a Flagship backup", "malformed");
+  }
+  const len = new DataView(head.buffer, head.byteOffset, head.byteLength).getBigUint64(8, false);
+  if (len < 1n || len > BigInt(BACKUP_FILE_MAX_BYTES)) throw new BackupFormatError("this backup's header is damaged", "damaged");
+  const metaLength = Number(len);
+  const dataOffset = BACKUP_BUNDLE_HEADER_BYTES + metaLength;
+  if (!Number.isSafeInteger(fileBytes) || fileBytes <= dataOffset) {
+    throw new BackupFormatError("this backup is cut short: it ends before its data", "damaged");
+  }
+  return { metaOffset: BACKUP_BUNDLE_HEADER_BYTES, metaLength, dataOffset, dataLength: fileBytes - dataOffset };
+}
+
+/** The `.flagship` name for a backup whose parts are named `<stem>.flagship-backup` / `.flagship-data`. */
+export function backupBundleFileName(partName: string): string {
+  return partName.replace(/\.flagship-(backup|data)$/, "") + BACKUP_BUNDLE_EXTENSION;
 }

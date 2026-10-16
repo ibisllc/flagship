@@ -29,10 +29,14 @@
  * the key opens it, then every frame as it unpacks.
  */
 import { createReadStream } from "node:fs";
+import { Readable } from "node:stream";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import {
+  BACKUP_BUNDLE_HEADER_BYTES,
   archiveDownloadCode,
   archiveKeysDigest,
+  backupBundleFileName,
+  backupBundleHeader,
   parseArchiveDownloadApproval,
   parseArchiveKeys,
   parseArchiveKeysDeposit,
@@ -124,6 +128,8 @@ interface BackupJob {
   sha256?: string;
   /** The backup file's size. */
   backupBytes?: number;
+  /** The one file's SHA-256. */
+  bundleSha256?: string;
   /** What the box expects the data file to take, once it has sized it. */
   estimatedBytes?: number;
   apps?: Array<{ serviceId: string; name: string }>;
@@ -150,6 +156,16 @@ export function parseRange(header: string | undefined, size: number): { start: n
   }
   if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start > end || start >= size) return "unsatisfiable";
   return { start, end };
+}
+
+/** SHA-256 of the one `.flagship` file: the header, the backup file, the data file. */
+async function bundleDigest(backupPath: string, backupBytes: number, dataPath: string): Promise<string> {
+  const h = createHash("sha256");
+  h.update(Buffer.from(backupBundleHeader(backupBytes)));
+  for (const p of [backupPath, dataPath]) {
+    for await (const c of createReadStream(p)) h.update(c as Buffer);
+  }
+  return h.digest("hex");
 }
 
 function fileStem(sourceServer: string, at: number): string {
@@ -242,7 +258,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     job: { progress: { done: number; total: number; app: string }; estimatedBytes?: number };
     /** Free room (e.g. drop older saved backups) until `need` bytes are free; returns the bytes free after. */
     makeRoom?: (need: number, estimate: number) => Promise<number>;
-  }): Promise<{ bytes: number; sha256: string; backupBytes: number; apps: Array<{ serviceId: string; name: string }>; left: Array<{ serviceId: string; name: string; reason: string }>; createdAt: number }> {
+  }): Promise<{ bytes: number; sha256: string; backupBytes: number; bundleSha256: string; apps: Array<{ serviceId: string; name: string }>; left: Array<{ serviceId: string; name: string; reason: string }>; createdAt: number }> {
     // Size it first: the data file, one app's scratch, and headroom so
     // the apps keep working. A box that can't size something goes ahead
     // on the flat minimum it already passed.
@@ -281,7 +297,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
       data: { fileName: a.dataName, bytes: r.bytes, sha256: r.sha256, frameBytes: ARCHIVE_FRAME_BYTES },
     };
     const written = await writeBackupFile(a.backupPath, { archiveId: a.archiveId, key: a.key, slots: a.slots, body, nonce: randomBytes(12) });
-    return { ...r, backupBytes: written.bytes };
+    return { ...r, backupBytes: written.bytes, bundleSha256: await bundleDigest(a.backupPath, written.bytes, a.dataPath) };
   }
 
   function startBackup(req: HttpRequest): Promise<HttpResponse> {
@@ -323,6 +339,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
           job.bytes = r.bytes;
           job.sha256 = r.sha256;
           job.backupBytes = r.backupBytes;
+          job.bundleSha256 = r.bundleSha256;
           job.apps = r.apps;
           job.left = r.left;
           key.fill(0);
@@ -363,8 +380,51 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     backupPath: string;
     backupFileName: string;
     dataFileName: string;
+    /** The backup file's size (the one file's metadata part). */
+    backupBytes: number;
+    /** The one `.flagship` file: its name, size and SHA-256 (served as a concatenation, never copied). */
+    bundleFileName: string;
+    bundleBytes: number;
+    bundleSha256: string;
     /** null: kept until it is removed (saved backups). */
     expiresAt: number | null;
+  }
+
+  /** Bytes [start, end] of the one file: header, then the backup file, then the data file. */
+  function bundleParts(d: Downloadable, start: number, end: number): Array<{ buf: Buffer } | { path: string; start: number; end: number }> {
+    const header = Buffer.from(backupBundleHeader(d.backupBytes));
+    const segs = [
+      { at: 0, size: header.length, buf: header as Buffer | null, path: "" },
+      { at: header.length, size: d.backupBytes, buf: null, path: d.backupPath },
+      { at: header.length + d.backupBytes, size: d.bytes, buf: null, path: d.dataPath },
+    ];
+    const out: Array<{ buf: Buffer } | { path: string; start: number; end: number }> = [];
+    for (const s of segs) {
+      const a = Math.max(start, s.at);
+      const b = Math.min(end, s.at + s.size - 1);
+      if (a > b) continue;
+      if (s.buf) out.push({ buf: s.buf.subarray(a - s.at, b - s.at + 1) });
+      else out.push({ path: s.path, start: a - s.at, end: b - s.at });
+    }
+    return out;
+  }
+
+  function bundleStream(d: Downloadable, start: number, end: number): NodeJS.ReadableStream {
+    const parts = bundleParts(d, start, end);
+    return Readable.from(
+      (async function* () {
+        for (const p of parts) {
+          if ("buf" in p) yield p.buf;
+          else for await (const c of createReadStream(p.path, { start: p.start, end: p.end })) yield c as Buffer;
+        }
+      })(),
+    );
+  }
+
+  async function bundleRead(d: Downloadable, start: number, len: number): Promise<Buffer> {
+    const chunks: Buffer[] = [];
+    for await (const c of bundleStream(d, start, start + len - 1)) chunks.push(c as Buffer);
+    return Buffer.concat(chunks);
   }
   /** Download links, by archive id; they die with the backup (and at a restart). */
   const links = new Map<string, { token: string; approved: Set<string> }>();
@@ -380,6 +440,10 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
       backupPath: backupFile,
       backupFileName: backupFileName(opts.build.serverFqdn, backup.startedAt),
       dataFileName: dataFileName(opts.build.serverFqdn, backup.startedAt),
+      backupBytes: backup.backupBytes ?? 0,
+      bundleFileName: backupBundleFileName(dataFileName(opts.build.serverFqdn, backup.startedAt)),
+      bundleBytes: BACKUP_BUNDLE_HEADER_BYTES + (backup.backupBytes ?? 0) + backup.bytes,
+      bundleSha256: backup.bundleSha256 ?? "",
       expiresAt: backup.startedAt + KEEP_MS,
     };
   }
@@ -393,6 +457,10 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
       backupPath: join(store!.entryDir(m.archiveId), SAVED_BACKUP_FILE),
       backupFileName: m.backupFileName,
       dataFileName: m.dataFileName,
+      backupBytes: m.backupBytes,
+      bundleFileName: m.bundleFileName,
+      bundleBytes: m.bundleBytes,
+      bundleSha256: m.bundleSha256,
       expiresAt: null,
     };
   }
@@ -443,6 +511,29 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     };
   }
 
+  /** `GET .../bundle?offset=N`: ≤ 4 MiB of the one `.flagship` file, for the phones' resumable downloader. */
+  async function bundleChunk(d: Downloadable | null, req: HttpRequest): Promise<HttpResponse> {
+    if (!d) return err(404, "no backup is ready");
+    const q = new URLSearchParams(req.path.includes("?") ? req.path.slice(req.path.indexOf("?") + 1) : "");
+    const offset = Number(q.get("offset") ?? "0");
+    if (!Number.isSafeInteger(offset) || offset < 0 || offset > d.bundleBytes) return err(400, "bad offset");
+    const len = Math.min(ARCHIVE_CHUNK_BYTES, d.bundleBytes - offset);
+    const buf = len > 0 ? await bundleRead(d, offset, len) : Buffer.alloc(0);
+    if (buf.length !== len) return err(500, "the backup file changed while it was read");
+    if (offset + len >= d.bundleBytes) noteDownloaded(d);
+    return {
+      status: 200,
+      headers: {
+        "content-type": "application/octet-stream",
+        "x-flagship-bundle-bytes": String(d.bundleBytes),
+        "x-flagship-bundle-sha256": d.bundleSha256,
+        "content-disposition": `attachment; filename="${d.bundleFileName}"`,
+        "cache-control": "no-store",
+      },
+      body: buf,
+    };
+  }
+
   async function backupFileResponse(d: Downloadable | null): Promise<HttpResponse> {
     if (!d) return err(404, "no backup is ready");
     let text: Buffer;
@@ -480,6 +571,9 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
       path: `${DOWNLOAD_PATH}${l.token}`,
       backupFileName: d.backupFileName,
       dataFileName: d.dataFileName,
+      bundleFileName: d.bundleFileName,
+      bundleBytes: d.bundleBytes,
+      bundleSha256: d.bundleSha256,
       bytes: d.bytes,
       sha256: d.sha256,
       expiresAt: d.expiresAt,
@@ -535,9 +629,9 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     const path = req.path.split("?")[0]!;
     if (!path.startsWith(DOWNLOAD_PATH)) return null;
     const [token = "", kind = "", ...more] = path.slice(DOWNLOAD_PATH.length).split("/");
-    if (more.length > 0 || !["", "status", "file", "backup"].includes(kind)) return err(404, "not found");
+    if (more.length > 0 || !["", "status", "bundle"].includes(kind)) return err(404, "not found");
     const method = req.method.toUpperCase();
-    if (method !== "GET" && (method !== "HEAD" || kind !== "file")) return err(405, "method not allowed");
+    if (method !== "GET" && (method !== "HEAD" || kind !== "bundle")) return err(405, "method not allowed");
     const q = new URLSearchParams(req.path.includes("?") ? req.path.slice(req.path.indexOf("?") + 1) : "");
     const r = q.get("r") ?? "";
     const validR = /^[0-9a-f]{32}$/.test(r);
@@ -560,12 +654,10 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
         renderDownloadPage({
           appLink: `${appLinkBase}/app/backup-download#s=${encodeURIComponent(opts.build.serverFqdn)}&a=${d.archiveId}&r=${r}`,
           code: archiveDownloadCode(r),
-          backupFileName: d.backupFileName,
-          dataFileName: d.dataFileName,
-          sizeText: gb(d.bytes),
+          fileName: d.bundleFileName,
+          sizeText: gb(d.bundleBytes),
           statusUrl: `${base}/status?r=${r}`,
-          backupUrl: `${base}/backup?r=${r}`,
-          fileUrl: `${base}/file?r=${r}`,
+          fileUrl: `${base}/bundle?r=${r}`,
           expiresText: d.expiresAt === null ? "the backup is removed from the server" : new Date(d.expiresAt).toUTCString(),
         }),
       );
@@ -574,12 +666,12 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     const approved = link.approved.has(r);
     if (kind === "status") return json(200, { approved });
     if (!approved) return err(403, "this download hasn't been approved: scan the QR on the download page with the Flagship app");
-    if (kind === "backup") return backupFileResponse(d);
-    const size = d.bytes;
-    const etag = `"${d.sha256 || d.archiveId}"`;
+    // The one `.flagship` file, streamed as header + backup file + data file (no copy on disk).
+    const size = d.bundleBytes;
+    const etag = `"${d.bundleSha256 || d.archiveId}"`;
     const fileHeaders: Record<string, string> = {
       "content-type": "application/octet-stream",
-      "content-disposition": `attachment; filename="${d.dataFileName}"`,
+      "content-disposition": `attachment; filename="${d.bundleFileName}"`,
       "accept-ranges": "bytes",
       etag,
       "cache-control": "no-store",
@@ -597,8 +689,8 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
       headers: { ...fileHeaders, ...(range ? { "content-range": `bytes ${start}-${end}/${size}` } : {}) },
       body: "",
       stream: {
-        length: size === 0 ? 0 : end - start + 1,
-        open: () => createReadStream(d.dataPath, { start, end }),
+        length: end - start + 1,
+        open: () => bundleStream(d, start, end),
       },
     };
   }
@@ -736,6 +828,9 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
           bytes: r.bytes,
           sha256: r.sha256,
           backupBytes: r.backupBytes,
+          bundleFileName: `${stem}.flagship`,
+          bundleBytes: BACKUP_BUNDLE_HEADER_BYTES + r.backupBytes + r.bytes,
+          bundleSha256: r.bundleSha256,
           backupFileName: `${stem}.flagship-backup`,
           dataFileName: `${stem}.flagship-data`,
           apps: r.apps,
@@ -863,7 +958,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     if (rest === "/schedule" && method === "PUT") return putSchedule(req);
     if (rest === "/keys" && method === "POST") return depositKeys(req);
     if (rest === "/run" && method === "POST") return runSaved("now");
-    const m = /^\/([0-9a-f]{32})(\/backup-file|\/chunk|\/link)?$/.exec(rest);
+    const m = /^\/([0-9a-f]{32})(\/backup-file|\/chunk|\/bundle|\/link)?$/.exec(rest);
     if (!m) return err(404, "not found");
     const id = m[1]!;
     const sub = m[2] ?? "";
@@ -878,6 +973,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     }
     if (sub === "/backup-file" && method === "GET") return backupFileResponse(await savedById(id));
     if (sub === "/chunk" && method === "GET") return chunk(await savedById(id), req);
+    if (sub === "/bundle" && method === "GET") return bundleChunk(await savedById(id), req);
     if (sub === "/link" && method === "POST") return mintLink(await savedById(id));
     return err(405, "method not allowed");
   }
@@ -893,6 +989,13 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
       dataFileName: dataFileName(opts.build.serverFqdn, backup.startedAt),
       ...(backup.bytes !== undefined ? { bytes: backup.bytes } : {}),
       ...(backup.backupBytes !== undefined ? { backupBytes: backup.backupBytes } : {}),
+      ...(backup.bytes !== undefined && backup.backupBytes !== undefined
+        ? {
+            bundleFileName: backupBundleFileName(dataFileName(opts.build.serverFqdn, backup.startedAt)),
+            bundleBytes: BACKUP_BUNDLE_HEADER_BYTES + backup.backupBytes + backup.bytes,
+            bundleSha256: backup.bundleSha256 ?? "",
+          }
+        : {}),
       ...(backup.estimatedBytes !== undefined ? { estimatedBytes: backup.estimatedBytes } : {}),
       ...(backup.sha256 ? { sha256: backup.sha256 } : {}),
       ...(backup.apps ? { apps: backup.apps } : {}),
@@ -1081,6 +1184,8 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
           return backupFileResponse(manualDownloadable());
         case `GET ${ARCHIVE_PATH}/chunk`:
           return chunk(manualDownloadable(), req);
+        case `GET ${ARCHIVE_PATH}/bundle`:
+          return bundleChunk(manualDownloadable(), req);
         case `POST ${ARCHIVE_PATH}/link`:
           return mintLink(manualDownloadable());
         case `POST ${ARCHIVE_PATH}/approve`:

@@ -27,6 +27,10 @@ export interface SavedBackupMeta {
   bytes: number;
   sha256: string;
   backupBytes: number;
+  /** The one `.flagship` file the owner downloads: header + backup file + data file. */
+  bundleFileName: string;
+  bundleBytes: number;
+  bundleSha256: string;
   backupFileName: string;
   dataFileName: string;
   apps: Array<{ serviceId: string; name: string }>;
