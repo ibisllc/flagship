@@ -244,7 +244,10 @@
 //       before Update; Diagnostics loses its explainer.
 //  v111: Import a backup and Backup/clone server word their steps like iOS:
 //       the passcode note, the passcode prompt and the waiting text.
-const SHELL_VERSION = "v111";
+//  v112: style.css takes the website's tokens and look and follows the
+//       device's light or dark setting; index.html adds per-scheme
+//       theme-color metas; manifest colours move to the site's dark canvas.
+const SHELL_VERSION = "v112";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
