@@ -10,7 +10,7 @@ final class ServerBackupFormatTests: XCTestCase {
     private func vectors(_ name: String) throws -> [String: Any] {
         var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         for _ in 0..<14 {
-            let url = dir.appendingPathComponent("packages/protocol/test-vectors/\(name)/vectors.json")
+            let url = dir.appendingPathComponent(name)
             if FileManager.default.fileExists(atPath: url.path) {
                 return try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
             }
@@ -22,7 +22,7 @@ final class ServerBackupFormatTests: XCTestCase {
     private func hex(_ v: Any?) throws -> Data { try XCTUnwrap(HexUtil.decode(try XCTUnwrap(v as? String))) }
 
     func testRecreatesTheSlotsAndOpensTheFileBothWays() throws {
-        let b = try vectors("server-backup")
+        let b = try vectors("packages/protocol/test-vectors/server-backup/vectors.json")
         let id = b["archiveId"] as! String
         let key = try hex(b["contentKeyHex"])
         let accountKek = try hex(b["accountKekHex"])
@@ -57,7 +57,7 @@ final class ServerBackupFormatTests: XCTestCase {
     }
 
     func testRefusesTamperedAndMalformedFiles() throws {
-        let b = try vectors("server-backup")
+        let b = try vectors("packages/protocol/test-vectors/server-backup/vectors.json")
         let accountKek = try hex(b["accountKekHex"])
         let passKek = try hex(b["passcodeKekHex"])
         for t in b["tampered"] as! [[String: Any]] {
@@ -85,7 +85,7 @@ final class ServerBackupFormatTests: XCTestCase {
     }
 
     func testPasscodeRulesAndGenerator() throws {
-        let b = try vectors("server-backup")
+        let b = try vectors("packages/protocol/test-vectors/server-backup/vectors.json")
         let rules = b["passcodeRules"] as! [String: [String]]
         for p in rules["ok"]! { XCTAssertNil(ServerBackupFormat.passcodeProblem(p), p) }
         for p in rules["weak"]! { XCTAssertNotNil(ServerBackupFormat.passcodeProblem(p), p) }
@@ -102,7 +102,7 @@ final class ServerBackupFormatTests: XCTestCase {
     }
 
     func testRestoreOrderMatchesTheVectorsAndRidesBesideThePairingOrder() throws {
-        let r = try vectors("server-restore")
+        let r = try vectors("packages/protocol/test-vectors/server-restore/vectors.json")
         let seed = try XCTUnwrap(ServiceInvite.deriveProtocolIrkSeed(umkSeed: try hex(r["umkSeedHex"])))
         let irk = try Curve25519.Signing.PrivateKey(rawRepresentation: seed)
         XCTAssertEqual(HexUtil.encode(irk.publicKey.rawRepresentation), r["pub"] as? String)

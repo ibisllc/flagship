@@ -251,6 +251,12 @@ struct FlagshipApp: App {
                 target: .vibeCodeChat(sessionId: "gym-smoke")
             )
         }
+        // `-smoke-awaiting-backup` marks the first online server as created to
+        // restore a backup and still waiting for it (Home's "Waiting for its
+        // backup" + Send the backup). Gym-only.
+        if args.contains("-smoke-awaiting-backup"), let pod = app.pods.first(where: { $0.status == .online }) {
+            app.podsAwaitingBackup[pod.fqdn.lowercased()] = AwaitingBackupWire(archiveId: String(repeating: "ab", count: 16), state: "waiting")
+        }
         // `-smoke-admin-root` treats this device as holding the admin master
         // root (GymSeams.forceAdminRoot) so the Slice-D admin-gated surfaces
         // (Account-security Rotate-admin card; the add-device promote toggle)

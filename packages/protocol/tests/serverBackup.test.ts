@@ -28,11 +28,11 @@ import {
   type ServerRestoreOrder,
 } from "../src/serverBackup.js";
 
-const dir = join(dirname(fileURLToPath(import.meta.url)), "../test-vectors");
+const root = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const B = JSON.parse(readFileSync(join(dir, "server-backup/vectors.json"), "utf8")) as any;
+const B = JSON.parse(readFileSync(join(root, "packages/protocol/test-vectors/server-backup/vectors.json"), "utf8")) as any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const R = JSON.parse(readFileSync(join(dir, "server-restore/vectors.json"), "utf8")) as any;
+const R = JSON.parse(readFileSync(join(root, "packages/protocol/test-vectors/server-restore/vectors.json"), "utf8")) as any;
 const fromHex = (h: string) => Uint8Array.from(h.match(/../g) ?? [], (b) => parseInt(b, 16));
 
 describe("server-backup vectors", () => {

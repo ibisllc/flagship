@@ -139,6 +139,36 @@ final class GymEveryMergeTests: XCTestCase {
         gymShot(app, "create-server-encrypt")
     }
 
+    // ─── Backup/clone server: import and backup (docs/server-backup-and-clone.md) ──
+
+    /// Add/Import a server → Import a backup opens the restore flow at its
+    /// first step: pick the two files.
+    func test_importBackupOpensTheRestoreFlow() throws {
+        let app = launch(tab: "home", extra: ["-smoke-admin-root"])
+        let addServer = app.buttons["home-add-server"]
+        XCTAssertTrue(addServer.waitForExistence(timeout: 15), "Home should show Add/Import a server.")
+        addServer.tap()
+        let importBackup = app.buttons.matching(identifier: "home-import-backup").firstMatch
+        XCTAssertTrue(importBackup.waitForExistence(timeout: 10), "Add/Import should offer Import a backup.")
+        importBackup.tap()
+        XCTAssertTrue(app.buttons["import-backup-choose"].waitForExistence(timeout: 10), "Import a backup should start by picking the files.")
+        XCTAssertTrue(app.staticTexts["import-backup-files"].exists || app.otherElements["import-backup-files"].exists,
+                      "It should say which files are picked and which are missing.")
+        gymShot(app, "import-backup-pick")
+    }
+
+    /// A server made to restore a backup reads "Waiting for its backup" on
+    /// Home, and tapping it opens the send flow for it.
+    func test_aServerWaitingForItsBackupOffersToSendIt() throws {
+        let app = launch(tab: "home", extra: ["-smoke-admin-root", "-smoke-awaiting-backup"])
+        let pill = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Waiting for its backup")).firstMatch
+        XCTAssertTrue(pill.waitForExistence(timeout: 15), "Home should mark the waiting server.")
+        gymShot(app, "home-awaiting-backup")
+        pill.tap()
+        XCTAssertTrue(app.buttons["import-backup-choose"].waitForExistence(timeout: 10), "Tapping it should open the send flow.")
+        gymShot(app, "send-backup-pick")
+    }
+
     /// A device without the account's admin root is not an admin device: Home
     /// lists the servers but offers no Add/Import a server (and so no menu).
     func test_nonAdminHomeHasNoAddServer() throws {

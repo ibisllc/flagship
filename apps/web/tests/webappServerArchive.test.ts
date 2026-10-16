@@ -18,12 +18,12 @@ import { restoreNameFor, restoreNameProblem, serverWaitingFor, takenServerNames,
 import { classifyServer, statusBucketForKind, renderServerCard } from "../public/webapp/views/home.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const vectors = (name: string) => JSON.parse(readFileSync(join(here, `../../../packages/protocol/test-vectors/${name}/vectors.json`), "utf8"));
-const V = vectors("server-archive") as { cases: Array<{ umkSeedHex: string; archiveIdHex: string; keyHex: string }>; invalidArchiveIds: string[] };
+const read = (path: string) => JSON.parse(readFileSync(join(here, "../../..", path), "utf8"));
+const V = read("packages/protocol/test-vectors/server-archive/vectors.json") as { cases: Array<{ umkSeedHex: string; archiveIdHex: string; keyHex: string }>; invalidArchiveIds: string[] };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const B = vectors("server-backup") as any;
+const B = read("packages/protocol/test-vectors/server-backup/vectors.json") as any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const R = vectors("server-restore") as any;
+const R = read("packages/protocol/test-vectors/server-restore/vectors.json") as any;
 
 const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
 const seed = (h: string) => Uint8Array.from(Buffer.from(h, "hex"));
@@ -328,7 +328,7 @@ describe("the Activity list", () => {
 });
 
 describe("browser download approval (flagship/archive-download/v1)", () => {
-  const AD = vectors("archive-download") as { umkSeedHex: string; cases: Array<{ serverDomain: string; archiveId: string; requestId: string; issuedAt: number; canonical: string; code: string; signature: string }>; invalid: any[] };
+  const AD = read("packages/protocol/test-vectors/archive-download/vectors.json") as { umkSeedHex: string; cases: Array<{ serverDomain: string; archiveId: string; requestId: string; issuedAt: number; canonical: string; code: string; signature: string }>; invalid: any[] };
 
   it("matches the shared vectors: canonical bytes, code, and the IRK signature", async () => {
     for (const c of AD.cases) {

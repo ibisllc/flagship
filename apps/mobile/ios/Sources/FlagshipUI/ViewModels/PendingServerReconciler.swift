@@ -119,8 +119,9 @@ public struct PendingServerReconciler {
         var health: [String: BoxHealth] = [:]
         for entry in registeredEntries { if let h = entry.health { health[entry.serverDomain.lowercased()] = h } }
         if app.podHealth != health { app.podHealth = health }
-        var waiting: [String: AwaitingBackupWire] = [:]
-        for entry in registeredEntries { if let w = entry.awaitingBackup { waiting[entry.serverDomain.lowercased()] = w } }
+        // Per listed server: a box that stops reporting it has its backup.
+        var waiting = app.podsAwaitingBackup
+        for entry in directory.pods { waiting[entry.serverDomain.lowercased()] = entry.revokedAt == nil ? entry.awaitingBackup : nil }
         if app.podsAwaitingBackup != waiting { app.podsAwaitingBackup = waiting }
         // A server revoked for any reason the owner can't undo was deleted,
         // transferred or retired: drop it if an earlier pass listed it.

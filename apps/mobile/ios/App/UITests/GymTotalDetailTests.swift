@@ -79,6 +79,22 @@ final class GymTotalDetailTests: XCTestCase {
 
     // ═══════════════════ D1 — server-detail control sweep ═══════════════════
 
+    /// Backup/clone server starts by setting the passcode: a suggested one,
+    /// and "Make the backup" waits until the user says it's saved
+    /// (docs/server-backup-and-clone.md).
+    func test_backupStartsWithThePasscode() throws {
+        let app = launch(tab: "home")
+        openPodDetail(app, named: "Home")
+        let backup = app.buttons["sd-backup-server"]
+        XCTAssertTrue(revealBySwipe(app, backup), "The server page should offer Backup/clone server.")
+        backup.tap()
+        XCTAssertTrue(app.staticTexts["backup-suggested-passcode"].waitForExistence(timeout: 10), "The backup should suggest a passcode.")
+        let start = app.buttons["backup-start"]
+        XCTAssertTrue(start.exists)
+        XCTAssertFalse(start.isEnabled, "Not until the passcode is saved.")
+        gymShot(app, "backup-passcode")
+    }
+
     /// D1: the dead-man (auto lock-down) card opens its dedicated screen; the
     /// enable toggle + the keep-unlocked affirm control render. Stops at render
     /// (no affirmation fired — Tier-1, no backend).
