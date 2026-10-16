@@ -24,6 +24,8 @@ import { setContainersChangedHook } from "./sandboxNetworking.js";
 
 export interface EgressRuntime {
   status(): EgressStatus;
+  /** FLAGSHIP_EGRESS=off: the operator turned the fence off on purpose. */
+  disabled: boolean;
   /** For the screens API: the signed endpoints and the views the apps list and detail carry. */
   appEgress: {
     handle: (path: string, method: string, req: HttpRequest) => Promise<HttpResponse | null>;
@@ -65,6 +67,8 @@ export interface BootEgressOptions {
   dockerWaitMs?: number;
   /** How often to retry a gateway that couldn't start. Default 30 s. */
   retryMs?: number;
+  /** The gateway came up after failing at boot: start the apps it held back. */
+  onRecovered?: () => void;
 }
 
 async function waitForDocker(cmd: CommandRunner, ms: number): Promise<boolean> {
@@ -89,6 +93,7 @@ export async function bootEgress(opts: BootEgressOptions): Promise<EgressRuntime
     await disableEgress(opts.cmd, log).catch(() => {});
     return {
       status: () => ({ enforced: false, reason: "FLAGSHIP_EGRESS=off" }),
+      disabled: true,
       appEgress: null,
       pruneUninstalled: async () => {},
       noteInstalled: async () => {},
@@ -145,7 +150,7 @@ export async function bootEgress(opts: BootEgressOptions): Promise<EgressRuntime
   } else {
     if (dockerDown) log("[egress] NOT ENFORCED: docker is not available");
     // dockerd may come up later (a slow start, a repair); until the fence
-    // does, AI test copies and builds stay refused, so keep trying.
+    // does, apps, AI test copies and AI builds stay refused, so keep trying.
     let trying = false;
     const retry = setInterval(() => {
       if (trying) return;
@@ -155,6 +160,7 @@ export async function bootEgress(opts: BootEgressOptions): Promise<EgressRuntime
         clearInterval(retry);
         log("[egress] gateway up after a retry");
         onEnforced();
+        opts.onRecovered?.();
       }, () => {});
     }, opts.retryMs ?? 30_000);
     retry.unref?.();
@@ -180,6 +186,7 @@ export async function bootEgress(opts: BootEgressOptions): Promise<EgressRuntime
 
   return {
     status: () => (dockerDown && !gateway.status().enforced ? { enforced: false, reason: "docker is not available" } : gateway.status()),
+    disabled: false,
     appEgress,
     pruneUninstalled: async () => {
       for (const id of store.serviceIds()) {

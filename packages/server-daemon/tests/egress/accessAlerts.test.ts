@@ -230,6 +230,9 @@ describe("bootEgress wiring", () => {
       env: {},
       dockerWaitMs: 0,
     });
+    // No docker: the fence is down and not opted out, so apps are held back.
+    expect(rt.disabled).toBe(false);
+    expect(rt.status()).toEqual({ enforced: false, reason: "docker is not available" });
     const events: AccessRequestEvent[] = [];
     rt.setAccessAlerts({ emit: (e) => events.push(e) });
     await rt.noteInstalled("harry-weather", ["api.open-meteo.com", { host: "cdn.example.com", why: "images" }]);
@@ -243,6 +246,8 @@ describe("bootEgress wiring", () => {
   it("FLAGSHIP_EGRESS=off has no access endpoints", async () => {
     const rt = await bootEgress({ cmd: noDocker, serverDomain: "b", app: () => null, log: () => {}, env: { FLAGSHIP_EGRESS: "off" } });
     expect(rt.appEgress).toBeNull();
+    // Turned off on purpose: the box doesn't hold apps back for it.
+    expect(rt.disabled).toBe(true);
     await rt.noteInstalled("x", ["a.com"]);
   });
 });

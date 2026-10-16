@@ -21,7 +21,7 @@ import {
 import { FileAppEnvStore, type AppEnvStore } from "./serviceEnvStore.js";
 import { AppRunner, buildStartCheck, realCommandRunner, type CommandRunner } from "./serviceRunner.js";
 import { ensureGvisor } from "./appSandbox/gvisor.js";
-import { keepAppSandbox } from "./appSandbox/state.js";
+import { keepAppSandbox, setEgressFence } from "./appSandbox/state.js";
 import { dockerRepaired, wakeDocker } from "./dockerHealth.js";
 import { FILES_HELPER_IMAGE } from "./volumeDump.js";
 import { ServiceActivity } from "./serviceActivity.js";
@@ -1307,7 +1307,13 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       const app = servicePlatformRef.current?.byServiceId(id);
       return app ? { name: app.manifest.name, declared: app.manifest.network?.egress ?? [] } : null;
     },
+    // Apps held back while the gateway was down start now.
+    onRecovered: () => void servicePlatformRef.current?.restore().catch(() => {}),
   });
+  // Fail closed: with the gateway down a live app would reach the whole
+  // internet past its owner-signed access list, so no app starts until it
+  // runs, and the server page says why (appSandbox/state.ts).
+  if (opts.appSandbox && !egress.disabled) setEgressFence(() => egress.status());
   const apiKeyAuthority =
     opts.servicePlatform?.hostUsername && opts.servicePlatform.hostIrkPub
       ? apiKeyAuthorizer({
@@ -1338,6 +1344,7 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
   if (!egress.status().enforced) {
     // Unfenced: the bridges exist with their fixed names, none internal, so
     // builds still reach the internet (the behaviour before the gateway).
+    // Apps and staging copies don't start until the gateway does.
     await ensureUnfencedNetworks(realCommandRunner, (m) => console.warn(m));
   }
   // The data layer's compose stack: brought up in the background when it's

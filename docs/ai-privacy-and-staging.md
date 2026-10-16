@@ -143,8 +143,11 @@ path's Deploy runs the same staged loop with the chat's files.
   removes the rules, makes the build bridge routable again and runs unfenced
   (the old behaviour). If the gateway can't
   start (no docker within 60 s, no iptables), the daemon logs
-  `[egress] NOT ENFORCED` and keeps the old behaviour rather than breaking
-  installed apps. Blocked attempts are logged as `[egress] blocked <who> → <host>`.
+  `[egress] NOT ENFORCED` and fails closed: no live app or staging copy
+  starts (`appSandbox/state.ts`), the server page's `appSandbox` reads
+  `unavailable` with the reason, and the daemon retries every 30 s, starting
+  the held-back apps once the gateway runs. Builds still run unfenced.
+  Blocked attempts are logged as `[egress] blocked <who> → <host>`.
 - **Existing apps lose the internet** on the first boot with this code, unless
   their manifest declares `network.egress` and the owner approves it.
 - **Limits**: HTTPS 443 and HTTP 80 only (no other ports, no QUIC); the

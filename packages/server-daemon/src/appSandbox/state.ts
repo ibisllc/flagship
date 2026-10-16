@@ -15,6 +15,23 @@ export type AppSandboxStatus =
 
 let current: Promise<GvisorResult> | null = null;
 let settled: GvisorResult | null = null;
+let egressFence: (() => { enforced: boolean; reason?: string }) | null = null;
+
+/**
+ * The egress gateway is part of an app's sandbox: an app without it would
+ * reach the whole internet, past its owner-signed access list. Once the box
+ * arms this (runtime.ts, unless FLAGSHIP_EGRESS=off), no app or staging copy
+ * starts while the gateway is down, and the server page says why.
+ */
+export function setEgressFence(status: (() => { enforced: boolean; reason?: string }) | null): void {
+  egressFence = status;
+}
+
+function egressRefusal(): string | null {
+  const s = egressFence?.();
+  if (!s || s.enforced) return null;
+  return `its internet firewall isn't running: ${s.reason ?? "it hasn't started"}`;
+}
 
 /** Begin (or redo) the setup; `docker run` waits on it. */
 export function startAppSandbox(setup: () => Promise<GvisorResult>): Promise<GvisorResult> {
@@ -31,20 +48,33 @@ export function startAppSandbox(setup: () => Promise<GvisorResult>): Promise<Gvi
 export function resetAppSandbox(): void {
   current = null;
   settled = null;
+  egressFence = null;
 }
 
 export function appSandboxStatus(): AppSandboxStatus {
+  const gvisor = gvisorStatus();
+  if (gvisor.state === "unavailable" || gvisor.state === "starting") return gvisor;
+  const fence = egressRefusal();
+  return fence ? { state: "unavailable", reason: fence } : gvisor;
+}
+
+function gvisorStatus(): AppSandboxStatus {
   if (!current) return { state: "off" };
   if (!settled) return { state: "starting" };
   return settled.ok ? { state: "ready", version: settled.version } : { state: "unavailable", reason: settled.reason };
 }
 
-/** The `docker run` args an app container needs; throws while gVisor isn't usable here. */
+/** The `docker run` args an app container needs; throws while its sandbox isn't usable here. */
 export async function appSandboxRunArgs(): Promise<string[]> {
-  if (!current) return [];
-  const r = await current;
-  if (!r.ok) throw new Error(`apps can't start on this server without their sandbox: ${r.reason}`);
-  return [`--runtime=${GVISOR_RUNTIME}`];
+  const args: string[] = [];
+  if (current) {
+    const r = await current;
+    if (!r.ok) throw new Error(`apps can't start on this server without their sandbox: ${r.reason}`);
+    args.push(`--runtime=${GVISOR_RUNTIME}`);
+  }
+  const fence = egressRefusal();
+  if (fence) throw new Error(`apps can't start on this server without their sandbox: ${fence}`);
+  return args;
 }
 
 /**

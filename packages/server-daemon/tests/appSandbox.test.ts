@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { GVISOR_RELEASE, GVISOR_SHA512, ensureGvisor, gvisorArch, gvisorUrl, probeFailure } from "../src/appSandbox/gvisor.js";
-import { appSandboxRunArgs, appSandboxStatus, keepAppSandbox, resetAppSandbox, startAppSandbox } from "../src/appSandbox/state.js";
+import { appSandboxRunArgs, appSandboxStatus, keepAppSandbox, resetAppSandbox, setEgressFence, startAppSandbox } from "../src/appSandbox/state.js";
 import { AppRunner, type CommandRunner } from "../src/serviceRunner.js";
 
 const TARBALL = Buffer.from("pretend gvisor bundle");
@@ -207,6 +207,32 @@ describe("apps start only in their sandbox", () => {
     expect(recovered).toBe(1);
     expect(await appSandboxRunArgs()).toEqual(["--runtime=runsc"]);
   });
+
+  it("starts no app while the internet firewall is down, says why, and starts them once it runs", async () => {
+    await startAppSandbox(async () => ({ ok: true, version: "runsc 1", runscPath: "/r" }));
+    let fence: { enforced: boolean; reason?: string } = { enforced: false, reason: "docker is not available" };
+    setEgressFence(() => fence);
+    const { runs, runner } = recorder();
+    await expect(runner.deploy({ serviceId: "harry--notes", image: "x:1" })).rejects.toThrow(
+      "apps can't start on this server without their sandbox: its internet firewall isn't running: docker is not available",
+    );
+    expect(runs).toHaveLength(0);
+    expect(appSandboxStatus()).toEqual({
+      state: "unavailable",
+      reason: "its internet firewall isn't running: docker is not available",
+    });
+    fence = { enforced: true };
+    await runner.deploy({ serviceId: "harry--notes", image: "x:1" });
+    expect(runs[0]).toContain("--runtime=runsc");
+    expect(appSandboxStatus()).toEqual({ state: "ready", version: "runsc 1" });
+  });
+
+  it("a broken gVisor is the reason shown, ahead of the firewall", async () => {
+    await startAppSandbox(async () => ({ ok: false, reason: "no network" }));
+    setEgressFence(() => ({ enforced: false, reason: "not started" }));
+    expect(appSandboxStatus()).toEqual({ state: "unavailable", reason: "no network" });
+  });
+
   it("quotes why gVisor crashed, not its register dump", () => {
     const out = [
       'docker: Error response from daemon: failed to create task for container: OCI runtime create failed: creating container: failure executing hook "/proc/1667/exe", err: exit status 2',
