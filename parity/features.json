@@ -67,7 +67,7 @@
       "ref": "ios",
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/ServerShare.swift", "flagship/server-share/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift", "SharedApp"]] },
-        "android": { "status": "partial", "reason": "No SharedAppScreen; a shared server's app rows aren't tappable (ShareServerScreens.kt).", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerShare.kt", "flagship/server-share/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ShareServerScreens.kt", "fun "]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerShare.kt", "flagship/server-share/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ShareServerScreens.kt", "fun "], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/SharedAppScreen.kt", "fun SharedAppScreen"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/serverShare.js", "flagship/server-share/v1"], ["apps/web/public/webapp/views/shared-server.js", "data-db-open"], ["apps/web/public/webapp/lib/serverShares.js", "export async function shareDbSource"], ["apps/web/public/webapp/views/share-accept.js", "export (async )?function enterShareAccept"]] }
       }
     },
@@ -177,7 +177,7 @@
       "ref": "ios",
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeSessionScreen.swift", "Jump to latest"]] },
-        "android": { "status": "missing", "reason": "The chat renders every message; no cap or Jump to latest.", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/VibeCodeChatScreen.kt", "Jump to latest"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/VibeCodeChatScreen.kt", "Jump to latest"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/vibeTranscript.js", "MAX_MESSAGES = 40"], ["apps/web/public/webapp/views/vibe-code.js", "transcriptWindow\\(all\\)"], ["apps/web/public/webapp/index.html", "id=\"vc-jump-latest\""]] }
       }
     },
@@ -207,7 +207,7 @@
       "ref": "ios",
       "surfaces": {
         "ios": { "status": "partial", "reason": "The AASA claims /qr but DeepLink.parse drops it; see the app-links derived check.", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/DeepLink.swift", "case \"/remote\""]] },
-        "android": { "status": "partial", "reason": "The manifest lacks /qr and the trailing-slash /join/ /share/ /transfer/; see the app-links derived check.", "anchors": [["apps/mobile/android/app/src/main/AndroidManifest.xml", "android:path=\"/share\""]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/AndroidManifest.xml", "android:path=\"/share\""], ["apps/mobile/android/app/src/main/AndroidManifest.xml", "android:path=\"/join/\""]] },
         "web": { "status": "partial", "reason": "By design the webapp opens only /join, /share, /transfer and /access; the rest are app-only or pasted (/invite-accept).", "anchors": [["apps/web/public/webapp/lib/deepLink.js", "\"/access\""]] }
       }
     },
@@ -267,7 +267,7 @@
       "ref": "ios",
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift", "case \\.joinAccount"]] },
-        "android": { "status": "partial", "reason": "Only from Welcome or an opened link, not from a signed-in Settings.", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/onboarding/JoinAccountContainer.kt", "fun "]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/onboarding/JoinAccountContainer.kt", "fun "], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/SettingsScreen.kt", "join-device-scan"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/views/join.js", "export async function openJoinAnotherAccount"], ["apps/web/public/webapp/index.html", "settings-tab-join-account"]] }
       }
     },
@@ -287,7 +287,7 @@
       "ref": "ios",
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/ios/App/WidgetExtension/PodStatusWidget.swift", "Widget"], ["apps/mobile/ios/App/WidgetExtension/InstallProgressLiveActivity.swift", "ActivityConfiguration"], ["apps/mobile/ios/App/Sources/Intents/FlagshipAppIntents.swift", "AppIntent"]] },
-        "android": { "status": "missing", "reason": "Owner wants widgets (and Wear OS) if feasible.", "anchors": [["apps/mobile/android/app/src/main/AndroidManifest.xml", "APPWIDGET_UPDATE"]] },
+        "android": { "status": "present", "reason": "Deliberately different: a Glance widget, an ongoing setup notification instead of a Live Activity, launcher shortcuts instead of App Intents.", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/companion/PodStatusWidget.kt", "GlanceAppWidget"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/companion/ProvisionNotifier.kt", "setOngoing"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/companion/CompanionShortcuts.kt", "setDynamicShortcuts"]] },
         "web": { "status": "na", "reason": "No platform equivalent for a web app.", "anchors": [] }
       }
     },
@@ -298,7 +298,7 @@
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/WatchDelegateKey.swift", "flagship/watch-delegate-key/v1"]] },
         "watch": { "status": "present", "anchors": [["apps/mobile/ios/App/WatchApp/WatchConnectivityClient.swift", "WCSession"], ["apps/mobile/shared/Sources/FlagshipCore/WatchApproval.swift", "boot|Boot"]] },
-        "android": { "status": "missing", "reason": "No Wear OS app; the delegate-key code exists (core/WatchDelegateKey.kt) without a watch to hold it.", "anchors": [] },
+        "android": { "status": "present", "reason": "The Wear OS app approves through the phone (Data Layer); the phone signs with the watch-delegate key.", "anchors": [["apps/mobile/android/wear/src/main/java/com/flagshipserver/wear/PhoneApprover.kt", "ApproveCommand"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/WatchDelegateKey.kt", "delegate"]] },
         "web": { "status": "na", "reason": "No watch for a web app.", "anchors": [] }
       }
     },
