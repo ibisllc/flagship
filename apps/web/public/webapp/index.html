@@ -865,8 +865,8 @@
           <div id="cs-backup-policy" class="boot-unlock-options">
             <label class="boot-unlock-option">
               <input type="radio" name="cs-backup-policy" value="phone-only" checked />
-              <span class="boot-unlock-title">Phone-side backups</span>
-              <span class="boot-unlock-desc faint-sm">Your server makes an encrypted backup every night and your phone keeps a copy, over Wi-Fi while charging. Your server's apps can hold up to the space you reserve here.</span>
+              <span class="boot-unlock-title">On my devices (default)</span>
+              <span class="boot-unlock-desc faint-sm">Your server makes an encrypted backup every night, and the Flagship app on one of your devices keeps a copy over Wi-Fi while charging. Your server's apps can hold up to the space you keep for it there, so its data can't grow larger than that device's free space.</span>
             </label>
             <label class="boot-unlock-option">
               <input type="radio" name="cs-backup-policy" value="peer" />
@@ -880,9 +880,9 @@
             </label>
           </div>
           <div id="cs-reserve-row">
-            <label for="cs-reserve-gb">Space on your phone <span class="faint-sm">(GB)</span></label>
+            <label for="cs-reserve-gb">Space kept on that device <span class="faint-sm">(GB)</span></label>
             <input id="cs-reserve-gb" type="number" min="1" max="4096" step="1" value="16" />
-            <p class="faint-sm">Keep this much free on your phone for the backup.</p>
+            <p class="faint-sm">Keep this much free on that device for the backup.</p>
           </div>
           <label>Recipe expires in <span class="faint-sm">(hours; 0.5–24, default 6)</span></label>
           <input id="cs-ttl-hours" type="number" min="0.5" max="24" step="0.5" value="6" />

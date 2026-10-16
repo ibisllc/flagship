@@ -74,7 +74,7 @@ export function backupsSectionHtml(body) {
         <div id="bk-policy-editor" class="hidden mt-2">
           <div class="boot-unlock-options">${policies}</div>
           <div id="bk-reserve-row" class="mt-2">
-            <label class="caption" for="bk-reserve-gb">Space on your phone (GB)</label>
+            <label class="caption" for="bk-reserve-gb">Space kept on that device (GB)</label>
             <input id="bk-reserve-gb" type="number" min="1" max="4096" step="1" value="${DEFAULT_WEB_RESERVE_GB}" class="full-width" />
             <p class="faint-sm">${escapeHtml(WEB_RESERVE_NOTE)}</p>
           </div>

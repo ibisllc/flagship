@@ -75,7 +75,7 @@ describe("backup-policy in the webapp (shared vectors)", () => {
   });
   it("describes the policy, the usage and the peer engine", () => {
     const v = { policy: { policy: "phone", phoneReserveBytes: 32 * GB }, cap: { limitBytes: 32 * GB, usedBytes: 3.2 * GB } };
-    expect(policy.policyLine(v)).toBe("Phone-side backups · up to 32 GB");
+    expect(policy.policyLine(v)).toBe("On my devices · up to 32 GB");
     expect(policy.usageLine(v)).toBe("Apps use 3.2 GB of 32 GB");
     expect(policy.usageFraction(v)).toBeCloseTo(0.1);
     expect(policy.usageLine({ policy: { policy: "peer" }, cap: { limitBytes: 120 * GB, usedBytes: GB } })).toBe("Apps use 1.0 GB of 120 GB (a third of this server's disk)");

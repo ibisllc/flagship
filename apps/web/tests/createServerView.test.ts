@@ -119,7 +119,8 @@ describe("create-server view — words for a browser", () => {
   });
 
   it("names the default backup policy for a browser, in the drafts list too", () => {
-    expect(section).toContain('<option value="phone-only">On my devices (default)</option>');
+    expect(section).toContain('<input type="radio" name="cs-backup-policy" value="phone-only" checked />');
+    expect(section).toContain('<span class="boot-unlock-title">On my devices (default)</span>');
     expect(section).toContain("that device's free space");
     expect(VIEW_SRC).toContain('"phone-only": "On my devices"');
   });

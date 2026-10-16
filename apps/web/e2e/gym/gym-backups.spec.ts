@@ -101,7 +101,7 @@ function backupsBox(page: Page, m: Mock, keys: Keys, init: { keysLeft?: number; 
         diskBytes: 120 * GB,
         reservedForPeersBytes: s.policy.policy === "peer" ? 80 * GB : null,
         apps: [],
-        ...(over ? { overReason: `This server holds ${(s.usedBytes / GB).toFixed(1)} GB of app data, over its backup limit of ${(limit! / GB).toFixed(1)} GB (the space your phone keeps for its backup). Remove apps or data, or change the backup policy on the server page.` } : {}),
+        ...(over ? { overReason: `This server holds ${(s.usedBytes / GB).toFixed(1)} GB of app data, over its backup limit of ${(limit! / GB).toFixed(1)} GB (the space your device keeps for its backup). Remove apps or data, or change the backup policy on the server page.` } : {}),
       },
       peer: s.policy.policy === "peer" ? init.peer ?? null : null,
     };
@@ -144,7 +144,7 @@ function backupsBox(page: Page, m: Mock, keys: Keys, init: { keysLeft?: number; 
         return {
           status: 409,
           json: {
-            error: `This server holds ${(s.usedBytes / GB).toFixed(1)} GB of app data, more than the ${(limit / GB).toFixed(1)} GB the phone would keep. Reserve at least ${(s.usedBytes / GB).toFixed(1)} GB on the phone, or remove apps or data first.`,
+            error: `This server holds ${(s.usedBytes / GB).toFixed(1)} GB of app data, more than the ${(limit / GB).toFixed(1)} GB your device would keep. Reserve at least ${(s.usedBytes / GB).toFixed(1)} GB on that device, or remove apps or data first.`,
             code: "over-backup-limit",
           },
         };
@@ -199,7 +199,7 @@ test.describe("gym webapp backups", () => {
     await openServer(page);
 
     // The policy, its limit and the usage against it.
-    await expect(page.locator("#bk-policy-value")).toHaveText("Phone-side backups · up to 32 GB");
+    await expect(page.locator("#bk-policy-value")).toHaveText("On my devices · up to 32 GB");
     await expect(page.locator("#bk-usage-line")).toHaveText("Apps use 3.2 GB of 32 GB");
     await expect(page.locator("#bk-usage-bar")).toBeVisible();
 
@@ -283,7 +283,7 @@ test.describe("gym webapp backups", () => {
     await page.check('input[name="bk-policy"][value="phone"]');
     await page.fill("#bk-reserve-gb", "4");
     await page.click("#bk-policy-save");
-    await expect(page.locator("#bk-policy-error")).toHaveText("This server holds 6.0 GB of app data, more than the 4.0 GB the phone would keep. Reserve at least 6.0 GB on the phone, or remove apps or data first.");
+    await expect(page.locator("#bk-policy-error")).toHaveText("This server holds 6.0 GB of app data, more than the 4.0 GB your device would keep. Reserve at least 6.0 GB on that device, or remove apps or data first.");
     // Peer-distributed: signed under the admin root, and the peer engine's status shows.
     await page.check('input[name="bk-policy"][value="peer"]');
     await expect(page.locator("#bk-reserve-row")).toBeHidden();
@@ -334,7 +334,7 @@ test.describe("gym webapp backups", () => {
     await expect(page.locator("#view-create-server")).toBeVisible({ timeout: 10_000 });
     // The three choices say what each one does; phone-side is the default with its reserve.
     await expect(page.locator('input[name="cs-backup-policy"][value="phone-only"]')).toBeChecked();
-    await expect(page.locator("#cs-backup-policy")).toContainText("Your server's apps can hold up to the space you reserve here.");
+    await expect(page.locator("#cs-backup-policy")).toContainText("so its data can't grow larger than that device's free space.");
     await expect(page.locator("#cs-backup-policy")).toContainText("Your apps can use up to a third of this server's disk");
     await expect(page.locator("#cs-backup-policy")).toContainText("If this server's disk fails, its apps and data are gone.");
     await expect(page.locator("#cs-reserve-row")).toBeVisible();

@@ -138,7 +138,7 @@ export class BackupCap {
     const limit = this.limitBytes() ?? 0;
     const why =
       p.policy === "phone"
-        ? "the space your phone keeps for its backup"
+        ? "the space your device keeps for its backup"
         : "a third of its disk, so other servers can keep their backups on it";
     return `This server holds ${formatGb(this.usedBytes() ?? 0)} of app data, over its backup limit of ${formatGb(limit)} (${why}). Remove apps or data, or change the backup policy on the server page.`;
   }

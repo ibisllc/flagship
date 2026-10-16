@@ -68,7 +68,7 @@ export function buildBackupPolicyHttp(deps: {
         if (limit !== null && used > limit) {
           const sentence =
             asked.policy === "phone"
-              ? `This server holds ${formatGb(used)} of app data, more than the ${formatGb(limit)} the phone would keep. Reserve at least ${formatGb(used)} on the phone, or remove apps or data first.`
+              ? `This server holds ${formatGb(used)} of app data, more than the ${formatGb(limit)} your device would keep. Reserve at least ${formatGb(used)} on that device, or remove apps or data first.`
               : `This server holds ${formatGb(used)} of app data, more than a third of its disk (${formatGb(limit)}), which is all a server may use with peer backups. Remove apps or data first, or choose another policy.`;
           return json(409, { error: sentence, code: "over-backup-limit" });
         }

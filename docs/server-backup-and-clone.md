@@ -208,7 +208,7 @@ in `ServicePlatform.install`, so installs, AI deploys of a new app, app
 copies and imports alike), an app copy that wouldn't fit, and an import
 that wouldn't fit (`507 code over-backup-limit`), with the sentence the
 owner sees ("This server holds 6.0 GB of app data, over its backup limit of
-5.0 GB (the space your phone keeps for its backup). Remove apps or data, or
+5.0 GB (the space your device keeps for its backup). Remove apps or data, or
 change the backup policy on the server page."). Redeploys of an app already
 there aren't refused. Crossing the limit, either way, goes into Activity.
 `appBudgets()` splits the limit per app (what each holds plus an equal share

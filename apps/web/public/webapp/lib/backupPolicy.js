@@ -15,7 +15,7 @@ const GB = 1024 ** 3;
 export const DEFAULT_WEB_RESERVE_GB = 16;
 
 export const POLICY_LABEL = {
-  phone: "Phone-side backups",
+  phone: "On my devices",
   peer: "Peer-distributed backups",
   none: "No backups",
   unset: "Not chosen yet",
@@ -23,12 +23,12 @@ export const POLICY_LABEL = {
 
 export const POLICY_TEXT = {
   phone:
-    "Your server makes an encrypted backup every night and your phone keeps a copy, over Wi-Fi while charging. Your server's apps can hold up to the space you reserve here.",
+    "Your server makes an encrypted backup every night, and the Flagship app on one of your devices keeps a copy over Wi-Fi while charging. Your server's apps can hold up to the space you keep for it there, so its data can't grow larger than that device's free space.",
   peer:
     "Encrypted pieces of your backup are kept on other Flagship servers, and yours keeps theirs. Your apps can use up to a third of this server's disk; the rest holds other servers' pieces.",
   none: "Nothing is backed up. If this server's disk fails, its apps and data are gone. You can still use Back up now on the server page.",
 };
-export const WEB_RESERVE_NOTE = "Keep this much free on your phone for the backup.";
+export const WEB_RESERVE_NOTE = "Keep this much free on that device for the backup.";
 
 /** The draft store's values ("phone-only" | "peer" | "none") → the wire's. */
 export function policyFromDraft(v) {
@@ -82,7 +82,7 @@ export function formatGb(n) {
   return `${(n / GB).toFixed(n < 10 * GB ? 1 : 0)} GB`;
 }
 
-/** "Backup policy: Phone-side backups · up to 32 GB" */
+/** "On my devices · up to 32 GB" */
 export function policyLine(view) {
   const p = view?.policy?.policy ?? "unset";
   const limit = view?.cap?.limitBytes;

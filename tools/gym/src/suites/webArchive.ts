@@ -243,7 +243,7 @@ export const WEB_ARCHIVE: readonly Scenario[] = [
         { kind: "tap", describe: "Download a backup.", handle: "[data-bk-download]" },
         { kind: "tap", describe: "Delete a backup (confirm).", handle: "[data-bk-delete]" },
       ],
-      assertions: [{ describe: "Policy", handle: "#bk-policy-value", expect: "text", text: "Phone-side backups" }],
+      assertions: [{ describe: "Policy", handle: "#bk-policy-value", expect: "text", text: "On my devices" }],
       screenshots: [shot("backups-section", "The Backups section."), shot("backups-after-delete", "After Delete.")],
       dimension: "D1",
     },
