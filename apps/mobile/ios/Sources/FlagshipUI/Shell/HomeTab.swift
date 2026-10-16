@@ -149,6 +149,10 @@ public struct HomeTab: View {
                     awaitingEntitlement: app.serversAwaiting(.entitlement),
                     statusPaused: app.accountStatusPaused,
                     serverListLocked: app.isServerListLocked,
+                    canAddServers: HomeScreen.showsAddServer(
+                        holdsAdminRoot: Keystore.hasAdminRoot || GymSeams.forceAdminRoot,
+                        isDemoAccount: app.isDemoAccount
+                    ),
                     onOpenPod: { pod in path.append(.serverDetail(podId: pod.podId)) },
                     onCancelServer: { pod in
                         Task { await cancelPendingServer(pod: pod, server: server, app: app, toasts: toasts) }

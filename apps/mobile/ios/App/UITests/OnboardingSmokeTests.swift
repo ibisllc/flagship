@@ -44,10 +44,12 @@ final class OnboardingSmokeTests: XCTestCase {
         XCTAssertTrue(skipAnyway.waitForExistence(timeout: 5), "Skipping should warn first.")
         skipAnyway.tap()
 
-        // 5. The empty Home — add the first server.
-        let addFirst = app.buttons["home-add-first-server"]
+        // 5. The empty Home — the device that opened the account holds the
+        // admin root, so it gets Add/Import a server; create the first one.
+        let addFirst = app.buttons["home-add-server"]
         XCTAssertTrue(addFirst.waitForExistence(timeout: 15), "A new account lands on Home with no servers.")
         addFirst.tap()
+        app.chooseAddNewServer()
 
         // 6. CreateServer — name it and advance through the design pages.
         let nameField = app.textFields.matching(identifier: "cs-name-field").firstMatch

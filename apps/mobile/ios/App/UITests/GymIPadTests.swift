@@ -64,7 +64,7 @@ final class GymIPadTests: XCTestCase {
     /// shell drew. The sidebar carries the destination rows ("Home"/"Services"/
     /// "Activity"/"Settings"), so its destinations are reachable from it.
     func test_iPadRendersSidebarNotTabView() throws {
-        let app = launch(tab: "home")
+        let app = launch(tab: "home", extra: ["-smoke-admin-root"])
         // The seeded Home shell drew (the add-server affordance proves pods +
         // paired state); now assert the iPad chrome around it.
         XCTAssertTrue(
@@ -134,7 +134,7 @@ final class GymIPadTests: XCTestCase {
     /// clamp actually bit on this wide pane. (On a compact iPhone pane the clamp
     /// is a no-op; this assertion is meaningful only on the iPad destination.)
     func test_iPadReadingColumnConstrainsWidth() throws {
-        let app = launch(tab: "home")
+        let app = launch(tab: "home", extra: ["-smoke-admin-root"])
         let addServer = app.buttons["home-add-server"]
         XCTAssertTrue(addServer.waitForExistence(timeout: 20), "Home should render the add-server affordance.")
         gymShot(app, "ipad-reading-column")

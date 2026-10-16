@@ -22,8 +22,8 @@ const EVERY_MERGE: readonly Scenario[] = [
     "FlagshipAppUITests/GymSmokeTests",
     {
       steps: [
-        { kind: "launch", describe: "Launch -smoke-mode -smoke-tab home (DemoFixtures seeded)." },
-        { kind: "assert", describe: "Home add-server affordance (present only with pods).", handle: "home-add-server" },
+        { kind: "launch", describe: "Launch -smoke-mode -smoke-tab home -smoke-admin-root (DemoFixtures seeded; an admin device)." },
+        { kind: "assert", describe: "Home's Add/Import a server (admin devices only).", handle: "home-add-server" },
       ],
       assertions: [{ describe: "Seeded Home shell present", handle: "home-add-server", expect: "present" }],
       screenshots: [shot("cold-launch", "After launch."), shot("home-ready", "Home with seeded pods.")],
@@ -82,7 +82,7 @@ const EVERY_MERGE: readonly Scenario[] = [
     "FlagshipAppUITests/GymEveryMergeTests/test_createServerFormReachable",
     {
       steps: [
-        { kind: "launch", describe: "Launch -smoke-mode -smoke-tab home." },
+        { kind: "launch", describe: "Launch -smoke-mode -smoke-tab home -smoke-admin-root (an admin device)." },
         { kind: "tap", describe: "Add/Import a server.", handle: "home-add-server" },
         { kind: "tap", describe: "Create a new server.", handle: "home-add-new-server" },
         { kind: "assert", describe: "Name field (step 0).", handle: "cs-name-field" },
@@ -99,6 +99,23 @@ const EVERY_MERGE: readonly Scenario[] = [
         shot("create-server-form", "Create-server name step."),
         shot("create-server-encrypt", "The disk-encryption step."),
       ],
+      dimension: "D1",
+    },
+  ),
+  ios(
+    "ios-home-non-admin",
+    "A device without the account's admin root (not an admin device): Home lists the servers with no Add/Import a server and so no menu (docs/service-access-gating.md 'Account members').",
+    "FlagshipAppUITests/GymEveryMergeTests/test_nonAdminHomeHasNoAddServer",
+    {
+      steps: [
+        { kind: "launch", describe: "Launch -smoke-mode -smoke-tab home without -smoke-admin-root." },
+        { kind: "assert", describe: "The server list drew.", handle: "YOUR SERVERS" },
+      ],
+      assertions: [
+        { describe: "No Add/Import a server", handle: "home-add-server", expect: "absent" },
+        { describe: "No menu", handle: "home-add-new-server", expect: "absent" },
+      ],
+      screenshots: [shot("home-non-admin", "Home on a non-admin device.")],
       dimension: "D1",
     },
   ),
@@ -314,7 +331,7 @@ const IPAD: readonly Scenario[] = [
     "FlagshipAppUITests/GymIPadTests/test_iPadRendersSidebarNotTabView",
     {
       steps: [
-        { kind: "launch", describe: "Launch -smoke-mode -smoke-tab home on the iPad destination." },
+        { kind: "launch", describe: "Launch -smoke-mode -smoke-tab home -smoke-admin-root on the iPad destination." },
         { kind: "assert", describe: "The seeded Home shell.", handle: "home-add-server" },
         { kind: "assert", describe: "The iPad sidebar.", handle: "ipad-sidebar" },
       ],
@@ -347,7 +364,7 @@ const IPAD: readonly Scenario[] = [
     "FlagshipAppUITests/GymIPadTests/test_iPadReadingColumnConstrainsWidth",
     {
       steps: [
-        { kind: "launch", describe: "Launch -smoke-mode -smoke-tab home on iPad." },
+        { kind: "launch", describe: "Launch -smoke-mode -smoke-tab home -smoke-admin-root on iPad." },
         { kind: "assert", describe: "A reading-column-bounded control.", handle: "home-add-server" },
       ],
       assertions: [{ describe: "Content clamped below the iPad pane width", handle: "home-add-server", expect: "present" }],
@@ -441,7 +458,8 @@ const TOTAL_DETAIL: readonly Scenario[] = [
     "FlagshipAppUITests/GymTotalDetailTests/test_createServerFullStepFlow",
     {
       steps: [
-        { kind: "tap", describe: "Add server.", handle: "home-add-server" },
+        { kind: "tap", describe: "Add/Import a server (-smoke-admin-root: an admin device).", handle: "home-add-server" },
+        { kind: "tap", describe: "Create a new server.", handle: "home-add-new-server" },
         { kind: "type", describe: "Name (step 0).", handle: "cs-name-field" },
         { kind: "tap", describe: "Next → step 1.", handle: "cs-next-button" },
         { kind: "assert", describe: "Disk-encryption toggle (step 1).", handle: "cs-encrypt-disk-toggle" },
@@ -577,7 +595,7 @@ const TOTAL_DETAIL: readonly Scenario[] = [
     "FlagshipAppUITests/GymTotalDetailTests/test_lockScreenTrapsOnLaunch",
     {
       steps: [
-        { kind: "launch", describe: "Launch -smoke-mode -smoke-tab home -smoke-locked." },
+        { kind: "launch", describe: "Launch -smoke-mode -smoke-tab home -smoke-locked -smoke-admin-root." },
         { kind: "assert", describe: "The biometric lock screen.", handle: "biometric-lock-screen" },
       ],
       assertions: [
@@ -776,13 +794,14 @@ const O = "FlagshipAppUITests/GymOctoberTests/";
 const OCTOBER: readonly Scenario[] = [
   iosTotal(
     "ios-oct-onboarding-walk",
-    "D1-A1: Welcome → handle → Open account → skip backup → empty Home → Add your first server → designer → delivery chooser, against the mock clients (-smoke-onboarding).",
+    "D1-A1: Welcome → handle → Open account → skip backup → empty Home → Add/Import a server → Create a new server → designer → delivery chooser, against the mock clients (-smoke-onboarding).",
     "FlagshipAppUITests/OnboardingSmokeTests/test_coldLaunchReachesDeliveryChooser",
     {
       steps: [
         { kind: "tap", describe: "Create your account → Continue.", handle: "open-account-continue" },
         { kind: "tap", describe: "Skip the backup.", handle: "secure-account-skip-anyway" },
-        { kind: "tap", describe: "Add your first server.", handle: "home-add-first-server" },
+        { kind: "tap", describe: "Add/Import a server (the account's opener holds the admin root).", handle: "home-add-server" },
+        { kind: "tap", describe: "Create a new server.", handle: "home-add-new-server" },
         { kind: "assert", describe: "Delivery chooser.", handle: "cs-delivery-pair" },
       ],
       assertions: [{ describe: "Delivery chooser offers pairing", handle: "cs-delivery-pair", expect: "present" }],

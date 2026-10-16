@@ -119,7 +119,7 @@ class GymFeatureMirrorTest : GymBase() {
      *  can never stay silently armed). */
     @Test
     fun createServerAdvancedTogglesResetRule() {
-        launch(tab = "home")
+        launch(tab = "home", adminRoot = true)
         addNewServer()
         nameServerAndNext()
         waitUntilExists("cs-advanced-toggle", timeoutMs = 15_000)

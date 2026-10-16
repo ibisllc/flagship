@@ -201,15 +201,10 @@ test.describe("gym webapp servers", () => {
     });
     await renderHome(page);
 
-    // "Add/Import a server" sits above the list (iOS/Android: home-add-server).
-    await expect(page.locator("#home-add-server")).toHaveText("+ Add/Import a server");
-    const addAbove = await page.evaluate(() => {
-      const add = document.getElementById("home-add-server");
-      const cards = document.querySelector("#servers-list [data-server-cards]");
-      return !!add && !!cards && !!(add.compareDocumentPosition(cards) & Node.DOCUMENT_POSITION_FOLLOWING);
-    });
-    expect(addAbove).toBe(true);
     await expect.poll(() => shownOrder(page)).toEqual([HOME, OFFICE, MEDIA]);
+    // This session holds no admin root, so it is not an admin device: no
+    // Add/Import a server (docs/service-access-gating.md "Account members").
+    await expect(page.locator("#home-add-server")).toHaveCount(0);
     await expect(page.locator("#servers-list [data-server-cards]")).toHaveAttribute("data-reorderable", "");
     // Only the leader wears a badge; home holds the saved order → green.
     await expect(page.locator("#servers-list [data-order-leader]")).toHaveCount(1);
@@ -260,6 +255,29 @@ test.describe("gym webapp servers", () => {
     await expect(officeBadge).toHaveClass(/\bok\b/, { timeout: 10_000 });
     await expect(officeBadge).not.toHaveAttribute("data-order-leader-pending", "");
     await shot(page, testInfo, "order-leader-confirmed");
+  });
+
+  test("gym servers home shows Add or Import a server above the list on an admin device only", async ({ page }, testInfo) => {
+    await reachHome(page);
+    await stub(page, [["/api/users/smoketest/pods", { pods: [livePod(HOME), livePod(OFFICE)] }]]);
+    await page.evaluate(async () => {
+      const { getSession } = await import("/lib/state.js");
+      getSession().adminRootSeed = crypto.getRandomValues(new Uint8Array(32));
+    });
+    await renderHome(page);
+    // "Add/Import a server" sits above the list (iOS/Android: home-add-server).
+    await expect(page.locator("#home-add-server")).toHaveText("+ Add/Import a server");
+    const addAbove = await page.evaluate(() => {
+      const add = document.getElementById("home-add-server");
+      const cards = document.querySelector("#servers-list [data-server-cards]");
+      return !!add && !!cards && !!(add.compareDocumentPosition(cards) & Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+    expect(addAbove).toBe(true);
+    await page.click("#home-add-server");
+    await expect(page.locator("[data-choice-add]")).toHaveText("Create a new server");
+    await expect(page.locator("[data-choice-co-manage]")).toHaveText("Co-manage a running server");
+    await expect(page.locator("[data-choice-import]")).toHaveText("Import a backup");
+    await shot(page, testInfo, "home-add-import-menu");
   });
 
   test("gym servers home keyboard reorder reverts when another device saved a newer order", async ({ page }, testInfo) => {

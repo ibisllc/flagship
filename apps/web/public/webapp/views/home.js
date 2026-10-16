@@ -45,6 +45,7 @@ import { fetchLeads, invertLeadsMap } from "../lib/directLeads.js";
 import { fetchDecryptedDirectory } from "../lib/accountDirectory.js";
 import { accountReadFetch, clearAccountReadTokens, onAccountReadPausedChange } from "../lib/accountRead.js";
 import { isCompanionProfile } from "../lib/companionGuard.js";
+import { isAdminDevice } from "../lib/memberRoles.js";
 import {
   currentServerOrder,
   isLeaderConfirmed,
@@ -605,47 +606,40 @@ function formatCertCountdown(validUntilMs) {
   return ""; // omit chip when comfortably valid — reduces visual noise
 }
 
-/** Render the zero-state card when the user has no servers yet.
- *
- *  Phase 2 (docs/login-and-account-redesign.md): an account is an
- *  IDENTITY, not a server. Once the account is open (a username is
- *  claimed + bound to this device key), the user lands here with ZERO
- *  servers — that's the normal, valid state, not an error. The CTA adds
- *  the FIRST server; the same flow adds the Nth. We distinguish:
- *    - account-open (username set) → "Your account is ready — add your
- *      first server." `CreateServer` is reachable as "Add a server".
- *    - unpaired (no username yet / mid-pair) → guide them to open an
- *      account / build a fresh server.
- */
-function renderEmptyServersList(root, { reason, username } = {}) {
-  const accountOpen = !!username;
-  const headline = accountOpen
-    ? "Your account is ready"
-    : "Your first server is one tap away";
-  const hint = accountOpen
-    ? "Add your first server to start running your own services."
-    : reason === "unpaired"
-      ? "Pair the webapp to your phone or pod first, or jump straight in and build a fresh server."
-      : "Mint a recipe, write it to a USB drive with the Flagship builder, and boot a spare machine — you're a few taps from your own cloud.";
-  const ctaLabel = accountOpen ? "Add your first server" : "Create a server";
-  root.innerHTML = `
-    <div class="card empty-state">
-      ${EMPTY_MARK_SVG}
-      <h3 class="empty-headline">${escapeHtml(headline)}</h3>
-      <p class="note empty-message">${escapeHtml(hint)}</p>
-      <button class="primary full-width" id="empty-create-server">${escapeHtml(ctaLabel)}</button>
-      ${accountOpen ? '<button class="secondary full-width mt-2" id="empty-co-manage">Co-manage a running server</button>' : ""}
-      ${accountOpen ? '<button class="linklike mt-2" id="empty-take-over">Someone handing you a box? Take over →</button>' : ""}
-      <a class="pill mt-2" href="https://flagshipserver.com/studio" target="_blank" rel="noopener">
-        Get Flagship Studio →
-      </a>
-    </div>
-  `;
-  $("empty-co-manage")?.addEventListener("click", async () => {
-    const { promptShareLink } = await import("./share-accept.js");
-    await promptShareLink();
+/** Only an admin device of the account adds servers to it (docs/service-access-gating.md
+ *  "Account members"): the device that holds the account's admin root. Every
+ *  account is opened with one, so an account never lacks an admin device. A
+ *  demo account's device stands in for its owner (it holds no keys; the
+ *  operator runs the account), as on iOS and Android. */
+export function canAddServers(session = getSession(), profile = getActiveProfile()) {
+  return isAdminDevice(session) || !!profile?.demoServer;
+}
+
+export const ADD_SERVERS_ADMIN_ONLY = "Only an admin device of this account can add servers.";
+
+const TAKE_OVER_LINK = "Someone handing you a box? Take over →";
+
+/** Home's one way to bring a server in: "Add/Import a server" opens the
+ *  Create / Co-manage / Import menu, whether or not the account has servers. */
+function wireAddServer(root) {
+  root.querySelector("#home-add-server")?.addEventListener("click", () => {
+    openAddOrImport({
+      onAdd: async () => {
+        const { enterCreateServer } = await import("./create-server.js");
+        await enterCreateServer();
+      },
+      onCoManage: async () => {
+        const { promptShareLink } = await import("./share-accept.js");
+        await promptShareLink();
+      },
+    });
   });
-  $("empty-take-over")?.addEventListener("click", async () => {
+}
+
+/** "Take over a box": the standalone acquirer claim (paste / scan a transfer
+ *  link), the same view a `/transfer?o=` deep link routes into. */
+function wireTakeOver(root) {
+  root.querySelector("#home-take-over")?.addEventListener("click", async () => {
     const { enterTransferClaim } = await import("./transfer-claim.js");
     enterTransferClaim().catch((e) => {
       if (e?.code !== "cancelled") {
@@ -654,21 +648,57 @@ function renderEmptyServersList(root, { reason, username } = {}) {
       }
     });
   });
-  $("empty-create-server")?.addEventListener("click", async () => {
-    // The account is already open, so this is "Add a server" — a separate,
-    // repeatable resource. "Add a server" now means PROVISION directly
-    // (Slice A: the three-way chooser is gone — pairing is automatic via
-    // auto-pair, and take-over is the /transfer deep-link + camera claim).
-    // When the account isn't open yet, fall back to the wizard's
-    // create-server step (which opens the account first).
-    if (accountOpen) {
-      const { enterCreateServer } = await import("./create-server.js");
-      await enterCreateServer();
-      return;
-    }
-    // No account yet — route through the wizard's OPEN-ACCOUNT step
-    // first (claim a username, bind the device key). Server provisioning
-    // happens after the account exists.
+}
+
+/** Render the zero-state card when the user has no servers yet.
+ *
+ *  An account is an IDENTITY, not a server (docs/login-and-account-redesign.md):
+ *  once it is open (a username is claimed + bound to this device key), zero
+ *  servers is the normal state. An admin device gets the same "Add/Import a
+ *  server" button as a populated list; any other device of the account is
+ *  told only an admin device can add one. With no account yet (no username /
+ *  mid-pair), "Create a server" opens the account first.
+ */
+export function renderEmptyServersList(root, { reason, username, canAdd = canAddServers() } = {}) {
+  const accountOpen = !!username;
+  if (accountOpen && !canAdd) {
+    root.innerHTML = `
+    <div class="card empty-state" data-home-empty-non-admin>
+      ${EMPTY_MARK_SVG}
+      <h3 class="empty-headline">No servers yet</h3>
+      <p class="note empty-message">${escapeHtml(ADD_SERVERS_ADMIN_ONLY)}</p>
+    </div>
+  `;
+    return;
+  }
+  const headline = accountOpen
+    ? "Your account is ready"
+    : "Your first server is one tap away";
+  const hint = accountOpen
+    ? "Add your first server to start running your own services."
+    : reason === "unpaired"
+      ? "Pair the webapp to your phone or pod first, or jump straight in and build a fresh server."
+      : "Mint a recipe, write it to a USB drive with the Flagship builder, and boot a spare machine — you're a few taps from your own cloud.";
+  const action = accountOpen
+    ? `<button class="primary full-width" id="home-add-server">${escapeHtml(ADD_IMPORT_LABEL)}</button>
+      <button class="linklike mt-2" id="home-take-over">${escapeHtml(TAKE_OVER_LINK)}</button>`
+    : '<button class="primary full-width" id="empty-create-server">Create a server</button>';
+  root.innerHTML = `
+    <div class="card empty-state">
+      ${EMPTY_MARK_SVG}
+      <h3 class="empty-headline">${escapeHtml(headline)}</h3>
+      <p class="note empty-message">${escapeHtml(hint)}</p>
+      ${action}
+      <a class="pill mt-2" href="https://flagshipserver.com/studio" target="_blank" rel="noopener">
+        Get Flagship Studio →
+      </a>
+    </div>
+  `;
+  wireAddServer(root);
+  wireTakeOver(root);
+  // No account yet: open it first (claim a username, bind the device key);
+  // the server comes after.
+  root.querySelector("#empty-create-server")?.addEventListener("click", async () => {
     try {
       const { enterWizard } = await import("./wizard.js");
       await enterWizard({ step: "username" });
@@ -1182,8 +1212,8 @@ function renderServerCards() {
     <div class="fs-hero-compact" data-home-compact aria-hidden="true">Servers</div>
     <div class="fs-hero">
       <h2 class="fs-hero-title" data-home-title>Servers</h2>
-      <button class="secondary" id="home-add-server">${escapeHtml(ADD_IMPORT_LABEL)}</button>
-      <button class="linklike mt-1" id="home-take-over">Someone handing you a box? Take over →</button>
+      ${canAddServers() ? `<button class="secondary" id="home-add-server">${escapeHtml(ADD_IMPORT_LABEL)}</button>
+      <button class="linklike mt-1" id="home-take-over">${escapeHtml(TAKE_OVER_LINK)}</button>` : ""}
       ${searchField({ value: homeQuery, placeholder: "Search servers", id: "home-search" })}
       ${chipRow({ items: chips, selected: homeFilter, ariaLabel: "Filter servers" })}
     </div>
@@ -1199,22 +1229,9 @@ function renderServerCards() {
  * old nodes + their listeners, so re-binding can't stack handlers).
  */
 function wireHomeListControls(list) {
-  // "+ Add/Import a server" — create a brand-new box (pairing is automatic),
-  // co-manage someone else's server from their share link, or import a
-  // backup onto one of the account's servers. Take-over is the
-  // separate "Take over" link + the /transfer deep-link + camera claim.
-  list.querySelector("#home-add-server")?.addEventListener("click", () => {
-    openAddOrImport({
-      onAdd: async () => {
-        const { enterCreateServer } = await import("./create-server.js");
-        await enterCreateServer();
-      },
-      onCoManage: async () => {
-        const { promptShareLink } = await import("./share-accept.js");
-        await promptShareLink();
-      },
-    });
-  });
+  // "+ Add/Import a server" (admin devices only): create a brand-new box,
+  // co-manage someone else's server from their share link, or import a backup.
+  wireAddServer(list);
   // Tap a registered server card → open its detail screen. Clicks that
   // land on an inner control (approve / delete / links) are ignored so the
   // card tap never hijacks a button.
@@ -1240,17 +1257,7 @@ function wireHomeListControls(list) {
       await enterServerDetail(fqdn);
     });
   });
-  // "Take over a box" — the standalone acquirer claim (paste / scan a
-  // transfer link). The same view a `/transfer?o=` deep link routes into.
-  list.querySelector("#home-take-over")?.addEventListener("click", async () => {
-    const { enterTransferClaim } = await import("./transfer-claim.js");
-    enterTransferClaim().catch((e) => {
-      if (e?.code !== "cancelled") {
-        console.error("transfer claim failed", e);
-        toast(e?.message ?? String(e), "err");
-      }
-    });
-  });
+  wireTakeOver(list);
   // Filter chips — narrow the visible set, no re-fetch.
   list.querySelectorAll("[data-chip]").forEach((btn) => {
     btn.addEventListener("click", () => {

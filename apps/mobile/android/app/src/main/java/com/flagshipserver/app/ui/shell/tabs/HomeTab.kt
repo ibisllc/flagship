@@ -315,13 +315,17 @@ fun HomeTab() {
                 pods = orderedPods,
                 serverOrderIssuedAt = app.serverOrderIssuedAt.collectAsState().value,
                 serverOrderAcks = app.serverOrderAcks.collectAsState().value,
+                canAddServers = com.flagshipserver.app.ui.screens.showsAddServer(
+                    holdsAdminRoot = com.flagshipserver.app.core.GymSeams.forceAdminRoot ||
+                        com.flagshipserver.app.keystore.Keystore.hasAdminRoot(),
+                    isDemoAccount = isDemoAccount,
+                ),
                 onOpenPod = { pod ->
                     nav.navigate("server-detail/${pod.podId}")
                 },
-                // Slice A — "Add/connect a server" goes STRAIGHT to provisioning a new
-                // box (no chooser). Pairing an existing box is automatic
-                // (Slice B); taking over a transferred box is a link/QR
-                // ingestion (Slice C, via the deep link / "Process a link").
+                // "Create a new server" in the Add/Import menu provisions a new
+                // box. Pairing an existing box is automatic (Slice B); taking
+                // over a transferred box is a link/QR ingestion (Slice C).
                 onAddServer = { nav.navigate("create-server") },
                 onImportBackup = { showImportBackup = true },
                 onCoManage = { nav.navigate("share-accept") },

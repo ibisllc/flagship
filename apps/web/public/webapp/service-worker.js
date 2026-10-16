@@ -231,7 +231,10 @@
 //       data file); Import a backup restores onto a new server made from
 //       the backup's settings, which waits for the app to send it
 //       (lib/serverBackupFormat.js, vendor/noble-hashes/sha2.js).
-const SHELL_VERSION = "v107";
+//  v108: Home's empty state carries the same Add/Import a server button as
+//       the list (no separate co-manage button), and only an admin device
+//       of the account sees it.
+const SHELL_VERSION = "v108";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

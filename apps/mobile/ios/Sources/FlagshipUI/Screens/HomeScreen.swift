@@ -65,12 +65,15 @@ public struct HomeScreen: View {
     /// `.com` refused the server list and nothing is cached: say it's locked
     /// and offer to unlock, never "no servers yet".
     let serverListLocked: Bool
+    /// Only an admin device of the account sees "Add/Import a server", in the
+    /// list and on the empty state ([showsAddServer]).
+    let canAddServers: Bool
     var onOpenPod: (PodInfo) -> Void = { _ in }
     var onAddServer: () -> Void = {}
     /// "Import a backup" in the Add/Import chooser.
     var onImportBackup: () -> Void = {}
     /// "Co-manage a running server": accept a server another account shares
-    /// (docs/share-a-server.md), from the Add/Import chooser or the empty state.
+    /// (docs/share-a-server.md), from the Add/Import chooser.
     var onCoManage: () -> Void = {}
     @State private var showAddOrImport = false
     /// Move a server to the top of the owner's order (docs/server-order.md).
@@ -129,6 +132,7 @@ public struct HomeScreen: View {
         awaitingEntitlement: Set<String> = [],
         statusPaused: Bool = false,
         serverListLocked: Bool = false,
+        canAddServers: Bool = true,
         onOpenPod: @escaping (PodInfo) -> Void = { _ in },
         onCancelServer: @escaping (PodInfo) -> Void = { _ in },
         onDeleteServer: @escaping (PodInfo) -> Void = { _ in },
@@ -163,6 +167,7 @@ public struct HomeScreen: View {
         self.awaitingEntitlement = awaitingEntitlement
         self.statusPaused = statusPaused
         self.serverListLocked = serverListLocked
+        self.canAddServers = canAddServers
         self.onOpenPod = onOpenPod
         self.onAddServer = onAddServer
         self.onImportBackup = onImportBackup
@@ -180,6 +185,32 @@ public struct HomeScreen: View {
         self.onSignInAgain = onSignInAgain
         self.sharedServers = sharedServers
         self.onOpenShared = onOpenShared
+    }
+
+    /// Only an admin device of the account adds servers to it
+    /// (docs/service-access-gating.md "Account members"): the device that holds
+    /// the account's admin root. Every account is opened with one, so an
+    /// account never lacks an admin device. A demo account's device stands in
+    /// for its owner (it holds no keys; the operator runs the account).
+    public static func showsAddServer(holdsAdminRoot: Bool, isDemoAccount: Bool) -> Bool {
+        holdsAdminRoot || isDemoAccount
+    }
+
+    static let addServersAdminOnly = "Only an admin device of this account can add servers."
+
+    /// What the empty Home says, and whether it carries Add/Import a server.
+    struct EmptyState: Equatable {
+        let headline: String
+        let hint: String
+        let showsAddServer: Bool
+    }
+
+    static func emptyState(canAddServers: Bool) -> EmptyState {
+        canAddServers
+            ? EmptyState(headline: "Your account is ready",
+                         hint: "Add your first server to start running your own services.",
+                         showsAddServer: true)
+            : EmptyState(headline: "No servers yet", hint: addServersAdminOnly, showsAddServer: false)
     }
 
     /// The Home dashboard NEVER renders a "couldn't load" card. When there's
@@ -495,30 +526,29 @@ public struct HomeScreen: View {
             if serverListLocked {
                 lockedCard(c: c)
             } else if pods.isEmpty {
+                let empty = Self.emptyState(canAddServers: canAddServers)
                 FSCard {
                     VStack(alignment: .leading, spacing: FS.space.s3) {
                         HStack(alignment: .top, spacing: FS.space.s3) {
-                            Image(systemName: "checkmark.seal.fill")
+                            Image(systemName: empty.showsAddServer ? "checkmark.seal.fill" : "server.rack")
                                 .imageScale(.large)
-                                .foregroundColor(c.success)
+                                .foregroundColor(empty.showsAddServer ? c.success : c.textMuted)
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("Your account is ready")
+                                Text(empty.headline)
                                     .font(.system(size: 17, weight: .semibold))
                                     .foregroundColor(c.text)
-                                Text("Add your first server to start running your own services.")
+                                Text(empty.hint)
                                     .font(FS.font.bodySm())
                                     .foregroundColor(c.textMuted)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                         }
-                        FSPrimaryButton("Add your first server", block: true, action: onAddServer)
-                            .accessibilityIdentifier("home-add-first-server")
-                        FSSecondaryButton("Co-manage a running server", block: true, action: onCoManage)
-                            .accessibilityIdentifier("home-co-manage")
+                        // The same button and menu as a populated list.
+                        if empty.showsAddServer { addServerButton(c: c) }
                     }
                 }
                 // .contain keeps the id on the card: otherwise it overrides
-                // the children's own ids (home-add-first-server).
+                // the children's own ids (home-add-server).
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("home-empty-state")
             } else {
@@ -529,7 +559,7 @@ public struct HomeScreen: View {
                     Text("\(pods.count)")
                         .font(.system(size: 12, weight: .semibold)).foregroundColor(c.textMuted)
                 }
-                addServerButton(c: c)
+                if canAddServers { addServerButton(c: c) }
                 // Filter chips (All / Online / Pending / Offline) over the
                 // derived liveness — purely narrows what's rendered.
                 FSChipRow(
@@ -588,8 +618,8 @@ public struct HomeScreen: View {
         }
     }
 
-    /// "Add/Import a server", above the list. The empty state carries its
-    /// own primary CTA, so this shows once at least one server exists.
+    /// "Add/Import a server": the one way to bring a server in (Create /
+    /// Co-manage / Import), above the list or on the empty state.
     @ViewBuilder
     private func addServerButton(c: FSColors) -> some View {
         Button(action: { showAddOrImport = true }) {

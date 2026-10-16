@@ -95,9 +95,11 @@ fun HomeScreen(
     /** "Import a backup" in the Add/Import chooser. */
     onImportBackup: () -> Unit = {},
     /** "Co-manage a running server": accept a server another account
-     *  shares (docs/share-a-server.md), from the Add/Import chooser or the
-     *  empty state. */
+     *  shares (docs/share-a-server.md), from the Add/Import chooser. */
     onCoManage: () -> Unit = {},
+    /** Only an admin device of the account sees "Add/Import a server", in
+     *  the list and on the empty state ([showsAddServer]). */
+    canAddServers: Boolean = true,
     /** Move a server to the top of the order (docs/server-order.md). */
     onMakeLeader: (PodInfo) -> Unit,
     onRefresh: () -> Unit,
@@ -293,16 +295,10 @@ fun HomeScreen(
         if (listLocked) {
             LockedServerListCard(onShowServers = onShowServers)
         } else if (pods.isEmpty()) {
-            EmptyServerCard(onAddServer = onAddServer, onCoManage = onCoManage)
+            EmptyServerCard(canAddServers = canAddServers, onAddOrImport = { showAddOrImport = true })
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                // The empty state carries its own "Add your first server".
-                FSGhostButton(
-                    label = "Add/Import a server",
-                    onClick = { showAddOrImport = true },
-                    block = true,
-                    modifier = Modifier.testTag("home-add-server"),
-                )
+                if (canAddServers) AddOrImportServerButton(onClick = { showAddOrImport = true })
                 FSSearchField(
                     value = search,
                     onValueChange = { search = it },
@@ -490,33 +486,46 @@ private fun LockedServerListCard(onShowServers: () -> Unit) {
     }
 }
 
+/** Only an admin device of the account adds servers to it
+ *  (docs/service-access-gating.md "Account members"): the device that holds
+ *  the account's admin root. Every account is opened with one, so an account
+ *  never lacks an admin device. A demo account's device stands in for its
+ *  owner (it holds no keys; the operator runs the account). */
+fun showsAddServer(holdsAdminRoot: Boolean, isDemoAccount: Boolean): Boolean = holdsAdminRoot || isDemoAccount
+
+internal const val ADD_SERVERS_ADMIN_ONLY = "Only an admin device of this account can add servers."
+
+/** "Add/Import a server": the one way to bring a server in (Create /
+ *  Co-manage / Import), above the list or on the empty state. */
 @Composable
-private fun EmptyServerCard(onAddServer: () -> Unit, onCoManage: () -> Unit) {
-    FSCard(padding = PaddingValues(FS.space.s6)) {
+private fun AddOrImportServerButton(onClick: () -> Unit) {
+    FSGhostButton(
+        label = "Add/Import a server",
+        onClick = onClick,
+        block = true,
+        modifier = Modifier.testTag("home-add-server"),
+    )
+}
+
+@Composable
+private fun EmptyServerCard(canAddServers: Boolean, onAddOrImport: () -> Unit) {
+    FSCard(padding = PaddingValues(FS.space.s6), modifier = Modifier.testTag("home-empty-state")) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             Text(
-                "Your account is ready",
+                if (canAddServers) "Your account is ready" else "No servers yet",
                 color = FS.colors.text,
                 style = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
             )
             Text(
-                "Add your first server to start running your own services.",
+                if (canAddServers) "Add your first server to start running your own services." else ADD_SERVERS_ADMIN_ONLY,
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
             )
-            Spacer(Modifier.height(FS.space.s2))
-            FSPrimaryButton(
-                label = "Add your first server",
-                onClick = onAddServer,
-                block = true,
-                modifier = Modifier.testTag("home-add-server"),
-            )
-            FSGhostButton(
-                label = "Co-manage a running server",
-                onClick = onCoManage,
-                block = true,
-                modifier = Modifier.testTag("home-co-manage"),
-            )
+            if (canAddServers) {
+                Spacer(Modifier.height(FS.space.s2))
+                // The same button and menu as a populated list.
+                AddOrImportServerButton(onClick = onAddOrImport)
+            }
         }
     }
 }

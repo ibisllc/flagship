@@ -70,7 +70,7 @@ final class GymOctoberTests: XCTestCase {
     /// turn; Allow and Deny sign the edited list and say what happened, and
     /// once both are answered nothing covers Home any more.
     func test_appAccessAlertAllowThenDeny() throws {
-        let app = launch(tab: "home", ["-smoke-access-alert"])
+        let app = launch(tab: "home", ["-smoke-access-alert", "-smoke-admin-root"])
         let title = app.staticTexts["access-alert-title"]
         XCTAssertTrue(title.waitForExistence(timeout: 20), "A waiting request should open the access sheet.")
         XCTAssertTrue(title.label.hasPrefix("Plants wants to reach "), "Got: \(title.label)")
@@ -100,7 +100,7 @@ final class GymOctoberTests: XCTestCase {
     /// Without `-smoke-access-alert` the same waiting requests never cover the
     /// app (the gym's default), and "Not now" with it closes the sheet.
     func test_appAccessAlertNotNowCloses() throws {
-        let app = launch(tab: "home", ["-smoke-access-alert"])
+        let app = launch(tab: "home", ["-smoke-access-alert", "-smoke-admin-root"])
         let title = app.staticTexts["access-alert-title"]
         XCTAssertTrue(title.waitForExistence(timeout: 20))
         app.buttons["access-alert-not-now"].tap()

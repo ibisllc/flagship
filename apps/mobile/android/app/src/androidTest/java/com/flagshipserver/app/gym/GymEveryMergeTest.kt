@@ -12,6 +12,7 @@
 package com.flagshipserver.app.gym
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import org.junit.Test
@@ -98,7 +99,8 @@ class GymEveryMergeTest : GymBase() {
      *  a single-step form, so the name + encrypt control are on one screen). */
     @Test
     fun createServerFormReachable() {
-        launch(tab = "home")
+        // Only an admin device sees Add/Import a server: play one.
+        launch(tab = "home", adminRoot = true)
         composeRule.onNodeWithTag("home-add-server").assertIsDisplayed()
         gymShot("home-ready")
         addNewServer()
@@ -111,6 +113,20 @@ class GymEveryMergeTest : GymBase() {
         nameServerAndNext()
         waitUntilExists("cs-encrypt-disk-toggle")
         gymShot("create-server-form")
+    }
+
+    /** A device without the account's admin root is not an admin device:
+     *  Home lists the servers but offers no Add/Import a server (and so no
+     *  menu). Mirror of iOS test_nonAdminHomeHasNoAddServer. */
+    @Test
+    fun nonAdminHomeHasNoAddServer() {
+        launch(tab = "home")
+        composeRule.waitUntil(15_000) {
+            composeRule.onAllNodesWithText("Search servers").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithTag("home-add-server").assertDoesNotExist()
+        composeRule.onNodeWithTag("home-add-new-server").assertDoesNotExist()
+        gymShot("home-non-admin")
     }
 
     // ─── The global active-operations sliver ─────────────────────────────────

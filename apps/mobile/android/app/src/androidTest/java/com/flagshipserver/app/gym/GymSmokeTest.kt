@@ -20,7 +20,8 @@ class GymSmokeTest : GymBase() {
      *  shell drew + fixtures applied — the same handle iOS asserts. */
     @Test
     fun gymColdLaunchRendersHome() {
-        launch(tab = "home")
+        // Only an admin device sees Add/Import a server: play one.
+        launch(tab = "home", adminRoot = true)
         gymShot("cold-launch")
         composeRule.onNodeWithTag("home-add-server").assertIsDisplayed()
         gymShot("home-ready")

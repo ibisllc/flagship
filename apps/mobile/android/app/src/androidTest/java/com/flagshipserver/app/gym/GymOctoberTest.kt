@@ -314,7 +314,7 @@ class GymOctoberTest : GymBase() {
      *  answered nothing covers Home. */
     @Test
     fun appAccessAlertAllowThenDeny() {
-        launch(tab = "home", username = "bright-maple", accessAlert = true)
+        launch(tab = "home", username = "bright-maple", accessAlert = true, adminRoot = true)
         waitUntilExists("access-alert-title", timeoutMs = 20_000)
         val ask = "Plants wants to reach "
         val first = textOf("access-alert-title")
@@ -344,7 +344,7 @@ class GymOctoberTest : GymBase() {
     /** "Not now" closes the dialog and leaves the request on the box. */
     @Test
     fun appAccessAlertNotNowCloses() {
-        launch(tab = "home", username = "bright-maple", accessAlert = true)
+        launch(tab = "home", username = "bright-maple", accessAlert = true, adminRoot = true)
         waitUntilExists("access-alert-title", timeoutMs = 20_000)
         composeRule.onNodeWithTag("access-alert-not-now").performClick()
         composeRule.waitForIdle()

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildServer } from "../src/server.js";
 
-/** Opening someone else's share link lives in Home's Add/Import a server menu. */
+/** Opening someone else's share link lives only in Home's Add/Import a server menu. */
 describe("co-manage entry", () => {
   const get = async (url: string) => (await buildServer().inject({ method: "GET", url })).body;
 
@@ -16,10 +16,9 @@ describe("co-manage entry", () => {
     expect(home).toContain("promptShareLink");
   });
 
-  it("an account with no servers yet reaches it from the empty state", async () => {
+  it("the empty state has no co-manage button of its own (it opens the same menu)", async () => {
     const home = await get("/webapp/views/home.js");
-    expect(home).toMatch(/id="empty-co-manage">Co-manage a running server</);
-    expect(home).toContain('$("empty-co-manage")');
+    expect(home).not.toContain("empty-co-manage");
   });
 
   it("the create-server page no longer carries the co-manage button", async () => {

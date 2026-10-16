@@ -110,7 +110,8 @@ final class GymEveryMergeTests: XCTestCase {
     /// and assert the disk-encryption toggle. Renders against the mock client;
     /// no backend.
     func test_createServerFormReachable() throws {
-        let app = launch(tab: "home")
+        // Only an admin device sees Add/Import a server: play one.
+        let app = launch(tab: "home", extra: ["-smoke-admin-root"])
         let addServer = app.buttons["home-add-server"]
         XCTAssertTrue(addServer.waitForExistence(timeout: 15), "Home should show add-server.")
         gymShot(app, "home-ready")
@@ -136,6 +137,16 @@ final class GymEveryMergeTests: XCTestCase {
             "Create-server step 1 should show the disk-encryption toggle."
         )
         gymShot(app, "create-server-encrypt")
+    }
+
+    /// A device without the account's admin root is not an admin device: Home
+    /// lists the servers but offers no Add/Import a server (and so no menu).
+    func test_nonAdminHomeHasNoAddServer() throws {
+        let app = launch(tab: "home")
+        XCTAssertTrue(app.staticTexts["YOUR SERVERS"].waitForExistence(timeout: 15), "Home should list the seeded servers.")
+        XCTAssertFalse(app.buttons["home-add-server"].exists, "Only an admin device sees Add/Import a server.")
+        XCTAssertFalse(app.buttons["home-add-new-server"].exists)
+        gymShot(app, "home-non-admin")
     }
 
     // ─── The global active-operations sliver ─────────────────────────────────

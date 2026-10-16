@@ -138,7 +138,7 @@ final class GymFeatureMirrorTests: XCTestCase {
     /// (default OFF); closing Advanced RESETS an armed debug-friendly so a
     /// debug/secret choice can never stay silently armed.
     func test_createServerAdvancedTogglesResetRule() throws {
-        let app = launch(tab: "home")
+        let app = launch(tab: "home", extra: ["-smoke-admin-root"])
         let add = app.buttons["home-add-server"]
         XCTAssertTrue(add.waitForExistence(timeout: 20), "Home should offer add-server.")
         add.tap()

@@ -1099,7 +1099,7 @@ const TOTAL: readonly Scenario[] = [
   // ── Servers: order + Leader badge, update card, un-revoke / delete — gym-servers.spec.ts ──
   webTotal(
     "web-total-server-order-drag",
-    "Server order (docs/server-order.md): dragging a server by its handle reorders Home at once (badge gray mid-drag), signs a flagship/server-order/v1 with the IRK and posts it to .com; the new leader's badge stays gray ('Leader, waiting for the server to confirm') until the box answers the hand-delivered order. Add/connect a server sits above the list. Mirrors iOS home-add-server / sd-leader-pending, Android home-add-server / leader-badge / leader-badge-pending.",
+    "Server order (docs/server-order.md): dragging a server by its handle reorders Home at once (badge gray mid-drag), signs a flagship/server-order/v1 with the IRK and posts it to .com; the new leader's badge stays gray ('Leader, waiting for the server to confirm') until the box answers the hand-delivered order. The session holds no admin root, so it shows no Add/Import a server. Mirrors iOS sd-leader-pending, Android leader-badge / leader-badge-pending.",
     "gym servers home drag reorders and the leader badge stays gray until the leader confirms",
     {
       steps: [
@@ -1110,7 +1110,7 @@ const TOTAL: readonly Scenario[] = [
         { kind: "assert", describe: "Office box answers heldIssuedAt; badge turns green.", handle: "[data-order-leader]" },
       ],
       assertions: [
-        { describe: "Add/connect a server above the list", handle: "#home-add-server", expect: "text", text: "Add/connect a server" },
+        { describe: "No Add/Import a server on a non-admin device", handle: "#home-add-server", expect: "absent" },
         { describe: "List is reorderable", handle: "#servers-list [data-server-cards][data-reorderable]", expect: "present" },
         { describe: "Leader badge", handle: "#servers-list [data-order-leader]", expect: "text", text: "Leader" },
         { describe: "Gray until confirmed", handle: "#servers-list [data-order-leader-pending]", expect: "present" },
@@ -1121,6 +1121,26 @@ const TOTAL: readonly Scenario[] = [
         shot("order-leader-pending", "New leader waiting for the box to confirm."),
         shot("order-leader-confirmed", "The box confirmed the order."),
       ],
+      dimension: "D1",
+    },
+  ),
+  webTotal(
+    "web-total-home-add-import-admin",
+    "Home's Add/Import a server (docs/service-access-gating.md 'Account members'): on an admin device (it holds the admin root) it sits above the list and opens Create a new server / Co-manage a running server / Import a backup. Mirrors iOS and Android home-add-server / home-add-new-server / home-co-manage / home-import-backup.",
+    "gym servers home shows Add or Import a server above the list on an admin device only",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Home with two servers; seed the session's admin root." },
+        { kind: "assert", describe: "Add/Import a server above the list.", handle: "#home-add-server" },
+        { kind: "tap", describe: "Open the menu.", handle: "#home-add-server" },
+      ],
+      assertions: [
+        { describe: "Add/Import a server", handle: "#home-add-server", expect: "text", text: "Add/Import a server" },
+        { describe: "Create a new server", handle: "[data-choice-add]", expect: "present" },
+        { describe: "Co-manage a running server", handle: "[data-choice-co-manage]", expect: "present" },
+        { describe: "Import a backup", handle: "[data-choice-import]", expect: "present" },
+      ],
+      screenshots: [shot("home-add-import-menu", "The Add/Import a server menu.")],
       dimension: "D1",
     },
   ),

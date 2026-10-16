@@ -113,7 +113,7 @@ final class AppStoreScreenshotTests: XCTestCase {
     func test_captureShowcase() throws {
         let env = ProcessInfo.processInfo.environment
         let app = XCUIApplication()
-        app.launchArguments = ["-smoke-mode", "-smoke-tab", "home", "-smoke-recovery-enrolled",
+        app.launchArguments = ["-smoke-mode", "-smoke-tab", "home", "-smoke-recovery-enrolled", "-smoke-admin-root",
                                "-smoke-username", env["SHOT_HANDLE"] ?? "bright-maple"]
         app.launch()
 

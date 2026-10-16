@@ -156,7 +156,7 @@ final class GymTotalDetailTests: XCTestCase {
     /// policy (step 2) — asserting each step's control. Stops at the backup-policy
     /// step (the next action mints an order; Tier-1 never provisions).
     func test_createServerFullStepFlow() throws {
-        let app = launch(tab: "home")
+        let app = launch(tab: "home", extra: ["-smoke-admin-root"])
         let add = app.buttons["home-add-server"]
         XCTAssertTrue(add.waitForExistence(timeout: 20), "Home should offer add-server.")
         add.tap()
@@ -416,7 +416,7 @@ final class GymTotalDetailTests: XCTestCase {
     /// screen, trapping the shell (the launch-relock path). The Simulator has no
     /// enrolled biometric, so the lock screen STAYS up for the assertion.
     func test_lockScreenTrapsOnLaunch() throws {
-        let app = launch(tab: "home", extra: ["-smoke-locked"])
+        let app = launch(tab: "home", extra: ["-smoke-locked", "-smoke-admin-root"])
         let locked = app.otherElements["biometric-lock-screen"].waitForExistence(timeout: 20)
             || app.staticTexts["Flagship is locked"].waitForExistence(timeout: 5)
             || app.buttons["lock-sign-out-btn"].waitForExistence(timeout: 5)

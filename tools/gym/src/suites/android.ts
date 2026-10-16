@@ -28,8 +28,8 @@ const EVERY_MERGE: readonly Scenario[] = [
     `${PKG}.GymSmokeTest`,
     {
       steps: [
-        { kind: "launch", describe: "Launch with flagship.smokeMode + smokeTab=home (DemoFixtures seeded)." },
-        { kind: "assert", describe: "Home add-server affordance (present only with pods).", handle: "home-add-server" },
+        { kind: "launch", describe: "Launch with flagship.smokeMode + smokeTab=home + smokeAdminRoot (DemoFixtures seeded; an admin device)." },
+        { kind: "assert", describe: "Home's Add/Import a server (admin devices only).", handle: "home-add-server" },
       ],
       assertions: [{ describe: "Seeded Home shell present", handle: "home-add-server", expect: "present" }],
       screenshots: [shot("cold-launch", "After launch."), shot("home-ready", "Home with seeded pods.")],
@@ -128,7 +128,7 @@ const EVERY_MERGE: readonly Scenario[] = [
     `${PKG}.GymEveryMergeTest#createServerFormReachable`,
     {
       steps: [
-        { kind: "launch", describe: "Launch smokeTab=home." },
+        { kind: "launch", describe: "Launch smokeTab=home + smokeAdminRoot (an admin device)." },
         { kind: "tap", describe: "Add/Import a server.", handle: "home-add-server" },
         { kind: "tap", describe: "Create a new server.", handle: "home-add-new-server" },
         { kind: "assert", describe: "Name field.", handle: "cs-name-field" },
@@ -142,6 +142,23 @@ const EVERY_MERGE: readonly Scenario[] = [
         shot("home-ready", "Home."),
         shot("create-server-form", "The create-server form."),
       ],
+      dimension: "D1",
+    },
+  ),
+  android(
+    "android-home-non-admin",
+    "A device without the account's admin root (not an admin device): Home lists the servers with no Add/Import a server and so no menu (docs/service-access-gating.md 'Account members').",
+    `${PKG}.GymEveryMergeTest#nonAdminHomeHasNoAddServer`,
+    {
+      steps: [
+        { kind: "launch", describe: "Launch smokeTab=home without smokeAdminRoot." },
+        { kind: "assert", describe: "The server list drew.", handle: "Search servers" },
+      ],
+      assertions: [
+        { describe: "No Add/Import a server", handle: "home-add-server", expect: "absent" },
+        { describe: "No menu", handle: "home-add-new-server", expect: "absent" },
+      ],
+      screenshots: [shot("home-non-admin", "Home on a non-admin device.")],
       dimension: "D1",
     },
   ),

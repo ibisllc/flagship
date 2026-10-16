@@ -29,7 +29,7 @@ import org.robolectric.annotation.Config
 class HomeScreenComposeTest {
     @get:Rule val composeRule = createComposeRule()
 
-    @Test fun emptyPods_showsAddYourFirstServerPrompt() {
+    @Test fun emptyPods_showsTheAddImportPrompt() {
         composeRule.setContent {
             FlagshipTheme {
                 HomeScreen(
@@ -45,7 +45,7 @@ class HomeScreenComposeTest {
                 )
             }
         }
-        composeRule.onNodeWithText("Add your first server").assertIsDisplayed()
+        composeRule.onNodeWithText("Add/Import a server").assertIsDisplayed()
         composeRule.onNodeWithText("Harry's cloud > Pixel").assertIsDisplayed()
         composeRule.onNodeWithText("Build a service").assertDoesNotExist()
         composeRule.onNodeWithText("YOUR SERVERS").assertDoesNotExist()
@@ -127,7 +127,7 @@ class HomeScreenComposeTest {
             }
         }
         composeRule.onNodeWithText("Your server list is locked").assertIsDisplayed()
-        composeRule.onNodeWithText("Add your first server").assertDoesNotExist()
+        composeRule.onNodeWithText("Add/Import a server").assertDoesNotExist()
         composeRule.onNodeWithText("Show my servers").performClick()
         org.junit.Assert.assertEquals(1, asked)
     }
