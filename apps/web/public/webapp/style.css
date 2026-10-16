@@ -973,6 +973,7 @@ select {
 .toast.err .icon { color: var(--err); }
 
 .hidden { display: none !important; }
+.fs-row.hidden { display: none !important; }
 
 /* ── First-run grid in #view-home ───────────────────────────────── */
 #view-home > .card,
