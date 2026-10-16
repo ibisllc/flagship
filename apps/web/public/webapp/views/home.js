@@ -45,7 +45,7 @@ import { fetchLeads, invertLeadsMap } from "../lib/directLeads.js";
 import { fetchDecryptedDirectory } from "../lib/accountDirectory.js";
 import { accountReadFetch, clearAccountReadTokens, onAccountReadPausedChange } from "../lib/accountRead.js";
 import { isCompanionProfile } from "../lib/companionGuard.js";
-import { ADD_SERVERS_ADMIN_ONLY, canAddServers } from "../lib/addServerGate.js";
+import { ADD_SERVERS_ADMIN_ONLY, canAddServers, canSignAdminOrders } from "../lib/addServerGate.js";
 import {
   currentServerOrder,
   isLeaderConfirmed,
@@ -945,7 +945,7 @@ function isOrderable(r) {
  * leader holds the order on screen (`orderIssuedAt`; see isLeaderConfirmed,
  * orderAckOf).
  */
-export function registeredEntries(ranked, { orderIssuedAt = 0, dragging = false } = {}) {
+export function registeredEntries(ranked, { orderIssuedAt = 0, dragging = false, canReorder = true } = {}) {
   const { leaderIndex, standingInFor } = leadershipOf(ranked, (r) => r.bucket === "online");
   const confirmed = isLeaderConfirmed({
     dragging,
@@ -953,7 +953,7 @@ export function registeredEntries(ranked, { orderIssuedAt = 0, dragging = false 
     leaderOrderIssuedAt: orderAckOf(ranked[leaderIndex]?.pod),
   });
   const orderable = ranked.filter(isOrderable);
-  const reorderable = orderable.length > 1;
+  const reorderable = canReorder && orderable.length > 1;
   return ranked.map((r, i) => {
     const slot = orderable.indexOf(r);
     const order = {
@@ -992,7 +992,12 @@ function shownOrderIssuedAt() {
 }
 
 function shownEntries() {
-  return registeredEntries(shownRegistered(), { orderIssuedAt: shownOrderIssuedAt(), dragging: orderDraft !== null });
+  // Only a device that can sign the order may change it (SERVER_ORDER_ADMIN_ONLY).
+  return registeredEntries(shownRegistered(), {
+    orderIssuedAt: shownOrderIssuedAt(),
+    dragging: orderDraft !== null,
+    canReorder: canSignAdminOrders(),
+  });
 }
 
 // One order state for Home and server detail: when it changes anywhere (Make

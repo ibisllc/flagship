@@ -216,6 +216,24 @@ describe("the leader follows the order", () => {
     expect(html.indexOf("js-order-handle")).toBeLessThan(html.indexOf("fs-listrow-body"));
   });
 
+  it("a device that can't sign the order sees it without the controls to change it", async () => {
+    const { registeredEntries } = await load("views/home.js");
+    const { SERVER_ORDER_ADMIN_ONLY } = await load("lib/serverOrder.js");
+    const rows = [
+      { server: { serverId: HOME3 }, pod: pod(HOME3, A, 1), bucket: "online" },
+      { server: { serverId: LETICIA }, pod: pod(LETICIA, B, 2), bucket: "online" },
+    ];
+    const entries = registeredEntries(rows, { canReorder: false });
+    for (const e of entries as Array<{ html: string; orderStk: string }>) {
+      expect(e.html).not.toContain("js-order-handle");
+      expect(e.html).not.toContain("js-order-up");
+      expect(e.orderStk).toBe("");
+    }
+    // The leader still wears its badge.
+    expect(entries[0].html).toContain("data-order-leader");
+    expect(SERVER_ORDER_ADMIN_ONLY).toBe("Only an admin device can change the server order.");
+  });
+
   it("skips pending and revoked servers when saying who the leader stands in for", async () => {
     const { registeredEntries } = await load("views/home.js");
     const rows = [

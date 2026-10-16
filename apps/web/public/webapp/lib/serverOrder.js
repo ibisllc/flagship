@@ -318,6 +318,11 @@ export class ServerOrderError extends Error {
   }
 }
 
+/** The server order is a sensitive order (admin root, docs/server-order.md):
+ *  `.com` refuses it from a device that doesn't hold the admin root, so such a
+ *  device sees the order without the controls to change it. */
+export const SERVER_ORDER_ADMIN_ONLY = "Only an admin device can change the server order.";
+
 /** The toast for a failed save: a newer order saved on another device says
  *  so in its own words; anything else gets the caller's usual copy. */
 export function serverOrderFailureText(e, fallback) {

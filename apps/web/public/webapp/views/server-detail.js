@@ -54,6 +54,7 @@ import {
   orderAckOf,
   rankPods,
   serverOrderFailureText,
+  SERVER_ORDER_ADMIN_ONLY,
   serverOrderOf,
 } from "../lib/serverOrder.js";
 import { podShortName } from "../lib/podSwitcher.js";
@@ -129,6 +130,7 @@ import {
 } from "../lib/serverMonitoring.js";
 import { serverSharingHtml, wireServerSharing } from "./server-sharing.js";
 import { accountReadFetch } from "../lib/accountRead.js";
+import { canSignAdminOrders } from "../lib/addServerGate.js";
 
 registerView("view-server-detail");
 
@@ -522,6 +524,7 @@ export async function renderServerDetail() {
         </div>
         <p class="note small hidden" id="leader-confirm-note">${escapeHtml(LEADER_WAITING_NOTE)}</p>
         <button id="make-leader-btn" class="full-width mt-2">Make leader</button>
+        ${canSignAdminOrders() ? "" : `<p class="note small mt-1" data-leader-admin-only>${escapeHtml(SERVER_ORDER_ADMIN_ONLY)}</p>`}
       </div>
       ${serverSharingHtml(body)}
 
@@ -725,7 +728,7 @@ function wireMakeLeader(body) {
     if (st.waiting) pill.setAttribute("title", "Leader, waiting for the server to confirm");
     else pill.removeAttribute("title");
     note?.classList.toggle("hidden", !st.waiting);
-    btn.disabled = !st.canLead;
+    btn.disabled = !st.canLead || !canSignAdminOrders();
   };
   void paint();
   // A box's ack, or the order changing anywhere, repaints the card while it's on screen.
