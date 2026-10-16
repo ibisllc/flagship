@@ -96,7 +96,7 @@ final class GymOctoberTests: XCTestCase {
         XCTAssertTrue(bad.waitForExistence(timeout: 10), "A name the box can't take is refused on the phone.")
 
         name.tap()
-        name.buttons["Clear text"].firstMatch.tap()
+        name.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: "plant-token".count + 2))
         name.typeText("PLANT_TOKEN")
         app.buttons["service-env-save-btn"].tap()
         let token = app.staticTexts["service-env-row-PLANT_TOKEN"]
