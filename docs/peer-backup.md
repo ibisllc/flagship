@@ -101,12 +101,14 @@ For each generation (one archive):
    effects: no Flagship header, frame length or zero padding shows, and two
    holders never hold equal bytes.
 4. For each brick the owner computes a Merkle root over its 1 KiB leaves
-   (`SHA-256(0x00‖leaf)` / `SHA-256(0x01‖l‖r)`). The **index** lists the
-   roots in order (segment, shard). The index is itself cut into segments and
-   coded like the payload, as segments `S..S+T−1`. The root on `.com` keeps
-   the Merkle roots of the index bricks. So a restore can check every brick
-   it fetches, and a live owner can challenge any brick with 32 bytes of
-   state per brick.
+   (`SHA-256(0x00‖leaf)` / `SHA-256(0x01‖l‖r)`) and keeps it locally, 32
+   bytes per brick, so it can challenge any brick (§6.1). The **index**
+   lists the SHA-256 of every data shard's plaintext, in order (segment,
+   shard). It is cut into segments and coded like the payload, as segments
+   `S..S+T−1`, and the root on `.com` keeps the hashes of the index shards.
+   A restore decrypts each brick it fetches and checks the shard against its
+   hash. Shard hashes don't depend on the placement revision, so a repair
+   never rewrites the index.
 
 A generation uses one **stripe** of `n` holders, or several stripes when one
 holder can't take `1/n` of the bricks (segment `s` uses stripe `s mod
