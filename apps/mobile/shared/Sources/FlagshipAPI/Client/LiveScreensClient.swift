@@ -17,18 +17,21 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     }
 
     /// LAN-direct (docs/lan-direct.md): use the box's local listener when a
-    /// probe has proven the box is on this network; otherwise, or if that
-    /// attempt fails before the request could reach the box, the relay.
+    /// probe has proven the box is on this network, else the relay. Any
+    /// failure on the LAN route stops LAN use on this network; the request
+    /// goes again over the relay unless it may already have changed something.
     private func sendPreferringLan(_ req: URLRequest, host: String?) async throws -> (Data, URLResponse) {
         #if canImport(Network)
-        if let host, let lan = await LanDirectRegistry.shared.session(for: host) {
+        if let host, let lan = LanDirectRegistry.shared.session(for: host) {
             do {
                 return try await lan.data(for: req)
-            } catch where LanDirectRegistry.failedBeforeDelivery(error) {
-                LanDirectRegistry.shared.markFailed(host: host)
+            } catch {
+                if Task.isCancelled { throw error }
                 // A pin mismatch here means some other device holds that LAN
                 // address — not an interception of the relay path.
-                _ = CertPinMismatchSink.shared.consumeRecentMismatch(host: host)
+                let otherDevice = CertPinMismatchSink.shared.consumeRecentMismatch(host: host)
+                LanDirectRegistry.shared.markFailed(host: host, why: otherDevice ? "another device answered" : "\((error as NSError).domain) \((error as NSError).code)")
+                guard otherDevice || LanDirectRegistry.mayResendOverRelay(error, method: req.httpMethod) else { throw error }
             }
         }
         #endif
