@@ -29,6 +29,7 @@
 //   flagship/servers-self-delete/v1|<username-lowercased>|<issuedAt>
 
 import { controlApex } from "./apex.js";
+import { throwIfRateLimited } from "./rateLimited.js";
 
 /** Canonical-bytes tags — MUST match @flagship/protocol
  *  TAG_ACCOUNT_SELF_DELETE / TAG_SERVERS_SELF_DELETE. */
@@ -148,8 +149,11 @@ export async function submitAccountSelfDelete(args, deps = {}) {
       body: JSON.stringify(body),
     });
   } catch (e) {
+    // The global .com guard turns a 429 into its sentence: keep it.
+    if (e?.rateLimited) throw e;
     throw makeError(`network: ${e?.message ?? e}`, "network");
   }
+  await throwIfRateLimited(resp);
   if (resp.status === 200) {
     return { ok: true, body: await resp.json().catch(() => ({})) };
   }

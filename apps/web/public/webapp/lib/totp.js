@@ -23,6 +23,7 @@
 
 import { signWithIrk as defaultSignWithIrk } from "../keystore.js";
 import { controlApex } from "./apex.js";
+import { throwIfRateLimited } from "./rateLimited.js";
 
 const COM_BASE = controlApex();
 
@@ -97,6 +98,7 @@ async function signedPost(path, { username, umk, code }, deps) {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(reqBody),
   });
+  await throwIfRateLimited(r);
   const text = await r.text();
   let body = null;
   try {
