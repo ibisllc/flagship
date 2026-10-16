@@ -280,6 +280,11 @@ describe("RealPostgresAdmin", () => {
       `REVOKE CONNECT, TEMPORARY ON DATABASE "postgres" FROM PUBLIC`,
       `REVOKE CONNECT, TEMPORARY ON DATABASE "template1" FROM PUBLIC`,
       `CREATE ROLE "${name}" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD 'it''s'`,
+      // Its connection, timeout and temp-file limits (appQuota/pgQuota.ts).
+      `ALTER ROLE "${name}" CONNECTION LIMIT 20`,
+      `ALTER ROLE "${name}" SET statement_timeout = '30s'`,
+      `ALTER ROLE "${name}" SET idle_in_transaction_session_timeout = '60s'`,
+      `ALTER ROLE "${name}" SET temp_file_limit = '1GB'`,
       `CREATE DATABASE "${name}" OWNER "${name}"`,
       `REVOKE ALL ON DATABASE "${name}" FROM PUBLIC`,
       `GRANT CONNECT, TEMPORARY ON DATABASE "${name}" TO "${name}"`,

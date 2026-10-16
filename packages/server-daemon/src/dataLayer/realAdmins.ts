@@ -3,6 +3,7 @@ import type { FilesAdmin, PostgresAdmin } from "./admin.js";
 import type { CommandRunner } from "../serviceRunner.js";
 import { isFilesVolume } from "./naming.js";
 import type { LoopVolumes } from "../appQuota/loopVolumes.js";
+import { roleLimitStatements } from "../appQuota/pgQuota.js";
 
 /**
  * Real admin implementations: the box's Postgres (brought up by
@@ -61,6 +62,8 @@ export class RealPostgresAdmin implements PostgresAdmin {
       await c.query(`REVOKE CONNECT, TEMPORARY ON DATABASE "postgres" FROM PUBLIC`);
       await c.query(`REVOKE CONNECT, TEMPORARY ON DATABASE "template1" FROM PUBLIC`);
       await c.query(`CREATE ROLE "${args.role}" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD ${pwLiteral}`);
+      // Connections, timeouts and temp files (appQuota/pgQuota.ts APP_ROLE_LIMITS).
+      for (const sql of roleLimitStatements(args.role)) await c.query(sql);
       await c.query(`CREATE DATABASE "${args.db}" OWNER "${args.role}"`);
       await c.query(`REVOKE ALL ON DATABASE "${args.db}" FROM PUBLIC`);
       await c.query(`GRANT CONNECT, TEMPORARY ON DATABASE "${args.db}" TO "${args.role}"`);

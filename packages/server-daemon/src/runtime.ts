@@ -1815,6 +1815,9 @@ export async function runAppSql(a: { pgUrl: string; sql: string }): Promise<void
   const c = new Client({ connectionString: url.toString(), connectionTimeoutMillis: 5000 });
   await c.connect();
   try {
+    // The role's 30 s statement timeout (appQuota/pgQuota.ts) is for the app, not its migrations.
+    await c.query("SET statement_timeout = 0");
+    await c.query("SET idle_in_transaction_session_timeout = 0");
     await c.query("BEGIN");
     try {
       await c.query(a.sql);

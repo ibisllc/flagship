@@ -129,6 +129,8 @@ const VACUUM_EVERY_MS = 10 * 60_000;
 export class AppQuotaManager {
   private state: PersistedState = { brake: "off", pg: {}, full: [] };
   private readonly views = new Map<string, AppStorageView>();
+  /** Roles given their limits (APP_ROLE_LIMITS) by this process: older ones get them at boot. */
+  private readonly limitedRoles = new Set<string>();
   private disk: DiskUse | null = null;
   private capped = false;
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -262,6 +264,7 @@ export class AppQuotaManager {
     const apps = this.opts.apps();
     const pg = this.opts.pg();
     const sizes = pg ? await this.pgSizes(pg, apps) : new Map<string, number>();
+    if (pg) await this.limitRoles(pg, apps.flatMap((a) => a.postgres.map((p) => p.role)));
     const seen = new Set<string>();
     for (const app of apps) {
       seen.add(app.serviceId);
@@ -317,6 +320,18 @@ export class AppQuotaManager {
       await writeFileDurable(this.opts.statePath, after).catch((e: Error) =>
         this.log(`[app-quota] couldn't save its state: ${e.message}`),
       );
+    }
+  }
+
+  private async limitRoles(pg: PgQuotaAdmin, roles: readonly string[]): Promise<void> {
+    for (const role of roles) {
+      if (this.limitedRoles.has(role)) continue;
+      try {
+        await pg.applyRoleLimits(role);
+        this.limitedRoles.add(role);
+      } catch (e) {
+        this.log(`[app-quota] couldn't set ${role}'s limits: ${(e as Error).message}`);
+      }
     }
   }
 
@@ -451,6 +466,7 @@ export class AppQuotaManager {
     }
     if (!pg || !this.opts.devDatabases) return;
     const dev = await this.opts.devDatabases();
+    await this.limitRoles(pg, dev);
     const sizes = await pg.sizes(dev);
     const live = new Set<string>();
     for (const db of dev) {

@@ -11,7 +11,8 @@
 import { randomBytes } from "node:crypto";
 import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { AppQuotaManager, RealPgQuota, emptyRevocation } from "../src/appQuota/index.js";
+import { APP_ROLE_LIMITS, AppQuotaManager, RealPgQuota, emptyRevocation } from "../src/appQuota/index.js";
+import { runAppSql } from "../src/runtime.js";
 import { RealPostgresAdmin } from "../src/dataLayer/realAdmins.js";
 
 const ADMIN_URL = process.env.FLAGSHIP_TEST_PG_URL;
@@ -135,6 +136,72 @@ describe.skipIf(!ADMIN_URL)("database size limits on a real Postgres", () => {
     await quota.unblock(name, name, emptyRevocation());
     const ext = await asApp(appUrl(), (c) => c.query("SELECT count(*)::int AS n FROM pg_extension WHERE extname = 'pg_freespacemap'"));
     expect(ext.rows[0].n).toBe(0);
+  });
+
+  it("a new app role has its connection, timeout and temp-file limits, and can't raise temp_file_limit", async () => {
+    const roleRow = await asApp(ADMIN_URL!, (c) => c.query<{ rolconnlimit: number }>("SELECT rolconnlimit FROM pg_roles WHERE rolname = $1", [name]));
+    expect(roleRow.rows[0]?.rolconnlimit).toBe(APP_ROLE_LIMITS.connectionLimit);
+    await asApp(appUrl(), async (c) => {
+      expect((await c.query("SHOW statement_timeout")).rows[0].statement_timeout).toBe(APP_ROLE_LIMITS.statementTimeout);
+      expect((await c.query("SHOW idle_in_transaction_session_timeout")).rows[0].idle_in_transaction_session_timeout).toBe("1min");
+      expect((await c.query("SHOW temp_file_limit")).rows[0].temp_file_limit).toBe("1GB");
+      await expect(c.query("SET temp_file_limit = '100GB'")).rejects.toThrow(/permission denied/);
+    });
+  });
+
+  it("an older role gets the limits at boot", async () => {
+    const old = `app_${randomBytes(12).toString("hex")}`;
+    await asApp(ADMIN_URL!, (c) => c.query(`CREATE ROLE "${old}" LOGIN PASSWORD 'x'`));
+    try {
+      const m = new AppQuotaManager({
+        apps: () => [{ serviceId: "alice-old", postgres: [{ database: old, role: old }] }],
+        budgets: () => null,
+        files: null,
+        pg: () => quota,
+        hostDisk: async () => null,
+        statePath: null,
+        log: () => {},
+      });
+      await m.kick();
+      const r = await asApp(ADMIN_URL!, (c) =>
+        c.query<{ rolconnlimit: number; cfg: string[] }>(
+          `SELECT r.rolconnlimit, s.setconfig AS cfg FROM pg_roles r LEFT JOIN pg_db_role_setting s ON s.setrole = r.oid AND s.setdatabase = 0 WHERE r.rolname = $1`,
+          [old],
+        ),
+      );
+      expect(r.rows[0]?.rolconnlimit).toBe(20);
+      expect(r.rows[0]?.cfg).toEqual(expect.arrayContaining(["statement_timeout=30s", "temp_file_limit=1GB"]));
+    } finally {
+      await asApp(ADMIN_URL!, (c) => c.query(`DROP ROLE "${old}"`));
+    }
+  });
+
+  it("a migration's own connection lifts the role's statement timeout", async () => {
+    await runAppSql({
+      pgUrl: appUrl(),
+      sql: "DO $$ BEGIN IF current_setting('statement_timeout') <> '0' THEN RAISE 'statement_timeout is %', current_setting('statement_timeout'); END IF; END $$",
+    });
+  });
+
+  it("counts large objects in the size and blocks writing them while blocked", async () => {
+    const before = (await quota.sizes([name])).get(name)!;
+    await asApp(appUrl(), (c) => c.query("SELECT lo_from_bytea(0, string_agg(decode(md5(i::text), 'hex'), ''::bytea)) AS oid FROM generate_series(1, 131072) AS i"));
+    const after = (await quota.sizes([name])).get(name)!;
+    expect(after - before).toBeGreaterThan(1024 * 1024);
+    const revoked = await quota.block(name, name, emptyRevocation());
+    expect(revoked.largeObjects).toEqual(["PUBLIC"]);
+    await asApp(appUrl(), async (c) => {
+      await expect(c.query("SELECT lo_from_bytea(0, '\\x00')")).rejects.toThrow(/permission denied/);
+      await expect(c.query("SELECT lo_create(0)")).rejects.toThrow(/permission denied/);
+      // Freeing room still works.
+      const oids = await c.query<{ oid: number }>("SELECT oid FROM pg_largeobject_metadata");
+      for (const o of oids.rows) await c.query("SELECT lo_unlink($1)", [o.oid]);
+    });
+    await quota.unblock(name, name, revoked);
+    await asApp(appUrl(), async (c) => {
+      const o = await c.query<{ oid: number }>("SELECT lo_from_bytea(0, '\\x00') AS oid");
+      await c.query("SELECT lo_unlink($1)", [o.rows[0]!.oid]);
+    });
   });
 
   it("the manager blocks at the budget and gives writes back once it's raised", async () => {

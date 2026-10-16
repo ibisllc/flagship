@@ -26,6 +26,8 @@ export interface PgRevocation {
   schemas: Array<{ name: string; from: string[] }>;
   databaseCreate: boolean;
   temporary: boolean;
+  /** Large-object writes (`LO_WRITE_FUNCTIONS`), and from whom: they bypass table privileges. */
+  largeObjects?: string[];
 }
 
 export function emptyRevocation(): PgRevocation {
@@ -45,7 +47,49 @@ export interface PgQuotaAdmin {
   setLogin(role: string, canLogin: boolean): Promise<void>;
   /** A plain VACUUM, so deleted rows' room shows in the free space map. */
   vacuum(db: string): Promise<void>;
+  /** The per-role limits every app role has (`APP_ROLE_LIMITS`); set again at boot on older roles. */
+  applyRoleLimits(role: string): Promise<void>;
 }
+
+/**
+ * What one app may take of the shared Postgres (docs/app-runtimes.md §5.3):
+ * connections, how long one statement or an idle transaction may run, and
+ * temp files (temp_file_limit is superuser-set, so the app can't raise it;
+ * the timeouts are defaults it may change for itself). The box's own
+ * connections as the role (migrations) lift the timeouts.
+ */
+export const APP_ROLE_LIMITS = {
+  connectionLimit: 20,
+  statementTimeout: "30s",
+  idleInTransactionSessionTimeout: "60s",
+  tempFileLimit: "1GB",
+} as const;
+
+/** The statements that give `role` its limits (role creation, and at boot). */
+export function roleLimitStatements(role: string): string[] {
+  const r = ident(role);
+  const l = APP_ROLE_LIMITS;
+  return [
+    `ALTER ROLE ${r} CONNECTION LIMIT ${l.connectionLimit}`,
+    `ALTER ROLE ${r} SET statement_timeout = '${l.statementTimeout}'`,
+    `ALTER ROLE ${r} SET idle_in_transaction_session_timeout = '${l.idleInTransactionSessionTimeout}'`,
+    `ALTER ROLE ${r} SET temp_file_limit = '${l.tempFileLimit}'`,
+  ];
+}
+
+/**
+ * Large objects live in the database's own pg_largeobject, so its size
+ * counts them, but writing one needs only EXECUTE on these functions (PUBLIC
+ * has it), not a table privilege: while a database is blocked they're
+ * revoked in it too. Truncating and unlinking stay allowed.
+ */
+export const LO_WRITE_FUNCTIONS = [
+  "lo_creat(integer)",
+  "lo_create(oid)",
+  "lo_from_bytea(oid, bytea)",
+  "lowrite(integer, bytea)",
+  "lo_put(oid, bigint, bytea)",
+] as const;
 
 const SAFE_IDENT = /^[a-z_][a-z0-9_]{0,62}$/;
 function ident(id: string): string {
@@ -116,6 +160,7 @@ export class RealPgQuota implements PgQuotaAdmin {
       schemas: prev.schemas.map((s) => ({ name: s.name, from: [...s.from] })),
       databaseCreate: prev.databaseCreate,
       temporary: prev.temporary,
+      ...(prev.largeObjects ? { largeObjects: [...prev.largeObjects] } : {}),
     };
     await this.withDb(db, async (c) => {
       const rels = await c.query<{ oid: number; name: string; ins: boolean; upd: boolean }>(
@@ -188,6 +233,25 @@ export class RealPgQuota implements PgQuotaAdmin {
         await c.query(`REVOKE TEMPORARY ON DATABASE ${ident(db)} FROM ${r}`);
         out.temporary = true;
       }
+      const lo = await c.query<{ ok: boolean }>(
+        `SELECT bool_or(has_function_privilege($1, f::regprocedure, 'EXECUTE')) AS ok FROM unnest($2::text[]) AS f`,
+        [role, LO_WRITE_FUNCTIONS],
+      );
+      if (lo.rows[0]?.ok) {
+        const from = new Set(out.largeObjects ?? []);
+        const fns = LO_WRITE_FUNCTIONS.join(", ");
+        await c.query(`REVOKE EXECUTE ON FUNCTION ${fns} FROM PUBLIC`);
+        from.add("PUBLIC");
+        const still = await c.query<{ ok: boolean }>(
+          `SELECT bool_or(has_function_privilege($1, f::regprocedure, 'EXECUTE')) AS ok FROM unnest($2::text[]) AS f`,
+          [role, LO_WRITE_FUNCTIONS],
+        );
+        if (still.rows[0]?.ok) {
+          await c.query(`REVOKE EXECUTE ON FUNCTION ${fns} FROM ${r}`);
+          from.add(role);
+        }
+        out.largeObjects = [...from];
+      }
     });
     return out;
   }
@@ -214,6 +278,9 @@ export class RealPgQuota implements PgQuotaAdmin {
       }
       if (revoked.databaseCreate) await c.query(`GRANT CREATE ON DATABASE ${ident(db)} TO ${r}`);
       if (revoked.temporary) await c.query(`GRANT TEMPORARY ON DATABASE ${ident(db)} TO ${r}`);
+      for (const who of revoked.largeObjects ?? []) {
+        await c.query(`GRANT EXECUTE ON FUNCTION ${LO_WRITE_FUNCTIONS.join(", ")} TO ${who === "PUBLIC" ? "PUBLIC" : ident(who)}`);
+      }
       await c.query(`DROP EXTENSION IF EXISTS pg_freespacemap`);
       await c.query(`DROP SCHEMA IF EXISTS ${QUOTA_SCHEMA}`);
     });
@@ -230,6 +297,12 @@ export class RealPgQuota implements PgQuotaAdmin {
   async vacuum(db: string): Promise<void> {
     await this.withDb(db, async (c) => {
       await c.query("VACUUM");
+    });
+  }
+
+  async applyRoleLimits(role: string): Promise<void> {
+    await this.withDb(null, async (c) => {
+      for (const sql of roleLimitStatements(role)) await c.query(sql);
     });
   }
 }
@@ -268,5 +341,9 @@ export class FakePgQuota implements PgQuotaAdmin {
   }
   async vacuum(): Promise<void> {
     this.vacuums++;
+  }
+  readonly limited = new Set<string>();
+  async applyRoleLimits(role: string): Promise<void> {
+    this.limited.add(role);
   }
 }

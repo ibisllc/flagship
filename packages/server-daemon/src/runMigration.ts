@@ -31,6 +31,9 @@ import type { InstalledService } from "./servicePlatform.js";
 
 const execFileP = promisify(execFile);
 
+/** Lift the app role's session timeouts for a migration's own connection. */
+export const MIGRATION_PGOPTIONS = "-c statement_timeout=0 -c idle_in_transaction_session_timeout=0";
+
 export interface RunMigrationDeps {
   /**
    * Look up the installed app by serviceId so we can pick up its data
@@ -102,6 +105,9 @@ export function buildRunMigration(deps: RunMigrationDeps): (args: {
         {
           timeout: timeoutMs,
           maxBuffer: 32 * 1024 * 1024,
+          // The app role's 30 s statement timeout (appQuota/pgQuota.ts) is
+          // for the app; a migration is bounded by `timeoutMs` instead.
+          env: { ...process.env, PGOPTIONS: MIGRATION_PGOPTIONS },
         },
       );
       // psql may emit NOTICE/WARNING on stderr without nonzero exit; we

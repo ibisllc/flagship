@@ -247,6 +247,14 @@ describe("AppQuotaManager", () => {
     expect(t.m.appView("alice-notes")?.postgres?.limitBytes).toBe(85 * MiB);
   });
 
+  it("gives every app and staging role its connection and timeout limits once per boot", async () => {
+    const t = setup();
+    t.devDbs.push("__dev_bbbb");
+    await t.m.kick();
+    await t.m.kick();
+    expect([...t.pg.limited].sort()).toEqual(["__dev_bbbb", "app_aaaa"]);
+  });
+
   it("reports what it measured for the backup cap", async () => {
     const t = setup();
     t.files.used.set(VOL, 7 * MiB);
