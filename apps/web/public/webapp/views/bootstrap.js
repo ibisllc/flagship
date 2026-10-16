@@ -8,6 +8,8 @@ import {
   signWithIrk,
   bytesToHex,
   persistSeedForProfile,
+  adoptProfileKeys,
+  resetDevice,
 } from "../keystore.js";
 import { humanError } from "../lib/humanError.js";
 import { failureText, rateLimitedError } from "../lib/rateLimited.js";
@@ -25,7 +27,7 @@ import { readNameField, readPairingField } from "../lib/connectAccount.js";
 import { loginRealAccount } from "../lib/loginTakeover.js";
 import { openAccount } from "../lib/openAccount.js";
 import { addProfile } from "../lib/profiles.js";
-import { unlockSession, getSession } from "../lib/state.js";
+import { unlockSession, getSession, lockSession } from "../lib/state.js";
 import { controlApex } from "../lib/apex.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
@@ -184,6 +186,18 @@ async function fetchSuggestion(deviceKey) {
   return { name: body.name, retryAfterMs: Number(body.retryAfterMs) || 2000 };
 }
 
+/** Sign-up cancelled before an account was opened: drop the key it just made,
+ *  so this browser is back at the cover rather than holding a key that
+ *  belongs to no account. */
+async function abandonNewKey() {
+  try {
+    await resetDevice();
+  } catch {
+    /* nothing stored */
+  }
+  lockSession();
+}
+
 /** CREATE ACCOUNT: a free, random, dashless handle. Passphrase → device key →
  *  fetch candidates → shuffle/accept → claim that EXACT name (no free-text edit,
  *  so a custom name stays a paid change) → on to the recovery step. */
@@ -229,7 +243,7 @@ async function createAccount() {
     retryAfterMs: first.retryAfterMs,
     fetchNext: () => fetchSuggestion(deviceKey),
   });
-  if (!chosen) return; // cancelled
+  if (!chosen) return abandonNewKey(); // cancelled
 
   const suggestedAccountName = chosen.split("-")
     .map((part) => part ? part[0].toUpperCase() + part.slice(1) : part)
@@ -241,7 +255,7 @@ async function createAccount() {
     initial: suggestedAccountName,
     validate: (v) => (!v?.trim() ? "Enter an account name" : null),
   });
-  if (!accountDisplayName) return;
+  if (!accountDisplayName) return abandonNewKey();
   const deviceDisplayName = await inlinePrompt({
     title: "Name this device",
     message: "This private name applies only inside this Flagship account.",
@@ -249,7 +263,7 @@ async function createAccount() {
     initial: "This browser",
     validate: (v) => (!v?.trim() ? "Enter a device name" : null),
   });
-  if (!deviceDisplayName) return;
+  if (!deviceDisplayName) return abandonNewKey();
 
   // Claim that EXACT name (idempotent, IRK-signed). No editable field, so a
   // free custom name is impossible — that's the paid name-change.
@@ -263,6 +277,7 @@ async function createAccount() {
         try { profileSet("username", u); } catch { /* swallow */ }
         session.username = u;
       },
+      adoptProfileKeys,
       persistSeedForProfile,
       addProfile,
       accountDisplayName,

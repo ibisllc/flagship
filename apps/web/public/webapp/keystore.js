@@ -863,6 +863,31 @@ export async function persistSeedForProfile(seed, cloudName, passphrase) {
   return profileId;
 }
 
+/**
+ * Carry this device's keys onto a newly opened account's profile: the wrapped
+ * device key (still under the passphrase the owner chose) and the admin-root
+ * record, both from the profile active now (the bootstrap's DEFAULT record for
+ * a first account). Opening an account used to re-wrap the key under a random
+ * passphrase nobody kept, so the next unlock failed, and left the admin root
+ * behind. Returns the new profileId, or null when there is no key to carry.
+ *
+ *  @param {string} cloudName  the new profile's cloud handle
+ *  @returns {Promise<string|null>}
+ */
+export async function adoptProfileKeys(cloudName) {
+  const fromId = activeProfileId();
+  const wrapped = await dbGet(wrappedUmkRecordKey(fromId));
+  if (!wrapped) return null;
+  const adminRoot = await dbGet(adminRootRecordKey(fromId));
+  const profileId = setActiveKeystoreProfile(cloudName);
+  if (profileId === fromId) return profileId;
+  await dbPut(wrappedUmkRecordKey(profileId), wrapped);
+  if (adminRoot && !(await dbGet(adminRootRecordKey(profileId)))) {
+    await dbPut(adminRootRecordKey(profileId), adminRoot);
+  }
+  return profileId;
+}
+
 export const _internal = {
   PBKDF2_ITERS,
   pkcs8FromSeed,

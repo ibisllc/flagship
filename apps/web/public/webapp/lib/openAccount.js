@@ -122,8 +122,10 @@ export async function claimUsername(username, irkPub, sign, deps = {}) {
  *  bootstrap) — `session.umk` + `session.irk` are present. The caller
  *  validates the username via {@link isValidUsername} first.
  *
- *  Multi-profile keying: when `persistSeedForProfile` is injected the
- *  session UMK is re-persisted under the NEW profile's keystore record
+ *  Multi-profile keying: `adoptProfileKeys` moves the device key (wrapped
+ *  under the owner's passphrase) and the admin root onto the NEW profile's
+ *  records; failing that, `persistSeedForProfile` re-wraps the session UMK
+ *  under the NEW profile's keystore record
  *  (keyed by `username`) BEFORE the local profile is added — so a second
  *  account opened in the same browser gets its OWN device-key record and
  *  never clobbers the first profile's wrapped UMK. The first account
@@ -137,6 +139,7 @@ export async function claimUsername(username, irkPub, sign, deps = {}) {
  *    fetch?: typeof fetch,
  *    setUsername?: (username: string) => void,
  *    addProfile?: (profile: object, opts?: object) => unknown,
+ *    adoptProfileKeys?: (cloudName: string) => Promise<string|null>,
  *    persistSeedForProfile?: (seed: Uint8Array, cloudName: string, passphrase: string) => Promise<unknown>,
  *    makePassphrase?: () => string,
  *    dispatchInitialView?: () => Promise<void>|void,
@@ -268,7 +271,11 @@ export async function openAccount(username, deps) {
   // second account never clobbers the first profile's device key. Done
   // BEFORE addProfile so the keystore record exists before the profile is
   // listed/made active.
-  if (typeof deps.persistSeedForProfile === "function") {
+  // Carry the device key (under the owner's own passphrase) and the admin
+  // root onto the account's profile; re-wrap only when there is nothing to
+  // carry, under a passphrase the caller supplies or a random one.
+  const adopted = typeof deps.adoptProfileKeys === "function" ? await deps.adoptProfileKeys(username) : null;
+  if (!adopted && typeof deps.persistSeedForProfile === "function") {
     const makePassphrase = deps.makePassphrase || randomLocalPassphrase;
     await deps.persistSeedForProfile(session.umk, username, makePassphrase());
   }

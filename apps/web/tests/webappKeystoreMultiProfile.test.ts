@@ -422,6 +422,33 @@ describe("webapp keystore — per-profile keying (multi-profile device keys)", (
     expect(Array.from(await k.unlockUmk(PASS, "bob"))).toEqual(Array.from(seedB));
   });
 
+  it("opening an account keeps the device key under the owner's passphrase and carries the admin root", async () => {
+    const k = await loadKeystore();
+    const openAccount = (await loadOpenAccount()).openAccount;
+    // The cover's Create: a key under DEFAULT, wrapped with the owner's passphrase.
+    const seed = await k.bootstrapNewIdentity(PASS);
+    const adminSeed = await k.generateAdminRoot(seed);
+    await openAccount("carl", {
+      accountDisplayName: "Carl Account",
+      deviceDisplayName: "This Browser",
+      session: { umk: seed, irk: await k.deriveIrkFromSeed(seed), adminRootSeed: adminSeed },
+      signWithIrk: (umk: Uint8Array, bytes: Uint8Array) => k.signWithIrk(umk, bytes),
+      ensureAdminRoot: async () => k.adminRootPubHex(adminSeed),
+      signWithAdminRoot: async () => new Uint8Array(64).fill(0x66),
+      signWithDevice: async () => new Uint8Array(64).fill(0x77),
+      bytesToHex: k.bytesToHex,
+      fetch: (() => okJson(200)) as any,
+      adoptProfileKeys: k.adoptProfileKeys,
+      persistSeedForProfile: k.persistSeedForProfile,
+      // No makePassphrase: what the cover and the wizard pass.
+    });
+    expect(k.activeProfileId()).toBe("carl");
+    // The next load unlocks the account's record with the owner's passphrase…
+    expect(Array.from(await k.unlockUmk(PASS, "carl"))).toEqual(Array.from(seed));
+    // …and finds the admin root there, so it is still an admin device.
+    expect(Array.from((await k.loadAdminRootSeed(seed, "carl"))!)).toEqual(Array.from(adminSeed));
+  });
+
   it("runTakeover flow: recovered seed wraps under the taken-over account's record", async () => {
     const k = await loadKeystore();
     const { runTakeover } = await loadLoginTakeover();

@@ -30,7 +30,7 @@
 
 import { registerView, show } from "../lib/router.js";
 import { getSession } from "../lib/state.js";
-import { signWithIrk, bytesToHex, persistSeedForProfile } from "../keystore.js";
+import { signWithIrk, bytesToHex, persistSeedForProfile, adoptProfileKeys } from "../keystore.js";
 import { isValidUsername, openAccount } from "../lib/openAccount.js";
 import { checkUsername } from "../lib/usersCheck.js";
 import { trademarkClaimMailto } from "../lib/trademarkClaim.js";
@@ -152,7 +152,7 @@ async function handleOpenAccount() {
   const username = (input?.value || "").trim().toLowerCase();
   renderTakenState(null); // clear any prior taken-state on a fresh attempt
   if (!isValidUsername(username)) {
-    toast("Username must be 3–30 lowercase letters and digits, no hyphens", "err");
+    toast("Username must be 3–30 lowercase letters and digits; single dashes inside are OK", "err");
     input?.focus();
     return false;
   }
@@ -209,6 +209,7 @@ async function handleOpenAccount() {
       },
       // Multi-profile keying: store the session UMK under THIS account's
       // own keystore record so a second account never clobbers the first.
+      adoptProfileKeys,
       persistSeedForProfile,
       addProfile,
       accountDisplayName,
@@ -333,7 +334,7 @@ async function renderStepBody(state, step) {
         <input id="wizard-username-input" type="text" inputmode="text" autocapitalize="none"
                autocomplete="username" spellcheck="false" placeholder="alice"
                aria-describedby="wizard-username-hint" />
-        <p id="wizard-username-hint" class="note muted-sm">3–30 lowercase letters and digits, no dots or hyphens</p>
+        <p id="wizard-username-hint" class="note muted-sm">3–30 lowercase letters and digits; single dashes inside are OK</p>
         <div id="wizard-username-taken" class="note err hidden" role="alert"></div>
         <div class="btn-row-sm">
           <button id="wizard-go-username" class="pill primary">Open my account</button>
@@ -453,9 +454,9 @@ function wireStepHandlers(state, step) {
   switch (step.id) {
     case "device-key":
       document.getElementById("wizard-go-bootstrap")?.addEventListener("click", async () => {
+        // The key exists by the time the wizard runs (the cover made it);
+        // this step only moves on.
         markCompleteAndAdvance(state, "device-key");
-        const { enterBootstrap } = await import("./bootstrap.js");
-        await enterBootstrap();
       });
       break;
     case "username":
