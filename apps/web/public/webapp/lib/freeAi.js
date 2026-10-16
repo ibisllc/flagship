@@ -88,7 +88,7 @@ export function freeAiView(status) {
   if (status.rateLimited) return { usable: false, text: status.message, offerOwnKey: true };
   if (!status.available) return { usable: false, text: UNAVAILABLE_MESSAGE, offerOwnKey: true };
   if (status.reason) {
-    return { usable: false, text: MESSAGE_BY_CODE[`free-ai-${status.reason}`] ?? status.message ?? UNAVAILABLE_MESSAGE, offerOwnKey: status.reason !== "no-server" };
+    return { usable: false, text: status.message || MESSAGE_BY_CODE[`free-ai-${status.reason}`] || UNAVAILABLE_MESSAGE, offerOwnKey: status.reason !== "no-server" };
   }
   if ((status.credits?.remainingTokens ?? 0) <= 0) return { usable: false, text: USED_UP_MESSAGE, offerOwnKey: true };
   return { usable: true, text: creditsLine(status.credits), offerOwnKey: false };
@@ -195,7 +195,8 @@ export async function mintFreeAiCredential(serverFqdn) {
   const limited = rateLimitedError(r.status, r.body, r.retryAfter);
   if (limited) throw limited;
   const code = r.body?.code || (r.status === 429 ? "free-ai-used-up" : "free-ai-unavailable");
-  const message = MESSAGE_BY_CODE[code] ?? UNAVAILABLE_MESSAGE;
+  const own = typeof r.body?.error === "string" && r.body.error.trim() ? r.body.error.trim() : null;
+  const message = own ?? MESSAGE_BY_CODE[code] ?? UNAVAILABLE_MESSAGE;
   throw Object.assign(new Error(message), { code, status: r.status, credits: r.body?.credits ?? null });
 }
 

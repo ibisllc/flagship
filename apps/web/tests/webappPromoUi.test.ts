@@ -27,6 +27,33 @@ const SPENT = {
 };
 const ok = (credits = CREDITS) => ({ available: true, ended: false, reason: null, credits });
 
+describe("Flagship Inference refusals in the server's own words", () => {
+  it("a refused pass shows the sentence flagshipserver.com sent, and the app's copy only when it sent none", async () => {
+    const { vi } = await import("vitest");
+    const { getSession } = await load("lib", "state.js");
+    const { mintFreeAiCredential, freeAiView } = await load("lib", "freeAi.js");
+    const s = getSession();
+    s.umk = new Uint8Array(32).fill(7);
+    s.username = "harry";
+    try {
+      const said = "Free AI is paused for today. It's back at midnight UTC.";
+      vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ error: said, code: "free-ai-busy-today" }), { status: 429 }));
+      await expect(mintFreeAiCredential("home.harry.flagship.services")).rejects.toMatchObject({ message: said, code: "free-ai-busy-today" });
+      vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ code: "free-ai-too-long" }), { status: 400 }));
+      const e = await mintFreeAiCredential("home.harry.flagship.services").catch((x: Error) => x);
+      expect(e.code).toBe("free-ai-too-long");
+      expect(e.message.length).toBeGreaterThan(10);
+      expect(e.message).not.toBe("free-ai-too-long");
+    } finally {
+      vi.unstubAllGlobals();
+      s.umk = null;
+      s.username = "";
+    }
+    // The status read: the server's message first.
+    expect(freeAiView({ available: true, ended: false, reason: "no-server", message: "Turn on a server first.", credits: CREDITS }).text).toBe("Turn on a server first.");
+  });
+});
+
 describe("webapp Flagship Inference", () => {
   it("shows the allowance in credits (1 credit = 1,000 weighted tokens) the way all three apps do", async () => {
     const { formatCredits, creditsLine, creditsLeft, weeklyCredits } = await load("lib", "freeAi.js");
