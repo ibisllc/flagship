@@ -509,8 +509,14 @@ of the last check here: **not yet checked**.
   to the relay (the copy records `route`). Same release: copies are gzipped
   and fetched 4 chunks at a time, and the Docker liveness check is fixed
   (`docker info --format` exits 0 with dockerd down, so ce6471c4's restart
-  never ran). Not yet run live: a phone on a metal box's Wi-Fi, and a copy
-  between two Studio VMs (needs the endorsed release on both).
+  never ran). **In the launch MVP** (owner, 2026-10-16: failure is a no-op).
+  2026-10-16 audit (`docs/lan-direct.md` "Failure handling"): the listener
+  can no longer stop the daemon; a copy's LAN fetch gives up after 15 s of
+  silence (was 5 min); both phones probe in the background (no request
+  waits) and resend over the relay after a LAN failure when that can't
+  apply a change twice. Drilled between two Debian VMs on a private link.
+  Needs an endorsed box release and store builds. Not yet run live: a phone
+  on a metal box's Wi-Fi, and a copy between two boxes on one LAN.
 - **Where an app runs (2026-10-12, box `73211505`, apps through `a79b4de9`).**
   `docs/app-placement.md`. Make leader never moved the box new apps were
   created on, and the app page's runs-on boxes came from the leader (its Save

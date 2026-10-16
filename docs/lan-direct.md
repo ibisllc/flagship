@@ -69,11 +69,13 @@ Rescan every 60 s (DHCP changes). `FLAGSHIP_LAN_DIRECT=0` disables it;
 that holds a verified hint probes it before use: a TLS handshake to the LAN
 endpoint with SNI = the box hostname, accepted only if the leaf matches the
 pinned fingerprint. Only then does it route there; the result is cached per
-network and dropped on any network change. Any failure falls back to the relay
-silently. The probe is what makes a stale hint harmless: on another network the
-same private address may belong to a different device, and a bare TCP check
-would send the request there (and a pin failure is not something OkHttp retries
-on another route).
+network and dropped on any network change. Probes run in the background, one
+at a time per box: a request never waits for one, it takes the relay until the
+box has proved itself. The probe is what makes a stale hint harmless: on
+another network the same private address may belong to a different device, and
+a bare TCP check would send the request there (and a pin failure is not
+something OkHttp retries on another route). See "Failure handling" for what
+every failure does.
 
 **Web: out of scope.** A browser can't override DNS or choose a proxy per site,
 and the box cert names the public hostname, so a page can't reach the box by
@@ -92,12 +94,88 @@ signed with its identity key) to that address, but still as
 `https://<source>` (`appCopy/lanFetch.ts`): SNI, Host and the WebPKI
 certificate check are against the source's own name, so a device that merely
 holds the address can't answer. It prefers an endpoint on its own /24, never
-tries a non-LAN address, gives a connection 3 s, and falls back to the relay
+tries a non-LAN address, gives a connection 3 s to connect and 15 s of silence after, and falls back to the relay
 for the rest of the copy at the first failure. The copy records `route`
 (`lan` | `relay`). A box with `FLAGSHIP_LAN_DIRECT=0` neither offers nor uses
 a LAN route. Studio's hosted VMs share one NAT subnet on their Mac
 (`192.168.64.0/24`), so two VMs on the same Mac copy over it even though a
 phone on the Wi-Fi can't reach them.
+
+## Failure handling
+
+Owner rule (2026-10-16): LAN-direct is in the MVP because its failure is a
+no-op. Whatever goes wrong costs at most a short timeout, is logged, and the
+traffic goes over the relay as if LAN-direct didn't exist. It never sends a
+request to a device that hasn't proved itself the box, and TLS always ends on
+the box with its own cert for its own name (Android: SNI, hostname check and
+pin on the box name; iOS: TLS to the box name inside the CONNECT tunnel, same
+pinning delegate; box to box: WebPKI against the source's name). A hostile
+LAN device sees what the relay sees: the box name and ciphertext.
+
+Logs: box `[lan-direct]` / `[app-copy]` lines in the daemon journal; iOS
+unified log subsystem `com.flagshipserver.app`, category `lan-direct`;
+Android logcat tag `LanDirect`.
+
+**Box.**
+
+| Failure | What happens |
+|---|---|
+| `FLAGSHIP_LAN_DIRECT=0` | No listener; the hint endpoint answers 204; app copies neither offer nor use a LAN route. |
+| No private address (a VPS) | Nothing bound; hint 204. |
+| An address can't be bound (`:443` taken, address gone) | That address stays relay-only; said once per address and reason; retried every 60 s. |
+| Interfaces unreadable, `FLAGSHIP_LAN_PORT` not a port, listener can't start | Relay only (bad port falls back to 443), logged; the daemon keeps running. |
+| The box's own TLS server is down | Each LAN connection is closed at once (the client falls back). |
+| A LAN client sends nothing / garbage / a CONNECT outside the box's zone or port | Closed after 5 s / closed after 4 KB / `403` without touching the TLS server. Over 256 connections: dropped. |
+| No certificate yet, or the cert rotated | No hint until a cert exists (204); a hint names the cert, so an old one is void on clients. |
+
+**Phone (iOS and Android).**
+
+| Failure | What happens |
+|---|---|
+| Hint with a bad signature, another box's name, another cert, expired, or any non-LAN endpoint | Refused and forgotten (logged); relay. |
+| No hint (204), hint fetch fails | Relay. |
+| Nothing answers at the hinted address (box away, other network) | The background probe gives up (iOS 1.5 s, Android 0.4 s connect + 1.5 s handshake); cached as failed for this network for 5 min; relay. No request waits. |
+| Another device holds the address (address reuse, hostile LAN) | Its TLS can't show the box's cert for the box name: the probe fails; relay. |
+| iOS local-network permission refused (or its prompt still open) | The probe's connection waits, which counts as failure; relay. |
+| The box leaves after proving itself (within the 5-min window) | iOS: `cannotConnectToHost` → the request goes again over the relay. Android: a LAN connect gets 1.5 s (not the client's 15 s), then OkHttp takes the relay route. LAN use stops on this network. |
+| A different device takes the address after the probe | TLS/pin refused before anything is sent → resent over the relay; LAN use stops; not reported as interception of the relay. |
+| The listener refuses the CONNECT (iOS) | CFNetwork proxy error → resent over the relay. |
+| Wi-Fi switch or drop mid-request | Network change clears every probe, so new requests take the relay. The request in flight: a read is resent over the relay; a change (POST etc.) whose fate is unknown fails as it would on a relay drop, and the retry takes the relay. |
+| A stalled LAN connection (box frozen, link up) | The request's own timeout, as on the relay; then as above. |
+| Any other LAN error | LAN use stops on this network; reads resent, changes fail once. |
+
+**Box to box (app copy).**
+
+| Failure | What happens |
+|---|---|
+| Source offers no LAN endpoint, or only non-LAN ones | Relay for every part. |
+| Nothing answers / handshake never finishes | 3 s, then that chunk and the rest of the copy go over the relay (`route: relay`, logged). |
+| Another device holds the address | TLS refuses it (wrong name or untrusted cert) before any request is sent; relay. |
+| The source goes quiet after the handshake (Wi-Fi drop, no reset) | 15 s of silence ends the request (was: the 5-minute request limit); relay. |
+| The connection drops mid-answer | The chunk fails (never a short chunk), refetched over the relay. |
+| Connection refused | Relay at once. |
+
+The webapp never uses LAN-direct.
+
+**Tested (2026-10-16).** Box: `lanDirect.test.ts` (listener over live
+sockets, including the failure rows above), `appCopyLanFetch.test.ts` (stall,
+quiet, truncation, wrong name, untrusted cert), `appCopy.test.ts` "with the
+real listener and LAN fetch" (the source's export behind the real listener,
+the target's real LAN fetch; decoy, mute, quiet, drops and refused each finish
+the copy over the relay with a log line). Android: `LanDirectTest` (background
+probe, single flight, fallback interceptor, connect cap). iOS:
+`LanDirectFallbackTests` (shared package) and `LanHintTests` /
+`LanDirectRegistryTests`; the app target builds. Two Debian 13 arm64 VMs
+(QEMU/HVF on the Mac) joined by a private link: the real listener found and
+bound the VM's two private addresses (not loopback, link-local or `fec0::`);
+from the peer, the daemon's LAN fetch, raw TLS with the name resolved to the
+LAN address (Android's route) and curl through CONNECT (iOS's route) all
+reached the box with SNI and Host = the box name; CONNECT to another host got
+403; 64 MB in 0.56 s. Failures on that link: replies black-holed → "no
+answer" in 3.1 s; 4 s added latency → 3.1 s; link down mid-transfer → "went
+quiet" 3 s after; listener stopped → refused in 33 ms; another TLS server
+with a valid cert for another name at the address → refused before any
+request (both curl routes too).
 
 ## Threat model
 
@@ -119,21 +197,12 @@ recovery confirmations — where it removes the network entirely, not bulk data.
 It needs its own transport binding (GATT + a Noise/XX-style handshake anchored
 in the same STK) and is not part of this branch.
 
-## Status (2026-10-09, `feat/lan-direct`)
+## Status (2026-10-16)
 
-- **Protocol + daemon:** built and tested — the pinned vector, every rejection
-  path, the address filter, and the listener over live sockets (raw-TLS pipe,
-  in-zone CONNECT, out-of-zone refusal, connection cap). Full vitest green.
-- **Android:** built and tested — the same vector, the refusal cases, and the
-  routing decisions (probe-gated, LAN-first with relay fallback, per-network
-  cache, expiry, internet-DNS-down). Unit suite green, debug APK builds.
-- **iOS:** written; the `FlagshipAPI` module (hint, registry, prober, proxy
-  sessions, `LiveScreensClient` routing) typechecks clean for macOS and the iOS
-  simulator under Swift 5 and Swift 6 strict concurrency. NOT yet built as the
-  app target and its XCTests (`LanHintTests`, `LanDirectRegistryTests`) NOT yet
-  run — the build machine ran out of disk. Do both before merging.
-- **Needs real hardware:** a box binding a real LAN interface; a phone on the same
-  Wi-Fi taking the LAN path (Android DNS route, iOS CONNECT proxy); roaming to
-  another network and back; a Studio-hosted VM (its NAT address won't be
-  reachable from a phone — the probe should fail and fall back).
-- **Before merge:** this design doc belongs on `main` by repo convention.
+On `main` since 2026-10-12 and in the launch MVP (`launch-mvp.md`). Boxes
+need an endorsed release with the 2026-10-16 fixes; phones need store builds.
+Not yet shown on real hardware, and only a phone on a real metal box's Wi-Fi
+can show it: iOS's local-network prompt and its effect, the CONNECT route
+through iOS's networking stack, Android's DNS route, roaming off the network
+and back, an app copy between two metal boxes on one LAN. A Studio-hosted VM
+is behind NAT, so a phone's probe of it should fail and stay on the relay.

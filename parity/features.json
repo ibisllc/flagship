@@ -553,6 +553,16 @@
         "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/RateLimited.kt", "Too many tries \\$w"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/HttpTransport.kt", "RateLimitedException\\.parse\\(status, text, retryAfter\\)"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/NetworkErrorHumanizer.kt", "Kind\\.RATE_LIMITED"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/FreeAiCredits.kt", "data class Limited\\(val message: String\\)"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/rateLimited.js", "Too many tries \\$\\{who\\}"], ["apps/web/public/webapp/lib/comFetch.js", "throwIfRateLimited"], ["apps/web/public/webapp/lib/humanError.js", "rateLimited"]] }
       }
+    },
+    {
+      "id": "lan-direct",
+      "title": "LAN-direct: reach the box over the local network once it proves itself, relay on any failure",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipAPI/Client/LanDirect.swift", "func provenEndpoint\\(for host: String\\)"], ["apps/mobile/shared/Sources/FlagshipAPI/Client/LiveScreensClient.swift", "mayResendOverRelay\\(error, method: req\\.httpMethod\\)"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/LanDirect.kt", "class LanDirectFallbackInterceptor"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/HttpClientFactory.kt", "LanAwareSocketFactory\\(\\)"]] },
+        "web": { "status": "na", "reason": "A browser can't route a site to a LAN address with valid TLS (docs/lan-direct.md); the webapp stays on the relay.", "anchors": [] }
+      }
     }
   ]
 }

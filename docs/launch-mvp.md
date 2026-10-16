@@ -35,6 +35,15 @@ launch (`anonymous-vouchers.md`).
 8. **Access control on every app:** "Open to all | Members only" plus a
    members list in both modes, with ranks Member < Manager < Master and a
    per-app identity for each visitor.
+9. **LAN-direct, with the relay as the fallback** (owner, 2026-10-16: in
+   because its failure is a no-op). A phone on the box's network, and a box
+   copying an app from a sibling on the same network, skip the relay; any
+   failure (nothing answering, another device at the address, a dropped
+   Wi-Fi, iOS local-network permission refused) costs at most a short
+   timeout, logs why and goes back to the relay (`lan-direct.md`
+   "Failure handling"). Tested with VMs and simulations; a phone on a real
+   metal box's Wi-Fi is in the hardware list below. The webapp stays on the
+   relay.
 
 ## Proven on real hardware before launch
 
@@ -45,6 +54,9 @@ launch (`anonymous-vouchers.md`).
 - VM appliances republished with the container networking fix.
 - A diagnosis of the guest memory corruption seen in home2's VM (hosting in
   Studio on a Mac will be most people's path).
+- LAN-direct from an iPhone and an Android phone on a metal box's Wi-Fi
+  (the LAN route taken, then the relay after leaving the network), and an
+  app copy between two boxes on one network.
 
 ## Not at launch (kept off `main`, each on its branch)
 
@@ -56,8 +68,8 @@ In order after launch:
 3. **Name change and dibs, together.** The dibs year starts when paid name
    change ships, not in October 2026 (supersedes the earlier window).
 4. **Marketplace:** free apps first; paid apps after the security scanner.
-5. Later: retail NFC boxes, the browser extension, LAN-direct, phone USB
-   burning, Bluetooth, the Mac App Store edition of Studio.
+5. Later: retail NFC boxes, the browser extension, phone USB burning,
+   Bluetooth, the Mac App Store edition of Studio.
 
 ## Consequences
 
