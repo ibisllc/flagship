@@ -425,7 +425,7 @@ struct FlagshipApp: App {
         case .unknown:      return .booting
         }
     }
-    // Seed the mock with one demo user so "I already have an account" →
+    // Seed the mock with one demo user so "Connect to an existing account" →
     // type "demo" opens a populated sandbox in mock mode WITHOUT minting
     // an identity or hitting the network (DemoFixtures is purely local;
     // the screens are served by MockScreensClient). Nothing is created
@@ -682,6 +682,9 @@ struct FlagshipApp: App {
                     orphanedPersistedUsername = username
                 }
             } else if !Keystore.hasWrappedUMK,
+                      // A gym onboarding walk starts on Welcome, even after
+                      // an earlier walk signed in to the mock demo.
+                      !ProcessInfo.processInfo.arguments.contains("-smoke-onboarding"),
                       let demo = await sessionStore.demoSession {
                 DemoFixtures.activate(
                     appState,

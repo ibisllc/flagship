@@ -43,24 +43,18 @@ public struct WelcomeScreen: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 Spacer().frame(height: FS.space.s8)
-                VStack(spacing: FS.space.s3) {
-                    FSPrimaryButton("Create your account", block: true, large: true, action: onCreate)
-                    // Drives the WebAuthn-PRF recovery flow on a
-                    // fresh install — pulls the wrapped UMK off
-                    // flagshipserver.com using a passkey that's
-                    // either synced via iCloud Keychain or held on
-                    // a YubiKey / 1Password / etc. After unwrap,
-                    // the user chooses Keep-both-devices /
-                    // Replace-lost-device / Wipe-&-restart.
-                    FSGhostButton("I already have an account", block: true, large: true, action: onExisting)
-                }
-                FSColorReader { c in
-                    Text("Patent Pending")
-                        .font(FS.font.caption())
-                        .foregroundColor(c.textMuted)
-                }
-                .padding(.top, FS.space.s4)
-                Spacer().frame(height: FS.space.s6)
+                // One page for both ways back in: sign in with the account
+                // name (recovery / re-pair / demo) or join with a pairing
+                // code from another device. Same footer as the app lock.
+                FSActionFooter(
+                    primary: "Create your account",
+                    primaryId: "welcome-create",
+                    secondary: "Connect to an existing account",
+                    secondaryId: "welcome-connect",
+                    secondaryHint: "Sign in with your account name, or join with a pairing code.",
+                    onPrimary: onCreate,
+                    onSecondary: onExisting
+                )
             }
             .padding(.horizontal, FS.space.s6)
             .fsReadingColumn()

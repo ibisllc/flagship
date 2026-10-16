@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import FlagshipAPI
 
-/// Backs the username-first **Join** ("I already have an account") flow.
+/// Backs the username-first sign-in on "Connect to an existing account".
 ///
 /// The sign-in space is access-control evaluation, not a fetch: the user
 /// types a bare username and we run a single preflight

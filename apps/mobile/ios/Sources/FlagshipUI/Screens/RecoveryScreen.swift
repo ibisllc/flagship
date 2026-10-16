@@ -99,7 +99,7 @@ public struct RecoveryScreen: View {
                                 Text("Recovery active").foregroundColor(c.text)
                             }
                             Text("Passkey: \(credId)").font(FS.font.mono()).foregroundColor(c.textMuted).lineLimit(1).truncationMode(.middle)
-                            Text("If you lose this device, install Flagship on a new one, choose \"I already have an account,\" and recover with your passphrase.").font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                            Text("If you lose this device, install Flagship on a new one, choose \"Connect to an existing account,\" and recover with your passphrase.").font(FS.font.bodySm()).foregroundColor(c.textMuted)
                         case .recovering:
                             HStack { ProgressView(); Text("Verifying passkey…").foregroundColor(c.textMuted) }
                         case .recovered:

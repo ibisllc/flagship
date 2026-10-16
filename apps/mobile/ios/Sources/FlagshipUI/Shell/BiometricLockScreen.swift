@@ -41,6 +41,9 @@ struct BiometricLockScreen: View {
                 Image(systemName: "lock.fill")
                     .font(.system(size: 64, weight: .medium))
                     .foregroundColor(c.primary)
+                    // On the icon, not the whole screen: an identifier on a
+                    // container covers its buttons' own.
+                    .accessibilityIdentifier("biometric-lock-screen")
                 Text("Flagship is locked")
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundColor(c.text)
@@ -63,32 +66,30 @@ struct BiometricLockScreen: View {
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, FS.space.s6)
                 }
-                FSPrimaryButton(
-                    status == .authenticating ? "Authenticating…" : "Unlock",
-                    enabled: status != .authenticating,
-                    block: true,
-                    large: true,
-                ) {
-                    Task { await tryUnlock() }
-                }
+                // Same footer as Welcome. Sign out is the always-present
+                // escape so a stale Keychain identity (which survives an app
+                // delete+reinstall) or broken/absent biometrics can never trap
+                // the user here. It's a genuine Tier-2 SIGN OUT — it erases
+                // this device's local key material from the Keychain (every
+                // profile, since the locked user can't pick one) and drops to
+                // Welcome. Like the Settings sign-out it's snoop-hardening,
+                // not eviction: the same key comes back via passkey recovery
+                // (instant re-pair, no rotation). Confirm copy adapts on
+                // cloud recovery.
+                FSActionFooter(
+                    primary: status == .authenticating ? "Authenticating…" : "Unlock",
+                    primaryEnabled: status != .authenticating,
+                    primaryId: "lock-unlock-btn",
+                    secondary: "Sign out",
+                    secondaryId: "lock-sign-out-btn",
+                    secondaryHint: "Erases this device's account key and returns to the start.",
+                    onPrimary: { Task { await tryUnlock() } },
+                    onSecondary: { showStartOver = true }
+                )
                 .padding(.horizontal, FS.space.s6)
-                // Always-present escape so a stale Keychain identity (which
-                // survives an app delete+reinstall) or broken/absent biometrics
-                // can never trap the user on this screen with no way forward.
-                // This is a genuine Tier-2 SIGN OUT — it erases this device's
-                // local key material from the Keychain (every profile, since
-                // the locked user can't pick one) and drops to Welcome. Like
-                // the Settings sign-out it's snoop-hardening, not eviction:
-                // the same key comes back via passkey recovery (instant
-                // re-pair, no rotation). Confirm copy adapts on cloud recovery.
-                Button("Sign out") { showStartOver = true }
-                    .font(FS.font.bodySm())
-                    .foregroundColor(c.textMuted)
-                    .padding(.bottom, FS.space.s10)
-                    .accessibilityIdentifier("lock-sign-out-btn")
+                .fsReadingColumn()
             }
         }
-        .accessibilityIdentifier("biometric-lock-screen")
         .accessibilityAddTraits(.isModal)
         .confirmationDialog(
             app.hasCloudRecovery ? "Sign out of this device?" : "Sign out without recovery?",

@@ -110,7 +110,7 @@ public final class KeyfileImportViewModel {
             // accounts. The keyfile sheet has no second-factor field
             // (yet); route the user to the sign-in flow, which prompts
             // for it.
-            phase = .failed("This account has a second factor enrolled. Use \"I already have an account\" to sign in — it will ask for your authenticator or recovery code.")
+            phase = .failed("This account has a second factor enrolled. Choose \"Connect to an existing account\" and sign in with your account name — it will ask for your authenticator or recovery code.")
         } catch {
             phase = .failed("Couldn't start bringing this device in. \(HumanError.humanize(error))")
         }

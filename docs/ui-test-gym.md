@@ -529,7 +529,7 @@ Surveyed from the real screen graphs this session. Cite-by-path; nothing invente
   `SecureAccountScreen`, `OpenAccountScreen`.
 - **Recovery/auth:** `RecoveryScreen`, `PostRecoveryScreen`,
   `PostRecoveryChoiceScreen` (keep-both / replace-lost / wipe-restart),
-  `JoinAccountScreen`, `JoinUsernameScreen`, `RealAccountLoginScreen`,
+  `JoinAccountScreen`, `ConnectAccountScreen`, `RealAccountLoginScreen`,
   `KeyfileImportSheet`, `KeyfileExportScreen`.
 - **Home/servers:** `HomeScreen`, `AddServerChooserScreen`, `PendingServerScreen`,
   `CreateServerStubScreen`, `DemoInstallProgressScreen`, `ProvisionTimelineView`.
@@ -548,7 +548,7 @@ Surveyed from the real screen graphs this session. Cite-by-path; nothing invente
   plus the AI-keys + privacy/appearance rows.
 - **Device mgmt:** `AddDeviceScreen` (QR + SAS, screenshot-protected),
   `PairingSafeguards`, `ReplaceDeviceFinalizeScreen` (grace countdown + Complete),
-  `JoinAccountScreen`/`JoinUsernameScreen` (incoming side).
+  `JoinAccountScreen`/`ConnectAccountScreen` (incoming side).
 - **Activity/audit:** `ActivityScreen`, `AuditLogScreen`, `ApproveUnlockScreen`.
 - **Companion/peer:** `CompanionDockScreen`, `CompanionRequestsScreen`,
   `PeerBackupScreen`, `BrowserViewerScreen`, `BrowserTabsScreen`.

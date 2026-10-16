@@ -437,7 +437,7 @@ final class GymTotalDetailTests: XCTestCase {
     /// enrolled biometric, so the lock screen STAYS up for the assertion.
     func test_lockScreenTrapsOnLaunch() throws {
         let app = launch(tab: "home", extra: ["-smoke-locked", "-smoke-admin-root"])
-        let locked = app.otherElements["biometric-lock-screen"].waitForExistence(timeout: 20)
+        let locked = app.images["biometric-lock-screen"].waitForExistence(timeout: 20)
             || app.staticTexts["Flagship is locked"].waitForExistence(timeout: 5)
             || app.buttons["lock-sign-out-btn"].waitForExistence(timeout: 5)
         XCTAssertTrue(locked, "Launching locked should trap the shell behind the biometric lock screen.")
