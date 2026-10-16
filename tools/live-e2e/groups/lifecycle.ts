@@ -1,21 +1,28 @@
 // Revoke / un-revoke / delete a server (.com), on account A's home2 — last,
-// because it takes the box out of the account.
+// because it takes the box out of the account. Delete is what the apps do:
+// deposit the admin-root-signed `wipe-now` decommission order, then release
+// the name; the box picks the order up on its 5-minute poll, wipes itself and
+// powers off, and .com no longer lets its key act for the account.
+import { randomBytes } from "node:crypto";
 import { bytesToHex } from "@noble/hashes/utils";
 import {
   signReleaseServerName,
   signRevocation,
+  signServerDecommission,
   signServerUnrevocation,
   type ReleaseServerName,
+  type ServerDecommission,
   type ServerRevocation,
   type ServerUnrevocation,
 } from "@flagship/protocol";
 import { pods } from "../lib/fleet.js";
-import { CONTROL, assert, postJson, short, sleep } from "../lib/harness.js";
+import { CONTROL, assert, http, postJson, short, sleep, tryHttp } from "../lib/harness.js";
 import type { Group } from "./types.js";
+import { mailboxAuth } from "./update.js";
 
 export const lifecycle: Group = {
   name: "lifecycle",
-  title: "revoke → un-revoke (admin root) → delete (release the name) on home2",
+  title: "revoke → un-revoke (admin root) → delete (wipe-now order + release the name) on home2, and the box wipes itself",
   needs: ["A2"],
   phase: 9,
   async run({ A, rec, box }) {
@@ -46,15 +53,50 @@ export const lifecycle: Group = {
       assert(p && !p.revokedAt, `/pods row: ${short(p)}`);
       return `dnsRepublished=${r.json?.dnsRepublished}`;
     });
-    await rec.check("delete: release the name (admin-root signed) → /pods no longer lists home2", async () => {
+
+    let stk = "";
+    const ordered = await rec.check("delete, step 1: the wipe-now decommission order (admin-root signed; the IRK is refused) is on file for home2's key", async () => {
+      stk = String((await row())?.identityPubKey ?? "").toLowerCase();
+      assert(/^[0-9a-f]{64}$/.test(stk), `no identityPubKey for home2`);
+      const order: ServerDecommission = { podCanonical: b.fqdn, retiredStkPubHex: stk, finalBackup: false, diskDisposition: "wipe-now", backupEpoch: 0, nonce: randomBytes(32).toString("hex"), issuedAt: Date.now() };
+      const send = (signer = A.keys.adminRoot) =>
+        postJson(`https://${CONTROL}/api/server/${encodeURIComponent(b.fqdn)}/decommission`, { ...mailboxAuth(A), order, signature: bytesToHex(signServerDecommission(order, signer)) });
+      const byIrk = await send(A.keys.irk);
+      assert(byIrk.status === 403, `IRK-signed order ${byIrk.status}: ${short(byIrk.text)}`);
+      const r = await send();
+      assert(r.status === 200, `order ${r.status}: ${short(r.text)}`);
+      const got = await http(`https://${CONTROL}/api/server/${encodeURIComponent(b.fqdn)}/decommission?stk=${stk}`);
+      assert(got.status === 200 && JSON.parse(got.json?.orderJson ?? "{}").diskDisposition === "wipe-now", `order read back ${got.status}: ${short(got.text)}`);
+      return "403 / 200, readable at the box's poll URL";
+    });
+    const released = await rec.check("delete, step 2: release the name (admin-root signed) → /pods no longer lists home2, by-domain says revoked", async () => {
       const rel: ReleaseServerName = { username: user, serverDomain: b.fqdn, issuedAt: Date.now() };
       const r = await postJson(`https://${CONTROL}/api/server/release`, { request: rel, signature: bytesToHex(signReleaseServerName(rel, A.keys.adminRoot)) });
       assert(r.status === 200, `${r.status}: ${short(r.text)}`);
       for (let i = 0; i < 6; i++) {
-        if (!(await row())) return "gone from /pods";
+        if (!(await row())) {
+          const bd = await http(`https://${CONTROL}/api/server/by-domain/${encodeURIComponent(b.fqdn)}`);
+          assert(bd.json?.revoked, `by-domain ${short(bd.text)}`);
+          return "gone from /pods; by-domain revoked";
+        }
         await sleep(5000);
       }
       throw new Error(`still listed: ${short(await row())}`);
+    });
+    if (!ordered || !released) return;
+    await rec.check("home2 consumes the order, wipes itself and stops answering (≤ 12 min)", async () => {
+      const deadline = Date.now() + 12 * 60_000;
+      let last = "";
+      while (Date.now() < deadline) {
+        const r = await tryHttp(`https://${b.fqdn}/`, {}, 15_000);
+        last = `${r.status} ${short(r.text, 60)}`;
+        if (r.status === 0 || r.status >= 500) {
+          const again = await tryHttp(`https://${b.fqdn}/api/services`, {}, 15_000);
+          if (again.status === 0 || again.status >= 500) return `stopped answering (${last})`;
+        }
+        await sleep(20_000);
+      }
+      throw new Error(`home2 still answers after 12 min (${last})`);
     });
   },
 };

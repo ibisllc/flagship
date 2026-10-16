@@ -3,8 +3,10 @@
 // python app (code, Postgres dump, files) from the source, and the copy serves
 // the same data; then the copy is uninstalled with the signed uninstall.
 import { bytesToHex } from "@noble/hashes/utils";
-import { signAppCopyGrant, signUninstallService, type AppCopyGrant, type UninstallServiceRequest } from "@flagship/protocol";
-import { pair } from "../lib/fleet.js";
+import { spawnSync } from "node:child_process";
+import { hexToBytes } from "@noble/hashes/utils";
+import { checkLanHint, signAppCopyGrant, signUninstallService, type AppCopyGrant, type LanHint, type UninstallServiceRequest } from "@flagship/protocol";
+import { pair, pods } from "../lib/fleet.js";
 import { assert, http, postJson, short, sleep, tryHttp } from "../lib/harness.js";
 import { PY_APP } from "./runtimes.js";
 import type { Group } from "./types.js";
@@ -25,6 +27,27 @@ export const appCopy: Group = {
       assert(before?.status === 200 && before.json?.file, `source /read ${before?.status}: ${short(before?.text)}`);
       return short(before!.json, 100);
     }))) return;
+
+    let lanOffered = false;
+    await rec.check("LAN-direct: the source's lan-hint is signed by its server key and names only LAN endpoints (or there are none: 204)", async () => {
+      const srcSession = await pair(A, src);
+      const r = await http(`https://${src.fqdn}/api/screens/lan-hint`, { headers: { "x-flagship-session": srcSession } });
+      if (r.status === 204) return "204: no LAN address on this host";
+      assert(r.status === 200 && r.json?.hint && r.json?.signatureHex, `lan-hint ${r.status}: ${short(r.text)}`);
+      const stk = String((await pods(A.username)).find((p) => p.serverDomain === src.fqdn)?.identityPubKey ?? "");
+      assert(/^[0-9a-f]{64}$/i.test(stk), "no identityPubKey on /pods");
+      const der = spawnSync("bash", ["-c", `echo | openssl s_client -connect ${src.fqdn}:443 -servername ${src.fqdn} 2>/dev/null | openssl x509 -outform DER 2>/dev/null | openssl dgst -sha256 -hex`], { encoding: "utf8", timeout: 25_000 });
+      const certSha256 = (/([0-9a-f]{64})\s*$/.exec(der.stdout.trim()) || [])[1] ?? "";
+      const hint = r.json.hint as LanHint;
+      const v = checkLanHint(hint, hexToBytes(r.json.signatureHex), hexToBytes(stk), { serverDomain: src.fqdn, certSha256, now: Date.now() });
+      assert(v.ok, `checkLanHint: ${short(v)} (cert ${certSha256.slice(0, 12)} vs ${String(hint.certSha256).slice(0, 12)})`);
+      const forged = checkLanHint({ ...hint, endpoints: [{ address: "10.9.9.9", port: 443 }] }, hexToBytes(r.json.signatureHex), hexToBytes(stk), { serverDomain: src.fqdn, certSha256, now: Date.now() });
+      assert(!forged.ok, "an altered hint verified");
+      const bridges = hint.endpoints.filter((e) => e.address.startsWith("172."));
+      assert(!bridges.length, `the hint offers a container bridge: ${bridges.map((e) => e.address).join(", ")}`);
+      lanOffered = hint.endpoints.length > 0;
+      return `${hint.endpoints.map((e) => `${e.address}:${e.port}`).join(", ")} — signature ok, altered hint refused`;
+    });
 
     const grantFor = (): AppCopyGrant => ({ sourceServer: src.fqdn, targetServer: dst.fqdn, serviceId, issuedAt: Date.now() });
     await rec.check("a copy grant signed by the owner IRK is refused", async () => {
@@ -49,7 +72,12 @@ export const appCopy: Group = {
         const r = await http(`https://${dst.fqdn}/api/screens/services/copies`, { headers: s });
         const c = (r.json?.copies ?? []).find((x: { copyId: string }) => x.copyId === copyId);
         last = short(c, 200);
-        if (c?.state === "done") return `done via ${c.route ?? "?"}`;
+        if (c?.state === "done") {
+          assert(c.route === "lan" || c.route === "relay", `route=${c.route}`);
+          // Both boxes sit on the provider's private network: the copy should take it.
+          assert(!lanOffered || c.route === "lan", `the source offered a LAN endpoint but the copy went via ${c.route}`);
+          return `done via ${c.route}`;
+        }
         if (c?.state === "failed") throw new Error(`copy failed: ${c.reason}`);
         await sleep(15_000);
       }

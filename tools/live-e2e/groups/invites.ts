@@ -33,7 +33,7 @@ import {
   type KnockAuthorization,
   type ServiceInviteListQuery,
 } from "@flagship/protocol";
-import { pair } from "../lib/fleet.js";
+import { mintDeviceGrant, pair } from "../lib/fleet.js";
 import { CONTROL, KEK, assert, cookieVal, http, postJson, short, sleep, tryHttp } from "../lib/harness.js";
 import { echoedFlagshipHeaders, installWhoami, setMode, setModeWithIrk, waitServing } from "./gating.js";
 import type { Group } from "./types.js";
@@ -297,6 +297,31 @@ export const invites: Group = {
       const boxW = await withdraw(made.inv.inviteId, phone);
       assert(boxW.status === 403, `device withdraw of admin invite: expected 403, got ${boxW.status}`);
       return "manager; 403 / 403";
+    });
+    await rec.check("SECOND ADMIN: a device under an admin-root-signed `admin` grant signs in as master and its own key orders a rank (an IRK-signed admin grant is refused)", async () => {
+      const id = randomBytes(16).toString("hex");
+      const seed = deriveAccountDeviceKeySeed(A.keys.umk, A.username, id);
+      const dev: Keypair = { privateKey: seed, publicKey: ed.getPublicKey(seed) };
+      const byIrk = await mintDeviceGrant(A, id, dev, ["admin", "view-directory"], irk);
+      assert(byIrk.status === 403, `IRK-signed admin grant: expected 403, got ${byIrk.status}: ${short(byIrk.text)}`);
+      const g = await mintDeviceGrant(A, id, dev, ["admin", "view-directory", "browse"], adminRoot);
+      assert(g.status === 200, `admin grant ${g.status}: ${short(g.text)}`);
+      // The box refreshes its device book for an unknown key at most every 30 s.
+      let role: string | null = null;
+      for (let i = 0; i < 8 && role !== "master"; i++) {
+        role = await appRole(dev).catch(() => null);
+        if (role !== "master") await sleep(10_000);
+      }
+      assert(role === "master", `second admin device role=${role}`);
+      const r = await rank(appRankTargetDevice(bytesToHex(phone.publicKey)), "member", dev);
+      assert(r.status === 200, `rank by the second admin device ${r.status}: ${short(r.text)}`);
+      await sleep(1100);
+      const phoneRole = await appRole(phone);
+      assert(phoneRole === "member", `phone role after the second admin's order: ${phoneRole}`);
+      await sleep(1100);
+      const back = await rank(appRankTargetDevice(bytesToHex(phone.publicKey)), "manager", adminRoot);
+      assert(back.status === 200, `restore ${back.status}`);
+      return "master; its rank order applied";
     });
     await rec.check("cleanup: the admin withdraws its invite; back to open", async () => {
       assert(adminInv, "no admin invite");

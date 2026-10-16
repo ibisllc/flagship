@@ -22,7 +22,7 @@ export interface Resp {
 export interface HttpInit {
   method?: string;
   headers?: Record<string, string>;
-  body?: string;
+  body?: string | Uint8Array;
 }
 
 /**
@@ -47,7 +47,7 @@ async function httpOnce(url: string, init: HttpInit, timeoutMs: number): Promise
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const r = await fetch(url, { ...init, signal: ctrl.signal, redirect: "manual" });
+    const r = await fetch(url, { ...init, body: init.body as BodyInit | undefined, signal: ctrl.signal, redirect: "manual" });
     const text = await r.text();
     let json: any = null;
     try {

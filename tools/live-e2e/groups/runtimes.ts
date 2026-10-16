@@ -160,12 +160,18 @@ export const runtimes: Group = {
       throw new Error(`appSandbox not ready in 10 min: ${last}`);
     });
 
-    const build = async (name: string, files: Record<string, string>, probe: (base: string) => Promise<string>) => {
+    const build = async (
+      name: string,
+      files: Record<string, string>,
+      probe: (base: string) => Promise<string>,
+      onStaging?: (c: Awaited<ReturnType<typeof mcpOpen>>) => Promise<string>,
+    ) => {
       await rec.check(`${name}: MCP build → test copy deploys → finish → live`, async () => {
         const c = await mcpOpen(b, session, `gym-${name}`);
         const d = await buildAndDeploy(c, files);
         const check = await tool(c, "check_app", { path: "/" });
         assert(/200/.test(check), `test copy check_app: ${short(check, 200)}`);
+        if (onStaging) await rec.check(`${name}: the staging copy reaches no host at all (not even a package registry)`, () => onStaging(c));
         await finishAndWaitLive(c, b, `${user}--${name}`);
         return short(d, 100);
       }) && (await rec.check(`${name}: the live app answers`, () => probe(`https://${name}.${b.fqdn}`)));
@@ -185,6 +191,14 @@ export const runtimes: Group = {
       assert(rd.json?.file === `gym-${user}` && rd.json?.rows?.includes(`gym-${user}`), `/read ${short(rd.text)}`);
       assert(String(rd.json?.pg).startsWith("18"), `postgres ${rd.json?.pg}`);
       return `uid=${r.json.uid} pg=${rd.json.pg} file+row written and read back`;
+    }, async (c) => {
+      const out: string[] = [];
+      for (const host of ["example.com", "pypi.org"]) {
+        const t = await tool(c, "check_app", { path: `/probe?host=${host}` });
+        assert(/reached\W{0,6}false/.test(t) && !/reached\W{0,6}true/.test(t), `staging reached ${host}: ${short(t, 200)}`);
+        out.push(`${host} blocked`);
+      }
+      return out.join(", ");
     });
     await build("nodeapp", nodeFiles, async (base) => {
       let r = await tryHttp(`${base}/`);
