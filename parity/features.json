@@ -68,7 +68,7 @@
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/ServerShare.swift", "flagship/server-share/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ShareServerScreens.swift", "SharedApp"]] },
         "android": { "status": "partial", "reason": "No SharedAppScreen; a shared server's app rows aren't tappable (ShareServerScreens.kt).", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerShare.kt", "flagship/server-share/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ShareServerScreens.kt", "fun "]] },
-        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/serverShare.js", "flagship/server-share/v1"], ["apps/web/public/webapp/views/shared-server.js", "export"], ["apps/web/public/webapp/views/share-accept.js", "export (async )?function enterShareAccept"]] }
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/serverShare.js", "flagship/server-share/v1"], ["apps/web/public/webapp/views/shared-server.js", "data-db-open"], ["apps/web/public/webapp/lib/serverShares.js", "export async function shareDbSource"], ["apps/web/public/webapp/views/share-accept.js", "export (async )?function enterShareAccept"]] }
       }
     },
     {
@@ -88,7 +88,7 @@
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipAPI/Models/AppCopyModels.swift", "flagship/app-copy/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/AppPlacementViews.swift", "struct "], ["apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServiceDetailViewModel.swift", "AdminOrderGate.runsOn"]] },
         "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AppCopy.kt", "flagship/app-copy/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/viewmodels/AppPlacementViewModel.kt", "flagship/app-copy/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServiceDetailScreen.kt", "AdminOrderGate.RUNS_ON"]] },
-        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/appPlacement.js", "flagship/app-copy/v1"]] }
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/appPlacement.js", "flagship/app-copy/v1"], ["apps/web/public/webapp/views/service-detail.js", "const adminOnly = !canSignAdminOrders"]] }
       }
     },
     {
@@ -98,7 +98,7 @@
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipAPI/Models/AppApiKeyModels.swift", "flagship/app-api-key/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/AppApiKeysScreens.swift", "struct "]] },
         "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AppApiKey.kt", "flagship/app-api-key/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ApiKeysSection.kt", "fun "], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServiceDetailScreen.kt", "AdminOrderGate.API_KEYS"]] },
-        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/appApiKeys.js", "flagship/app-api-key/v1"]] }
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/appApiKeys.js", "flagship/app-api-key/v1"], ["apps/web/public/webapp/views/service-detail.js", "API_KEYS_ADMIN_ONLY"]] }
       }
     },
     {
@@ -108,7 +108,7 @@
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipAPI/Models/AppDbModels.swift", "flagship/app-db-write/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/AppDatabaseScreens.swift", "struct "]] },
         "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AppDbWrite.kt", "flagship/app-db-write/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/AppDatabaseScreens.kt", "fun "], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/AppDatabaseScreens.kt", "AdminOrderGate.DATABASE_WRITE"]] },
-        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/appDb.js", "flagship/app-db-write/v1"], ["apps/web/public/webapp/views/app-db.js", "export"]] }
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/appDb.js", "flagship/app-db-write/v1"], ["apps/web/public/webapp/views/app-db.js", "writeRefusal"]] }
       }
     },
     {
@@ -118,7 +118,7 @@
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipAPI/Models/AppAccessModels.swift", "flagship/app-access/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/AppAccessScreens.swift", "struct "]] },
         "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AppAccessList.kt", "flagship/app-access/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/AccessListScreens.kt", "fun "], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/AccessListScreens.kt", "AdminOrderGate.ACCESS_LIST"]] },
-        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/appAccess.js", "flagship/app-access/v1"], ["apps/web/public/webapp/views/app-access.js", "export"]] }
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/appAccess.js", "flagship/app-access/v1"], ["apps/web/public/webapp/views/app-access.js", "ACCESS_ADMIN_ONLY"], ["apps/web/public/webapp/lib/accessAlerts.js", "export async function fetchAccessRequestsOnServers"]] }
       }
     },
     {
@@ -178,7 +178,7 @@
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/VibeCodeSessionScreen.swift", "Jump to latest"]] },
         "android": { "status": "missing", "reason": "The chat renders every message; no cap or Jump to latest.", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/VibeCodeChatScreen.kt", "Jump to latest"]] },
-        "web": { "status": "missing", "reason": "The audit listed it present, but no transcript cap or Jump to latest was found in views/vibe-code.js on 2026-10-14; only the summary marker (SUMMARISED_NOTE).", "anchors": [["apps/web/public/webapp/views/vibe-code.js", "Jump to latest"]] }
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/vibeTranscript.js", "MAX_MESSAGES = 40"], ["apps/web/public/webapp/views/vibe-code.js", "transcriptWindow\\(all\\)"], ["apps/web/public/webapp/index.html", "id=\"vc-jump-latest\""]] }
       }
     },
     {
@@ -268,7 +268,7 @@
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift", "case \\.joinAccount"]] },
         "android": { "status": "partial", "reason": "Only from Welcome or an opened link, not from a signed-in Settings.", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/onboarding/JoinAccountContainer.kt", "fun "]] },
-        "web": { "status": "present", "anchors": [["apps/web/public/webapp/views/join.js", "export"]] }
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/views/join.js", "export async function openJoinAnotherAccount"], ["apps/web/public/webapp/index.html", "settings-tab-join-account"]] }
       }
     },
     {
@@ -510,7 +510,7 @@
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/ServerBackupFormat.swift", "flagship/server-restore/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerArchiveScreens.swift", "Backup/clone server"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerArchiveScreens.swift", "struct ImportBackupScreen"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerArchiveScreens.swift", "isDemoAccount: app.isDemoAccount"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift", "Add/Import a server"], ["apps/mobile/shared/Sources/FlagshipAPI/Models/ServerArchiveModels.swift", "flagship/archive-download/v1"]] },
         "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerArchive.kt", "flagship/server-archive/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServerArchiveScreens.kt", "Backup/clone server"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/HomeScreen.kt", "Add/Import a server"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/api/ServerArchiveModels.kt", "flagship/archive-download/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerBackupFormat.kt", "flagship/server-restore/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServerArchiveScreens.kt", "fun ImportBackupScreen"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/HomeScreen.kt", "Waiting for its backup"]] },
-        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/serverBackupFormat.js", "flagship/server-restore/v1"], ["apps/web/public/webapp/views/server-detail.js", "Backup/clone server"], ["apps/web/public/webapp/views/import-backup.js", "createServerForRestore"], ["apps/web/public/webapp/views/home.js", "ADD_IMPORT_LABEL"], ["apps/web/public/webapp/lib/serverArchive.js", "flagship/archive-download/v1"]] }
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/serverBackupFormat.js", "flagship/server-restore/v1"], ["apps/web/public/webapp/views/server-detail.js", "Backup/clone server"], ["apps/web/public/webapp/views/import-backup.js", "createServerForRestore"], ["apps/web/public/webapp/views/home.js", "ADD_IMPORT_LABEL"], ["apps/web/public/webapp/lib/serverArchive.js", "flagship/archive-download/v1"], ["apps/web/public/webapp/lib/serverArchive.js", "export function archiveErrorText"]] }
       }
     },
     {
