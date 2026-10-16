@@ -24,6 +24,7 @@
 import { controlApex } from "./apex.js";
 import { ensureAdminRoot as defaultEnsureAdminRoot } from "./adminRoot.js";
 import { throwIfRateLimited } from "./rateLimited.js";
+import { askLocalPassphrase, isLocalPassphrase } from "./localPassphrase.js";
 import {
   canonicalAccountProfile,
   canonicalDeviceSelfProfile,
@@ -141,7 +142,8 @@ export async function claimUsername(username, irkPub, sign, deps = {}) {
  *    addProfile?: (profile: object, opts?: object) => unknown,
  *    adoptProfileKeys?: (cloudName: string) => Promise<string|null>,
  *    persistSeedForProfile?: (seed: Uint8Array, cloudName: string, passphrase: string) => Promise<unknown>,
- *    makePassphrase?: () => string,
+ *    localPassphrase?: string,         this browser's passphrase, when the key must be re-wrapped
+ *    prompt?: (opts: object) => Promise<string|null>,  asks for it otherwise (lib/modal.js inlinePrompt)
  *    dispatchInitialView?: () => Promise<void>|void,
  *  }} deps
  *  @returns {Promise<{ username: string, alreadyClaimed: boolean }>}
@@ -272,12 +274,19 @@ export async function openAccount(username, deps) {
   // BEFORE addProfile so the keystore record exists before the profile is
   // listed/made active.
   // Carry the device key (under the owner's own passphrase) and the admin
-  // root onto the account's profile; re-wrap only when there is nothing to
-  // carry, under a passphrase the caller supplies or a random one.
+  // root onto the account's profile. Only when there is nothing to carry is
+  // the key re-wrapped, and then under a passphrase the owner chose (the
+  // caller's, or asked for now): the lock screen asks for exactly that one
+  // after a reload, so a generated one would lock them out.
   const adopted = typeof deps.adoptProfileKeys === "function" ? await deps.adoptProfileKeys(username) : null;
   if (!adopted && typeof deps.persistSeedForProfile === "function") {
-    const makePassphrase = deps.makePassphrase || randomLocalPassphrase;
-    await deps.persistSeedForProfile(session.umk, username, makePassphrase());
+    const passphrase = isLocalPassphrase(deps.localPassphrase)
+      ? deps.localPassphrase
+      : typeof deps.prompt === "function"
+        ? await askLocalPassphrase(deps.prompt)
+        : null;
+    if (!passphrase) throw new Error("choose a passphrase of 8+ characters to lock this browser");
+    await deps.persistSeedForProfile(session.umk, username, passphrase);
   }
 
   if (typeof deps.addProfile === "function") {
@@ -339,17 +348,6 @@ function canonicalDeviceGrant(grant) {
 
 function defaultBytesToHex(b) {
   return Array.from(b).map((x) => x.toString(16).padStart(2, "0")).join("");
-}
-
-/** Random URL-safe local at-rest wrap passphrase for the per-profile
- *  keystore record. The username claim (Ed25519-signed by the device key)
- *  is the real identity gate; a typed local passphrase here would just be
- *  friction on the open-account path. Mirrors loginTakeover.js. */
-function randomLocalPassphrase() {
-  const bytes = (globalThis.crypto || crypto).getRandomValues(new Uint8Array(24));
-  let s = "";
-  for (const b of bytes) s += b.toString(16).padStart(2, "0");
-  return s;
 }
 
 async function safeText(resp) {
