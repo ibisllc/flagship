@@ -22,6 +22,7 @@ import {
   HOME,
   REFUSED_NOT_ADMIN,
   createAccount,
+  freshUnlock,
   mock,
   reachHome,
   sawToast,
@@ -366,8 +367,23 @@ test.describe("gym webapp members and app pages", () => {
     await page.fill("#sa-name", "Robin");
     await page.setInputFiles("#sa-photo", { name: "robin.png", mimeType: "image/png", buffer: PNG });
     await expect(page.locator("#sa-photo-preview img")).toBeVisible();
+    // An admin's invite takes one fresh unlock: Cancel and a wrong passphrase send nothing.
+    const invites = () => m.sent((u) => u.pathname === "/api/users/smoketest/service-invites").length;
     await page.click("#sa-add-go");
+    await expect(page.locator(".modal-title")).toHaveText("Invite Robin?", { timeout: 10_000 });
+    await expect(page.locator(".modal-message")).toContainText("They will open this app as Manager.");
+    await shot(page, testInfo, "invite-fresh-unlock");
+    await page.click("[data-modal-cancel]");
+    await page.click("#sa-add-go");
+    await freshUnlock(page, "Invite Robin?", "not-this-device-passphrase");
+    await sawToast(page, "That passphrase doesn't unlock this device.");
+    expect(invites()).toBe(0);
+    expect(m.sent(svc("/members/rank"))).toHaveLength(0);
+    await page.click("#sa-add-go");
+    await freshUnlock(page, "Invite Robin?");
     await expect(page.locator("#sa-add-status")).toHaveText("Invite for Robin created.", { timeout: 10_000 });
+    // One unlock covered the invite and its rank.
+    await expect(page.locator(".modal-title")).toHaveCount(0);
 
     // The create goes to .com under the admin root; the name and photo only sealed.
     const create = m.last((u) => u.pathname === "/api/users/smoketest/service-invites")!;
@@ -416,10 +432,12 @@ test.describe("gym webapp members and app pages", () => {
     await page.click("#sa-add-person");
     await page.fill("#sa-name", "Ana");
     await page.click("#sa-add-go");
+    await freshUnlock(page, "Invite Ana?");
     await expect(page.locator("#sa-add-status")).toHaveText("Invite for Ana created.", { timeout: 10_000 });
     await page.click("#sa-add-person");
     await page.fill("#sa-name", "Ben");
     await page.click("#sa-add-go");
+    await freshUnlock(page, "Invite Ben?");
     await expect(page.locator("#sa-add-status")).toHaveText("Invite for Ben created.", { timeout: 10_000 });
     const second = await page.locator("#sa-link").inputValue();
     await page.click("#sa-copy");
@@ -448,6 +466,7 @@ test.describe("gym webapp members and app pages", () => {
     await page.fill("#sa-expiry-days", "7");
     await page.selectOption("#sa-new-role", "master");
     await page.click("#sa-add-go");
+    await freshUnlock(page, "Create the group Chess club?");
     await expect(page.locator("#sa-add-status")).toHaveText("Group Chess club created.", { timeout: 10_000 });
     const create = m.last((u) => u.pathname === "/api/users/smoketest/service-invites")!;
     const req = create.body.request;
@@ -486,6 +505,7 @@ test.describe("gym webapp members and app pages", () => {
     await page.fill("#sa-name", "Kim");
     await page.check("#sa-approve");
     await page.click("#sa-add-go");
+    await freshUnlock(page, "Invite Kim?");
     await expect(page.locator("#sa-add-status")).toHaveText("Invite for Kim created.", { timeout: 10_000 });
     await expect(page.locator("#sa-manual-hint")).toBeVisible();
     const req = m.last((u) => u.pathname === "/api/users/smoketest/service-invites")!.body.request;

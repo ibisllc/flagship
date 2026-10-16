@@ -11,7 +11,7 @@
  */
 
 import { test, expect, type Page, type TestInfo } from "@playwright/test";
-import { sawToast, watchToasts } from "./gymKit.js";
+import { freshUnlock, sawToast, watchToasts } from "./gymKit.js";
 import { createHash } from "node:crypto";
 import { stubAccountReadToken } from "../fixtures/accountRead.js";
 
@@ -183,10 +183,13 @@ const GONE_DEVICE = "00112233445566778899aabbccddeeff";
 /** Give this browser an account device id; `admin` decides whether it holds the admin root. */
 async function asDevice(page: Page, { admin }: { admin: boolean }): Promise<void> {
   await page.evaluate(
-    async ({ accountId, deviceId, admin }) => {
+    async ({ accountId, deviceId, admin, passphrase }) => {
       const profiles = await import("/lib/profiles.js");
       const store = await import("/lib/profilesStore.js");
       const { getSession } = await import("/lib/state.js");
+      // The account's profile holds this device's key under its passphrase,
+      // as opening an account leaves it, so a fresh unlock finds it.
+      await (await import("/keystore.js")).persistSeedForProfile(getSession().umk, "smoketest", passphrase);
       profiles.addProfile({ cloudName: "smoketest", accountId, deviceId });
       store.ensureProfile("smoketest");
       store.setActiveCloudName("smoketest");
@@ -195,7 +198,7 @@ async function asDevice(page: Page, { admin }: { admin: boolean }): Promise<void
       session.username = "smoketest";
       session.adminRootSeed = admin ? crypto.getRandomValues(new Uint8Array(32)) : null;
     },
-    { accountId: ACCOUNT_ID, deviceId: THIS_DEVICE, admin },
+    { accountId: ACCOUNT_ID, deviceId: THIS_DEVICE, admin, passphrase: PASSPHRASE },
   );
 }
 
@@ -348,6 +351,7 @@ test.describe("gym webapp apps", () => {
 
     // Raising Sam to Master signs flagship/app-rank/v1 for their invite.
     await sam.locator('select[data-action="sa-role"]').selectOption("master");
+    await freshUnlock(page, "Make Sam Master?");
     await expect(sam.locator(".sa-crown")).toBeVisible({ timeout: 10_000 });
     await expect(sam.locator('select[data-action="sa-role"]')).toHaveValue("master");
     const roleCall = calls.find((c) => c.method === "POST" && c.url.pathname === svc("/members/rank"));
@@ -563,7 +567,9 @@ test.describe("gym webapp apps", () => {
 
     // Demote the phone to Member: one admin-root order naming the device key.
     await row("Kitchen iPad").locator('select[data-action="sa-acct-rank"]').selectOption("member");
+    await freshUnlock(page, "Make Kitchen iPad Member?");
     await expect(row("Kitchen iPad").locator('select[data-action="sa-acct-rank"]')).toHaveValue("member", { timeout: 10_000 });
+    await expect.poll(() => calls.filter((c) => c.method === "POST" && c.url.pathname === svc("/members/rank")).length).toBe(1);
     const demote = calls.find((c) => c.method === "POST" && c.url.pathname === svc("/members/rank"))!;
     const o1 = demote.body.order;
     expect(o1).toEqual({ serviceRef: SERVICE_ID, target: `device:${PHONE_PUB}`, rank: "member", issuedAt: o1.issuedAt });
@@ -583,6 +589,7 @@ test.describe("gym webapp apps", () => {
     await shot(page, testInfo, "account-members-refused");
 
     await row("Mum").locator('select[data-action="sa-acct-rank"]').selectOption("manager");
+    await freshUnlock(page, "Make Mum Manager?");
     await expect(row("Mum").locator('select[data-action="sa-acct-rank"]')).toHaveValue("manager", { timeout: 10_000 });
     await expect(row("Mum").locator('[data-action="sa-acct-refuse"]')).toHaveCount(1);
     const back = calls.filter((c) => c.method === "POST" && c.url.pathname === svc("/members/rank"))[2]!;

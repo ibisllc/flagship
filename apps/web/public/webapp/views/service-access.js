@@ -40,6 +40,7 @@ import {
   signWithAccountId,
 } from "../keystore.js";
 import { sensitiveSigner } from "../lib/adminRoot.js";
+import { confirmFreshUnlock } from "../lib/freshUnlock.js";
 import {
   createInvite,
   listInvites,
@@ -455,6 +456,19 @@ async function onAdd(serviceRef) {
     }
   }
   const manual = !isGroup && !!$("sa-approve")?.checked;
+  // An admin's invite is signed with the admin root: one fresh unlock for it
+  // and its rank (owner rule: one biometric per invite).
+  if (admin) {
+    const unlocked = await freshAdminUnlock({
+      title: isGroup ? `Create the group ${name}?` : `Invite ${name}?`,
+      message: `${isGroup ? "Everyone who joins" : "They"} will open this app as ${roleLabel(role)}.`,
+      okLabel: "Create invite",
+    });
+    if (!unlocked) {
+      if (status) status.textContent = "";
+      return;
+    }
+  }
 
   if (status) {
     status.className = "mt-2 text-sm";
@@ -600,9 +614,10 @@ function addAbility() {
 }
 
 /**
- * The create/revoke signer: the admin root on an admin device (unlocked with
- * the session, no extra prompt), else this device's account device key, which
- * .com and the box take as a member-tier invite from this device.
+ * The create/revoke signer: the admin root on an admin device, else this
+ * device's account device key, which .com and the box take as a member-tier
+ * invite from this device. An admin's create (and a rank order) first takes
+ * one fresh unlock ({@link freshAdminUnlock}); a withdrawal uses the session.
  */
 function inviteSigner() {
   return sensitiveSigner(signWithThisDevice);
@@ -716,6 +731,16 @@ async function renderPeople(serviceRef) {
   });
 }
 
+/** One fresh unlock before an admin-root-signed invite or rank change
+ *  (lib/freshUnlock.js). Resolves true when the passphrase checks out; a
+ *  wrong one says so, a cancel says nothing. */
+async function freshAdminUnlock(opts) {
+  const r = await confirmFreshUnlock(opts);
+  if (r.ok) return true;
+  if (!r.cancelled) toast(r.error, "err");
+  return false;
+}
+
 /** Admin devices: sign one flagship/app-rank/v1 with the admin root and send it. */
 async function sendRank(serviceRef, target, rank) {
   const session = getSession();
@@ -736,6 +761,16 @@ async function onPickRole(serviceRef, sel) {
   const role = sel.value;
   if (role === before) return;
   if (!isAdminDevice(getSession())) {
+    sel.value = before;
+    return;
+  }
+  const name = sel.getAttribute("data-name") || "them";
+  const unlocked = await freshAdminUnlock({
+    title: `Make ${name} ${roleLabel(role)}?`,
+    message: `${name} gets what a ${roleLabel(role)} may do in this app.`,
+    okLabel: "Change rank",
+  });
+  if (!unlocked) {
     sel.value = before;
     return;
   }
@@ -820,7 +855,7 @@ export function accountMemberRowHtml(row, ctx = { isAdmin: false, devicePub: "",
   let actions;
   if (ctx.isAdmin) {
     const refusedOption = row.refused ? `<option value="${RANK_REFUSED}" selected disabled>${escapeHtml(roleLabel(RANK_REFUSED))}</option>` : "";
-    actions = `${row.refused ? "" : crownHtml(current)}<select data-action="sa-acct-rank" data-target="${escapeHtml(target)}" data-current="${escapeHtml(current)}" aria-label="Rank for ${escapeHtml(name)}">${refusedOption}${roleOptionsHtml(row.refused ? "" : current)}</select>${
+    actions = `${row.refused ? "" : crownHtml(current)}<select data-action="sa-acct-rank" data-target="${escapeHtml(target)}" data-current="${escapeHtml(current)}" data-name="${escapeHtml(name)}" aria-label="Rank for ${escapeHtml(name)}">${refusedOption}${roleOptionsHtml(row.refused ? "" : current)}</select>${
       row.refused
         ? ""
         : `<button class="sa-remove" type="button" data-action="sa-acct-refuse" data-target="${escapeHtml(target)}" data-name="${escapeHtml(name)}">Refuse</button>`
@@ -877,7 +912,7 @@ export function peopleRowHtml(i, members, labelOf, ctx = { isAdmin: false, devic
   const picker = !role
     ? ""
     : ctx.isAdmin
-      ? `${crownHtml(role)}<select data-action="sa-role" data-target="${escapeHtml(target)}" data-current="${escapeHtml(role)}" aria-label="Rank for ${escapeHtml(name)}">${roleOptionsHtml(role)}</select>`
+      ? `${crownHtml(role)}<select data-action="sa-role" data-target="${escapeHtml(target)}" data-current="${escapeHtml(role)}" data-name="${escapeHtml(name)}" aria-label="Rank for ${escapeHtml(name)}">${roleOptionsHtml(role)}</select>`
       : `${crownHtml(role)}<span class="sa-rank" data-rank="${escapeHtml(role)}">${escapeHtml(roleLabel(role))}</span>`;
   const removeLabel = isGroup ? "Revoke" : "Remove";
   const invitedBy = invitedByText(i, ctx);

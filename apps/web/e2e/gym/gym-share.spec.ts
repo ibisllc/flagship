@@ -49,7 +49,11 @@ async function reachHome(page: Page): Promise<void> {
   await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
   // The unlock toasts once it has dispatched its view: the sync point.
   await sawToast(page, "Unlocked", 30_000);
-  await page.evaluate(async () => {
+  await page.evaluate(async (passphrase) => {
+    // The account's profile holds this device's key under its passphrase, as
+    // opening an account leaves it, so a fresh unlock finds it.
+    const { getSession: session } = await import("/lib/state.js");
+    await (await import("/keystore.js")).persistSeedForProfile(session().umk, "smoketest", passphrase);
     const store = await import("/lib/profilesStore.js");
     store.ensureProfile("smoketest");
     store.setActiveCloudName("smoketest");
@@ -61,7 +65,7 @@ async function reachHome(page: Page): Promise<void> {
     api.setSessionToken("gym-fixture-session-token");
     api.setSessionTokenForPod("home.smoketest.flagship.services", "gym-fixture-session-token");
     (await import("/lib/apex.js")).setApexOverride({ control: "https://flagshipserver.com" });
-  });
+  }, PASSPHRASE);
 }
 
 type Responder = (body: unknown, url: URL) => { status?: number; json: unknown } | null;
@@ -240,6 +244,10 @@ test.describe("gym webapp share", () => {
     await expect(dlg.locator("[data-share-data]")).not.toBeChecked();
     await shot(page, testInfo, "share-sheet-form");
     await dlg.locator("[data-share-create]").click();
+    // The offer is admin-root-signed: one fresh unlock, asked inside the sheet.
+    await expect(dlg.locator("[data-share-unlock-title]")).toHaveText("Share home with Jo?");
+    await dlg.locator("[data-share-passphrase]").fill(PASSPHRASE);
+    await dlg.locator("[data-share-unlock-ok]").click();
     await expect(dlg.locator("[data-share-link]")).toHaveValue(/^https:\/\/flagshipserver\.com\/share#s=[0-9a-f]{32}&k=[0-9a-f]{64}$/, { timeout: 10_000 });
     await expect(dlg.locator("[data-share-qr] svg")).toBeVisible();
     await shot(page, testInfo, "share-sheet-link");

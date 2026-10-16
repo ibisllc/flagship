@@ -21,6 +21,8 @@ import {
   livePod,
   mock,
   reachHome,
+  freshUnlock,
+  PASSPHRASE,
   sensitive,
   serverDetail,
   shot,
@@ -352,6 +354,7 @@ test.describe("gym webapp sharing", () => {
 
     // Ana's code matches: Yes, confirm signs the grant with her acceptance.
     await row(page, fx.ana.row.shareId).locator("[data-share-confirm]").click();
+    await freshUnlock(page, "Give Ana access?");
     const grant = await m.waitFor(`${HOME}/api/screens/shares`);
     expect(grant.body.grant).toMatchObject({ serverDomain: HOME, shareId: fx.ana.row.shareId, memberPubHex: fx.ana.memberPubHex, level: "manage", label: "Ana" });
     expect(grant.body.accept.memberPubHex).toBe(fx.ana.memberPubHex);
@@ -378,6 +381,7 @@ test.describe("gym webapp sharing", () => {
 
     // See app data on.
     await sam.locator('[data-share-opt="seeAppData"]').check();
+    await freshUnlock(page, "Let Sam see app data?");
     g = await m.waitFor(`${HOME}/api/screens/shares`, "POST", 2);
     expect(g.body.grant).toMatchObject({ seeAppData: true, level: "manage" });
 
@@ -389,7 +393,7 @@ test.describe("gym webapp sharing", () => {
     expect(m.sent(`${HOME}/api/screens/shares`)).toHaveLength(2);
     // Allow: the grant, then Sam's copy of the disk key on .com.
     await sam.locator('[data-share-opt="unlockAtBoot"]').click();
-    await page.click("[data-modal-ok]");
+    await freshUnlock(page, "Let Sam approve start-up?");
     g = await m.waitFor(`${HOME}/api/screens/shares`, "POST", 3);
     expect(g.body.grant.unlockAtBoot).toBe(true);
     const dep = await m.waitFor(`/server-shares/${fx.active.shareId}/unlock`);
@@ -459,6 +463,15 @@ test.describe("gym webapp sharing", () => {
     await dlg.locator("[data-share-data]").check();
     await shot(page, testInfo, "share-sheet-all-on");
     await dlg.locator("[data-share-create]").click();
+    // One fresh unlock inside the sheet: a wrong passphrase is refused there and nothing is sent.
+    await expect(dlg.locator("[data-share-unlock-title]")).toHaveText("Share home with Jo?");
+    await dlg.locator("[data-share-passphrase]").fill("not-this-device-passphrase");
+    await dlg.locator("[data-share-unlock-ok]").click();
+    await expect(dlg.locator("[data-share-error]")).toHaveText("That passphrase doesn't unlock this device.");
+    expect(m.sent(/server-shares$/)).toHaveLength(0);
+    await dlg.locator("[data-share-create]").click();
+    await dlg.locator("[data-share-passphrase]").fill(PASSPHRASE);
+    await dlg.locator("[data-share-unlock-ok]").click();
     const link = dlg.locator("[data-share-link]");
     await expect(link).toHaveValue(/^https:\/\/flagshipserver\.com\/share#s=[0-9a-f]{32}&k=[0-9a-f]{64}$/, { timeout: 10_000 });
     const post = m.last(/server-shares$/)!;

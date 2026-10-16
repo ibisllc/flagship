@@ -33,6 +33,7 @@ import {
   shareErrorText,
 } from "../lib/serverShares.js";
 import { accountReadFetch } from "../lib/accountRead.js";
+import { confirmFreshUnlock } from "../lib/freshUnlock.js";
 import { SHARE_ADMIN_ONLY, canSignAdminOrders } from "../lib/addServerGate.js";
 
 const hasDisk = (body) => body?.diskEncryption !== "none";
@@ -210,6 +211,12 @@ function wireRows(body, state) {
       const a = byId(state.awaiting, btn.getAttribute("data-share-confirm"));
       if (!a) return;
       void busy(btn, async () => {
+        const unlocked = await freshShareUnlock({
+          title: `Give ${a.label} access?`,
+          message: `${a.label} will ${a.level === "manage" ? "manage" : "see"} ${serverNameOf(fqdn)}.`,
+          okLabel: "Give access",
+        });
+        if (!unlocked) return;
         const r = await confirmShare(fqdn, a);
         toast(`${a.label} can now ${a.level === "manage" ? "manage" : "see"} this server`, "ok");
         if (r.unlockError) toast(`Start-up approval isn't set up yet: ${shareErrorText(r.unlockError)}`, "err");
@@ -252,7 +259,22 @@ function wireRows(body, state) {
   root.querySelectorAll("[data-share-level]").forEach((sel) => {
     sel.addEventListener("change", () => {
       const s = byId(state.active, sel.getAttribute("data-share-id"));
-      if (s) void busy(sel, () => changeShare(fqdn, s, { level: sel.value }));
+      if (!s) return;
+      const level = sel.value;
+      void busy(sel, async () => {
+        if (level === "manage") {
+          const unlocked = await freshShareUnlock({
+            title: `Let ${s.label} manage ${serverNameOf(fqdn)}?`,
+            message: LEVEL_LINE.manage,
+            okLabel: "Allow",
+          });
+          if (!unlocked) {
+            sel.value = s.level;
+            return;
+          }
+        }
+        await changeShare(fqdn, s, { level });
+      });
     });
   });
   root.querySelectorAll("[data-share-opt]").forEach((box) => {
@@ -261,13 +283,17 @@ function wireRows(body, state) {
       if (!s) return;
       const key = box.getAttribute("data-share-opt");
       const on = box.checked;
-      if (key === "unlockAtBoot" && on) {
-        const ok = await inlineConfirm({
-          title: `Let ${s.label} approve start-up?`,
-          message: `${UNLOCK_LINE} They can unlock ${serverNameOf(fqdn)} when it starts. ${UNLOCK_WARNING}`,
-          okLabel: "Allow",
-        });
-        if (!ok) {
+      if (on) {
+        const unlocked = await freshShareUnlock(
+          key === "unlockAtBoot"
+            ? {
+                title: `Let ${s.label} approve start-up?`,
+                message: `${UNLOCK_LINE} They can unlock ${serverNameOf(fqdn)} when it starts. ${UNLOCK_WARNING}`,
+                okLabel: "Allow",
+              }
+            : { title: `Let ${s.label} see app data?`, message: DATA_LINE, okLabel: "Allow" },
+        );
+        if (!unlocked) {
           box.checked = false;
           return;
         }
@@ -406,11 +432,26 @@ export async function openShareSheet(body) {
   go.addEventListener("click", async () => {
     const err = q("[data-share-error]");
     err.classList.add("hidden");
+    const label = labelEl.value;
+    const level = dlg.querySelector('input[name="share-level"]:checked')?.value === "manage" ? "manage" : "view";
+    const unlocked = await confirmFreshUnlock(
+      {
+        title: `Share ${name} with ${label.trim()}?`,
+        message: `They'll ${level === "manage" ? "manage" : "see"} it with their own account.`,
+        okLabel: "Create link",
+      },
+      { prompt: sheetPrompt(dlg) },
+    );
+    if (!unlocked.ok) {
+      if (!unlocked.cancelled) {
+        err.textContent = unlocked.error;
+        err.classList.remove("hidden");
+      }
+      return;
+    }
     go.disabled = true;
     go.textContent = "Signing…";
     try {
-      const label = labelEl.value;
-      const level = dlg.querySelector('input[name="share-level"]:checked')?.value === "manage" ? "manage" : "view";
       created = await createShareOffer({
         serverDomain: fqdn,
         serverName: name,
@@ -429,6 +470,52 @@ export async function openShareSheet(body) {
     }
   });
   return dlg;
+}
+
+/** One fresh unlock before an admin-root-signed share grant (owner rule: one
+ *  biometric per invite). Turning things off and withdrawing use the session. */
+async function freshShareUnlock(opts) {
+  const r = await confirmFreshUnlock(opts);
+  if (r.ok) return true;
+  if (!r.cancelled) toast(r.error, "err");
+  return false;
+}
+
+/** The share sheet's own passphrase step, in place of lib/modal.js's prompt
+ *  (an overlay would sit under the open <dialog>). Same contract: resolves
+ *  the typed passphrase, or null on Cancel. */
+function sheetPrompt(dlg) {
+  return ({ title, message, okLabel = "Confirm" }) =>
+    new Promise((resolve) => {
+      const form = dlg.querySelector('[data-share-stage="form"]');
+      const stage = document.createElement("div");
+      stage.setAttribute("data-share-stage", "unlock");
+      stage.innerHTML = `
+        <p class="modal-title" data-share-unlock-title>${escapeHtml(title)}</p>
+        <p class="modal-message" data-share-unlock-message>${escapeHtml(message)}</p>
+        <input type="password" class="full-width" autocomplete="current-password" placeholder="Passphrase" aria-label="Passphrase" data-share-passphrase />
+        <div class="row-2 mt-3">
+          <button class="secondary" data-share-unlock-cancel>Cancel</button>
+          <button data-share-unlock-ok>${escapeHtml(okLabel)}</button>
+        </div>`;
+      form.classList.add("hidden");
+      form.after(stage);
+      const input = stage.querySelector("[data-share-passphrase]");
+      const done = (v) => {
+        stage.remove();
+        form.classList.remove("hidden");
+        resolve(v);
+      };
+      stage.querySelector("[data-share-unlock-ok]").addEventListener("click", () => done(input.value));
+      stage.querySelector("[data-share-unlock-cancel]").addEventListener("click", () => done(null));
+      input.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter") {
+          ev.preventDefault();
+          done(input.value);
+        }
+      });
+      input.focus();
+    });
 }
 
 function showLink(dlg, created) {

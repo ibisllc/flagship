@@ -48,7 +48,7 @@ export const WEB_APPS: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-members-invite-manager",
-    "An admin device invites a person at Manager with a photo: the create to .com is admin-root-signed and carries the name and photo only sealed; Manager rides an admin-root app-rank/v1 order; the result shows the box link (author, invite and app in the fragment), a QR, Copy link and Share.",
+    "An admin device invites a person at Manager with a photo: one fresh unlock (Cancel and a wrong passphrase send nothing) covers the invite and its rank; the create to .com is admin-root-signed and carries the name and photo only sealed; Manager rides an admin-root app-rank/v1 order; the result shows the box link (author, invite and app in the fragment), a QR, Copy link and Share.",
     "gym members an admin invites a person at Manager with a photo and gets the link, QR, Copy and Share",
     {
       steps: [
