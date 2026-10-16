@@ -12,6 +12,7 @@
 
 import type { Scenario } from "../scenario.js";
 import { ios, iosTotal, shot } from "./helpers.js";
+import { IOS_SWEEP_SCENARIOS } from "./ios-sweep.js";
 
 // ───────────────────────── every-merge (fast gate) ─────────────────────────
 
@@ -116,6 +117,36 @@ const EVERY_MERGE: readonly Scenario[] = [
         { describe: "No menu", handle: "home-add-new-server", expect: "absent" },
       ],
       screenshots: [shot("home-non-admin", "Home on a non-admin device.")],
+      dimension: "D1",
+    },
+  ),
+  ios(
+    "ios-import-backup",
+    "Home → Add/Import a server → Import a backup opens the restore flow at its first step: pick the archive's files (admin device).",
+    "FlagshipAppUITests/GymEveryMergeTests/test_importBackupOpensTheRestoreFlow",
+    {
+      steps: [
+        { kind: "tap", describe: "Add/Import a server.", handle: "home-add-server" },
+        { kind: "tap", describe: "Import a backup.", handle: "home-import-backup" },
+        { kind: "assert", describe: "Pick the files.", handle: "import-backup-choose" },
+      ],
+      assertions: [{ describe: "File picker step", handle: "import-backup-choose", expect: "present" }],
+      screenshots: [shot("import-backup-pick", "The first step.")],
+      dimension: "D1",
+    },
+  ),
+  ios(
+    "ios-awaiting-backup",
+    "A server made to restore a backup (-smoke-awaiting-backup) reads 'Waiting for its backup' on Home; tapping it opens the send flow.",
+    "FlagshipAppUITests/GymEveryMergeTests/test_aServerWaitingForItsBackupOffersToSendIt",
+    {
+      steps: [
+        { kind: "assert", describe: "Home marks the waiting server.", handle: "Waiting for its backup" },
+        { kind: "tap", describe: "Open it.", handle: "Waiting for its backup" },
+        { kind: "assert", describe: "The send flow.", handle: "import-backup-choose" },
+      ],
+      assertions: [{ describe: "Send flow", handle: "import-backup-choose", expect: "present" }],
+      screenshots: [shot("home-awaiting-backup", "Home."), shot("send-backup-pick", "Send flow.")],
       dimension: "D1",
     },
   ),
@@ -396,6 +427,23 @@ const IPAD: readonly Scenario[] = [
 const TOTAL_DETAIL: readonly Scenario[] = [
   // D1 — server-detail control sweep + the full create-server step flow.
   iosTotal(
+    "ios-total-detail-backup-passcode",
+    "D1: Backup/clone server opens with a suggested passcode; Start stays off until the passcode is saved.",
+    "FlagshipAppUITests/GymTotalDetailTests/test_backupStartsWithThePasscode",
+    {
+      steps: [
+        { kind: "tap", describe: "Home server → Backup/clone server.", handle: "sd-backup-server" },
+        { kind: "assert", describe: "Suggested passcode.", handle: "backup-suggested-passcode" },
+      ],
+      assertions: [
+        { describe: "Passcode suggested", handle: "backup-suggested-passcode", expect: "present" },
+        { describe: "Start waits for the passcode", handle: "backup-start", expect: "present" },
+      ],
+      screenshots: [shot("backup-passcode", "The passcode step.")],
+      dimension: "D1",
+    },
+  ),
+  iosTotal(
     "ios-total-detail-deadman-screen",
     "D1: the dead-man (auto lock-down) card opens its screen; the enable toggle renders.",
     "FlagshipAppUITests/GymTotalDetailTests/test_serverDetailDeadManScreenOpens",
@@ -580,7 +628,7 @@ const TOTAL_DETAIL: readonly Scenario[] = [
     "FlagshipAppUITests/GymTotalDetailTests/test_accountSecurityTotpEnrollStages",
     {
       steps: [
-        { kind: "tap", describe: "Settings → Account security (currently a no-op — see the skip).", handle: "settings-open-account-security" },
+        { kind: "tap", describe: "Settings → Account security.", handle: "settings-open-account-security" },
         { kind: "assert", describe: "Enrollment QR (when reachable).", handle: "account-security-qr" },
       ],
       assertions: [{ describe: "Enrollment QR present (when the nav is wired)", handle: "account-security-qr", expect: "present" }],
@@ -1114,4 +1162,5 @@ export const IOS_GYM_SCENARIOS: readonly Scenario[] = [
   ...TOTAL_DETAIL,
   ...FEATURE_MIRRORS,
   ...OCTOBER,
+  ...IOS_SWEEP_SCENARIOS,
 ];

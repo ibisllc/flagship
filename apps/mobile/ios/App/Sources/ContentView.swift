@@ -47,6 +47,7 @@ struct ContentView: View {
                 Color.clear
             }
             Toaster()
+            if GymProbe.isOn { GymProbeView() }
         }
         // One sheet for the whole queue: the next request replaces the answered
         // one in place. Keyed on the item, SwiftUI re-presented the sheet per

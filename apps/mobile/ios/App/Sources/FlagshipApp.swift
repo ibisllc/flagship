@@ -1,4 +1,5 @@
 import SwiftUI
+import CryptoKit
 import UIKit
 import Flagship
 import FlagshipCore
@@ -170,7 +171,8 @@ struct FlagshipApp: App {
         operations: ActiveOperationsCenter,
         trust: TrustCenter,
         privacy: PrivacySettings,
-        screens: MockScreensClient
+        screens: MockScreensClient,
+        mocks: GymMocks
     ) {
         let args = ProcessInfo.processInfo.arguments
         guard args.contains("-smoke-mode") else { return }
@@ -274,6 +276,16 @@ struct FlagshipApp: App {
         // very trap that scenario asserts (D4-E1).
         GymSeams.bypassBiometricGates = !wantLocked
         GymSeams.accountRootSeed = Data(repeating: 0x47, count: 32)
+        // The smoke account is admin-pinned like every account opened today:
+        // the mock `.com` and boxes verify sensitive orders under its admin
+        // root (refusing the IRK), and `-smoke-admin-root` makes this device
+        // hold that root. Without it the device is a non-admin one.
+        GymSeams.adminRootSeed = GymSeams.forceAdminRoot ? GymSeams.gymAdminRootSeed : nil
+        GymOrderCanonical.install()
+        MockOrderSigners.shared.pin(
+            adminRoot: (try? Curve25519.Signing.PrivateKey(rawRepresentation: GymSeams.gymAdminRootSeed))?.publicKey,
+            irk: Keystore.gymIRK()?.publicKey
+        )
         GymSeams.suppressAccessAlerts = !args.contains("-smoke-access-alert")
         if !GymSeams.suppressAccessAlerts {
             // "Not now" persists for a day; a prior run's answer must not hide the sheet.
@@ -284,6 +296,7 @@ struct FlagshipApp: App {
         // The live path derives this from a real `.com` blessing check
         // (ContentView.runTrustCheck, live-client only); the gym injects a fixed
         // failure so the degraded-trust experience is exercisable offline.
+        GymSweepSeams.apply(args: args, app: app, operations: operations, mocks: mocks)
         if args.contains("-smoke-trust-untrusted") {
             trust.markUntrusted([
                 TrustFailure(
@@ -499,6 +512,12 @@ struct FlagshipApp: App {
     }
     private let liveMailbox: any SecretMailboxClient
     private let readTokens: AccountReadTokenProvider
+    /// Every mock client, for the gym's launch seams.
+    private var gymMocks: GymMocks {
+        GymMocks(screens: mockClient, server: mockServerClient as? MockFlagshipServerClient, mailbox: mockMailbox,
+                 lockPower: mockLockPower, frontPage: mockFrontPage, uninstall: mockServiceUninstall,
+                 access: mockServiceAccess, transfer: mockServerTransfer, migration: mockServerMigration, relay: mockRelay)
+    }
     private var activeClient: any ScreensClient {
         dev.useLiveClient ? liveClient : mockClient
     }
@@ -592,7 +611,7 @@ struct FlagshipApp: App {
                 }
                 .onAppear {
                     Self.applySmokeModeIfRequested(appState, linker: linker, operations: operations, trust: trust, privacy: privacy,
-                                                   screens: mockClient)
+                                                   screens: mockClient, mocks: gymMocks)
                     appDelegate.linker = linker
                     linker.makeCurrent()
                     WatchBridge.shared.activate(

@@ -710,6 +710,21 @@ const OCTOBER: readonly Scenario[] = [
       dimension: "D3",
     },
   ),
+  androidTotal(
+    "android-oct-watch-quick-approve",
+    "D3: Settings → Account security → 'Quick approve from watch': off by default; on registers the delegate grant (its renewal date shows), off revokes it.",
+    `${PKG}.GymWatchTest#quickApproveFromWatchTogglesTheDelegateGrant`,
+    {
+      steps: [
+        { kind: "tap", describe: "Account security.", handle: "settings-open-account-security" },
+        { kind: "tap", describe: "Quick approve from watch.", handle: "watch-delegate-toggle" },
+        { kind: "assert", describe: "The grant is active.", handle: "watch-delegate-active" },
+      ],
+      assertions: [{ describe: "Delegate grant shown", handle: "watch-delegate-active", expect: "present" }],
+      screenshots: [shot("watch-quick-approve-off", "Off."), shot("watch-quick-approve-on", "On.")],
+      dimension: "D3",
+    },
+  ),
 ];
 
 export const ANDROID_GYM_SCENARIOS: readonly Scenario[] = [

@@ -17,6 +17,14 @@
 		A1C0C0A11CE5500000000001 /* AccessControlScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0A11CE5500000000002 /* AccessControlScreenshotTests.swift */; };
 		A1C0C0A11CE5500000000003 /* GymSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0A11CE5500000000004 /* GymSupport.swift */; };
 		A1C0C0A11CE5500000000005 /* GymOctoberTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0A11CE5500000000006 /* GymOctoberTests.swift */; };
+		A1C0C0A11CE5500000000100 /* GymSweepSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0A11CE5500000000101 /* GymSweepSupport.swift */; };
+		A1C0C0A11CE5500000000102 /* GymSweepHomeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0A11CE5500000000103 /* GymSweepHomeTests.swift */; };
+		A1C0C0A11CE5500000000104 /* GymSweepServerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0A11CE5500000000105 /* GymSweepServerTests.swift */; };
+		A1C0C0A11CE5500000000106 /* GymSweepAppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0A11CE5500000000107 /* GymSweepAppTests.swift */; };
+		A1C0C0A11CE5500000000108 /* GymSweepSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0A11CE5500000000109 /* GymSweepSettingsTests.swift */; };
+		A1C0C0A11CE550000000010A /* GymSweepBuildTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0A11CE550000000010B /* GymSweepBuildTests.swift */; };
+		A1C0C0A11CE550000000010C /* GymSweepShareTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0A11CE550000000010D /* GymSweepShareTests.swift */; };
+		A1C0C0A11CE550000000010E /* GymIPadSweepTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0C0A11CE550000000010F /* GymIPadSweepTests.swift */; };
 		348FD2E20DDB83B215026A45 /* AppStoreScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0F97547E19F9E2FA08E4F04 /* AppStoreScreenshotTests.swift */; };
 		34D09AC29C29E289630C4402 /* WatchRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1087DEB8E4808BCCBC78D8AB /* WatchRootView.swift */; };
 		37CD93243A7D74054B520FA0 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 5E2730A9F5FEA2A10B78AFB0 /* PrivacyInfo.xcprivacy */; };
@@ -162,6 +170,14 @@
 		A1C0C0A11CE5500000000002 /* AccessControlScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessControlScreenshotTests.swift; sourceTree = "<group>"; };
 		A1C0C0A11CE5500000000004 /* GymSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymSupport.swift; sourceTree = "<group>"; };
 		A1C0C0A11CE5500000000006 /* GymOctoberTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymOctoberTests.swift; sourceTree = "<group>"; };
+		A1C0C0A11CE5500000000101 /* GymSweepSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymSweepSupport.swift; sourceTree = "<group>"; };
+		A1C0C0A11CE5500000000103 /* GymSweepHomeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymSweepHomeTests.swift; sourceTree = "<group>"; };
+		A1C0C0A11CE5500000000105 /* GymSweepServerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymSweepServerTests.swift; sourceTree = "<group>"; };
+		A1C0C0A11CE5500000000107 /* GymSweepAppTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymSweepAppTests.swift; sourceTree = "<group>"; };
+		A1C0C0A11CE5500000000109 /* GymSweepSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymSweepSettingsTests.swift; sourceTree = "<group>"; };
+		A1C0C0A11CE550000000010B /* GymSweepBuildTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymSweepBuildTests.swift; sourceTree = "<group>"; };
+		A1C0C0A11CE550000000010D /* GymSweepShareTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymSweepShareTests.swift; sourceTree = "<group>"; };
+		A1C0C0A11CE550000000010F /* GymIPadSweepTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GymIPadSweepTests.swift; sourceTree = "<group>"; };
 		B0F97547E19F9E2FA08E4F04 /* AppStoreScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStoreScreenshotTests.swift; sourceTree = "<group>"; };
 		C026689338C66E2541C8B3EF /* FlagshipApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = FlagshipApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CA43A33A5EACE6A2A88A7032 /* ios */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ios; path = ..; sourceTree = SOURCE_ROOT; };
@@ -330,6 +346,14 @@
 				A1C0C0A11CE5500000000002 /* AccessControlScreenshotTests.swift */,
 				A1C0C0A11CE5500000000004 /* GymSupport.swift */,
 				A1C0C0A11CE5500000000006 /* GymOctoberTests.swift */,
+				A1C0C0A11CE5500000000101 /* GymSweepSupport.swift */,
+				A1C0C0A11CE5500000000103 /* GymSweepHomeTests.swift */,
+				A1C0C0A11CE5500000000105 /* GymSweepServerTests.swift */,
+				A1C0C0A11CE5500000000107 /* GymSweepAppTests.swift */,
+				A1C0C0A11CE5500000000109 /* GymSweepSettingsTests.swift */,
+				A1C0C0A11CE550000000010B /* GymSweepBuildTests.swift */,
+				A1C0C0A11CE550000000010D /* GymSweepShareTests.swift */,
+				A1C0C0A11CE550000000010F /* GymIPadSweepTests.swift */,
 				B0F97547E19F9E2FA08E4F04 /* AppStoreScreenshotTests.swift */,
 				9320B5267D47AFDE76FD5D46 /* GymEveryMergeTests.swift */,
 				1CCAE03802624702DE798B52 /* GymFeatureMirrorTests.swift */,
@@ -580,6 +604,14 @@
 				A1C0C0A11CE5500000000001 /* AccessControlScreenshotTests.swift in Sources */,
 				A1C0C0A11CE5500000000003 /* GymSupport.swift in Sources */,
 				A1C0C0A11CE5500000000005 /* GymOctoberTests.swift in Sources */,
+				A1C0C0A11CE5500000000100 /* GymSweepSupport.swift in Sources */,
+				A1C0C0A11CE5500000000102 /* GymSweepHomeTests.swift in Sources */,
+				A1C0C0A11CE5500000000104 /* GymSweepServerTests.swift in Sources */,
+				A1C0C0A11CE5500000000106 /* GymSweepAppTests.swift in Sources */,
+				A1C0C0A11CE5500000000108 /* GymSweepSettingsTests.swift in Sources */,
+				A1C0C0A11CE550000000010A /* GymSweepBuildTests.swift in Sources */,
+				A1C0C0A11CE550000000010C /* GymSweepShareTests.swift in Sources */,
+				A1C0C0A11CE550000000010E /* GymIPadSweepTests.swift in Sources */,
 				348FD2E20DDB83B215026A45 /* AppStoreScreenshotTests.swift in Sources */,
 				8CDC40B8810F689102B838D2 /* GymEveryMergeTests.swift in Sources */,
 				BD9630458EA132BCD16ADCA4 /* GymFeatureMirrorTests.swift in Sources */,
