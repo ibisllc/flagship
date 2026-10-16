@@ -82,7 +82,7 @@ export function orderedEntries(entries, activeId) {
 export const DELETE_TITLE = "Delete this key?";
 
 export function deleteMessage(label) {
-  return `${label} will be removed from this phone. Builds that are already running keep working.`;
+  return `${label} will be removed from this browser. Builds that are already running keep working.`;
 }
 
 async function chooseEntry(e) {

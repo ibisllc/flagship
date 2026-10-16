@@ -209,6 +209,7 @@ async function renderDetail(buildId, server = "") {
       state: held.state,
       fileCount: Array.isArray(held.files) ? held.files.length : 0,
       reason: failed.reason,
+      canAdapt: failed.canAdapt,
     });
   }
   try {

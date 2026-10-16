@@ -128,7 +128,7 @@ function wirePodSwitcher(root) {
 }
 
 function stripScheme(s) {
-  return s.replace(/^https?:\/\//, "");
+  return String(s ?? "").replace(/^https?:\/\//, "");
 }
 
 /** V7 — short link on its own line (bold, no icon) with a copy

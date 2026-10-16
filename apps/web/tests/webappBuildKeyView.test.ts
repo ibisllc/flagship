@@ -74,7 +74,7 @@ describe("webapp AI-key step", () => {
     expect(orderedEntries([{ id: "a" }, { id: "b" }], "b").map((e: { id: string }) => e.id)).toEqual(["b", "a"]);
     expect(orderedEntries([{ id: "a" }, { id: "b" }], "gone").map((e: { id: string }) => e.id)).toEqual(["a", "b"]);
     expect(DELETE_TITLE).toBe("Delete this key?");
-    expect(deleteMessage("Work")).toBe("Work will be removed from this phone. Builds that are already running keep working.");
+    expect(deleteMessage("Work")).toBe("Work will be removed from this browser. Builds that are already running keep working.");
   });
 
   it("vibe-code sends the credential on start and handles needsCredential", async () => {

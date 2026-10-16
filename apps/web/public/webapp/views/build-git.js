@@ -114,7 +114,7 @@ export function enterBuildGit() {
  * the box's reason and offer what the card offers, running the AI again
  * (unless the build is sealed) or installing the files it holds.
  */
-export async function resumeBuildGit({ buildId: id, server = "", state, fileCount = 0, reason }) {
+export async function resumeBuildGit({ buildId: id, server = "", state, fileCount = 0, reason, canAdapt = true }) {
   await enterBuildGit();
   // It stays on the server that holds it: no server picker.
   const picker = $("build-git-runs-on");
@@ -124,13 +124,15 @@ export async function resumeBuildGit({ buildId: id, server = "", state, fileCoun
   assignedName = state?.name ?? null;
   closed = state?.sealed === true;
   lastVerdict = { buildId: id, fit: false, reason, fileCount, name: assignedName };
+  // No AI for a sealed build, or on a box with no model to adapt with.
+  const offerAi = canAdapt && !closed;
   const card = $("build-git-verdict");
   card.classList.remove("hidden");
   card.innerHTML = `
     <div class="card" data-build-failed>
       <p class="err-text">${escapeHtml(reason)}</p>
-      ${closed ? "" : `<button id="build-git-adapt" class="full-width mt-2">${escapeHtml(ADAPT_BUTTON)}</button>`}
-      <button id="build-git-deploy" class="${closed ? "" : "secondary "}full-width mt-2">${escapeHtml(DEPLOY_BUTTON)}</button>
+      ${offerAi ? `<button id="build-git-adapt" class="full-width mt-2">${escapeHtml(ADAPT_BUTTON)}</button>` : ""}
+      <button id="build-git-deploy" class="${offerAi ? "secondary " : ""}full-width mt-2">${escapeHtml(DEPLOY_BUTTON)}</button>
       ${journalLink()}
     </div>`;
   $("build-git-adapt")?.addEventListener("click", () =>
