@@ -28,7 +28,7 @@ object Variant : AppVariant {
     override fun applyLaunchOverrides(intent: Intent?) {
         val host = intent?.getStringExtra(EXTRA_APEX_HOST)?.trim()?.lowercase().orEmpty()
         if (host.isEmpty()) return
-        Endpoints.setOverride(host.takeIf { it != Endpoints.PROD_CONTROL_HOST })
+        if (host == Endpoints.PROD_CONTROL_HOST) Endpoints.setOverride(null as Endpoints.Override?) else Endpoints.setOverride(host)
     }
 
     override fun gymLaunch(

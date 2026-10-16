@@ -122,9 +122,9 @@ internal class RestoreNeedsPairingException :
     Exception("This server couldn't be prepared to receive the backup. Try again.")
 
 /** Saves the design and chooser phases; the live ones restore as the chooser. */
-private val PhaseSaver = androidx.compose.runtime.saveable.Saver<androidx.compose.runtime.MutableState<Phase>, String>(
-    save = { if (it.value == Phase.Design) Phase.Design.name else Phase.DeliveryChooser.name },
-    restore = { mutableStateOf(Phase.valueOf(it)) },
+private val PhaseSaver = androidx.compose.runtime.saveable.Saver<Phase, String>(
+    save = { if (it == Phase.Design) Phase.Design.name else Phase.DeliveryChooser.name },
+    restore = { Phase.valueOf(it) },
 )
 
 private fun createError(t: Throwable): String {
