@@ -641,6 +641,9 @@ public final class SharedWithMeStore {
 
     private var inviteFlow: ServerShareMemberFlow? {
         if let inviteFlowOverride { return inviteFlowOverride }
+        #if !DEBUG
+        return flow
+        #else
         guard demo else { return flow }
         if let demoInviteFlow { return demoInviteFlow }
         let shareId = ServerShareDemo.entries()[0].shareId
@@ -651,6 +654,7 @@ public final class SharedWithMeStore {
             umkSeed: ServerShareServices.umkSeed)
         demoInviteFlow = made
         return made
+        #endif
     }
 
     /// Runs `body` with this share's token, signing in again once if the box

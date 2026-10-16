@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 import CryptoKit
 
@@ -148,3 +149,4 @@ public final class ShareCoInvitesMockBox: ServerShareTransport, @unchecked Senda
         return k.isValidSignature(s, for: bytes)
     }
 }
+#endif

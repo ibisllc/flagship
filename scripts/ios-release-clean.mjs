@@ -34,8 +34,8 @@ export const RELEASE_SOURCE_DIRS = [
 
 /** Names that only the gym, the unit tests or developer mode may use. */
 export const FORBIDDEN = [
-  { id: "mock type", re: /\bMock[A-Z]\w*/ },
-  { id: "gym fixtures", re: /\b(DemoFixtures|ServiceAccessFixture|samplePods\w*)\b/ },
+  { id: "mock type", re: /\b\w*Mock[A-Z]\w*/ },
+  { id: "gym fixtures", re: /\b(DemoFixtures|ServiceAccessFixture|samplePods\w*|ServerShareDemo\.(ownerRows|activity|link|sessions|entries|invitation|startup|secretHex|memberPub))\b/ },
   { id: "gym seam", re: /\b(GymSeams|GymLaunch|GymSweepSeams|GymOrderCanonical|GymMocks|GymProbe\w*|gymIRK|gymAdminRoot|gymForce\w*)\b/ },
   { id: "developer mode", re: /\b(DeveloperSettings|DeveloperScreen|useLiveClient|mockLatency\w*)\b|Developer menu|flagship\.dev\./ },
   { id: "smoke launch argument", re: /"-smoke-|"-apex-host"/ },
@@ -43,7 +43,7 @@ export const FORBIDDEN = [
 
 /** Strings a Release binary must not contain (checked with `strings`). */
 export const FORBIDDEN_IN_BINARY = [
-  /Mock(Screens|FlagshipServer|QrRelay|PairingRelay|SecretMailbox|LockPower|FrontPage|Leads|ServiceAccess|ServiceUninstall|ServerTransfer|ServerMigration|BuilderPair|DemoConnect|Browser|WebAuthn|OrderSigners|SuggestWords|DbTable)/,
+  /Mock(Screens|FlagshipServer|QrRelay|PairingRelay|SecretMailbox|LockPower|FrontPage|Leads|ServiceAccess|ServiceUninstall|ServerTransfer|ServerMigration|BuilderPair|DemoConnect|Browser|WebAuthn|OrderSigners|SuggestWords|DbTable|Box)/,
   /DemoFixtures|ServiceAccessFixture|samplePods/,
   /GymSeams|GymLaunch|GymSweepSeams|GymOrderCanonical|GymMocks|GymProbe/,
   /DeveloperSettings|DeveloperScreen|useLiveClient|mockLatency|Developer menu|flagship\.dev\./,
@@ -124,8 +124,9 @@ export function scanSwift(text, file = "<text>") {
     const code = codeOf(raw, state);
     if (stack.includes("debug")) return;
     for (const f of FORBIDDEN) {
-      const m = f.re.exec(code);
-      if (m) findings.push({ file, line: idx + 1, rule: f.id, match: m[0], text: t });
+      for (const m of code.matchAll(new RegExp(f.re.source, "g"))) {
+        findings.push({ file, line: idx + 1, rule: f.id, match: m[0], text: t });
+      }
     }
   });
   return findings;

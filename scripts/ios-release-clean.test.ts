@@ -10,7 +10,7 @@ describe("iOS Release builds ship no mocks or developer mode", () => {
   it("flags Release-visible mock and dev-mode code and ignores Debug-only code and comments", () => {
     const src = [
       "import Foundation",
-      "let a = MockScreensClient()",
+      "let a = MockScreensClient(); let a2 = ShareCoInvitesMockBox.gym(bundleKey: nil)",
       "// MockScreensClient in a comment is fine",
       "let url = \"https://x\" // DemoFixtures",
       "#if DEBUG",
@@ -30,7 +30,7 @@ describe("iOS Release builds ship no mocks or developer mode", () => {
       "   still a comment */ let g = dev.useLiveClient",
     ].join("\n");
     const found = scanSwift(src).map((f: { line: number; match: string }) => `${f.line}:${f.match}`);
-    expect(found).toEqual(["2:MockScreensClient", "8:GymSeams", "11:DeveloperSettings", "16:\"-smoke-", "19:useLiveClient"]);
+    expect(found).toEqual(["2:MockScreensClient", "2:ShareCoInvitesMockBox", "8:GymSeams", "11:DeveloperSettings", "16:\"-smoke-", "19:useLiveClient"]);
   });
 
   it("flags mock and developer-mode names in a binary's strings", () => {
@@ -39,8 +39,9 @@ describe("iOS Release builds ship no mocks or developer mode", () => {
       "_$s10FlagshipUI17MockScreensClientCMn",
       "Developer menu unlocked.",
       "-smoke-mode",
+      "_$s12FlagshipCore21ShareCoInvitesMockBoxCMn",
       "DemoAccount",
     ].join("\n");
-    expect(scanBinaryStrings(strings)).toEqual(["-smoke-mode", "Developer menu", "MockScreens"]);
+    expect(scanBinaryStrings(strings)).toEqual(["-smoke-mode", "Developer menu", "MockBox", "MockScreens"]);
   });
 });
