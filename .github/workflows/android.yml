@@ -56,3 +56,11 @@ jobs:
 
       - name: Build debug APK
         run: ./gradlew --no-daemon :app:assembleDebug
+
+      # Mock clients, fixtures, gym seams and developer mode live in src/debug
+      # only; a release build must carry none of them.
+      - name: Build release APKs (debug-signed)
+        run: ./gradlew --no-daemon :app:assembleRelease :wear:assembleRelease
+
+      - name: Release carries no mock data or developer mode
+        run: bash scripts/check-release-clean.sh

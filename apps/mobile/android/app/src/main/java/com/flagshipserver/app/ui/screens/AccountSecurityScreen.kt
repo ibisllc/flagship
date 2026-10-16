@@ -54,7 +54,7 @@ import androidx.navigation.NavController
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.keystore.CloudRecoveryEnrollment
-import com.flagshipserver.app.core.GymSeams
+import com.flagshipserver.app.core.Variant
 import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.keystore.KeystoreIrkAccess
 import com.flagshipserver.app.keystore.PasskeyCeremonyAdapter
@@ -190,7 +190,7 @@ fun AccountSecurityScreen(nav: NavController) {
 
         // Slice D (§5) — "Rotate admin key". Shown ONLY on a device that holds
         // the admin master root (greyed/absent otherwise).
-        if (GymSeams.forceAdminRoot || Keystore.hasAdminRoot()) {
+        if (Variant.forceAdminRoot || Keystore.hasAdminRoot()) {
             AdminRootRotateCard(server = server, username = app.currentUser.value ?: "")
         }
         Spacer(Modifier.height(FS.space.s2))

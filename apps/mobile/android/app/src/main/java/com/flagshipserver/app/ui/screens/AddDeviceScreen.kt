@@ -48,7 +48,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.flagshipserver.app.core.LocalAppState
-import com.flagshipserver.app.core.MockDevicePairingRelay
 import com.flagshipserver.app.core.PairingQr
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSGhostButton
@@ -71,15 +70,17 @@ fun AddDeviceScreen(
     val username = app.currentUser.collectAsState().value ?: ""
     val scope = rememberCoroutineScope()
 
-    // The relay transport is a CompositionLocal-free seam here: the live
-    // phone↔phone relay lands with the server's role plumbing. Until then
-    // the screen uses the Mock so the UI is exercisable; tests drive the
-    // VM directly.
-    val relay = remember { MockDevicePairingRelay() }
+    // No live phone-to-phone relay exists yet: say so instead of pairing over
+    // nothing. Debug builds use the in-memory relay so the gym can drive it.
+    val relays = remember { com.flagshipserver.app.core.Variant.devicePairingRelays() }
+    if (relays == null) {
+        DevicePairingUnavailable(title = "Add a device", onCancel = onCancel)
+        return
+    }
     val vm: AddDeviceViewModel = viewModel(
         factory = viewModelFactory {
             initializer {
-                AddDeviceViewModel(relay = relay.admin, username = username)
+                AddDeviceViewModel(relay = relays.admin, username = username)
             }
         },
     )
@@ -317,3 +318,27 @@ internal fun RiskWarning(text: String) {
  *  QrRelay.formatMatchCode + webapp/lib/pairingRelay.js. */
 internal fun formatSas(code: String): String =
     if (code.length == 6) "${code.substring(0, 3)} ${code.substring(3)}" else code
+
+/** Where device pairing would start while no live relay exists. */
+@Composable
+internal fun DevicePairingUnavailable(title: String, onCancel: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = FS.space.s6, vertical = FS.space.s8)
+            .semantics { contentDescription = "device-pairing-unavailable" },
+        verticalArrangement = Arrangement.spacedBy(FS.space.s4),
+    ) {
+        Text(
+            title,
+            color = FS.colors.text,
+            style = TextStyle(fontSize = 28.sp, fontWeight = FontWeight.SemiBold),
+        )
+        Text(
+            com.flagshipserver.app.core.DEVICE_PAIRING_UNAVAILABLE,
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 16.sp),
+        )
+        FSPrimaryButton(label = "Back", onClick = onCancel, block = true)
+    }
+}

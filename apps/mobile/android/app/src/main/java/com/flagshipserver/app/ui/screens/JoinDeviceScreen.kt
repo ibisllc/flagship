@@ -45,7 +45,6 @@ import androidx.compose.ui.unit.sp
 import com.flagshipserver.app.core.JoinLink
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalFlagshipServerClient
-import com.flagshipserver.app.core.MockDevicePairingRelay
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPrimaryButton
@@ -70,6 +69,14 @@ fun JoinDeviceScreen(
 ) {
     // No screenshots — the SAS + relay are the join doorway.
     SecureWindow()
+
+    // No live phone-to-phone relay exists yet: say so before the scanner.
+    // Debug builds use the in-memory relay so the gym can drive it.
+    val relays = remember { com.flagshipserver.app.core.Variant.devicePairingRelays() }
+    if (relays == null) {
+        DevicePairingUnavailable(title = "Join an account", onCancel = onCancel)
+        return
+    }
 
     val app = LocalAppState.current
     val server = LocalFlagshipServerClient.current
@@ -96,14 +103,10 @@ fun JoinDeviceScreen(
         return
     }
 
-    // The live phone↔phone relay lands with the server's role plumbing;
-    // until then the screen uses the Mock so the surface is exercisable.
-    // Tests drive the VM directly with their own relay.
-    val relay = remember { MockDevicePairingRelay() }
     val vm = remember(link) {
         JoinDeviceViewModel(
             joinLink = link!!,
-            relay = relay.incoming,
+            relay = relays.incoming,
             server = server,
             app = app,
         )

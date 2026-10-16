@@ -148,7 +148,7 @@ class DemoServerBlockTest {
             status = "none",
             ttlIdleMinutes = 30,
         )
-        DemoFixtures.activate(app, "demoalice", demoServer = block)
+        DemoAccount.activate(app, "demoalice", demoServer = block)
         val pods = app.pods.first()
         assertEquals("demoServer-present path must render ONE device", 1, pods.size)
         assertEquals("home.demoalice.flagship.services", pods.first().fqdn)
@@ -158,37 +158,24 @@ class DemoServerBlockTest {
         assertEquals("demoalice", app.currentUser.first())
     }
 
-    @Test fun activate_demoServerNil_fallsBackToThreeFixtures() = runTest {
-        // Backward compat: an already-shipped Worker that only has a
-        // TEST_ACCOUNTS entry (no demo_users row) keeps producing
-        // the legacy 3-pod sandbox.
+    @Test fun activate_demoServerNil_hasNoServers() = runTest {
+        // No fixture servers outside the gym: without a demo server the
+        // account opens with none, like any new account.
         val app = AppState()
-        DemoFixtures.activate(app, "play-reviewer-q2", demoServer = null)
-        val pods = app.pods.first()
-        assertEquals("demoServer-absent path keeps the legacy 3 fixtures",
-            3, pods.size)
-        assertEquals(listOf("Home", "Office", "Music"), pods.map { it.name })
-    }
-
-    @Test fun activate_defaultOverloadStillFallsBackToFixtures() = runTest {
-        // The legacy 2-arg activate(_:username:) callers (older code
-        // paths) must still get the 3-pod sandbox — i.e. the new
-        // demoServer param is a non-breaking optional default.
-        val app = AppState()
-        DemoFixtures.activate(app, "play-reviewer-q2")
-        assertEquals(3, app.pods.first().size)
+        DemoAccount.activate(app, "play-reviewer-q2", demoServer = null)
+        assertTrue(app.pods.first().isEmpty())
     }
 
     @Test fun samplePodFromDemoServer_upStatusMapsToOnline() {
         val block = DemoServerBlock("home.demoalice.flagship.services", "up", 30)
-        val pod = DemoFixtures.samplePodFromDemoServer(block, "demoalice")
+        val pod = DemoAccount.samplePodFromDemoServer(block, "demoalice")
         assertEquals(PodInfo.Status.ONLINE, pod.status)
         assertEquals("home.demoalice.flagship.services", pod.fqdn)
     }
 
     @Test fun samplePodFromDemoServer_provisioningMapsToPending() {
         val block = DemoServerBlock("home.demoalice.flagship.services", "provisioning", 30)
-        val pod = DemoFixtures.samplePodFromDemoServer(block, "demoalice")
+        val pod = DemoAccount.samplePodFromDemoServer(block, "demoalice")
         assertEquals(PodInfo.Status.PENDING, pod.status)
     }
 

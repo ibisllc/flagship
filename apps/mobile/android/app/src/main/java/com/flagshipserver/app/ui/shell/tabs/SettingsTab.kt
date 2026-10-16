@@ -23,7 +23,6 @@ import com.flagshipserver.app.ui.screens.KeyfileExportScreen
 import java.net.URLDecoder
 import java.net.URLEncoder
 import com.flagshipserver.app.ui.screens.AiKeysManagerScreen
-import com.flagshipserver.app.ui.screens.DeveloperScreen
 import com.flagshipserver.app.ui.screens.PairedSessionsScreen
 import com.flagshipserver.app.ui.screens.PeerBackupScreen
 import com.flagshipserver.app.ui.screens.PostRecoveryScreen
@@ -131,7 +130,6 @@ fun SettingsTab() {
         composable("recovery") { RecoveryScreen(nav) }
         composable("post-recovery") { PostRecoveryScreen(nav) }
         composable("keyfile-export") { KeyfileExportScreen(nav) }
-        composable("developer") { DeveloperScreen(nav) }
         composable("providers") { ProvidersScreen(nav) }
         composable("ai-keys") { AiKeysManagerScreen(nav) }
         composable("privacy") { PrivacyScreen(nav) }

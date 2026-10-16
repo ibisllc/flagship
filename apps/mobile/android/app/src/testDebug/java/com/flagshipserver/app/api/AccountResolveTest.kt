@@ -6,14 +6,14 @@
 //     account is kind="unknown" with zeroed factors, NEVER an error.
 //   - a seeded demo username resolves to kind="demo" + a demoServer
 //     block; demo crypto is a no-op so the join skips every credential.
-//   - the demo branch, fed into DemoFixtures.activate, opens the
+//   - the demo branch, fed into DemoAccount.activate, opens the
 //     account (a freshly-attached device + the sandbox pod).
 //   - the wire decodes byte-identically from the Worker JSON shape.
 
 package com.flagshipserver.app.api
 
 import com.flagshipserver.app.core.AppState
-import com.flagshipserver.app.core.DemoFixtures
+import com.flagshipserver.app.core.DemoAccount
 import com.flagshipserver.app.core.PodInfo
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -128,10 +128,10 @@ class AccountResolveTest {
         }
         val app = AppState()
         // Drive the JoinAccountContainer's demo branch logic directly:
-        // resolve → kind==demo → DemoFixtures.activate(demoServer).
+        // resolve → kind==demo → DemoAccount.activate(demoServer).
         val r = mock.resolveAccount("demoalice")
         assertEquals(AccountResolution.AccountKind.Demo, r.accountKind)
-        DemoFixtures.activate(app, r.username, demoServer = r.demoServer)
+        DemoAccount.activate(app, r.username, demoServer = r.demoServer)
 
         assertTrue("demo join must open the account", app.isPaired.first())
         assertEquals("demoalice", app.currentUser.first())

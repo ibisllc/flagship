@@ -43,7 +43,7 @@ import com.flagshipserver.app.api.PushTokenRegisterRequest
 import com.flagshipserver.app.api.RecoveryEnvelopeRequest
 import com.flagshipserver.app.api.UsernameClaimRequest
 import com.flagshipserver.app.core.AppState
-import com.flagshipserver.app.core.DemoFixtures
+import com.flagshipserver.app.core.DemoAccount
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.PodInfo
 import com.flagshipserver.app.keystore.Keystore
@@ -219,8 +219,8 @@ class LoginDecisionMatrixConformanceTest {
         }
         val app = AppState()
         val r = server.resolveAccount("demoalice")
-        // The JoinAccountContainer demo branch: DemoFixtures.activate.
-        DemoFixtures.activate(app, r.username, demoServer = r.demoServer)
+        // The JoinAccountContainer demo branch: DemoAccount.activate.
+        DemoAccount.activate(app, r.username, demoServer = r.demoServer)
         assertTrue(app.isPaired.first())
         assertEquals("demoalice", app.currentUser.first())
         val pods = app.pods.first()

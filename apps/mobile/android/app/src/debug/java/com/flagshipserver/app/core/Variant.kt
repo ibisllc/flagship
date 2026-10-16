@@ -1,0 +1,118 @@
+// Debug builds: the UI gym's launch seams and the mock clients its no-backend
+// scenarios run on (see AppVariant). Never compiled into a release build.
+
+package com.flagshipserver.app.core
+
+import android.content.Intent
+import com.flagshipserver.app.api.AppAccessPending
+import com.flagshipserver.app.api.BuildClient
+import com.flagshipserver.app.api.FlagshipServerClient
+import com.flagshipserver.app.api.MockBuildClient
+import com.flagshipserver.app.api.MockFlagshipServerClient
+import com.flagshipserver.app.api.MockScreensClient
+import com.flagshipserver.app.api.MockSecretMailboxClient
+import com.flagshipserver.app.api.MockServerTransferClient
+import com.flagshipserver.app.api.MockServiceAccessClient
+import com.flagshipserver.app.api.ScreensClient
+import com.flagshipserver.app.api.SecretMailboxClient
+import com.flagshipserver.app.api.ServerTransferClient
+import com.flagshipserver.app.api.ServiceAccessClient
+
+object Variant : AppVariant {
+    /** Launch extra that points every client at another backend apex (the
+     *  gym environment, or an unreachable host to keep a live run offline). */
+    const val EXTRA_APEX_HOST = "flagship.apexHost"
+
+    @Volatile private var mockRun = false
+
+    override fun applyLaunchOverrides(intent: Intent?) {
+        val host = intent?.getStringExtra(EXTRA_APEX_HOST)?.trim()?.lowercase().orEmpty()
+        if (host.isEmpty()) return
+        Endpoints.setOverride(host.takeIf { it != Endpoints.PROD_CONTROL_HOST })
+    }
+
+    override fun gymLaunch(
+        intent: Intent?,
+        appState: AppState,
+        operations: ActiveOperationsCenter,
+        trust: TrustCenter,
+    ): GymLaunch? {
+        val cfg = SmokeModeConfig.from(intent) ?: return null
+        val tab = SmokeMode.apply(config = cfg, appState = appState, operations = operations, trust = trust)
+        mockRun = !cfg.live
+        if (cfg.live) return GymLaunch(tab, mocks = null)
+
+        val screens = MockScreensClient()
+        // The access dialogs ask about each waiting host in turn: give Plants a
+        // second one so Allow and Deny can both be answered (iOS has two).
+        if (cfg.seedAccessAlert) {
+            screens.accessFixture["bright-maple--plants"]?.let { plants ->
+                screens.accessFixture["bright-maple--plants"] = plants.copy(
+                    pending = plants.pending + AppAccessPending(
+                        "tile.openstreetmap.org",
+                        AppAccessPending.SOURCE_ATTEMPT,
+                        3,
+                        System.currentTimeMillis() - 600_000L,
+                        System.currentTimeMillis() - 60_000L,
+                    ),
+                )
+            }
+        }
+        val build = MockBuildClient()
+        // Smoke mode has no `.com` or box: an in-memory share world instead.
+        val shares = if (!cfg.seedShares) null else {
+            val home = appState.pods.value.firstOrNull { it.name == "Home" }
+            MockServerShares.runtime(
+                username = cfg.username,
+                homeDomain = home?.fqdn ?: "home.${cfg.username}.flagship.services",
+                homeStkPubHex = home?.identityPubKeyHex ?: "51".repeat(32),
+                memberScreens = screens,
+            )
+        }
+        val accessBoxes: ((AppState) -> List<AccessBox>)? = if (!cfg.seedAccessAlert) null else { app ->
+            app.currentPod?.let { listOf(AccessBox(it.podId, it.fqdn, screens)) }.orEmpty()
+        }
+        return GymLaunch(
+            tab,
+            GymMocks(
+                screens = screens,
+                build = build,
+                flagshipServer = MockFlagshipServerClient(),
+                relay = MockQrRelayClient(),
+                transfer = MockServerTransferClient(),
+                mailbox = MockSecretMailboxClient(),
+                podClients = FixedPodClients(screens, build),
+                shares = shares,
+                accessBoxes = accessBoxes,
+            ),
+        )
+    }
+
+    override val usesMockClients: Boolean get() = mockRun
+    override val forceAdminRoot: Boolean get() = GymSeams.forceAdminRoot
+    override val bypassBiometricGates: Boolean get() = GymSeams.bypassBiometricGates
+
+    override fun defaultScreens(): ScreensClient = MockScreensClient()
+    override fun defaultBuild(): BuildClient = MockBuildClient()
+    override fun defaultFlagshipServer(): FlagshipServerClient = MockFlagshipServerClient()
+    override fun defaultQrRelay(): QrRelayClient = MockQrRelayClient()
+    override fun defaultMailbox(): SecretMailboxClient = MockSecretMailboxClient()
+    override fun defaultTransfer(): ServerTransferClient = MockServerTransferClient()
+
+    override fun serviceAccessFixture(screens: ScreensClient): ServiceAccessFixture? {
+        if (screens !is MockScreensClient) return null
+        return ServiceAccessFixture(
+            client = if (mockRun) MockServiceAccessClient.shared else ServiceAccessClient(),
+            selfDeviceId = MockScreensClient.SELF_DEVICE_ID,
+            selfDevicePub = MockScreensClient.SELF_DEVICE_PUB,
+            deviceNames = MockScreensClient.DEVICE_NAMES,
+        )
+    }
+
+    override fun freeAiClient(): FreeAiClient? = if (mockRun) MockFreeAiClient() else null
+
+    override fun reuseRelay(shared: QrRelayClient): QrRelayClient? = shared.takeIf { it is MockQrRelayClient }
+
+    override fun devicePairingRelays(): DevicePairingRelays =
+        MockDevicePairingRelay().let { DevicePairingRelays(it.admin, it.incoming) }
+}

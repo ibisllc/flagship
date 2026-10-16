@@ -1,6 +1,6 @@
 // Settings landing, organised into the spec S1 six-group taxonomy: Account ·
-// Devices · Companions · Web access · Backup & peers · App · Danger zone ·
-// Developer (hidden). One tap to any row; mirrors the iOS/webapp grouping.
+// Devices · Companions · Web access · Backup & peers · App · Danger zone.
+// One tap to any row; mirrors the iOS/webapp grouping.
 
 package com.flagshipserver.app.ui.screens
 
@@ -80,7 +80,6 @@ import com.flagshipserver.app.core.AppState
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.api.PushTokenRevokeRequest
 import com.flagshipserver.app.core.HexUtil
-import com.flagshipserver.app.core.LocalDeveloperSettings
 import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.PushTokenRevoke
@@ -102,11 +101,8 @@ fun SettingsScreen(nav: NavController) {
     val app = LocalAppState.current
     val privacy = LocalPrivacySettings.current
     val themeMode = privacy?.themeMode?.collectAsState()?.value ?: ThemeMode.AUTO
-    val dev = LocalDeveloperSettings.current
     val server = LocalFlagshipServerClient.current
     val client = LocalScreensClient.current
-    val devUnlocked = dev?.unlocked?.collectAsState()?.value ?: false
-    var versionTaps by remember { mutableIntStateOf(0) }
     // C6a — drives the Remove-this-device confirmation dialog.
     var showRemoveConfirm by remember { mutableStateOf(false) }
     // Tier 2 — drives the key-wipe Sign-out confirmation dialog. Copy +
@@ -153,13 +149,13 @@ fun SettingsScreen(nav: NavController) {
     // never wrap a real UMK. A passwordless demo ACCOUNT (its profile or pods
     // carry a demoServer block) counts as demo too — it holds no account keys,
     // so the key-backed rows are hidden and Delete account becomes a
-    // remove-from-device. Absent DeveloperSettings ⇒ the mock half is false
-    // (fail-closed: the gate applies).
+    // remove-from-device. A debug gym run on mocks counts as demo; a release
+    // build never does (fail-closed: the gate applies).
     val pods by app.pods.collectAsState()
     val profiles by app.profiles.collectAsState()
     val activeCloud by app.activeCloudName.collectAsState()
     val isDemoAccountSession = AppState.isDemoAccount(profiles.firstOrNull { it.cloudName == activeCloud }, pods)
-    val isMockSession = dev?.useLiveClient?.collectAsState()?.value?.let { !it } ?: false
+    val isMockSession = com.flagshipserver.app.core.Variant.usesMockClients
     val isDemoAccount = isMockSession || isDemoAccountSession
     var showDemoDeleteNotice by remember { mutableStateOf(false) }
     val signOutPolicy = SignOutPolicy.evaluate(
@@ -214,7 +210,7 @@ fun SettingsScreen(nav: NavController) {
         Spacer(Modifier.height(FS.space.s6))
 
         // Settings taxonomy (spec S1): Account · Devices · Companions ·
-        // Web access · Backup & peers · App · Danger zone · Developer (hidden).
+        // Web access · Backup & peers · App · Danger zone.
         // One tap to any row; account security leads the Account group. Matches
         // the iOS six-group result so the surfaces stay isomorphic.
 
@@ -418,22 +414,14 @@ fun SettingsScreen(nav: NavController) {
                     onClick = { nav.navigate("privacy") },
                 ),
                 // About — Android has no separate About screen, so the version /
-                // license card below IS the About surface (it also carries the
-                // 3-tap developer unlock). This row scrolls to nothing extra; it
-                // exists for group parity with iOS/web and taps the same unlock.
+                // license card below IS the About surface. The row exists for
+                // group parity with iOS/web.
                 FSSettingsRowData(
                     icon = Icons.Outlined.Info,
                     title = "About Flagship",
                     subtitle = "Version, license, source.",
                     showsChevron = false,
-                    onClick = {
-                        // Debug builds only: a shipped build has no hidden
-                        // mode that swaps in fake data.
-                        if (BuildConfig.DEBUG) {
-                            versionTaps += 1
-                            if (versionTaps >= 3) dev?.setUnlocked(true)
-                        }
-                    },
+                    onClick = {},
                 ),
             ),
         )
@@ -454,32 +442,7 @@ fun SettingsScreen(nav: NavController) {
                     modifier = Modifier
                         .padding(top = FS.space.s1),
                 )
-                if (BuildConfig.DEBUG) {
-                    FSGhostButton(
-                        label = if (devUnlocked) "Developer unlocked" else "Tap version to unlock developer",
-                        onClick = {
-                            versionTaps += 1
-                            if (versionTaps >= 3) dev?.setUnlocked(true)
-                        },
-                    )
-                }
             }
-        }
-
-        // 8 — DEVELOPER (hidden behind the 3-tap version unlock).
-        if (devUnlocked) {
-            Spacer(Modifier.height(FS.space.s4))
-            FSSettingsGroup(
-                header = "DEVELOPER",
-                rows = listOf(
-                    FSSettingsRowData(
-                        icon = Icons.Outlined.Build,
-                        title = "Developer",
-                        subtitle = "Toggle the live screens client + dev fixtures.",
-                        onClick = { nav.navigate("developer") },
-                    ),
-                ),
-            )
         }
 
         Spacer(Modifier.height(FS.space.s6))

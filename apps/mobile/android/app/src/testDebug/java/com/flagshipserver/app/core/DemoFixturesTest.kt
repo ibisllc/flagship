@@ -19,20 +19,23 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DemoFixturesTest {
-    @Test fun activate_populatesAppStateWithSamplePods() = runTest {
+    @Test fun activate_withoutADemoServer_opensAnAccountWithNoServers() = runTest {
+        // No fixture servers outside the gym: a demo name the Worker gives no
+        // server opens like any new account (device bug 2026-10-16).
         val app = AppState()
-        DemoFixtures.activate(app, "play-reviewer-q2")
+        DemoAccount.activate(app, "play-reviewer-q2")
         assertTrue(app.isPaired.first())
         assertEquals("play-reviewer-q2", app.currentUser.first())
-        val pods = app.pods.first()
-        assertEquals(3, pods.size)
+        assertTrue(app.pods.first().isEmpty())
+    }
+
+    @Test fun gymSamplePods_areScopedToTheDemoName() {
+        val pods = DemoFixtures.samplePods("play-reviewer-q2")
         assertEquals(listOf("Home", "Office", "Music"), pods.map { it.name })
-        val leader = app.leaderPodId.first()
-        assertNotNull(leader)
-        assertEquals(leader, app.currentPodId.first())
         // FQDNs are scoped to the demo username so they're obviously
         // sample data — not collision-able with a real pod.
         assertTrue(pods.all { it.fqdn.contains(".play-reviewer-q2.flagship.services") })
+        assertNotNull(pods.firstOrNull())
     }
 
     @Test fun defaultMockServer_hasNoTestAccountsConfigured() = runTest {
