@@ -196,12 +196,27 @@ export async function removeManagedDeviceDisplayName(deviceId, current, deps = {
     method: "DELETE",
     body: JSON.stringify({ expectedRevision: current?.revision ?? 0 }),
   }, { ...deps, session, profile });
-  if (!response.ok) throw new Error(`Profile update failed (${response.status})`);
+  if (!response.ok) throw await directoryError(response);
   return response.json();
+}
+
+/** `.com`'s refusal in its own words (the apps show the server's sentence). */
+async function directoryError(response) {
+  let reason = null;
+  try {
+    const body = await response.clone().json();
+    if (typeof body?.error === "string" && body.error.trim()) reason = body.error.trim();
+  } catch {
+    /* not JSON */
+  }
+  const e = new Error(reason ?? `Profile update failed (${response.status})`);
+  e.status = response.status;
+  e.body = reason ? { error: reason } : null;
+  return e;
 }
 
 async function putProfile(path, body, deps) {
   const response = await signedDirectoryFetch(path, { method: "PUT", body: JSON.stringify(body) }, deps);
-  if (!response.ok) throw new Error(`Profile update failed (${response.status})`);
+  if (!response.ok) throw await directoryError(response);
   return response.json();
 }

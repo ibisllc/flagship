@@ -33,14 +33,14 @@ import {
 import { escapeHtml } from "../lib/util.js";
 import { get as profileGet } from "../lib/profilesStore.js";
 import { screensFetch } from "../lib/api.js";
+import { wrappedUmkRecordKey } from "../keystore.js";
 
 registerView("view-recovery");
 
-// Must match keystore.js's RECORD_KEY exactly — both sides write/read
-// the same IndexedDB row, so a typo here was silently breaking export
-// and import (toast would say "no wrapped UMK on this device yet" even
-// right after a successful bootstrap).
-const WRAPPED_UMK_KEY = "wrappedUmk";
+// The active profile's row, as keystore.js keys it (`wrappedUmk` for the
+// DEFAULT profile, `wrappedUmk.<profileId>` for a named account): both sides
+// must read and write the same IndexedDB row.
+const WRAPPED_UMK_KEY = () => wrappedUmkRecordKey();
 
 async function exportWrapped() {
   // The keystore module stores the wrapped UMK in IndexedDB. We fetch
@@ -51,7 +51,7 @@ async function exportWrapped() {
     const db = await openDb();
     const tx = db.transaction("keystore", "readonly");
     const store = tx.objectStore("keystore");
-    const wrapped = await reqToPromise(store.get(WRAPPED_UMK_KEY));
+    const wrapped = await reqToPromise(store.get(WRAPPED_UMK_KEY()));
     if (!wrapped) return toast("No wrapped UMK on this device yet", "err");
     const json = JSON.stringify(wrapped, (_, v) => {
       if (v instanceof ArrayBuffer) {
@@ -89,7 +89,7 @@ async function importWrapped(file) {
     });
     const db = await openDb();
     const tx = db.transaction("keystore", "readwrite");
-    tx.objectStore("keystore").put(parsed, WRAPPED_UMK_KEY);
+    tx.objectStore("keystore").put(parsed, WRAPPED_UMK_KEY());
     await txDone(tx);
     toast("Imported — refresh, then unlock with your passphrase");
   } catch (e) {
