@@ -731,15 +731,28 @@ export function mergeAppsAcrossServers(lists, leader = "") {
   });
 }
 
+/** How the box starts its reason when the app's internet firewall (the egress
+ *  gateway) is what keeps apps from starting (server-daemon appSandbox/state.ts). */
+export const EGRESS_FENCE_REASON = "its internet firewall isn't running";
+
 /**
- * What the server page says about the sandbox apps run in (gVisor,
- * docs/app-runtimes.md §5.1), or null when there's nothing to say.
+ * What the server page says about the sandbox apps run in (gVisor and the
+ * egress gateway, docs/app-runtimes.md §5.1), or null when there's nothing to say.
  */
 export function appSandboxNotice(sandbox) {
   if (sandbox?.state === "unavailable") {
+    const reason = typeof sandbox.reason === "string" && sandbox.reason ? sandbox.reason : "unknown reason";
+    // The egress gateway is part of the sandbox (the box's reason says so);
+    // it is retried every 30 seconds, gVisor every 10 minutes.
+    if (reason.startsWith(EGRESS_FENCE_REASON)) {
+      return {
+        tone: "danger",
+        text: `Apps can't start on this server: ${reason}. The server tries again every 30 seconds and starts them once it runs.`,
+      };
+    }
     return {
       tone: "danger",
-      text: `Apps can't start on this server: the sandbox they run in isn't working (${sandbox.reason}). The server tries again every 10 minutes.`,
+      text: `Apps can't start on this server: the sandbox they run in isn't working (${reason}). The server tries again every 10 minutes.`,
     };
   }
   if (sandbox?.state === "starting") {

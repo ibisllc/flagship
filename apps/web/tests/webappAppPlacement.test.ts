@@ -742,4 +742,16 @@ describe("the sandbox apps run in (docs/app-runtimes.md §5.1)", () => {
     // An older server sends nothing.
     expect(appSandboxNotice(undefined)).toBeNull();
   });
+
+  it("says the box's own reason and its 30-second retry when the internet firewall is down", async () => {
+    const { appSandboxNotice } = await loadPlacement();
+    // The box's reason, word for word (server-daemon appSandbox/state.ts).
+    expect(
+      appSandboxNotice({ state: "unavailable", reason: "its internet firewall isn't running: nft: command not found" }),
+    ).toEqual({
+      tone: "danger",
+      text: "Apps can't start on this server: its internet firewall isn't running: nft: command not found. The server tries again every 30 seconds and starts them once it runs.",
+    });
+    expect(appSandboxNotice({ state: "unavailable" })?.text).toContain("(unknown reason)");
+  });
 });
