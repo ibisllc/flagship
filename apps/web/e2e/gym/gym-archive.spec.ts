@@ -753,7 +753,6 @@ test.describe("gym webapp archive", () => {
     const m = await mock(page);
     m.get("/api/users/smoketest/pods", { pods: [livePod(HOME)] });
     m.get("/api/order/SER-GYM-1/status", { phase: "installing" });
-    m.post("/api/auth-code/SER-GYM-1/revoke", { ok: true });
     m.post(
       "/api/server/release",
       sensitive(page, keys, (r: { username: string; serverDomain: string; issuedAt: number }) => `flagship/release-server-name/v1|${r.username}|${r.serverDomain}|${r.issuedAt}`, (b) => ({ arg: b.request, sig: b.signature }), () => ({ json: { ok: true } })),
@@ -765,15 +764,17 @@ test.describe("gym webapp archive", () => {
     }, order);
     await expect(page.locator("#pending-server-name")).toHaveText("garage");
     await expect(page.locator("#pending-server-fqdn")).toHaveText(order.fqdn);
-    await expect(page.locator("#pending-server-serial")).toHaveText("SER-GYM-1");
-    await expect(page.locator("#pending-server-note")).toContainText("Setup:", { timeout: 10_000 });
+    // The kept serial follows the order's own status: its phase and the checklist.
+    await expect(page.locator("#pending-server-note")).toHaveText("Installing", { timeout: 10_000 });
+    await expect(page.locator("#pending-server-progress .demo-step-active")).toContainText("Installing");
     await shot(page, testInfo, "pending-server");
 
     // ← Back returns Home and keeps the order.
     await page.click("#pending-server-back");
     await expect(page.locator("#view-home")).toBeVisible();
 
-    // Cancel order: the native confirm, the auth-code revoke, the name release, the order gone.
+    // Cancel order: the browser's confirm, then the name release under the admin
+    // root (which also voids the recipe's auth code on .com), and the order is gone.
     await page.evaluate(async (order) => (await import("/views/pending-server.js")).enterPendingServer(order), order);
     let confirmText = "";
     page.once("dialog", (d) => {
@@ -781,9 +782,8 @@ test.describe("gym webapp archive", () => {
       void d.accept();
     });
     await page.click("#pending-server-cancel");
-    await sawToast(page, "Order cancelled (garage)");
-    expect(confirmText).toContain('Cancel order for "garage"?');
-    expect(m.sent("/api/auth-code/SER-GYM-1/revoke")).toHaveLength(1);
+    await sawToast(page, `Deleted — "${order.fqdn}" is free again`);
+    expect(confirmText).toContain(`Delete "${order.fqdn}"? This frees the name for reuse`);
     const release = m.last("/api/server/release")!;
     expect(release.body.request.serverDomain).toBe(order.fqdn);
     expect(

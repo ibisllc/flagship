@@ -209,7 +209,7 @@ export const WEB_ARCHIVE: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-archive-pending-server",
-    "The pending-server page shows the order and its setup phase; Back returns Home; Cancel order asks first, revokes the auth code, releases the name under the admin root, drops the order and returns Home.",
+    "The pending-server page shows the order and its setup checklist from the order's own status; Back returns Home; Cancel order asks first, releases the name under the admin root (voiding the recipe), drops the order and returns Home.",
     "gym archive pending server page cancels the order and goes back",
     {
       steps: [
