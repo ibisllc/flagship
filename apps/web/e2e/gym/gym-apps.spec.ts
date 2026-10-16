@@ -1158,4 +1158,143 @@ test.describe("gym webapp apps", () => {
     await card.scrollIntoViewIfNeeded();
     await shot(page, testInfo, "app-backup-gone");
   });
+
+  test("gym apps separate list on each server is a Pro switch with a server picker", async ({ page }, testInfo) => {
+    await reachHome(page);
+    await asDevice(page, { admin: true });
+    const myPub = await thisDevicePub(page);
+    const sealed = await sealBundles(page, { "inv-sam": "Sam", "inv-lee": "Lee", "inv-new": "New link" });
+    let scope = "account";
+    const listScope = (self: string) => ({
+      serviceRef: SERVICE_ID,
+      scope,
+      pending: false,
+      plan: "pro",
+      self,
+      leader: HOME,
+      servers: [HOME, MEDIA],
+    });
+    // Each server holds its own list: Sam joined on home, Lee on media.
+    const members = (who: { id: string; aid: string }) => ({
+      mode: "open",
+      roles: ["member", "manager", "master"],
+      defaultRole: "member",
+      descriptions: {},
+      accountMembers: accountMembers(myPub, { tier: "admin", rank: "master" }),
+      members: [{ aid: who.aid, role: "member", grants: [{ inviteId: who.id, role: "member" }], direct: false }],
+      invites: [{ inviteId: who.id, role: "member", set: false }],
+    });
+    const SAM = { id: "inv-sam", aid: "5a".repeat(32) };
+    const LEE = { id: "inv-lee", aid: "6b".repeat(32) };
+    const calls = await stub(page, [
+      ...baseRules(appDetail()),
+      {
+        method: "GET",
+        match: (u) => u.pathname === "/api/users/smoketest/service-invites",
+        answer: () => ({
+          json: {
+            invites: [
+              { inviteId: "inv-sam", serviceRef: SERVICE_ID, encryptedBundle: sealed["inv-sam"], boundAID: SAM.aid, createdAt: Date.now() - 86_400_000, approvalMode: "auto" },
+              { inviteId: "inv-lee", serviceRef: SERVICE_ID, encryptedBundle: sealed["inv-lee"], boundAID: LEE.aid, createdAt: Date.now() - 86_400_000, approvalMode: "auto" },
+              { inviteId: "inv-new", serviceRef: SERVICE_ID, encryptedBundle: sealed["inv-new"], createdAt: Date.now() - 3_600_000, approvalMode: "auto" },
+            ],
+          },
+        }),
+      },
+      { method: "GET", match: on(HOME, svc("/members")), answer: () => ({ json: members(SAM) }) },
+      { method: "GET", match: on(MEDIA, svc("/members")), answer: () => ({ json: members(LEE) }) },
+      { method: "GET", match: on(HOME, svc("/list-scope")), answer: () => ({ json: listScope(HOME) }) },
+      { method: "GET", match: on(MEDIA, svc("/list-scope")), answer: () => ({ json: listScope(MEDIA) }) },
+      {
+        method: "POST",
+        match: on(HOME, svc("/list-scope")),
+        answer: (c) => {
+          scope = c.body.order.scope;
+          return { json: { ok: true, ...listScope(HOME) } };
+        },
+      },
+    ]);
+    await openApp(page);
+    await page.click("#sd-access");
+    await expect(page.locator("#sa-scope-card")).toBeVisible({ timeout: 10_000 });
+    // One list: the switch is off, no picker, every invite shows.
+    await expect(page.locator("#sa-scope-toggle")).not.toBeChecked();
+    await expect(page.locator("#sa-scope-toggle")).toBeEnabled();
+    await expect(page.locator("#sa-server-picker")).toBeHidden();
+    await expect(page.locator("#sa-members-title")).toHaveText("Members (3)", { timeout: 10_000 });
+    await shot(page, testInfo, "list-scope-one-list");
+
+    // On: asked once, then an admin-root-signed flagship/app-list-scope/v1 naming the app only.
+    await page.click("#sa-scope-toggle");
+    await expect(page.locator(".modal-title")).toHaveText("A separate list on each server?");
+    await expect(page.locator(".modal-message")).toHaveText("Each server keeps its current list. Changes you make on one server stay on it.");
+    await page.click("[data-modal-ok]");
+    await expect(page.locator("#sa-server-picker")).toBeVisible({ timeout: 10_000 });
+    const on1 = calls.find((c) => c.method === "POST" && c.url.pathname === svc("/list-scope"))!;
+    expect(on1.body.order).toEqual({ serviceRef: SERVICE_ID, scope: "server", issuedAt: on1.body.order.issuedAt });
+    expect(fresh(on1.body.order.issuedAt)).toBe(true);
+    expect(
+      await signedBy(page, ["flagship/app-list-scope/v1", SERVICE_ID, "server", on1.body.order.issuedAt].join("|"), on1.body.signature),
+    ).toBe(true);
+    await expect(page.locator('#sa-server-picker [data-server="' + HOME + '"]')).toHaveAttribute("aria-checked", "true");
+    // home's list: Sam, plus the link nobody has used.
+    await expect(page.locator("#sa-members-title")).toHaveText("Members (2)", { timeout: 10_000 });
+    await expect(page.locator("#sa-people")).toContainText("Sam");
+    await expect(page.locator("#sa-people")).not.toContainText("Lee");
+    await shot(page, testInfo, "list-scope-home");
+
+    // Picking media re-targets the whole screen: its members, with its own session.
+    await page.click('#sa-server-picker [data-server="' + MEDIA + '"]');
+    await expect(page.locator('#sa-server-picker [data-server="' + MEDIA + '"]')).toHaveAttribute("aria-checked", "true", { timeout: 10_000 });
+    await expect(page.locator("#sa-people")).toContainText("Lee", { timeout: 10_000 });
+    await expect(page.locator("#sa-people")).not.toContainText("Sam");
+    const mediaRead = calls.filter((c) => c.method === "GET" && c.url.host === MEDIA && c.url.pathname === svc("/members"));
+    expect(mediaRead.length).toBeGreaterThan(0);
+    expect(mediaRead[0]!.headers["x-flagship-session"]).toBe("gym-media-token");
+    await shot(page, testInfo, "list-scope-media");
+  });
+
+  test("gym apps separate list switch is locked without Pro and the plan screen warns before Pro ends", async ({ page }, testInfo) => {
+    await reachHome(page);
+    await asDevice(page, { admin: true });
+    const myPub = await thisDevicePub(page);
+    let plan = "free";
+    await stub(page, [
+      ...baseRules(appDetail()),
+      { method: "GET", match: (u) => u.pathname === "/api/users/smoketest/service-invites", answer: () => ({ json: { invites: [] } }) },
+      {
+        method: "GET",
+        match: on(HOME, svc("/members")),
+        answer: () => ({
+          json: { mode: "open", roles: ["member", "manager", "master"], defaultRole: "member", descriptions: {}, accountMembers: accountMembers(myPub, { tier: "admin", rank: "master" }), members: [], invites: [] },
+        }),
+      },
+      {
+        method: "GET",
+        match: on(HOME, svc("/list-scope")),
+        answer: () => ({ json: { serviceRef: SERVICE_ID, scope: "account", pending: false, plan, self: HOME, leader: HOME, servers: [HOME, MEDIA] } }),
+      },
+      { method: "GET", match: on(HOME, "/api/screens/tier-status"), answer: () => ({ json: { tier: "free", customDomains: [], reservedNames: [] } }) },
+      { method: "GET", match: on(HOME, "/api/screens/access-lists/summary"), answer: () => ({ json: { plan: "pro", separateApps: 2, leaders: [HOME] } }) },
+    ]);
+    await openApp(page);
+    await page.click("#sd-access");
+    await expect(page.locator("#sa-scope-card")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("#sa-scope-toggle")).toBeDisabled();
+    await expect(page.locator("#sa-scope-pro")).toBeVisible();
+    await expect(page.locator("#sa-scope-pro")).toContainText("Comes with Pro.");
+    await expect(page.locator("#sa-scope-pro a")).toHaveAttribute("href", "https://flagshipserver.com/pro");
+    await shot(page, testInfo, "list-scope-needs-pro");
+
+    plan = "pro";
+    await page.evaluate(async () => {
+      const { enterTierStatus } = await import("/views/tier-status.js");
+      await enterTierStatus();
+    });
+    await expect(page.locator("#tier-status-separate-lists-warning")).toHaveText(
+      "2 apps have a separate access list on each server. When Pro ends they'll all use home's list.",
+      { timeout: 10_000 },
+    );
+    await shot(page, testInfo, "plan-separate-lists-warning");
+  });
 });

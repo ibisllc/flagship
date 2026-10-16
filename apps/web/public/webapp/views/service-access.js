@@ -27,7 +27,24 @@
 
 import { $, registerView, show } from "../lib/router.js";
 import { getSession } from "../lib/state.js";
-import { getPodBaseUrl, screensFetch } from "../lib/api.js";
+import { boxClient, currentPodFqdn, getPodBaseUrl, screensFetch } from "../lib/api.js";
+import {
+  LIST_SCOPE_NOTE,
+  LIST_SCOPE_OFF_TITLE,
+  LIST_SCOPE_ON_CONFIRM,
+  LIST_SCOPE_ON_TITLE,
+  LIST_SCOPE_PENDING,
+  LIST_SCOPE_PRO_LINK,
+  LIST_SCOPE_PRO_NOTE,
+  LIST_SCOPE_READONLY_ON,
+  LIST_SCOPE_TITLE,
+  PRO_URL,
+  canTurnOn,
+  fetchListScope,
+  listScopeOffConfirm,
+  serverName,
+  setListScope,
+} from "../lib/listScope.js";
 import { controlApex } from "../lib/apex.js";
 import { getActiveProfile } from "../lib/profiles.js";
 import { fetchDecryptedDirectory } from "../lib/accountDirectory.js";
@@ -109,12 +126,21 @@ function rememberMode(serviceRef, mode) {
   }
 }
 
-/** Box base URL of the currently-paired pod (canonical-bytes input). */
+/**
+ * The server whose list the screen shows: "" is the current pod. Another one
+ * only while the app keeps a separate list on each server (a Pro option,
+ * feat/marketplace) and the owner picked it.
+ */
+let listServer = "";
+/** The app's scope as the shown server said it (lib/listScope.js), or null. */
+let lastScope = null;
+
+/** Box base URL of the server the screen shows (canonical-bytes input). */
 function podBaseUrl() {
-  return getPodBaseUrl() ?? "";
+  return (listServer ? boxClient(listServer).baseUrl : getPodBaseUrl()) ?? "";
 }
 
-const screensJson = (path, init) => screensFetch(path, init);
+const screensJson = (path, init) => (listServer ? boxClient(listServer).fetch(path, init) : screensFetch(path, init));
 
 /** This device's account device id, or "" when the profile has none. */
 function thisDeviceId() {
@@ -155,6 +181,8 @@ function loadDeviceNames() {
 
 export async function enterServiceAccess(service) {
   currentService = service;
+  listServer = "";
+  lastScope = null;
   show("view-service-access");
   await renderServiceAccess(service);
 }
@@ -186,6 +214,17 @@ export async function renderServiceAccess(service) {
       </div>
       <div id="sa-mode-status" class="mt-2 text-xs muted-sm">${escapeHtml(modeNote(mode))}</div>
       ${admin ? "" : `<p id="sa-mode-locked" class="note mt-1">${escapeHtml(ADMIN_ONLY_MODE_NOTE)}</p>`}
+    </div>
+
+    <div class="card mt-3 hidden" id="sa-scope-card">
+      <label class="inline-check" for="sa-scope-toggle">
+        <input type="checkbox" id="sa-scope-toggle" data-testid="service-access-list-scope-toggle"${admin ? "" : " disabled"} />
+        ${escapeHtml(LIST_SCOPE_TITLE)}
+      </label>
+      <p class="note mt-1" id="sa-scope-note">${escapeHtml(LIST_SCOPE_NOTE)}</p>
+      <p class="note mt-1 hidden" id="sa-scope-pro" data-testid="service-access-list-scope-pro">${escapeHtml(LIST_SCOPE_PRO_NOTE)} <a href="${PRO_URL}" target="_blank" rel="noopener">${escapeHtml(LIST_SCOPE_PRO_LINK)}</a></p>
+      <p class="note mt-1 hidden" id="sa-scope-pending" data-testid="service-access-list-scope-pending">${escapeHtml(LIST_SCOPE_PENDING)}</p>
+      <div class="fs-segmented mt-2 hidden" id="sa-server-picker" data-testid="service-access-server-picker" role="radiogroup" aria-label="Server"></div>
     </div>
 
     <h2 class="mt-4" id="sa-account-title">Account members</h2>
@@ -271,8 +310,119 @@ export async function renderServiceAccess(service) {
   $("sa-accept-go")?.addEventListener("click", () => {
     onFinalizeAccept(serviceRef).catch((e) => { console.error(e); toast(humanError(e), "err"); });
   });
+  $("sa-scope-toggle")?.addEventListener("change", (ev) => {
+    onScopeToggle(service, ev.currentTarget.checked).catch((e) => { console.error(e); toast(humanError(e), "err"); });
+  });
 
+  await renderScope(service);
   await renderPeople(serviceRef);
+}
+
+/**
+ * The "Separate list on each server" switch (a Pro option, admin devices) and,
+ * while it is on, the server picker: the whole screen then shows and edits the
+ * picked server's list.
+ */
+async function renderScope(service) {
+  const card = $("sa-scope-card");
+  if (!card) return;
+  const state = await fetchListScope(service.serviceId, { fetchJson: screensJson });
+  lastScope = state;
+  if (!state) {
+    card.classList.add("hidden");
+    return;
+  }
+  card.classList.remove("hidden");
+  const admin = isAdminDevice(getSession());
+  const on = state.scope === "server" || state.pending;
+  const toggle = $("sa-scope-toggle");
+  if (toggle) {
+    toggle.checked = on;
+    toggle.disabled = !admin || (!on && !canTurnOn(state));
+  }
+  $("sa-scope-pro")?.classList.toggle("hidden", !admin || on || canTurnOn(state));
+  $("sa-scope-pending")?.classList.toggle("hidden", !state.pending);
+  const note = $("sa-scope-note");
+  if (note) note.textContent = !admin && state.scope === "server" ? LIST_SCOPE_READONLY_ON : LIST_SCOPE_NOTE;
+  const picker = $("sa-server-picker");
+  if (!picker) return;
+  const shown = listServer || state.self || currentPodFqdn();
+  const servers = state.servers.length > 0 ? state.servers : [shown];
+  if (state.scope !== "server" || servers.length < 2) {
+    picker.classList.add("hidden");
+    picker.innerHTML = "";
+    return;
+  }
+  picker.classList.remove("hidden");
+  picker.innerHTML = servers
+    .map((f) => `<button type="button" role="radio" data-server="${escapeHtml(f)}" aria-checked="${f === shown}">${escapeHtml(serverName(f))}</button>`)
+    .join("");
+  for (const b of picker.querySelectorAll("[data-server]")) {
+    b.addEventListener("click", () => {
+      const f = b.getAttribute("data-server") ?? "";
+      if (f === shown) return;
+      listServer = f === currentPodFqdn() ? "" : f;
+      renderServiceAccess(service).catch((e) => toast(humanError(e), "err"));
+    });
+  }
+}
+
+/**
+ * With a separate list on each server, the invites `.com` lists for the app
+ * (it doesn't know which server a link points at) are narrowed to the ones
+ * the shown server knows, plus links nobody has used yet. With one list, all.
+ */
+export function invitesOnShownServer(invites, members, scope) {
+  if (!scope || scope.scope !== "server" || !members) return invites;
+  const known = new Set([
+    ...(members.invites ?? []).map((i) => i.inviteId),
+    ...(members.members ?? []).flatMap((m) => (m.grants ?? []).map((g) => g.inviteId)),
+  ]);
+  const unused = (i) => !i.boundAID && !(i.boundAIDs?.length > 0) && !(i.redemptions > 0);
+  return invites.filter((i) => known.has(i.inviteId) || unused(i));
+}
+
+async function onScopeToggle(service, wantOn) {
+  const toggle = $("sa-scope-toggle");
+  const state = lastScope;
+  const revert = () => {
+    if (toggle) toggle.checked = !wantOn;
+  };
+  if (!state || !isAdminDevice(getSession())) return revert();
+  if (wantOn && !canTurnOn(state)) {
+    $("sa-scope-pro")?.classList.remove("hidden");
+    return revert();
+  }
+  const { inlineConfirm } = await import("../lib/modal.js");
+  const ok = await inlineConfirm(
+    wantOn
+      ? { title: LIST_SCOPE_ON_TITLE, message: LIST_SCOPE_ON_CONFIRM, okLabel: "Separate lists" }
+      : { title: LIST_SCOPE_OFF_TITLE, message: listScopeOffConfirm(state.leader || state.self), okLabel: "One list" },
+  );
+  if (!ok) return revert();
+  const session = getSession();
+  if (toggle) toggle.disabled = true;
+  try {
+    await setListScope({
+      serviceRef: service.serviceId,
+      scope: wantOn ? "server" : "account",
+      umk: session.umk,
+      signWithIrk: sensitiveSigner(),
+      fetchJson: screensJson,
+    });
+    toast(wantOn ? "Each server now keeps its own list." : "Every server now uses one list.");
+  } catch (e) {
+    revert();
+    if (e?.status === 402 || e?.body?.code === "pro-required") {
+      $("sa-scope-pro")?.classList.remove("hidden");
+      return;
+    }
+    throw e;
+  } finally {
+    if (toggle) toggle.disabled = false;
+  }
+  if (!wantOn) listServer = "";
+  await renderServiceAccess(service);
 }
 
 const MODE_LABEL = { open: "Open to all", restricted: "Members only" };
@@ -663,7 +813,7 @@ async function renderPeople(serviceRef) {
     root.innerHTML = `<div class="card"><p class="err-text">${escapeHtml(humanError(invites.reason))}</p></div>`;
     return;
   }
-  lastInvites = invites.value;
+  lastInvites = invitesOnShownServer(invites.value, lastMembers, lastScope);
   const title = $("sa-members-title");
   if (title) title.textContent = `Members (${lastInvites.length})`;
   if (lastInvites.length === 0) {
