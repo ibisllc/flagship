@@ -151,7 +151,7 @@ describe("keyfileImportTakeover — second-factor 401 routes to sign-in (#52 par
       SecondFactorRequiredError,
     );
     // The exact guidance must match iOS/Android so the three surfaces agree.
-    expect(SECOND_FACTOR_GUIDANCE).toContain('"I already have an account"');
+    expect(SECOND_FACTOR_GUIDANCE).toContain('"Connect to an existing account"');
   });
 
   it("maps a 401 with credentialRequired[] to the same sentinel", async () => {

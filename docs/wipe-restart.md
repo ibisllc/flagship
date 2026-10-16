@@ -31,7 +31,7 @@ the old phone *and* the recovery passkey. That's a separate threat
 
 ## Ceremony, step by step
 
-1. User opens the app on a new device → "I already have an account".
+1. User opens the app on a new device → "Connect to an existing account" → signs in with the account name.
 2. WebAuthn-PRF ceremony with the recovery passkey → unwraps the cloud-stored UMK.
 3. PostRecoveryChoice shows three options. User picks **"Wipe & restart"**.
 4. Scare sheet: "This will disconnect every device on this account and start fresh. Apps stay installed; their data stays on the pods. Continue?"

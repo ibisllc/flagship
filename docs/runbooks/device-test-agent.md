@@ -87,7 +87,7 @@ build, then:
 3. **Android app on ChromeOS** (if the Chromebook runs Android apps): install
    Flagship from Play. Note the version (Play may still serve the older store
    build: that's useful, record what works and what doesn't). Sign in with
-   recovery or "I already have an account". Walk Home, a server page and an app
+   recovery under "Connect to an existing account". Walk Home, a server page and an app
    page. Note any layout problems with a keyboard/trackpad and window
    resizing.
 4. **Linux Studio (optional, if Linux development environment is on).** In the

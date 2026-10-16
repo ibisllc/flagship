@@ -284,7 +284,11 @@
 //  v121: turning debug access on or renewing it (and a debug-friendly
 //       recipe) asks for this device's passphrase again (lib/freshUnlock.js),
 //       one fresh unlock per grant.
-const SHELL_VERSION = "v121";
+//  v122: the cover offers "Create your account" and "Connect to an
+//       existing account", one page with both ways back in: the account
+//       name (sign in) and a pairing code or link (join); a pairing link
+//       typed as the name joins (lib/connectAccount.js).
+const SHELL_VERSION = "v122";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -371,6 +375,7 @@ const OPTIONAL_SHELL = [
   "/lib/appBackup.js",
   "/lib/activityFeed.js",
   "/lib/accountAccess.js",
+  "/lib/connectAccount.js",
   "/lib/accountDeletion.js",
   "/lib/accountDirectory.js",
   "/lib/accountMetadata.js",

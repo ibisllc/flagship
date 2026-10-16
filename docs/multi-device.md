@@ -81,7 +81,7 @@ underneath the If-Match flow; the ETag is the user-visible projection.
 
 ## How "Replace device" works end-to-end (planned)
 
-1. User on the new device opens the app → "I already have an account".
+1. User on the new device opens the app → "Connect to an existing account" → signs in with the account name.
 2. New device generates IRK keypair locally in the Secure Enclave / Keystore.
 3. WebAuthn-PRF ceremony with the recovery passkey → unwraps the cloud-stored UMK.
 4. Device requests `GET /api/users/:u/devices` → captures ETag.

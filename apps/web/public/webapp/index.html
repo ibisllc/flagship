@@ -50,21 +50,42 @@
 
       <!-- View 1: First run — passphrase to wrap a fresh UMK -->
       <section id="view-bootstrap" class="hidden">
-        <h2>Get started</h2>
-        <div class="card warning">
-          <p class="note">The webapp stores your master key in this browser. Native iOS / Android apps use Secure Enclave or StrongBox and are stronger.</p>
-          <a class="pill" href="https://flagshipserver.com/security#model">Read the trade-offs →</a>
+        <div id="bootstrap-welcome">
+          <h2>Get started</h2>
+          <div class="card warning">
+            <p class="note">The webapp stores your master key in this browser. Native iOS / Android apps use Secure Enclave or StrongBox and are stronger.</p>
+            <a class="pill" href="https://flagshipserver.com/security#model">Read the trade-offs →</a>
+          </div>
+          <div class="card">
+            <p class="note">New here? You'll get a free, random handle.</p>
+            <button id="bootstrap-create" class="full-width" data-testid="welcome-create">Create your account</button>
+            <button id="bootstrap-connect" class="secondary full-width mt-2" data-testid="welcome-connect">Connect to an existing account</button>
+          </div>
         </div>
-        <div class="card">
-          <p class="note">New here? You'll get a free, random handle — you can change it later.</p>
-          <button id="bootstrap-create" class="full-width">Create a new account</button>
+        <div id="bootstrap-connect-panel" class="hidden" data-testid="connect-account">
+          <button id="connect-back" class="ghost" data-testid="connect-back" aria-label="Back to Get started">← Back</button>
+          <h2 id="connect-title">Connect to an existing account</h2>
+          <div class="card" aria-labelledby="connect-name-heading">
+            <p id="connect-name-heading" class="card-title">Sign in with your account name</p>
+            <label for="bootstrap-username">Account name</label>
+            <input id="bootstrap-username" data-testid="connect-name-field" type="text" placeholder="bright-maple" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" aria-describedby="connect-name-helper" />
+            <p id="connect-name-helper" class="note muted-sm mt-2">The name you picked when you made the account.</p>
+            <p id="connect-name-error" class="err-text hidden" role="alert" data-testid="connect-name-error"></p>
+            <button id="bootstrap-continue" class="full-width mt-2" data-testid="connect-name-continue">Continue</button>
+          </div>
+          <div id="bootstrap-access" class="card mt-2 hidden"></div>
+          <div class="connect-or" role="separator" aria-label="or"><span>or</span></div>
+          <div class="card" aria-labelledby="connect-pair-heading">
+            <p id="connect-pair-heading" class="card-title">Join with a pairing code</p>
+            <p class="note muted-sm">On a device of that account, open Settings → Trusted devices → Add device.</p>
+            <button id="connect-scan" class="secondary full-width hidden" data-testid="connect-scan">Scan a code</button>
+            <video id="connect-scan-video" class="full-width mt-2 hidden" playsinline muted aria-label="Camera preview for the pairing code"></video>
+            <label for="connect-pair-input">Code or link</label>
+            <input id="connect-pair-input" data-testid="connect-pair-field" type="text" placeholder="https://flagshipserver.com/join?…" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" />
+            <p id="connect-pair-error" class="err-text hidden" role="alert" data-testid="connect-pair-error"></p>
+            <button id="connect-pair-continue" class="secondary full-width mt-2" data-testid="connect-pair-continue">Join</button>
+          </div>
         </div>
-        <div class="card mt-2">
-          <p class="note">Already have an account? Enter your username to sign in.</p>
-          <input id="bootstrap-username" type="text" placeholder="username" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" />
-          <button id="bootstrap-continue" class="secondary full-width mt-2">Sign in</button>
-        </div>
-        <div id="bootstrap-access" class="card mt-2 hidden"></div>
       </section>
 
       <!-- View 2: Locked — passphrase to unwrap UMK -->

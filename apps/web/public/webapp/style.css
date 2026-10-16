@@ -2740,3 +2740,24 @@ section h2.fs-hero-title::before { content: none; }
   color: var(--ink-faint);
   padding: 24px 16px 32px;
 }
+
+/* "Connect to an existing account": the "or" between signing in by name and
+   joining with a pairing code. */
+.connect-or {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: var(--space-4) 0;
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.connect-or::before, .connect-or::after {
+  content: "";
+  flex: 1;
+  border-top: 1px solid var(--border);
+}
+#connect-scan-video { border-radius: 6px; max-height: 320px; background: #000; }
+#connect-back { padding-left: 0; }

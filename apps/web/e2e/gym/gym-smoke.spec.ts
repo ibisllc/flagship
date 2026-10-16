@@ -125,14 +125,50 @@ test.describe("gym webapp", () => {
     await shot(page, testInfo, "cold-launch");
     // The editorial brand title renders.
     await expect(page.locator("header h1#title")).toContainText("Flagship");
-    // The username-first cover: the typed-name field + the primary "create a
-    // new account" action are present + enabled (the every-button-reachable
-    // spirit of D7-usable for this screen).
-    await expect(page.locator("#bootstrap-username")).toBeVisible();
+    // The cover: "Create your account" + one "Connect to an existing
+    // account" (the every-button-reachable spirit of D7-usable).
     const go = page.locator("#bootstrap-create");
     await expect(go).toBeVisible();
     await expect(go).toBeEnabled();
+    await expect(go).toHaveText("Create your account");
+    await expect(page.getByTestId("welcome-connect")).toHaveText("Connect to an existing account");
+    await expect(page.getByText("I already have an account")).toHaveCount(0);
+    await expect(page.locator("#bootstrap-username")).toBeHidden();
     await shot(page, testInfo, "bootstrap-ready");
+  });
+
+  test("gym webapp connect page holds sign-in and join with a pairing code", async ({
+    page,
+  }, testInfo) => {
+    await coldLaunch(page);
+    await page.getByTestId("welcome-connect").click();
+    await expect(page.getByTestId("connect-account")).toBeVisible();
+    await expect(page.getByTestId("connect-name-field")).toBeVisible();
+    await expect(page.getByTestId("connect-name-continue")).toBeEnabled();
+    await expect(page.getByTestId("connect-pair-field")).toBeVisible();
+    await expect(page.getByTestId("connect-pair-continue")).toBeEnabled();
+    await expect(page.locator(".connect-or")).toBeVisible();
+    await shot(page, testInfo, "connect-account");
+    // Something that isn't a code, in the code field: a sentence, no join.
+    await page.getByTestId("connect-pair-field").fill("bright-maple");
+    await page.getByTestId("connect-pair-continue").click();
+    await expect(page.getByTestId("connect-pair-error")).toContainText("looks like an account name");
+    await expect(page.locator("#view-bootstrap")).toBeVisible();
+    // Back returns to the two choices.
+    await page.getByTestId("connect-back").click();
+    await expect(page.getByTestId("welcome-connect")).toBeVisible();
+  });
+
+  test("gym webapp pairing link typed as the account name opens the join flow", async ({
+    page,
+  }, testInfo) => {
+    await coldLaunch(page);
+    await page.getByTestId("welcome-connect").click();
+    await page.getByTestId("connect-name-field").fill(`https://flagshipserver.com/join?sid=gym123&pk=${"A".repeat(43)}`);
+    await page.getByTestId("connect-name-continue").click();
+    await expect(page.locator("#toast")).toContainText("That's a pairing link", { timeout: 6_000 });
+    await expect(page.locator("#view-join")).toBeVisible({ timeout: 10_000 });
+    await shot(page, testInfo, "connect-link-to-join");
   });
 
   test("gym webapp boots on the brand-DNA palette + fonts", async ({ page }, testInfo) => {
@@ -217,9 +253,11 @@ test.describe("gym webapp", () => {
     // path validates client-side BEFORE any directory call, so an invalid
     // handle is rejected with no backend: stays on the cover + an error toast.
     await coldLaunch(page);
-    await page.fill("#bootstrap-username", "AB"); // uppercase + too short
+    await page.click("#bootstrap-connect");
+    await page.fill("#bootstrap-username", "AB"); // too short once lowercased
     await page.click("#bootstrap-continue");
     await expect(page.locator("#view-bootstrap")).toBeVisible();
+    await expect(page.getByTestId("connect-name-error")).toContainText(/lowercase/i);
     await expect(page.locator("#toast")).toContainText(/lowercase/i, { timeout: 6_000 });
     await shot(page, testInfo, "username-invalid");
   });

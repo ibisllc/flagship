@@ -11,7 +11,7 @@ import {
 } from "../keystore.js";
 import { humanError } from "../lib/humanError.js";
 import { failureText, rateLimitedError } from "../lib/rateLimited.js";
-import { $, registerView } from "../lib/router.js";
+import { $, registerView, currentViewId } from "../lib/router.js";
 import { dispatchInitialView } from "../lib/deepLink.js";
 import { inlineConfirm, inlinePrompt, inlineSuggestUsername } from "../lib/modal.js";
 import { recoverFromCloud, takeRecoveryProof } from "../lib/recovery.js";
@@ -21,6 +21,7 @@ import {
   resolveAccount,
 } from "../lib/accountResolve.js";
 import { accessOptions } from "../lib/accountAccess.js";
+import { readNameField, readPairingField } from "../lib/connectAccount.js";
 import { loginRealAccount } from "../lib/loginTakeover.js";
 import { openAccount } from "../lib/openAccount.js";
 import { addProfile } from "../lib/profiles.js";
@@ -36,17 +37,98 @@ const USERNAME_RE = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/; // 3–30, interior das
 
 // Sign-up no longer takes a chosen name — naming is random-by-default
 // (docs/naming-recovery-and-name-change.md §4): a custom name is a paid change,
-// later. So the cover has TWO actions: "Create account" (→ random handle) and a
-// username field that is SIGN-IN only.
+// later. So the cover has TWO actions: "Create your account" (→ random handle)
+// and "Connect to an existing account", one page holding both ways back in:
+// the account name (sign in) and a pairing code (join), as on iOS and Android.
+
+export const NAME_RULE_ERROR =
+  "Account names are 3 to 30 lowercase letters and digits, with single dashes inside.";
+
+function setFieldError(id, text) {
+  const el = $(id);
+  if (!el) return;
+  el.textContent = text || "";
+  el.classList.toggle("hidden", !text);
+}
+
+/** Welcome ↔ the connect page (both live in view-bootstrap). */
+function showConnectPanel(open) {
+  $("bootstrap-welcome")?.classList.toggle("hidden", open);
+  $("bootstrap-connect-panel")?.classList.toggle("hidden", !open);
+  setFieldError("connect-name-error", "");
+  setFieldError("connect-pair-error", "");
+  if (open) {
+    void import("../qrScanner.js")
+      .then(({ hasBarcodeDetector }) => $("connect-scan")?.classList.toggle("hidden", !hasBarcodeDetector()))
+      .catch(() => {});
+    $("bootstrap-username")?.focus();
+  } else {
+    hideAccess();
+    stopConnectScan();
+  }
+}
+
+/** The pairing half: a pasted or scanned link (or bare `sid=…&pk=…`) joins. */
+async function handlePairing(text) {
+  const r = readPairingField(text ?? $("connect-pair-input")?.value);
+  if (r.action === "none") return setFieldError("connect-pair-error", "Paste the pairing link, or scan the code.");
+  if (r.action === "error") return setFieldError("connect-pair-error", r.error);
+  setFieldError("connect-pair-error", "");
+  stopConnectScan();
+  const { enterJoin } = await import("./join.js");
+  return enterJoin(r.link);
+}
+
+function stopConnectScan() {
+  const video = $("connect-scan-video");
+  const stream = video?.srcObject;
+  stream?.getTracks?.().forEach((t) => t.stop());
+  if (video) {
+    video.srcObject = null;
+    video.classList.add("hidden");
+  }
+}
+
+async function scanPairingCode() {
+  const btn = $("connect-scan");
+  const video = $("connect-scan-video");
+  if (!btn || !video) return;
+  btn.disabled = true;
+  btn.textContent = "Scanning…";
+  video.classList.remove("hidden");
+  setFieldError("connect-pair-error", "");
+  try {
+    const { scanWithCamera } = await import("../qrScanner.js");
+    const raw = String(await scanWithCamera(video, { timeoutMs: 30_000 }));
+    await handlePairing(raw);
+  } catch {
+    setFieldError("connect-pair-error", "Couldn't scan. Paste the pairing link instead.");
+  } finally {
+    stopConnectScan();
+    btn.disabled = false;
+    btn.textContent = "Scan a code";
+  }
+}
 
 /** SIGN IN: resolve the typed username and branch on what the account IS —
  *  never a dead 404/"taken". Unknown → "no account by that name" (NOT sign-up;
- *  sign-up is the separate random path). Taken → the credential access options. */
+ *  sign-up is the separate random path). Taken → the credential access options.
+ *  A pairing link pasted here goes to join instead, with a note. */
 async function handleContinue() {
-  const raw = ($("bootstrap-username")?.value || "").trim().toLowerCase();
-  if (!USERNAME_RE.test(raw) || raw.includes("--")) {
-    return toast("Username: 3–30 lowercase letters/digits with interior single dashes", "err");
+  const field = readNameField($("bootstrap-username")?.value);
+  if (field.action === "join") {
+    setFieldError("connect-name-error", "");
+    toast(field.note, "ok");
+    const { enterJoin } = await import("./join.js");
+    return enterJoin(field.link);
   }
+  if (field.action === "error") return setFieldError("connect-name-error", field.error);
+  const raw = field.action === "sign-in" ? field.name : "";
+  if (!USERNAME_RE.test(raw) || raw.includes("--")) {
+    setFieldError("connect-name-error", NAME_RULE_ERROR);
+    return toast(NAME_RULE_ERROR, "err");
+  }
+  setFieldError("connect-name-error", "");
   hideAccess();
   let resolution;
   try {
@@ -247,15 +329,11 @@ async function dispatchAccess(id, resolution) {
       return enterRecovery();
     }
     case "scan": {
-      const link = await inlinePrompt({
-        title: "Scan a pairing code",
-        message:
-          "On a device that's already signed in, open Settings → Add device, then paste the pairing link it shows here.",
-        placeholder: "https://flagshipserver.com/join?…",
-      });
-      if (!link) return;
-      const { enterJoin } = await import("./join.js");
-      return enterJoin(link);
+      // The pairing half is on this same page.
+      const input = $("connect-pair-input");
+      input?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+      input?.focus();
+      return;
     }
   }
 }
@@ -337,11 +415,29 @@ async function recoverRealAccount(resolution) {
 
 export function initBootstrapView() {
   $("bootstrap-create")?.addEventListener("click", createAccount);
+  $("bootstrap-connect")?.addEventListener("click", () => showConnectPanel(true));
+  $("connect-back")?.addEventListener("click", () => showConnectPanel(false));
   $("bootstrap-continue")?.addEventListener("click", handleContinue);
   $("bootstrap-username")?.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
       handleContinue();
     }
+  });
+  $("bootstrap-username")?.addEventListener("input", () => setFieldError("connect-name-error", ""));
+  $("connect-pair-continue")?.addEventListener("click", () => handlePairing());
+  $("connect-pair-input")?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handlePairing();
+    }
+  });
+  $("connect-pair-input")?.addEventListener("input", () => setFieldError("connect-pair-error", ""));
+  $("connect-scan")?.addEventListener("click", scanPairingCode);
+  // Every arrival on the cover (boot, sign-out, a new profile) starts at the
+  // two choices; leaving it stops the camera.
+  document.addEventListener("flagship:view-shown", (e) => {
+    if (e.detail?.id === "view-bootstrap") showConnectPanel(false);
+    else if (currentViewId() !== "view-bootstrap") stopConnectScan();
   });
 }

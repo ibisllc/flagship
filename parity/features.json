@@ -232,6 +232,16 @@
       }
     },
     {
+      "id": "connect-existing-account",
+      "title": "Welcome: Create your account + one Connect to an existing account page (account name or pairing code)",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "missing", "reason": "Welcome still has the old separate entry.", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/ConnectAccountScreen.swift", "Connect to an existing account"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/WelcomeScreen.swift", "welcome-connect"]] },
+        "android": { "status": "missing", "reason": "Welcome still has the old separate entries.", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/onboarding/ConnectAccountScreen.kt", "Connect to an existing account"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/WelcomeScreen.kt", "welcome-connect"]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/index.html", "data-testid=\"welcome-connect\">Connect to an existing account<"], ["apps/web/public/webapp/lib/connectAccount.js", "export function readNameField"]] }
+      }
+    },
+    {
       "id": "recovery",
       "title": "Recovery (passkey PRF, keyfile)",
       "ref": "ios",

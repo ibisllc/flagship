@@ -60,7 +60,7 @@ function defaultBytesToHex(b) {
  *  three surfaces tell the user the same thing. The import sheet can't collect
  *  the factor, so it points at the sign-in flow which can. */
 export const SECOND_FACTOR_GUIDANCE =
-  'This account has a second factor enrolled. Use "I already have an account" to sign in — it will ask for your authenticator or recovery code.';
+  'This account has a second factor enrolled. Choose "Connect to an existing account" and sign in with your account name — it will ask for your authenticator or recovery code.';
 
 /** A tagged sentinel error so the caller can render the second-factor
  *  guidance instead of a raw failure. */

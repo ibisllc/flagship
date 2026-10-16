@@ -103,6 +103,7 @@ test("S9 — sign in → recover with passkey takes the account over on this bro
     });
   });
 
+  await page.click("#bootstrap-connect");
   await page.fill("#bootstrap-username", identity.username);
   await page.click("#bootstrap-continue");
   const recover = page.locator('#bootstrap-access [data-access="recover"]');
@@ -175,6 +176,7 @@ test("S9 — an account without cloud recovery can't take the passkey path", asy
       }),
     }),
   );
+  await page.click("#bootstrap-connect");
   await page.fill("#bootstrap-username", identity.username);
   await page.click("#bootstrap-continue");
   await expect(page.locator('#bootstrap-access [data-access="recover"]')).toBeDisabled();
