@@ -6,6 +6,7 @@
 //   node scripts/ios-release-clean.mjs                 source check (CI: scripts/ios-release-clean.test.ts)
 //   node scripts/ios-release-clean.mjs --app <X.app>   scan a built Release app's binaries
 //   node scripts/ios-release-clean.mjs --build         build Release for a generic iOS device, then scan it
+//                                     [--derived-data <dir>] [--keep]   (hold the shared native-build lock around it)
 //
 // The source check reads every Swift file the app, watch app and widgets
 // compile and fails on any gym or mock symbol a Release build would compile.
@@ -14,7 +15,8 @@
 // past the source check (a new mock, a macro) is still caught.
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -213,8 +215,8 @@ function main() {
   if (i >= 0) app = resolve(args[i + 1] ?? "");
   let derived = null;
   if (args.includes("--build")) {
-    derived = resolve(args[args.indexOf("--derived-data") + 1] ?? join(ROOT, ".build/ios-release-clean"));
-    if (args.indexOf("--derived-data") < 0) derived = join(ROOT, ".build/ios-release-clean");
+    const d = args.indexOf("--derived-data");
+    derived = d >= 0 ? resolve(args[d + 1]) : mkdtempSync(join(tmpdir(), "ios-release-clean-"));
     mkdirSync(derived, { recursive: true });
     app = build(derived);
   }
