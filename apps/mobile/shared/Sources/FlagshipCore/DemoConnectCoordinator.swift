@@ -121,7 +121,7 @@ public final class DemoConnectCoordinator {
             updatePod(
                 appState,
                 fqdn: block.fqdn,
-                status: DemoFixtures.mapStatus(block.lifecycle),
+                status: DemoAccount.mapStatus(block.lifecycle),
                 demoServer: block
             )
             if block.lifecycle == .up { return block }

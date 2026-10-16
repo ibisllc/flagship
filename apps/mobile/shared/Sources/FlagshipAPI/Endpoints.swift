@@ -11,8 +11,8 @@ import Foundation
 /// today's literal exactly as before. Unlike the webapp (which derives the
 /// apex from the served origin), a native app isn't "served" from a host, so
 /// the test-build seam is an explicit override — `setOverride(_:)` — that the
-/// app applies at launch from a launch-arg (`-apex-host <host>`) or a
-/// `DeveloperSettings` field. PROD callers never set it.
+/// Debug app applies at launch from a launch-arg (`-apex-host <host>`,
+/// `GymLaunch`). Release builds never set it.
 public enum Endpoints {
     /// Today's prod control apex host (no scheme).
     public static let prodControlHost = "flagshipserver.com"

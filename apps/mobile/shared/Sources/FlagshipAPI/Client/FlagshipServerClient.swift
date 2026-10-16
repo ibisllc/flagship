@@ -1757,6 +1757,7 @@ public struct UsernameSuggestion: Codable, Equatable, Sendable {
     }
 }
 
+#if DEBUG
 /// Small curated word pairs for the Mock suggestion (no DNS/queue offline).
 enum MockSuggestWords {
     static let adjectives = ["happy", "brave", "calm", "clever", "lucky", "swift", "sunny", "witty", "golden", "jolly"]
@@ -1767,6 +1768,7 @@ enum MockSuggestWords {
         return "\(a)-\(n)"
     }
 }
+#endif
 
 public struct UsernameAvailabilityResponse: Codable, Equatable, Sendable {
     public let username: String
@@ -1780,7 +1782,7 @@ public struct UsernameAvailabilityResponse: Codable, Equatable, Sendable {
     public let testAccount: TestAccountMeta?
     /// Plan A — present when the typed username matches a `demo_users`
     /// row on the Worker. Drives the new "one real device" rendering
-    /// in DemoFixtures + the on-connect-provisioning flow. Absent ⇒
+    /// in DemoAccount + the on-connect-provisioning flow. Absent ⇒
     /// legacy (testAccount-only) behaviour preserved. See
     /// docs/sample-users.md §10.9.
     public let demoServer: DemoServerBlock?
@@ -1997,7 +1999,7 @@ public enum DeviceScope: String, Codable, Equatable, Sendable, CaseIterable {
 /// every "absent" is a field, never an HTTP status. The client login
 /// state machine branches on `kind`:
 ///   - "demo"    → skip all credentials; attach a new device + open the
-///                 sandbox via DemoFixtures.activate(demoServer:).
+///                 sandbox via DemoAccount.activate(demoServer:).
 ///   - "unknown" → render "No Flagship account by that name" (not a 404).
 ///   - "single" / "multi" → real-account recovery branches (Phase 3).
 public struct AccountResolution: Codable, Equatable, Hashable, Sendable {
@@ -2282,6 +2284,7 @@ public struct RecoveryProofToken: Codable, Equatable, Sendable {
 
 // MARK: - Mock
 
+#if DEBUG
 public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Sendable {
     public var simulatedLatency: TimeInterval = 0.2
     public var shouldFail: Bool = false
@@ -3380,6 +3383,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         return AdminRootRotationResponse(ok: true, newAdminRootPubHex: body.rotation.newAdminRootPub)
     }
 }
+#endif
 
 // MARK: - Live
 

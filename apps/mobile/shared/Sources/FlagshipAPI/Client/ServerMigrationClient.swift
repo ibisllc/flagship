@@ -222,6 +222,7 @@ public final class LiveServerMigrationClient: ServerMigrationClient, @unchecked 
 
 // MARK: - Mock
 
+#if DEBUG
 /// In-memory broker for previews / tests. Records the phone's deposits and
 /// serves a scriptable session to the poll.
 public final class MockServerMigrationClient: ServerMigrationClient, @unchecked Sendable {
@@ -262,3 +263,4 @@ public final class MockServerMigrationClient: ServerMigrationClient, @unchecked 
         aborts.append((serverDomain, body))
     }
 }
+#endif

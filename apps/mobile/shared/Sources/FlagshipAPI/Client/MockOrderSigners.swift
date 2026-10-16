@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 import CryptoKit
 
@@ -143,3 +144,4 @@ public final class MockOrderSigners: @unchecked Sendable {
         return out
     }
 }
+#endif

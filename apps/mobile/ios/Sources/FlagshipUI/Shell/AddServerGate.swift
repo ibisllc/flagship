@@ -21,7 +21,7 @@ public enum AddServerGate {
 
     @MainActor
     public static func allows(_ app: AppState) -> Bool {
-        allows(holdsAdminRoot: Keystore.hasAdminRoot || GymSeams.forceAdminRoot, isDemoAccount: app.isDemoAccount)
+        allows(holdsAdminRoot: Keystore.hasAdminRoot, isDemoAccount: app.isDemoAccount)
     }
 
     /// The admin root a new server's recipe pins. Only opening the account

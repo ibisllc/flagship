@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 import FlagshipAPI
 
@@ -83,3 +84,4 @@ public enum GymOrderCanonical {
         }
     }
 }
+#endif

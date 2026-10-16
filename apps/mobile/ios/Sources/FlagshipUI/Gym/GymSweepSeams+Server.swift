@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 import FlagshipAPI
 import FlagshipCore
@@ -7,3 +8,4 @@ extension GymSweepSeams {
     static func server(_ args: [String], _ app: AppState, _ mocks: GymMocks) {
     }
 }
+#endif

@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 import CryptoKit
 
@@ -1677,3 +1678,4 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         ])
     }
 }
+#endif

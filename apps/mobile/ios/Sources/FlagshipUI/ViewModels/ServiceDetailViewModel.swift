@@ -338,7 +338,7 @@ public final class ServiceDetailViewModel {
         self.clients = clients
         self.server = server
         self.username = username
-        self.uninstallClient = uninstallClient ?? MockServiceUninstallClient()
+        self.uninstallClient = uninstallClient ?? DefaultClients.serviceUninstall()
         self.serverDomain = serverDomain
         self.irkSigner = irkSigner ?? { reason in try await Keystore.sensitiveOrderSigningKey(reason: reason) }
         self.egressSigner = egressSigner ?? { reason in try await Keystore.sensitiveOrderSigningKey(reason: reason) }

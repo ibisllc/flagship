@@ -11,7 +11,6 @@ struct ContentView: View {
     @Environment(ToastCenter.self) private var toasts
     @Environment(ActiveOperationsCenter.self) private var operations
     @Environment(TrustCenter.self) private var trust
-    @Environment(DeveloperSettings.self) private var dev
     @Environment(\.flagshipServerClient) private var serverClient
     @Environment(\.secretMailboxClient) private var mailbox
     @Environment(\.sessionStore) private var sessionStore
@@ -47,7 +46,9 @@ struct ContentView: View {
                 Color.clear
             }
             Toaster()
+            #if DEBUG
             if GymProbe.isOn { GymProbeView() }
+            #endif
         }
         // One sheet for the whole queue: the next request replaces the answered
         // one in place. Keyed on the item, SwiftUI re-presented the sheet per
@@ -146,12 +147,12 @@ struct ContentView: View {
     }
 
     /// Run the maintainer-trust check against `.com` and feed the verdict to
-    /// the `TrustCenter`. Live-client only (the Mock control server is for
-    /// dev/demo and has no blessing to verify); a network/parse failure is a
-    /// NON-verdict and leaves the center untouched (never bricks offline).
+    /// the `TrustCenter`. Not in the mock gym (its control server has no
+    /// blessing to verify); a network/parse failure is a NON-verdict and
+    /// leaves the center untouched (never bricks offline).
     @MainActor
     private func runTrustCheck() async {
-        guard dev.useLiveClient else { return }
+        guard !Self.usesMocks else { return }
         switch await TrustChecker().check() {
         case .trusted:                 trust.markTrusted()
         case .untrusted(let failure):  trust.markUntrusted([failure])
@@ -231,14 +232,17 @@ struct ContentView: View {
     private func managedBoxes() -> @MainActor () async -> [AppAccessAlertCenter.Box] {
         let app = self.app
         let store = self.sessionStore
-        let dev = self.dev
+        #if DEBUG
         let mock = self.screensClient
+        #endif
         let pinned = BoxPinnedURLSession.make(pinFor: { CertPinRegistry.shared.pinFor(host: $0) })
         return {
-            guard dev.useLiveClient else {
+            #if DEBUG
+            if Self.usesMocks {
                 guard let domain = await mock.boxDomain() ?? app.sessionPod?.fqdn else { return [] }
                 return [AppAccessAlertCenter.Box(serverDomain: domain, client: mock)]
             }
+            #endif
             var out: [AppAccessAlertCenter.Box] = []
             for pod in app.pods where pod.status != .pending && !pod.fqdn.isEmpty {
                 guard let token = await store.sessionToken(forPodId: PodInfo.podId(forFqdn: pod.fqdn)),
@@ -271,7 +275,7 @@ struct ContentView: View {
                     guard let app else { return false }
                     return app.isPaired && app.isUnlocked && !app.isRestrictedDevice && AdminOrderGate.allows(app)
                 },
-                alertsEnabled: { privacy.pushNotificationsEnabled && !GymSeams.suppressAccessAlerts }
+                alertsEnabled: { privacy.pushNotificationsEnabled && !Self.gymSuppressesAccessAlerts }
             )
             center.observeEvents()
             accessAlerts = center
@@ -329,7 +333,7 @@ struct ContentView: View {
     /// Web-Push wake.
     @MainActor
     private func syncAiChatPoller() {
-        guard dev.useLiveClient else { return }
+        guard !Self.usesMocks else { return }
         if aiChatPoller == nil {
             let pinned = BoxPinnedURLSession.make(pinFor: { CertPinRegistry.shared.pinFor(host: $0) })
             let client = LivePhoneAlertClient(urlSession: pinned, store: sessionStore)
@@ -360,10 +364,29 @@ struct ContentView: View {
     /// App scope (see FlagshipApp.body), so the device-token callback
     /// can route through to .com regardless of which view triggered
     /// `registerForRemoteNotifications`.
-    /// Smoke-test plumbing: launch with `-smoke-tab <home|apps|activity|settings>`
-    /// to land on a specific tab on first paint. Production builds never
-    /// pass this arg, so the optional stays nil and `.home` is used.
+    /// The mock gym (Debug builds only); Release always runs live.
+    private static var usesMocks: Bool {
+        #if DEBUG
+        GymLaunch.usesMocks
+        #else
+        false
+        #endif
+    }
+
+    private static var gymSuppressesAccessAlerts: Bool {
+        #if DEBUG
+        GymSeams.suppressAccessAlerts
+        #else
+        false
+        #endif
+    }
+
+    /// Gym plumbing (Debug builds): launch with `-smoke-tab
+    /// <home|apps|activity|settings>` to land on a tab on first paint.
     private var smokeInitialDestination: RootDestination? {
+        #if !DEBUG
+        return nil
+        #else
         let args = ProcessInfo.processInfo.arguments
         guard args.contains("-smoke-mode"),
               let idx = args.firstIndex(of: "-smoke-tab"),
@@ -376,6 +399,7 @@ struct ContentView: View {
         case "settings": return .settings
         default:         return nil
         }
+        #endif
     }
 
     private func registerPush() async {

@@ -161,7 +161,6 @@ public enum SettingsRoute: Hashable, Sendable {
     /// Phase 3b — the in-app scanner entry for the incoming side
     /// ("Scan a pairing code"), reached from Settings → Devices.
     case scanPairingCode
-    case developer
     case privacy
     /// B7 — Replace-device FINALIZE surface. Reached after `initiate`
     /// returns `.pending`, or re-entered later while a rotation is in

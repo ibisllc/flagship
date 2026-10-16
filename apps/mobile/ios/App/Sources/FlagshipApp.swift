@@ -14,12 +14,13 @@ struct FlagshipApp: App {
     @State private var toasts = ToastCenter()
     @State private var operations = ActiveOperationsCenter()
     @State private var trust: TrustCenter
-    @State private var dev = DeveloperSettings()
     @State private var privacy = PrivacySettings()
     @State private var pushRegistrar: PushRegistrar?
     @State private var persistedIdentityRestoreStarted = false
     @State private var orphanedPersistedUsername: String?
+    #if DEBUG
     private let mockClient = MockScreensClient()
+    #endif
     private let liveClient: any ScreensClient
     private let livePodClients: PodScreensClientFactory
     // The session store backing the live screens client. Owned here so
@@ -29,15 +30,13 @@ struct FlagshipApp: App {
     private let sessionStore: any SessionStoring
 
     init() {
-        // FIRST: apply a backend-apex override from the launch args, BEFORE
-        // any client is constructed below (the live clients capture their
-        // base URL at init). The gym test build launches with
-        // `-apex-host gym.flagshipserver.com`; a prod launch passes nothing,
-        // so `Endpoints` stays on today's literal. (A persisted
-        // DeveloperSettings.apexHost — applied in its own init — is the
-        // fallback when no launch arg is present.)
-        Self.applyApexHostArgIfPresent()
+        // The gym's launch seams (Debug builds only), FIRST: the live clients
+        // below capture their base URL at init, so `-apex-host` must retarget
+        // `Endpoints` before any of them is built.
+        #if DEBUG
+        GymLaunch.applyApexHostArg()
         Self.applySmokeOnboardingIfRequested()
+        #endif
         let state = AppState()
         _appState = State(initialValue: state)
         // `.com` serves the account's servers, devices and app names only
@@ -158,12 +157,11 @@ struct FlagshipApp: App {
         }
     }
 
-    /// Smoke-test entry point: when launched with `-smoke-mode YES`
-    /// the app skips onboarding and lands directly on the paired
-    /// shell with DemoFixtures sample pods. ContentView pairs this
-    /// with `-smoke-tab` to pre-route the shell to a tab. Production
-    /// builds ignore the flag — `ProcessInfo.arguments` is only
-    /// populated when the launcher sets it.
+    #if DEBUG
+    /// The mock gym's entry point (Debug builds only): launched with
+    /// `-smoke-mode YES` the app skips onboarding and lands directly on the
+    /// paired shell with DemoFixtures sample pods. ContentView pairs this
+    /// with `-smoke-tab` to pre-route the shell to a tab.
     @MainActor
     private static func applySmokeModeIfRequested(
         _ app: AppState,
@@ -312,7 +310,7 @@ struct FlagshipApp: App {
     /// Gym-only (`-smoke-onboarding`): start unpaired with nothing left from a
     /// previous run (the onboarding walk creates real keys on the simulator,
     /// and a leftover account would be restored instead of showing Welcome),
-    /// against the mock client (DeveloperSettings), with the UI-level Face ID
+    /// against the mock clients (GymLaunch), with the UI-level Face ID
     /// prompts passed as in `-smoke-mode`.
     private static func applySmokeOnboardingIfRequested() {
         guard ProcessInfo.processInfo.arguments.contains("-smoke-onboarding") else { return }
@@ -320,20 +318,8 @@ struct FlagshipApp: App {
         GymSeams.bypassBiometricGates = true
         GymSeams.suppressAccessAlerts = true
     }
+    #endif
 
-    /// Backend-apex override seam for the gym test build. When launched with
-    /// `-apex-host <host>` (e.g. `gym.flagshipserver.com`), retarget every
-    /// client at that apex via `Endpoints` BEFORE the clients are built.
-    /// Production launches pass nothing, so `Endpoints` keeps today's literal
-    /// and the live app is byte-identical. `-apex-host` is the value form
-    /// (`["-apex-host", "gym.flagshipserver.com"]`); the bare flag is ignored.
-    private static func applyApexHostArgIfPresent() {
-        let args = ProcessInfo.processInfo.arguments
-        guard let i = args.firstIndex(of: "-apex-host"), i + 1 < args.count else { return }
-        let host = args[i + 1]
-        guard !host.isEmpty, !host.hasPrefix("-") else { return }
-        DeveloperSettings.applyApexOverride(host)
-    }
 
     /// Wire the FlagshipUI InstallProgressBridge to the App-target
     /// Live Activity. The bridge is set up once at @main init so every
@@ -425,6 +411,29 @@ struct FlagshipApp: App {
         case .unknown:      return .booting
         }
     }
+    private let liveServerClient: any FlagshipServerClient
+    private let liveRelay: any QrRelayClient = LiveQrRelayClient()
+    private let liveLockPower: any LockPowerClient
+    private let liveFrontPage: any FrontPageClient
+    private let liveLeads: any LeadsClient
+    private let liveServiceUninstall: any ServiceUninstallClient
+    private let liveServerTransfer: any ServerTransferClient = LiveServerTransferClient()
+    private let liveServerMigration: any ServerMigrationClient = LiveServerMigrationClient()
+    private let liveServiceAccess: any ServiceAccessClient
+    private let liveMailbox: any SecretMailboxClient
+    private let readTokens: AccountReadTokenProvider
+    // Cross-device pairing relay (Add a device / Join an account). Its
+    // network transport over /qr-pipe is a follow-up, so Release builds
+    // refuse with a sentence; Debug builds keep the in-process relay the
+    // gym and unit tests pair through.
+    #if DEBUG
+    private let pairingRelay: any PairingRelayClient = MockPairingRelayClient()
+    #else
+    private let pairingRelay: any PairingRelayClient = UnavailablePairingRelayClient()
+    #endif
+    #if DEBUG
+    // The mock gym's clients (Debug builds only): every one stands in for
+    // its live twin when GymLaunch.usesMocks.
     // Seed the mock with one demo user so "I already have an account" →
     // type "demo" opens a populated sandbox in mock mode WITHOUT minting
     // an identity or hitting the network (DemoFixtures is purely local;
@@ -449,13 +458,7 @@ struct FlagshipApp: App {
         }
         return m
     }()
-    private let liveServerClient: any FlagshipServerClient
     private let mockRelay = MockQrRelayClient()
-    private let liveRelay: any QrRelayClient = LiveQrRelayClient()
-    // Phase 3b — cross-device pairing relay seam. The live bidirectional
-    // transport over /qr-pipe is a follow-up; the Mock seam is wired so
-    // the admin/incoming flows + safeguards are exercisable today.
-    private let pairingRelay = MockPairingRelayClient()
     // Phone-as-unlock-endpoint relay mailbox. Live in production so the
     // SecretRequestsContainer can fetch + answer the box's boot-secret
     // requests; Mock (empty inbox) in dev/preview.
@@ -464,36 +467,29 @@ struct FlagshipApp: App {
     // in production; the in-process Mock (records sends, never auto-affirms)
     // in dev/preview/demo.
     private let mockLockPower = MockLockPowerClient()
-    private let liveLockPower: any LockPowerClient
     // Front-page (owner-assignable apex) box-direct client — same pinned
     // session and live/mock split as lock/power.
     private let mockFrontPage = MockFrontPageClient()
-    private let liveFrontPage: any FrontPageClient
     // Direct (box-read) per-service leadership — `GET /api/leads` over the SAME
     // box-pinned session, preferred over the `.com` `/pods` relay when a box is
     // reachable. The Mock returns nil ("no fresher source") so dev/preview/demo
     // keep the relay value untouched.
     private let mockLeads = MockLeadsClient()
-    private let liveLeads: any LeadsClient
     // Service-uninstall box-direct client — same pinned session and live/mock
     // split as lock/power + front-page.
     private let mockServiceUninstall = MockServiceUninstallClient()
-    private let liveServiceUninstall: any ServiceUninstallClient
     // Transfer-a-box broker client — hits `.com` (the namespace-migration
     // broker), not a box-pinned pipe, so it's a plain live client; live/mock
     // split as the others.
     private let mockServerTransfer = MockServerTransferClient()
-    private let liveServerTransfer: any ServerTransferClient = LiveServerTransferClient()
     // Server-migration lane client — hits `.com` (the migration orchestration
     // lane), not a box-pinned pipe; live/mock split as transfer.
     private let mockServerMigration = MockServerMigrationClient()
-    private let liveServerMigration: any ServerMigrationClient = LiveServerMigrationClient()
     // Per-service access gating (#92): box calls ride the SAME box-pinned
     // session (set-mode + redeem are signature-authed daemon endpoints); the
     // invite create/list/revoke calls hit `.com` over the default public-CA
     // session. Live/mock split as the other box-direct clients.
     private let mockServiceAccess = MockServiceAccessClient()
-    private let liveServiceAccess: any ServiceAccessClient
     /// Gym-only (`-smoke-mode -smoke-access-fixture`): a members list on the
     /// demo apps' Access control, signed with fixed keys instead of the Keystore.
     /// `-smoke-non-admin-device` plays a device without the admin root (a
@@ -502,7 +498,7 @@ struct FlagshipApp: App {
     private let accessFixture = AccessFixtureOnce()
     private var accessFixtureKeys: ServiceAccessKeys? {
         let args = ProcessInfo.processInfo.arguments
-        guard args.contains("-smoke-mode"), args.contains("-smoke-access-fixture"), !dev.useLiveClient else { return nil }
+        guard args.contains("-smoke-mode"), args.contains("-smoke-access-fixture"), GymLaunch.usesMocks else { return nil }
         return accessFixture.keys {
             ServiceAccessFixture.seed(access: mockServiceAccess, screens: mockClient,
                                       serviceIds: ["bright-maple--plants", "bright-maple--wiki", "trent--scratchpad"],
@@ -510,52 +506,88 @@ struct FlagshipApp: App {
                                       memberRank: args.contains("-smoke-member-rank-device"))
         }
     }
-    private let liveMailbox: any SecretMailboxClient
-    private let readTokens: AccountReadTokenProvider
     /// Every mock client, for the gym's launch seams.
     private var gymMocks: GymMocks {
         GymMocks(screens: mockClient, server: mockServerClient as? MockFlagshipServerClient, mailbox: mockMailbox,
                  lockPower: mockLockPower, frontPage: mockFrontPage, uninstall: mockServiceUninstall,
                  access: mockServiceAccess, transfer: mockServerTransfer, migration: mockServerMigration, relay: mockRelay)
     }
+    #else
+    private var accessFixtureKeys: ServiceAccessKeys? { nil }
+    #endif
+    /// What the shell injects: the live clients, or the mock gym's in a Debug
+    /// build launched with `-smoke-mode` / `-smoke-onboarding`.
     private var activeClient: any ScreensClient {
-        dev.useLiveClient ? liveClient : mockClient
+        #if DEBUG
+        if GymLaunch.usesMocks { return mockClient }
+        #endif
+        return liveClient
     }
-    /// Clients bound to one server each (docs/app-placement.md): over the box-
-    /// pinned session with that box's own token; the mock for every server in
-    /// demo mode.
     private var activePodClients: PodScreensClientFactory {
-        dev.useLiveClient ? livePodClients : .shared(mockClient)
+        #if DEBUG
+        if GymLaunch.usesMocks { return .shared(mockClient) }
+        #endif
+        return livePodClients
     }
     private var activeServerClient: any FlagshipServerClient {
-        dev.useLiveClient ? liveServerClient : mockServerClient
+        #if DEBUG
+        if GymLaunch.usesMocks { return mockServerClient }
+        #endif
+        return liveServerClient
     }
     private var activeRelay: any QrRelayClient {
-        dev.useLiveClient ? liveRelay : mockRelay
+        #if DEBUG
+        if GymLaunch.usesMocks { return mockRelay }
+        #endif
+        return liveRelay
     }
     private var activeMailbox: any SecretMailboxClient {
-        dev.useLiveClient ? liveMailbox : mockMailbox
+        #if DEBUG
+        if GymLaunch.usesMocks { return mockMailbox }
+        #endif
+        return liveMailbox
     }
     private var activeLockPower: any LockPowerClient {
-        dev.useLiveClient ? liveLockPower : mockLockPower
+        #if DEBUG
+        if GymLaunch.usesMocks { return mockLockPower }
+        #endif
+        return liveLockPower
     }
     private var activeFrontPage: any FrontPageClient {
-        dev.useLiveClient ? liveFrontPage : mockFrontPage
+        #if DEBUG
+        if GymLaunch.usesMocks { return mockFrontPage }
+        #endif
+        return liveFrontPage
     }
     private var activeLeads: any LeadsClient {
-        dev.useLiveClient ? liveLeads : mockLeads
+        #if DEBUG
+        if GymLaunch.usesMocks { return mockLeads }
+        #endif
+        return liveLeads
     }
     private var activeServiceUninstall: any ServiceUninstallClient {
-        dev.useLiveClient ? liveServiceUninstall : mockServiceUninstall
+        #if DEBUG
+        if GymLaunch.usesMocks { return mockServiceUninstall }
+        #endif
+        return liveServiceUninstall
     }
     private var activeServiceAccess: any ServiceAccessClient {
-        dev.useLiveClient ? liveServiceAccess : mockServiceAccess
+        #if DEBUG
+        if GymLaunch.usesMocks { return mockServiceAccess }
+        #endif
+        return liveServiceAccess
     }
     private var activeServerTransfer: any ServerTransferClient {
-        dev.useLiveClient ? liveServerTransfer : mockServerTransfer
+        #if DEBUG
+        if GymLaunch.usesMocks { return mockServerTransfer }
+        #endif
+        return liveServerTransfer
     }
     private var activeServerMigration: any ServerMigrationClient {
-        dev.useLiveClient ? liveServerMigration : mockServerMigration
+        #if DEBUG
+        if GymLaunch.usesMocks { return mockServerMigration }
+        #endif
+        return liveServerMigration
     }
 
     var body: some Scene {
@@ -569,7 +601,6 @@ struct FlagshipApp: App {
                 .environment(toasts)
                 .environment(operations)
                 .environment(trust)
-                .environment(dev)
                 .environment(privacy)
                 .environment(\.screensClient, activeClient)
                 .environment(\.sessionStore, sessionStore)
@@ -610,8 +641,10 @@ struct FlagshipApp: App {
                     Text("Flagship.com no longer lists this account. Nothing on this iPhone has been deleted. You can keep using the local account, or erase its local keys and data to start over.")
                 }
                 .onAppear {
+                    #if DEBUG
                     Self.applySmokeModeIfRequested(appState, linker: linker, operations: operations, trust: trust, privacy: privacy,
                                                    screens: mockClient, mocks: gymMocks)
+                    #endif
                     appDelegate.linker = linker
                     linker.makeCurrent()
                     WatchBridge.shared.activate(
@@ -683,7 +716,7 @@ struct FlagshipApp: App {
                 }
             } else if !Keystore.hasWrappedUMK,
                       let demo = await sessionStore.demoSession {
-                DemoFixtures.activate(
+                DemoAccount.activate(
                     appState,
                     username: demo.username,
                     demoServer: demo.server
@@ -738,6 +771,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     }
 }
 
+#if DEBUG
 /// Seeds the gym's Access control fixture once per launch.
 private final class AccessFixtureOnce {
     private var cached: ServiceAccessKeys?
@@ -748,3 +782,4 @@ private final class AccessFixtureOnce {
         return k
     }
 }
+#endif

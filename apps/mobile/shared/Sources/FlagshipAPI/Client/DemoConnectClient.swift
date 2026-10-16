@@ -130,6 +130,7 @@ public final class LiveDemoConnectClient: DemoConnectClient, @unchecked Sendable
 
 // MARK: - Mock
 
+#if DEBUG
 public final class MockDemoConnectClient: DemoConnectClient, @unchecked Sendable {
     private let server: MockFlagshipServerClient
     public var simulatedConnectLatency: TimeInterval = 0
@@ -223,3 +224,4 @@ public final class MockDemoConnectClient: DemoConnectClient, @unchecked Sendable
         server.demoServers[lower] = DemoServerBlock(fqdn: cur.fqdn, status: "none")
     }
 }
+#endif

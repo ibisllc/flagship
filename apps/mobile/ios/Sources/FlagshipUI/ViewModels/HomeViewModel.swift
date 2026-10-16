@@ -31,9 +31,11 @@ public final class HomeViewModel {
             // Mock-side: tell the in-memory client which pod fixture to
             // return. LiveScreensClient ignores this (its base URL is
             // already the right pod's daemon).
+            #if DEBUG
             if let mock = client as? MockScreensClient, let podContext {
                 mock.podContext = podContext
             }
+            #endif
             let resp = try await client.serverDetail()
             detail = .loaded(resp)
             needsPairing = false

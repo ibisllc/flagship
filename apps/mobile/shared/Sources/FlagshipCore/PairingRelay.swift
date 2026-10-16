@@ -54,6 +54,7 @@ public enum PairingRelayError: Error, LocalizedError, Sendable {
     case peerMissing
     case transport(String)
     case sessionInvalidated
+    case unavailable
 
     public var errorDescription: String? {
         switch self {
@@ -61,12 +62,35 @@ public enum PairingRelayError: Error, LocalizedError, Sendable {
         case .peerMissing:        return "The other device isn't connected. Try scanning again."
         case .transport(let m):   return "Pairing transport error: \(m)"
         case .sessionInvalidated: return "The pairing session was cancelled for your security."
+        case .unavailable:        return "Adding a device by scanning a code isn't available yet."
         }
     }
 }
 
+/// The pairing relay has no network transport yet (the `/qr-pipe` leg is a
+/// follow-up), so shipped builds refuse with a sentence instead of waiting
+/// on a peer that can never arrive.
+public struct UnavailablePairingRelayClient: PairingRelayClient {
+    public init() {}
+    public func adminAwaitDevicePubkey(sid: String, aeadKey: SymmetricKey) async throws -> Data {
+        throw PairingRelayError.unavailable
+    }
+    public func adminDeliverBundle(sid: String, ciphertextBase64Url: String, nonceBase64Url: String) async throws {
+        throw PairingRelayError.unavailable
+    }
+    public func incomingSendPubkeyAwaitBundle(
+        sid: String,
+        devicePubCiphertextBase64Url: String,
+        devicePubNonceBase64Url: String
+    ) async throws -> (ciphertextBase64Url: String, nonceBase64Url: String) {
+        throw PairingRelayError.unavailable
+    }
+    public func close() async {}
+}
+
 // MARK: - Mock
 
+#if DEBUG
 /// In-process pairing relay for unit + UI tests. A single instance is
 /// shared by BOTH the admin- and incoming-side view models in a test so
 /// the two halves rendezvous: the incoming side's pushed pubkey is
@@ -187,3 +211,4 @@ public final class MockPairingRelayClient: PairingRelayClient, @unchecked Sendab
         for w in bw { w.resume(throwing: PairingRelayError.sessionInvalidated) }
     }
 }
+#endif

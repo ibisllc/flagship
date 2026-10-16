@@ -139,6 +139,7 @@ public enum DirectLeadsInversion {
     }
 }
 
+#if DEBUG
 /// In-memory mock: returns a configurable map (default nil = "no fresher source").
 public final class MockLeadsClient: LeadsClient, @unchecked Sendable {
     private let lock = NSLock()
@@ -160,3 +161,4 @@ public final class MockLeadsClient: LeadsClient, @unchecked Sendable {
         return result
     }
 }
+#endif

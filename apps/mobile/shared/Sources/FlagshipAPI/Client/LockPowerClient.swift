@@ -164,6 +164,7 @@ private func numberToInt64(_ v: Any?) -> Int64 {
     return 0
 }
 
+#if DEBUG
 /// In-memory mock: records what was sent (so tests can assert wire shapes)
 /// and returns controllable results. The affirm path is NOT automatic — it
 /// only returns the configured `leaseExpiry` when the VM explicitly drives an
@@ -230,3 +231,4 @@ public final class MockLockPowerClient: LockPowerClient, @unchecked Sendable {
         return JournalResult(ok: true, unit: unit, lines: journalLines)
     }
 }
+#endif

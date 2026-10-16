@@ -18,7 +18,7 @@ import FlagshipAPI
 ///     │     is now a reusable "Add a server" reachable from Home.
 ///     └─ I already have an account → JoinUsernameScreen (username-first)
 ///           → preflight /api/account/resolve (200 always):
-///             ├─ demo    → DemoFixtures.activate (attach a new device)
+///             ├─ demo    → DemoAccount.activate (attach a new device)
 ///             ├─ unknown → inline "no account by that name" state
 ///             └─ single/multi → RealAccountLoginScreen — the Phase-3
 ///                       state machine (RealAccountLoginViewModel):
@@ -114,7 +114,7 @@ public struct OnboardingFlow: View {
                     // the real takeover state machine.
                     JoinUsernameScreen(
                         onDemo: { username, demoServer in
-                            DemoFixtures.activate(
+                            DemoAccount.activate(
                                 app,
                                 username: username,
                                 demoServer: demoServer

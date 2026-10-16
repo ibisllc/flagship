@@ -1,3 +1,4 @@
+#if DEBUG
 import SwiftUI
 import FlagshipAPI
 
@@ -21,3 +22,4 @@ public struct GymProbeView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
+#endif

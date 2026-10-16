@@ -11,7 +11,6 @@ public struct SettingsTab: View {
     @Environment(\.pushRegistrar) private var pushRegistrar
     @Environment(ToastCenter.self) private var toasts
     @Environment(AppState.self) private var app
-    @Environment(DeveloperSettings.self) private var dev
     @Environment(DeepLinker.self) private var linker
     @Environment(PrivacySettings.self) private var privacy
 
@@ -26,6 +25,15 @@ public struct SettingsTab: View {
     @State private var pendingCompanionCount: Int = 0
 
     public init() {}
+
+    /// Demo accounts (and the mock gym's session) never wrap a real key, so
+    /// the sign-out recovery gate doesn't apply to them.
+    private var isDemoSession: Bool {
+        #if DEBUG
+        if GymLaunch.usesMocks { return true }
+        #endif
+        return app.isDemoAccount
+    }
 
     public var body: some View {
         NavigationStack(path: $path) {
@@ -91,11 +99,6 @@ public struct SettingsTab: View {
                     controlDevices: vm.controlDevices,
                     trustedDevices: vm.trustedDevices,
                     pendingRePair: vm.pendingRePair,
-                    // Developer tools are a mock-mode concern: a shipped
-                    // live build never surfaces them. The only way in is the
-                    // deliberate pre-login 3-tap on the Welcome box, which
-                    // flips to mock first.
-                    showDeveloper: !dev.useLiveClient,
                     onAddDevice: {
                         // Adding a device hands over the UMK (account master
                         // key) — gate it behind an explicit Face ID before we
@@ -149,7 +152,7 @@ public struct SettingsTab: View {
                         // never wrap a real UMK).
                         guard SignOutPolicy.evaluate(
                             hasCloudRecovery: app.hasCloudRecovery,
-                            isDemoAccount: !dev.useLiveClient || app.isDemoAccount
+                            isDemoAccount: isDemoSession
                         ) == .allowed else { return }
                         Keystore.wipe()
                         app.signOut()
@@ -166,7 +169,6 @@ public struct SettingsTab: View {
                     onOpenCompanionRequests: { path.append(.companionRequests) },
                     pendingCompanionWritesCount: pendingCompanionCount,
                     onOpenAbout: { path.append(.about) },
-                    onOpenDeveloper: { path.append(.developer) },
                     onOpenPrivacy: { path.append(.privacy) },
                     onRefresh: { await vm.load() },
                     onRemoveFromAccount: {
@@ -179,7 +181,7 @@ public struct SettingsTab: View {
                         // sessions are exempt.
                         guard SignOutPolicy.evaluate(
                             hasCloudRecovery: app.hasCloudRecovery,
-                            isDemoAccount: !dev.useLiveClient || app.isDemoAccount
+                            isDemoAccount: isDemoSession
                         ) == .allowed else { return }
                         // B6a — full self-revoke: drop push token on
                         // .com, wipe Keystore (UMK / IRK / wrapped
@@ -235,11 +237,16 @@ public struct SettingsTab: View {
                         // E2/E3 — drive the wipe ceremony. The new UMK is
                         // wrapped under a REAL platform passkey: a mock PRF
                         // would upload an envelope cloud recovery can never
-                        // unwrap. Mock mode keeps the mock.
+                        // unwrap. The mock gym keeps the mock.
                         if wipeVm == nil {
+                            #if DEBUG
+                            let webAuthn: WebAuthnProvider = GymLaunch.usesMocks ? MockWebAuthnProvider() : PlatformWebAuthnProvider()
+                            #else
+                            let webAuthn: WebAuthnProvider = PlatformWebAuthnProvider()
+                            #endif
                             wipeVm = WipeRestartViewModel(
                                 server: server,
-                                webAuthn: dev.useLiveClient ? PlatformWebAuthnProvider() : MockWebAuthnProvider(),
+                                webAuthn: webAuthn,
                                 username: { [app] in app.currentUser }
                             )
                         }
@@ -260,7 +267,7 @@ public struct SettingsTab: View {
                     hasCloudRecovery: app.hasCloudRecovery,
                     signOutPolicy: SignOutPolicy.evaluate(
                         hasCloudRecovery: app.hasCloudRecovery,
-                        isDemoAccount: !dev.useLiveClient || app.isDemoAccount,
+                        isDemoAccount: isDemoSession,
                         isLastDevice: isLastDevice
                     ),
                     onRecoveryRequired: {
@@ -448,13 +455,6 @@ public struct SettingsTab: View {
                     }
                 }
             )
-        case .developer:
-            DeveloperScreen(dev: dev, onWipeIdentity: {
-                Task { @MainActor in
-                    await pushRegistrar?.revoke()
-                    app.signOut()
-                }
-            })
         case .privacy:
             PrivacyScreen()
         case .profiles:
@@ -542,11 +542,16 @@ struct CompanionDockContainer: View {
             let servers = app.pods
                 .filter { $0.status != .pending && !$0.fqdn.isEmpty }
                 .map { CompanionDockViewModel.ServerChoice(fqdn: $0.fqdn, name: $0.name, online: app.hasLiveSession($0)) }
+            // A relay of its own: the shared live one also carries the
+            // create-server delivery.
+            #if DEBUG
+            let ownRelay: any QrRelayClient = relay is MockQrRelayClient ? relay : LiveQrRelayClient()
+            #else
+            let ownRelay: any QrRelayClient = LiveQrRelayClient()
+            #endif
             vm = CompanionDockViewModel(
                 clients: podClients,
-                // A relay of its own: the shared live one also carries the
-                // create-server delivery.
-                relay: relay is MockQrRelayClient ? relay : LiveQrRelayClient(),
+                relay: ownRelay,
                 servers: servers,
                 defaultFqdn: app.currentPod?.fqdn,
                 username: app.currentUser ?? ""
@@ -848,9 +853,6 @@ struct PostRecoveryContainer: View {
 
 struct AboutStub: View {
     @Environment(\.colorScheme) private var scheme
-    @Environment(DeveloperSettings.self) private var dev
-    @Environment(ToastCenter.self) private var toasts
-    @State private var tapCount: Int = 0
 
     var body: some View {
         let c = FSColors.scheme(scheme)
@@ -862,25 +864,10 @@ struct AboutStub: View {
                 FSCard {
                     VStack(alignment: .leading, spacing: FS.space.s3) {
                         labeled("Version", appVersion, c: c)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                #if DEBUG
-                                tapCount += 1
-                                if tapCount >= 3 && !dev.unlocked {
-                                    dev.unlocked = true
-                                    toasts.success("Developer menu unlocked.")
-                                }
-                                #endif
-                            }
                         labeled("License", "BUSL-1.1 → Apache 2.0 (2030)", c: c)
                         labeled("Patents", "Patent Pending", c: c)
                         labeled("Source", "github.com/ibisllc/flagship", c: c, mono: true)
                     }
-                }
-                if dev.unlocked && !dev.useLiveClient {
-                    Text("Developer menu is in Settings.")
-                        .font(FS.font.caption())
-                        .foregroundColor(c.textMuted)
                 }
             }
             .padding(FS.space.s6)

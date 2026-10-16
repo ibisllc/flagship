@@ -69,7 +69,6 @@ public struct SettingsScreen: View {
     var onRenameCurrentDevice: (String) async -> Bool = { _ in false }
     var onSetManagedDeviceName: (String, String, Bool) async -> Bool = { _, _, _ in false }
     var onRemoveManagedDeviceName: (String) async -> Bool = { _ in false }
-    let showDeveloper: Bool
     /// v1.2 Phase 4 — "Multi-device + 2FA" badge state read out of the
     /// Worker `usernames` row. Nil while the load is in flight or if
     /// the call failed; "single" / "multi" otherwise.
@@ -116,7 +115,6 @@ public struct SettingsScreen: View {
     /// the badge on the Companion-requests nav row.
     var pendingCompanionWritesCount: Int = 0
     var onOpenAbout: () -> Void = {}
-    var onOpenDeveloper: () -> Void = {}
     var onOpenPrivacy: () -> Void = {}
     var onRefresh: () async -> Void = {}
     /// B6a — fired after the user confirms in the Remove sheet. The
@@ -170,7 +168,6 @@ public struct SettingsScreen: View {
         controlDevices: LoadingState<[PairedSessionSummary]>,
         trustedDevices: LoadingState<[SettingsViewModel.DirectoryDevice]> = .loaded([]),
         pendingRePair: PendingRePairSnapshot? = nil,
-        showDeveloper: Bool = false,
         accountType: String? = nil,
         onAddDevice: @escaping () -> Void = {},
         onScanPairingCode: @escaping () -> Void = {},
@@ -195,7 +192,6 @@ public struct SettingsScreen: View {
         onOpenCompanionRequests: @escaping () -> Void = {},
         pendingCompanionWritesCount: Int = 0,
         onOpenAbout: @escaping () -> Void = {},
-        onOpenDeveloper: @escaping () -> Void = {},
         onOpenPrivacy: @escaping () -> Void = {},
         onRefresh: @escaping () async -> Void = {},
         onRemoveFromAccount: @escaping () async -> Void = {},
@@ -219,7 +215,6 @@ public struct SettingsScreen: View {
         self.onRenameCurrentDevice = onRenameCurrentDevice
         self.onSetManagedDeviceName = onSetManagedDeviceName
         self.onRemoveManagedDeviceName = onRemoveManagedDeviceName
-        self.showDeveloper = showDeveloper
         self.accountType = accountType
         self.onAddDevice = onAddDevice
         self.onScanPairingCode = onScanPairingCode
@@ -238,7 +233,6 @@ public struct SettingsScreen: View {
         self.onOpenCompanionRequests = onOpenCompanionRequests
         self.pendingCompanionWritesCount = pendingCompanionWritesCount
         self.onOpenAbout = onOpenAbout
-        self.onOpenDeveloper = onOpenDeveloper
         self.onOpenPrivacy = onOpenPrivacy
         self.onRefresh = onRefresh
         self.onRemoveFromAccount = onRemoveFromAccount
@@ -295,7 +289,6 @@ public struct SettingsScreen: View {
                 appSection(c: c)
                 sessionActions(c: c)
                 dangerZone(c: c)
-                developerGroup(c: c)
                 about(c: c)
 
                 Spacer().frame(height: FS.space.s12)
@@ -795,17 +788,6 @@ public struct SettingsScreen: View {
         FSSettingsGroup("BACKUP & PEERS", rows: [
             FSSettingsRow(icon: "externaldrive.connected.to.line.below.fill", title: "Peer-backup", subtitle: "Shard health across peers", action: onOpenPeerBackup),
         ])
-    }
-
-    /// Developer group (spec S1 group 7) — hidden behind the 3-tap / mock
-    /// toggle. The one place technical terms are allowed to stay.
-    @ViewBuilder
-    private func developerGroup(c: FSColors) -> some View {
-        if showDeveloper {
-            FSSettingsGroup("DEVELOPER", rows: [
-                FSSettingsRow(icon: "hammer.fill", title: "Developer", subtitle: "Mock/live toggle, latency knob", action: onOpenDeveloper),
-            ])
-        }
     }
 
     /// The three-tier "leave the app" cluster, ordered by increasing

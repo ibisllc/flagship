@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 import FlagshipAPI
 import FlagshipCore
@@ -54,3 +55,4 @@ public enum GymSweepSeams {
         return args[i + 1]
     }
 }
+#endif

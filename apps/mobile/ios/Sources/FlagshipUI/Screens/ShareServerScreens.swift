@@ -462,9 +462,12 @@ struct ShareAcceptScreen: View {
                 model = ShareAcceptModel(store: store, flow: store.flow, demo: ServerShareDemo.isOn)
                 if let shareId, let secretHex {
                     await model?.open(shareId: shareId, secretHex: secretHex)
-                } else if ServerShareDemo.route == "accept" {
+                }
+                #if DEBUG
+                if shareId == nil || secretHex == nil, ServerShareDemo.route == "accept" {
                     await model?.open(shareId: ServerShareDemo.invitation.shareId, secretHex: ServerShareDemo.secretHex)
                 }
+                #endif
             }
         }
         .sheet(isPresented: $scanning) {

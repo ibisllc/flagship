@@ -17,7 +17,7 @@ public struct PodScreensClientFactory: Sendable {
         await build(fqdn.lowercased())
     }
 
-    /// Every server answered by the same client (demo/mock mode, previews).
+    /// Every server answered by the same client (the mock gym, tests).
     public static func shared(_ client: any ScreensClient) -> PodScreensClientFactory {
         PodScreensClientFactory { _ in client }
     }
@@ -36,7 +36,11 @@ public struct PodScreensClientFactory: Sendable {
 }
 
 private struct PodScreensClientsKey: EnvironmentKey {
+    #if DEBUG
     static let defaultValue = PodScreensClientFactory.shared(MockScreensClient())
+    #else
+    static let defaultValue = PodScreensClientFactory.live(urlSession: .shared, store: SessionStore())
+    #endif
 }
 
 /// The box (FQDN) the surrounding screens' `screensClient` is bound to, when a

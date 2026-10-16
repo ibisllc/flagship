@@ -87,6 +87,7 @@ public final class LiveServiceUninstallClient: ServiceUninstallClient, @unchecke
     }
 }
 
+#if DEBUG
 /// In-memory mock: records what was sent (so tests can assert the wire shape +
 /// verify the signature) and optionally throws a configured error.
 public final class MockServiceUninstallClient: ServiceUninstallClient, @unchecked Sendable {
@@ -127,3 +128,4 @@ public final class MockServiceUninstallClient: ServiceUninstallClient, @unchecke
         }
     }
 }
+#endif

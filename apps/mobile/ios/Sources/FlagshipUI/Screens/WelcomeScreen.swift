@@ -3,13 +3,7 @@ import FlagshipCore
 
 /// D.2.1 — WelcomeScreen.
 public struct WelcomeScreen: View {
-    // Dev-mode escape hatch — see `secretTap`. The live/mock toggle
-    // otherwise lives in Settings, which is unreachable before sign-in;
-    // tapping the box illustration 3× flips it from the cover page.
-    @Environment(DeveloperSettings.self) private var dev
-    @Environment(ToastCenter.self) private var toasts
     @Environment(\.colorScheme) private var scheme
-    @State private var tapCount: Int = 0
 
     var onCreate: () -> Void = {}
     var onExisting: () -> Void = {}
@@ -20,17 +14,8 @@ public struct WelcomeScreen: View {
     public var body: some View {
         FSScreen {
             VStack(spacing: 0) {
-                modeBadge
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                    .padding(.top, FS.space.s2)
                 Spacer().frame(height: FS.space.s8)
                 BoxIllustration().frame(height: 220)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        #if DEBUG
-                        secretTap()
-                        #endif
-                    }
                 Spacer()
                 VStack(alignment: .leading, spacing: FS.space.s4) {
                     Text("Your stuff,\non your hardware.")
@@ -64,42 +49,6 @@ public struct WelcomeScreen: View {
             }
             .padding(.horizontal, FS.space.s6)
             .fsReadingColumn()
-        }
-    }
-
-    /// 3 taps on the box illustration toggles live↔mock and reveals the
-    /// in-Settings developer menu. Reachable WITHOUT signing in, so a
-    /// stranded live build can fall back to the on-device mock. Debug
-    /// builds only: a shipped build has no hidden mode switch.
-    private func secretTap() {
-        tapCount += 1
-        guard tapCount >= 3 else { return }
-        tapCount = 0
-        dev.useLiveClient.toggle()
-        dev.unlocked = true
-        toasts.info(
-            dev.useLiveClient
-                ? "You're now in LIVE mode — data comes from flagshipserver.com."
-                : "You're now in MOCK mode — sign in as “demo” (nothing is created)."
-        )
-    }
-
-    /// Shown ONLY in mock mode. Live is the normal mode and needs no
-    /// chrome; the badge is a loud reminder that you're on fake data,
-    /// plus the mock login hint. (Switching modes still fires a toast.)
-    @ViewBuilder private var modeBadge: some View {
-        if !dev.useLiveClient {
-            let tint = FSColors.scheme(scheme).warning
-            HStack(spacing: 6) {
-                Circle().fill(tint).frame(width: 7, height: 7)
-                Text("MOCK · sign in as “demo”")
-                    .font(FS.font.caption())
-                    .foregroundColor(tint)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(Capsule().fill(tint.opacity(0.14)))
-            .accessibilityLabel("Mock data mode")
         }
     }
 }
