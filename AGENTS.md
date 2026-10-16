@@ -223,6 +223,21 @@ of the last check here: **not yet checked**.
   Alpine bootstrap). Needs the owner's YubiKey: mint a `CaEndorsement` with the
   maintainers CLI, commit it, redeploy `.com`.
 
+- **The `flagship.services` DNS zone is nearly full (2026-10-16).** Cloudflare
+  caps it at 200 records; prod holds ~154. An account with one server takes
+  about 12 (6 CAA + 2 for the account + 4 per box), so only ~3–4 more accounts
+  fit, and when it is full new boxes (prod and gym) never get their DNS-01
+  records or a certificate (two gym runs went red this way). ~70 of the 154 are
+  leftovers: accounts with no server left (`demoent1-4`, `demouser7347*`,
+  `demo1234`, `harry1`, `ltsln0yduha`: 4 each; `drill-1010`, `update-drill`,
+  `openai-build`, `jolly-quince`, `harry2`: 6–8 each). Owner options: a higher
+  record cap (paid Cloudflare plan); fewer records per account (one wildcard
+  A/AAAA for the relay's passthrough IP instead of per-box records, CAA only
+  on the account name: ~3 per account); the gym on its own registered domain
+  (also frees the shared Let's Encrypt budget: `flagship.services` isn't on
+  the PSL yet, so gym and prod certificates share 50 a week); reap the
+  leftovers. The live gym now refuses to start when its fleet won't fit.
+
 ### In flight
 
 - **Live gym on UpCloud, all green (2026-10-15).** `bash scripts/gym-refresh.sh`
