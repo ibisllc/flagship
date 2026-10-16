@@ -114,14 +114,14 @@ public final class RealAccountLoginViewModel {
     public init(
         resolution: AccountResolution,
         server: any FlagshipServerClient,
-        webAuthn: WebAuthnProvider = DefaultClients.webAuthn(),
+        webAuthn: WebAuthnProvider? = nil,
         installUMK: @escaping @MainActor (SymmetricKey, String) async throws -> Void = { seed, reason in
             try await Keystore.installUMK(seed, reason: reason)
         }
     ) {
         self.resolution = resolution
         self.server = server
-        self.webAuthn = webAuthn
+        self.webAuthn = webAuthn ?? DefaultClients.webAuthn()
         self.installUMK = installUMK
         self.branch = Self.deriveBranch(resolution)
     }

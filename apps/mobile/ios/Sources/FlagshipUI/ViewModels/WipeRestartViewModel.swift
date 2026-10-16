@@ -56,11 +56,11 @@ public final class WipeRestartViewModel {
 
     public init(
         server: FlagshipServerClient,
-        webAuthn: WebAuthnProvider = DefaultClients.webAuthn(),
+        webAuthn: WebAuthnProvider? = nil,
         username: @escaping () -> String?
     ) {
         self.server = server
-        self.webAuthn = webAuthn
+        self.webAuthn = webAuthn ?? DefaultClients.webAuthn()
         self.username = username
     }
 

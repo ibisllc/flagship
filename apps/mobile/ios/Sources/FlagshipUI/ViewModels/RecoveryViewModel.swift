@@ -52,11 +52,11 @@ public final class RecoveryViewModel {
 
     public init(
         client: any FlagshipServerClient,
-        webAuthn: WebAuthnProvider = DefaultClients.webAuthn(),
+        webAuthn: WebAuthnProvider? = nil,
         username: @escaping () -> String? = { nil }
     ) {
         self.client = client
-        self.webAuthn = webAuthn
+        self.webAuthn = webAuthn ?? DefaultClients.webAuthn()
         self.username = username
     }
 
