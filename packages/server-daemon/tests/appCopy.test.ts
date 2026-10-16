@@ -11,7 +11,9 @@ import { mkdtempSync, readdirSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import https from "node:https";
+import net from "node:net";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   deriveIRK,
   ed,
@@ -25,7 +27,9 @@ import { buildAppCopySource } from "../src/appCopy/source.js";
 import { AppCopyStore, INTERRUPTED_REASON } from "../src/appCopy/store.js";
 import { buildAppCopyTarget, COPIES_PATH, COPY_PATH } from "../src/appCopy/target.js";
 import type { AppCopyOps } from "../src/appCopy/ops.js";
-import type { LanFetch } from "../src/appCopy/lanFetch.js";
+import { makeLanFetch, type LanFetch } from "../src/appCopy/lanFetch.js";
+import { startLanListener } from "../src/lanDirect.js";
+import { selfSigned } from "./helpers/selfSignedTls.js";
 import { pickLanEndpoint } from "../src/appCopy/target.js";
 import { APP_COPY_CHUNK_BYTES, APP_COPY_EXPORT_PATH, APP_COPY_PARALLEL, copyEnvKeyFromCgk, fetchEnvelopeBytes } from "../src/appCopy/wire.js";
 import { DbWriteLedger } from "../src/dataLayer/ownerDb.js";
@@ -159,6 +163,8 @@ interface WorldOpts {
   sourceLan?: LanEndpoint[];
   /** The target's LAN route; given the world's source, so it can answer as it. */
   lanFetch?: (source: ReturnType<typeof buildAppCopySource>) => LanFetch;
+  /** Collects the target's log lines. */
+  targetLog?: string[];
 }
 
 async function world(o: WorldOpts = {}) {
@@ -256,6 +262,7 @@ async function world(o: WorldOpts = {}) {
     pollMs: 20,
     lanFetch: o.lanFetch ? o.lanFetch(source) : null,
     ownLanAddresses: () => ["192.168.64.42"],
+    log: (m) => o.targetLog?.push(m),
     now,
   });
   const screens = (companion = false) =>
@@ -469,6 +476,117 @@ describe("the owner's order on the target (POST /api/screens/services/copy)", ()
       await w.target.settle();
       expect((await call(w, "GET", COPIES_PATH)).json.copies[0]).toMatchObject({ state: "done", route: "relay" });
       expect(lan).toEqual([]);
+    });
+
+    /**
+     * Real sockets: the source's export handler behind an HTTPS server and the
+     * real LAN listener, the target's real LAN fetch. What sits behind the
+     * listener varies: the source itself, or something that fails. The relay
+     * stays the in-process one, so a copy that ends `relay` fell back.
+     */
+    describe("with the real listener and LAN fetch", () => {
+      const closers: Array<() => Promise<void>> = [];
+      afterEach(async () => {
+        await Promise.all(closers.splice(0).map((c) => c()));
+      });
+
+      type Behaviour = "source" | "decoy" | "mute" | "quiet" | "drops" | "refused";
+      async function lanWorld(behaviour: Behaviour) {
+        const tls = await selfSigned(behaviour === "decoy" ? "printer.local" : SRC);
+        let source: ReturnType<typeof buildAppCopySource> | null = null;
+        let backend: net.Server;
+        if (behaviour === "mute") {
+          backend = net.createServer((sock) => {
+            sock.resume();
+            closers.push(async () => void sock.destroy());
+          });
+        } else {
+          const h = https.createServer({ cert: tls.cert, key: tls.key }, (req, res) => {
+            const chunks: Buffer[] = [];
+            req.on("data", (c: Buffer) => chunks.push(c));
+            req.on("end", async () => {
+              if (behaviour === "quiet") return;
+              const r = await source!.handle({ method: req.method!, path: req.url!, headers: req.headers as Record<string, string>, body: Buffer.concat(chunks) });
+              const body = r!.status === 204 ? Buffer.alloc(0) : Buffer.from(r!.body as string | Buffer);
+              if (behaviour === "drops") {
+                res.writeHead(r!.status, { ...(r!.headers ?? {}), "content-length": String(body.length) });
+                res.write(body.subarray(0, Math.floor(body.length / 2)));
+                setTimeout(() => res.socket?.destroy(), 5);
+                return;
+              }
+              res.writeHead(r!.status, r!.headers ?? {});
+              res.end(body);
+            });
+          });
+          closers.push(async () => void h.closeAllConnections());
+          backend = h;
+        }
+        await new Promise<void>((r) => backend.listen(0, "127.0.0.1", () => r()));
+        closers.push(() => new Promise<void>((r) => backend.close(() => r())));
+        const lan = await startLanListener({
+          port: 0,
+          backendPort: (backend.address() as net.AddressInfo).port,
+          zone: SRC,
+          listAddresses: () => ["127.0.0.1"],
+          log: () => {},
+        });
+        closers.push(() => lan.close());
+        const listenerPort = lan.endpoints()[0]!.port;
+        if (behaviour === "refused") await lan.close();
+
+        const real = makeLanFetch({ ca: tls.cert, connectTimeoutMs: 300, idleTimeoutMs: 300 });
+        const carried: string[] = [];
+        const targetLog: string[] = [];
+        const w = await world({
+          // What the source offers; the test's listener is on loopback, which
+          // a real box never offers, so the target is pointed there instead.
+          sourceLan: [SRC_LAN],
+          lanFetch: (s) => {
+            source = s;
+            return (endpoint, url, init) => {
+              expect(endpoint).toEqual(SRC_LAN);
+              carried.push((JSON.parse(init.body) as { part: string }).part);
+              return real({ address: "127.0.0.1", port: listenerPort }, url, init);
+            };
+          },
+          targetLog,
+        });
+        return { w, carried, targetLog };
+      }
+
+      async function copyOnce(behaviour: Behaviour) {
+        const lw = await lanWorld(behaviour);
+        await call(lw.w, "POST", COPY_PATH, grant());
+        await lw.w.target.settle();
+        const copy = (await call(lw.w, "GET", COPIES_PATH)).json.copies[0];
+        return { ...lw, copy };
+      }
+
+      it("copies over the LAN when the source is behind the listener", async () => {
+        const { w, copy, carried } = await copyOnce("source");
+        expect(copy).toMatchObject({ state: "done", route: "lan" });
+        expect(carried).toEqual(expect.arrayContaining(["image", "db:default", "files", "source"]));
+        expect(w.fetchLog.every((f) => f.part === "meta")).toBe(true);
+        expect(w.dst.platform.byServiceId(SERVICE)).toBeTruthy();
+      });
+
+      for (const [behaviour, what] of [
+        ["decoy", "another device holds the address and answers TLS with its own cert"],
+        ["mute", "the address accepts connections but never finishes a handshake"],
+        ["quiet", "the source goes silent after the handshake (Wi-Fi dropped)"],
+        ["drops", "the connection drops halfway through each answer"],
+        ["refused", "nothing listens there any more"],
+      ] as const) {
+        it(`finishes over the relay, and says so, when ${what}`, async () => {
+          const t0 = Date.now();
+          const { w, copy, targetLog } = await copyOnce(behaviour);
+          expect(copy).toMatchObject({ state: "done", route: "relay" });
+          expect(w.dst.platform.byServiceId(SERVICE)).toBeTruthy();
+          expect(w.fetchLog.map((f) => f.part)).toEqual(expect.arrayContaining(["image", "db:default", "files", "source"]));
+          expect(targetLog.some((m) => m.includes("isn't answering on the local network") && m.includes("using the relay"))).toBe(true);
+          expect(Date.now() - t0).toBeLessThan(10_000);
+        });
+      }
     });
 
     it("prefers a source address on the target's own subnet", () => {

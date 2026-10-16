@@ -16,9 +16,13 @@ export type LanFetch = (
   init: { method: string; headers: Record<string, string>; body: string; signal?: AbortSignal },
 ) => Promise<Response>;
 
-/** `ca` replaces the system roots (tests). */
-export function makeLanFetch(o: { connectTimeoutMs?: number; ca?: string } = {}): LanFetch {
+/** `ca` replaces the system roots (tests). A connection gets
+ *  `connectTimeoutMs` to finish its handshake, then may go quiet for at most
+ *  `idleTimeoutMs` (a Wi-Fi drop leaves no reset, only silence); either way the
+ *  request fails and the caller goes back to the relay. */
+export function makeLanFetch(o: { connectTimeoutMs?: number; idleTimeoutMs?: number; ca?: string } = {}): LanFetch {
   const connectTimeoutMs = o.connectTimeoutMs ?? 3_000;
+  const idleTimeoutMs = o.idleTimeoutMs ?? 15_000;
   const agent = new https.Agent({ keepAlive: true, maxSockets: 8, ...(o.ca ? { ca: o.ca } : {}) });
   return (endpoint, url, init) =>
     new Promise<Response>((resolve, reject) => {
@@ -43,6 +47,10 @@ export function makeLanFetch(o: { connectTimeoutMs?: number; ca?: string } = {})
           const chunks: Buffer[] = [];
           res.on("data", (c: Buffer) => chunks.push(c));
           res.on("error", reject);
+          // The connection closed before the whole answer arrived.
+          res.on("close", () => {
+            if (!res.complete) reject(new Error("the local connection dropped mid-answer"));
+          });
           res.on("end", () => {
             const status = res.statusCode ?? 502;
             const headers: Record<string, string> = {};
@@ -52,10 +60,14 @@ export function makeLanFetch(o: { connectTimeoutMs?: number; ca?: string } = {})
         },
       );
       const t = setTimeout(() => req.destroy(new Error("no answer on the local network")), connectTimeoutMs);
+      const connected = (): void => {
+        clearTimeout(t);
+        req.setTimeout(idleTimeoutMs, () => req.destroy(new Error("the local network went quiet")));
+      };
       req.on("socket", (s) => {
         // A kept-alive socket is already connected and past its handshake.
-        if (!s.connecting && !s.pending) clearTimeout(t);
-        else s.once("secureConnect", () => clearTimeout(t));
+        if (!s.connecting && !s.pending) connected();
+        else s.once("secureConnect", connected);
       });
       req.on("error", (e) => {
         clearTimeout(t);
