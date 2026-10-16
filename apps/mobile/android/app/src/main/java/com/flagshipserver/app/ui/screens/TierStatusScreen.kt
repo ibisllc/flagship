@@ -57,8 +57,15 @@ import java.util.Locale
 @Composable
 fun TierStatusScreen(@Suppress("UNUSED_PARAMETER") nav: NavController) {
     val client = LocalScreensClient.current
-    val vm = remember { TierStatusViewModel(client) }
+    val appState = com.flagshipserver.app.core.LocalAppState.current
+    val vm = remember {
+        TierStatusViewModel(client, serverName = { fqdn ->
+            appState.pods.value.firstOrNull { it.fqdn.equals(fqdn, ignoreCase = true) }?.name?.takeIf { it.isNotBlank() }
+                ?: com.flagshipserver.app.core.AppListScope.firstLabel(fqdn)
+        })
+    }
     val state by vm.state.collectAsState()
+    val listsWarning by vm.separateListsWarning.collectAsState()
 
     LaunchedEffect(Unit) { vm.load() }
 
@@ -81,6 +88,13 @@ fun TierStatusScreen(@Suppress("UNUSED_PARAMETER") nav: NavController) {
             style = TextStyle(fontSize = 14.sp),
         )
         Spacer(Modifier.height(FS.space.s4))
+
+        listsWarning?.let { line ->
+            FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.fillMaxWidth().semantics { testTag = "tier-status-separate-lists-warning" }) {
+                Text(line, color = FS.colors.text, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
+            }
+            Spacer(Modifier.height(FS.space.s4))
+        }
 
         when (val s = state) {
             is LoadingState.Loaded -> Body(s.value)

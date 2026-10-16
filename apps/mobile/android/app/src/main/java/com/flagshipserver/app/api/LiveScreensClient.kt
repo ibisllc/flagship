@@ -352,6 +352,17 @@ class LiveScreensClient(
         return request("${servicePath(serviceId)}/members/rank", AppRankResponse.serializer(), "POST", body)
     }
 
+    override suspend fun appListScope(serviceId: String): AppListScopeState =
+        request("${servicePath(serviceId)}/list-scope", AppListScopeState.serializer())
+
+    override suspend fun setAppListScope(serviceId: String, req: AppListScopeRequest): AppListScopeState {
+        val body = json.encodeToString(AppListScopeRequest.serializer(), req).toByteArray()
+        return request("${servicePath(serviceId)}/list-scope", AppListScopeState.serializer(), "POST", body)
+    }
+
+    override suspend fun accessListsSummary(): AccessListsSummary =
+        request("/api/screens/access-lists/summary", AccessListsSummary.serializer())
+
     override suspend fun serviceApiKeys(serviceId: String): AppApiKeysResponse =
         request("${servicePath(serviceId)}/api-keys", AppApiKeysResponse.serializer())
 

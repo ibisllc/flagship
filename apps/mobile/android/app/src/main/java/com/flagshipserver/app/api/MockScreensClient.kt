@@ -447,6 +447,60 @@ class MockScreensClient(
         return AppRankResponse(ok = true, target = t, rank = role)
     }
 
+    // ---------- Access control — a separate list on each server (Pro) ----
+
+    /** The account's plan as the box sees it (null: the gym's seed, else "free"). */
+    var listScopePlan: String? = null
+    /** Per-app scope the box holds (absent: "server" for Plants when the gym seeds it, else "account"). */
+    val listScopes: MutableMap<String, String> = mutableMapOf()
+    /** The app's servers in server order (the demo's first two). */
+    var listScopeServers: List<String> = listOf("home.bright-maple.flagship.services", "office.bright-maple.flagship.services")
+    val setListScopeCalls: MutableList<Pair<String, AppListScopeRequest>> = mutableListOf()
+    /** Status to refuse the next list-scope change with (e.g. 409), once. */
+    var listScopeStatus: Int? = null
+
+    private fun mockPlan(): String = listScopePlan ?: com.flagshipserver.app.core.GymSeams.listsPlan ?: "free"
+
+    private fun scopeOf(serviceId: String): String =
+        listScopes[serviceId]
+            ?: if (com.flagshipserver.app.core.GymSeams.separateLists && serviceId == GYM_SEPARATE_APP) "server" else "account"
+
+    private fun listScopeState(serviceId: String) = AppListScopeState(
+        serviceRef = serviceId,
+        scope = scopeOf(serviceId),
+        plan = mockPlan(),
+        self = "$podContext.bright-maple.flagship.services",
+        leader = listScopeServers.firstOrNull().orEmpty(),
+        servers = listScopeServers,
+    )
+
+    override suspend fun appListScope(serviceId: String): AppListScopeState {
+        tick()
+        return listScopeState(serviceId)
+    }
+
+    /** Mirrors the box: Pro only for "server", newest order wins. */
+    override suspend fun setAppListScope(serviceId: String, req: AppListScopeRequest): AppListScopeState {
+        tick()
+        setListScopeCalls.add(serviceId to req)
+        listScopeStatus?.let { listScopeStatus = null; throw ScreensError.Http(it, """{"error":"refused"}""") }
+        if (req.order.scope == "server" && mockPlan() != "pro") {
+            throw ScreensError.Http(402, """{"error":"A separate list on each server comes with Pro.","code":"pro-required"}""")
+        }
+        listScopes[serviceId] = req.order.scope
+        return listScopeState(serviceId)
+    }
+
+    override suspend fun accessListsSummary(): AccessListsSummary {
+        tick()
+        val apps = (listScopes.keys + GYM_SEPARATE_APP).filter { scopeOf(it) == "server" }
+        return AccessListsSummary(
+            plan = mockPlan(),
+            separateApps = apps.size,
+            leaders = if (apps.isEmpty()) emptyList() else listOfNotNull(listScopeServers.firstOrNull()),
+        )
+    }
+
     override suspend fun serviceDb(serviceId: String): AppDbOverview {
         tick()
         dbError?.let { throw it }
@@ -1238,6 +1292,8 @@ class MockScreensClient(
         const val OTHER_DEVICE_ID = "fedcba9876543210fedcba9876543210"
         val OTHER_DEVICE_PUB = "b2".repeat(32)
         const val CO_MANAGER_SHARE_ID = "0f1e2d3c4b5a69788796a5b4c3d2e1f0"
+        /** The demo app the gym gives a separate list on each server. */
+        const val GYM_SEPARATE_APP = "bright-maple--plants"
 
         /** The names the account directory would give them (decrypted on the phone). */
         val DEVICE_NAMES = mapOf(SELF_DEVICE_ID to "Pixel 9", OTHER_DEVICE_ID to "Kitchen iPad")

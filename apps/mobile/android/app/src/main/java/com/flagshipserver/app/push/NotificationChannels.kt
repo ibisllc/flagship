@@ -60,6 +60,7 @@ object NotificationChannels {
         "re-pair-urgent",
         "totp-failed-rate",
         InviteCreatedPush.CATEGORY,
+        AccessListsPush.CATEGORY,
     )
 
     /** The channel a push with this category (and kind) posts on. */

@@ -425,4 +425,59 @@ class GymOctoberTest : GymBase() {
         composeRule.waitUntil(15_000) { count("shared-approve-startup") == 0 }
         gymShot("shared-server-unlocked")
     }
+
+    // ─── A separate access list on each server (Pro; feat/marketplace) ──────
+
+    private fun openPlantsAccess(listsPlan: String, separateLists: Boolean = false) {
+        launch(tab = "apps", adminRoot = true, listsPlan = listsPlan, separateLists = separateLists)
+        waitUntilTextExists("Houseplant watering tracker", timeoutMs = 20_000)
+        composeRule.onNodeWithText("Houseplant watering tracker").performClick()
+        waitUntilExists("service-detail-access-row", timeoutMs = 20_000)
+        composeRule.onNodeWithTag("service-detail-access-row").performScrollTo().performClick()
+        waitUntilExists("service-access-list-scope-toggle", timeoutMs = 15_000)
+    }
+
+    /** Without Pro the switch is off and locked, with "Comes with Pro." and no purchase link. */
+    @Test
+    fun listScopeLockedWithoutPro() {
+        openPlantsAccess(listsPlan = "free")
+        composeRule.onNodeWithTag("service-access-list-scope-toggle").assertIsNotEnabled()
+        composeRule.onNodeWithTag("service-access-list-scope-pro").assertExists()
+        composeRule.onNodeWithText("Comes with Pro.").assertExists()
+        assertEquals(0, count("service-access-server-picker"))
+        gymShot("access-list-scope-locked")
+    }
+
+    /** With Pro: turn it on (confirmed), the server picker appears, and picking
+     *  Office loads Office's own list. */
+    @Test
+    fun listScopeOnShowsTheServerPicker() {
+        openPlantsAccess(listsPlan = "pro")
+        assertEquals(0, count("service-access-list-scope-pro"))
+        composeRule.onNodeWithTag("service-access-list-scope-toggle").performClick()
+        waitUntilExists("service-access-list-scope-confirm")
+        composeRule.onNodeWithText("Each server keeps its current list. Changes you make on one server stay on it.").assertExists()
+        gymShot("access-list-scope-confirm")
+        composeRule.onNodeWithTag("service-access-list-scope-confirm").performClick()
+        waitUntilExists("service-access-server-picker", timeoutMs = 15_000)
+        gymShot("access-list-scope-on")
+        composeRule.onNodeWithTag("service-access-server-picker-office").performClick()
+        composeRule.waitUntil(15_000) {
+            composeRule.onAllNodes(hasTestTag("service-access-server-picker-office") and androidx.compose.ui.test.isSelected())
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        waitUntilExists("service-access-account-members-title", timeoutMs = 15_000)
+        gymShot("access-list-scope-office")
+    }
+
+    /** Tier & usage warns before Pro ends while an app keeps separate lists. */
+    @Test
+    fun tierStatusWarnsAboutSeparateLists() {
+        launch(tab = "settings", listsPlan = "pro", separateLists = true)
+        waitUntilTextExists("Plan / Subscription", timeoutMs = 20_000)
+        composeRule.onNodeWithText("Plan / Subscription").performScrollTo().performClick()
+        waitUntilExists("tier-status-separate-lists-warning", timeoutMs = 15_000)
+        waitUntilTextExists("1 app has a separate access list on each server.")
+        gymShot("tier-status-separate-lists-warning")
+    }
 }

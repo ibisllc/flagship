@@ -35,6 +35,7 @@ object BoxEventLabels {
         "share.signed-in" to "A shared person signed in",
         "server.update" to "Server updated by a co-manager",
         "server.state.corrupt" to "This server found a damaged settings file and locked it down",
+        "access.lists.merged" to "Back to one access list",
     )
 
     private val genericWrite = Regex("^(get|post|put|patch|delete) /", RegexOption.IGNORE_CASE)

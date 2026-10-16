@@ -545,6 +545,61 @@ const OCTOBER: readonly Scenario[] = [
     },
   ),
   androidTotal(
+    "android-oct-access-list-scope-locked",
+    "D3 (feat/marketplace): on an admin device without Pro, 'Separate list on each server' is off and locked with 'Comes with Pro.' (no purchase link) and no server picker.",
+    O + "listScopeLockedWithoutPro",
+    {
+      steps: [
+        { kind: "launch", describe: "Plants → Access control as an admin device, plan free (smokeAdminRoot, smokePlan=free)." },
+        { kind: "assert", describe: "The locked switch and its Pro line.", handle: "service-access-list-scope-pro" },
+      ],
+      assertions: [
+        { describe: "Separate-lists switch", handle: "service-access-list-scope-toggle", expect: "present" },
+        { describe: "Comes with Pro.", handle: "service-access-list-scope-pro", expect: "present" },
+        { describe: "No server picker", handle: "service-access-server-picker", expect: "absent" },
+      ],
+      screenshots: [shot("access-list-scope-locked", "Locked without Pro.")],
+      dimension: "D3",
+    },
+  ),
+  androidTotal(
+    "android-oct-access-list-scope-server-picker",
+    "D3 (feat/marketplace): with Pro, turning on 'Separate list on each server' (confirmed, admin-root signed) shows the server picker; picking Office loads Office's own list.",
+    O + "listScopeOnShowsTheServerPicker",
+    {
+      steps: [
+        { kind: "launch", describe: "Plants → Access control as an admin device, plan Pro (smokeAdminRoot, smokePlan=pro)." },
+        { kind: "tap", describe: "Separate list on each server → confirm.", handle: "service-access-list-scope-toggle" },
+        { kind: "tap", describe: "Server picker → Office.", handle: "service-access-server-picker-office" },
+      ],
+      assertions: [
+        { describe: "Separate-lists switch", handle: "service-access-list-scope-toggle", expect: "present" },
+        { describe: "Server picker", handle: "service-access-server-picker", expect: "present" },
+        { describe: "No Pro line", handle: "service-access-list-scope-pro", expect: "absent" },
+      ],
+      screenshots: [
+        shot("access-list-scope-confirm", "Confirm."),
+        shot("access-list-scope-on", "Picker."),
+        shot("access-list-scope-office", "Office's list."),
+      ],
+      dimension: "D3",
+    },
+  ),
+  androidTotal(
+    "android-oct-tier-status-separate-lists-warning",
+    "D3 (feat/marketplace): Tier & usage warns, while on Pro, that an app with a separate list on each server will use its lead server's list when Pro ends.",
+    O + "tierStatusWarnsAboutSeparateLists",
+    {
+      steps: [
+        { kind: "launch", describe: "Settings → Plan / Subscription, plan Pro, Plants with separate lists (smokePlan=pro, smokeSeparateLists)." },
+        { kind: "assert", describe: "The warning card.", handle: "tier-status-separate-lists-warning" },
+      ],
+      assertions: [{ describe: "Separate-lists warning", handle: "tier-status-separate-lists-warning", expect: "present" }],
+      screenshots: [shot("tier-status-separate-lists-warning", "Warning.")],
+      dimension: "D3",
+    },
+  ),
+  androidTotal(
     "android-oct-api-key-create",
     "D6: Plants' API keys list its key; creating one shows the secret.",
     O + "apiKeyCreateShowsTheSecretOnce",

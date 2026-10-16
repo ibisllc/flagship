@@ -190,6 +190,20 @@ interface ScreensClient {
     suspend fun setAppRank(serviceId: String, req: AppRankRequest): AppRankResponse =
         throw ScreensError.NotImplemented("app members")
 
+    /** `GET /api/screens/services/:serviceId/list-scope`: whether the app keeps
+     *  a separate access list on each server (a Pro option). */
+    suspend fun appListScope(serviceId: String): AppListScopeState =
+        throw ScreensError.NotImplemented("list scope")
+
+    /** `POST …/list-scope`: an admin's signed `flagship/app-list-scope/v1`
+     *  (402 pro-required; 403 not an admin; 409 a newer order won, sign again). */
+    suspend fun setAppListScope(serviceId: String, req: AppListScopeRequest): AppListScopeState =
+        throw ScreensError.NotImplemented("list scope")
+
+    /** `GET /api/screens/access-lists/summary`: the account's apps with separate lists. */
+    suspend fun accessListsSummary(): AccessListsSummary =
+        throw ScreensError.NotImplemented("list scope")
+
     /** `GET /api/screens/services/:serviceId/api-keys` (docs/app-apis.md §3).
      *  A box without API keys answers 404. */
     suspend fun serviceApiKeys(serviceId: String): AppApiKeysResponse =
