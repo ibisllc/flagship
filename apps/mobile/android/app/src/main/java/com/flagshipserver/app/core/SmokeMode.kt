@@ -48,6 +48,9 @@ data class SmokeModeConfig(
     val seedShares: Boolean = false,
     /** This device's rank in the mock box's apps when not an admin (GymSeams.deviceRank). */
     val deviceRank: String? = null,
+    /** The mock box's saved backups and policy (iOS `-smoke-backups`):
+     *  "empty" | "failed" | "unset" | "over" | "restore-partial" | null (the default box). */
+    val backups: String? = null,
 ) {
     companion object {
         const val EXTRA_SMOKE_MODE = "flagship.smokeMode"
@@ -60,6 +63,7 @@ data class SmokeModeConfig(
         const val EXTRA_SMOKE_ACCESS_ALERT = "flagship.smokeAccessAlert"
         const val EXTRA_SMOKE_SHARES = "flagship.smokeShares"
         const val EXTRA_SMOKE_DEVICE_RANK = "flagship.smokeDeviceRank"
+        const val EXTRA_SMOKE_BACKUPS = "flagship.smokeBackups"
 
         const val SMOKE_USERNAME = "smoketest"
 
@@ -82,6 +86,8 @@ data class SmokeModeConfig(
                 seedShares = intent.getBooleanExtra(EXTRA_SMOKE_SHARES, false),
                 deviceRank = intent.getStringExtra(EXTRA_SMOKE_DEVICE_RANK)?.trim()?.lowercase()
                     ?.takeIf { it in setOf("member", "manager", "master", "refused") },
+                backups = intent.getStringExtra(EXTRA_SMOKE_BACKUPS)?.trim()?.lowercase()
+                    ?.takeIf { it in setOf("empty", "failed", "unset", "over", "restore-partial") },
             )
         }
     }

@@ -30,4 +30,9 @@ object GymSeams {
      *  the orders it lets through go to the mock clients. */
     @Volatile
     var bypassBiometricGates: Boolean = false
+
+    /** The file Import a backup's picker hands over (the system picker can't
+     *  be driven from the gym). Only the instrumentation sets it. */
+    @Volatile
+    var importBackupFile: java.io.File? = null
 }

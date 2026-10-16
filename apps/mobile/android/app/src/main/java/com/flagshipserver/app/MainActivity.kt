@@ -266,6 +266,10 @@ class MainActivity : FragmentActivity() {
                 )
             }
         }
+        if (smoke != null) {
+            mockScreens.seedBackups(smoke.backups)
+            MockScreensClient.smokeInstance = mockScreens
+        }
         val liveScreens = LiveScreensClient(client = okHttp, store = sessionStore)
         // #91 — drains the box's phone-pollable AlertInbox (GET /api/phone/alerts)
         // for AI-chat-needs-you events. Shares the box-pinned OkHttp + session

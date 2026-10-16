@@ -1404,8 +1404,34 @@ class MockScreensClient(
         return policyView()
     }
 
+    /** Seed the saved backups and policy for a gym scenario (SmokeModeConfig.backups). */
+    fun seedBackups(kind: String?) {
+        when (kind) {
+            "empty" -> {
+                backupKeyPool.clear()
+                savedBackupsList.clear()
+                backupLastRun = null
+            }
+            "failed" -> backupLastRun = BackupLastRun(now() - 3_600_000L, false, "schedule", reason = "needs about 12.0 GB, has 3.1 GB")
+            "unset" -> backupPolicyState = BackupPolicyState()
+            "over" -> backupUsedBytes = 40L * GB
+            "restore-partial" -> {
+                restoreWaiting = ServerRestoreWaiting("ab".repeat(16), 0, "00".repeat(32))
+                restoreApps = listOf(
+                    ServerRestoreApp("bright-maple--wiki", "Wiki", "done"),
+                    ServerRestoreApp("bright-maple--notes", "Notes", "failed", "its image didn't build"),
+                )
+            }
+        }
+    }
+
     companion object {
         private const val GB = 1024L * 1024 * 1024
+
+        /** The mock box the running app talks to in smoke mode, for the gym's
+         *  assertions on what was sent. Only MainActivity's smoke seam sets it. */
+        @Volatile
+        var smokeInstance: MockScreensClient? = null
 
         /** The mock box's device book: this phone, and the account's other one. */
         const val SELF_DEVICE_ID = "0123456789abcdef0123456789abcdef"

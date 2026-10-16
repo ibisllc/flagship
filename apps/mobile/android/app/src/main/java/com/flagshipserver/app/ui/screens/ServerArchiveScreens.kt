@@ -405,7 +405,11 @@ internal fun ImportBackupScreen(vm: ImportBackupViewModel, onClose: () -> Unit =
             }
         }
     }
-    val pick = pickFiles ?: { picker.launch(arrayOf("*/*")) }
+    val pick = pickFiles ?: {
+        val gymFile = com.flagshipserver.app.core.GymSeams.importBackupFile
+        if (gymFile != null) scope.launch { vm.choose(com.flagshipserver.app.viewmodels.LocalPickedFile(gymFile)) }
+        else picker.launch(arrayOf("*/*"))
+    }
     val title = when (phase) {
         is ImportBackupViewModel.Phase.Waiting, is ImportBackupViewModel.Phase.Sending,
         is ImportBackupViewModel.Phase.Restoring, is ImportBackupViewModel.Phase.Done,
