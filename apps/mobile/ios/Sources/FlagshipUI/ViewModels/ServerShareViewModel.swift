@@ -223,7 +223,13 @@ public enum ServerShareServices {
             username: username,
             isDemo: isDemoAccount,
             adminRootPubHex: Keystore.hasAdminRoot ? Keystore.adminRootPubHex() : nil,
-            adminRoot: { reason in try await Keystore.adminRootKey(reason: reason) },
+            // One Face ID: the context that passed opens the admin root and the
+            // account key the per-share key derives from.
+            adminRoot: { reason in
+                let context = try await BiometricGate().evaluateReturningContext(reason: reason)
+                Keystore.cacheSessionUMK(authenticatedBy: context)
+                return try Keystore.adminRootKey(authenticatedBy: context)
+            },
             irk: { reason in try await Keystore.deriveIRK(reason: reason) }
         )
     }
