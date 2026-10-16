@@ -25,6 +25,8 @@ export interface GymTeardownDeps {
   };
   /** The services apex; only names under it are ever deleted. */
   servicesApex: string;
+  /** Waits before a retry (tests pass a no-op). */
+  pause?: (ms: number) => Promise<void>;
 }
 
 export interface GymTeardownBody {
@@ -93,15 +95,26 @@ export async function handleGymTeardown(
     targets.push({ serverId: id, title: "" });
   }
 
+  const pause = deps.pause ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const destroyed: string[] = [];
   const failed: Array<{ serverId: string; error: string }> = [];
+  // The provider refuses some calls when many land at once (UpCloud answers
+  // 401 AUTHENTICATION_FAILED under load), so a failed destroy is tried
+  // twice more, a few seconds apart, before it is reported.
   await Promise.all(
     (dryRun ? [] : targets).map(async (t) => {
-      try {
-        await deps.cloud.destroyServer(t.serverId);
-        destroyed.push(t.serverId);
-      } catch (e) {
-        failed.push({ serverId: t.serverId, error: (e instanceof Error ? e.message : String(e)).slice(0, 200) });
+      for (let attempt = 1; ; attempt++) {
+        try {
+          await deps.cloud.destroyServer(t.serverId);
+          destroyed.push(t.serverId);
+          return;
+        } catch (e) {
+          if (attempt >= 3) {
+            failed.push({ serverId: t.serverId, error: (e instanceof Error ? e.message : String(e)).slice(0, 200) });
+            return;
+          }
+          await pause(3000 * attempt);
+        }
       }
     }),
   );
@@ -112,6 +125,8 @@ export async function handleGymTeardown(
   // gym run must leave nothing behind.
   let dnsDeleted = 0;
   const dnsFailed: string[] = [];
+  /** Every record in the zone (prod's too): the zone has a record cap gym and prod share. */
+  let zoneRecords: number | null = null;
   if (deps.dns && (all || domains.length || usernames.length)) {
     const zones = (usernames as string[]).map((u) => `${u.toLowerCase()}.${apex}`);
     const boxes = (domains as string[]).map((d) => d.toLowerCase());
@@ -127,11 +142,21 @@ export async function handleGymTeardown(
     } catch {
       dnsFailed.push("list");
     }
+    zoneRecords = records.length;
+    const retry: Array<{ id: string; name: string; type: string }> = [];
     for (const r of records.filter((x) => doomed(x.name))) {
       if (dryRun) {
         dnsDeleted += 1;
         continue;
       }
+      try {
+        if (await deps.dns.deleteById(r.id)) dnsDeleted += 1;
+      } catch {
+        retry.push(r);
+      }
+    }
+    if (retry.length) await pause(2000);
+    for (const r of retry) {
       try {
         if (await deps.dns.deleteById(r.id)) dnsDeleted += 1;
       } catch {
@@ -141,8 +166,8 @@ export async function handleGymTeardown(
   }
 
   if (dryRun) {
-    return { status: 200, body: { dryRun: true, servers: listed, wouldDestroy: targets, refused, dnsWouldDelete: dnsDeleted } };
+    return { status: 200, body: { dryRun: true, servers: listed, wouldDestroy: targets, refused, dnsWouldDelete: dnsDeleted, zoneRecords } };
   }
   const status = failed.length || dnsFailed.length ? 502 : 200;
-  return { status, body: { destroyed, failed, refused, dnsDeleted, dnsFailed } };
+  return { status, body: { destroyed, failed, refused, dnsDeleted, dnsFailed, zoneRecords } };
 }

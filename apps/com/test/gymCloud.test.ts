@@ -89,6 +89,50 @@ describe("handleGymTeardown", () => {
   });
 });
 
+describe("handleGymTeardown under load", () => {
+  it("retries a destroy the provider refused, and reports one that keeps failing", async () => {
+    const cloud = fakeCloud();
+    let calls = 0;
+    const flaky: GymCloudClient = {
+      ...cloud,
+      async destroyServer(id) {
+        calls++;
+        if (id === GYM_A && calls <= 2) throw new Error("UpCloud GET /server → HTTP 401 AUTHENTICATION_FAILED");
+        if (id === GYM_B) throw new Error("still failing");
+        await cloud.destroyServer(id);
+      },
+    };
+    const r = await handleGymTeardown({ ...deps(flaky), pause: async () => {} }, { serverIds: [GYM_A, GYM_B] });
+    expect(r.body.destroyed).toEqual([GYM_A]);
+    expect((r.body.failed as Array<{ serverId: string }>).map((f) => f.serverId)).toEqual([GYM_B]);
+    expect(r.status).toBe(502);
+  });
+
+  it("retries a DNS delete once and reports the zone's size", async () => {
+    const cloud = fakeCloud();
+    const records = [
+      { id: "1", name: "home.gx1.gym.flagship.services", type: "A" },
+      { id: "2", name: "home.alice.flagship.services", type: "A" },
+    ];
+    let tries = 0;
+    const dns = {
+      listAll: async () => records,
+      deleteById: async () => {
+        tries++;
+        if (tries === 1) throw new Error("429");
+        return true;
+      },
+    };
+    const dry = await handleGymTeardown({ ...deps(cloud), dns, pause: async () => {} }, { all: true, dryRun: true });
+    expect(dry.body.zoneRecords).toBe(2);
+    expect(dry.body.dnsWouldDelete).toBe(1);
+    const r = await handleGymTeardown({ ...deps(cloud), dns, pause: async () => {} }, { usernames: ["gx1"] });
+    expect(r.body.dnsDeleted).toBe(1);
+    expect(r.body.dnsFailed).toEqual([]);
+    expect(r.body.zoneRecords).toBe(2);
+  });
+});
+
 describe("UpCloud extra labels", () => {
   it("parses k=v pairs and drops malformed ones", () => {
     expect(parseUpCloudLabels("flagship-env=gym, bad pair ,x=y")).toEqual({ "flagship-env": "gym", x: "y" });
