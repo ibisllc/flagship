@@ -75,6 +75,8 @@ export const MAX_PG_IDENT = 63;
 
 /** The sentinel every dev database and role starts with; no prod name does. */
 export const DEV_PG_PREFIX = "__dev_";
+/** Every dev files volume starts with this; no prod one does. */
+export const DEV_FILES_PREFIX = "flagship-devfiles-";
 const PROD_PG_PREFIX = "app_";
 
 /**

@@ -86,6 +86,17 @@ export class RealPostgresAdmin implements PostgresAdmin {
     });
   }
 
+  async listNamed(prefix: string): Promise<string[]> {
+    return this.withClient(async (c) => {
+      const r = await c.query<{ name: string }>(
+        `SELECT datname AS name FROM pg_database WHERE starts_with(datname, $1)
+         UNION SELECT rolname AS name FROM pg_roles WHERE starts_with(rolname, $1)`,
+        [prefix],
+      );
+      return r.rows.map((row) => row.name);
+    });
+  }
+
   async listTables(db: string): Promise<string[]> {
     assertSafeIdent(db);
     const url = withDatabase(this.opts.adminUrl, db);
@@ -154,6 +165,14 @@ export class RealFilesAdmin implements FilesAdmin {
       await this.capture(["volume", "rm", args.volume]).catch(() => {});
       throw new Error(`couldn't prepare files volume ${args.volume}: ${(e as Error).message}`);
     }
+  }
+
+  async listVolumes(prefix: string): Promise<string[]> {
+    const out = await this.capture(["volume", "ls", "-q", "--filter", `name=${prefix}`]);
+    return out
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((v) => v.startsWith(prefix) && isFilesVolume(v));
   }
 
   async removeVolume(volume: string): Promise<void> {

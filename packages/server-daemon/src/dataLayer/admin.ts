@@ -25,6 +25,8 @@ export interface PostgresAdmin {
    * throws a clear error when it's needed but absent.
    */
   execSql?(args: { db: string; sql: string }): Promise<void>;
+  /** Databases and roles whose name starts `prefix` (the boot sweep of dev ones). */
+  listNamed?(prefix: string): Promise<string[]>;
 }
 
 /** Per-app files folders: Docker named volumes, mounted at `/data`. */
@@ -35,6 +37,8 @@ export interface FilesAdmin {
   removeVolume(volume: string): Promise<void>;
   /** Bytes the volume uses on disk, or null when the box can't tell. */
   volumeBytes(volume: string): Promise<number | null>;
+  /** Volumes whose name starts `prefix` (the boot sweep of dev ones). */
+  listVolumes?(prefix: string): Promise<string[]>;
 }
 
 export class InMemoryPostgresAdmin implements PostgresAdmin {
@@ -78,6 +82,9 @@ export class InMemoryPostgresAdmin implements PostgresAdmin {
       d.tables.set(table, existing);
     }
   }
+  async listNamed(prefix: string): Promise<string[]> {
+    return [...this.databases.keys()].filter((n) => n.startsWith(prefix));
+  }
 }
 
 export class InMemoryFilesAdmin implements FilesAdmin {
@@ -91,5 +98,8 @@ export class InMemoryFilesAdmin implements FilesAdmin {
   }
   async volumeBytes(volume: string): Promise<number | null> {
     return this.volumes.get(volume)?.bytes ?? null;
+  }
+  async listVolumes(prefix: string): Promise<string[]> {
+    return [...this.volumes.keys()].filter((v) => v.startsWith(prefix));
   }
 }

@@ -3,6 +3,7 @@ import type { FilesAdmin, PostgresAdmin } from "./admin.js";
 import {
   APP_PG_EXTENSIONS,
   DEFAULT_STORE_NAME,
+  DEV_FILES_PREFIX,
   DEV_PG_PREFIX,
   FILES_MOUNT,
   filesVolume,
@@ -258,6 +259,51 @@ export class DataProvisioner {
       stores: args.stores,
       space: "dev",
     });
+  }
+
+  /**
+   * Drop every DEV store except those of the identities in `keep` (the boot
+   * sweep of copies a restart orphaned). Only `__dev_` databases/roles and
+   * `flagship-devfiles-` volumes are ever considered; a prod name can't match.
+   */
+  async sweepDevDataspaces(
+    keep: () => readonly { creator: string; slug: string; stores: AppDataStores }[],
+  ): Promise<{ databases: number; volumes: number }> {
+    // Read at each drop, after the listing: a copy that started meanwhile
+    // has named its stores before it makes them, so it is never swept.
+    const kept = () => {
+      const pgNames = new Set<string>();
+      const volumeNames = new Set<string>();
+      for (const k of keep()) {
+        if (this.opts.nameKey) {
+          for (const storeName of postgresStoreNames(k.stores)) {
+            pgNames.add(pgDatabase({ creator: k.creator, slug: k.slug, storeName, space: "dev" }, this.opts.nameKey));
+          }
+        }
+        if (wantsFiles(k.stores)) volumeNames.add(filesVolume({ creator: k.creator, slug: k.slug, space: "dev" }));
+      }
+      return { pgNames, volumeNames };
+    };
+    let databases = 0;
+    let volumes = 0;
+    const pg = this.opts.postgres;
+    if (pg?.listNamed) {
+      await this.opts.ready?.();
+      for (const name of await pg.listNamed(DEV_PG_PREFIX)) {
+        if (!name.startsWith(DEV_PG_PREFIX) || kept().pgNames.has(name)) continue;
+        await pg.dropRoleAndDb({ db: name, role: name });
+        databases++;
+      }
+    }
+    const files = this.opts.files;
+    if (files?.listVolumes) {
+      for (const v of await files.listVolumes(DEV_FILES_PREFIX)) {
+        if (!v.startsWith(DEV_FILES_PREFIX) || kept().volumeNames.has(v)) continue;
+        await files.removeVolume(v);
+        volumes++;
+      }
+    }
+    return { databases, volumes };
   }
 
   // Read-only accessors used by the data dashboard.

@@ -289,6 +289,56 @@ describe("StagingRunner", () => {
   });
 });
 
+describe("StagingRunner: the boot sweep", () => {
+  it("removes dev data a restart left behind, keeps the copies running now and never touches a live app's stores", async () => {
+    const { cmd } = recordingCmd();
+    const postgres = new InMemoryPostgresAdmin();
+    const files = new InMemoryFilesAdmin();
+    const nameKey = "n".repeat(40);
+    const runner = new StagingRunner({
+      cmd,
+      workingDir: mkdtempSync(join(tmpdir(), "staging-")),
+      dataProvisioner: new DataProvisioner({ postgres, files, nameKey }),
+      runSql: async () => {},
+      startCheck: async () => ({ ok: true }),
+      pickPort: () => 51234,
+      now: () => 1700000000000,
+    });
+    const withFiles = FILES["flagship.app.json"].replace('"postgres":true', '"postgres":true,"files":true');
+    expect(withFiles).not.toBe(FILES["flagship.app.json"]);
+    expect((await runner.stage({ buildId: "live1", files: { ...FILES, "flagship.app.json": withFiles }, slug: "notes" })).ok).toBe(true);
+    // What a daemon that restarted mid-staging left, next to a live app's stores.
+    await postgres.createRoleAndDb({ db: devDb("gone1"), role: devDb("gone1"), password: "x" });
+    await postgres.createRoleAndDb({ db: "app_0123456789abcdef01234567", role: "app_0123456789abcdef01234567", password: "x" });
+    await files.createVolume({ volume: "flagship-devfiles-owner--stg-gone1" });
+    await files.createVolume({ volume: "flagship-files-harry--notes" });
+
+    await runner.sweep();
+
+    expect([...postgres.databases.keys()].sort()).toEqual([devDb("live1"), "app_0123456789abcdef01234567"].sort());
+    expect([...files.volumes.keys()].sort()).toEqual(["flagship-devfiles-owner--stg-live1", "flagship-files-harry--notes"]);
+  });
+
+  it("leaves dev data alone while the data layer is down", async () => {
+    const { cmd } = recordingCmd();
+    const postgres = new InMemoryPostgresAdmin();
+    await postgres.createRoleAndDb({ db: devDb("gone1"), role: devDb("gone1"), password: "x" });
+    const runner = new StagingRunner({
+      cmd,
+      workingDir: mkdtempSync(join(tmpdir(), "staging-")),
+      dataProvisioner: new DataProvisioner({
+        postgres,
+        nameKey: "n".repeat(40),
+        ready: async () => {
+          throw new DataLayerUnavailableError("starting");
+        },
+      }),
+    });
+    await runner.sweep();
+    expect(postgres.databases.has(devDb("gone1"))).toBe(true);
+  });
+});
+
 /** A docker whose `build` fails with `msg()`. */
 function buildFails(msg: () => string): CommandRunner {
   const fail = (args: string[]) => {

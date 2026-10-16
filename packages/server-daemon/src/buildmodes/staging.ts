@@ -236,16 +236,39 @@ export class StagingRunner implements StagingHost {
     this.images.delete(buildId);
   }
 
-  /** Remove copies a previous daemon left behind (best-effort, at boot). */
+  /**
+   * Remove copies a previous daemon left behind, and their dev data (the
+   * sample database and files volume), best-effort at boot. A chat that is
+   * continued later stages a fresh dataspace anyway (stage tears the old
+   * names down first), so nothing a continuable chat needs is lost; copies
+   * this process runs are kept.
+   */
   async sweep(): Promise<void> {
-    if (!this.deps.cmd.capture) return;
+    if (this.deps.cmd.capture) {
+      try {
+        const { stdout } = await this.deps.cmd.capture("docker", ["ps", "-aq", "--filter", "name=^flagship-stg-"]);
+        for (const id of stdout.split("\n").map((l) => l.trim()).filter(Boolean)) {
+          await this.deps.cmd.run("docker", ["rm", "-f", id]).catch(() => {});
+        }
+      } catch {
+        /* docker unavailable */
+      }
+    }
+    const provisioner = this.deps.dataProvisioner;
+    if (!provisioner) return;
     try {
-      const { stdout } = await this.deps.cmd.capture("docker", ["ps", "-aq", "--filter", "name=^flagship-stg-"]);
-      for (const id of stdout.split("\n").map((l) => l.trim()).filter(Boolean)) {
-        await this.deps.cmd.run("docker", ["rm", "-f", id]).catch(() => {});
+      const swept = await provisioner.sweepDevDataspaces(() =>
+        [...this.running.values()].flatMap((r) =>
+          r.stores ? [{ creator: STAGING_CREATOR, slug: r.devSlug, stores: r.stores }] : [],
+        ),
+      );
+      if (swept.databases + swept.volumes > 0) {
+        console.warn(
+          `[staging] removed ${swept.databases} test database(s) and ${swept.volumes} files volume(s) a restart left behind`,
+        );
       }
     } catch {
-      /* docker unavailable */
+      /* the data layer isn't up; the next boot tries again */
     }
   }
 
