@@ -288,7 +288,16 @@
 //       existing account", one page with both ways back in: the account
 //       name (sign in) and a pairing code or link (join); a pairing link
 //       typed as the name joins (lib/connectAccount.js).
-const SHELL_VERSION = "v122";
+//  v123: a non-admin device sees the server page and its sharing read-only;
+//       Settings screens go Back to Settings, the install tracker and
+//       report to Activity; Activity reads the signed-in account; hidden
+//       settings rows stay hidden; rate-limit sentences for account
+//       deletion and 2FA; one link per invite; a finished backup reopens;
+//       .com's migration and directory refusals in its words; a new
+//       account reopens with its passphrase as the same admin device;
+//       auto-pair reads serverDomain; open git builds reopen where they
+//       stand.
+const SHELL_VERSION = "v123";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
