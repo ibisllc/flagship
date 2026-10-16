@@ -37,5 +37,6 @@ object Variant : AppVariant {
     override fun serviceAccessFixture(screens: ScreensClient): ServiceAccessFixture? = null
     override fun freeAiClient(): FreeAiClient? = null
     override fun reuseRelay(shared: QrRelayClient): QrRelayClient? = null
+    override fun credentialCalls(): com.flagshipserver.app.keystore.CredentialCalls? = null
     override fun devicePairingRelays(): DevicePairingRelays? = null
 }

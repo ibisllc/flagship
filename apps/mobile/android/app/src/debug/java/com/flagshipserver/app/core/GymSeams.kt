@@ -30,4 +30,10 @@ object GymSeams {
      *  the orders it lets through go to the mock clients. */
     @Volatile
     var bypassBiometricGates: Boolean = false
+
+    /** Stand in a passkey app that saves passkeys but returns the PRF key
+     *  only on an assertion (Samsung Pass's behaviour), for the cloud
+     *  recovery set-up scenario. */
+    @Volatile
+    var fakePasskeysNoPrfOnCreate: Boolean = false
 }

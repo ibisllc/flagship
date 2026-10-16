@@ -57,6 +57,9 @@ interface AppVariant {
     /** Gym: the relay to reuse when [shared] is the mock one. */
     fun reuseRelay(shared: QrRelayClient): QrRelayClient?
 
+    /** Gym: a fake passkey app in place of Credential Manager. */
+    fun credentialCalls(): com.flagshipserver.app.keystore.CredentialCalls?
+
     /** The phone-to-phone pairing relay. Null until a live one exists: the
      *  pairing screens then say it isn't available yet. */
     fun devicePairingRelays(): DevicePairingRelays?

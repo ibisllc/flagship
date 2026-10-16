@@ -97,6 +97,37 @@ class CloudRecoveryEnrollmentTest {
         assertNull("no ACME key was escrowed", restored.acmeScalar)
     }
 
+    /** Device bug 2026-10-16: a passkey app that returns the PRF key only on
+     *  an assertion (Samsung Pass) must still enroll on the first try, and the
+     *  escrow must restore with the same passkey. Drives the real manager. */
+    @Test
+    fun enrollThenRestore_withAPasskeyAppThatGivesNoKeyOnCreate() = runTest {
+        val activity = org.robolectric.Robolectric.buildActivity(android.app.Activity::class.java).get()
+        val manager = PasskeyRecoveryManager(FakePasskeyApp(), retryDelayMs = 0)
+        var secondPrompts = 0
+        val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+        CloudRecoveryEnrollment.enroll(
+            server = server,
+            passkeys = PasskeyCeremonyAdapter(manager, activity) { secondPrompts++ },
+            irk = irk(0x03),
+            username = username,
+            umkSeed = umkSeed,
+            passphrase = passphrase,
+            passphraseConfirm = passphrase,
+            acmeScalar = null,
+            now = 1_700_000_000_000L,
+        )
+        assertEquals(1, secondPrompts)
+        val restored = CloudRecoveryEnrollment.restore(
+            server = server,
+            passkeys = PasskeyCeremonyAdapter(manager, activity),
+            username = username,
+            passphrase = passphrase,
+            now = 1_700_000_000_001L,
+        )
+        assertEquals(HexUtil.encode(umkSeed), HexUtil.encode(restored.umkSeed))
+    }
+
     @Test
     fun enrollThenRestore_restoresEscrowedAcmeKey() = runTest {
         val server = MockFlagshipServerClient(simulatedLatencyMs = 0)

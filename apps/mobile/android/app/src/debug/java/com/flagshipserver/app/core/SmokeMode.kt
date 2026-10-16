@@ -55,6 +55,8 @@ data class SmokeModeConfig(
     /** Keep the LIVE clients instead of forcing the mock: a real account's
      *  shell with no backend reachable (the "new account, no server" check). */
     val live: Boolean = false,
+    /** A fake passkey app with no PRF output on create (GymSeams). */
+    val fakePasskeys: Boolean = false,
 ) {
     companion object {
         const val EXTRA_SMOKE_MODE = "flagship.smokeMode"
@@ -68,6 +70,7 @@ data class SmokeModeConfig(
         const val EXTRA_SMOKE_SHARES = "flagship.smokeShares"
         const val EXTRA_SMOKE_DEVICE_RANK = "flagship.smokeDeviceRank"
         const val EXTRA_SMOKE_LIVE = "flagship.smokeLive"
+        const val EXTRA_SMOKE_FAKE_PASSKEYS = "flagship.smokeFakePasskeys"
 
         const val SMOKE_USERNAME = "smoketest"
 
@@ -91,6 +94,7 @@ data class SmokeModeConfig(
                 deviceRank = intent.getStringExtra(EXTRA_SMOKE_DEVICE_RANK)?.trim()?.lowercase()
                     ?.takeIf { it in setOf("member", "manager", "master", "refused") },
                 live = intent.getBooleanExtra(EXTRA_SMOKE_LIVE, false),
+                fakePasskeys = intent.getBooleanExtra(EXTRA_SMOKE_FAKE_PASSKEYS, false),
             )
         }
     }
@@ -162,6 +166,7 @@ object SmokeMode {
         GymSeams.forceAdminRoot = config.seedAdminRoot
         GymSeams.deviceRank = config.deviceRank
         GymSeams.bypassBiometricGates = true
+        GymSeams.fakePasskeysNoPrfOnCreate = config.fakePasskeys
 
         if (config.seedTrustUntrusted) {
             trust.markUntrusted(

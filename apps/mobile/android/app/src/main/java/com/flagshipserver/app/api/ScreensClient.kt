@@ -306,10 +306,15 @@ sealed class ScreensError(message: String) : Throwable(message) {
  * a user should never see "noSessionToken" or a stack message. Surfaces that show
  * an error to the user route it through this instead of a raw `t.message`.
  */
-fun Throwable.userFacing(): String = when (this) {
-    is ScreensError -> message ?: "Something went wrong. Try again."
-    is com.flagshipserver.app.core.RateLimitedException -> userMessage
-    else -> "Couldn't reach the server. Check your connection and try again."
+fun Throwable.userFacing(): String {
+    com.flagshipserver.app.core.ErrorLog.caught(
+        "box", this, com.flagshipserver.app.core.NetworkErrorHumanizer.errorCode(this),
+    )
+    return when (this) {
+        is ScreensError -> message ?: "Something went wrong. Try again."
+        is com.flagshipserver.app.core.RateLimitedException -> userMessage
+        else -> "Couldn't reach the server. Check your connection and try again."
+    }
 }
 
 /** The box's own `{error}` wording from a refused call, if it sent one. */

@@ -113,6 +113,9 @@ object Variant : AppVariant {
 
     override fun reuseRelay(shared: QrRelayClient): QrRelayClient? = shared.takeIf { it is MockQrRelayClient }
 
+    override fun credentialCalls(): com.flagshipserver.app.keystore.CredentialCalls? =
+        if (GymSeams.fakePasskeysNoPrfOnCreate) com.flagshipserver.app.keystore.FakePasskeyApp() else null
+
     override fun devicePairingRelays(): DevicePairingRelays =
         MockDevicePairingRelay().let { DevicePairingRelays(it.admin, it.incoming) }
 }
