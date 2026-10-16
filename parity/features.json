@@ -579,7 +579,7 @@
       "title": "Debug access: an admin device lets an SSH key in for 1 h / 24 h / 7 days, renews or turns it off; a banner while it's on",
       "ref": "ios",
       "surfaces": {
-        "ios": { "status": "missing", "reason": "Being built (debug-access v2).", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/DebugAccess.swift", "flagship/debug-access/v2"]] },
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/DebugAccess.swift", "flagship/debug-access/v2"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/DebugAccessCard.swift", "struct DebugAccessBanner"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/DebugAccessCard.swift", "sd-debug-access-admin-only"], ["apps/mobile/ios/Sources/FlagshipUI/ViewModels/CreateServerViewModel.swift", "debugSshKey"], ["apps/mobile/ios/Sources/FlagshipUI/ViewModels/ActivityViewModel.swift", "server\\.debug-access\\.revoked"]] },
         "android": { "status": "missing", "reason": "Being built (debug-access v2).", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/DebugAccess.kt", "flagship/debug-access/v2"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/debugAccess.js", "flagship/debug-access/v2"], ["apps/web/public/webapp/views/debug-access.js", "debugAccessBanner"], ["apps/web/public/webapp/views/debug-access.js", "DEBUG_ADMIN_ONLY"], ["apps/web/public/webapp/views/create-server.js", "readDebugSshKey"], ["apps/web/public/webapp/lib/activityFeed.js", "server\\.debug-access\\.revoked"]] }
       }
