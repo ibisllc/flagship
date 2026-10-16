@@ -16,6 +16,8 @@ import {
 } from "../src/serviceInvite.js";
 import { buildCoManagerInviteVectors, VECTORS_PATH } from "./genCoManagerInviteVectors.js";
 
+// VECTORS_PATH is packages/protocol/test-vectors/co-manager-invite/vectors.json.
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const V = JSON.parse(readFileSync(VECTORS_PATH, "utf8")) as any;
 const text = (b: Uint8Array) => new TextDecoder().decode(b);
