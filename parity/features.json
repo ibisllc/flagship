@@ -87,7 +87,7 @@
       "ref": "ios",
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipAPI/Models/AppCopyModels.swift", "flagship/app-copy/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/AppPlacementViews.swift", "struct "]] },
-        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AppCopy.kt", "flagship/app-copy/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/viewmodels/AppPlacementViewModel.kt", "flagship/app-copy/v1"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AppCopy.kt", "flagship/app-copy/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/viewmodels/AppPlacementViewModel.kt", "flagship/app-copy/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServiceDetailScreen.kt", "AdminOrderGate.RUNS_ON"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/appPlacement.js", "flagship/app-copy/v1"]] }
       }
     },
@@ -97,7 +97,7 @@
       "ref": "ios",
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipAPI/Models/AppApiKeyModels.swift", "flagship/app-api-key/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/AppApiKeysScreens.swift", "struct "]] },
-        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AppApiKey.kt", "flagship/app-api-key/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ApiKeysSection.kt", "fun "]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AppApiKey.kt", "flagship/app-api-key/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ApiKeysSection.kt", "fun "], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServiceDetailScreen.kt", "AdminOrderGate.API_KEYS"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/appApiKeys.js", "flagship/app-api-key/v1"]] }
       }
     },
@@ -107,7 +107,7 @@
       "ref": "ios",
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipAPI/Models/AppDbModels.swift", "flagship/app-db-write/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/AppDatabaseScreens.swift", "struct "]] },
-        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AppDbWrite.kt", "flagship/app-db-write/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/AppDatabaseScreens.kt", "fun "]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AppDbWrite.kt", "flagship/app-db-write/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/AppDatabaseScreens.kt", "fun "], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/AppDatabaseScreens.kt", "AdminOrderGate.DATABASE_WRITE"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/appDb.js", "flagship/app-db-write/v1"], ["apps/web/public/webapp/views/app-db.js", "export"]] }
       }
     },
@@ -117,7 +117,7 @@
       "ref": "ios",
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipAPI/Models/AppAccessModels.swift", "flagship/app-access/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/AppAccessScreens.swift", "struct "]] },
-        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AppAccessList.kt", "flagship/app-access/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/AccessListScreens.kt", "fun "]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AppAccessList.kt", "flagship/app-access/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/AccessListScreens.kt", "fun "], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/AccessListScreens.kt", "AdminOrderGate.ACCESS_LIST"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/appAccess.js", "flagship/app-access/v1"], ["apps/web/public/webapp/views/app-access.js", "export"]] }
       }
     },

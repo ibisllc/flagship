@@ -132,6 +132,7 @@ fun ServiceAccessScreen(nav: NavController, serviceId: String) {
                 deviceSigner = { _ -> Keystore.accountDeviceSigner(Keystore.currentUmkSeed(), username, deviceId() ?: MockScreensClient.SELF_DEVICE_ID) },
                 ownDevicePubHex = { MockScreensClient.SELF_DEVICE_PUB },
                 deviceNames = { MockScreensClient.DEVICE_NAMES },
+                isAdminDevice = { com.flagshipserver.app.core.AdminOrderGate.allows(appState) },
             )
         } else {
             ServiceAccessViewModel(
@@ -144,6 +145,8 @@ fun ServiceAccessScreen(nav: NavController, serviceId: String) {
                     if (id == null) null
                     else com.flagshipserver.app.viewmodels.AccountDeviceNames.load(server, username, id)
                 },
+                // A demo account's device stands in for its owner (its box pins no root).
+                isAdminDevice = { com.flagshipserver.app.core.AdminOrderGate.allows(appState) },
             )
         }
     }

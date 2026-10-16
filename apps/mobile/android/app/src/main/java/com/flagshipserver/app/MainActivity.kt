@@ -457,7 +457,10 @@ class MainActivity : FragmentActivity() {
                     boxes = accessBoxes,
                     isActiveGate = {
                         foreground.value && appState.isPaired.value && appState.isUnlocked.value &&
-                            !appState.isRestrictedDevice()
+                            !appState.isRestrictedDevice() &&
+                            // Allow / Deny is an admin order: other devices see
+                            // the requests on each app's page, read-only.
+                            com.flagshipserver.app.core.AdminOrderGate.allows(appState)
                     },
                     alertsEnabled = { privacy.pushNotificationsEnabled.value },
                 )

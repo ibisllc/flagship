@@ -94,6 +94,8 @@ fun InternetAccessSection(
     summary: AppAccessSummary,
     restricted: Boolean,
     fallbackServerDomain: () -> String?,
+    /** Why the requests can't be answered here (a restricted profile, or not an admin device). */
+    readOnlyNote: String = AppAccessViewModel.READ_ONLY_NOTE,
 ) {
     val client = LocalScreensClient.current
     val toasts = LocalToastCenter.current
@@ -169,7 +171,12 @@ fun InternetAccessSection(
             }
             if (restricted) {
                 Spacer(Modifier.height(FS.space.s2))
-                Text(AppAccessViewModel.READ_ONLY_NOTE, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+                Text(
+                    readOnlyNote,
+                    color = FS.colors.textMuted,
+                    style = TextStyle(fontSize = 13.sp),
+                    modifier = Modifier.testTag("service-detail-access-read-only"),
+                )
             }
             Spacer(Modifier.height(FS.space.s3))
             FSSecondaryButton(
@@ -295,7 +302,9 @@ fun AccessListScreen(nav: NavController, serviceId: String, fromDraft: Boolean =
     val vm = remember(serviceId, client, podId, signing) {
         appVm(serviceId, client, appName, signing) { (appState.sessionPod ?: appState.leaderPod)?.fqdn }
     }
-    val restricted = appState.isRestrictedDevice()
+    val restricted = appState.isRestrictedDevice() || !com.flagshipserver.app.core.AdminOrderGate.allows(appState)
+    val readOnlyNote = if (appState.isRestrictedDevice()) AppAccessViewModel.READ_ONLY_NOTE
+    else com.flagshipserver.app.core.AdminOrderGate.ACCESS_LIST
     val state by vm.state.collectAsState()
     val loadError by vm.loadError.collectAsState()
     val busy by vm.busy.collectAsState()
@@ -389,7 +398,12 @@ fun AccessListScreen(nav: NavController, serviceId: String, fromDraft: Boolean =
                 }
                 Spacer(Modifier.height(FS.space.s4))
                 if (restricted) {
-                    Text(AppAccessViewModel.READ_ONLY_NOTE, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+                    Text(
+                        readOnlyNote,
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 13.sp),
+                        modifier = Modifier.testTag("access-list-read-only"),
+                    )
                 } else {
                     FSPrimaryButton(
                         label = if (busy) "Saving…" else "Save",

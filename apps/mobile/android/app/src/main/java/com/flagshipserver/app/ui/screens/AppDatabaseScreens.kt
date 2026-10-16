@@ -324,6 +324,8 @@ fun AppDbQueryScreen(nav: NavController, serviceId: String, store: String) {
         }
     }
     val phase by vm.phase.collectAsState()
+    // A write is a signed `app-db-write/v1` order the box takes from an admin device only.
+    val adminDevice = remember(appState) { com.flagshipserver.app.core.AdminOrderGate.allows(appState) }
     var sql by rememberSaveable(serviceId, store) { mutableStateOf("") }
     val hScroll = rememberScrollState()
     val running = phase is AppDbQueryViewModel.Phase.Running
@@ -364,7 +366,16 @@ fun AppDbQueryScreen(nav: NavController, serviceId: String, store: String) {
                                     style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium),
                                 )
                                 Spacer(Modifier.height(FS.space.s2))
-                                Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                                if (!adminDevice) {
+                                    Text(
+                                        com.flagshipserver.app.core.AdminOrderGate.DATABASE_WRITE,
+                                        color = FS.colors.textMuted,
+                                        style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                                        modifier = Modifier.testTag("db-write-admin-only"),
+                                    )
+                                    Spacer(Modifier.height(FS.space.s2))
+                                    FSGhostButton(AppDbQueryViewModel.CANCEL, onClick = { vm.cancelWrite() })
+                                } else Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
                                     FSPrimaryButton(
                                         AppDbQueryViewModel.CONFIRM,
                                         onClick = { scope.launch { vm.confirmWrite() } },

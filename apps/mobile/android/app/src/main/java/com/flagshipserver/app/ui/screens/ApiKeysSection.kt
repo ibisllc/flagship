@@ -62,6 +62,8 @@ fun ApiKeysSection(
     appName: String,
     restricted: Boolean,
     fallbackServerDomain: () -> String?,
+    /** Why keys can't be changed here (a restricted profile, or not an admin device). */
+    readOnlyNote: String = AppApiKeysViewModel.READ_ONLY_NOTE,
 ) {
     val client = LocalScreensClient.current
     val toasts = LocalToastCenter.current
@@ -126,7 +128,12 @@ fun ApiKeysSection(
                     }
                     if (restricted) {
                         Spacer(Modifier.height(FS.space.s2))
-                        Text(AppApiKeysViewModel.READ_ONLY_NOTE, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+                        Text(
+                            readOnlyNote,
+                            color = FS.colors.textMuted,
+                            style = TextStyle(fontSize = 13.sp),
+                            modifier = Modifier.testTag("service-detail-api-keys-read-only"),
+                        )
                     } else {
                         Spacer(Modifier.height(FS.space.s3))
                         FSSecondaryButton(

@@ -112,11 +112,9 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
     val pagePod = com.flagshipserver.app.core.LocalPodScope.current?.pod ?: appState.currentPod
     val pagePodState = androidx.compose.runtime.rememberUpdatedState(pagePod)
     val podClients = com.flagshipserver.app.core.LocalPodClients.current
-    // Uninstalling (here or by unticking a server) is an admin order: the box
-    // refuses it from any other device.
-    val adminDevice = remember {
-        com.flagshipserver.app.core.GymSeams.forceAdminRoot || com.flagshipserver.app.keystore.Keystore.hasAdminRoot()
-    }
+    // Uninstalling, "Runs on", the access list, API keys and database writes
+    // are admin orders: an admin-pinned box refuses them from any other device.
+    val adminDevice = remember(pods) { com.flagshipserver.app.core.AdminOrderGate.allows(appState) }
 
     val detailVm: ServiceDetailViewModel = viewModel(
         key = "service-detail-$serviceId-${pagePod?.podId}",
@@ -233,14 +231,16 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                         serviceId = serviceId,
                         appName = resp.app.slug.replaceFirstChar { it.uppercase() },
                         summary = access,
-                        restricted = appState.isRestrictedDevice(),
+                        restricted = appState.isRestrictedDevice() || !adminDevice,
+                        readOnlyNote = if (appState.isRestrictedDevice()) com.flagshipserver.app.viewmodels.AppAccessViewModel.READ_ONLY_NOTE
+                        else com.flagshipserver.app.core.AdminOrderGate.ACCESS_LIST,
                         fallbackServerDomain = { pagePodState.value?.fqdn ?: appState.sessionPod?.fqdn },
                     )
                 } else {
                     EgressSection(
                         serviceId = serviceId,
                         egress = resp.app.egress,
-                        restricted = appState.isRestrictedDevice(),
+                        restricted = appState.isRestrictedDevice() || !adminDevice,
                         fallbackServerDomain = { pagePodState.value?.fqdn ?: appState.sessionPod?.fqdn },
                     )
                 }
@@ -248,7 +248,9 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                 ApiKeysSection(
                     serviceId = serviceId,
                     appName = resp.app.slug.replaceFirstChar { it.uppercase() },
-                    restricted = appState.isRestrictedDevice(),
+                    restricted = appState.isRestrictedDevice() || !adminDevice,
+                    readOnlyNote = if (appState.isRestrictedDevice()) com.flagshipserver.app.viewmodels.AppApiKeysViewModel.READ_ONLY_NOTE
+                    else com.flagshipserver.app.core.AdminOrderGate.API_KEYS,
                     fallbackServerDomain = { pagePodState.value?.fqdn ?: appState.sessionPod?.fqdn },
                 )
                 // The owner's Database section (docs/app-apis.md §6): owner
@@ -276,8 +278,15 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                     leaderPodId = leaderId,
                     message = placementMessage,
                     restricted = appState.isRestrictedDevice(),
-                    onCopy = { row -> scope.launch { placementVm.copyTo(row.pod.podId) } },
-                    onRemove = { row -> if (adminDevice) confirmRemoveFrom = row else toasts.error(UNINSTALL_ADMIN_ONLY_LINE) },
+                    adminDevice = adminDevice,
+                    onCopy = { row ->
+                        if (adminDevice) scope.launch { placementVm.copyTo(row.pod.podId) }
+                        else toasts.error(com.flagshipserver.app.core.AdminOrderGate.RUNS_ON)
+                    },
+                    onRemove = { row ->
+                        if (adminDevice) confirmRemoveFrom = row
+                        else toasts.error(com.flagshipserver.app.core.AdminOrderGate.RUNS_ON)
+                    },
                     onDismissMessage = { placementVm.dismissMessage() },
                 )
 
@@ -783,6 +792,7 @@ private fun RunsOnSection(
     leaderPodId: String?,
     message: String?,
     restricted: Boolean,
+    adminDevice: Boolean,
     onCopy: (com.flagshipserver.app.viewmodels.AppPlacementViewModel.Row) -> Unit,
     onRemove: (com.flagshipserver.app.viewmodels.AppPlacementViewModel.Row) -> Unit,
     onDismissMessage: () -> Unit,
@@ -798,7 +808,7 @@ private fun RunsOnSection(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(
                         checked = row.ticked,
-                        enabled = !restricted && vm.canChange(row),
+                        enabled = !restricted && adminDevice && vm.canChange(row),
                         onCheckedChange = { on -> if (on) onCopy(row) else onRemove(row) },
                         modifier = Modifier.semantics { testTag = "runs-on-toggle-${row.pod.podId}" },
                     )
@@ -847,10 +857,12 @@ private fun RunsOnSection(
         }
     }
     Text(
-        text = "Tick a server to copy the app there with its data as it is now. Each copy then keeps its own data.",
+        text = if (adminDevice) "Tick a server to copy the app there with its data as it is now. Each copy then keeps its own data."
+        else com.flagshipserver.app.core.AdminOrderGate.RUNS_ON,
         color = FS.colors.textMuted,
         style = TextStyle(fontSize = 12.sp),
-        modifier = Modifier.padding(top = FS.space.s2, start = FS.space.s1),
+        modifier = Modifier.padding(top = FS.space.s2, start = FS.space.s1)
+            .semantics { testTag = if (adminDevice) "runs-on-help" else "runs-on-admin-only" },
     )
 }
 
@@ -1003,7 +1015,7 @@ private fun wrapAtDots(s: String): String = s.replace(".", ".​")
 // means the button enables for stems the server then rejects.
 private val STEM_RE = Regex("^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$")
 
-internal const val UNINSTALL_ADMIN_ONLY_LINE = "Only an admin device can remove an app."
+internal const val UNINSTALL_ADMIN_ONLY_LINE = com.flagshipserver.app.core.AdminOrderGate.UNINSTALL
 
 @Composable
 private fun ReplaceStemDialog(

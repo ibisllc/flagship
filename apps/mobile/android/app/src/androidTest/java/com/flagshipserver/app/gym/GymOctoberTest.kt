@@ -76,7 +76,7 @@ class GymOctoberTest : GymBase() {
      *  request leaves the page. */
     @Test
     fun serviceAccessPendingAllow() {
-        openPlants()
+        openPlants(adminRoot = true)
         waitUntilExists("service-detail-access-allow", timeoutMs = 20_000)
         val before = composeRule.onAllNodesWithTag("service-detail-access-allow").fetchSemanticsNodes().size
         assertTrue("Plants has a host waiting", before >= 1)
@@ -193,7 +193,7 @@ class GymOctoberTest : GymBase() {
 
     @Test
     fun apiKeyCreateShowsTheSecretOnce() {
-        openPlants()
+        openPlants(adminRoot = true)
         waitUntilExists("service-detail-api-keys", timeoutMs = 20_000)
         composeRule.onNodeWithTag("service-detail-api-keys").performScrollTo()
         waitUntilTextExists("Garden sensor", timeoutMs = 15_000)
@@ -215,6 +215,71 @@ class GymOctoberTest : GymBase() {
         waitUntilExists("db-range", timeoutMs = 15_000)
         composeRule.onNodeWithTag("db-range").assertTextContains("230", substring = true)
         gymShot("database-grid")
+    }
+
+    /** A device without the admin root sees the app's admin orders read-only,
+     *  each with its sentence, and never sends one the box would refuse:
+     *  Allow / Deny, API keys, Runs on ticks and Uninstall. */
+    @Test
+    fun adminOrdersAreReadOnlyOnANonAdminDevice() {
+        openPlants()
+        waitUntilExists("service-detail-access", timeoutMs = 20_000)
+        waitUntilExists("service-detail-access-read-only", timeoutMs = 15_000)
+        composeRule.onNodeWithTag("service-detail-access-read-only").performScrollTo()
+            .assertTextContains("Only an admin device can change this app's internet access.")
+        assertEquals("no Allow on a non-admin device", 0, count("service-detail-access-allow"))
+        gymShot("access-read-only")
+
+        waitUntilExists("service-detail-api-keys-read-only", timeoutMs = 15_000)
+        composeRule.onNodeWithTag("service-detail-api-keys-read-only").performScrollTo()
+            .assertTextContains("Only an admin device can create or revoke API keys.")
+        assertEquals("no Create key on a non-admin device", 0, count("service-detail-api-keys-create"))
+
+        composeRule.waitUntil(20_000) {
+            composeRule.onAllNodes(tagStartsWith("runs-on-toggle-")).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onAllNodes(tagStartsWith("runs-on-toggle-")).fetchSemanticsNodes().forEach { node ->
+            val tag = node.config.getOrNull(SemanticsProperties.TestTag)!!
+            composeRule.onNodeWithTag(tag).assertIsNotEnabled()
+        }
+        composeRule.onNodeWithTag("runs-on-admin-only").performScrollTo()
+            .assertTextContains("Only an admin device can change where this app runs.")
+
+        assertEquals(0, count("service-detail-uninstall-btn"))
+        composeRule.onNodeWithTag("service-detail-uninstall-admin-only").performScrollTo().assertIsDisplayed()
+        gymShot("admin-orders-read-only")
+    }
+
+    /** A write needs an admin device: a non-admin one is told so instead of Confirm. */
+    @Test
+    fun databaseWriteIsAdminOnly() {
+        openPlants()
+        waitUntilExists("service-detail-database", timeoutMs = 20_000)
+        composeRule.onNodeWithTag("service-detail-database").performScrollTo().performClick()
+        waitUntilExists("db-run-sql", timeoutMs = 15_000)
+        composeRule.onNodeWithTag("db-run-sql").performScrollTo().performClick()
+        waitUntilExists("db-sql-editor")
+        composeRule.onNode(hasSetTextActionIn("db-sql-editor")).performTextInput("DELETE FROM plants")
+        composeRule.onNodeWithTag("db-sql-run").performClick()
+        waitUntilExists("db-write-admin-only", timeoutMs = 15_000)
+        composeRule.onNodeWithTag("db-write-admin-only")
+            .assertTextContains("Only an admin device can change this app's data.")
+        assertEquals(0, count("db-confirm-write"))
+        gymShot("db-write-admin-only")
+    }
+
+    private fun hasSetTextActionIn(tag: String) =
+        androidx.compose.ui.test.hasSetTextAction() and (hasTestTag(tag) or hasAnyAncestor(hasTestTag(tag)))
+
+    /** The same page on an admin device offers each of them. */
+    @Test
+    fun adminOrdersAreOfferedOnAnAdminDevice() {
+        openPlants(adminRoot = true)
+        waitUntilExists("service-detail-api-keys-create", timeoutMs = 20_000)
+        assertEquals(0, count("service-detail-api-keys-read-only"))
+        waitUntilExists("runs-on-help", timeoutMs = 20_000)
+        assertEquals(0, count("runs-on-admin-only"))
+        composeRule.onNodeWithTag("service-detail-uninstall-btn").performScrollTo().assertIsDisplayed()
     }
 
     // ─── Where an app runs ───────────────────────────────────────────────────
