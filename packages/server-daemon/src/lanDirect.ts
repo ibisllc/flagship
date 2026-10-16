@@ -30,8 +30,13 @@ import {
   type LanHint,
 } from "@flagship/protocol";
 
-/** Interfaces that look private but aren't the user's LAN. */
-const VIRTUAL_IFACE = /^(docker|br-|veth|virbr|vnet|vmnet|cni|flannel|cali|lxc|lxd|podman|tailscale|wg|tun|tap|zt|utun)/i;
+/** Interfaces that look private but aren't the user's LAN (`fs-` = the box's own sandbox bridges, egress/policy.ts). */
+const VIRTUAL_IFACE = /^(docker|br-|fs-|veth|virbr|vnet|vmnet|cni|flannel|cali|lxc|lxd|podman|tailscale|wg|tun|tap|zt|utun)/i;
+
+/** Every address of this host, bridges included (a source offering one of them is this box). */
+export function hostAddresses(ifaces: NodeJS.Dict<os.NetworkInterfaceInfo[]> = os.networkInterfaces()): string[] {
+  return Object.values(ifaces).flatMap((infos) => (infos ?? []).map((i) => i.address));
+}
 
 export function lanAddressesFromInterfaces(
   ifaces: NodeJS.Dict<os.NetworkInterfaceInfo[]>,

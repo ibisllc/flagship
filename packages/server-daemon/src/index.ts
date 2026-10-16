@@ -21,7 +21,7 @@ import {
   buildAlertInboxHandlers,
 } from "./alertInboxHttp.js";
 import { startDaemonStatusHeartbeat, type DaemonStatusHeartbeat } from "./daemonStatusHeartbeat.js";
-import { buildSignedLanHint, lanPortFromEnv } from "./lanDirect.js";
+import { buildSignedLanHint, hostAddresses, lanPortFromEnv } from "./lanDirect.js";
 import { makeRelayTrustExceptionResolver } from "./relayTrustExceptions.js";
 import { sendPushRelay, sendRelayTrustAlert } from "./relaySos.js";
 import { buildOwnerWake } from "./ownerWake.js";
@@ -2846,7 +2846,9 @@ async function wireRuntimeSurfaces(deps: {
       egress: { noteCopied: (id, list, declared) => runtime.egress.noteCopied(id, list, declared) },
       ledger: new DbWriteLedger(join(dataDir, "data", "app-copy-orders.json"), undefined, 60 * 60_000),
       // A box kept relay-only (FLAGSHIP_LAN_DIRECT=0) fetches through the relay too.
-      ...(runtime.lan ? { ownLanAddresses: () => runtime.lan?.endpoints().map((e) => e.address) ?? [] } : { lanFetch: null }),
+      ...(runtime.lan
+        ? { ownLanAddresses: () => [...(runtime.lan?.endpoints().map((e) => e.address) ?? []), ...hostAddresses()] }
+        : { lanFetch: null }),
       log: (m) => console.log(m),
     });
     void target.recover(interrupted).catch((e: Error) => console.warn(`[app-copy] recovery failed: ${e.message}`));

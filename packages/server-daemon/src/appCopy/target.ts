@@ -124,12 +124,22 @@ interface Route {
   lanChunks: number;
 }
 
-/** A local address of the source to try: one on this box's own /24 (or /64) first. */
+/**
+ * A local address of the source to try: one on this box's own /24 (or /64)
+ * first. Never one of this box's own addresses: every box can carry the same
+ * private address on an internal bridge, and dialling it reaches this box.
+ */
 export function pickLanEndpoint(offered: unknown, own: string[]): LanEndpoint | null {
   if (!Array.isArray(offered)) return null;
+  const self = new Set(own.map((a) => a.toLowerCase()));
   const ok = offered.filter(
     (e): e is LanEndpoint =>
-      typeof e?.address === "string" && isLanAddress(e.address) && Number.isInteger(e.port) && e.port > 0 && e.port < 65536,
+      typeof e?.address === "string" &&
+      isLanAddress(e.address) &&
+      !self.has(e.address.toLowerCase()) &&
+      Number.isInteger(e.port) &&
+      e.port > 0 &&
+      e.port < 65536,
   );
   const prefix = (a: string) => (a.includes(":") ? a.split(":").slice(0, 4).join(":") : a.split(".").slice(0, 3).join("."));
   const mine = new Set(own.map(prefix));

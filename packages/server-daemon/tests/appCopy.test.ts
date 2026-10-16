@@ -598,6 +598,11 @@ describe("the owner's order on the target (POST /api/screens/services/copy)", ()
       expect(pickLanEndpoint(offered, [])).toEqual({ address: "10.0.0.5", port: 443 });
       expect(pickLanEndpoint([{ address: "8.8.8.8", port: 443 }, { address: "192.168.1.2", port: 0 }], [])).toBeNull();
       expect(pickLanEndpoint("nope", [])).toBeNull();
+      // Two gym boxes both advertised their sandbox bridge 172.20.0.1, and the
+      // target "preferred" it (its own /24) and dialled itself (live, 2026-10-16).
+      const both = [{ address: "172.20.0.1", port: 443 }, { address: "10.4.2.75", port: 443 }];
+      expect(pickLanEndpoint(both, ["10.4.25.125", "172.20.0.1"])).toEqual({ address: "10.4.2.75", port: 443 });
+      expect(pickLanEndpoint([{ address: "172.20.0.1", port: 443 }], ["172.20.0.1"])).toBeNull();
     });
   });
 

@@ -27,6 +27,8 @@ describe("lanAddressesFromInterfaces", () => {
       eth1: [iface("203.0.113.5")],
       docker0: [iface("172.17.0.1")],
       "br-1a2b": [iface("172.18.0.1")],
+      "fs-apps": [iface("172.20.0.1")],
+      "fs-staging": [iface("172.21.0.1")],
       tailscale0: [iface("100.101.102.103")],
       wg0: [iface("10.8.0.2")],
       eth0: [iface("10.0.0.15")],
