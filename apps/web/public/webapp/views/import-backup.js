@@ -87,7 +87,7 @@ export function openAddOrImport({ onAdd, onCoManage }) {
 
 export const IMPORT_INTRO =
   "Pick the backup's two files (the .flagship-backup and its .flagship-data) from wherever you keep them. " +
-  "You choose a name; everything else comes from the backup. You then host or burn the new server as usual, " +
+  "You choose a name; everything else comes from the backup. Then set up the new server as usual, " +
   "and this page sends it the backup as soon as it comes online.";
 
 /** Every name the account already uses: its servers (revoked ones still hold
@@ -161,7 +161,7 @@ export async function openImportBackup({ targetFqdn = null } = {}) {
       <p class="note small" data-imp-files></p>
     </div>
     <div class="hidden" data-imp-pass>
-      <label class="caption mt-2" for="imp-passcode">This backup was made on another account, or with a passcode only. Enter its passcode:</label>
+      <label class="caption mt-2" for="imp-passcode">This backup was made on another account. Enter its passcode to open it.</label>
       <input id="imp-passcode" type="password" class="full-width" autocomplete="off" autocapitalize="off" spellcheck="false" data-imp-passcode />
       <button class="full-width mt-2" data-imp-unlock>Open the backup</button>
     </div>
@@ -385,8 +385,8 @@ export async function openImportBackup({ targetFqdn = null } = {}) {
           }
         }
         status(
-          `Waiting for ${name} to come online and pair with this browser. Keep this page open; ` +
-            "if you close it, the server keeps waiting and you can send the backup later.",
+          `Waiting for ${name} to come online… Set it up with the recipe if you haven't yet. Keep this page open: ` +
+            `the backup goes as soon as the server is up. If you leave, ${name} keeps waiting and shows on Home with Send the backup.`,
         );
         await sleep(5000);
       }
@@ -408,7 +408,7 @@ export async function openImportBackup({ targetFqdn = null } = {}) {
     } catch (e) {
       show(ui.barEl, false);
       if (e?.code === "cancelled") return;
-      status(`${name} keeps waiting for its backup: pick the backup again to send it, or delete the server from Home.`);
+      status("The server keeps waiting for its backup. Pick the backup again from Home to send it, or delete the server there.");
       fail(e);
     }
   }

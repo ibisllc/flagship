@@ -338,14 +338,17 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     public func serverArchiveChunk(offset: Int64) async throws -> Data {
         try await requestData("/api/screens/server-archive/chunk?offset=\(offset)", timeout: 300)
     }
+    public func serverArchiveBackupFile() async throws -> Data {
+        try await requestData("/api/screens/server-archive/backup-file", timeout: 60)
+    }
     public func serverArchiveForget() async throws {
         _ = try await requestData("/api/screens/server-archive", method: "DELETE", timeout: 30)
     }
     public func serverArchiveApprove(_ req: ServerArchiveApproveRequest) async throws {
         _ = try await requestData("/api/screens/server-archive/approve", method: "POST", body: try JSONEncoder().encode(req), timeout: 30)
     }
-    public func serverRestoreStart(_ req: ServerRestoreStartRequest) async throws {
-        _ = try await requestData("/api/screens/server-restore/start", method: "POST", body: try JSONEncoder().encode(req), timeout: 30)
+    public func serverRestoreStart(_ req: ServerRestoreStartRequest) async throws -> ServerRestoreStartResponse {
+        try await request("/api/screens/server-restore/start", method: "POST", body: try JSONEncoder().encode(req))
     }
     public func serverRestoreChunk(offset: Int64, data: Data) async throws {
         _ = try await requestData("/api/screens/server-restore/chunk?offset=\(offset)", method: "POST", body: data, timeout: 300,
@@ -354,9 +357,8 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     public func serverRestoreCommit(_ req: ServerRestoreCommitRequest) async throws {
         _ = try await requestData("/api/screens/server-restore/commit", method: "POST", body: try JSONEncoder().encode(req), timeout: 60)
     }
-    public func serverRestoreStatus() async throws -> ServerRestoreStatus? {
-        let r: ServerRestoreStatusResponse = try await request("/api/screens/server-restore")
-        return r.restore
+    public func serverRestoreStatus() async throws -> ServerRestoreStatusResponse {
+        try await request("/api/screens/server-restore")
     }
     public func boxActivity(limit: Int, before: Int?) async throws -> [BoxActivityEntry] {
         var path = "/api/screens/activity?limit=\(limit)"

@@ -1,7 +1,8 @@
 import Foundation
 
-/// "Backup/clone server" (docs/server-backup-and-clone.md): the sealed archive
-/// a box makes of all its apps, and the import of one onto a box.
+/// "Backup/clone server" (docs/server-backup-and-clone.md): the two files a
+/// box makes of all its apps, and the restore of them onto a new server made
+/// to wait for them.
 public struct ServerArchiveApp: Codable, Equatable, Sendable {
     public let serviceId: String
     public let name: String
@@ -28,22 +29,28 @@ public struct ServerArchiveStatus: Codable, Equatable, Sendable {
     public let state: String
     public let startedAt: Int64
     public let progress: ServerArchiveProgress?
+    /// The data file's size and SHA-256.
     public let bytes: Int64?
     public let sha256: String?
+    /// The names the two files are saved under.
+    public let backupFileName: String?
+    public let dataFileName: String?
     public let apps: [ServerArchiveApp]?
     /** Apps that couldn't go in (no source to rebuild from), with why. */
     public let left: [ServerArchiveLeftApp]?
     public let reason: String?
 
     public init(archiveId: String, state: String, startedAt: Int64 = 0, progress: ServerArchiveProgress? = nil,
-                bytes: Int64? = nil, sha256: String? = nil, apps: [ServerArchiveApp]? = nil,
-                left: [ServerArchiveLeftApp]? = nil, reason: String? = nil) {
+                bytes: Int64? = nil, sha256: String? = nil, backupFileName: String? = nil, dataFileName: String? = nil,
+                apps: [ServerArchiveApp]? = nil, left: [ServerArchiveLeftApp]? = nil, reason: String? = nil) {
         self.archiveId = archiveId
         self.state = state
         self.startedAt = startedAt
         self.progress = progress
         self.bytes = bytes
         self.sha256 = sha256
+        self.backupFileName = backupFileName
+        self.dataFileName = dataFileName
         self.apps = apps
         self.left = left
         self.reason = reason
@@ -66,13 +73,46 @@ public struct ServerArchiveStatusResponse: Codable, Equatable, Sendable {
     public init(archive: ServerArchiveStatus?) { self.archive = archive }
 }
 
+/// One key slot of a backup file: the content key wrapped under a passcode
+/// (Argon2id) or under the account's archive key (packages/protocol/src/serverBackup.ts).
+public struct ServerBackupKdf: Codable, Equatable, Sendable {
+    public var algo: String = "argon2id"
+    public let m: Int
+    public let t: Int
+    public let p: Int
+    public let saltHex: String
+    public init(m: Int, t: Int, p: Int, saltHex: String) {
+        self.m = m
+        self.t = t
+        self.p = p
+        self.saltHex = saltHex
+    }
+}
+
+public struct ServerBackupSlot: Codable, Equatable, Sendable {
+    /// `passcode` | `account`
+    public let kind: String
+    public let kdf: ServerBackupKdf?
+    public let nonceHex: String
+    public let wrappedHex: String
+    public init(kind: String, kdf: ServerBackupKdf? = nil, nonceHex: String, wrappedHex: String) {
+        self.kind = kind
+        self.kdf = kdf
+        self.nonceHex = nonceHex
+        self.wrappedHex = wrappedHex
+    }
+}
+
 public struct ServerArchiveStartRequest: Codable, Equatable, Sendable {
     public let archiveId: String
-    /// The 32-byte key the phone derived for this archive, lowercase hex.
+    /// The random content key this device made for the backup, lowercase hex.
     public let key: String
-    public init(archiveId: String, key: String) {
+    /// The key slots the box writes into the backup file.
+    public let slots: [ServerBackupSlot]
+    public init(archiveId: String, key: String, slots: [ServerBackupSlot]) {
         self.archiveId = archiveId
         self.key = key
+        self.slots = slots
     }
 }
 
@@ -83,6 +123,12 @@ public struct ServerRestoreStartRequest: Codable, Equatable, Sendable {
         self.archiveId = archiveId
         self.bytes = bytes
     }
+}
+
+public struct ServerRestoreStartResponse: Codable, Equatable, Sendable {
+    /// How much of the data file the server already holds: the upload goes on from here.
+    public let received: Int64
+    public init(received: Int64) { self.received = received }
 }
 
 public struct ServerRestoreCommitRequest: Codable, Equatable, Sendable {
@@ -106,7 +152,7 @@ public struct ServerRestoreApp: Codable, Equatable, Sendable {
 
 public struct ServerRestoreStatus: Codable, Equatable, Sendable {
     public let archiveId: String
-    /// `uploading` | `ready` | `opening` | `restoring` | `done` | `failed`
+    /// `uploading` | `ready` | `checking` | `restoring` | `done` | `failed`
     public let state: String
     public let bytes: Int64
     public let received: Int64
@@ -123,9 +169,26 @@ public struct ServerRestoreStatus: Codable, Equatable, Sendable {
     }
 }
 
+/// The backup a server created to restore one is waiting for.
+public struct ServerRestoreWaiting: Codable, Equatable, Sendable {
+    public let archiveId: String
+    public let bytes: Int64
+    public let sha256: String
+    public init(archiveId: String, bytes: Int64, sha256: String) {
+        self.archiveId = archiveId
+        self.bytes = bytes
+        self.sha256 = sha256
+    }
+}
+
+/// `GET /api/screens/server-restore`.
 public struct ServerRestoreStatusResponse: Codable, Equatable, Sendable {
+    public let waiting: ServerRestoreWaiting?
     public let restore: ServerRestoreStatus?
-    public init(restore: ServerRestoreStatus?) { self.restore = restore }
+    public init(waiting: ServerRestoreWaiting? = nil, restore: ServerRestoreStatus?) {
+        self.waiting = waiting
+        self.restore = restore
+    }
 }
 
 /// One entry of the box's own activity log (`GET /api/screens/activity`).

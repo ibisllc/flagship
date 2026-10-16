@@ -118,6 +118,23 @@ public final class CreateServerViewModel {
     public var backupPolicy: CreateServerDraftStore.BackupPolicy = .phoneOnly {
         didSet { draftStore.setBackupPolicy(backupPolicy) }
     }
+    /// Set when this server is made to restore a backup (Import a backup,
+    /// docs/server-backup-and-clone.md): the owner-signed restore order rides
+    /// beside the pairing order, so the box waits for exactly that data file.
+    public var restore: RestoreTarget?
+    public struct RestoreTarget: Equatable, Sendable {
+        public let archiveId: String
+        public let bytes: Int64
+        public let sha256: String
+        public init(archiveId: String, bytes: Int64, sha256: String) {
+            self.archiveId = archiveId
+            self.bytes = bytes
+            self.sha256 = sha256
+        }
+    }
+    struct RestoreNeedsPairing: Error, LocalizedError {
+        var errorDescription: String? { "This server couldn't be prepared to receive the backup. Try again." }
+    }
     /// Set after the .delivered transition. Container reads this so
     /// the new pending pod records the auth-code serial that Cancel-
     /// order will revoke.
@@ -470,6 +487,15 @@ public final class CreateServerViewModel {
             pairingOrderJson = pairing.pairingOrderJson
         } catch {
             pairingOrderJson = nil
+        }
+        if let restore {
+            guard let json = pairingOrderJson else { throw RestoreNeedsPairing() }
+            let order = ServerBackupFormat.RestoreOrder(
+                serverDomain: serverDomain, archiveId: restore.archiveId, bytes: restore.bytes,
+                sha256: restore.sha256, issuedAt: Int64(Date().timeIntervalSince1970 * 1000)
+            )
+            let sig = try irk.signature(for: try order.canonicalBytes())
+            pairingOrderJson = ServerBackupFormat.attachRestore(toPairingJson: json, order: order, signatureHex: HexUtil.encode(sig))
         }
 
         // Secret-free recipe (docs/recipe-delivery-and-remote-install.md).

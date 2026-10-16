@@ -65,6 +65,7 @@ let package = Package(
         .target(
             name: "Flagship",
             dependencies: [
+                .product(name: "FlagshipAPI", package: "FlagshipShared"),
                 .product(name: "FlagshipCore", package: "FlagshipShared"),
                 "FlagshipArgon2"
             ],

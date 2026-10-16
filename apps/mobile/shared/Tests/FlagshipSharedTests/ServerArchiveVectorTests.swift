@@ -33,18 +33,8 @@ final class ServerArchiveVectorTests: XCTestCase {
         XCTAssertNil(ServerArchive.deriveKey(umkSeed: Data(count: 5), archiveId: String(repeating: "a", count: 32)))
     }
 
-    func testReadsAHeaderAndRefusesOtherFiles() throws {
-        let head = Data("{\"magic\":\"flagship-archive\",\"v\":1,\"archiveId\":\"00112233445566778899aabbccddeeff\",\"createdAt\":5,\"sourceServer\":\"home.alice.flagship.services\",\"apps\":[{\"serviceId\":\"alice--wiki\",\"name\":\"Wiki\"}]}\nBINARY".utf8)
-        let h = try ServerArchive.parseHeader(head)
-        XCTAssertEqual(h.archiveId, "00112233445566778899aabbccddeeff")
-        XCTAssertEqual(h.appNames, ["Wiki"])
-        XCTAssertThrowsError(try ServerArchive.parseHeader(Data("hello\n".utf8))) { XCTAssertEqual($0 as? ServerArchive.HeaderError, .notABackup) }
-        XCTAssertThrowsError(try ServerArchive.parseHeader(Data("{\"magic\":\"flagship-archive\",\"v\":2}\n".utf8))) { XCTAssertEqual($0 as? ServerArchive.HeaderError, .newerVersion) }
-        XCTAssertThrowsError(try ServerArchive.parseHeader(Data("{\"magic\":\"flagship-archive\",\"v\":1,\"archiveId\":\"zz\"}\n".utf8))) { XCTAssertEqual($0 as? ServerArchive.HeaderError, .damaged) }
-    }
-
     func testNamesAndSizes() {
-        XCTAssertEqual(ServerArchive.fileName(sourceServer: "Home.alice.flagship.services", createdAt: Date(timeIntervalSince1970: 1_792_000_000)), "Home-2026-10-14.flagship-backup")
+        XCTAssertEqual(ServerArchive.fileStem(sourceServer: "Home.alice.flagship.services", createdAt: Date(timeIntervalSince1970: 1_792_000_000)), "Home-2026-10-14")
         XCTAssertEqual(ServerArchive.formatBytes(900 * 1024), "900 KB")
         XCTAssertEqual(ServerArchive.formatBytes(5 * 1024 * 1024), "5.0 MB")
         XCTAssertEqual(ServerArchive.formatBytes(3 * 1024 * 1024 * 1024), "3.0 GB")

@@ -151,6 +151,11 @@ public final class AppState {
     /// arriving every minute doesn't re-flow the whole pod list.
     public var podHealth: [String: BoxHealth] = [:]
 
+    /// Servers created to restore a backup that are still waiting for it (or
+    /// restoring it), per lowercased fqdn, from `/pods` `awaitingBackup`.
+    /// Home shows "Waiting for its backup" and offers to send it.
+    public var podsAwaitingBackup: [String: AwaitingBackupWire] = [:]
+
     /// The Box Request Inbox (docs/box-request-inbox.md): ONE typed object,
     /// keyed by lowercased fqdn → the list of approvals that box is currently
     /// asking its owner for. Mirrors the backend's `/pods` `pendingRequests`

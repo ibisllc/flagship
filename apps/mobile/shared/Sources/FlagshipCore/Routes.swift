@@ -29,6 +29,9 @@ public enum HomeRoute: Hashable, Sendable {
     case sharedServer(shareId: String)
     /// One app on a shared server.
     case sharedApp(shareId: String, serviceId: String)
+    /// Import a backup onto a new server, or send it to a server waiting for
+    /// it (docs/server-backup-and-clone.md).
+    case importBackup(targetFqdn: String?)
 
     public var builderLink: String? {
         if case .provisionServerForBuilder(let link) = self { return link }

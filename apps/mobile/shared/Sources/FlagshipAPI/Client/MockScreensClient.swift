@@ -1184,6 +1184,12 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public var restoreApps: [ServerRestoreApp] = [ServerRestoreApp(serviceId: "alice--wiki", name: "Wiki", state: "done")]
     public var restoreFinalState = "done"
     public var restoreFailure: String?
+    /// The backup this (mock) server waits for; nil ⇒ it isn't waiting.
+    public var restoreWaiting: ServerRestoreWaiting?
+    /// How much of the data file the server already holds when an upload starts.
+    public var restoreAlreadyReceived: Int64 = 0
+    /// A small backup file the mock hands out (a real one comes from the box).
+    public var archiveBackupFile = Data("{\"magic\":\"flagship-backup\",\"v\":2}\n".utf8)
 
     public func serverArchiveStart(_ req: ServerArchiveStartRequest) async throws {
         try await tick()
@@ -1195,12 +1201,17 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         guard let id = archiveStarts.last?.archiveId, !archiveForgotten else { return nil }
         let sha = SHA256.hash(data: archiveBytes).map { String(format: "%02x", $0) }.joined()
         return ServerArchiveStatus(archiveId: id, state: "ready", startedAt: 1, bytes: Int64(archiveBytes.count), sha256: sha,
+                                   backupFileName: "home-1970-01-01.flagship-backup", dataFileName: "home-1970-01-01.flagship-data",
                                    apps: [ServerArchiveApp(serviceId: "alice--wiki", name: "Wiki")])
     }
     public func serverArchiveChunk(offset: Int64) async throws -> Data {
         try await tick()
         let start = Int(offset)
         return archiveBytes.subdata(in: start..<min(start + 4 * 1024 * 1024, archiveBytes.count))
+    }
+    public func serverArchiveBackupFile() async throws -> Data {
+        try await tick()
+        return archiveBackupFile
     }
     public func serverArchiveForget() async throws {
         try await tick()
@@ -1211,9 +1222,10 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         try await tick()
         archiveApprovals.append(req)
     }
-    public func serverRestoreStart(_ req: ServerRestoreStartRequest) async throws {
+    public func serverRestoreStart(_ req: ServerRestoreStartRequest) async throws -> ServerRestoreStartResponse {
         try await tick()
         restoreStarts.append(req)
+        return ServerRestoreStartResponse(received: restoreAlreadyReceived)
     }
     public func serverRestoreChunk(offset: Int64, data: Data) async throws {
         try await tick()
@@ -1223,12 +1235,19 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         try await tick()
         restoreCommits.append(req)
     }
-    public func serverRestoreStatus() async throws -> ServerRestoreStatus? {
+    public func serverRestoreStatus() async throws -> ServerRestoreStatusResponse {
         try await tick()
-        guard let id = restoreStarts.last?.archiveId else { return nil }
-        return ServerRestoreStatus(archiveId: id, state: restoreFailure == nil ? restoreFinalState : "failed",
-                                   bytes: restoreStarts.last?.bytes ?? 0, received: restoreStarts.last?.bytes ?? 0,
-                                   apps: restoreApps, reason: restoreFailure)
+        guard let id = restoreStarts.last?.archiveId, !restoreCommits.isEmpty else {
+            return ServerRestoreStatusResponse(waiting: restoreWaiting, restore: nil)
+        }
+        let failed = restoreFailure != nil
+        let done = !failed && restoreFinalState == "done"
+        return ServerRestoreStatusResponse(
+            waiting: done ? nil : restoreWaiting,
+            restore: ServerRestoreStatus(archiveId: id, state: failed ? "failed" : restoreFinalState,
+                                         bytes: restoreStarts.last?.bytes ?? 0, received: restoreStarts.last?.bytes ?? 0,
+                                         apps: restoreApps, reason: restoreFailure)
+        )
     }
 
     public func peerBackupStatus() async throws -> PeerBackupStatusResponse {

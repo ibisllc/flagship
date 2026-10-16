@@ -36,8 +36,6 @@ public struct HomeTab: View {
     /// list's "Delete server" context action). Non-nil ⇒ the typed-name
     /// delete sheet is shown.
     @State private var pendingDeletePod: PodInfo?
-    /// Home → Add/Import a server → Import a backup.
-    @State private var showImportBackup = false
 
     public init() {}
 
@@ -163,7 +161,7 @@ public struct HomeTab: View {
                         pendingDeletePod = pod
                     },
                     onAddServer: { path.append(.provisionServer) },
-                    onImportBackup: { showImportBackup = true },
+                    onImportBackup: { path.append(.importBackup(targetFqdn: nil)) },
                     onCoManage: { path.append(.acceptShare(shareId: nil, secretHex: nil)) },
                     onMakeLeader: { pod in
                         Task { await saveServerOrder { await $0.makeLeader(podId: pod.podId) } }
@@ -225,6 +223,9 @@ public struct HomeTab: View {
                     sharedServers: SharedWithMeStore.shared.rows,
                     onOpenShared: { path.append(.sharedServer(shareId: $0)) }
                 )
+                .backupWaits(app.podsAwaitingBackup) { pod in
+                    path.append(.importBackup(targetFqdn: pod.fqdn))
+                }
             } else {
                 ProgressView()
             }
@@ -277,19 +278,6 @@ public struct HomeTab: View {
             // not on the next launch.
             if hasOnline {
                 Task { await refreshRecoveryStatus() }
-            }
-        }
-        .sheet(isPresented: $showImportBackup) {
-            NavigationStack {
-                ImportBackupSheet(vm: ImportBackupViewModel(
-                    targets: app.pods
-                        .filter { $0.status == .online && !$0.fqdn.isEmpty }
-                        .map { .init(fqdn: $0.fqdn, label: $0.name) },
-                    clients: podClients
-                ))
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button("Done") { showImportBackup = false } }
-                }
             }
         }
         .sheet(item: $pendingDeletePod) { pod in
@@ -393,6 +381,15 @@ public struct HomeTab: View {
                                onLeft: { path.removeAll() })
         case .sharedApp(let shareId, let serviceId):
             SharedAppScreen(shareId: shareId, serviceId: serviceId)
+        case .importBackup(let targetFqdn):
+            ImportBackupContainer(
+                targetFqdn: targetFqdn,
+                onServerCreated: { serverDomain, serial, name in
+                    // Like any new server: on Home at once, cancellable.
+                    addPendingPod(name: name, description: "", fqdn: serverDomain, serial: serial, navigateHome: false)
+                },
+                onClose: { path.removeAll() }
+            )
         }
     }
 

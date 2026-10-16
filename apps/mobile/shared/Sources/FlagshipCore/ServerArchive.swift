@@ -1,22 +1,25 @@
 import Foundation
 import CryptoKit
 
-/// "Backup/clone server" (docs/server-backup-and-clone.md): the key that seals
-/// an archive, the readable header of an archive file, and the wording around
-/// both. Must pass packages/protocol/test-vectors/server-archive/vectors.json.
+/// "Backup/clone server" (docs/server-backup-and-clone.md): the account's key
+/// for a backup (the KEK of its account slot), the names of a backup's two
+/// files, and the wording around them. The format is `ServerBackupFormat`.
+/// Must pass packages/protocol/test-vectors/server-archive/vectors.json.
 public enum ServerArchive {
-    public static let fileExtension = "flagship-backup"
     public static let uploadChunkBytes = 4 * 1024 * 1024
-    public static let headerMaxBytes = 64 * 1024
 
     public static let excludesNote =
-        "Holds your apps' source, data and settings, never system images: the server you import onto rebuilds each app, so any Flagship server can open it. Not included: API keys, the server's name and certificate, peer backups, and the Git host."
-    public static let cloneHint =
-        "To clone a server under a new name: add the new server first, then import the backup onto it."
+        "Holds your apps' source, data and settings, never system images: the new server rebuilds each app, so any Flagship server can restore it. Not included: the server's keys and certificate, peer backups, and the Git host."
+    public static let passcodeNote =
+        "Anyone with both files and this passcode can restore the backup, on any account, so keep it somewhere safe and apart from the files. It can't be reset. Your own devices open your backups without it."
+    public static let importIntro =
+        "Pick the backup's two files (the .flagship-backup and its .flagship-data) from wherever you keep them. "
+        + "You choose a name; everything else comes from the backup. Then set up the new server as usual, "
+        + "and this screen sends it the backup as soon as it comes online."
 
-    /// `HKDF-SHA256(umkSeed, salt: empty, info: "flagship/server-archive/v1|<archiveId>")`.
-    /// Independent of any server id, so any device of the account opens an
-    /// archive and imports it onto a server with a different name.
+    /// `HKDF-SHA256(umkSeed, salt: empty, info: "flagship/server-archive/v1|<archiveId>")`:
+    /// the key of a backup's account slot. Independent of any server id, so any
+    /// device of the account opens its backups under any new name.
     public static func deriveKey(umkSeed: Data, archiveId: String) -> Data? {
         guard umkSeed.count == 32, isArchiveId(archiveId) else { return nil }
         let key = HKDF<SHA256>.deriveKey(
@@ -33,57 +36,18 @@ public enum ServerArchive {
     }
 
     public static func newArchiveId() -> String {
-        var bytes = [UInt8](repeating: 0, count: 16)
-        for i in bytes.indices { bytes[i] = UInt8.random(in: 0...255) }
-        return bytes.map { String(format: "%02x", $0) }.joined()
+        HexUtil.encode(ServerBackupFormat.randomBytes(16))
     }
 
-    public struct Header: Equatable, Sendable {
-        public let archiveId: String
-        public let createdAt: Int64
-        public let sourceServer: String
-        public let appNames: [String]
-    }
-
-    public enum HeaderError: Error, Equatable, LocalizedError {
-        case notABackup
-        case newerVersion
-        case damaged
-        public var errorDescription: String? {
-            switch self {
-            case .notABackup: return "That isn't a Flagship backup."
-            case .newerVersion: return "This backup is from a newer version of Flagship. Update the app and try again."
-            case .damaged: return "This backup's header is damaged."
-            }
-        }
-    }
-
-    /// Reads the readable first line of an archive file (pass its first ~64 KB).
-    public static func parseHeader(_ head: Data) throws -> Header {
-        guard let nl = head.firstIndex(of: 0x0a),
-              let obj = try? JSONSerialization.jsonObject(with: head.prefix(upTo: nl)) as? [String: Any],
-              obj["magic"] as? String == "flagship-archive"
-        else { throw HeaderError.notABackup }
-        guard (obj["v"] as? NSNumber)?.intValue == 1 else { throw HeaderError.newerVersion }
-        guard let id = obj["archiveId"] as? String, isArchiveId(id) else { throw HeaderError.damaged }
-        let apps = (obj["apps"] as? [[String: Any]] ?? []).compactMap { $0["name"] as? String }
-        return Header(
-            archiveId: id,
-            createdAt: (obj["createdAt"] as? NSNumber)?.int64Value ?? 0,
-            sourceServer: obj["sourceServer"] as? String ?? "",
-            appNames: apps
-        )
-    }
-
-    /// The name a backup is offered under: `<server label>-<yyyy-MM-dd>.flagship-backup`.
-    public static func fileName(sourceServer: String, createdAt: Date) -> String {
+    /// `<server label>-<yyyy-MM-dd>`: the two files are this plus `.flagship-backup` / `.flagship-data`.
+    public static func fileStem(sourceServer: String, createdAt: Date) -> String {
         let label = sourceServer.split(separator: ".").first.map(String.init) ?? "server"
         let clean = label.filter { $0.isLetter || $0.isNumber || $0 == "-" }
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.timeZone = TimeZone(identifier: "UTC")
         f.dateFormat = "yyyy-MM-dd"
-        return "\(clean.isEmpty ? "server" : clean)-\(f.string(from: createdAt)).\(fileExtension)"
+        return "\(clean.isEmpty ? "server" : clean)-\(f.string(from: createdAt))"
     }
 
     public static func formatBytes(_ n: Int64) -> String {

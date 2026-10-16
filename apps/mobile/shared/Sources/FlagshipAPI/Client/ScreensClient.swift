@@ -187,14 +187,16 @@ public protocol ScreensClient: Sendable {
     // chunks; and the import of one onto this box.
     func serverArchiveStart(_ req: ServerArchiveStartRequest) async throws
     func serverArchiveStatus() async throws -> ServerArchiveStatus?
+    /// The small backup file (JSON) of the ready backup.
+    func serverArchiveBackupFile() async throws -> Data
     func serverArchiveChunk(offset: Int64) async throws -> Data
     func serverArchiveForget() async throws
     /// The owner's signed approval for one browser download request.
     func serverArchiveApprove(_ req: ServerArchiveApproveRequest) async throws
-    func serverRestoreStart(_ req: ServerRestoreStartRequest) async throws
+    func serverRestoreStart(_ req: ServerRestoreStartRequest) async throws -> ServerRestoreStartResponse
     func serverRestoreChunk(offset: Int64, data: Data) async throws
     func serverRestoreCommit(_ req: ServerRestoreCommitRequest) async throws
-    func serverRestoreStatus() async throws -> ServerRestoreStatus?
+    func serverRestoreStatus() async throws -> ServerRestoreStatusResponse
     /// What this box did, newest first (`before` is the `seq` cursor).
     func boxActivity(limit: Int, before: Int?) async throws -> [BoxActivityEntry]
 
@@ -485,13 +487,16 @@ public extension ScreensClient {
     func serverArchiveChunk(offset: Int64) async throws -> Data {
         throw ScreensClientError.notImplemented("server backup")
     }
+    func serverArchiveBackupFile() async throws -> Data {
+        throw ScreensClientError.notImplemented("server backup")
+    }
     func serverArchiveForget() async throws {
         throw ScreensClientError.notImplemented("server backup")
     }
     func serverArchiveApprove(_ req: ServerArchiveApproveRequest) async throws {
         throw ScreensClientError.notImplemented("server backup")
     }
-    func serverRestoreStart(_ req: ServerRestoreStartRequest) async throws {
+    func serverRestoreStart(_ req: ServerRestoreStartRequest) async throws -> ServerRestoreStartResponse {
         throw ScreensClientError.notImplemented("server import")
     }
     func serverRestoreChunk(offset: Int64, data: Data) async throws {
@@ -500,7 +505,7 @@ public extension ScreensClient {
     func serverRestoreCommit(_ req: ServerRestoreCommitRequest) async throws {
         throw ScreensClientError.notImplemented("server import")
     }
-    func serverRestoreStatus() async throws -> ServerRestoreStatus? {
+    func serverRestoreStatus() async throws -> ServerRestoreStatusResponse {
         throw ScreensClientError.notImplemented("server import")
     }
     func boxActivity(limit: Int, before: Int?) async throws -> [BoxActivityEntry] { [] }

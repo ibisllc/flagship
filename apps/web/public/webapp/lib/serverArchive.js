@@ -25,7 +25,7 @@ export const BACKUP_TITLE = "Backup/clone server";
 export const BACKUP_EXCLUDES_NOTE =
   "Holds your apps' source, data and settings, never system images: the new server rebuilds each app, so any Flagship server can restore it. Not included: the server's keys and certificate, peer backups, and the Git host.";
 export const PASSCODE_NOTE =
-  "Anyone with both files and this passcode can restore the backup, on any account, so keep it somewhere safe and separate from the files. It can't be reset. Your own devices open your backups without it.";
+  "Anyone with both files and this passcode can restore the backup, on any account, so keep it somewhere safe and apart from the files. It can't be reset. Your own devices open your backups without it.";
 
 const toHex = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 const random = (n) => crypto.getRandomValues(new Uint8Array(n));

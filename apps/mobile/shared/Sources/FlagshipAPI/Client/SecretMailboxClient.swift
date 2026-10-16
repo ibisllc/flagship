@@ -504,6 +504,10 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
     /// `issuedAt` of the server order the box last reported ranking by (its
     /// acknowledgement, docs/server-order.md). nil when it never reported one.
     public let orderIssuedAt: Int64?
+    /// The box was created to restore a backup and is waiting for it (or
+    /// restoring it): Home says so. Advisory, from the box's heartbeat; nil
+    /// once the backup is in (docs/server-backup-and-clone.md).
+    public let awaitingBackup: AwaitingBackupWire?
     public init(
         serverDomain: String,
         identityPubKey: String,
@@ -519,7 +523,8 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         lastSeenMsAgo: Int64? = nil,
         leadsServices: [String] = [],
         health: BoxHealth? = nil,
-        orderIssuedAt: Int64? = nil
+        orderIssuedAt: Int64? = nil,
+        awaitingBackup: AwaitingBackupWire? = nil
     ) {
         self.serverDomain = serverDomain; self.identityPubKey = identityPubKey
         self.revokedAt = revokedAt; self.lastReported = lastReported
@@ -533,6 +538,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         self.leadsServices = leadsServices
         self.health = health
         self.orderIssuedAt = orderIssuedAt
+        self.awaitingBackup = awaitingBackup
     }
 
     public init(from decoder: Decoder) throws {
@@ -555,6 +561,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         self.trustStatus = (try? c.decodeIfPresent(SignedBoxTrustStatus.self, forKey: .trustStatus)) ?? nil
         self.health = (try? c.decodeIfPresent(BoxHealth.self, forKey: .health)) ?? nil
         self.orderIssuedAt = (try? c.decodeIfPresent(Int64.self, forKey: .orderIssuedAt)) ?? nil
+        self.awaitingBackup = (try? c.decodeIfPresent(AwaitingBackupWire.self, forKey: .awaitingBackup)) ?? nil
     }
 
     /// Encode mirrors the wire shape (the presence flag round-trips through a
@@ -577,6 +584,7 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
         if !pendingRequests.isEmpty { try c.encode(pendingRequests, forKey: .pendingRequests) }
         try c.encodeIfPresent(health, forKey: .health)
         try c.encodeIfPresent(orderIssuedAt, forKey: .orderIssuedAt)
+        try c.encodeIfPresent(awaitingBackup, forKey: .awaitingBackup)
     }
 
     /// `cameOnline` derivation, shared by the reconciler. A box that has
@@ -595,7 +603,18 @@ public struct PodDirectoryEntry: Codable, Equatable, Sendable {
 
     private struct CurrentCert: Codable, Equatable { let sha256: String? }
     private enum CodingKeys: String, CodingKey {
-        case serverDomain, identityPubKey, revokedAt, revocationReason, lastReported, registeredAt, currentCert, signedStatus, trustStatus, pendingRequests, liveness, lastSeenMsAgo, leadsServices, health, orderIssuedAt
+        case serverDomain, identityPubKey, revokedAt, revocationReason, lastReported, registeredAt, currentCert, signedStatus, trustStatus, pendingRequests, liveness, lastSeenMsAgo, leadsServices, health, orderIssuedAt, awaitingBackup
+    }
+}
+
+/// `/pods` `awaitingBackup`: the backup a server waits for, and whether it is restoring it.
+public struct AwaitingBackupWire: Codable, Equatable, Sendable {
+    public let archiveId: String
+    /// `waiting` | `restoring`
+    public let state: String
+    public init(archiveId: String, state: String) {
+        self.archiveId = archiveId
+        self.state = state
     }
 }
 

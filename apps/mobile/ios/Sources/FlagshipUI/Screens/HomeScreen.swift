@@ -76,6 +76,10 @@ public struct HomeScreen: View {
     /// (docs/share-a-server.md), from the Add/Import chooser.
     var onCoManage: () -> Void = {}
     @State private var showAddOrImport = false
+    /// Servers created to restore a backup that still wait for it (lowercased
+    /// fqdn → state), and the action that sends it (docs/server-backup-and-clone.md).
+    var awaitingBackup: [String: AwaitingBackupWire] = [:]
+    var onSendBackup: (PodInfo) -> Void = { _ in }
     /// Move a server to the top of the owner's order (docs/server-order.md).
     var onMakeLeader: (PodInfo) -> Void = { _ in }
     /// The owner dropped a server elsewhere in the list: the new order, by pod id.
@@ -702,6 +706,14 @@ public struct HomeScreen: View {
         }
     }
 
+    /// Home with the servers waiting for their backup marked, and the action that sends it.
+    public func backupWaits(_ waits: [String: AwaitingBackupWire], onSend: @escaping (PodInfo) -> Void) -> HomeScreen {
+        var s = self
+        s.awaitingBackup = waits
+        s.onSendBackup = onSend
+        return s
+    }
+
     /// A server row: a drag handle on the left while the list can be
     /// reordered, the name behind a small server glyph, the status pill
     /// (and Leader badge) under it, and the long-press context menu.
@@ -709,6 +721,7 @@ public struct HomeScreen: View {
         let liveness = pod.livenessState(
             hasLiveUnlockRequest: pod.awaitingUnlock || awaitingApproval.contains(pod.fqdn.lowercased()) || awaitingEntitlement.contains(pod.fqdn.lowercased())
         )
+        let backupWait = liveness == .online ? awaitingBackup[pod.fqdn.lowercased()] : nil
         let reorderable = canReorder
         let draggable = reorderable && orderableIds.contains(pod.podId)
         return HStack(spacing: 0) {
@@ -723,7 +736,7 @@ public struct HomeScreen: View {
                     .accessibilityHidden(true)
                     .accessibilityIdentifier("home-server-handle")
             }
-            Button(action: { onOpenPod(pod) }) {
+            Button(action: { backupWait?.state == "waiting" ? onSendBackup(pod) : onOpenPod(pod) }) {
                 HStack(alignment: .center, spacing: FS.space.s3) {
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 6) {
@@ -755,11 +768,16 @@ public struct HomeScreen: View {
                                         .accessibilityIdentifier("home-standing-in")
                                 }
                             }
-                            FSPill(
-                                PodStatusStyle.label(liveness: liveness, status: pod.status),
-                                kind: PodStatusStyle.pillKind(liveness: liveness, status: pod.status)
-                            )
-                            .accessibilityIdentifier(PodStatusStyle.pillAccessibilityId(liveness: liveness, status: pod.status))
+                            if let backupWait {
+                                FSPill(backupWait.state == "restoring" ? "Restoring its backup" : "Waiting for its backup", kind: .provisioning)
+                                    .accessibilityIdentifier("pod-card-awaiting-backup")
+                            } else {
+                                FSPill(
+                                    PodStatusStyle.label(liveness: liveness, status: pod.status),
+                                    kind: PodStatusStyle.pillKind(liveness: liveness, status: pod.status)
+                                )
+                                .accessibilityIdentifier(PodStatusStyle.pillAccessibilityId(liveness: liveness, status: pod.status))
+                            }
                         }
                         .padding(.top, 2)
                     }
@@ -799,6 +817,13 @@ public struct HomeScreen: View {
                 // the custom LeaderFlag can't be used here — use the closest
                 // stock flag symbol instead of the retired crown.
                 Label("Make leader", systemImage: "flag.fill")
+            }
+        }
+        if awaitingBackup[pod.fqdn.lowercased()]?.state == "waiting" {
+            Button {
+                onSendBackup(pod)
+            } label: {
+                Label("Send the backup", systemImage: "arrow.up.doc")
             }
         }
         Button {
