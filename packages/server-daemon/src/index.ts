@@ -232,6 +232,7 @@ import {
   wireGossip,
   resolveCgk,
   buildCertPrewarm,
+  apexFromBoxFqdn,
   buildLeadsHttpHandler,
   type LeadsSnapshot,
 } from "./gossip/index.js";
@@ -1580,6 +1581,10 @@ async function main(): Promise<void> {
         listServiceSlugs: () =>
           servicePlatformRefForServer.current?.list().map((a) => a.slug) ?? [],
         ...(serverOrder ? { serverOrder } : {}),
+        // The zone this box lives in (`<server>.<user>.<apex>`): the gym's
+        // boxes are under gym.flagship.services, so broadcast and the
+        // leader-routed URLs must not assume the production apex.
+        ...(apexFromBoxFqdn(env.serverFqdn!) ? { servicesApex: apexFromBoxFqdn(env.serverFqdn!)! } : {}),
         onLog: (m) => console.log(m),
       });
       if (result.enabled && result.handler && result.loop) {
