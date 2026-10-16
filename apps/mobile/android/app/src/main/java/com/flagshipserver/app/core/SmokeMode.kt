@@ -47,6 +47,10 @@ data class SmokeModeConfig(
     val seedShares: Boolean = false,
     /** This device's rank in the mock box's apps when not an admin (GymSeams.deviceRank). */
     val deviceRank: String? = null,
+    /** The account's plan as the mock box sees it (GymSeams.listsPlan). */
+    val listsPlan: String? = null,
+    /** Plants keeps a separate access list on each server (GymSeams.separateLists). */
+    val separateLists: Boolean = false,
 ) {
     companion object {
         const val EXTRA_SMOKE_MODE = "flagship.smokeMode"
@@ -59,6 +63,8 @@ data class SmokeModeConfig(
         const val EXTRA_SMOKE_ACCESS_ALERT = "flagship.smokeAccessAlert"
         const val EXTRA_SMOKE_SHARES = "flagship.smokeShares"
         const val EXTRA_SMOKE_DEVICE_RANK = "flagship.smokeDeviceRank"
+        const val EXTRA_SMOKE_PLAN = "flagship.smokePlan"
+        const val EXTRA_SMOKE_SEPARATE_LISTS = "flagship.smokeSeparateLists"
 
         const val SMOKE_USERNAME = "smoketest"
 
@@ -81,6 +87,9 @@ data class SmokeModeConfig(
                 seedShares = intent.getBooleanExtra(EXTRA_SMOKE_SHARES, false),
                 deviceRank = intent.getStringExtra(EXTRA_SMOKE_DEVICE_RANK)?.trim()?.lowercase()
                     ?.takeIf { it in setOf("member", "manager", "master", "refused") },
+                listsPlan = intent.getStringExtra(EXTRA_SMOKE_PLAN)?.trim()?.lowercase()
+                    ?.takeIf { it == "pro" || it == "free" },
+                separateLists = intent.getBooleanExtra(EXTRA_SMOKE_SEPARATE_LISTS, false),
             )
         }
     }
@@ -141,6 +150,8 @@ object SmokeMode {
         // same-process launch's seed can never leak into an unflagged run.
         GymSeams.forceAdminRoot = config.seedAdminRoot
         GymSeams.deviceRank = config.deviceRank
+        GymSeams.listsPlan = config.listsPlan
+        GymSeams.separateLists = config.separateLists
         GymSeams.bypassBiometricGates = true
 
         if (config.seedTrustUntrusted) {

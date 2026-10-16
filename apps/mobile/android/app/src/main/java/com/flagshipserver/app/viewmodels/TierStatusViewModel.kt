@@ -12,6 +12,7 @@ package com.flagshipserver.app.viewmodels
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.ScreensError
 import com.flagshipserver.app.api.TierStatusResponse
+import com.flagshipserver.app.core.AppListScope
 import com.flagshipserver.app.core.NetworkErrorHumanizer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -26,11 +27,31 @@ import kotlin.math.roundToInt
 class TierStatusViewModel(
     private val client: ScreensClient,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    /** A server's display name by its fqdn. */
+    private val serverName: (String) -> String = AppListScope::firstLabel,
 ) {
     private val _state = MutableStateFlow<LoadingState<TierStatusResponse>>(LoadingState.Idle)
     val state: StateFlow<LoadingState<TierStatusResponse>> = _state.asStateFlow()
 
+    /** The warning before Pro ends while apps keep a separate access list on
+     *  each server (the apps have no cancel button, so it stands in for one);
+     *  null when there's nothing to warn about or the server can't say. */
+    private val _separateListsWarning = MutableStateFlow<String?>(null)
+    val separateListsWarning: StateFlow<String?> = _separateListsWarning.asStateFlow()
+
     fun load() = scope.launch {
+        launch {
+            val summary = try {
+                client.accessListsSummary()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                null
+            }
+            _separateListsWarning.value = summary?.let {
+                AppListScope.separateListsWarning(it.plan, it.separateApps, it.leaders, serverName)
+            }
+        }
         _state.value = LoadingState.Loading
         runCatching { client.tierStatus() }
             .fold(
