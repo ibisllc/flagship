@@ -52,6 +52,11 @@ function canonical(r: {
   );
 }
 
+/** Lets queued beats run: each settled POST may start the next one. */
+async function settle(): Promise<void> {
+  for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
+}
+
 const DUMMY_PEM = "-----BEGIN CERTIFICATE-----\nnotarealcert\n-----END CERTIFICATE-----\n";
 
 describe("daemon-status heartbeat", () => {
@@ -209,9 +214,10 @@ describe("daemon-status heartbeat", () => {
     runs = ["family"];
     hb.appsChanged();
     hb.appsChanged();
+    await settle();
     runs = ["family", "clock"];
     hb.appsChanged();
-    await new Promise((r) => setTimeout(r, 0));
+    await settle();
     hb.stop();
     // Not known yet (the app platform isn't up) is sent as nothing, never as "none".
     expect(calls.map((c) => c.runsServices)).toEqual([undefined, ["family"], ["family", "clock"]]);
@@ -236,7 +242,7 @@ describe("daemon-status heartbeat", () => {
     hb.update({ certPem: DUMMY_PEM, privateKeyPem: "x" }, 1_800_000_000_000, []);
     held = 1_760_000_000_000;
     hb.orderChanged();
-    await new Promise((r) => setTimeout(r, 0));
+    await settle();
     hb.stop();
     // Nothing before the first cert; then one beat per change.
     expect(calls.map((c) => c.orderIssuedAt)).toEqual([0, 1_760_000_000_000]);
@@ -261,10 +267,54 @@ describe("daemon-status heartbeat", () => {
     hb.update({ certPem: DUMMY_PEM, privateKeyPem: "x" }, 1_800_000_000_000, []);
     wait = null;
     hb.backupWaitChanged();
-    await new Promise((r) => setTimeout(r, 0));
+    await settle();
     hb.stop();
     expect(calls.map((c) => c.awaitingBackup)).toEqual([{ archiveId: "00".repeat(16), state: "waiting" }, undefined]);
     expect(calls[0].request.awaitingBackup).toBeUndefined();
+  });
+
+  it("sends one beat at a time, so the newest state always lands last", async () => {
+    // A live restore finished while the beat for its last app was still in
+    // flight; both POSTs raced and the stale "restoring" one landed last, so
+    // /pods showed the server restoring for good (live gym, 2026-10-16).
+    const landed: any[] = [];
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const releases: Array<() => void> = [];
+    const fetchImpl = (async (_url: any, init: any) => {
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise<void>((r) => releases.push(r));
+      inFlight--;
+      landed.push(JSON.parse(init.body));
+      return new Response("ok", { status: 200 });
+    }) as unknown as typeof fetch;
+    let wait: { archiveId: string; state: "waiting" | "restoring" } | null = { archiveId: "00".repeat(16), state: "restoring" };
+    let runs = ["a"];
+    const hb = startDaemonStatusHeartbeat({
+      serverDomain: "home1.harry.flagship.services",
+      sign: makeKeypair(9),
+      controlPlaneBaseUrl: "https://flagshipserver.com",
+      intervalMs: 60_000,
+      readAwaitingBackup: () => wait,
+      readRuns: () => runs,
+      fetchImpl,
+    });
+    hb.update({ certPem: DUMMY_PEM, privateKeyPem: "x" }, 1_800_000_000_000, []);
+    runs = ["a", "b"];
+    hb.appsChanged();
+    wait = null;
+    hb.backupWaitChanged();
+    for (let i = 0; i < 10 && (releases.length || inFlight); i++) {
+      await settle();
+      releases.shift()?.();
+    }
+    await settle();
+    hb.stop();
+    expect(maxInFlight).toBe(1);
+    expect(landed.length).toBe(2);
+    expect(landed.at(-1).awaitingBackup).toBeUndefined();
+    expect(landed.at(-1).runsServices).toEqual(["a", "b"]);
   });
 
   it("a network failure never throws (best-effort)", async () => {
