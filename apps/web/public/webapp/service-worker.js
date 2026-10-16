@@ -263,7 +263,13 @@
 //       sends the admin root's approval of the AuthCode, the RCK and a
 //       restore order sign under the admin root, and `.com`'s refusal
 //       (code add-server-admin-only) reads as the apps' sentence.
-const SHELL_VERSION = "v116";
+//  v117: admin-only app orders (Remove app, Runs on, access lists, API
+//       keys, database writes) only where they can be signed; backup and
+//       restore errors in the box's words; long build chats capped with
+//       Jump to latest (lib/vibeTranscript.js); a shared app's Database;
+//       Settings → Scan a pairing code; access alerts from every server;
+//       Flagship Inference refusals in .com's words.
+const SHELL_VERSION = "v117";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

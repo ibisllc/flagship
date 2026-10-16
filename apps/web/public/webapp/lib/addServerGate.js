@@ -32,7 +32,7 @@ export function canSignAdminOrders(session = getSession(), profile = getActivePr
 export const REMOVE_APP_ADMIN_ONLY = "Only an admin device can remove an app.";
 export const ACCESS_ADMIN_ONLY = "Only an admin device can change this app's internet access.";
 export const API_KEYS_ADMIN_ONLY = "Only an admin device can create or revoke API keys.";
-export const DB_WRITE_ADMIN_ONLY = "Only an admin device can change this app's data. Reading it works from any device.";
+export const DB_WRITE_ADMIN_ONLY = "Only an admin device can change this app's data.";
 
 export class AddServerRefusedError extends Error {
   constructor() {

@@ -32,7 +32,7 @@ export const NOTIFY_LINE =
 export const NOTIFY_NOT_ALLOWED = "The owner hasn't let you approve this server's start-up.";
 // A share makes its holder a co-manager, Manager in every app of the server
 // (accessPrincipals.ts), so a members-only app still opens for them.
-export const MEMBERS_ONLY_HINT = "Members only. You can open it: you co-manage this server.";
+export const MEMBERS_ONLY_HINT = "Members only. As a co-manager you can open it.";
 export const DATA_TITLE = "Can see app data";
 export const DATA_LINE = "They can open each app's Database section.";
 export const SHARED_DB_OPEN = "Database";
