@@ -106,7 +106,7 @@ class HomeScreenComposeTest {
                 )
             }
         }
-        composeRule.onNodeWithText("backend ate the request").assertIsDisplayed()
+        composeRule.onNodeWithText("backend ate the request").performScrollTo().assertIsDisplayed()
     }
 
     @Test fun aRefusedServerList_isLockedNotEmpty() {

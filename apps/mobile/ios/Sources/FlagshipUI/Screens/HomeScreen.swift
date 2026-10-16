@@ -69,6 +69,9 @@ public struct HomeScreen: View {
     var onAddServer: () -> Void = {}
     /// "Import a backup" in the Add/Import chooser.
     var onImportBackup: () -> Void = {}
+    /// "Co-manage a running server": accept a server another account shares
+    /// (docs/share-a-server.md), from the Add/Import chooser or the empty state.
+    var onCoManage: () -> Void = {}
     @State private var showAddOrImport = false
     /// Move a server to the top of the owner's order (docs/server-order.md).
     var onMakeLeader: (PodInfo) -> Void = { _ in }
@@ -131,6 +134,7 @@ public struct HomeScreen: View {
         onDeleteServer: @escaping (PodInfo) -> Void = { _ in },
         onAddServer: @escaping () -> Void = {},
         onImportBackup: @escaping () -> Void = {},
+        onCoManage: @escaping () -> Void = {},
         onMakeLeader: @escaping (PodInfo) -> Void = { _ in },
         onReorder: @escaping ([String]) -> Void = { _ in },
         onShowMyServers: @escaping () async -> Void = {},
@@ -162,6 +166,7 @@ public struct HomeScreen: View {
         self.onOpenPod = onOpenPod
         self.onAddServer = onAddServer
         self.onImportBackup = onImportBackup
+        self.onCoManage = onCoManage
         self.onMakeLeader = onMakeLeader
         self.onReorder = onReorder
         self.onShowMyServers = onShowMyServers
@@ -508,6 +513,8 @@ public struct HomeScreen: View {
                         }
                         FSPrimaryButton("Add your first server", block: true, action: onAddServer)
                             .accessibilityIdentifier("home-add-first-server")
+                        FSSecondaryButton("Co-manage a running server", block: true, action: onCoManage)
+                            .accessibilityIdentifier("home-co-manage")
                     }
                 }
                 // .contain keeps the id on the card: otherwise it overrides
@@ -602,13 +609,13 @@ public struct HomeScreen: View {
         }
         .accessibilityIdentifier("home-add-server")
         .confirmationDialog("Add/Import a server", isPresented: $showAddOrImport, titleVisibility: .visible) {
-            Button("Add a new server") { onAddServer() }
+            Button("Create a new server") { onAddServer() }
                 .accessibilityIdentifier("home-add-new-server")
+            Button("Co-manage a running server") { onCoManage() }
+                .accessibilityIdentifier("home-co-manage")
             Button("Import a backup") { onImportBackup() }
                 .accessibilityIdentifier("home-import-backup")
             Button("Cancel", role: .cancel) {}
-        } message: {
-            Text(ServerArchive.cloneHint)
         }
     }
 

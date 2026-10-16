@@ -1,7 +1,8 @@
-// Home → "+ Add/Import a server". Two doors: add a brand-new server (the
-// existing create flow), or import a backup file onto a server of the account
-// (Backup/clone server). Importing never changes the server's name: to clone
-// under a new name, add the new server first, then import onto it.
+// Home → "+ Add/Import a server". Three doors: create a brand-new server (the
+// existing create flow), co-manage a server someone else runs (their share
+// link), or import a backup file onto a server of the account (Backup/clone
+// server). Importing never changes the server's name: to clone under a new
+// name, add the new server first, then import onto it.
 
 import { getSession } from "../lib/state.js";
 import { escapeHtml } from "../lib/util.js";
@@ -20,8 +21,6 @@ import {
 } from "../lib/serverArchive.js";
 
 export const ADD_IMPORT_LABEL = "+ Add/Import a server";
-export const IMPORT_CLONE_HINT =
-  "To clone a server under a new name: add the new server first, then import the backup onto it.";
 
 function openDialog(label, html) {
   const dlg = document.createElement("dialog");
@@ -38,14 +37,14 @@ function openDialog(label, html) {
 }
 
 /** The chooser Home's button opens. */
-export function openAddOrImport({ onAdd }) {
+export function openAddOrImport({ onAdd, onCoManage }) {
   const { dlg, close } = openDialog(
     "Add or import a server",
     `
     <h3 class="modal-title">Add/Import a server</h3>
-    <button class="full-width" data-choice-add>Add a new server</button>
+    <button class="full-width" data-choice-add>Create a new server</button>
+    <button class="secondary full-width mt-2" data-choice-co-manage>Co-manage a running server</button>
     <button class="secondary full-width mt-2" data-choice-import>Import a backup</button>
-    <p class="note small mt-2">${escapeHtml(IMPORT_CLONE_HINT)}</p>
     <div class="row-2 mt-3"><button class="secondary" data-choice-cancel>Cancel</button></div>
   `,
   );
@@ -53,6 +52,10 @@ export function openAddOrImport({ onAdd }) {
   dlg.querySelector("[data-choice-add]").addEventListener("click", () => {
     close();
     onAdd();
+  });
+  dlg.querySelector("[data-choice-co-manage]").addEventListener("click", () => {
+    close();
+    onCoManage();
   });
   dlg.querySelector("[data-choice-import]").addEventListener("click", () => {
     close();

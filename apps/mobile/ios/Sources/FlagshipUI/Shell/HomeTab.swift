@@ -160,6 +160,7 @@ public struct HomeTab: View {
                     },
                     onAddServer: { path.append(.provisionServer) },
                     onImportBackup: { showImportBackup = true },
+                    onCoManage: { path.append(.acceptShare(shareId: nil, secretHex: nil)) },
                     onMakeLeader: { pod in
                         Task { await saveServerOrder { await $0.makeLeader(podId: pod.podId) } }
                     },
@@ -354,8 +355,7 @@ public struct HomeTab: View {
                     // User backed out before delivering — drop any
                     // pending state and head home.
                     path.removeAll()
-                },
-                onCoManage: { path.append(.acceptShare(shareId: nil, secretHex: nil)) }
+                }
             )
         case .installProgress(let serial, let name, let description):
             // Provisioning now renders the SINGLE canonical timeline
@@ -618,7 +618,6 @@ struct CreateServerContainer: View {
     let onDeliveredVisible: (_ serverDomain: String, _ serial: String, _ name: String, _ description: String) -> Void
     let onDelivered: (_ serverDomain: String, _ serial: String, _ name: String, _ description: String) -> Void
     let onCancel: () -> Void
-    let onCoManage: (() -> Void)?
     @Environment(\.flagshipServerClient) private var serverClient
     @Environment(\.qrRelayClient) private var qrRelay
     @Environment(\.secretMailboxClient) private var mailbox
@@ -630,14 +629,12 @@ struct CreateServerContainer: View {
         builderLink: String? = nil,
         onDeliveredVisible: @escaping (_ serverDomain: String, _ serial: String, _ name: String, _ description: String) -> Void = { _, _, _, _ in },
         onDelivered: @escaping (_ serverDomain: String, _ serial: String, _ name: String, _ description: String) -> Void,
-        onCancel: @escaping () -> Void = {},
-        onCoManage: (() -> Void)? = nil
+        onCancel: @escaping () -> Void = {}
     ) {
         self.builderLink = builderLink
         self.onDeliveredVisible = onDeliveredVisible
         self.onDelivered = onDelivered
         self.onCancel = onCancel
-        self.onCoManage = onCoManage
     }
 
     var body: some View {
@@ -658,8 +655,7 @@ struct CreateServerContainer: View {
                         let serial = vm.lastDeliveredSerial ?? ""
                         onDelivered(serverDomain, serial, name, description)
                     },
-                    onCancel: onCancel,
-                    onCoManage: onCoManage
+                    onCancel: onCancel
                 )
             } else {
                 ProgressView()

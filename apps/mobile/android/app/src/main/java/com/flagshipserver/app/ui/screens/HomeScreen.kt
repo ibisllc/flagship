@@ -94,6 +94,10 @@ fun HomeScreen(
     onAddServer: () -> Unit,
     /** "Import a backup" in the Add/Import chooser. */
     onImportBackup: () -> Unit = {},
+    /** "Co-manage a running server": accept a server another account
+     *  shares (docs/share-a-server.md), from the Add/Import chooser or the
+     *  empty state. */
+    onCoManage: () -> Unit = {},
     /** Move a server to the top of the order (docs/server-order.md). */
     onMakeLeader: (PodInfo) -> Unit,
     onRefresh: () -> Unit,
@@ -155,21 +159,31 @@ fun HomeScreen(
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { showAddOrImport = false },
             title = { androidx.compose.material3.Text("Add/Import a server") },
-            text = { androidx.compose.material3.Text(com.flagshipserver.app.core.ServerArchive.CLONE_HINT) },
-            confirmButton = {
-                androidx.compose.material3.TextButton(
-                    onClick = { showAddOrImport = false; onAddServer() },
-                    modifier = Modifier.testTag("home-add-new-server"),
-                ) {
-                    androidx.compose.material3.Text("Add a new server")
+            text = {
+                Column {
+                    androidx.compose.material3.TextButton(
+                        onClick = { showAddOrImport = false; onAddServer() },
+                        modifier = Modifier.testTag("home-add-new-server"),
+                    ) {
+                        androidx.compose.material3.Text("Create a new server")
+                    }
+                    androidx.compose.material3.TextButton(
+                        onClick = { showAddOrImport = false; onCoManage() },
+                        modifier = Modifier.testTag("home-co-manage"),
+                    ) {
+                        androidx.compose.material3.Text("Co-manage a running server")
+                    }
+                    androidx.compose.material3.TextButton(
+                        onClick = { showAddOrImport = false; onImportBackup() },
+                        modifier = Modifier.testTag("home-import-backup"),
+                    ) {
+                        androidx.compose.material3.Text("Import a backup")
+                    }
                 }
             },
-            dismissButton = {
-                androidx.compose.material3.TextButton(
-                    onClick = { showAddOrImport = false; onImportBackup() },
-                    modifier = Modifier.testTag("home-import-backup"),
-                ) {
-                    androidx.compose.material3.Text("Import a backup")
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = { showAddOrImport = false }) {
+                    androidx.compose.material3.Text("Cancel")
                 }
             },
         )
@@ -279,7 +293,7 @@ fun HomeScreen(
         if (listLocked) {
             LockedServerListCard(onShowServers = onShowServers)
         } else if (pods.isEmpty()) {
-            EmptyServerCard(onAddServer = onAddServer)
+            EmptyServerCard(onAddServer = onAddServer, onCoManage = onCoManage)
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                 // The empty state carries its own "Add your first server".
@@ -477,7 +491,7 @@ private fun LockedServerListCard(onShowServers: () -> Unit) {
 }
 
 @Composable
-private fun EmptyServerCard(onAddServer: () -> Unit) {
+private fun EmptyServerCard(onAddServer: () -> Unit, onCoManage: () -> Unit) {
     FSCard(padding = PaddingValues(FS.space.s6)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             Text(
@@ -496,6 +510,12 @@ private fun EmptyServerCard(onAddServer: () -> Unit) {
                 onClick = onAddServer,
                 block = true,
                 modifier = Modifier.testTag("home-add-server"),
+            )
+            FSGhostButton(
+                label = "Co-manage a running server",
+                onClick = onCoManage,
+                block = true,
+                modifier = Modifier.testTag("home-co-manage"),
             )
         }
     }

@@ -117,7 +117,7 @@ final class GymEveryMergeTests: XCTestCase {
         addServer.tap()
         app.chooseAddNewServer()
 
-        // "Add a new server" goes straight into the create flow.
+        // "Create a new server" goes straight into the create flow.
         let name = app.textFields["cs-name-field"]
         XCTAssertTrue(
             name.waitForExistence(timeout: 15),

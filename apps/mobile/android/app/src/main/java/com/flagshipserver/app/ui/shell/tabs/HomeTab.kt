@@ -324,6 +324,7 @@ fun HomeTab() {
                 // ingestion (Slice C, via the deep link / "Process a link").
                 onAddServer = { nav.navigate("create-server") },
                 onImportBackup = { showImportBackup = true },
+                onCoManage = { nav.navigate("share-accept") },
                 onMakeLeader = { pod -> saveOrder { orderSaver.makeLeader(pod.podId) } },
                 onReorder = { ids -> saveOrder { orderSaver.reorder(ids) } },
                 onDeleteServer = { pod ->
@@ -515,7 +516,6 @@ fun HomeTab() {
                     nav.navigate("install-progress/$serial?name=$encoded&fqdn=${URLEncoder.encode(serverDomain, "UTF-8")}")
                 },
                 onCancel = { nav.popBackStack() },
-                onCoManage = { nav.navigate("share-accept") },
             )
         }
         composable("install-progress/{serial}") { entry ->

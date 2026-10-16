@@ -621,12 +621,17 @@ function renderEmptyServersList(root, { reason, username } = {}) {
       <h3 class="empty-headline">${escapeHtml(headline)}</h3>
       <p class="note empty-message">${escapeHtml(hint)}</p>
       <button class="primary full-width" id="empty-create-server">${escapeHtml(ctaLabel)}</button>
+      ${accountOpen ? '<button class="secondary full-width mt-2" id="empty-co-manage">Co-manage a running server</button>' : ""}
       ${accountOpen ? '<button class="linklike mt-2" id="empty-take-over">Someone handing you a box? Take over →</button>' : ""}
       <a class="pill mt-2" href="https://flagshipserver.com/studio" target="_blank" rel="noopener">
         Get Flagship Studio →
       </a>
     </div>
   `;
+  $("empty-co-manage")?.addEventListener("click", async () => {
+    const { promptShareLink } = await import("./share-accept.js");
+    await promptShareLink();
+  });
   $("empty-take-over")?.addEventListener("click", async () => {
     const { enterTransferClaim } = await import("./transfer-claim.js");
     enterTransferClaim().catch((e) => {
@@ -1181,14 +1186,19 @@ function renderServerCards() {
  * old nodes + their listeners, so re-binding can't stack handlers).
  */
 function wireHomeListControls(list) {
-  // "+ Add/Import a server" — add a brand-new box (pairing is automatic) or
-  // import a backup onto one of the account's servers. Take-over is the
+  // "+ Add/Import a server" — create a brand-new box (pairing is automatic),
+  // co-manage someone else's server from their share link, or import a
+  // backup onto one of the account's servers. Take-over is the
   // separate "Take over" link + the /transfer deep-link + camera claim.
   list.querySelector("#home-add-server")?.addEventListener("click", () => {
     openAddOrImport({
       onAdd: async () => {
         const { enterCreateServer } = await import("./create-server.js");
         await enterCreateServer();
+      },
+      onCoManage: async () => {
+        const { promptShareLink } = await import("./share-accept.js");
+        await promptShareLink();
       },
     });
   });

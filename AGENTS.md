@@ -537,8 +537,9 @@ of the last check here: **not yet checked**.
   rank by it. "Set as preferred server" is now "Make leader"; the set-leader
   vote, lane and consumer are gone. Same commits: phones keep their account
   device key after the first unlock (silent read tokens) and Home offers
-  "Show my servers" instead of an empty list; the co-manage entry moved to
-  the Add-a-server page. Needs: migration 0096 before the `.com` deploy
+  "Show my servers" instead of an empty list; the co-manage entry is now
+  "Co-manage a running server" in Home's Add/Import menu (2026-10-15, shell
+  v106; also on the empty state). Needs: migration 0096 before the `.com` deploy
   (webapp shell v74), an endorsed box release, iOS/Android builds. Not yet
   run on a device. Follow-up the same day (owner's Home review): no
   numbers (position is the order), a drag handle on the left of each row

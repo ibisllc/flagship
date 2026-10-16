@@ -124,13 +124,13 @@ const EVERY_MERGE: readonly Scenario[] = [
   ),
   android(
     "android-create-server-form",
-    "Home → Add/Import a server → Add a new server opens the create-server form (name field + disk-encryption control).",
+    "Home → Add/Import a server → Create a new server opens the create-server form (name field + disk-encryption control).",
     `${PKG}.GymEveryMergeTest#createServerFormReachable`,
     {
       steps: [
         { kind: "launch", describe: "Launch smokeTab=home." },
         { kind: "tap", describe: "Add/Import a server.", handle: "home-add-server" },
-        { kind: "tap", describe: "Add a new server.", handle: "home-add-new-server" },
+        { kind: "tap", describe: "Create a new server.", handle: "home-add-new-server" },
         { kind: "assert", describe: "Name field.", handle: "cs-name-field" },
         { kind: "assert", describe: "Disk-encryption control.", handle: "cs-encrypt-disk-toggle" },
       ],

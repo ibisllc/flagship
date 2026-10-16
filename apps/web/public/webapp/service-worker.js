@@ -223,7 +223,11 @@
 //       their account device key while manager-class, else see why not. App
 //       sign-in signs with the device key on own servers and the share key
 //       on shared ones. (v97-v100 belong to feature branches.)
-const SHELL_VERSION = "v101";
+//  v106: Home's Add/Import a server offers Create a new server, Co-manage a
+//       running server (moved off the create-server page) and Import a
+//       backup, without the clone explainer. (v102-v105 belong to feature
+//       branches.)
+const SHELL_VERSION = "v106";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

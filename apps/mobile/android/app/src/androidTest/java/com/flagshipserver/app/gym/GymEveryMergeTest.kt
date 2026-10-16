@@ -102,7 +102,7 @@ class GymEveryMergeTest : GymBase() {
         composeRule.onNodeWithTag("home-add-server").assertIsDisplayed()
         gymShot("home-ready")
         addNewServer()
-        // "Add a new server" opens the create-server form (a NavHost push).
+        // "Create a new server" opens the create-server form (a NavHost push).
         waitUntilExists("cs-name-field")
         composeRule.onNodeWithTag("cs-name-field").assertExists()
         gymShot("create-server-name")
