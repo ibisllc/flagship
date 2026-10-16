@@ -104,6 +104,11 @@ export interface AccessSync {
   probe(peer: string, serviceRef: string): Promise<boolean>;
   /** Drop an uninstalled app's journal and pending hand-overs. */
   forget(serviceRef: string): Promise<void>;
+  /**
+   * Wait for every hand-over this box has under way (and any it starts
+   * meanwhile) to finish; resolves true when there was one.
+   */
+  idle(): Promise<boolean>;
   start(): void;
   stop(): void;
 }
@@ -120,6 +125,13 @@ export function buildAccessSync(opts: AccessSyncOptions): AccessSync {
   /** peer → serviceRef → entries still to hand over */
   const outbox = new Map<string, Map<string, Map<string, AccessEntry>>>();
   const timers: ReturnType<typeof setInterval>[] = [];
+  const inFlight = new Set<Promise<void>>();
+
+  /** Run a hand-over in the background; it must never reject. */
+  function background(p: Promise<void>): void {
+    inFlight.add(p);
+    void p.finally(() => inFlight.delete(p));
+  }
 
   const shared = (ref: string) => opts.key !== null && scope(ref) === "account";
 
@@ -176,11 +188,15 @@ export function buildAccessSync(opts: AccessSyncOptions): AccessSync {
     if (!(await push(leader, ref, entries))) queue(leader, ref, entries);
   }
 
+  const failed = (ref: string) => (e: unknown) => log(`[access-sync] ${ref}: hand-over failed: ${String((e as Error)?.message ?? e)}`);
+
   function record(ref: string, entry: AccessEntry): void {
-    void (async () => {
-      if (!(await opts.journal.add(ref, entry))) return;
-      await forward(ref, [entry]);
-    })().catch((e) => log(`[access-sync] ${ref}: hand-over failed: ${String((e as Error)?.message ?? e)}`));
+    background(
+      (async () => {
+        if (!(await opts.journal.add(ref, entry))) return;
+        await forward(ref, [entry]);
+      })().catch(failed(ref)),
+    );
   }
 
   /** Apply what a peer handed over; returns the entries new to this box. */
@@ -252,7 +268,7 @@ export function buildAccessSync(opts: AccessSyncOptions): AccessSync {
       const fresh = await take(env.ref, raw);
       await opts.journal.notePeers(env.ref, [env.from]);
       const leader = opts.peers()?.leaderFor(env.ref)?.toLowerCase() ?? null;
-      if (fresh.length > 0 && leader === self) void fanOut(env.ref, fresh, env.from);
+      if (fresh.length > 0 && leader === self) background(fanOut(env.ref, fresh, env.from).catch(failed(env.ref)));
       return json(200, { ok: true, taken: fresh.length, digest: opts.journal.digest(env.ref) });
     }
     if (req.path === "/api/access-sync/pull") {
@@ -362,6 +378,11 @@ export function buildAccessSync(opts: AccessSyncOptions): AccessSync {
       if (!shared(ref)) return false;
       const r = await post("pull", peer.toLowerCase(), ref, { digest: opts.journal.digest(ref) });
       return !!r && r.ok;
+    },
+    async idle() {
+      if (inFlight.size === 0) return false;
+      while (inFlight.size > 0) await Promise.all([...inFlight]);
+      return true;
     },
     async forget(ref) {
       opts.store.setCatchingUp(ref, false);
