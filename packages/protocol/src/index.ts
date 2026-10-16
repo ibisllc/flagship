@@ -48,6 +48,7 @@ export * from "./appCopy.js";
 export * from "./archiveDownload.js";
 export * from "./archiveKeys.js";
 export * from "./backupPolicy.js";
+export * from "./serviceEnvChange.js";
 export * from "./serverBackup.js";
 export * from "./aiModels.js";
 export * from "./blindRsa.js";

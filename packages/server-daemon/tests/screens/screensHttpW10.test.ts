@@ -20,8 +20,9 @@
 import { describe, expect, it } from "vitest";
 import {
   ed,
-  signSetServiceEnv,
-  type SetServiceEnvRequest,
+  serviceEnvValueSha256,
+  signServiceEnvChange,
+  type ServiceEnvChange,
 } from "@flagship/protocol";
 import {
   buildScreensHttp,
@@ -90,6 +91,7 @@ function realPlatform(store: AppEnvStore, irkPub: Uint8Array): ScreensHttpDeps["
     appRunner: new AppRunner(cmd),
     dataProvisioner: null,
     envStore: store,
+    serverFqdn: SERVER_FQDN,
     now: () => NOW,
   }) as unknown as ScreensHttpDeps["servicePlatform"];
 }
@@ -109,16 +111,17 @@ function envHarness(seedByte: number) {
     appEnvStore: store,
     now: () => NOW,
   });
-  const sign = (env: Record<string, string>, issuedAt = NOW) => {
-    const request: SetServiceEnvRequest = {
-      serverId: SERVER_FQDN,
-      creator: "alice",
-      slug: "todos",
-      env,
-      issuedAt,
-    };
-    return { request, signature: hex(signSetServiceEnv(request, { publicKey: irkPub, privateKey: seed })) };
-  };
+  let n = 0;
+  const change = (op: "set" | "unset", name: string, value?: string, serviceId = "alice--todos"): ServiceEnvChange => ({
+    serverId: SERVER_FQDN,
+    serviceId,
+    op,
+    name,
+    valueSha256: op === "set" ? serviceEnvValueSha256(value ?? "") : "",
+    issuedAt: NOW,
+    nonce: (++n + seedByte * 1000).toString(16).padStart(32, "0"),
+  });
+  const sign = (c: ServiceEnvChange) => hex(signServiceEnvChange(c, { publicKey: irkPub, privateKey: seed }));
   const post = (path: string, body: unknown) =>
     handle(
       req({
@@ -132,11 +135,15 @@ function envHarness(seedByte: number) {
     const r = await handle(req({ path: `/api/screens/services/${appId}/env`, headers: { "x-flagship-session": "tok-good" } }));
     return JSON.parse(r!.body as string).names as string[];
   };
-  const set = (appId: string, name: string, value: string) =>
-    post(`/api/screens/services/${appId}/env/set`, { name, value, ...sign({ [name]: value }) });
-  const unset = (appId: string, name: string) =>
-    post(`/api/screens/services/${appId}/env/unset`, { name, ...sign({}) });
-  return { store, handle, sign, post, names, set, unset };
+  const set = (appId: string, name: string, value: string) => {
+    const c = change("set", name, value);
+    return post(`/api/screens/services/${appId}/env/set`, { change: c, value, signature: sign(c) });
+  };
+  const unset = (appId: string, name: string) => {
+    const c = change("unset", name);
+    return post(`/api/screens/services/${appId}/env/unset`, { change: c, signature: sign(c) });
+  };
+  return { store, handle, change, sign, post, names, set, unset };
 }
 
 describe("W10 — services env-var KV editor", () => {
@@ -170,29 +177,42 @@ describe("W10 — services env-var KV editor", () => {
     expect(await h.store.get(appId)).toEqual({ B_KEY: "two" });
   });
 
-  it("an unset whose signed map is not empty is refused and changes nothing", async () => {
+  it("a replayed unset is refused and can't take away a variable set again", async () => {
     const h = envHarness(0xa5);
     await h.set(appId, "A_KEY", "one");
-    const r = await h.post(`/api/screens/services/${appId}/env/unset`, { name: "A_KEY", ...h.sign({ OTHER: "x" }) });
+    const c = h.change("unset", "A_KEY");
+    const body = { change: c, signature: h.sign(c) };
+    expect((await h.post(`/api/screens/services/${appId}/env/unset`, body))?.status).toBe(200);
+    await h.set(appId, "A_KEY", "again");
+    const replay = await h.post(`/api/screens/services/${appId}/env/unset`, body);
+    expect(replay?.status).toBe(400);
+    expect(JSON.parse(replay!.body as string).error).toBe("this change was already applied");
+    expect(await h.store.get(appId)).toEqual({ A_KEY: "again" });
+  });
+
+  it("an unset signed for one name can't remove another", async () => {
+    const h = envHarness(0xa6);
+    await h.set(appId, "A_KEY", "one");
+    await h.set(appId, "B_KEY", "two");
+    const c = h.change("unset", "A_KEY");
+    const r = await h.post(`/api/screens/services/${appId}/env/unset`, { change: { ...c, name: "B_KEY" }, signature: h.sign(c) });
     expect(r?.status).toBe(400);
-    expect(await h.store.get(appId)).toEqual({ A_KEY: "one" });
+    expect(await h.store.get(appId)).toEqual({ A_KEY: "one", B_KEY: "two" });
   });
 
-  it("rejects /set when (creator,slug) does not match :appId in the URL", async () => {
+  it("refuses a change for another app, the wrong route's op, or a value that isn't the signed one", async () => {
     const h = envHarness(0xa2);
-    for (const wrong of ["alice--OTHER", "alice-todos"]) {
-      const resp = await h.post(`/api/screens/services/${wrong}/env/set`, { name: "FOO", value: "bar", ...h.sign({ FOO: "bar" }) });
-      expect(resp?.status).toBe(400);
-      expect(JSON.parse(resp!.body as string).error).toContain("creator,slug");
-    }
-  });
-
-  it("rejects /set when the body's name/value is not present in request.env", async () => {
-    const h = envHarness(0xa3);
-    // Wrong value on the body vs envelope.
-    const resp = await h.post(`/api/screens/services/${appId}/env/set`, { name: "FOO", value: "DIFFERENT", ...h.sign({ FOO: "bar" }) });
-    expect(resp?.status).toBe(400);
-    expect(JSON.parse(resp!.body as string).error).toContain("name/value");
+    const other = h.change("set", "FOO", "bar", "alice--other");
+    let r = await h.post(`/api/screens/services/${appId}/env/set`, { change: other, value: "bar", signature: h.sign(other) });
+    expect(r?.status).toBe(400);
+    expect(JSON.parse(r!.body as string).error).toBe("the change names another app");
+    const set = h.change("set", "FOO", "bar");
+    r = await h.post(`/api/screens/services/${appId}/env/unset`, { change: set, signature: h.sign(set) });
+    expect(JSON.parse(r!.body as string).error).toBe("the change is not an unset");
+    r = await h.post(`/api/screens/services/${appId}/env/set`, { change: set, value: "DIFFERENT", signature: h.sign(set) });
+    expect(r?.status).toBe(400);
+    expect(JSON.parse(r!.body as string).error).toBe("the value doesn't match the signed change");
+    expect(r!.body as string).not.toContain("DIFFERENT");
     expect(await h.names(appId)).toEqual([]);
   });
 });

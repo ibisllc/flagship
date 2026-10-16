@@ -63,8 +63,8 @@ import { deployPhaseText, deployRequestBody, startAndFollowChatDeploy } from "..
 import { RELAY_TURNED_OFF, TURN_RELAY_OFF, isRelayFailure } from "../lib/aiRelay.js";
 import { turnRelayOffForCredential } from "../providers.js";
 import { getSession } from "../lib/state.js";
-import { bytesToHex, signWithIrk } from "../keystore.js";
-import { canonicalSetServiceEnv } from "./service-env.js";
+import { signWithIrk } from "../keystore.js";
+import { signedEnvChangeBody } from "../lib/serviceEnvChange.js";
 import { fetchFreeAiStatus, freeAiEntryView, freshCredential, mintFreeAiCredential } from "../lib/freeAi.js";
 import { credentialFor, defaultModelFor, loadProviders } from "../providers.js";
 import {
@@ -999,16 +999,16 @@ async function sendEnvVar() {
   if (parts.length !== 2 || !parts[0] || !parts[1]) return toast("This build has no app to set it on yet.", "err");
   const session = getSession();
   if (!session?.umk) return toast("Unlock first", "err");
-  const [creator, slug] = parts;
-  const envelope = { serverId: client().fqdn, creator, slug, env: { [name]: value }, issuedAt: Date.now() };
   const btn = $("vc-envvar-send");
   if (btn) btn.disabled = true;
   try {
-    const canon = canonicalSetServiceEnv(envelope.serverId, creator, slug, envelope.env, envelope.issuedAt);
-    const signature = bytesToHex(await signWithIrk(session.umk, canon));
+    const body = await signedEnvChangeBody(
+      { serverId: client().fqdn, serviceId: appId, op: "set", name, value },
+      (bytes) => signWithIrk(session.umk, bytes),
+    );
     await boxFetch(`/api/screens/services/${encodeURIComponent(appId)}/env/set`, {
       method: "POST",
-      body: JSON.stringify({ name, value, request: envelope, signature }),
+      body: JSON.stringify(body),
     });
     if (el) el.value = "";
     await answerEnvVar("set");

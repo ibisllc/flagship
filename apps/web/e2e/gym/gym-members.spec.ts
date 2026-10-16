@@ -51,10 +51,8 @@ const CANON = {
   uninstall: ["/lib/appPlacement.js", "canonicalUninstallServiceBytes"] as Canon,
   rename: (r: { username: string; serviceId: string; newDisplayLabel: string; issuedAt: number }) =>
     ["flagship/service-rename/v1", r.username, r.serviceId, r.newDisplayLabel.toLowerCase(), String(r.issuedAt)].join("|"),
-  env: (r: { serverId: string; creator: string; slug: string; env: Record<string, string>; issuedAt: number }) => {
-    const pairs = Object.keys(r.env).sort().map((k) => `${k}=${r.env[k]}`);
-    return ["flagship/set-service-env/v1", r.serverId, r.creator, r.slug, String(pairs.length), ...pairs, String(r.issuedAt)].join("|");
-  },
+  env: (c: { serverId: string; serviceId: string; op: string; name: string; valueSha256: string; issuedAt: number; nonce: string }) =>
+    ["flagship/service-env-change/v1", c.serverId, c.serviceId, c.op, c.name, c.valueSha256, String(c.issuedAt), c.nonce].join("|"),
 };
 
 test.use({ viewport: { width: 430, height: 932 } });
@@ -1119,12 +1117,21 @@ test.describe("gym webapp members and app pages", () => {
     let names = ["OPENAI_API_KEY"];
     const m = base(await mock(page));
     m.get(onHome(svc("/env")), () => ({ json: { names } }));
+    // The box: one signed change per call, each nonce spent once.
+    const spent = new Set<string>();
+    const fresh = (c: { body: { change: { nonce: string } } }) => {
+      if (spent.has(c.body.change.nonce)) return false;
+      spent.add(c.body.change.nonce);
+      return true;
+    };
     m.post(onHome(svc("/env/set")), (c) => {
-      names = [...new Set([...names, c.body.name])].sort();
+      if (!fresh(c)) return { status: 400, json: { error: "this change was already applied" } };
+      names = [...new Set([...names, c.body.change.name])].sort();
       return { json: { ok: true } };
     });
     m.post(onHome(svc("/env/unset")), (c) => {
-      names = names.filter((n) => n !== c.body.name);
+      if (!fresh(c)) return { status: 400, json: { error: "this change was already applied" } };
+      names = names.filter((n) => n !== c.body.change.name);
       return { json: { ok: true } };
     });
     await openApp(page);
@@ -1134,6 +1141,12 @@ test.describe("gym webapp members and app pages", () => {
 
     await page.click("#service-env-save");
     await sawToast(page, "Name required");
+    // A name the box can't take is refused before anything is signed.
+    await page.fill("#service-env-name", "stripe-key");
+    await page.fill("#service-env-value", "x");
+    await page.click("#service-env-save");
+    await sawToast(page, "Use letters, digits and _ only, not starting with a digit (like API_KEY).");
+    expect(m.sent(svc("/env/set"))).toHaveLength(0);
     await page.fill("#service-env-name", "STRIPE_KEY");
     await page.fill("#service-env-value", "sk_live_gym_value");
     await page.click("#service-env-save");
@@ -1141,10 +1154,12 @@ test.describe("gym webapp members and app pages", () => {
     await expect(page.locator("#service-env-value")).toHaveValue("");
     await expect(page.locator('.service-env-row[data-name="STRIPE_KEY"]')).toBeVisible();
     const set = m.last(svc("/env/set"))!;
-    expect(set.body.name).toBe("STRIPE_KEY");
-    expect(set.body.request).toMatchObject({ serverId: HOME, creator: "smoketest", slug: "notes", env: { STRIPE_KEY: "sk_live_gym_value" } });
+    // The signed change names the one variable and the value's SHA-256; the value rides beside it.
+    expect(set.body.value).toBe("sk_live_gym_value");
+    expect(set.body.change).toMatchObject({ serverId: HOME, serviceId: SERVICE_ID, op: "set", name: "STRIPE_KEY", valueSha256: "35a8295bef5f31893ced0a5280d7ed588b5d99b9e574e9a83a412a93a8dc86d0" });
+    expect(set.body.change.nonce).toMatch(/^[0-9a-f]{32}$/);
     // The box takes the env order under the IRK (servicePlatform verifyHostAuthority).
-    expect(await signer(page, keys, CANON.env, set.body.request, set.body.signature)).toBe("irk");
+    expect(await signer(page, keys, CANON.env, set.body.change, set.body.signature)).toBe("irk");
     // The value never shows on the page.
     await expect(page.locator("#view-service-env")).not.toContainText("sk_live_gym_value");
     await shot(page, testInfo, "env-saved");
@@ -1153,9 +1168,13 @@ test.describe("gym webapp members and app pages", () => {
     await page.locator('.service-env-row[data-name="OPENAI_API_KEY"] .service-env-remove').click();
     await expect(page.locator('.service-env-row[data-name="OPENAI_API_KEY"]')).toHaveCount(0, { timeout: 10_000 });
     const unset = m.last(svc("/env/unset"))!;
-    expect(unset.body.name).toBe("OPENAI_API_KEY");
-    expect(Object.keys(unset.body.request.env)).not.toContain("OPENAI_API_KEY");
-    expect(await signer(page, keys, CANON.env, unset.body.request, unset.body.signature)).toBe("irk");
+    // The unset signs the name it removes; the other variable stays.
+    expect(unset.body.change).toMatchObject({ serviceId: SERVICE_ID, op: "unset", name: "OPENAI_API_KEY", valueSha256: "" });
+    expect("value" in unset.body).toBe(false);
+    expect(await signer(page, keys, CANON.env, unset.body.change, unset.body.signature)).toBe("irk");
+    await expect(page.locator('.service-env-row[data-name="STRIPE_KEY"]')).toBeVisible();
+    // Every change carried its own nonce: none was refused as a replay.
+    expect(new Set([set.body.change.nonce, unset.body.change.nonce]).size).toBe(2);
 
     page.once("dialog", (d) => void d.dismiss());
     await page.locator('.service-env-row[data-name="STRIPE_KEY"] .service-env-remove').click();

@@ -1,6 +1,6 @@
 /**
  * Service lifecycle domain — rename / custom-domain attach / voi.ci shorten,
- * install + uninstall, per-service env vars, the update-pack pull request,
+ * install + uninstall, the update-pack pull request (env vars: serviceEnvChange.ts),
  * and the single-use service-access invite + acceptance (#79).
  *
  * Extracted verbatim from the original monolithic `auth.ts`; tags, field
@@ -16,7 +16,6 @@ const TAG_SET_CUSTOM_DOMAIN = "flagship/custom-domain/v1";
 const TAG_VOICI_SHORTEN = "flagship/voici-shorten/v1";
 const TAG_INSTALL_SERVICE = "flagship/install-service/v1";
 const TAG_UNINSTALL_SERVICE = "flagship/uninstall-service/v1";
-const TAG_SET_SERVICE_ENV = "flagship/set-service-env/v1";
 const TAG_UPDATE_PULL = "flagship/update-pull/v1";
 const TAG_SERVICE_INVITE = "flagship/service-invite/v1";
 const TAG_SERVICE_INVITE_ACCEPT = "flagship/service-invite-accept/v1";
@@ -217,74 +216,6 @@ export function signUninstallService(r: UninstallServiceRequest, irk: Keypair): 
 export function verifyUninstallService(r: UninstallServiceRequest, sig: Bytes, irkPub: Bytes): boolean {
   try {
     return ed.verify(sig, canonicalUninstallService(r), irkPub);
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Phone/laptop request to set an app's per-app environment variables.
- *
- * IRK-signed by the host — the SAME trust root as install/uninstall.
- * The owner sets `key=value` pairs on an app from the control surface;
- * they are injected into the deployed app's runtime environment and
- * sealed at rest on the box. The vibecoding model sees the env-var
- * NAMES (so generated code can reference them) but NEVER the values.
- *
- * Semantics depend on the route that carries it. `/api/services/:id/env`
- * stores exactly this map (an empty map clears all env). The screens
- * editor's `/env/set` merges it into what is stored (a client knows the
- * names but never the values, so it signs only the one it sets) and
- * `/env/unset` signs an empty map and drops one name. The map values are part
- * of the canonical bytes so a MITM can't swap a value against a
- * captured signature; the values are SECRET — the daemon never logs
- * them, never returns them on any surface, and seals them at rest.
- */
-export interface SetServiceEnvRequest {
-  serverId: ServerId;
-  creator: string;
-  slug: string;
-  /** Env pairs to store (see the route's semantics above). Values are SECRET. */
-  env: Record<string, string>;
-  issuedAt: number;
-}
-
-/**
- * Canonical bytes for a set-app-env order. The env map is serialized
- * with keys sorted so the byte string is deterministic regardless of
- * insertion order, then each `name=value` joined under the `|`
- * separator like every other envelope. Both name and value go into
- * the signed bytes (a value swap must invalidate the signature).
- */
-function canonicalSetServiceEnv(r: SetServiceEnvRequest): Bytes {
-  legacyFieldGuard("creator", r.creator);
-  legacyFieldGuard("slug", r.slug);
-  const pairs = Object.keys(r.env)
-    .sort()
-    .map((k) => {
-      legacyFieldGuard(`env-key:${k}`, k);
-      legacyFieldGuard(`env-value:${k}`, r.env[k]!);
-      return `${k}=${r.env[k]}`;
-    });
-  return new TextEncoder().encode(
-    [
-      TAG_SET_SERVICE_ENV,
-      r.serverId,
-      r.creator,
-      r.slug,
-      String(pairs.length),
-      ...pairs,
-      r.issuedAt,
-    ].join("|"),
-  );
-}
-
-export function signSetServiceEnv(r: SetServiceEnvRequest, irk: Keypair): Bytes {
-  return ed.sign(canonicalSetServiceEnv(r), irk.privateKey);
-}
-export function verifySetServiceEnv(r: SetServiceEnvRequest, sig: Bytes, irkPub: Bytes): boolean {
-  try {
-    return ed.verify(sig, canonicalSetServiceEnv(r), irkPub);
   } catch {
     return false;
   }

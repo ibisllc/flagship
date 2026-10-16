@@ -8,13 +8,14 @@ import {
   signJournalRequest,
   signPhoneOrder,
   signSetDeadManPolicy,
-  signSetServiceEnv,
+  signServiceEnvChange,
+  serviceEnvValueSha256,
   signUninstallService,
   type InstallServiceRequest,
   type JournalRequest,
   type PhoneOrder,
   type SetDeadManPolicy,
-  type SetServiceEnvRequest,
+  type ServiceEnvChange,
   type UninstallServiceRequest,
 } from "@flagship/protocol";
 import { pair } from "../lib/fleet.js";
@@ -202,15 +203,34 @@ export const core: Group = {
       return "installed + listed";
     });
     if (!installed) return;
-    await rec.check("set the app's env (owner-IRK signed) → 200", async () => {
-      const req: SetServiceEnvRequest = { serverId: fqdn, creator: user, slug, env: { GYM_PROBE: "ok" }, issuedAt: Date.now() };
-      const r = await postJson(`https://${fqdn}/api/services/${encodeURIComponent(serviceId)}/env`, { request: req, signature: bytesToHex(signSetServiceEnv(req, irk)) }, {}, 60_000);
-      assert(r.status === 200, `set-env ${r.status}: ${short(r.text)}`);
-      return "env applied";
+    const envChange = (op: "set" | "unset", name: string, value?: string): ServiceEnvChange => ({
+      serverId: fqdn,
+      serviceId,
+      op,
+      name,
+      valueSha256: value === undefined ? "" : serviceEnvValueSha256(value),
+      issuedAt: Date.now(),
+      nonce: bytesToHex(crypto.getRandomValues(new Uint8Array(16))),
     });
-    await rec.check("app env set rejects a forged signature", async () => {
-      const req: SetServiceEnvRequest = { serverId: fqdn, creator: user, slug, env: { X: "y" }, issuedAt: Date.now() };
-      const r = await postJson(`https://${fqdn}/api/services/${encodeURIComponent(serviceId)}/env`, { request: req, signature: "00".repeat(64) });
+    const envUrl = `https://${fqdn}/api/services/${encodeURIComponent(serviceId)}/env`;
+    await rec.check("set two env vars and unset one (owner-IRK signed) → each 200, and a replay is refused", async () => {
+      const a = envChange("set", "GYM_PROBE", "ok");
+      const sigA = bytesToHex(signServiceEnvChange(a, irk));
+      const r1 = await postJson(envUrl, { change: a, value: "ok", signature: sigA }, {}, 60_000);
+      assert(r1.status === 200, `set GYM_PROBE ${r1.status}: ${short(r1.text)}`);
+      const b = envChange("set", "GYM_OTHER", "x");
+      const r2 = await postJson(envUrl, { change: b, value: "x", signature: bytesToHex(signServiceEnvChange(b, irk)) }, {}, 60_000);
+      assert(r2.status === 200, `set GYM_OTHER ${r2.status}: ${short(r2.text)}`);
+      const u = envChange("unset", "GYM_OTHER");
+      const r3 = await postJson(envUrl, { change: u, signature: bytesToHex(signServiceEnvChange(u, irk)) }, {}, 60_000);
+      assert(r3.status === 200, `unset GYM_OTHER ${r3.status}: ${short(r3.text)}`);
+      const again = await postJson(envUrl, { change: a, value: "ok", signature: sigA });
+      assert(again.status >= 400 && again.status < 500, `a replayed change got ${again.status}`);
+      return "set, set, unset applied; replay refused";
+    });
+    await rec.check("app env change rejects a forged signature", async () => {
+      const c = envChange("set", "X", "y");
+      const r = await postJson(envUrl, { change: c, value: "y", signature: "00".repeat(64) });
       assert(r.status >= 400 && r.status < 500, `expected 4xx, got ${r.status}`);
       return `rejected ${r.status}`;
     });

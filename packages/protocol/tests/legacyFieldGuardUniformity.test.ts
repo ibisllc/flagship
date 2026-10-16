@@ -39,7 +39,6 @@ import {
   type ServiceEntitlement,
   type ServiceRename,
   type SetCustomDomain,
-  type SetServiceEnvRequest,
   type TotpDisable,
   type TotpEnrollBegin,
   type TotpEnrollConfirm,
@@ -74,7 +73,6 @@ import {
   signServiceEntitlement,
   signServiceRename,
   signSetCustomDomain,
-  signSetServiceEnv,
   signTotpDisable,
   signTotpEnrollBegin,
   signTotpEnrollConfirm,
@@ -355,25 +353,6 @@ describe("SEC-6 — service / recovery / lease / totp", () => {
         (r) => signUninstallService(r, kp),
       );
     }
-  });
-  it("SetServiceEnv.{creator,slug,env-key,env-value}", () => {
-    const base = (o: Partial<SetServiceEnvRequest> = {}): SetServiceEnvRequest => ({
-      serverId: "s",
-      creator: "c",
-      slug: "g",
-      env: { K: "v" },
-      issuedAt: NOW,
-      ...o,
-    });
-    for (const f of ["creator", "slug"] as const) {
-      bothBad<SetServiceEnvRequest>((bad) => base({ [f]: bad }), (r) => signSetServiceEnv(r, kp));
-    }
-    // env key
-    expect(() => signSetServiceEnv(base({ env: { ["A|B"]: "v" } }), kp)).toThrow();
-    expect(() => signSetServiceEnv(base({ env: { ["AB"]: "v" } }), kp)).toThrow();
-    // env value
-    expect(() => signSetServiceEnv(base({ env: { K: "v|w" } }), kp)).toThrow();
-    expect(() => signSetServiceEnv(base({ env: { K: "vw" } }), kp)).toThrow();
   });
   it("UpdatePull.{creator,slug,since}", () => {
     for (const f of ["creator", "slug", "since"] as const) {

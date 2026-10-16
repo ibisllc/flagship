@@ -19,11 +19,11 @@ import type { SwkOps } from "../src/keyCustodian.js";
 import {
   ed,
   signInstallService,
-  signSetServiceEnv,
+  serviceEnvValueSha256,
+  signServiceEnvChange,
   signUninstallService,
-  verifySetServiceEnv,
   type Keypair,
-  type SetServiceEnvRequest,
+  type ServiceEnvChange,
 } from "@flagship/protocol";
 import {
   FileAppEnvStore,
@@ -43,6 +43,22 @@ import type { InstalledService } from "../src/servicePlatform.js";
 const SECRET = "sk-user-private-DO-NOT-LEAK-1234567890";
 const HOST = "alice";
 const HOST_FQDN = `home.${HOST}.flagship.services`;
+
+let nonceCounter = 0;
+/** A fresh change for alice--envapp; a set carries the hash of `value`. */
+function envChange(op: "set" | "unset", name: string, value?: string, over: Partial<ServiceEnvChange> = {}): ServiceEnvChange {
+  nonceCounter += 1;
+  return {
+    serverId: HOST_FQDN,
+    serviceId: "alice--envapp",
+    op,
+    name,
+    valueSha256: op === "set" ? serviceEnvValueSha256(value ?? "") : "",
+    issuedAt: Date.now(),
+    nonce: nonceCounter.toString(16).padStart(32, "0"),
+    ...over,
+  };
+}
 
 function makeKey(): Keypair {
   const priv = new Uint8Array(32);
@@ -174,7 +190,7 @@ describe("FileAppEnvStore — sealed at rest + persistence", () => {
 
 // ── Signed set-app-env order (invariant b) ────────────────────────────
 
-describe("ServicePlatform.setEnv — owner-signed order accepted; unsigned/wrong-signer rejected", () => {
+describe("ServicePlatform.changeEnv — one owner-signed change, never replayed", () => {
   function build() {
     const hostIrk = makeKey();
     const { runner } = fakeRunner();
@@ -185,75 +201,105 @@ describe("ServicePlatform.setEnv — owner-signed order accepted; unsigned/wrong
       appRunner: runner,
       dataProvisioner: null,
       envStore: store,
+      serverFqdn: HOST_FQDN,
     });
-    return { platform, hostIrk, store };
+    const apply = (c: ServiceEnvChange, value?: string, key: Keypair = hostIrk) =>
+      platform.changeEnv({ change: c, ...(value !== undefined ? { value } : {}), signature: signServiceEnvChange(c, key) });
+    return { platform, hostIrk, store, apply };
   }
 
-  function order(env: Record<string, string>): SetServiceEnvRequest {
-    return {
-      serverId: HOST_FQDN,
-      creator: HOST,
-      slug: "envapp",
-      env,
-      issuedAt: Date.now(),
-    };
-  }
-
-  // Justification (invariant b, positive): a valid owner-signed order
-  // is accepted and stored sealed.
-  it("accepts a valid host-IRK-signed order and stores it", async () => {
-    const { platform, hostIrk, store } = build();
-    const r = order({ OPENAI_API_KEY: SECRET });
-    const res = await platform.setEnv({
-      request: r,
-      signature: signSetServiceEnv(r, hostIrk),
-      verify: verifySetServiceEnv,
-    });
-    expect(res.ok).toBe(true);
+  // Justification (invariant b, positive): a valid owner-signed change
+  // is accepted and stored sealed; a second set keeps the first.
+  it("sets, keeps other variables, and unsets only the signed name", async () => {
+    const { store, apply } = build();
+    expect((await apply(envChange("set", "OPENAI_API_KEY", SECRET), SECRET)).ok).toBe(true);
+    expect((await apply(envChange("set", "REGION", "us"), "us")).ok).toBe(true);
+    expect(await store.get("alice--envapp")).toEqual({ OPENAI_API_KEY: SECRET, REGION: "us" });
+    expect((await apply(envChange("unset", "REGION"))).ok).toBe(true);
     expect(await store.get("alice--envapp")).toEqual({ OPENAI_API_KEY: SECRET });
   });
 
-  // Justification (invariant b, negative): a wrong-signer order is
+  // Justification: the replay gap the old unset had: a captured change is
+  // spent once, set or unset.
+  it("refuses a replayed change, so it can't undo a later one", async () => {
+    const { platform, store, hostIrk, apply } = build();
+    const first = envChange("set", "K", "v1");
+    const sig = signServiceEnvChange(first, hostIrk);
+    expect((await platform.changeEnv({ change: first, value: "v1", signature: sig })).ok).toBe(true);
+    expect((await apply(envChange("set", "K", "v2"), "v2")).ok).toBe(true);
+    const again = await platform.changeEnv({ change: first, value: "v1", signature: sig });
+    expect(again).toEqual({ ok: false, reason: "this change was already applied" });
+    expect(await store.get("alice--envapp")).toEqual({ K: "v2" });
+    const unset = envChange("unset", "K");
+    const usig = signServiceEnvChange(unset, hostIrk);
+    expect((await platform.changeEnv({ change: unset, signature: usig })).ok).toBe(true);
+    expect((await apply(envChange("set", "K", "v3"), "v3")).ok).toBe(true);
+    expect((await platform.changeEnv({ change: unset, signature: usig })).ok).toBe(false);
+    expect(await store.get("alice--envapp")).toEqual({ K: "v3" });
+  });
+
+  // Justification: an unset's signature names its variable, so it can't be
+  // pointed at another one.
+  it("refuses a change whose name differs from the signed one", async () => {
+    const { platform, store, hostIrk, apply } = build();
+    await apply(envChange("set", "A", "1"), "1");
+    await apply(envChange("set", "B", "2"), "2");
+    const unsetA = envChange("unset", "A");
+    const sig = signServiceEnvChange(unsetA, hostIrk);
+    expect((await platform.changeEnv({ change: { ...unsetA, name: "B" }, signature: sig })).ok).toBe(false);
+    expect(await store.get("alice--envapp")).toEqual({ A: "1", B: "2" });
+  });
+
+  // Justification (invariant b, negative): a wrong-signer change is
   // REJECTED and NOTHING is stored.
-  it("rejects a wrong-signer order; nothing is stored", async () => {
-    const { platform, store } = build();
-    const attacker = makeKey();
-    const r = order({ OPENAI_API_KEY: SECRET });
-    const res = await platform.setEnv({
-      request: r,
-      signature: signSetServiceEnv(r, attacker),
-      verify: verifySetServiceEnv,
-    });
+  it("rejects a wrong-signer change; nothing is stored", async () => {
+    const { store, apply } = build();
+    const res = await apply(envChange("set", "OPENAI_API_KEY", SECRET), SECRET, makeKey());
     expect(res.ok).toBe(false);
     expect(await store.get("alice--envapp")).toBeNull();
   });
 
-  // Justification (invariant b, negative): a tampered (unsigned) body
-  // is rejected; nothing stored.
-  it("rejects a value tampered after signing; nothing stored", async () => {
-    const { platform, hostIrk, store } = build();
-    const r = order({ OPENAI_API_KEY: SECRET });
-    const sig = signSetServiceEnv(r, hostIrk);
-    const res = await platform.setEnv({
-      request: { ...r, env: { OPENAI_API_KEY: "sk-swapped" } },
-      signature: sig,
-      verify: verifySetServiceEnv,
-    });
-    expect(res.ok).toBe(false);
+  // Justification: the value must be the one whose hash was signed.
+  it("rejects a value swapped after signing; nothing stored", async () => {
+    const { apply, store } = build();
+    const res = await apply(envChange("set", "OPENAI_API_KEY", SECRET), "sk-swapped");
+    expect(res).toEqual({ ok: false, reason: "the value doesn't match the signed change" });
     expect(await store.get("alice--envapp")).toBeNull();
   });
 
-  // Justification: reserved FLAGSHIP_ names can never be set by an owner.
-  it("rejects a reserved FLAGSHIP_ env name", async () => {
-    const { platform, hostIrk, store } = build();
-    const r = order({ FLAGSHIP_APP_ID: "spoof" });
-    const res = await platform.setEnv({
-      request: r,
-      signature: signSetServiceEnv(r, hostIrk),
-      verify: verifySetServiceEnv,
-    });
-    expect(res.ok).toBe(false);
+  it("rejects a stale change, one for another server, and a reserved FLAGSHIP_ name", async () => {
+    const { platform, apply, store } = build();
+    expect((await apply(envChange("set", "K", "v", { issuedAt: Date.now() - 10 * 60_000 }), "v")).ok).toBe(false);
+    expect((await apply(envChange("set", "K", "v", { serverId: "home2.alice.flagship.services" }), "v")).ok).toBe(false);
+    // A FLAGSHIP_ name can't even be signed, and the box refuses one sent anyway.
+    expect(() => apply(envChange("set", "FLAGSHIP_APP_ID", "spoof"), "spoof")).toThrow(/reserved/);
+    const forged = await platform.changeEnv({ change: envChange("set", "FLAGSHIP_APP_ID", "spoof"), value: "spoof", signature: new Uint8Array(64) });
+    expect(forged.ok).toBe(false);
     expect(await store.get("alice--envapp")).toBeNull();
+  });
+
+  it("spent nonces survive a restart (the file store)", async () => {
+    const { fileUsedNonceStore } = await import("../src/updateConsumer.js");
+    const dir = await mkdtemp(join(tmpdir(), "env-nonces-"));
+    try {
+      const hostIrk = makeKey();
+      const store = new InMemoryAppEnvStore();
+      const make = () =>
+        new ServicePlatform({
+          host: { username: HOST, irkPub: hostIrk.publicKey },
+          swk: fakeSwk(),
+          appRunner: fakeRunner().runner,
+          dataProvisioner: null,
+          envStore: store,
+          envNonceStore: fileUsedNonceStore(join(dir, "nonces.json")),
+        });
+      const c = envChange("set", "K", "v");
+      const sig = signServiceEnvChange(c, hostIrk);
+      expect((await make().changeEnv({ change: c, value: "v", signature: sig })).ok).toBe(true);
+      expect((await make().changeEnv({ change: c, value: "v", signature: sig })).ok).toBe(false);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -427,18 +473,8 @@ describe("export/share artifact — declared names only, never a value", () => {
       envStore: store,
     });
     // Owner sets a secret env on the app.
-    const setReq: SetServiceEnvRequest = {
-      serverId: HOST_FQDN,
-      creator: HOST,
-      slug: "envapp",
-      env: { OPENAI_API_KEY: SECRET },
-      issuedAt: Date.now(),
-    };
-    await platform.setEnv({
-      request: setReq,
-      signature: signSetServiceEnv(setReq, hostIrk),
-      verify: verifySetServiceEnv,
-    });
+    const setChange = envChange("set", "OPENAI_API_KEY", SECRET);
+    await platform.changeEnv({ change: setChange, value: SECRET, signature: signServiceEnvChange(setChange, hostIrk) });
 
     const session = new VibeCodeSession({ username: HOST, serverFqdn: HOST_FQDN });
     session.feedAssistant(
@@ -501,20 +537,14 @@ describe("set-app-env HTTP — response never echoes a value", () => {
       envStore: store,
     });
     const handle = buildServiceHttpHandlers({ platform, hostIrk: null });
-    const r: SetServiceEnvRequest = {
-      serverId: HOST_FQDN,
-      creator: HOST,
-      slug: "envapp",
-      env: { OPENAI_API_KEY: SECRET },
-      issuedAt: Date.now(),
-    };
-    const sig = signSetServiceEnv(r, makeKey()); // attacker key
+    const c = envChange("set", "OPENAI_API_KEY", SECRET);
+    const sig = signServiceEnvChange(c, makeKey()); // attacker key
     const res = await handle({
       method: "POST",
       path: "/api/services/alice--envapp/env",
       headers: {},
       body: Buffer.from(
-        JSON.stringify({ request: r, signature: Buffer.from(sig).toString("hex") }),
+        JSON.stringify({ change: c, value: SECRET, signature: Buffer.from(sig).toString("hex") }),
       ),
     });
     expect(res).not.toBeNull();
@@ -538,19 +568,13 @@ describe("set-app-env HTTP — response never echoes a value", () => {
       envStore: store,
     });
     const handle = buildServiceHttpHandlers({ platform, hostIrk: null });
-    const r: SetServiceEnvRequest = {
-      serverId: HOST_FQDN,
-      creator: HOST,
-      slug: "envapp",
-      env: { OPENAI_API_KEY: SECRET },
-      issuedAt: Date.now(),
-    };
+    const c = envChange("set", "OPENAI_API_KEY", SECRET);
     const res = await handle({
       method: "POST",
       path: "/api/services/alice--envapp/env",
       headers: {},
       body: Buffer.from(
-        JSON.stringify({ request: r, signature: Buffer.from(signSetServiceEnv(r, hostIrk)).toString("hex") }),
+        JSON.stringify({ change: c, value: SECRET, signature: Buffer.from(signServiceEnvChange(c, hostIrk)).toString("hex") }),
       ),
     });
     expect(res!.status).toBe(200);
