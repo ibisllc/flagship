@@ -114,6 +114,7 @@ public final class LiveFrontPageClient: FrontPageClient, @unchecked Sendable {
     }
 }
 
+#if DEBUG
 /// In-memory mock: records what was set (so tests can assert wire shapes)
 /// and returns configurable state + options.
 public final class MockFrontPageClient: FrontPageClient, @unchecked Sendable {
@@ -158,3 +159,4 @@ public final class MockFrontPageClient: FrontPageClient, @unchecked Sendable {
         state = FrontPageState(label: label.isEmpty ? nil : label, active: !label.isEmpty)
     }
 }
+#endif

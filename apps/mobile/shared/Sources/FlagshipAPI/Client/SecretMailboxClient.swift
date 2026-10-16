@@ -1089,6 +1089,7 @@ public final class LiveSecretMailboxClient: SecretMailboxClient, @unchecked Send
 
 // MARK: - Mock
 
+#if DEBUG
 /// In-memory mailbox for previews / the unconfigured default. Returns an
 /// empty inbox so the approval surface renders the empty state without a
 /// network call.
@@ -1224,3 +1225,4 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
         decommissionDeposits.append((serverDomain, body))
     }
 }
+#endif

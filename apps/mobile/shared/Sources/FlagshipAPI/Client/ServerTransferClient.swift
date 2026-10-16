@@ -263,6 +263,7 @@ public final class LiveServerTransferClient: ServerTransferClient, @unchecked Se
 
 // MARK: - Mock
 
+#if DEBUG
 /// In-memory broker for previews / tests. Records the giver's offer + disk-key
 /// deposit and serves a scriptable claim/disk-key to the acquirer/giver poll.
 public final class MockServerTransferClient: ServerTransferClient, @unchecked Sendable {
@@ -313,3 +314,4 @@ public final class MockServerTransferClient: ServerTransferClient, @unchecked Se
         rehomeAuths.append((serverDomain, body))
     }
 }
+#endif

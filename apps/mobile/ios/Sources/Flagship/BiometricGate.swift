@@ -78,7 +78,9 @@ public struct BiometricGate {
         // unreachable in the no-backend gym. The bypass emits NO crypto —
         // load-bearing ceremonies (keychain unseal / SE ECDH) still require
         // the real thing. Production never sets the flag.
+        #if DEBUG
         if GymSeams.bypassBiometricGates { return LAContext() }
+        #endif
         let context = LAContext()
         var error: NSError?
         // `.deviceOwnerAuthentication` = biometrics OR the device passcode, so a

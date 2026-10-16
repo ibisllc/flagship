@@ -21,7 +21,7 @@ import FlagshipAPI
 ///         │     → JoinAccountScreen (the incoming pairing join)
 ///         └─ Sign in with your account name (username-first)
 ///           → preflight /api/account/resolve (200 always):
-///             ├─ demo    → DemoFixtures.activate (attach a new device)
+///             ├─ demo    → DemoAccount.activate (attach a new device)
 ///             ├─ unknown → inline "no account by that name" state
 ///             └─ single/multi → RealAccountLoginScreen — the Phase-3
 ///                       state machine (RealAccountLoginViewModel):
@@ -118,7 +118,7 @@ public struct OnboardingFlow: View {
                     // (nil = its scanner; a link connects at once).
                     ConnectAccountScreen(
                         onDemo: { username, demoServer in
-                            DemoFixtures.activate(
+                            DemoAccount.activate(
                                 app,
                                 username: username,
                                 demoServer: demoServer

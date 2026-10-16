@@ -14,6 +14,7 @@ public protocol BrowserStream: AnyObject, Sendable {
     func close()
 }
 
+#if DEBUG
 /// In-memory stream for tests + previews. `incoming` finishes the
 /// moment `close()` is called or `finish()` is invoked. `send` is a
 /// no-op that just records the most recent input for assertions.
@@ -44,3 +45,4 @@ public final class MockBrowserStream: BrowserStream, @unchecked Sendable {
         continuation.finish()
     }
 }
+#endif

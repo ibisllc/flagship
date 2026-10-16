@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 import FlagshipAPI
 import FlagshipCore
@@ -27,3 +28,4 @@ extension GymSweepSeams {
         }
     }
 }
+#endif

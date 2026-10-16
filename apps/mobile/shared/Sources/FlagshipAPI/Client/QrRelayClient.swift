@@ -154,6 +154,7 @@ public final class LiveQrRelayClient: QrRelayClient, @unchecked Sendable {
 
 // MARK: - Mock
 
+#if DEBUG
 /// Scripted mock relay for unit + UI tests. `scriptedSequence` controls
 /// what frames the consumer will see in order. Default flow: ack on
 /// openAndHello, delivered on deliver.
@@ -194,3 +195,4 @@ public final class MockQrRelayClient: QrRelayClient, @unchecked Sendable {
 
     public func close() async {}
 }
+#endif

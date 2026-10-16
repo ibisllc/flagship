@@ -53,6 +53,7 @@ public extension EnvironmentValues {
     }
 }
 
+#if DEBUG
 /// Gym-only (`-smoke-mode -smoke-access-fixture`): a members list for the demo
 /// apps, so Access control renders the account's devices, a co-manager,
 /// people, a group and their ranks without a keystore or a box.
@@ -144,3 +145,4 @@ public enum ServiceAccessFixture {
             deviceNames: [ipadDeviceId: "Harry's iPad", thisDeviceId: "Harry's iPhone"])
     }
 }
+#endif

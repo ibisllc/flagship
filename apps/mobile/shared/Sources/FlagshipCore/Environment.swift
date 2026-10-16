@@ -2,10 +2,14 @@ import SwiftUI
 import FlagshipAPI
 
 /// EnvironmentValues extension so any view can read the live ScreensClient
-/// via `@Environment(\.screensClient)`. The App-level shell injects either
-/// a MockScreensClient (dev/preview) or a LiveScreensClient (paired pod).
+/// via `@Environment(\.screensClient)`. The App-level shell injects the
+/// LiveScreensClient; Debug builds default to the mock for tests and the gym.
 private struct ScreensClientKey: EnvironmentKey {
+#if DEBUG
     static let defaultValue: any ScreensClient = MockScreensClient()
+#else
+    static let defaultValue: any ScreensClient = LiveScreensClient(store: SessionStore())
+#endif
 }
 
 public extension EnvironmentValues {
@@ -18,7 +22,11 @@ public extension EnvironmentValues {
 /// Pre-pairing endpoints on flagshipserver.com (the Cloudflare Worker).
 /// Used by onboarding + recovery flows before a session token exists.
 private struct FlagshipServerClientKey: EnvironmentKey {
+#if DEBUG
     static let defaultValue: any FlagshipServerClient = MockFlagshipServerClient()
+#else
+    static let defaultValue: any FlagshipServerClient = LiveFlagshipServerClient()
+#endif
 }
 
 public extension EnvironmentValues {
@@ -31,7 +39,11 @@ public extension EnvironmentValues {
 /// QR-relay WebSocket peer of `flagshipserver.com/qr-pipe/<sid>`.
 /// Used by the v2 create-server flow.
 private struct QrRelayClientKey: EnvironmentKey {
+#if DEBUG
     static let defaultValue: any QrRelayClient = MockQrRelayClient()
+#else
+    static let defaultValue: any QrRelayClient = LiveQrRelayClient()
+#endif
 }
 
 public extension EnvironmentValues {
@@ -45,7 +57,11 @@ public extension EnvironmentValues {
 /// admit). Distinct from `qrRelayClient` (one-shot phone→browser create-
 /// server delivery). Defaults to the in-process Mock.
 private struct PairingRelayClientKey: EnvironmentKey {
+#if DEBUG
     static let defaultValue: any PairingRelayClient = MockPairingRelayClient()
+#else
+    static let defaultValue: any PairingRelayClient = UnavailablePairingRelayClient()
+#endif
 }
 
 public extension EnvironmentValues {
@@ -60,7 +76,11 @@ public extension EnvironmentValues {
 /// requests. Defaults to the in-process Mock (empty inbox) so previews + the
 /// unconfigured shell render the empty state with no network call.
 private struct SecretMailboxClientKey: EnvironmentKey {
+#if DEBUG
     static let defaultValue: any SecretMailboxClient = MockSecretMailboxClient()
+#else
+    static let defaultValue: any SecretMailboxClient = LiveSecretMailboxClient()
+#endif
 }
 
 public extension EnvironmentValues {
@@ -93,7 +113,11 @@ public extension EnvironmentValues {
 /// `/api/deadman/*`) over the box-pinned session. Defaults to the in-process
 /// Mock (records sends, never auto-affirms) so previews/tests are inert.
 private struct LockPowerClientKey: EnvironmentKey {
+#if DEBUG
     static let defaultValue: any LockPowerClient = MockLockPowerClient()
+#else
+    static let defaultValue: any LockPowerClient = LiveLockPowerClient(urlSession: .shared)
+#endif
 }
 
 public extension EnvironmentValues {
@@ -108,7 +132,11 @@ public extension EnvironmentValues {
 /// canonical pipe. Defaults to the in-process Mock so previews/tests are
 /// inert.
 private struct FrontPageClientKey: EnvironmentKey {
+#if DEBUG
     static let defaultValue: any FrontPageClient = MockFrontPageClient()
+#else
+    static let defaultValue: any FrontPageClient = LiveFrontPageClient(urlSession: .shared)
+#endif
 }
 
 public extension EnvironmentValues {
@@ -123,7 +151,11 @@ public extension EnvironmentValues {
 /// relay when a box is reachable. Defaults to the in-process Mock (returns nil =
 /// "no fresher source"), so previews/tests keep the relay value untouched.
 private struct LeadsClientKey: EnvironmentKey {
+#if DEBUG
     static let defaultValue: any LeadsClient = MockLeadsClient()
+#else
+    static let defaultValue: any LeadsClient = LiveLeadsClient(urlSession: .shared)
+#endif
 }
 
 public extension EnvironmentValues {
@@ -139,7 +171,11 @@ public extension EnvironmentValues {
 /// create/list/revoke) ride a public-CA session. Defaults to the in-process
 /// Mock so previews/tests are inert.
 private struct ServiceAccessClientKey: EnvironmentKey {
+#if DEBUG
     static let defaultValue: any ServiceAccessClient = MockServiceAccessClient()
+#else
+    static let defaultValue: any ServiceAccessClient = LiveServiceAccessClient(boxSession: .shared)
+#endif
 }
 
 public extension EnvironmentValues {
@@ -155,7 +191,11 @@ public extension EnvironmentValues {
 /// in-process Mock so previews/tests are inert (they record sends, never hit a
 /// network).
 private struct ServiceUninstallClientKey: EnvironmentKey {
+#if DEBUG
     static let defaultValue: any ServiceUninstallClient = MockServiceUninstallClient()
+#else
+    static let defaultValue: any ServiceUninstallClient = LiveServiceUninstallClient(urlSession: .shared)
+#endif
 }
 
 public extension EnvironmentValues {
@@ -170,7 +210,11 @@ public extension EnvironmentValues {
 /// (the namespace-migration broker), not a box-pinned pipe. Defaults to the
 /// in-process Mock so previews/tests are inert.
 private struct ServerTransferClientKey: EnvironmentKey {
+#if DEBUG
     static let defaultValue: any ServerTransferClient = MockServerTransferClient()
+#else
+    static let defaultValue: any ServerTransferClient = LiveServerTransferClient()
+#endif
 }
 
 public extension EnvironmentValues {
@@ -186,7 +230,11 @@ public extension EnvironmentValues {
 /// not a box-pinned pipe. Defaults to the in-process Mock so previews/tests
 /// are inert.
 private struct ServerMigrationClientKey: EnvironmentKey {
+#if DEBUG
     static let defaultValue: any ServerMigrationClient = MockServerMigrationClient()
+#else
+    static let defaultValue: any ServerMigrationClient = LiveServerMigrationClient()
+#endif
 }
 
 public extension EnvironmentValues {

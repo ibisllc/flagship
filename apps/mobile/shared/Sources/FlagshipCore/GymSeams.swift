@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 
 /// GYM-ONLY static overrides (same pattern as
@@ -52,3 +53,4 @@ public enum GymSeams {
     /// fixture signs admin orders with.
     public static let gymAdminRootSeed = Data(repeating: 9, count: 32)
 }
+#endif

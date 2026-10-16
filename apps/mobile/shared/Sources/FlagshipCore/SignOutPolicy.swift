@@ -27,6 +27,7 @@ public enum SignOutPolicy: Equatable, Sendable {
     /// so it's a normal Tier-2/3 action — `.allowed` / `.blockedNoRecovery`.)
     case deletionCeremony
 
+    #if DEBUG
     /// GYM-ONLY override. The UI gym needs to exercise the recovery-gating UX
     /// (greyed tier-2/3 buttons → recovery-required toast, D3-C1 / §7-A seed
     /// state), but a `-smoke-mode` session is demo-classified and therefore
@@ -37,6 +38,7 @@ public enum SignOutPolicy: Equatable, Sendable {
     /// (the only writer is the smoke-mode launch seam), so the demo-exemption is
     /// unchanged for real users.
     public nonisolated(unsafe) static var gymForceBlockNoRecovery = false
+    #endif
 
     /// `isLastDevice` distinguishes the two no-recovery shapes (docs §2):
     /// when there is NO cloud recovery, a wipe on the LAST device is account
@@ -52,7 +54,9 @@ public enum SignOutPolicy: Equatable, Sendable {
         isDemoAccount: Bool = false,
         isLastDevice: Bool = false
     ) -> SignOutPolicy {
+        #if DEBUG
         if gymForceBlockNoRecovery { return .blockedNoRecovery }
+        #endif
         if isDemoAccount { return .allowed }
         if hasCloudRecovery { return .allowed }
         return isLastDevice ? .deletionCeremony : .blockedNoRecovery

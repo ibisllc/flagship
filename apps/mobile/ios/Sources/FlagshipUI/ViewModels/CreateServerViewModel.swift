@@ -184,7 +184,7 @@ public final class CreateServerViewModel {
         swkDepositStore: PendingSwkDepositStore = PendingSwkDepositStore(),
         pairingDepositStore: PendingPairingDepositStore = PendingPairingDepositStore(),
         cgkDepositStore: PendingCgkDepositStore = PendingCgkDepositStore(),
-        mailbox: any SecretMailboxClient = MockSecretMailboxClient(),
+        mailbox: any SecretMailboxClient = DefaultClients.secretMailbox(),
         sessionStore: any SessionStoring = SessionStore(),
         adminRootPubHex: @escaping @MainActor () -> String? = { Keystore.hasAdminRoot ? Keystore.adminRootPubHex() : nil },
         adminRootSigner: @escaping (String) async throws -> Curve25519.Signing.PrivateKey = { reason in

@@ -104,7 +104,7 @@ final class SignOutPolicyTests: XCTestCase {
         func onSignOut() {
             guard SignOutPolicy.evaluate(
                 hasCloudRecovery: app.hasCloudRecovery,
-                isDemoAccount: true // !dev.useLiveClient — the mock/demo client
+                isDemoAccount: true // a demo account (or the mock gym session)
             ) == .allowed else { return }
             wiped = true
             app.signOut()

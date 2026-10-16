@@ -492,6 +492,7 @@ public final class LiveServiceAccessClient: ServiceAccessClient, @unchecked Send
     }
 }
 
+#if DEBUG
 /// In-memory mock for tests + previews: records writes, returns configurable
 /// state / invite rows, and mock-binds on redeem.
 public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Sendable {
@@ -655,3 +656,4 @@ public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Send
         try maybeThrow()
     }
 }
+#endif

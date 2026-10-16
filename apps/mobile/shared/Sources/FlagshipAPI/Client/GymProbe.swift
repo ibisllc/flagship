@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 import Observation
 
@@ -32,3 +33,4 @@ public final class GymProbe {
     /// The accessibility label of the `gym-probe` element.
     public var label: String { lines.isEmpty ? "none" : lines.joined(separator: "\n") }
 }
+#endif

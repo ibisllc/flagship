@@ -100,7 +100,13 @@ public enum ServerShareCopy {
 /// render these with no backend, for screenshots and the gym.
 /// `-smoke-share-route owner|sheet|accept|home|member|member-view` opens one
 /// screen (`member` is the Can manage share, `member-view` the Can view one).
+/// Debug builds only: Release has no fixtures and is never in this mode.
 public enum ServerShareDemo {
+    #if !DEBUG
+    public static let isOn = false
+    public static let route: String? = nil
+    public static func initialRoute(pods: [PodInfo]) -> HomeRoute? { nil }
+    #else
     private static var args: [String] { ProcessInfo.processInfo.arguments }
 
     public static var isOn: Bool { args.contains("-smoke-mode") && args.contains("-smoke-shares") }
@@ -183,6 +189,7 @@ public enum ServerShareDemo {
                                                     nonce: Data(repeating: 9, count: 32), issuedAt: 1),
                              expiresAt: nil)
     }
+    #endif
 }
 
 /// The live clients and Keystore-backed keys.
@@ -282,10 +289,12 @@ public final class ShareServerCardModel {
     /// `allowAuth`: the owner asked (pull to refresh, "Show invitations"), so
     /// reading the invitations may prompt Face ID.
     public func load(allowAuth: Bool = false) async {
+        #if DEBUG
         if demo {
             state = .loaded(OwnerSharesSnapshot(rows: ServerShareDemo.ownerRows(), invitationsRead: true, serverAnswered: true))
             return
         }
+        #endif
         guard let flow else { return }
         if state.value == nil { state = .loading }
         do {
@@ -299,10 +308,12 @@ public final class ShareServerCardModel {
     }
 
     public func loadActivity() async {
+        #if DEBUG
         if demo {
             activity = .loaded(ServerShareDemo.activity())
             return
         }
+        #endif
         guard let flow, let token = await ownerToken() else { return }
         do {
             activity = .loaded(try await flow.activity(serverDomain: serverDomain, ownerToken: token))
@@ -312,7 +323,9 @@ public final class ShareServerCardModel {
     }
 
     public func create(_ draft: ShareDraft) async -> CreatedShare? {
+        #if DEBUG
         if demo { return CreatedShare(shareId: String(repeating: "ab", count: 16), link: ServerShareDemo.link, expiresAt: 0) }
+        #endif
         guard let flow, busy == nil else { return nil }
         busy = "create"
         errorMessage = nil
@@ -436,11 +449,13 @@ public final class SharedWithMeStore {
         self.makeScreensClient = makeScreensClient
         self.pushRegistry = pushRegistry
         self.pushToken = pushToken
+        #if DEBUG
         if demo {
             let sessions = ServerShareDemo.sessions()
             items = ServerShareDemo.entries().map { Item(entry: $0, status: .ready, session: sessions[$0.shareId]) }
             loaded = true
         }
+        #endif
     }
 
     public var rows: [SharedServerRow] {
@@ -526,12 +541,14 @@ public final class SharedWithMeStore {
     }
 
     public func screensClient(for shareId: String, forceNew: Bool = false) async throws -> any ScreensClient {
+        #if DEBUG
         if demo {
             let m = MockScreensClient()
             m.simulatedLatency = 0
             m.podContext = item(shareId).map { ServerShareNames.serverLabel(fromDomain: $0.entry.serverDomain) } ?? "garage"
             return m
         }
+        #endif
         let s = try await session(for: shareId, forceNew: forceNew)
         guard let it = item(shareId) else { throw ServerShareFlowError.shareEnded }
         return makeScreensClient(it.entry.serverDomain.lowercased(), s.token)
@@ -556,12 +573,14 @@ public final class SharedWithMeStore {
 
     /// The box's view of this share, with whether it may update the server.
     public func me(_ shareId: String) async throws -> ShareMeResponse {
+        #if DEBUG
         if demo {
             let s = item(shareId)?.session
             return ShareMeResponse(shareId: shareId, level: s?.level ?? .view, unlockAtBoot: s?.unlockAtBoot ?? false,
                                    seeAppData: s?.seeAppData ?? false, serverDomain: item(shareId)?.entry.serverDomain ?? "",
                                    canUpdate: s?.level == .manage)
         }
+        #endif
         guard let flow, let it = item(shareId) else { throw ServerShareFlowError.shareEnded }
         let s = try await session(for: shareId)
         return try await flow.client.boxMe(serverDomain: it.entry.serverDomain.lowercased(), shareToken: s.token)
@@ -595,7 +614,9 @@ public final class SharedWithMeStore {
     // MARK: Start-up approval
 
     public func pendingStartups(_ shareId: String) async throws -> [VerifiedShareStartup] {
+        #if DEBUG
         if demo { return ServerShareDemo.route == "member" ? [ServerShareDemo.startup] : [] }
+        #endif
         guard let flow, let it = item(shareId), keysUnlocked() else { return [] }
         let stk: String
         if let s = stks[shareId] { stk = s } else {
@@ -705,12 +726,14 @@ public final class ShareAcceptModel {
     }
 
     public func open(shareId: String, secretHex: String) async {
+        #if DEBUG
         if demo {
             phase = ServerShareDemo.route == "accept"
                 ? .code(AcceptedShare(entry: ServerShareDemo.entries()[0], sas: "482 913"), owner: ServerShareDemo.invitation.ownerName)
                 : .invitation(ServerShareDemo.invitation)
             return
         }
+        #endif
         guard let flow else { return }
         phase = .opening
         do {

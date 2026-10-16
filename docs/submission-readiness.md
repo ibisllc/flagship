@@ -15,7 +15,7 @@
 6. **CI grep-gate** that FAILS a *release* build if the `debug`-user or burn-time-LUKS constants are present. **[agent]**
 7. **Guard/disarm the prod-wipe script** — per-env confirmation token + prod row-count dry-run + audit-logged admin-only path (or remove it from the deployable surface). **[agent]**
 8. **Remove `DEV_LATE_LOG` + the W12 debug endpoints** from the release surface (keep on dev). **[agent]**
-9. **Gate the demo/dev flips** (3-tap live/mock toggle + DemoFixtures) behind the release flag — keep them for dev/gym. **[agent]**
+9. **Gate the demo/dev flips** (3-tap live/mock toggle + DemoFixtures) behind the release flag — keep them for dev/gym. **Done on iOS and the webapp (2026-10-16): mocks, fixtures and gym seams are `#if DEBUG`, developer mode and `?debug=1` are gone; `scripts/ios-release-clean.mjs`.**
 10. **Builder reburn:** remove the `debug`/`flagship` console user + burn-time LUKS passphrase + re-enable the `luksRemoveKey` guard. **[agent code + owner reburn]**
 
 ## P2 — Store onboarding (the actual submission gate)

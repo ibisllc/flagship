@@ -56,7 +56,7 @@ public final class WipeRestartViewModel {
 
     public init(
         server: FlagshipServerClient,
-        webAuthn: WebAuthnProvider = MockWebAuthnProvider(),
+        webAuthn: WebAuthnProvider = DefaultClients.webAuthn(),
         username: @escaping () -> String?
     ) {
         self.server = server

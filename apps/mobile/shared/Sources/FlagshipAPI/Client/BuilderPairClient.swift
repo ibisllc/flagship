@@ -257,6 +257,7 @@ public final class LiveBuilderPairClient: BuilderPairClient, @unchecked Sendable
 
 // MARK: - Mock
 
+#if DEBUG
 /// Scripted mock for tests. Push inbound events with `emit(_:)`; outbound
 /// frames are captured in `sent`.
 public final class MockBuilderPairClient: BuilderPairClient, @unchecked Sendable {
@@ -284,3 +285,4 @@ public final class MockBuilderPairClient: BuilderPairClient, @unchecked Sendable
     /// Convenience accessors for assertions.
     public var sentJSON: [String] { sent.map { $0.json } }
 }
+#endif

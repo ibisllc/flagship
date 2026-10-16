@@ -7,12 +7,11 @@ import XCTest
 /// the gym test env and drives the REAL app against a REAL gym box.
 ///
 /// LIVE LAUNCH SEAM (§7-F): each test launches with `-apex-host
-/// gym.flagshipserver.com`. FlagshipApp.applyApexHostArgIfPresent() retargets
+/// gym.flagshipserver.com`. GymLaunch.applyApexHostArg() (Debug builds) retargets
 /// every live client at that apex BEFORE the clients are constructed
-/// (DeveloperSettings.applyApexOverride → Endpoints.setOverride), and
-/// `DeveloperSettings.useLiveClient` defaults to TRUE in every build, so the live
-/// gating client (LiveServiceAccessClient over the box's pinned session) is the
-/// active one. The control apex is overridable via GYM_LIVE_CONTROL_APEX in the
+/// (→ Endpoints.setOverride), and a launch without `-smoke-mode` uses the live
+/// clients, so the live gating client (LiveServiceAccessClient over the box's
+/// pinned session) is the active one. The control apex is overridable via GYM_LIVE_CONTROL_APEX in the
 /// registry; the XCUITest reads the same env so a non-default gym apex stays in
 /// lockstep.
 ///
@@ -73,7 +72,7 @@ final class GymLiveTests: XCTestCase {
     }
 
     /// Launch in LIVE mode against the gym apex. `-apex-host <gym>` retargets the
-    /// live clients; `useLiveClient` already defaults true. NO `-smoke-mode` (that
+    /// live clients, which every launch without `-smoke-mode` uses (that
     /// would seed the mock). Extra args are appended for per-test needs.
     private func launchLive(_ extra: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()

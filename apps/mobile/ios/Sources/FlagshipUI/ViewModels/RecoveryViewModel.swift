@@ -52,7 +52,7 @@ public final class RecoveryViewModel {
 
     public init(
         client: any FlagshipServerClient,
-        webAuthn: WebAuthnProvider = MockWebAuthnProvider(),
+        webAuthn: WebAuthnProvider = DefaultClients.webAuthn(),
         username: @escaping () -> String? = { nil }
     ) {
         self.client = client
@@ -346,6 +346,7 @@ public struct WebAuthnRegistration: Sendable {
     public init(credentialId: String) { self.credentialId = credentialId }
 }
 
+#if DEBUG
 /// Mock provider — deterministic PRF secret keyed on the PRF salt so a
 /// passphrase-bound setup + recover round-trip works in tests. A real
 /// authenticator keys its hmac-secret output by the salt (NOT the
@@ -379,3 +380,4 @@ public final class MockWebAuthnProvider: WebAuthnProvider, @unchecked Sendable {
         return key.withUnsafeBytes { Data($0) }
     }
 }
+#endif

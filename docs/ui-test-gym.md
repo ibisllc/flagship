@@ -293,17 +293,14 @@ We are **not** starting from zero. Per-surface reality, with file paths:
    no backend. Pair with `-smoke-tab <home|apps|activity|settings>` to land on a
    tab (`ContentView.smokeInitialDestination`). The XCUITest sets these via
    `app.launchArguments`.
-2. **Live mode (real backend):** controlled by
-   `DeveloperSettings.useLiveClient` (`apps/mobile/shared/Sources/FlagshipCore/DeveloperSettings.swift`),
-   persisted in `UserDefaults` key `flagship.dev.useLiveClient`. Release builds
-   default ON, Debug default to the mock (`releaseDefaultUseLive`). The active
-   client is chosen in `FlagshipApp.activeClient`
-   (`dev.useLiveClient ? liveClient : mockClient`, same for
-   server/relay/mailbox/lockPower/frontPage). For a Tier-2 test, the launcher
-   pre-seeds the toggle (a Release-config build, or a DEBUG launch-arg the app
-   reads) so the live `ScreensClient` points at the demo box. Note: in the app
-   the toggle is reached by 3-tapping the version row
-   (`DeveloperSettings.unlocked`) — the gym sets it programmatically.
+2. **Live mode (real backend):** any launch without `-smoke-mode` /
+   `-smoke-onboarding`. The active client is chosen in
+   `FlagshipApp.activeClient` (`GymLaunch.usesMocks ? mockClient : liveClient`,
+   same for every other client); `-apex-host <host>` points the live clients
+   at the gym backend (`GymLaunch.applyApexHostArg`). All of it, the mocks,
+   fixtures and launch seams, is `#if DEBUG`: the gym runs Debug builds, and a
+   Release build has no mock clients and no developer mode (owner, 2026-10-16;
+   `node scripts/ios-release-clean.mjs --build` proves it on a built app).
 
 ### webapp — a real Playwright gym already runs in CI
 - **Location:** `apps/web/e2e/` — `playwright.config.ts` (chromium-only,
