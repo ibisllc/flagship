@@ -20,6 +20,7 @@ import { getPodBaseUrl, getSessionToken, screensFetch } from "./api.js";
 import { getSession } from "./state.js";
 import { sensitiveSigner } from "./adminRoot.js";
 import { isCompanionProfile } from "./companionGuard.js";
+import { canSignAdminOrders } from "./addServerGate.js";
 import { pushNotificationsEnabled } from "./pushSetting.js";
 import { toast } from "./toast.js";
 import { humanError } from "./humanError.js";
@@ -362,7 +363,8 @@ export async function answerWithSession(req, action) {
 
 /**
  * Wire the alerts into the shell. `isUnlocked` is the shell's "past the lock
- * screens" predicate; nothing shows over the lock, on a companion, or without
+ * screens" predicate; nothing shows over the lock, on a companion, on a device
+ * that can't sign the answer (not an admin device: lib/addServerGate.js), or without
  * a paired pod.
  */
 export function startAccessAlerts({ isUnlocked }) {
@@ -372,6 +374,7 @@ export function startAccessAlerts({ isUnlocked }) {
         isUnlocked() &&
         pushNotificationsEnabled() &&
         !isCompanionProfile() &&
+        canSignAdminOrders() &&
         !!getPodBaseUrl() &&
         !!getSession()?.umk
       );

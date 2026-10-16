@@ -8,6 +8,7 @@ import { $, registerView, show } from "../lib/router.js";
 import { getPodBaseUrl, getSessionToken, screensFetch, ScreensError } from "../lib/api.js";
 import { getSession } from "../lib/state.js";
 import { sensitiveSigner } from "../lib/adminRoot.js";
+import { DB_WRITE_ADMIN_ONLY, canSignAdminOrders } from "../lib/addServerGate.js";
 import { podServerDomain } from "../lib/accessAlerts.js";
 import { toast } from "../lib/toast.js";
 import { humanError } from "../lib/humanError.js";
@@ -141,8 +142,16 @@ export function renderQueryErrorHtml(text, { sqlState } = {}) {
 }
 
 /** "This changes data. Confirm to run it." with Confirm and run; `note` is
- *  shown above it (e.g. a used confirmation). */
-export function renderNeedsGrantHtml(note = "") {
+ *  shown above it (e.g. a used confirmation). A device that can't sign the
+ *  write (not an admin device: the box takes it only under the admin root)
+ *  gets the admin-only line and no button. */
+export function renderNeedsGrantHtml(note = "", { adminOnly = false } = {}) {
+  if (adminOnly) {
+    return `
+      <div class="card" data-db-needs-grant data-db-admin-only>
+        <p class="weight-600">${escapeHtml(DB_WRITE_ADMIN_ONLY)}</p>
+      </div>`;
+  }
   return `
       <div class="card" data-db-needs-grant>
         ${note ? `<p class="err-text">${escapeHtml(note)}</p>` : ""}
@@ -286,6 +295,10 @@ function cancelConfirm() {
 
 function askConfirm(note) {
   cancelConfirm();
+  if (!canSignAdminOrders()) {
+    showResult(renderNeedsGrantHtml("", { adminOnly: true }));
+    return Promise.resolve(false);
+  }
   return new Promise((resolve) => {
     pendingConfirm = resolve;
     showResult(renderNeedsGrantHtml(note));

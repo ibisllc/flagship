@@ -27,7 +27,7 @@ import {
 import { getSession } from "../lib/state.js";
 import { signWithIrk } from "../keystore.js";
 import { sensitiveSigner } from "../lib/adminRoot.js";
-import { isAdminDevice } from "../lib/memberRoles.js";
+import { ACCESS_ADMIN_ONLY, API_KEYS_ADMIN_ONLY, REMOVE_APP_ADMIN_ONLY, canSignAdminOrders } from "../lib/addServerGate.js";
 import { enterBrowserViewer } from "./browser-viewer.js";
 import { toast } from "../lib/toast.js";
 import { humanError } from "../lib/humanError.js";
@@ -177,7 +177,7 @@ export async function renderServiceDetail(serviceId) {
           <span class="label">creator</span><span class="value">${escapeHtml(s.creator)}</span>
         </div>
       </div>
-      <div id="sd-runs-on">${runsOnHtml([], { companion: isCompanionProfile(), adminOnly: !isAdminDevice(getSession()) })}</div>
+      <div id="sd-runs-on">${runsOnHtml([], { companion: isCompanionProfile(), adminOnly: !canSignAdminOrders() })}</div>
       ${body.editable === true ? renderEditRow() : ""}
       ${typeof body.adaptedFrom?.repo === "string" ? renderReportRow(body.adaptedFrom.repo) : ""}
       <div id="sd-egress">${renderInternetSection(s)}</div>
@@ -225,7 +225,7 @@ export async function renderServiceDetail(serviceId) {
         </p>
         <button id="sd-configure-env" class="full-width mt-2">Configure environment</button>
       </div>
-      ${isCompanionProfile() || !isAdminDevice(getSession()) ? "" : `<button id="service-detail-remove-btn" class="danger full-width mt-4" type="button">${escapeHtml(REMOVE_APP_LABEL)}</button>`}
+      ${renderRemoveAppControl()}
     `;
 
     $("sd-edit")?.addEventListener("click", async () => {
@@ -287,10 +287,27 @@ export function renderInternetSection(app, opts = {}) {
   return renderEgressSection(app, opts);
 }
 
+/** Why this device sees an app's internet access read-only ("" when it can
+ *  change it): a companion asks its owner app; a non-admin device an admin. */
+export function accessLockNote({ companion = false, adminOnly = false } = {}) {
+  if (companion) return ACCESS_COMPANION_NOTE;
+  if (adminOnly) return ACCESS_ADMIN_ONLY;
+  return "";
+}
+
+/** "Remove app" for a device that may sign the uninstall; the admin-only line
+ *  for another device of the account; nothing on a companion. */
+export function renderRemoveAppControl({ companion = isCompanionProfile(), adminOnly = !canSignAdminOrders() } = {}) {
+  if (companion) return "";
+  if (adminOnly) return `<p class="faint-sm mt-4" data-remove-app-locked>${escapeHtml(REMOVE_APP_ADMIN_ONLY)}</p>`;
+  return `<button id="service-detail-remove-btn" class="danger full-width mt-4" type="button">${escapeHtml(REMOVE_APP_LABEL)}</button>`;
+}
+
 /** The suggested-list card: each host with its reason, Review / Dismiss
- *  (a note instead on a companion). */
-export function renderAccessDraftCard(draft, { companion = isCompanionProfile() } = {}) {
+ *  (a note instead on a companion or a non-admin device). */
+export function renderAccessDraftCard(draft, { companion = isCompanionProfile(), adminOnly = !canSignAdminOrders() } = {}) {
   if (!draft) return "";
+  const locked = accessLockNote({ companion, adminOnly });
   const hosts = draft.hosts
     .map(
       (h) => `
@@ -301,8 +318,8 @@ export function renderAccessDraftCard(draft, { companion = isCompanionProfile() 
         <div class="sd-access-draft mt-2" data-access-draft>
           <div class="weight-600">${escapeHtml(ACCESS_DRAFT_TITLE)}</div>
           <ul class="sd-access-draft-hosts">${hosts}</ul>
-          ${companion
-            ? `<p class="faint-sm mt-1">${escapeHtml(ACCESS_COMPANION_NOTE)}</p>`
+          ${locked
+            ? `<p class="faint-sm mt-1" data-access-locked>${escapeHtml(locked)}</p>`
             : `<div class="sd-access-actions mt-1">
                 <button data-access-draft-act="review">${escapeHtml(ACCESS_DRAFT_REVIEW)}</button>
                 <button class="secondary" data-access-draft-act="dismiss">${escapeHtml(ACCESS_DRAFT_DISMISS)}</button>
@@ -316,12 +333,13 @@ export function renderAccessDraftCard(draft, { companion = isCompanionProfile() 
  * companion) and View access list. `state` is the box's GET .../access answer
  * once it has arrived.
  */
-export function renderAccessSection(app, { summary = readAccessSummary(app), state = null, companion = isCompanionProfile() } = {}) {
+export function renderAccessSection(app, { summary = readAccessSummary(app), state = null, companion = isCompanionProfile(), adminOnly = !canSignAdminOrders() } = {}) {
+  const locked = accessLockNote({ companion, adminOnly });
   const rules = state ? parseAccessList(state.list).rules.length : summary?.rules ?? 0;
   let pendingHtml = "";
   let draftHtml = "";
   if (state) {
-    draftHtml = renderAccessDraftCard(state.draft, { companion });
+    draftHtml = renderAccessDraftCard(state.draft, { companion, adminOnly });
   } else if (summary?.draft) {
     draftHtml = `<p class="muted-sm mt-2">${escapeHtml(ACCESS_DRAFT_WAITING)}</p>`;
   }
@@ -331,7 +349,7 @@ export function renderAccessSection(app, { summary = readAccessSummary(app), sta
         <div class="sd-access-req mt-2" data-access-host="${escapeHtml(r.host)}">
           <div class="weight-600">Wants to reach <span class="mono">${escapeHtml(r.host)}</span></div>
           <div class="muted-sm">${escapeHtml(accessRequestNote(r))}</div>
-          ${companion
+          ${locked
             ? ""
             : `<div class="sd-access-actions mt-1">
                 <button data-access-act="allow" data-host="${escapeHtml(r.host)}">${escapeHtml(ACCESS_ALLOW)}</button>
@@ -340,8 +358,8 @@ export function renderAccessSection(app, { summary = readAccessSummary(app), sta
               </div>`}
         </div>`)
       .join("");
-    if (companion && state.pending.length > 0) {
-      pendingHtml += `<p class="faint-sm mt-2">${escapeHtml(ACCESS_COMPANION_NOTE)}</p>`;
+    if (locked && state.pending.length > 0) {
+      pendingHtml += `<p class="faint-sm mt-2" data-access-locked>${escapeHtml(locked)}</p>`;
     }
   } else if (summary?.pending > 0) {
     pendingHtml = `<p class="muted-sm mt-2">${summary.pending === 1 ? "1 request" : `${summary.pending} requests`} waiting…</p>`;
@@ -439,8 +457,8 @@ async function answerFromPage(app, state, btn) {
 
 /** The v1 internet-access cards for `app` (its `egress`), or "" when there
  *  is nothing to show. Only for a box that doesn't send `access`. */
-export function renderEgressSection(app, { companion = isCompanionProfile() } = {}) {
-  const st = egressCardState(app, { companion });
+export function renderEgressSection(app, { companion = isCompanionProfile(), adminOnly = !canSignAdminOrders() } = {}) {
+  const st = egressCardState(app, { companion: companion || adminOnly });
   if (!st) return "";
   let html = "";
   if (st.pending.length > 0) {
@@ -451,7 +469,7 @@ export function renderEgressSection(app, { companion = isCompanionProfile() } = 
         <p class="note mt-2">${escapeHtml(EGRESS_NOTE)}</p>
         ${st.canSign
           ? `<button id="sd-egress-allow" class="full-width mt-2">${escapeHtml(EGRESS_ALLOW)}</button>`
-          : `<p class="faint-sm mt-2">${escapeHtml(EGRESS_COMPANION_NOTE)}</p>`}
+          : `<p class="faint-sm mt-2">${escapeHtml(companion ? EGRESS_COMPANION_NOTE : ACCESS_ADMIN_ONLY)}</p>`}
       </div>`;
   }
   if (st.approved.length > 0) {
@@ -565,7 +583,7 @@ async function loadDatabaseEntry(app) {
 // API keys (docs/app-apis.md §3). Hidden when the box 404s the list.
 // ---------------------------------------------------------------
 
-function apiKeyRow(k, { companion, now }) {
+function apiKeyRow(k, { companion, adminOnly = false, now }) {
   const expired = isApiKeyExpired(k, now);
   return `
         <div class="sd-api-key mt-2" data-api-key="${escapeHtml(k.keyId)}">
@@ -577,7 +595,7 @@ function apiKeyRow(k, { companion, now }) {
             k.lastUsedAt ? `Last used ${escapeHtml(formatWhen(k.lastUsedAt, now))}` : "Never used"
           }</div>
           ${expired ? `<div class="muted-sm err-text">Expired ${escapeHtml(formatWhen(k.expiresAt, now))}</div>` : ""}
-          ${companion
+          ${companion || adminOnly
             ? ""
             : `<button class="secondary sd-api-key-revoke mt-1" data-api-key-revoke="${escapeHtml(k.keyId)}">${escapeHtml(API_KEYS_REVOKE)}</button>`}
         </div>`;
@@ -620,13 +638,14 @@ function apiKeyReveal(revealed) {
  * an older box without API keys); `form` shows the create form, `revealed`
  * the just-created key, once.
  */
-export function renderApiKeysSection({ keys, companion = isCompanionProfile(), form = false, revealed = null, error = "", now = Date.now() } = {}) {
+export function renderApiKeysSection({ keys, companion = isCompanionProfile(), adminOnly = !canSignAdminOrders(), form = false, revealed = null, error = "", now = Date.now() } = {}) {
   if (!Array.isArray(keys)) return "";
   const list = keys.length === 0
     ? `<p class="muted-sm mt-2">${escapeHtml(API_KEYS_EMPTY)}</p>`
-    : keys.map((k) => apiKeyRow(k, { companion, now })).join("");
+    : keys.map((k) => apiKeyRow(k, { companion, adminOnly, now })).join("");
   let action = "";
   if (companion) action = `<p class="faint-sm mt-2">${escapeHtml(API_KEYS_COMPANION_NOTE)}</p>`;
+  else if (adminOnly) action = `<p class="faint-sm mt-2" data-api-keys-locked>${escapeHtml(API_KEYS_ADMIN_ONLY)}</p>`;
   else if (revealed) action = apiKeyReveal(revealed);
   else if (form) action = apiKeyForm();
   else action = `<button id="sd-api-key-new" class="secondary full-width mt-2">${escapeHtml(API_KEYS_CREATE)}</button>`;
@@ -889,7 +908,7 @@ function paintRunsOn(state) {
   const slot = $("sd-runs-on");
   if (!slot || runsOn !== state) return;
   const companion = isCompanionProfile();
-  const adminOnly = !isAdminDevice(getSession());
+  const adminOnly = !canSignAdminOrders();
   slot.innerHTML = runsOnHtml(
     runsOnModel(state.rows, { companion: companion || adminOnly, busy: state.busy, busyChecked: state.busyChecked }),
     { companion, adminOnly, error: state.error },

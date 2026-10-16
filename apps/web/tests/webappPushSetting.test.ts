@@ -233,6 +233,7 @@ describe("no access sheets with the switch off", () => {
     ps.set("podBaseUrl", "https://home.harry.flagship.services", { storage });
     ps.set("sessionToken", "tok", { storage });
     getSession().umk = new Uint8Array(32).fill(1);
+    getSession().adminRootSeed = new Uint8Array(32).fill(2);
     const urls: string[] = [];
     vi.stubGlobal("fetch", async (url: string) => {
       urls.push(url);
@@ -248,6 +249,7 @@ describe("no access sheets with the switch off", () => {
     await alerts.controller.check({ force: true });
     expect(urls).toEqual(["https://home.harry.flagship.services/api/screens/access-requests"]);
     getSession().umk = null;
+    getSession().adminRootSeed = null;
   });
 });
 

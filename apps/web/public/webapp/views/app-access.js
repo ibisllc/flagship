@@ -2,7 +2,8 @@
 // may reach, one allow/deny rule per line. The editor parses as you type and
 // shows each error by its line; Save stays off while there are errors (or
 // nothing changed), then signs the list with the sensitive-order key and sends
-// it. A companion session sees the list read-only. Opened with `{draft: true}`
+// it. A companion session, and a device that isn't an admin device (the box
+// takes the list only under the admin root), see the list read-only. Opened with `{draft: true}`
 // (Review on a suggested list), the editor starts from the box's draft; saving
 // it is the normal signed POST, which clears the draft on the box.
 
@@ -11,6 +12,7 @@ import { screensFetch, ScreensError } from "../lib/api.js";
 import { getSession } from "../lib/state.js";
 import { sensitiveSigner } from "../lib/adminRoot.js";
 import { isCompanionProfile } from "../lib/companionGuard.js";
+import { ACCESS_ADMIN_ONLY, canSignAdminOrders } from "../lib/addServerGate.js";
 import { toast } from "../lib/toast.js";
 import { humanError } from "../lib/humanError.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
@@ -54,6 +56,8 @@ export async function renderAppAccess(serviceId, appName, { draft = false } = {}
   const root = $("app-access-content");
   root.innerHTML = skeletonCards(1);
   const companion = isCompanionProfile();
+  const lockNote = companion ? ACCESS_COMPANION_NOTE : canSignAdminOrders() ? "" : ACCESS_ADMIN_ONLY;
+  const locked = !!lockNote;
   let access;
   try {
     access = await fetchServiceAccess(serviceId, (path, init) => screensFetch(path, init));
@@ -75,16 +79,16 @@ export async function renderAppAccess(serviceId, appName, { draft = false } = {}
       ${fromDraft ? `<p class="note" data-access-draft-note>${escapeHtml(ACCESS_DRAFT_EDITOR_NOTE)}</p>` : ""}
       <p class="note">${escapeHtml(ACCESS_LIST_HELP)}</p>
       <textarea id="app-access-text" class="access-editor mt-2" rows="12" spellcheck="false" autocapitalize="off"
-        autocomplete="off" aria-label="Access list"${companion ? " readonly" : ""}
+        autocomplete="off" aria-label="Access list"${locked ? " readonly" : ""}
         placeholder="allow api.example.com">${escapeHtml(text)}</textarea>
       <div id="app-access-errors" aria-live="polite"></div>
       <p class="muted-sm mt-1" id="app-access-count"></p>
-      ${companion
-        ? `<p class="faint-sm mt-2">${escapeHtml(ACCESS_COMPANION_NOTE)}</p>`
+      ${locked
+        ? `<p class="faint-sm mt-2" data-access-locked>${escapeHtml(lockNote)}</p>`
         : `<button id="app-access-save" class="full-width mt-2" disabled>${escapeHtml(ACCESS_SAVE)}</button>`}
     </div>`;
   const textarea = $("app-access-text");
-  const update = () => paintState(accessEditorState(textarea.value, current.list, { companion }));
+  const update = () => paintState(accessEditorState(textarea.value, current.list, { companion: locked }));
   textarea.addEventListener("input", update);
   update();
   $("app-access-save")?.addEventListener("click", (ev) => void save(ev.currentTarget, textarea));

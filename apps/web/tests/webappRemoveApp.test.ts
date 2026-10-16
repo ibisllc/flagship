@@ -75,12 +75,25 @@ describe("Remove app — the signed uninstall", () => {
 });
 
 describe("Remove app — the app page", () => {
-  it("offers the button (iOS's service-detail-remove-btn) to the owner's admin devices only", () => {
-    expect(VIEW).toMatch(/isCompanionProfile\(\) \|\| !isAdminDevice\(getSession\(\)\) \? "" : `<button id="service-detail-remove-btn" class="danger/);
+  it("offers the button (iOS's service-detail-remove-btn) to admin devices and demo accounts, says why to others", async () => {
+    const { renderRemoveAppControl } = await import(pathToFileURL(resolve(__dirname, "..", "public", "webapp", "views", "service-detail.js")).href);
+    expect(renderRemoveAppControl({ companion: false, adminOnly: false })).toContain('id="service-detail-remove-btn"');
+    const locked: string = renderRemoveAppControl({ companion: false, adminOnly: true });
+    expect(locked).not.toContain("service-detail-remove-btn");
+    expect(locked).toContain("Only an admin device can remove an app.");
+    expect(renderRemoveAppControl({ companion: true, adminOnly: false })).toBe("");
+    expect(VIEW).toContain("${renderRemoveAppControl()}");
   });
 
-  it("locks Runs on (copies and uninstalls) on a device without the admin root, saying why", () => {
-    expect(VIEW).toContain("const adminOnly = !isAdminDevice(getSession());");
+  it("uses the add-server rule (admin root, or a demo account) for every admin-only order", async () => {
+    const gate = await import(pathToFileURL(resolve(__dirname, "..", "public", "webapp", "lib", "addServerGate.js")).href);
+    expect(gate.canSignAdminOrders({ adminRootSeed: new Uint8Array(32) }, null)).toBe(true);
+    expect(gate.canSignAdminOrders({}, { demoServer: "demo.flagship.services" })).toBe(true);
+    expect(gate.canSignAdminOrders({}, {})).toBe(false);
+  });
+
+  it("locks Runs on (copies and uninstalls) on a device that can't sign admin orders, saying why", () => {
+    expect(VIEW).toContain("const adminOnly = !canSignAdminOrders();");
     expect(VIEW).toContain("runsOnModel(state.rows, { companion: companion || adminOnly,");
   });
 

@@ -256,7 +256,7 @@ describe("API keys — the app's page", () => {
 
   it("lists each key with its scope, dates and Revoke; Create key opens the form", async () => {
     const { renderApiKeysSection } = await load("views/service-detail.js");
-    const html: string = renderApiKeysSection({ keys, companion: false, now: NOW });
+    const html: string = renderApiKeysSection({ keys, companion: false, adminOnly: false, now: NOW });
     expect(html).toContain("API keys");
     expect(html).toContain("Kitchen &lt;display&gt;");
     expect(html).toContain("Read &amp; write");
@@ -269,7 +269,7 @@ describe("API keys — the app's page", () => {
     expect(html.match(/Expired /g)).toHaveLength(1);
     expect(html).toContain('data-api-key-revoke="bbbbbbbbbbbbbbbb"');
     expect(html).toContain('id="sd-api-key-new"');
-    const form: string = renderApiKeysSection({ keys: [], companion: false, form: true, now: NOW });
+    const form: string = renderApiKeysSection({ keys: [], companion: false, adminOnly: false, form: true, now: NOW });
     expect(form).toContain("No API keys yet.");
     expect(form).toContain('id="sd-api-key-label"');
     expect(form).toContain('<option value="read" selected>Read</option>');
@@ -280,7 +280,7 @@ describe("API keys — the app's page", () => {
 
   it("shows a new key once, with Copy, the warning and the usage line", async () => {
     const { renderApiKeysSection } = await load("views/service-detail.js");
-    const html: string = renderApiKeysSection({ keys, companion: false, revealed: { key: "fsk_0123456789abcdef_s3cret", label: "Kitchen" }, now: NOW });
+    const html: string = renderApiKeysSection({ keys, companion: false, adminOnly: false, revealed: { key: "fsk_0123456789abcdef_s3cret", label: "Kitchen" }, now: NOW });
     expect(html).toContain("fsk_0123456789abcdef_s3cret");
     expect(html).toContain("Copy it now. Flagship can't show it again.");
     expect(html).toContain("Authorization: Bearer &lt;key&gt;");
@@ -296,6 +296,15 @@ describe("API keys — the app's page", () => {
     expect(html).not.toContain("sd-api-key-new");
     expect(html).toContain("Create and revoke keys from your owner app.");
     expect(renderApiKeysSection({ keys: null, companion: false })).toBe("");
+  });
+
+  it("is read-only on a device that isn't an admin device, saying why (the box takes keys only under the admin root)", async () => {
+    const { renderApiKeysSection } = await load("views/service-detail.js");
+    const html: string = renderApiKeysSection({ keys, companion: false, adminOnly: true, now: NOW });
+    expect(html).toContain("Kitchen &lt;display&gt;");
+    expect(html).not.toContain("data-api-key-revoke");
+    expect(html).not.toContain("sd-api-key-new");
+    expect(html).toContain("Only an admin device can create or revoke API keys.");
   });
 
   it("the page loads the section, signs with sensitiveSigner and confirms Revoke; the shell precaches the lib", async () => {

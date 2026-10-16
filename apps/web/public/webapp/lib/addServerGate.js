@@ -15,8 +15,24 @@ import { isAdminDevice } from "./memberRoles.js";
 export const ADD_SERVERS_ADMIN_ONLY = "Only an admin device of this account can add servers.";
 
 export function canAddServers(session = getSession(), profile = getActiveProfile()) {
+  return canSignAdminOrders(session, profile);
+}
+
+/**
+ * The same rule for every order an admin-pinned box takes only under the admin
+ * root: uninstall, "Runs on" copies and removals, an app's access list (and
+ * its Allow / Deny), API keys and database writes. A non-admin device would
+ * sign them with the IRK and be refused, so it sees the control read-only with
+ * the line below instead. Mirrors iOS `Keystore.hasAdminRoot || isDemoAccount`.
+ */
+export function canSignAdminOrders(session = getSession(), profile = getActiveProfile()) {
   return isAdminDevice(session) || !!profile?.demoServer;
 }
+
+export const REMOVE_APP_ADMIN_ONLY = "Only an admin device can remove an app.";
+export const ACCESS_ADMIN_ONLY = "Only an admin device can change this app's internet access.";
+export const API_KEYS_ADMIN_ONLY = "Only an admin device can create or revoke API keys.";
+export const DB_WRITE_ADMIN_ONLY = "Only an admin device can change this app's data. Reading it works from any device.";
 
 export class AddServerRefusedError extends Error {
   constructor() {

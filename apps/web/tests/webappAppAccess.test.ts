@@ -396,7 +396,7 @@ describe("suggested lists (drafts)", () => {
     const { readAccessDraft } = await loadAccess();
     const app = { serviceId: "harry-weather", slug: "weather", access: { rules: 0, pending: 0, draft: true } };
     const state = { list: "", listSha256: "", pending: [], draft: readAccessDraft(DRAFT) };
-    const html: string = renderAccessSection(app, { state, companion: false });
+    const html: string = renderAccessSection(app, { state, companion: false, adminOnly: false });
     expect(html).toContain("This app suggests letting it reach these hosts");
     expect(html).toContain("api.open-meteo.com");
     expect(html).toContain("forecasts &lt;b&gt;");
@@ -409,8 +409,22 @@ describe("suggested lists (drafts)", () => {
     expect(comp).toContain("Change this from your owner app.");
     // Before GET …/access answers, the summary flag says one waits.
     expect(renderAccessSection(app, { companion: false })).toContain("A suggested access list is waiting");
-    const none: string = renderAccessSection({ ...app, access: { rules: 0, pending: 0 } }, { state: { ...state, draft: null }, companion: false });
+    const none: string = renderAccessSection({ ...app, access: { rules: 0, pending: 0 } }, { state: { ...state, draft: null }, companion: false, adminOnly: false });
     expect(none).not.toContain("data-access-draft");
+  });
+
+  it("gives a device that isn't an admin device no Allow / Deny / Review, and says why", async () => {
+    const { renderAccessSection, accessLockNote } = await load("views/service-detail.js");
+    const { readAccessDraft } = await loadAccess();
+    const app = { serviceId: "harry-weather", slug: "weather", access: { rules: 0, pending: 1, draft: true } };
+    const state = { list: "", listSha256: "", pending: [{ host: "api.example.com", count: 2, lastAt: 1 }], draft: readAccessDraft(DRAFT) };
+    const html: string = renderAccessSection(app, { state, companion: false, adminOnly: true });
+    expect(html).toContain("api.example.com");
+    expect(html).not.toContain("data-access-act");
+    expect(html).not.toContain("data-access-draft-act");
+    expect(html).toContain("Only an admin device can change this app's internet access.");
+    expect(accessLockNote({ companion: false, adminOnly: false })).toBe("");
+    expect(accessLockNote({ companion: true, adminOnly: true })).toBe("Change this from your owner app.");
   });
 
   it("the alert: a draft gets Review / Not now; Review opens the editor with it and ends the pass", async () => {
