@@ -79,6 +79,7 @@ export const SENSITIVE_TAGS = new Set([
   "flagship/server-share-revoke/v1", //    end a share (box + .com)
   "flagship/server-share-offer/v1", //     offer a share (.com)
   "flagship/server-share-unlock/v1", //    a share's copy of the disk key (.com)
+  "flagship/server-share-accept-admin/v1", // accept a share for this account (the shared box)
 ]);
 
 const _decoder = new TextDecoder();

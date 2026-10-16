@@ -30,6 +30,8 @@ export const TAG_SERVER_SHARE_UNLOCK = "flagship/server-share-unlock/v1";
 export const TAG_SHARE_INBOX = "flagship/share-inbox/v1";
 export const TAG_SERVER_SHARE_PUSH = "flagship/server-share-push/v1";
 export const TAG_SERVER_SHARE_UPDATE = "flagship/server-share-update/v1";
+export const TAG_SERVER_SHARE_ACCEPT_ADMIN = "flagship/server-share-accept-admin/v1";
+export const ACCOUNT_KEY_KINDS = Object.freeze(["admin-root", "irk"]);
 
 const INFO_MEMBER = "flagship/server-share-member/v1";
 const INFO_TOKEN = "flagship/server-share/token/v1";
@@ -293,7 +295,41 @@ export function parseShareAcceptancePayload(v) {
   const o = obj(v);
   if (!o || o.v !== 1 || typeof o.signature !== "string" || !/^[0-9a-f]{128}$/.test(o.signature)) return null;
   const accept = parseServerShareAccept(o.accept);
-  return accept ? { v: 1, accept, signature: o.signature } : null;
+  if (!accept) return null;
+  if (o.admin === undefined) return { v: 1, accept, signature: o.signature };
+  const admin = parseShareAcceptAdminProof(o.admin);
+  return admin ? { v: 1, accept, signature: o.signature, admin } : null;
+}
+
+/** `.com`'s CA-signed AccountKeyAttestation, shape only: the box checks the
+ *  signature against its maintainer chain; the apps carry it unchanged. */
+export function parseAccountKeyAttestation(v) {
+  const o = obj(v);
+  if (!o || o.kind !== "AccountKeyAttestation" || o.version !== 1) return null;
+  if (!ACCOUNT_KEY_KINDS.includes(o.keyKind)) return null;
+  if (typeof o.keyPubHex !== "string" || !HEX64.test(o.keyPubHex)) return null;
+  if (typeof o.signedBy !== "string" || !HEX64.test(o.signedBy)) return null;
+  if (typeof o.signature !== "string" || !/^[0-9a-f]{128}$/.test(o.signature)) return null;
+  if (!isTime(o.issuedAt) || !isTime(o.expiresAt) || o.expiresAt <= o.issuedAt) return null;
+  return {
+    kind: "AccountKeyAttestation",
+    version: 1,
+    keyKind: o.keyKind,
+    keyPubHex: o.keyPubHex,
+    issuedAt: o.issuedAt,
+    expiresAt: o.expiresAt,
+    signedBy: o.signedBy,
+    signature: o.signature,
+  };
+}
+
+/** The joining account's admin proof sealed with an acceptance (#12 + the attestation). */
+export function parseShareAcceptAdminProof(v) {
+  const o = obj(v);
+  if (!o || typeof o.signature !== "string" || !/^[0-9a-f]{128}$/.test(o.signature)) return null;
+  const admit = parseServerShareAcceptAdmin(o.admit);
+  const attestation = parseAccountKeyAttestation(o.attestation);
+  return admit && attestation ? { admit, signature: o.signature, attestation } : null;
 }
 
 export function parseShareInboxEntry(v) {
@@ -401,6 +437,24 @@ export function serverShareAcceptCanonicalBytes(a) {
 }
 
 /** #4 leave — B's member key. */
+/** #12 accept-admin — the joining account's sensitive key (admin root, else IRK). */
+export function serverShareAcceptAdminCanonicalBytes(a) {
+  domain(a.serverDomain);
+  checkShareId(a.shareId);
+  checkHex64("memberPubHex", a.memberPubHex);
+  time("acceptedAt", a.acceptedAt);
+  if (!ACCOUNT_KEY_KINDS.includes(a.keyKind)) throw new Error("server-share: keyKind must be admin-root or irk");
+  checkHex64("keyPubHex", a.keyPubHex);
+  return join(TAG_SERVER_SHARE_ACCEPT_ADMIN, [
+    a.serverDomain,
+    a.shareId,
+    a.memberPubHex,
+    String(a.acceptedAt),
+    a.keyKind,
+    a.keyPubHex,
+  ]);
+}
+
 export function serverShareLeaveCanonicalBytes(l) {
   domain(l.serverDomain);
   checkShareId(l.shareId);
@@ -524,6 +578,8 @@ export const signServerShareRevoke = signerFor(serverShareRevokeCanonicalBytes);
 export const verifyServerShareRevoke = verifierFor(serverShareRevokeCanonicalBytes);
 export const signServerShareAccept = signerFor(serverShareAcceptCanonicalBytes);
 export const verifyServerShareAccept = verifierFor(serverShareAcceptCanonicalBytes);
+export const signServerShareAcceptAdmin = signerFor(serverShareAcceptAdminCanonicalBytes);
+export const verifyServerShareAcceptAdmin = verifierFor(serverShareAcceptAdminCanonicalBytes);
 export const signServerShareLeave = signerFor(serverShareLeaveCanonicalBytes);
 export const verifyServerShareLeave = verifierFor(serverShareLeaveCanonicalBytes);
 export const signServerShareSession = signerFor(serverShareSessionCanonicalBytes);
@@ -587,6 +643,20 @@ export const parseServerShareRevoke = parsedFor(serverShareRevokeCanonicalBytes,
 export const parseServerShareAccept = parsedFor(serverShareAcceptCanonicalBytes, (o) =>
   str(o.serverDomain) && str(o.shareId) && str(o.memberPubHex) && isTime(o.acceptedAt)
     ? { serverDomain: o.serverDomain, shareId: o.shareId, memberPubHex: o.memberPubHex, acceptedAt: o.acceptedAt }
+    : null,
+);
+
+export const parseServerShareAcceptAdmin = parsedFor(serverShareAcceptAdminCanonicalBytes, (o) =>
+  str(o.serverDomain) && str(o.shareId) && str(o.memberPubHex) && isTime(o.acceptedAt) &&
+  ACCOUNT_KEY_KINDS.includes(o.keyKind) && str(o.keyPubHex)
+    ? {
+        serverDomain: o.serverDomain,
+        shareId: o.shareId,
+        memberPubHex: o.memberPubHex,
+        acceptedAt: o.acceptedAt,
+        keyKind: o.keyKind,
+        keyPubHex: o.keyPubHex,
+      }
     : null,
 );
 

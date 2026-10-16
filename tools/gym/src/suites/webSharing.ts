@@ -92,7 +92,7 @@ export const WEB_SHARING: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-sharing-member-link",
-    "Co-manager opening a share link: Not now goes Home with nothing accepted; a link .com doesn't know shows its error and Back to servers; Accept saves the inbox entry and, once the owner confirms, 'Open home' lands on the shared server; the page's and the accept view's Back go Home.",
+    "Co-manager opening a share link: Not now goes Home with nothing accepted; a link .com doesn't know shows its error and Back to servers; Accept asks for the passphrase once and seals an admin-root-signed flagship/server-share-accept-admin/v1 with .com's attestation, saves the inbox entry and, once the owner confirms, 'Open home' lands on the shared server; the page's and the accept view's Back go Home.",
     "gym sharing co-manager link: Not now, a bad link's Back to servers, and Open once the owner confirms",
     {
       steps: [
@@ -103,6 +103,34 @@ export const WEB_SHARING: readonly Scenario[] = [
       ],
       assertions: [{ describe: "Shared page at manage level", handle: "#shared-server-sub", expect: "text", text: "Can manage" }],
       screenshots: [shot("member-bad-link", "The bad link."), shot("member-confirmed", "Open after the owner confirmed.")],
+      dimension: "D3",
+    },
+  ),
+  webTotal(
+    "web-total-sharing-member-non-admin",
+    "Only an admin device of the joining account accepts a co-manage share (the shared server checks the admin root's signature): a non-admin device's share link reads 'Only an admin device of your account can accept a co-manage invitation.' with Back to servers and no Accept; nothing is fetched or posted.",
+    "gym sharing a non-admin device can't accept a co-manage link",
+    {
+      steps: [
+        { kind: "launch", describe: "A non-admin device opens a share link." },
+        { kind: "tap", describe: "Back to servers.", handle: "[data-share-home]" },
+      ],
+      assertions: [
+        { describe: "Refusal", handle: "#share-accept-content", expect: "text", text: "Only an admin device of your account can accept a co-manage invitation." },
+        { describe: "No Accept", handle: "[data-share-accept]", expect: "absent" },
+      ],
+      screenshots: [shot("member-non-admin-refused", "The refusal.")],
+      dimension: "D4",
+    },
+  ),
+  webTotal(
+    "web-total-sharing-member-demo-accept",
+    "A demo account's device holds no admin root: Accept (no passphrase) has .com's demo signer sign flagship/server-share-accept-admin/v1 with the demo account's admin root, and seals that with the attestation, so the shared server checks it like any account's.",
+    "gym sharing a demo account's device accepts through .com's demo signer",
+    {
+      steps: [{ kind: "tap", describe: "Accept.", handle: "[data-share-accept]" }],
+      assertions: [{ describe: "Waiting for the owner", handle: "[data-share-waiting]", expect: "present" }],
+      screenshots: [shot("member-demo-accepted", "Accepted on a demo account.")],
       dimension: "D3",
     },
   ),

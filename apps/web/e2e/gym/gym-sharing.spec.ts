@@ -17,6 +17,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import {
   HOME,
+  PASSPHRASE,
   USER,
   livePod,
   mock,
@@ -44,6 +45,33 @@ const GRANT: Canon = [SS, "serverShareGrantCanonicalBytes"];
 const REVOKE: Canon = [SS, "serverShareRevokeCanonicalBytes"];
 const OFFER: Canon = [SS, "serverShareOfferCanonicalBytes"];
 const UNLOCK: Canon = [SS, "serverShareUnlockCanonicalBytes"];
+const ACCEPT_ADMIN: Canon = [SS, "serverShareAcceptAdminCanonicalBytes"];
+const ACCEPT_POST = /\/api\/server-shares\/[0-9a-f]{32}\/accept$/;
+
+/** `.com`'s attestation of this account's admin key (the page only carries it; the box checks the CA signature). */
+function attestationFor(keyPubHex: string) {
+  const now = Date.now();
+  return { kind: "AccountKeyAttestation", version: 1, keyKind: "admin-root", keyPubHex, issuedAt: now - 1000, expiresAt: now + 14 * 86_400_000, signedBy: "ca".repeat(32), signature: "00".repeat(64) };
+}
+
+/** The webapp's fresh unlock for one admin signature: this device's passphrase. */
+async function passFreshUnlock(page: Page, title: string): Promise<void> {
+  await expect(page.locator(".modal-title")).toHaveText(title, { timeout: 10_000 });
+  await page.fill(".modal-input", PASSPHRASE);
+  await page.click("[data-modal-ok]");
+}
+
+/** Open the sealed acceptance B posted and return its admin proof. */
+async function acceptanceProof(page: Page, link: { shareId: string; secretHex: string }, sealed: string) {
+  return page.evaluate(async ({ shareId, secretHex, sealed }) => {
+    const ss = await import("/lib/serverShare.js");
+    const ks = await import("/keystore.js");
+    const p = ss.parseShareAcceptancePayload(
+      await ss.openShareJson(await ss.shareLinkKey(ks.hexToBytes(secretHex)), ss.shareAad(ss.AAD_SHARE_ACCEPTANCE, shareId), sealed),
+    );
+    return { admit: p?.admin?.admit, signature: p?.admin?.signature as string, keyPubHex: p?.admin?.admit.keyPubHex as string };
+  }, { shareId: link.shareId, secretHex: link.secretHex, sealed });
+}
 
 test.use({ viewport: { width: 430, height: 932 } });
 
@@ -528,11 +556,12 @@ test.describe("gym webapp sharing", () => {
   // ─────────────────────────── co-manager ───────────────────────────
 
   test("gym sharing co-manager link: Not now, a bad link's Back to servers, and Open once the owner confirms", async ({ page }, testInfo) => {
-    await reachHome(page, { kind: "admin", servers: [HOME] });
+    const keys = await reachHome(page, { kind: "admin", servers: [HOME] });
     const fx = await fixtures(page);
     let confirmed = false;
     let accepted = false;
     const m = await mock(page);
+    m.get(`/api/users/${USER}/account-key-attestation`, { attestation: attestationFor(keys.adminPubHex!) });
     m.post(`/api/server-shares/${fx.alice.shareId}/accept`, () => ((accepted = true), { json: { ok: true } }));
     m.get(`/api/server-shares/${fx.alice.shareId}`, () => ({ json: { shareId: fx.alice.shareId, serverDomain: SHARED_BOX, state: accepted ? "accepted" : "offered", offer: fx.alice.offer, acceptance: null, unlock: true } }));
     m.first("GET", `/api/server-shares/${fx.kim.shareId}`, () => ({ status: 404, json: { error: "not found" } }));
@@ -567,10 +596,15 @@ test.describe("gym webapp sharing", () => {
     await page.click("[data-share-home]");
     await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
 
-    // Accept, read the code; once the owner confirms, Open lands on the server.
+    // Accept (one fresh unlock: the admin root signs #12), read the code; once
+    // the owner confirms, Open lands on the server.
     await open({ shareId: fx.alice.shareId, secretHex: fx.alice.secretHex });
     await page.click("[data-share-accept]");
+    await passFreshUnlock(page, "Accept this share?");
     await expect(page.locator("[data-share-waiting]")).toBeVisible({ timeout: 10_000 });
+    const proof = await acceptanceProof(page, fx.alice, m.sent(ACCEPT_POST)[0]!.body.acceptance);
+    expect(proof.keyPubHex).toBe(keys.adminPubHex);
+    expect(await signer(page, keys, ACCEPT_ADMIN, proof.admit, proof.signature)).toBe("admin");
     const put = m.sent("/api/share-inbox").find((c) => c.body.request.op === "put");
     expect(put).toBeTruthy();
     confirmed = true;
@@ -585,6 +619,54 @@ test.describe("gym webapp sharing", () => {
     await open({ shareId: fx.alice.shareId, secretHex: fx.alice.secretHex });
     await page.click("#share-accept-back");
     await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
+  });
+
+  test("gym sharing a non-admin device can't accept a co-manage link", async ({ page }, testInfo) => {
+    await reachHome(page, { kind: "non-admin", servers: [HOME] });
+    const fx = await fixtures(page);
+    const m = await mock(page);
+    m.get(`/api/server-shares/${fx.alice.shareId}`, { shareId: fx.alice.shareId, serverDomain: SHARED_BOX, state: "offered", offer: fx.alice.offer, acceptance: null, unlock: true });
+    await page.evaluate(async (link) => {
+      const { enterShareAccept } = await import("/views/share-accept.js");
+      await enterShareAccept(link);
+    }, { shareId: fx.alice.shareId, secretHex: fx.alice.secretHex });
+    await expect(page.locator("#share-accept-content")).toContainText(
+      "Only an admin device of your account can accept a co-manage invitation.",
+      { timeout: 10_000 },
+    );
+    await expect(page.locator("[data-share-accept]")).toHaveCount(0);
+    await shot(page, testInfo, "member-non-admin-refused");
+    await page.click("[data-share-home]");
+    await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
+    expect(m.sent("/accept")).toHaveLength(0);
+    expect(m.sent("/account-key-attestation", "GET")).toHaveLength(0);
+  });
+
+  test("gym sharing a demo account's device accepts through .com's demo signer", async ({ page }, testInfo) => {
+    await reachHome(page, { kind: "demo", servers: [HOME] });
+    const fx = await fixtures(page);
+    const demoAdminPub = "d3".repeat(32);
+    const m = await mock(page);
+    let accepted = false;
+    m.get(`/api/server-shares/${fx.alice.shareId}`, () => ({ json: { shareId: fx.alice.shareId, serverDomain: SHARED_BOX, state: accepted ? "accepted" : "offered", offer: fx.alice.offer, acceptance: null, unlock: false } }));
+    m.get(`/api/users/${USER}/account-key-attestation`, { attestation: attestationFor(demoAdminPub) });
+    m.post(`/api/dev/sample-user/${USER}/share-accept`, (c) => ({ json: { signature: c.body.admit.keyPubHex === demoAdminPub ? "5e".repeat(64) : "" } }));
+    m.post(`/api/server-shares/${fx.alice.shareId}/accept`, () => ((accepted = true), { json: { ok: true } }));
+    m.post("/api/share-inbox", (c) => ({ json: c.body.request.op === "list" ? { entries: [] } : { ok: true } }));
+    m.get(`${SHARED_BOX}/api/shares/nonce`, { nonce: "11".repeat(32) });
+    m.post(`${SHARED_BOX}/api/shares/session`, () => ({ status: 403, json: { error: "not-shared", code: "not-shared" } }));
+    await page.evaluate(async (link) => {
+      const { enterShareAccept } = await import("/views/share-accept.js");
+      await enterShareAccept(link);
+    }, { shareId: fx.alice.shareId, secretHex: fx.alice.secretHex });
+    await page.click("[data-share-accept]");
+    // No passphrase: a demo account's operator holds its admin root.
+    await expect(page.locator("[data-share-waiting]")).toBeVisible({ timeout: 10_000 });
+    const [signed] = m.sent("/share-accept");
+    expect(signed!.body.admit).toMatchObject({ shareId: fx.alice.shareId, keyKind: "admin-root", keyPubHex: demoAdminPub });
+    const proof = await acceptanceProof(page, fx.alice, m.sent(ACCEPT_POST)[0]!.body.acceptance);
+    expect(proof.signature).toBe("5e".repeat(64));
+    await shot(page, testInfo, "member-demo-accepted");
   });
 
   test("gym sharing co-manager turns start-up notices on and off", async ({ page }, testInfo) => {

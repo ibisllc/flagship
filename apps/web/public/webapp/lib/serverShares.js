@@ -16,7 +16,9 @@ import { boxClient, ScreensError } from "./api.js";
 import { sensitiveSigner } from "./adminRoot.js";
 import { _internal as bootSeal } from "./bootApproval.js";
 import { humanError } from "./humanError.js";
-import { deriveHouseholdKeyFromSeed, signWithIrk, bytesToHex, hexToBytes } from "../keystore.js";
+import { deriveHouseholdKeyFromSeed, signWithIrk, bytesToHex, hexToBytes, adminRootPubHex } from "../keystore.js";
+import { confirmFreshUnlock } from "./freshUnlock.js";
+import { getActiveProfile } from "./profiles.js";
 
 export const LEVEL_TEXT = Object.freeze({ view: "Can view", manage: "Can manage" });
 export const LEVEL_LINE = Object.freeze({
@@ -42,6 +44,13 @@ export const LEAVE_LABEL = "Leave this server";
 export const LEAVE_TITLE = "Leave this server?";
 export const LEAVE_MESSAGE = "You lose access at once. The owner would have to share it with you again.";
 export const SHARED_DB_WRITE_REFUSED = "Only someone who can manage this server can change its apps' data. You can read it.";
+// Only an admin device of the joining account accepts (owner rule 2026-10-16,
+// docs/share-a-server.md §5.1): the shared server checks it.
+export const SHARE_ACCEPT_ADMIN_ONLY = "Only an admin device of your account can accept a co-manage invitation.";
+export const SHARE_ACCEPT_UNLOCK_TITLE = "Accept this share?";
+export const SHARE_ACCEPT_UNLOCK_MESSAGE = "Your account's admin key signs that you accept.";
+// The box's refusals of a first grant (acceptAdmin.ts) carry a sentence for the owner.
+const ACCEPT_REFUSAL_CODES = new Set(["accept-not-admin", "accept-signature", "accept-stale", "accept-unverifiable"]);
 
 export class ShareError extends Error {
   constructor(message, code, status) {
@@ -71,6 +80,9 @@ function ctx(deps = {}) {
     accountSign: deps.accountSign ?? ((bytes) => signWithIrk(umk, bytes)),
     boxFetch: deps.boxFetch ?? ((fqdn, path, init) => boxClient(fqdn).fetch(path, init)),
     openDiskKey: deps.openDiskKey ?? null,
+    adminRootSeed: deps.adminRootSeed !== undefined ? deps.adminRootSeed : session?.adminRootSeed ?? null,
+    isDemo: deps.isDemo ?? null,
+    freshUnlock: deps.freshUnlock ?? ((prompt) => confirmFreshUnlock(prompt)),
   };
 }
 
@@ -194,6 +206,9 @@ async function openAcceptance(row, record, serverDomain) {
     const a = payload.accept;
     if (a.serverDomain !== serverDomain || a.shareId !== row.shareId) return null;
     if (!(await ss.verifyServerShareAccept(a, payload.signature, a.memberPubHex))) return null;
+    // The admin proof is the box's to check; it must at least name this acceptance.
+    const ad = payload.admin?.admit;
+    if (ad && (ad.serverDomain !== a.serverDomain || ad.shareId !== a.shareId || ad.memberPubHex !== a.memberPubHex)) return null;
     return payload;
   } catch {
     return null;
@@ -278,6 +293,7 @@ export async function loadOwnerShares(serverDomain, deps = {}) {
         ...base,
         accept: payload.accept,
         acceptSignature: payload.signature,
+        acceptAdmin: payload.admin ?? null,
         memberPubHex: payload.accept.memberPubHex,
         sas: await ss.shareSas(row.shareId, payload.accept.memberPubHex, hexToBytes(rec.secretHex)),
       });
@@ -317,10 +333,24 @@ export async function confirmShare(serverDomain, awaiting, deps = {}) {
   if (!awaiting?.accept) throw new ShareError("This acceptance didn't check out.", "bad-acceptance");
   const grant = grantOf(serverDomain, awaiting, d.now());
   const signature = await sigHex(ss.signServerShareGrant(grant, d.sensitiveSign));
-  await d.boxFetch(lower(serverDomain), "/api/screens/shares", {
-    method: "POST",
-    body: JSON.stringify({ grant, signature, accept: awaiting.accept, acceptSignature: awaiting.acceptSignature }),
-  });
+  try {
+    await d.boxFetch(lower(serverDomain), "/api/screens/shares", {
+      method: "POST",
+      body: JSON.stringify({
+        grant,
+        signature,
+        accept: awaiting.accept,
+        acceptSignature: awaiting.acceptSignature,
+        ...(awaiting.acceptAdmin ? { acceptAdmin: awaiting.acceptAdmin } : {}),
+      }),
+    });
+  } catch (e) {
+    // The box says why it can't take this acceptance, in words for the owner.
+    if (e instanceof ScreensError && ACCEPT_REFUSAL_CODES.has(e.body?.code) && typeof e.body?.error === "string") {
+      throw new ShareError(e.body.error, e.body.code, e.status);
+    }
+    throw e;
+  }
   let unlockError = null;
   if (grant.unlockAtBoot) {
     try {
@@ -540,8 +570,49 @@ export async function openShareLink({ shareId, secretHex }, deps = {}) {
   return { shareId, secretHex, token, state: res.body.state, offer, acceptedByMe, unlock: !!res.body.unlock };
 }
 
-/** Accept: sign #3 with the member key, post it sealed, and save the share to
- *  B's inbox. Resolves to the six digits to read to the owner. */
+/**
+ * The joining account's admin proof (#12, docs/share-a-server.md §5.1): `.com`'s
+ * attestation of this account's sensitive key, fetched about our own account,
+ * and #12 signed with that key after one fresh unlock. A demo account's device
+ * holds no admin root; `.com` signs for the demo account instead.
+ */
+async function adminProof(d, accept) {
+  const isAdmin = d.adminRootSeed instanceof Uint8Array;
+  const isDemo = d.isDemo ?? !!getActiveProfile()?.demoServer;
+  if (!isAdmin && !isDemo) throw new ShareError(SHARE_ACCEPT_ADMIN_ONLY, "not-admin");
+  if (!isDemo) {
+    const unlocked = await d.freshUnlock({
+      title: SHARE_ACCEPT_UNLOCK_TITLE,
+      message: SHARE_ACCEPT_UNLOCK_MESSAGE,
+      okLabel: "Accept",
+    });
+    if (!unlocked.ok) throw new ShareError(unlocked.error ?? "Not accepted.", unlocked.cancelled ? "cancelled" : "unlock");
+  }
+  const res = await call(d, `${d.apex}/api/users/${encodeURIComponent(d.username)}/account-key-attestation`);
+  const attestation = res.ok ? ss.parseAccountKeyAttestation(res.body?.attestation) : null;
+  if (!attestation) throw new ShareError(errText(res, "Couldn't accept. Try again."), "attestation", res.status);
+  const admit = { ...accept, keyKind: attestation.keyKind, keyPubHex: attestation.keyPubHex };
+  let signature;
+  if (isDemo) {
+    const r = await postJson(d, `${d.apex}/api/dev/sample-user/${encodeURIComponent(d.username)}/share-accept`, { admit });
+    if (!r.ok || typeof r.body?.signature !== "string") throw new ShareError(errText(r, "Couldn't accept. Try again."), "accept-failed", r.status);
+    signature = r.body.signature;
+  } else if (attestation.keyKind === "admin-root") {
+    // This device's admin root must be the one the account pins now.
+    if ((await adminRootPubHex(d.adminRootSeed)) !== attestation.keyPubHex) {
+      throw new ShareError(SHARE_ACCEPT_ADMIN_ONLY, "not-admin");
+    }
+    signature = await sigHex(ss.signServerShareAcceptAdmin(admit, d.adminRootSeed));
+  } else {
+    // An account that pins no admin root: its IRK is its sensitive key.
+    signature = await sigHex(ss.signServerShareAcceptAdmin(admit, d.accountSign));
+  }
+  return { admit, signature, attestation };
+}
+
+/** Accept: sign #3 with the member key and #12 with the account's admin key,
+ *  post them sealed, and save the share to B's inbox. Resolves to the six
+ *  digits to read to the owner. */
 export async function acceptShare(opened, deps = {}) {
   const d = ctx(deps);
   const { shareId, secretHex, offer } = opened;
@@ -551,11 +622,13 @@ export async function acceptShare(opened, deps = {}) {
   if (!opened.acceptedByMe) {
     if (opened.state === "accepted") throw new ShareError("Someone else already used this link. Ask the owner for a new one.", "taken", 409);
     const accept = { serverDomain: offer.serverDomain, shareId, memberPubHex: member.pubHex, acceptedAt };
+    const admin = await adminProof(d, accept);
     const signature = await sigHex(ss.signServerShareAccept(accept, member.seed));
     const acceptance = await ss.sealShareJson(await ss.shareLinkKey(secret), ss.shareAad(ss.AAD_SHARE_ACCEPTANCE, shareId), {
       v: 1,
       accept,
       signature,
+      admin,
     });
     const res = await postJson(d, `${d.apex}/api/server-shares/${shareId}/accept`, { acceptance }, {
       "x-flagship-share-token": opened.token,

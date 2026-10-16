@@ -9,11 +9,12 @@ import { inlinePrompt } from "../lib/modal.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
 import { serverIcon } from "../lib/icons.js";
 import { parseShareLink } from "../lib/serverShare.js";
-import { ADD_SERVERS_ADMIN_ONLY, canAddServers, refuseAddServer } from "../lib/addServerGate.js";
+import { canAddServers, refuseAddServer } from "../lib/addServerGate.js";
 import {
   DATA_TITLE,
   LEVEL_LINE,
   LEVEL_TEXT,
+  SHARE_ACCEPT_ADMIN_ONLY,
   acceptShare,
   openShareLink,
   shareErrorText,
@@ -100,9 +101,10 @@ export async function enterShareAccept(link) {
     wireHome();
     return;
   }
-  // Co-managing a server adds it to the account: admin devices only.
+  // Co-managing a server adds it to the account: admin devices only, and the
+  // shared server checks the admin key's signature (docs/share-a-server.md §5.1).
   if (!canAddServers()) {
-    el.innerHTML = errorCard(ADD_SERVERS_ADMIN_ONLY);
+    el.innerHTML = errorCard(SHARE_ACCEPT_ADMIN_ONLY);
     wireHome();
     return;
   }
@@ -141,12 +143,12 @@ async function accept(opened, my) {
     r = await acceptShare(opened);
   } catch (e) {
     if (my !== seq) return;
-    if (e?.code === "taken" || e?.code === "expired") {
+    if (e?.code === "taken" || e?.code === "expired" || e?.code === "not-admin") {
       el.innerHTML = errorCard(shareErrorText(e));
       wireHome();
       return;
     }
-    toast(shareErrorText(e), "err");
+    if (e?.code !== "cancelled") toast(shareErrorText(e), "err");
     throw e;
   }
   if (my !== seq) return;
