@@ -55,6 +55,24 @@ const EVERY_MERGE: readonly Scenario[] = [
     },
   ),
   android(
+    "android-lock-footer",
+    "The lock screen ends like Welcome: Unlock, Sign out right below, a gap, then Patent Pending above the navigation bar.",
+    `${PKG}.GymOnboardingTest#lockScreenSharesTheWelcomeFooter`,
+    {
+      steps: [
+        { kind: "launch", describe: "Launch smokeTab=settings." },
+        { kind: "tap", describe: "Lock.", handle: "settings-lock-btn" },
+      ],
+      assertions: [
+        { describe: "Unlock", handle: "biometric-unlock-btn", expect: "present" },
+        { describe: "Sign out", handle: "lock-sign-out-btn", expect: "present" },
+        { describe: "Patent Pending", handle: "patent-pending", expect: "present" },
+      ],
+      screenshots: [shot("lock-screen", "The lock screen's footer.")],
+      dimension: "D7",
+    },
+  ),
+  android(
     "android-connect-link-to-join",
     "A pairing link typed into the account-name field opens the join flow (flagship.smokeOnboarding).",
     `${PKG}.GymOnboardingTest#pairingLinkTypedAsTheNameOpensJoin`,
