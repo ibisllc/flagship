@@ -93,6 +93,15 @@ export const WEB_MISC: readonly Scenario[] = [
     "D4",
   ),
   row(
+    "web-total-misc-backup-file-takeover-finish",
+    "A backup file's takeover after its grace: Finish now posts re-pair/complete naming the rotated key the initiate installed, signed by that key; the sheet closes and the browser signs with the rotated key from then on.",
+    "gym misc a backup file's takeover finishes once its grace has passed",
+    "[data-grace-finish]",
+    [{ describe: "Finish now", handle: "[data-grace-finish]", expect: "enabled" }],
+    [["keyfile-grace-ready", "Finish now armed."]],
+    "D4",
+  ),
+  row(
     "web-total-misc-profiles-none",
     "Profiles with none: 'No profiles yet' and Set one up opens the account cover.",
     "gym misc profiles with none offers Set one up, which opens the account cover",

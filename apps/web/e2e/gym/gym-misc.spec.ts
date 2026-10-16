@@ -419,11 +419,7 @@ test.describe("gym webapp misc", () => {
     await shot(page, testInfo, "keyfile-grace");
   });
 
-  // Product bug: the recovery view's grace sheet passes finishTakeover a
-  // takeover with no seed, rotated key or signer (views/recovery.js
-  // runImportGraceCountdown), so Finish now returns "needs-key", which the
-  // click handler ignores: the button stays "Finishing…" and nothing is sent.
-  test.fixme("gym misc a backup file's takeover finishes once its grace has passed", async ({ page }) => {
+  test("gym misc a backup file's takeover finishes once its grace has passed", async ({ page }, testInfo) => {
     await reachHome(page, { kind: "admin", servers: [HOME] });
     const m = await mock(page);
     basePods(m);
@@ -442,8 +438,19 @@ test.describe("gym webapp misc", () => {
     await page.fill(".modal-input", "new-device-passphrase");
     await page.click("[data-modal-ok]");
     await expect(page.locator("[data-grace-finish]")).toBeEnabled({ timeout: 15_000 });
+    await shot(page, testInfo, "keyfile-grace-ready");
     await page.click("[data-grace-finish]");
-    await m.waitFor("/re-pair/complete");
+
+    // The completion names the rotated key the initiate installed, signed by it.
+    const done = await m.waitFor("/re-pair/complete");
+    const rp = m.last("/api/users/smoketest/re-pair")!;
+    expect(done.body.request.newIrkPub).toBe(rp.body.request.newIrkPub);
+    const completeCanon = (r: { username: string; newIrkPub: string; issuedAt: number }) =>
+      `flagship/re-pair-complete/v1|${r.username}|${r.newIrkPub}|${r.issuedAt}`;
+    expect(await verifies(page, completeCanon, done.body.request, done.body.signature, rp.body.request.newIrkPub)).toBe(true);
+    // The sheet closes and this device signs with the rotated key from now on.
+    await expect(page.locator("[data-grace-finish]")).toHaveCount(0, { timeout: 10_000 });
+    expect(await page.evaluate(async () => (await import("/keystore.js")).currentIrkVersion())).toBeGreaterThan(1);
   });
 
   // ───────────────────────────── profiles + settings rows ─────────────────────────────

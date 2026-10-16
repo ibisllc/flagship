@@ -428,7 +428,9 @@ async function runKeyfileImport(file) {
     }
 
     toast(`Bringing this device into ${username}`, "ok");
-    await runImportGraceCountdown(takeover);
+    // Finish now signs the completion with the rotated key, derived from the
+    // restored account key.
+    await runImportGraceCountdown({ ...takeover, seed: session.umk }, keystore);
   } catch (e) {
     toast(importErrorMessage(e), "err");
   }
@@ -445,7 +447,7 @@ async function runKeyfileImport(file) {
  * `finishTakeover` (the CAS-swap completion) so the countdown logic stays the
  * shared, unit-tested core.
  */
-async function runImportGraceCountdown(takeover) {
+async function runImportGraceCountdown(takeover, keystore) {
   const { graceTimeline, finishTakeover } = await import("../lib/loginTakeover.js");
   const { dispatchInitialView } = await import("../lib/deepLink.js");
 
@@ -495,6 +497,9 @@ async function runImportGraceCountdown(takeover) {
     finishBtn.textContent = "Finishing…";
     try {
       const result = await finishTakeover(takeover, {
+        signWithIrkVersioned: keystore.signWithIrkVersioned,
+        deriveIrkVersioned: keystore.deriveIrkVersioned,
+        bytesToHex: keystore.bytesToHex,
         // The re-pair ROTATED to takeover.newIrkVersion; once the swap
         // completes server-side, persist that version locally so subsequent
         // signing (push, orders, …) uses the rotated device key — mirrors
@@ -515,7 +520,7 @@ async function runImportGraceCountdown(takeover) {
       if (result.outcome === "objected") {
         toast(result.message, "err");
         close();
-      } else if (result.outcome === "expired") {
+      } else if (result.outcome === "expired" || result.outcome === "needs-key") {
         toast(result.message, "err");
         close();
       } else if (result.outcome === "too-early") {
