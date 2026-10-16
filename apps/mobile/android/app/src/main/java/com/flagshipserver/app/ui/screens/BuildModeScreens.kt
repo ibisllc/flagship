@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -299,7 +300,7 @@ private val BUILD_HELP_ITEMS = listOf(
     "Import from a Git repo" to
         "Paste the address of a code repository, for example on GitHub. If it is already set up for Flagship it installs as-is; otherwise the AI can adapt it for you.",
     "Connect your IDE" to
-        "For developers: work in Cursor or Cline on your computer with your own AI, connected to your server over MCP. No AI key is stored on the server.",
+        "For developers: work in your own IDE (Claude Code, Cursor, VS Code or Cline) with your own AI, connected to your server over MCP. No AI key is stored on the server.",
 )
 
 @Composable
@@ -840,7 +841,7 @@ fun BuildMcpScreen(nav: NavController, editServiceId: String? = null) {
     ScreenScaffold(
         title = "Connect your IDE",
         subtitle = vm.editingName?.let { EditService.ideIntro(it) }
-            ?: "Build from Cursor or Cline using your own AI. The box runs an MCP server scoped to just this build — no model key on the box.",
+            ?: "Build from your own IDE (Claude Code, Cursor, VS Code or Cline) using your own AI. The box runs an MCP server scoped to just this build — no model key on the box.",
         onBack = { nav.popBackStack() },
     ) {
         val creating = phase is BuildMcpViewModel.McpPhase.Creating
@@ -866,9 +867,13 @@ fun BuildMcpScreen(nav: NavController, editServiceId: String? = null) {
         } else {
             ConnectionCard(
                 conn = conn,
-                onCopyConfig = {
-                    copyToClipboard(ctx, "Flagship MCP config", ideConfigString(conn.ideConfig))
+                onCopyConfig = { config ->
+                    copyToClipboard(ctx, "Flagship MCP config", config)
                     toasts.success("Config copied.")
+                },
+                onCopyCommand = { command ->
+                    copyToClipboard(ctx, "Flagship MCP command", command)
+                    toasts.success("Command copied.")
                 },
                 onCopyKey = {
                     copyToClipboard(ctx, "Flagship MCP key", conn.key)
@@ -888,7 +893,8 @@ fun BuildMcpScreen(nav: NavController, editServiceId: String? = null) {
 @Composable
 private fun ConnectionCard(
     conn: BuildMcpConnection,
-    onCopyConfig: () -> Unit,
+    onCopyConfig: (String) -> Unit,
+    onCopyCommand: (String) -> Unit,
     onCopyKey: () -> Unit,
     onRotate: () -> Unit,
     onJournal: () -> Unit,
@@ -897,23 +903,57 @@ private fun ConnectionCard(
     envRequests: List<BuildEnvRequest>,
     deployStatus: String?,
 ) {
+    val choices = conn.ideChoices()
+    var selected by remember { mutableStateOf("claude-code") }
+    val ide = choices.firstOrNull { it.id == selected } ?: choices.first()
+    val config = ideConfigString(ide.config)
     FSCard(padding = PaddingValues(FS.space.s5)) {
         Text(
-            "Paste this into your IDE's MCP settings (Cursor: Settings → MCP; Cline: MCP servers). The key works only for this build.",
+            "Add this to your IDE's own settings, not a file in your project (the address names your server). The key works only for this build.",
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+            modifier = Modifier.testTag("build-mcp-user-settings"),
         )
         Spacer(Modifier.height(FS.space.s3))
         KeyValueRow("URL", conn.url)
         Spacer(Modifier.height(FS.space.s2))
         KeyValueRow("Key", conn.key)
         Spacer(Modifier.height(FS.space.s3))
-        Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            FSSecondaryButton("Copy key", onClick = onCopyKey)
-            FSSecondaryButton("Copy IDE config", onClick = onCopyConfig)
+        if (choices.size > 1) {
+            Spacer(Modifier.height(FS.space.s3))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
+                modifier = Modifier.horizontalScroll(rememberScrollState()).testTag("build-mcp-ide-picker"),
+            ) {
+                choices.forEach { c ->
+                    com.flagshipserver.app.ui.components.FSChip(
+                        label = c.name,
+                        selected = c.id == ide.id,
+                        onClick = { selected = c.id },
+                        modifier = Modifier.testTag("build-mcp-ide-${c.id}"),
+                    )
+                }
+            }
+        }
+        ide.where?.takeIf { it.isNotBlank() }?.let {
+            Spacer(Modifier.height(FS.space.s2))
+            Text(it, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp), modifier = Modifier.testTag("build-mcp-ide-where"))
         }
         Spacer(Modifier.height(FS.space.s3))
-        CodeBlock(ideConfigString(conn.ideConfig))
+        Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            FSSecondaryButton("Copy key", onClick = onCopyKey)
+            FSSecondaryButton("Copy IDE config", onClick = { onCopyConfig(config) }, modifier = Modifier.testTag("build-mcp-copy-config"))
+        }
+        Spacer(Modifier.height(FS.space.s3))
+        Box(Modifier.testTag("build-mcp-ide-config")) { CodeBlock(config) }
+        ide.command?.let { command ->
+            Spacer(Modifier.height(FS.space.s3))
+            Text("Or run:", color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+            Spacer(Modifier.height(FS.space.s2))
+            Box(Modifier.testTag("build-mcp-ide-command")) { CodeBlock(command) }
+            Spacer(Modifier.height(FS.space.s2))
+            FSSecondaryButton("Copy command", onClick = { onCopyCommand(command) }, block = true, modifier = Modifier.testTag("build-mcp-copy-command"))
+        }
         Spacer(Modifier.height(FS.space.s3))
         Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             FSSecondaryButton("Regenerate key", onClick = onRotate)

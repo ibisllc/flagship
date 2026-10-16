@@ -133,13 +133,28 @@ class MockBuildClient(
     private fun connectionFor(buildId: String): BuildMcpConnection {
         val url = "https://home.bright-maple.flagship.services/mcp/build/$buildId"
         val key = mintKey()
-        return BuildMcpConnection(url = url, key = key, ideConfig = ideConfig(url, key))
+        val name = "flagship-$buildId"
+        val generic = ideConfig(name, url, key, type = "http")
+        val configs = listOf(
+            McpIdeConfig(
+                "claude-code", "Claude Code", "Run the command in a terminal, or pass the JSON with --mcp-config", generic,
+                command = "claude mcp add --scope user --transport http $name $url --header \"Authorization: Bearer $key\"",
+            ),
+            McpIdeConfig("cursor", "Cursor", "~/.cursor/mcp.json (Cursor Settings → MCP → Add new global MCP server)", ideConfig(name, url, key, type = null)),
+            McpIdeConfig("vscode", "VS Code", "Your user mcp.json (Command Palette → MCP: Open User Configuration)", ideConfig(name, url, key, type = "http", top = "servers")),
+            McpIdeConfig("cline", "Cline", "Cline → MCP Servers → Configure MCP Servers", ideConfig(name, url, key, type = "streamableHttp")),
+        )
+        return BuildMcpConnection(url = url, key = key, ideConfig = generic, ideConfigs = if (legacyMcpConfig) null else configs)
     }
 
-    /** Cursor/Cline MCP-servers config snippet, matching the daemon's shape. */
-    private fun ideConfig(url: String, key: String): JsonObject = buildJsonObject {
-        put("mcpServers", buildJsonObject {
-            put("flagship-build", buildJsonObject {
+    /** Answer like a box from before per-IDE configs (only `ideConfig`). */
+    var legacyMcpConfig = false
+
+    /** One IDE's MCP config, in the daemon's shapes (buildOrchestrator `mcpIdeConfigs`). */
+    private fun ideConfig(name: String, url: String, key: String, type: String?, top: String = "mcpServers"): JsonObject = buildJsonObject {
+        put(top, buildJsonObject {
+            put(name, buildJsonObject {
+                type?.let { put("type", JsonPrimitive(it)) }
                 put("url", JsonPrimitive(url))
                 put("headers", buildJsonObject {
                     put("Authorization", JsonPrimitive("Bearer $key"))

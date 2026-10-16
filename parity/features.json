@@ -177,7 +177,7 @@
       "ref": "web",
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/ViewModels/BuildMcpViewModel.swift", "ideConfigs"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/BuildModesScreens.swift", "build-mcp-ide-picker"]] },
-        "android": { "status": "missing", "reason": "Shows and copies only the generic ideConfig, which Cline refuses and VS Code's mcp.json doesn't read.", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/api/BuildClient.kt", "ideConfigs"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/api/BuildClient.kt", "ideConfigs"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/BuildModeScreens.kt", "build-mcp-ide-picker"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/views/build-mcp.js", "conn\\.ideConfigs"], ["apps/web/public/webapp/views/build-mcp.js", "data-mcp-ide"]] }
       }
     },

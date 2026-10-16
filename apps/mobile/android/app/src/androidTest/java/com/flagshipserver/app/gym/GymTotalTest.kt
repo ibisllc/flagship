@@ -6,6 +6,9 @@
 package com.flagshipserver.app.gym
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.onNodeWithText
+import org.junit.Assert.assertEquals
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithTag
@@ -57,6 +60,32 @@ class GymTotalTest : GymBase() {
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("build-mcp-create").assertIsDisplayed()
         gymShot("build-mcp")
+    }
+
+    /** Connect your IDE offers each IDE's own config: Claude Code with its
+     *  one-line command, then Cursor, VS Code (`servers`) and Cline
+     *  (`streamableHttp`), each saying where it goes. Mirror of iOS
+     *  test_buildMcpIdeConfigs. */
+    @Test
+    fun buildMcpIdeConfigs() {
+        launch(tab = "apps")
+        composeRule.onNodeWithTag("services-build-cta").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("build-src-mcp").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("build-mcp-create").performClick()
+        waitUntilExists("build-mcp-ide-picker", timeoutMs = 15_000)
+        composeRule.onNodeWithTag("build-mcp-user-settings").assertTextContains("not a file in your project", substring = true)
+        composeRule.onNodeWithText("claude mcp add --scope user --transport http", substring = true).assertExists()
+        composeRule.onNodeWithTag("build-mcp-copy-command").assertExists()
+        gymShot("build-mcp-ide-claude-code")
+        composeRule.onNodeWithTag("build-mcp-ide-vscode").performClick()
+        composeRule.onNodeWithText("\"servers\"", substring = true).assertExists()
+        composeRule.onNodeWithTag("build-mcp-ide-where").assertTextContains("MCP: Open User Configuration", substring = true)
+        assertEquals(0, composeRule.onAllNodesWithTag("build-mcp-copy-command").fetchSemanticsNodes().size)
+        composeRule.onNodeWithTag("build-mcp-ide-cline").performClick()
+        composeRule.onNodeWithText("streamableHttp", substring = true).assertExists()
+        gymShot("build-mcp-ide-cline")
     }
 
     // ─── D3 — AI-keys manager ────────────────────────────────────────────────
