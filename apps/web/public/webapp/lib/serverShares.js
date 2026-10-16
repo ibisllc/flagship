@@ -35,6 +35,8 @@ export const NOTIFY_NOT_ALLOWED = "The owner hasn't let you approve this server'
 export const MEMBERS_ONLY_HINT = "Members only. You can open it: you co-manage this server.";
 export const DATA_TITLE = "Can see app data";
 export const DATA_LINE = "They can open each app's Database section.";
+export const SHARED_DB_OPEN = "Database";
+export const SHARED_DB_WRITE_REFUSED = "Only someone who can manage this server can change its apps' data. You can read it.";
 
 export class ShareError extends Error {
   constructor(message, code, status) {
@@ -710,6 +712,24 @@ export async function signInToShare(entry, deps = {}, { force = false } = {}) {
   };
   rememberSession(entry.shareId, s);
   return s;
+}
+
+/**
+ * Where views/app-db.js reads an app's data on a server shared with "Can see
+ * app data" (docs/share-a-server.md §5.5): the share session, and writes
+ * signed with the per-share key, which the box takes only at "Can manage".
+ */
+export async function shareDbSource(entry, me, { back, deps = {} } = {}) {
+  const client = shareBoxClient(entry, deps);
+  const canWrite = me?.level === "manage" && !!me?.seeAppData;
+  const signWith = canWrite ? await shareMemberSigner(entry, deps) : null;
+  return {
+    fetchJson: (path, init) => client.fetch(path, init),
+    signer: () => ({ serverDomain: lower(entry.serverDomain), umk: getSession()?.umk ?? null, signWithIrk: signWith }),
+    writeRefusal: () => (canWrite ? "" : SHARED_DB_WRITE_REFUSED),
+    csvAuth: async () => ({ base: boxUrl(entry.serverDomain, ""), token: (await signInToShare(entry, deps)).token }),
+    back: back ?? (async () => {}),
+  };
 }
 
 /** A box client on B's share session: `fetch(path, init)` like screensFetch,

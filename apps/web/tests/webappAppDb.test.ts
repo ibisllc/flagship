@@ -336,7 +336,7 @@ describe("database — the screens", () => {
     expect(ask).toContain('id="app-db-confirm"');
     expect(ask).toContain("already used");
     // A device that isn't an admin device can't sign the write: no button, the reason instead.
-    const locked: string = renderNeedsGrantHtml("", { adminOnly: true });
+    const locked: string = renderNeedsGrantHtml("", { refusal: "Only an admin device can change this app's data. Reading it works from any device." });
     expect(locked).not.toContain('id="app-db-confirm"');
     expect(locked).toContain("Only an admin device can change this app's data.");
   });

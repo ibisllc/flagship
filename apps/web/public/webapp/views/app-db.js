@@ -38,9 +38,29 @@ import {
 
 registerView("view-app-db");
 
-/** @type {{serviceId: string, appName: string, stores: any[], screen: string, store: string, table: string, offset: number, sql: string} | null} */
+/** @type {{serviceId: string, appName: string, stores: any[], screen: string, store: string, table: string, offset: number, sql: string, src: DbSource} | null} */
 let current = null;
-const fetchJson = (path, init) => screensFetch(path, init);
+
+/**
+ * Where the page reads and how it signs a write. The owner's own server by
+ * default: the paired session, the sensitive-order key, and writes only from
+ * a device that can sign admin orders. A server shared with this account
+ * ("Can see app data", docs/share-a-server.md §5.5) passes its own: the share
+ * session, the per-share key, and writes only at "Can manage".
+ * @typedef {{ fetchJson: Function, signer: () => object, writeRefusal: () => string, csvAuth: () => Promise<{base: string, token: string}>, back: () => Promise<void> }} DbSource
+ */
+function ownerSource(serviceId) {
+  return {
+    fetchJson: (path, init) => screensFetch(path, init),
+    signer: () => ({ serverDomain: podServerDomain(), umk: getSession()?.umk ?? null, signWithIrk: sensitiveSigner() }),
+    writeRefusal: () => (canSignAdminOrders() ? "" : DB_WRITE_ADMIN_ONLY),
+    csvAuth: async () => ({ base: getPodBaseUrl(), token: getSessionToken() }),
+    back: async () => {
+      const { enterServiceDetail } = await import("./service-detail.js");
+      await enterServiceDetail(serviceId);
+    },
+  };
+}
 const message = (e) => (e instanceof ScreensError || e?.status ? dbErrorMessage(e) : humanError(e));
 
 export function renderDbTablesHtml(stores) {
@@ -143,13 +163,13 @@ export function renderQueryErrorHtml(text, { sqlState } = {}) {
 
 /** "This changes data. Confirm to run it." with Confirm and run; `note` is
  *  shown above it (e.g. a used confirmation). A device that can't sign the
- *  write (not an admin device: the box takes it only under the admin root)
- *  gets the admin-only line and no button. */
-export function renderNeedsGrantHtml(note = "", { adminOnly = false } = {}) {
-  if (adminOnly) {
+ *  write (not an admin device: the box takes it only under the admin root;
+ *  a share below "Can manage") gets `refusal`, why not, and no button. */
+export function renderNeedsGrantHtml(note = "", { refusal = "" } = {}) {
+  if (refusal) {
     return `
-      <div class="card" data-db-needs-grant data-db-admin-only>
-        <p class="weight-600">${escapeHtml(DB_WRITE_ADMIN_ONLY)}</p>
+      <div class="card" data-db-needs-grant data-db-write-refused>
+        <p class="weight-600">${escapeHtml(refusal)}</p>
       </div>`;
   }
   return `
@@ -173,7 +193,7 @@ async function renderTables() {
   root.innerHTML = skeletonCards(2);
   let stores;
   try {
-    stores = await fetchDbStores(ctx.serviceId, fetchJson);
+    stores = await fetchDbStores(ctx.serviceId, ctx.src.fetchJson);
   } catch (e) {
     if (current !== ctx) return;
     root.innerHTML = renderQueryErrorHtml(message(e));
@@ -212,7 +232,7 @@ async function renderTable() {
       table: ctx.table,
       offset: ctx.offset,
       limit: DB_PAGE_SIZE,
-      fetchJson,
+      fetchJson: ctx.src.fetchJson,
     });
   } catch (e) {
     if (current !== ctx) return;
@@ -240,8 +260,7 @@ async function exportCsv(btn) {
       serviceId: ctx.serviceId,
       store: ctx.store,
       table: ctx.table,
-      base: getPodBaseUrl(),
-      token: getSessionToken(),
+      ...(await ctx.src.csvAuth()),
       makeError: (msg, status, body) => new ScreensError(msg, status, body),
     });
     const url = URL.createObjectURL(blob);
@@ -295,8 +314,9 @@ function cancelConfirm() {
 
 function askConfirm(note) {
   cancelConfirm();
-  if (!canSignAdminOrders()) {
-    showResult(renderNeedsGrantHtml("", { adminOnly: true }));
+  const refusal = current?.src.writeRefusal() ?? "";
+  if (refusal) {
+    showResult(renderNeedsGrantHtml("", { refusal }));
     return Promise.resolve(false);
   }
   return new Promise((resolve) => {
@@ -323,12 +343,9 @@ async function run(btn) {
       serviceId: ctx.serviceId,
       store,
       sql,
-      fetchJson,
+      fetchJson: ctx.src.fetchJson,
       confirm: (note) => (current === ctx && ctx.screen === "sql" ? askConfirm(note) : Promise.resolve(false)),
-      signer: () => {
-        const session = getSession();
-        return { serverDomain: podServerDomain(), umk: session?.umk ?? null, signWithIrk: sensitiveSigner() };
-      },
+      signer: () => ctx.src.signer(),
     });
     if (current !== ctx || ctx.screen !== "sql" || out.cancelled) return;
     showResult(renderQueryResultHtml(out.result));
@@ -348,8 +365,7 @@ export function initAppDbView() {
       return;
     }
     if (current) {
-      const { enterServiceDetail } = await import("./service-detail.js");
-      await enterServiceDetail(current.serviceId);
+      await current.src.back();
     } else {
       show("view-services-list");
     }
@@ -364,9 +380,11 @@ export function initAppDbView() {
   });
 }
 
-export async function enterAppDb(serviceId, appName) {
+/** Open an app's Database. `source` overrides where it reads (a shared server). */
+export async function enterAppDb(serviceId, appName, source = null) {
   cancelConfirm();
-  current = { serviceId, appName: appName || serviceId, stores: [], screen: "tables", store: "", table: "", offset: 0, sql: "" };
+  const src = { ...ownerSource(serviceId), ...(source ?? {}) };
+  current = { serviceId, appName: appName || serviceId, stores: [], screen: "tables", store: "", table: "", offset: 0, sql: "", src };
   show("view-app-db");
   await renderTables();
 }

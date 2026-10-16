@@ -2642,6 +2642,7 @@ section h2.fs-hero-title::before { content: none; }
 .shared-app:first-child { border-top: 0; padding-top: 0; }
 .shared-app-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); }
 .shared-app-head button { width: auto; flex: 0 0 auto; white-space: nowrap; }
+.shared-app-actions { display: flex; flex-wrap: wrap; gap: var(--space-1); justify-content: flex-end; }
 .shared-app-name { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; }
 
 /* AI model menu (build chat header + Settings defaults) */

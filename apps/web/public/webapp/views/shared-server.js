@@ -29,6 +29,7 @@ import {
   MEMBERS_ONLY_HINT,
   NOTIFY_LINE,
   NOTIFY_TITLE,
+  SHARED_DB_OPEN,
   UNLOCK_TITLE,
   approveShareStartup,
   fetchShareStartups,
@@ -37,6 +38,7 @@ import {
   orderShareUpdate,
   setSharePush,
   shareBoxClient,
+  shareDbSource,
   shareErrorText,
   shareMemberSigner,
   sharePushState,
@@ -207,14 +209,17 @@ function updateCardHtml(detail) {
 
 const releaseName = (r) => (typeof r?.tag === "string" && r.tag ? r.tag : String(r?.commit ?? "").slice(0, 8));
 
-function appRowHtml(app, raw, canManage) {
+function appRowHtml(app, raw, canManage, seeAppData = false) {
   const wants = canManage && hasPendingInternetRequest(raw) ? ` <span class="pill warn">${escapeHtml(ACCESS_PENDING_BADGE)}</span>` : "";
   const membersOnly = raw?.accessMode === "members-only" ? `<p class="faint-sm" data-members-only>${escapeHtml(MEMBERS_ONLY_HINT)}</p>` : "";
   return `
         <div class="shared-app" data-shared-app="${escapeHtml(app.serviceId)}">
           <div class="shared-app-head">
             <span class="shared-app-name"><span class="weight-600">${escapeHtml(app.name)}</span>${appStatePillHtml(app.state)}${wants}</span>
-            ${canManage ? `<button class="secondary btn-xs" data-access-open="${escapeHtml(app.serviceId)}">Internet access</button>` : ""}
+            <span class="shared-app-actions">
+              ${seeAppData ? `<button class="secondary btn-xs" data-db-open="${escapeHtml(app.serviceId)}">${escapeHtml(SHARED_DB_OPEN)}</button>` : ""}
+              ${canManage ? `<button class="secondary btn-xs" data-access-open="${escapeHtml(app.serviceId)}">Internet access</button>` : ""}
+            </span>
           </div>
           ${app.url ? `<a class="muted-sm mono text-xs truncate" href="${escapeHtml(app.url)}" target="_blank" rel="noopener">${escapeHtml(app.url.replace(/^https?:\/\//, ""))}</a>` : ""}
           ${membersOnly}
@@ -257,7 +262,7 @@ export function sharedServerHtml({ entry, me, detail, apps, startups = [] }) {
       </div>
       <h2 class="mt-4">Apps</h2>
       <div class="card" id="shared-apps-card">
-        ${rows.length ? rows.map((a) => appRowHtml(a, raw.get(a.serviceId), canManage)).join("") : `<p class="faint-sm">No apps on this server yet.</p>`}
+        ${rows.length ? rows.map((a) => appRowHtml(a, raw.get(a.serviceId), canManage, !!me.seeAppData)).join("") : `<p class="faint-sm">No apps on this server yet.</p>`}
       </div>
       ${canManage && me.canUpdate === true ? updateCardHtml(detail) : ""}
       ${leaveHtml(name)}`;
@@ -327,14 +332,14 @@ async function renderSharedServer() {
   const startups = me.unlockAtBoot ? await fetchShareStartups(entry).catch(() => []) : [];
   if (!onPage(my)) return;
   root.innerHTML = sharedServerHtml({ entry, me, detail, apps, startups });
-  wirePage(entry, my, { canManage: me.level === "manage", startups, apps });
+  wirePage(entry, my, { canManage: me.level === "manage", startups, apps, me });
   wireNotify(entry);
   if (me.level === "manage" && me.canUpdate === true) void loadUpdateOffer(entry, client, detail, my);
   startMetrics(entry, client, my);
   if (me.unlockAtBoot) pollStartups(entry, my);
 }
 
-function wirePage(entry, my, { canManage, startups, apps = [] }) {
+function wirePage(entry, my, { canManage, startups, apps = [], me = null }) {
   const name = entry.serverName || entry.serverDomain;
   $("shared-leave-btn")?.addEventListener("click", async (ev) => {
     const ok = await inlineConfirm({
@@ -357,6 +362,9 @@ function wirePage(entry, my, { canManage, startups, apps = [] }) {
     }
   });
   wireStartup(entry, my, startups);
+  document.querySelectorAll("[data-db-open]").forEach((btn) => {
+    btn.addEventListener("click", () => void openSharedDb(entry, me, btn.getAttribute("data-db-open"), apps));
+  });
   if (!canManage) return;
   document.querySelectorAll("[data-access-open]").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -475,6 +483,19 @@ function startMetrics(entry, client, my) {
   };
   void tick();
   metricsTimer = setInterval(tick, METRICS_POLL_MS);
+}
+
+/** An app's Database on the shared server ("Can see app data"); Back returns here. */
+async function openSharedDb(entry, me, serviceId, apps) {
+  const app = serverAppRows(apps, []).find((a) => a.serviceId === serviceId);
+  try {
+    stopTimers();
+    const source = await shareDbSource(entry, me, { back: () => enterSharedServer(entry) });
+    const { enterAppDb } = await import("./app-db.js");
+    await enterAppDb(serviceId, app?.name ?? serviceId, source);
+  } catch (e) {
+    toast(shareErrorText(e), "err");
+  }
 }
 
 async function toggleAccessEditor(entry, serviceId, appName) {

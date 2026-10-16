@@ -363,6 +363,28 @@ describe("share this server — owner and member flows", () => {
     expect(post.memberPubHex).toBe(hex(memberPub));
     expect(verifyAppAccessGrant(post.body.grant as never, fromHex(post.body.signature as string), memberPub)).toBe(true);
   });
+
+  it("the Database on a shared server reads over the share session and writes only at manage", async () => {
+    const w = await world();
+    const { entry } = await sharedWithB(w);
+    const back = vi.fn(async () => {});
+    const viewer = await shares.shareDbSource(entry, { level: "view", seeAppData: true }, { back, deps: w.depsB });
+    expect(viewer.writeRefusal()).toBe("Only someone who can manage this server can change its apps' data. You can read it.");
+    expect(await viewer.fetchJson("/api/screens/apps-list")).toMatchObject({ apps: [{ serviceId: "notes" }] });
+    const csv = await viewer.csvAuth();
+    expect(csv.base).toBe(`https://${S}`);
+    expect(typeof csv.token).toBe("string");
+    await viewer.back();
+    expect(back).toHaveBeenCalledOnce();
+
+    const manager = await shares.shareDbSource(entry, { level: "manage", seeAppData: true }, { deps: w.depsB });
+    expect(manager.writeRefusal()).toBe("");
+    const s = manager.signer();
+    expect(s.serverDomain).toBe(S);
+    const sig = await s.signWithIrk(null, new Uint8Array([1, 2, 3]));
+    const { ed25519 } = await import("@noble/curves/ed25519.js");
+    expect(ed25519.verify(sig, new Uint8Array([1, 2, 3]), deriveShareMemberKey({ seed: umkB }, entry.shareId).publicKey)).toBe(true);
+  });
 });
 
 describe("share this server — start-up approval", () => {
@@ -541,6 +563,14 @@ describe("the shared server's page", () => {
     expect(html).toContain("Members only. You can open it: you co-manage this server.");
     expect(html).not.toContain("You need an invite");
     for (const owned of OWNER_ONLY) expect(html).not.toContain(owned);
+  });
+
+  it("offers each app's Database only with Can see app data", () => {
+    const withData = sharedServerHtml({ entry, me: { level: "view", unlockAtBoot: false, seeAppData: true }, detail, apps });
+    expect(withData).toContain('data-db-open="notes"');
+    expect(withData).toContain(">Database<");
+    const without = sharedServerHtml({ entry, me: { level: "manage", unlockAtBoot: false, seeAppData: false }, detail, apps });
+    expect(without).not.toContain("data-db-open");
   });
 
   it("at view: no access-list editor and no start-up card", () => {
