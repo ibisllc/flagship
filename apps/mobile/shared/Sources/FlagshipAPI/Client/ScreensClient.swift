@@ -199,6 +199,23 @@ public protocol ScreensClient: Sendable {
     func serverRestoreStatus() async throws -> ServerRestoreStatusResponse
     /// What this box did, newest first (`before` is the `seq` cursor).
     func boxActivity(limit: Int, before: Int?) async throws -> [BoxActivityEntry]
+    /// ≤ 4 MiB of a backup's one `.flagship` file from `offset`
+    /// (`<route>/bundle?offset=N`): Back up now's backup, or a saved one.
+    func serverArchiveBundle(_ route: ServerArchiveRoute, offset: Int64) async throws -> Data
+    // Saved backups and their schedule (docs/server-backup-and-clone.md,
+    // "Scheduled backups"): `GET /api/screens/server-archive/backups` and
+    // the changes to it, each answering the same view.
+    func savedBackups() async throws -> SavedBackupsView
+    func savedBackupsSetSchedule(_ schedule: BackupSchedule) async throws -> SavedBackupsView
+    /// An admin device's signed `flagship/server-archive-keys/v1` batch.
+    func savedBackupsDepositKeys(_ req: ArchiveKeysDepositRequest) async throws -> SavedBackupsView
+    /// Back up now into the list: 202 `{archiveId}`; 409 `code: no-keys` with an empty pool.
+    func savedBackupsRun() async throws -> SavedBackupRunResponse
+    func savedBackupDelete(archiveId: String) async throws -> SavedBackupsView
+    /// The server's backup policy and the size limit it puts on app data.
+    func backupPolicy() async throws -> BackupPolicyView
+    /// A signed `flagship/backup-policy/v1` (409 `code: over-backup-limit` when the server holds more).
+    func setBackupPolicy(_ req: BackupPolicyRequest) async throws -> BackupPolicyView
 
     func peerBackupStatus() async throws -> PeerBackupStatusResponse
     func peerBackupToggle(participate: Bool) async throws -> PeerBackupStatusResponse
@@ -510,6 +527,30 @@ public extension ScreensClient {
         throw ScreensClientError.notImplemented("server import")
     }
     func boxActivity(limit: Int, before: Int?) async throws -> [BoxActivityEntry] { [] }
+    func serverArchiveBundle(_ route: ServerArchiveRoute, offset: Int64) async throws -> Data {
+        throw ScreensClientError.notImplemented("server backup")
+    }
+    func savedBackups() async throws -> SavedBackupsView {
+        throw ScreensClientError.notImplemented("saved backups")
+    }
+    func savedBackupsSetSchedule(_ schedule: BackupSchedule) async throws -> SavedBackupsView {
+        throw ScreensClientError.notImplemented("saved backups")
+    }
+    func savedBackupsDepositKeys(_ req: ArchiveKeysDepositRequest) async throws -> SavedBackupsView {
+        throw ScreensClientError.notImplemented("saved backups")
+    }
+    func savedBackupsRun() async throws -> SavedBackupRunResponse {
+        throw ScreensClientError.notImplemented("saved backups")
+    }
+    func savedBackupDelete(archiveId: String) async throws -> SavedBackupsView {
+        throw ScreensClientError.notImplemented("saved backups")
+    }
+    func backupPolicy() async throws -> BackupPolicyView {
+        throw ScreensClientError.notImplemented("backup policy")
+    }
+    func setBackupPolicy(_ req: BackupPolicyRequest) async throws -> BackupPolicyView {
+        throw ScreensClientError.notImplemented("backup policy")
+    }
     func buildAdapterFile(buildId: String) async throws -> String {
         throw ScreensClientError.notImplemented("flagship.app.json")
     }

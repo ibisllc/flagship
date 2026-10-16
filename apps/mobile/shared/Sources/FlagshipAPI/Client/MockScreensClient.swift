@@ -1211,9 +1211,12 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         try await tick()
         guard let id = archiveStarts.last?.archiveId, !archiveForgotten else { return nil }
         let sha = SHA256.hash(data: archiveBytes).map { String(format: "%02x", $0) }.joined()
+        let bundle = archiveBundle
         return ServerArchiveStatus(archiveId: id, state: "ready", startedAt: 1, bytes: Int64(archiveBytes.count), sha256: sha,
                                    backupFileName: "home-1970-01-01.flagship-backup", dataFileName: "home-1970-01-01.flagship-data",
-                                   apps: [ServerArchiveApp(serviceId: "alice--wiki", name: "Wiki")])
+                                   apps: [ServerArchiveApp(serviceId: "alice--wiki", name: "Wiki")],
+                                   bundleFileName: "home-1970-01-01.flagship", bundleBytes: Int64(bundle.count),
+                                   bundleSha256: Self.sha(bundle))
     }
     public func serverArchiveChunk(offset: Int64) async throws -> Data {
         try await tick()
@@ -1259,6 +1262,285 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                                          bytes: restoreStarts.last?.bytes ?? 0, received: restoreStarts.last?.bytes ?? 0,
                                          apps: restoreApps, reason: restoreFailure)
         )
+    }
+
+    // MARK: - Saved backups and the backup policy
+    //
+    // Answers like the box (serverArchive/service.ts and backupPolicy/http.ts):
+    // same shapes, same sentences, same refusals. Every backup's one file is
+    // `archiveBundle` (the header, `archiveBackupFile`, then `archiveBytes`).
+
+    /// The box's sentence while its key pool is empty.
+    public static let noKeysSentence =
+        "an admin device of your account hasn't approved backups for this server yet: open this server in the Flagship app on an admin device"
+    public var savedSchedule = BackupSchedule.boxDefault
+    /// Newest first.
+    public var savedBackupsList: [SavedBackup] = []
+    public var savedKeyPool: [ArchiveKey] = []
+    public var savedLastRun: SavedBackupLastRun?
+    public var savedRunning: SavedBackupRunning?
+    /// How many reads a Back up now stays running for before it is listed.
+    public var savedRunReads = 2
+    /// The next run fails with this sentence (the box's `lastRun.reason`).
+    public var savedRunFailure: String?
+    public var savedNow: @Sendable () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }
+    public private(set) var savedSchedulePuts: [BackupSchedule] = []
+    public private(set) var savedKeyDeposits: [ArchiveKeysDepositRequest] = []
+    public private(set) var savedDeletes: [String] = []
+    public private(set) var savedRuns = 0
+    public private(set) var bundleReads: [ServerArchiveRoute] = []
+    private var savedUsedIds: Set<String> = []
+    private var savedRunReadsLeft = 0
+
+    public var policyCurrent = BackupPolicyCurrent(policy: "unset")
+    /// What a backup of this server would hold, and its disk.
+    public var policyUsedBytes: Int64 = 3_435_973_837
+    public var policyDiskBytes: Int64 = 360 * 1_073_741_824
+    public var policyPeer: PeerBackupEngineStatus?
+    public private(set) var policyOrders: [BackupPolicyRequest] = []
+
+    /// The one `.flagship` file the mock box serves for every backup.
+    public var archiveBundle: Data {
+        var len = UInt64(archiveBackupFile.count).bigEndian
+        var out = Data("FLGSHBK1".utf8)
+        withUnsafeBytes(of: &len) { out.append(contentsOf: $0) }
+        return out + archiveBackupFile + archiveBytes
+    }
+    public var archiveBundleSha: String { Self.sha(archiveBundle) }
+
+    private static let gib: Int64 = 1_073_741_824
+    private static func formatGb(_ n: Int64) -> String {
+        let v = Double(n) / Double(gib)
+        return n < 10 * gib ? String(format: "%.1f GB", v) : String(format: "%.0f GB", v)
+    }
+    static func sha(_ d: Data) -> String { SHA256.hash(data: d).map { String(format: "%02x", $0) }.joined() }
+    static func refusal(_ status: Int, _ error: String, code: String? = nil) -> ScreensClientError {
+        var o: [String: Any] = ["error": error]
+        if let code { o["code"] = code }
+        let body = (try? JSONSerialization.data(withJSONObject: o)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+        return .http(status: status, message: body)
+    }
+
+    /// A saved backup made at `createdAt` (for seeding the list).
+    public func makeSavedBackup(createdAt: Int64, trigger: String = "schedule", id: String? = nil) -> SavedBackup {
+        let archiveId = id ?? (0..<16).map { _ in String(format: "%02x", UInt8.random(in: 0...255)) }.joined()
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "UTC")
+        f.dateFormat = "yyyy-MM-dd-HHmm"
+        let stem = "home-\(f.string(from: Date(timeIntervalSince1970: Double(createdAt) / 1000)))"
+        let bundle = archiveBundle
+        return SavedBackup(archiveId: archiveId, createdAt: createdAt, trigger: trigger, bytes: Int64(archiveBytes.count),
+                           sha256: Self.sha(archiveBytes), backupBytes: Int64(archiveBackupFile.count),
+                           backupFileName: "\(stem).flagship-backup", dataFileName: "\(stem).flagship-data",
+                           apps: [ServerArchiveApp(serviceId: "bright-maple--plants", name: "Plants"),
+                                  ServerArchiveApp(serviceId: "bright-maple--wiki", name: "Wiki")],
+                           bundleFileName: "\(stem).flagship", bundleBytes: Int64(bundle.count), bundleSha256: Self.sha(bundle))
+    }
+
+    /// Fresh keys in the pool (as an admin device's deposit would bring).
+    public func seedKeyPool(_ n: Int) {
+        savedKeyPool = (0..<n).map { i in
+            ArchiveKey(archiveId: String(format: "%032x", i + 1), kekHex: String(repeating: "ab", count: 32))
+        }
+    }
+
+    private func scheduleActive() -> Bool { policyCurrent.policy != "none" }
+
+    private func nextRun(now: Int64) -> Int64? {
+        let s = savedSchedule
+        guard s.frequency != "off", !savedKeyPool.isEmpty, scheduleActive() else { return nil }
+        let day: Int64 = 86_400_000
+        var t = (now / day) * day + Int64(s.minuteOfDayUtc) * 60_000
+        if t <= now { t += day }
+        if s.frequency == "weekly" {
+            while Calendar.mockUtcWeekday(t) != s.weekdayUtc { t += day }
+        }
+        return t
+    }
+
+    private func advanceRun() {
+        guard let r = savedRunning else { return }
+        if savedRunReadsLeft > 0 {
+            savedRunReadsLeft -= 1
+            savedRunning = SavedBackupRunning(archiveId: r.archiveId, trigger: r.trigger, startedAt: r.startedAt,
+                                              progress: ServerArchiveProgress(done: min(r.progress.done + 1, r.progress.total),
+                                                                              total: r.progress.total, app: "Wiki"))
+            return
+        }
+        savedRunning = nil
+        if let why = savedRunFailure {
+            savedRunFailure = nil
+            savedLastRun = SavedBackupLastRun(at: r.startedAt, ok: false, trigger: r.trigger, reason: why)
+            return
+        }
+        savedBackupsList.insert(makeSavedBackup(createdAt: r.startedAt, trigger: r.trigger, id: r.archiveId), at: 0)
+        savedLastRun = SavedBackupLastRun(at: r.startedAt, ok: true, trigger: r.trigger, archiveId: r.archiveId)
+    }
+
+    private func savedView() -> SavedBackupsView {
+        let pool = savedKeyPool.count
+        return SavedBackupsView(
+            schedule: savedSchedule,
+            scheduleActive: scheduleActive(),
+            nextRunAt: nextRun(now: savedNow()),
+            lastRun: savedLastRun,
+            running: savedRunning,
+            keysLeft: pool,
+            keysWanted: pool < 30 ? min(400, 800 - pool) : 0,
+            waitingReason: pool == 0 && savedSchedule.frequency != "off" ? Self.noKeysSentence : nil,
+            usedBytes: savedBackupsList.reduce(0) { $0 + $1.bytes + $1.backupBytes },
+            backups: savedBackupsList
+        )
+    }
+
+    public func savedBackups() async throws -> SavedBackupsView {
+        try await tick()
+        advanceRun()
+        return savedView()
+    }
+
+    public func savedBackupsSetSchedule(_ s: BackupSchedule) async throws -> SavedBackupsView {
+        try await tick()
+        guard ["daily", "weekly", "off"].contains(s.frequency) else { throw Self.refusal(400, "frequency must be daily, weekly or off") }
+        guard (0...1439).contains(s.minuteOfDayUtc) else { throw Self.refusal(400, "the time must be a minute of the day (0 to 1439)") }
+        guard (0...6).contains(s.weekdayUtc) else { throw Self.refusal(400, "the weekday must be 0 (Sunday) to 6") }
+        guard (0...60).contains(s.keepDaily) else { throw Self.refusal(400, "keep between 0 and 60 daily backups") }
+        guard (0...52).contains(s.keepWeekly) else { throw Self.refusal(400, "keep between 0 and 52 weekly backups") }
+        guard s.keepDaily + s.keepWeekly > 0 else { throw Self.refusal(400, "keep at least one backup") }
+        savedSchedule = s
+        savedSchedulePuts.append(s)
+        GymProbe.note("put backup schedule \(s.frequency) minute \(s.minuteOfDayUtc) weekday \(s.weekdayUtc) keep \(s.keepDaily)/\(s.keepWeekly)")
+        return savedView()
+    }
+
+    public func savedBackupsDepositKeys(_ req: ArchiveKeysDepositRequest) async throws -> SavedBackupsView {
+        try await tick()
+        let d = req.deposit
+        let sigOk = req.signature.count == 128 && req.signature.allSatisfy(\.isHexDigit)
+        let ids = Set(req.keys.map(\.archiveId))
+        guard !req.keys.isEmpty, req.keys.count <= 400, ids.count == req.keys.count, sigOk else { throw Self.refusal(400, "malformed keys") }
+        let lines = req.keys.map { "\($0.archiveId):\($0.kekHex)" }.joined(separator: "\n")
+        guard d.count == req.keys.count, d.digest == Self.sha(Data(lines.utf8)) else {
+            throw Self.refusal(400, "the keys don't match their signature")
+        }
+        guard abs(savedNow() - d.issuedAt) <= 10 * 60_000 else { throw Self.refusal(403, "the approval is stale: approve again") }
+        do {
+            try MockOrderSigners.shared.require(.sensitive, kind: "server-archive-keys", signatureHex: req.signature, payload: d)
+        } catch {
+            throw Self.refusal(403, "only an admin device of this account can approve backups")
+        }
+        savedKeyDeposits.append(req)
+        let have = Set(savedKeyPool.map(\.archiveId)).union(savedUsedIds)
+        savedKeyPool = Array((savedKeyPool + req.keys.filter { !have.contains($0.archiveId) }).prefix(800))
+        GymProbe.note("deposited \(req.keys.count) backup keys")
+        return savedView()
+    }
+
+    public func savedBackupsRun() async throws -> SavedBackupRunResponse {
+        try await tick()
+        if savedRunning != nil { throw Self.refusal(409, "a backup or restore is already running here") }
+        guard let k = savedKeyPool.first else { throw Self.refusal(409, Self.noKeysSentence, code: "no-keys") }
+        savedKeyPool.removeFirst()
+        savedUsedIds.insert(k.archiveId)
+        savedRuns += 1
+        savedRunReadsLeft = savedRunReads
+        savedRunning = SavedBackupRunning(archiveId: k.archiveId, trigger: "now", startedAt: savedNow(),
+                                          progress: ServerArchiveProgress(done: 0, total: 2, app: "Plants"))
+        GymProbe.note("backup now \(k.archiveId)")
+        return SavedBackupRunResponse(archiveId: k.archiveId)
+    }
+
+    public func savedBackupDelete(archiveId: String) async throws -> SavedBackupsView {
+        try await tick()
+        if savedRunning?.archiveId == archiveId { throw Self.refusal(409, "the backup is still being made") }
+        guard savedBackupsList.contains(where: { $0.archiveId == archiveId }) else {
+            throw Self.refusal(404, "that backup isn't on this server")
+        }
+        savedBackupsList.removeAll { $0.archiveId == archiveId }
+        savedDeletes.append(archiveId)
+        GymProbe.note("deleted backup \(archiveId)")
+        return savedView()
+    }
+
+    public func serverArchiveBundle(_ route: ServerArchiveRoute, offset: Int64) async throws -> Data {
+        try await tick()
+        switch route {
+        case .current:
+            guard archiveStarts.last != nil, !archiveForgotten else { throw Self.refusal(404, "no backup is ready") }
+        case .saved(let id):
+            guard savedBackupsList.contains(where: { $0.archiveId == id }) else { throw Self.refusal(404, "no backup is ready") }
+        }
+        let bundle = archiveBundle
+        guard offset >= 0, offset <= Int64(bundle.count) else { throw Self.refusal(400, "bad offset") }
+        bundleReads.append(route)
+        let start = Int(offset)
+        let data = bundle.subdata(in: start..<min(start + 4 * 1024 * 1024, bundle.count))
+        if start + data.count >= bundle.count, case .saved(let id) = route { GymProbe.note("downloaded backup \(id)") }
+        return data
+    }
+
+    private func limitBytes(_ p: BackupPolicyCurrent) -> Int64? {
+        switch p.policy {
+        case "phone": return p.phoneReserveBytes > 0 ? p.phoneReserveBytes : nil
+        case "peer": return policyDiskBytes / 3
+        default: return nil
+        }
+    }
+
+    private func policyView() -> BackupPolicyView {
+        let limit = limitBytes(policyCurrent)
+        let over = limit.map { policyUsedBytes >= $0 } ?? false
+        let why = policyCurrent.policy == "phone"
+            ? "the space your phone keeps for its backup"
+            : "a third of its disk, so other servers can keep their backups on it"
+        let reason = over
+            ? "This server holds \(Self.formatGb(policyUsedBytes)) of app data, over its backup limit of \(Self.formatGb(limit ?? 0)) (\(why)). Remove apps or data, or change the backup policy on the server page."
+            : nil
+        return BackupPolicyView(
+            policy: policyCurrent,
+            cap: BackupCapView(limitBytes: limit, usedBytes: policyUsedBytes, measuredAt: savedNow(), overLimit: over,
+                               diskBytes: policyDiskBytes,
+                               reservedForPeersBytes: policyCurrent.policy == "peer" ? policyDiskBytes - policyDiskBytes / 3 : nil,
+                               apps: [BackupCapApp(serviceId: "bright-maple--plants", bytes: policyUsedBytes / 3),
+                                      BackupCapApp(serviceId: "bright-maple--wiki", bytes: policyUsedBytes - policyUsedBytes / 3)],
+                               overReason: reason),
+            peer: policyCurrent.policy == "peer" ? policyPeer : nil
+        )
+    }
+
+    public func backupPolicy() async throws -> BackupPolicyView {
+        try await tick()
+        return policyView()
+    }
+
+    public func setBackupPolicy(_ req: BackupPolicyRequest) async throws -> BackupPolicyView {
+        try await tick()
+        let o = req.order
+        let valid = ["phone", "peer", "none"].contains(o.policy) && !o.serverDomain.isEmpty
+            && (o.policy == "phone" ? o.phoneReserveBytes > 0 : o.phoneReserveBytes == 0) && o.issuedAt >= 0
+        if valid, let limit = limitBytes(BackupPolicyCurrent(policy: o.policy, phoneReserveBytes: o.phoneReserveBytes)),
+           policyUsedBytes > limit {
+            let sentence = o.policy == "phone"
+                ? "This server holds \(Self.formatGb(policyUsedBytes)) of app data, more than the \(Self.formatGb(limit)) the phone would keep. Reserve at least \(Self.formatGb(policyUsedBytes)) on the phone, or remove apps or data first."
+                : "This server holds \(Self.formatGb(policyUsedBytes)) of app data, more than a third of its disk (\(Self.formatGb(limit))), which is all a server may use with peer backups. Remove apps or data first, or choose another policy."
+            GymProbe.note("refused backup-policy over limit")
+            throw Self.refusal(409, sentence, code: "over-backup-limit")
+        }
+        guard valid else { throw Self.refusal(400, "that backup policy is malformed") }
+        do {
+            try MockOrderSigners.shared.require(.sensitive, kind: "backup-policy", signatureHex: req.signatureHex, payload: o)
+        } catch {
+            throw Self.refusal(403, "only an admin device of this account can set the backup policy")
+        }
+        if let held = policyCurrent.issuedAt, o.issuedAt <= held {
+            if o.issuedAt == held { return policyView() }
+            throw Self.refusal(409, "a newer backup policy is already set on this server")
+        }
+        policyOrders.append(req)
+        policyCurrent = BackupPolicyCurrent(policy: o.policy, phoneReserveBytes: o.phoneReserveBytes, issuedAt: o.issuedAt)
+        GymProbe.note("set backup-policy \(o.policy) \(o.phoneReserveBytes)")
+        return policyView()
     }
 
     public func peerBackupStatus() async throws -> PeerBackupStatusResponse {
@@ -1675,5 +1957,14 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                 summary: "deployed to home pod", serviceId: "bright-maple--plants"
             ),
         ])
+    }
+}
+
+private extension Calendar {
+    /// 0 = Sunday ... 6 = Saturday of the UTC day holding `ms`.
+    static func mockUtcWeekday(_ ms: Int64) -> Int {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "UTC")!
+        return c.component(.weekday, from: Date(timeIntervalSince1970: Double(ms) / 1000)) - 1
     }
 }

@@ -5,7 +5,8 @@ import CryptoKit
 /// part straight to its place in the file, and remembering which parts are in
 /// so an interrupted download picks up where it stopped. The finished file is
 /// checked against the SHA-256 the server reported. Used by the Backup/clone
-/// sheet (docs/server-backup-and-clone.md).
+/// sheet, the saved backups' Download and the phone's background copy
+/// (docs/server-backup-and-clone.md).
 public enum ArchiveDownloader {
     /// What the box hands out per `GET .../chunk?offset=` (serverArchive/service.ts).
     public static let chunkBytes: Int64 = 4 * 1024 * 1024
@@ -37,6 +38,7 @@ public enum ArchiveDownloader {
         stateFile: URL,
         chunkBytes: Int64 = chunkBytes,
         parallel: Int = parallel,
+        protection: FileProtectionType = .complete,
         fetch: @escaping @Sendable (_ offset: Int64) async throws -> Data,
         progress: @escaping @Sendable (_ received: Int64) async -> Void = { _ in }
     ) async throws {
@@ -45,7 +47,7 @@ public enum ArchiveDownloader {
         if state.total != total || state.sha256 != sha256 || !fm.fileExists(atPath: file.path) {
             state = State(total: total, sha256: sha256, done: [])
             try? fm.removeItem(at: file)
-            fm.createFile(atPath: file.path, contents: nil, attributes: [.protectionKey: FileProtectionType.complete])
+            fm.createFile(atPath: file.path, contents: nil, attributes: [.protectionKey: protection])
         }
         let fh = try FileHandle(forWritingTo: file)
         defer { try? fh.close() }
