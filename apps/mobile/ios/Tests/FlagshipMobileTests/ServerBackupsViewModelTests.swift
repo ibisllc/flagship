@@ -219,7 +219,7 @@ final class ServerBackupsViewModelTests: XCTestCase {
         XCTAssertTrue(m.peerLines.contains("2 of 5 pieces safe"))
         let ok = await m.changePolicy(to: .phoneOnly, reserveBytes: 8 << 30)
         XCTAssertFalse(ok)
-        XCTAssertEqual(m.policyError, "This server holds 150 GB of app data, more than the 8.0 GB the phone would keep. Reserve at least 150 GB on the phone, or remove apps or data first.")
+        XCTAssertEqual(m.policyError, "This server holds 150 GB of app data, more than the 8.0 GB your device would keep. Reserve at least 150 GB on that device, or remove apps or data first.")
     }
 
     func testNoBackupsHidesTheScheduleButKeepsBackUpNow() async {

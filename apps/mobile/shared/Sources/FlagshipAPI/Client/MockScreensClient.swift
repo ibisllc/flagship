@@ -1492,7 +1492,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         let limit = limitBytes(policyCurrent)
         let over = limit.map { policyUsedBytes >= $0 } ?? false
         let why = policyCurrent.policy == "phone"
-            ? "the space your phone keeps for its backup"
+            ? "the space your device keeps for its backup"
             : "a third of its disk, so other servers can keep their backups on it"
         let reason = over
             ? "This server holds \(Self.formatGb(policyUsedBytes)) of app data, over its backup limit of \(Self.formatGb(limit ?? 0)) (\(why)). Remove apps or data, or change the backup policy on the server page."
@@ -1522,7 +1522,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         if valid, let limit = limitBytes(BackupPolicyCurrent(policy: o.policy, phoneReserveBytes: o.phoneReserveBytes)),
            policyUsedBytes > limit {
             let sentence = o.policy == "phone"
-                ? "This server holds \(Self.formatGb(policyUsedBytes)) of app data, more than the \(Self.formatGb(limit)) the phone would keep. Reserve at least \(Self.formatGb(policyUsedBytes)) on the phone, or remove apps or data first."
+                ? "This server holds \(Self.formatGb(policyUsedBytes)) of app data, more than the \(Self.formatGb(limit)) your device would keep. Reserve at least \(Self.formatGb(policyUsedBytes)) on that device, or remove apps or data first."
                 : "This server holds \(Self.formatGb(policyUsedBytes)) of app data, more than a third of its disk (\(Self.formatGb(limit))), which is all a server may use with peer backups. Remove apps or data first, or choose another policy."
             GymProbe.note("refused backup-policy over limit")
             throw Self.refusal(409, sentence, code: "over-backup-limit")
