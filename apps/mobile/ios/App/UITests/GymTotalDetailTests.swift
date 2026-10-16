@@ -275,6 +275,10 @@ final class GymTotalDetailTests: XCTestCase {
             app.navigationBars["Build sessions"].waitForExistence(timeout: 15),
             "The journal link should push the Build sessions screen."
         )
+        // The list covers every server of the account, each row naming its own.
+        let onServer = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS %@", " · on ")).firstMatch
+        XCTAssertTrue(onServer.waitForExistence(timeout: 15), "Each build names the server it is on.")
         gymShot(app, "build-journal")
     }
 

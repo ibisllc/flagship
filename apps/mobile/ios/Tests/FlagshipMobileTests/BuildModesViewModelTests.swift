@@ -417,4 +417,61 @@ final class BuildModesViewModelTests: XCTestCase {
         await vm.loadList()
         XCTAssertNotNil(vm.list.failure)
     }
+
+    // MARK: - Build sessions across the account's servers
+
+    private func serverClient(_ builds: [BuildSummary], sessions: [VibeCodeSessionMeta]) -> MockScreensClient {
+        let c = makeClient()
+        c.buildSessionsFixture = BuildSessionsResponse(builds: builds)
+        c.vibeCodeSessionsFixture = sessions
+        return c
+    }
+
+    func test_journalVM_listsEveryServersBuilds_eachNamingItsServer() async {
+        let home = serverClient([BuildSummary(buildId: "g1", mode: "git", name: "notes", startedAt: 1, lastAt: 2,
+                                              entryCount: 1, lastKind: "fitness-check", open: true)],
+                                sessions: [VibeCodeSessionMeta(sessionId: "s-home", startedAt: 5, status: "failed")])
+        let office = serverClient([BuildSummary(buildId: "g2", mode: "git", name: "wiki", startedAt: 3, lastAt: 4,
+                                                entryCount: 1, lastKind: "fitness-check", open: true)],
+                                  sessions: [VibeCodeSessionMeta(sessionId: "s-office", startedAt: 9, status: "awaiting-tool-response")])
+        let vm = BuildJournalViewModel(client: home, servers: [
+            .init(fqdn: "Home.x", name: "Home", client: home),
+            .init(fqdn: "office.x", name: "Office", client: office),
+        ])
+        await vm.loadList()
+        guard case .loaded(let builds) = vm.list else { return XCTFail("not loaded: \(vm.list)") }
+        XCTAssertEqual(Set(builds.map(\.buildId)), ["g1", "g2"])
+        XCTAssertEqual(vm.liveSessions.map(\.sessionId), ["s-office", "s-home"], "newest activity first")
+        XCTAssertEqual(vm.sessionServer["s-office"], "office.x")
+        XCTAssertEqual(vm.serverName(forSession: "s-home"), "Home")
+        XCTAssertEqual(vm.serverName(forBuild: "g2"), "Office")
+        XCTAssertEqual(BuildJournalScreen.subtitle("Started now", on: vm.serverName(forBuild: "g2")), "Started now · on Office")
+
+        await vm.discard(build: builds.first { $0.buildId == "g2" }!)
+        XCTAssertEqual(office.buildDiscardCalls, ["g2"], "the discard goes to the build's own server")
+        XCTAssertTrue(home.buildDiscardCalls.isEmpty)
+    }
+
+    func test_journalVM_anUnreachableServerIsNamed_notFatal() async {
+        let home = serverClient([], sessions: [VibeCodeSessionMeta(sessionId: "s-home", startedAt: 5, status: "failed")])
+        let office = makeClient()
+        office.shouldFail = true
+        let vm = BuildJournalViewModel(client: home, servers: [
+            .init(fqdn: "home.x", name: "Home", client: home),
+            .init(fqdn: "office.x", name: "Office", client: office),
+        ])
+        await vm.loadList()
+        XCTAssertNil(vm.list.failure)
+        XCTAssertEqual(vm.liveSessions.map(\.sessionId), ["s-home"])
+        XCTAssertEqual(vm.unreachableServers, ["Office"])
+        XCTAssertEqual(BuildJournalScreen.unreachableNote(["Office"]), "Couldn't reach Office, so its builds aren't listed.")
+    }
+
+    func test_journalVM_oneServer_namesNoServer() async {
+        let home = serverClient([], sessions: [VibeCodeSessionMeta(sessionId: "s-home", startedAt: 5, status: "failed")])
+        let vm = BuildJournalViewModel(client: home, servers: [.init(fqdn: "home.x", name: "Home", client: home)])
+        await vm.loadList()
+        XCTAssertFalse(vm.spansServers)
+        XCTAssertNil(vm.serverName(forSession: "s-home"))
+    }
 }

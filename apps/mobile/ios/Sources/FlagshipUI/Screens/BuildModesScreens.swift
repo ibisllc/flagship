@@ -727,11 +727,13 @@ private struct CopyableRow: View {
 public struct BuildJournalScreen: View {
     @Environment(\.colorScheme) private var scheme
     @Bindable var vm: BuildJournalViewModel
-    var onResume: (String) -> Void = { _ in }
+    /// Open a chat: its session id and, when the list spans servers, the
+    /// server it runs on.
+    var onResume: (String, String?) -> Void = { _, _ in }
     @State private var confirmDiscard: VibeCodeSessionMeta?
     @State private var confirmDiscardBuild: BuildSummary?
 
-    public init(vm: BuildJournalViewModel, onResume: @escaping (String) -> Void = { _ in }) {
+    public init(vm: BuildJournalViewModel, onResume: @escaping (String, String?) -> Void = { _, _ in }) {
         self.vm = vm
         self.onResume = onResume
     }
@@ -787,6 +789,17 @@ public struct BuildJournalScreen: View {
         }
     }
 
+    /// "Started 2m ago · on Home" when the list spans servers.
+    static func subtitle(_ base: String, on server: String?) -> String {
+        server.map { "\(base) · on \($0)" } ?? base
+    }
+
+    static func unreachableNote(_ names: [String]) -> String {
+        let list = names.joined(separator: ", ")
+        return names.count == 1 ? "Couldn't reach \(list), so its builds aren't listed."
+            : "Couldn't reach \(list), so their builds aren't listed."
+    }
+
     static func discardMessage(_ session: VibeCodeSessionMeta) -> String {
         let freed = session.name.map { " Its name, \"\($0)\", becomes free again." } ?? ""
         return "This stops the AI and deletes what it has written on your server.\(freed)"
@@ -801,14 +814,21 @@ public struct BuildJournalScreen: View {
             ErrorCard(message: msg)
         case .loaded(let builds):
             let open = vm.openBuilds(builds)
+            if !vm.unreachableServers.isEmpty {
+                Text(Self.unreachableNote(vm.unreachableServers))
+                    .font(FS.font.caption()).foregroundColor(c.warning)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("build-sessions-unreachable")
+            }
             if !vm.liveSessions.isEmpty || !open.isEmpty {
-                Text("Open on your server").font(FS.font.caption()).foregroundColor(c.textMuted)
+                Text(vm.spansServers ? "Open on your servers" : "Open on your server")
+                    .font(FS.font.caption()).foregroundColor(c.textMuted)
                 ForEach(open) { b in
                     Button(action: { Task { await vm.loadDetail(buildId: b.buildId) } }) {
                         FSListRow(
                             leading: .icon(modeIcon(b.mode), color: c.primary),
                             title: b.displayName,
-                            subtitle: "Started \(Self.timeString(b.startedAt))",
+                            subtitle: Self.subtitle("Started \(Self.timeString(b.startedAt))", on: vm.serverName(forBuild: b.buildId)),
                             detail: nil,
                             below: { FSPill(b.methodLabel, kind: .idle) }
                         ) {
@@ -825,11 +845,12 @@ public struct BuildJournalScreen: View {
                     .padding(.top, -FS.space.s2)
                 }
                 ForEach(vm.liveSessions) { session in
-                    Button(action: { onResume(session.sessionId) }) {
+                    Button(action: { onResume(session.sessionId, vm.sessionServer[session.sessionId]) }) {
                         FSListRow(
                             leading: .icon("sparkles", color: session.isActive ? c.success : c.textMuted),
                             title: vm.name(for: session, builds: builds),
-                            subtitle: "Started \(Self.timeString(session.startedAt))",
+                            subtitle: Self.subtitle("Started \(Self.timeString(session.startedAt))",
+                                                    on: vm.serverName(forSession: session.sessionId)),
                             detail: nil,
                             below: {
                                 HStack(spacing: FS.space.s2) {
@@ -876,7 +897,8 @@ public struct BuildJournalScreen: View {
                         FSListRow(
                             leading: .icon(modeIcon(b.mode), color: c.primary),
                             title: b.displayName,
-                            subtitle: "Started \(Self.timeString(b.startedAt)) · \(b.entryCount) step\(b.entryCount == 1 ? "" : "s")",
+                            subtitle: Self.subtitle("Started \(Self.timeString(b.startedAt)) · \(b.entryCount) step\(b.entryCount == 1 ? "" : "s")",
+                                                    on: vm.serverName(forBuild: b.buildId)),
                             detail: nil,
                             below: { FSPill(b.methodLabel, kind: .idle) }
                         ) {

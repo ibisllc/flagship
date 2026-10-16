@@ -211,7 +211,10 @@ public struct ServicesTab: View {
         case .buildMcp:
             BuildMcpContainer(path: $path)
         case .buildJournal(let buildId):
-            BuildJournalContainer(buildId: buildId, onResume: { path.openVibeSession($0) })
+            BuildJournalContainer(buildId: buildId, onResume: { sessionId, fqdn in
+                if let fqdn { bind(fqdn) }
+                path.openVibeSession(sessionId)
+            })
         case .buildKey(let purpose):
             BuildKeyContainer(purpose: purpose, path: $path, holder: buildCred)
         case .editService(let serviceId):
@@ -983,8 +986,10 @@ struct BuildMcpContainer: View {
 // when `buildId` is non-nil.
 struct BuildJournalContainer: View {
     let buildId: String?
-    var onResume: (String) -> Void = { _ in }
+    var onResume: (String, String?) -> Void = { _, _ in }
     @Environment(\.screensClient) private var client
+    @Environment(\.podScreensClients) private var podClients
+    @Environment(AppState.self) private var app
     @State private var vm: BuildJournalViewModel?
     var body: some View {
         Group {
@@ -996,7 +1001,16 @@ struct BuildJournalContainer: View {
         }
         .task {
             if vm == nil {
-                let model = BuildJournalViewModel(client: client)
+                // The list covers every server of the account (as the
+                // webapp's does); a timeline opened by id stays on this one.
+                var servers: [BuildJournalViewModel.Server] = []
+                if buildId == nil {
+                    for pod in CreationTarget.eligible(app.pods) {
+                        servers.append(.init(fqdn: pod.fqdn, name: AppPlacementCopy.serverName(pod),
+                                             client: await podClients.client(forFqdn: pod.fqdn)))
+                    }
+                }
+                let model = BuildJournalViewModel(client: client, servers: servers)
                 vm = model
                 if let buildId {
                     await model.loadDetail(buildId: buildId)
