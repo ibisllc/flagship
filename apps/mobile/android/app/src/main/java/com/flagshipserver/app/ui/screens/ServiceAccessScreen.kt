@@ -176,6 +176,8 @@ internal fun ServiceAccessContent(
     val restricted by vm.restricted.collectAsState()
     val people by vm.people.collectAsState()
     val members by vm.members.collectAsState()
+    // Read here so the invite line recomposes once the box has been asked.
+    vm.membersRead.collectAsState().value
     val busyRoles by vm.busyRoles.collectAsState()
     val roleNotice by vm.roleNotice.collectAsState()
     val lastLink by vm.lastInviteLink.collectAsState()

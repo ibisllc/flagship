@@ -154,6 +154,9 @@ class ServiceAccessViewModel(
     /** The box's account members, people, grants and ranks; null until read (or when it can't be). */
     private val _members = MutableStateFlow<AppMembersResponse?>(null)
     val members: StateFlow<AppMembersResponse?> = _members.asStateFlow()
+    /** Whether the box has been asked for the members (answered or not). */
+    private val _membersRead = MutableStateFlow(false)
+    val membersRead: StateFlow<Boolean> = _membersRead.asStateFlow()
     /** Rows whose rank change is being signed / sent (inviteId, or an account member's rowKey). */
     private val _busyRoles = MutableStateFlow<Set<String>>(emptySet())
     val busyRoles: StateFlow<Set<String>> = _busyRoles.asStateFlow()
@@ -181,19 +184,25 @@ class ServiceAccessViewModel(
 
     /**
      * Whether this device may create invites here. An admin always; any other
-     * device while its own rank is Manager or Master. A box that lists no
-     * account members (or hasn't answered) decides itself.
+     * device only once the box has listed it at Manager or Master, so "+ Add"
+     * never shows before its rank is known (the webapp's `inviteAbility`).
      */
     val canInvite: Boolean
         get() {
             if (isAdmin) return true
-            val m = _members.value ?: return true
-            if (m.accountMembers.isEmpty()) return true
+            if (_members.value == null) return false
             return selfMember?.appRank?.managerClass == true
         }
 
-    /** The one line shown instead of "+ Add" when this device may not invite. */
-    val inviteBlockedLine: String? get() = if (canInvite) null else CANT_INVITE_LINE
+    /** The one line shown instead of "+ Add" when this device may not invite
+     *  (none while the box is still being asked). */
+    val inviteBlockedLine: String?
+        get() = when {
+            canInvite -> null
+            _members.value == null -> if (_membersRead.value) RANKS_UNKNOWN_LINE else null
+            selfMember == null -> DEVICE_NOT_LISTED_LINE
+            else -> CANT_INVITE_LINE
+        }
 
     private fun createdHere(p: AccessPerson): Boolean {
         val box = _members.value?.invite(p.inviteId)
@@ -260,6 +269,7 @@ class ServiceAccessViewModel(
         val s = screens ?: return
         resolveSelf()
         _members.value = runCatching { s.appMembers(serviceRef) }.getOrNull()
+        _membersRead.value = true
         resolveDeviceNames()
     }
 
@@ -387,7 +397,7 @@ class ServiceAccessViewModel(
         val trimmed = name.trim()
         if (trimmed.isEmpty()) return null
         if (!canInvite) {
-            _phase.value = ServiceAccessPhase.Failed(CANT_INVITE_LINE)
+            _phase.value = ServiceAccessPhase.Failed(inviteBlockedLine ?: CANT_INVITE_LINE)
             return null
         }
         _busyAdd.value = true
@@ -603,6 +613,8 @@ class ServiceAccessViewModel(
         private val DEVICE_ID = Regex("^[0-9a-f]{32}$")
 
         const val CANT_INVITE_LINE = "Only an admin can let you invite people to this app."
+        const val DEVICE_NOT_LISTED_LINE = "Your server doesn't list this device yet. Refresh in a minute."
+        const val RANKS_UNKNOWN_LINE = "Couldn't read your rank in this app from your server."
 
         fun create(
             context: Context,

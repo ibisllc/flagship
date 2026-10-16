@@ -133,7 +133,8 @@ class ServiceAccessViewModelTest {
 
     @Test fun addPerson_auto_sealsSignsWithTheDeviceKeyAndReturnsLinkWithAuthor() = runTest {
         val t = FakeTransport()
-        val vm = makeVM(ServiceAccessClient(boxTransport = t, comTransport = t), now = { 1700 })
+        val vm = makeVM(ServiceAccessClient(boxTransport = t, comTransport = t), now = { 1700 }, screens = boxWithSelf("manager"))
+        vm.refreshMembers()
         val link = vm.addPerson("Alex", null, InviteTier.PERSONAL_AUTO)
         assertNotNull(link)
         assertTrue(link!!.startsWith("https://$server/invite#"))
@@ -156,7 +157,8 @@ class ServiceAccessViewModelTest {
 
     @Test fun addPerson_manual_setsApprovalMode() = runTest {
         val t = FakeTransport()
-        val vm = makeVM(ServiceAccessClient(boxTransport = t, comTransport = t), now = { 1700 })
+        val vm = makeVM(ServiceAccessClient(boxTransport = t, comTransport = t), now = { 1700 }, screens = boxWithSelf("manager"))
+        vm.refreshMembers()
         val link = vm.addPerson("Sam", null, InviteTier.PERSONAL_MANUAL)
         val req = t.lastBodyJson()!!["request"]!!.jsonObject
         assertEquals("manual", req["approvalMode"]!!.jsonPrimitive.content)
@@ -166,7 +168,8 @@ class ServiceAccessViewModelTest {
 
     @Test fun addPerson_group_commitsMaxNAndExpiryInSignedBytes() = runTest {
         val t = FakeTransport()
-        val vm = makeVM(ServiceAccessClient(boxTransport = t, comTransport = t), now = { 1700 })
+        val vm = makeVM(ServiceAccessClient(boxTransport = t, comTransport = t), now = { 1700 }, screens = boxWithSelf("manager"))
+        vm.refreshMembers()
         vm.addPerson("Chess club", null, InviteTier.GROUP, maxRedemptions = 10, expiresAt = 1700009999999L)
         val env = t.lastBodyJson()!!
         val req = env["request"]!!.jsonObject
@@ -427,6 +430,35 @@ class ServiceAccessViewModelTest {
         }
     }
 
+    /** "+ Add" waits for the box: no invite and no line before it answered,
+     *  the webapp's notes when it couldn't be read or doesn't list this device. */
+    @Test fun aNonAdminDevice_cantInviteUntilTheBoxConfirmsItsRank() = runTest {
+        val t = FakeTransport()
+        val screens = boxWithSelf("manager")
+        val vm = makeVM(ServiceAccessClient(boxTransport = t, comTransport = t), screens = screens)
+        assertFalse("no rank known before the box answered", vm.canInvite)
+        assertNull(vm.inviteBlockedLine)
+        vm.load()
+        assertTrue(vm.canInvite)
+
+        val failing = object : com.flagshipserver.app.api.ScreensClient by MockScreensClient(simulatedLatencyMs = 0) {
+            override suspend fun appMembers(serviceId: String): AppMembersResponse = throw java.io.IOException("offline")
+        }
+        val unread = makeVM(ServiceAccessClient(boxTransport = t, comTransport = t), screens = failing)
+        unread.load()
+        assertFalse(unread.canInvite)
+        assertEquals(ServiceAccessViewModel.RANKS_UNKNOWN_LINE, unread.inviteBlockedLine)
+        assertNull(unread.addPerson("Alex", null))
+
+        val empty = MockScreensClient(simulatedLatencyMs = 0).apply {
+            membersFixture[serviceRef] = AppMembersResponse(serviceId = serviceRef, mode = "open", defaultRole = "member", accountMembers = emptyList())
+        }
+        val unlisted = makeVM(ServiceAccessClient(boxTransport = t, comTransport = t), screens = empty)
+        unlisted.load()
+        assertFalse("a box that lists no account members doesn't let a non-admin invite", unlisted.canInvite)
+        assertEquals(ServiceAccessViewModel.DEVICE_NOT_LISTED_LINE, unlisted.inviteBlockedLine)
+    }
+
     @Test fun aDeviceTheBoxDoesntList_cantInvite_butAnAdminAlwaysCan() = runTest {
         val screens = MockScreensClient(simulatedLatencyMs = 0)
         val t = FakeTransport()
@@ -497,7 +529,9 @@ class ServiceAccessViewModelTest {
         val old = AccessPerson("d", "D", null, false)
         val admin = makeVM(ServiceAccessClient(boxTransport = t, comTransport = t), admin = true)
         for (p in listOf(mine, othersMember, mineAdmin, old)) assertTrue(admin.canRemove(p))
-        val member = makeVM(ServiceAccessClient(boxTransport = t, comTransport = t))
+        val member = makeVM(ServiceAccessClient(boxTransport = t, comTransport = t), screens = boxWithSelf("manager"))
+        assertFalse("not before the box confirmed its rank", member.canRemove(mine))
+        member.refreshMembers()
         assertTrue(member.canRemove(mine))
         assertTrue(member.canRemove(mineUpper))
         assertFalse(member.canRemove(othersMember))
