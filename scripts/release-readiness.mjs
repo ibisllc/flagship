@@ -146,7 +146,7 @@ async function phaseE2e(ctx) {
     const mig = run("npx", ["--yes", `wrangler@${WRANGLER_VERSION}`, "d1", "migrations", "apply", "flagship-state", "--local"], { cwd: join(ROOT, "apps/com"), log, env: { CI: "1" } });
     if (mig.status !== 0) return { status: "red", summary: "local D1 migrations failed (see e2e.log)", metrics: {} };
     const fd = openSync(join(ctx.out, "wrangler-dev.log"), "a");
-    worker = spawn("npx", ["--yes", `wrangler@${WRANGLER_VERSION}`, "dev", "--port", String(E2E_PORT), "--var", "RATE_LIMIT_SCALE:100"], { cwd: join(ROOT, "apps/com"), stdio: ["ignore", fd, fd], detached: true });
+    worker = spawn("npx", ["--yes", `wrangler@${WRANGLER_VERSION}`, "dev", "--port", String(E2E_PORT), "--var", "ACCOUNT_READ_TOKEN_SECRET:e2e-local-read-token-secret", "--var", "RATE_LIMIT_SCALE:100"], { cwd: join(ROOT, "apps/com"), stdio: ["ignore", fd, fd], detached: true });
     closeSync(fd);
     let up = false;
     for (let i = 0; i < 180 && !up; i++) {
