@@ -247,7 +247,11 @@
 //  v112: style.css takes the website's tokens and look and follows the
 //       device's light or dark setting; index.html adds per-scheme
 //       theme-color metas; manifest colours move to the site's dark canvas.
-const SHELL_VERSION = "v112";
+//  v113: Create, co-manage, take over and import a backup refuse a device
+//       that isn't an admin device of the account wherever they are opened
+//       (lib/addServerGate.js), and minting a recipe no longer mints an
+//       admin root.
+const SHELL_VERSION = "v113";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -335,6 +339,7 @@ const OPTIONAL_SHELL = [
   "/lib/accountResolve.js",
   "/lib/activeOperations.js",
   "/lib/adminRoot.js",
+  "/lib/addServerGate.js",
   "/lib/adminRootRotation.js",
   "/lib/adminRootTransfer.js",
   "/lib/aiChatAlerts.js",

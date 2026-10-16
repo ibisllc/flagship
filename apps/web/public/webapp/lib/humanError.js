@@ -75,6 +75,10 @@ export function humanError(e, opts = {}) {
   if (e && typeof e === "object" && e.rateLimited === true && typeof e.message === "string") {
     return e.message;
   }
+  // An error written for the person (e.g. lib/addServerGate.js's refusal).
+  if (e && typeof e === "object" && typeof e.userMessage === "string" && e.userMessage) {
+    return e.userMessage;
+  }
   const status = statusOf(e);
 
   if (status == null && isNetwork(e)) return COPY.network;

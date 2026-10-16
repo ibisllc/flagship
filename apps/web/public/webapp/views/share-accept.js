@@ -9,6 +9,7 @@ import { inlinePrompt } from "../lib/modal.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
 import { serverIcon } from "../lib/icons.js";
 import { parseShareLink } from "../lib/serverShare.js";
+import { ADD_SERVERS_ADMIN_ONLY, canAddServers, refuseAddServer } from "../lib/addServerGate.js";
 import {
   DATA_TITLE,
   LEVEL_LINE,
@@ -99,6 +100,12 @@ export async function enterShareAccept(link) {
     wireHome();
     return;
   }
+  // Co-managing a server adds it to the account: admin devices only.
+  if (!canAddServers()) {
+    el.innerHTML = errorCard(ADD_SERVERS_ADMIN_ONLY);
+    wireHome();
+    return;
+  }
   el.innerHTML = skeletonCards(1);
   let opened;
   try {
@@ -183,6 +190,7 @@ function waitForOwner(entry, name, my) {
 /** "Paste a share link": a browser can't take flagship:// links, so the
  *  person pastes what they were sent. */
 export async function promptShareLink() {
+  if (!canAddServers()) return refuseAddServer();
   const text = await inlinePrompt({
     title: "Open a share link",
     message: "Paste the link the owner sent you.",

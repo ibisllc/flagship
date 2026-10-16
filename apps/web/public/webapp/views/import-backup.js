@@ -34,6 +34,7 @@ import {
   parseBackupFile,
 } from "../lib/serverBackupFormat.js";
 import { createServerForRestore, isValidServerName } from "./create-server.js";
+import { canAddServers, refuseAddServer } from "../lib/addServerGate.js";
 
 export const ADD_IMPORT_LABEL = "+ Add/Import a server";
 
@@ -151,6 +152,8 @@ export async function openImportBackup({ targetFqdn = null } = {}) {
     toast("Unlock the webapp first", "err");
     return;
   }
+  // Importing a backup adds a server to the account: admin devices only.
+  if (!canAddServers(session)) return refuseAddServer();
   const { dlg, close } = openDialog(
     "Import a backup",
     `

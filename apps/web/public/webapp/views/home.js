@@ -45,7 +45,7 @@ import { fetchLeads, invertLeadsMap } from "../lib/directLeads.js";
 import { fetchDecryptedDirectory } from "../lib/accountDirectory.js";
 import { accountReadFetch, clearAccountReadTokens, onAccountReadPausedChange } from "../lib/accountRead.js";
 import { isCompanionProfile } from "../lib/companionGuard.js";
-import { isAdminDevice } from "../lib/memberRoles.js";
+import { ADD_SERVERS_ADMIN_ONLY, canAddServers } from "../lib/addServerGate.js";
 import {
   currentServerOrder,
   isLeaderConfirmed,
@@ -606,16 +606,8 @@ function formatCertCountdown(validUntilMs) {
   return ""; // omit chip when comfortably valid — reduces visual noise
 }
 
-/** Only an admin device of the account adds servers to it (docs/service-access-gating.md
- *  "Account members"): the device that holds the account's admin root. Every
- *  account is opened with one, so an account never lacks an admin device. A
- *  demo account's device stands in for its owner (it holds no keys; the
- *  operator runs the account), as on iOS and Android. */
-export function canAddServers(session = getSession(), profile = getActiveProfile()) {
-  return isAdminDevice(session) || !!profile?.demoServer;
-}
-
-export const ADD_SERVERS_ADMIN_ONLY = "Only an admin device of this account can add servers.";
+// Only an admin device of the account adds servers to it (lib/addServerGate.js).
+export { canAddServers, ADD_SERVERS_ADMIN_ONLY };
 
 const TAKE_OVER_LINK = "Someone handing you a box? Take over →";
 

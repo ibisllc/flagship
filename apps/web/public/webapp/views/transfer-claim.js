@@ -22,6 +22,7 @@ import { show } from "../lib/router.js";
 import { getSession } from "../lib/state.js";
 import { bytesToHex, adminRootPubHex } from "../keystore.js";
 import { sensitiveSigner } from "../lib/adminRoot.js";
+import { canAddServers, refuseAddServer } from "../lib/addServerGate.js";
 import {
   parseTransferLink,
   parseTransferOfferQR,
@@ -55,6 +56,8 @@ export async function enterTransferClaim(prefillOffer) {
     toast("Unlock the webapp first", "err");
     return;
   }
+  // Taking over a box adds it to the account: admin devices only.
+  if (!canAddServers(session)) return refuseAddServer();
 
   const dlg = document.createElement("dialog");
   dlg.className = "modal-card";

@@ -13,6 +13,7 @@ import { parseViewQuery, clearViewQuery } from "./router.js";
 import { humanError } from "./humanError.js";
 import { toast } from "./toast.js";
 import { transferLinkFromLocation } from "./serverTransfer.js";
+import { canAddServers, refuseAddServer } from "./addServerGate.js";
 
 /** Strip the transfer `o=` param from the URL bar after we've ingested it, so
  *  a reload / re-dispatch can't re-open the claim sheet. Best-effort. */
@@ -50,6 +51,8 @@ export async function dispatchInitialView() {
     const offer = transferLinkFromLocation();
     if (offer) {
       clearTransferQuery();
+      // Taking over a box is for the account's admin devices only.
+      if (!canAddServers()) return refuseAddServer({ home: true });
       const { enterTransferClaim } = await import("../views/transfer-claim.js");
       await enterTransferClaim(offer).catch((e) => {
         // A user-cancelled claim dialog is not an error.
@@ -119,6 +122,7 @@ export async function dispatchInitialView() {
       return enterPodPair();
     }
     if (q.view === "view-create-server") {
+      if (!canAddServers()) return refuseAddServer({ home: true });
       const { enterCreateServer } = await import("../views/create-server.js");
       return enterCreateServer();
     }

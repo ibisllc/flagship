@@ -4,8 +4,10 @@
 import { $, registerView, show } from "../lib/router.js";
 import { humanError } from "../lib/humanError.js";
 import { getSession, ensureUsername } from "../lib/state.js";
-import { bytesToHex, signWithIrk, deriveSwkFromSeed } from "../keystore.js";
-import { ensureAdminRoot, sensitiveSigner } from "../lib/adminRoot.js";
+import { bytesToHex, signWithIrk, deriveSwkFromSeed, adminRootPubHex as ksAdminRootPubHex } from "../keystore.js";
+import { sensitiveSigner } from "../lib/adminRoot.js";
+import { canAddServers, recipeAdminRootPin, refuseAddServer } from "../lib/addServerGate.js";
+import { getActiveProfile } from "../lib/profiles.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
 import { formatWhen } from "../lib/dateFormat.js";
@@ -518,18 +520,16 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
   const ttlMs = clampRecipeTtlMs(recipeTtlMs);
   const irkPubHex = bytesToHex(session.irk.publicKey);
 
-  // Slice D (docs/device-admin-tier-spec.md §1.3 / §8.1) — ensure this device
-  // holds the account's admin master root (idempotent; mints one only if
-  // absent, e.g. a legacy direct-entry create that skipped open-account). Its
-  // pubkey is published with the claim AND pinned INSIDE the recipe AuthCode so
-  // the fresh box pins it. Best-effort: a mint failure leaves adminRootPubHex
-  // null → a legacy no-admin-root recipe (byte-identical to pre-D).
-  let adminRootPubHex = null;
-  try {
-    adminRootPubHex = await ensureAdminRoot(session);
-  } catch {
-    adminRootPubHex = null;
-  }
+  // Slice D (docs/device-admin-tier-spec.md §1.3 / §8.1) — pin the account's
+  // admin master root INSIDE the recipe AuthCode so the fresh box anchors it.
+  // Only an admin device adds servers, and only opening the account mints an
+  // admin root (lib/openAccount.js): a device without one is refused here,
+  // before any `.com` call, never handed a stray root the account's admins
+  // don't hold. A demo account pins none.
+  const adminRootPubHex = await recipeAdminRootPin(session, {
+    isDemo: opts.isDemo ?? !!getActiveProfile()?.demoServer,
+    pubHexOf: opts.adminRootPubHexOf ?? ksAdminRootPubHex,
+  });
 
   // 1. Claim username (idempotent) — Phase 2: SKIPPED when the account
   // was already opened (the standalone claim ran at open-account time).
@@ -835,6 +835,7 @@ export function initCreateServerView() {
 }
 
 export async function enterCreateServer() {
+  if (!canAddServers()) return refuseAddServer();
   show("view-create-server");
   await refreshDrafts();
 }
