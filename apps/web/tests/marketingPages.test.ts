@@ -202,6 +202,18 @@ describe("marketing surface — design system v2 (dark+teal)", () => {
     expect(r.body).toMatch(/boot|unlock/i);
   });
 
+  it("/docs has no placeholder sections: the manifest, recovery and app API sections say what they cover", async () => {
+    const app = buildServer();
+    const r = await app.inject({ method: "GET", url: "/docs/index.html" });
+    expect(r.body).not.toMatch(/\bTODO\b/);
+    expect(r.body).toContain("Manifest reference");
+    expect(r.body).toContain("<code>runtime</code>");
+    expect(r.body).toContain(".flagshipkey");
+    expect(r.body).toContain("X-Flagship-Visitor");
+    expect(r.body).toContain("/__flagship/sign-in?next=/path");
+    expect(r.body).not.toContain("object store / KV");
+  });
+
   it("the standalone /how-to.html explainer is deleted (no longer a served page)", async () => {
     const app = buildServer();
     const r = await app.inject({ method: "GET", url: "/how-to.html" });

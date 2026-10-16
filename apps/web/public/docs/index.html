@@ -17,6 +17,9 @@
     .doc-section { padding: var(--space-8) 0; border-top: 1px solid var(--border); }
     .doc-section h2 { font-size: var(--h2-size); line-height: var(--h2-line); margin-bottom: var(--space-3); letter-spacing: -0.01em; }
     .doc-section p { color: var(--text-muted); }
+    .doc-section ul { color: var(--text-muted); padding-left: 1.2em; margin: var(--space-2) 0 var(--space-3); }
+    .doc-section li { margin-bottom: var(--space-2); }
+    .doc-section pre { margin: var(--space-3) 0; }
     .doc-section a { font-weight: 600; }
     .doc-section .next { display: inline-block; margin-top: var(--space-3); }
     .toc { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-6) 0; }
@@ -127,7 +130,7 @@
       <p><strong>2 · Mint &amp; deliver a recipe.</strong> Your phone pairs directly with <a href="/studio">Flagship Studio</a> using the QR or short code Studio shows. After you confirm the matching security code, the phone mints and sends a small signed recipe naming your server and carrying a short, single-use expiry. Studio fetches the right base OS and writes the boot USB — you never pick or download an OS image yourself. A pre-built box fetches its recipe automatically when you plug it in.</p>
       <p><strong>3 · Boot &amp; install.</strong> The USB boots a hardened Linux base on your hardware. A first-boot script validates the recipe signature locally, then fetches the public installer from our GitHub repo at the exact pinned ref — a few hundred auditable lines of shell. It formats the disk with LUKS, generates a per-box identity, requests a real Let's Encrypt cert (DNS-01 wildcard), registers with <code>flagshipserver.com</code>, and boots into steady state. Your phone lights up: <em>"Your Flagship is online."</em></p>
       <p><strong>4 · Every-boot unlock.</strong> When the box reboots, the LUKS-encrypted root won't open. The boot stage polls <code>flagshipserver.com</code> for an unsealed unlock key. Your phone, woken by a push, asks for biometrics, decrypts the sealed blob locally, and deposits the unsealed key with a 10-minute TTL. The box consumes it; the row is deleted on read; the disk opens. A stolen box without your phone is a brick — even we can't help, because we never had the unsealed key.</p>
-      <p><strong>5 · Live. Vibe-code. Share.</strong> From the phone you describe a service in plain language. An LLM writes it (your provider key, or our daily promo). The daemon builds the container, provisions Postgres / object store / KV scoped to the service, deploys it, and registers a subdomain — live within a minute at <code>app.you.flagship.services</code>. Sharing is one tap: a signed invite or a username search. Services never see cookies; the daemon injects identity headers after a membership check.</p>
+      <p><strong>5 · Live. Vibe-code. Share.</strong> From the phone you describe a service in plain language. An LLM writes it (your own provider key, or Flagship Inference's free credits). The daemon builds the container, provisions a Postgres database and a files folder scoped to the service, deploys it, and registers a subdomain — live within a minute at <code>app.you.flagship.services</code>. Sharing is one tap: a signed invite or a username search. Services never see cookies; the daemon injects identity headers after a membership check.</p>
       <p><strong>If you lose the phone.</strong> Cloud recovery stores only an encrypted copy of your master key. On iOS, recovering it requires both your recovery passphrase and access to the iCloud Keychain holding your Flagship passkey; Flagship cannot read the key or reset your passphrase. Without cloud recovery, a single-device account must use the slower waiting-period claim process.</p>
       <a class="next" href="/security">Read the trust model →</a>
     </section>
@@ -226,9 +229,30 @@
 
     <section class="doc-section" id="apps">
       <h2>Apps &amp; manifest</h2>
-      <p>An app is a Docker container with a <code>flagship.app.json</code> manifest. The manifest declares which data stores the app needs (Postgres, a files folder), which web hosts it can navigate to, and what's public. The daemon injects identity headers so apps never have to handle login.</p>
-      <p>You vibe-code an app from the phone (the LLM emits the manifest + Dockerfile + sources) or you write it by hand and push to your Forgejo. Either way the daemon builds, deploys, and routes.</p>
-      <p>Manifest reference: TODO (in progress).</p>
+      <p>An app is a container your server builds from its source and a <code>flagship.app.json</code> manifest at the root of its repo. The manifest names the runtime the server builds it on, the data stores it needs (Postgres, a files folder), the internet hosts it may reach, and what anyone can open without signing in. The server injects identity headers, so apps never handle passwords.</p>
+      <p>You describe an app in a build chat (the AI writes the source and the manifest, never a Dockerfile) or import a git repo. Either way your server builds it, runs it in its own sandbox, and routes it.</p>
+      <h3>Manifest reference</h3>
+      <p>The fields, all checked when the app is installed:</p>
+      <ul>
+        <li><code>schema_version</code>: always <code>1</code>. <code>name</code>: a DNS label (lowercase letters, digits and dashes). <code>version</code>: semver, like <code>1.2.0</code>. <code>description</code>: optional.</li>
+        <li><code>runtime</code>: <code>base</code> is <code>node-24</code>, <code>python-3.13</code> or <code>static</code>, plus <code>port</code> (the app listens on <code>$PORT</code>), <code>start</code> (the start command as a list; <code>node-24</code> defaults to <code>npm start</code>) and <code>env</code>. Keys starting with <code>FLAGSHIP_</code> are the server's. An imported repo with its own Dockerfile names an <code>image</code> instead of a <code>base</code>.</li>
+        <li><code>data.stores</code>: <code>postgres: true</code> gives the app a Postgres 18 database (<code>FLAGSHIP_PG_URL</code>, with pgvector and the common extensions); <code>files: true</code> gives it a writable folder at <code>/data</code> (<code>FLAGSHIP_FILES_DIR</code>) that survives restarts and redeploys. There is no S3 and no Redis.</li>
+        <li><code>network</code>: <code>subdomain</code>, served at <code>&lt;subdomain&gt;.&lt;server&gt;.&lt;you&gt;.flagship.services</code>, and <code>egress</code>, the hosts the app asks to reach, each with why. Nothing goes out until you approve it in the app's access list.</li>
+        <li><code>access</code>: <code>enabled: true</code> (apps can't opt out of identity), <code>default_role</code>, optional <code>custom_roles</code>, <code>public_routes</code> (paths anyone can open when the app is members-only) and <code>queryable_by</code>.</li>
+        <li><code>migration.verification</code>: <code>standard</code> (biometric) or <code>elevated</code> (biometric and a second factor), for apps holding money, health or password data.</li>
+        <li>Optional: <code>browser.domains</code>, the sites an app may drive in your server's own browser, approved at install.</li>
+      </ul>
+      <pre><code>{
+  "schema_version": 1,
+  "name": "habits",
+  "version": "0.1.0",
+  "description": "Daily habit tracker.",
+  "runtime": { "base": "node-24", "port": 8080, "start": ["node", "server.js"] },
+  "data": { "stores": { "postgres": true } },
+  "network": { "subdomain": "habits" },
+  "access": { "enabled": true, "default_role": "member" },
+  "migration": { "verification": "standard" }
+}</code></pre>
     </section>
 
     <section class="doc-section" id="multiplexing">
@@ -239,14 +263,26 @@
 
     <section class="doc-section" id="recovery">
       <h2>Recovery</h2>
-      <p>If you backed up to iCloud Keychain or Google Block Store at setup, a fresh phone can recover your master key with biometrics. If you didn't, your data is gone — like a hardware wallet. We tell you this clearly during setup.</p>
-      <p>Detailed flow: TODO. The short version: install the phone app, log in to your iCloud / Google account, the wrapped key downloads, biometrics unwrap it, you re-pair each server.</p>
+      <p>Your account key lives on your devices. There are three ways to get it onto a new one, and if you have none of them your data can't be recovered, like a hardware wallet. The apps say so while you set up.</p>
+      <ul>
+        <li><strong>Another of your devices.</strong> On a device that's signed in, open Settings → Trusted devices → Add device. On the new one, sign in with your account name and choose to scan a pairing code (or Settings → Scan a pairing code when it's already signed in elsewhere). Both show the same code; when they match, the key moves over, end to end encrypted.</li>
+        <li><strong>A cloud backup.</strong> If you turned on recovery, a passkey kept by iCloud Keychain or Google Password Manager unlocks a sealed copy of your key. On a new phone, sign in with your account name and confirm with Face ID or your fingerprint.</li>
+        <li><strong>Your account key file.</strong> Settings → Back up account key saves a passphrase-protected <code>.flagshipkey</code> file. Open it on the new device with its passphrase.</li>
+      </ul>
+      <p>Recovering without a working device is a takeover, and it waits so a thief can't rush it: 7 days on an account with one device, 24 hours on an account with several, which also needs your recovery authenticator code or a recovery code. Your other devices are told at once and can cancel it. Afterwards each server pairs with the new device.</p>
     </section>
 
     <section class="doc-section" id="api">
       <h2>API reference</h2>
-      <p>The .com Worker exposes an extensive API for QR scan, server registration, push, LLM-promo, and aliases. The daemon exposes a per-app surface (browser, alerts, identity rotation, app install/uninstall).</p>
-      <p>Reference: TODO. For now, the source is the spec — see <a href="https://github.com/ibisllc/flagship">github.com/ibisllc/flagship</a> and start at <code>packages/control-plane/src/index.ts</code>.</p>
+      <p>What an app on your server can count on:</p>
+      <ul>
+        <li><strong>Who is calling.</strong> The server drops every <code>X-Flagship-*</code> header a client sends and sets its own: <code>X-Flagship-Visitor</code> is <code>member</code>, <code>api</code> or <code>anonymous</code>; for a member, <code>X-Flagship-User</code> is an id that is stable for this app only (the same person has unrelated ids in two apps) and <code>X-Flagship-Role</code> is their rank, <code>member</code>, <code>manager</code> or <code>master</code>. Anonymous visitors get no user or role.</li>
+        <li><strong>Sign-in.</strong> Send people to <code>/__flagship/sign-in?next=/path</code> on the app's own host (and <code>/__flagship/sign-out</code>). They approve on their phone; the app never sees a password.</li>
+        <li><strong>API keys.</strong> Scripts and devices call the app with <code>Authorization: Bearer fsk_&lt;keyId&gt;_&lt;secret&gt;</code>, a key the owner creates on the app's page, read-only or read and write. The server checks it first and the app sees <code>X-Flagship-Visitor: api</code> and <code>X-Flagship-Api-Scope</code>.</li>
+        <li><strong>Live connections.</strong> Responses stream, and WebSocket upgrades pass through.</li>
+        <li><strong>Data.</strong> <code>FLAGSHIP_PG_URL</code> for its Postgres database and <code>FLAGSHIP_FILES_DIR</code> for its files folder.</li>
+      </ul>
+      <p>Everything else, between your devices, your servers and flagshipserver.com, is signed orders rather than a public API. The specs are in the open source repo: <a href="https://github.com/ibisllc/flagship">github.com/ibisllc/flagship</a>, starting with <code>docs/app-apis.md</code> and <code>docs/manifest.md</code>.</p>
     </section>
   </section>
 </main>
