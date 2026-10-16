@@ -58,7 +58,7 @@ describe("connect to an existing account", () => {
     const html = read("index.html");
     const cover = html.slice(html.indexOf('<section id="view-bootstrap"'), html.indexOf("</section>", html.indexOf('<section id="view-bootstrap"')));
     expect(cover).toContain('id="bootstrap-create" class="full-width" data-testid="welcome-create">Create your account<');
-    expect(cover).toContain('data-testid="welcome-connect">Connect to an existing account<');
+    expect(cover).toMatch(/data-testid="welcome-connect"[^>]*>Connect to an existing account</);
     expect(cover).not.toMatch(/I already have an account|Join with a pairing code<\/button>/);
     const panel = cover.slice(cover.indexOf('id="bootstrap-connect-panel"'));
     const name = panel.indexOf("Sign in with your account name");
@@ -70,6 +70,30 @@ describe("connect to an existing account", () => {
     for (const id of ["connect-name-field", "connect-name-continue", "connect-scan", "connect-pair-field", "connect-pair-continue", "connect-back"]) {
       expect(panel).toContain(`data-testid="${id}"`);
     }
+  });
+
+  it("Welcome and both lock screens share the footer: primary, secondary, Patent Pending", () => {
+    const html = read("index.html");
+    const block = (start: string) => {
+      const i = html.indexOf(start);
+      return html.slice(i, html.indexOf("</section>", i));
+    };
+    for (const [start, primary, secondary] of [
+      ['id="bootstrap-welcome"', "welcome-create", "welcome-connect"],
+      ['<section id="view-unlock"', "lock-unlock", "lock-sign-out"],
+      ['<section id="view-pin-unlock"', "lock-unlock", "lock-sign-out"],
+    ] as const) {
+      const b = block(start);
+      const footer = b.slice(b.indexOf('class="action-footer"'));
+      const p = footer.indexOf(`data-testid="${primary}"`);
+      const s = footer.indexOf(`data-testid="${secondary}"`);
+      const pp = footer.indexOf('data-testid="patent-pending">Patent Pending<');
+      expect(p, start).toBeGreaterThan(0);
+      expect(s, start).toBeGreaterThan(p);
+      expect(pp, start).toBeGreaterThan(s);
+    }
+    expect(read("views/unlock.js")).toMatch(/"unlock-sign-out"[^\n]*handleReset/);
+    expect(read("views/unlock.js")).toMatch(/"pin-unlock-sign-out"[^\n]*handleReset/);
   });
 
   it("bootstrap routes a pasted link from either field into the join flow", () => {

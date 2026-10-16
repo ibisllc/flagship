@@ -299,7 +299,9 @@
 //       stand.
 //  v124: no developer surfaces in the shipped webapp: the sticky debug URL
 //       flag, Settings' Developer section and its Send order panel are gone.
-const SHELL_VERSION = "v124";
+//  v125: Welcome and the lock screens share one footer (primary, secondary
+//       right below, a gap, Patent Pending); the lock screens gain Sign out.
+const SHELL_VERSION = "v125";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

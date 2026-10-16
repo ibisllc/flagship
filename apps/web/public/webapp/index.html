@@ -50,16 +50,18 @@
 
       <!-- View 1: First run — passphrase to wrap a fresh UMK -->
       <section id="view-bootstrap" class="hidden">
-        <div id="bootstrap-welcome">
+        <div id="bootstrap-welcome" class="front-door">
           <h2>Get started</h2>
           <div class="card warning">
             <p class="note">The webapp stores your master key in this browser. Native iOS / Android apps use Secure Enclave or StrongBox and are stronger.</p>
             <a class="pill" href="https://flagshipserver.com/security#model">Read the trade-offs →</a>
           </div>
-          <div class="card">
-            <p class="note">New here? You'll get a free, random handle.</p>
+          <p class="note">New here? You'll get a free, random handle.</p>
+          <div class="action-footer">
             <button id="bootstrap-create" class="full-width" data-testid="welcome-create">Create your account</button>
-            <button id="bootstrap-connect" class="secondary full-width mt-2" data-testid="welcome-connect">Connect to an existing account</button>
+            <button id="bootstrap-connect" class="secondary full-width" data-testid="welcome-connect" aria-describedby="welcome-connect-hint">Connect to an existing account</button>
+            <span id="welcome-connect-hint" class="visually-hidden">Sign in with your account name, or join with a pairing code.</span>
+            <p class="action-footer-mark" data-testid="patent-pending">Patent Pending</p>
           </div>
         </div>
         <div id="bootstrap-connect-panel" class="hidden" data-testid="connect-account">
@@ -89,22 +91,32 @@
       </section>
 
       <!-- View 2: Locked — passphrase to unwrap UMK -->
-      <section id="view-unlock" class="hidden">
-        <h2>Unlock</h2>
+      <section id="view-unlock" class="hidden front-door">
+        <h2>Flagship is locked</h2>
         <div class="card">
+          <label for="unlock-passphrase">Passphrase</label>
           <input id="unlock-passphrase" type="password" placeholder="Passphrase" autocomplete="current-password" />
-          <button id="unlock-go" class="full-width mt-3">Unlock</button>
+        </div>
+        <div class="action-footer">
+          <button id="unlock-go" class="full-width" data-testid="lock-unlock">Unlock</button>
+          <button id="unlock-sign-out" class="secondary full-width" data-testid="lock-sign-out">Sign out</button>
+          <p class="action-footer-mark" data-testid="patent-pending">Patent Pending</p>
         </div>
       </section>
 
       <!-- View 2b: PIN-locked — numeric PIN to re-derive the in-memory key -->
-      <section id="view-pin-unlock" class="hidden">
-        <h2>Enter PIN</h2>
+      <section id="view-pin-unlock" class="hidden front-door">
+        <h2>Flagship is locked</h2>
         <div class="card">
+          <label for="pin-unlock-input">PIN</label>
           <input id="pin-unlock-input" type="password" inputmode="numeric" pattern="[0-9]*" autocomplete="off" placeholder="PIN" />
-          <button id="pin-unlock-go" class="full-width mt-3">Unlock</button>
           <p class="note mt-2" id="pin-unlock-error" style="display: none;"></p>
-          <button class="secondary full-width mt-2" id="pin-unlock-passphrase">Unlock with passphrase instead</button>
+          <button class="ghost full-width mt-2" id="pin-unlock-passphrase">Unlock with passphrase instead</button>
+        </div>
+        <div class="action-footer">
+          <button id="pin-unlock-go" class="full-width" data-testid="lock-unlock">Unlock</button>
+          <button id="pin-unlock-sign-out" class="secondary full-width" data-testid="lock-sign-out">Sign out</button>
+          <p class="action-footer-mark" data-testid="patent-pending">Patent Pending</p>
         </div>
       </section>
 

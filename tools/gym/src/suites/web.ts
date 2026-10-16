@@ -73,6 +73,25 @@ const EVERY_MERGE: readonly Scenario[] = [
     },
   ),
   web(
+    "web-front-door-footer",
+    "Welcome and the lock screen share one footer: the primary button, the secondary right below it, a gap, then Patent Pending inside the viewport.",
+    "gym webapp welcome and lock share the footer with Patent Pending",
+    {
+      steps: [
+        { kind: "launch", describe: "Cold launch." },
+        { kind: "assert", describe: "Welcome footer order.", handle: "#bootstrap-welcome [data-testid=patent-pending]" },
+        { kind: "launch", describe: "Create an identity, reload to the lock screen." },
+        { kind: "assert", describe: "Lock footer order.", handle: "#view-unlock [data-testid=patent-pending]" },
+      ],
+      assertions: [
+        { describe: "Welcome Patent Pending", handle: "#bootstrap-welcome [data-testid=patent-pending]", expect: "text", text: "Patent Pending" },
+        { describe: "Lock Sign out", handle: "#view-unlock [data-testid=lock-sign-out]", expect: "text", text: "Sign out" },
+      ],
+      screenshots: [shot("welcome-footer", "Welcome's footer."), shot("lock-footer", "The lock screen's footer.")],
+      dimension: "D7",
+    },
+  ),
+  web(
     "web-connect-link-to-join",
     "A pairing link typed into the account-name field opens the join flow, with a one-line note.",
     "gym webapp pairing link typed as the account name opens the join flow",

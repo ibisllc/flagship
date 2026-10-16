@@ -137,6 +137,35 @@ test.describe("gym webapp", () => {
     await shot(page, testInfo, "bootstrap-ready");
   });
 
+  test("gym webapp welcome and lock share the footer with Patent Pending", async ({
+    page,
+  }, testInfo) => {
+    // Primary, the secondary right below it, a gap, then Patent Pending at
+    // the bottom: the same on Welcome and on the lock screen.
+    const footer = async (primary: string, secondary: string, scope: string) => {
+      const p = await page.locator(`${scope} [data-testid=${primary}]`).boundingBox();
+      const s = await page.locator(`${scope} [data-testid=${secondary}]`).boundingBox();
+      const pp = await page.locator(`${scope} [data-testid=patent-pending]`).boundingBox();
+      expect(p && s && pp).toBeTruthy();
+      expect(s!.y).toBeGreaterThanOrEqual(p!.y + p!.height);
+      expect(s!.y - (p!.y + p!.height)).toBeLessThan(24);
+      expect(pp!.y - (s!.y + s!.height)).toBeGreaterThanOrEqual(24);
+      const viewport = page.viewportSize()!;
+      expect(pp!.y + pp!.height).toBeLessThanOrEqual(viewport.height);
+    };
+    await coldLaunch(page);
+    await expect(page.locator("#bootstrap-welcome [data-testid=patent-pending]")).toHaveText("Patent Pending");
+    await footer("welcome-create", "welcome-connect", "#bootstrap-welcome");
+    await shot(page, testInfo, "welcome-footer");
+    await generateIdentity(page);
+    await page.goto("/index.html");
+    await expect(page.locator("#view-unlock")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("#view-unlock [data-testid=lock-unlock]")).toHaveText("Unlock");
+    await expect(page.locator("#view-unlock [data-testid=lock-sign-out]")).toHaveText("Sign out");
+    await footer("lock-unlock", "lock-sign-out", "#view-unlock");
+    await shot(page, testInfo, "lock-footer");
+  });
+
   test("gym webapp connect page holds sign-in and join with a pairing code", async ({
     page,
   }, testInfo) => {

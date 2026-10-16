@@ -94,6 +94,10 @@ export async function handleReset() {
 
 export function initUnlockView() {
   $("unlock-go")?.addEventListener("click", handleUnlock);
+  // The lock screens' Sign out (the same footer as Welcome): the device
+  // reset Settings offers, under the same recovery gate.
+  $("unlock-sign-out")?.addEventListener("click", () => void handleReset());
+  $("pin-unlock-sign-out")?.addEventListener("click", () => void handleReset());
 }
 
 export { hasWrappedUmk };
