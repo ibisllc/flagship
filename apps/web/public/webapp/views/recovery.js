@@ -537,7 +537,7 @@ async function runImportGraceCountdown(takeover) {
 }
 
 export function initRecoveryView() {
-  $("recovery-back")?.addEventListener("click", () => show("view-home"));
+  $("recovery-back")?.addEventListener("click", () => show("view-settings-tab"));
   $("recovery-keyfile-export")?.addEventListener("click", runKeyfileExport);
   $("recovery-keyfile-input")?.addEventListener("change", (ev) => {
     const f = ev.target.files?.[0];

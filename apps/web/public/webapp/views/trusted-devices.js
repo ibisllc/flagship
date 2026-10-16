@@ -657,7 +657,7 @@ export function initTrustedDevicesView() {
       renderTrustedDevices().catch(() => {});
     }
   });
-  $("trusted-devices-back")?.addEventListener("click", () => show("view-settings"));
+  $("trusted-devices-back")?.addEventListener("click", () => show("view-settings-tab"));
   // Phase 3b — cross-device QR pairing: the admin generates a pairing QR
   // and seals the account keys to a freshly-scanned-in collaborator
   // device (which joins QUARANTINED for 14 days).

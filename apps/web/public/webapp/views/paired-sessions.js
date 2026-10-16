@@ -80,7 +80,7 @@ async function revoke(prefix) {
 }
 
 export function initPairedSessionsView() {
-  $("paired-sessions-back")?.addEventListener("click", () => show("view-home"));
+  $("paired-sessions-back")?.addEventListener("click", () => show("view-settings-tab"));
   $("paired-sessions-refresh")?.addEventListener("click", () => {
     renderPairedSessions().catch((e) => { console.error(e); toast(humanError(e), "err"); });
   });

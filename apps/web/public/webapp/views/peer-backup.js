@@ -287,7 +287,7 @@ async function runToggle(nextParticipate) {
 }
 
 export function initPeerBackupView() {
-  $("peer-backup-back")?.addEventListener("click", () => show("view-home"));
+  $("peer-backup-back")?.addEventListener("click", () => show("view-settings-tab"));
   $("peer-backup-refresh")?.addEventListener("click", () => {
     renderPeerBackup().catch((e) => { console.error(e); toast(humanError(e), "err"); });
   });

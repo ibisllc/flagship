@@ -473,7 +473,7 @@ async function handleNoRecoveryGatedTap() {
 
 export function initSettingsView() {
   $("settings-back")?.addEventListener("click", async () => {
-    show("view-home");
+    show("view-settings-tab");
     await renderActiveProviderChip();
   });
   // Tier 1 — LOCK WITH PIN. First time (no PIN set) walks through setup

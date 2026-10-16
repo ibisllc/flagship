@@ -160,9 +160,10 @@ function reset() {
 export function initInstallProgressView() {
   $("ip-go")?.addEventListener("click", start);
   $("ip-reset")?.addEventListener("click", reset);
+  // The tracker is opened from Activity (its tab), so Back returns there.
   $("install-progress-back")?.addEventListener("click", () => {
     clearPoll();
-    show("view-home");
+    show("view-activity");
   });
 }
 

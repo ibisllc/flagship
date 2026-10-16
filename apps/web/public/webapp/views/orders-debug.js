@@ -163,7 +163,7 @@ async function sendOrder() {
 export function initOrdersDebugView() {
   $("od-kind")?.addEventListener("change", renderFields);
   $("od-send")?.addEventListener("click", sendOrder);
-  $("orders-debug-back")?.addEventListener("click", () => show("view-home"));
+  $("orders-debug-back")?.addEventListener("click", () => show("view-settings-tab"));
 }
 
 export function enterOrdersDebug() {
