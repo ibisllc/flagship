@@ -20,6 +20,13 @@ import {
   type ServiceAccessModeOrder,
   type ServiceAllowRemoveOrder,
 } from "../src/appAccessOrders.js";
+import {
+  APP_MEMBER_ROLES,
+  appMemberRoleTargetAid,
+  appMemberRoleTargetGrant,
+  appMemberRoleTargetInvite,
+  parseAppMemberRoleTarget,
+} from "../src/appMemberRole.js";
 import { hex } from "../src/canonicalBase.js";
 import { ed } from "../src/edSync.js";
 
@@ -98,6 +105,19 @@ describe("app-access-orders beyond the vectors", () => {
     expect(parseAppRankTarget(`share:${"b".repeat(32)}`)).toEqual({ kind: "share", shareId: "b".repeat(32) });
     expect(parseAppRankTarget(`grant:x1/${d}`)).toEqual({ kind: "grant", inviteId: "x1", aid: d });
     expect(parseAppRankTarget("owner")).toBeNull();
+  });
+
+  it("builds and reads invited-person targets", () => {
+    expect(appMemberRoleTargetAid("AB".repeat(32))).toBe(`aid:${"ab".repeat(32)}`);
+    expect(parseAppMemberRoleTarget(appMemberRoleTargetInvite("inv-1"))).toEqual({ kind: "invite", inviteId: "inv-1" });
+    expect(parseAppMemberRoleTarget(appMemberRoleTargetGrant("inv-1", "CD".repeat(32)))).toEqual({
+      kind: "grant",
+      inviteId: "inv-1",
+      aid: "cd".repeat(32),
+    });
+    expect(parseAppMemberRoleTarget("invite:")).toBeNull();
+    expect(parseAppMemberRoleTarget(`grant:inv-1/${"cd".repeat(31)}`)).toBeNull();
+    expect(APP_MEMBER_ROLES).toEqual(["member", "manager", "master"]);
   });
 
   it("a v1 mode order (with serverId) never parses as v2", () => {

@@ -149,12 +149,13 @@ being a member. The box keeps the grants in the service's allow-list state
 them (`roles.grants` per join, `roles.invites` per invite, `roles.aids` for
 members who joined before personal invites were tracked).
 
-**Signed orders.** A role change is `flagship/app-member-role/v1|<serverDomain>|
-<serviceId>|<target>|<role>|<issuedAt>` (`target` = `invite:<inviteId>`,
-`grant:<inviteId>/<aid>` for one join, or `aid:<hex>`), signed by the sensitive-order key and verified by the box
-(`memberRoles.ts`: `GET /api/screens/services/:id/members`,
-`POST …/members/role`), at most 10 minutes old and newer than the last order
-for that target. Vectors: `packages/protocol/test-vectors/app-member-role/`.
+**Signed orders.** A rank change is `flagship/app-rank/v1` (see "Account
+members": `target` = `invite:<inviteId>`, `grant:<inviteId>/<aid>` for one
+join, `aid:<hex>`, or an account device / co-manager), signed by the
+admin-only key and verified by the box (`memberRoles.ts`:
+`GET /api/screens/services/:id/members`, `POST …/members/rank`), at most 10
+minutes old and newer than the last order for that target. Its server-named
+predecessor `flagship/app-member-role/v1` is retired.
 Mode changes and removals are admin-only orders (see "Account members"). Clients send the
 invite's role right after creating it, and skip that when it is the default.
 Removing a person prunes their AID on the box only when that was their last
@@ -316,8 +317,8 @@ as one), `share:<32 hex shareId>`, `invite:<inviteId>`,
 `grant:<inviteId>/<aid hex>` or `aid:<aid hex>`; `rank` is `member`,
 `manager`, `master`, or `refused` (device and share targets only). Vectors:
 `packages/protocol/test-vectors/app-access-orders/`; all four ports pass
-them. `flagship/app-member-role/v1` (server-named) is still accepted, under
-the same admin-only key.
+them. The server-named `flagship/app-member-role/v1` is retired (pre-release:
+no box takes it, its vectors are gone).
 
 ### Box surface
 
@@ -383,7 +384,9 @@ So the leader only distributes. Applying is idempotent and "latest order
 wins" per target (the per-target `issuedAt` sequence), so arrival order
 doesn't matter. A withdraw that arrives before the join it withdraws is kept
 (`roles.withdrawn`) and refuses that join once the creator is known. v1 orders
-name one server and stay on it. `.com` keeps doing first-bind arbitration on
+name one server and stay on it, and so do the box's own changes (an
+AI-built app first deployed members-only): a copy or the next admin order
+carries them. `.com` keeps doing first-bind arbitration on
 the box where someone redeems; the other boxes trust the box that did only
 as far as the proofs above go (the cap stops a second person on a personal
 invite).

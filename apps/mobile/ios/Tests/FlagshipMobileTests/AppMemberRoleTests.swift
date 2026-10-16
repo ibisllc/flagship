@@ -4,56 +4,10 @@ import CryptoKit
 @testable import FlagshipUI
 import FlagshipCore
 
-/// The iOS member-role order against THE reference,
-/// `packages/protocol/test-vectors/app-member-role/vectors.json` (loaded from
-/// disk, never transcribed), plus the Access control view model's ranks.
+/// The Access control rows' ranks and targets and the view model's ranks
+/// (the rank order's vectors are in AppAccessOrdersVectorTests).
 @MainActor
 final class AppMemberRoleTests: XCTestCase {
-
-    private func vectors() throws -> [String: Any] {
-        var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-        for _ in 0..<14 {
-            let url = dir.appendingPathComponent("packages/protocol/test-vectors/app-member-role/vectors.json")
-            if FileManager.default.fileExists(atPath: url.path) {
-                return try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
-            }
-            dir = dir.deletingLastPathComponent()
-        }
-        throw XCTSkip("vectors.json not found above \(#filePath)")
-    }
-
-    private func order(_ c: [String: Any]) -> AppMemberRoleOrder {
-        AppMemberRoleOrder(serverDomain: c["serverDomain"] as! String, serviceId: c["serviceId"] as! String,
-                           target: c["target"] as! String, role: c["role"] as! String,
-                           issuedAt: (c["issuedAt"] as! NSNumber).int64Value)
-    }
-
-    func test_vectors_canonicalBytesAndPinnedSignatures() throws {
-        let v = try vectors()
-        let umk = try XCTUnwrap(HexUtil.decode(v["umkSeedHex"] as! String))
-        let seed = try XCTUnwrap(ServiceInvite.deriveProtocolIrkSeed(umkSeed: umk))
-        let key = try Curve25519.Signing.PrivateKey(rawRepresentation: seed)
-        XCTAssertEqual(HexUtil.encode(key.publicKey.rawRepresentation), v["pub"] as? String)
-        let cases = try XCTUnwrap(v["cases"] as? [[String: Any]])
-        XCTAssertFalse(cases.isEmpty)
-        for c in cases {
-            let o = order(c)
-            let bytes = try o.canonicalBytes()
-            XCTAssertEqual(String(data: bytes, encoding: .utf8), c["canonical"] as? String)
-            let pinned = try XCTUnwrap(HexUtil.decode(c["signature"] as! String))
-            XCTAssertTrue(key.publicKey.isValidSignature(pinned, for: bytes))
-            // CryptoKit signs randomized: ours differs from the pinned one but verifies.
-            XCTAssertTrue(key.publicKey.isValidSignature(try key.signature(for: bytes), for: bytes))
-        }
-    }
-
-    func test_vectors_refusals() throws {
-        let invalid = try XCTUnwrap(try vectors()["invalid"] as? [[String: Any]])
-        XCTAssertFalse(invalid.isEmpty)
-        for c in invalid {
-            XCTAssertThrowsError(try order(c).canonicalBytes(), c["why"] as? String ?? "")
-        }
-    }
 
     func test_rowRolesTargetsAndAlsoIn() {
         let sam = String(repeating: "ab", count: 32)

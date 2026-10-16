@@ -15,7 +15,7 @@ import {
   sealInviteBundle,
   serviceInviteId,
   serviceInviteSecretHash,
-  signAppMemberRole,
+  signAppRank,
   signCreateServiceInvite,
   signInstallService,
   signKnockAuthorization,
@@ -27,7 +27,7 @@ import {
   signServiceAllowRemoveV2,
   type ServiceAccessModeOrder,
   type ServiceAllowRemoveOrder,
-  type AppMemberRoleOrder,
+  type AppRankOrder,
   type CreateServiceInvite,
   type InstallServiceRequest,
   type KnockAuthorization,
@@ -233,8 +233,8 @@ export const gating: Group = {
       return `member, user=${h["x-flagship-user"]?.slice(0, 10)}…`;
     });
     const roleOrder = (role: string, signer = adminRoot) => {
-      const order: AppMemberRoleOrder = { serverDomain: fqdn, serviceId: serviceRef, target: appMemberRoleTargetAid(friendHex), role, issuedAt: Date.now() };
-      return postJson(`https://${fqdn}/api/screens/services/${encodeURIComponent(serviceRef)}/members/role`, { order, signature: bytesToHex(signAppMemberRole(order, signer)) }, { "x-flagship-session": session });
+      const order: AppRankOrder = { serviceRef, target: appMemberRoleTargetAid(friendHex), rank: role, issuedAt: Date.now() };
+      return postJson(`https://${fqdn}/api/screens/services/${encodeURIComponent(serviceRef)}/members/rank`, { order, signature: bytesToHex(signAppRank(order, signer)) }, { "x-flagship-session": session });
     };
     await rec.check("the members list shows the friend as a member (paired session)", async () => {
       const r = await http(`https://${fqdn}/api/screens/services/${encodeURIComponent(serviceRef)}/members`, { headers: { "x-flagship-session": session } });

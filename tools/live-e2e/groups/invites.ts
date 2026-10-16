@@ -19,7 +19,6 @@ import {
   randomServiceInviteId,
   sealInviteBundle,
   serviceInviteSecretHash,
-  signAppMemberRole,
   signAppRank,
   signCreateServiceInvite,
   signDeviceCapabilityGrant,
@@ -27,7 +26,6 @@ import {
   signRedeemServiceInvite,
   signRevokeServiceInvite,
   signServiceInviteListQuery,
-  type AppMemberRoleOrder,
   type AppRankOrder,
   type CreateServiceInvite,
   type DeviceCapabilityGrant,
@@ -288,12 +286,7 @@ export const invites: Group = {
       const made = await create(adminRoot, "Gym Admin Pick");
       assert(made.status === 200 && made.tier === "admin", `admin create ${made.status} tier=${made.tier}`);
       adminInv = made.inv;
-      const order: AppMemberRoleOrder = { serverDomain: fqdn, serviceId: serviceRef, target: `invite:${made.inv.inviteId}`, role: "manager", issuedAt: Date.now() };
-      const r = await postJson(
-        `https://${fqdn}/api/screens/services/${encodeURIComponent(serviceRef)}/members/role`,
-        { order, signature: bytesToHex(signAppMemberRole(order, adminRoot)) },
-        { "x-flagship-session": session },
-      );
+      const r = await rank(`invite:${made.inv.inviteId}`, "manager", adminRoot);
       assert(r.status === 200, `role ${r.status}: ${short(r.text)}`);
       const red = await redeem(made.inv, friendB);
       assert(red.status === 200 && red.json?.tier === "admin", `redeem ${red.status}: ${short(red.text)}`);

@@ -10,7 +10,6 @@
  *            members:[{aid, role, grants:[{inviteId, role, tier}], direct}],
  *            invites:[{inviteId, role, set, tier, creatorPub, creatorDeviceId}] }
  *   POST /api/screens/services/:id/members/rank   { order, signature }   (flagship/app-rank/v1)
- *   POST /api/screens/services/:id/members/role   { order, signature }   (flagship/app-member-role/v1)
  *
  * Account members are the devices of the account that owns the box (from the
  * device book: admin devices are Master, the others Manager) and the accounts
@@ -30,11 +29,8 @@
  * could read who the members are).
  */
 import {
-  parseAppMemberRoleOrder,
-  parseAppMemberRoleTarget,
   parseAppRankOrder,
   parseAppRankTarget,
-  verifyAppMemberRole,
   verifyAppRank,
   type AdminGrantView,
   type AppManifest,
@@ -57,11 +53,10 @@ export const MEMBER_ROLE_MAX_SKEW_MS = 10 * 60_000;
 
 const J = { "content-type": "application/json" } as const;
 const LIST_RE = /^\/api\/screens\/services\/([^/]+)\/members$/;
-const ROLE_RE = /^\/api\/screens\/services\/([^/]+)\/members\/role$/;
 const RANK_RE = /^\/api\/screens\/services\/([^/]+)\/members\/rank$/;
 
 export function isMemberRolesPath(path: string): boolean {
-  return LIST_RE.test(path) || ROLE_RE.test(path) || RANK_RE.test(path);
+  return LIST_RE.test(path) || RANK_RE.test(path);
 }
 
 /**
@@ -209,7 +204,7 @@ export function buildMemberRolesHttp(
 ): (path: string, method: string, req: HttpRequest) => Promise<HttpResponse | null> {
   const now = opts.now ?? (() => Date.now());
   const log = opts.log ?? (() => {});
-  const { adminSigned, applyInvitedTarget, applyRank } = rankCore(opts);
+  const { adminSigned, applyRank } = rankCore(opts);
 
   function list(serviceId: string, manifest: Pick<AppManifest, "access">): HttpResponse {
     const { roles, defaultRole, descriptions } = offeredRoles(manifest);
@@ -282,22 +277,6 @@ export function buildMemberRolesHttp(
     return { order: body.order, sig: Uint8Array.from(Buffer.from(body.signature, "hex")) };
   }
 
-  async function setRole(serviceId: string, req: HttpRequest): Promise<HttpResponse> {
-    const b = readBody(req);
-    if ("status" in b) return b;
-    const order = parseAppMemberRoleOrder(b.order);
-    if (!order) return err(400, "malformed order");
-    if (order.serviceId !== serviceId) return err(400, "the order is for a different app");
-    if (order.serverDomain !== opts.serverDomain) return err(403, "the order is for a different server");
-    if (Math.abs(now() - order.issuedAt) > MEMBER_ROLE_MAX_SKEW_MS) return err(403, "the order is stale: sign it again");
-    if (!adminSigned(order, b.sig, verifyAppMemberRole)) return err(403, "only an admin device can change a rank");
-    const target = parseAppMemberRoleTarget(order.target)!;
-    const refused = await applyInvitedTarget(serviceId, target, order.target, order.role, order.issuedAt);
-    if (refused) return refused;
-    log(`[members] ${serviceId}: ${target.kind} role set to ${order.role}`);
-    return json(200, { ok: true, target: order.target, role: order.role });
-  }
-
   async function setRank(serviceId: string, req: HttpRequest): Promise<HttpResponse> {
     const b = readBody(req);
     if ("status" in b) return b;
@@ -314,7 +293,7 @@ export function buildMemberRolesHttp(
   }
 
   return async function handle(path, method, req) {
-    const m = RANK_RE.exec(path) ?? ROLE_RE.exec(path) ?? LIST_RE.exec(path);
+    const m = RANK_RE.exec(path) ?? LIST_RE.exec(path);
     if (!m) return null;
     let serviceId: string;
     try {
@@ -327,10 +306,6 @@ export function buildMemberRolesHttp(
     if (RANK_RE.test(path)) {
       if (method !== "POST") return err(405, "method not allowed");
       return setRank(serviceId, req);
-    }
-    if (ROLE_RE.test(path)) {
-      if (method !== "POST") return err(405, "method not allowed");
-      return setRole(serviceId, req);
     }
     if (method !== "GET") return err(405, "method not allowed");
     return list(serviceId, app.manifest);

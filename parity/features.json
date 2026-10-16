@@ -123,12 +123,12 @@
     },
     {
       "id": "app-members-ranks",
-      "title": "App page: access control, members and ranks (app-member-role/v1)",
+      "title": "App page: access control, account members and ranks (app-rank/v1)",
       "ref": "ios",
       "surfaces": {
-        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipAPI/Models/AppMemberModels.swift", "flagship/app-member-role/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift", "struct "]] },
-        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AppMemberRoles.kt", "flagship/app-member-role/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServiceAccessScreen.kt", "flagship/app-member-role/v1"]] },
-        "web": { "status": "present", "reason": "Also still shows the legacy raw Members list (service-detail.js).", "anchors": [["apps/web/public/webapp/lib/memberRoles.js", "flagship/app-member-role/v1"]] }
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipAPI/Models/AppAccessOrders.swift", "flagship/app-rank/v1"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ServiceAccessScreen.swift", "Account members"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AppMemberRoles.kt", "flagship/app-rank/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServiceAccessScreen.kt", "Account members"]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/memberRoles.js", "flagship/app-rank/v1"], ["apps/web/public/webapp/views/service-access.js", "Account members"]] }
       }
     },
     {

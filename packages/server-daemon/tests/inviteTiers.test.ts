@@ -24,7 +24,6 @@ import {
   sealInviteBundle,
   serviceInviteSecretHash,
   signAcceptServiceInvite,
-  signAppMemberRole,
   signAppRank,
   signCreateServiceInvite,
   signDeviceCapabilityGrant,
@@ -36,7 +35,6 @@ import {
   signServiceAllowRemoveV2,
   signSetServiceAccessMode,
   type AcceptServiceInvite,
-  type AppMemberRoleOrder,
   type AppRankOrder,
   type CreateServiceInvite,
   type DeviceCapabilityGrant,
@@ -231,17 +229,6 @@ async function box(opts: { pinned?: boolean; defaultRole?: string; grants?: Reco
     return (await roles(req.path, "POST", req))!;
   }
 
-  async function roleV1(target: string, r: string, signer: Keypair, issuedAt = NOW) {
-    const o: AppMemberRoleOrder = { serverDomain: FQDN, serviceId: SERVICE, target, role: r, issuedAt };
-    const req: HttpRequest = {
-      method: "POST",
-      path: `/api/screens/services/${SERVICE}/members/role`,
-      headers: {},
-      body: Buffer.from(JSON.stringify({ order: o, signature: hex(signAppMemberRole(o, signer)) })),
-    };
-    return (await roles(req.path, "POST", req))!;
-  }
-
   async function list() {
     const req: HttpRequest = { method: "GET", path: `/api/screens/services/${SERVICE}/members`, headers: {}, body: Buffer.alloc(0) };
     return JSON.parse(String((await roles(req.path, "GET", req))!.body));
@@ -265,7 +252,7 @@ async function box(opts: { pinned?: boolean; defaultRole?: string; grants?: Reco
   }
 
   return {
-    store, book, access, redeem, accept, rank, roleV1, list, withdraw, knock, seen, post, dir,
+    store, book, access, redeem, accept, rank, list, withdraw, knock, seen, post, dir,
     setListed: (g: Record<string, unknown>[]) => { listed = g; },
     fetches: () => fetches,
   };
@@ -398,9 +385,8 @@ describe("admin orders override the defaults (demotion works)", () => {
     expect(b.seen(FRIEND)?.role).toBe("master");
     expect((await b.rank(`aid:${FRIEND}`, "member", adminRoot, NOW + 1)).status).toBe(200);
     expect(b.seen(FRIEND)?.role).toBe("member");
-    // The v1 order still works, admin-only.
-    expect((await b.roleV1(`aid:${FRIEND}`, "manager", ownerIrk, NOW + 2)).status).toBe(403);
-    expect((await b.roleV1(`aid:${FRIEND}`, "manager", adminRoot, NOW + 2)).status).toBe(200);
+    expect((await b.rank(`aid:${FRIEND}`, "manager", ownerIrk, NOW + 2)).status).toBe(403);
+    expect((await b.rank(`aid:${FRIEND}`, "manager", adminRoot, NOW + 2)).status).toBe(200);
     expect(b.seen(FRIEND)?.role).toBe("manager");
   });
 

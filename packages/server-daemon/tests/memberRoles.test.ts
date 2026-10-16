@@ -4,9 +4,9 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   deriveIRK,
-  signAppMemberRole,
+  signAppRank,
   signAppDbWriteGrant,
-  type AppMemberRoleOrder,
+  type AppRankOrder,
 } from "@flagship/protocol";
 import { buildMemberRolesHttp, offeredRoles } from "../src/memberRoles.js";
 import { ServiceAccessStore } from "../src/serviceAccess.js";
@@ -49,14 +49,14 @@ async function harness(opts: { installed?: boolean; now?: number } = {}) {
   return { store, handle, dir };
 }
 
-function order(over: Partial<AppMemberRoleOrder> = {}): AppMemberRoleOrder {
-  return { serverDomain: FQDN, serviceId: SERVICE, target: `aid:${FRIEND}`, role: "master", issuedAt: NOW, ...over };
+function order(over: Partial<AppRankOrder> = {}): AppRankOrder {
+  return { serviceRef: SERVICE, target: `aid:${FRIEND}`, rank: "master", issuedAt: NOW, ...over };
 }
 
-function post(o: AppMemberRoleOrder, sig: Uint8Array, service = SERVICE): HttpRequest {
+function post(o: AppRankOrder, sig: Uint8Array, service = SERVICE): HttpRequest {
   return {
     method: "POST",
-    path: `/api/screens/services/${service}/members/role`,
+    path: `/api/screens/services/${service}/members/rank`,
     headers: {},
     body: Buffer.from(JSON.stringify({ order: o, signature: hex(sig) })),
   };
@@ -100,72 +100,70 @@ describe("setting a role", () => {
   it("applies an owner-signed order and the member's role follows it", async () => {
     const { handle, store } = await harness();
     const o = order();
-    const r = await handle(post(o, signAppMemberRole(o, ownerIrk)).path, "POST", post(o, signAppMemberRole(o, ownerIrk)));
+    const r = await handle(post(o, signAppRank(o, ownerIrk)).path, "POST", post(o, signAppRank(o, ownerIrk)));
     expect(r?.status).toBe(200);
     expect(store.roleOf(SERVICE, FRIEND, "member")).toBe("master");
     const list = JSON.parse(String((await handle(get.path, "GET", get))!.body));
     expect(list.members).toEqual([{ aid: FRIEND, role: "master", grants: [], direct: "master" }]);
   });
 
-  it("refuses anyone but the owner, another order's signature, another box or app, and stale orders", async () => {
+  it("refuses anyone but the owner, another order's signature, another app, and stale orders", async () => {
     const { handle, store } = await harness();
     const o = order();
-    const send = (oo: AppMemberRoleOrder, sig: Uint8Array) => handle(post(oo, sig).path, "POST", post(oo, sig));
-    expect((await send(o, signAppMemberRole(o, strangerIrk)))?.status).toBe(403);
+    const send = (oo: AppRankOrder, sig: Uint8Array) => handle(post(oo, sig).path, "POST", post(oo, sig));
+    expect((await send(o, signAppRank(o, strangerIrk)))?.status).toBe(403);
     const dbSig = signAppDbWriteGrant(
       { serverDomain: FQDN, serviceId: SERVICE, store: "default", sqlSha256: "ab".repeat(32), issuedAt: NOW },
       ownerIrk,
     );
     expect((await send(o, dbSig))?.status).toBe(403);
-    const otherBox = order({ serverDomain: "media.alice.flagship.services" });
-    expect((await send(otherBox, signAppMemberRole(otherBox, ownerIrk)))?.status).toBe(403);
-    const otherApp = order({ serviceId: "alice-chess" });
-    const r = await handle(post(otherApp, signAppMemberRole(otherApp, ownerIrk)).path.replace("alice-chess", SERVICE), "POST", post(otherApp, signAppMemberRole(otherApp, ownerIrk)));
+    const otherApp = order({ serviceRef: "alice-chess" });
+    const r = await handle(post(otherApp, signAppRank(otherApp, ownerIrk)).path.replace("alice-chess", SERVICE), "POST", post(otherApp, signAppRank(otherApp, ownerIrk)));
     expect(r?.status).toBe(400);
     const old = order({ issuedAt: NOW - 11 * 60_000 });
-    expect((await send(old, signAppMemberRole(old, ownerIrk)))?.status).toBe(403);
+    expect((await send(old, signAppRank(old, ownerIrk)))?.status).toBe(403);
     expect(store.roleOf(SERVICE, FRIEND, "member")).toBeNull();
   });
 
   it("gives ladder roles only, never owner, and only to members", async () => {
     const { handle } = await harness();
-    const send = (oo: AppMemberRoleOrder) => {
-      const sig = signAppMemberRole(oo, ownerIrk);
+    const send = (oo: AppRankOrder) => {
+      const sig = signAppRank(oo, ownerIrk);
       return handle(post(oo, sig).path, "POST", post(oo, sig));
     };
     // A role off the ladder can't even be signed; a forged body is refused.
-    expect(() => signAppMemberRole(order({ role: "coach" }), ownerIrk)).toThrow();
-    const forged = post(order(), signAppMemberRole(order(), ownerIrk));
+    expect(() => signAppRank(order({ rank: "coach" }), ownerIrk)).toThrow();
+    const forged = post(order(), signAppRank(order(), ownerIrk));
     forged.body = Buffer.from(String(forged.body).replace('"master"', '"coach"'));
     expect((await handle(forged.path, "POST", forged))?.status).toBe(400);
-    expect((await send(order({ role: "manager" })))?.status).toBe(200);
+    expect((await send(order({ rank: "manager" })))?.status).toBe(200);
     expect((await send(order({ target: `aid:${OTHER}`, issuedAt: NOW + 1 })))?.status).toBe(422);
     expect((await send(order({ target: `aid:${OWNER_AID}`, issuedAt: NOW + 2 })))?.status).toBe(422);
   });
 
   it("refuses a replayed or older order for the same target", async () => {
     const { handle, store } = await harness();
-    const send = (oo: AppMemberRoleOrder) => {
-      const sig = signAppMemberRole(oo, ownerIrk);
+    const send = (oo: AppRankOrder) => {
+      const sig = signAppRank(oo, ownerIrk);
       return handle(post(oo, sig).path, "POST", post(oo, sig));
     };
-    expect((await send(order({ role: "member", issuedAt: NOW + 5 })))?.status).toBe(200);
-    expect((await send(order({ role: "member", issuedAt: NOW + 5 })))?.status).toBe(409);
-    expect((await send(order({ role: "master", issuedAt: NOW + 4 })))?.status).toBe(409);
+    expect((await send(order({ rank: "member", issuedAt: NOW + 5 })))?.status).toBe(200);
+    expect((await send(order({ rank: "member", issuedAt: NOW + 5 })))?.status).toBe(409);
+    expect((await send(order({ rank: "master", issuedAt: NOW + 4 })))?.status).toBe(409);
     expect(store.roleOf(SERVICE, FRIEND, "member")).toBe("member");
   });
 
   it("every invite is a grant; a person has the highest of their grants, and losing one leaves the others", async () => {
     const { handle, store, dir } = await harness();
-    const send = (oo: AppMemberRoleOrder) => {
-      const sig = signAppMemberRole(oo, ownerIrk);
+    const send = (oo: AppRankOrder) => {
+      const sig = signAppRank(oo, ownerIrk);
       return handle(post(oo, sig).path, "POST", post(oo, sig));
     };
     // A group link at viewer, a personal invite at admin, both for OTHER.
-    expect((await send(order({ target: "invite:family", role: "member" })))?.status).toBe(200);
+    expect((await send(order({ target: "invite:family", rank: "member" })))?.status).toBe(200);
     await store.addAllowed(SERVICE, OTHER, "family");
     expect(store.roleOf(SERVICE, OTHER, "member")).toBe("member");
-    expect((await send(order({ target: "invite:sam-1", role: "master", issuedAt: NOW + 1 })))?.status).toBe(200);
+    expect((await send(order({ target: "invite:sam-1", rank: "master", issuedAt: NOW + 1 })))?.status).toBe(200);
     await store.addAllowed(SERVICE, OTHER, "sam-1");
     expect(store.roleOf(SERVICE, OTHER, "member")).toBe("master");
     const list = JSON.parse(String((await handle(get.path, "GET", get))!.body));
@@ -187,12 +185,12 @@ describe("setting a role", () => {
       "sam-1": "master",
     });
     // One person's join through the group is its own grant with its own role.
-    expect((await send(order({ target: `grant:family/${OTHER}`, role: "manager", issuedAt: NOW + 2 })))?.status).toBe(200);
+    expect((await send(order({ target: `grant:family/${OTHER}`, rank: "manager", issuedAt: NOW + 2 })))?.status).toBe(200);
     expect(store.grantRole(SERVICE, "family", OTHER, "member")).toBe("manager");
     expect(store.inviteRole(SERVICE, "family", "member")).toBe("member");
     // A grant someone doesn't hold is refused.
-    expect((await send(order({ target: `grant:other-link/${OTHER}`, role: "manager", issuedAt: NOW + 3 })))?.status).toBe(422);
-    expect((await send(order({ target: `grant:family/${OTHER}`, role: "member", issuedAt: NOW + 4 })))?.status).toBe(200);
+    expect((await send(order({ target: `grant:other-link/${OTHER}`, rank: "manager", issuedAt: NOW + 3 })))?.status).toBe(422);
+    expect((await send(order({ target: `grant:family/${OTHER}`, rank: "member", issuedAt: NOW + 4 })))?.status).toBe(200);
     // Revoking the personal invite leaves the group: still a member, now viewer.
     await store.revokeGroup("sam-1", SERVICE);
     expect(store.isAllowed(SERVICE, OTHER)).toBe(true);
@@ -208,14 +206,14 @@ describe("setting a role", () => {
 
   it("removing a member drops their role; revoking a group drops its role", async () => {
     const { handle, store } = await harness();
-    const send = (oo: AppMemberRoleOrder) => {
-      const sig = signAppMemberRole(oo, ownerIrk);
+    const send = (oo: AppRankOrder) => {
+      const sig = signAppRank(oo, ownerIrk);
       return handle(post(oo, sig).path, "POST", post(oo, sig));
     };
-    await send(order({ role: "master" }));
+    await send(order({ rank: "master" }));
     await store.removeAllowed(SERVICE, FRIEND);
     expect(store.roleOf(SERVICE, FRIEND, "viewer")).toBeNull();
-    await send(order({ target: "invite:grp-2", role: "member", issuedAt: NOW + 1 }));
+    await send(order({ target: "invite:grp-2", rank: "member", issuedAt: NOW + 1 }));
     await store.addAllowed(SERVICE, OTHER, "grp-2");
     await store.revokeGroup("grp-2", SERVICE);
     expect(store.roleOf(SERVICE, OTHER, "viewer")).toBeNull();
@@ -228,7 +226,7 @@ describe("setting a role", () => {
 
   it("copies roles with the app, keeping only the copied members'", async () => {
     const { handle, store } = await harness();
-    const sig = signAppMemberRole(order(), ownerIrk);
+    const sig = signAppRank(order(), ownerIrk);
     await handle(post(order(), sig).path, "POST", post(order(), sig));
     const exported = store.exportEntry(SERVICE)!;
     const target = new ServiceAccessStore(join(mkdtempSync(join(tmpdir(), "roles-t-")), "s.json"));
