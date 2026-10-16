@@ -37,6 +37,7 @@ import {
   archiveKeysDigest,
   backupBundleFileName,
   backupBundleHeader,
+  parseBackupBundleHeader,
   parseArchiveDownloadApproval,
   parseArchiveKeys,
   parseArchiveKeysDeposit,
@@ -58,9 +59,12 @@ import { installArchive, unpackArchive, type ArchiveRestoreDeps, type RestoreApp
 import type { RestoreWait } from "./restoreWait.js";
 import { KEY_POOL_LOW, KEY_POOL_MAX, SAVED_BACKUP_FILE, SAVED_DATA_FILE, SavedBackups, type SavedBackupMeta, type SavedState } from "./saved.js";
 import { isDue, nextRunAt, parseSchedule, retained, slotStartAtOrBefore } from "./schedule.js";
+import type { MigratePause } from "./migratePause.js";
 
 export const ARCHIVE_PATH = "/api/screens/server-archive";
 export const DOWNLOAD_PATH = "/api/archive-download/";
+/** Migrate's speed check: a few MiB the new server times (no session; a one-use token). */
+export const PROBE_PATH = "/api/archive-probe/";
 export const RESTORE_PATH = "/api/screens/server-restore";
 /** The saved backups (Back up now into the list, and the schedule). */
 export const SAVED_PATH = `${ARCHIVE_PATH}/backups`;
@@ -114,6 +118,10 @@ export interface ServerArchiveServiceOptions {
   };
   /** Whether an import of `bytes` may come onto this server (the backup policy's limit): null, or why not. */
   admitIncoming?: (bytes: number) => string | null;
+  /** Migrate on the archive path (docs/server-migration.md): the pause on the old box. */
+  migrate?: { pause: MigratePause };
+  /** Fetch for a box-to-box pull and the link probe (tests). */
+  fetchImpl?: typeof fetch;
   now?: () => number;
   log?: (m: string) => void;
 }
@@ -210,6 +218,8 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
   let backup: BackupJob | null = null;
   let restore: RestoreJob | null = null;
   let running = false;
+  /** A box-to-box pull of the backup this server waits for is under way. */
+  let pulling = false;
 
   const json = (status: number, body: unknown): HttpResponse => ({ status, headers: J, body: JSON.stringify(body) });
   const err = (status: number, error: string, extra: Record<string, unknown> = {}) => json(status, { error, ...extra });
@@ -627,6 +637,8 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
   /** The download link: the page, its status, and (approved only) the two files. */
   async function handleDownload(req: HttpRequest): Promise<HttpResponse | null> {
     const path = req.path.split("?")[0]!;
+    const probed = serveProbe(path);
+    if (probed) return probed;
     if (!path.startsWith(DOWNLOAD_PATH)) return null;
     const [token = "", kind = "", ...more] = path.slice(DOWNLOAD_PATH.length).split("/");
     if (more.length > 0 || !["", "status", "bundle"].includes(kind)) return err(404, "not found");
@@ -715,11 +727,16 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     pinnedArchiveIds?: () => Set<string>;
   } = {};
   function pinned(): Set<string> {
+    const out = new Set<string>();
     try {
-      return hooks.pinnedArchiveIds?.() ?? new Set();
+      for (const id of hooks.pinnedArchiveIds?.() ?? []) out.add(id);
     } catch {
-      return new Set();
+      /* the hook never fails a backup */
     }
+    // The backup a move is carrying stays until the move ends.
+    const moving = opts.migrate?.pause.pinnedArchiveId();
+    if (moving) out.add(moving);
+    return out;
   }
   const NO_KEYS =
     "an admin device of your account hasn't approved backups for this server yet: open this server in the Flagship app on an admin device";
@@ -780,12 +797,15 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
   }
 
   /** Start a saved backup now (Back up now, or the schedule). */
-  async function runSaved(trigger: "schedule" | "now"): Promise<HttpResponse> {
+  async function runSaved(trigger: "schedule" | "now", purpose: "backup" | "migrate" = "backup"): Promise<HttpResponse> {
     if (!store) return err(404, "this server doesn't keep backups");
     if (running) return err(409, "a backup or restore is already running here");
+    if (purpose === "migrate" && !opts.migrate) return err(404, "this server can't be moved yet: update it first");
     const s = await state();
     const k = keyPool[0];
     if (!k) return err(409, NO_KEYS, { code: "no-keys" });
+    // Migrate: pause every app first, so nothing is written after the backup.
+    if (purpose === "migrate") await opts.migrate!.pause.pause();
     // The key leaves the pool (on disk) before it is used, so it is never used twice.
     keyPool = keyPool.slice(1);
     await store.saveKeys(keyPool);
@@ -837,6 +857,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
           left: r.left,
         };
         await store.commit(meta);
+        if (purpose === "migrate") await opts.migrate!.pause.setArchive(meta.archiveId);
         s.history.lastOk = true;
         s.lastRun = { at: startedAt, ok: true, trigger, archiveId: k.archiveId };
         await store.saveState(s);
@@ -865,6 +886,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
         await store.saveState(s).catch(() => {});
         note("server.backup.failed", `The ${trigger === "schedule" ? "scheduled " : ""}backup failed: ${reason}`, false);
         log(`[server-archive] saved backup failed: ${reason}`);
+        if (purpose === "migrate") await opts.migrate!.pause.resume("The backup for the move failed, so this server's apps are running again.").catch(() => {});
       })
       .finally(async () => {
         key.fill(0);
@@ -890,6 +912,8 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
         ? { archiveId: savedJob.archiveId, trigger: savedJob.trigger, startedAt: savedJob.startedAt, progress: savedJob.progress, ...(savedJob.estimatedBytes !== undefined ? { estimatedBytes: savedJob.estimatedBytes } : {}) }
         : null,
       keysLeft: keyPool.length,
+      /** Set while Migrate has this server's apps paused. */
+      migratePause: opts.migrate?.pause.current() ?? null,
       /** How many keys the apps should send (one approval), 0 while the pool is full enough. */
       keysWanted: keyPool.length < KEY_POOL_LOW ? Math.min(400, KEY_POOL_MAX - keyPool.length) : 0,
       ...(keyPool.length === 0 && s.schedule.frequency !== "off" ? { waitingReason: NO_KEYS } : {}),
@@ -957,7 +981,25 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     if (rest === "" && method === "GET") return json(200, await savedView());
     if (rest === "/schedule" && method === "PUT") return putSchedule(req);
     if (rest === "/keys" && method === "POST") return depositKeys(req);
-    if (rest === "/run" && method === "POST") return runSaved("now");
+    if (rest === "/run" && method === "POST") {
+      let purpose: "backup" | "migrate" = "backup";
+      try {
+        const b = req.body.length > 0 ? (JSON.parse(req.body.toString("utf8")) as { purpose?: unknown }) : {};
+        if (b.purpose === "migrate") purpose = "migrate";
+      } catch {
+        return err(400, "invalid json");
+      }
+      return runSaved("now", purpose);
+    }
+    if (rest === "/resume" && method === "POST") {
+      if (!opts.migrate) return err(404, "not found");
+      await opts.migrate.pause.resume("The move was stopped, so this server's apps are running again.");
+      return json(200, await savedView());
+    }
+    if (rest === "/estimate" && method === "GET") {
+      const est = await estimateServerArchive(opts.build);
+      return json(200, { archiveBytes: est?.archiveBytes ?? null, apps: opts.build.apps().length });
+    }
     const m = /^\/([0-9a-f]{32})(\/backup-file|\/chunk|\/bundle|\/link)?$/.exec(rest);
     if (!m) return err(404, "not found");
     const id = m[1]!;
@@ -1154,6 +1196,143 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     return json(202, { archiveId: job.archiveId });
   }
 
+  // -------------------------------------------------------------------------
+  // Migrate on the archive path (docs/server-migration.md, "Data path")
+  // -------------------------------------------------------------------------
+
+  /** `POST .../server-restore/order`: a restore order sent after pairing, on a server with no apps yet. */
+  async function lateOrder(req: HttpRequest): Promise<HttpResponse> {
+    if (!opts.wait) return err(404, "this server can't take a backup");
+    let b: { order?: unknown; signatureHex?: unknown };
+    try {
+      b = JSON.parse(req.body.toString("utf8")) as typeof b;
+    } catch {
+      return err(400, "invalid json");
+    }
+    if (opts.build.apps().length > 0 && !waiting()) {
+      return err(409, "this server already has apps, so it can't take a whole server's backup: use a new server", { code: "has-apps" });
+    }
+    const refused = await opts.wait.adoptOrder(b.order, b.signatureHex);
+    if (refused) return err(/admin device|different server/.test(refused) ? 403 : 409, refused);
+    return json(200, restoreView());
+  }
+
+  /**
+   * `POST .../server-restore/pull { url, requestId }`: fetch the backup this
+   * server waits for straight from the old server's approved download link
+   * (`<url>/bundle?r=<requestId>`), its data part only, resuming where the
+   * upload stands. The commit checks its size and SHA-256 as for an upload.
+   */
+  async function pull(req: HttpRequest): Promise<HttpResponse> {
+    let b: { url?: unknown; requestId?: unknown };
+    try {
+      b = JSON.parse(req.body.toString("utf8")) as typeof b;
+    } catch {
+      return err(400, "invalid json");
+    }
+    const w = waiting();
+    if (!w) return err(409, "this server isn't waiting for a backup", { code: "not-waiting" });
+    if (typeof b.url !== "string" || !/^https:\/\/[a-z0-9.-]+\/api\/archive-download\/[0-9a-f]{64}$/.test(b.url)) return err(400, "url must be a server's backup download link");
+    if (typeof b.requestId !== "string" || !/^[0-9a-f]{32}$/.test(b.requestId)) return err(400, "requestId must be 16 bytes of lowercase hex");
+    const started = await startRestore({ ...req, body: Buffer.from(JSON.stringify({ archiveId: w.archiveId, bytes: w.bytes })) });
+    if (started.status !== 202) return started;
+    const job = restore!;
+    if (job.state === "ready") return json(202, { archiveId: w.archiveId, received: job.received });
+    if (pulling) return json(202, { archiveId: w.archiveId, received: job.received });
+    pulling = true;
+    job.reason = undefined;
+    const fetchImpl = opts.fetchImpl ?? fetch;
+    const src = `${b.url}/bundle?r=${b.requestId}`;
+    void (async () => {
+      const head = await fetchImpl(src, { headers: { range: `bytes=0-${BACKUP_BUNDLE_HEADER_BYTES - 1}` } });
+      if (head.status !== 206 && head.status !== 200) throw new ArchiveError(`the old server refused the download (${head.status})`);
+      const headBytes = new Uint8Array(await head.arrayBuffer()).subarray(0, BACKUP_BUNDLE_HEADER_BYTES);
+      const total = Number(/\/(\d+)$/.exec(head.headers.get("content-range") ?? "")?.[1] ?? head.headers.get("content-length") ?? 0);
+      const parts = parseBackupBundleHeader(headBytes, total);
+      if (parts.dataLength !== job.bytes) throw new ArchiveError("the old server's backup isn't the one this server is waiting for (its size differs)");
+      const from = parts.dataOffset + job.received;
+      const res = await fetchImpl(src, { headers: { range: `bytes=${from}-` } });
+      if (res.status !== 206 || !res.body) throw new ArchiveError(`the old server didn't resume the download (${res.status})`);
+      const fh = await open(uploadFile, job.received === 0 ? "w" : "r+", 0o600);
+      try {
+        let at = job.received;
+        for await (const c of res.body as unknown as AsyncIterable<Uint8Array>) {
+          if (at + c.length > job.bytes) throw new ArchiveError("the old server sent more than the backup holds");
+          await fh.write(c, 0, c.length, at);
+          at += c.length;
+          job.received = at;
+        }
+        await fh.sync();
+      } finally {
+        await fh.close();
+      }
+      if (job.received !== job.bytes) throw new ArchiveError("the download from the old server stopped early: it resumes when you try again");
+      job.state = "ready";
+      note("server.restore.pulled", "The backup arrived from the old server.");
+    })()
+      .catch((e: Error) => {
+        job.reason = e instanceof ArchiveError || e instanceof Error ? e.message : String(e);
+        log(`[server-archive] pull failed: ${job.reason}`);
+      })
+      .finally(() => {
+        pulling = false;
+      });
+    return json(202, { archiveId: w.archiveId, received: job.received });
+  }
+
+  /** `POST .../server-restore/probe { url }`: how fast this server reads from the old one (for the downtime estimate). */
+  async function probe(req: HttpRequest): Promise<HttpResponse> {
+    let b: { url?: unknown };
+    try {
+      b = JSON.parse(req.body.toString("utf8")) as typeof b;
+    } catch {
+      return err(400, "invalid json");
+    }
+    if (typeof b.url !== "string" || !/^https:\/\/[a-z0-9.-]+\/api\/archive-probe\/[0-9a-f]{64}$/.test(b.url)) return err(400, "url must be a server's probe link");
+    const fetchImpl = opts.fetchImpl ?? fetch;
+    const t0 = now();
+    let n = 0;
+    try {
+      const res = await fetchImpl(b.url);
+      if (res.status !== 200 || !res.body) return err(502, `the old server didn't answer the speed check (${res.status})`);
+      for await (const c of res.body as unknown as AsyncIterable<Uint8Array>) n += c.length;
+    } catch (e) {
+      return err(502, `the old server couldn't be reached: ${(e as Error).message}`);
+    }
+    const ms = Math.max(1, now() - t0);
+    return json(200, { bytes: n, ms, bytesPerSecond: Math.round((n * 1000) / ms) });
+  }
+
+  /** Probe links on the old server: a few MiB of zeros for the new one to time. */
+  const probes = new Map<string, number>();
+  const PROBE_BYTES = 8 * 1024 * 1024;
+  function mintProbe(): HttpResponse {
+    const token = randomBytes(32).toString("hex");
+    probes.set(token, now() + 10 * 60_000);
+    return json(200, { path: `${PROBE_PATH}${token}`, bytes: PROBE_BYTES });
+  }
+  function serveProbe(path: string): HttpResponse | null {
+    if (!path.startsWith(PROBE_PATH)) return null;
+    const token = path.slice(PROBE_PATH.length);
+    const until = probes.get(token);
+    if (!until || until < now()) return err(404, "this speed-check link has expired");
+    probes.delete(token);
+    const zero = Buffer.alloc(1024 * 1024);
+    return {
+      status: 200,
+      headers: { "content-type": "application/octet-stream", "cache-control": "no-store" },
+      body: "",
+      stream: {
+        length: PROBE_BYTES,
+        open: () =>
+          Readable.from(
+            (function* () {
+              for (let i = 0; i < PROBE_BYTES / zero.length; i++) yield zero;
+            })(),
+          ),
+      },
+    };
+  }
   function restoreView() {
     const r = restore
       ? {
@@ -1163,6 +1342,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
           received: restore.received,
           apps: restore.apps,
           startedAt: restore.startedAt,
+          pulling,
           ...(restore.reason ? { reason: restore.reason } : {}),
         }
       : null;
@@ -1196,6 +1376,14 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
           backup = null;
           await dropBackupFiles();
           return json(200, { ok: true });
+        case `POST ${RESTORE_PATH}/order`:
+          return lateOrder(req);
+        case `POST ${RESTORE_PATH}/pull`:
+          return pull(req);
+        case `POST ${RESTORE_PATH}/probe`:
+          return probe(req);
+        case `POST ${ARCHIVE_PATH}/probe-link`:
+          return mintProbe();
         case `POST ${RESTORE_PATH}/start`:
           return startRestore(req);
         case `POST ${RESTORE_PATH}/chunk`:

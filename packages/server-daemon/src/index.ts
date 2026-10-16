@@ -40,11 +40,9 @@ import {
 } from "./peerBackup/manifest.js";
 import {
   buildComStkResolver,
-  buildHttpShardFetcher,
   buildHttpShardPusher,
   buildLivePeerProvider,
 } from "./peerBackup/shipper.js";
-import { fsRestoreSink, runRestoreOnce } from "./peerBackup/restore.js";
 import { quiesceDataServices, walkDataDir } from "./dataDirWalker.js";
 import {
   dumpDataVolumes,
@@ -202,6 +200,7 @@ import { AppCopyStore } from "./appCopy/store.js";
 import { buildAppCopyTarget } from "./appCopy/target.js";
 import { buildServerArchiveService } from "./serverArchive/service.js";
 import { buildRestoreWait, type RestoreWait } from "./serverArchive/restoreWait.js";
+import { buildMigratePause, movingPage, type MigratePause } from "./serverArchive/migratePause.js";
 import { BackupPolicyStore } from "./backupPolicy/policy.js";
 import { BackupCap } from "./backupPolicy/cap.js";
 import { buildBackupPolicyHttp } from "./backupPolicy/http.js";
@@ -1185,6 +1184,21 @@ async function main(): Promise<void> {
       })
     : null;
   await backupPolicy?.load();
+  // Migrate's pause (docs/server-migration.md, "Data path"): the apps are
+  // paused while the server moves, and their URLs say so.
+  const migratePause = cfg
+    ? buildMigratePause({
+        path: `${dataDir}/migrate-pause.json`,
+        containers: () => (servicePlatformRefForServer.current?.list() ?? []).map((a) => `flagship-${a.serviceId}`),
+        run: async (args) => {
+          const { realCommandRunner } = await import("./serviceRunner.js");
+          await realCommandRunner.run("docker", args);
+        },
+        note: (kind, detail, ok) => activityLog.note(kind, detail, { ok: ok ?? true }),
+        log: (m) => console.log(m),
+      })
+    : null;
+  await migratePause?.load();
   const adoptPairingSiblings = async (json: string) => {
     await restoreWait?.adoptFromPairingJson(json);
     await backupPolicy?.adoptFromPairingJson(json);
@@ -1458,6 +1472,7 @@ async function main(): Promise<void> {
       activityLog,
       restoreWait,
       backupPolicy,
+      migratePause,
       serverOrder,
       serviceAccessRef,
       accessPrincipals,
@@ -1517,6 +1532,7 @@ async function main(): Promise<void> {
     servicePlatformRef: servicePlatformRefForServer,
     identityKeypair,
     backupLoop,
+    migratePause,
   });
 
   // ---- Peer-backup periodic pass ----
@@ -1556,16 +1572,14 @@ async function main(): Promise<void> {
   // ---- Server-migration consumer (docs/server-migration.md, the NEW box) ----
   // A freshly-provisioned pod polls `.com` for a migration assignment naming
   // its account. The admin-signed order is RE-VERIFIED under the config-pinned
-  // authority before anything runs. The restore pass opens the MIGRATING
-  // server's manifest with THIS box's provisioned SWK (the phone derives
-  // deriveSWK(umk, <migrating serverId>) into a migration recipe) and fetches
-  // shards from same-account peers authenticated as THIS pod. On take-over the
+  // authority before anything runs. The data comes on the archive path: the
+  // owner's app has this box pull the old server's backup and restore it (a
+  // server waiting for a backup), and the pre-seed is done once it is. On take-over the
   // box writes the re-home marker for the migrated name and restarts — the
   // same boot path transfer-a-box uses re-homes FQDN/cert/entitlement.
   // Armed only in production (cfg) with an SWK; a box with no session just
   // 404s cheaply on the heartbeat cadence.
   if (cfg && env.controlPlaneBaseUrl && env.serverFqdn && swkHex) {
-    const migrationSwk = hexToBytes(swkHex.trim());
     const controlPlaneBaseUrl = env.controlPlaneBaseUrl;
     const myServerDomain = env.serverFqdn;
     const migrationPoller = buildMigrationPoller({
@@ -1575,33 +1589,14 @@ async function main(): Promise<void> {
       ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
       username: cfg.userId,
       controlPlaneBaseUrl,
-      restore: async ({ serverId }) => {
-        const out = await runRestoreOnce({
-          serverId,
-          swk: migrationSwk,
-          mySTK: identityKeypair,
-          controlPlaneBaseUrl,
-          sink: fsRestoreSink(`${dataDir}/data`),
-          // Authenticate shard reads as THIS pod (its directory-bound STK);
-          // peers serve same-account depositors' shards to it.
-          source: buildHttpShardFetcher({
-            myServerId: myServerDomain,
-            mySTK: identityKeypair,
-          }),
-          onLog: (m) => console.log(`[migration] ${m}`),
-        });
-        if (out.status === "complete") return { complete: true };
-        if (out.status === "partial") {
-          return {
-            complete: false,
-            detail: `${out.report.failed.length} of ${out.report.chunksTotal} chunks not yet restorable`,
-          };
-        }
-        if (out.status === "no-manifest") {
-          return { complete: false, detail: "no backup manifest for the migrating server yet" };
-        }
-        return { complete: false, detail: out.reason };
-      },
+      // The data moves on the archive path (docs/server-migration.md, "Data
+      // path"): the owner's app pauses the old server, makes its backup and
+      // has this box pull and restore it as a server waiting for a backup.
+      // The pre-seed (and the final delta) is done once that restore is.
+      restore: async () =>
+        restoreWait?.restoredAny()
+          ? { complete: true }
+          : { complete: false, detail: "waiting for the old server's backup" },
       onTakeOver: async ({ serverDomain }) => {
         activityLog.note("server.migration.taken-over", "This server took over the name from the old server.");
         // Symmetric restore step: the shard restore above landed `_dumps/**`
@@ -2260,6 +2255,7 @@ async function wireRuntimeSurfaces(deps: {
   activityLog: ActivityLog;
   restoreWait: RestoreWait | null;
   backupPolicy: BackupPolicyStore | null;
+  migratePause: MigratePause | null;
   serviceAccessRef: { current: ServiceAccessStore | null };
   accessPrincipals: AccessPrincipals;
   accessSyncRef: { current: AccessSync | null };
@@ -3064,10 +3060,17 @@ async function wireRuntimeSurfaces(deps: {
         },
       },
       ...(backupCap ? { admitIncoming: (bytes: number) => backupCap.admit(bytes) } : {}),
+      ...(deps.migratePause ? { migrate: { pause: deps.migratePause } } : {}),
       ...(env.controlPlaneBaseUrl ? { appLinkBase: env.controlPlaneBaseUrl } : {}),
       log: (m) => console.log(m),
     });
     await service.init();
+    // While a move has the apps paused, every app URL says so instead of a 502.
+    const pause = deps.migratePause;
+    if (pause) {
+      runtime.addAppGate(async () => (pause.paused() ? movingPage() : null));
+      setInterval(() => void pause.sweep().catch(() => {}), 10 * 60_000).unref();
+    }
     service.startSchedule(
       (() => {
         const raw = Number(process.env.FLAGSHIP_BACKUP_SCHEDULE_TICK_MS);
@@ -3526,6 +3529,8 @@ async function wireOwnerHandlers(deps: {
   identityKeypair: Keypair;
   /** Peer-backup loop (null when no SWK) — flushed on a finalBackup decommission. */
   backupLoop: BackupLoop | null;
+  /** Migrate's pause: a move on the archive path needs no final flush. */
+  migratePause: MigratePause | null;
 }): Promise<void> {
   const { runtime, cfg, env, autoUnlockSuppressor, hostPowerRunner, identityKeypair } = deps;
   if (!cfg) return;
@@ -3760,6 +3765,8 @@ async function wireOwnerHandlers(deps: {
       // for any non-store files under data/. The epoch is recorded by the §9
       // epoch-complete report the consumer POSTs after this resolves.
       backupFlush: async (_epoch) => {
+        // A move on the archive path already carried the data and paused the apps.
+        if (deps.migratePause?.paused()) return;
         if (!deps.backupLoop) return;
         const dataRoot = `${dataDir}/data`;
         const walkOpts = await dumpVolumesBeforeWalk(dataRoot, (m) => console.log(m));

@@ -66,6 +66,8 @@ function lateWait(ref: { current: RestoreWait | null }): RestoreWait {
     setRestoring: (on) => ref.current?.setRestoring(on),
     finish: async (id) => ref.current?.finish(id),
     heartbeatView: () => ref.current?.heartbeatView() ?? null,
+    adoptOrder: async (o, s) => (ref.current ? ref.current.adoptOrder(o, s) : "not waiting"),
+    restoredAny: () => ref.current?.restoredAny() ?? false,
   };
 }
 

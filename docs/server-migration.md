@@ -1,5 +1,56 @@
 # Server migration — move a server to new hardware, safely, in place
 
+## Data path (owner decision, 2026-10-16): the server backup, not peer shards
+
+Migrate no longer moves data through peer-backup shards (the old box no
+longer needs to be "enrolled"). It is a backup of the old server, restored
+onto the new one, then the take-over and the wipe below, all on the same
+primitives as Back up now and Import a backup
+(`docs/server-backup-and-clone.md`):
+
+1. **Initiate** and **provision** as below (admin-signed
+   `flagship/server-migration/v1`; the new box is an ordinary new server
+   that attaches to the session).
+2. **Estimate.** The app reads the old box's backup size
+   (`GET /api/screens/server-archive/backups/estimate`) and asks the new
+   box to time the link (`POST /api/screens/server-archive/probe-link` on
+   the old box, a one-use 8 MiB `/api/archive-probe/<token>`; `POST
+   /api/screens/server-restore/probe {url}` on the new one → bytes per
+   second), and shows the expected downtime (backup + transfer + restore)
+   before anything starts.
+3. **Pause and back up the old box:** `POST .../backups/run {purpose:
+   "migrate"}`. The box pauses every app (`docker pause`: nothing writes
+   after the backup; Postgres and the files folders stay readable), makes a
+   saved backup with a key from its pool (the account slot), and pins it
+   until the move ends (`serverArchive/migratePause.ts`, marker
+   `<dataDir>/migrate-pause.json`). Every app URL answers 503 with a calm
+   "This app is moving to a new server; it will be back shortly" page.
+   Abort (`POST .../backups/resume`), a failed backup, or a day without a
+   freeze unpauses the apps.
+4. **The new box takes the backup:** the app opens the backup file with the
+   account key, signs `flagship/server-restore/v1` for the NEW box, and
+   sends it after pairing (`POST /api/screens/server-restore/order`, refused
+   on a server that already has apps). It approves a browser-style download
+   request on the old box (`flagship/archive-download/v1`) and hands the new
+   box the link: `POST /api/screens/server-restore/pull {url, requestId}`.
+   The new box fetches `<link>/bundle` itself (box to box, HTTP Range,
+   resumable), keeps only the data part, and the app commits the content
+   key as for an import. Every app is tried; failed apps are named and the
+   restore ends.
+5. **Pre-seeded → confirm-ready → freeze → take over → wipe**, unchanged:
+   the new box acks pre-seeded once its restore is done (`restoredAny`); the
+   freeze's final flush is a no-op for a move on the archive path (the apps
+   were paused before the backup); the old box is wiped after the take-over.
+
+Progress is shown as backup %, transfer % (`restore.received / bytes`) and
+restore % (apps done / apps). Downtime is the pause: backup + transfer +
+restore. **Live replication** (streaming writes so the pause disappears)
+remains a later version.
+
+The rest of this document is the original design (2026-07-01); where it
+talks about peer-backup pre-seed and final deltas, the data path above
+replaces it.
+
 > **Status: DESIGN. Build post-launch.** Recorded 2026-07-01. Most parts already exist —
 > **this spec is the orchestration that makes them fit into one guided "Migrate this
 > server" flow**: mint a replacement box that comes online, restores the data, takes over
