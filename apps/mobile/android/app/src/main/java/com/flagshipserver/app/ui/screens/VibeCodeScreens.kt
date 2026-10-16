@@ -51,6 +51,7 @@ import androidx.navigation.NavController
 import com.flagshipserver.app.api.LlmProviderCredential
 import com.flagshipserver.app.api.VibeCodeNameCheck
 import com.flagshipserver.app.api.VibeCodeStartRequest
+import com.flagshipserver.app.api.boxError
 import com.flagshipserver.app.core.LocalActiveOperationsCenter
 import com.flagshipserver.app.core.FreeAiCopy
 import com.flagshipserver.app.core.FreeAiSessions
@@ -190,6 +191,20 @@ object VibeCodeDescribe {
 
     fun canBuild(slug: String, prompt: String, check: VibeCodeNameCheck?, starting: Boolean): Boolean =
         slug.isNotEmpty() && prompt.isNotBlank() && check?.kind != "invalid" && !starting
+
+    /** Statuses the generating screen hands to the chat: the AI needs the
+     *  owner, the build is shippable, or it failed (the chat continues it). */
+    fun handsOffToChat(status: String): Boolean =
+        status in listOf("awaiting-tool-response", "ready-to-deploy", "deploying", "deployed", "failed")
+
+    /** `model`/`effort` for the first message: the menu's choice once the menu
+     *  has loaded (Settings' default only if the menu still offers it), else
+     *  nothing, so the box picks; never an unchecked saved model. */
+    fun startModel(
+        menu: com.flagshipserver.app.core.ModelMenu?,
+        choice: com.flagshipserver.app.core.ModelChoice?,
+    ): Pair<String?, String?> =
+        if (menu == null) null to null else com.flagshipserver.app.core.ModelMenus.startWire(choice)
 }
 
 /**
@@ -223,6 +238,40 @@ fun VibeCodeDescribeScreen(nav: NavController) {
     val scope = rememberCoroutineScope()
     var starting by remember { mutableStateOf(false) }
     val describeScroll = rememberScrollState()
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    // The AI model for the first message: the key's default from Settings,
+    // checked against what its menu offers (iOS VibeCodeDescribeContainer).
+    // No key handed over: no menu, the box picks.
+    val pendingCredential = remember { PendingBuildCredential.peek() }
+    var menu by remember { mutableStateOf<com.flagshipserver.app.core.ModelMenu?>(null) }
+    var choice by remember { mutableStateOf<com.flagshipserver.app.core.ModelChoice?>(null) }
+    LaunchedEffect(pendingCredential, screens) {
+        if (pendingCredential == null) return@LaunchedEffect
+        val m = com.flagshipserver.app.core.ModelCatalogs.menuFor(pendingCredential, screens)
+        menu = m
+        choice = com.flagshipserver.app.core.ModelMenus.initial(
+            m, runCatching { com.flagshipserver.app.core.AiKeyStore.defaultModelFor(pendingCredential) }.getOrNull(),
+        )
+    }
+    // Files and images on the opening message.
+    var staged by remember { mutableStateOf<List<com.flagshipserver.app.api.VibeCodeAttachment>>(emptyList()) }
+    var attachError by remember { mutableStateOf<String?>(null) }
+    var vision by remember { mutableStateOf<com.flagshipserver.app.core.VisionCheck?>(null) }
+    fun stage(uri: android.net.Uri?) {
+        if (uri == null) return
+        scope.launch(kotlinx.coroutines.Dispatchers.Main) {
+            val (a, problem) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { readAttachment(context, uri, staged.size) }
+            attachError = problem
+            if (a != null) staged = staged + a
+        }
+    }
+    val photoPicker = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia(),
+    ) { stage(it) }
+    val filePicker = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
+    ) { stage(it) }
 
     suspend fun runCheck(s: String): VibeCodeNameCheck {
         val result = runCatching { screens.vibeCodeNameCheck(s) }.getOrDefault(VibeCodeNameCheck.Unknown)
@@ -339,6 +388,20 @@ fun VibeCodeDescribeScreen(nav: NavController) {
                 ExampleChip(label) { prompt = text }
             }
         }
+        Spacer(Modifier.height(FS.space.s3))
+        ChatComposerAttachments(
+            staged = staged,
+            error = attachError,
+            onPhoto = {
+                photoPicker.launch(
+                    androidx.activity.result.PickVisualMediaRequest(
+                        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly,
+                    ),
+                )
+            },
+            onFile = { filePicker.launch(com.flagshipserver.app.core.ChatAttachments.DOCUMENT_MIME_TYPES) },
+            onRemove = { i -> staged = staged.filterIndexed { j, _ -> j != i } },
+        )
 
         Spacer(Modifier.height(FS.space.s6))
 
@@ -377,71 +440,96 @@ fun VibeCodeDescribeScreen(nav: NavController) {
             style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
         )
 
+        menu?.let { m ->
+            Spacer(Modifier.height(FS.space.s6))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
+                modifier = Modifier.testTag("vibe-describe-model"),
+            ) {
+                Text(
+                    text = "AI model",
+                    color = FS.colors.textMuted,
+                    style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium),
+                )
+                ChatModelBar(m, choice) { choice = it }
+            }
+        }
+
         Spacer(Modifier.height(FS.space.s8))
+
+        fun build() {
+            if (starting) return
+            starting = true
+            val s = slug
+            // Launch on Main so the post-call nav.navigate runs on the main
+            // thread. The network I/O hops to IO inside the client; only the
+            // UI work needs Main. (rememberCoroutineScope is Main in prod,
+            // but the Compose-UI-Test continuation interceptor can resume a
+            // bare launch off-main → 'addObserver/setCurrentState must be
+            // called on the main thread'. Pinning Main is correct + robust.)
+            scope.launch(kotlinx.coroutines.Dispatchers.Main) {
+                try {
+                    val latest = check.takeIf { checkedSlug == s } ?: runCheck(s)
+                    if (!latest.ok) {
+                        if (latest.kind != "invalid") conflict = latest
+                        return@launch
+                    }
+                    val pending = PendingBuildCredential.peek()
+                    val cred = pending?.let(LlmProviderCredential::from)
+                    val startModel = VibeCodeDescribe.startModel(menu, choice)
+                    // Keep the server it starts on for the steps after this one.
+                    podScope?.let { it.choose?.invoke(it.pod.podId) }
+                    val resp = screens.vibeCodeStart(
+                        VibeCodeStartRequest(
+                            prompt = prompt, credential = cred,
+                            // The menu's choice (the key's default, checked); none ⇒ the box's.
+                            model = startModel.first, effort = startModel.second,
+                            attachments = staged.takeIf { it.isNotEmpty() },
+                            name = s, visibility = visibility,
+                        ),
+                    )
+                    if (resp.needsCredential) {
+                        // Box wants a key — route into the AI-key step.
+                        nav.navigate("vibe/key")
+                    } else {
+                        PendingBuildCredential.take()
+                        staged = emptyList()
+                        com.flagshipserver.app.core.BuildSessionAi.remember(resp.sessionId, pending)
+                        if (pending?.isFreeAi == true) FreeAiSessions.remember(resp.sessionId, server)
+                        nav.openVibeSession("vibe/generating/${resp.sessionId}")
+                    }
+                } catch (t: Throwable) {
+                    val taken = VibeCodeNameCheck.conflict(t)
+                    if (taken != null) {
+                        check = taken
+                        checkedSlug = s
+                        conflict = taken
+                        return@launch
+                    }
+                    // Don't swallow — a tap that does nothing with no
+                    // feedback is a dead control. Surface the failure (e.g.
+                    // the box paired session isn't ready) so the owner knows
+                    // the build didn't start. Mirror of iOS's un-swallowed
+                    // vibeCodeStart error. The owner can retry the tap.
+                    android.util.Log.e("VibeCodeStart", "failed: ${t::class.java.name}: ${t.message}", t)
+                    toasts.error("Couldn't start the build: ${t.boxError() ?: NetworkErrorHumanizer.humanize(t)}")
+                } finally {
+                    starting = false
+                }
+            }
+        }
 
         FSPrimaryButton(
             label = if (starting) "Starting…" else "Build it",
             modifier = Modifier.testTag("vibe-describe-build"),
             onClick = {
                 if (starting) return@FSPrimaryButton
-                starting = true
-                val s = slug
-                // Launch on Main so the post-call nav.navigate runs on the main
-                // thread. The network I/O hops to IO inside the client; only the
-                // UI work needs Main. (rememberCoroutineScope is Main in prod,
-                // but the Compose-UI-Test continuation interceptor can resume a
-                // bare launch off-main → 'addObserver/setCurrentState must be
-                // called on the main thread'. Pinning Main is correct + robust.)
-                scope.launch(kotlinx.coroutines.Dispatchers.Main) {
-                    try {
-                        val latest = check.takeIf { checkedSlug == s } ?: runCheck(s)
-                        if (!latest.ok) {
-                            if (latest.kind != "invalid") conflict = latest
-                            return@launch
-                        }
-                        val pending = PendingBuildCredential.peek()
-                        val cred = pending?.let(LlmProviderCredential::from)
-                        val startModel = com.flagshipserver.app.core.ModelMenus.startWire(
-                            runCatching { com.flagshipserver.app.core.AiKeyStore.defaultModelFor(pending) }.getOrNull(),
-                        )
-                        // Keep the server it starts on for the steps after this one.
-                        podScope?.let { it.choose?.invoke(it.pod.podId) }
-                        val resp = screens.vibeCodeStart(
-                            VibeCodeStartRequest(
-                                prompt = prompt, credential = cred,
-                                // The default model chosen in Settings for this key; none ⇒ the box's.
-                                model = startModel.first, effort = startModel.second,
-                                name = s, visibility = visibility,
-                            ),
-                        )
-                        if (resp.needsCredential) {
-                            // Box wants a key — route into the AI-key step.
-                            nav.navigate("vibe/key")
-                        } else {
-                            PendingBuildCredential.take()
-                            com.flagshipserver.app.core.BuildSessionAi.remember(resp.sessionId, pending)
-                            if (pending?.isFreeAi == true) FreeAiSessions.remember(resp.sessionId, server)
-                            nav.openVibeSession("vibe/generating/${resp.sessionId}")
-                        }
-                    } catch (t: Throwable) {
-                        val taken = VibeCodeNameCheck.conflict(t)
-                        if (taken != null) {
-                            check = taken
-                            checkedSlug = s
-                            conflict = taken
-                            return@launch
-                        }
-                        // Don't swallow — a tap that does nothing with no
-                        // feedback is a dead control. Surface the failure (e.g.
-                        // the box paired session isn't ready) so the owner knows
-                        // the build didn't start. Mirror of iOS's un-swallowed
-                        // vibeCodeStart error. The owner can retry the tap.
-                        android.util.Log.e("VibeCodeStart", "failed: ${t::class.java.name}: ${t.message}", t)
-                        toasts.error("Couldn't start the build: ${NetworkErrorHumanizer.humanize(t)}")
-                    } finally {
-                        starting = false
-                    }
-                }
+                val seeing = com.flagshipserver.app.core.ModelMenus.visionCheck(
+                    menu ?: com.flagshipserver.app.core.ModelMenu.Unknown, choice,
+                    com.flagshipserver.app.core.ChatAttachments.hasImage(staged),
+                )
+                if (seeing is com.flagshipserver.app.core.VisionCheck.Send) build() else vision = seeing
             },
             enabled = VibeCodeDescribe.canBuild(slug, prompt, currentCheck, starting),
             block = true,
@@ -455,6 +543,17 @@ fun VibeCodeDescribeScreen(nav: NavController) {
             modifier = Modifier.fillMaxWidth().padding(top = FS.space.s1),
         )
         Spacer(Modifier.height(FS.space.s8))
+        vision?.let { check ->
+            VisionDialog(
+                check = check,
+                onSwitch = { to ->
+                    vision = null
+                    choice = to
+                    build()
+                },
+                onDismiss = { vision = null },
+            )
+        }
     }
 
     conflict?.let { c ->
@@ -563,9 +662,9 @@ fun VibeCodeGeneratingScreen(nav: NavController, sessionId: String = "") {
 
     // The WS stream is display-only and carries NO talkToUser frame and NO
     // deploy trigger. So we poll the session status here and hand off to the
-    // chat surface the moment the AI needs the owner (`awaiting-tool-response`)
-    // or the build is finished and shippable (`ready-to-deploy`/`deploying`/
-    // `deployed`). The chat screen is where the owner replies to the AI AND
+    // chat surface the moment the AI needs the owner (`awaiting-tool-response`),
+    // the build is finished and shippable (`ready-to-deploy`/`deploying`/
+    // `deployed`), or it failed (the chat's composer continues it). The chat screen is where the owner replies to the AI AND
     // taps Deploy — making it the single interaction+deploy surface for a
     // scratch build. Mirror of iOS VibeCodeGeneratingContainer.startStatusRouter.
     LaunchedEffect(sessionId) {
@@ -574,7 +673,7 @@ fun VibeCodeGeneratingScreen(nav: NavController, sessionId: String = "") {
         while (!routed) {
             try {
                 val st = client.vibeCodeStatus(sessionId)
-                if (st.status in listOf("awaiting-tool-response", "ready-to-deploy", "deploying", "deployed")) {
+                if (VibeCodeDescribe.handsOffToChat(st.status)) {
                     routed = true
                     // nav.navigate must run on Main (the live call's
                     // withContext(IO) + the test's continuation interceptor can

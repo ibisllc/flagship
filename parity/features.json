@@ -157,7 +157,7 @@
       "ref": "ios",
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/ViewModels/ModelMenu.swift", "used [^\\n]*credits|usedCredits"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ModelMenuViews.swift", "struct "]] },
-        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AiModelMenu.kt", "usedCredits|used .* credits"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ModelMenuUi.kt", "fun "]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/AiModelMenu.kt", "usedCredits|used .* credits"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ModelMenuUi.kt", "fun "], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/VibeCodeScreens.kt", "vibe-describe-model"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/modelMenu.js", "usedCredits|used .* credits"]] }
       }
     },
@@ -167,7 +167,7 @@
       "ref": "ios",
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/ViewModels/ChatAttachments.swift", "pdf"]] },
-        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ChatAttachments.kt", "application/pdf"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ChatAttachments.kt", "application/pdf"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/VibeCodeScreens.kt", "attachments = staged"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/modelMenu.js", "application/pdf"], ["apps/web/public/webapp/views/vibe-code.js", "MAX_ATTACHMENTS"]] }
       }
     },

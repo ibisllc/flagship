@@ -90,4 +90,30 @@ class VibeCodeDescribeTest {
         assertEquals(listOf("a", "b", "c"), com.flagshipserver.app.viewmodels.AiKeysViewModel.ordered(rows, null).map { it.id })
         assertEquals(listOf("a", "b", "c"), com.flagshipserver.app.viewmodels.AiKeysViewModel.ordered(rows, "gone").map { it.id })
     }
+
+    /** The first message's model: a saved default the catalog no longer
+     *  offers falls back to the catalog's default; no menu, no model. */
+    @Test fun theFirstMessageSendsTheMenusCheckedChoice_neverAStaleSavedModel() {
+        val catalog = com.flagshipserver.app.api.InferenceCatalogResponse(
+            models = listOf(
+                com.flagshipserver.app.api.InferenceModel(id = "medium"),
+                com.flagshipserver.app.api.InferenceModel(id = "glm", efforts = listOf("low", "high"), defaultEffort = "low"),
+            ),
+            defaultModel = "glm",
+        )
+        val menu = com.flagshipserver.app.core.ModelMenu.Flagship(catalog)
+        val stale = com.flagshipserver.app.core.ModelChoice("retired-model")
+        val choice = com.flagshipserver.app.core.ModelMenus.initial(menu, stale)
+        assertEquals("glm" to "low", VibeCodeDescribe.startModel(menu, choice))
+        val saved = com.flagshipserver.app.core.ModelChoice("medium")
+        assertEquals("medium" to null, VibeCodeDescribe.startModel(menu, com.flagshipserver.app.core.ModelMenus.initial(menu, saved)))
+        assertEquals(null to null, VibeCodeDescribe.startModel(null, saved))
+    }
+
+    /** A chat that fails while generating opens the chat, where it can be continued. */
+    @Test fun aFailedBuildHandsOffToTheChat() {
+        assertTrue(VibeCodeDescribe.handsOffToChat("failed"))
+        assertTrue(VibeCodeDescribe.handsOffToChat("awaiting-tool-response"))
+        assertFalse(VibeCodeDescribe.handsOffToChat("streaming"))
+    }
 }
