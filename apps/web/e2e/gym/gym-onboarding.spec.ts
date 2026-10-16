@@ -157,7 +157,16 @@ function resolution(username: string, extra: Record<string, unknown>) {
   };
 }
 
+/** The cover's "Connect to an existing account" page holds the account-name
+ *  field (dbb1d746e); open it when it isn't already showing. */
+async function openConnect(page: Page): Promise<void> {
+  if (await page.locator("#bootstrap-username").isVisible()) return;
+  await page.click("#bootstrap-connect");
+  await expect(page.locator("#bootstrap-username")).toBeVisible();
+}
+
 async function signIn(page: Page, username: string): Promise<void> {
+  await openConnect(page);
   await page.fill("#bootstrap-username", username);
   await page.click("#bootstrap-continue");
 }
@@ -450,9 +459,13 @@ test.describe("gym webapp onboarding", () => {
     await page.goto("/index.html");
 
     // A malformed name is refused before any lookup, from Enter as from the button.
+    await openConnect(page);
     await page.fill("#bootstrap-username", "AB");
     await page.press("#bootstrap-username", "Enter");
-    await sawToast(page, "Username: 3–30 lowercase letters/digits");
+    // The sentence shows under the field.
+    await expect(page.locator("#connect-name-error")).toHaveText(
+      "Account names are 3 to 30 lowercase letters and digits, with single dashes inside.",
+    );
     expect(m.sent("/api/account/resolve", "GET")).toHaveLength(0);
 
     await signIn(page, "nobodyhere");
@@ -470,14 +483,13 @@ test.describe("gym webapp onboarding", () => {
     await expect(access).toContainText("No cloud recovery is set up on this account.");
     await shot(page, testInfo, "signin-access-options");
 
-    // Scan a pairing code: Cancel does nothing; a link opens the join screen.
-    await access.locator('[data-access="scan"]').click();
-    await expect(page.locator(".modal-title")).toHaveText("Scan a pairing code");
-    await page.click("[data-modal-cancel]");
-    await expect(page.locator("#view-bootstrap")).toBeVisible();
-    await access.locator('[data-access="scan"]').click();
-    await page.fill(".modal-input", `https://flagshipserver.com/join?sid=${"ab".repeat(16)}&pk=${"cd".repeat(32)}`);
-    await page.click("[data-modal-ok]");
+    // The same page's pairing code: an account name there is refused in a
+    // sentence; a pairing link opens the join screen.
+    await page.fill("#connect-pair-input", "harry");
+    await page.click("#connect-pair-continue");
+    await expect(page.locator("#connect-pair-error")).toContainText("looks like an account name");
+    await page.fill("#connect-pair-input", `https://flagshipserver.com/join?sid=${"ab".repeat(16)}&pk=${"cd".repeat(32)}`);
+    await page.click("#connect-pair-continue");
     await expect(page.locator("#view-join")).toBeVisible({ timeout: 10_000 });
     await expect(page.locator("#join-confirm")).toBeDisabled();
 

@@ -160,11 +160,9 @@ test.describe("gym webapp server page and Home leftovers", () => {
     await expect(banner.locator("[data-ann-dismiss]")).toHaveCount(0);
     await shot(page, testInfo, "home-device-removed");
     await banner.locator("[data-ann-cta]").click();
-    // The page reloads without the session: the signed-in Home is gone and the
-    // device's session slots are cleared. (In the gym the wrapped key lives
-    // under the first-run profile, so the reload shows the cover; on a real
-    // device it asks to unlock.)
-    await expect(page.locator("#view-unlock, #view-bootstrap").first()).toBeVisible({ timeout: 15_000 });
+    // The page reloads without the session: the signed-in Home is gone, the
+    // device's session slots are cleared, and the key asks to be unlocked.
+    await expect(page.locator("#view-unlock")).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("#view-home")).toBeHidden();
     const left = await page.evaluate(async () => (await import("/lib/profilesStore.js")).get("sessionV1"));
     expect(left ?? null).toBeNull();

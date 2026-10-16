@@ -1138,8 +1138,13 @@ test.describe("gym webapp apps", () => {
     const r = del.body.request;
     expect(r).toMatchObject({ serverId: MEDIA, creator: "smoketest", slug: "notes" });
     expect(await signedBy(page, ["flagship/uninstall-service/v1", r.serverId, r.creator, r.slug, r.issuedAt].join("|"), del.body.signature)).toBe(true);
-    // Nothing was ever sent to home or to the unreachable attic.
-    expect(calls.some((c) => c.method !== "GET" && c.url.host !== MEDIA && c.url.host.endsWith("flagship.services"))).toBe(false);
+    // No app order went to home or to attic (auto-pair asking attic, a box
+    // this browser has no session for, for one is expected).
+    expect(
+      calls.some(
+        (c) => c.method !== "GET" && c.url.host !== MEDIA && c.url.host.endsWith("flagship.services") && !c.url.pathname.endsWith("/api/orders-from-user"),
+      ),
+    ).toBe(false);
     await shot(page, testInfo, "runs-on-removed");
   });
 

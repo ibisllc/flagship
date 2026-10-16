@@ -70,6 +70,14 @@ function baseAccount(m: Mock): void {
   });
 }
 
+/** The cover's "Connect to an existing account" page holds the account-name
+ *  field (dbb1d746e); open it when it isn't already showing. */
+async function openConnect(page: Page): Promise<void> {
+  if (await page.locator("#bootstrap-username").isVisible()) return;
+  await page.click("#bootstrap-connect");
+  await expect(page.locator("#bootstrap-username")).toBeVisible();
+}
+
 test.describe("gym webapp account", () => {
   test("gym account every Settings row opens its screen from Home and Back leaves it", async ({ page }, testInfo) => {
     await noSockets(page);
@@ -594,6 +602,7 @@ test.describe("gym webapp account", () => {
     m.get("/api/account/resolve/harry", () => RATE_LIMITED_12_MIN("ip"));
     await watchToasts(page);
     await page.goto("/index.html");
+    await openConnect(page);
     await page.fill("#bootstrap-username", "harry");
     await page.click("#bootstrap-continue");
     await sawToast(page, "Too many tries from your network. Try again in about 12 minutes.");
