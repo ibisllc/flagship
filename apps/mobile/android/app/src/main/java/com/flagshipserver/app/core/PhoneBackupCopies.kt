@@ -3,7 +3,7 @@
 // charging), the phone fetches each server's newest saved backup into its own
 // private storage, `filesDir/backups/<server>/<archiveId>/`, with the same
 // resumable chunk downloader as Back up now, checks its SHA-256, and keeps the
-// newest two that fit the space the owner reserved. Downloading is a session
+// newest two that fit the space the owner reserved. One `.flagship` file each. Downloading is a session
 // read: nothing is opened and the account key is never needed.
 
 package com.flagshipserver.app.core
@@ -21,7 +21,8 @@ class PhoneBackupCopies(
     private val prefs: android.content.SharedPreferences?,
 ) {
     data class Copy(val server: String, val meta: SavedBackup, val dir: File) {
-        val files: List<File> get() = listOf(File(dir, meta.backupFileName), File(dir, meta.dataFileName))
+        /** The one `.flagship` file. */
+        val file: File get() = File(dir, meta.bundleFileName)
     }
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -47,7 +48,7 @@ class PhoneBackupCopies(
         (serverDir(server).listFiles() ?: emptyArray()).mapNotNull { dir ->
             val meta = runCatching { json.decodeFromString(SavedBackup.serializer(), File(dir, META).readText()) }.getOrNull()
                 ?: return@mapNotNull null
-            Copy(server.lowercase(), meta, dir).takeIf { c -> c.files.all { it.isFile } }
+            Copy(server.lowercase(), meta, dir).takeIf { it.file.isFile }
         }.sortedByDescending { it.meta.createdAt }
 
     fun has(server: String, archiveId: String): Boolean = copies(server).any { it.meta.archiveId == archiveId }
@@ -66,19 +67,18 @@ class PhoneBackupCopies(
     /** Download [b] from [client] into this phone's storage. */
     suspend fun fetch(server: String, b: SavedBackup, client: ScreensClient, progress: (Long) -> Unit = {}) {
         val dir = File(serverDir(server), b.archiveId).apply { mkdirs() }
-        val part = File(dir, "data.part")
+        val part = File(dir, "bundle.part")
         ArchiveDownloader.download(
-            total = b.bytes,
-            sha256 = b.sha256,
+            total = b.bundleBytes,
+            sha256 = b.bundleSha256,
             file = part,
-            stateFile = File(dir, "data.state.json"),
-            fetch = { offset -> client.savedBackupChunk(b.archiveId, offset) },
+            stateFile = File(dir, "bundle.state.json"),
+            fetch = { offset -> client.savedBackupBundleChunk(b.archiveId, offset) },
             progress = progress,
         )
-        val backup = client.savedBackupFile(b.archiveId)
-        File(dir, b.dataFileName).delete()
-        check(part.renameTo(File(dir, b.dataFileName))) { "The backup couldn't be saved on this phone." }
-        File(dir, b.backupFileName).writeBytes(backup)
+        val bundle = File(dir, b.bundleFileName)
+        bundle.delete()
+        check(part.renameTo(bundle)) { "The backup couldn't be saved on this phone." }
         File(dir, META).writeText(json.encodeToString(SavedBackup.serializer(), b))
     }
 

@@ -362,11 +362,8 @@ class LiveScreensClient(
     override suspend fun serverArchiveStatus(): ServerArchiveStatus? =
         request("/api/screens/server-archive", ServerArchiveStatusResponse.serializer()).archive
 
-    override suspend fun serverArchiveChunk(offset: Long): ByteArray =
-        requestBytes("/api/screens/server-archive/chunk?offset=$offset", readTimeoutSeconds = 300)
-
-    override suspend fun serverArchiveBackupFile(): ByteArray =
-        requestBytes("/api/screens/server-archive/backup-file", readTimeoutSeconds = 60)
+    override suspend fun serverArchiveBundleChunk(offset: Long): ByteArray =
+        requestBytes("/api/screens/server-archive/bundle?offset=$offset", readTimeoutSeconds = 300)
 
     override suspend fun serverArchiveForget() {
         request<Unit>("/api/screens/server-archive", null, "DELETE", null, readTimeoutSeconds = 30)
@@ -412,11 +409,8 @@ class LiveScreensClient(
     override suspend fun runBackupNow(): BackupRunResponse =
         request("$savedPath/run", BackupRunResponse.serializer(), "POST", ByteArray(0), readTimeoutSeconds = 30)
 
-    override suspend fun savedBackupFile(archiveId: String): ByteArray =
-        requestBytes("$savedPath/$archiveId/backup-file", readTimeoutSeconds = 60)
-
-    override suspend fun savedBackupChunk(archiveId: String, offset: Long): ByteArray =
-        requestBytes("$savedPath/$archiveId/chunk?offset=$offset", readTimeoutSeconds = 300)
+    override suspend fun savedBackupBundleChunk(archiveId: String, offset: Long): ByteArray =
+        requestBytes("$savedPath/$archiveId/bundle?offset=$offset", readTimeoutSeconds = 300)
 
     override suspend fun savedBackupLink(archiveId: String): SavedBackupLink =
         request("$savedPath/$archiveId/link", SavedBackupLink.serializer(), "POST", ByteArray(0), readTimeoutSeconds = 30)

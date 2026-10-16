@@ -21,4 +21,6 @@ object AdminOrderGate {
     const val ACCESS_LIST = "Only an admin device can change this app's internet access."
     const val API_KEYS = "Only an admin device can create or revoke API keys."
     const val DATABASE_WRITE = "Only an admin device can change this app's data."
+    /** The server page's orders (the webapp's SERVER_ADMIN_ONLY). */
+    const val SERVER = "Only an admin device can change this server. This device can see it."
 }

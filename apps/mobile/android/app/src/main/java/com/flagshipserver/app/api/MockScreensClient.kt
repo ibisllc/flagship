@@ -1052,6 +1052,7 @@ class MockScreensClient(
 
     override suspend fun serverArchiveStart(req: ServerArchiveStartRequest) {
         tick()
+        if (req.slots.none { it.kind == "passcode" }) throw boxRefusal(400, "a backup made with Back up now needs a passcode", "passcode-required")
         archiveStarts += req
         archiveForgotten = false
     }
@@ -1069,19 +1070,30 @@ class MockScreensClient(
             sha256 = sha,
             backupFileName = "home-1970-01-01.flagship-backup",
             dataFileName = "home-1970-01-01.flagship-data",
+            bundleFileName = "home-1970-01-01.flagship",
+            bundleBytes = archiveBundle.size.toLong(),
+            bundleSha256 = sha256Hex(archiveBundle),
             apps = listOf(ServerArchiveApp("alice--wiki", "Wiki")),
         )
     }
 
-    override suspend fun serverArchiveChunk(offset: Long): ByteArray {
-        tick()
+    /** The one `.flagship` file the box serves: header, the backup file, the data file. */
+    val archiveBundle: ByteArray
+        get() = com.flagshipserver.app.core.ServerBackupFormat.bundleHeader(archiveBackupFile.size) + archiveBackupFile + archiveBytes
+
+    private fun sha256Hex(b: ByteArray) = java.security.MessageDigest.getInstance("SHA-256").digest(b).joinToString("") { "%02x".format(it) }
+
+    private fun bundleChunk(offset: Long): ByteArray {
+        val bundle = archiveBundle
+        if (offset < 0 || offset > bundle.size) throw boxRefusal(400, "bad offset")
         val start = offset.toInt()
-        return archiveBytes.copyOfRange(start, minOf(start + 4 * 1024 * 1024, archiveBytes.size))
+        return bundle.copyOfRange(start, minOf(start + 4 * 1024 * 1024, bundle.size))
     }
 
-    override suspend fun serverArchiveBackupFile(): ByteArray {
+    override suspend fun serverArchiveBundleChunk(offset: Long): ByteArray {
         tick()
-        return archiveBackupFile
+        if (archiveStarts.isEmpty() || archiveForgotten) throw boxRefusal(404, "no backup is ready")
+        return bundleChunk(offset)
     }
 
     override suspend fun serverArchiveForget() {
@@ -1184,6 +1196,9 @@ class MockScreensClient(
             backupBytes = archiveBackupFile.size.toLong(),
             backupFileName = "$stem.flagship-backup",
             dataFileName = "$stem.flagship-data",
+            bundleFileName = "$stem.flagship",
+            bundleBytes = archiveBundle.size.toLong(),
+            bundleSha256 = sha256Hex(archiveBundle),
             apps = backupRunApps,
         )
     }
@@ -1305,24 +1320,16 @@ class MockScreensClient(
     private fun savedById(id: String): SavedBackup =
         savedBackupsList.firstOrNull { it.archiveId == id } ?: throw boxRefusal(404, "no backup is ready")
 
-    override suspend fun savedBackupFile(archiveId: String): ByteArray {
+    override suspend fun savedBackupBundleChunk(archiveId: String, offset: Long): ByteArray {
         tick()
         savedById(archiveId)
-        return archiveBackupFile
-    }
-
-    override suspend fun savedBackupChunk(archiveId: String, offset: Long): ByteArray {
-        tick()
-        savedById(archiveId)
-        if (offset < 0 || offset > archiveBytes.size) throw boxRefusal(400, "bad offset")
-        val start = offset.toInt()
-        return archiveBytes.copyOfRange(start, minOf(start + 4 * 1024 * 1024, archiveBytes.size))
+        return bundleChunk(offset)
     }
 
     override suspend fun savedBackupLink(archiveId: String): SavedBackupLink {
         tick()
         val b = savedById(archiveId)
-        return SavedBackupLink("/api/archive-download/" + "ab".repeat(32), b.backupFileName, b.dataFileName, b.bytes, b.sha256, null)
+        return SavedBackupLink("/api/archive-download/" + "ab".repeat(32), b.backupFileName, b.dataFileName, b.bytes, b.sha256, b.bundleFileName, b.bundleBytes, b.bundleSha256, null)
     }
 
     override suspend fun deleteSavedBackup(archiveId: String): SavedBackupsView {

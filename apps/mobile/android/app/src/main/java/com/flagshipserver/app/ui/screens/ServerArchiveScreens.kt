@@ -9,7 +9,6 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -57,6 +56,7 @@ import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalPodClients
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.PodInfo
+import com.flagshipserver.app.core.BackupsText
 import com.flagshipserver.app.core.ServerArchive
 import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.ui.components.FSCard
@@ -90,14 +90,31 @@ internal fun ServerBackupButton(serverDomain: String) {
     if (show) ServerBackupDialog(serverDomain, onDismiss = { show = false })
 }
 
-/** Write both files into a folder the user picked (a tree from ACTION_OPEN_DOCUMENT_TREE). */
-private fun saveIntoFolder(context: Context, tree: Uri, files: List<File>) {
-    val resolver = context.contentResolver
-    val dir = DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
-    for (f in files) {
-        val doc = DocumentsContract.createDocument(resolver, dir, "application/octet-stream", f.name)
-            ?: throw java.io.IOException("couldn't create ${f.name}")
-        resolver.openOutputStream(doc)!!.use { out -> f.inputStream().use { it.copyTo(out, 1 shl 20) } }
+/** Copy [file] into the document the user created (ACTION_CREATE_DOCUMENT). */
+internal fun saveIntoDocument(context: Context, doc: Uri, file: File) {
+    context.contentResolver.openOutputStream(doc)?.use { out -> file.inputStream().use { it.copyTo(out, 1 shl 20) } }
+        ?: throw java.io.IOException("couldn't write ${file.name}")
+}
+
+/** The system "Save to" picker for one backup file, then the copy into it. */
+@Composable
+internal fun rememberSaveBackupLauncher(
+    file: () -> File?,
+    onSaving: (Boolean) -> Unit,
+    onResult: (Boolean) -> Unit,
+): androidx.activity.compose.ManagedActivityResultLauncher<String, Uri?> {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    return rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { doc: Uri? ->
+        val f = file()
+        if (doc != null && f != null) {
+            scope.launch {
+                onSaving(true)
+                val ok = runCatching { withContext(Dispatchers.IO) { saveIntoDocument(context, doc, f) } }.isSuccess
+                onSaving(false)
+                onResult(ok)
+            }
+        }
     }
 }
 
@@ -122,23 +139,18 @@ private fun ServerBackupDialog(serverDomain: String, onDismiss: () -> Unit) {
     var saveNote by remember { mutableStateOf<String?>(null) }
     var saveError by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
-    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree: Uri? ->
-        val saved = phase as? ServerBackupViewModel.Phase.Saved
-        if (tree != null && saved != null) {
-            scope.launch {
-                saving = true
-                saveError = null
-                val result = runCatching { withContext(Dispatchers.IO) { saveIntoFolder(context, tree, saved.files) } }
-                saving = false
-                if (result.isSuccess) {
-                    saveNote = "Saved both files in the folder you picked."
-                    withContext(Dispatchers.IO) { saved.files.forEach { it.delete() } }
-                } else {
-                    saveError = "Couldn't save the files there. Pick another folder."
-                }
+    val saver = rememberSaveBackupLauncher(
+        file = { (phase as? ServerBackupViewModel.Phase.Saved)?.file },
+        onSaving = { saving = it; if (it) saveError = null },
+        onResult = { ok ->
+            if (ok) {
+                saveNote = "Saved."
+                (phase as? ServerBackupViewModel.Phase.Saved)?.file?.delete()
+            } else {
+                saveError = "Couldn't save the backup there. Pick another place."
             }
-        }
-    }
+        },
+    )
     LaunchedEffect(vm) { vm.load() }
     AlertDialog(
         // Closing never stops the server: reopening follows the same backup.
@@ -163,7 +175,7 @@ private fun ServerBackupDialog(serverDomain: String, onDismiss: () -> Unit) {
                         LinearProgressIndicator(progress = { p.fraction.toFloat() }, modifier = Modifier.fillMaxWidth())
                     }
                     is ServerBackupViewModel.Phase.Ready -> {
-                        Text("Backup ready: two files, ${ServerArchive.formatBytes(p.bytes)} in all. Keep them together.", color = FS.colors.text)
+                        Text("Backup ready: one file, ${ServerArchive.formatBytes(p.bytes)}.", color = FS.colors.text)
                         if (vm.leftOut.isNotEmpty()) {
                             Text(
                                 "Left out (no source to rebuild them from): ${vm.leftOut.joinToString(", ")}.",
@@ -172,7 +184,7 @@ private fun ServerBackupDialog(serverDomain: String, onDismiss: () -> Unit) {
                             )
                         }
                         FSPrimaryButton(
-                            label = "Download both files",
+                            label = "Download the backup",
                             onClick = { scope.launch { vm.download() } },
                             block = true,
                             modifier = Modifier.testTag("backup-download"),
@@ -184,16 +196,16 @@ private fun ServerBackupDialog(serverDomain: String, onDismiss: () -> Unit) {
                     }
                     is ServerBackupViewModel.Phase.Saved -> {
                         Text(
-                            "Downloaded. The server has removed its copy. Save both files together: pick a folder (on this phone, a cloud drive or a USB drive) and both go there.",
+                            "Downloaded. The server has removed its copy. Save the file somewhere safe: on this phone, a cloud drive or a USB drive.",
                             color = FS.colors.text,
                         )
-                        p.files.forEach { Text(it.name, color = FS.colors.textMuted, style = captionStyle) }
+                        Text(p.file.name, color = FS.colors.textMuted, style = captionStyle)
                         saveNote?.let { Text(it, color = FS.colors.success) }
                         saveError?.let { Text(it, color = FS.colors.danger) }
                         if (saveNote == null) {
                             FSPrimaryButton(
-                                label = if (saving) "Saving…" else "Save both files…",
-                                onClick = { folderPicker.launch(null) },
+                                label = if (saving) "Saving…" else "Save the backup…",
+                                onClick = { saver.launch(p.file.name) },
                                 enabled = !saving,
                                 block = true,
                                 modifier = Modifier.testTag("backup-share"),
@@ -220,6 +232,7 @@ internal fun PasscodeStep(vm: ServerBackupViewModel, copied: Boolean, onCopy: ()
             color = FS.colors.text,
             style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
         )
+        Text(BackupsText.PASSCODE_WHY, color = FS.colors.text, style = bodySmStyle, modifier = Modifier.testTag("backup-passcode-why"))
         Text(ServerArchive.PASSCODE_NOTE, color = FS.colors.textMuted, style = bodySmStyle)
         if (vm.useOwnPasscode) {
             FSField(
@@ -384,11 +397,11 @@ internal fun ImportBackupScreen(vm: ImportBackupViewModel, onClose: () -> Unit =
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val phase by vm.phase.collectAsState()
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris: List<Uri> ->
-        if (uris.isNotEmpty()) {
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri != null) {
             scope.launch {
-                val files = withContext(Dispatchers.IO) { uris.map { SafPickedFile(context, it) } }
-                vm.choose(files)
+                val file = withContext(Dispatchers.IO) { SafPickedFile(context, uri) }
+                vm.choose(file)
             }
         }
     }
@@ -418,21 +431,21 @@ internal fun ImportBackupScreen(vm: ImportBackupViewModel, onClose: () -> Unit =
             when (val p = phase) {
                 ImportBackupViewModel.Phase.Pick -> {
                     Text(
-                        vm.targetFqdn?.let { "${serverName(it)} is waiting for its backup. Pick the backup's two files and this screen sends it." }
+                        vm.targetFqdn?.let { "${serverName(it)} is waiting for its backup. Pick the backup file and this screen sends it." }
                             ?: ServerArchive.IMPORT_INTRO,
                         color = FS.colors.textMuted,
                     )
                     FSCard(modifier = Modifier.fillMaxWidth()) {
-                        Text(vm.filesSummary, color = FS.colors.text, style = bodySmStyle, modifier = Modifier.testTag("import-backup-files"))
+                        Text(vm.fileSummary, color = FS.colors.text, style = bodySmStyle, modifier = Modifier.testTag("import-backup-files"))
                     }
                     FSPrimaryButton(
-                        label = if (vm.backupFileName == null && vm.dataFileName == null) "Choose the backup files" else "Choose the other file",
+                        label = if (vm.fileName == null) "Choose the backup file" else "Choose another file",
                         onClick = pick,
                         block = true,
                         modifier = Modifier.testTag("import-backup-choose"),
                     )
                     Text(
-                        "You can pick both at once. They're read where they are; nothing is copied onto this phone.",
+                        "It's read where it is; nothing is copied onto this phone.",
                         color = FS.colors.textMuted,
                         style = captionStyle,
                     )
@@ -535,7 +548,14 @@ internal fun ImportBackupScreen(vm: ImportBackupViewModel, onClose: () -> Unit =
                         color = FS.colors.success,
                         style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
                     )
-                    p.apps.forEach { Text(ImportBackupViewModel.describe(it), color = FS.colors.textMuted, style = bodySmStyle) }
+                    ImportBackupViewModel.resultLines(p.apps).forEachIndexed { i, line ->
+                        Text(
+                            line,
+                            color = if (i == 0) FS.colors.text else FS.colors.danger,
+                            style = bodySmStyle,
+                            modifier = Modifier.testTag(if (i == 0) "import-backup-restored" else "import-backup-failed-app"),
+                        )
+                    }
                     FSPrimaryButton(label = "Done", onClick = onClose, block = true, modifier = Modifier.testTag("import-backup-done"))
                 }
                 is ImportBackupViewModel.Phase.Failed -> {

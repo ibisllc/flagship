@@ -52,10 +52,15 @@ data class SavedBackup(
     val backupBytes: Long = 0,
     val backupFileName: String,
     val dataFileName: String,
+    /** The one `.flagship` file people keep: its name, size and whole-file SHA-256. */
+    val bundleFileName: String = com.flagshipserver.app.core.ServerBackupFormat.bundleFileName(dataFileName),
+    val bundleBytes: Long = 0,
+    val bundleSha256: String = "",
     val apps: List<ServerArchiveApp> = emptyList(),
     val left: List<ServerArchiveLeftApp> = emptyList(),
 ) {
-    val totalBytes: Long get() = bytes + backupBytes
+    /** What the backup takes: the one file (or its two parts on a box from before it). */
+    val totalBytes: Long get() = if (bundleBytes > 0) bundleBytes else bytes + backupBytes
 }
 
 /** `GET /api/screens/server-archive/backups` (and every write's answer). */
@@ -89,6 +94,9 @@ data class SavedBackupLink(
     val dataFileName: String,
     val bytes: Long,
     val sha256: String,
+    val bundleFileName: String? = null,
+    val bundleBytes: Long? = null,
+    val bundleSha256: String? = null,
     val expiresAt: Long? = null,
 )
 

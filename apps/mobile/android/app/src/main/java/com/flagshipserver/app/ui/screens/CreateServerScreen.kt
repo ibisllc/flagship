@@ -116,6 +116,9 @@ data class CreateServerPreset(
     val restore: ImportBackupViewModel.RestoreTarget,
 )
 
+/** The server's backup policy as the wizard chose it: `phone` | `peer` | `none`, and the phone's reserve. */
+data class BackupPolicyChoice(val policy: String, val phoneReserveBytes: Long)
+
 /** The pairing order couldn't be built, so a server made to restore a backup can't be told which one. */
 internal class RestoreNeedsPairingException :
     Exception("This server couldn't be prepared to receive the backup. Try again.")
@@ -197,10 +200,13 @@ fun CreateServerScreen(
     // Per-service leadership (Phase 6): the per-cloud CGK is NEVER embedded in the
     // recipe, so it is owed on EVERY created server and deposited post-registration.
     val cgkDepositStore = remember { com.flagshipserver.app.core.PendingCgkDepositStore.from(context) }
-    // Backup policy — draft-only metadata (phone-only default). Hydrated from
-    // the draft store so flipping away mid-fill doesn't lose the pick; NOT on
-    // the wire (applied later via an owner-signed set-backup-policy order).
+    // Backup policy (phone-side default) and the phone's reserve: hydrated from
+    // the draft store so flipping away mid-fill doesn't lose the pick; signed as
+    // a `flagship/backup-policy/v1` order beside the pairing order at mint.
     var backupPolicy by remember { mutableStateOf(draftStore.backupPolicy()) }
+    val phoneFree = remember { phoneFreeBytes(context) }
+    var reserveGb by remember { mutableStateOf(draftStore.reserveGb() ?: com.flagshipserver.app.core.BackupsText.defaultReserveGb(phoneFree)) }
+    val backupChoice = BackupPolicyChoice(backupPolicy.order, reserveGb.toLong() * com.flagshipserver.app.core.BackupsText.GB)
     // Builder-pairing controller (built when the user picks "Pair with the
     // builder app") + on-device-burn recipe (minted before showing the burn UI).
     var pairController by remember { mutableStateOf<BuilderPairController?>(null) }
@@ -229,6 +235,7 @@ fun CreateServerScreen(
             sessionStore = sessionStore,
             isDemoAccount = app.isDemoAccountNow(),
             restore = preset?.restore,
+            backupPolicy = backupChoice,
         )
         registerControlPlane(
             flagshipServer = flagshipServer,
@@ -383,6 +390,12 @@ fun CreateServerScreen(
                 debugFriendly = debugFriendly,
                 onDebugFriendly = { debugFriendly = it },
                 backupPolicy = backupPolicy,
+                reserveGb = reserveGb,
+                onReserveGb = {
+                    reserveGb = it
+                    draftStore.setReserveGb(it)
+                },
+                phoneFreeBytes = phoneFree,
                 onBackupPolicy = {
                     backupPolicy = it
                     draftStore.setBackupPolicy(it)
@@ -507,6 +520,7 @@ fun CreateServerScreen(
                                 sessionStore = sessionStore,
                                 isDemoAccount = app.isDemoAccountNow(),
                                 restore = preset?.restore,
+                                backupPolicy = backupChoice,
                             )
                             qrRelay.openAndHello(
                                 sid = delivery.sid,
@@ -624,6 +638,9 @@ private fun DesignPhase(
     debugFriendly: Boolean,
     onDebugFriendly: (Boolean) -> Unit,
     backupPolicy: CreateServerDraftStore.BackupPolicy,
+    reserveGb: Int,
+    onReserveGb: (Int) -> Unit,
+    phoneFreeBytes: Long,
     onBackupPolicy: (CreateServerDraftStore.BackupPolicy) -> Unit,
     error: String?,
     onBack: () -> Unit,
@@ -684,7 +701,13 @@ private fun DesignPhase(
                     )
                 }
                 else -> {
-                    BackupPolicyPicker(policy = backupPolicy, onPolicy = onBackupPolicy)
+                    BackupPolicyPicker(
+                        policy = backupPolicy,
+                        onPolicy = onBackupPolicy,
+                        reserveGb = reserveGb,
+                        onReserveGb = onReserveGb,
+                        phoneFreeBytes = phoneFreeBytes,
+                    )
                 }
             }
         }
@@ -891,14 +914,17 @@ private fun AdvancedModePicker(
     }
 }
 
-// Backup policy — draft-only metadata, three tiers, default "phone-only".
-// Mirrors iOS's backupPolicyPicker + the webapp's #cs-backup-policy dropdown.
-// NOT carried in the signed InstallBlob; applied later via an owner-signed
-// set-backup-policy order.
+// Backup policy — three choices, phone-side by default, with the phone's
+// reserve (docs/server-backup-and-clone.md, "Backup policy"). The choice is
+// signed at mint and rides beside the pairing order. Same words as iOS and
+// the webapp (BackupPolicyOptions).
 @Composable
 private fun BackupPolicyPicker(
     policy: CreateServerDraftStore.BackupPolicy,
     onPolicy: (CreateServerDraftStore.BackupPolicy) -> Unit,
+    reserveGb: Int,
+    onReserveGb: (Int) -> Unit,
+    phoneFreeBytes: Long,
 ) {
     Text(
         "Backup policy",
@@ -906,25 +932,13 @@ private fun BackupPolicyPicker(
         style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
     )
     Spacer(Modifier.height(FS.space.s2))
-    BootUnlockOption(
-        selected = policy == CreateServerDraftStore.BackupPolicy.PHONE_ONLY,
-        title = "Phone-side backups",
-        subtitle = "The default. Your phone pulls an encrypted backup of each app on a schedule. Restores need this device. Because the backup lives on your phone, your server's data can't grow larger than your phone's free space.",
-        onClick = { onPolicy(CreateServerDraftStore.BackupPolicy.PHONE_ONLY) },
-    )
-    Spacer(Modifier.height(FS.space.s2))
-    BootUnlockOption(
-        selected = policy == CreateServerDraftStore.BackupPolicy.PEER,
-        title = "Peer-distributed backups",
-        subtitle = "Your encrypted shards are stored across other Flagship users (and theirs on you). Recoverable from any device with your account.",
-        onClick = { onPolicy(CreateServerDraftStore.BackupPolicy.PEER) },
-    )
-    Spacer(Modifier.height(FS.space.s2))
-    BootUnlockOption(
-        selected = policy == CreateServerDraftStore.BackupPolicy.NONE,
-        title = "No backups",
-        subtitle = "Power-user opt-out. If the box dies before you back up manually, the data is gone.",
-        onClick = { onPolicy(CreateServerDraftStore.BackupPolicy.NONE) },
+    BackupPolicyOptions(
+        policy = policy.order,
+        onPolicy = { k -> CreateServerDraftStore.BackupPolicy.fromOrder(k)?.let(onPolicy) },
+        reserveGb = reserveGb,
+        onReserveGb = onReserveGb,
+        phoneFreeBytes = phoneFreeBytes,
+        tagPrefix = "cs-backup-policy",
     )
 }
 
@@ -1172,6 +1186,7 @@ private suspend fun prepareDelivery(
     sessionStore: com.flagshipserver.app.api.SessionStoring? = null,
     isDemoAccount: Boolean = false,
     restore: ImportBackupViewModel.RestoreTarget? = null,
+    backupPolicy: BackupPolicyChoice? = null,
 ): PendingDelivery {
     val parsed = QrRelay.parseQrUrl(rawQr)
     val session = QrSession.fresh()
@@ -1191,6 +1206,7 @@ private suspend fun prepareDelivery(
         sessionStore = sessionStore,
         isDemoAccount = isDemoAccount,
         restore = restore,
+        backupPolicy = backupPolicy,
     )
 
     return PendingDelivery(
@@ -1243,6 +1259,9 @@ internal suspend fun mintRecipeBundle(
     // Import a backup: sign a restore order for this server and attach it beside
     // the pairing order (docs/server-backup-and-clone.md).
     restore: ImportBackupViewModel.RestoreTarget? = null,
+    // The server's backup policy, signed and attached beside the pairing order
+    // (docs/server-backup-and-clone.md, "Backup policy").
+    backupPolicy: BackupPolicyChoice? = null,
 ): MintedBundle {
     // Only an admin device of the account adds servers, and only opening the
     // account mints an admin root: refuse here, before any prompt or `.com`
@@ -1345,6 +1364,15 @@ internal suspend fun mintRecipeBundle(
         val restoreSigner = if (adminRootPinHex != null) Keystore.adminRootKey("Restore a backup on $serverName") else irk
         val sig = restoreSigner.sign(order.canonicalBytes())
         pairingOrderJson = ServerBackupFormat.attachRestore(json, order, HexUtil.encode(sig))
+    }
+    // The box takes the policy under its sensitive-order key once the pairing
+    // order verifies: the admin root it pins, the IRK on a demo box (none pinned).
+    pairingOrderJson = pairingOrderJson?.let { json ->
+        val choice = backupPolicy ?: return@let json
+        val order = com.flagshipserver.app.core.BackupPolicyOrder.make(serverDomain, choice.policy, choice.phoneReserveBytes, now)
+        if (!order.isValid) return@let json
+        val signer = if (adminRootPinHex != null) Keystore.adminRootKey("Set the backup policy of $serverName") else irk
+        ServerBackupFormat.attachBackupPolicy(json, order, HexUtil.encode(signer.sign(order.canonicalBytes())))
     }
 
     // Secret-free recipe (docs/recipe-delivery-and-remote-install.md).

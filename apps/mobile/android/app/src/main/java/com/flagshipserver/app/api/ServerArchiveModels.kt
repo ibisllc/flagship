@@ -26,6 +26,10 @@ data class ServerArchiveStatus(
     /** The names the two files are saved under. */
     val backupFileName: String? = null,
     val dataFileName: String? = null,
+    /** The one `.flagship` file people keep: its name, size and whole-file SHA-256. */
+    val bundleFileName: String? = null,
+    val bundleBytes: Long? = null,
+    val bundleSha256: String? = null,
     val apps: List<ServerArchiveApp>? = null,
     /** Apps that couldn't go in (no source to rebuild from), with why. */
     val left: List<ServerArchiveLeftApp>? = null,

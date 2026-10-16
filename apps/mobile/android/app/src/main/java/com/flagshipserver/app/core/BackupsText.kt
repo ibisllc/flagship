@@ -46,7 +46,7 @@ object BackupsText {
     const val KEEP_COPY_NOTE = "Only on Wi-Fi while charging."
     const val DELETE_CONFIRM = "Delete this backup from the server?"
     const val LIST_NOTE =
-        "Each backup is two files. Keep them together; Import a backup on Home restores them. They open on your own devices without a passcode."
+        "Each backup is one .flagship file. Import a backup on Home restores it. It opens on your own devices without a passcode."
     const val NOT_CHOSEN = "Not chosen yet"
     /** Back up now's passcode step (owner, 2026-10-16). */
     const val PASSCODE_WHY =

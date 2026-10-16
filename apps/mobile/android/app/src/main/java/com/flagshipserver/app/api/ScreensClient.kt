@@ -229,10 +229,8 @@ interface ScreensClient {
         throw ScreensError.NotImplemented("server backup")
     suspend fun serverArchiveStatus(): ServerArchiveStatus? =
         throw ScreensError.NotImplemented("server backup")
-    suspend fun serverArchiveChunk(offset: Long): ByteArray =
-        throw ScreensError.NotImplemented("server backup")
-    /** The small backup file (JSON) of the ready backup. */
-    suspend fun serverArchiveBackupFile(): ByteArray =
+    /** ≤ 4 MiB of the ready backup's one `.flagship` file, from [offset]. */
+    suspend fun serverArchiveBundleChunk(offset: Long): ByteArray =
         throw ScreensError.NotImplemented("server backup")
     suspend fun serverArchiveForget(): Unit =
         throw ScreensError.NotImplemented("server backup")
@@ -260,9 +258,8 @@ interface ScreensClient {
     /** 202 `{archiveId}`; 409 `code: no-keys` when the box has no keys, 409 when busy. */
     suspend fun runBackupNow(): BackupRunResponse =
         throw ScreensError.NotImplemented("saved backups")
-    suspend fun savedBackupFile(archiveId: String): ByteArray =
-        throw ScreensError.NotImplemented("saved backups")
-    suspend fun savedBackupChunk(archiveId: String, offset: Long): ByteArray =
+    /** ≤ 4 MiB of a saved backup's one `.flagship` file, from [offset]. */
+    suspend fun savedBackupBundleChunk(archiveId: String, offset: Long): ByteArray =
         throw ScreensError.NotImplemented("saved backups")
     suspend fun savedBackupLink(archiveId: String): SavedBackupLink =
         throw ScreensError.NotImplemented("saved backups")

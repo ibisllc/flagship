@@ -219,33 +219,30 @@ class ServerBackupsViewModel(
 
     // ── Download ───────────────────────────────────────────────────
 
-    /** Both files of a saved backup, in 4 MiB parts, several at once, resuming
-     *  and checked against the box's SHA-256. The box keeps its copy. */
-    suspend fun download(b: SavedBackup): List<File>? {
+    /** A saved backup's one `.flagship` file, in 4 MiB parts, several at once,
+     *  resuming and checked against the box's SHA-256. The box keeps its copy. */
+    suspend fun download(b: SavedBackup): File? {
         if (downloading.containsKey(b.archiveId)) return null
         downloading[b.archiveId] = 0.0
         actionError = null
         val dir = File(downloadDir(), b.archiveId).apply { mkdirs() }
-        val part = File(dir, "data.part")
-        val state = File(dir, "data.state.json")
+        val part = File(dir, "bundle.part")
+        val state = File(dir, "bundle.state.json")
         try {
             ArchiveDownloader.download(
-                total = b.bytes,
-                sha256 = b.sha256,
+                total = b.bundleBytes,
+                sha256 = b.bundleSha256,
                 file = part,
                 stateFile = state,
-                fetch = { offset -> client.savedBackupChunk(b.archiveId, offset) },
-                progress = { received -> downloading[b.archiveId] = if (b.bytes > 0) received.toDouble() / b.bytes else 1.0 },
+                fetch = { offset -> client.savedBackupBundleChunk(b.archiveId, offset) },
+                progress = { received -> downloading[b.archiveId] = if (b.bundleBytes > 0) received.toDouble() / b.bundleBytes else 1.0 },
             )
-            val backupBytes = client.savedBackupFile(b.archiveId)
-            val dataFile = File(dir, b.dataFileName)
-            val backupFile = File(dir, b.backupFileName)
+            val bundle = File(dir, b.bundleFileName)
             withContext(Dispatchers.IO) {
-                dataFile.delete()
-                check(part.renameTo(dataFile)) { "The backup couldn't be saved on this device." }
-                backupFile.writeBytes(backupBytes)
+                bundle.delete()
+                check(part.renameTo(bundle)) { "The backup couldn't be saved on this device." }
             }
-            return listOf(backupFile, dataFile)
+            return bundle
         } catch (e: CancellationException) {
             throw e
         } catch (t: Throwable) {

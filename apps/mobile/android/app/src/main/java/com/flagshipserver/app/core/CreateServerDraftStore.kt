@@ -1,10 +1,10 @@
 // Local, draft-only metadata the user fills in before delivering an
 // InstallBlob. Kotlin mirror of FlagshipCore/CreateServerDraftStore.swift.
 //
-// Deliberately NOT signed into the InstallBlob (the audit confirmed
-// `backupPolicy` does not appear in the canonical bytes), so it lives only on
-// this device and only as user intent. The box reads it later via an
-// owner-signed `set-backup-policy` order.
+// Not part of the InstallBlob's signed bytes: the chosen policy is signed as
+// its own `flagship/backup-policy/v1` order and rides beside the pairing order
+// (docs/server-backup-and-clone.md, "Backup policy"); this store only keeps
+// the draft while the user fills the form.
 //
 // Mirrors the webapp's draft schema (apps/web/public/webapp/lib/buildDraft.js):
 //   - backupPolicy ∈ {"none", "phone-only", "peer"}, default "phone-only".
@@ -21,7 +21,7 @@ import android.content.SharedPreferences
 
 class CreateServerDraftStore(private val prefs: SharedPreferences) {
     enum class BackupPolicy(val wire: String) {
-        /** Phone-side scheduled pull; the default. Mirrors the webapp default. */
+        /** Phone-side backups; the default. Mirrors the webapp default. */
         PHONE_ONLY("phone-only"),
 
         /** Peer-backup distribution to other Flagship users. */
@@ -30,9 +30,20 @@ class CreateServerDraftStore(private val prefs: SharedPreferences) {
         /** No automatic backup. Power-user opt-out. */
         NONE("none");
 
+        /** The policy's name in `flagship/backup-policy/v1`. */
+        val order: String get() = if (this == PHONE_ONLY) "phone" else wire
+
         companion object {
             fun fromWire(s: String?): BackupPolicy? = entries.firstOrNull { it.wire == s }
+            fun fromOrder(s: String): BackupPolicy? = entries.firstOrNull { it.order == s }
         }
+    }
+
+    /** The phone's reserve for a phone-side backup, in GB; null ⇒ the default for this phone. */
+    fun reserveGb(): Int? = prefs.getInt(RESERVE_KEY, 0).takeIf { it > 0 }
+
+    fun setReserveGb(gb: Int) {
+        prefs.edit().putInt(RESERVE_KEY, gb).apply()
     }
 
     /** The user's chosen backup policy — absent ⇒ the default ("phone-only"). */
@@ -47,12 +58,13 @@ class CreateServerDraftStore(private val prefs: SharedPreferences) {
      *  the next "Add a server" doesn't ghost-restore yesterday's pick onto a
      *  fresh build. */
     fun reset() {
-        prefs.edit().remove(BACKUP_POLICY_KEY).apply()
+        prefs.edit().remove(BACKUP_POLICY_KEY).remove(RESERVE_KEY).apply()
     }
 
     companion object {
         private const val PREFS = "flagship.createServerDraft"
         private const val BACKUP_POLICY_KEY = "backupPolicy"
+        private const val RESERVE_KEY = "phoneReserveGb"
 
         fun from(context: Context): CreateServerDraftStore =
             CreateServerDraftStore(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE))
