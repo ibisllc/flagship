@@ -386,3 +386,32 @@ describe("share the adaptation, and a shared adaptation that crashes", () => {
     expect(follow).toHaveBeenCalledTimes(1);
   });
 });
+
+// A git or IDE build the box brought back failed after a restart (3cadd12da)
+// keeps its files: the apps say the box's reason and offer the AI again or
+// deploying.
+describe("a build a restart cut off", () => {
+  const AI = "The server restarted while the AI was working on this build. Its files are kept: run the AI again, or deploy.";
+  const LIVE = "The server restarted while it was putting this build live. Its files are kept: deploy it again.";
+
+  it("a git build offers the AI again and deploy; a sealed one only deploy", async () => {
+    const { failedBuild } = await loadGit();
+    expect(failedBuild({ mode: "git", adapt: { status: "failed", reason: AI } })).toEqual({ mode: "git", reason: AI, canAdapt: true });
+    expect(failedBuild({ mode: "git", sealed: true, adapt: { status: "failed", reason: LIVE } })).toEqual({
+      mode: "git",
+      reason: LIVE,
+      canAdapt: false,
+    });
+    expect(failedBuild({ mode: "git", adapt: { status: "failed", reason: "x", notConfigured: true } })?.canAdapt).toBe(false);
+  });
+
+  it("an IDE build offers deploy; anything not failed is left alone", async () => {
+    const { failedBuild } = await loadGit();
+    expect(failedBuild({ mode: "mcp", adapt: { status: "failed", reason: LIVE } })).toEqual({ mode: "mcp", reason: LIVE, canAdapt: false });
+    expect(failedBuild({ mode: "git", adapt: { status: "running", startedAt: 1 } })).toBeNull();
+    expect(failedBuild({ mode: "git", adapt: { status: "done", fileCount: 2, deployed: false } })).toBeNull();
+    expect(failedBuild({ mode: "git" })).toBeNull();
+    expect(failedBuild({ mode: "scratch", adapt: { status: "failed", reason: AI } })).toBeNull();
+    expect(failedBuild(null)).toBeNull();
+  });
+});

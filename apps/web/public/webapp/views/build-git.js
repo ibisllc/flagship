@@ -16,6 +16,7 @@ import {
   ADAPT_BUTTON,
   CHECK_AGAIN,
   CLOSED_NOTE,
+  DEPLOY_BUTTON,
   NOT_LIVE,
   NOT_LIVE_FALLBACK,
   RETRY_ADAPT,
@@ -106,6 +107,45 @@ export function enterBuildGit() {
   }).then(() => {
     if (!buildId && !checking) onServerChosen();
   });
+}
+
+/**
+ * Reopen a git build the box brought back failed (Build sessions → Open): say
+ * the box's reason and offer what the card offers, running the AI again
+ * (unless the build is sealed) or installing the files it holds.
+ */
+export async function resumeBuildGit({ buildId: id, server = "", state, fileCount = 0, reason }) {
+  await enterBuildGit();
+  // It stays on the server that holds it: no server picker.
+  const picker = $("build-git-runs-on");
+  if (picker) picker.innerHTML = "";
+  box = boxClient(server || creationTarget().fqdn);
+  buildId = id;
+  assignedName = state?.name ?? null;
+  closed = state?.sealed === true;
+  lastVerdict = { buildId: id, fit: false, reason, fileCount, name: assignedName };
+  const card = $("build-git-verdict");
+  card.classList.remove("hidden");
+  card.innerHTML = `
+    <div class="card" data-build-failed>
+      <p class="err-text">${escapeHtml(reason)}</p>
+      ${closed ? "" : `<button id="build-git-adapt" class="full-width mt-2">${escapeHtml(ADAPT_BUTTON)}</button>`}
+      <button id="build-git-deploy" class="${closed ? "" : "secondary "}full-width mt-2">${escapeHtml(DEPLOY_BUTTON)}</button>
+      ${journalLink()}
+    </div>`;
+  $("build-git-adapt")?.addEventListener("click", () =>
+    enterBuildKey({
+      contextLabel: "Building with AI",
+      back: "view-build-git",
+      onChosen: (credential) => {
+        adaptCredential = credential;
+        show("view-build-git");
+        void adapt();
+      },
+    }),
+  );
+  $("build-git-deploy").addEventListener("click", deploy);
+  wireJournalLink();
 }
 
 // Another server: a repo checked on the old one doesn't carry over, and names
@@ -251,7 +291,7 @@ function renderVerdict(r, error = null) {
       <div class="card">
         <div class="build-git-verdict-head"><p><strong>Flagship-ready ✓</strong></p>${checkAgainButton()}</div>
         <p class="note">${escapeHtml(r.reason)} — ${r.fileCount} file(s).</p>
-        <button id="build-git-deploy" class="full-width mt-2">Install it</button>
+        <button id="build-git-deploy" class="full-width mt-2">${escapeHtml(DEPLOY_BUTTON)}</button>
         ${journalLink()}
       </div>`;
     $("build-git-deploy").addEventListener("click", deploy);
@@ -334,7 +374,7 @@ function renderAdapted(fileCount) {
     <div class="card">
       <p><strong>Adapted ✓</strong></p>
       <p class="note">The AI rewrote this repo into a Flagship app (${fileCount} file(s)).</p>
-      <button id="build-git-deploy" class="full-width mt-2">Install it</button>
+      <button id="build-git-deploy" class="full-width mt-2">${escapeHtml(DEPLOY_BUTTON)}</button>
       ${adapterExport()}
       ${journalLink()}
     </div>`;
@@ -490,6 +530,6 @@ async function deploy() {
     }
     toast(failure.message, "err");
     btn.disabled = false;
-    btn.textContent = "Install it";
+    btn.textContent = DEPLOY_BUTTON;
   }
 }

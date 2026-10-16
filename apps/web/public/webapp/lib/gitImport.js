@@ -26,6 +26,22 @@ export const SHARE_LABEL = "Anonymously share your adaptation";
 export const SHARE_NOTE = "Others can then install this repo without AI. Nothing about you or your server is included.";
 export const CHECK_AGAIN = "Check again";
 
+export const DEPLOY_BUTTON = "Install it";
+
+/**
+ * A git or IDE build the box brought back failed, e.g. one a restart cut off
+ * while the AI worked on it or while it went live (the box keeps its files and
+ * says so in `adapt.reason`). Null for anything else. `canAdapt`: the AI may
+ * run on it again (a git build that isn't sealed); deploying is always offered.
+ */
+export function failedBuild(state) {
+  const a = state?.adapt;
+  if (!a || a.status !== "failed" || typeof a.reason !== "string" || !a.reason) return null;
+  const mode = state.mode === "mcp" ? "mcp" : state.mode === "git" ? "git" : null;
+  if (!mode) return null;
+  return { mode, reason: a.reason, canAdapt: mode === "git" && state.sealed !== true && a.notConfigured !== true };
+}
+
 const POLL_INTERVAL_MS = 2000;
 const POLL_LIMIT_MS = 45 * 60 * 1000;
 const MAX_MISSES = 5;

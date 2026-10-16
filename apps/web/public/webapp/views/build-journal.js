@@ -36,6 +36,8 @@ import {
   sortSessionsNewestFirst,
 } from "../lib/vibeSessions.js";
 import { openVibeCodeSession } from "./vibe-code.js";
+import { DEPLOY_BUTTON, failedBuild } from "../lib/gitImport.js";
+import { resumeBuildGit } from "./build-git.js";
 
 registerView("view-build-journal");
 
@@ -194,12 +196,31 @@ async function confirmDiscard(session) {
 }
 
 async function renderDetail(buildId, server = "") {
+  const c = clientOf(server);
+  const path = `/api/build/sessions/${encodeURIComponent(buildId)}`;
+  // A build the box brought back failed (a restart cut it off) says why and
+  // offers the AI again or deploying; an ended build has no state any more.
+  const held = await clientOf(server).fetch(path).catch(() => null);
+  const failed = failedBuild(held?.state);
+  if (failed?.mode === "git") {
+    return resumeBuildGit({
+      buildId,
+      server: c.fqdn,
+      state: held.state,
+      fileCount: Array.isArray(held.files) ? held.files.length : 0,
+      reason: failed.reason,
+    });
+  }
   try {
-    const r = await clientOf(server).fetch(`/api/build/sessions/${encodeURIComponent(buildId)}/journal`);
+    const r = await clientOf(server).fetch(`${path}/journal`);
     const entries = r.entries || [];
     const detail = $("build-journal-detail");
     detail.classList.remove("hidden");
     detail.innerHTML = `
+      ${failed ? `<div class="card" data-build-failed>
+        <p class="err-text">${escapeHtml(failed.reason)}</p>
+        <button id="build-journal-deploy" class="full-width mt-2">${escapeHtml(DEPLOY_BUTTON)}</button>
+      </div>` : ""}
       <div class="card">
         <h3>Build ${escapeHtml(buildId)}</h3>
         <ol class="build-journal-timeline">
@@ -216,7 +237,22 @@ async function renderDetail(buildId, server = "") {
             .join("")}
         </ol>
       </div>`;
+    $("build-journal-deploy")?.addEventListener("click", () => void deployHeld(buildId, c));
   } catch (e) {
     toast(e instanceof ScreensError ? e.message : String(e), "err");
+  }
+}
+
+// Put an IDE build the box brought back failed live from the files it holds.
+async function deployHeld(buildId, c) {
+  const btn = $("build-journal-deploy");
+  if (btn) btn.disabled = true;
+  try {
+    const r = await c.fetch(`/api/build/sessions/${encodeURIComponent(buildId)}/deploy`, { method: "POST" });
+    toast(`Deployed → ${r.url}`, "ok");
+    await renderList();
+  } catch (e) {
+    toast(e instanceof ScreensError ? e.message : String(e), "err");
+    if (btn) btn.disabled = false;
   }
 }
