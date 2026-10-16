@@ -537,11 +537,20 @@ fun CreateServerScreen(
                                 delivery.bundle,
                             )
                             val sealed = delivery.session.seal(plainJson.toByteArray())
-                            qrRelay.deliver(sealed.ciphertextB64u, sealed.nonceB64u)
-                            registerControlPlane(
-                                flagshipServer = flagshipServer,
-                                bundle = delivery.bundle,
-                                authCodeUserSig = delivery.bundle.blob.authCodeUserSignature,
+                            // `.com` must accept the server before the recipe
+                            // leaves the phone: a refused AuthCode (a non-admin
+                            // device, a rotated root) would otherwise leave the
+                            // browser or Studio holding a recipe that can never
+                            // register.
+                            registerThenDeliver(
+                                register = {
+                                    registerControlPlane(
+                                        flagshipServer = flagshipServer,
+                                        bundle = delivery.bundle,
+                                        authCodeUserSig = delivery.bundle.blob.authCodeUserSignature,
+                                    )
+                                },
+                                deliver = { qrRelay.deliver(sealed.ciphertextB64u, sealed.nonceB64u) },
                             )
                             // Remember the boot-unlock choice so the approval
                             // screen (deposit-or-not) + server detail (kill
@@ -567,7 +576,7 @@ fun CreateServerScreen(
                                 description,
                             )
                         } catch (t: Throwable) {
-                            error = NetworkErrorHumanizer.humanize(t)
+                            error = createError(t)
                         } finally {
                             qrRelay.close()
                             working = false
@@ -1426,6 +1435,13 @@ internal fun debugGrantEnvelope(
     return DebugAccess.envelopeJson(grant, sig)
 }
 
+/** The QR delivery's order: `.com` accepts the server, then the recipe goes out.
+ *  A refusal throws before [deliver] runs. */
+internal suspend fun registerThenDeliver(register: suspend () -> Unit, deliver: suspend () -> Unit) {
+    register()
+    deliver()
+}
+
 /**
  * Pre-publish the auth-code + RCK on .com so the freshly-booted box can
  * register itself on first phone-home. The auth-code is IRK-signed and, since
@@ -1472,6 +1488,25 @@ internal suspend fun registerControlPlane(
         null
     }
 
+    flagshipServer.issueAuthCode(
+        AuthCodeIssueRequest(
+            code = AuthCodeWire(
+                version = bundle.blob.authCode.version,
+                serial = bundle.blob.authCode.serial,
+                username = bundle.blob.authCode.username,
+                serverName = bundle.blob.authCode.serverName,
+                serverDomain = bundle.blob.authCode.serverDomain,
+                delegatedPubKey = bundle.blob.authCode.delegatedPubKey,
+                userPubKey = bundle.blob.authCode.userPubKey,
+                issuedAt = bundle.blob.authCode.issuedAt,
+                expiresAt = bundle.blob.authCode.expiresAt,
+                adminRootPubKey = bundle.blob.authCode.adminRootPubKey,
+            ),
+            signature = authCodeUserSig,
+            adminSignature = adminSignature,
+        ),
+    )
+
     val rckSig = HexUtil.encode(rckSigner.sign(
         RckRegister.canonicalBytes(
             username = bundle.blob.username,
@@ -1489,25 +1524,6 @@ internal suspend fun registerControlPlane(
                 issuedAt = now,
             ),
             signature = rckSig,
-        ),
-    )
-
-    flagshipServer.issueAuthCode(
-        AuthCodeIssueRequest(
-            code = AuthCodeWire(
-                version = bundle.blob.authCode.version,
-                serial = bundle.blob.authCode.serial,
-                username = bundle.blob.authCode.username,
-                serverName = bundle.blob.authCode.serverName,
-                serverDomain = bundle.blob.authCode.serverDomain,
-                delegatedPubKey = bundle.blob.authCode.delegatedPubKey,
-                userPubKey = bundle.blob.authCode.userPubKey,
-                issuedAt = bundle.blob.authCode.issuedAt,
-                expiresAt = bundle.blob.authCode.expiresAt,
-                adminRootPubKey = bundle.blob.authCode.adminRootPubKey,
-            ),
-            signature = authCodeUserSig,
-            adminSignature = adminSignature,
         ),
     )
 }

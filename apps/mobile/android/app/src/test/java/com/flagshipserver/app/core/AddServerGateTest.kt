@@ -11,6 +11,9 @@ import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.api.MockFlagshipServerClient
 import com.flagshipserver.app.ui.screens.mintRecipeBundle
 import com.flagshipserver.app.ui.screens.registerControlPlane
+import com.flagshipserver.app.ui.screens.registerThenDeliver
+import com.flagshipserver.app.api.FlagshipServerClient
+import com.flagshipserver.app.api.AuthCodeIssueRequest
 import com.google.crypto.tink.subtle.Ed25519Verify
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -145,4 +148,46 @@ class AddServerGateTest {
         assertFalse(AddServerGate.isServerRefusal(HttpException(403, """{"error":"invalid signature"}""")))
         assertFalse(AddServerGate.isServerRefusal(HttpException(400, """{"code":"add-server-admin-only"}""")))
     }
+
+    /** A refused AuthCode stops everything after it: no RCK is registered and
+     *  the QR recipe is never handed to the browser or Studio (gap P0-7). */
+    @Test
+    fun aRefusedAuthCodeRegistersNoRck_andDeliversNoRecipe() = runTest {
+        Keystore.loadOrCreateUmkSeed()
+        val pub = Keystore.generateAdminRoot()
+        val mock = MockFlagshipServerClient(simulatedLatencyMs = 0)
+        val refusal = HttpException(403, """{"error":"Only an admin device of this account can add servers.","code":"add-server-admin-only"}""")
+        val server = object : FlagshipServerClient by mock {
+            override suspend fun issueAuthCode(req: AuthCodeIssueRequest) { throw refusal }
+        }
+        val hex32 = "ab".repeat(32)
+        val domain = "home.harry.flagship.services"
+        val bundle = InstallBlobBundle(
+            blob = WireBlob(
+                serverDomain = domain, username = "harry", serverName = "home",
+                phoneDelegatedPubKey = hex32,
+                authCode = WireAuthCode(
+                    serial = "S2", username = "harry", serverName = "home", serverDomain = domain,
+                    delegatedPubKey = hex32, userPubKey = hex32, issuedAt = 0L, expiresAt = 1L,
+                    adminRootPubKey = pub,
+                ),
+                authCodeUserSignature = "00".repeat(64),
+                rckPubKey = hex32,
+            ),
+            blobSignature = "00".repeat(64),
+        )
+        var delivered = false
+        try {
+            registerThenDeliver(
+                register = { registerControlPlane(server, bundle, bundle.blob.authCodeUserSignature) },
+                deliver = { delivered = true },
+            )
+            fail("the refusal must surface")
+        } catch (e: HttpException) {
+            assertEquals(AddServerGate.ADMIN_ONLY, NetworkErrorHumanizer.humanize(e))
+        }
+        assertFalse("the recipe must not leave the phone", delivered)
+        assertTrue("no RCK after a refused AuthCode", mock.registeredRcks.isEmpty())
+    }
+
 }
