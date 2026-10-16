@@ -280,6 +280,18 @@ describe("ServiceAccessStore", () => {
     const raw = JSON.parse(readFileSync(path, "utf8"));
     expect(raw[SERVICE].mode).toBe("restricted");
   });
+
+  it("overlapping changes all land and leave a whole file (a torn one fails open on reload)", async () => {
+    const path = join(mkdtempSync(join(tmpdir(), "sa-")), "service-access.json");
+    const a = new ServiceAccessStore(path);
+    await a.load();
+    const refs = Array.from({ length: 20 }, (_, i) => `app-${i}-${"x".repeat(i * 50)}`);
+    await Promise.all(refs.map((r) => a.setMode(r, "restricted")));
+    const b = new ServiceAccessStore(path);
+    await b.load();
+    expect(b.failedOpen()).toBe(false);
+    for (const r of refs) expect(b.mode(r)).toBe("restricted");
+  });
 });
 
 describe("set-mode endpoint (owner-IRK)", () => {
@@ -836,6 +848,16 @@ describe("ServiceSessionStore", () => {
     await b.load();
     expect(b.lookup(live, NOW + 1_000)).toEqual({ serviceRef: SERVICE, aid: hex(friendAid.publicKey) });
     expect(b.lookup(expired, NOW + 1_000)).toBeNull();
+  });
+
+  it("overlapping issues all persist", async () => {
+    const path = join(mkdtempSync(join(tmpdir(), "ss-")), "service-sessions.json");
+    const a = new ServiceSessionStore(path);
+    await a.load();
+    const tokens = await Promise.all(Array.from({ length: 20 }, () => a.issue(SERVICE, hex(friendAid.publicKey), NOW, 60_000)));
+    const b = new ServiceSessionStore(path);
+    await b.load();
+    for (const t of tokens) expect(b.lookup(t, NOW + 1_000)).toEqual({ serviceRef: SERVICE, aid: hex(friendAid.publicKey) });
   });
 });
 

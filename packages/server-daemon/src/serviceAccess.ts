@@ -28,8 +28,7 @@
  */
 
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { readFile, rename } from "node:fs/promises";
 import {
   openInviteBundle,
   serviceInviteSecretHash,
@@ -65,6 +64,7 @@ import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
 import type { Principal, PrincipalResolver } from "./accessPrincipals.js";
 import type { AccessEntry } from "./accessJournal.js";
+import { serialFileWriter } from "./serialFileWriter.js";
 
 const H = { "content-type": "application/json" };
 
@@ -254,6 +254,7 @@ export class ServiceAccessStore {
   private readonly ownerAidHex: string | null;
   private principals: PrincipalResolver | null;
   private readonly catchingUp = new Set<string>();
+  private readonly persist: () => Promise<void>;
 
   constructor(
     statePath = "/var/flagship/data/flagship-access/service-access.json",
@@ -274,6 +275,9 @@ export class ServiceAccessStore {
     } = {},
   ) {
     this.statePath = statePath;
+    // Changes land concurrently (requests, peers' hand-overs, the revocation
+    // poller); a torn file would fail open on the next boot.
+    this.persist = serialFileWriter(statePath, () => this.snapshot());
     this.legacyPath = opts.legacyPath ?? null;
     this.onFailOpen = opts.onFailOpen;
     this.ownerAidHex = opts.ownerAidHex?.toLowerCase() ?? null;
@@ -817,15 +821,12 @@ export class ServiceAccessStore {
     return "ok";
   }
 
-  private async persist(): Promise<void> {
+  private snapshot(): string {
     const out: PersistShape = {};
     for (const [ref, e] of this.byService) {
       out[ref] = { mode: e.mode, allow: e.allow, groups: e.groups, roles: e.roles };
     }
-    await mkdir(dirname(this.statePath), { recursive: true });
-    const tmp = `${this.statePath}.tmp`;
-    await writeFile(tmp, JSON.stringify(out), { mode: 0o600 });
-    await rename(tmp, this.statePath);
+    return JSON.stringify(out);
   }
 }
 
@@ -892,9 +893,11 @@ export class ServiceSessionStore {
   /** secretId → cookie token (the phone addresses a session by its secretId). */
   private bySecretId = new Map<string, string>();
   private readonly statePath: string;
+  private readonly persist: () => Promise<void>;
 
   constructor(statePath = "/var/flagship/service-sessions.json") {
     this.statePath = statePath;
+    this.persist = serialFileWriter(statePath, () => this.snapshot());
   }
 
   async load(): Promise<void> {
@@ -1013,13 +1016,10 @@ export class ServiceSessionStore {
     }
   }
 
-  private async persist(): Promise<void> {
+  private snapshot(): string {
     const out: SessionPersistShape = {};
     for (const [tok, e] of this.byToken) out[tok] = e;
-    await mkdir(dirname(this.statePath), { recursive: true });
-    const tmp = `${this.statePath}.tmp`;
-    await writeFile(tmp, JSON.stringify(out), { mode: 0o600 });
-    await rename(tmp, this.statePath);
+    return JSON.stringify(out);
   }
 }
 

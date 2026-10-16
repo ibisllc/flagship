@@ -283,6 +283,32 @@ describe("one access list per app", () => {
     expect(bad?.status).toBe(403);
   });
 
+  it("hand-overs arriving at once on the leader all apply and reach disk", async () => {
+    // Two servers outside this fleet hand the leader one change each, at the same moment.
+    const f = await fleet(["home", "home2", "home3"]);
+    const modeOrder = { serviceRef: SERVICE, mode: "restricted" as const, issuedAt: NOW };
+    const rankOrder = { serviceRef: SERVICE, target: `device:${hex(laptop.publicKey)}`, rank: "refused", issuedAt: NOW };
+    const pushFrom = (from: string, entry: unknown) => {
+      const env = { from: `${from}.alice.flagship.services`, to: "home.alice.flagship.services", serviceRef: SERVICE, issuedAt: NOW, body: JSON.stringify({ entries: [entry] }) };
+      const mac = accessSyncMac(syncKey, { op: "push", ...env });
+      return f.box("home").sync.handle({ method: "POST", path: "/api/access-sync/push", headers: {}, body: Buffer.from(JSON.stringify({ ...env, mac })) });
+    };
+    const [a, b] = await Promise.all([
+      pushFrom("home4", { kind: "mode", order: modeOrder, signature: hex(signServiceAccessModeV2(modeOrder, adminRoot)) }),
+      pushFrom("home5", { kind: "rank", order: rankOrder, signature: hex(signAppRank(rankOrder, adminRoot)) }),
+    ]);
+    expect(JSON.parse(String(a!.body)).taken + JSON.parse(String(b!.body)).taken).toBe(2);
+    await f.settle();
+    const reloaded = new ServiceAccessStore(join(f.box("home").dir, "data/flagship-access/service-access.json"));
+    await reloaded.load();
+    expect(reloaded.failedOpen()).toBe(false);
+    expect(reloaded.mode(SERVICE)).toBe("restricted");
+    for (const n of ["home", "home2", "home3"]) {
+      expect(f.box(n).store.mode(SERVICE)).toBe("restricted");
+      expect(f.box(n).store.isAllowed(SERVICE, hex(laptop.publicKey))).toBe(false);
+    }
+  });
+
   it("a personal invite binds one person on every box, however many joins are handed over", async () => {
     const f = await fleet(["home", "home2"]);
     const { carrier, secretHash } = await f.redeem(f.box("home"), adminRoot);
