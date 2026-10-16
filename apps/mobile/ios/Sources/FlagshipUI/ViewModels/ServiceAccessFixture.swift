@@ -69,6 +69,23 @@ public enum ServiceAccessFixture {
     public static let unnamedDeviceId = String(repeating: "2b", count: 16)
     public static let mumShareId = "0f1e2d3c4b5a69788796a5b4c3d2e1f0"
 
+    /// The Pro switch for a separate access list on each server: `free` (off,
+    /// locked), `pro` (off, can turn on) or `separate` (on, with the Home and
+    /// Office servers in the picker, and the plan screen's warning).
+    public static func seedListScope(_ kind: String, screens: MockScreensClient, serviceIds: [String], username: String) {
+        let home = "home.\(username).flagship.services"
+        let office = "office.\(username).flagship.services"
+        let pro = kind != "free"
+        let separate = kind == "separate"
+        for ref in serviceIds {
+            screens.mockListScope[ref] = AppListScopeState(
+                serviceRef: ref, scope: separate ? "server" : "account", plan: pro ? "pro" : "free",
+                selfFqdn: home, leader: home, servers: [home, office])
+        }
+        screens.mockAccessListsSummary = AccessListsSummary(
+            plan: pro ? "pro" : "free", separateApps: separate ? 1 : 0, leaders: separate ? [home] : [])
+    }
+
     static func key(_ b: UInt8) -> Curve25519.Signing.PrivateKey {
         try! Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: b, count: 32))
     }
@@ -76,7 +93,9 @@ public enum ServiceAccessFixture {
     static func pub(_ k: Curve25519.Signing.PrivateKey) -> String { HexUtil.encode(k.publicKey.rawRepresentation) }
 
     public static func seed(access: MockServiceAccessClient, screens: MockScreensClient,
-                            serviceIds: [String], nonAdmin: Bool = false, memberRank: Bool = false) -> ServiceAccessKeys {
+                            serviceIds: [String], nonAdmin: Bool = false, memberRank: Bool = false,
+                            listScope: String? = nil, username: String = "bright-maple") -> ServiceAccessKeys {
+        if let listScope { seedListScope(listScope, screens: screens, serviceIds: serviceIds, username: username) }
         let aid = key(5)
         let admin = key(9)
         let device = key(0xd0)

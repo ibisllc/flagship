@@ -194,6 +194,15 @@ public protocol ScreensClient: Sendable {
     /// `POST …/members/rank`: an admin's signed `flagship/app-rank/v1` order.
     /// 403 = not an admin, 409 = a newer order already applied (sign again).
     func setAppRank(serviceId: String, _ req: AppRankRequest) async throws -> AppRankResponse
+    /// `GET /api/screens/services/<id>/list-scope`: one access list on every
+    /// server, or a separate one on each (a Pro option). An older box answers 404.
+    func appListScope(serviceId: String) async throws -> AppListScopeState
+    /// `POST …/list-scope`: an admin's signed `flagship/app-list-scope/v1`.
+    /// 402 = needs Pro, 403 = not an admin, 409 = stale (sign again).
+    func setAppListScope(serviceId: String, _ req: AppListScopeRequest) async throws -> AppListScopeState
+    /// `GET /api/screens/access-lists/summary`: the account's apps with a
+    /// separate list on each server.
+    func accessListsSummary() async throws -> AccessListsSummary
 
     // Copying an app between the owner's servers (docs/app-placement.md §5).
     /// `POST /api/screens/services/copy` to the TARGET box: the owner's signed
@@ -469,6 +478,15 @@ public extension ScreensClient {
     }
     func setAppRank(serviceId: String, _ req: AppRankRequest) async throws -> AppRankResponse {
         throw ScreensClientError.notImplemented("app members")
+    }
+    func appListScope(serviceId: String) async throws -> AppListScopeState {
+        throw ScreensClientError.notImplemented("separate access lists")
+    }
+    func setAppListScope(serviceId: String, _ req: AppListScopeRequest) async throws -> AppListScopeState {
+        throw ScreensClientError.notImplemented("separate access lists")
+    }
+    func accessListsSummary() async throws -> AccessListsSummary {
+        throw ScreensClientError.notImplemented("separate access lists")
     }
     func accessRequestEvents() -> AsyncStream<Void> {
         AsyncStream { $0.finish() }

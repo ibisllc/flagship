@@ -468,6 +468,54 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         return AppRankResponse(ok: true, target: t, rank: rank)
     }
 
+    // MARK: Separate access list per server (Pro)
+
+    /// Per-service list scope the box would answer (nil: an older box, 404).
+    public var mockListScope: [String: AppListScopeState] = [:]
+    public private(set) var setAppListScopeCalls: [(serviceId: String, req: AppListScopeRequest)] = []
+    /// Status to answer the next list-scope change with (e.g. 403), once.
+    public var mockListScopeStatus: Int?
+    /// The account summary the plan screen reads (nil: an older box, 404).
+    public var mockAccessListsSummary: AccessListsSummary?
+
+    public func appListScope(serviceId: String) async throws -> AppListScopeState {
+        try await tick()
+        guard let s = mockListScope[serviceId] else {
+            throw ScreensClientError.http(status: 404, message: #"{"error":"not found"}"#)
+        }
+        return s
+    }
+
+    /// Mirrors the box: "server" needs Pro (402), "account" always goes through.
+    public func setAppListScope(serviceId: String, _ req: AppListScopeRequest) async throws -> AppListScopeState {
+        try await tick()
+        setAppListScopeCalls.append((serviceId, req))
+        if let status = mockListScopeStatus {
+            mockListScopeStatus = nil
+            throw ScreensClientError.http(status: status, message: #"{"error":"refused"}"#)
+        }
+        guard let cur = mockListScope[serviceId] else {
+            throw ScreensClientError.http(status: 404, message: #"{"error":"not found"}"#)
+        }
+        if req.order.scope == "server", !cur.isPro {
+            throw ScreensClientError.http(
+                status: 402,
+                message: #"{"error":"A separate list on each server comes with Pro.","code":"pro-required"}"#)
+        }
+        let next = AppListScopeState(serviceRef: cur.serviceRef, scope: req.order.scope, pending: false, plan: cur.plan,
+                                     selfFqdn: cur.selfFqdn, leader: cur.leader, servers: cur.servers)
+        mockListScope[serviceId] = next
+        return next
+    }
+
+    public func accessListsSummary() async throws -> AccessListsSummary {
+        try await tick()
+        guard let s = mockAccessListsSummary else {
+            throw ScreensClientError.http(status: 404, message: #"{"error":"not found"}"#)
+        }
+        return s
+    }
+
     /// When set, a signed query is refused unless this key made the signature.
     public var mockDbVerifyKey: Data?
     public private(set) var serviceDbQueryCalls: [(serviceId: String, store: String, req: AppDbQueryRequest)] = []
