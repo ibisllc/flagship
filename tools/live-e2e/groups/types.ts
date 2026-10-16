@@ -1,8 +1,8 @@
 import type { Account, Box } from "../lib/fleet.js";
 import type { Recorder } from "../lib/harness.js";
 
-/** A1/A2/A3 = account A's `home`/`home2`/`home3`; B1 = account B's `home`; R1 = the real account R's `home`. */
-export type Slot = "A1" | "A2" | "A3" | "B1" | "R1";
+/** A1/A2/A3 = account A's `home`/`home2`/`home3`; B1 = account B's `home`; R1/R2 = the real account R's `home`/`home2`. */
+export type Slot = "A1" | "A2" | "A3" | "B1" | "R1" | "R2";
 
 export interface GroupCtx {
   A: Account;

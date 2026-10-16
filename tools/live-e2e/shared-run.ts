@@ -5,7 +5,9 @@
  *
  *   account A: `home` (demo flow) + `home2` (gym provision, same account)
  *   account B: `home` (demo flow) — a second, unrelated account
- *   account R: `home` (a REAL account: admin root pinned, read tokens, admin-only add-server)
+ *   account R: `home` + `home2` (a REAL account: admin root pinned, read tokens, admin-only
+ *              add-server; both boxes share the SWK a phone derives for `home`, so `home`
+ *              can migrate onto `home2`)
  *   A3: account A's `home3` (gym provision), left unpaired: the `archive` group restores onto it
  *
  * Groups declare which boxes they need; only those are provisioned. Groups in
@@ -28,7 +30,7 @@
  */
 import { readFileSync } from "node:fs";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils";
-import { ed } from "@flagship/protocol";
+import { deriveSWK, ed } from "@flagship/protocol";
 import { join } from "node:path";
 import { ADMIN, CONTROL, KEK, Recorder, SERVICES, runDir, writeJson } from "./lib/harness.js";
 import {
@@ -120,7 +122,7 @@ async function main(): Promise<number> {
     return 2;
   }
   const groups: Group[] = wanted.length ? GROUPS.filter((g) => wanted.includes(g.name)) : GROUPS;
-  const needs = new Set<Slot>(flag("--all-boxes") ? ["A1", "A2", "A3", "B1", "R1"] : groups.flatMap((g) => g.needs));
+  const needs = new Set<Slot>(flag("--all-boxes") ? ["A1", "A2", "A3", "B1", "R1", "R2"] : groups.flatMap((g) => g.needs));
   const keep = flag("--keep");
   const reusePath = opt("--reuse");
   const dir = runDir("live-run");
@@ -184,15 +186,16 @@ async function main(): Promise<number> {
           }),
         );
       }
-      if (needs.has("R1")) {
+      if (needs.has("R1") || needs.has("R2")) {
         kicks.push(
-          fleetRec.check("create REAL account R (admin root pinned) + its home box (admin-approved add-server)", async () => {
+          fleetRec.check("create REAL account R (admin root pinned) + its boxes (admin-approved add-server)", async () => {
             const r = await createRealAccount();
             accounts.push(r);
             saveFleet(dir, accounts);
-            const b = await addBox(r, "home");
+            const provisionExtras = { swkHex: bytesToHex(deriveSWK({ seed: r.keys.umk }, `home.${r.username}.${SERVICES}`)), backupIntervalMs: 60_000 };
+            const made = await Promise.all((["R1", "R2"] as const).filter((s) => needs.has(s)).map((s) => addBox(r, s === "R1" ? "home" : "home2", { provisionExtras })));
             saveFleet(dir, accounts);
-            return `${r.username}: ${b.fqdn} (${b.serverId})`;
+            return `${r.username}: ${made.map((b) => `${b.fqdn} (${b.serverId})`).join(" + ")}`;
           }),
         );
       }
@@ -227,6 +230,8 @@ async function main(): Promise<number> {
           return B?.boxes.find((b) => b.serverName === "home");
         case "R1":
           return R?.boxes.find((b) => b.serverName === "home");
+        case "R2":
+          return R?.boxes.find((b) => b.serverName === "home2");
       }
     };
 

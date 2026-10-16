@@ -10,6 +10,7 @@ import { enforcement } from "./enforcement.js";
 import { gating } from "./gating.js";
 import { invites } from "./invites.js";
 import { lifecycle } from "./lifecycle.js";
+import { migrate } from "./migrate.js";
 import { oneList } from "./oneList.js";
 import { realAccount } from "./realAccount.js";
 import { remote } from "./remote.js";
@@ -35,6 +36,7 @@ export const GROUPS: Group[] = [
   apiKeys,
   remote,
   aiChat,
+  migrate,
   appCopy,
   archive,
   activity,

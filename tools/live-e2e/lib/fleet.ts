@@ -223,6 +223,8 @@ export function issueAuthCode(c: AuthCode, irk: Keypair, approver?: Keypair) {
 export interface AddBoxOptions {
   /** Extra fields written verbatim into the box's install-blob.json (e.g. an embedded `pairingOrder`). */
   blobExtras?: Record<string, unknown>;
+  /** Gym-only provisioning fields (`swkHex`, `backupIntervalMs`): a migration's two boxes share an SWK. */
+  provisionExtras?: Record<string, unknown>;
 }
 
 /**
@@ -259,6 +261,7 @@ export async function addBox(acct: Account, serverName: string, opts: AddBoxOpti
       irkPrivHex: bytesToHex(irk.privateKey),
       adminRootPrivHex: bytesToHex(adminRoot.privateKey),
       ownerAidPubHex: bytesToHex(aid.publicKey),
+      ...(opts.provisionExtras ?? {}),
     },
     adminHeaders(),
     120_000,
