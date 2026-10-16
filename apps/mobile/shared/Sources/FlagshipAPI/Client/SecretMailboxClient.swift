@@ -1191,6 +1191,7 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
             serverOrderError = nil
             throw e
         }
+        try MockOrderSigners.shared.require(.sensitive, kind: "server-order", signatureHex: body.signature, payload: body)
         serverOrders.append((username, body))
     }
     public private(set) var updateDeposits: [(serverDomain: String, body: UpdateDepositBody)] = []
@@ -1198,6 +1199,7 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
     public var nextUpdateError: Error?
     public func depositUpdate(serverDomain: String, body: UpdateDepositBody) async throws {
         if let e = nextUpdateError { nextUpdateError = nil; throw e }
+        try MockOrderSigners.shared.require(.sensitive, kind: "server-update", signatureHex: body.signature, payload: body)
         updateDeposits.append((serverDomain, body))
     }
     /// What `fetchReleaseCatalog` returns; nil ⇒ an up-to-date catalog with no
@@ -1218,6 +1220,7 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
     public private(set) var decommissionDeposits: [(serverDomain: String, body: DecommissionDepositBody)] = []
     public func depositDecommission(serverDomain: String, body: DecommissionDepositBody) async throws {
         if let e = nextDecommissionError { nextDecommissionError = nil; throw e }
+        try MockOrderSigners.shared.require(.sensitive, kind: "server-decommission", signatureHex: body.signature, payload: body)
         decommissionDeposits.append((serverDomain, body))
     }
 }

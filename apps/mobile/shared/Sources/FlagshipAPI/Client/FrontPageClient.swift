@@ -150,6 +150,7 @@ public final class MockFrontPageClient: FrontPageClient, @unchecked Sendable {
 
     public func setFrontPage(serverDomain: String, request: [String: Any], signatureHex: String) async throws {
         try maybeThrow()
+        try MockOrderSigners.shared.require(.sensitive, kind: "front-page", signatureHex: signatureHex, payload: request)
         var flat: [String: String] = [:]
         for (k, v) in request { flat[k] = String(describing: v) }
         let label = flat["label"] ?? ""

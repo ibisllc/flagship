@@ -114,6 +114,7 @@ public final class MockServiceUninstallClient: ServiceUninstallClient, @unchecke
         signatureHex: String
     ) async throws {
         if let e = nextError { nextError = nil; throw e }
+        try MockOrderSigners.shared.require(.sensitive, kind: "uninstall", signatureHex: signatureHex, payload: request)
         var flat: [String: String] = [:]
         for (k, v) in request { flat[k] = String(describing: v) }
         lock.withLock {

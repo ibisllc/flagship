@@ -576,7 +576,8 @@ public struct Keystore {
     /// The signing gate (§8.3) keys off this: present ⇒ this device is an admin,
     /// sensitive orders sign under the admin root; absent ⇒ legacy owner-IRK.
     public static var hasAdminRoot: Bool {
-        keychainRead(account: account(KCKey.adminRootWrapped)) != nil
+        if GymSeams.adminRootSeed != nil { return true }
+        return keychainRead(account: account(KCKey.adminRootWrapped)) != nil
             && keychainRead(account: account(KCKey.adminRootPub)) != nil
     }
 
@@ -584,6 +585,7 @@ public struct Keystore {
     /// admin root is sealed. Biometric-free (the pub is stored device-local but
     /// NOT secret) so account-claim / recipe-mint can pin it without a prompt.
     public static func adminRootPubHex() -> String? {
+        if let gym = gymAdminRoot() { return HexUtil.encode(gym.publicKey.rawRepresentation) }
         guard let raw = keychainRead(account: account(KCKey.adminRootPub)) else { return nil }
         return HexUtil.encode(raw)
     }
@@ -720,13 +722,29 @@ public struct Keystore {
     public static func adminRootKey(
         reason: String = "Authorize an admin action"
     ) async throws -> Curve25519.Signing.PrivateKey {
-        try unwrapAdminRoot(wrapper: try await WrappingKeypair.createOrLoad(reason: reason))
+        if let gym = gymAdminRoot() { return gym }
+        return try unwrapAdminRoot(wrapper: try await WrappingKeypair.createOrLoad(reason: reason))
+    }
+
+    /// Gym-only (`-smoke-admin-root`): the fixed admin root the mock `.com`
+    /// and boxes pin, so admin-signed orders reach them as on a real account.
+    public static func gymAdminRoot() -> Curve25519.Signing.PrivateKey? {
+        GymSeams.adminRootSeed.flatMap { try? Curve25519.Signing.PrivateKey(rawRepresentation: $0) }
+    }
+
+    /// Gym-only: the IRK the smoke session's fixed account root derives, for
+    /// the mocks to pin. Nil outside `-smoke-mode`.
+    public static func gymIRK() -> Curve25519.Signing.PrivateKey? {
+        guard let seed = GymSeams.accountRootSeed else { return nil }
+        let irkSeed = derive(umk: SymmetricKey(data: seed), info: "flagship/irk/v\(currentIrkVersion())")
+        return try? Curve25519.Signing.PrivateKey(rawRepresentation: irkSeed.withUnsafeBytes { Data($0) })
     }
 
     /// The admin master root, unwrapped with a context the owner has just
     /// authenticated (no second prompt).
     public static func adminRootKey(authenticatedBy context: LAContext) throws -> Curve25519.Signing.PrivateKey {
-        try unwrapAdminRoot(wrapper: try WrappingKeypair.load(context: context))
+        if let gym = gymAdminRoot() { return gym }
+        return try unwrapAdminRoot(wrapper: try WrappingKeypair.load(context: context))
     }
 
     private static func unwrapAdminRoot(wrapper: WrappingKeypair) throws -> Curve25519.Signing.PrivateKey {

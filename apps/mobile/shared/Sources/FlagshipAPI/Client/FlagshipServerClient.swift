@@ -2404,11 +2404,13 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
 
     public func releaseServerName(_ req: ReleaseServerNameRequest) async throws {
         try await tick()
+        try MockOrderSigners.shared.require(.sensitive, kind: "release-server-name", signatureHex: req.signature, payload: req)
         releasedServerNames.append(req)
     }
 
     public func revokeServer(_ req: ServerRevocationRequest) async throws {
         try await tick()
+        try MockOrderSigners.shared.require(.irk, kind: "server-revoke", signatureHex: req.signature, payload: req)
         revokedServers.append(req)
         revokedDomains.insert(req.request.revokedServerId.lowercased())
     }
@@ -2416,6 +2418,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public func unrevokeServer(_ req: ServerUnrevocationRequest) async throws -> ServerUnrevocationResponse {
         try await tick()
         if let unrevokeError { throw unrevokeError }
+        try MockOrderSigners.shared.require(.sensitive, kind: "server-unrevoke", signatureHex: req.signature, payload: req)
         let domain = req.request.serverDomain.lowercased()
         if nonRestorableRevokes.contains(domain) {
             throw ScreensClientError.http(status: 409, message: "this server was deleted, transferred or retired and can't be restored")

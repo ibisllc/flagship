@@ -199,6 +199,7 @@ public final class MockLockPowerClient: LockPowerClient, @unchecked Sendable {
     }
 
     public func sendPowerOff(serverDomain: String, request: [String: Any], signatureHex: String) async throws {
+        try MockOrderSigners.shared.require(.sensitive, kind: "power-off", signatureHex: signatureHex, payload: request)
         try record(serverDomain, "/api/power", request, signatureHex)
     }
 
@@ -207,6 +208,7 @@ public final class MockLockPowerClient: LockPowerClient, @unchecked Sendable {
     }
 
     public func setDeadManPolicy(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> DeadManPolicyResult {
+        try MockOrderSigners.shared.require(.sensitive, kind: "deadman-policy", signatureHex: signatureHex, payload: request)
         try record(serverDomain, "/api/deadman/policy", request, signatureHex)
         if let o = policyResultOverride { return o }
         let enabled = (request["enabled"] as? Bool) ?? false
@@ -214,6 +216,7 @@ public final class MockLockPowerClient: LockPowerClient, @unchecked Sendable {
     }
 
     public func affirmDeadMan(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> DeadManAffirmResult {
+        try MockOrderSigners.shared.require(.sensitive, kind: "deadman-affirm", signatureHex: signatureHex, payload: request)
         try record(serverDomain, "/api/deadman/affirm", request, signatureHex)
         return DeadManAffirmResult(ok: true, leaseExpiry: affirmLeaseExpiry)
     }

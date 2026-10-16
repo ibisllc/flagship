@@ -555,12 +555,24 @@ public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Send
 
     public init() {}
     private func maybeThrow() throws { if let e = nextError { nextError = nil; throw e } }
+    static func int64(_ v: Any?) -> Int64 {
+        switch v {
+        case let i as Int64: return i
+        case let i as Int: return Int64(i)
+        case let n as NSNumber: return n.int64Value
+        default: return 0
+        }
+    }
     private func flatten(_ r: [String: Any]) -> [String: String] { var f: [String: String] = [:]; for (k, v) in r { f[k] = String(describing: v) }; return f }
 
     public func getAccessState(serverDomain: String, serviceRef: String) async throws -> ServiceAccessState { try maybeThrow(); return state }
 
     public func setAccessMode(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> String {
         try maybeThrow()
+        try MockOrderSigners.shared.require(.sensitive, kind: "access-mode", signatureHex: signatureHex,
+                       over: try? ServiceAccessModeOrder(serviceRef: request["serviceRef"] as? String ?? "",
+                                                         mode: request["mode"] as? String ?? "",
+                                                         issuedAt: Self.int64(request["issuedAt"])).canonicalBytes())
         lock.withLock { _setMode.append(SetModeCall(serverDomain: serverDomain, request: flatten(request), signatureHex: signatureHex)) }
         let mode = (request["mode"] as? String) ?? "open"
         state = ServiceAccessState(mode: mode, allowCount: state.allowCount)
@@ -568,6 +580,10 @@ public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Send
     }
 
     public func removeServiceAllow(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> RemoveAllowResult {
+        try MockOrderSigners.shared.require(.sensitive, kind: "allow-remove", signatureHex: signatureHex,
+                       over: try? ServiceAllowRemoveOrder(serviceRef: request["serviceRef"] as? String ?? "",
+                                                          aid: request["aid"] as? String ?? "",
+                                                          issuedAt: Self.int64(request["issuedAt"])).canonicalBytes())
         lock.withLock { _removeAllow.append(RemoveAllowCall(serverDomain: serverDomain, request: flatten(request), signatureHex: signatureHex)) }
         if let e = removeAllowError { removeAllowError = nil; throw e }
         try maybeThrow()

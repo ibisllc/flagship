@@ -39,4 +39,16 @@ public enum GymSeams {
     /// the mock clients, which accept any signature. Set ONLY by the
     /// `-smoke-mode` seam; the onboarding walk creates real keys instead.
     public nonisolated(unsafe) static var accountRootSeed: Data?
+
+    /// A fixed admin master root for a smoke session launched with
+    /// `-smoke-admin-root`: this device then holds the admin root the mock
+    /// `.com` and boxes pin, and signs sensitive orders with it as a real
+    /// admin device does. Nil (the default) is a device without it, whose
+    /// sensitive orders the mocks refuse, as the real ones do.
+    public nonisolated(unsafe) static var adminRootSeed: Data?
+
+    /// The admin root every smoke account pins (the mocks verify under it),
+    /// whether or not this device holds it. Same key the Access control
+    /// fixture signs admin orders with.
+    public static let gymAdminRootSeed = Data(repeating: 9, count: 32)
 }

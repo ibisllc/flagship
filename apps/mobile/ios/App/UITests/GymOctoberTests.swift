@@ -448,7 +448,7 @@ final class GymOctoberTests: XCTestCase {
     func test_unrevokeRestoresARevokedServer() throws {
         // The default demo user: un-revoke is the one order here the guardrail
         // counts as destructive, so it runs against an allowed demo identity.
-        let app = launch(tab: "home", ["-smoke-revoked"], username: "smoketest")
+        let app = launch(tab: "home", ["-smoke-revoked", "-smoke-admin-root"], username: "smoketest")
         openServerPage(app, named: "Garage")
         XCTAssertTrue(app.descendants(matching: .any)["server-detail-revoked"].waitForExistence(timeout: 15),
                       "A revoked server's page says so.")
@@ -509,7 +509,7 @@ final class GymOctoberTests: XCTestCase {
         openPlants(app)
         let accessNote = app.staticTexts["service-detail-access-read-only"]
         XCTAssertTrue(reveal(app, accessNote), "The access list says why it can't be changed here.")
-        XCTAssertEqual(accessNote.label, "Only an admin device can change what this app may reach.")
+        XCTAssertEqual(accessNote.label, "Only an admin device can change this app's internet access.")
         XCTAssertFalse(app.buttons["service-detail-access-allow"].exists, "No Allow on a non-admin device.")
         let keysNote = app.staticTexts["service-detail-api-keys-read-only"]
         XCTAssertTrue(reveal(app, keysNote))

@@ -176,6 +176,8 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                   pub.isValidSignature(sig, for: req.grant.canonicalBytes()) else {
                 throw ScreensClientError.http(status: 403, message: #"{"error":"invalid signature"}"#)
             }
+        } else {
+            try MockOrderSigners.shared.require(.sensitive, kind: "app-copy", signatureHex: req.signature, over: req.grant.canonicalBytes())
         }
         let me = await boxDomain()
         guard req.grant.targetServer.lowercased() == me?.lowercased() else {
@@ -217,6 +219,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         try await tick()
         serviceEgressSetCalls.append((serviceId, req))
         if let e = serviceEgressSetError { throw e }
+        try MockOrderSigners.shared.require(.sensitive, kind: "app-egress", signatureHex: req.signature, over: req.grant.canonicalBytes())
         guard let current = mockEgress[serviceId] else {
             throw ScreensClientError.http(status: 404, message: #"{"error":"no such service"}"#)
         }
@@ -318,6 +321,8 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                   pub.isValidSignature(sig, for: req.grant.canonicalBytes()) else {
                 throw refuse(403, "bad signature")
             }
+        } else {
+            try MockOrderSigners.shared.require(.sensitive, kind: "app-access", signatureHex: req.signature, over: req.grant.canonicalBytes())
         }
         if let last = mockAccessIssuedAt[serviceId], req.grant.issuedAt <= last {
             throw refuse(409, "not newer than the applied list")
@@ -428,6 +433,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public func setAppRank(serviceId: String, _ req: AppRankRequest) async throws -> AppRankResponse {
         try await tick()
         setAppRankCalls.append((serviceId, req))
+        try MockOrderSigners.shared.require(.sensitive, kind: "app-rank", signatureHex: req.signature, over: try? req.order.canonicalBytes())
         if let status = mockMemberRoleStatus {
             mockMemberRoleStatus = nil
             throw ScreensClientError.http(status: status, message: #"{"error":"refused"}"#)
@@ -565,6 +571,8 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                       pub.isValidSignature(sig, for: grant.canonicalBytes()) else {
                     throw dbRefuse(403, #"{"error":"invalid signature"}"#)
                 }
+            } else {
+                try MockOrderSigners.shared.require(.sensitive, kind: "app-db-write", signatureHex: sigHex, over: grant.canonicalBytes())
             }
             let order = "\(grant.serviceId)|\(grant.store)|\(grant.sqlSha256)|\(grant.issuedAt)"
             if mockDbForceReplays > 0 || mockDbUsedOrders.contains(order) {
@@ -642,6 +650,8 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                   pub.isValidSignature(sig, for: g.canonicalBytes()) else {
                 throw refuse(403, "bad signature")
             }
+        } else {
+            try MockOrderSigners.shared.require(.sensitive, kind: "app-api-key", signatureHex: req.signature, over: g.canonicalBytes())
         }
         guard !keys.contains(where: { $0.keyId == g.keyId }) else { throw refuse(409, "keyId exists") }
         keys.insert(AppApiKey(keyId: g.keyId, label: req.label, scope: g.scope, createdAt: now,
@@ -682,6 +692,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public func deliverServerOrder(_ order: SignedServerOrderWire) async throws -> ServerOrderAck {
         try await tick()
         if let deliverServerOrderError { throw deliverServerOrderError }
+        try MockOrderSigners.shared.require(.sensitive, kind: "server-order", signatureHex: order.signature, payload: order)
         deliveredServerOrders.append(order)
         return ServerOrderAck(heldIssuedAt: deliveredServerOrders.map(\.order.issuedAt).max() ?? 0)
     }
@@ -1531,8 +1542,12 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         return BuildAdaptReply(ok: true, started: true)
     }
 
+    /// What `buildState` answers for one build, before anything else.
+    public var buildStateFixtures: [String: BuildStateResponse] = [:]
+
     public func buildState(buildId: String) async throws -> BuildStateResponse {
         try await tick()
+        if let f = buildStateFixtures[buildId] { return f }
         let adapt = buildAdaptStartCalls.contains { $0.buildId == buildId }
             ? (buildAdaptStatusScript.isEmpty
                 ? (buildAdaptStatusFixture ?? BuildAdaptStatus(status: "done", fileCount: 16, deployed: false))
@@ -1605,6 +1620,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         try await tick()
         buildDeployCalls.append(buildId)
         if let e = buildDeployError { throw e }
+        GymProbe.note("deployed build \(buildId)")
         return BuildDeployResponse(
             ok: true,
             serviceId: "bright-maple-imported-app",
