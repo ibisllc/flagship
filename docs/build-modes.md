@@ -461,10 +461,13 @@ deletes. The chosen `{provider, apiKey, baseUrl?}` rides the build request as
   to the existing vibe screen; marketplace tile degrades to "coming soon".
 - **request_env_var → phone** — DONE (server + webapp). The orchestrator
   keeps a value-free per-build pending list, fires a value-free
-  `notifyOwner({buildId, name})` hook (log-only by default, swap in the push
-  relay in production — mirrors the vibe-code W10 hook) and journals an
+  `notifyOwner({buildId, name})` hook (a content-free push through `.com`'s
+  relay, category `generic`, at most one a minute, the same wake the
+  vibe-code W10 hook sends: `ownerWake.ts`) and journals an
   `env-requested` entry; `GET /api/build/sessions/:id/env-requests` returns
   `{requests:[{name, why?, secret?, requestedAt, requestedBy, currentlySet}]}`
   (deduped by name, never a value); the webapp mcp view surfaces it with a
   "the IDE never sees the value — set it in Configure environment" note.
-  REMAINING: the real push fan-out + the iOS/Android surfaces.
+  REMAINING: the iOS/Android surfaces, and a `generic` push opening the
+  apps' AI-chat alert drain (today it opens the app, whose foreground
+  long-poll then drains it).

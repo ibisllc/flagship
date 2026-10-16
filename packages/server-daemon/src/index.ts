@@ -24,6 +24,7 @@ import { startDaemonStatusHeartbeat, type DaemonStatusHeartbeat } from "./daemon
 import { buildSignedLanHint } from "./lanDirect.js";
 import { makeRelayTrustExceptionResolver } from "./relayTrustExceptions.js";
 import { sendPushRelay, sendRelayTrustAlert } from "./relaySos.js";
+import { buildOwnerWake } from "./ownerWake.js";
 import type { RelayLockdownController } from "./relayLockdown.js";
 import { BackupLoop } from "./backupLoop.js";
 import { RepairScheduler } from "./peerBackup/repairScheduler.js";
@@ -2484,33 +2485,31 @@ async function wireRuntimeSurfaces(deps: {
   });
   runtime.addHandler(vibeCodeHandle);
 
-  // W10 — fire a notify-owner callback whenever a vibe-code session
-  // transitions into awaiting-tool-response. The default impl logs
-  // (operator-visible) so the chain is provably wired; production
-  // deployments that integrate with .com's push relay replace this
-  // hook with a real fan-out (POST `<controlPlane>/api/push/relay`
-  // with a category of "vibecode-needs-you"). The callback is
-  // value-free by construction — it receives only the session id,
-  // the tool kind, and the tool-use id. No model arguments, no env
-  // values, no chat messages.
+  // W10 — whenever a build needs the owner (a vibe-code session waiting on
+  // a tool response, an IDE build asking for an env var), wake the phone
+  // through .com's push relay. Content-free (ownerWake.ts): category
+  // `generic`, a marker body, nothing about which build or what it asks.
+  const wakeOwnerForBuild = buildOwnerWake({
+    owner: () => cfg?.userId ?? null,
+    signer: custodian,
+    controlPlaneBaseUrl: env.controlPlaneBaseUrl,
+    log: (l) => console.log(l),
+  });
   vibeRegistry.setNotifyOwner(({ sessionId, kind, toolUseId }) => {
     // eslint-disable-next-line no-console
-    console.log(
-      `[vibecode] session=${sessionId} tool=${kind} toolUseId=${toolUseId} ` +
-        `→ owner-notify hook fired (push fan-out wiring is operator-supplied)`,
-    );
+    console.log(`[vibecode] session=${sessionId} tool=${kind} toolUseId=${toolUseId} → waking the owner`);
     // #91 — queue a value-free AI-chat alert on the SAME phone-pollable
     // AlertInbox the rest of the daemon→phone events ride. The phone's
     // foreground long-poll (GET /api/phone/alerts) drains it, raises a
     // LOCAL notification, and surfaces the session in the operations sliver
-    // with a deep link into the chat. This is the always-on baseline; the
-    // optional push relay below is an additional (operator-supplied) wake.
+    // with a deep link into the chat. The push opens the app to drain it.
     alertInbox.emit({
       kind: "ai-chat-needs-you",
       serviceId: sessionId,
       request: kind,
       toolUseId,
     });
+    void wakeOwnerForBuild();
   });
 
   // ---- Build modes: git import + MCP (the two new create-service
@@ -2622,18 +2621,12 @@ async function wireRuntimeSurfaces(deps: {
           ...(why != null ? { detail: why } : {}),
         });
       },
-      // Mirror the vibe-code W10 notify-owner hook: log-only by default so
-      // the chain is provably wired; production deployments that integrate
-      // with .com's push relay replace this with a real fan-out (POST
-      // `<controlPlane>/api/push/relay`, category "build-needs-env"). The
-      // callback is value-free by construction — only the build id + the
-      // env NAME, never a value, reason, or secret flag.
+      // Same content-free wake as the vibe-code hook above. The callback
+      // only ever sees the build id + the env NAME; neither leaves the box.
       notifyOwner: ({ buildId, name }) => {
         // eslint-disable-next-line no-console
-        console.log(
-          `[build] build=${buildId} env-requested=${name} ` +
-            `→ owner-notify hook fired (push fan-out wiring is operator-supplied)`,
-        );
+        console.log(`[build] build=${buildId} env-requested=${name} → waking the owner`);
+        void wakeOwnerForBuild();
       },
     });
     buildNameHoldersRef.current = buildOrchestrator;
