@@ -19,6 +19,10 @@ import { WEB_BUILDS } from "./webBuilds.js";
 import { WEB_ACCOUNT } from "./webAccount.js";
 import { WEB_APPS } from "./webApps.js";
 import { WEB_SWEEP } from "./webSweep.js";
+import { WEB_SERVER_PAGE } from "./webServerPage.js";
+import { WEB_ONBOARDING } from "./webOnboarding.js";
+import { WEB_MISC } from "./webMisc.js";
+import { WEB_DIALOGS } from "./webDialogs.js";
 
 // ───────────────────────── every-merge (fast gate) ─────────────────────────
 
@@ -1990,4 +1994,8 @@ export const WEB_GYM_SCENARIOS: readonly Scenario[] = [
   ...WEB_ACCOUNT,
   ...WEB_APPS,
   ...WEB_SWEEP,
+  ...WEB_SERVER_PAGE,
+  ...WEB_ONBOARDING,
+  ...WEB_MISC,
+  ...WEB_DIALOGS,
 ];
