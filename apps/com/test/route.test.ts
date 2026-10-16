@@ -132,6 +132,35 @@ describe("flagshipserver.com Worker — routing", () => {
     expect((spaRoute.headers.get("content-type") ?? "")).toContain("text/html");
   });
 
+  it("a missing .css/.js 404s on the webapp, remote and recovery hosts too", async () => {
+    const env = makeEnv({
+      ASSETS: {
+        async fetch(req) {
+          const path = new URL(req.url).pathname;
+          if (path === "/webapp/app.js") {
+            return new Response("export {}", { status: 200, headers: { "content-type": "text/javascript" } });
+          }
+          return new Response("<!doctype html><title>Flagship</title>", {
+            status: 200,
+            headers: { "content-type": "text/html; charset=utf-8" },
+          });
+        },
+      },
+    });
+    for (const host of ["webapp.flagshipserver.com", "remote.flagshipserver.com", "recovery.flagshipserver.com"]) {
+      for (const path of ["/style.css", "/lib/gone.js", "/qrEncoder.js"]) {
+        const r = await route(new Request(`https://${host}${path}`), env);
+        expect(r.status, `${host}${path}`).toBe(404);
+        expect(await r.text()).not.toContain("<!doctype");
+      }
+    }
+    const real = await route(new Request("https://webapp.flagshipserver.com/app.js"), env);
+    expect(real.status).toBe(200);
+    const clientRoute = await route(new Request("https://webapp.flagshipserver.com/join"), env);
+    expect(clientRoute.status).toBe(200);
+    expect(clientRoute.headers.get("content-type") ?? "").toContain("text/html");
+  });
+
   it("/api/* is forwarded to SERVICES_BASE_URL preserving method + path + query", async () => {
     await route(
       new Request("https://flagshipserver.com/api/me/servers?sessionId=abc"),

@@ -936,19 +936,25 @@ async function routeImpl(
   }
 
   // Static asset path — let the assets binding handle it.
-  const assetResponse = await env.ASSETS.fetch(request);
-  // Deploy-flash guard: the assets binding runs `not_found_handling =
-  // "single-page-application"`, so a MISSING file falls back to index.html
-  // (200 + text/html). For a stylesheet/script that's the wrong answer —
-  // the browser tries to parse the marketing HTML as CSS/JS, flashing the
-  // page unstyled mid-deploy. A `.css`/`.js` miss must read as a real 404
-  // so the browser treats it as a failed asset, not a document, and retries.
-  if (/\.(?:css|js|mjs)$/.test(url.pathname)) {
+  return notFoundForMissingAsset(url.pathname, await env.ASSETS.fetch(request));
+}
+
+/**
+ * Deploy-flash guard: the assets binding runs `not_found_handling =
+ * "single-page-application"`, so a MISSING file falls back to index.html
+ * (200 + text/html). For a stylesheet/script that's the wrong answer —
+ * the browser tries to parse the HTML as CSS/JS, flashing the page
+ * unstyled mid-deploy. A `.css`/`.js` miss must read as a real 404 so the
+ * browser treats it as a failed asset, not a document. Applies on every
+ * host that serves assets (apex, webapp, remote, recovery, previews).
+ */
+function notFoundForMissingAsset(pathname: string, assetResponse: Response): Response {
+  if (/\.(?:css|js|mjs)$/.test(pathname)) {
     const contentType = assetResponse.headers.get("content-type") ?? "";
     if (assetResponse.ok && contentType.includes("text/html")) {
       return new Response("Not found", {
         status: 404,
-        headers: { "content-type": "text/plain; charset=utf-8" },
+        headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
       });
     }
   }
@@ -1568,7 +1574,7 @@ async function serveWebapp(
     method,
     headers: request.headers,
   });
-  return env.ASSETS.fetch(assetReq);
+  return notFoundForMissingAsset(rewrittenPath, await env.ASSETS.fetch(assetReq));
 }
 
 /**
@@ -1671,7 +1677,7 @@ async function serveRecovery(
     method,
     headers: request.headers,
   });
-  const asset = await env.ASSETS.fetch(assetReq);
+  const asset = notFoundForMissingAsset(rewrittenPath, await env.ASSETS.fetch(assetReq));
   return withRecoveryHeaders(asset);
 }
 
@@ -1823,7 +1829,7 @@ async function serveWipPreview(
     method: request.method,
     headers: request.headers,
   });
-  const upstream = await env.ASSETS.fetch(assetReq);
+  const upstream = notFoundForMissingAsset(realPath, await env.ASSETS.fetch(assetReq));
   const headers = new Headers(upstream.headers);
   headers.append("set-cookie", WIP_PREVIEW_COOKIE);
   return new Response(upstream.body, {
