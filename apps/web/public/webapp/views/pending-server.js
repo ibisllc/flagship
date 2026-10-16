@@ -172,4 +172,10 @@ export function initPendingServerView() {
     const { enterHome } = await import("./home.js");
     await enterHome();
   });
+  // Leaving the view (a tab, a deep link) stops following the order.
+  document.addEventListener("flagship:view-shown", (e) => {
+    if (e.detail?.id === "view-pending-server") return;
+    clearStatusPoll();
+    currentOrder = null;
+  });
 }
