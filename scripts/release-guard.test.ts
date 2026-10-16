@@ -63,6 +63,7 @@ describe("release-guard.sh — against the real repo (backdoors present in dev)"
     expect(r.stderr).not.toMatch(/EngineTests\.swift/);
     expect(r.stderr).not.toMatch(/debugAccessGate\.ts/);
     expect(r.stderr).not.toMatch(/chpasswd/);
+    expect(r.stderr).not.toContain("debug password");
     expect(r.stderr).toMatch(/userdata\.ts:\d+:export const BURN_PASSPHRASE/);
   });
 });
@@ -124,38 +125,65 @@ describe("release-guard.sh — against a clean tree (post-GA, backdoors removed)
     expect(r.stderr).toContain("burn-time LUKS passphrase");
   });
 
-  it("debug creds OUTSIDE the sanctioned gate still fail RELEASE (inline-bake regression)", () => {
+  it("a debug user OUTSIDE the sanctioned gate still fails RELEASE (inline-bake regression)", () => {
     dir = makeCleanTree();
     writeFileSync(
       join(dir, "packages", "flagship-builder", "src", "inline-bake.ts"),
-      "export const bake = `echo 'debug:flagship' | chpasswd`;\n",
+      "export const bake = `useradd -m -s /bin/bash debug`;\n",
     );
     const r = run({ RELEASE: "1", RELEASE_GUARD_ROOT: dir });
     expect(r.code).toBe(1);
     expect(r.stderr).toContain("debug console user");
   });
 
-  it("the sanctioned gate is exempt — but ONLY while it still verifies the owner grant", () => {
-    dir = makeCleanTree();
-    const gateDir = join(dir, "packages", "server-daemon", "src");
-    mkdirSync(gateDir, { recursive: true });
-    const gateWithVerify = [
-      'import { verifyDebugAccessGrant } from "@flagship/protocol";',
-      'const DEBUG_PASSWORD = "flagship";',
-      "export async function gate() { if (!verifyDebugAccessGrant()) return; }",
-      "",
-    ].join("\n");
-    writeFileSync(join(gateDir, "debugAccessGate.ts"), gateWithVerify);
-    let r = run({ RELEASE: "1", RELEASE_GUARD_ROOT: dir });
-    expect(r.code).toBe(0);
+  const KEY_ONLY_GATE = [
+    'import { verifyDebugAccessGrant } from "@flagship/protocol";',
+    "// handles flagship/debug-access/v2",
+    'const SSHD = "Match User debug\\n  AuthenticationMethods publickey\\n  PasswordAuthentication no\\n";',
+    'const line = (k: string) => `expiry-time="x" ${k}`;',
+    'export async function open() { await run("useradd", ["-m", "debug"]); }',
+    "",
+  ].join("\n");
 
-    // Strip the verification but keep the creds: the exemption must not hide it.
-    writeFileSync(
-      join(gateDir, "debugAccessGate.ts"),
-      'const DEBUG_PASSWORD = "flagship";\nexport async function gate() {}\n',
-    );
-    r = run({ RELEASE: "1", RELEASE_GUARD_ROOT: dir });
-    expect(r.code).toBe(1);
-    expect(r.stderr).toContain("no longer verifies the owner grant");
+  function writeGate(d: string, body: string): void {
+    const gateDir = join(d, "packages", "server-daemon", "src");
+    mkdirSync(gateDir, { recursive: true });
+    writeFileSync(join(gateDir, "debugAccessGate.ts"), body);
+  }
+
+  it("a key-only, grant-verified gate passes RELEASE (its useradd is exempt)", () => {
+    dir = makeCleanTree();
+    writeGate(dir, KEY_ONLY_GATE);
+    const r = run({ RELEASE: "1", RELEASE_GUARD_ROOT: dir });
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("OK");
+  });
+
+  it("a debug password anywhere fails even a dev build, the gate included", () => {
+    for (const bad of [
+      'const DEBUG_PASSWORD = "anything";',
+      "const x = `echo debug:pw | chpasswd`;",
+      'const conf = "PasswordAuthentication yes";',
+    ]) {
+      dir = makeCleanTree();
+      writeGate(dir, `${KEY_ONLY_GATE}${bad}\n`);
+      const r = run({ RELEASE: "", RELEASE_GUARD_ROOT: dir });
+      expect(r.code, bad).toBe(1);
+      expect(r.stderr, bad).toContain("debug password");
+      rmSync(dir, { recursive: true, force: true });
+    }
+    dir = "";
+  });
+
+  it("a gate that stops verifying, or stops being key-only, fails", () => {
+    for (const drop of ["verifyDebugAccessGrant", "AuthenticationMethods publickey", "PasswordAuthentication no", "expiry-time="]) {
+      dir = makeCleanTree();
+      writeGate(dir, KEY_ONLY_GATE.split(drop).join("REMOVED"));
+      const r = run({ RELEASE: "", RELEASE_GUARD_ROOT: dir });
+      expect(r.code, drop).toBe(1);
+      expect(r.stderr, drop).toContain("no longer key-only and grant-verified");
+      rmSync(dir, { recursive: true, force: true });
+    }
+    dir = "";
   });
 });

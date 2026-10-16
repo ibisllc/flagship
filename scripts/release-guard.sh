@@ -12,17 +12,22 @@
 # FAIL while it is still live in source; the normal dev / PR / gym path stays
 # GREEN with the constants present (it only runs under RELEASE=1).
 #
-# The `debug`/`flagship` console account is NOT a backdoor anymore — it is a
-# SHIPPING v1 feature (owner decision, 2026-07-05): advanced users can enable
-# SSH/console tinkering on their own box. It is consent-as-crypto: the creds
-# exist ONLY when the box verifies an owner-IRK-signed `flagship/debug-access/v1`
-# grant minted from the phone's biometric-gated Advanced toggle
+# Owner debug access (the `debug` user) is NOT a backdoor — it is a SHIPPING
+# feature (owner decisions 2026-07-05 and 2026-10-16): an owner can let their
+# own SSH key in for a while. It is consent-as-crypto and SSH-key only: the box
+# lets a key in ONLY on a verified admin-signed `flagship/debug-access/v2`
+# grant, until it expires or is revoked
 # (packages/server-daemon/src/debugAccessGate.ts — the single sanctioned home).
-# This guard therefore (a) EXEMPTS debugAccessGate.ts from the debug-account
-# scans, (b) still FAILS if those creds appear anywhere ELSE (a regression to an
-# unconditional inline bake), and (c) positively ASSERTS the gate file still
-# routes through verifyDebugAccessGrant — so stripping the verification while
-# keeping the creds also fails the release.
+# This guard therefore:
+#   (a) FAILS ALWAYS (dev too) on any debug password: a `DEBUG_PASSWORD`
+#       constant, a `chpasswd` for the debug user, or `PasswordAuthentication
+#       yes` anywhere in shipping source (there is no password debug path);
+#   (b) EXEMPTS only the gate from the `useradd debug` scan, and fails a
+#       release if that appears anywhere else (an unconditional inline bake);
+#   (c) positively ASSERTS the gate still verifies the grant and configures
+#       sshd key-only with an expiry on the key (verifyDebugAccessGrant,
+#       `AuthenticationMethods publickey`, `PasswordAuthentication no`,
+#       `expiry-time=`), so weakening it fails.
 #
 # DESIGN — what it flags vs. what it tolerates:
 # The builder already carries a `stripDebugFeatures()` defense (userdata.ts /
@@ -33,16 +38,17 @@
 # NOT just grep for the bare string everywhere; it targets the LOAD-BEARING
 # definitions that constitute an actually-shippable backdoor:
 #   - the literal BURN_PASSPHRASE assignment, and
-#   - the `echo 'debug:flagship' | chpasswd` shell line that bakes the account
-#     into a real image,
+#   - a `useradd … debug` outside the gate, which bakes the account into a
+#     real image,
 # and it explicitly skips test files + the documented strip machinery. When the
-# owner does Bucket-C items 2+3 (delete BURN_PASSPHRASE, drop the useradd/chpasswd
-# block, re-enable the luksRemoveKey guard), this gate goes green under RELEASE=1.
+# owner does Bucket-C items 2+3 (delete BURN_PASSPHRASE, re-enable the
+# luksRemoveKey guard), this gate goes green under RELEASE=1.
 #
 # HOW THE RELEASE PATH IS TRIGGERED:
 #   RELEASE=1 bash scripts/release-guard.sh
 # In dev / PR / gym (RELEASE unset or != 1) it prints what it found and exits 0
-# (advisory). In CI it is wired as a separate `release-guard` job that only runs
+# (advisory), except for a debug-password finding (header (a)/(c)), which
+# always exits 1. In CI it is wired as a separate `release-guard` job that only runs
 # on a release trigger (a `release` tag, or the manual workflow_dispatch with
 # release=true) — see .github/workflows/release-guard.yml. There is a self-test
 # at scripts/release-guard.test.ts.
@@ -108,32 +114,30 @@ scan() {
 scan "burn-time LUKS passphrase" \
   '(BURN_PASSPHRASE|burnPassphrase)[[:space:]]*=[[:space:]]*"flagship-build-time-luks-rekey-me-immediately"'
 
-# Debug-account regression scans. The grant-gated home (debugAccessGate.ts) is
-# EXEMPT — that path ships in v1 (see the header). Anywhere else these
-# definitions appear is a regression to an unconditional inline bake and fails
-# a release. The legacy literal forms stay in the patterns for the same reason.
-scan "debug console user (password constant)" \
-  'DEBUG_PASSWORD[[:space:]]*=[[:space:]]*"flagship"' allow-debug-gate
+# Debug access is SSH-key only. A debug password anywhere — the gate included —
+# is a regression that fails every run, dev too (header (a)).
+debug_start=${#findings[@]}
+scan "debug password (constant)" 'DEBUG_PASSWORD[[:space:]]*='
+scan "debug password (chpasswd)" '(debug|DEBUG_).*chpasswd|chpasswd.*(debug|DEBUG_)'
+scan "debug password (sshd PasswordAuthentication yes)" 'PasswordAuthentication[[:space:]]+yes'
 
-scan "debug console user (chpasswd)" \
-  "echo '?(debug|\\\$\\{DEBUG_USER\\}):(flagship|\\\$\\{DEBUG_PASSWORD\\})'?[[:space:]]*\\|[[:space:]]*chpasswd" allow-debug-gate
-
-scan "debug console user (useradd)" \
-  'useradd([[:space:]].*[[:space:]]debug([[:space:]]|$)|.*DEBUG_USER)' allow-debug-gate
-
-# Positive assertion — the exempted gate must still route its cred writes
-# through the owner-grant verification. If someone strips the verify call but
-# keeps the creds, the exemption above would otherwise hide it.
+# The gate must still verify the grant and keep sshd key-only with an expiry
+# on the key (header (c)).
 if [ -f "$root/$DEBUG_GATE_REL" ]; then
-  if ! grep -qE 'verifyDebugAccessGrant' "$root/$DEBUG_GATE_REL"; then
-    findings+=("debug gate no longer verifies the owner grant"$'\t'"$DEBUG_GATE_REL: verifyDebugAccessGrant not found")
-  fi
-elif grep -rInEq 'DEBUG_PASSWORD[[:space:]]*=[[:space:]]*"flagship"' \
-    --include="*.ts" "$root/packages" 2>/dev/null; then
-  # The gate moved without updating DEBUG_GATE_REL — fail loudly rather than
-  # silently exempting nothing (the scans above would already be flagging it).
-  findings+=("debug gate path stale"$'\t'"$DEBUG_GATE_REL: missing but debug creds exist elsewhere")
+  for need in 'verifyDebugAccessGrant' 'AuthenticationMethods publickey' 'PasswordAuthentication no' 'expiry-time='; do
+    if ! grep -qF "$need" "$root/$DEBUG_GATE_REL"; then
+      findings+=("debug gate no longer key-only and grant-verified"$'\t'"$DEBUG_GATE_REL: '$need' not found")
+    fi
+  done
+elif grep -rIlq 'debug-access/v2' --include="*.ts" "$root/packages/server-daemon/src" 2>/dev/null; then
+  # The gate moved without updating DEBUG_GATE_REL: fail rather than check nothing.
+  findings+=("debug gate path stale"$'\t'"$DEBUG_GATE_REL: missing but the daemon handles debug-access/v2 elsewhere")
 fi
+debug_count=$(( ${#findings[@]} - debug_start ))
+
+# An inline `debug` user outside the gate is an unconditional bake (header (b)).
+scan "debug console user (useradd)" \
+  'useradd([[:space:]].*[[:space:]]debug([^[:alnum:]_-]|$)|.*DEBUG_USER)' allow-debug-gate
 
 count="${#findings[@]}"
 
@@ -149,14 +153,21 @@ for f in "${findings[@]}"; do
   echo "  [$label] $loc" >&2
 done
 
+if [ "$debug_count" -gt 0 ]; then
+  echo >&2
+  echo "::error::Debug access must be SSH-key only and grant-verified (debugAccessGate.ts)." >&2
+  echo "A debug password or a weakened gate fails every build, dev included." >&2
+  exit 1
+fi
+
 release="${RELEASE:-}"
 if [ "$release" = "1" ] || [ "$release" = "true" ]; then
   echo >&2
   echo "::error::RELEASE build but a dev-mode backdoor is still present. Disarm Bucket-C" >&2
   echo "item 3 before release: delete BURN_PASSPHRASE (+ regenerate the engine bundle and" >&2
   echo "its vendored copies) and re-enable the luksRemoveKey guard (CLAUDE.md → GA close-out TODO)." >&2
-  echo "Debug creds outside debugAccessGate.ts are a regression — the grant-gated debug" >&2
-  echo "feature ships in v1 ONLY from that file." >&2
+  echo "A debug user outside debugAccessGate.ts is a regression: owner debug access" >&2
+  echo "ships ONLY from that file." >&2
   exit 1
 fi
 
