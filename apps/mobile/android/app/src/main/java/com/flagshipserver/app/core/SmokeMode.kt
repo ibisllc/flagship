@@ -14,6 +14,10 @@
 //   iOS -smoke-dead             ↔ --es flagship.smokePods dead
 //   iOS -smoke-awaiting-backup  ↔ --es flagship.smokePods awaiting-backup
 //   iOS -smoke-username <name>  ↔ --es flagship.smokeUsername <name>
+//   (Android only)              ↔ --es flagship.smokePods none   (no servers)
+//   (Android only)              ↔ --ez flagship.smokeLive true   (keep the LIVE
+//                                  clients; pair with flagship.apexHost set to
+//                                  an unreachable host so nothing leaves the device)
 //
 // PRODUCTION SAFETY: MainActivity only calls into here when the app is
 // debuggable (ApplicationInfo.FLAG_DEBUGGABLE) AND the smokeMode extra is set —
@@ -31,7 +35,7 @@ data class SmokeModeConfig(
     val tab: RootDestination,
     val seedOps: Boolean,
     val seedTrustUntrusted: Boolean,
-    /** "awaiting-unlock" | "dead" | "awaiting-backup" | null — picks the variant fixture pod set. */
+    /** "awaiting-unlock" | "dead" | "awaiting-backup" | "none" | null — picks the variant fixture pod set. */
     val podsVariant: String?,
     /** Treat this device as holding the admin master root (GymSeams twin of
      *  iOS `-smoke-admin-root`) so the Slice-D admin-gated surfaces render. */
@@ -48,6 +52,9 @@ data class SmokeModeConfig(
     val seedShares: Boolean = false,
     /** This device's rank in the mock box's apps when not an admin (GymSeams.deviceRank). */
     val deviceRank: String? = null,
+    /** Keep the LIVE clients instead of forcing the mock: a real account's
+     *  shell with no backend reachable (the "new account, no server" check). */
+    val live: Boolean = false,
 ) {
     companion object {
         const val EXTRA_SMOKE_MODE = "flagship.smokeMode"
@@ -60,6 +67,7 @@ data class SmokeModeConfig(
         const val EXTRA_SMOKE_ACCESS_ALERT = "flagship.smokeAccessAlert"
         const val EXTRA_SMOKE_SHARES = "flagship.smokeShares"
         const val EXTRA_SMOKE_DEVICE_RANK = "flagship.smokeDeviceRank"
+        const val EXTRA_SMOKE_LIVE = "flagship.smokeLive"
 
         const val SMOKE_USERNAME = "smoketest"
 
@@ -82,6 +90,7 @@ data class SmokeModeConfig(
                 seedShares = intent.getBooleanExtra(EXTRA_SMOKE_SHARES, false),
                 deviceRank = intent.getStringExtra(EXTRA_SMOKE_DEVICE_RANK)?.trim()?.lowercase()
                     ?.takeIf { it in setOf("member", "manager", "master", "refused") },
+                live = intent.getBooleanExtra(EXTRA_SMOKE_LIVE, false),
             )
         }
     }
@@ -104,6 +113,7 @@ object SmokeMode {
             val pods = when (config.podsVariant) {
                 "awaiting-unlock" -> DemoFixtures.samplePodsWithAwaitingUnlock(user)
                 "dead" -> DemoFixtures.samplePodsWithDeadServer(user)
+                "none" -> emptyList()
                 else -> DemoFixtures.samplePods(user)
             }.mapIndexed { i, pod ->
                 // Real boxes carry their STK; the server order names servers by

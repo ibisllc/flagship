@@ -108,6 +108,12 @@ class DeveloperSettings(prefs: SharedPreferences) {
         _useLiveClient.value = false
     }
 
+    /** GYM-ONLY: the live clients for a smoke run that checks a real
+     *  account's shell (in-memory, like [forceMockForSmokeRun]). */
+    fun forceLiveForSmokeRun() {
+        _useLiveClient.value = true
+    }
+
     fun setUnlocked(value: Boolean) {
         _unlocked.value = value
         store.edit().putBoolean(KEY_UNLOCKED, value).apply()

@@ -374,10 +374,11 @@ fun HomeScreen(
 
         Spacer(Modifier.height(FS.space.s6))
 
-        when (state) {
-            is LoadingState.Loaded -> ServerOverviewCard(state.value, onRefresh = onRefresh)
-            is LoadingState.Failed -> ErrorCard(message = state.message, onRetry = onRefresh)
-            else -> ServerCardSkeleton()
+        // Never a "couldn't load" card on Home (mirror of iOS): with no server
+        // there is nothing to load, and each server row carries its own state.
+        // The current server's recent deploys show once it answers.
+        if (state is LoadingState.Loaded && pods.isNotEmpty()) {
+            RecentActivitySection(state.value.recentInstallEvents)
         }
         Spacer(Modifier.height(FS.space.s12))
       }
@@ -841,23 +842,49 @@ fun PodCard(
     }
 }
 
+/** Home's recent deploys on the current server (iOS HomeScreen.recentActivity). */
 @Composable
-private fun ServerOverviewCard(detail: ServerDetailResponse, onRefresh: () -> Unit) {
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Text(
-                detail.serverFqdn,
-                color = FS.colors.text,
-                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Medium),
-            )
-            Text(
-                "${detail.serviceCount} services · server ${detail.daemonVersion}",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp),
-            )
-            FSGhostButton(label = "Refresh", onClick = onRefresh)
+private fun RecentActivitySection(events: List<com.flagshipserver.app.api.RecentInstallEvent>) {
+    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3), modifier = Modifier.testTag("home-recent-activity")) {
+        Text(
+            "RECENT ACTIVITY",
+            color = FS.colors.textMuted,
+            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp),
+        )
+        FSCard {
+            if (events.isEmpty()) {
+                Text("No recent activity.", color = FS.colors.textMuted)
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+                    events.forEachIndexed { i, e ->
+                        Row(verticalAlignment = Alignment.Top) {
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text("${recentVerb(e.kind)} ${e.serviceId}", color = FS.colors.text, style = TextStyle(fontSize = 15.sp))
+                                e.detail?.let { Text(it, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp)) }
+                            }
+                            Spacer(Modifier.width(FS.space.s2))
+                            Text(
+                                com.flagshipserver.app.core.FlagshipDateFormat.format(e.at, includeTime = true),
+                                color = FS.colors.textMuted,
+                                style = TextStyle(fontSize = 12.sp),
+                            )
+                        }
+                        if (i < events.size - 1) {
+                            Box(Modifier.fillMaxWidth().height(1.dp).background(FS.colors.border))
+                        }
+                    }
+                }
+            }
         }
     }
+}
+
+internal fun recentVerb(kind: String): String = when (kind) {
+    "installed" -> "Deployed"
+    "uninstalled" -> "Removed"
+    "deploy" -> "Redeployed"
+    "update-pulled" -> "Updated"
+    else -> "Event:"
 }
 
 @Composable

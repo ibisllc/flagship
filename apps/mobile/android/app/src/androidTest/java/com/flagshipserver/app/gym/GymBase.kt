@@ -90,6 +90,8 @@ abstract class GymBase {
         accessAlert: Boolean = false,
         shares: Boolean = false,
         deviceRank: String? = null,
+        live: Boolean = false,
+        apexHost: String? = null,
     ) {
         // A test may relaunch with different seeds (e.g. the admin/non-admin
         // state pair) — close the prior scenario so activities never stack.
@@ -107,6 +109,8 @@ abstract class GymBase {
             if (accessAlert) putExtra(SmokeModeConfig.EXTRA_SMOKE_ACCESS_ALERT, true)
             if (shares) putExtra(SmokeModeConfig.EXTRA_SMOKE_SHARES, true)
             if (deviceRank != null) putExtra(SmokeModeConfig.EXTRA_SMOKE_DEVICE_RANK, deviceRank)
+            if (live) putExtra(SmokeModeConfig.EXTRA_SMOKE_LIVE, true)
+            if (apexHost != null) putExtra("flagship.apexHost", apexHost)
         }
         scenario = ActivityScenario.launch(intent)
         composeRule.waitForIdle()
