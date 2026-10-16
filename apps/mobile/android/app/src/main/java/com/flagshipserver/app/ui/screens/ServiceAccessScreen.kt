@@ -190,7 +190,7 @@ internal fun ServiceAccessContent(
     val scope = rememberCoroutineScope()
     val phase by vm.phase.collectAsState()
     val restricted by vm.restricted.collectAsState()
-    val people by vm.people.collectAsState()
+    val allPeople by vm.people.collectAsState()
     val members by vm.members.collectAsState()
     val busyRoles by vm.busyRoles.collectAsState()
     val roleNotice by vm.roleNotice.collectAsState()
@@ -203,6 +203,7 @@ internal fun ServiceAccessContent(
     val busyScope by vm.busyScope.collectAsState()
     val scopeNeedsPro by vm.scopeNeedsPro.collectAsState()
     val shownServer by vm.shownServer.collectAsState()
+    val people = vm.peopleOnShownServer(allPeople, members, listScope)
 
     var adding by remember { mutableStateOf<InviteTier?>(null) }
     var name by remember { mutableStateOf("") }
