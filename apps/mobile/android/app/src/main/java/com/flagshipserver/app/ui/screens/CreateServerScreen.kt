@@ -203,6 +203,7 @@ fun CreateServerScreen(
             cgkDepositStore = cgkDepositStore,
             pairingDepositStore = pairingDepositStore,
             sessionStore = sessionStore,
+            isDemoAccount = app.isDemoAccountNow(),
         )
         registerControlPlane(
             flagshipServer = flagshipServer,
@@ -476,6 +477,7 @@ fun CreateServerScreen(
                                 // post-registration so the box comes online paired.
                                 mailbox = mailbox,
                                 sessionStore = sessionStore,
+                                isDemoAccount = app.isDemoAccountNow(),
                             )
                             qrRelay.openAndHello(
                                 sid = delivery.sid,
@@ -1124,6 +1126,7 @@ private suspend fun prepareDelivery(
     // production passes the session store so the token-persist runs.
     mailbox: com.flagshipserver.app.api.SecretMailboxClient? = null,
     sessionStore: com.flagshipserver.app.api.SessionStoring? = null,
+    isDemoAccount: Boolean = false,
 ): PendingDelivery {
     val parsed = QrRelay.parseQrUrl(rawQr)
     val session = QrSession.fresh()
@@ -1141,6 +1144,7 @@ private suspend fun prepareDelivery(
         cgkDepositStore = cgkDepositStore,
         pairingDepositStore = pairingDepositStore,
         sessionStore = sessionStore,
+        isDemoAccount = isDemoAccount,
     )
 
     return PendingDelivery(
@@ -1189,7 +1193,15 @@ internal suspend fun mintRecipeBundle(
     cgkDepositStore: com.flagshipserver.app.core.PendingCgkDepositStore? = null,
     pairingDepositStore: PendingPairingDepositStore? = null,
     sessionStore: com.flagshipserver.app.api.SessionStoring? = null,
+    isDemoAccount: Boolean = false,
 ): MintedBundle {
+    // Only an admin device of the account adds servers, and only opening the
+    // account mints an admin root: refuse here, before any prompt or `.com`
+    // call, rather than mint a recipe the account's admins don't anchor.
+    val adminRootPinHex = com.flagshipserver.app.core.AddServerGate.recipeAdminRootPin(
+        adminRootPubHex = if (Keystore.hasAdminRoot()) Keystore.adminRootPubHex() else null,
+        isDemoAccount = isDemoAccount,
+    )
     // The subdomain IS what the user typed (validated as a DNS label in the
     // design step; no slugify). Normalize case only.
     val slug = ServerLabel.normalized(serverName)
@@ -1209,9 +1221,9 @@ internal suspend fun mintRecipeBundle(
     val rckPubHex = HexUtil.encode(rck.publicKey)
 
     // Slice D (D-1) — pin the account's ADMIN MASTER ROOT into the AuthCode so a
-    // fresh box anchors it (signature-covered by the IRK below). Null on a legacy
-    // account with no admin root ⇒ byte-identical pre-D canonical bytes.
-    val adminRootPubBytes = Keystore.adminRootPubHex()?.let { HexUtil.decode(it) }
+    // fresh box anchors it (signature-covered by the IRK below). Null only on a
+    // demo account ⇒ byte-identical pre-D canonical bytes.
+    val adminRootPubBytes = adminRootPinHex?.let { HexUtil.decode(it) }
 
     val authCodeBytesObj = AuthCodeBytes(
         version = 1,

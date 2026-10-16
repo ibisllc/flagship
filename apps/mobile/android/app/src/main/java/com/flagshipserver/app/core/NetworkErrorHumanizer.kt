@@ -64,6 +64,7 @@ object NetworkErrorHumanizer {
                     "its admin.",
             )
             rateLimit != null -> Classified(Kind.RATE_LIMITED, rateLimit.userMessage)
+            t is AddServerRefused -> Classified(Kind.REQUEST_PROBLEM, AddServerGate.ADMIN_ONLY)
             t is HttpException -> classifyStatus(t.status)
             t is HasHttpStatus -> classifyStatus(t.httpStatus)
             isOffline(t) -> Classified(

@@ -491,9 +491,10 @@ private fun LockedServerListCard(onShowServers: () -> Unit) {
  *  the account's admin root. Every account is opened with one, so an account
  *  never lacks an admin device. A demo account's device stands in for its
  *  owner (it holds no keys; the operator runs the account). */
-fun showsAddServer(holdsAdminRoot: Boolean, isDemoAccount: Boolean): Boolean = holdsAdminRoot || isDemoAccount
+fun showsAddServer(holdsAdminRoot: Boolean, isDemoAccount: Boolean): Boolean =
+    com.flagshipserver.app.core.AddServerGate.allows(holdsAdminRoot, isDemoAccount)
 
-internal const val ADD_SERVERS_ADMIN_ONLY = "Only an admin device of this account can add servers."
+internal const val ADD_SERVERS_ADMIN_ONLY = com.flagshipserver.app.core.AddServerGate.ADMIN_ONLY
 
 /** "Add/Import a server": the one way to bring a server in (Create /
  *  Co-manage / Import), above the list or on the empty state. */

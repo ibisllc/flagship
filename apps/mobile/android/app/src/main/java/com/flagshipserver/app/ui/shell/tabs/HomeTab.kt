@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.flagshipserver.app.core.AddServerGate
 import com.flagshipserver.app.core.DeepLink
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalDeepLinker
@@ -39,6 +40,7 @@ import com.flagshipserver.app.core.decommissionServer
 import com.flagshipserver.app.core.deleteServer
 import com.flagshipserver.app.core.LocalServerTransferClient
 import com.flagshipserver.app.core.RecoveryBannerStore
+import com.flagshipserver.app.ui.screens.AddServerAdminOnlyScreen
 import com.flagshipserver.app.ui.screens.DemoInstallProgressScreen
 import com.flagshipserver.app.ui.screens.HomeScreen
 import com.flagshipserver.app.ui.screens.PendingServerScreen
@@ -305,7 +307,14 @@ fun HomeTab() {
             )
             var showImportBackup by remember { androidx.compose.runtime.mutableStateOf(false) }
             if (showImportBackup) {
-                com.flagshipserver.app.ui.screens.ImportBackupDialog(onDismiss = { showImportBackup = false })
+                if (AddServerGate.allows(app)) {
+                    com.flagshipserver.app.ui.screens.ImportBackupDialog(onDismiss = { showImportBackup = false })
+                } else {
+                    LaunchedEffect(Unit) {
+                        toasts.warning(AddServerGate.ADMIN_ONLY)
+                        showImportBackup = false
+                    }
+                }
             }
             HomeScreen(
                 state = vm.state.collectAsState().value,
@@ -315,11 +324,7 @@ fun HomeTab() {
                 pods = orderedPods,
                 serverOrderIssuedAt = app.serverOrderIssuedAt.collectAsState().value,
                 serverOrderAcks = app.serverOrderAcks.collectAsState().value,
-                canAddServers = com.flagshipserver.app.ui.screens.showsAddServer(
-                    holdsAdminRoot = com.flagshipserver.app.core.GymSeams.forceAdminRoot ||
-                        com.flagshipserver.app.keystore.Keystore.hasAdminRoot(),
-                    isDemoAccount = isDemoAccount,
-                ),
+                canAddServers = AddServerGate.allows(app),
                 onOpenPod = { pod ->
                     nav.navigate("server-detail/${pod.podId}")
                 },
@@ -392,6 +397,10 @@ fun HomeTab() {
                 navArgument("k") { type = NavType.StringType; nullable = true; defaultValue = null },
             ),
         ) { entry ->
+            if (!AddServerGate.allows(app)) {
+                AddServerAdminOnlyScreen(onBack = { nav.popBackStack() })
+                return@composable
+            }
             val s = entry.arguments?.getString("s")
             val k = entry.arguments?.getString("k")
             ShareAcceptScreen(
@@ -471,6 +480,10 @@ fun HomeTab() {
             "transfer-acquirer?offer={offer}",
             arguments = listOf(navArgument("offer") { type = NavType.StringType; nullable = true; defaultValue = null }),
         ) { entry ->
+            if (!AddServerGate.allows(app)) {
+                AddServerAdminOnlyScreen(onBack = { nav.popBackStack() })
+                return@composable
+            }
             // Slice C — take over a transferred box. Mounted with the giver's
             // signed offer JSON pre-ingested (from a `/transfer?o=…` deep link or
             // the "Process a link" paste); the VM Ed25519-verifies the offer
@@ -485,6 +498,10 @@ fun HomeTab() {
             route = "create-server?builder={builder}",
             arguments = listOf(navArgument("builder") { type = NavType.StringType; defaultValue = "" }),
         ) { entry ->
+            if (!AddServerGate.allows(app)) {
+                AddServerAdminOnlyScreen(onBack = { nav.popBackStack() })
+                return@composable
+            }
             val builderLink = entry.arguments?.getString("builder")
                 ?.let { URLDecoder.decode(it, "UTF-8") }?.takeIf { it.isNotEmpty() }
             CreateServerScreen(
