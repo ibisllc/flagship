@@ -12,9 +12,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -28,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.flagshipserver.app.core.LocalScreensClient
@@ -212,11 +218,22 @@ private fun FeedBody(feed: ActivityFeed, nav: NavController) {
         recentRows.forEach { item ->
             FSCard(padding = PaddingValues(FS.space.s3)) {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        if (item.warning) "⚠️ ${item.title}" else item.title,
-                        color = if (item.warning) FS.colors.warning else FS.colors.text,
-                        style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (item.warning) {
+                            Icon(
+                                Icons.Filled.Warning,
+                                contentDescription = "Warning",
+                                tint = FS.colors.warning,
+                                modifier = Modifier.size(18.dp).testTag("activity-row-warning"),
+                            )
+                            Spacer(Modifier.width(FS.space.s2))
+                        }
+                        Text(
+                            item.title,
+                            color = if (item.warning) FS.colors.warning else FS.colors.text,
+                            style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
+                        )
+                    }
                     item.subtitle?.let { sub ->
                         Text(
                             sub,
