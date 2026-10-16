@@ -93,8 +93,87 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             ],
             lastUpdate: LastUpdate(outcome: "applied", at: now - 2 * oneDay,
                                    targetCommit: "9f2c1ab3de4567890abcdef1234567890abcdef1",
-                                   previousCommit: "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b")
+                                   previousCommit: "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b"),
+            debugAccess: debugAccessView(now: now)
         )
+    }
+
+    // MARK: - Debug access (docs/recipe-delivery-and-remote-install.md)
+
+    /// What the mock box lets in, per server; refusals use the box's sentences.
+    public private(set) var debugAccessByPod: [String: DebugAccessView] = [:]
+    public private(set) var debugAccessBodies: [String] = []
+
+    private var mockFqdn: String {
+        let podName = podContext.hasPrefix("demo-")
+            ? String(podContext.split(separator: "-").dropFirst().first ?? Substring(podContext))
+            : podContext
+        return "\(podName).bright-maple.flagship.services"
+    }
+
+    private func debugAccessView(now: Int64) -> DebugAccessView {
+        let v = debugAccessByPod[podContext] ?? .off
+        if v.on, let e = v.expiresAt, e <= now {
+            return DebugAccessView(on: false, lastEnded: .init(at: e, why: "expired"))
+        }
+        return v
+    }
+
+    private static func refuse(_ status: Int, _ sentence: String) -> ScreensClientError {
+        let body = (try? JSONSerialization.data(withJSONObject: ["error": sentence])).flatMap { String(data: $0, encoding: .utf8) } ?? ""
+        return .http(status: status, message: body)
+    }
+
+    private static func mockFingerprint(_ key: String) -> String? {
+        let parts = key.split(separator: " ")
+        guard parts.count == 2, let blob = Data(base64Encoded: String(parts[1])) else { return nil }
+        return "SHA256:" + Data(SHA256.hash(data: blob)).base64EncodedString().replacingOccurrences(of: "=", with: "")
+    }
+
+    public func debugAccessGrant(body: String) async throws -> DebugAccessChange {
+        try await tick()
+        debugAccessBodies.append(body)
+        guard let obj = (try? JSONSerialization.jsonObject(with: Data(body.utf8))) as? [String: Any],
+              let g = obj["grant"] as? [String: Any] else {
+            throw Self.refuse(400, "That debug access grant can't be read.")
+        }
+        if g["sshAuthorizedKey"] != nil {
+            throw Self.refuse(422, "This debug access grant is from an older app. Update the app and turn debug access on again.")
+        }
+        guard let domain = g["serverDomain"] as? String, let key = g["sshPublicKey"] as? String,
+              let issued = (g["issuedAt"] as? NSNumber)?.int64Value,
+              let expires = (g["expiresAt"] as? NSNumber)?.int64Value else {
+            throw Self.refuse(400, "That debug access grant can't be read.")
+        }
+        if key.isEmpty { throw Self.refuse(422, "Debug access needs an SSH public key.") }
+        guard let fp = Self.mockFingerprint(key) else { throw Self.refuse(422, "That isn't an SSH public key this server can use.") }
+        if expires - issued > 7 * 24 * 3600 * 1000 { throw Self.refuse(422, "Debug access can be on for at most 7 days at a time.") }
+        if domain.lowercased() != mockFqdn { throw Self.refuse(422, "That debug access grant is for another server.") }
+        guard let sig = obj["signatureHex"] as? String, sig.count == 128 else {
+            throw Self.refuse(403, "This server takes debug access only from an admin device of this account.")
+        }
+        let wasOn = debugAccessView(now: issued).on
+        let v = DebugAccessView(on: true, expiresAt: expires, keyFingerprint: fp, grantedBy: "admin")
+        debugAccessByPod[podContext] = v
+        return DebugAccessChange(ok: true, change: wasOn ? "renewed" : "granted", debugAccess: v)
+    }
+
+    public func debugAccessRevoke(body: String) async throws -> DebugAccessChange {
+        try await tick()
+        debugAccessBodies.append(body)
+        guard let obj = (try? JSONSerialization.jsonObject(with: Data(body.utf8))) as? [String: Any],
+              let r = obj["revoke"] as? [String: Any], let domain = r["serverDomain"] as? String,
+              let issued = (r["issuedAt"] as? NSNumber)?.int64Value else {
+            throw Self.refuse(400, "That request to turn off debug access can't be read.")
+        }
+        if domain.lowercased() != mockFqdn { throw Self.refuse(422, "That request is for another server.") }
+        guard let sig = obj["signatureHex"] as? String, sig.count == 128 else {
+            throw Self.refuse(403, "This server takes debug access only from an admin device of this account.")
+        }
+        let wasOn = debugAccessView(now: issued).on
+        let v = DebugAccessView(on: false, lastEnded: wasOn ? .init(at: issued, why: "revoked") : debugAccessByPod[podContext]?.lastEnded)
+        debugAccessByPod[podContext] = v
+        return DebugAccessChange(ok: true, change: wasOn ? "revoked" : "unchanged", debugAccess: v)
     }
 
     // MARK: - P1.2 apps-list
