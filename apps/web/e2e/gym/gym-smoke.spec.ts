@@ -125,8 +125,8 @@ test.describe("gym webapp", () => {
 
   test("gym webapp boots on the brand-DNA palette + fonts", async ({ page }, testInfo) => {
     // Token conformance (D7-beautiful, the pass/fail half): the rendered
-    // palette + type stack must match the brand tokens — teal accent, dark
-    // canvas, Geist / Instrument Serif — with NO stray legacy blue (#3B5BFF)
+    // palette + type stack must match the website's tokens — teal accent, the
+    // site's paper or near-black canvas, Geist with no display serif — with NO stray legacy blue (#3B5BFF)
     // or old palette green. Mirrors the s15 webapp-shell brand assertion but
     // lives in the every-merge gym so a brand regression trips per-merge.
     await coldLaunch(page);
@@ -142,12 +142,13 @@ test.describe("gym webapp", () => {
       };
     });
     expect(tokens.canvas).not.toContain("#0a0a0a"); // not the old pure-black identity
+    expect(["#f7f6f2", "#0a0a09"]).toContain(tokens.canvas); // the site's two canvases
     expect(tokens.accent).not.toBe("");
     expect(tokens.accent).not.toContain("3b5bff"); // legacy blue is gone
     expect(tokens.accent).not.toContain("4ad295"); // old palette green is gone
     expect(tokens.fontSans).toContain("geist");
     expect(tokens.renderedBody).toContain("geist");
-    expect(tokens.fontDisplay).toContain("instrument");
+    expect(tokens.fontDisplay).not.toContain("instrument"); // titles are Geist, like the site
     await shot(page, testInfo, "brand-dna");
   });
 

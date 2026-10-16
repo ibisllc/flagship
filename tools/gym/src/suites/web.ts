@@ -39,7 +39,7 @@ const EVERY_MERGE: readonly Scenario[] = [
   ),
   web(
     "web-brand-dna",
-    "The boot palette + type stack conform to the brand tokens (teal accent, dark canvas, Geist + Instrument Serif; no legacy blue).",
+    "The boot palette + type stack conform to the website's tokens (teal accent, paper or near-black canvas, Geist with no display serif; no legacy blue).",
     "gym webapp boots on the brand-DNA palette + fonts",
     {
       steps: [
