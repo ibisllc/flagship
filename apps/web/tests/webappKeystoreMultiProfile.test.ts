@@ -390,7 +390,7 @@ describe("webapp keystore — per-profile keying (multi-profile device keys)", (
       bytesToHex: k.bytesToHex,
       fetch: (() => okJson(200)) as any,
       persistSeedForProfile: k.persistSeedForProfile,
-      makePassphrase: () => PASS,
+      localPassphrase: PASS,
     });
     // alice now has her own record AND is the active profile.
     expect(k.activeProfileId()).toBe("alice");
@@ -412,7 +412,7 @@ describe("webapp keystore — per-profile keying (multi-profile device keys)", (
       bytesToHex: k.bytesToHex,
       fetch: (() => okJson(200)) as any,
       persistSeedForProfile: k.persistSeedForProfile,
-      makePassphrase: () => PASS,
+      localPassphrase: PASS,
     });
     expect(k.activeProfileId()).toBe("bob");
     expect(store.has("wrappedUmk.bob")).toBe(true);
@@ -447,6 +447,41 @@ describe("webapp keystore — per-profile keying (multi-profile device keys)", (
     expect(Array.from(await k.unlockUmk(PASS, "carl"))).toEqual(Array.from(seed));
     // …and finds the admin root there, so it is still an admin device.
     expect(Array.from((await k.loadAdminRootSeed(seed, "carl"))!)).toEqual(Array.from(adminSeed));
+  });
+
+  it("with no key to carry, opening an account wraps it under a passphrase the owner chooses, never a random one", async () => {
+    const k = await loadKeystore();
+    const openAccount = (await loadOpenAccount()).openAccount;
+    // A session whose key isn't in this browser's keystore: nothing to adopt.
+    const seed = new Uint8Array(32).fill(0x5d);
+    const irk = await k.deriveIrkFromSeed(seed);
+    const deps = (over: Record<string, unknown>) => ({
+      accountDisplayName: "Dana Account",
+      deviceDisplayName: "This Browser",
+      session: { umk: seed, irk },
+      signWithIrk: (umk: Uint8Array, bytes: Uint8Array) => k.signWithIrk(umk, bytes),
+      ensureAdminRoot: async (session: { adminRootSeed?: Uint8Array }) => {
+        session.adminRootSeed = new Uint8Array(32).fill(0x44);
+        return "55".repeat(32);
+      },
+      signWithAdminRoot: async () => new Uint8Array(64).fill(0x66),
+      signWithDevice: async () => new Uint8Array(64).fill(0x77),
+      bytesToHex: k.bytesToHex,
+      fetch: (() => okJson(200)) as any,
+      adoptProfileKeys: k.adoptProfileKeys,
+      persistSeedForProfile: k.persistSeedForProfile,
+      ...over,
+    });
+    // Neither a passphrase nor a way to ask: refused, nothing stored.
+    await expect(openAccount("dana", deps({}))).rejects.toThrow(/passphrase/);
+    expect(DATABASES.get("flagship-webapp")?.get("keystore")?.has("wrappedUmk.dana") ?? false).toBe(false);
+
+    // Asked (typed twice): the next load unlocks with what the owner typed.
+    const titles: string[] = [];
+    const prompt = async (o: { title: string }) => (titles.push(o.title), "dana-chose-this");
+    await openAccount("dana", deps({ prompt }));
+    expect(titles).toEqual(["Lock this browser", "Confirm passphrase"]);
+    expect(Array.from(await k.unlockUmk("dana-chose-this", "dana"))).toEqual(Array.from(seed));
   });
 
   it("runTakeover flow: recovered seed wraps under the taken-over account's record", async () => {

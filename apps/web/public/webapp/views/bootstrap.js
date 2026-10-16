@@ -278,6 +278,8 @@ async function createAccount() {
         session.username = u;
       },
       adoptProfileKeys,
+      // Asked only when there is no key to carry onto the profile.
+      prompt: inlinePrompt,
       persistSeedForProfile,
       addProfile,
       accountDisplayName,

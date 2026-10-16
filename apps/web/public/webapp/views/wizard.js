@@ -210,6 +210,8 @@ async function handleOpenAccount() {
       // Multi-profile keying: store the session UMK under THIS account's
       // own keystore record so a second account never clobbers the first.
       adoptProfileKeys,
+      // Asked only when there is no key to carry onto the profile.
+      prompt: inlinePrompt,
       persistSeedForProfile,
       addProfile,
       accountDisplayName,
