@@ -797,12 +797,12 @@ release, and applies to a VM from its next start).
   2026-10-12 brought graceful VM stop + the appliance cache in Application
   Support). `wrangler` is not a repo dependency: the script's final
   `npm run deploy` needs a wrangler on PATH.
-- **Windows + Linux:** `studio-v0.1.2` on GitHub Releases, built by the
+- **Windows + Linux:** `studio-v0.1.3` on GitHub Releases (2026-10-15), built by the
   on-demand `studio-release.yml` (pass `publish=true` to release; it now
   stamps the version into both apps and checks it). Windows is a zip with
   `xorriso` bundled in `tools\`, **unsigned** (no code-signing cert). Linux is
-  an x86-64 AppImage that needs Node.js 20+, pkexec and xorriso. **On `main`
-  since 2026-10-15, level with the Mac (not yet in a release):** hosting from
+  an x86-64 AppImage that needs Node.js 20+, pkexec and xorriso. **In 0.1.3,
+  level with the Mac:** hosting from
   the published prebuilt appliance by default (verified qcow2 archive kept as
   the base, a qcow2 overlay + install-blob seed per server, installer-ISO
   fallback; a base is pruned only once no server's overlay reads it), QEMU

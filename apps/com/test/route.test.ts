@@ -2026,7 +2026,7 @@ describe("/download/<os> — on-brand installer redirect", () => {
     );
     expect(windows.status).toBe(302);
     expect(windows.headers.get("location")).toBe(
-      "https://github.com/ibisllc/flagship/releases/download/studio-v0.1.2/FlagshipStudio-Windows-x64-0.1.2.zip",
+      "https://github.com/ibisllc/flagship/releases/download/studio-v0.1.3/FlagshipStudio-Windows-x64-0.1.3.zip",
     );
 
     const linux = await route(
@@ -2035,7 +2035,7 @@ describe("/download/<os> — on-brand installer redirect", () => {
     );
     expect(linux.status).toBe(302);
     expect(linux.headers.get("location")).toBe(
-      "https://github.com/ibisllc/flagship/releases/download/studio-v0.1.2/FlagshipStudio-Linux-x86_64-0.1.2.AppImage",
+      "https://github.com/ibisllc/flagship/releases/download/studio-v0.1.3/FlagshipStudio-Linux-x86_64-0.1.3.AppImage",
     );
 
     const unknown = await route(
