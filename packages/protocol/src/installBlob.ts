@@ -14,6 +14,7 @@ import { hex, legacyFieldGuard } from "./canonicalBase.js";
 import type { Bytes, Keypair } from "./types.js";
 
 const TAG_AUTH_CODE = "flagship/auth-code/v1";
+const TAG_AUTH_CODE_ADMIN = "flagship/auth-code-admin/v1";
 const TAG_INSTALL_BLOB = "flagship/install-blob/v1";
 const TAG_SERVER_REGISTER = "flagship/server-register/v1";
 const TAG_AUTH_CODE_REVOKE = "flagship/auth-code-revoke/v1";
@@ -281,6 +282,38 @@ export function verifyAuthCode(c: AuthCode, sig: Bytes, irkPub: Bytes): boolean 
   } catch {
     return false;
   }
+}
+
+/**
+ * An admin device's approval of a new server (owner rule 2026-10-16: adding a
+ * server to an account is admin-only, and `.com` enforces it). The admin root
+ * (or a device holding an admin-root-signed `admin` grant) signs
+ * `flagship/auth-code-admin/v1|<the AuthCode's canonical bytes>`, which commit
+ * to the `ar=` root the new box will pin; an AuthCode without one has no admin
+ * form. Vectors: `test-vectors/add-server/vectors.json`.
+ */
+export function authCodeAdminCanonicalBytes(c: AuthCode): Bytes {
+  if (c.adminRootPubKey === undefined || c.adminRootPubKey.length !== 32) {
+    throw new Error("auth-code admin approval needs the AuthCode's admin root");
+  }
+  const inner = new TextDecoder().decode(canonicalAuthCode(c));
+  return new TextEncoder().encode(`${TAG_AUTH_CODE_ADMIN}|${inner}`);
+}
+
+export function signAuthCodeAdmin(c: AuthCode, admin: Keypair): Bytes {
+  return ed.sign(authCodeAdminCanonicalBytes(c), admin.privateKey);
+}
+
+export function verifyAuthCodeAdmin(c: AuthCode, sig: Bytes, pub: Bytes): boolean {
+  try {
+    return ed.verify(sig, authCodeAdminCanonicalBytes(c), pub);
+  } catch {
+    return false;
+  }
+}
+
+export function authCodeCanonicalBytes(c: AuthCode): Bytes {
+  return canonicalAuthCode(c);
 }
 
 export function signInstallBlob(b: InstallBlob, irk: Keypair): Bytes {

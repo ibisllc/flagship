@@ -463,9 +463,15 @@ export function parseServerRestoreOrder(v: unknown): ServerRestoreOrder | null {
 /**
  * The restore order as it rides inside a pairing order's JSON
  * (`{request, signature, restore: {order, signatureHex}}`): pull it out and
- * verify it names this box, under the owner's key. Null when absent or bad.
+ * verify it names this box, under the owner's key (or the caller's own
+ * authorization, e.g. an admin-pinned box's sensitive-order gate). Null when
+ * absent or bad.
  */
-export function openRestoreFromPairingJson(json: string, ownerPub: Bytes, expectedServerDomain: string): { order: ServerRestoreOrder; signatureHex: string } | null {
+export function openRestoreFromPairingJson(
+  json: string,
+  ownerPub: Bytes | ((order: ServerRestoreOrder, sig: Bytes) => boolean),
+  expectedServerDomain: string,
+): { order: ServerRestoreOrder; signatureHex: string } | null {
   let r: unknown;
   try {
     r = (JSON.parse(json) as { restore?: unknown })?.restore;
@@ -477,6 +483,8 @@ export function openRestoreFromPairingJson(json: string, ownerPub: Bytes, expect
   const order = parseServerRestoreOrder(raw);
   if (!order || typeof signatureHex !== "string" || !/^[0-9a-f]{128}$/.test(signatureHex)) return null;
   if (order.serverDomain.toLowerCase() !== expectedServerDomain.toLowerCase()) return null;
-  if (!verifyServerRestoreOrder(order, hexToBytes(signatureHex), ownerPub)) return null;
+  const sig = hexToBytes(signatureHex);
+  const authorized = typeof ownerPub === "function" ? ownerPub(order, sig) : verifyServerRestoreOrder(order, sig, ownerPub);
+  if (!authorized) return null;
   return { order, signatureHex };
 }

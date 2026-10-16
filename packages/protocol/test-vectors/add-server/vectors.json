@@ -1,0 +1,102 @@
+{
+  "about": "Adding a server to an account is admin-only (owner rule 2026-10-16; docs/service-access-gating.md \"Account members\"). authCode: on an admin-pinned account, POST /api/auth-code/issue carries `adminSignature`, the admin root's (or an admin-granted device's) Ed25519 signature over flagship/auth-code-admin/v1|<the AuthCode canonical string>; the AuthCode must carry ar=<the account's pinned admin root>, and an AuthCode without ar= has no admin form (refuse). The IRK still signs the plain AuthCode (`signature`). reject: signatures that must NOT verify as the admin approval under keys.adminRootPubHex. wrongRoot: an AuthCode pinning another root, approved by that root: it verifies under that root, and .com refuses it because the root is not the account's. restore: flagship/server-restore/v1 (unchanged bytes) signed by the admin root, which an admin-pinned box now requires (IRK refused). Seeds are raw Ed25519 seeds.",
+  "keys": {
+    "irkSeedHex": "1111111111111111111111111111111111111111111111111111111111111111",
+    "irkPubHex": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+    "adminRootSeedHex": "2222222222222222222222222222222222222222222222222222222222222222",
+    "adminRootPubHex": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+    "otherRootSeedHex": "3333333333333333333333333333333333333333333333333333333333333333",
+    "otherRootPubHex": "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce",
+    "deviceSeedHex": "4444444444444444444444444444444444444444444444444444444444444444",
+    "devicePubHex": "d759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c48"
+  },
+  "authCode": {
+    "fields": {
+      "version": 1,
+      "serial": "01ABCDEF0123456789ABCDEF01",
+      "username": "harry",
+      "serverName": "home2",
+      "serverDomain": "home2.harry.flagship.services",
+      "delegatedPubKey": "c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242",
+      "userPubKey": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+      "issuedAt": 1792000000000,
+      "expiresAt": 1792021600000,
+      "adminRootPubKey": "a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0"
+    },
+    "canonical": "flagship/auth-code/v1|1|01ABCDEF0123456789ABCDEF01|harry|home2|home2.harry.flagship.services|c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242|d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737|1792000000000|1792021600000|ar=a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+    "irkSignatureHex": "eeb93badd817dd3477525b21974b384a9547f52fabf18f1248141b37fba7848c73251f80c39c99f416c983eb6553517370c599073ca512fc49302c80eb56b90a",
+    "adminCanonical": "flagship/auth-code-admin/v1|flagship/auth-code/v1|1|01ABCDEF0123456789ABCDEF01|harry|home2|home2.harry.flagship.services|c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242|d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737|1792000000000|1792021600000|ar=a09aa5f47a6759802ff955f8dc2d2a14a5c99d23be97f864127ff9383455a4f0",
+    "adminSignatureHex": "183df316f4f711241edcd90d2c5b12834e65c073f547714e10bf8ced367f972cc8d957f8f173fd8ec721e1ae48d254db6f9af7f0213badf2564dbbca0ac9230b"
+  },
+  "reject": [
+    {
+      "why": "the IRK signed the admin form",
+      "signatureHex": "29202140a3f1625148d5c03859ece83657f15e2f204aec2b4bdb3195e71c5a7db5334383e788cf47fd6c92bbad14daebda9a13fc305d09e0ce76a70378375402"
+    },
+    {
+      "why": "a non-admin device key signed the admin form",
+      "signatureHex": "10e72c1591351e2d6aba292f2934ee6810309dff410317353d2127c48547a719cc9138f7ec82d0a733f4475f2deb8d44d09c2c451c1e288927e40d5157ffdd05"
+    },
+    {
+      "why": "the admin root signed the plain AuthCode, not the admin form",
+      "signatureHex": "462885c7f11ed9305112f4920068705884f176717f7b5bb9699626bfc58428f094253ea37c5d43477c14f358f1598b2ca99c09e89022eb6e0292beec4bf3ea03"
+    },
+    {
+      "why": "another root signed the admin form",
+      "signatureHex": "6a45b362a0b1e11d58f88ae75c43915ab2839b2dd4b94523d5cf27983365e919139690e70e79db87541da2c8b73272d04beed54f52e86a22604ca1b5fcaf9f0a"
+    }
+  ],
+  "wrongRoot": {
+    "fields": {
+      "version": 1,
+      "serial": "01ABCDEF0123456789ABCDEF01",
+      "username": "harry",
+      "serverName": "home2",
+      "serverDomain": "home2.harry.flagship.services",
+      "delegatedPubKey": "c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242",
+      "userPubKey": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+      "issuedAt": 1792000000000,
+      "expiresAt": 1792021600000,
+      "adminRootPubKey": "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce"
+    },
+    "adminCanonical": "flagship/auth-code-admin/v1|flagship/auth-code/v1|1|01ABCDEF0123456789ABCDEF01|harry|home2|home2.harry.flagship.services|c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242|d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737|1792000000000|1792021600000|ar=17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce",
+    "adminSignatureHex": "5f906c2c1533ac2d8ace1eb8e50e5be5afab128bd5562f5810f392471ebbec7052fe162d34dce1b3d66c805feaf64b008b0d9b2cc5a634ae283a72a605f96e00"
+  },
+  "refuse": [
+    {
+      "why": "no admin root in the AuthCode",
+      "fields": {
+        "version": 1,
+        "serial": "01ABCDEF0123456789ABCDEF01",
+        "username": "harry",
+        "serverName": "home2",
+        "serverDomain": "home2.harry.flagship.services",
+        "delegatedPubKey": "c6822637c7d310ec57627be00ba259d253749f4aaf644470cffbe53a35f73242",
+        "userPubKey": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+        "issuedAt": 1792000000000,
+        "expiresAt": 1792021600000
+      }
+    }
+  ],
+  "restore": {
+    "order": {
+      "serverDomain": "home2.harry.flagship.services",
+      "archiveId": "00112233445566778899aabbccddeeff",
+      "bytes": 123456789,
+      "sha256": "abababababababababababababababababababababababababababababababab",
+      "issuedAt": 1792000000000
+    },
+    "canonical": "flagship/server-restore/v1|home2.harry.flagship.services|00112233445566778899aabbccddeeff|123456789|abababababababababababababababababababababababababababababababab|1792000000000",
+    "adminSignatureHex": "1103c0e04d3d989d44df3e6c483b508a8d293eef95a5cfe2fd655eb323a12395b9c28672552c5edc241c06c57b57093eec6617cc540d1d372fd91a558840710d",
+    "reject": [
+      {
+        "why": "the IRK signed it (an admin-pinned box refuses)",
+        "signatureHex": "445ff6316bd118e04e4eb85ebf0f5f21702c0e7bd10b652dd81d9c283eb75ef0222e1af57fe668ac7b2e9b9a6ab02f4fb6b38968196ee83b50fd9e8085991808"
+      },
+      {
+        "why": "a non-admin device key signed it",
+        "signatureHex": "081328e39ffaa62e159970146a52443962dd5cd741dadda9aa090ba752ce8b32bd77c47be8bea2d5fadcdac45fa2fb150ba77658eb4b68787edc1fc641345602"
+      }
+    ]
+  }
+}
