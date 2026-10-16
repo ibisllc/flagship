@@ -933,6 +933,7 @@ public struct SettingsScreen: View {
                 .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityIdentifier("appicon-\(label.lowercased())")
     }
 
@@ -962,6 +963,7 @@ public struct SettingsScreen: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(mode == .auto ? "Automatic appearance" : (mode == .light ? "Light appearance" : "Dark appearance"))
+        .accessibilityAddTraits(selected ? .isSelected : [])
         .accessibilityIdentifier("appearance-\(mode.rawValue)")
     }
 

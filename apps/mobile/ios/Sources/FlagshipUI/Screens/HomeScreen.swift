@@ -68,6 +68,10 @@ public struct HomeScreen: View {
     /// Only an admin device of the account sees "Add/Import a server", in the
     /// list and on the empty state ([showsAddServer]).
     let canAddServers: Bool
+    /// Only an admin device signs the orders behind reordering, Make
+    /// leader, Cancel server and Delete server (`.com` takes them only under
+    /// the admin root), so another device isn't offered them.
+    var canChangeServers: Bool = true
     var onOpenPod: (PodInfo) -> Void = { _ in }
     var onAddServer: () -> Void = {}
     /// "Import a backup" in the Add/Import chooser.
@@ -137,6 +141,7 @@ public struct HomeScreen: View {
         statusPaused: Bool = false,
         serverListLocked: Bool = false,
         canAddServers: Bool = true,
+        canChangeServers: Bool = true,
         onOpenPod: @escaping (PodInfo) -> Void = { _ in },
         onCancelServer: @escaping (PodInfo) -> Void = { _ in },
         onDeleteServer: @escaping (PodInfo) -> Void = { _ in },
@@ -172,6 +177,7 @@ public struct HomeScreen: View {
         self.statusPaused = statusPaused
         self.serverListLocked = serverListLocked
         self.canAddServers = canAddServers
+        self.canChangeServers = canChangeServers
         self.onOpenPod = onOpenPod
         self.onAddServer = onAddServer
         self.onImportBackup = onImportBackup
@@ -248,6 +254,8 @@ public struct HomeScreen: View {
                             .disabled(unlocking)
                             .accessibilityIdentifier("status-paused-unlock")
                     }
+                    // .contain keeps the Unlock button's own id.
+                    .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("status-paused")
                 }
                 if !pods.isEmpty {
@@ -499,6 +507,7 @@ public struct HomeScreen: View {
                 .accessibilityIdentifier("home-show-my-servers")
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("home-locked-state")
     }
 
@@ -512,7 +521,7 @@ public struct HomeScreen: View {
 
     /// Reordering only makes sense over the whole list.
     private var canReorder: Bool {
-        statusFilter == .all && search.trimmingCharacters(in: .whitespaces).isEmpty
+        canChangeServers && statusFilter == .all && search.trimmingCharacters(in: .whitespaces).isEmpty
             && pods.filter({ $0.status != .pending && !$0.isRevoked }).count > 1
     }
 
@@ -564,6 +573,13 @@ public struct HomeScreen: View {
                         .font(.system(size: 12, weight: .semibold)).foregroundColor(c.textMuted)
                 }
                 if canAddServers { addServerButton(c: c) }
+                if !canChangeServers {
+                    Text(AdminOrderGate.server)
+                        .font(FS.font.caption())
+                        .foregroundColor(c.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("home-servers-admin-only")
+                }
                 // Filter chips (All / Online / Pending / Offline) over the
                 // derived liveness — purely narrows what's rendered.
                 FSChipRow(
@@ -736,7 +752,7 @@ public struct HomeScreen: View {
                     .accessibilityHidden(true)
                     .accessibilityIdentifier("home-server-handle")
             }
-            Button(action: { backupWait?.state == "waiting" ? onSendBackup(pod) : onOpenPod(pod) }) {
+            Button(action: { backupWait?.state == "waiting" && canChangeServers ? onSendBackup(pod) : onOpenPod(pod) }) {
                 HStack(alignment: .center, spacing: FS.space.s3) {
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 6) {
@@ -809,7 +825,8 @@ public struct HomeScreen: View {
     private func serverMenu(pod: PodInfo) -> some View {
         // Leader = the daemon the screens point at; only a
         // server that came online can be one.
-        if pod.status != .pending && !pod.isRevoked && pods.first(where: { $0.status != .pending && !$0.isRevoked })?.podId != pod.podId {
+        if canChangeServers && pod.status != .pending && !pod.isRevoked
+            && pods.first(where: { $0.status != .pending && !$0.isRevoked })?.podId != pod.podId {
             Button {
                 onMakeLeader(pod)
             } label: {
@@ -819,7 +836,7 @@ public struct HomeScreen: View {
                 Label("Make leader", systemImage: "flag.fill")
             }
         }
-        if awaitingBackup[pod.fqdn.lowercased()]?.state == "waiting" {
+        if canChangeServers && awaitingBackup[pod.fqdn.lowercased()]?.state == "waiting" {
             Button {
                 onSendBackup(pod)
             } label: {
@@ -834,7 +851,9 @@ public struct HomeScreen: View {
         // A pending (in-flight) server can be cancelled
         // straight from the list — frees the name + revokes
         // the install code.
-        if pod.status == .pending {
+        if !canChangeServers {
+            EmptyView()
+        } else if pod.status == .pending {
             Button(role: .destructive) {
                 onCancelServer(pod)
             } label: {

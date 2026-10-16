@@ -225,6 +225,7 @@ public final class MockLockPowerClient: LockPowerClient, @unchecked Sendable {
     public var journalLines: [String] = []
 
     public func readJournal(serverDomain: String, request: [String: Any], signatureHex: String) async throws -> JournalResult {
+        try MockOrderSigners.shared.require(.irk, kind: "journal", signatureHex: signatureHex, payload: request)
         try record(serverDomain, "/api/journal", request, signatureHex)
         let unit = (request["unit"] as? String) ?? "flagship-daemon"
         return JournalResult(ok: true, unit: unit, lines: journalLines)

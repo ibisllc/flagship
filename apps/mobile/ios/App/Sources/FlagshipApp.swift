@@ -317,6 +317,10 @@ struct FlagshipApp: App {
     private static func applySmokeOnboardingIfRequested() {
         guard ProcessInfo.processInfo.arguments.contains("-smoke-onboarding") else { return }
         Keystore.wipeAllProfiles()
+        // A demo account joined by an earlier walk lives in the session
+        // store, not the keychain: drop it too, or the next launch restores
+        // that demo instead of showing Welcome.
+        UserDefaults.standard.removeObject(forKey: "flagship.demoSession.v1")
         GymSeams.bypassBiometricGates = true
         GymSeams.suppressAccessAlerts = true
     }
@@ -514,9 +518,12 @@ struct FlagshipApp: App {
     private let readTokens: AccountReadTokenProvider
     /// Every mock client, for the gym's launch seams.
     private var gymMocks: GymMocks {
-        GymMocks(screens: mockClient, server: mockServerClient as? MockFlagshipServerClient, mailbox: mockMailbox,
-                 lockPower: mockLockPower, frontPage: mockFrontPage, uninstall: mockServiceUninstall,
-                 access: mockServiceAccess, transfer: mockServerTransfer, migration: mockServerMigration, relay: mockRelay)
+        var mocks = GymMocks(screens: mockClient, server: mockServerClient as? MockFlagshipServerClient, mailbox: mockMailbox,
+                             lockPower: mockLockPower, frontPage: mockFrontPage, uninstall: mockServiceUninstall,
+                             access: mockServiceAccess, transfer: mockServerTransfer, migration: mockServerMigration,
+                             relay: mockRelay)
+        mocks.pairingRelay = pairingRelay
+        return mocks
     }
     private var activeClient: any ScreensClient {
         dev.useLiveClient ? liveClient : mockClient
@@ -525,7 +532,9 @@ struct FlagshipApp: App {
     /// pinned session with that box's own token; the mock for every server in
     /// demo mode.
     private var activePodClients: PodScreensClientFactory {
-        dev.useLiveClient ? livePodClients : .shared(mockClient)
+        guard !dev.useLiveClient else { return livePodClients }
+        let mock = mockClient
+        return PodScreensClientFactory { fqdn in GymSweepSeams.podClient(forFqdn: fqdn) ?? mock }
     }
     private var activeServerClient: any FlagshipServerClient {
         dev.useLiveClient ? liveServerClient : mockServerClient
@@ -612,6 +621,7 @@ struct FlagshipApp: App {
                 .onAppear {
                     Self.applySmokeModeIfRequested(appState, linker: linker, operations: operations, trust: trust, privacy: privacy,
                                                    screens: mockClient, mocks: gymMocks)
+                    GymSweepSeams.applyOnboarding(args: ProcessInfo.processInfo.arguments, mocks: gymMocks)
                     appDelegate.linker = linker
                     linker.makeCurrent()
                     WatchBridge.shared.activate(

@@ -16,6 +16,8 @@ public struct GymMocks {
     public let transfer: MockServerTransferClient
     public let migration: MockServerMigrationClient
     public let relay: MockQrRelayClient
+    /// The device-pairing relay (Join an account by pairing).
+    public var pairingRelay: MockPairingRelayClient?
 
     public init(screens: MockScreensClient, server: MockFlagshipServerClient?, mailbox: MockSecretMailboxClient,
                 lockPower: MockLockPowerClient, frontPage: MockFrontPageClient, uninstall: MockServiceUninstallClient,
@@ -40,12 +42,14 @@ public struct GymMocks {
 @MainActor
 public enum GymSweepSeams {
     public static func apply(args: [String], app: AppState, operations: ActiveOperationsCenter, mocks: GymMocks) {
+        resetAiKeys()
         home(args, app, operations, mocks)
         server(args, app, mocks)
         apps(args, app, mocks)
         settings(args, app, mocks)
         build(args, app, operations, mocks)
         share(args, app, mocks)
+        onboarding(args, app, mocks)
     }
 
     /// The value after `flag` in the launch arguments, if any.

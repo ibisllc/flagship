@@ -281,7 +281,11 @@ struct ImportBackupScreen: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityIdentifier("import-backup-files")
                 }
-                FSPrimaryButton(vm.backupFileName == nil && vm.dataFileName == nil ? "Choose the backup files" : "Choose the other file", block: true) { picking = true }
+                FSPrimaryButton(vm.backupFileName == nil && vm.dataFileName == nil ? "Choose the backup files" : "Choose the other file", block: true) {
+                    // Gym: the system file picker can't be driven, so a
+                    // smoke launch hands over its fixture files instead.
+                    if let urls = GymSweepSeams.importArchiveURLs { Task { await vm.choose(urls) } } else { picking = true }
+                }
                     .accessibilityIdentifier("import-backup-choose")
                 Text("You can pick both at once. They're read where they are; nothing is copied onto this phone.")
                     .font(FS.font.caption())

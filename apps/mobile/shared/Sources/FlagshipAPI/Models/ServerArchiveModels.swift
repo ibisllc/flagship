@@ -196,6 +196,10 @@ public struct BoxActivityEntry: Codable, Equatable, Sendable {
     public struct Actor: Codable, Equatable, Sendable {
         public let kind: String
         public let label: String?
+        public init(kind: String, label: String? = nil) {
+            self.kind = kind
+            self.label = label
+        }
     }
     public let seq: Int?
     public let ts: Int64

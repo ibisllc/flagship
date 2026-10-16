@@ -1118,7 +1118,8 @@ public final class MockSecretMailboxClient: SecretMailboxClient, @unchecked Send
         return SealedLuksKeyResponse(serverDomain: serverDomain, sealedKey: hex, sealedAt: 1)
     }
     public func fetchPods(username: String) async throws -> PodsDirectoryResponse {
-        PodsDirectoryResponse(username: username, pods: directory, pending: directoryPending, serverOrder: directoryServerOrder)
+        GymProbe.note("read pods")
+        return PodsDirectoryResponse(username: username, pods: directory, pending: directoryPending, serverOrder: directoryServerOrder)
     }
 
     /// Scripted live-sync responses for tests: each `fetchLiveSync` call pops the

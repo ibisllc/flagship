@@ -43,7 +43,7 @@ public struct ServerOrderSaver {
         self.app = app
         self.mailbox = mailbox
         self.clients = clients
-        self.signer = signer ?? { reason in try await Self.sensitiveOrderKey(reason: reason) }
+        self.signer = signer ?? { reason in try await Self.adminOrderKey(reason: reason) }
         self.now = now
     }
 
@@ -108,6 +108,7 @@ public struct ServerOrderSaver {
     }
 
     static func message(for error: Error) -> String {
+        if error is AdminOrderRefused { return AdminOrderGate.server }
         if BiometricGate.GateError.from(error) == .userCancelled {
             return "The server order wasn't changed."
         }
@@ -120,6 +121,15 @@ public struct ServerOrderSaver {
     /// Silent when the session already holds the IRK and this device has no
     /// admin root; otherwise one Face ID / passcode prompt, which also opens
     /// the account keys for the rest of the session.
+    /// The key a server order is signed with: the admin root only. `.com`
+    /// and the boxes take an order only under it (every account is opened
+    /// with one; a demo account keeps its order on the device), so a device
+    /// without it never signs one with the IRK.
+    static func adminOrderKey(reason: String) async throws -> Curve25519.Signing.PrivateKey {
+        guard Keystore.hasAdminRoot else { throw AdminOrderRefused() }
+        return try await sensitiveOrderKey(reason: reason)
+    }
+
     static func sensitiveOrderKey(reason: String) async throws -> Curve25519.Signing.PrivateKey {
         if !Keystore.hasAdminRoot, let irk = Keystore.sessionIRKIfCached() { return irk }
         let context = try await BiometricGate().evaluateReturningContext(reason: reason)

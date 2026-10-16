@@ -15,6 +15,7 @@ struct FrontPageCard: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.frontPageClient) private var client
     @Environment(ToastCenter.self) private var toasts
+    @Environment(AppState.self) private var app
 
     let serverDomain: String
 
@@ -68,13 +69,15 @@ struct FrontPageCard: View {
             }
             .pickerStyle(.menu)
             .accessibilityIdentifier("sd-front-page-picker")
-            .disabled(isBusy)
+            .disabled(isBusy || !AdminOrderGate.allows(app))
 
-            FSSecondaryButton(isBusy ? "Saving…" : "Save", block: true) {
-                Task { await save() }
+            if AdminOrderGate.allows(app) {
+                FSSecondaryButton(isBusy ? "Saving…" : "Save", block: true) {
+                    Task { await save() }
+                }
+                .accessibilityIdentifier("sd-front-page-save")
+                .disabled(isBusy || selection == (vm.current ?? ""))
             }
-            .accessibilityIdentifier("sd-front-page-save")
-            .disabled(isBusy || selection == (vm.current ?? ""))
         }
     }
 

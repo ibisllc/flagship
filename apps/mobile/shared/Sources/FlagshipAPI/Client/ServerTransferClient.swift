@@ -283,6 +283,7 @@ public final class MockServerTransferClient: ServerTransferClient, @unchecked Se
     public init() {}
 
     public func postOffer(serverDomain: String, body: TransferOfferBody) async throws -> TransferOfferResult {
+        try MockOrderSigners.shared.require(.sensitive, kind: "transfer-offer", signatureHex: body.offerSignature, payload: body)
         offers.append((serverDomain, body))
         return TransferOfferResult(ok: true, expiresAt: body.offer.expiresAt)
     }

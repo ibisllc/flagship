@@ -148,6 +148,7 @@ public struct HomeTab: View {
                     statusPaused: app.accountStatusPaused,
                     serverListLocked: app.isServerListLocked,
                     canAddServers: AddServerGate.allows(app),
+                    canChangeServers: AdminOrderGate.allows(app),
                     onOpenPod: { pod in path.append(.serverDetail(podId: pod.podId)) },
                     onCancelServer: { pod in
                         Task { await cancelPendingServer(pod: pod, server: server, app: app, toasts: toasts) }
@@ -633,6 +634,7 @@ struct CreateServerContainer: View {
     @Environment(\.secretMailboxClient) private var mailbox
     @Environment(\.sessionStore) private var sessionStore
     @Environment(AppState.self) private var app
+    @Environment(ToastCenter.self) private var toasts
     @State private var vm: CreateServerViewModel?
 
     init(
@@ -665,7 +667,7 @@ struct CreateServerContainer: View {
                         let serial = vm.lastDeliveredSerial ?? ""
                         onDelivered(serverDomain, serial, name, description)
                     },
-                    onCancel: onCancel
+                    onCancel: { cancel(vm) }
                 )
             } else {
                 ProgressView()
@@ -686,6 +688,21 @@ struct CreateServerContainer: View {
     }
 }
 
+extension CreateServerContainer {
+    /// "Cancel order" on the delivered page: the recipe is out and the server
+    /// is already on Home, so cancel it there too (free the name, revoke the
+    /// install code) before leaving, as a pending server's own Cancel does.
+    @MainActor
+    func cancel(_ vm: CreateServerViewModel) {
+        guard case .delivered(_, let domain) = vm.phase,
+              let pod = app.pods.first(where: { $0.fqdn.lowercased() == domain.lowercased() && $0.status == .pending })
+        else { onCancel(); return }
+        Task {
+            if await cancelPendingServer(pod: pod, server: serverClient, app: app, toasts: toasts) { onCancel() }
+        }
+    }
+}
+
 /// Wraps PendingServerScreen so the Cancel-order tap reaches
 /// flagshipserver.com (auth-code revoke) before dropping the pod
 /// from AppState. The container surfaces success/failure as toasts.
@@ -698,7 +715,8 @@ struct PendingPodContainer: View {
     @State private var cancelling: Bool = false
 
     var body: some View {
-        PendingServerScreen(pod: pod, username: app.currentUser, awaitingUnlock: app.isAwaitingUnlock(pod)) {
+        PendingServerScreen(pod: pod, username: app.currentUser, awaitingUnlock: app.isAwaitingUnlock(pod),
+                            cancelRefusal: AdminOrderGate.allows(app) ? nil : AdminOrderGate.server) {
             Task { await cancelOrder() }
         }
     }

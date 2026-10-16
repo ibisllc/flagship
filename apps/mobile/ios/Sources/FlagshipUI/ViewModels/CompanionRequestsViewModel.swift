@@ -36,6 +36,7 @@ public final class CompanionRequestsViewModel {
     private let server: any FlagshipServerClient
     private let username: () -> String?
     private let signer: @MainActor (String) async throws -> Curve25519.Signing.PrivateKey
+    private let sensitiveSigner: @MainActor (String) async throws -> Curve25519.Signing.PrivateKey
     private let now: () -> Int64
     private let pollIntervalNanos: UInt64
 
@@ -46,6 +47,7 @@ public final class CompanionRequestsViewModel {
         server: any FlagshipServerClient,
         username: @escaping () -> String?,
         signer: (@MainActor (String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
+        sensitiveSigner: (@MainActor (String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
         now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
         pollIntervalNanos: UInt64 = CompanionRequestsViewModel.pollInterval
     ) {
@@ -54,6 +56,11 @@ public final class CompanionRequestsViewModel {
         self.username = username
         self.signer = signer ?? { reason in
             try await Keystore.deriveIRK(reason: reason)
+        }
+        // Releasing a name is a sensitive order: `.com` takes it only under
+        // the admin root on an admin-pinned account (the IRK is refused).
+        self.sensitiveSigner = sensitiveSigner ?? signer ?? { reason in
+            try await Keystore.sensitiveOrderSigningKey(reason: reason)
         }
         self.now = now
         self.pollIntervalNanos = pollIntervalNanos
@@ -153,7 +160,7 @@ public final class CompanionRequestsViewModel {
         }
         let intentUsername = string(from: intent["username"]) ?? user
         let issuedAt = self.now()
-        let irk = try await signer("Approve release-server for \(serverDomain)")
+        let irk = try await sensitiveSigner("Approve release-server for \(serverDomain)")
         let canonical = ReleaseServerName.canonicalBytes(
             username: intentUsername,
             serverDomain: serverDomain,

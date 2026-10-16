@@ -89,7 +89,7 @@ final class GymTotalTests: XCTestCase {
     /// lock/power control, the front-page picker, and the View-journal action.
     /// These render from the MOCK serverDetail() response (no live box).
     func test_serverDetailRendersCards() throws {
-        let app = launch(tab: "home")
+        let app = launch(tab: "home", extra: ["-smoke-admin-root"])
         gymShot(app, "home-ready")
         openHomePodDetail(app)
         gymShot(app, "server-detail")
@@ -119,7 +119,7 @@ final class GymTotalTests: XCTestCase {
     /// not a backend delete. Asserts the confirmation control surfaces, then
     /// stops (never actually revokes; this is Tier-1, no backend).
     func test_revokeServerSheetConfirm() throws {
-        let app = launch(tab: "home")
+        let app = launch(tab: "home", extra: ["-smoke-admin-root"])
         openHomePodDetail(app)
         // The revoke entry lives in the danger zone, below the fold.
         let revoke = app.buttons["sd-revoke-server"]
