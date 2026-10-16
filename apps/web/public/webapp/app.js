@@ -26,6 +26,7 @@ import {
   setOperationsBarUnlockedResolver,
 } from "./lib/operationsBar.js";
 import {
+  AI_CHAT_SW_MESSAGE,
   aiChatDeepLink,
   startAiChatAlertPoll,
   makeAiChatNotifier,
@@ -639,12 +640,24 @@ async function boot() {
   // worker's showNotification (a tap then routes via the SW's notificationclick
   // DEEP_LINK), falling back to an inline Notification whose onclick opens the
   // chat. Best-effort throughout — a .com/box outage can never wedge the app.
-  startAiChatAlertPoll({
+  const aiChatPoll = startAiChatAlertPoll({
     active: () => sliversUnlocked() && !!getPodBaseUrlSafe(),
     notify: makeAiChatNotifier({ show: showAiChatNotification }),
     // The alerts come from the current server: the chat opens there.
     server: () => currentPodFqdn(),
+    open: (a) => void openVibeCodeSessionById(a.serviceId, { server: a.server || "" }),
   });
+  // The box wakes the owner with a content-free `generic` push when a build
+  // needs them; tapping it drains the inbox now and lands on that chat, in an
+  // open tab (the service worker's message) or a tab it opened (`?wake=1`).
+  try {
+    navigator.serviceWorker?.addEventListener("message", (ev) => {
+      if (ev.data?.type === AI_CHAT_SW_MESSAGE) void aiChatPoll.wake();
+    });
+  } catch {
+    /* no service worker */
+  }
+  if (new URLSearchParams(location.search).has("wake")) void aiChatPoll.wake();
 
   // "<App> wants to reach <host>" (docs/ai-privacy-and-staging.md §3a): fetch
   // the box's pending access requests on load, focus, a notification click and

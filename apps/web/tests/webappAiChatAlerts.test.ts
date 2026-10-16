@@ -91,7 +91,8 @@ describe("aiChatAlerts — drainAiChatAlertsOnce", () => {
       notify: (a: any) => notified.push(a),
     });
 
-    expect(r).toEqual({ cursor: 7, handled: 1 });
+    expect(r).toMatchObject({ cursor: 7, handled: 1 });
+    expect(r.alerts.map((a: any) => a.serviceId)).toEqual(["sess-a"]);
     // Operations sliver got a build op keyed by the session, pointing at chat.
     expect(ops.upserts).toHaveLength(1);
     expect(ops.upserts[0]?.id).toBe("sess-a");
@@ -149,7 +150,7 @@ describe("aiChatAlerts — drainAiChatAlertsOnce", () => {
       notify: (a: any) => notified.push(a),
     });
 
-    expect(r).toEqual({ cursor: 12, handled: 0 });
+    expect(r).toEqual({ cursor: 12, handled: 0, alerts: [] });
     expect(ops.upserts).toHaveLength(0);
     expect(notified).toHaveLength(0);
     expect(calls.some((c) => c.path === "/api/phone/alerts/ack")).toBe(false);
@@ -299,5 +300,100 @@ describe("aiChatAlerts — startAiChatAlertPoll", () => {
 
     stop();
     expect(scheduled).toBeNull();
+  });
+});
+
+// The box wakes the owner with a content-free `generic` push when a build
+// needs them (d36407cab). Tapping it drains the inbox at once and opens the
+// chat it names, also when the foreground poll already drained it, or once
+// the app is unlocked.
+describe("aiChatAlerts — a tapped push wakes the poll", () => {
+  function manualTimer() {
+    let scheduled: (() => void) | null = null;
+    return {
+      setTimeout: ((fn: () => void) => {
+        scheduled = fn;
+        return 1;
+      }) as any,
+      clearTimeout: (() => {
+        scheduled = null;
+      }) as any,
+      run: () => scheduled?.(),
+    };
+  }
+  const flush = async () => {
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+  };
+
+  it("drains now and opens the waiting chat on its server", async () => {
+    const { startAiChatAlertPoll } = await load();
+    let events: any[] = [];
+    const opened: any[] = [];
+    const stop = startAiChatAlertPoll({
+      fetcher: async (p: string) => (p.startsWith("/api/phone/alerts?") ? { events } : { ok: true }),
+      operations: fakeOps(),
+      server: () => "home.harry.flagship.services",
+      open: (a: any) => opened.push(a),
+      ...manualTimer(),
+    });
+    await flush();
+    expect(opened).toEqual([]);
+    events = [aiChatEnvelope(4, "sess-w", "requestEnvVar", "tool-9")];
+    await stop.wake();
+    expect(opened).toHaveLength(1);
+    expect(opened[0]).toMatchObject({ serviceId: "sess-w", server: "home.harry.flagship.services" });
+    stop();
+  });
+
+  it("a poll tick alone never opens a chat", async () => {
+    const { startAiChatAlertPoll } = await load();
+    const { fetcher } = fakeFetcher([aiChatEnvelope(1, "sess-a", "talkToUser", "t")]);
+    const opened: any[] = [];
+    const ops = fakeOps();
+    const stop = startAiChatAlertPoll({ fetcher, operations: ops, open: (a: any) => opened.push(a), ...manualTimer() });
+    await flush();
+    expect(ops.upserts.map((u) => u.id)).toEqual(["sess-a"]);
+    expect(opened).toEqual([]);
+    stop();
+  });
+
+  it("opens the chat the foreground poll already drained, if it is recent", async () => {
+    const { startAiChatAlertPoll, RECENT_ALERT_MS } = await load();
+    let events: any[] = [aiChatEnvelope(1, "sess-b", "talkToUser", "t")];
+    const opened: any[] = [];
+    let now = 1_000_000;
+    const stop = startAiChatAlertPoll({
+      fetcher: async (p: string) => (p.startsWith("/api/phone/alerts?") ? { events } : { ok: true }),
+      operations: fakeOps(),
+      open: (a: any) => opened.push(a),
+      now: () => now,
+      ...manualTimer(),
+    });
+    await flush();
+    events = [];
+    await stop.wake();
+    expect(opened.map((a) => a.serviceId)).toEqual(["sess-b"]);
+    now += RECENT_ALERT_MS + 1;
+    await stop.wake();
+    expect(opened).toHaveLength(1);
+    stop();
+  });
+
+  it("while locked the wake waits for the first drain after unlock", async () => {
+    const { startAiChatAlertPoll } = await load();
+    let unlocked = false;
+    const { fetcher, calls } = fakeFetcher([aiChatEnvelope(2, "sess-c", "talkToUser", "t")]);
+    const opened: any[] = [];
+    const t = manualTimer();
+    const stop = startAiChatAlertPoll({ active: () => unlocked, fetcher, operations: fakeOps(), open: (a: any) => opened.push(a), ...t });
+    await flush();
+    await stop.wake();
+    expect(calls).toHaveLength(0);
+    expect(opened).toEqual([]);
+    unlocked = true;
+    t.run();
+    await flush();
+    expect(opened.map((a) => a.serviceId)).toEqual(["sess-c"]);
+    stop();
   });
 });

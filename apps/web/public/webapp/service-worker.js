@@ -854,11 +854,14 @@ self.addEventListener("notificationclick", (event) => {
       if (same) {
         await same.focus();
         // Boxes send access alerts as `generic` pushes (older ones as
-        // app-access), so any of them checks the box's access requests.
+        // app-access), so any of them checks the box's access requests. A
+        // build that needs the owner sends the same content-free `generic`
+        // push, so that one also drains the AI-chat alerts and opens the chat.
         if (data && (data.kind === "app-access" || (data.kind === "generic" && !deepLink))) {
           // The open webapp fetches the requests and shows the sheet.
           try {
             same.postMessage({ type: "ACCESS_REQUESTS" });
+            if (data.kind === "generic") same.postMessage({ type: "AI_CHAT_ALERTS" });
           } catch (_e) {
             /* the page also checks on focus */
           }
@@ -873,7 +876,10 @@ self.addEventListener("notificationclick", (event) => {
         }
         return;
       }
-      const target = deepLink ? new URL(deepLink, self.location.origin).toString() : "/";
+      // No tab open: a content-free push opens the webapp asking it to check
+      // for a waiting build chat once unlocked (`?wake=1`, app.js).
+      const wake = data && data.kind === "generic" && !deepLink;
+      const target = deepLink ? new URL(deepLink, self.location.origin).toString() : wake ? "/?wake=1" : "/";
       await self.clients.openWindow(target);
     })(),
   );

@@ -84,7 +84,7 @@ export function surfaceAiChatOperation(alert, deps = {}) {
  * @param {(alert:object)=>void} [args.notify] raise a local notification
  * @param {object} [args.operations]          the ActiveOperationsCenter
  * @param {(path:string, init?:object)=>Promise<any>} [args.fetcher] screensFetch shim
- * @returns {Promise<{ cursor:number, handled:number }>}
+ * @returns {Promise<{ cursor:number, handled:number, alerts:object[] }>}
  */
 export async function drainAiChatAlertsOnce(args) {
   const fetcher = args.fetcher || screensFetch;
@@ -93,10 +93,11 @@ export async function drainAiChatAlertsOnce(args) {
 
   const body = await fetcher(`/api/phone/alerts?since=${encodeURIComponent(since)}`);
   const events = Array.isArray(body && body.events) ? body.events : [];
-  if (events.length === 0) return { cursor: since, handled: 0 };
+  if (events.length === 0) return { cursor: since, handled: 0, alerts: [] };
 
   let cursor = since;
   let handled = 0;
+  const alerts = [];
   for (const env of events) {
     if (env && typeof env.id === "number" && env.id > cursor) cursor = env.id;
     const alert = env && env.alert;
@@ -104,6 +105,7 @@ export async function drainAiChatAlertsOnce(args) {
     if (typeof alert.serviceId !== "string" || alert.serviceId.length === 0) continue;
     const tagged = args.server ? { ...alert, server: args.server } : alert;
     surfaceAiChatOperation(tagged, { operations: args.operations });
+    alerts.push(tagged);
     try {
       notify(tagged);
     } catch {
@@ -126,7 +128,7 @@ export async function drainAiChatAlertsOnce(args) {
       /* best-effort — re-drained next tick */
     }
   }
-  return { cursor, handled };
+  return { cursor, handled, alerts };
 }
 
 /**
@@ -173,9 +175,12 @@ export function makeAiChatNotifier(deps) {
  * @param {() => string} [deps.server]  the box the fetcher reaches right now
  * @param {number} [deps.intervalMs]
  * @param {() => boolean} [deps.active]  gate — only drain while this returns true
+ * @param {(alert:object)=>void} [deps.open]  open the chat an alert names (after a wake)
+ * @param {() => number} [deps.now]
  * @param {Function} [deps.setTimeout]
  * @param {Function} [deps.clearTimeout]
- * @returns {() => void} stop handle
+ * @returns {(() => void) & { wake: () => Promise<void> }} stop handle; `wake()`
+ *   drains at once and opens the first waiting chat it finds
  */
 export function startAiChatAlertPoll(deps = {}) {
   const interval = typeof deps.intervalMs === "number" ? deps.intervalMs : 5_000;
@@ -185,30 +190,58 @@ export function startAiChatAlertPoll(deps = {}) {
   let handle = null;
   let stopped = false;
   let cursor = 0;
+  // Set by a content-free push (the box's "a build needs you" wake): the next
+  // drain that finds a waiting chat opens it instead of only listing it.
+  let openNext = false;
+  let wokeAt = 0;
+  let draining = null;
+  // The newest chat a drain surfaced, so a push tapped after the foreground
+  // poll already drained its alert still opens that chat.
+  let last = null;
+  const now = deps.now || Date.now;
+
+  const drain = async () => {
+    if (!active()) return;
+    try {
+      const r = await drainAiChatAlertsOnce({
+        since: cursor,
+        notify: deps.notify,
+        operations: deps.operations,
+        fetcher: deps.fetcher,
+        server: typeof deps.server === "function" ? deps.server() : undefined,
+      });
+      cursor = r.cursor;
+      if (r.alerts.length > 0) last = { alert: r.alerts[0], at: now() };
+      if (openNext && r.alerts.length > 0 && now() - wokeAt < RECENT_ALERT_MS) {
+        openNext = false;
+        openAlert(r.alerts[0]);
+      }
+    } catch {
+      /* transport blip — keep the cursor, retry next tick */
+    }
+  };
+  const openAlert = (alert) => {
+    try {
+      deps.open?.(alert);
+    } catch {
+      /* opening is a courtesy; the sliver still holds the op */
+    }
+  };
+  const drainOnce = () => {
+    if (!draining) draining = drain().finally(() => { draining = null; });
+    return draining;
+  };
 
   const tick = async () => {
     if (stopped) return;
-    if (active()) {
-      try {
-        const r = await drainAiChatAlertsOnce({
-          since: cursor,
-          notify: deps.notify,
-          operations: deps.operations,
-          fetcher: deps.fetcher,
-          server: typeof deps.server === "function" ? deps.server() : undefined,
-        });
-        cursor = r.cursor;
-      } catch {
-        /* transport blip — keep the cursor, retry next tick */
-      }
-    }
+    if (active()) await drainOnce();
     if (stopped) return;
     handle = setT(tick, interval);
   };
   // Kick the first tick on a microtask so the caller isn't blocked.
   Promise.resolve().then(tick);
 
-  return () => {
+  const stop = () => {
     stopped = true;
     if (handle != null) {
       try {
@@ -219,4 +252,25 @@ export function startAiChatAlertPoll(deps = {}) {
       handle = null;
     }
   };
+  stop.wake = async () => {
+    if (stopped) return;
+    openNext = true;
+    wokeAt = now();
+    if (draining) await draining;
+    // Locked (or not paired yet): the first drain after unlock opens it.
+    if (!active()) return;
+    await drainOnce();
+    if (!openNext) return;
+    openNext = false;
+    if (last && now() - last.at < RECENT_ALERT_MS) openAlert(last.alert);
+  };
+  return stop;
 }
+
+/** How long a drained alert still counts as the reason for a tapped push. */
+export const RECENT_ALERT_MS = 15 * 60_000;
+
+/** What the service worker posts to an open webapp when a content-free push is
+ *  tapped: the box sends the same `generic` push for an access request and for
+ *  a build that needs the owner, so the page checks both. */
+export const AI_CHAT_SW_MESSAGE = "AI_CHAT_ALERTS";

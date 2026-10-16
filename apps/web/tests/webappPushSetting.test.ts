@@ -283,8 +283,24 @@ describe("a generic push checks the box's access requests", () => {
       expect(h.shown).toHaveLength(1);
       expect(h.shown[0]!.opts.data.kind).toBe("generic");
       await h.fire("notificationclick", { notification: { close: () => {}, data: h.shown[0]!.opts.data } });
-      expect(posted).toEqual([{ type: "ACCESS_REQUESTS" }]);
+      // The same content-free push wakes the owner for a build that needs
+      // them, so the click also drains the AI-chat alerts (d36407cab).
+      expect(posted).toEqual([{ type: "ACCESS_REQUESTS" }, { type: "AI_CHAT_ALERTS" }]);
     }
+  });
+
+  it("an older box's app-access push checks access requests only", async () => {
+    const posted: unknown[] = [];
+    const tab = { url: "https://webapp.flagshipserver.com/", focus: async () => {}, postMessage: (m: unknown) => posted.push(m) };
+    const h = sandbox([tab]);
+    await h.fire("notificationclick", { notification: { close: () => {}, data: { kind: "app-access", deepLink: null } } });
+    expect(posted).toEqual([{ type: "ACCESS_REQUESTS" }]);
+  });
+
+  it("with no tab open a generic push opens the webapp asking it to check for a waiting chat", async () => {
+    const h = sandbox([]);
+    await h.fire("notificationclick", { notification: { close: () => {}, data: { kind: "generic", deepLink: null } } });
+    expect(h.opened).toEqual(["/?wake=1"]);
   });
 });
 
