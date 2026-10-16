@@ -126,11 +126,14 @@ class KnockAuthorizeViewModelTest {
         assertEquals(listOf("device"), signerCalls)
     }
 
-    @Test fun ownServer_withoutADeviceId_fallsBackToTheAid() = runTest {
+    /** No account device id: refused with the webapp's sentence, never the global AID. */
+    @Test fun ownServer_withoutADeviceId_isRefused_neverTheGlobalAid() = runTest {
         val t = KnockTransport(status = 200, respBody = okBody)
-        makeVM(t, withDeviceKey = false).authorize()
-        assertSignedBy(t, aidPub)
-        assertEquals(listOf("global"), signerCalls)
+        val vm = makeVM(t, withDeviceKey = false)
+        vm.authorize()
+        assertEquals(KnockAuthorizePhase.Failed(KnockAuthorizeViewModel.NO_DEVICE_KEY), vm.phase.value)
+        assertTrue("nothing is sent", t.lastBody == null)
+        assertFalse(signerCalls.contains("global"))
     }
 
     @Test fun serverSharedWithUs_signsWithThatSharesKey_fromTheLoadedList() = runTest {
@@ -326,6 +329,7 @@ class KnockAuthorizeViewModelTest {
             client = ServiceAccessClient(boxTransport = t, comTransport = t),
             aidSigner = { Ed25519Sign(aidKp.privateKey) },
             aidPubHex = { HexUtil.encode(aidPub) },
+            deviceKey = { Ed25519Sign(deviceKp.privateKey) to deviceKp.publicKey },
             ownServers = { listOf(serverId) },
             persist = { persisted.add(it) },
         )

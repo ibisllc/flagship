@@ -110,8 +110,11 @@ class KnockAuthorizeViewModel(
         fun List<String>.hasBox() = any { InviteOwnerBook.normHost(it) == host }
         try {
             val reason = title.removeSuffix("?")
+            // On our own servers we sign with this device's account device
+            // key, never the account-wide AID (per-app identity; the webapp's
+            // knockIdentity refuses the same way).
             suspend fun ownKey(): Pair<Ed25519Sign, ByteArray> =
-                deviceKey(reason) ?: (aidSigner(reason) to HexUtil.decode(aidPubHex(reason))!!)
+                deviceKey(reason) ?: throw NoDeviceKey()
             suspend fun shareFor(fetch: Boolean): String? =
                 runCatching { sharedServers(fetch) }.getOrDefault(emptyList())
                     .firstOrNull { InviteOwnerBook.normHost(it.first) == host }?.second
@@ -165,6 +168,8 @@ class KnockAuthorizeViewModel(
                 serviceRef = result.serviceRef.ifEmpty { serviceRef },
                 browserAgent = result.browserAgent,
             )
+        } catch (_: NoDeviceKey) {
+            _phase.value = KnockAuthorizePhase.Failed(NO_DEVICE_KEY)
         } catch (e: KnockAuthorizeError) {
             _phase.value = KnockAuthorizePhase.Failed(
                 when (e) {
@@ -179,6 +184,11 @@ class KnockAuthorizeViewModel(
     }
 
     companion object {
+        const val NO_DEVICE_KEY =
+            "This device isn't set up on your account yet. Sign in to your account on it again, then try again."
         const val NOT_YOURS = "This isn't one of your servers. Open its invite link on this phone first, then try again."
     }
 }
+
+/** This device has no account device id, so it can't sign on its own servers. */
+private class NoDeviceKey : Exception()
