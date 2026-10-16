@@ -76,8 +76,8 @@
       "title": "Co-manager invites: invite at Member from a shared server's app, withdraw your own (docs/service-access-gating.md \"Co-manager invites\")",
       "ref": "web",
       "surfaces": {
-        "ios": { "status": "missing", "reason": "Built on the box, .com and the webapp first (2026-10-16); the native port follows scratchpad co-invite-native-notes.md.", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/ServerShare.swift", "flagship/share-invite-bundle/v1"]] },
-        "android": { "status": "missing", "reason": "Built on the box, .com and the webapp first (2026-10-16); the native port follows scratchpad co-invite-native-notes.md.", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerShare.kt", "flagship/share-invite-bundle/v1"]] },
+        "ios": { "status": "missing", "reason": "Built on the box, .com and the webapp first (2026-10-16); the native port follows docs/service-access-gating.md \"Co-manager invites\".", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/ServerShare.swift", "flagship/share-invite-bundle/v1"]] },
+        "android": { "status": "missing", "reason": "Built on the box, .com and the webapp first (2026-10-16); the native port follows docs/service-access-gating.md \"Co-manager invites\".", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerShare.kt", "flagship/share-invite-bundle/v1"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/serverShare.js", "flagship/share-invite-bundle/v1"], ["apps/web/public/webapp/lib/serverShares.js", "export async function createShareInvite"], ["apps/web/public/webapp/views/shared-server.js", "data-invite-open"]] }
       }
     },

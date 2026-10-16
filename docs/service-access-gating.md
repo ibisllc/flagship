@@ -258,18 +258,18 @@ decrypted account directory on the device.
 
 ### What each class may do (box-enforced)
 
-| | admin device | non-admin device, manager-class in the app | below manager, or refused |
+| | admin device | non-admin device or co-manager, manager-class in the app | below manager, refused, or a share at Can view |
 |---|---|---|---|
-| create an invite | yes, any rank (admin root) | yes, always at Member (its own device key) | no |
+| create an invite | yes, any rank (admin root) | yes, always at Member (its own device key; a co-manager its share's member key) | no |
 | withdraw an invite | any | only invites **it** created; that removes the people who joined through them | no |
 | change a rank, refuse a device or co-manager | yes (`flagship/app-rank/v1`) | no | no |
 | open / members-only, remove a person, revoke anyone else's access | yes | no | no |
 | uninstall or delete the app | yes | no | no |
 
-Co-managers, and guests an admin raised to Manager, are manager-class for
-the app (it gets the rank) but get no invite rights (owner-approved):
-`.com` can't tie their keys to the owner's account without learning who
-shares with whom.
+Co-managers invite too (owner decision 2026-10-16, "Co-manager invites"
+below): the shared box vouches for their member key to `.com`. Guests an
+admin raised to Manager are manager-class for the app (it gets the rank)
+but get no invite rights yet.
 
 - **Invites.** An admin signs the create with the admin root (or an admin
   device's key); a non-admin device signs it with its account device key and
@@ -299,6 +299,139 @@ shares with whom.
   (`flagship/service-access-mode/v2`, and v1), allow-list removals
   (`flagship/service-allow-remove/v2`, and v1), and app uninstall (the box's
   own identity still uninstalls for box-internal flows).
+
+### Co-manager invites (owner decision, 2026-10-16)
+
+"Co-managers should be able to invite people. And just like account
+devices, if an admin has downgraded them to member (or removed their
+access) then they can't invite." A co-manager is someone another account
+shares the server with (`share-a-server.md`); at "Can manage" they are
+Manager in every app by default, so they invite exactly as a non-admin
+device does: at Member only, withdrawing only their own invites, and only
+while they stay manager-class in that app.
+
+**Who may.** The box decides, for the co-manager's member key in one app
+(`coManagerInviteStanding`): the share must still stand, at `manage`; no
+admin `flagship/app-rank/v1` order on `share:<shareId>` may have set
+`member` (demoted) or `refused`; and the app isn't catching up. Master (an
+admin raised them) still invites at Member only. The refusal reasons and the
+box's own sentences (apps show them as given):
+
+| `why` | sentence |
+|---|---|
+| `view-only` | You can view this server but not manage it, so you can't invite people to its apps. |
+| `demoted` | An admin made you a Member of this app, so you can't invite people to it. |
+| `refused` | An admin turned off your access to this app. |
+| `not-shared` | This server isn't shared with you anymore. |
+| `catching-up` | This server is catching up with the app's other servers. Try again in a moment. |
+
+**Signing.** The co-manager's device signs the ordinary
+`flagship/service-invite/create/v1` (and, to withdraw,
+`flagship/service-invite/revoke/v1`) with its per-share member key
+(`deriveShareMemberKey(UMK, shareId)`). `authorAID` is the owner's AID (the
+box gives it), so the invite sits in the owner's list like any other. The
+invitee's name is sealed with the usual bundle format under a key only the
+co-manager's devices derive:
+`HKDF-SHA256(UMK, "", "flagship/share-invite-bundle/v1|<shareId>", 32)`.
+The owner's devices can't read it: their Access control shows such a row as
+"Someone they invited", "Invited by <label> (co-manager)". Manual-approve
+invites aren't offered to co-managers (422 `manual-not-offered`).
+
+**Through the box, never straight to `.com`.** `.com` must not learn who
+shares with whom, so it can't tie a member key to the owner's account. The
+co-manager posts the signed create to the shared box over the share session
+(`POST /api/shares/invites`); the box checks the standing and the signature,
+then posts it to `.com` itself with
+
+    flagship/service-invite-co-manager/v1|<username>|<serverDomain>|<inviteId>|<serviceRef>|<creatorPubHex>|<createSigHex>|<issuedAt>
+
+signed with its STK (`relay: {serverDomain, issuedAt, signature}` beside the
+create, plus `request.creatorPubHex`). `.com` checks the STK against the
+account's live registered server, the relay's freshness (5 minutes) and the
+create's signature under `creatorPubHex`, and keeps the row with
+`creator_tier = 'co-manager'` and `creator_pub_hex` = the member key (no
+migration: the column is text). It pushes the admin devices the same
+content-free notice as for a member invite. That member key may revoke the
+row on `.com` (withdrawing only ever takes access away, so `.com` needn't
+know whether the share still stands); the box relays the co-manager's
+revoke there too. `.com` stores nothing about the share: no share id, no
+label, no level. Vectors: `packages/protocol/test-vectors/co-manager-invite/`
+(TypeScript and webapp pass them; Swift and Kotlin to port).
+
+**On redemption** (and on a join handed over by another server) the box
+verifies the create under the co-manager keys it knows for that app (its own
+shares, and the journal's records, below), records tier `co-manager` and the
+creator key (sticky), caps the join at Member, and lets the person in only
+while the creator's standing is `ok`; otherwise 403 "the person who sent
+this invite can no longer invite people to this app: ask for a new link".
+People who already joined stay until withdrawn or removed, as for devices.
+The box that holds the share records the tier and creator at create time,
+before anyone can join.
+
+**Withdraw.** `POST /api/shares/invites/withdraw {revoke, signature}` over
+the share session, for an invite this share made on this box, while its
+standing is `ok`: the box removes whoever joined through it, keeps the
+withdraw (journal), and tells `.com`. The generic
+`POST /api/service-access/invite-withdraw` takes the same signed revoke under
+the same rule; an admin withdraws any.
+
+**One list per app.** The app's other servers don't hold the share, so the
+shared box records a `share` entry in the app's journal when the co-manager
+first invites to it, and again whenever the share changes (the owner's new
+grant, e.g. down to `view`) or ends (the owner's revoke, or the
+co-manager's leave): `{kind:"share", grant, signature, end?}`, keyed by
+share id, the newer grant wins and an end is final. Every box verifies the
+grant under its own admin-only key (the account's boxes pin the same root),
+a revoke under that key and a leave under the grant's member key, and keeps
+`roles.coManagers[shareId] = {pub, level, label, serverDomain, issuedAt,
+ended}` per app. Admin rank orders on `share:<shareId>` now apply on every
+server of the app (the peer applier takes share targets it doesn't hold).
+The box holding the share always asks its own share store, never the
+journal's record of it. Residual: a server that gets the share's end after
+a withdraw the co-manager made just before it keeps that withdraw's people
+until an admin removes them (the same ordering residual as a demoted
+device).
+
+**Box surface (share session, `x-flagship-session: fss_…`).**
+
+- `GET /api/shares/invites?service=<serviceRef>` (any level) →
+  `{serviceRef, canInvite, why, whyText, rank, ownerAid, invites:[{inviteId,
+  createdAt, encryptedBundle, maxRedemptions, expiresAt, joined}]}` (only this
+  share's own invites, kept in `<dataDir>/share-invites.json`; dropped when
+  the share ends). 404 `no-such-app`.
+- `POST /api/shares/invites {request:{inviteId, authorAID, serviceRef,
+  secretHash, encryptedBundle, issuedAt, maxRedemptions?, expiresAt?},
+  signature}` (Can manage) → `{created, inviteId, tier:"co-manager"}`; errors
+  `{error, code}` with code `view-only`, `demoted`, `refused`, `not-shared`,
+  `catching-up`, `wrong-author`, `invalid-signature`, `stale`,
+  `no-such-app`, `exists`, `too-many-invites` (200 open per share),
+  `manual-not-offered`, `com-unreachable`, `com-refused`.
+- `POST /api/shares/invites/withdraw {revoke:{inviteId, issuedAt},
+  signature}` → `{ok, pruned, comNotified}`; `not-yours` (404) and the
+  standing codes.
+- The members list (`GET /api/screens/services/:id/members`) adds
+  `creatorShareId` and `creatorLabel` to a co-manager's invites.
+
+**Clients.** On a shared server's page at Can manage each app has
+**Invite people**: "People you invite join as Member. You can withdraw your
+own invites.", + Add person / + Add group (Rank: Member), a link on the
+shared server (`https://<server>/invite#<secret>&a=<ownerAid>&i=<inviteId>&s=<serviceRef>`),
+**Your invites** with "Not opened yet" / "1 person joined" / "3 of 10
+joined" and **Withdraw** (asks first: "Withdraw this invite?", "The link
+stops working, and anyone who joined through it loses access to <app>.").
+Without the right the panel shows the box's sentence and the invites
+without Withdraw; at Can view the Apps card says the `view-only` sentence
+once and offers no panel. Webapp: `lib/serverShares.js`
+(`fetchShareInvites`, `createShareInvite`, `withdrawShareInvite`),
+`views/shared-server.js`.
+
+Built in `packages/server-daemon/src/shares/shareInvites.ts`,
+`serviceAccess.ts` (standing, journal `share` entries), `accessJournal.ts`,
+`packages/control-plane/src/serviceInvites.ts`
+(`coManagerRelaySigner`); tests `packages/server-daemon/tests/coManagerInvites.test.ts`,
+`packages/control-plane/tests/coManagerInvites.test.ts`,
+`apps/web/tests/webappCoManagerInvites.test.ts`, gym scenario
+`web-total-share-co-manager-invites`.
 
 ### Adding a server (owner decision, 2026-10-16)
 
@@ -415,9 +548,10 @@ each carrying its own proof:
 | entry | proof every box re-checks |
 |---|---|
 | `mode`, `remove`, `rank` | the admin-only key (`flagship/service-access-mode/v2`, `flagship/service-allow-remove/v2`, `flagship/app-rank/v1`) |
-| `join` | the signed create (admin root or a device in the box's own book) and the joiner's redeem signature over the create's secret hash; the invite's cap (a personal invite binds one person), its expiry, the creator still manager-class, no later removal of that person, no withdraw of the invite |
+| `join` | the signed create (admin root, a device in the box's own book, or a co-manager's member key the box knows for the app) and the joiner's redeem signature over the create's secret hash; the invite's cap (a personal invite binds one person), its expiry, the creator still manager-class (a co-manager: still sharing at Can manage), no later removal of that person, no withdraw of the invite |
 | `accept` | the signed create and the joiner's acceptance signature (manual approve) |
-| `withdraw` | an admin's revoke, or the creating device's while it is still manager-class there |
+| `withdraw` | an admin's revoke, or the creating device's (or co-manager's) while it is still manager-class there |
+| `share` | the owner's share grant under the admin-only key, and its end (the owner's revoke under that key, or the co-manager's leave under the grant's member key); see "Co-manager invites" |
 
 So the leader only distributes. Applying is idempotent and "latest order
 wins" per target (the per-target `issuedAt` sequence), so arrival order

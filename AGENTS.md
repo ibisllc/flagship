@@ -121,9 +121,10 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   manager < master (no owner rank). In every app, by default: the owning
   account's admin devices are master, its other devices and co-managing
   accounts manager, people they invite member. Invite and withdraw rights
-  come from being manager-class in that app (a non-admin device invites only
-  at Member and withdraws only its own invites; a demoted one's links stop
-  letting new people in). Only admins change ranks (demotion and refusal
+  come from being manager-class in that app (a non-admin device, or a
+  co-manager at "Can manage", invites only at Member and withdraws only its
+  own invites; a demoted, refused or view-only one's links stop letting new
+  people in). Only admins change ranks (demotion and refusal
   included), modes, or remove others, and the box enforces it: the admin root
   on admin-pinned boxes, never the IRK. Admins keep one biometric per invite.
 - **One access list per app across the account's servers** (owner rule,
@@ -188,7 +189,7 @@ cd apps/com && npx wrangler d1 execute flagship-state \
 > when done. History up to 2026-10-10 is frozen verbatim in
 > `docs/archive/status-log-through-2026-10-10.md`; read it for the why behind
 > anything below. Keep this section short: it loads into every agent session.
-> Last updated **2026-10-15**.
+> Last updated **2026-10-16**.
 
 ### Launch
 
@@ -450,6 +451,23 @@ of the last check here: **not yet checked**.
   store builds first (current store builds get the refusal when creating a
   server), then `.com` (webapp shell v116 ships with it); the restore rule
   needs an endorsed box release.
+- **Co-manager invites (2026-10-16, owner decision).**
+  `docs/service-access-gating.md` "Co-manager invites". A co-manager at "Can
+  manage" invites people to the shared server's apps at Member and withdraws
+  their own, while manager-class there (an admin's demotion to Member, a
+  refusal, a share down to view or ended stops their links; joined people
+  stay). Signed with the share's member key and sent to the box
+  (`/api/shares/invites`, `/withdraw`), which checks the standing and relays
+  the create to `.com` under its STK (`flagship/service-invite-co-manager/v1`;
+  tier `co-manager`, no migration, `.com` learns nothing about the share).
+  The app's other servers learn the co-manager from a signed `share`
+  journal entry; share-target rank orders now apply on every server.
+  Names sealed under `flagship/share-invite-bundle/v1` (co-manager's devices
+  only). Vectors `packages/protocol/test-vectors/co-manager-invite/` (TS +
+  webapp). On `main` through the box, `.com` and the webapp (shell v119,
+  gym `web-total-share-co-manager-invites`). Needs: a `.com` deploy, an
+  endorsed box release, and the iOS/Android port (parity
+  `share-co-manager-invites`; Swift/Kotlin vectors).
 - **One access list per app (2026-10-15).** "One list per app" in the same
   doc: per-app journal of signed entries, the app's lead server distributes
   box to box (`/api/access-sync/push|pull`, CGK-derived MAC; nothing via
@@ -463,7 +481,7 @@ of the last check here: **not yet checked**.
   least uses the box's own zone (`ffc9a64c1`). Needs, for both: `.com` deploy with migration
   0102 (and shell v101), an endorsed box release, iOS/Android store builds.
   Open: a box-internal mode change (an AI-built app deployed members-only)
-  isn't handed over; co-managers and guests at Manager don't invite yet;
+  isn't handed over; guests an admin raised to Manager don't invite yet;
   non-admin device keys are UMK-derived, so one non-admin device's rank
   versus another's isn't enforceable against a hostile device of the same
   person.

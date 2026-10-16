@@ -24,6 +24,7 @@ A share is one A-signed grant naming one of B's keys and a level:
 | Accept an app update held for review | | yes |
 | Update the server to a release Flagship's maintainers endorsed (§5.6) | | yes |
 | Edit an app's internet access list, answer its requests | | yes |
+| Invite people to its apps at Member, withdraw their own invites (§5.7) | | yes |
 | **See app data** (opt-in): the Database section, read only | opt-in | opt-in |
 | Change app data (signed statement in the Database console) | | opt-in |
 | **Unlock at boot** (opt-in): approve S's start-up, and be pushed when S waits (§5.4) | opt-in | opt-in |
@@ -299,11 +300,20 @@ do the apps show the Update control.
 
 ### 5.7 Apps on S
 
-B stays an ordinary visitor on S's apps: the per-app identity rule
-(`AGENTS.md`) is unchanged, and a members-only app still needs an app invite.
-The apps list and app detail carry `accessMode` (`open` or `members-only`), so
-B's page says "Members only. You need an invite to use this app." next to such
-an app.
+B is Manager in every app of S by default (an admin may change that per app
+with `flagship/app-rank/v1` on `share:<shareId>`, or refuse B there), signing
+in with the member key; the apps list and app detail carry `accessMode`, and
+B's page says "Members only. As a co-manager you can open it." next to a
+members-only app.
+
+At "Can manage", while manager-class in an app, B invites people to it at
+Member and withdraws B's own invites (owner decision 2026-10-16): B signs the
+invite with the member key, the box checks B's standing and relays it to
+`.com` with its STK, so `.com` still never learns who B is. A demotion to
+Member, a refusal, a downgrade to "Can view" or the share's end stops B's
+links letting new people in; whoever joined stays until withdrawn or
+removed. Design, wire and strings: `service-access-gating.md` "Co-manager
+invites".
 
 ## 6. Route map
 
@@ -320,6 +330,8 @@ unchanged.
 | `GET /api/shares/nonce`, `POST /api/shares/session`, `POST /api/shares/leave` | public (signature is the auth) |
 | `GET /api/shares/me` | view |
 | `POST /api/shares/update` (B-signed #11, §5.6) | manage |
+| `GET /api/shares/invites?service=` (B's standing and own invites, §5.7) | view |
+| `POST /api/shares/invites` (a B-signed invite create), `POST /api/shares/invites/withdraw` (B's own) | manage (box-checked standing) |
 | `GET /api/screens/server-detail`, `apps-list`, `app-detail/:id`, `server-metrics/:podId`, `release-status`, `updates`, `peer-backup/status`, `lan-hint` | view |
 | `GET /api/screens/access-requests`, `GET /api/screens/services/:id/access`, `GET …/egress` | manage |
 | `POST /api/screens/services/:id/access` (B-signed `app-access/v1`), `POST …/access/dismiss`, `POST …/access/draft/dismiss` | manage |
@@ -364,6 +376,7 @@ New box routes:
 | `GET /api/server/:domain/share-ends?since=` | none (signed envelopes; box verifies) | revokes and leaves for S |
 | `POST /api/share-inbox` | #9 | B's "Shared with me" entries: put / list / delete |
 | `GET /api/boot/share/pending/:domain`, `GET /api/boot/share/key/:domain`, `POST /api/boot/response` | boot gate role `share` | §5.4 |
+| `POST /api/users/:u/service-invites` with `relay` | S's STK over `flagship/service-invite-co-manager/v1` + B's member-key create | B's invite, relayed by S (§5.7); stored at tier `co-manager` with the member key, nothing about the share |
 
 Every other `.com` account route stays A's: each verifies A's own keys.
 
@@ -522,8 +535,9 @@ start-up) and day-to-day upkeep without A. Owner decisions, 2026-10-14:
    (§8) instead; rotation is on the Later list.
 4. **IDE and git builds stay A's in v1** (they hand out a long-lived MCP key).
    On the Later list.
-5. **Apps on S don't learn about shares.** B is an ordinary visitor; a
-   members-only app needs an app invite, and B's page says so (§5.7).
+5. **Apps on S see B as Manager** (owner, 2026-10-15; an admin may change
+   it per app), and since 2026-10-16 B invites people at Member while
+   manager-class there (§5.7).
 6. **Server updates at manage level: yes** (§5.6). The release endorsement is
    the safety check; B only picks when. View level can't.
 7. **Only B's admin devices accept a share** (owner rule 2026-10-16: adding
