@@ -178,5 +178,7 @@ The loop is designed to run with nobody watching it.
   its author's authority, and the public store is the same for everyone.
 - **No upstream pull request:** the app doesn't offer one yet. The author
   commits the exported file themselves.
-- **Lost on restart:** git and IDE builds live only in daemon memory, so a
-  restart forgets them, and with them the export. Their journals survive.
+- **Restarts:** git and IDE builds are saved under `<dataDir>/data/builds/`
+  (`buildmodes/buildStore.ts`) and come back after a restart, kept a month
+  after their last change. One the AI was adapting, or the box was putting
+  live, comes back failed with a sentence; its files are kept.

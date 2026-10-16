@@ -60,6 +60,15 @@ import {
   type AppManifest,
 } from "@flagship/protocol";
 import { indexableRepo, licensePathOf, type AdapterIndex, type StoreReason } from "./adapterIndex.js";
+import type { BuildSnapshot, BuildStore } from "./buildStore.js";
+
+/** What a build that was mid-run when the daemon stopped says afterwards. */
+export const INTERRUPTED_AI_REASON =
+  "The server restarted while the AI was working on this build. Its files are kept: run the AI again, or deploy.";
+export const INTERRUPTED_GO_LIVE_REASON =
+  "The server restarted while it was putting this build live. Its files are kept: deploy it again.";
+/** Saved builds are dropped a month after their last change, like build chats. */
+export const BUILD_RETENTION_MS = 30 * 24 * 60 * 60_000;
 
 /** How many times the AI may fix an adaptation the store refused. */
 const MAX_FIX_ROUNDS = 2;
@@ -294,6 +303,10 @@ export interface BuildOrchestratorDeps {
    * (back-compat: tests inject an `adaptRunner` directly).
    */
   adaptCredentialAvailable?: (buildId: string) => boolean;
+  /** Keeps builds across a daemon restart (`restore` reads it back). Unset ⇒ memory only. */
+  store?: BuildStore;
+  /** Coalesce saves this long (default 300 ms). */
+  saveDelayMs?: number;
   now?: () => number;
   rand?: () => string;
 }
@@ -351,12 +364,122 @@ export class BuildOrchestrator {
   private readonly sealedBuilds = new Set<string>();
   /** Go-lives in progress, so a second request joins the first. */
   private readonly goingLive = new Map<string, Promise<DeployResult>>();
+  private readonly saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly saving = new Map<string, Promise<void>>();
   private readonly now: () => number;
   private readonly rand: () => string;
 
   constructor(private readonly deps: BuildOrchestratorDeps) {
     this.now = deps.now ?? (() => Date.now());
     this.rand = deps.rand ?? (() => randomBytes(8).toString("hex"));
+  }
+
+  // ----- persistence ---------------------------------------------------
+
+  private setWorkspace(buildId: string, ws: BuildWorkspace): void {
+    ws.onChange(() => this.touch(buildId));
+    this.workspaces.set(buildId, ws);
+    this.touch(buildId);
+  }
+
+  /** Save the build soon (coalesced). */
+  private touch(buildId: string): void {
+    if (!this.deps.store || this.saveTimers.has(buildId)) return;
+    const t = setTimeout(() => {
+      this.saveTimers.delete(buildId);
+      void this.saveNow(buildId);
+    }, this.deps.saveDelayMs ?? 300);
+    t.unref?.();
+    this.saveTimers.set(buildId, t);
+  }
+
+  private snapshot(buildId: string): BuildSnapshot | null {
+    const st = this.states.get(buildId);
+    if (!st) return null;
+    const envRequests = this.envRequests.get(buildId);
+    const src = this.gitSources.get(buildId);
+    return {
+      v: 1,
+      buildId,
+      updatedAt: this.now(),
+      state: { ...st },
+      files: this.workspaces.get(buildId)?.snapshot() ?? {},
+      ...(envRequests?.length ? { envRequests: [...envRequests] } : {}),
+      ...(src ? { gitSource: { ...src } } : {}),
+      aiTouched: this.aiTouched.has(buildId),
+      sealed: this.sealedBuilds.has(buildId),
+    };
+  }
+
+  private saveNow(buildId: string): Promise<void> {
+    const store = this.deps.store;
+    if (!store) return Promise.resolve();
+    const prev = this.saving.get(buildId) ?? Promise.resolve();
+    const next = prev.then(async () => {
+      const snap = this.snapshot(buildId);
+      if (snap) await store.save(snap);
+    }).catch(() => {});
+    this.saving.set(buildId, next);
+    void next.finally(() => {
+      if (this.saving.get(buildId) === next) this.saving.delete(buildId);
+    });
+    return next;
+  }
+
+  /** Write every pending save now (shutdown, tests). */
+  async flush(): Promise<void> {
+    const ids = [...this.saveTimers.keys()];
+    for (const id of ids) {
+      clearTimeout(this.saveTimers.get(id)!);
+      this.saveTimers.delete(id);
+    }
+    await Promise.all(ids.map((id) => this.saveNow(id)));
+    await Promise.all([...this.saving.values()]);
+  }
+
+  /**
+   * Bring back the builds a previous daemon kept. One the AI was working on,
+   * or the box was putting live, comes back failed with the reason (that
+   * work can't continue); its files are intact, so the owner can run the AI
+   * again or deploy. An IDE keeps its key and reconnects; a sealed build
+   * stays sealed.
+   */
+  async restore(): Promise<number> {
+    const store = this.deps.store;
+    if (!store) return 0;
+    const cutoff = this.now() - BUILD_RETENTION_MS;
+    let restored = 0;
+    for (const { snap, binaries } of await store.loadAll()) {
+      if (this.states.has(snap.buildId)) continue;
+      if (snap.updatedAt < cutoff) {
+        await store.delete(snap.buildId).catch(() => {});
+        continue;
+      }
+      const st = snap.state as BuildState;
+      const id = snap.buildId;
+      if (st.adapt?.status === "running") {
+        st.adapt = {
+          status: "failed",
+          reason: st.adapt.phase === "going-live" ? INTERRUPTED_GO_LIVE_REASON : INTERRUPTED_AI_REASON,
+        };
+      }
+      this.states.set(id, st);
+      const ws = new BuildWorkspace(snap.files);
+      ws.onChange(() => this.touch(id));
+      this.workspaces.set(id, ws);
+      if (snap.envRequests?.length) this.envRequests.set(id, snap.envRequests as PendingEnvRequest[]);
+      if (snap.gitSource) this.gitSources.set(id, snap.gitSource as GitSource);
+      if (binaries) {
+        this.binaries.set(id, Object.fromEntries(Object.entries(binaries).map(([p, b64]) => [p, Buffer.from(b64, "base64")])));
+      }
+      if (snap.aiTouched) this.aiTouched.add(id);
+      if (snap.sealed || st.sealed) this.sealedBuilds.add(id);
+      restored++;
+      if (st.adapt?.status === "failed" && (st.adapt.reason === INTERRUPTED_AI_REASON || st.adapt.reason === INTERRUPTED_GO_LIVE_REASON)) {
+        this.touch(id);
+      }
+    }
+    return restored;
   }
 
   private newBuildId(): string {
@@ -392,6 +515,7 @@ export class BuildOrchestrator {
     const list = this.envRequests.get(buildId) ?? [];
     list.push(req);
     this.envRequests.set(buildId, list);
+    this.touch(buildId);
     this.deps.notifyOwner?.({ buildId, name: req.name });
     if (this.deps.recordEnvRequest) {
       await this.deps.recordEnvRequest({
@@ -490,8 +614,12 @@ export class BuildOrchestrator {
       gitFit: fitness.fit,
       ...(name ? { name } : {}),
     });
-    this.workspaces.set(buildId, new BuildWorkspace(fitness.files));
-    if (fitness.binaries) this.binaries.set(buildId, fitness.binaries);
+    if (fitness.binaries) {
+      this.binaries.set(buildId, fitness.binaries);
+      const encoded = Object.fromEntries(Object.entries(fitness.binaries).map(([p, b]) => [p, b.toString("base64")]));
+      await this.deps.store?.saveBinaries(buildId, encoded).catch(() => {});
+    }
+    this.setWorkspace(buildId, new BuildWorkspace(fitness.files));
     this.gitSources.set(buildId, {
       repo: authored ? null : repo,
       repoUrl: normalizeRepoUrl(args.gitUrl),
@@ -551,11 +679,17 @@ export class BuildOrchestrator {
     this.deps.staging?.forget(buildId);
     this.aiTouched.delete(buildId);
     this.states.delete(buildId);
+    this.workspaces.get(buildId)?.onChange(null);
     this.workspaces.delete(buildId);
     this.mcpServers.delete(buildId);
     this.envRequests.delete(buildId);
     this.gitSources.delete(buildId);
     this.binaries.delete(buildId);
+    const timer = this.saveTimers.get(buildId);
+    if (timer) clearTimeout(timer);
+    this.saveTimers.delete(buildId);
+    await this.saving.get(buildId);
+    await this.deps.store?.delete(buildId).catch(() => {});
     if (st.mode === "mcp") await this.deps.mcpKeys.revoke(buildId);
     await this.deps.journal.append(buildId, {
       mode: st.mode,
@@ -570,6 +704,7 @@ export class BuildOrchestrator {
   setShare(buildId: string, share: boolean): void {
     const src = this.gitSources.get(buildId);
     if (src) src.share = share;
+    this.touch(buildId);
   }
 
   /**
@@ -584,11 +719,13 @@ export class BuildOrchestrator {
     if (this.sealedBuilds.has(buildId)) return { ok: false, status: 409, reason: CLOSED_TO_AI };
     if (!this.adaptConfigured(buildId)) return { ok: false, status: 503, reason: "AI adapt not configured" };
     st.adapt = { status: "running", startedAt: this.now(), phase: "staging" };
+    this.touch(buildId);
     void this.adaptGit(buildId, opts)
       .catch((e: unknown): AdaptResult => ({ ok: false, reason: (e as Error).message }))
       .then((r) => {
         const cur = this.states.get(buildId);
         if (!cur) return;
+        this.touch(buildId);
         cur.adapt = r.ok
           ? {
               status: "done",
@@ -625,6 +762,14 @@ export class BuildOrchestrator {
    * model output that produced no manifest.
    */
   async adaptGit(buildId: string, opts: { instructions?: string } = {}): Promise<AdaptResult> {
+    try {
+      return await this.adaptGitNow(buildId, opts);
+    } finally {
+      this.touch(buildId);
+    }
+  }
+
+  private async adaptGitNow(buildId: string, opts: { instructions?: string }): Promise<AdaptResult> {
     const st = this.states.get(buildId);
     if (!st || st.mode !== "git") return { ok: false, reason: "not a git build" };
     if (this.sealedBuilds.has(buildId)) return { ok: false, reason: CLOSED_TO_AI };
@@ -919,6 +1064,7 @@ export class BuildOrchestrator {
         delete st.adapt;
       }
     }
+    this.touch(buildId);
     if (r.ok) return { ok: true };
     return { ok: false, reason: r.reason, ...(r.environment ? { environment: r.environment } : {}) };
   }
@@ -963,6 +1109,7 @@ export class BuildOrchestrator {
       const refused = await this.shareAdapter(buildId, src, ws.snapshot());
       if (refused && src.rounds < MAX_FIX_ROUNDS && this.adaptConfigured(buildId)) {
         src.rounds++;
+        this.touch(buildId);
         return {
           ok: false,
           reason:
@@ -987,6 +1134,7 @@ export class BuildOrchestrator {
     this.sealedBuilds.add(buildId);
     const st = this.states.get(buildId);
     if (st) st.sealed = true;
+    await this.saveNow(buildId);
     await this.deps.forgetCredential?.(buildId).catch(() => {});
     if (st?.mode === "mcp" || this.mcpServers.has(buildId)) await this.deps.mcpKeys.revoke(buildId).catch(() => {});
     this.mcpServers.delete(buildId);
@@ -1003,11 +1151,13 @@ export class BuildOrchestrator {
     const st = this.states.get(buildId);
     if (!st) return;
     st.adapt = { status: "running", startedAt: this.now(), phase: "going-live" };
+    this.touch(buildId);
     void this.goLive(buildId)
       .catch((e: unknown): DeployResult => ({ ok: false, reason: (e as Error).message }))
       .then((r) => {
         const cur = this.states.get(buildId);
         if (!cur) return;
+        this.touch(buildId);
         const fileCount = this.workspaces.get(buildId)?.count() ?? 0;
         cur.adapt = r.ok
           ? { status: "done", fileCount, deployed: true, deployedUrl: r.url, serviceId: r.serviceId }
@@ -1064,6 +1214,7 @@ export class BuildOrchestrator {
     st.deployedUrl = r.url;
     // Deploying again (the owner) replaces it in place.
     st.editsServiceId ??= r.serviceId;
+    this.touch(buildId);
     const src = this.gitSources.get(buildId);
     if (!src) return;
     const origin =
@@ -1109,8 +1260,8 @@ export class BuildOrchestrator {
       ...(edit ? { editsServiceId: edit.serviceId } : {}),
     });
     const ws = new BuildWorkspace(edit?.files);
-    this.workspaces.set(buildId, ws);
     this.aiTouched.add(buildId);
+    this.setWorkspace(buildId, ws);
     this.mcpServers.set(buildId, this.makeMcpServer(buildId, ws));
     await this.deps.journal.append(buildId, {
       mode: "mcp",
@@ -1158,10 +1309,13 @@ export class BuildOrchestrator {
         await this.deps.mcpKeys.revoke(buildId).catch(() => {});
         return { authed: false, response: null };
       }
-      // Rehydrate after a restart: recreate the server over a fresh/empty
-      // workspace if the build state is gone (best-effort).
-      const ws = this.workspaces.get(buildId) ?? new BuildWorkspace();
-      this.workspaces.set(buildId, ws);
+      // After a restart: the saved build's files (restore), else an empty
+      // workspace when the build wasn't saved (best-effort).
+      let ws = this.workspaces.get(buildId);
+      if (!ws) {
+        ws = new BuildWorkspace();
+        this.setWorkspace(buildId, ws);
+      }
       server = this.makeMcpServer(buildId, ws);
       this.mcpServers.set(buildId, server);
     }
@@ -1215,10 +1369,10 @@ export class BuildOrchestrator {
     if (src.origin !== "index" || !src.indexFile || !src.repo || !stage) return { ok: false, reason };
     void this.deps.adapterIndex?.complain({ repo: src.repo, file: src.indexFile, stage }).catch(() => {});
     this.failedHere.add(src.indexFile);
-    this.workspaces.set(buildId, new BuildWorkspace(src.original));
     st.gitFit = false;
     src.origin = "ai";
     delete src.indexFile;
+    this.setWorkspace(buildId, new BuildWorkspace(src.original));
     // The owner's own AI makes a better one; if this build already has a
     // key, it starts now.
     if (this.adaptConfigured(buildId)) this.startAdaptGit(buildId);

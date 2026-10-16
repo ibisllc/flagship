@@ -143,6 +143,7 @@ import { buildAppImage, buildArtifactPipeline } from "./buildmodes/deployArtifac
 import { StagingRunner } from "./buildmodes/staging.js";
 import type { AgentRunner } from "./buildmodes/buildAgent.js";
 import { BuildOrchestrator } from "./buildmodes/buildOrchestrator.js";
+import { fileBuildStore } from "./buildmodes/buildStore.js";
 import { buildBuildModesHttpHandlers } from "./buildmodes/buildModesHttp.js";
 import { ForgejoAppAdmin } from "./forgejoServiceAdmin.js";
 import type { ServicePlatform } from "./servicePlatform.js";
@@ -2550,6 +2551,8 @@ async function wireRuntimeSurfaces(deps: {
       activity: runtime.serviceActivity,
     });
     const buildOrchestrator = new BuildOrchestrator({
+      // Git and IDE builds survive a restart (an update causes one).
+      store: fileBuildStore(join(dataDir, "data", "builds")),
       modelRedactor,
       journal: buildJournal,
       gitImporter,
@@ -2629,6 +2632,12 @@ async function wireRuntimeSurfaces(deps: {
         void wakeOwnerForBuild();
       },
     });
+    const restoredBuilds = await buildOrchestrator.restore().catch((e: Error) => {
+      console.warn(`[build] could not read the saved builds: ${e.message}`);
+      return 0;
+    });
+    if (restoredBuilds > 0) console.log(`[build] brought back ${restoredBuilds} git/IDE build(s)`);
+    process.once("SIGTERM", () => void buildOrchestrator.flush());
     buildNameHoldersRef.current = buildOrchestrator;
     buildEditingRef.current = () => buildOrchestrator.editingServiceIds();
     runtime.addHandler(

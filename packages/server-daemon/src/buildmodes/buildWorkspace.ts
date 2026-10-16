@@ -48,9 +48,15 @@ export function isSafeBuildPath(path: string): boolean {
 
 export class BuildWorkspace {
   private files = new Map<string, string>();
+  private changed: (() => void) | null = null;
 
   constructor(initial?: Record<string, string>) {
     if (initial) for (const [k, v] of Object.entries(initial)) this.files.set(k, v);
+  }
+
+  /** Called after every write or delete (the orchestrator saves the build). */
+  onChange(fn: (() => void) | null): void {
+    this.changed = fn;
   }
 
   list(): string[] {
@@ -76,11 +82,14 @@ export class BuildWorkspace {
       return { ok: false, reason: `workspace exceeds ${MAX_FILES} files` };
     }
     this.files.set(path, content);
+    this.changed?.();
     return { ok: true };
   }
 
   delete(path: string): boolean {
-    return this.files.delete(path);
+    const gone = this.files.delete(path);
+    if (gone) this.changed?.();
+    return gone;
   }
 
   snapshot(): Record<string, string> {
