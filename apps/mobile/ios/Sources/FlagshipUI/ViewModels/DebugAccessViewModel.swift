@@ -64,7 +64,7 @@ public final class DebugAccessViewModel {
 
     /// One fresh biometric per grant (like an admin invite), then the admin
     /// root with that context; the IRK only on a device without one.
-    static func freshSensitiveKey(reason: String) async throws -> Curve25519.Signing.PrivateKey {
+    public static func freshSensitiveKey(reason: String) async throws -> Curve25519.Signing.PrivateKey {
         let context = try await BiometricGate().evaluateReturningContext(reason: reason)
         if Keystore.hasAdminRoot { return try Keystore.adminRootKey(authenticatedBy: context) }
         Keystore.cacheSessionUMK(authenticatedBy: context)
