@@ -7,7 +7,14 @@ import { describe, expect, it } from "vitest";
 import { tryControlPlane, type ControlPlaneEnv } from "../src/controlPlaneRoutes.js";
 import { D1Storage, type D1Database } from "@flagship/storage";
 import { createSqliteD1 } from "../../../packages/storage/tests/support/sqliteD1.js";
-import { ACCOUNT_READ_TOKEN_LABEL, deriveIRK, signDeviceEndpointClaim } from "@flagship/protocol";
+import {
+  ACCOUNT_READ_TOKEN_LABEL,
+  deriveIRK,
+  ed,
+  parsePlanAttestation,
+  signDeviceEndpointClaim,
+  verifyCaSignedPlanAttestation,
+} from "@flagship/protocol";
 
 const ORIGIN = "https://flagshipserver.com";
 const irk = deriveIRK({ seed: new Uint8Array(32).fill(5) });
@@ -64,6 +71,42 @@ describe("GET /api/users/<u>/allowance and /purchases", () => {
       );
       expect(owned!.status).toBe(200);
       expect(await owned!.json()).toMatchObject({ ok: true, purchases: [] });
+    } finally {
+      sqlite.close();
+    }
+  });
+
+  it("signs the account's plan with the CA key, behind the same read token", async () => {
+    const sqlite = createSqliteD1();
+    try {
+      const storage = new D1Storage(sqlite as unknown as D1Database);
+      await storage.usernames.put({ username: "alice", irkPubHex: hex(irk.publicKey), claimedAt: 1 });
+      const caSk = new Uint8Array(32).fill(0x61);
+      const env: ControlPlaneEnv = {
+        DB: sqlite as unknown as D1Database,
+        ACCOUNT_READ_TOKEN_SECRET: "route-secret",
+        FLAGSHIP_CA_PRIV_HEX: hex(caSk),
+      };
+      expect((await tryControlPlane(new Request(`${ORIGIN}/api/users/alice/plan-attestation`), env))!.status).toBe(401);
+      const minted = await tryControlPlane(
+        new Request(`${ORIGIN}/api/accounts/alice/read-token`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(irkBody()),
+        }),
+        env,
+      );
+      const { token } = (await minted!.json()) as { token: string };
+      const r = await tryControlPlane(
+        new Request(`${ORIGIN}/api/users/alice/plan-attestation`, { headers: { authorization: `Bearer ${token}` } }),
+        env,
+      );
+      expect(r!.status).toBe(200);
+      expect(r!.headers.get("cache-control")).toBe("private, no-store");
+      const a = parsePlanAttestation(await r!.json())!;
+      expect(a).toMatchObject({ username: "alice", tier: "free", paidUntil: 0 });
+      const chain = { authorizedCaKeys: () => [hex(ed.getPublicKey(caSk))] };
+      expect(verifyCaSignedPlanAttestation(a, chain, a.issuedAt + 1, "ef".repeat(32))).toEqual({ ok: true });
     } finally {
       sqlite.close();
     }

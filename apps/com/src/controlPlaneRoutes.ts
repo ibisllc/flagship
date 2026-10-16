@@ -179,6 +179,7 @@ import {
   handleUsageReport,
   handleUsageStatus,
   handleUserAllowance,
+  handlePlanAttestation,
   handleAdminTierGrant,
   handleRedeemVoucher,
   handleIssueVoucher,
@@ -556,6 +557,7 @@ const ROUTE_RE = {
   USAGE_REPORT: /^\/api\/usage\/report$/,
   USAGE_STATUS: /^\/api\/usage\/status$/,
   USER_ALLOWANCE: /^\/api\/users\/([^/]+)\/allowance$/,
+  USER_PLAN_ATTESTATION: /^\/api\/users\/([^/]+)\/plan-attestation$/,
   USER_PURCHASES: /^\/api\/users\/([^/]+)\/purchases$/,
   ADMIN_APP_PRICE: /^\/api\/admin\/marketplace\/([^/]+)\/([^/]+)\/price$/,
   ADMIN_APP_GRANT_PURCHASE: /^\/api\/admin\/marketplace\/([^/]+)\/([^/]+)\/grant-purchase$/,
@@ -1017,6 +1019,16 @@ export async function tryControlPlane(
         { meter: new D1MeterStorage(env.DB), tiers: storage.tiers },
         decodeURIComponent(m[1]!),
       ),
+    );
+  }
+
+  // The account's plan, CA-signed, for its boxes (docs/service-access-gating.md
+  // "Separate lists per server (Pro)"): gated like /pods by the read token.
+  if (method === "GET" && (m = path.match(ROUTE_RE.USER_PLAN_ATTESTATION))) {
+    const gate = await gateAccountRead(storage, env, request, decodeURIComponent(m[1]!));
+    if (gate) return gate;
+    return finishRead(
+      await handlePlanAttestation({ ca, tiers: storage.tiers, usernames: storage.usernames }, decodeURIComponent(m[1]!)),
     );
   }
 

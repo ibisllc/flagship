@@ -38,6 +38,7 @@ export * from "./meter.js";
 export * from "./metering.js";
 export * from "./tierGrant.js";
 export * from "./voucher.js";
+export * from "./planAttestation.js";
 export * from "./stripe.js";
 export * from "./appPurchase.js";
 export * from "./developer.js";

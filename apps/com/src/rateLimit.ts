@@ -670,7 +670,7 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "POST" && pathname === "/api/voucher/redeem") {
     return "voucher-redeem";
   }
-  if (m === "GET" && /^\/api\/users\/[^/]+\/allowance$/.test(pathname)) {
+  if (m === "GET" && /^\/api\/users\/[^/]+\/(?:allowance|plan-attestation)$/.test(pathname)) {
     return "user-allowance";
   }
   if (m === "POST" && (pathname === "/api/stripe/checkout" || pathname === "/api/stripe/app-checkout")) {
