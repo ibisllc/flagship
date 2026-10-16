@@ -269,7 +269,7 @@ import { AccessPrincipals, AccountDeviceBook } from "./accessPrincipals.js";
 import { AccessJournal } from "./accessJournal.js";
 import { buildAccessSync, deriveAccessSyncKey, type AccessPeers, type AccessSync } from "./accessSync.js";
 import { buildPodsPeers } from "./accessPeers.js";
-import { AccessScopes, PlanCheck } from "./accessScope.js";
+import { AccessScopes, PlanCheck, type ProState } from "./accessScope.js";
 import { buildListScopeHttp } from "./accessScopeHttp.js";
 import { caTrustChainFromFolder } from "./releaseVerifier.js";
 import { BoxReadToken } from "./boxReadToken.js";
@@ -3513,7 +3513,7 @@ async function wireOwnerHandlers(deps: {
     scopes.onTransition((ref, change) => sync.onScopeChange(ref, change));
     // Pro ended (verifiably): every app with separate lists goes back to one.
     // The app's lead server tells the owner, with nothing about which app.
-    plan.onChange((state) => {
+    const onPlan = (state: ProState) => {
       void scopes.planChanged(state).then((merged) => {
         if (merged.length === 0) return;
         const self = env.serverFqdn.toLowerCase();
@@ -3525,7 +3525,10 @@ async function wireOwnerHandlers(deps: {
         );
         deps.notifyListsMerged?.();
       });
-    });
+    };
+    plan.onChange(onPlan);
+    // What the box already knew at boot (a lapse it saw before a restart).
+    onPlan(plan.state());
     plan.start();
     deps.accessSyncRef.current = sync;
     deps.listScopeRef.current = buildListScopeHttp({
