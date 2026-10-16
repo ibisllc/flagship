@@ -610,8 +610,8 @@ allowances (1M / 5M / 20M a month) are placeholders.
 
 ### Built, waiting on deploys or rebuilds
 
-- **`.com` Worker:** current with `main` as of 2026-10-15 (`1ebd17d15`,
-  version `6250f2e4`, webapp shell **v96**, D1 through migration 0101).
+- **`.com` Worker:** current with `main` as of 2026-10-15 (`3e8fef1de`,
+  version `f8c619da`, webapp shell **v113**, D1 through migration 0103).
   Always `npx tsc -b` first and apply pending D1 migrations before deploying.
 - **Rate limits count in Durable Objects (2026-10-15):** every budget in
   `apps/com/src/rateLimit.ts` is applied as written (any window, counted once
