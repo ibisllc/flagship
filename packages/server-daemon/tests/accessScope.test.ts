@@ -160,7 +160,7 @@ async function fleet(names: string[]) {
   for (const f of order) await make(f);
   const box = (n: string) => boxes.get(fqdn(n))!;
   const settle = async () => {
-    for (let i = 0; i < 10; i++) await new Promise((r) => setTimeout(r, 5));
+    while ((await Promise.all([...boxes.values()].map((b) => b.sync.idle()))).some(Boolean));
   };
   const post = async (b: Box, path: string, body: unknown) =>
     (await b.access.handle({ method: "POST", path, headers: {}, body: Buffer.from(JSON.stringify(body)) }))!;

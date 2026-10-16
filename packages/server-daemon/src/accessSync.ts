@@ -497,8 +497,11 @@ export function buildAccessSync(opts: AccessSyncOptions): AccessSync {
   }
 
   function later(f: () => Promise<unknown>): void {
-    const t = setTimeout(() => void f().catch(() => {}), 0);
-    if (typeof t.unref === "function") t.unref();
+    const tick = new Promise<void>((resolve) => {
+      const t = setTimeout(resolve, 0);
+      if (typeof t.unref === "function") t.unref();
+    });
+    background(tick.then(f).then(() => {}, () => {}));
   }
 
   return {
