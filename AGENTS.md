@@ -490,11 +490,12 @@ of the last check here: **not yet checked**.
   The app's other servers learn the co-manager from a signed `share`
   journal entry; share-target rank orders now apply on every server.
   Names sealed under `flagship/share-invite-bundle/v1` (co-manager's devices
-  only). Vectors `packages/protocol/test-vectors/co-manager-invite/` (TS +
-  webapp). On `main` through the box, `.com` and the webapp (shell v119,
-  gym `web-total-share-co-manager-invites`). Needs: a `.com` deploy, an
-  endorsed box release, and the iOS/Android port (parity
-  `share-co-manager-invites`; Swift/Kotlin vectors).
+  only). Vectors `packages/protocol/test-vectors/co-manager-invite/` (TS,
+  webapp, Swift, Kotlin). On `main` on the box, `.com`, the webapp (shell
+  v119, gym `web-total-share-co-manager-invites`), iOS and Android (gym
+  `ios-oct-share-co-manager-*`, `android-oct-share-co-manager-*`; the
+  Android smoke world gains Cabin, shared at Can view). Needs: a `.com`
+  deploy, an endorsed box release, iOS/Android store builds.
 - **One access list per app (2026-10-15).** "One list per app" in the same
   doc: per-app journal of signed entries, the app's lead server distributes
   box to box (`/api/access-sync/push|pull`, CGK-derived MAC; nothing via
