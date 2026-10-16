@@ -110,6 +110,13 @@ key). TS, the webapp, Swift and Kotlin all pass them.
 
 ## Making a backup
 
+**The passcode is mandatory for Back up now** (owner, 2026-10-16): the box
+refuses a Back up now backup without a passcode slot (`400 code
+passcode-required`). The apps say why when they ask for it: this passcode
+is what imports the backup into any account that isn't yours; your own
+account opens it with its account key. Scheduled backups have the account
+slot only (see below).
+
 The app asks for the passcode first (the suggested one, or the user's own),
 makes the content key and the archive id, and wraps the key in both slots on
 the device (the passcode never leaves it). It hands the box the content key
@@ -298,7 +305,13 @@ the file names carry the time (`home-2026-10-16-0300.flagship-backup`).
    behind and the rest go on.
 8. **Done.** Once every app has been tried, the box stops waiting for good (a
    done marker keeps a replayed order from re-arming it) and is a normal
-   server. Apps that failed are listed on the result and in Activity.
+   server with the apps that worked. "We try our best and then give up"
+   (owner, 2026-10-16): an app that fails (it won't rebuild, its data won't
+   load, the server is over its backup limit, ...) is left out cleanly and
+   named with the box's reason on the result (`restore.apps[].reason`) and
+   in Activity ("Couldn't restore: notes (its image didn't build)"); the
+   server never stays "Waiting for its backup" because of one app. The same
+   applies to Migrate.
 
 If anything fails on the way (the drive with the data file goes away, the
 phone closes, the check fails, the key is wrong), the server stays **Waiting

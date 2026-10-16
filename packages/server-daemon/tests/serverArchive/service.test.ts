@@ -588,6 +588,29 @@ describe("Backup/clone server", () => {
     expect(asJson(await call(restarted, "GET", RESTORE_PATH)).restore.state).toBe("done");
   });
 
+  it("Back up now needs a passcode slot: the account slot alone is refused", async () => {
+    const w = await world();
+    const r = await call(w.sourceService, "POST", `${ARCHIVE_PATH}/start`, { archiveId: ARCHIVE_ID, key: keyHex(), slots: [slots()[1]] });
+    expect(r.status).toBe(400);
+    expect(asJson(r)).toMatchObject({ code: "passcode-required" });
+  });
+
+  it("an app that fails to restore is named with its reason, and the server stops waiting anyway", async () => {
+    const w = await world();
+    const file = await backUp(w);
+    w.targetWait.current = await waitingFor(w.dir, DST, file);
+    w.dst.platform.setAdmitNewApp(() => "This server holds 6.0 GB of app data, over its backup limit of 5.0 GB");
+    await upload(w.targetService, file);
+    expect((await call(w.targetService, "POST", `${RESTORE_PATH}/commit`, { key: keyHex() })).status).toBe(202);
+    await w.targetService.settle();
+    const view = asJson(await call(w.targetService, "GET", RESTORE_PATH));
+    expect(view.restore).toMatchObject({ state: "done", apps: [{ serviceId: SERVICE, name: "notes", state: "failed", reason: expect.stringMatching(/over its backup limit/) }] });
+    // Every app was tried: the server is a normal server now, not "Waiting for its backup".
+    expect(view.waiting).toBeNull();
+    expect(w.targetWait.current.heartbeatView()).toBeNull();
+    expect(w.dst.platform.byServiceId(SERVICE)).toBeUndefined();
+  });
+
   it("an app that is already on the server is skipped, not overwritten", async () => {
     const w = await world();
     const file = await backUp(w);

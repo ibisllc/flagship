@@ -296,6 +296,8 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
       if (typeof b.key !== "string" || !/^[0-9a-f]{64}$/.test(b.key)) return err(400, "key must be 32 bytes of lowercase hex");
       const slots: BackupSlot[] | null = parseBackupSlots(b.slots);
       if (!slots) return err(400, "slots must hold a passcode slot, an account slot, or both");
+      // Back up now always has a passcode: it is what opens the backup on an account that isn't yours (owner, 2026-10-16).
+      if (!slots.some((s) => s.kind === "passcode")) return err(400, "a backup made with Back up now needs a passcode", { code: "passcode-required" });
       if (running) return err(409, "a backup or restore is already running here");
       await ensureDir();
       if ((await free(opts.dir)) < MIN_FREE_BYTES) return err(507, "this server doesn't have enough free disk space to make a backup");
@@ -1022,7 +1024,15 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
         await opts.wait?.finish(w.archiveId);
         const ok = results.filter((r) => r.state === "done").length;
         const failed = results.filter((r) => r.state === "failed").length;
-        note("server.restore.finished", `Backup restored: ${ok} app${ok === 1 ? "" : "s"}${failed > 0 ? `, ${failed} failed` : ""}.`, failed === 0);
+        const failedText = results
+          .filter((r) => r.state === "failed")
+          .map((r) => `${r.name} (${(r.reason ?? "it couldn't be restored").replace(/[.\s]+$/, "")})`)
+          .join(", ");
+        note(
+          "server.restore.finished",
+          `Backup restored: ${ok} app${ok === 1 ? "" : "s"}.` + (failed > 0 ? ` Couldn't restore: ${failedText}.` : ""),
+          failed === 0,
+        );
       } catch (e) {
         job.state = "failed";
         job.reason = e instanceof ArchiveError ? e.message : `the restore failed: ${(e as Error).message}`;
