@@ -131,7 +131,7 @@ class SharedServerScreenComposeTest {
         composeRule.onNodeWithTag("shared-members-only-svc-1", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText(ShareCopy.MEMBERS_ONLY_HINT).assertIsDisplayed()
         // A co-manager is manager-class: never told they need an invite.
-        composeRule.onNodeWithText("Members only. You can open it as a co-manager.").assertIsDisplayed()
+        composeRule.onNodeWithText("Members only. As a co-manager you can open it.").assertIsDisplayed()
         composeRule.onNodeWithTag("shared-members-only-svc-2", useUnmergedTree = true).assertDoesNotExist()
     }
 

@@ -103,7 +103,7 @@ object ShareCopy {
     const val NOTICES_LINE = "Turning this on lets Flagship's service know this device helps with this server, so it can wake you. The notice itself names no server."
     // A co-manager is manager-class in every app of a shared server (owner rule
     // "Three ranks"), so a members-only app still lets them in.
-    const val MEMBERS_ONLY_HINT = "Members only. You can open it as a co-manager."
+    const val MEMBERS_ONLY_HINT = "Members only. As a co-manager you can open it."
 
     const val UPDATE_TITLE = "Update"
     const val UPDATE_CURRENT = "Up to date."
