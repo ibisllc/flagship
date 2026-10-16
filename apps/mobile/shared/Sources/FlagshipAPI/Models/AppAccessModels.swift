@@ -566,6 +566,20 @@ public struct AppAccessRefusal: Codable, Equatable, Sendable {
     }
 }
 
+// MARK: - "Something on the box needs you" wake
+
+/// Raised by a content-free push (`generic`, or `app-access` from an older
+/// box). A box sends one when an app asks for a host and when a build chat
+/// waits on the owner (a question or an env var), so whoever drains the phone
+/// alert inbox drains it now instead of on its next tick.
+public enum PhoneAlertEvents {
+    public static let wake = Notification.Name("flagship.phone-alerts.wake")
+
+    public static func postWake() {
+        NotificationCenter.default.post(name: wake, object: nil)
+    }
+}
+
 // MARK: - "A request is waiting" signal
 
 /// Raised when a box says an app was denied a host no rule covered (a

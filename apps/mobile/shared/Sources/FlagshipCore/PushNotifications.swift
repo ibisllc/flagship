@@ -150,10 +150,13 @@ extension PushNotifications: UNUserNotificationCenterDelegate {
         // without also enqueuing a deep link — they're already in-app.
         let info = notification.request.content.userInfo
         // A `generic` push (`app-access` from an older box): the app is open,
-        // so it fetches what's waiting from the box and asks in-app instead
-        // of a banner.
+        // so it fetches what's waiting from the box (access requests and
+        // build chats that need the owner) and asks in-app instead of a banner.
         if AppAccessEvents.isPush(info, categoryIdentifier: notification.request.content.categoryIdentifier) {
-            Task { @MainActor in AppAccessEvents.post() }
+            Task { @MainActor in
+                AppAccessEvents.post()
+                PhoneAlertEvents.postWake()
+            }
             completionHandler([.list])
             return
         }
@@ -177,6 +180,7 @@ extension PushNotifications: UNUserNotificationCenterDelegate {
             // opening the app is the whole action; it fetches the details.
             if AppAccessEvents.isPush(userInfo, categoryIdentifier: category) {
                 AppAccessEvents.post()
+                PhoneAlertEvents.postWake()
                 completionHandler()
                 return
             }

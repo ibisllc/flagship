@@ -188,4 +188,39 @@ final class AiChatAlertPollerTests: XCTestCase {
         _ = await poller.drainOnce()
         XCTAssertEqual(client.fetchSinceCalls, [0, 0, 9])
     }
+
+    /// A content-free `generic` push now also means a build chat waits on the
+    /// owner: the wake drains at once instead of on the next 5 s tick, and
+    /// only while the app is usable.
+    func test_wakePushDrainsAtOnce() async throws {
+        let ops = ActiveOperationsCenter()
+        let client = FakeClient(PhoneAlertsResponse(events: [], size: 0))
+        var notified: [String] = []
+        var active = true
+        let poller = AiChatAlertPoller(operations: ops, client: client, isActive: { active },
+                                       notify: { sessionId, _, _ in notified.append(sessionId) },
+                                       pollIntervalNanos: 3_600_000_000_000)
+        poller.start()
+        defer { poller.stop() }
+        try await waitUntil { client.fetchSinceCalls.count == 1 }
+
+        client.response = PhoneAlertsResponse(events: [aiChatEnv(4, "sess-w", .talkToUser, "tool-1")], size: 1)
+        PhoneAlertEvents.postWake()
+        try await waitUntil { notified == ["sess-w"] }
+        XCTAssertEqual(client.ackedThrough, [4])
+        XCTAssertEqual(ops.operations.first?.id, "build:sess-w")
+
+        active = false
+        PhoneAlertEvents.postWake()
+        try await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertEqual(client.fetchSinceCalls.count, 2, "A locked app doesn't drain on a wake.")
+    }
+
+    private func waitUntil(_ condition: @escaping @MainActor () -> Bool, timeout: TimeInterval = 5) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() {
+            if Date() > deadline { XCTFail("Timed out waiting"); return }
+            try await Task.sleep(nanoseconds: 20_000_000)
+        }
+    }
 }

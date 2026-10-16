@@ -41,6 +41,8 @@ public final class AiChatAlertPoller {
     private let pollIntervalNanos: UInt64
 
     private var task: Task<Void, Never>?
+    private var wakeObserver: NSObjectProtocol?
+    private var draining = false
     /// ACK cursor per server ("" when the client names none) — the highest
     /// alert id drained from it. Each box numbers its own alerts, so one
     /// server's cursor would skip another's.
@@ -65,6 +67,13 @@ public final class AiChatAlertPoller {
 
     public func start() {
         stop()
+        // A content-free `generic` push also means a build chat may wait on
+        // the owner: drain at once rather than on the next tick.
+        wakeObserver = NotificationCenter.default.addObserver(
+            forName: PhoneAlertEvents.wake, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in await self?.drainOnWake() }
+        }
         task = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 guard let self else { return }
@@ -79,6 +88,16 @@ public final class AiChatAlertPoller {
     public func stop() {
         task?.cancel()
         task = nil
+        if let wakeObserver { NotificationCenter.default.removeObserver(wakeObserver) }
+        wakeObserver = nil
+    }
+
+    /// The drain a wake push asks for; skipped while locked or while another
+    /// drain is in flight (that one fetches the same alerts).
+    @discardableResult
+    public func drainOnWake() async -> Int {
+        guard isActive() else { return 0 }
+        return await drainOnce()
     }
 
     /// One drain: fetch since the cursor, act on every `ai-chat-needs-you`
@@ -88,6 +107,9 @@ public final class AiChatAlertPoller {
     /// number of AI-chat alerts handled (for tests / pull-to-refresh).
     @discardableResult
     public func drainOnce() async -> Int {
+        if draining { return 0 }
+        draining = true
+        defer { draining = false }
         let server = await client.boundServer()
         let key = server ?? ""
         let cursor = cursors[key] ?? 0
