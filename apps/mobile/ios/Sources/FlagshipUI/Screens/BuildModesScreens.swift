@@ -102,7 +102,7 @@ public struct BuildSourceChooserScreen: View {
                     BuildSourceTile(
                         icon: "laptopcomputer",
                         title: "Connect your IDE",
-                        subtitle: "Build from Cursor or Cline using your own AI. No model key ever touches the box.",
+                        subtitle: "Build from your own IDE (Claude Code, Cursor, VS Code or Cline) using your own AI. No model key ever touches the box.",
                         action: onMcp
                     )
                     .accessibilityIdentifier("build-src-mcp")
@@ -139,7 +139,7 @@ private struct BuildHelpSheet: View {
         ("arrow.down.circle", "Import from a Git repo",
          "Paste the address of a code repository, for example on GitHub. If it is already set up for Flagship it installs as-is; otherwise the AI can adapt it for you."),
         ("laptopcomputer", "Connect your IDE",
-         "For developers: work in Cursor or Cline on your computer with your own AI, connected to your server over MCP. No AI key is stored on the server."),
+         "For developers: work in your own IDE (Claude Code, Cursor, VS Code or Cline) with your own AI, connected to your server over MCP. No AI key is stored on the server."),
     ]
 
     var body: some View {
@@ -608,15 +608,30 @@ public struct BuildMcpScreen: View {
     private func connectionCard(c: FSColors) -> some View {
         if let conn = vm.connection {
             FSCard {
-                Text("Paste this into your IDE's MCP settings (Cursor: Settings → MCP; Cline: MCP servers). The key works only for this build.")
+                Text("Add this to your IDE's own settings, not a file in your project (the address names your server). The key works only for this build.")
                     .font(FS.font.bodySm()).foregroundColor(c.textMuted)
                     .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("build-mcp-user-settings")
 
                 CopyableRow(label: "URL", value: conn.url, mono: true) {
                     onCopy(conn.url, "URL copied")
                 }
                 CopyableRow(label: "Key", value: conn.key, mono: true) {
                     onCopy(conn.key, "Key copied")
+                }
+
+                if vm.ideChoices.count > 1 {
+                    Picker("IDE", selection: $vm.selectedIde) {
+                        ForEach(vm.ideChoices) { ide in Text(ide.name).tag(ide.id) }
+                    }
+                    .pickerStyle(.segmented)
+                    .accessibilityIdentifier("build-mcp-ide-picker")
+                }
+                if let whereText = vm.currentIde?.where, !whereText.isEmpty {
+                    Text(whereText)
+                        .font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("build-mcp-ide-where")
                 }
 
                 FSSecondaryButton("Copy IDE config", block: true) {
@@ -633,6 +648,24 @@ public struct BuildMcpScreen: View {
                     }
                     .background(c.surfaceSunken)
                     .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
+                    .accessibilityIdentifier("build-mcp-ide-config")
+                }
+
+                if let command = vm.ideCommand {
+                    Text("Or run:").font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        Text(command)
+                            .font(FS.font.mono())
+                            .foregroundColor(c.text)
+                            .padding(FS.space.s3)
+                            .accessibilityIdentifier("build-mcp-ide-command")
+                    }
+                    .background(c.surfaceSunken)
+                    .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
+                    FSSecondaryButton("Copy command", block: true) {
+                        onCopy(command, "Command copied")
+                    }
+                    .accessibilityIdentifier("build-mcp-copy-command")
                 }
 
                 HStack(spacing: FS.space.s2) {

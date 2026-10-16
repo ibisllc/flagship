@@ -193,10 +193,31 @@ public struct BuildMcpConnection: Codable, Equatable {
     /// pretty-prints it for copy. (`AnyCodable` is not `Sendable`, so neither
     /// is this — matches `OrdersSendResponse`/`AppDetailResponse`.)
     public let ideConfig: [String: AnyCodable]
-    public init(url: String, key: String, ideConfig: [String: AnyCodable]) {
+    /// The same connection in each IDE's own format (Claude Code, Cursor,
+    /// VS Code, Cline). Older boxes send only `ideConfig`.
+    public let ideConfigs: [McpIdeConfig]?
+    public init(url: String, key: String, ideConfig: [String: AnyCodable], ideConfigs: [McpIdeConfig]? = nil) {
         self.url = url
         self.key = key
         self.ideConfig = ideConfig
+        self.ideConfigs = ideConfigs
+    }
+}
+
+/// One IDE's config for an MCP connection: where it goes, the JSON, and a
+/// one-line command when the IDE has one (Claude Code).
+public struct McpIdeConfig: Codable, Equatable, Identifiable {
+    public let id: String
+    public let name: String
+    public let `where`: String?
+    public let config: [String: AnyCodable]
+    public let command: String?
+    public init(id: String, name: String, where: String?, config: [String: AnyCodable], command: String? = nil) {
+        self.id = id
+        self.name = name
+        self.where = `where`
+        self.config = config
+        self.command = command
     }
 }
 

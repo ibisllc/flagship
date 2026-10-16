@@ -263,6 +263,42 @@ final class GymTotalDetailTests: XCTestCase {
         gymShot(app, "build-mcp-connected")
     }
 
+    /// Connect your IDE offers each IDE's own config: Claude Code with its
+    /// one-line command, then Cursor, VS Code (`servers`) and Cline
+    /// (`streamableHttp`), each saying where it goes; URLs copy unescaped.
+    func test_buildMcpIdeConfigs() throws {
+        let app = launch(tab: "apps")
+        openBuildChooser(app)
+        let mcp = app.buttons["build-src-mcp"]
+        XCTAssertTrue(mcp.waitForExistence(timeout: 15))
+        mcp.tap()
+        let create = app.buttons["build-mcp-create"]
+        XCTAssertTrue(create.waitForExistence(timeout: 15))
+        create.tap()
+        let note = app.staticTexts["build-mcp-user-settings"]
+        XCTAssertTrue(note.waitForExistence(timeout: 15))
+        XCTAssertTrue(note.label.contains("not a file in your project"), note.label)
+        let config = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "mcpServers")).firstMatch
+        XCTAssertTrue(config.waitForExistence(timeout: 10), "Claude Code's config shows first.")
+        XCTAssertTrue(config.label.contains("https://"), "URLs aren't escaped: \(config.label)")
+        XCTAssertFalse(config.label.contains("\\/"))
+        let command = app.staticTexts["build-mcp-ide-command"]
+        XCTAssertTrue(command.exists, "Claude Code has a one-line command.")
+        XCTAssertTrue(command.label.hasPrefix("claude mcp add --scope user --transport http"), command.label)
+        XCTAssertTrue(app.buttons["build-mcp-copy-command"].exists)
+        gymShot(app, "build-mcp-ide-claude-code")
+
+        app.buttons["VS Code"].tap()
+        let vscode = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "\"servers\"")).firstMatch
+        XCTAssertTrue(vscode.waitForExistence(timeout: 5), "VS Code's mcp.json uses servers.")
+        XCTAssertTrue(app.staticTexts["build-mcp-ide-where"].label.contains("MCP: Open User Configuration"))
+        XCTAssertFalse(app.staticTexts["build-mcp-ide-command"].exists, "Only Claude Code has a command.")
+        app.buttons["Cline"].tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "streamableHttp")).firstMatch
+            .waitForExistence(timeout: 5), "Cline's config uses streamableHttp.")
+        gymShot(app, "build-mcp-ide-cline")
+    }
+
     /// D2-B10: the build journal — reachable from the chooser's "View past
     /// builds" link; the mock seeds prior builds so the list renders rows.
     func test_buildJournalList() throws {

@@ -43,12 +43,36 @@ public final class BuildMcpViewModel {
         editServiceId.flatMap { $0.components(separatedBy: "--").last }
     }
 
-    /// Pretty-printed IDE config JSON, ready to paste / copy.
+    /// The IDE whose config the screen shows (the box's ids: claude-code,
+    /// cursor, vscode, cline).
+    public var selectedIde = "claude-code"
+
+    /// Each IDE's own config from the box; an older box sends only the
+    /// generic one, offered as a single "IDE" choice.
+    public var ideChoices: [McpIdeConfig] {
+        guard let conn = connection else { return [] }
+        if let list = conn.ideConfigs, !list.isEmpty { return list }
+        return [McpIdeConfig(id: "generic", name: "IDE", where: "Your IDE's MCP settings", config: conn.ideConfig)]
+    }
+
+    public var currentIde: McpIdeConfig? {
+        ideChoices.first { $0.id == selectedIde } ?? ideChoices.first
+    }
+
+    /// The current IDE's one-line command (Claude Code), when it has one.
+    public var ideCommand: String? { currentIde?.command }
+
+    /// Pretty-printed config for the current IDE, ready to paste / copy.
     public var ideConfigJson: String {
-        guard let conn = connection else { return "" }
-        let obj = conn.ideConfig.mapValues { $0.value }
+        guard let cfg = currentIde?.config else { return "" }
+        return Self.prettyJson(cfg.mapValues { $0.value })
+    }
+
+    /// Slashes stay as written, so URLs don't copy as `https:\/\/`.
+    static func prettyJson(_ obj: [String: Any]) -> String {
         guard JSONSerialization.isValidJSONObject(obj),
-              let data = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted, .sortedKeys]),
+              let data = try? JSONSerialization.data(withJSONObject: obj,
+                                                     options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]),
               let s = String(data: data, encoding: .utf8)
         else { return "" }
         return s

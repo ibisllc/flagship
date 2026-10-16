@@ -1467,6 +1467,8 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
 
     public private(set) var buildDeployCalls: [String] = []
 
+    /// Answer MCP connections like a box from before per-IDE configs (only `ideConfig`).
+    public var mockMcpLegacyConfig = false
     /// Override the past-builds list. Nil → a two-entry default.
     public var buildSessionsFixture: BuildSessionsResponse?
     /// Override the journal. Nil → a small deterministic timeline.
@@ -1476,15 +1478,28 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         if let f = buildMcpFixture { return f }
         let url = "https://\(podContext).bright-maple.flagship.services/mcp/build/\(buildId)"
         let key = "fbk_\(UUID().uuidString.prefix(16).lowercased())"
-        let ideConfig: [String: AnyCodable] = [
-            "mcpServers": AnyCodable([
-                "flagship-build": [
-                    "url": url,
-                    "headers": ["Authorization": "Bearer \(key)"],
-                ] as [String: Any]
-            ] as [String: Any])
+        // The box's shapes (buildOrchestrator `mcpIdeConfigs`).
+        let name = "flagship-\(buildId)"
+        let headers: [String: Any] = ["Authorization": "Bearer \(key)"]
+        func servers(_ entry: [String: Any], key top: String = "mcpServers") -> [String: AnyCodable] {
+            [top: AnyCodable([name: entry] as [String: Any])]
+        }
+        let ideConfig = servers(["type": "http", "url": url, "headers": headers])
+        let ideConfigs = [
+            McpIdeConfig(id: "claude-code", name: "Claude Code",
+                         where: "Run the command in a terminal, or pass the JSON with --mcp-config", config: ideConfig,
+                         command: "claude mcp add --scope user --transport http \(name) \(url) --header \"Authorization: Bearer \(key)\""),
+            McpIdeConfig(id: "cursor", name: "Cursor",
+                         where: "~/.cursor/mcp.json (Cursor Settings → MCP → Add new global MCP server)",
+                         config: servers(["url": url, "headers": headers])),
+            McpIdeConfig(id: "vscode", name: "VS Code",
+                         where: "Your user mcp.json (Command Palette → MCP: Open User Configuration)",
+                         config: servers(["type": "http", "url": url, "headers": headers], key: "servers")),
+            McpIdeConfig(id: "cline", name: "Cline", where: "Cline → MCP Servers → Configure MCP Servers",
+                         config: servers(["type": "streamableHttp", "url": url, "headers": headers])),
         ]
-        return BuildMcpConnection(url: url, key: key, ideConfig: ideConfig)
+        return BuildMcpConnection(url: url, key: key, ideConfig: ideConfig,
+                                  ideConfigs: mockMcpLegacyConfig ? nil : ideConfigs)
     }
 
     /// Thrown by `buildGit` instead of a verdict (a taken name, a failed clone).
