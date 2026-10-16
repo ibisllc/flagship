@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { setDockerRepairedHook } from "./dockerHealth.js";
-import { readFile, rename, rm, stat } from "node:fs/promises";
+import { readFile, rename, rm, stat, statfs } from "node:fs/promises";
 import { onCorruptState, withFileLock, writeFileDurable } from "./durableFile.js";
 import { basename, join } from "node:path";
 import { buildModelRedactor } from "./llm/modelPrivacy.js";
@@ -11,6 +11,7 @@ import {
   verifyRootEntitlement,
   verifyArchiveDownloadApproval,
   verifyArchiveKeysDeposit,
+  verifyBackupPolicy,
   verifyServerShareGrant,
   verifyServerShareRevoke,
   type Keypair,
@@ -199,6 +200,10 @@ import { AppCopyStore } from "./appCopy/store.js";
 import { buildAppCopyTarget } from "./appCopy/target.js";
 import { buildServerArchiveService } from "./serverArchive/service.js";
 import { buildRestoreWait, type RestoreWait } from "./serverArchive/restoreWait.js";
+import { BackupPolicyStore } from "./backupPolicy/policy.js";
+import { BackupCap } from "./backupPolicy/cap.js";
+import { buildBackupPolicyHttp } from "./backupPolicy/http.js";
+import { measureAppArchiveBytes } from "./serverArchive/build.js";
 import {
   buildSelfDeletePoller,
   fileMarkerStore,
@@ -1157,6 +1162,31 @@ async function main(): Promise<void> {
       })
     : null;
   await restoreWait?.load();
+  // The backup policy (phone / peer / none) and the size limit it sets
+  // (docs/server-backup-and-clone.md, "Backup policy"): chosen at create time
+  // beside the pairing order, changed from the server page, signed under the
+  // sensitive-order authority.
+  const backupPolicy = cfg
+    ? new BackupPolicyStore({
+        path: `${dataDir}/backup-policy.json`,
+        serverDomain: env.serverFqdn!,
+        authorize: (order, sig) =>
+          authorizeSensitiveOrder({
+            ownerIrkPub: cfg.irkPublicKey,
+            ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+            username: cfg.userId,
+            order,
+            signature: sig,
+            verify: verifyBackupPolicy,
+          }),
+        log: (m) => console.log(m),
+      })
+    : null;
+  await backupPolicy?.load();
+  const adoptPairingSiblings = async (json: string) => {
+    await restoreWait?.adoptFromPairingJson(json);
+    await backupPolicy?.adoptFromPairingJson(json);
+  };
   const statusHeartbeat = startDaemonStatusHeartbeat({
     serverDomain: env.serverFqdn!,
     sign: (msg) => custodian.signAsBox(msg),
@@ -1359,7 +1389,7 @@ async function main(): Promise<void> {
             pairedSessions,
             markerStore: pairingMarker,
             onVerified: async (json) => {
-              await restoreWait?.adoptFromPairingJson(json);
+              await adoptPairingSiblings(json);
             },
             onLog: (m) => console.log(m),
           });
@@ -1376,7 +1406,7 @@ async function main(): Promise<void> {
           pairedSessions,
           markerStore: pairingMarker,
           onVerified: async (json) => {
-              await restoreWait?.adoptFromPairingJson(json);
+              await adoptPairingSiblings(json);
             },
           guard: restarts.guard,
           onLog: (m) => console.log(m),
@@ -1425,6 +1455,7 @@ async function main(): Promise<void> {
       frontPage,
       activityLog,
       restoreWait,
+      backupPolicy,
       serverOrder,
       serviceAccessRef,
       accessPrincipals,
@@ -2226,6 +2257,7 @@ async function wireRuntimeSurfaces(deps: {
   frontPage: FrontPageStore;
   activityLog: ActivityLog;
   restoreWait: RestoreWait | null;
+  backupPolicy: BackupPolicyStore | null;
   serviceAccessRef: { current: ServiceAccessStore | null };
   accessPrincipals: AccessPrincipals;
   accessSyncRef: { current: AccessSync | null };
@@ -2800,6 +2832,38 @@ async function wireRuntimeSurfaces(deps: {
       : {}),
   });
 
+  // The backup policy's size limit: measured like a backup sizes itself,
+  // refreshed every 10 minutes and after app changes, and checked before any
+  // new app, copy or import comes onto this server.
+  const backupCap = (() => {
+    const platform = runtime.servicePlatform;
+    if (!deps.backupPolicy || !platform) return null;
+    const ops = realAppCopyOps();
+    const cap = new BackupCap({
+      policy: deps.backupPolicy,
+      measure: () => measureAppArchiveBytes({ apps: () => platform.list(), ops, sourceDir: vibeAppDir, log: (m) => console.log(m) }),
+      diskBytes: async () => {
+        const s = await statfs(join(dataDir, "data")).catch(() => statfs(dataDir));
+        return Number(s.blocks) * Number(s.bsize);
+      },
+      note: (kind, detail, ok) => deps.activityLog.note(kind, detail, { ok: ok ?? true }),
+      log: (m) => console.log(m),
+    });
+    platform.setAdmitNewApp(() => cap.admit());
+    void cap.refresh();
+    setInterval(() => void cap.refresh(), 10 * 60_000).unref();
+    deps.backupPolicy.onChange(() => void cap.refresh());
+    return cap;
+  })();
+  const backupPolicyHttp =
+    deps.backupPolicy && backupCap
+      ? buildBackupPolicyHttp({
+          policy: deps.backupPolicy,
+          cap: backupCap,
+          note: (kind, detail, ok) => deps.activityLog.note(kind, detail, { ok: ok ?? true }),
+        })
+      : null;
+
   // Copying an app between the account's servers (docs/app-placement.md §5):
   // this box as source (the public export endpoint) and as target (the
   // screens endpoints + the apps-list rows while a copy runs).
@@ -2838,6 +2902,7 @@ async function wireRuntimeSurfaces(deps: {
       ...authority,
       serverFqdn: env.serverFqdn,
       platform,
+      ...(backupCap ? { admitIncoming: (bytes: number) => backupCap.admit(bytes) } : {}),
       dataProvisioner: runtime.dataProvisioner,
       store,
       ops,
@@ -2952,7 +3017,14 @@ async function wireRuntimeSurfaces(deps: {
             signature: sig,
             verify: verifyArchiveKeysDeposit,
           }),
+        // The schedule runs unless the policy is "No backups": the phone fetches its backups,
+        // and the peer engine builds its bricks from them.
+        scheduleActive: () => {
+          const p = deps.backupPolicy?.current().policy ?? "unset";
+          return p !== "none";
+        },
       },
+      ...(backupCap ? { admitIncoming: (bytes: number) => backupCap.admit(bytes) } : {}),
       ...(env.controlPlaneBaseUrl ? { appLinkBase: env.controlPlaneBaseUrl } : {}),
       log: (m) => console.log(m),
     });
@@ -3111,6 +3183,7 @@ async function wireRuntimeSurfaces(deps: {
     appEgress: runtime.egress.appEgress,
     appCopy: appCopyTarget,
     serverArchive: serverArchiveService,
+    backupPolicy: backupPolicyHttp,
     // The status pill (docs/app-placement.md §6): one `docker ps` for every
     // app, and what's deploying or being edited here.
     appStatus: buildAppStatusReader({

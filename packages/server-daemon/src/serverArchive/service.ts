@@ -105,7 +105,11 @@ export interface ServerArchiveServiceOptions {
     diskBytes?: (dir: string) => Promise<number>;
     /** Share of the disk saved backups may take. Default 0.5. */
     maxDiskShare?: number;
+    /** Whether the schedule runs (the backup policy is phone-side, or unset). Default: always. */
+    scheduleActive?: () => boolean;
   };
+  /** Whether an import of `bytes` may come onto this server (the backup policy's limit): null, or why not. */
+  admitIncoming?: (bytes: number) => string | null;
   now?: () => number;
   log?: (m: string) => void;
 }
@@ -243,7 +247,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     // the apps keep working. A box that can't size something goes ahead
     // on the flat minimum it already passed.
     a.job.progress = { done: 0, total: 0, app: "Checking free space" };
-    const est = await estimateServerArchive({ ...opts.build, workDir: scratch });
+    const est = await estimateServerArchive(opts.build);
     if (est) {
       a.job.estimatedBytes = est.archiveBytes;
       const need = est.archiveBytes + est.largestAppBytes + HEADROOM_BYTES;
@@ -611,6 +615,18 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     progress: { done: number; total: number; app: string };
     estimatedBytes?: number;
   } | null = null;
+  /** The peer engine's hooks: it builds bricks from saved backups and pins the ones it uses. */
+  let hooks: {
+    onArchiveSaved?: (meta: SavedBackupMeta, files: { dataPath: string; backupPath: string }) => void;
+    pinnedArchiveIds?: () => Set<string>;
+  } = {};
+  function pinned(): Set<string> {
+    try {
+      return hooks.pinnedArchiveIds?.() ?? new Set();
+    } catch {
+      return new Set();
+    }
+  }
   const NO_KEYS =
     "an admin device of your account hasn't approved backups for this server yet: open this server in the Flagship app on an admin device";
 
@@ -630,8 +646,9 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     const s = await state();
     const all = await store!.list();
     const keep = retained(all.map((m) => ({ id: m.archiveId, createdAt: m.createdAt })), s.schedule);
+    const held = pinned();
     for (const m of all) {
-      if (keep.has(m.archiveId)) continue;
+      if (keep.has(m.archiveId) || held.has(m.archiveId)) continue;
       await store!.remove(m.archiveId);
       links.delete(m.archiveId);
     }
@@ -647,13 +664,16 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     const cap = share * (await diskBytes());
     let all = await store!.list();
     let have = await free(opts.dir);
+    const held = pinned();
     const used = () => all.reduce((n, m) => n + m.bytes + m.backupBytes, 0);
-    while (all.length > 1 && (have < need || used() + estimate > cap)) {
-      const oldest = all[all.length - 1]!;
+    while (have < need || used() + estimate > cap) {
+      // The oldest that is neither the newest nor in use by the peer engine.
+      const oldest = [...all.slice(1)].reverse().find((m) => !held.has(m.archiveId));
+      if (!oldest) break;
       await store!.remove(oldest.archiveId);
       links.delete(oldest.archiveId);
       note("server.backup.removed", `Removed the backup from ${new Date(oldest.createdAt).toISOString().slice(0, 10)} to make room for a new one.`);
-      all = all.slice(0, -1);
+      all = all.filter((m) => m.archiveId !== oldest.archiveId);
       have = await free(opts.dir);
     }
     return have;
@@ -707,7 +727,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
       });
     })()
       .then(async (r) => {
-        await store.commit({
+        const meta: SavedBackupMeta = {
           archiveId: k.archiveId,
           createdAt: startedAt,
           trigger,
@@ -718,10 +738,19 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
           dataFileName: `${stem}.flagship-data`,
           apps: r.apps,
           left: r.left,
-        });
+        };
+        await store.commit(meta);
         s.history.lastOk = true;
         s.lastRun = { at: startedAt, ok: true, trigger, archiveId: k.archiveId };
         await store.saveState(s);
+        try {
+          hooks.onArchiveSaved?.(meta, {
+            dataPath: join(store.entryDir(meta.archiveId), SAVED_DATA_FILE),
+            backupPath: join(store.entryDir(meta.archiveId), SAVED_BACKUP_FILE),
+          });
+        } catch (e) {
+          log(`[server-archive] the saved-backup hook failed: ${(e as Error).message}`);
+        }
         await applyRetention();
         note(
           "server.backup.created",
@@ -753,9 +782,12 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     const s = await state();
     const backups = await store!.list();
     const t = now();
+    const active = opts.saved?.scheduleActive ? opts.saved.scheduleActive() : true;
     return {
       schedule: s.schedule,
-      nextRunAt: keyPool.length === 0 ? null : nextRunAt(s.schedule, s.history, t),
+      /** False while the backup policy isn't phone-side: the schedule doesn't run (Back up now still does). */
+      scheduleActive: active,
+      nextRunAt: keyPool.length === 0 || !active ? null : nextRunAt(s.schedule, s.history, t),
       lastRun: s.lastRun,
       running: savedJob
         ? { archiveId: savedJob.archiveId, trigger: savedJob.trigger, startedAt: savedJob.startedAt, progress: savedJob.progress, ...(savedJob.estimatedBytes !== undefined ? { estimatedBytes: savedJob.estimatedBytes } : {}) }
@@ -816,6 +848,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
   /** The schedule's tick: start a run when one is due. */
   async function tick(): Promise<void> {
     if (!store || running || keyPool.length === 0) return;
+    if (opts.saved?.scheduleActive && !opts.saved.scheduleActive()) return;
     const s = await state();
     if (!isDue(s.schedule, s.history, now())) return;
     await runSaved("schedule");
@@ -835,6 +868,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     if (sub === "" && method === "DELETE") {
       if (savedJob?.archiveId === id) return err(409, "the backup is still being made");
       if (!(await savedById(id))) return err(404, "that backup isn't on this server");
+      if (pinned().has(id)) return err(409, "this backup is the one kept on other servers right now, so it can't be deleted until a newer one replaces it");
       await store.remove(id);
       links.delete(id);
       note("server.backup.removed", "A saved backup was deleted.");
@@ -895,6 +929,8 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
       return err(409, "this server is waiting for a different backup", { code: "other-backup" });
     }
     if (running) return err(409, "a backup or restore is already running here");
+    const capRefusal = opts.admitIncoming?.(w.bytes) ?? null;
+    if (capRefusal) return err(507, capRefusal, { code: "over-backup-limit" });
     // An upload of this backup already under way (the app closed, or the box
     // restarted): carry on from where it stopped.
     if (restore && restore.archiveId === w.archiveId && (restore.state === "uploading" || restore.state === "ready")) {
@@ -1072,6 +1108,10 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     },
     /** One look at the schedule (the daemon calls it every few minutes). */
     tick,
+    /** The peer engine plugs in here: told of each saved backup, and asked which it still needs. */
+    setSavedHooks(h: typeof hooks): void {
+      hooks = h;
+    },
     /** Check the schedule every `everyMs` (default 5 minutes) until stopped. */
     startSchedule(everyMs = 5 * 60_000): () => void {
       const t = setInterval(() => void tick().catch((e: Error) => log(`[server-archive] schedule tick failed: ${e.message}`)), everyMs);

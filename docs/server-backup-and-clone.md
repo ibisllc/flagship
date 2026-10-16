@@ -116,6 +116,65 @@ the device (the passcode never leaves it). It hands the box the content key
 and the slots over the pinned session; the box seals the data file, writes
 the backup file around the slots, wipes the key and never stores it.
 
+## Backup policy
+
+Every server has one backup policy, picked when it is created and changed
+from its page (owner decision, 2026-10-16). Back up now and Migrate stay
+one-off buttons beside it.
+
+| Policy | What runs | Size limit on the server's app data |
+|---|---|---|
+| **Phone-side** (`phone`) | the scheduled backup below, and the owner's phone fetches the newest one in the background | the space the phone keeps for it (`phoneReserveBytes`, the owner picks it) |
+| **Peer-distributed** (`peer`) | the scheduled backup below, which the peer engine (`peerBackup/v2/`) spreads as encrypted bricks on other servers | a third of the server's disk; the rest holds other servers' bricks and this one's redundancy |
+| **No backups** (`none`) | nothing | none |
+
+A server with no policy yet (`unset`, older boxes and older apps) runs the
+scheduled backup and has no limit; its page asks the owner to choose. A
+policy whose limit the server is already over is refused with a sentence
+(`409 code over-backup-limit`): a phone reserve smaller than the data, or
+peer backups on a server using more than a third of its disk.
+
+**Peer engine seams** (owned by the peer engine, `serverArchive/service.ts`
+`setSavedHooks`): `onArchiveSaved(meta, {dataPath, backupPath})` after each
+saved backup, and `pinnedArchiveIds()`, which retention, making room and
+Delete never remove. Its status reaches the page through
+`backupPolicyHttp.setPeerStatus`, and its pool is sized from
+`BackupCap.reservedForPeersBytes()`.
+
+**The order.** `flagship/backup-policy/v1|<serverDomain>|<phone|peer|none>|<phoneReserveBytes>|<issuedAt>`
+(`packages/protocol/src/backupPolicy.ts`, vectors in
+`test-vectors/backup-policy/vectors.json`); `phoneReserveBytes` is > 0
+exactly when the policy is `phone`. Signed with the sensitive-order key
+(admin root, else IRK) and checked on the box under its pinned authority
+(`backupPolicy/policy.ts`). At create time it rides beside the pairing order
+like a restore order (`{request, signature, restore?, backupPolicy: {order,
+signatureHex}}`), so it can be consumed hours later; the box therefore checks
+no freshness window but keeps only an order newer than the one it holds, so
+an old order can't be replayed over a newer choice. Later changes:
+`GET/POST /api/screens/backup-policy` (`backupPolicy/http.ts`), answering
+`{ policy, cap, peer }`. `<dataDir>/backup-policy.json`.
+
+The older PSK-signed `set-backup-policy` phone order (`enabled: boolean`,
+`protocol/src/orders.ts`) is left as it was: no app sends it and Debian
+boxes never hold its PSK key. It only toggles the old peer loop.
+
+**The limit** (`backupPolicy/cap.ts`). The data a backup would hold: each
+app's databases, files folder and working tree, measured the way a backup
+sizes itself (`measureAppArchiveBytes`), every 10 minutes and after a
+policy change. At or over the limit the box refuses every new app (one gate
+in `ServicePlatform.install`, so installs, AI deploys of a new app, app
+copies and imports alike), an app copy that wouldn't fit, and an import
+that wouldn't fit (`507 code over-backup-limit`), with the sentence the
+owner sees ("This server holds 6.0 GB of app data, over its backup limit of
+5.0 GB (the space your phone keeps for its backup). Remove apps or data, or
+change the backup policy on the server page."). Redeploys of an app already
+there aren't refused. Crossing the limit, either way, goes into Activity.
+`appBudgets()` splits the limit per app (what each holds plus an equal share
+of the room left, split between Postgres and files by what each holds) for
+the per-app disk quotas that hold a running app to its share (the disk-quota
+phase of `app-runtimes.md`); until those are in, an app can still grow past
+the limit by its own writes, and the page shows the server over it.
+
 ## Scheduled backups (saved on the server)
 
 The box makes the same two files on a schedule, by itself, whether or not

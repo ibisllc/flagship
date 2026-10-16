@@ -114,6 +114,7 @@ import { isAppDbPath } from "../dataLayer/ownerDb.js";
 import { isMemberRolesPath } from "../memberRoles.js";
 import { isAppCopyPath } from "../appCopy/target.js";
 import { isServerArchivePath } from "../serverArchive/service.js";
+import { isBackupPolicyPath } from "../backupPolicy/http.js";
 import type { ReleaseCatalogSource } from "../updateReleases.js";
 import type { AppStatusSource } from "../appStatus.js";
 import type { ServiceActivityKind } from "../serviceActivity.js";
@@ -219,6 +220,8 @@ export interface ScreensHttpDeps {
    * Owner sessions only.
    */
   serverArchive?: { handle: (path: string, method: string, req: HttpRequest, ctx: { companion: boolean }) => Promise<HttpResponse | null> } | null;
+  /** The backup policy and its size limit (backupPolicy/http.ts). Owner sessions only. */
+  backupPolicy?: { handle: (path: string, method: string, req: HttpRequest, ctx: { companion: boolean }) => Promise<HttpResponse | null> } | null;
   /**
    * Every app's container state in one Docker call (appStatus.ts). Unset ⇒
    * every app is `unknown`.
@@ -594,6 +597,12 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
     if (deps.serverArchive && isServerArchivePath(path)) {
       const companion = deps.pairedSessions?.isCompanionRequest?.(req) === true;
       const r = await deps.serverArchive.handle(path, method, req, { companion });
+      if (r) return r;
+    }
+
+    if (deps.backupPolicy && isBackupPolicyPath(path)) {
+      const companion = deps.pairedSessions?.isCompanionRequest?.(req) === true;
+      const r = await deps.backupPolicy.handle(path, method, req, { companion });
       if (r) return r;
     }
 

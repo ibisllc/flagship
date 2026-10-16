@@ -192,27 +192,52 @@ export interface ArchiveSizeEstimate {
  * JSON). Null when the box can't size something: the caller falls back to
  * watching the disk while it works.
  */
-export async function estimateServerArchive(deps: ArchiveBuildDeps): Promise<ArchiveSizeEstimate | null> {
-  const ops = deps.ops;
-  if (!ops.databaseBytes || !ops.filesBytes) return null;
+export async function estimateServerArchive(deps: Pick<ArchiveBuildDeps, "apps" | "ops" | "sourceDir" | "log">): Promise<ArchiveSizeEstimate | null> {
+  const perApp = await measureAppArchiveBytes(deps);
+  if (!perApp) return null;
   let archiveBytes = 64 * 1024;
   let largestAppBytes = 0;
+  for (const a of perApp.values()) {
+    archiveBytes += a.totalBytes;
+    largestAppBytes = Math.max(largestAppBytes, a.totalBytes);
+  }
+  return { archiveBytes, largestAppBytes };
+}
+
+/** One app's share of a backup, by part. */
+export interface AppArchiveBytes {
+  postgresBytes: number;
+  filesBytes: number;
+  /** The working tree as it travels (base64 JSON). */
+  treeBytes: number;
+  /** All of it, with tar and frame overhead. */
+  totalBytes: number;
+}
+
+/**
+ * What each app puts in a backup (its databases, files folder and working
+ * tree), by service id: the size the backup policy's limit counts. Null when
+ * the box can't size something.
+ */
+export async function measureAppArchiveBytes(deps: Pick<ArchiveBuildDeps, "apps" | "ops" | "sourceDir" | "log">): Promise<Map<string, AppArchiveBytes> | null> {
+  const ops = deps.ops;
+  if (!ops.databaseBytes || !ops.filesBytes) return null;
+  const out = new Map<string, AppArchiveBytes>();
   try {
     for (const app of deps.apps()) {
-      let bytes = 0;
-      for (const cred of Object.values(app.data?.postgres ?? {})) bytes += await ops.databaseBytes(cred);
-      if (app.data?.files) bytes += await ops.filesBytes(app.data.files.volume);
-      if (deps.sourceDir) bytes += Math.ceil((await treeBytes(join(deps.sourceDir, app.serviceId))) * 1.4);
+      let postgresBytes = 0;
+      for (const cred of Object.values(app.data?.postgres ?? {})) postgresBytes += await ops.databaseBytes(cred);
+      const filesBytes = app.data?.files ? await ops.filesBytes(app.data.files.volume) : 0;
+      const tree = deps.sourceDir ? Math.ceil((await treeBytes(join(deps.sourceDir, app.serviceId))) * 1.4) : 0;
+      const bytes = postgresBytes + filesBytes + tree;
       // tar headers and padding, frame tags: well under 1% plus a little per part.
-      bytes += Math.ceil(bytes / 100) + 16 * 1024;
-      archiveBytes += bytes;
-      largestAppBytes = Math.max(largestAppBytes, bytes);
+      out.set(app.serviceId, { postgresBytes, filesBytes, treeBytes: tree, totalBytes: bytes + Math.ceil(bytes / 100) + 16 * 1024 });
     }
   } catch (e) {
     deps.log?.(`[server-archive] couldn't size the backup: ${(e as Error).message}`);
     return null;
   }
-  return { archiveBytes, largestAppBytes };
+  return out;
 }
 
 function addBuffer(pack: tar.Pack, name: string, body: Buffer): Promise<void> {

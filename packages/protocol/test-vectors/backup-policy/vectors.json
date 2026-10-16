@@ -1,0 +1,69 @@
+{
+  "about": "flagship/backup-policy/v1 (docs/server-backup-and-clone.md, Backup policy): a server's backup policy. Canonical: tag|serverDomain|policy|phoneReserveBytes|issuedAt. policy is phone, peer or none; phoneReserveBytes is > 0 exactly when the policy is phone, else 0. Key: the protocol IRK derived from the UMK seed.",
+  "umkSeedHex": "2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a",
+  "pub": "c49775473bf9dcf5ad1608c8e66823d55dc6889be27e42a029fd9de195c8d7e4",
+  "cases": [
+    {
+      "serverDomain": "home.harry.flagship.services",
+      "policy": "phone",
+      "phoneReserveBytes": 34359738368,
+      "issuedAt": 1700000000000,
+      "canonical": "flagship/backup-policy/v1|home.harry.flagship.services|phone|34359738368|1700000000000",
+      "signature": "fda8a7b0ec25e242c5d90db445e2257d182b0cc6ea85671c0fe5b8d8e6352ec3806bc0a9051300a6df37c6058d1b45da088f3aed3697e568db35c072c1445707"
+    },
+    {
+      "serverDomain": "home2.harry.flagship.services",
+      "policy": "peer",
+      "phoneReserveBytes": 0,
+      "issuedAt": 1792000000000,
+      "canonical": "flagship/backup-policy/v1|home2.harry.flagship.services|peer|0|1792000000000",
+      "signature": "493bc6e0ca7eaa2443cb77d33e022ed0b6b08e7fba7d4bfceb2b37fe7924bd0b8d1d4ee3dddce9f72d1b2040b4646fcf7668f777c980fc0b38dbb211c5b64206"
+    },
+    {
+      "serverDomain": "lab.harry.flagship.services",
+      "policy": "none",
+      "phoneReserveBytes": 0,
+      "issuedAt": 1792000000001,
+      "canonical": "flagship/backup-policy/v1|lab.harry.flagship.services|none|0|1792000000001",
+      "signature": "8cb78f3bf9f6fa34929471262fce8cfa8842832c0d85192823425f72d0ffb10fdf111342ddaf8b99feaa97d1c911791d258a06a09b8a7860285bbcb55b7e4202"
+    }
+  ],
+  "invalid": [
+    {
+      "serverDomain": "",
+      "policy": "none",
+      "phoneReserveBytes": 0,
+      "issuedAt": 1
+    },
+    {
+      "serverDomain": "home.harry.flagship.services",
+      "policy": "cloud",
+      "phoneReserveBytes": 0,
+      "issuedAt": 1
+    },
+    {
+      "serverDomain": "home.harry.flagship.services",
+      "policy": "phone",
+      "phoneReserveBytes": 0,
+      "issuedAt": 1
+    },
+    {
+      "serverDomain": "home.harry.flagship.services",
+      "policy": "peer",
+      "phoneReserveBytes": 5,
+      "issuedAt": 1
+    },
+    {
+      "serverDomain": "home.harry.flagship.services",
+      "policy": "phone",
+      "phoneReserveBytes": -1,
+      "issuedAt": 1
+    },
+    {
+      "serverDomain": "home.harry.flagship.services",
+      "policy": "none",
+      "phoneReserveBytes": 0,
+      "issuedAt": -1
+    }
+  ]
+}

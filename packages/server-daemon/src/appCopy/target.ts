@@ -101,6 +101,8 @@ export interface AppCopyTargetOptions extends SensitiveAuthority {
   lanFetch?: LanFetch | null;
   /** This box's own LAN addresses (to prefer a source address on the same subnet). */
   ownLanAddresses?: () => string[];
+  /** Whether `bytes` of app may come onto this server (the backup policy's limit): null, or why not. */
+  admitIncoming?: (bytes: number) => string | null;
   pollMs?: number;
   /** How long the source may take to make the bundle. Default 60 min. */
   prepareTimeoutMs?: number;
@@ -332,6 +334,8 @@ export function buildAppCopyTarget(opts: AppCopyTargetOptions) {
       const route: Route = { lan: lanFetch ? pickLanEndpoint(meta.lan, opts.ownLanAddresses?.() ?? []) : null, lanChunks: 0 };
       if (route.lan) log(`[app-copy] ${grant.serviceId}: fetching from ${grant.sourceServer} on the local network`);
       const total = meta.parts.reduce((n, p) => n + p.bytes, 0);
+      const capRefusal = opts.admitIncoming?.(total) ?? null;
+      if (capRefusal) throw new Error(capRefusal);
       let got = 0;
       const files = new Map<string, string>();
       opts.store.setProgress(rec.copyId, P.fetchStart);

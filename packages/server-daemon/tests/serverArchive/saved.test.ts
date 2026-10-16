@@ -105,7 +105,7 @@ const rng = (n: number) => {
   return b;
 };
 
-async function world(over: { free?: () => number; disk?: number; sized?: number } = {}) {
+async function world(over: { free?: () => number; disk?: number; sized?: number; scheduleActive?: () => boolean } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "saved-backups-"));
   const clock = { t: Date.UTC(2026, 9, 14, 12) };
   const src = platformFor(srcBox, "s".repeat(40));
@@ -130,6 +130,7 @@ async function world(over: { free?: () => number; disk?: number; sized?: number 
         dir: join(dir, "server-backups"),
         authorizeKeys: (d, sig) => verifyArchiveKeysDeposit(d, sig, owner.publicKey),
         diskBytes: async () => over.disk ?? 1e13,
+        ...(over.scheduleActive ? { scheduleActive: over.scheduleActive } : {}),
       },
       now: () => clock.t,
     });
@@ -399,6 +400,78 @@ describe("saved backups", () => {
     expect(del.json().backups).toEqual([]);
     expect((await get(`${link.path}/file?r=${R}`)).status).toBe(404);
     expect((await call(w.svc, "DELETE", `${SAVED_PATH}/${id}`)).status).toBe(404);
+  });
+
+  it("the schedule runs only while the backup policy is phone-side; Back up now always works", async () => {
+    let phone = false;
+    const w = await world({ scheduleActive: () => phone });
+    await giveKeys(w, 3);
+    await w.svc.tick();
+    await w.svc.settle();
+    let v = (await call(w.svc, "GET", SAVED_PATH)).json();
+    expect(v).toMatchObject({ scheduleActive: false, nextRunAt: null, backups: [] });
+    await runNow(w);
+    phone = true;
+    w.clock.t += 24 * 60 * 60_000;
+    await w.svc.tick();
+    await w.svc.settle();
+    v = (await call(w.svc, "GET", SAVED_PATH)).json();
+    expect(v.scheduleActive).toBe(true);
+    expect(v.backups.map((b: { trigger: string }) => b.trigger)).toEqual(["schedule", "now"]);
+  });
+
+  it("tells the peer engine about each saved backup, and never drops one it pins", async () => {
+    const w = await world();
+    await giveKeys(w, 10);
+    const saved: Array<{ id: string; dataPath: string }> = [];
+    let pin = new Set<string>();
+    w.svc.setSavedHooks({ onArchiveSaved: (m, f) => void saved.push({ id: m.archiveId, dataPath: f.dataPath }), pinnedArchiveIds: () => pin });
+    const first = await runNow(w);
+    expect(saved).toEqual([{ id: first, dataPath: join(w.dir, "server-backups", first, "data.flagship-data") }]);
+    pin = new Set([first]);
+    await call(w.svc, "PUT", `${SAVED_PATH}/schedule`, { frequency: "daily", minuteOfDayUtc: 180, keepDaily: 1, keepWeekly: 0 });
+    for (let i = 0; i < 3; i++) {
+      w.clock.t += DAY;
+      await runNow(w);
+    }
+    const ids = (await call(w.svc, "GET", SAVED_PATH)).json().backups.map((b: { archiveId: string }) => b.archiveId);
+    expect(ids).toHaveLength(2);
+    expect(ids).toContain(first);
+    const del = await call(w.svc, "DELETE", `${SAVED_PATH}/${first}`);
+    expect(del.status).toBe(409);
+    expect(del.json().error).toMatch(/kept on other servers/);
+  });
+
+  it("an import past the backup policy's limit is refused before any upload", async () => {
+    const svc = buildServerArchiveService({
+      dir: join(mkdtempSync(join(tmpdir(), "cap-import-")), "a"),
+      wait: {
+        load: async () => {},
+        current: () => ({ order: { serverDomain: DST, archiveId: "00".repeat(16), bytes: 9 * GB, sha256: "00".repeat(32), issuedAt: 1 }, signatureHex: "" }) as never,
+        adoptFromPairingJson: async () => false,
+        setRestoring: () => {},
+        finish: async () => {},
+        heartbeatView: () => null,
+      },
+      build: { serverFqdn: DST, apps: () => [], containerName: () => "", ops: fakeOps().ops, envStore: null, access: null, accessList: null },
+      restore: { serverFqdn: DST, platform: platformFor(dstBox, "t".repeat(40)).platform, dataProvisioner: null, ops: fakeOps().ops, signInstall: (r) => dstBox.signInstallService(r), envStore: null, access: null, egress: null, buildImage: async () => ({ ok: true as const }), pullImage: async () => {} },
+      freeBytes: async () => 1e12,
+      admitIncoming: (bytes) => (bytes > 5 * GB ? "That needs about 9.0 GB and this server has 5.0 GB left under its backup limit" : null),
+    });
+    const r = await svc.handle(`${RESTORE_PATH}/start`, "POST", req("POST", `${RESTORE_PATH}/start`, { archiveId: "00".repeat(16), bytes: 9 * GB }), { companion: false });
+    expect(r!.status).toBe(507);
+    expect(JSON.parse(String(r!.body))).toMatchObject({ code: "over-backup-limit", error: expect.stringMatching(/backup limit/) });
+  });
+
+  it("a server over its backup limit refuses a new app with the limit's sentence", async () => {
+    const { platform } = platformFor(dstBox, "u".repeat(40));
+    platform.setAdmitNewApp(() => "This server holds 6.0 GB of app data, over its backup limit of 5.0 GB");
+    const request = { serverId: DST, creator: "harry", slug: "notes", manifestJson: JSON.stringify(MANIFEST), addOwnerToMembership: true, issuedAt: Date.now() };
+    const r = await platform.install({ request, signature: signInstallService(request, owner), verify: verifyInstallService });
+    expect(r).toEqual({ ok: false, reason: expect.stringMatching(/over its backup limit/) });
+    platform.setAdmitNewApp(() => null);
+    const again = { ...request, issuedAt: Date.now() + 1 };
+    expect((await platform.install({ request: again, signature: signInstallService(again, owner), verify: verifyInstallService })).ok).toBe(true);
   });
 
   it("companion sessions can't see or change saved backups", async () => {

@@ -223,9 +223,17 @@ export class ServicePlatform {
   private readonly maxAgeMs: number;
   private readonly now: () => number;
 
+  /** Whether a new app may come onto this server (the backup policy's limit): null, or the sentence why not. */
+  private admitNewApp: (() => string | null) | null = null;
+
   constructor(private readonly deps: ServicePlatformDeps) {
     this.maxAgeMs = deps.maxAgeMs ?? 5 * 60_000;
     this.now = deps.now ?? (() => Date.now());
+  }
+
+  /** Gate every new app (install, copy, import) on the backup policy's limit. Redeploys aren't gated. */
+  setAdmitNewApp(fn: (() => string | null) | null): void {
+    this.admitNewApp = fn;
   }
 
   /**
@@ -359,6 +367,8 @@ export class ServicePlatform {
       // identity, but verify defensively.
       return { ok: false, reason: `URL ${urlLabel} already in use` };
     }
+    const refused = this.admitNewApp?.() ?? null;
+    if (refused) return { ok: false, reason: refused };
 
     // 1. Provision data stores per the manifest.
     let data: AppDataCredentials | null = null;
