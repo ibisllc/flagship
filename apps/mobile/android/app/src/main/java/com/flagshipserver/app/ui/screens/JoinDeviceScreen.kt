@@ -1,5 +1,5 @@
 // Phase 3b — INCOMING cross-device pairing screen. Reached two ways:
-//   - in-app scanner (Welcome → "Join with a pairing code"), or
+//   - Connect to an existing account → Scan a code, or a pasted link, or
 //   - the https://flagshipserver.com/join App Link (the collaborator's native
 //     camera follows the admin's QR).
 //
