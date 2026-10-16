@@ -230,6 +230,24 @@ const TOTAL: readonly Scenario[] = [
       dimension: "D2",
     },
   ),
+  androidTotal(
+    "android-total-build-mcp-ide-configs",
+    "Connect your IDE shows each IDE's own config: Claude Code with its claude mcp add --scope user command, Cursor, VS Code (servers) and Cline (streamableHttp), each saying where it goes, and says to keep it in the IDE's user settings.",
+    `${PKG}.GymTotalTest#buildMcpIdeConfigs`,
+    {
+      steps: [
+        { kind: "tap", describe: "Create a connection.", handle: "build-mcp-create" },
+        { kind: "tap", describe: "VS Code.", handle: "build-mcp-ide-vscode" },
+        { kind: "tap", describe: "Cline.", handle: "build-mcp-ide-cline" },
+      ],
+      assertions: [
+        { describe: "IDE picker", handle: "build-mcp-ide-picker", expect: "present" },
+        { describe: "User-settings warning", handle: "build-mcp-user-settings", expect: "present" },
+      ],
+      screenshots: [shot("build-mcp-ide-claude-code", "Claude Code."), shot("build-mcp-ide-cline", "Cline.")],
+      dimension: "D2",
+    },
+  ),
   // D3 — AI-keys manager.
   androidTotal(
     "android-total-ai-keys-manager",

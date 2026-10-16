@@ -143,6 +143,25 @@ data class BuildMcpConnection(
     val key: String,
     /** Opaque copyable IDE config blob (re-serialized verbatim for copy). */
     val ideConfig: kotlinx.serialization.json.JsonElement,
+    /** The same connection in each IDE's own format (Claude Code, Cursor,
+     *  VS Code, Cline). Older boxes send only [ideConfig]. */
+    val ideConfigs: List<McpIdeConfig>? = null,
+) {
+    /** Each IDE's config, or the generic one (as a single "IDE" choice) from an older box. */
+    fun ideChoices(): List<McpIdeConfig> =
+        ideConfigs?.takeIf { it.isNotEmpty() }
+            ?: listOf(McpIdeConfig(id = "generic", name = "IDE", where = "Your IDE's MCP settings", config = ideConfig))
+}
+
+/** One IDE's config for an MCP connection: where it goes, the JSON, and a
+ *  one-line command when the IDE has one (Claude Code). */
+@Serializable
+data class McpIdeConfig(
+    val id: String,
+    val name: String,
+    val where: String? = null,
+    val config: kotlinx.serialization.json.JsonElement,
+    val command: String? = null,
 )
 
 /** POST /api/build/mcp response. */

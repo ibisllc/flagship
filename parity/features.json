@@ -87,7 +87,7 @@
       "ref": "web",
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/ServerShare.swift", "flagship/share-invite-bundle/v1"], ["apps/mobile/shared/Sources/FlagshipCore/ShareCoInvites.swift", "public func createCoInvite"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/CoInviteSection.swift", "co-invite-open"]] },
-        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerShare.kt", "flagship/share-invite-bundle/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerShareClient.kt", "suspend fun createCoInvite"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/CoInviteSection.kt", "co-invite-open"]] },
+        "android": { "status": "missing", "reason": "Built on the box, .com and the webapp first (2026-10-16); the native port follows docs/service-access-gating.md \"Co-manager invites\".", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerShare.kt", "flagship/share-invite-bundle/v1"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/serverShare.js", "flagship/share-invite-bundle/v1"], ["apps/web/public/webapp/lib/serverShares.js", "export async function createShareInvite"], ["apps/web/public/webapp/views/shared-server.js", "data-invite-open"]] }
       }
     },
@@ -187,7 +187,7 @@
       "ref": "web",
       "surfaces": {
         "ios": { "status": "missing", "reason": "Shows and copies only the generic ideConfig, which Cline refuses and VS Code's mcp.json doesn't read.", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/ViewModels/BuildMcpViewModel.swift", "ideConfigs"]] },
-        "android": { "status": "missing", "reason": "Shows and copies only the generic ideConfig, which Cline refuses and VS Code's mcp.json doesn't read.", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/api/BuildClient.kt", "ideConfigs"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/api/BuildClient.kt", "ideConfigs"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/BuildModeScreens.kt", "build-mcp-ide-picker"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/views/build-mcp.js", "conn\\.ideConfigs"], ["apps/web/public/webapp/views/build-mcp.js", "data-mcp-ide"]] }
       }
     },
