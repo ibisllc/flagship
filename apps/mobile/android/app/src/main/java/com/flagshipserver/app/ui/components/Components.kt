@@ -73,7 +73,7 @@ fun FSPrimaryButton(
     enabled = enabled,
     block = block,
     large = large,
-    bg = FS.colors.primary,
+    bg = FS.colors.fill,
     fg = FS.colors.onAccent,
     border = null,
 )

@@ -296,7 +296,7 @@ private fun HoldToApproveButton(
                 .fillMaxWidth()
                 .heightIn(min = 44.dp)
                 .clip(RoundedCornerShape(FS.radius.md))
-                .background(if (enabled) FS.colors.primary else FS.colors.textMuted)
+                .background(if (enabled) FS.colors.fill else FS.colors.textMuted)
                 .padding(horizontal = FS.space.s5, vertical = FS.space.s2),
             contentAlignment = Alignment.Center,
         ) {

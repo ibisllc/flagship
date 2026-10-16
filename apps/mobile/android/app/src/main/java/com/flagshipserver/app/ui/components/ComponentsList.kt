@@ -80,7 +80,7 @@ fun FSChip(
     count: Int? = null,
 ) {
     val bg by animateColorAsState(
-        if (selected) FS.colors.primary else FS.colors.surface,
+        if (selected) FS.colors.fill else FS.colors.surface,
         tween(durationMillis = 200), label = "chip-bg",
     )
     val border = if (selected) Color.Transparent else FS.colors.border
@@ -277,7 +277,7 @@ fun FSAnnouncementCard(
     onCta: () -> Unit = {},
     onDismiss: (() -> Unit)? = null,
 ) {
-    val accent = tint ?: FS.colors.primary
+    val accent = tint ?: FS.colors.fill
     Column(
         verticalArrangement = Arrangement.spacedBy(FS.space.s3),
         modifier = modifier

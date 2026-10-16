@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.Flagship" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">@color/flagship_canvas</item>
+        <item name="android:windowBackground">@color/flagship_window</item>
     </style>
 </resources>

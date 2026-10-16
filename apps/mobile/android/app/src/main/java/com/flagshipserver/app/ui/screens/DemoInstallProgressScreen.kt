@@ -57,7 +57,7 @@ fun DemoProgressBar(fraction: Double, failed: Boolean, modifier: Modifier = Modi
                 .fillMaxWidth(f)
                 .height(4.dp)
                 .clip(RoundedCornerShape(2.dp))
-                .background(if (failed) FS.colors.danger else FS.colors.primary),
+                .background(if (failed) FS.colors.danger else FS.colors.fill),
         )
     }
 }

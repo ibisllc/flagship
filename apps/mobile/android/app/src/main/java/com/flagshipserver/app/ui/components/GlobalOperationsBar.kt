@@ -100,7 +100,7 @@ private fun OperationsSliver(op: ActiveOperation, extra: Int, onTap: () -> Unit)
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .background(FS.colors.primary)
+            .background(FS.colors.fill)
             .clickable(onClick = onTap)
             .semantics {
                 testTag = "global-operations-bar"
@@ -109,14 +109,14 @@ private fun OperationsSliver(op: ActiveOperation, extra: Int, onTap: () -> Unit)
             .padding(horizontal = FS.space.s4, vertical = FS.space.s2),
     ) {
         CircularProgressIndicator(
-            color = Color.White,
+            color = FS.colors.onAccent,
             strokeWidth = 2.dp,
             modifier = Modifier.size(16.dp),
         )
         Box(Modifier.size(FS.space.s2))
         Text(
             text = op.label,
-            color = Color.White,
+            color = FS.colors.onAccent,
             style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -127,12 +127,12 @@ private fun OperationsSliver(op: ActiveOperation, extra: Int, onTap: () -> Unit)
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(FS.radius.pill))
-                    .background(Color.White.copy(alpha = 0.22f))
+                    .background(FS.colors.onAccent.copy(alpha = 0.22f))
                     .padding(horizontal = 6.dp, vertical = 2.dp),
             ) {
                 Text(
                     text = "+$extra",
-                    color = Color.White,
+                    color = FS.colors.onAccent,
                     style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Bold),
                 )
             }
@@ -142,7 +142,7 @@ private fun OperationsSliver(op: ActiveOperation, extra: Int, onTap: () -> Unit)
         // in this module, so we avoid pulling that dependency in for one mark.
         Text(
             text = "›",
-            color = Color.White.copy(alpha = 0.85f),
+            color = FS.colors.onAccent.copy(alpha = 0.85f),
             style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
         )
     }

@@ -469,7 +469,7 @@ private fun ProviderPickChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val bg = if (selected) FS.colors.primary else FS.colors.surfaceSunken
+    val bg = if (selected) FS.colors.fill else FS.colors.surfaceSunken
     val fg = if (selected) FS.colors.onAccent else FS.colors.textMuted
     Box(
         modifier

@@ -39,50 +39,56 @@ data class FlagshipColors(
     val border: Color,
     val text: Color,
     val textMuted: Color,
+    /** The teal as a foreground: text, links, icons, outlines, the cursor
+     *  (the webapp's `--accent`: deepened in light so it passes AA as text). */
     val primary: Color,
+    /** Pressed / hovered [primary] (`--accent-press`). */
     val primaryHover: Color,
-    // The readable foreground ON a filled accent/primary surface (button label,
-    // selected-segment text). A role token, never a baked literal: white on the
-    // light-theme teal, black on the dark-theme bright teal — mirrors the
-    // Material `onPrimary` the theme already pins.
+    /** The Flagship teal as a filled surface: primary buttons, the selected
+     *  segment, progress, the operations bar (`--teal`, `--accent-fill`). */
+    val fill: Color,
+    /** The readable foreground ON [fill] (`--accent-on`): dark ink in both
+     *  themes, never white or cream (design-system §2.1). */
     val onAccent: Color,
     val success: Color,
     val warning: Color,
     val danger: Color,
 )
 
+// The website's palette (apps/web/public/tokens.css), as the webapp carries it
+// (apps/web/public/webapp/style.css; docs/design-system.md §2): warm paper in
+// light, warm near-black in dark, cream ink, one teal. No pure #000 / #FFF as
+// a page or text colour.
 val LightColors = FlagshipColors(
-    bg              = Color(0xFFFAFAF7),
-    surface         = Color(0xFFFFFFFF),
-    surfaceSunken   = Color(0xFFF2F1EC),
-    border          = Color(0xFFE6E4DD),
-    text            = Color(0xFF14140F),
-    textMuted       = Color(0xFF6B6A63),
-    // Brand teal (web --teal #14B8A6); pressed/aux = --teal-deep #0F8B7E.
-    primary         = Color(0xFF14B8A6),
-    primaryHover    = Color(0xFF0F8B7E),
-    onAccent        = Color(0xFFFFFFFF),
-    success         = Color(0xFF1F8A4C),
-    warning         = Color(0xFFB8651A),
-    danger          = Color(0xFFC83A3A),
+    bg              = Color(0xFFF7F6F2), // --canvas
+    surface         = Color(0xFFFFFFFF), // --surface (cards)
+    surfaceSunken   = Color(0xFFEFEDE7), // --surface-sunken
+    border          = Color(0xFFDEDBD3), // --border
+    text            = Color(0xFF14140F), // --ink
+    textMuted       = Color(0xFF555149), // --ink-muted
+    primary         = Color(0xFF0F766E), // --accent
+    primaryHover    = Color(0xFF0B5F58), // --accent-press
+    fill            = Color(0xFF14B8A6), // --teal
+    onAccent        = Color(0xFF0A0A09), // --accent-on
+    success         = Color(0xFF15803D), // --ok
+    warning         = Color(0xFFA15C07), // --warn
+    danger          = Color(0xFFB91C1C), // --err
 )
 
 val DarkColors = FlagshipColors(
-    bg              = Color(0xFF0E0F12),
-    surface         = Color(0xFF16181C),
-    surfaceSunken   = Color(0xFF1C1F24),
-    border          = Color(0xFF2A2D33),
-    text            = Color(0xFFF2F1EC),
-    textMuted       = Color(0xFF9A9A93),
-    // Brand teal lifted for dark legibility (web --teal-bright #2DD4BF);
-    // pressed/aux = --teal #14B8A6.
-    primary         = Color(0xFF2DD4BF),
-    primaryHover    = Color(0xFF14B8A6),
-    // Black reads on the lifted dark-theme teal where white would wash out.
-    onAccent        = Color(0xFF000000),
-    success         = Color(0xFF4FBE7A),
-    warning         = Color(0xFFE5A050),
-    danger          = Color(0xFFE86464),
+    bg              = Color(0xFF0A0A09), // --canvas
+    surface         = Color(0xFF161512), // --surface
+    surfaceSunken   = Color(0xFF121110), // --surface-sunken
+    border          = Color(0xFF2D2B24), // --border
+    text            = Color(0xFFECE7D6), // --ink (warm cream)
+    textMuted       = Color(0xFFA39D8F), // --ink-muted
+    primary         = Color(0xFF2DD4BF), // --accent (--teal-bright)
+    primaryHover    = Color(0xFF5EEAD4), // --accent-press
+    fill            = Color(0xFF14B8A6), // --teal
+    onAccent        = Color(0xFF0A0A09), // --accent-on
+    success         = Color(0xFF4ADE80), // --ok
+    warning         = Color(0xFFFBBF24), // --warn
+    danger          = Color(0xFFF87171), // --err
 )
 
 val LocalFlagshipColors = staticCompositionLocalOf { LightColors }
@@ -177,7 +183,7 @@ fun FlagshipTheme(
             surface = colors.surface,
             surfaceVariant = colors.surfaceSunken,
             primary = colors.primary,
-            onPrimary = Color.Black,
+            onPrimary = colors.onAccent,
             secondaryContainer = colors.primary.copy(alpha = 0.20f),
             onSecondaryContainer = colors.primary,
             onBackground = colors.text,
@@ -192,7 +198,8 @@ fun FlagshipTheme(
             surface = colors.surface,
             surfaceVariant = colors.surfaceSunken,
             primary = colors.primary,
-            onPrimary = Color.White,
+            // Paper on the deepened light-theme teal (AA); never pure white.
+            onPrimary = colors.bg,
             secondaryContainer = colors.primary.copy(alpha = 0.14f),
             onSecondaryContainer = colors.primaryHover,
             onBackground = colors.text,

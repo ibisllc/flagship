@@ -419,8 +419,8 @@ fun VibeCodeDescribeScreen(nav: NavController) {
                     modifier = Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(FS.radius.sm))
-                        .background(if (selected) FS.colors.primary else FS.colors.surfaceSunken)
-                        .border(1.dp, if (selected) FS.colors.primary else FS.colors.border, RoundedCornerShape(FS.radius.sm))
+                        .background(if (selected) FS.colors.fill else FS.colors.surfaceSunken)
+                        .border(1.dp, if (selected) FS.colors.fill else FS.colors.border, RoundedCornerShape(FS.radius.sm))
                         .clickable { visibility = value }
                         .padding(vertical = 10.dp)
                         .testTag("vibe-describe-visibility-$value"),

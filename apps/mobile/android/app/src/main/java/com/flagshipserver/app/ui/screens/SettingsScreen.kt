@@ -740,7 +740,7 @@ private fun ThemeSegment(
         modifier
             .height(46.dp)
             .clip(RoundedCornerShape(10.dp))
-            .background(if (selected) FS.colors.primary else FS.colors.surfaceSunken)
+            .background(if (selected) FS.colors.fill else FS.colors.surfaceSunken)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
