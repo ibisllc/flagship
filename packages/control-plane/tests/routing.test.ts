@@ -18,6 +18,7 @@ import { InMemoryStorage } from "@flagship/storage";
 
 const harryUmk = { seed: new Uint8Array(32).fill(11) };
 const harryIrk = deriveIRK(harryUmk);
+const harryAdmin = freshKeypair(77);
 const malloryUmk = { seed: new Uint8Array(32).fill(99) };
 const malloryIrk = deriveIRK(malloryUmk);
 
@@ -49,6 +50,7 @@ async function setUpClaimedHarry() {
         issuedAt: claim.issuedAt,
       },
       signature: bytesToHex(sig),
+      adminRootPub: bytesToHex(harryAdmin.publicKey),
     },
   );
   return storage;
@@ -59,7 +61,7 @@ async function setUpClaimedHarry() {
 beforeEach(() => __resetRoutingReplayRing());
 
 describe("POST /api/routing/register-rck", () => {
-  it("happy path: IRK-signed registration creates the routing record", async () => {
+  it("happy path: admin-root-signed registration creates the routing record", async () => {
     const storage = await setUpClaimedHarry();
     const rck = freshKeypair(1);
     const claim: RegisterRck = {
@@ -68,7 +70,7 @@ describe("POST /api/routing/register-rck", () => {
       rckPubKey: rck.publicKey,
       issuedAt: Date.now(),
     };
-    const sig = signRegisterRck(claim, harryIrk);
+    const sig = signRegisterRck(claim, harryAdmin);
     const r = await handleRegisterRck(
       { routing: storage.routing, usernames: storage.usernames },
       {
@@ -122,7 +124,7 @@ describe("POST /api/routing/register-rck", () => {
       rckPubKey: rck.publicKey,
       issuedAt: Date.now(),
     };
-    const sig = signRegisterRck(claim, harryIrk);
+    const sig = signRegisterRck(claim, harryAdmin);
     const r = await handleRegisterRck(
       { routing: storage.routing, usernames: storage.usernames },
       {
@@ -148,7 +150,7 @@ describe("POST /api/routing/register-rck", () => {
       rckPubKey: rck.publicKey,
       issuedAt: Date.now(),
     };
-    const sig = signRegisterRck(claim, harryIrk);
+    const sig = signRegisterRck(claim, harryAdmin);
     const r = await handleRegisterRck(
       { routing: storage.routing, usernames: storage.usernames },
       {
@@ -173,7 +175,7 @@ describe("POST /api/routing/register-rck", () => {
       rckPubKey: rck.publicKey,
       issuedAt: Date.now(),
     };
-    const sig = signRegisterRck(claim, harryIrk);
+    const sig = signRegisterRck(claim, harryAdmin);
     const r = await handleRegisterRck(
       { routing: storage.routing, usernames: storage.usernames },
       {
@@ -199,7 +201,7 @@ describe("POST /api/routing/set-target", () => {
       rckPubKey: rck.publicKey,
       issuedAt: Date.now(),
     };
-    const sig = signRegisterRck(claim, harryIrk);
+    const sig = signRegisterRck(claim, harryAdmin);
     await handleRegisterRck(
       { routing: storage.routing, usernames: storage.usernames },
       {
@@ -342,7 +344,7 @@ describe("GET /api/routing/lookup", () => {
       rckPubKey: rck.publicKey,
       issuedAt: Date.now(),
     };
-    const sig = signRegisterRck(claim, harryIrk);
+    const sig = signRegisterRck(claim, harryAdmin);
     await handleRegisterRck(
       { routing: storage.routing, usernames: storage.usernames },
       {

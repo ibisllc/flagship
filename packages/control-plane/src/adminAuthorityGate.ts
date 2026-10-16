@@ -192,3 +192,39 @@ export async function authorizeSensitiveComOp(
 
   return { ok: false, reason: "sensitive op requires master-admin authority" };
 }
+
+/** The sentence every app shows when a non-admin device tries to add a server. */
+export const ADD_SERVER_ADMIN_ONLY = "Only an admin device of this account can add servers.";
+export const ADD_SERVER_ADMIN_ONLY_CODE = "add-server-admin-only";
+
+/** The 403 `.com` answers with, so each app shows its own copy of the sentence. */
+export function addServerRefused(): { status: 403; body: { error: string; code: string } } {
+  return { status: 403, body: { error: ADD_SERVER_ADMIN_ONLY, code: ADD_SERVER_ADMIN_ONLY_CODE } };
+}
+
+/**
+ * Adding a server to an account (create one, take over a box) is for the
+ * account's admin devices only (owner rule 2026-10-16;
+ * docs/service-access-gating.md "Account members"). The order must verify
+ * under the pinned admin root or an admin-root-granted `admin` device
+ * ({@link authorizeSensitiveComOp}'s open gate). An account with no admin root
+ * pinned is refused outright: every current app opens an account with one, so
+ * only legacy accounts lack it, and their IRK is held by every device.
+ *
+ * Callers apply this to real accounts only. A demo account (`isDemo`, set by
+ * the operator) keeps the check its handler had before the rule, the same
+ * exception the apps make.
+ */
+export async function authorizeAddServer(
+  deps: AdminAuthorityGateDeps,
+  args: {
+    username: string;
+    userRec: UsernameRecord;
+    verifyWith: (candidatePubHex: string) => boolean;
+    now?: number;
+  },
+): Promise<SensitiveAuthorization> {
+  if (!args.userRec.adminRootPubHex) return { ok: false, reason: ADD_SERVER_ADMIN_ONLY };
+  const authz = await authorizeSensitiveComOp(deps, args);
+  return authz.ok ? authz : { ok: false, reason: ADD_SERVER_ADMIN_ONLY };
+}

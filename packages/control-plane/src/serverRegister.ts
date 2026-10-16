@@ -1,4 +1,5 @@
 import {
+  authCodeCanonicalBytes,
   verifyAuthCode,
   verifyServerRegister,
   type AuthCode,
@@ -11,8 +12,10 @@ import type {
   PushTokenStorage,
   RoutingStorage,
   ServerStorage,
+  UsernameStorage,
 } from "@flagship/storage";
-import { HEX64, HEX128, hexToBytes, bytesToHex } from "./hex.js";
+import { HEX64, HEX128, equalBytes, hexToBytes, bytesToHex } from "./hex.js";
+import { addServerRefused } from "./adminAuthorityGate.js";
 import { SERIAL_RE, validateAndUseAuthCode } from "./authCode.js";
 import { publishUserZoneCaa, type CaaUpsertClient } from "./caaPublish.js";
 import type { CaRestrictionCaaOptions } from "@flagship/services-zone";
@@ -42,6 +45,8 @@ const NONCE_HEX = /^[0-9a-f]{16,128}$/;
 export interface ServerRegisterDeps {
   authCodes: AuthCodeStorage;
   servers: ServerStorage;
+  /** When wired, a real account's AuthCode must still pin its admin root. */
+  usernames?: UsernameStorage;
   /** Optional. When provided, server registration also: (a) sets the
    *  routing target if the user has registered an RCK for this subdomain,
    *  (b) publishes A/AAAA records pointing the subdomain at the
@@ -225,6 +230,24 @@ export async function handleServerRegister(
   }
   if (useResult.code.serverDomain !== authCode.serverDomain) {
     return malformed("auth-code/registration serverDomain mismatch");
+  }
+  // The box pins the admin root and IRK from the AuthCode it presents, so it
+  // must be the very AuthCode `.com` admitted at issue (where an admin device
+  // approved it), not a re-signed variant under the same serial.
+  if (!equalBytes(authCodeCanonicalBytes(useResult.code), authCodeCanonicalBytes(authCode))) {
+    return forbidden("auth-code does not match the one issued");
+  }
+  // Adding a server is admin-only (owner rule 2026-10-16): the admin root the
+  // AuthCode pins must still be the account's (a root rotated since issue, or
+  // a code from before the rule pinning another root, no longer registers).
+  // A demo account is the operator's and keeps its old path.
+  if (deps.usernames) {
+    const owner = await deps.usernames.get(authCode.username);
+    const pinned = owner?.adminRootPubHex?.toLowerCase();
+    const codeRoot = useResult.code.adminRootPubKey ? bytesToHex(useResult.code.adminRootPubKey) : undefined;
+    if (owner && !owner.isDemo && (!pinned || codeRoot !== pinned)) {
+      return addServerRefused();
+    }
   }
 
   await deps.servers.put({

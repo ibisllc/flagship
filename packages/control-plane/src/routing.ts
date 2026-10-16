@@ -9,7 +9,7 @@ import type {
   RoutingStorage,
   UsernameStorage,
 } from "@flagship/storage";
-import { authorizeSensitiveComOp } from "./adminAuthorityGate.js";
+import { addServerRefused, authorizeAddServer, authorizeSensitiveComOp } from "./adminAuthorityGate.js";
 import { HEX64, HEX128, equalHex, hexToBytes, bytesToHex } from "./hex.js";
 import { validateServerLabel } from "./labels.js";
 import {
@@ -127,19 +127,22 @@ export async function handleRegisterRck(
   };
   const sig = hexToBytes(body.signature);
   // SENSITIVE (v1-sec GAP 4): claiming a subdomain's routing target is an
-  // authority-bearing op, so authorize it through the shared master-admin gate
-  // (admin-root-signed when an admin root is pinned; legacy owner-IRK verify
-  // otherwise) instead of a raw owner-IRK check.
-  const authz = await authorizeSensitiveComOp(
-    { grants: deps.grants, now: deps.now },
-    {
-      username: r.username.toLowerCase(),
-      userRec,
-      verifyWith: (pub) => verifyRegisterRck(claim, sig, hexToBytes(pub)),
-    },
-  );
-  if (!authz.ok) {
-    return forbidden("invalid signature");
+  // authority-bearing op, and a step of adding a server, which is admin-only
+  // (owner rule 2026-10-16): on a real account only the admin root (or an
+  // admin-granted device) signs it, and an account with no admin root can't.
+  // A demo account keeps the sensitive-op gate it had.
+  const gateDeps = { grants: deps.grants, now: deps.now };
+  const gateArgs = {
+    username: r.username.toLowerCase(),
+    userRec,
+    verifyWith: (pub: string) => verifyRegisterRck(claim, sig, hexToBytes(pub)),
+  };
+  if (userRec.isDemo) {
+    const authz = await authorizeSensitiveComOp(gateDeps, gateArgs);
+    if (!authz.ok) return forbidden("invalid signature");
+  } else {
+    const authz = await authorizeAddServer(gateDeps, gateArgs);
+    if (!authz.ok) return addServerRefused();
   }
 
   // Subdomain must be `<server>.<user>.<apex>` and the user segment must

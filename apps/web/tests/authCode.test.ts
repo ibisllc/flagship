@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   signAuthCode,
+  signAuthCodeAdmin,
   signAuthCodeRevocation,
   signClaimUsername,
   type AuthCode,
@@ -12,6 +13,12 @@ import { buildServer } from "../src/server.js";
 
 const harryUmk = { seed: new Uint8Array(32).fill(11) };
 const harryIrk = deriveIRK(harryUmk);
+// Adding a server is admin-only (owner rule 2026-10-16): harry's account pins
+// an admin root, which approves each AuthCode.
+const harryAdmin = (() => {
+  const sk = new Uint8Array(32).fill(12);
+  return { privateKey: sk, publicKey: ed.getPublicKey(sk) };
+})();
 const malloryUmk = { seed: new Uint8Array(32).fill(99) };
 const malloryIrk = deriveIRK(malloryUmk);
 
@@ -44,6 +51,7 @@ async function claimHarry(app: ReturnType<typeof buildServer>): Promise<void> {
         issuedAt: claim.issuedAt,
       },
       signature: bytesToHex(sig),
+      adminRootPub: bytesToHex(harryAdmin.publicKey),
     },
   });
   if (r.statusCode !== 200) throw new Error(`claim failed: ${r.body}`);
@@ -62,6 +70,7 @@ function buildSignedCode(): { code: AuthCode; signature: Uint8Array } {
     userPubKey: harryIrk.publicKey,
     issuedAt,
     expiresAt: issuedAt + 3_600_000,
+    adminRootPubKey: harryAdmin.publicKey,
   };
   return { code, signature: signAuthCode(code, harryIrk) };
 }
@@ -69,6 +78,7 @@ function buildSignedCode(): { code: AuthCode; signature: Uint8Array } {
 function asJson(c: AuthCode): {
   code: object;
   signature?: string;
+  adminSignature?: string;
 } {
   return {
     code: {
@@ -81,7 +91,9 @@ function asJson(c: AuthCode): {
       userPubKey: bytesToHex(c.userPubKey),
       issuedAt: c.issuedAt,
       expiresAt: c.expiresAt,
+      ...(c.adminRootPubKey ? { adminRootPubKey: bytesToHex(c.adminRootPubKey) } : {}),
     },
+    ...(c.adminRootPubKey ? { adminSignature: bytesToHex(signAuthCodeAdmin(c, harryAdmin)) } : {}),
   };
 }
 

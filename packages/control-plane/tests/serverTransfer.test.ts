@@ -52,11 +52,20 @@ const NOW = 1_000_000;
 const aliceIrk = makeKey();
 const bobIrk = makeKey();
 const boxIdentity = makeKey();
+const aliceAdmin = makeKey();
+const bobAdmin = makeKey();
 
 async function setup(): Promise<InMemoryStorage> {
   const s = new InMemoryStorage();
   await s.usernames.put({ username: "alice", irkPubHex: hex(aliceIrk.publicKey), claimedAt: 1 });
-  await s.usernames.put({ username: "bob", irkPubHex: hex(bobIrk.publicKey), claimedAt: 1 });
+  // Taking a box over is admin-only (owner rule 2026-10-16): bob, the usual
+  // acquirer, is an admin-pinned account and claims with his admin root.
+  await s.usernames.put({
+    username: "bob",
+    irkPubHex: hex(bobIrk.publicKey),
+    claimedAt: 1,
+    adminRootPubHex: hex(bobAdmin.publicKey),
+  });
   await s.servers.put({
     serverDomain: HOST,
     username: "alice",
@@ -136,7 +145,8 @@ function claimBody(
   opts?: { now?: number; acquirerIrkPub?: Uint8Array; sign?: Keypair; adminRoot?: string },
 ) {
   const now = opts?.now ?? NOW;
-  const adminRoot = opts?.adminRoot ?? "";
+  const isBob = username === "bob";
+  const adminRoot = opts?.adminRoot ?? (isBob ? hex(bobAdmin.publicKey) : "");
   const claim: ServerTransferClaim = {
     serverDomain: HOST,
     transferNonce: nonce,
@@ -145,7 +155,7 @@ function claimBody(
     acquirerAdminRootPubHex: adminRoot,
     issuedAt: now,
   };
-  const sig = signServerTransferClaim(claim, opts?.sign ?? irk);
+  const sig = signServerTransferClaim(claim, opts?.sign ?? (isBob ? bobAdmin : irk));
   return {
     claim: {
       serverDomain: HOST,
@@ -255,7 +265,7 @@ describe("transfer-a-box broker", () => {
       claimBody(bobIrk, "bob", nonce, { sign: wrongSigner }),
     );
     expect(res.status).toBe(403);
-    expect((res.body as { error: string }).error).toMatch(/invalid claim signature/);
+    expect((res.body as { error: string }).error).toBe("Only an admin device of this account can add servers.");
   });
 
   it("rejects a claim against an absent offer", async () => {
@@ -395,9 +405,6 @@ describe("transfer-a-box broker", () => {
 // rehome read. `.com`'s verify on deposit is a garbage filter — the deposit
 // carries NO other auth because the admin-root signature IS the authorization.
 
-const aliceAdmin = makeKey();
-const bobAdmin = makeKey();
-
 async function setupAdminTier(): Promise<InMemoryStorage> {
   const s = await setup();
   await s.usernames.put({
@@ -487,7 +494,7 @@ describe("transfer-a-box admin-root handoff (Slice D §9.8)", () => {
     expect((await handlePostTransferClaim(deps(s), HOST, badHex)).status).toBe(400);
   });
 
-  it("legacy accounts (no admin roots) claim with \"\" — giver poll + rehome carry it", async () => {
+  it("a legacy giver's poll + rehome carry the acquirer's admin root", async () => {
     const s = await setup();
     const nonce = hex(rand(32));
     await handlePostTransferOffer(deps(s), HOST, offerBody(aliceIrk, { nonce }));
@@ -495,11 +502,11 @@ describe("transfer-a-box admin-root handoff (Slice D §9.8)", () => {
     expect(res.status).toBe(200);
 
     const poll = await handleGetTransferClaim(deps(s), HOST, mailboxAuth(aliceIrk, "alice"));
-    expect((poll.body as { acquirerAdminRootPub: string }).acquirerAdminRootPub).toBe("");
+    expect((poll.body as { acquirerAdminRootPub: string }).acquirerAdminRootPub).toBe(hex(bobAdmin.publicKey));
 
     const rehome = await handleGetTransferRehome(deps(s), HOST);
     const rb = rehome.body as { acquirerAdminRootPub?: string; adminHandoff?: unknown };
-    expect(rb.acquirerAdminRootPub).toBe("");
+    expect(rb.acquirerAdminRootPub).toBe(hex(bobAdmin.publicKey));
     expect(rb.adminHandoff).toBeUndefined();
   });
 
@@ -590,7 +597,7 @@ describe("transfer-a-box admin-root handoff (Slice D §9.8)", () => {
     const res = await handlePostTransferAdminHandoff(
       deps(s),
       HOST,
-      handoffBody(aliceAdmin, nonce, { newAdminRootPub: "" }),
+      handoffBody(aliceAdmin, nonce),
     );
     expect(res.status).toBe(409);
     expect((res.body as { error: string }).error).toMatch(/no admin root/);
@@ -623,18 +630,18 @@ describe("transfer-a-box admin-root handoff (Slice D §9.8)", () => {
     );
   });
 
-  it("unpin handoff (\"\" new root) round-trips when the acquirer is a legacy account", async () => {
+  it("unpin handoff (\"\" new root) round-trips when the acquirer is a demo account with no root", async () => {
     const s = await setupAdminTier();
-    // carol is a LEGACY acquirer — an IRK but no admin root (a benign re-put
-    // preserves adminRootPubHex, so a fresh account is the honest fixture).
+    // carol has an IRK but no admin root. Only a demo account (operator-run)
+    // may take a box over without one (adding a server is admin-only).
     const carolIrk = makeKey();
-    await s.usernames.put({ username: "carol", irkPubHex: hex(carolIrk.publicKey), claimedAt: 1 });
+    await s.usernames.put({ username: "carol", irkPubHex: hex(carolIrk.publicKey), claimedAt: 1, isDemo: true });
     const nonce = hex(rand(32));
     await handlePostTransferOffer(deps(s), HOST, offerBody(aliceIrk, { nonce, sign: aliceAdmin }));
     const claimRes = await handlePostTransferClaim(
       deps(s),
       HOST,
-      claimBody(carolIrk, "carol", nonce), // legacy carol: IRK-signed, adminRoot ""
+      claimBody(carolIrk, "carol", nonce), // demo carol: IRK-signed, adminRoot ""
     );
     expect(claimRes.status).toBe(200);
 

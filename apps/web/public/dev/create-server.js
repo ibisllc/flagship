@@ -4,6 +4,7 @@
 
 const TAG_CLAIM = "flagship/claim-username/v1";
 const TAG_AUTH_CODE = "flagship/auth-code/v1";
+const TAG_AUTH_CODE_ADMIN = "flagship/auth-code-admin/v1";
 const TAG_INSTALL_BLOB = "flagship/install-blob/v1";
 const TAG_RCK_REGISTER = "flagship/rck-register/v1";
 
@@ -88,12 +89,16 @@ async function runFlow() {
   const claimIssuedAt = Date.now();
   const claimMsg = canonical([TAG_CLAIM, username, bytesToHex(irk.publicKey), claimIssuedAt]);
   const claimSig = await sign(irk.keypair.privateKey, claimMsg);
+  // Adding a server is admin-only (owner rule 2026-10-16): the simulated
+  // account pins an admin root, which approves the AuthCode and the RCK.
+  const adminRoot = await gen();
   const claimResp = await fetch("/api/username/claim", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       request: { username, irkPub: bytesToHex(irk.publicKey), issuedAt: claimIssuedAt },
       signature: bytesToHex(claimSig),
+      adminRootPub: bytesToHex(adminRoot.publicKey),
     }),
   });
   if (!claimResp.ok) {
@@ -117,12 +122,14 @@ async function runFlow() {
     issuedAt: acIssuedAt,
     expiresAt: acExpiresAt,
   };
-  const acMsg = canonical([
+  const acParts = [
     TAG_AUTH_CODE, code.version, code.serial, code.username, code.serverName,
     code.serverDomain, bytesToHex(code.delegatedPubKey), bytesToHex(code.userPubKey),
-    code.issuedAt, code.expiresAt,
-  ]);
+    code.issuedAt, code.expiresAt, `ar=${bytesToHex(adminRoot.publicKey)}`,
+  ];
+  const acMsg = canonical(acParts);
   const acSig = await sign(irk.keypair.privateKey, acMsg);
+  const acAdminSig = await sign(adminRoot.keypair.privateKey, canonical([TAG_AUTH_CODE_ADMIN, ...acParts]));
   const issueResp = await fetch("/api/auth-code/issue", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -133,8 +140,10 @@ async function runFlow() {
         delegatedPubKey: bytesToHex(code.delegatedPubKey),
         userPubKey: bytesToHex(code.userPubKey),
         issuedAt: code.issuedAt, expiresAt: code.expiresAt,
+        adminRootPubKey: bytesToHex(adminRoot.publicKey),
       },
       signature: bytesToHex(acSig),
+      adminSignature: bytesToHex(acAdminSig),
     }),
   });
   if (!issueResp.ok) {
@@ -154,7 +163,7 @@ async function runFlow() {
   const rckRegMsg = canonical([
     TAG_RCK_REGISTER, username, code.serverDomain, bytesToHex(rck.publicKey), rckRegIssuedAt,
   ]);
-  const rckRegSig = await sign(irk.keypair.privateKey, rckRegMsg);
+  const rckRegSig = await sign(adminRoot.keypair.privateKey, rckRegMsg);
   const rckResp = await fetch("/api/routing/register-rck", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -232,6 +241,7 @@ async function runFlow() {
           delegatedPubKey: bytesToHex(code.delegatedPubKey),
           userPubKey: bytesToHex(code.userPubKey),
           issuedAt: code.issuedAt, expiresAt: code.expiresAt,
+          adminRootPubKey: bytesToHex(adminRoot.publicKey),
         },
         authCodeUserSignature: bytesToHex(acSig),
         issuedAt: blob.issuedAt,

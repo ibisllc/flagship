@@ -300,6 +300,38 @@ shares with whom.
   (`flagship/service-allow-remove/v2`, and v1), and app uninstall (the box's
   own identity still uninstalls for box-internal flows).
 
+### Adding a server (owner decision, 2026-10-16)
+
+Adding a server to the account is admin-only, and `.com` and the box
+enforce it, not just the apps (`AddServerGate` on all three). On a real
+account `.com` refuses each of these unless an admin signs (the pinned admin
+root, or a device with an admin-root-signed `admin` grant), with a 403
+`{"error": "Only an admin device of this account can add servers.", "code":
+"add-server-admin-only"}` that every app shows as that sentence:
+
+- **Create** (`POST /api/auth-code/issue`): the AuthCode must pin the
+  account's admin root (`ar=`) and carry `adminSignature`, the admin's
+  signature over `flagship/auth-code-admin/v1|<AuthCode canonical>`. The IRK
+  still signs the AuthCode itself (the box verifies that). At
+  `/api/server/register` the box must present the very AuthCode `.com`
+  admitted, still pinning the account's current root.
+- **RCK registration** (`POST /api/routing/register-rck`): admin-signed.
+- **Take over a box** (transfer claim): admin-signed, and its
+  `acquirerAdminRootPub` must be the acquirer's pinned root.
+- **Restore a backup**: an admin-pinned box takes the
+  `flagship/server-restore/v1` order only from the admin root (IRK refused).
+
+An account with no admin root pinned (legacy) can't add a server: every
+current app opens an account with one, and on a legacy account every device
+holds the IRK. A demo account (`isDemo`, operator-run) keeps the checks it
+had. Vectors: `packages/protocol/test-vectors/add-server/` (TS, webapp,
+Swift, Kotlin).
+
+Not enforced by a server: **co-managing** (accepting a share). `.com` and
+the shared box never learn who the second account is (`share-a-server.md`
+§2), so neither can check that the acceptance came from that account's admin
+device without learning the account; only the apps gate it.
+
 ### Orders
 
 They name the app (its `serviceRef`, the same on every server of the

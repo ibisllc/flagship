@@ -41,6 +41,7 @@ import { randomBytes } from "node:crypto";
 import {
   ed,
   signAuthCode,
+  signAuthCodeAdmin,
   signInstallBlob,
   signClaimUsername,
   signJournalRequest,
@@ -212,6 +213,10 @@ async function main(): Promise<void> {
   const irk = keypairFromSeed(randomBytes(32)); // the app's OWN IRK, NOT the demo IRK
   const irkPubHex = bytesToHex(irk.publicKey);
   const irkPrivHex = bytesToHex(irk.privateKey);
+  // Adding a server is admin-only (owner rule 2026-10-16): the account pins an
+  // admin root at claim time, and that root approves the AuthCode.
+  const adminRoot = keypairFromSeed(randomBytes(32));
+  const adminRootPubHex = bytesToHex(adminRoot.publicKey);
   // Names are claimable ONLY if the server recently SUGGESTED them
   // (docs/username-suggestion-queue.md), so take one from /api/username/suggest.
   const suggestDeviceKey = bytesToHex(keypairFromSeed(randomBytes(32)).publicKey);
@@ -249,6 +254,7 @@ async function main(): Promise<void> {
         body: JSON.stringify({
           request: { username: user, irkPub: irkPubHex, issuedAt: claim.issuedAt },
           signature: sig,
+          adminRootPub: adminRootPubHex,
         }),
       });
       assert(r.status === 200 || r.status === 409, `claim ${r.status}: ${r.text.slice(0, 140)}`);
@@ -269,6 +275,7 @@ async function main(): Promise<void> {
       userPubKey: irk.publicKey,
       issuedAt: acIssuedAt,
       expiresAt: acExpiresAt,
+      adminRootPubKey: adminRoot.publicKey,
     };
     const authCodeSig = signAuthCode(authCode, irk);
     const authCodeSigHex = bytesToHex(authCodeSig);
@@ -288,8 +295,10 @@ async function main(): Promise<void> {
             userPubKey: irkPubHex,
             issuedAt: authCode.issuedAt,
             expiresAt: authCode.expiresAt,
+            adminRootPubKey: adminRootPubHex,
           },
           signature: authCodeSigHex,
+          adminSignature: bytesToHex(signAuthCodeAdmin(authCode, adminRoot)),
         }),
       });
       assert(r.status === 200 || r.status === 201, `issue ${r.status}: ${r.text.slice(0, 160)}`);
@@ -331,6 +340,7 @@ async function main(): Promise<void> {
         userPubKey: irkPubHex,
         issuedAt: authCode.issuedAt,
         expiresAt: authCode.expiresAt,
+        adminRootPubKey: adminRootPubHex,
       },
       authCodeUserSignature: authCodeSigHex,
       installerGitRef: blob.installerGitRef,
@@ -350,6 +360,7 @@ async function main(): Promise<void> {
             installBlob: onWireBlob,
             blobSignature: blobSigHex,
             irkPrivHex,
+            adminRootPrivHex: bytesToHex(adminRoot.privateKey),
             ...(BOX_SIZE ? { size: BOX_SIZE } : {}),
             ...(BOX_REGION ? { region: BOX_REGION } : {}),
           }),

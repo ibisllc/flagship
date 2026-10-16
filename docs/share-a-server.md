@@ -526,6 +526,11 @@ start-up) and day-to-day upkeep without A. Owner decisions, 2026-10-14:
    members-only app needs an app invite, and B's page says so (§5.7).
 6. **Server updates at manage level: yes** (§5.6). The release endorsement is
    the safety check; B only picks when. View level can't.
+7. **Only B's admin devices accept a share** (owner rule 2026-10-16: adding
+   a server is admin-only), but only B's apps enforce it. A check by `.com`
+   or S would need B's admin root, which names B's account, and §2 keeps B
+   unknown to both. Creating, taking over and restoring are server-enforced
+   (`service-access-gating.md` "Adding a server").
 
 ### Later
 

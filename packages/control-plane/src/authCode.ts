@@ -1,10 +1,12 @@
 import {
   verifyAuthCode,
+  verifyAuthCodeAdmin,
   verifyAuthCodeRevocation,
   type AuthCode,
   type AuthCodeRevocation,
 } from "@flagship/protocol";
-import type { AuthCodeStorage, UsernameStorage } from "@flagship/storage";
+import type { AuthCodeStorage, DeviceCapabilityGrantStorage, UsernameStorage } from "@flagship/storage";
+import { addServerRefused, authorizeAddServer } from "./adminAuthorityGate.js";
 import { HEX64, HEX128, equalHex, hexToBytes, bytesToHex } from "./hex.js";
 import { validateServerLabel, validateUserLabel } from "./labels.js";
 import {
@@ -15,6 +17,8 @@ import {
 export interface AuthCodeDeps {
   storage: AuthCodeStorage;
   usernames: UsernameStorage;
+  /** Admin-granted devices may approve a new server too (wire it in prod). */
+  grants?: DeviceCapabilityGrantStorage;
   /**
    * The data-plane apex serverDomains are validated against —
    * `flagship.services` in prod, `gym.flagship.services` in the test env
@@ -51,6 +55,12 @@ interface IssueBody {
     adminRootPubKey?: string;
   };
   signature?: string;
+  /**
+   * The admin approval: on an admin-pinned account, the admin root (or an
+   * admin-granted device) signs `flagship/auth-code-admin/v1|<AuthCode>`
+   * (`signAuthCodeAdmin`). Adding a server is admin-only (2026-10-16).
+   */
+  adminSignature?: string;
 }
 
 export async function handleAuthCodeIssue(
@@ -127,6 +137,29 @@ export async function handleAuthCodeIssue(
   };
   const sig = hexToBytes(body.signature);
   if (!verifyAuthCode(code, sig, userPubKey)) return forbidden("invalid signature");
+
+  // Adding a server is admin-only (owner rule 2026-10-16). On a real account
+  // the AuthCode must pin the account's own admin root (the box anchors it)
+  // and carry that root's approval; a demo account (operator-run) keeps the
+  // IRK-only issue it always had.
+  if (!registered.isDemo) {
+    const pinned = registered.adminRootPubHex?.toLowerCase();
+    const adminSigHex = body.adminSignature;
+    if (!pinned || adminRootPubKeyHex !== pinned || typeof adminSigHex !== "string" || !HEX128.test(adminSigHex)) {
+      return addServerRefused();
+    }
+    const adminSig = hexToBytes(adminSigHex);
+    const authz = await authorizeAddServer(
+      { grants: deps.grants, now: deps.now },
+      {
+        username: userV.label,
+        userRec: registered,
+        verifyWith: (pub) => verifyAuthCodeAdmin(code, adminSig, hexToBytes(pub)),
+        now,
+      },
+    );
+    if (!authz.ok) return addServerRefused();
+  }
 
   const out = await deps.storage.put({
     serial: code.serial,

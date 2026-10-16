@@ -435,6 +435,21 @@ of the last check here: **not yet checked**.
   devices on all three); `flagship/app-member-role/v1` retired
   (`109ab06de`). Live gym groups `invites` + `gating` green
   (`live-run-2026-10-16T00-50-30-999Z`: 14 + 21 checks).
+- **Adding a server is admin-only, server-enforced (2026-10-16).**
+  `docs/service-access-gating.md` "Adding a server". On a real account
+  `.com` refuses create (the auth-code issue needs the account's pinned root
+  in `ar=` and `adminSignature` over `flagship/auth-code-admin/v1|<AuthCode>`),
+  RCK registration and take-over claims unless the admin root (or an
+  admin-granted device) signs, and refuses accounts with no admin root; the
+  box must register with the AuthCode `.com` admitted, still pinning the
+  current root. Admin-pinned boxes take restore orders only from the admin
+  root. Demo accounts keep their old checks. 403 `code:
+  add-server-admin-only`, shown as the apps' sentence. Vectors
+  `test-vectors/add-server/` (all four ports). Co-manage stays app-gated
+  (a server check would unmask the second account). Deploy order: iOS/Android
+  store builds first (current store builds get the refusal when creating a
+  server), then `.com` (webapp shell v116 ships with it); the restore rule
+  needs an endorsed box release.
 - **One access list per app (2026-10-15).** "One list per app" in the same
   doc: per-app journal of signed entries, the app's lead server distributes
   box to box (`/api/access-sync/push|pull`, CGK-derived MAC; nothing via

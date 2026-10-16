@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ed,
   signAuthCode,
+  signAuthCodeAdmin,
   signRegisterRck,
   signReleaseServerName,
   type AuthCode,
@@ -39,11 +40,19 @@ function hex(b: Uint8Array): string {
   return s;
 }
 
-async function withUser(username: string): Promise<{ usernames: InMemoryUsernameStorage; irk: Keypair }> {
+async function withUser(
+  username: string,
+): Promise<{ usernames: InMemoryUsernameStorage; irk: Keypair; admin: Keypair }> {
   const usernames = new InMemoryUsernameStorage();
   const irk = makeKey();
-  await usernames.put({ username, irkPubHex: hex(irk.publicKey), claimedAt: 1_000 });
-  return { usernames, irk };
+  const admin = makeKey();
+  await usernames.put({
+    username,
+    irkPubHex: hex(irk.publicKey),
+    adminRootPubHex: hex(admin.publicKey),
+    claimedAt: 1_000,
+  });
+  return { usernames, irk, admin };
 }
 
 /** A fully-signed auth-code issue body for a given server domain. */
@@ -52,6 +61,7 @@ function authCodeIssueBody(args: {
   serverName: string;
   serverDomain: string;
   irk: Keypair;
+  admin: Keypair;
   issuedAt: number;
 }): unknown {
   const issued: AuthCode = {
@@ -64,6 +74,7 @@ function authCodeIssueBody(args: {
     userPubKey: args.irk.publicKey,
     issuedAt: args.issuedAt,
     expiresAt: args.issuedAt + 60 * 60_000,
+    adminRootPubKey: args.admin.publicKey,
   };
   const sig = signAuthCode(issued, args.irk);
   return {
@@ -71,8 +82,10 @@ function authCodeIssueBody(args: {
       ...issued,
       delegatedPubKey: hex(issued.delegatedPubKey),
       userPubKey: hex(issued.userPubKey),
+      adminRootPubKey: hex(args.admin.publicKey),
     },
     signature: hex(sig),
+    adminSignature: hex(signAuthCodeAdmin(issued, args.admin)),
   };
 }
 
@@ -81,7 +94,7 @@ describe("apex config — authCode serverDomain validation", () => {
   const now = () => issuedAt;
 
   it("DEFAULT apex (unset) accepts the prod serverDomain — byte-identical to before", async () => {
-    const { usernames, irk } = await withUser("alice");
+    const { usernames, irk, admin } = await withUser("alice");
     const storage = new InMemoryAuthCodeStorage();
     const res = await handleAuthCodeIssue(
       { storage, usernames, now },
@@ -90,6 +103,7 @@ describe("apex config — authCode serverDomain validation", () => {
         serverName: "home",
         serverDomain: "home.alice.flagship.services",
         irk,
+        admin,
         issuedAt,
       }),
     );
@@ -97,7 +111,7 @@ describe("apex config — authCode serverDomain validation", () => {
   });
 
   it("DEFAULT apex REJECTS a gym serverDomain (prod doesn't know `gym.`)", async () => {
-    const { usernames, irk } = await withUser("alice");
+    const { usernames, irk, admin } = await withUser("alice");
     const storage = new InMemoryAuthCodeStorage();
     const res = await handleAuthCodeIssue(
       { storage, usernames, now },
@@ -106,6 +120,7 @@ describe("apex config — authCode serverDomain validation", () => {
         serverName: "home",
         serverDomain: "home.alice.gym.flagship.services",
         irk,
+        admin,
         issuedAt,
       }),
     );
@@ -113,7 +128,7 @@ describe("apex config — authCode serverDomain validation", () => {
   });
 
   it("gym apex accepts the gym serverDomain and rejects the prod one", async () => {
-    const { usernames, irk } = await withUser("alice");
+    const { usernames, irk, admin } = await withUser("alice");
     const ok = await handleAuthCodeIssue(
       { storage: new InMemoryAuthCodeStorage(), usernames, apex: GYM_APEX, now },
       authCodeIssueBody({
@@ -121,6 +136,7 @@ describe("apex config — authCode serverDomain validation", () => {
         serverName: "home",
         serverDomain: "home.alice.gym.flagship.services",
         irk,
+        admin,
         issuedAt,
       }),
     );
@@ -133,6 +149,7 @@ describe("apex config — authCode serverDomain validation", () => {
         serverName: "home",
         serverDomain: "home.alice.flagship.services",
         irk,
+        admin,
         issuedAt,
       }),
     );
@@ -140,12 +157,13 @@ describe("apex config — authCode serverDomain validation", () => {
   });
 
   it("explicit prod apex matches the default exactly", async () => {
-    const { usernames, irk } = await withUser("alice");
+    const { usernames, irk, admin } = await withUser("alice");
     const body = authCodeIssueBody({
       username: "alice",
       serverName: "home",
       serverDomain: "home.alice.flagship.services",
       irk,
+      admin,
       issuedAt,
     });
     const def = await handleAuthCodeIssue(
@@ -166,9 +184,9 @@ describe("apex config — release-name namespace guard", () => {
   const now = () => issuedAt;
 
   async function release(apex: string | undefined, serverDomain: string) {
-    const { usernames, irk } = await withUser("alice");
+    const { usernames, admin } = await withUser("alice");
     const claim = { username: "alice", serverDomain, issuedAt };
-    const sig = signReleaseServerName(claim, irk);
+    const sig = signReleaseServerName(claim, admin);
     return handleServerReleaseName(
       {
         usernames,
@@ -198,10 +216,10 @@ describe("apex config — RCK subdomain namespace guard", () => {
   const now = () => issuedAt;
 
   async function registerRck(apex: string | undefined, subdomain: string) {
-    const { usernames, irk } = await withUser("alice");
+    const { usernames, admin } = await withUser("alice");
     const rck = makeKey();
     const claim = { username: "alice", subdomain, rckPubKey: rck.publicKey, issuedAt };
-    const sig = signRegisterRck(claim, irk);
+    const sig = signRegisterRck(claim, admin);
     return handleRegisterRck(
       { routing: new InMemoryRoutingStorage(), usernames, ...(apex ? { apex } : {}), now },
       {

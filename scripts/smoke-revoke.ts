@@ -9,6 +9,7 @@
 import {
   ed,
   signAuthCode,
+  signAuthCodeAdmin,
   signClaimUsername,
   signRegisterRck,
   signServerRegister,
@@ -57,30 +58,37 @@ async function register(): Promise<{ serverDomain: string; identity: Keypair }> 
   const irk = makeKey();
   const rck = makeKey();
   const identity = makeKey();
+  // Adding a server is admin-only: the account pins an admin root at claim
+  // time, and that root signs the RCK and approves the AuthCode.
+  const adminRoot = makeKey();
   const claim: ClaimUsername = { username, irkPub: irk.publicKey, issuedAt: Date.now() };
   let r = await postJson("/api/username/claim", {
     request: { username, irkPub: bytesToHex(irk.publicKey), issuedAt: claim.issuedAt },
     signature: bytesToHex(signClaimUsername(claim, irk)),
+    adminRootPub: bytesToHex(adminRoot.publicKey),
   });
   if (r.status !== 200) throw new Error(`claim: ${JSON.stringify(r.body)}`);
   const rckClaim: RegisterRck = { username, subdomain: serverDomain, rckPubKey: rck.publicKey, issuedAt: Date.now() };
   r = await postJson("/api/routing/register-rck", {
     request: { username, subdomain: serverDomain, rckPubKey: bytesToHex(rck.publicKey), issuedAt: rckClaim.issuedAt },
-    signature: bytesToHex(signRegisterRck(rckClaim, irk)),
+    signature: bytesToHex(signRegisterRck(rckClaim, adminRoot)),
   });
   if (r.status !== 200) throw new Error(`rck: ${JSON.stringify(r.body)}`);
   const issuedAt = Date.now();
   const code: AuthCode = {
     version: 1, serial: `revoke-${Date.now()}-${suffix}`, username, serverName, serverDomain,
     delegatedPubKey: makeKey().publicKey, userPubKey: irk.publicKey, issuedAt, expiresAt: issuedAt + 3_600_000,
+    adminRootPubKey: adminRoot.publicKey,
   };
   const codeSig = signAuthCode(code, irk);
   r = await postJson("/api/auth-code/issue", {
     code: { ...code,
       delegatedPubKey: bytesToHex(code.delegatedPubKey),
       userPubKey: bytesToHex(code.userPubKey),
+      adminRootPubKey: bytesToHex(adminRoot.publicKey),
     },
     signature: bytesToHex(codeSig),
+    adminSignature: bytesToHex(signAuthCodeAdmin(code, adminRoot)),
   });
   if (r.status !== 200) throw new Error(`auth: ${JSON.stringify(r.body)}`);
   const nonce = new Uint8Array(16);
@@ -95,6 +103,7 @@ async function register(): Promise<{ serverDomain: string; identity: Keypair }> 
       authCode: { ...code,
         delegatedPubKey: bytesToHex(code.delegatedPubKey),
         userPubKey: bytesToHex(code.userPubKey),
+        adminRootPubKey: bytesToHex(adminRoot.publicKey),
       },
       authCodeUserSignature: bytesToHex(codeSig),
       serverIdentityPubKey: bytesToHex(identity.publicKey),

@@ -6,7 +6,8 @@
 # custom-domain, luks-lease deposit/revoke, cert soft/hard revoke, account +
 # servers self-delete, server decommission, transfer offer/claim, release-name,
 # watch-delegate mint/revoke, entitlement-revocation-list, service-invite
-# create/revoke, and the admin-scope device-grant mint) MUST authorize the order
+# create/revoke, the admin-scope device-grant mint, and the auth-code issue that
+# adds a server) MUST authorize the order
 # through the GATED master-admin path (`authorizeSensitiveComOp` /
 # `requireMasterAdmin`), never by verifying the order directly against the raw
 # owner-IRK (`userRec.irkPubHex`, `owner.irkPubHex`, `acquirer.irkPubHex`,
@@ -64,6 +65,7 @@ SENSITIVE_HANDLERS=(
   "packages/control-plane/src/secretMailbox.ts|handlePostUpdateDeposit"
   "packages/control-plane/src/deviceCapabilityGrants.ts|handleMintDeviceGrant"
   "packages/control-plane/src/routing.ts|handleRegisterRck"
+  "packages/control-plane/src/authCode.ts|handleAuthCodeIssue"
 )
 
 # DEVICE-KEY EXCEPTIONS — owner decision 2026-10-15 (docs/service-access-
@@ -96,8 +98,9 @@ MEMBERSHIP_KEY_HELPERS='deviceInviteSigner|memberInviteSigner|revokedByCreator|v
 # A gate token proves the handler routes authorization through the master-admin
 # path. `signerRoot` covers the admin-scope grant-mint discriminator (§3.3),
 # which uses the admin-root-vs-membership split directly rather than the shared
-# order helper.
-GATE_TOKENS='authorizeSensitiveComOp|requireMasterAdmin|signerRoot'
+# order helper. `authorizeAddServer` is that helper with no legacy fallback
+# (adding a server is admin-only, owner rule 2026-10-16).
+GATE_TOKENS='authorizeSensitiveComOp|authorizeAddServer|requireMasterAdmin|signerRoot'
 
 # A forbidden trusted-key token passed to a verify* call = a raw owner-IRK verify
 # that skipped the gate. Matches irkPub / *.irkPubHex / ownerIrkPub / irkPublicKey.

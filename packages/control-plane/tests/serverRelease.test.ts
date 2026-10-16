@@ -18,6 +18,7 @@ import { InMemoryStorage, type AuthCodeRecord } from "@flagship/storage";
 
 const harryUmk = { seed: new Uint8Array(32).fill(11) };
 const harryIrk = deriveIRK(harryUmk);
+const harryAdmin = freshKeypair(77);
 const malloryUmk = { seed: new Uint8Array(32).fill(99) };
 const malloryIrk = deriveIRK(malloryUmk);
 
@@ -45,6 +46,7 @@ async function setUpClaimedHarry() {
         issuedAt: claim.issuedAt,
       },
       signature: bytesToHex(sig),
+      adminRootPub: bytesToHex(harryAdmin.publicKey),
     },
   );
   return storage;
@@ -62,7 +64,7 @@ async function seedRouting(storage: InMemoryStorage, rckSeed: number) {
     rckPubKey: rck.publicKey,
     issuedAt: Date.now(),
   };
-  const sig = signRegisterRck(claim, harryIrk);
+  const sig = signRegisterRck(claim, harryAdmin);
   const r = await handleRegisterRck(
     { routing: storage.routing, usernames: storage.usernames },
     {
@@ -94,7 +96,7 @@ function activeAuthCode(serial: string): AuthCodeRecord {
   };
 }
 
-function releaseBody(irk = harryIrk, overrides: Partial<ReleaseServerName> = {}) {
+function releaseBody(irk: { privateKey: Uint8Array; publicKey: Uint8Array } = harryAdmin, overrides: Partial<ReleaseServerName> = {}) {
   const claim: ReleaseServerName = {
     username: "harry",
     serverDomain: DOMAIN,
@@ -191,7 +193,7 @@ describe("POST /api/server/release (cancel the server / free the name)", () => {
   it("400 when serverDomain is not under the signing username's namespace", async () => {
     const storage = await setUpClaimedHarry();
     // Mallory's-style domain, signed by harry → namespace mismatch.
-    const { body } = releaseBody(harryIrk, {
+    const { body } = releaseBody(harryAdmin, {
       serverDomain: "home.mallory.flagship.services",
     });
     const r = await handleServerReleaseName(deps(storage), body);
@@ -202,7 +204,7 @@ describe("POST /api/server/release (cancel the server / free the name)", () => {
     // Server names are a looser RFC-1123 DNS label than usernames:
     // interior hyphens are fine, but leading/trailing ones are not.
     const storage = await setUpClaimedHarry();
-    const { body } = releaseBody(harryIrk, {
+    const { body } = releaseBody(harryAdmin, {
       serverDomain: "-home.harry.flagship.services",
     });
     const r = await handleServerReleaseName(deps(storage), body);
@@ -214,7 +216,7 @@ describe("POST /api/server/release (cancel the server / free the name)", () => {
     // release fails for a DIFFERENT reason (name not under control) — the
     // point is the 400 is NOT a label-shape rejection.
     const storage = await setUpClaimedHarry();
-    const { body } = releaseBody(harryIrk, {
+    const { body } = releaseBody(harryAdmin, {
       serverDomain: "media-server.harry.flagship.services",
     });
     const r = await handleServerReleaseName(deps(storage), body);
@@ -224,7 +226,7 @@ describe("POST /api/server/release (cancel the server / free the name)", () => {
   it("403 on a stale request", async () => {
     const storage = await setUpClaimedHarry();
     await seedRouting(storage, 1);
-    const { body } = releaseBody(harryIrk, { issuedAt: Date.now() - 10 * 60_000 });
+    const { body } = releaseBody(harryAdmin, { issuedAt: Date.now() - 10 * 60_000 });
     const r = await handleServerReleaseName(deps(storage), body);
     expect(r.status).toBe(403);
   });

@@ -994,7 +994,12 @@ export async function tryControlPlane(
   if (method === "POST" && ROUTE_RE.AUTH_CODE_ISSUE.test(path)) {
     return finish(
       await handleAuthCodeIssue(
-        { storage: storage.authCodes, usernames: storage.usernames, apex: env.SERVICES_APEX },
+        {
+          storage: storage.authCodes,
+          usernames: storage.usernames,
+          grants: storage.deviceCapabilityGrants,
+          apex: env.SERVICES_APEX,
+        },
         await readJson(request),
       ),
     );
@@ -1054,6 +1059,7 @@ export async function tryControlPlane(
         {
           authCodes: storage.authCodes,
           servers: storage.servers,
+          usernames: storage.usernames,
           routing: storage.routing,
           dns,
           // N0d-2: nudge the device family on a new registration.

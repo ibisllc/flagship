@@ -10,6 +10,7 @@
 import {
   ed,
   signAuthCode,
+  signAuthCodeAdmin,
   signClaimUsername,
   signRegisterRck,
   signServerRegister,
@@ -76,6 +77,9 @@ async function main(): Promise<void> {
   // 1. Claim username
   const claim: ClaimUsername = { username, irkPub: irk.publicKey, issuedAt: Date.now() };
   const claimSig = signClaimUsername(claim, irk);
+  // Adding a server is admin-only: the account pins an admin root at claim
+  // time, and that root signs the RCK and approves the AuthCode.
+  const adminRoot = makeKey();
   let r = await post("/api/username/claim", {
     request: {
       username,
@@ -83,6 +87,7 @@ async function main(): Promise<void> {
       issuedAt: claim.issuedAt,
     },
     signature: bytesToHex(claimSig),
+    adminRootPub: bytesToHex(adminRoot.publicKey),
   });
   console.log(`[smoke] claim → ${r.status}`);
   if (r.status !== 200) throw new Error(`claim failed: ${JSON.stringify(r.body)}`);
@@ -94,7 +99,7 @@ async function main(): Promise<void> {
     rckPubKey: rck.publicKey,
     issuedAt: Date.now(),
   };
-  const rckSig = signRegisterRck(rckClaim, irk);
+  const rckSig = signRegisterRck(rckClaim, adminRoot);
   r = await post("/api/routing/register-rck", {
     request: {
       username,
@@ -121,6 +126,7 @@ async function main(): Promise<void> {
     userPubKey: irk.publicKey,
     issuedAt,
     expiresAt: issuedAt + 3_600_000,
+    adminRootPubKey: adminRoot.publicKey,
   };
   const codeSig = signAuthCode(code, irk);
   r = await post("/api/auth-code/issue", {
@@ -134,8 +140,10 @@ async function main(): Promise<void> {
       userPubKey: bytesToHex(code.userPubKey),
       issuedAt: code.issuedAt,
       expiresAt: code.expiresAt,
+      adminRootPubKey: bytesToHex(adminRoot.publicKey),
     },
     signature: bytesToHex(codeSig),
+    adminSignature: bytesToHex(signAuthCodeAdmin(code, adminRoot)),
   });
   console.log(`[smoke] auth   → ${r.status}`);
   if (r.status !== 200) throw new Error(`auth failed: ${JSON.stringify(r.body)}`);
@@ -164,6 +172,7 @@ async function main(): Promise<void> {
         userPubKey: bytesToHex(code.userPubKey),
         issuedAt: code.issuedAt,
         expiresAt: code.expiresAt,
+        adminRootPubKey: bytesToHex(adminRoot.publicKey),
       },
       authCodeUserSignature: bytesToHex(codeSig),
       serverIdentityPubKey: bytesToHex(identity.publicKey),

@@ -23,6 +23,8 @@ export interface UsernameRecord {
   username: string;
   irkPub: Uint8Array;
   claimedAt: number;
+  /** The account's pinned admin root, when the claim named one. */
+  adminRootPub?: Uint8Array;
 }
 
 export interface UsernameRegistry {
@@ -42,10 +44,12 @@ export class InMemoryUsernameRegistry implements UsernameRegistry {
     if (existing && !equalBytes(existing.irkPub, rec.irkPub)) {
       return { ok: false, reason: "username already claimed" };
     }
+    const adminRootPub = rec.adminRootPub ?? existing?.adminRootPub;
     this.byName.set(norm, {
       username: norm,
       irkPub: rec.irkPub.slice(),
       claimedAt: rec.claimedAt,
+      ...(adminRootPub ? { adminRootPub: adminRootPub.slice() } : {}),
     });
     return { ok: true };
   }
@@ -81,6 +85,7 @@ export function adaptRegistryToStorage(
         username: rec.username,
         irkPub: hexToBytes(rec.irkPubHex),
         claimedAt: rec.claimedAt,
+        ...(rec.adminRootPubHex ? { adminRootPub: hexToBytes(rec.adminRootPubHex) } : {}),
       });
     },
     async get(username) {
@@ -90,6 +95,7 @@ export function adaptRegistryToStorage(
         username: r.username,
         irkPubHex: bytesToHex(r.irkPub),
         claimedAt: r.claimedAt,
+        ...(r.adminRootPub ? { adminRootPubHex: bytesToHex(r.adminRootPub) } : {}),
       };
     },
     async list() {

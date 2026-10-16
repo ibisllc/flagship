@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   signAuthCode,
+  signAuthCodeAdmin,
   signClaimUsername,
   signServerRegister,
   type AuthCode,
@@ -12,6 +13,12 @@ import { buildServer } from "../src/server.js";
 
 const harryUmk = { seed: new Uint8Array(32).fill(11) };
 const harryIrk = deriveIRK(harryUmk);
+// Adding a server is admin-only (owner rule 2026-10-16): harry's account pins
+// an admin root, which approves each AuthCode.
+const harryAdmin = (() => {
+  const sk = new Uint8Array(32).fill(12);
+  return { privateKey: sk, publicKey: ed.getPublicKey(sk) };
+})();
 const malloryUmk = { seed: new Uint8Array(32).fill(99) };
 const malloryIrk = deriveIRK(malloryUmk);
 
@@ -45,6 +52,7 @@ async function setUpClaimedHarry() {
         issuedAt: claim.issuedAt,
       },
       signature: bytesToHex(sig),
+      adminRootPub: bytesToHex(harryAdmin.publicKey),
     },
   });
   if (r.statusCode !== 200) throw new Error(`claim failed: ${r.body}`);
@@ -64,6 +72,7 @@ function buildAuthCode(serial: string): { code: AuthCode; signature: Uint8Array 
     userPubKey: harryIrk.publicKey,
     issuedAt,
     expiresAt: issuedAt + 3_600_000,
+    adminRootPubKey: harryAdmin.publicKey,
   };
   return { code, signature: signAuthCode(code, harryIrk) };
 }
@@ -87,8 +96,10 @@ async function issueAuthCode(
         userPubKey: bytesToHex(code.userPubKey),
         issuedAt: code.issuedAt,
         expiresAt: code.expiresAt,
+        adminRootPubKey: bytesToHex(harryAdmin.publicKey),
       },
       signature: bytesToHex(signature),
+      adminSignature: bytesToHex(signAuthCodeAdmin(code, harryAdmin)),
     },
   });
 }
@@ -122,6 +133,7 @@ function registerPayload(
         userPubKey: bytesToHex(code.userPubKey),
         issuedAt: code.issuedAt,
         expiresAt: code.expiresAt,
+        ...(code.adminRootPubKey ? { adminRootPubKey: bytesToHex(code.adminRootPubKey) } : {}),
       },
       authCodeUserSignature: bytesToHex(userSig),
       serverIdentityPubKey: bytesToHex(serverIdentity.publicKey),

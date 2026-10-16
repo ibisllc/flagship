@@ -60,7 +60,7 @@ import type {
   UsernameStorage,
 } from "@flagship/storage";
 import type { DnsUpsertClient } from "./serverRegister.js";
-import { authorizeSensitiveComOp } from "./adminAuthorityGate.js";
+import { addServerRefused, authorizeAddServer, authorizeSensitiveComOp } from "./adminAuthorityGate.js";
 import { HEX64, HEX128, equalHex, hexToBytes } from "./hex.js";
 import {
   conflict, forbidden, gone, malformed, notFound, ok,
@@ -412,16 +412,30 @@ export async function handlePostTransferClaim(
   // re-homes only under the acquirer's admin root; legacy acquirer-IRK when no
   // admin root is pinned). The `acquirerIrkPub` re-home target is bound to the
   // acquirer's registered membership IRK above — that binding is unchanged.
-  const claimAuthz = await authorizeSensitiveComOp(
-    { grants: deps.grants, now: deps.now },
-    {
-      username: acquirerNorm,
-      userRec: acquirer,
-      verifyWith: (pub) => verifyServerTransferClaim(claim, claimSig, hexToBytes(pub)),
-    },
-  );
-  if (!claimAuthz.ok) {
-    return forbidden("invalid claim signature");
+  //
+  // Taking over a box adds a server to the acquirer's account, which is
+  // admin-only (owner rule 2026-10-16): on a real account the claim must name
+  // the acquirer's own pinned admin root (the box re-pins it) and be signed by
+  // it or an admin-granted device; an account with no admin root can't take
+  // a box over. A demo acquirer keeps the sensitive-op gate it had.
+  const claimGateDeps = { grants: deps.grants, now: deps.now };
+  const claimGateArgs = {
+    username: acquirerNorm,
+    userRec: acquirer,
+    verifyWith: (pub: string) => verifyServerTransferClaim(claim, claimSig, hexToBytes(pub)),
+  };
+  if (acquirer.isDemo) {
+    const claimAuthz = await authorizeSensitiveComOp(claimGateDeps, claimGateArgs);
+    if (!claimAuthz.ok) return forbidden("invalid claim signature");
+  } else {
+    if (
+      !acquirer.adminRootPubHex ||
+      c.acquirerAdminRootPub.toLowerCase() !== acquirer.adminRootPubHex.toLowerCase()
+    ) {
+      return addServerRefused();
+    }
+    const claimAuthz = await authorizeAddServer(claimGateDeps, claimGateArgs);
+    if (!claimAuthz.ok) return addServerRefused();
   }
 
   // Atomic one-time claim (CAS on claimed_at IS NULL). A racing second claim

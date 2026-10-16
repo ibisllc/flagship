@@ -111,10 +111,17 @@ function fromHex(h: string): Uint8Array {
   return out;
 }
 
-async function brokerStore(): Promise<InMemoryStorage> {
+/** Taking a box over is admin-only (owner rule 2026-10-16): bob is an
+ *  admin-pinned acquirer unless `bobDemo` makes him a rootless demo account. */
+async function brokerStore(opts: { bobDemo?: boolean } = {}): Promise<InMemoryStorage> {
   const s = new InMemoryStorage();
   await s.usernames.put({ username: "alice", irkPubHex: hex(aliceIrk.publicKey), claimedAt: 1 });
-  await s.usernames.put({ username: "bob", irkPubHex: hex(bobIrk.publicKey), claimedAt: 1 });
+  await s.usernames.put({
+    username: "bob",
+    irkPubHex: hex(bobIrk.publicKey),
+    claimedAt: 1,
+    ...(opts.bobDemo ? { isDemo: true } : { adminRootPubHex: hex(bobAdminRoot.publicKey) }),
+  });
   await s.servers.put({
     serverDomain: HOST,
     username: "alice",
@@ -288,7 +295,7 @@ describe("transfer-a-box — webapp", () => {
         umk: new Uint8Array(32),
         acquirerIrkPubHex: hex(bobIrk.publicKey),
         acquirerAdminRootPubHex: hex(bobAdminRoot.publicKey),
-        signWithIrk: signerFor(bobIrk),
+        signWithIrk: signerFor(bobAdminRoot),
       },
       { fetch: fetchImpl, origin: "https://x", now: () => now },
     );
@@ -319,9 +326,9 @@ describe("transfer-a-box — webapp", () => {
     expect(poll.acquirerAdminRootPub).toBe(hex(bobAdminRoot.publicKey));
   });
 
-  it("claim without an admin root sends acquirerAdminRootPub:\"\" and the giver poll reflects it", async () => {
+  it("claim without an admin root sends acquirerAdminRootPub:\"\" and the giver poll reflects it (demo acquirer)", async () => {
     const lib = await loadLib();
-    const s = await brokerStore();
+    const s = await brokerStore({ bobDemo: true });
     const now = 1_000_000;
     const fetchImpl = brokerFetch(s, now);
 
@@ -394,7 +401,7 @@ describe("transfer-a-box — webapp", () => {
     );
     const parsed = lib.parseTransferOfferQR(created.qrText);
     await lib.submitTransferClaim(
-      { offer: parsed, acquirerUsername: "bob", umk: new Uint8Array(32), acquirerIrkPubHex: hex(bobIrk.publicKey), signWithIrk: signerFor(bobIrk) },
+      { offer: parsed, acquirerUsername: "bob", umk: new Uint8Array(32), acquirerIrkPubHex: hex(bobIrk.publicKey), acquirerAdminRootPubHex: hex(bobAdminRoot.publicKey), signWithIrk: signerFor(bobAdminRoot) },
       { fetch: fetchImpl, origin: "https://x", now: () => now },
     );
 
@@ -483,7 +490,7 @@ describe("transfer-a-box — webapp", () => {
     );
     const parsed = lib.parseTransferOfferQR(created.qrText);
     await lib.submitTransferClaim(
-      { offer: parsed, acquirerUsername: "bob", umk: new Uint8Array(32), acquirerIrkPubHex: hex(bobIrk.publicKey), signWithIrk: signerFor(bobIrk) },
+      { offer: parsed, acquirerUsername: "bob", umk: new Uint8Array(32), acquirerIrkPubHex: hex(bobIrk.publicKey), acquirerAdminRootPubHex: hex(bobAdminRoot.publicKey), signWithIrk: signerFor(bobAdminRoot) },
       { fetch: fetchImpl, origin: "https://x", now: () => now },
     );
 

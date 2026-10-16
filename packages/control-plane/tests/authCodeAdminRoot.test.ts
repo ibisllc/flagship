@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import {
   ed,
   signAuthCode,
+  signAuthCodeAdmin,
   signClaimUsername,
   signServerRegister,
   type AuthCode,
@@ -84,6 +85,7 @@ describe("Slice D — AuthCode adminRootPubKey is persisted at issue", () => {
           adminRootPubKey: hex(adminRoot.publicKey),
         },
         signature: hex(sig),
+        adminSignature: hex(signAuthCodeAdmin(code, adminRoot)),
       },
     );
     expect(res.status).toBe(200);
