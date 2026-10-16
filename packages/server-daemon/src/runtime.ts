@@ -25,6 +25,7 @@ import { keepAppSandbox } from "./appSandbox/state.js";
 import { dockerRepaired, wakeDocker } from "./dockerHealth.js";
 import { FILES_HELPER_IMAGE } from "./volumeDump.js";
 import { ServiceActivity } from "./serviceActivity.js";
+import { NO_FRAME_HEADERS } from "./pageHeaders.js";
 import { ensureContainerLinksUnmanaged } from "./containerLinks.js";
 import { CertManager, type CertMaterial } from "./certManager.js";
 import {
@@ -647,7 +648,7 @@ function buildDefaultHandler(
     if (req.path === "/" || req.path === "") {
       return {
         status: 200,
-        headers: { "content-type": "text/html; charset=utf-8" },
+        headers: { "content-type": "text/html; charset=utf-8", ...NO_FRAME_HEADERS },
         body: defaultApexPage(opts.serverFqdn),
       };
     }
@@ -2323,7 +2324,7 @@ export function disambiguationResponse(sni: string): HttpResponse {
 </html>`;
   return {
     status: 404,
-    headers: { "content-type": "text/html; charset=utf-8" },
+    headers: { "content-type": "text/html; charset=utf-8", ...NO_FRAME_HEADERS },
     body: html,
   };
 }

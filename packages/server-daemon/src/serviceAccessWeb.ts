@@ -43,9 +43,14 @@ import {
 import { renderQrSvg } from "./qrSvg.js";
 import { SESSION_COOKIE, type ServiceAccessStore, type ServiceSessionStore } from "./serviceAccess.js";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
+import { NO_FRAME_HEADERS } from "./pageHeaders.js";
 
 const JSON_H = { "content-type": "application/json" };
-const HTML_H = { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" };
+const HTML_H = {
+  "content-type": "text/html; charset=utf-8",
+  "cache-control": "no-store",
+  ...NO_FRAME_HEADERS,
+};
 
 /**
  * An app's sign-in and sign-out links (docs/app-apis.md §5). On an open app a

@@ -117,6 +117,8 @@ describe("web-experience gating — knock page", () => {
     expect(res).not.toBeNull();
     expect(res!.status).toBe(200);
     expect(res!.headers["content-type"]).toContain("text/html");
+    expect(res!.headers["x-frame-options"]).toBe("DENY");
+    expect(res!.headers["content-security-policy"]).toBe("frame-ancestors 'none'");
     const html = String(res!.body);
     expect(html).toContain("Access is restricted");
     // Self-contained: no remote asset FETCHES (the SVG's xmlns is a namespace

@@ -209,6 +209,68 @@ const RECOVERY_CSP =
   "object-src 'none'";
 
 /**
+ * CSP for the webapp shell on `webapp.` and `remote.`. Scripts come only from
+ * the shell itself (no inline script, no eval); the shell talks only to the
+ * control apex and its sub-origins and to the account's servers under the
+ * services apex. Inline styles stay allowed: the views set `style=`
+ * attributes throughout.
+ */
+function shellCsp(env: RouteEnv): string {
+  const apex = apexHost(env);
+  const services = env.SERVICES_APEX ?? "flagship.services";
+  return (
+    "default-src 'self'; " +
+    "script-src 'self'; " +
+    "style-src 'self' 'unsafe-inline'; " +
+    "img-src 'self' data: blob:; " +
+    "font-src 'self'; " +
+    `connect-src 'self' https://${apex} wss://${apex} https://*.${apex} wss://*.${apex} ` +
+    `https://*.${services} wss://*.${services}; ` +
+    "worker-src 'self'; " +
+    "manifest-src 'self'; " +
+    "media-src 'self' blob:; " +
+    "frame-src 'none'; " +
+    "frame-ancestors 'none'; " +
+    "form-action 'self'; " +
+    "base-uri 'none'; " +
+    "object-src 'none'"
+  );
+}
+
+/**
+ * Headers on every response the Worker sends. No page on these hosts is meant
+ * to sit in a frame (recovery opens as a popup), and a framed webapp or remote
+ * session could have its clicks steered by an overlay, so framing is refused
+ * everywhere. A response that already carries a CSP (recovery) keeps it.
+ *
+ * The shell CSP goes by the host the request really arrived on: local dev and
+ * the e2e harness reach the shell through `x-flagship-effective-host` and fake
+ * box hosts, which it would block.
+ */
+function withSecurityHeaders(res: Response, requestUrl: URL, env: RouteEnv): Response {
+  if (res.status === 101) return res;
+  const isShellHost =
+    requestUrl.hostname === webappHost(env) || requestUrl.hostname === remoteHost(env);
+  const headers = new Headers(res.headers);
+  if (!headers.has("content-security-policy")) {
+    headers.set("content-security-policy", isShellHost ? shellCsp(env) : "frame-ancestors 'none'");
+  }
+  if (!headers.has("x-frame-options")) headers.set("x-frame-options", "DENY");
+  if (!headers.has("x-content-type-options")) headers.set("x-content-type-options", "nosniff");
+  if (!headers.has("referrer-policy")) {
+    headers.set("referrer-policy", isShellHost ? "no-referrer" : "strict-origin-when-cross-origin");
+  }
+  if (requestUrl.protocol === "https:") {
+    headers.set("strict-transport-security", "max-age=31536000");
+  }
+  return new Response(res.body, {
+    status: res.status,
+    statusText: res.statusText,
+    headers,
+  });
+}
+
+/**
  * Origins allowed to call /api/* on the apex via cross-origin XHR.
  * The webapp lives on webapp.flagshipserver.com; the marketing/identity
  * site on flagshipserver.com is same-origin (no preflight); local dev
@@ -284,6 +346,9 @@ export interface RouteEnv {
    *  served origin, so serving the webapp on webapp.gym.flagshipserver.com is all
    *  that's needed for the live web e2e. */
   CONTROL_APEX?: string;
+  /** Data-plane apex (`flagship.services`, gym `gym.flagship.services`); the
+   *  shell CSP lets the webapp reach the account's servers under it. */
+  SERVICES_APEX?: string;
   /** SNI passthrough anycast IPs (also used by serverRegister to publish DNS). */
   SERVICES_PASSTHROUGH_IPV4?: string;
   SERVICES_PASSTHROUGH_IPV6?: string;
@@ -512,7 +577,7 @@ export async function route(
   }
 
   const res = await routeImpl(request, env, url, ctx);
-  return applyCors(request, url, res, env);
+  return withSecurityHeaders(applyCors(request, url, res, env), requestUrl, env);
 }
 
 /** Internal — the actual routing logic. `route` wraps this with CORS. */

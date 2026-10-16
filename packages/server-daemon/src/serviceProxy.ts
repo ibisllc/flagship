@@ -35,6 +35,7 @@ import type { Bytes } from "@flagship/protocol";
 import type { BoxSigner } from "./keyCustodian.js";
 import type { InstalledService } from "./servicePlatform.js";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
+import { NO_FRAME_HEADERS } from "./pageHeaders.js";
 import type { UpdateServer } from "./updateServer.js";
 import type { ApiKeyAuthenticator } from "./appApiKeys.js";
 
@@ -177,7 +178,7 @@ export async function prepareAppRequest(
       kind: "respond",
       response: {
         status: 403,
-        headers: { "content-type": "text/html; charset=utf-8" },
+        headers: { "content-type": "text/html; charset=utf-8", ...NO_FRAME_HEADERS },
         body: REQUEST_ACCESS_TEMPLATE(app.manifest.name, app.urlLabel),
       },
     };

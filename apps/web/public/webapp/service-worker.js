@@ -251,7 +251,11 @@
 //       that isn't an admin device of the account wherever they are opened
 //       (lib/addServerGate.js), and minting a recipe no longer mints an
 //       admin root.
-const SHELL_VERSION = "v113";
+//  v114: the webapp refuses to run in a frame (lib/frameGuard.js) and the
+//       service-worker registration moves out of index.html into
+//       lib/swRegister.js, so the shell runs under a CSP with no inline
+//       script.
+const SHELL_VERSION = "v114";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -270,6 +274,8 @@ const ESSENTIAL_PATHS = [
   "/lib/state.js",
   "/lib/api.js",
   "/lib/toast.js",
+  "/lib/frameGuard.js",
+  "/lib/swRegister.js",
 ];
 
 // OPTIONAL_SHELL: everything else worth precaching. A 404 here is

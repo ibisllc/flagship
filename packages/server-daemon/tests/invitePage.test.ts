@@ -36,6 +36,8 @@ describe("box invite page", () => {
     expect(r!.status).toBe(200);
     expect(String(r!.body)).toContain("Open in the Flagship app");
     expect(r!.headers!["referrer-policy"]).toBe("no-referrer");
+    expect(r!.headers!["x-frame-options"]).toBe("DENY");
+    expect(r!.headers!["content-security-policy"]).toBe("frame-ancestors 'none'");
     expect(await handle(req("/invite/"))).not.toBeNull();
     expect(await handle(req("/invite", `notes.${BOX}`))).toBeNull();
     expect(await handle(req("/invite", BOX, "POST"))).toBeNull();

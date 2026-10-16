@@ -2272,3 +2272,75 @@ describe("boot.flagshipserver.com — boot operations served by flagship-com", (
     expect(r.status).toBe(404);
   });
 });
+
+describe("framing protection on every host (clickjacking report, 2026-10)", () => {
+  const hosts = [
+    "https://webapp.flagshipserver.com/",
+    "https://remote.flagshipserver.com/",
+    "https://flagshipserver.com/",
+    "https://flagshipserver.com/studio",
+    "https://flagshipserver.com/api/health",
+    "https://recovery.flagshipserver.com/",
+  ];
+
+  for (const u of hosts) {
+    it(`${u} refuses to be framed`, async () => {
+      const r = await route(
+        new Request(u, { headers: { cookie: "flagship_preview=1" } }),
+        makeEnv(),
+      );
+      expect(r.headers.get("x-frame-options")).toBe("DENY");
+      expect(r.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
+      expect(r.headers.get("x-content-type-options")).toBe("nosniff");
+      expect(r.headers.get("strict-transport-security")).toBe("max-age=31536000");
+    });
+  }
+
+  it("the webapp and remote hosts get the shell CSP: no inline script, no eval", async () => {
+    for (const u of ["https://webapp.flagshipserver.com/", "https://remote.flagshipserver.com/app.js"]) {
+      const r = await route(new Request(u), makeEnv());
+      const csp = r.headers.get("content-security-policy") ?? "";
+      expect(csp).toContain("script-src 'self';");
+      expect(csp).not.toMatch(/script-src[^;]*'unsafe-(inline|eval)'/);
+      expect(csp).toContain("object-src 'none'");
+      expect(csp).toContain("base-uri 'none'");
+      expect(csp).toContain("https://*.flagship.services wss://*.flagship.services");
+      expect(csp).toContain("https://flagshipserver.com wss://flagshipserver.com");
+      expect(r.headers.get("referrer-policy")).toBe("no-referrer");
+    }
+  });
+
+  it("the shell CSP follows a test env's apexes", async () => {
+    const r = await route(
+      new Request("https://webapp.gym.flagshipserver.com/"),
+      makeEnv({ CONTROL_APEX: "gym.flagshipserver.com", SERVICES_APEX: "gym.flagship.services" }),
+    );
+    const csp = r.headers.get("content-security-policy") ?? "";
+    expect(csp).toContain("https://gym.flagshipserver.com ");
+    expect(csp).toContain("https://*.gym.flagship.services ");
+  });
+
+  it("a shell reached through the dev host override keeps only the framing CSP", async () => {
+    const r = await route(
+      new Request("http://localhost:8787/", {
+        headers: { "x-flagship-effective-host": "webapp.flagshipserver.com" },
+      }),
+      makeEnv(),
+    );
+    expect(r.headers.get("content-security-policy")).toBe("frame-ancestors 'none'");
+    expect(r.headers.get("x-frame-options")).toBe("DENY");
+    expect(r.headers.get("strict-transport-security")).toBeNull();
+  });
+
+  it("recovery keeps its own stricter CSP", async () => {
+    const r = await route(new Request("https://recovery.flagshipserver.com/"), makeEnv());
+    expect(r.headers.get("content-security-policy")).toContain("connect-src 'self' https://flagshipserver.com;");
+    expect(r.headers.get("content-security-policy")).not.toContain("'unsafe-inline'");
+  });
+
+  it("the asset body and status pass through unchanged", async () => {
+    const r = await route(new Request("https://webapp.flagshipserver.com/style.css"), makeEnv());
+    expect(r.status).toBe(200);
+    expect(await r.text()).toBe("asset:/webapp/style.css");
+  });
+});

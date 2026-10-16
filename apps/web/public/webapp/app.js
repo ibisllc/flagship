@@ -9,6 +9,7 @@
 // Sensitive material (UMK seed, IRK private key) is held only in
 // `lib/state.js`'s closure — never on `window`, never logged.
 
+import "./lib/frameGuard.js";
 import {
   bootstrapNewIdentity,
   hasWrappedUmk,

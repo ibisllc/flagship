@@ -9,6 +9,7 @@
 // secret is never sent to any server.
 
 import type { HttpRequest, HttpResponse } from "./runtime.js";
+import { NO_FRAME_HEADERS } from "./pageHeaders.js";
 
 export interface InvitePageOptions {
   /** The box fqdn; the page answers only on the box's own host, never an app's. */
@@ -37,6 +38,7 @@ export function buildInvitePage(opts: InvitePageOptions) {
         "cache-control": "no-store",
         "referrer-policy": "no-referrer",
         "x-robots-tag": "noindex",
+        ...NO_FRAME_HEADERS,
       },
       body: method === "HEAD" ? "" : html,
     };
