@@ -138,7 +138,12 @@ async function postDeposit(url, reqBody, f) {
     throw err(`network error: ${(e && e.message) || e}`);
   }
   const body = await resp.json().catch(() => ({}));
-  if (!resp.ok) throw err((body && body.error) || `HTTP ${resp.status}`, resp.status);
+  if (!resp.ok) {
+    // Keep `.com`'s answer so the dialog can say it (humanError's boxErrorText).
+    const e = err((body && body.error) || `HTTP ${resp.status}`, resp.status);
+    e.body = body;
+    throw e;
+  }
   return body;
 }
 

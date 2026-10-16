@@ -71,6 +71,8 @@ export async function startServerBackup({ client, umk, passcode, rng = random, a
   if (!umk) throw userError("Unlock the webapp first.");
   const current = await backupStatus({ client }).catch(() => null);
   if (current?.state === "building") return current.archiveId;
+  // Reopening the dialog on a finished backup (no new passcode) shows it again.
+  if (current?.state === "ready" && !passcode) return current.archiveId;
   if (!passcode) throw userError("Choose a passcode first.");
   const archiveId = newArchiveId(rng);
   const contentKey = rng(32);

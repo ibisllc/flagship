@@ -179,6 +179,21 @@ describe("backup and restore calls", () => {
     expect(posts).toEqual([]);
   });
 
+  it("shows a finished backup again when the dialog reopens, and a new passcode starts a new one", async () => {
+    const posts: string[] = [];
+    const client = {
+      fetch: async (path: string, init: any) => {
+        if (!init) return { archive: { archiveId: "bb".repeat(16), state: "ready" } };
+        posts.push(path);
+      },
+    };
+    expect(await archive.startServerBackup({ client, umk: seed(B.umkSeedHex) })).toBe("bb".repeat(16));
+    expect(posts).toEqual([]);
+    const id = await archive.startServerBackup({ client, umk: seed(B.umkSeedHex), passcode: B.passcode, argonParams: { m: 64, t: 1, p: 1 } });
+    expect(id).not.toBe("bb".repeat(16));
+    expect(posts).toHaveLength(1);
+  });
+
   it("uploads from where the server has got to, and follows its count after a refusal", async () => {
     const offsets: number[] = [];
     const client = {

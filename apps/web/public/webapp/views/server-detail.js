@@ -2175,7 +2175,7 @@ async function openMigrateDialog(body) {
   };
 
   const showError = (e) => {
-    errEl.textContent = humanError(e);
+    errEl.textContent = archiveErrorText(e);
     errEl.classList.remove("hidden");
   };
 

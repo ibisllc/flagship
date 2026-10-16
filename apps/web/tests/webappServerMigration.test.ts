@@ -220,6 +220,18 @@ describe("startMigration deposit", () => {
     expect(out.ok).toBe(true);
   });
 
+  it("a refusal carries .com's own sentence for the dialog", async () => {
+    const fetchImpl = async () =>
+      new Response(JSON.stringify({ error: "this server isn't backed up to your other servers yet" }), { status: 409 });
+    const e = await startMigration(
+      { ...baseArgs(), oldStkPubHex: "aa".repeat(32), disposition: "wipe-after-handoff" },
+      { fetch: fetchImpl as never, origin: "https://c.example", now: () => 1700 },
+    ).catch((x: unknown) => x);
+    const { boxErrorText } = await import("../public/webapp/lib/humanError.js");
+    expect((e as { status: number }).status).toBe(409);
+    expect(boxErrorText(e)).toBe("This server isn't backed up to your other servers yet.");
+  });
+
   it("rejects a wipe-now disposition (never authorized by a migration)", async () => {
     await expect(
       startMigration(
