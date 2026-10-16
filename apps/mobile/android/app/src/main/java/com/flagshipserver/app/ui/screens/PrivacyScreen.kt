@@ -117,7 +117,7 @@ fun PrivacyScreen(nav: NavController) {
                     "On by default. Flagship asks for biometrics each time the app " +
                         "launches or comes back from the background, so you stay signed " +
                         "in without re-entering your passphrase. Turn it off to open " +
-                        "straight in. Either way your pods stay running; this just " +
+                        "straight in. Either way your servers stay running; this just " +
                         "controls who can see and tap.",
                     color = FS.colors.textMuted,
                     style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),

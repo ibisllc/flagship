@@ -95,6 +95,7 @@ abstract class GymBase {
         apexHost: String? = null,
         fakePasskeys: Boolean = false,
         realBiometrics: Boolean = false,
+        persistSession: Boolean = false,
     ) {
         // A test may relaunch with different seeds (e.g. the admin/non-admin
         // state pair) — close the prior scenario so activities never stack.
@@ -116,6 +117,20 @@ abstract class GymBase {
             if (apexHost != null) putExtra("flagship.apexHost", apexHost)
             if (fakePasskeys) putExtra(SmokeModeConfig.EXTRA_SMOKE_FAKE_PASSKEYS, true)
             if (realBiometrics) putExtra(SmokeModeConfig.EXTRA_SMOKE_REAL_BIOMETRICS, true)
+            if (persistSession) putExtra(SmokeModeConfig.EXTRA_SMOKE_PERSIST_SESSION, true)
+        }
+        scenario = ActivityScenario.launch(intent)
+        composeRule.waitForIdle()
+    }
+
+    /** Launch the app the way the launcher does, with no gym extras (a cold
+     *  start of whatever the device holds), pointed at [apexHost]. */
+    protected fun launchPlain(apexHost: String = "flagship.invalid") {
+        scenario?.close()
+        val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val intent = Intent(ctx, MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            putExtra("flagship.apexHost", apexHost)
         }
         scenario = ActivityScenario.launch(intent)
         composeRule.waitForIdle()

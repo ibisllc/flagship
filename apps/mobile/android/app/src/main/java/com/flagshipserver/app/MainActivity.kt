@@ -150,6 +150,17 @@ class MainActivity : FragmentActivity() {
                 if (Keystore.hasUmkSeed()) appState.restorePersistedSession(activeCloud)
             }
         }
+        // App lock (device bug M12): a cold start of a signed-in device with
+        // "Lock with biometrics" on opens locked. Logged (no account data) so
+        // a report of the app opening unlocked can be traced.
+        runCatching {
+            android.util.Log.i(
+                com.flagshipserver.app.core.ErrorLog.TAG,
+                "launch: lockOn=${privacy.requireBiometricAtLaunch.value} " +
+                    "passphraseOn=${privacy.requirePassphraseAtLaunch.value} " +
+                    "restored=${appState.isPaired.value} unlocked=${appState.isUnlocked.value}",
+            )
+        }
         val sessionStore = EncryptedSessionStore.create(applicationContext)
         appState.onSignedOut = { sessionStore.setDemoSession(null) }
         if (!appState.isPaired.value && !Keystore.hasUmkSeed()) {
@@ -175,7 +186,7 @@ class MainActivity : FragmentActivity() {
         // the gym's state, land on the requested tab and, unless the run keeps
         // the live clients, swap in the mocks. A release build has no gym code,
         // so an intent can never seed fixtures there.
-        com.flagshipserver.app.core.Variant.gymLaunch(intent, appState, operations, trustCenter)?.let { gym ->
+        com.flagshipserver.app.core.Variant.gymLaunch(applicationContext, intent, appState, operations, trustCenter)?.let { gym ->
             smokeInitialTab = gym.initialTab
             gymMocks = gym.mocks
         }
@@ -537,6 +548,13 @@ class MainActivity : FragmentActivity() {
                 ThemeMode.DARK -> true
             }
 
+            // With the app lock on, Recents shows no snapshot of the account
+            // (the lock screen only arrives after the app is already gone).
+            val lockOn by privacy.requireBiometricAtLaunch.collectAsState()
+            LaunchedEffect(lockOn) {
+                if (android.os.Build.VERSION.SDK_INT >= 33) setRecentsScreenshotEnabled(!lockOn)
+            }
+
             FlagshipTheme(darkTheme = useDark) {
                 CompositionLocalProvider(
                     LocalAppState provides appState,
@@ -586,7 +604,7 @@ class MainActivity : FragmentActivity() {
         super.onDestroy()
         PushHolder.registrar = null
         SecretRequestBridge.onSecretRequest = null
-        BiometricAuthority.set(null)
+        BiometricAuthority.clearIf(biometric)
     }
 
     /** C12 — re-arm the lock-screen gate when the activity moves to
@@ -598,6 +616,9 @@ class MainActivity : FragmentActivity() {
     override fun onStart() {
         super.onStart()
         foreground.value = true
+        // The visible activity owns the biometric prompt (another instance's
+        // onDestroy must never leave key use without one).
+        if (::biometric.isInitialized) BiometricAuthority.set(biometric)
     }
 
     override fun onStop() {

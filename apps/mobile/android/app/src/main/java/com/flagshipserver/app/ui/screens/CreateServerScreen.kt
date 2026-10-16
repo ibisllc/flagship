@@ -233,6 +233,7 @@ fun CreateServerScreen(
     // to register when it phones home, regardless of delivery channel), reusing
     // the shared minter so the recipe is byte-identical across delivery methods.
     suspend fun mintAndRegister(): MintedBundle {
+        com.flagshipserver.app.core.ErrorLog.step("create-server", "mint start")
         val username = app.currentUser.value ?: throw IllegalStateException("not paired yet")
         val minted = mintRecipeBundle(
             username = username,
@@ -251,11 +252,13 @@ fun CreateServerScreen(
             isDemoAccount = app.isDemoAccountNow(),
             restore = preset?.restore,
         )
+        com.flagshipserver.app.core.ErrorLog.step("create-server", "minted; registering with .com")
         registerControlPlane(
             flagshipServer = flagshipServer,
             bundle = minted.bundle,
             authCodeUserSig = minted.bundle.blob.authCodeUserSignature,
         )
+        com.flagshipserver.app.core.ErrorLog.step("create-server", "registered")
         return minted
     }
 
@@ -1280,7 +1283,9 @@ internal suspend fun mintRecipeBundle(
     val now = System.currentTimeMillis()
     val expiresAt = now + recipeTtlMs.coerceIn(MIN_RECIPE_TTL_MS, MAX_RECIPE_TTL_MS)
 
+    com.flagshipserver.app.core.ErrorLog.step("create-server", "admin pin ok; asking for the account key")
     val irk = Keystore.deriveIRK("Create server $serverName")
+    com.flagshipserver.app.core.ErrorLog.step("create-server", "account key ok")
     val irkPubHex = Keystore.irkPubHex()
     val irkPubBytes = HexUtil.decode(irkPubHex) ?: error("corrupt account key")
 

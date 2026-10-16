@@ -79,10 +79,20 @@ object BiometricGate {
             }
             lifecycle.addObserver(gone)
             try {
+                if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                    com.flagshipserver.app.core.ErrorLog.step("biometric", "waiting for the screen (${lifecycle.currentState})")
+                }
                 lifecycle.withStateAtLeast(Lifecycle.State.RESUMED) {
+                    com.flagshipserver.app.core.ErrorLog.step("biometric", "prompt start")
                     cancel = starter.start { outcome.complete(it) }
                 }
-                when (val o = outcome.await()) {
+                val result = outcome.await()
+                com.flagshipserver.app.core.ErrorLog.step(
+                    "biometric",
+                    "prompt outcome ${result.javaClass.simpleName}" +
+                        ((result as? PromptOutcome.Error)?.let { " code=${it.code} ${it.message}" } ?: ""),
+                )
+                when (val o = result) {
                     PromptOutcome.Succeeded -> return
                     PromptOutcome.CancelledByUser -> throw BiometricCancelled()
                     is PromptOutcome.Error -> {

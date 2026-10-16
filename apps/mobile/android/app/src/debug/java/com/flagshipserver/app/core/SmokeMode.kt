@@ -60,6 +60,9 @@ data class SmokeModeConfig(
     /** Real biometric prompts and the lock-on-background setting, for the
      *  app-lock scenarios (the other scenarios pass every prompt). */
     val realBiometrics: Boolean = false,
+    /** Persist a signed-in device (keystore profile + account key, lock on)
+     *  so a later plain launch is a cold start of a real account. */
+    val persistSession: Boolean = false,
 ) {
     companion object {
         const val EXTRA_SMOKE_MODE = "flagship.smokeMode"
@@ -75,6 +78,7 @@ data class SmokeModeConfig(
         const val EXTRA_SMOKE_LIVE = "flagship.smokeLive"
         const val EXTRA_SMOKE_FAKE_PASSKEYS = "flagship.smokeFakePasskeys"
         const val EXTRA_SMOKE_REAL_BIOMETRICS = "flagship.smokeRealBiometrics"
+        const val EXTRA_SMOKE_PERSIST_SESSION = "flagship.smokePersistSession"
 
         const val SMOKE_USERNAME = "smoketest"
 
@@ -100,6 +104,7 @@ data class SmokeModeConfig(
                 live = intent.getBooleanExtra(EXTRA_SMOKE_LIVE, false),
                 fakePasskeys = intent.getBooleanExtra(EXTRA_SMOKE_FAKE_PASSKEYS, false),
                 realBiometrics = intent.getBooleanExtra(EXTRA_SMOKE_REAL_BIOMETRICS, false),
+                persistSession = intent.getBooleanExtra(EXTRA_SMOKE_PERSIST_SESSION, false),
             )
         }
     }

@@ -20,6 +20,11 @@ object ErrorLog {
         return "[$code] $where: $chain"
     }
 
+    /** A breadcrumb for one step of an action (never key material). */
+    fun step(where: String, what: String) {
+        runCatching { android.util.Log.i(TAG, "$where: $what") }
+    }
+
     fun caught(where: String, t: Throwable, code: String) {
         val line = line(where, t, code)
         runCatching { android.util.Log.w(TAG, line) }

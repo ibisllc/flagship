@@ -24,6 +24,7 @@ interface AppVariant {
      *  and, unless the run keeps the live clients, the mock clients. Null for a
      *  normal launch, and always in release. */
     fun gymLaunch(
+        context: android.content.Context,
         intent: Intent?,
         appState: AppState,
         operations: ActiveOperationsCenter,
