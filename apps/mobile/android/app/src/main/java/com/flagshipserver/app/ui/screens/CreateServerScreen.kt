@@ -1331,7 +1331,10 @@ internal suspend fun mintRecipeBundle(
             sha256 = restore.sha256,
             issuedAt = now,
         )
-        val sig = irk.sign(order.canonicalBytes())
+        // An admin-pinned box takes a restore order only from the admin root
+        // (adding a server is admin-only); a demo account signs with the IRK.
+        val restoreSigner = if (adminRootPinHex != null) Keystore.adminRootKey("Restore a backup on $serverName") else irk
+        val sig = restoreSigner.sign(order.canonicalBytes())
         pairingOrderJson = ServerBackupFormat.attachRestore(json, order, HexUtil.encode(sig))
     }
 
@@ -1425,8 +1428,10 @@ internal fun debugGrantEnvelope(
 
 /**
  * Pre-publish the auth-code + RCK on .com so the freshly-booted box can
- * register itself on first phone-home. The auth-code is IRK-signed; RCK
- * registration uses the sensitive admin signer when the account has one.
+ * register itself on first phone-home. The auth-code is IRK-signed and, since
+ * adding a server is admin-only (owner rule 2026-10-16), approved by the admin
+ * root it pins; the admin root also signs the RCK. A demo account pins no root
+ * and keeps the IRK path.
  *
  * Phase 2 (login redesign): the USERNAME CLAIM no longer happens here.
  * Account creation is decoupled from server provisioning — the account
@@ -1445,7 +1450,27 @@ internal suspend fun registerControlPlane(
     authCodeUserSig: String,
 ) {
     val now = System.currentTimeMillis()
-    val rckSigner = Keystore.adminSigningKey("Authorize server routing")
+    val wire = bundle.blob.authCode
+    val pinsRoot = wire.adminRootPubKey != null
+    val rckSigner = if (pinsRoot) Keystore.adminRootKey("Add ${wire.serverName} to your account")
+    else Keystore.adminSigningKey("Authorize server routing")
+    val adminSignature = if (pinsRoot) {
+        val code = AuthCodeBytes(
+            version = wire.version,
+            serial = wire.serial,
+            username = wire.username,
+            serverName = wire.serverName,
+            serverDomain = wire.serverDomain,
+            delegatedPubKey = HexUtil.decode(wire.delegatedPubKey) ?: error("corrupt recipe"),
+            userPubKey = HexUtil.decode(wire.userPubKey) ?: error("corrupt recipe"),
+            issuedAt = wire.issuedAt,
+            expiresAt = wire.expiresAt,
+            adminRootPubKey = HexUtil.decode(wire.adminRootPubKey!!) ?: error("corrupt recipe"),
+        )
+        HexUtil.encode(rckSigner.sign(code.adminCanonicalBytes()))
+    } else {
+        null
+    }
 
     val rckSig = HexUtil.encode(rckSigner.sign(
         RckRegister.canonicalBytes(
@@ -1482,6 +1507,7 @@ internal suspend fun registerControlPlane(
                 adminRootPubKey = bundle.blob.authCode.adminRootPubKey,
             ),
             signature = authCodeUserSig,
+            adminSignature = adminSignature,
         ),
     )
 }

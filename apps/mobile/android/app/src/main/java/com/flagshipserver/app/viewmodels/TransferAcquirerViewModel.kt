@@ -10,6 +10,7 @@
 package com.flagshipserver.app.viewmodels
 
 import com.flagshipserver.app.api.ServerTransferClient
+import com.flagshipserver.app.core.AddServerGate
 import com.flagshipserver.app.core.ServerTransferFlow
 import com.flagshipserver.app.keystore.Keystore
 import com.google.crypto.tink.subtle.Ed25519Sign
@@ -126,7 +127,9 @@ class TransferAcquirerViewModel(
                 TransferAcquirerPhase.Failed("That transfer code is invalid.")
             }
         } catch (e: Throwable) {
-            _phase.value = TransferAcquirerPhase.Failed("Couldn't claim the box: ${e.message}")
+            _phase.value = TransferAcquirerPhase.Failed(
+                if (AddServerGate.isServerRefusal(e)) AddServerGate.ADMIN_ONLY else "Couldn't claim the box: ${e.message}",
+            )
         }
     }
 }

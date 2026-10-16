@@ -86,6 +86,7 @@ data class AuthCode(
 ) {
     companion object {
         const val CANONICAL_TAG = "flagship/auth-code/v1"
+        const val ADMIN_CANONICAL_TAG = "flagship/auth-code-admin/v1"
     }
 
     fun canonicalBytes(): ByteArray {
@@ -103,6 +104,20 @@ data class AuthCode(
         )
         adminRootPubKey?.let { parts.add("ar=${HexUtil.encode(it)}") }
         return parts.joinToString("|").toByteArray()
+    }
+
+    /**
+     * An admin device's approval of this new server: adding a server is
+     * admin-only (owner rule 2026-10-16) and `.com` refuses an AuthCode on an
+     * admin-pinned account without it. The admin root signs
+     * `flagship/auth-code-admin/v1|<canonicalBytes()>`, which commits to the
+     * `ar=` root the box will pin; an AuthCode without one has no admin form.
+     * Pinned by packages/protocol/test-vectors/add-server/vectors.json.
+     */
+    fun adminCanonicalBytes(): ByteArray {
+        val ar = adminRootPubKey
+        require(ar != null && ar.size == 32) { "auth-code admin approval needs the AuthCode's admin root" }
+        return "$ADMIN_CANONICAL_TAG|".toByteArray() + canonicalBytes()
     }
 }
 

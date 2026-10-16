@@ -925,6 +925,10 @@ data class AccountSelfDeleteBundleRequest(
 data class AuthCodeIssueRequest(
     val code: AuthCodeWire,
     val signature: String,
+    /** hex, the admin root over `AuthCode.adminCanonicalBytes()`. Adding a
+     *  server is admin-only: `.com` refuses a code on an admin-pinned account
+     *  without it. Null only for a demo account (no admin root pinned). */
+    val adminSignature: String? = null,
 )
 
 @Serializable
@@ -1418,6 +1422,8 @@ class MockFlagshipServerClient(
      *  test see whether a retry re-used the device or minted a second one. */
     val bootstrapDeviceIds: Map<String, List<String>> get() = _bootstrapDeviceIds
     val issuedAuthCodes: Map<String, AuthCodeWire> get() = _issuedAuthCodes
+    private val _issuedAdminSignatures = mutableMapOf<String, String>()  // serial → admin approval hex
+    val issuedAdminSignatures: Map<String, String> get() = _issuedAdminSignatures
     val revokedAuthCodes: Set<String> get() = _revokedAuthCodes
     val releasedServerNames: List<ReleaseServerNameRequest> get() = _releasedServerNames
     val revokedServers: List<ServerRevocationRequest> get() = _revokedServers
@@ -1467,6 +1473,7 @@ class MockFlagshipServerClient(
     override suspend fun issueAuthCode(req: AuthCodeIssueRequest) {
         tick()
         _issuedAuthCodes[req.code.serial] = req.code
+        req.adminSignature?.let { _issuedAdminSignatures[req.code.serial] = it }
     }
 
     override suspend fun registerRck(req: RckRegisterRequest) {

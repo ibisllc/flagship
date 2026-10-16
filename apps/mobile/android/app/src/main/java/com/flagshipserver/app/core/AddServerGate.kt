@@ -11,6 +11,9 @@
 package com.flagshipserver.app.core
 
 import com.flagshipserver.app.keystore.Keystore
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 object AddServerGate {
     const val ADMIN_ONLY = "Only an admin device of this account can add servers."
@@ -33,6 +36,18 @@ object AddServerGate {
         if (adminRootPubHex != null) return adminRootPubHex
         if (isDemoAccount) return null
         throw AddServerRefused()
+    }
+
+    /** `.com` enforces the rule too (2026-10-16): its refusal is a 403
+     *  `{"error": …, "code": "add-server-admin-only"}`, shown as [ADMIN_ONLY]. */
+    const val SERVER_REFUSAL_CODE = "add-server-admin-only"
+
+    fun isServerRefusal(t: Throwable): Boolean {
+        if (t !is HttpException || t.status != 403) return false
+        val code = runCatching {
+            Json.parseToJsonElement(t.body).jsonObject["code"]?.jsonPrimitive?.content
+        }.getOrNull()
+        return code == SERVER_REFUSAL_CODE
     }
 }
 

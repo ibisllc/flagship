@@ -8,7 +8,10 @@ package com.flagshipserver.app.core
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.flagshipserver.app.keystore.Keystore
+import com.flagshipserver.app.api.MockFlagshipServerClient
 import com.flagshipserver.app.ui.screens.mintRecipeBundle
+import com.flagshipserver.app.ui.screens.registerControlPlane
+import com.google.crypto.tink.subtle.Ed25519Verify
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -93,5 +96,53 @@ class AddServerGateTest {
         Keystore.loadOrCreateUmkSeed()
         val pub = Keystore.generateAdminRoot()
         assertEquals(pub, AddServerGate.recipeAdminRootPin(Keystore.adminRootPubHex(), isDemoAccount = false))
+    }
+
+    /** `.com` enforces the rule too: the issue carries the admin root's
+     *  approval of the AuthCode that pins it, and the RCK is the root's. */
+    @Test
+    fun theAuthCodeIssueCarriesTheAdminRootsApproval() = runTest {
+        Keystore.loadOrCreateUmkSeed()
+        val pub = Keystore.generateAdminRoot()
+        val server = MockFlagshipServerClient(simulatedLatencyMs = 0)
+        val hex32 = "ab".repeat(32)
+        val domain = "home.harry.flagship.services"
+        val bundle = InstallBlobBundle(
+            blob = WireBlob(
+                serverDomain = domain, username = "harry", serverName = "home",
+                phoneDelegatedPubKey = hex32,
+                authCode = WireAuthCode(
+                    serial = "S1", username = "harry", serverName = "home", serverDomain = domain,
+                    delegatedPubKey = hex32, userPubKey = hex32, issuedAt = 0L, expiresAt = 1L,
+                    adminRootPubKey = pub,
+                ),
+                authCodeUserSignature = "00".repeat(64),
+                rckPubKey = hex32,
+            ),
+            blobSignature = "00".repeat(64),
+        )
+        registerControlPlane(server, bundle, bundle.blob.authCodeUserSignature)
+
+        val wire = server.issuedAuthCodes.getValue("S1")
+        assertEquals(pub, wire.adminRootPubKey)
+        val approval = server.issuedAdminSignatures["S1"] ?: error("no admin approval on the issue")
+        val code = AuthCode(
+            version = wire.version, serial = wire.serial, username = wire.username,
+            serverName = wire.serverName, serverDomain = wire.serverDomain,
+            delegatedPubKey = HexUtil.decode(wire.delegatedPubKey)!!,
+            userPubKey = HexUtil.decode(wire.userPubKey)!!,
+            issuedAt = wire.issuedAt, expiresAt = wire.expiresAt,
+            adminRootPubKey = HexUtil.decode(pub)!!,
+        )
+        Ed25519Verify(HexUtil.decode(pub)!!).verify(HexUtil.decode(approval)!!, code.adminCanonicalBytes())
+    }
+
+    @Test
+    fun theServersRefusalShowsTheSameSentence() {
+        val refusal = HttpException(403, """{"error":"Only an admin device of this account can add servers.","code":"add-server-admin-only"}""")
+        assertTrue(AddServerGate.isServerRefusal(refusal))
+        assertEquals(AddServerGate.ADMIN_ONLY, NetworkErrorHumanizer.humanize(refusal))
+        assertFalse(AddServerGate.isServerRefusal(HttpException(403, """{"error":"invalid signature"}""")))
+        assertFalse(AddServerGate.isServerRefusal(HttpException(400, """{"code":"add-server-admin-only"}""")))
     }
 }
