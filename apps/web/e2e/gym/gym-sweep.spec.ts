@@ -170,10 +170,29 @@ async function startSweep(page: Page): Promise<Sweep> {
  * press the screen is reached again if the press left it or opened something.
  * Returns how many controls were pressed.
  */
-async function sweepScreen(s: Sweep, label: string, root: string, reach: () => Promise<void>, { min = 1, skip = /$^/ } = {}): Promise<number> {
+/** Wait until the screen has finished rendering: its `ready` element (if
+ *  any) shows and its control count holds still across two reads. */
+async function settle(page: Page, root: string, ready?: string): Promise<void> {
+  if (ready) await expect(page.locator(ready).first()).toBeVisible({ timeout: 15_000 });
+  let last = -1;
+  await expect
+    .poll(async () => {
+      const n = await controls(page, root).count();
+      const same = n === last;
+      last = n;
+      return same;
+    }, { intervals: [300], timeout: 15_000 })
+    .toBe(true);
+}
+
+async function sweepScreen(s: Sweep, label: string, root: string, reach: () => Promise<void>, { min = 1, skip = /$^/, ready = "" } = {}): Promise<number> {
   const { page } = s;
-  await reach();
-  await expect(page.locator(root)).toBeVisible({ timeout: 15_000 });
+  const arrive = async () => {
+    await reach();
+    await expect(page.locator(root)).toBeVisible({ timeout: 15_000 });
+    await settle(page, root, ready || undefined);
+  };
+  await arrive();
   const seen = new Set<string>();
   let pressed = 0;
   for (let i = 0; i < 200; i++) {
@@ -254,8 +273,7 @@ async function sweepScreen(s: Sweep, label: string, root: string, reach: () => P
     if (now.dialogs > 0) await closeOverlays(page);
     if (now.view !== root.replace(/^#/, "") || effect.startsWith("request") || effect.includes("dialog")) {
       await closeOverlays(page);
-      await reach();
-      await expect(page.locator(root)).toBeVisible({ timeout: 15_000 });
+      await arrive();
     }
   }
   expect(pressed, `${label}: controls pressed`).toBeGreaterThanOrEqual(min);
@@ -298,7 +316,7 @@ test.describe("gym webapp every-button sweep", () => {
   test("gym sweep presses every control on Home, Activity and the Services list", async ({ page }, testInfo) => {
     test.setTimeout(300_000);
     const s = await startSweep(page);
-    await sweepScreen(s, "home", "#view-home", tab(page, "home"), { min: 3 });
+    await sweepScreen(s, "home", "#view-home", tab(page, "home"), { min: 3, ready: "#servers-list [data-open-fqdn]" });
     await sweepScreen(s, "activity", "#view-activity", tab(page, "activity"), { min: 1 });
     await sweepScreen(s, "services", "#view-services-list", tab(page, "apps"), { min: 2 });
     await finish(s, testInfo, "home");
