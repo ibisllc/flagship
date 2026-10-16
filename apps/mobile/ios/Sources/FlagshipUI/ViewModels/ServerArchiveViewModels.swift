@@ -137,7 +137,7 @@ public final class ServerBackupViewModel {
                 if s.state == "failed" { throw BackupError.failed(s.reason ?? "the backup couldn't be made") }
                 if s.state == "ready" {
                     status = s
-                    phase = .ready(bytes: s.bytes ?? 0)
+                    phase = .ready(bytes: s.bundleBytes ?? s.bytes ?? 0)
                     return
                 }
                 let p = s.progress
@@ -155,28 +155,24 @@ public final class ServerBackupViewModel {
         }
     }
 
-    /// Download both files for the share sheet: the small backup file, and
-    /// the data file in 4 MiB parts, several at once, resuming an interrupted
-    /// download and checking the server's SHA-256.
+    /// Download the one `.flagship` file for the share sheet: 4 MiB parts,
+    /// several at once, resuming an interrupted download and checking the
+    /// whole file's SHA-256.
     public func download() async {
-        guard case .ready = phase, let s = status, let total = s.bytes else { return }
+        guard case .ready = phase, let s = status else { return }
+        let stem = ServerArchive.fileStem(sourceServer: serverFqdn, createdAt: Date(timeIntervalSince1970: Double(s.startedAt) / 1000))
+        let name = s.bundleFileName ?? "\(stem).\(ServerBackupBundle.fileExtension)"
+        let total = s.bundleBytes ?? 0
+        guard total > 0 else {
+            phase = .failed("This server's release can't hand out the backup as one file yet. Update the server and try again.")
+            return
+        }
         phase = .downloading(fraction: 0)
         let c = await clients.client(forFqdn: serverFqdn)
-        let fm = FileManager.default
-        try? fm.createDirectory(at: directory, withIntermediateDirectories: true)
-        let stem = ServerArchive.fileStem(sourceServer: serverFqdn, createdAt: Date(timeIntervalSince1970: Double(s.startedAt) / 1000))
-        let part = directory.appendingPathComponent("\(s.archiveId).part")
-        let state = directory.appendingPathComponent("\(s.archiveId).json")
-        let dataURL = directory.appendingPathComponent(s.dataFileName ?? "\(stem).\(ServerBackupFormat.dataExtension)")
-        let backupURL = directory.appendingPathComponent(s.backupFileName ?? "\(stem).\(ServerBackupFormat.backupExtension)")
         do {
-            let backupFile = try await c.serverArchiveBackupFile()
-            try await ArchiveDownloader.download(
-                total: total,
-                sha256: s.sha256,
-                to: part,
-                stateFile: state,
-                fetch: { offset in try await c.serverArchiveChunk(offset: offset) },
+            let url = try await ArchiveDownloader.downloadBundle(
+                client: c, route: .current, bytes: total, sha256: s.bundleSha256, fileName: name,
+                into: directory.appendingPathComponent(s.archiveId, isDirectory: true),
                 progress: { [weak self] received in
                     await MainActor.run {
                         guard let self, case .downloading = self.phase else { return }
@@ -184,11 +180,8 @@ public final class ServerBackupViewModel {
                     }
                 }
             )
-            try? fm.removeItem(at: dataURL)
-            try fm.moveItem(at: part, to: dataURL)
-            try backupFile.write(to: backupURL, options: [.atomic, .completeFileProtection])
             try? await c.serverArchiveForget()
-            phase = .saved([backupURL, dataURL])
+            phase = .saved([url])
         } catch is CancellationError {
             // The parts already in stay for the next try.
             phase = .ready(bytes: total)
@@ -215,7 +208,7 @@ public final class ServerBackupViewModel {
     static func message(_ error: Error) -> String {
         if let e = error as? BackupError { return e.errorDescription ?? "The backup failed." }
         if let e = error as? ArchiveDownloader.DownloadError { return e.errorDescription ?? "The download didn't finish." }
-        return ScreensClientError.userFacing(error)
+        return BoxSentence.of(error)
     }
 }
 
@@ -256,9 +249,9 @@ public final class ImportBackupViewModel {
     }
 
     public private(set) var phase: Phase = .pick
-    public private(set) var backupFileName: String?
-    public private(set) var dataFileName: String?
-    public private(set) var dataFileSize: Int64?
+    /// The picked `.flagship` file's name and size.
+    public private(set) var fileName: String?
+    public private(set) var fileSize: Int64?
     public private(set) var opened: ServerBackupFormat.Opened?
     public private(set) var fileError: String?
     public var passcode = ""
@@ -275,8 +268,9 @@ public final class ImportBackupViewModel {
     private let onRestored: (String) -> Void
     private let pollNs: UInt64
     private var file: ServerBackupFormat.File?
-    private var backupURL: URL?
-    private var dataURL: URL?
+    /// The picked file and where its data part starts (it is read where it is).
+    private var bundleURL: URL?
+    private var layout: ServerBackupBundle.Layout?
     private var scoped: [URL] = []
     private var sendTask: Task<Void, Never>?
 
@@ -313,48 +307,33 @@ public final class ImportBackupViewModel {
 
     // MARK: Files
 
-    /// The user picked one or both files (security-scoped URLs from the file importer).
+    /// The user picked the backup's `.flagship` file (a security-scoped URL
+    /// from the file importer). Only its header and metadata part are read now.
     public func choose(_ urls: [URL]) async {
         fileError = nil
-        for url in urls {
-            let ok = url.startAccessingSecurityScopedResource()
-            let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.int64Value ?? 0
-            let head = (try? FileHandle(forReadingFrom: url)).flatMap { fh -> Data? in
-                defer { try? fh.close() }
-                return try? fh.read(upToCount: 64)
-            } ?? Data()
-            switch ServerBackupFormat.classify(head: head, size: size) {
-            case .backup:
-                do {
-                    let parsed = try ServerBackupFormat.parse(try Data(contentsOf: url))
-                    file = parsed
-                    opened = nil
-                    backupURL = url
-                    backupFileName = url.lastPathComponent
-                } catch {
-                    fileError = (error as? LocalizedError)?.errorDescription ?? "That backup file couldn't be read."
-                }
-                if ok { scoped.append(url) }
-            case .data:
-                dataURL = url
-                dataFileName = url.lastPathComponent
-                dataFileSize = size
-                if ok { scoped.append(url) }
-            case nil:
-                if ok { url.stopAccessingSecurityScopedResource() }
-                fileError = "\(url.lastPathComponent) isn't a Flagship backup file or data file."
-            }
+        guard let url = urls.first else { return }
+        let ok = url.startAccessingSecurityScopedResource()
+        do {
+            let read = try ServerBackupBundle.read(url)
+            for u in scoped { u.stopAccessingSecurityScopedResource() }
+            scoped = ok ? [url] : []
+            file = read.file
+            layout = read.layout
+            opened = nil
+            bundleURL = url
+            fileName = url.lastPathComponent
+            fileSize = read.layout.dataOffset + read.layout.dataLength
+        } catch {
+            if ok { url.stopAccessingSecurityScopedResource() }
+            fileError = (error as? LocalizedError)?.errorDescription ?? "That file couldn't be read."
+            return
         }
         await advance()
     }
 
-    /// The line under the picker: what's picked, and what's still missing.
+    /// The line under the picker: the file picked, or that none is yet.
     public var filesSummary: String {
-        let b = backupFileName.map { "Backup file: \($0)" } ?? "Backup file: not picked yet"
-        let want = opened?.body.data.fileName
-        let d = dataFileName.map { "Data file: \($0) (\(ServerArchive.formatBytes(dataFileSize ?? 0)))" }
-            ?? "Data file: not picked yet\(want.map { " (\($0))" } ?? "")"
-        return "\(b)\n\(d)"
+        fileName.map { "\($0) (\(ServerArchive.formatBytes(fileSize ?? 0)))" } ?? "No backup file picked yet"
     }
 
     /// One line on what the backup holds, once it is open.
@@ -406,20 +385,23 @@ public final class ImportBackupViewModel {
 
     private func checkData() async {
         guard let opened else { return }
-        guard let dataURL else {
+        guard let bundleURL, let layout else {
             phase = .pick
             return
         }
         phase = .checking(fraction: 0)
         let total = Double(max(opened.body.data.bytes, 1))
         do {
-            try await ServerBackupFormat.checkDataFile(dataURL, against: opened.body.data) { [weak self] read in
+            try await ServerBackupBundle.checkData(bundleURL, layout: layout, against: opened.body.data) { [weak self] read in
                 await MainActor.run { self?.phase = .checking(fraction: Double(read) / total) }
             }
         } catch {
-            self.dataURL = nil
-            dataFileName = nil
-            fileError = (error as? LocalizedError)?.errorDescription ?? "The data file couldn't be checked."
+            self.bundleURL = nil
+            self.layout = nil
+            self.file = nil
+            self.opened = nil
+            fileName = nil
+            fileError = (error as? LocalizedError)?.errorDescription ?? "The backup file couldn't be checked."
             phase = .pick
             return
         }
@@ -524,7 +506,7 @@ public final class ImportBackupViewModel {
     }
 
     private func run(_ fqdn: String) async {
-        guard let opened, let dataURL else { return }
+        guard let opened, let bundleURL, let layout else { return }
         let c = await clients.client(forFqdn: fqdn)
         do {
             // Wait for the server to come online, pair with this device, and say
@@ -534,7 +516,7 @@ public final class ImportBackupViewModel {
                 if let st = try? await c.serverRestoreStatus() {
                     if st.waiting?.archiveId == opened.file.archiveId {
                         if let r = st.restore, ["checking", "restoring"].contains(r.state) { break }
-                        try await upload(c, fqdn: fqdn, dataURL: dataURL, opened: opened)
+                        try await upload(c, fqdn: fqdn, url: bundleURL, layout: layout, opened: opened)
                         try await c.serverRestoreCommit(ServerRestoreCommitRequest(key: HexUtil.encode(opened.contentKey)))
                         break
                     }
@@ -567,9 +549,10 @@ public final class ImportBackupViewModel {
         }
     }
 
-    private func upload(_ c: any ScreensClient, fqdn: String, dataURL: URL, opened: ServerBackupFormat.Opened) async throws {
+    private func upload(_ c: any ScreensClient, fqdn: String, url: URL, layout: ServerBackupBundle.Layout,
+                        opened: ServerBackupFormat.Opened) async throws {
         let size = opened.body.data.bytes
-        guard let fh = try? FileHandle(forReadingFrom: dataURL) else { throw ImportError.unreadable }
+        guard let fh = try? FileHandle(forReadingFrom: url) else { throw ImportError.unreadable }
         defer { try? fh.close() }
         var offset = try await c.serverRestoreStart(ServerRestoreStartRequest(archiveId: opened.file.archiveId, bytes: size)).received
         var retries = 0
@@ -578,9 +561,7 @@ public final class ImportBackupViewModel {
             try Task.checkCancellation()
             let chunk: Data
             do {
-                try fh.seek(toOffset: UInt64(offset))
-                guard let d = try fh.read(upToCount: ServerArchive.uploadChunkBytes), !d.isEmpty else { throw ImportError.unreadable }
-                chunk = d
+                chunk = try ServerBackupBundle.readData(fh, layout: layout, offset: offset, count: ServerArchive.uploadChunkBytes)
             } catch {
                 throw ImportError.unreadable
             }
@@ -609,12 +590,23 @@ public final class ImportBackupViewModel {
         }
     }
 
+    /// The result: "Restored N apps" (the restore tries every app, then ends).
+    public static func restoredLine(_ apps: [ServerRestoreApp]) -> String {
+        let n = apps.filter { $0.state == "done" }.count
+        return "Restored \(n) app\(n == 1 ? "" : "s")"
+    }
+
+    /// One line per app that couldn't be restored, with the server's reason.
+    public static func failedLines(_ apps: [ServerRestoreApp]) -> [String] {
+        apps.filter { $0.state == "failed" }.map { "Couldn't restore: \($0.name): \(($0.reason ?? "unknown reason"))" }
+    }
+
     private enum ImportError: Error, LocalizedError {
         case unreadable, vanished, otherBackup
         case failed(String)
         var errorDescription: String? {
             switch self {
-            case .unreadable: return "The data file can't be read any more (was its drive removed?)."
+            case .unreadable: return "The backup file can't be read any more (was its drive removed?)."
             case .vanished: return "The restore disappeared from the server."
             case .otherBackup: return "That server is waiting for a different backup."
             case .failed(let why): return "The restore failed: \(why)."

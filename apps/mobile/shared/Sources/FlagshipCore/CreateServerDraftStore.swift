@@ -1,9 +1,9 @@
 import Foundation
 
-/// Local, draft-only metadata the user can fill in before delivering an
-/// InstallBlob. Deliberately NOT signed into the InstallBlob (the audit
-/// confirmed `backupPolicy` does not appear in the canonical bytes), so it
-/// lives only on this device and only as user intent.
+/// What the user picked on the create form before delivering an InstallBlob.
+/// Not part of the InstallBlob's signed bytes: the backup policy is signed
+/// on its own (`flagship/backup-policy/v1`) and rides beside the pairing
+/// order (`ServerBackupFormat.attachBackupPolicy`).
 ///
 /// Mirrors the webapp's draft schema in
 /// `apps/web/public/webapp/lib/buildDraft.js`:
@@ -25,6 +25,7 @@ public struct CreateServerDraftStore {
 
     private let defaults: UserDefaults
     private static let backupPolicyKey = "flagship.createServerDraft.backupPolicy"
+    private static let phoneReserveKey = "flagship.createServerDraft.phoneReserveBytes"
 
     public init(defaults: UserDefaults = .standard) { self.defaults = defaults }
 
@@ -40,10 +41,24 @@ public struct CreateServerDraftStore {
         defaults.set(policy.rawValue, forKey: Self.backupPolicyKey)
     }
 
+    /// The space the phone keeps for a phone-side server's backup, or nil
+    /// (the picker then offers its default).
+    public func phoneReserveBytes() -> Int64? {
+        let v = defaults.object(forKey: Self.phoneReserveKey) as? NSNumber
+        return v.map { $0.int64Value }.flatMap { $0 > 0 ? $0 : nil }
+    }
+
+    public func setPhoneReserveBytes(_ bytes: Int64?) {
+        if let bytes, bytes > 0 { defaults.set(NSNumber(value: bytes), forKey: Self.phoneReserveKey) } else {
+            defaults.removeObject(forKey: Self.phoneReserveKey)
+        }
+    }
+
     /// Wipe the draft back to defaults. Called after a successful delivery so
     /// the next "Add a server" doesn't ghost-restore yesterday's inputs onto a
     /// fresh build.
     public func reset() {
         defaults.removeObject(forKey: Self.backupPolicyKey)
+        defaults.removeObject(forKey: Self.phoneReserveKey)
     }
 }

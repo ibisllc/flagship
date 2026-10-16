@@ -251,7 +251,7 @@ public struct ServerDetailScreen: View {
                     LockPowerCard(serverDomain: d.serverFqdn)
                     DeadManCard(serverDomain: d.serverFqdn, serverName: serverName ?? d.serverFqdn)
                     JournalCard(serverDomain: d.serverFqdn)
-                    BackupMigrateCard(serverDomain: d.serverFqdn)
+                    ServerBackupsSection(serverDomain: d.serverFqdn)
                     UpdateServerCard(serverDomain: d.serverFqdn, currentCommit: d.currentCommit, lastUpdate: d.lastUpdate, onRefreshDetail: onRefreshDetail)
                 }
                 // The health report comes from the directory, not the box, so
@@ -873,29 +873,6 @@ struct TransferButton: View {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Done") { showSheet = false }
                     }
-                }
-            }
-        }
-    }
-}
-
-/// The server page's Backup / Migrate card: just the two action buttons.
-struct BackupMigrateCard: View {
-    @Environment(\.colorScheme) private var scheme
-
-    let serverDomain: String
-
-    var body: some View {
-        let c = FSColors.scheme(scheme)
-        VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("BACKUP / MIGRATE")
-                .font(.system(size: 12, weight: .semibold))
-                .tracking(1)
-                .foregroundColor(c.textMuted)
-            FSCard {
-                VStack(alignment: .leading, spacing: FS.space.s2) {
-                    ServerBackupButton(serverDomain: serverDomain)
-                    MigrateServerButton(serverDomain: serverDomain)
                 }
             }
         }

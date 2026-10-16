@@ -2,18 +2,21 @@ import Foundation
 import CryptoKit
 
 /// "Backup/clone server" (docs/server-backup-and-clone.md): the account's key
-/// for a backup (the KEK of its account slot), the names of a backup's two
-/// files, and the wording around them. The format is `ServerBackupFormat`.
+/// for a backup (the KEK of its account slot), the backup's file name, and
+/// the wording around them. The format is `ServerBackupFormat`.
 /// Must pass packages/protocol/test-vectors/server-archive/vectors.json.
 public enum ServerArchive {
     public static let uploadChunkBytes = 4 * 1024 * 1024
 
     public static let excludesNote =
         "Holds your apps' source, data and settings, never system images: the new server rebuilds each app, so any Flagship server can restore it. Not included: the server's keys and certificate, peer backups, and the Git host."
+    /// Why Back up now always asks for a passcode (owner, 2026-10-16).
+    public static let passcodeWhy =
+        "You'll need this passcode to import the backup into an account that isn't yours. Your own account opens it without the passcode."
     public static let passcodeNote =
-        "Anyone with both files and this passcode can restore the backup, on any account, so keep it somewhere safe and apart from the files. It can't be reset. Your own devices open your backups without it."
+        "Anyone with the file and this passcode can restore the backup, on any account, so keep it somewhere safe and apart from the file. It can't be reset."
     public static let importIntro =
-        "Pick the backup's two files (the .flagship-backup and its .flagship-data) from wherever you keep them. "
+        "Pick the backup's .flagship file from wherever you keep it. "
         + "You choose a name; everything else comes from the backup. Then set up the new server as usual, "
         + "and this screen sends it the backup as soon as it comes online."
 
