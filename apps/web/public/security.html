@@ -173,9 +173,9 @@
         <p>What that means in practice, until the programme is funded:</p>
         <ul class="bullets">
           <li><strong>We still triage and fix on the published SLA.</strong>
-            Funding has no bearing on how fast a report gets dealt with. Both
-            reports we have received so far were fixed and deployed the same
-            day.</li>
+            Funding has no bearing on how fast a report gets dealt with. Every
+            report listed in the hall of fame below was fixed and deployed
+            within the SLA.</li>
           <li><strong>Every qualifying report is recorded as an outstanding
             obligation</strong>, with the severity we assess it at, to be
             settled against the bands below at commercial launch.</li>
@@ -359,6 +359,40 @@
           deployed service, since nothing loaded it, but every deploy now
           rebuilds from an empty directory and refuses to ship compiled code
           that has no source.
+        </p>
+
+        <h4>The webapp and the browser remote could be framed by another site</h4>
+        <p class="hof-meta">
+          Low &middot; reported and fixed October 2026 &middot; fix
+          <a href="https://github.com/ibisllc/flagship/commit/d0658fb6">d0658fb6</a>
+          &middot; credit pending the reporter&rsquo;s preference
+        </p>
+        <p>
+          The webapp, the browser remote and this site sent nothing telling a
+          browser not to show them inside another site&rsquo;s frame. A hostile
+          page could load them invisibly and lay its own buttons on top, so a
+          click meant for the hostile page landed on ours (clickjacking).
+        </p>
+        <p>
+          The reach was limited. A framed copy starts signed out: browsers give
+          a frame inside another site its own storage, so it never sees the keys
+          of the user&rsquo;s real session, and passkey and Face ID prompts
+          appear above any page, where an overlay cannot reach them. The case
+          that mattered was the browser remote. Someone who scanned its code and
+          approved it with their phone while it sat inside a hostile page would
+          leave an approved session in that frame, where buttons laid over it
+          could steer their clicks.
+        </p>
+        <p>
+          Every response from <code>flagshipserver.com</code> and its
+          subdomains now refuses framing (<code>frame-ancestors 'none'</code>
+          and <code>X-Frame-Options: DENY</code>), and the webapp also refuses
+          to start inside a frame if it is ever served without those headers.
+          The same pass gave the webapp and the remote a strict Content Security
+          Policy: scripts only from the app itself, no inline script, and
+          connections only to Flagship and the account&rsquo;s own servers. The
+          pages a Flagship server serves itself (invites, sign-in, request
+          access) refuse framing too, from each server&rsquo;s next update.
         </p>
       </section>
 

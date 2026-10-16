@@ -640,6 +640,17 @@ allowances (1M / 5M / 20M a month) are placeholders.
   recovery lookup of one name in 15 min is refused with the sentence). The
   gym Worker gets it at the next `scripts/gym-refresh.sh`; the apps' side
   needs iOS/Android store builds.
+- **Clickjacking report (2026-10-15, Low):** every `.com` Worker response
+  now refuses framing (`frame-ancestors 'none'` + `X-Frame-Options: DENY`)
+  and carries nosniff, HSTS and a referrer policy (`withSecurityHeaders` in
+  `apps/com/src/route.ts`); `webapp.`/`remote.` get a strict shell CSP
+  (`shellCsp`: script-src 'self', connect-src the control apex and the
+  services apex only), so no inline script may return to the shell (tested);
+  the webapp refuses to boot in a frame (`lib/frameGuard.js`, shell v114);
+  the box's own pages (invite, knock, request access, landing, 404) send the
+  same framing headers (`pageHeaders.ts`, `d0658fb6`), which needs an endorsed box
+  release. Reporter credit pending; listed in the security page's hall of
+  fame.
 - **App "Back up now" (2026-10-15):** the box never mounted `/api/backups/<id>`,
   so every client's archive fetch 404'd; now mounted (owner sessions only).
   The webapp fetches it with the session and saves the Blob, like iOS/Android.
