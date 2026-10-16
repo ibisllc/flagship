@@ -430,14 +430,122 @@ beside the access state in `<dataDir>/data/flagship-access/`, so Migrate
 carries both; archive and copy carry the state; uninstall drops the app's
 state and journal.
 
-**Per-server lists later.** `scope(serviceRef)` is `"account"` for every app on
-`main`. A future per-server list (a Pro option, built on `feat/marketplace`)
-returns `"server"`: that app's changes stay on the box and its sync endpoints
-refuse. When such an account goes back to one list (it stops paying), its
-boxes adopt the leader's list.
+**Per-server lists.** `scope(serviceRef)` is `"account"` for every app on
+`main`. The Pro option that returns `"server"` is built on `feat/marketplace`
+only: "Separate lists per server (Pro)", below.
 
 Built in `packages/server-daemon/src/accessJournal.ts` and `accessSync.ts`;
 tests `packages/server-daemon/tests/accessSync.test.ts`.
+
+## Separate lists per server (Pro) (owner decision, 2026-10-15; `feat/marketplace` only)
+
+A Pro account may give an app a separate access list on each server that runs
+it. Nothing of this is on `main` (no switch, no Pro check, no scope other than
+`"account"`); the code lives on `feat/marketplace`.
+
+**The switch.** Per app, an admin device signs
+
+    flagship/app-list-scope/v1|<serviceRef>|<account|server>|<issuedAt>
+
+with the sensitive-order key (the admin root, like the mode and rank orders)
+and posts it to one of the app's servers
+(`POST /api/screens/services/:id/list-scope {order, signature}`, at most 10
+minutes old, newer than the last one: latest order wins). That box hands it to
+the app's other servers; every box verifies it under its own admin key.
+Vectors: `packages/protocol/test-vectors/app-list-scope/` (TypeScript, webapp,
+Swift and Kotlin pass them).
+
+- **On (`server`):** each box keeps its current copy as its own list and stops
+  copying the app's changes out or taking them in. Joins, removals, withdraws
+  posted to a box, mode and rank orders all stay on the box they were made on.
+  Invite revocations polled from `.com` (`revoked-since`) still apply on every
+  box: a link withdrawn on `.com` stops working everywhere. That is the safe
+  default (a revocation should never be confined by a list split) and needs no
+  per-server bookkeeping on `.com`.
+- **Off (`account`):** every box takes the app's lead server's list. Each box
+  but the leader drops its list (mode kept until the leader's journal says
+  otherwise, so a members-only app never opens up in between) and its
+  journal, then catches up from the leader, letting only the account's own
+  devices in until it has (as after a restart). Changes the leader holds only
+  as box-local or v1 state don't carry, as with one list.
+
+**Why the box can trust "Pro".** `.com` serves
+`GET /api/users/<u>/plan-attestation` (read token, like `/pods`):
+
+    flagship/plan-attestation/v1|<username>|<tier>|<paidUntil>|<issuedAt>|<expiresAt>
+
+signed with the hot CA key, 26-hour TTL. The box verifies it through the same
+chain as the directory attestation and the relay blessing: the baked
+maintainer pin, the forward ca-track chain in its own `.maintainers/`, the
+live CaEndorsement, then the signature and TTL. This is the cleanest
+verifiable mechanism the code already had. The post-boot entitlement deposit
+was the other candidate, but it is signed by the owner's own keys, and an
+owner can't attest their own payment. A plain JSON tier from `.com` could be
+forged by anything on the path. Residual, stated plainly: `.com` holds the CA
+key, so `.com` itself could misstate a plan. Calling an account Pro costs
+nothing. Calling it free merges lists, which is the same thing that happens
+when someone stops paying. The box re-reads the attestation every 3 hours, at
+most once a minute when an owner screen asks, and at most every 5 minutes when
+another server's epoch says the plan changed. It keeps the newest one on disk.
+
+- The box honours `server` only while its attestation says Pro (`hobby` or
+  `maker`) and the paid period hasn't ended. An owner's own post is refused
+  without it (`402 {code: "pro-required"}`). An order handed over by another
+  server is kept as **pending** (still one list, no exchange with servers
+  that honour it) until the box sees Pro.
+- **Downgrade.** When an in-date attestation says the account is free, every
+  app with separate lists goes back to one list, exactly like turning the
+  switch off: the lead server's list becomes the shared list and the other
+  servers' copies are dropped. The order is marked ended. Pro coming back
+  doesn't bring separate lists back; a new order does. The app's lead server
+  records an activity row (`access.lists.merged`) and sends a content-free
+  push (category `access-lists`: "Pro ended, so your apps use one access list
+  on all your servers again."). Neither names an app or a person.
+- **Unknown plan.** No attestation, an expired one, an ended paid period with
+  no newer word, `.com` unreachable, or a lapsed CA lease: nothing changes. A
+  pending order isn't honoured, and an honoured one isn't ended. An outage
+  never merges anyone's lists.
+
+**Epochs.** Each app's epoch is `<issuedAt of its scope order>:<account|server|pending|ended>`
+(`0:account` with no order). Every access-sync push and pull carries the
+sender's epoch and scope order. A server that missed a switch adopts the newer
+order from whichever server it talks to next, and list entries cross only
+between servers in the same epoch, so a separate copy never leaks into another
+server's list across a switch. A pull always answers (it is also how a box
+learns who runs an app), but without entries across epochs. While an app
+switches, its new epoch shows only once its list is ready. A box with separate
+lists still exchanges the scope order with the leader on the 2-minute
+reconcile, so a switch-off reaches a box that was down.
+
+**Owner surface.**
+
+- `GET /api/screens/services/:id/list-scope` →
+  `{serviceRef, scope, pending, plan: pro|free|unknown, self, leader, servers}`
+  (`servers` = the app's servers in the owner's server order).
+- `GET /api/screens/access-lists/summary` → `{plan, separateApps, leaders}`
+  across the account. The box asks its sibling servers box to box
+  (`POST /api/access-sync/scopes`, same CGK MAC), so `.com` learns nothing
+  about apps.
+
+**Clients** (webapp, iOS, Android). Access control on admin devices has
+**Separate list on each server**. Without Pro it is off and locked with
+"Comes with Pro." The webapp links to `/pro`; the store apps show no purchase
+link (App Store and Play anti-steering rules, the conservative choice). On
+turns it on after one confirmation; Off confirms that every server will use
+the leader's list. While it is on, a server picker lists the app's servers and
+the whole screen (members, account members, mode, invites and their links,
+every order) works on the picked server with that server's session. `.com`'s
+invite list is narrowed to the invites that server knows plus unused links,
+since `.com` doesn't know which server a link points at. The plan screen
+warns before Pro ends: "N apps have a separate access list on each server.
+When Pro ends they'll all use <lead server>'s list." (each its own lead
+server's when they differ). The apps have no cancel button, so the warning
+always shows while Pro is on and N > 0.
+
+Built on `feat/marketplace` in `packages/protocol/src/appListScope.ts`,
+`planAttestation.ts`, `packages/control-plane/src/planAttestation.ts`,
+`packages/server-daemon/src/accessScope.ts`, `accessScopeHttp.ts` and
+`accessSync.ts`; tests `packages/server-daemon/tests/accessScope.test.ts`.
 
 ## Per-app identity (owner rule, 2026-10-13)
 

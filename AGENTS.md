@@ -940,7 +940,14 @@ v105 over `main`'s v101):
 when `main` passes it, take the next unused number and move the tests' pins.
 Not compiled since the rebase: the iOS and Android code on any branch.
 
-- **`feat/marketplace`** (+ Pro payments, vouchers). Its migrations 0090–0091
+- **`feat/marketplace`** (+ Pro payments, vouchers). Also a Pro option:
+  **a separate access list on each server** per app (2026-10-15,
+  `docs/service-access-gating.md` "Separate lists per server (Pro)": an
+  admin-root-signed `flagship/app-list-scope/v1`, honoured by a box only while
+  it holds a CA-signed `flagship/plan-attestation/v1` from `.com` saying Pro;
+  a verified lapse merges every app into its lead server's list with a
+  content-free `access-lists` push; webapp, iOS and Android at parity). Not
+  run on a real box. Its migrations 0090–0091
   live on the branch (`main` skips 0088–0094 for branches). The allowance and
   purchases reads now take the account read token like `/pods`. Open: Android's
   marketplace page has its own server picker but installs through the current
