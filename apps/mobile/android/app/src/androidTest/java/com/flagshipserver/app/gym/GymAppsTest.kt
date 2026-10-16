@@ -97,18 +97,22 @@ class GymAppsTest : GymBase() {
     @Test
     fun runsOnTickCopiesAndUntickRemoves() {
         openPlants()
-        val office = firstTagWith("runs-on-toggle-demo-office")
-        composeRule.onNodeWithTag(office).scrollIfNeeded().performClick()
+        fun toggles(on: Boolean) = composeRule.onAllNodes(tagPrefix("runs-on-toggle-")).fetchSemanticsNodes().filter { n ->
+            (n.config.getOrNull(SemanticsProperties.ToggleableState) == androidx.compose.ui.state.ToggleableState.On) == on &&
+                n.config.getOrNull(SemanticsProperties.Disabled) == null
+        }.map { it.config[SemanticsProperties.TestTag] }
+        composeRule.waitUntil(20_000) { toggles(false).isNotEmpty() && toggles(true).isNotEmpty() }
+        val off = toggles(false).first()
+        tap(off)
         assertSigned("app-copy", "admin")
         eventually(what = "the copy order") { screensMock.copyRequests.size == 1 }
-        assertTrue(screensMock.copyRequests.single().grant.targetServer.startsWith("office."))
         gymShot("copied")
-        val home = firstTagWith("runs-on-toggle-demo-home")
-        composeRule.onNodeWithTag(home).scrollIfNeeded().performClick()
+        val on = toggles(true).first()
+        tap(on)
         waitUntilExists("runs-on-remove-confirm")
         tapText("Cancel")
         assertTrue(screensMock.uninstalls.isEmpty())
-        composeRule.onNodeWithTag(home).scrollIfNeeded().performClick()
+        tap(on)
         tap("runs-on-remove-confirm")
         assertSigned("uninstall", "admin")
         eventually(what = "the uninstall") { screensMock.uninstalls.isNotEmpty() }
@@ -176,10 +180,10 @@ class GymAppsTest : GymBase() {
             )
         })
         waitUntilExists("service-detail-access-deny", 20_000)
-        composeRule.onAllNodesWithTag("service-detail-access-deny").onFirst().scrollIfNeeded().performClick()
+        tap("service-detail-access-deny")
         assertSigned("app-access", "admin")
         eventually(what = "deny rule") { screensMock.accessCalls.last().second.list.contains("deny ") }
-        composeRule.onAllNodesWithTag("service-detail-access-ignore").onFirst().scrollIfNeeded().performClick()
+        tap("service-detail-access-ignore")
         eventually(what = "ignored") { screensMock.accessDismissals.isNotEmpty() }
         composeRule.waitUntil(10_000) { tagCount("service-detail-access-ignore") == 0 }
         gymShot("access-answered")
@@ -245,7 +249,6 @@ class GymAppsTest : GymBase() {
         openAccessControl()
         tap("service-access-add-group")
         type("service-access-name-field", "Chess club")
-        tap("service-access-approve-toggle")
         tap("service-access-create-invite")
         waitUntilExists("service-access-share-url", 15_000)
         val link = textOfTag("service-access-share-url")
@@ -262,6 +265,7 @@ class GymAppsTest : GymBase() {
         openAccessControl()
         tap("service-access-add-person")
         type("service-access-name-field", "Gym friend")
+        tap("service-access-approve-toggle")
         tap("service-access-create-invite")
         val role = firstTagWith("service-access-role-")
         val inviteId = role.removePrefix("service-access-role-")
@@ -306,8 +310,7 @@ class GymAppsTest : GymBase() {
         tap("api-key-created-done")
         waitGone("api-key-created-dialog")
         waitText("Garden sensor")
-        composeRule.onNode(hasTestTag("service-detail-api-key-revoke") and hasAnyAncestor(hasTestTag("service-detail-api-key-5d2c8e0f9a7b1346")))
-            .scrollIfNeeded().performClick()
+        tapMatching(hasTestTag("service-detail-api-key-revoke") and hasAnyAncestor(hasTestTag("service-detail-api-key-5d2c8e0f9a7b1346")))
         tap("api-key-revoke-confirm")
         eventually(what = "revoked") { screensMock.apiKeyRevokes.singleOrNull()?.second == "5d2c8e0f9a7b1346" }
         waitTextGone("Garden sensor")

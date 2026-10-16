@@ -33,6 +33,7 @@ import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.junit4.ComposeTestRule
@@ -205,19 +206,30 @@ abstract class GymBase {
             if (e.message?.contains("Scroll", ignoreCase = true) == true) this else throw e
         }
 
-    /** Scroll to a tagged node and tap it. */
-    protected fun tap(tag: String, timeoutMs: Long = 10_000) {
-        waitUntilExists(tag, timeoutMs)
-        composeRule.onNodeWithTag(tag).scrollIfNeeded().performClick()
+    /** Wait (bounded) for a node [m] matches to exist and be enabled, scrolling
+     *  a lazy list to it when it isn't composed yet, then tap the first one. */
+    protected fun tapMatching(m: androidx.compose.ui.test.SemanticsMatcher, timeoutMs: Long = 10_000) {
+        val enabled = m and !androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.Disabled)
+        composeRule.waitUntil(timeoutMs) {
+            if (composeRule.onAllNodes(enabled).fetchSemanticsNodes().isNotEmpty()) return@waitUntil true
+            // A lazy list composes only what's on screen: ask each to scroll to it.
+            composeRule.onAllNodes(androidx.compose.ui.test.hasScrollToNodeAction()).fetchSemanticsNodes().indices.forEach { i ->
+                runCatching {
+                    composeRule.onAllNodes(androidx.compose.ui.test.hasScrollToNodeAction())[i].performScrollToNode(m)
+                }
+            }
+            false
+        }
+        composeRule.onAllNodes(enabled).onFirst().scrollIfNeeded().performClick()
         composeRule.waitForIdle()
     }
 
+    /** Scroll to a tagged node and tap it (once it's enabled). */
+    protected fun tap(tag: String, timeoutMs: Long = 10_000) = tapMatching(hasTestTag(tag), timeoutMs)
+
     /** Tap a node whose content description is the gym handle. */
-    protected fun tapDesc(desc: String, timeoutMs: Long = 10_000) {
-        waitUntilExistsDesc(desc, timeoutMs)
-        composeRule.onNode(androidx.compose.ui.test.hasContentDescription(desc)).scrollIfNeeded().performClick()
-        composeRule.waitForIdle()
-    }
+    protected fun tapDesc(desc: String, timeoutMs: Long = 10_000) =
+        tapMatching(androidx.compose.ui.test.hasContentDescription(desc), timeoutMs)
 
     /** Tap the first node showing [text] (a button or row without a handle). */
     protected fun tapText(text: String, timeoutMs: Long = 10_000, substring: Boolean = false) {
@@ -288,8 +300,9 @@ abstract class GymBase {
 
     private val outsideMonitor = object : Instrumentation.ActivityMonitor() {
         override fun onStartActivity(intent: Intent): Instrumentation.ActivityResult? {
-            val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
-            if (intent.component?.packageName == ctx.packageName) return null
+            // The app's own screens and the test runner's own activities are
+            // explicit; pickers, share sheets and browsers aren't.
+            if (intent.component != null) return null
             startedIntents += intent
             val result = Intent()
             when (intent.action) {
