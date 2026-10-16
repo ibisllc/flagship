@@ -107,6 +107,19 @@ export interface ServerDetailResponse {
    */
   lastUpdate?: UpdateOutcomeRecord | null;
   /**
+   * Owner debug access (docs/recipe-delivery-and-remote-install.md): whether
+   * an SSH key is let in as `debug`, until when, which key, and who signed
+   * it (`admin` = the admin root or an admin device; `owner-key` = the IRK on
+   * a box with no admin root pinned). Older daemons omit the field.
+   */
+  debugAccess?: {
+    on: boolean;
+    expiresAt: number | null;
+    keyFingerprint: string | null;
+    grantedBy: "admin" | "owner-key" | null;
+    lastEnded?: { at: number; why: "expired" | "revoked" };
+  };
+  /**
    * The sandbox every app runs in (gVisor, docs/app-runtimes.md §5.1):
    * `unavailable` means no app can start here, and says why. Older daemons
    * omit the field.

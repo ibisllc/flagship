@@ -83,6 +83,8 @@ export interface EnforcementContext {
 }
 
 const ZERO_SIG = "00".repeat(64);
+/** A well-formed key for the debug grant (never installed anywhere by the gym). */
+const GYM_DEBUG_SSH_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINBKsjJ0K7SrOhNovUYV5ObQIkq3GgFrr4UgozLJd4c3";
 
 /** The rejection reason of a master-admin decision (union-narrowing helper). */
 function reasonOf(d: MasterAdminDecision): string {
@@ -337,8 +339,8 @@ export async function checkRevocationReachesBox(ctx: EnforcementContext): Promis
 // ── control 4 — debug-access requires the admin authority ─────────────────────
 
 /**
- * A verified debug grant opens a passworded `debug` sudoer + password-auth SSH — a
- * LAN/console root shell. On a box with a pinned admin master root it must require
+ * A verified debug grant lets an SSH key in as the `debug` sudoer until it ends — a
+ * LAN root shell. On a box with a pinned admin master root it must require
  * the ADMIN ROOT (a membership-IRK-only grant is rejected), exactly like
  * wipe/transfer/decommission. The gym can't pin a root on a legacy demo box AND
  * can't SSH the box's LAN from CI, so the authority boundary is proven
@@ -359,12 +361,17 @@ export async function checkDebugAccessAuthority(ctx: EnforcementContext): Promis
         reason:
           "requires a box reburned with a pinned admin master root AND LAN SSH to the box (neither is provisionable on a legacy gym demo box from CI)",
         todo:
-          "on a pinned-root box: deliver a membership-IRK-signed debug grant → assert NO `debug` user / SSH refused over LAN; deliver an admin-root-signed grant → assert `debug:flagship` LAN SSH works",
+          "on a pinned-root box: deliver a membership-IRK-signed debug grant → assert NO `debug` user / SSH refused over LAN; deliver an admin-root-signed grant → assert key-only `debug` LAN SSH works until it expires",
         deterministic: true,
       },
     },
     async () => {
-      const grant: DebugAccessGrant = { serverDomain: target.fqdn, sshAuthorizedKey: "", issuedAt: now() };
+      const grant: DebugAccessGrant = {
+        serverDomain: target.fqdn,
+        sshPublicKey: GYM_DEBUG_SSH_KEY,
+        issuedAt: now(),
+        expiresAt: now() + 60 * 60 * 1000,
+      };
       const ownerSig = signDebugAccessGrant(grant, keys.ownerIrk);
       const forgedSig = hexToBytes(ZERO_SIG);
       const membershipUnderRoot = requireMasterAdmin(ownerHex, target.user, adminRootHex, [], now());

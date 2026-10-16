@@ -32,6 +32,7 @@ import { isAppApiKeysPath, type AppApiKeysHttp } from "../appApiKeys.js";
 import { ACCESS_ALERTS_PATH, buildAccessAlertSettingHttp, type AccessAlertSetting } from "../egress/accessAlertSetting.js";
 import { SERVER_ORDER_PATH, buildServerOrderHttp } from "../serverOrderHttp.js";
 import type { ServerOrderHolder } from "../serverOrderHolder.js";
+import { DEBUG_PATH, DEBUG_REVOKE_PATH, buildDebugAccessHttp, type DebugAccessController } from "../debugAccessGate.js";
 import {
   summarizeAttachment,
   prepareAttachments,
@@ -187,6 +188,11 @@ export interface ScreensHttpDeps {
    * one it holds. Absent ⇒ the path 404s and the order arrives via `.com`.
    */
   serverOrder?: Pick<ServerOrderHolder, "current" | "offer"> | null;
+  /**
+   * Owner debug access (`/api/screens/debug-access`, debugAccessGate.ts): an
+   * admin-signed SSH key let in until it ends. Its state rides server-detail.
+   */
+  debugAccess?: Pick<DebugAccessController, "view" | "grant" | "revoke"> | null;
   /**
    * The owner's Database section (`/services/:id/db…`, dataLayer/ownerDb.ts):
    * an app's live data, owner sessions only (companions get 403 on every
@@ -553,6 +559,14 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
     if (deps.serverOrder && path === SERVER_ORDER_PATH) {
       const r = await buildServerOrderHttp({
         holder: deps.serverOrder,
+        denyCompanion: (r) => denyCompanionWrite(deps.pairedSessions ?? null, r),
+      })(path, method, req);
+      if (r) return r;
+    }
+
+    if (deps.debugAccess && (path === DEBUG_PATH || path === DEBUG_REVOKE_PATH)) {
+      const r = await buildDebugAccessHttp({
+        controller: deps.debugAccess,
         denyCompanion: (r) => denyCompanionWrite(deps.pairedSessions ?? null, r),
       })(path, method, req);
       if (r) return r;
@@ -1488,6 +1502,7 @@ function serverDetail(deps: ScreensHttpDeps, now: () => number): ServerDetailRes
     daemonVersion: deps.daemonVersion,
     currentCommit: deps.currentCommit?.() ?? null,
     lastUpdate: deps.lastUpdate?.() ?? null,
+    ...(deps.debugAccess ? { debugAccess: deps.debugAccess.view() } : {}),
     appSandbox: appSandboxStatus(),
     startedAt: deps.startedAt,
     uptimeMs: now() - deps.startedAt,

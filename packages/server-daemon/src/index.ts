@@ -214,8 +214,9 @@ import {
   rehomeAdminRootOverride,
 } from "./transferRehomeConsumer.js";
 import {
-  runDebugAccessGate,
-  fileDebugMarkerStore,
+  DebugAccessController,
+  buildDebugSystem,
+  debugGrantFromInstallBlob,
   realDebugCommandRunner,
 } from "./debugAccessGate.js";
 import {
@@ -3043,7 +3044,30 @@ async function wireRuntimeSurfaces(deps: {
     return { shares, gate: shares.gate(pairedSessions) };
   })();
 
+  // Owner debug access (docs/recipe-delivery-and-remote-install.md "Debug
+  // access"): an admin-signed SSH key let in as `debug` until it ends. Takes
+  // the recipe's grant once at first boot, then grants from the server page.
+  const debugAccess = cfg
+    ? new DebugAccessController({
+        serverDomain: env.serverFqdn,
+        authority: () => ({
+          ownerIrkPub: cfg.irkPublicKey,
+          ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+          username: cfg.userId,
+          activeGrants: deps.accessPrincipals.book?.adminGrants() ?? [],
+        }),
+        statePath: join(dataDir, "debug-access.json"),
+        legacyMarkerPath: join(dataDir, "debug-access-done.json"),
+        system: buildDebugSystem({ runner: realDebugCommandRunner, log: (m) => console.log(m) }),
+        installGrant: () => debugGrantFromInstallBlob(),
+        activity: (kind, detail) => deps.activityLog.note(kind, detail),
+        log: (m) => console.log(m),
+      })
+    : null;
+  void debugAccess?.start();
+
   const screensHandle = buildScreensHttp({
+    debugAccess,
     gate: sharesBundle?.gate ?? pairedSessions,
     shares: sharesBundle?.shares ?? null,
     // An unreadable access state leaves every app members-only (the store's own default).
@@ -3556,30 +3580,6 @@ async function wireOwnerHandlers(deps: {
     process.once("SIGTERM", () => selfDeletePoller.stop());
     process.once("SIGINT", () => selfDeletePoller.stop());
     console.log("[daemon] self-delete content-wipe poller armed");
-  }
-  // Owner-authorized debug access (docs/recipe-delivery-and-remote-install.md):
-  // a one-shot gate that enables the `debug` console user + installs its SSH key
-  // ONLY if the recipe carries an owner-IRK-signed `debugGrant` that verifies
-  // under the config-pinned owner IRK AND names THIS box. No valid grant ⇒ no
-  // debug user (the builder no longer bakes one). Idempotent via a local marker;
-  // never throws. Fire-and-forget — never blocks the owner-API bring-up.
-  {
-    const dataDir = process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship";
-    void runDebugAccessGate({
-      serverDomain: env.serverFqdn,
-      ownerIrkPub: cfg.irkPublicKey,
-      // Slice D — hold the root-shell grant to the admin-root boundary when one
-      // is pinned (v1-sec GAP 2); no pin ⇒ legacy owner-IRK path, unchanged.
-      ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
-      username: cfg.userId,
-      markerStore: fileDebugMarkerStore(`${dataDir}/debug-access-done.json`),
-      runner: realDebugCommandRunner,
-      onLog: (m) => console.log(m),
-    })
-      .then((out) => {
-        if (out.enabled) console.log("[daemon] debug access ENABLED by owner grant");
-      })
-      .catch(() => {});
   }
   // Graceful-decommission (docs/server-replacement-graceful-decommission.md
   // §10 + §9): poll this box's OWN eviction order on the heartbeat cadence. When

@@ -231,8 +231,9 @@ describe("runPair transport glue", () => {
     // Phone (behind Face ID) signs the grant under the owner IRK and replies.
     const grant: DebugAccessGrant = {
       serverDomain: "home.harry.flagship.services",
-      sshAuthorizedKey: "",
+      sshPublicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINBKsjJ0K7SrOhNovUYV5ObQIkq3GgFrr4UgozLJd4c3",
       issuedAt: 1_700_000_000_000,
+      expiresAt: 1_700_000_000_000 + 24 * 3600 * 1000,
     };
     const sigHex = hex(signDebugAccessGrant(grant, ownerIrk));
     const carrier = JSON.stringify({ grant, signatureHex: sigHex });

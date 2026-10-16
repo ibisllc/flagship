@@ -15,13 +15,15 @@
  *
  * ADVANCED — debug access (`--debug`): mirrors the macOS builder's Advanced
  * "Debug mode" toggle. Enabling a box's debug console user / SSH is NOT a
- * builder checkbox — it requires an owner-IRK-signed grant the BOX verifies.
+ * builder checkbox — it requires an admin-signed grant the BOX verifies.
  * With `--debug`, after the recipe arrives the builder sends a `consent-request`
- * over the session; the phone shows a security warning + Face ID and replies
- * with a signed `flagship/debug-access/v1` grant; the builder embeds it as the
- * recipe's UNSIGNED `debugGrant` sibling (exactly like `swkHex`/`pairingOrder`)
- * so the box-side gate enables debug ONLY after verifying it against the
- * config-pinned owner IRK. Deny/timeout ⇒ no grant ⇒ a production image.
+ * over the session; a phone that answers it replies with a signed
+ * `flagship/debug-access/v2` grant (an SSH key and an end time); the builder
+ * embeds it as the recipe's UNSIGNED `debugGrant` sibling (exactly like
+ * `swkHex`/`pairingOrder`) so the box lets that key in ONLY after verifying it
+ * against its pinned admin root. Deny/timeout ⇒ no grant ⇒ a production image.
+ * Today's phones bake the grant into the recipe at mint time instead (their
+ * own Advanced "Debug-friendly server" toggle) and don't answer the request.
  */
 import WebSocket from "ws";
 import QRCode from "qrcode";
@@ -38,8 +40,8 @@ import {
   openDelivered,
   base64UrlEncode,
   base64UrlDecode,
+  parseDebugAccessGrant,
   verifyDebugAccessGrant,
-  type DebugAccessGrant,
   type Bytes,
 } from "@flagship/protocol";
 import { loadBlobFromString } from "./loadBlob.js";
@@ -273,16 +275,12 @@ export async function runPair(opts: PairOptions = {}): Promise<PairResult> {
         void finalize();
         return;
       }
-      // Best-effort local integrity check: the recipe's userPubKey IS the owner
-      // IRK, so we can confirm the grant verifies (the box re-verifies anyway).
-      const g = carrierObj.grant as Partial<DebugAccessGrant> | undefined;
+      // Best-effort local integrity check against the recipe's admin root (or
+      // its IRK when none is pinned); the box re-verifies anyway.
+      const g = parseDebugAccessGrant(carrierObj.grant);
       const sigHex = carrierObj.signatureHex;
       const sig = typeof sigHex === "string" ? base16(sigHex) : null;
-      if (
-        g && typeof g.serverDomain === "string" && typeof g.sshAuthorizedKey === "string" &&
-        typeof g.issuedAt === "number" && sig && ownerIrkPub &&
-        verifyDebugAccessGrant(g as DebugAccessGrant, sig, ownerIrkPub)
-      ) {
+      if (g && sig && ownerIrkPub && verifyDebugAccessGrant(g, sig, ownerIrkPub)) {
         debugCarrier = carrierStr;
         log("  ✓ Debug grant verified under the owner key.");
       } else {
@@ -371,7 +369,8 @@ export async function runPair(opts: PairOptions = {}): Promise<PairResult> {
             const loaded = loadBlobFromString(text, { kind: "stdin" });
             recipeText = text;
             recipeDomain = loaded.blob.serverDomain;
-            ownerIrkPub = loaded.blob.authCode.userPubKey;
+            // The box takes debug grants under its pinned admin root (the IRK only without one).
+            ownerIrkPub = loaded.blob.authCode.adminRootPubKey ?? loaded.blob.authCode.userPubKey;
             emit({ event: "delivered", serverDomain: recipeDomain });
             if (wantDebug) {
               requestDebugConsent(); // keep the session open for the consent round-trip

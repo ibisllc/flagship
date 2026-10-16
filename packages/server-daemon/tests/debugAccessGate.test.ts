@@ -1,427 +1,425 @@
 /**
- * Box-side enforcement of the owner-authorized debug-access grant
- * (docs/recipe-delivery-and-remote-install.md).
- *
- * The recipe carries an UNSIGNED `debugGrant` install-blob sibling (a JSON
- * string of `{grant,signatureHex}`); the daemon enables the `debug` console user
- * + installs its SSH key ONLY if the owner-IRK signature verifies under the
- * config-pinned owner IRK AND the grant names THIS box. These tests cover:
- *   - the happy path: a verified grant → useradd + key install + marker;
- *   - absent grant (no sibling / no blob) → no-op (stays a production image);
- *   - a forged / wrong-IRK signature → no-op (NEVER enables);
- *   - a wrong serverDomain → no-op;
- *   - idempotency: a re-run with the marker present never re-applies.
+ * Owner debug access on the box (docs/recipe-delivery-and-remote-install.md
+ * "Debug access"): verify, open, renew, expire, revoke, survive restarts.
  */
-
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  DEBUG_ACCESS_HOUR_MS,
+  canonicalDebugAccessGrant,
+  deriveIRK,
   ed,
   signDebugAccessGrant,
+  signDebugAccessRevoke,
+  sshKeyFingerprint,
   type DebugAccessGrant,
   type Keypair,
 } from "@flagship/protocol";
 import {
-  runDebugAccessGate,
+  DebugAccessController,
+  authorizedKeyLine,
+  buildDebugAccessHttp,
+  buildDebugSystem,
+  debugGrantFromInstallBlob,
+  sshExpiryTime,
   type DebugCommandRunner,
-  type DebugMarkerStore,
+  type DebugSystem,
 } from "../src/debugAccessGate.js";
 
 const DOMAIN = "home.alice.flagship.services";
-const SSH_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleKeyBytes alice@phone";
+const T0 = 1_760_000_000_000;
 
-function makeKey(seed: number): Keypair {
-  const priv = new Uint8Array(32).fill(seed);
-  return { privateKey: priv, publicKey: ed.getPublicKey(priv) };
+function sshEd25519(seed: number): string {
+  const pub = ed.getPublicKey(new Uint8Array(32).fill(seed));
+  const type = new TextEncoder().encode("ssh-ed25519");
+  const blob = new Uint8Array(4 + type.length + 4 + 32);
+  const dv = new DataView(blob.buffer);
+  dv.setUint32(0, type.length);
+  blob.set(type, 4);
+  dv.setUint32(4 + type.length, 32);
+  blob.set(pub, 8 + type.length);
+  return `ssh-ed25519 ${Buffer.from(blob).toString("base64")}`;
 }
-function hex(b: Uint8Array): string {
-  let s = "";
-  for (const x of b) s += x.toString(16).padStart(2, "0");
+const KEY = sshEd25519(0x11);
+const KEY2 = sshEd25519(0x12);
+
+const admin: Keypair = (() => {
+  const priv = new Uint8Array(32).fill(0x5a);
+  return { privateKey: priv, publicKey: ed.getPublicKey(priv) };
+})();
+const irk = deriveIRK({ seed: new Uint8Array(32).fill(0x2a) });
+const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
+
+function signed(g: Partial<DebugAccessGrant> = {}, key: Keypair = admin) {
+  const grant: DebugAccessGrant = {
+    serverDomain: DOMAIN,
+    sshPublicKey: KEY,
+    issuedAt: T0,
+    expiresAt: T0 + 24 * DEBUG_ACCESS_HOUR_MS,
+    ...g,
+  };
+  return { grant, signatureHex: hex(signDebugAccessGrant(grant, key)) };
+}
+function revoked(issuedAt: number, key: Keypair = admin) {
+  const revoke = { serverDomain: DOMAIN, issuedAt };
+  return { revoke, signatureHex: hex(signDebugAccessRevoke(revoke, key)) };
+}
+
+function fakeSystem(): DebugSystem & { events: string[]; openKey: string | null } {
+  const s = {
+    events: [] as string[],
+    openKey: null as string | null,
+    async open(k: { sshPublicKey: string; expiresAt: number }) {
+      s.events.push(`open ${k.sshPublicKey === KEY ? "KEY" : "KEY2"} ${k.expiresAt}`);
+      s.openKey = k.sshPublicKey;
+    },
+    async close() {
+      s.events.push("close");
+      s.openKey = null;
+    },
+  };
   return s;
 }
 
-/** Records every command the gate would run, so we assert the effects. */
-function recordingRunner(): DebugCommandRunner & { calls: Array<[string, string[]]> } {
-  const calls: Array<[string, string[]]> = [];
-  return {
-    calls,
-    async run(cmd, args) {
-      calls.push([cmd, args]);
-    },
-  };
-}
-
-/** Records the config/banner files the gate writes, so tests never touch /etc. */
-function recordingWriter(): {
-  write: (p: string, c: string, m?: number) => Promise<void>;
-  files: Array<[string, string]>;
-} {
-  const files: Array<[string, string]> = [];
-  return {
-    files,
-    async write(p, c) {
-      files.push([p, c]);
-    },
-  };
-}
-
-function memMarker(): DebugMarkerStore & { marked: boolean } {
-  const state = { marked: false };
-  return {
-    get marked() {
-      return state.marked;
-    },
-    async has() {
-      return state.marked;
-    },
-    async mark() {
-      state.marked = true;
-    },
-  };
-}
-
 let dir: string;
-const savedEnv = process.env.FLAGSHIP_INSTALL_BLOB;
+let clock: number;
+let activity: Array<[string, string]>;
 
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), "flagship-debug-gate-"));
+  dir = await mkdtemp(join(tmpdir(), "debug-access-"));
+  clock = T0 + 60_000;
+  activity = [];
 });
 afterEach(async () => {
-  if (savedEnv === undefined) delete process.env.FLAGSHIP_INSTALL_BLOB;
-  else process.env.FLAGSHIP_INSTALL_BLOB = savedEnv;
   await rm(dir, { recursive: true, force: true });
 });
 
-/** Write an install blob carrying (optionally) a `debugGrant` sibling. */
-async function writeBlob(obj: Record<string, unknown>): Promise<string> {
-  const p = join(dir, "install-blob.json");
-  await writeFile(p, JSON.stringify(obj));
-  process.env.FLAGSHIP_INSTALL_BLOB = p;
-  return p;
-}
-
-function grantSibling(grant: DebugAccessGrant, signer: Keypair): string {
-  return JSON.stringify({
-    grant,
-    signatureHex: hex(signDebugAccessGrant(grant, signer)),
+function controller(opts: {
+  system: DebugSystem;
+  pinned?: boolean;
+  installGrant?: unknown;
+  legacy?: boolean;
+}) {
+  return new DebugAccessController({
+    serverDomain: DOMAIN,
+    authority: () => ({
+      ownerIrkPub: irk.publicKey,
+      ...(opts.pinned === false ? {} : { adminRootPub: admin.publicKey }),
+      username: "alice",
+    }),
+    statePath: join(dir, "debug-access.json"),
+    ...(opts.legacy ? { legacyMarkerPath: join(dir, "debug-access-done.json") } : {}),
+    system: opts.system,
+    installGrant: async () => opts.installGrant ?? null,
+    activity: (kind, detail) => activity.push([kind, detail]),
+    now: () => clock,
+    tickMs: 3_600_000,
   });
 }
 
-describe("runDebugAccessGate", () => {
-  it("(a) valid grant → enables the debug user + installs the SSH key + marks", async () => {
-    const owner = makeKey(1);
-    const grant: DebugAccessGrant = {
-      serverDomain: DOMAIN,
-      sshAuthorizedKey: SSH_KEY,
-      issuedAt: 1_700_000_000,
-    };
-    await writeBlob({ serverDomain: DOMAIN, debugGrant: grantSibling(grant, owner) });
+describe("debug access grants", () => {
+  it("opens for an admin-root grant naming this box, and server-detail says so", async () => {
+    const sys = fakeSystem();
+    const c = controller({ system: sys });
+    const r = await c.grant(signed());
+    expect(r).toMatchObject({ ok: true, change: "granted" });
+    expect(sys.openKey).toBe(KEY);
+    expect(c.view()).toEqual({
+      on: true,
+      expiresAt: T0 + 24 * DEBUG_ACCESS_HOUR_MS,
+      keyFingerprint: sshKeyFingerprint(KEY),
+      grantedBy: "admin",
+    });
+    expect(activity.map((a) => a[0])).toEqual(["server.debug-access.granted"]);
+    c.stop();
+  });
 
-    const runner = recordingRunner();
-    const marker = memMarker();
-    const writer = recordingWriter();
-    let installedKey: string | null = null;
+  it("refuses the IRK on an admin-pinned box, and takes it where no admin root is pinned", async () => {
+    const sys = fakeSystem();
+    const pinned = controller({ system: sys });
+    const r = await pinned.grant(signed({}, irk));
+    expect(r).toEqual({ ok: false, status: 403, error: "This server takes debug access only from an admin device of this account." });
+    expect(sys.events).toEqual([]);
 
-    const out = await runDebugAccessGate({
-      serverDomain: DOMAIN,
-      ownerIrkPub: owner.publicKey,
-      markerStore: marker,
-      runner,
-      homeDir: join(dir, "home", "debug"),
-      installAuthorizedKey: async (key) => {
-        installedKey = key;
+    await rm(join(dir, "debug-access.json"), { force: true });
+    const legacy = controller({ system: sys, pinned: false });
+    const ok = await legacy.grant(signed({}, irk));
+    expect(ok).toMatchObject({ ok: true });
+    expect(legacy.view().grantedBy).toBe("owner-key");
+    pinned.stop();
+    legacy.stop();
+  });
+
+  it("refuses a stranger's key, another box, a grant without a key, a v1 grant and bad times", async () => {
+    const sys = fakeSystem();
+    const c = controller({ system: sys });
+    const stranger = { privateKey: new Uint8Array(32).fill(9), publicKey: ed.getPublicKey(new Uint8Array(32).fill(9)) };
+    expect(await c.grant(signed({}, stranger))).toMatchObject({ ok: false, status: 403 });
+    expect(await c.grant(signed({ serverDomain: "home2.alice.flagship.services" }))).toMatchObject({
+      ok: false,
+      error: "That debug access grant is for another server.",
+    });
+    const noKey = { grant: { serverDomain: DOMAIN, sshPublicKey: "", issuedAt: T0, expiresAt: T0 + 1000 }, signatureHex: "00".repeat(64) };
+    expect(await c.grant(noKey)).toMatchObject({ ok: false, error: "Debug access needs an SSH public key." });
+    const v1 = { grant: { serverDomain: DOMAIN, sshAuthorizedKey: "", issuedAt: T0 }, signatureHex: "00".repeat(64) };
+    expect(await c.grant(v1)).toMatchObject({ ok: false, status: 422 });
+    const long = { serverDomain: DOMAIN, sshPublicKey: KEY, issuedAt: T0, expiresAt: T0 + 8 * 24 * DEBUG_ACCESS_HOUR_MS };
+    const longSig = hex(ed.sign(canonicalDebugAccessGrant(long), admin.privateKey));
+    expect(await c.grant({ grant: long, signatureHex: longSig })).toMatchObject({ ok: false, error: expect.stringMatching(/7 days/) });
+    clock = T0 + 60 * 60_000;
+    expect(await c.grant(signed())).toMatchObject({ ok: false, error: expect.stringMatching(/clock/) });
+    expect(sys.events).toEqual([]);
+    expect(c.view().on).toBe(false);
+    c.stop();
+  });
+
+  it("renews with a newer grant, refuses an older one, and a new key ends the old key's sessions", async () => {
+    const sys = fakeSystem();
+    const c = controller({ system: sys });
+    await c.grant(signed());
+    clock += 60_000;
+    const renew = await c.grant(signed({ issuedAt: T0 + 120_000, expiresAt: T0 + 7 * 24 * DEBUG_ACCESS_HOUR_MS }));
+    expect(renew).toMatchObject({ ok: true, change: "renewed" });
+    expect(await c.grant(signed())).toMatchObject({ ok: false, status: 409 });
+    await c.grant(signed({ sshPublicKey: KEY2, issuedAt: T0 + 130_000 }));
+    expect(sys.events.slice(-2)).toEqual(["close", `open KEY2 ${T0 + 24 * DEBUG_ACCESS_HOUR_MS}`]);
+    expect(activity.map((a) => a[0])).toEqual([
+      "server.debug-access.granted",
+      "server.debug-access.renewed",
+      "server.debug-access.renewed",
+    ]);
+    c.stop();
+  });
+
+  it("revokes at once, and the revoke can't be replayed to kill a later grant", async () => {
+    const sys = fakeSystem();
+    const c = controller({ system: sys });
+    await c.grant(signed());
+    const off = await c.revoke(revoked(T0 + 90_000));
+    expect(off).toMatchObject({ ok: true, change: "revoked" });
+    expect(sys.openKey).toBeNull();
+    expect(c.view()).toMatchObject({ on: false, expiresAt: null, lastEnded: { why: "revoked" } });
+    expect(await c.grant(signed())).toMatchObject({ ok: false, status: 409 });
+    expect(await c.grant(signed({ issuedAt: T0 + 100_000 }))).toMatchObject({ ok: true });
+    expect(await c.revoke(revoked(T0 + 90_000))).toMatchObject({ ok: false, status: 409 });
+    expect(c.view().on).toBe(true);
+    expect(await c.revoke(revoked(T0 + 95_000, irk))).toMatchObject({ ok: false, status: 403 });
+    expect(activity.map((a) => a[0])).toEqual([
+      "server.debug-access.granted",
+      "server.debug-access.revoked",
+      "server.debug-access.granted",
+    ]);
+    c.stop();
+  });
+
+  it("closes at expiry", async () => {
+    const sys = fakeSystem();
+    const c = controller({ system: sys });
+    await c.grant(signed({ expiresAt: T0 + DEBUG_ACCESS_HOUR_MS }));
+    clock = T0 + DEBUG_ACCESS_HOUR_MS - 1;
+    await c.checkExpiry();
+    expect(sys.openKey).toBe(KEY);
+    clock = T0 + DEBUG_ACCESS_HOUR_MS;
+    expect(c.view().on).toBe(false);
+    await c.checkExpiry();
+    expect(sys.openKey).toBeNull();
+    expect(activity.at(-1)?.[0]).toBe("server.debug-access.expired");
+    c.stop();
+  });
+});
+
+describe("debug access across restarts", () => {
+  it("reopens an unexpired grant after a restart, and never reopens an expired one", async () => {
+    const sys = fakeSystem();
+    const first = controller({ system: sys });
+    await first.grant(signed());
+    first.stop();
+
+    const sys2 = fakeSystem();
+    const again = controller({ system: sys2 });
+    await again.start();
+    expect(sys2.events).toEqual([`open KEY ${T0 + 24 * DEBUG_ACCESS_HOUR_MS}`]);
+    again.stop();
+
+    clock = T0 + 25 * DEBUG_ACCESS_HOUR_MS;
+    const sys3 = fakeSystem();
+    const later = controller({ system: sys3 });
+    await later.start();
+    expect(sys3.events).toEqual(["close"]);
+    expect(later.view()).toMatchObject({ on: false, lastEnded: { why: "expired" } });
+    later.stop();
+
+    const sys4 = fakeSystem();
+    const fourth = controller({ system: sys4 });
+    await fourth.start();
+    expect(sys4.events).toEqual([]);
+    fourth.stop();
+  });
+
+  it("finishes a close a crash interrupted", async () => {
+    const sys = fakeSystem();
+    const c = controller({ system: sys });
+    await c.grant(signed());
+    c.stop();
+    const path = join(dir, "debug-access.json");
+    const state = JSON.parse(await readFile(path, "utf8"));
+    state.active.ending = "revoked";
+    await writeFile(path, JSON.stringify(state));
+
+    const sys2 = fakeSystem();
+    const next = controller({ system: sys2 });
+    await next.start();
+    expect(sys2.events).toEqual(["close"]);
+    expect(next.view()).toMatchObject({ on: false, lastEnded: { why: "revoked" } });
+    next.stop();
+  });
+
+  it("takes the recipe's grant once, at first boot only", async () => {
+    const sys = fakeSystem();
+    const c = controller({ system: sys, installGrant: JSON.stringify(signed()) });
+    await c.start();
+    expect(c.view().on).toBe(true);
+    await c.revoke(revoked(T0 + 90_000));
+    c.stop();
+
+    const sys2 = fakeSystem();
+    const next = controller({ system: sys2, installGrant: JSON.stringify(signed()) });
+    await next.start();
+    expect(sys2.events).toEqual([]);
+    expect(next.view().on).toBe(false);
+    next.stop();
+  });
+
+  it("an install-time grant may be older than the clock skew, but not ended", async () => {
+    clock = T0 + 2 * DEBUG_ACCESS_HOUR_MS;
+    const ok = controller({ system: fakeSystem(), installGrant: signed() });
+    await ok.start();
+    expect(ok.view().on).toBe(true);
+    ok.stop();
+
+    await rm(join(dir, "debug-access.json"));
+    clock = T0 + 25 * DEBUG_ACCESS_HOUR_MS;
+    const late = controller({ system: fakeSystem(), installGrant: signed() });
+    await late.start();
+    expect(late.view().on).toBe(false);
+    late.stop();
+  });
+
+  it("an unreadable state file closes access and refuses grants signed before it was found", async () => {
+    await writeFile(join(dir, "debug-access.json"), "{not json");
+    const sys = fakeSystem();
+    const c = controller({ system: sys });
+    await c.start();
+    expect(sys.events).toEqual(["close"]);
+    expect(await c.grant(signed())).toMatchObject({ ok: false, status: 409 });
+    c.stop();
+  });
+
+  it("closes the v1 gate's password access on the first start", async () => {
+    await writeFile(join(dir, "debug-access-done.json"), JSON.stringify({ enabledAt: 1, serverDomain: DOMAIN }));
+    const sys = fakeSystem();
+    const c = controller({ system: sys, legacy: true });
+    await c.start();
+    expect(sys.events).toEqual(["close"]);
+    await expect(readFile(join(dir, "debug-access-done.json"))).rejects.toThrow();
+    expect(activity[0]?.[0]).toBe("server.debug-access.revoked");
+    c.stop();
+  });
+});
+
+describe("the OS side", () => {
+  function recorder() {
+    const calls: string[] = [];
+    const files = new Map<string, { content: string; mode: number }>();
+    const removed: string[] = [];
+    const runner: DebugCommandRunner = {
+      async run(cmd, args) {
+        calls.push([cmd, ...args].join(" "));
       },
-      writeConfigFile: writer.write,
-    });
-
-    expect(out).toEqual({ enabled: true });
-    expect(marker.marked).toBe(true);
-    // The debug user is created.
-    expect(runner.calls.some(([c, a]) => c === "useradd" && a.includes("debug"))).toBe(true);
-    // The SSH key was installed (trimmed).
-    expect(installedKey).toBe(SSH_KEY);
-    // A known password is set (the load-bearing GA-guard line) so password SSH works.
-    expect(
-      runner.calls.some(
-        ([c, a]) => c === "bash" && a.join(" ").includes("debug:flagship") && a.join(" ").includes("chpasswd"),
-      ),
-    ).toBe(true);
-    // sshd is ensured enabled + a password-auth drop-in is written.
-    expect(runner.calls.some(([c, a]) => c === "systemctl" && a.includes("ssh"))).toBe(true);
-    // Missing host keys (the sealed VM appliance) are generated before sshd starts.
-    const keygen = runner.calls.findIndex(([c, a]) => c === "ssh-keygen" && a.includes("-A"));
-    const start = runner.calls.findIndex(([c, a]) => c === "systemctl" && a.includes("--now"));
-    expect(keygen).toBeGreaterThanOrEqual(0);
-    expect(keygen).toBeLessThan(start);
-    expect(writer.files.some(([p]) => p.includes("sshd_config.d"))).toBe(true);
-    // A console banner with the live LAN IP (\4) + creds is written.
-    const banner = writer.files.find(([p]) => p.includes("issue.d"));
-    expect(banner).toBeTruthy();
-    expect(banner![1]).toContain("\\4");
-    expect(banner![1]).toContain("flagship");
-  });
-
-  it("(a') valid grant with an empty SSH key → enables the user, no key install", async () => {
-    const owner = makeKey(2);
-    const grant: DebugAccessGrant = { serverDomain: DOMAIN, sshAuthorizedKey: "", issuedAt: 5 };
-    await writeBlob({ debugGrant: grantSibling(grant, owner) });
-
-    const runner = recordingRunner();
-    const writer = recordingWriter();
-    let installCalled = false;
-
-    const out = await runDebugAccessGate({
-      serverDomain: DOMAIN,
-      ownerIrkPub: owner.publicKey,
-      markerStore: memMarker(),
-      runner,
-      installAuthorizedKey: async () => {
-        installCalled = true;
-      },
-      writeConfigFile: writer.write,
-    });
-
-    expect(out).toEqual({ enabled: true });
-    expect(runner.calls.some(([c]) => c === "useradd")).toBe(true);
-    expect(installCalled).toBe(false);
-    // No chown/chmod of the .ssh dir either (no key path).
-    expect(runner.calls.some(([c]) => c === "chmod")).toBe(false);
-    // BUT a known password IS still set (the easy LAN-SSH path with no key) + banner.
-    expect(
-      runner.calls.some(([c, a]) => c === "bash" && a.join(" ").includes("debug:flagship")),
-    ).toBe(true);
-    expect(writer.files.some(([p]) => p.includes("issue.d"))).toBe(true);
-  });
-
-  it("(b) absent grant (no sibling) → no-op", async () => {
-    const owner = makeKey(3);
-    await writeBlob({ serverDomain: DOMAIN });
-
-    const runner = recordingRunner();
-    const out = await runDebugAccessGate({
-      serverDomain: DOMAIN,
-      ownerIrkPub: owner.publicKey,
-      markerStore: memMarker(),
-      runner,
-    });
-
-    expect(out).toEqual({ enabled: false, reason: "no-grant" });
-    expect(runner.calls).toHaveLength(0);
-  });
-
-  it("(b') absent install blob entirely → no-op", async () => {
-    const owner = makeKey(3);
-    process.env.FLAGSHIP_INSTALL_BLOB = join(dir, "does-not-exist.json");
-
-    const runner = recordingRunner();
-    const out = await runDebugAccessGate({
-      serverDomain: DOMAIN,
-      ownerIrkPub: owner.publicKey,
-      markerStore: memMarker(),
-      runner,
-    });
-
-    expect(out).toEqual({ enabled: false, reason: "no-grant" });
-    expect(runner.calls).toHaveLength(0);
-  });
-
-  it("(c) forged / wrong-IRK signature → no-op, does NOT enable", async () => {
-    const owner = makeKey(4);
-    const attacker = makeKey(99);
-    const grant: DebugAccessGrant = {
-      serverDomain: DOMAIN,
-      sshAuthorizedKey: SSH_KEY,
-      issuedAt: 7,
     };
-    // Signed by the ATTACKER, but the gate verifies against the OWNER IRK.
-    await writeBlob({ debugGrant: grantSibling(grant, attacker) });
-
-    const runner = recordingRunner();
-    const marker = memMarker();
-    const out = await runDebugAccessGate({
-      serverDomain: DOMAIN,
-      ownerIrkPub: owner.publicKey,
-      markerStore: marker,
+    const sys = buildDebugSystem({
       runner,
+      writeFile: async (p, content, mode) => void files.set(p, { content, mode }),
+      removeFile: async (p) => void removed.push(p),
     });
+    return { sys, calls, files, removed };
+  }
 
-    expect(out).toEqual({ enabled: false, reason: "rejected" });
-    expect(runner.calls).toHaveLength(0);
-    expect(marker.marked).toBe(false);
+  it("opens key-only: no password, root-owned key file with an expiry, key auth only for debug", async () => {
+    const r = recorder();
+    await r.sys.open({ sshPublicKey: KEY, expiresAt: Date.UTC(2026, 9, 17, 8, 30, 5) });
+    expect(r.calls).toContain("usermod -p * -e  -s /bin/bash debug");
+    expect(r.calls.some((c) => /chpasswd|passwd /.test(c))).toBe(false);
+    const key = r.files.get("/etc/flagship/debug-ssh/authorized_keys")!;
+    expect(key.content).toBe(`expiry-time="20261017083005Z" ${KEY} flagship-debug-access\n`);
+    expect(key.mode).toBe(0o644);
+    const sshd = r.files.get("/etc/ssh/sshd_config.d/10-flagship-debug.conf")!.content;
+    expect(sshd).toContain("Match User debug");
+    expect(sshd).toContain("AuthenticationMethods publickey");
+    expect(sshd).toContain("PasswordAuthentication no");
+    expect(sshd).not.toMatch(/PasswordAuthentication yes/);
+    expect(r.files.get("/etc/sudoers.d/90-flagship-debug")?.mode).toBe(0o440);
   });
 
-  it("(c') tampered grant body (valid sig over DIFFERENT fields) → no-op", async () => {
-    const owner = makeKey(5);
-    const signed: DebugAccessGrant = { serverDomain: DOMAIN, sshAuthorizedKey: "", issuedAt: 1 };
-    const sig = hex(signDebugAccessGrant(signed, owner));
-    // Swap in a different SSH key after signing — the signature no longer covers it.
-    const tampered = JSON.stringify({
-      grant: { serverDomain: DOMAIN, sshAuthorizedKey: SSH_KEY, issuedAt: 1 },
-      signatureHex: sig,
-    });
-    await writeBlob({ debugGrant: tampered });
-
-    const runner = recordingRunner();
-    const out = await runDebugAccessGate({
-      serverDomain: DOMAIN,
-      ownerIrkPub: owner.publicKey,
-      markerStore: memMarker(),
-      runner,
-    });
-
-    expect(out).toEqual({ enabled: false, reason: "rejected" });
-    expect(runner.calls).toHaveLength(0);
+  it("closes: key and sudo gone, account locked and expired, sessions killed", async () => {
+    const r = recorder();
+    await r.sys.close();
+    expect(r.removed).toEqual(expect.arrayContaining([
+      "/etc/flagship/debug-ssh/authorized_keys",
+      "/etc/sudoers.d/90-flagship-debug",
+      "/etc/ssh/sshd_config.d/10-flagship-debug.conf",
+    ]));
+    expect(r.calls).toEqual(expect.arrayContaining([
+      "usermod -p ! -e 1 debug",
+      "loginctl terminate-user debug",
+      "pkill -KILL -u debug",
+    ]));
+    expect(r.calls.indexOf("usermod -p ! -e 1 debug")).toBeLessThan(r.calls.indexOf("pkill -KILL -u debug"));
   });
 
-  it("(d) grant names a DIFFERENT box → no-op", async () => {
-    const owner = makeKey(6);
-    const grant: DebugAccessGrant = {
-      serverDomain: "other.bob.flagship.services",
-      sshAuthorizedKey: SSH_KEY,
-      issuedAt: 9,
-    };
-    await writeBlob({ debugGrant: grantSibling(grant, owner) });
-
-    const runner = recordingRunner();
-    const out = await runDebugAccessGate({
-      serverDomain: DOMAIN, // this box is alice's, not bob's
-      ownerIrkPub: owner.publicKey,
-      markerStore: memMarker(),
-      runner,
-    });
-
-    expect(out).toEqual({ enabled: false, reason: "rejected" });
-    expect(runner.calls).toHaveLength(0);
+  it("formats OpenSSH expiry times in UTC", () => {
+    expect(sshExpiryTime(Date.UTC(2026, 0, 2, 3, 4, 5))).toBe("20260102030405Z");
+    expect(authorizedKeyLine({ sshPublicKey: KEY, expiresAt: Date.UTC(2026, 0, 2, 3, 4, 5) })).toMatch(/^expiry-time="20260102030405Z" ssh-ed25519 /);
   });
+});
 
-  it("(e) idempotent: a re-run with the marker present never re-applies", async () => {
-    const owner = makeKey(7);
-    const grant: DebugAccessGrant = {
-      serverDomain: DOMAIN,
-      sshAuthorizedKey: SSH_KEY,
-      issuedAt: 11,
-    };
-    await writeBlob({ debugGrant: grantSibling(grant, owner) });
+describe("the screens route", () => {
+  const req = (body: unknown) => ({ body: Buffer.from(JSON.stringify(body)) }) as never;
+  it("grants, revokes and reports, refusing companion sessions", async () => {
+    const c = controller({ system: fakeSystem() });
+    const allow = buildDebugAccessHttp({ controller: c, denyCompanion: () => null });
+    const r = await allow("/api/screens/debug-access", "POST", req(signed()));
+    expect(r?.status).toBe(200);
+    expect(JSON.parse(String(r?.body))).toMatchObject({ ok: true, change: "granted", debugAccess: { on: true } });
+    const view = await allow("/api/screens/debug-access", "GET", req(null));
+    expect(JSON.parse(String(view?.body)).on).toBe(true);
+    const bad = await allow("/api/screens/debug-access", "POST", req(signed({}, irk)));
+    expect(bad?.status).toBe(403);
+    expect(JSON.parse(String(bad?.body)).error).toMatch(/admin device/);
+    const off = await allow("/api/screens/debug-access/revoke", "POST", req(revoked(T0 + 90_000)));
+    expect(JSON.parse(String(off?.body))).toMatchObject({ change: "revoked", debugAccess: { on: false } });
 
-    const marker = memMarker();
-    const runner1 = recordingRunner();
-    const first = await runDebugAccessGate({
-      serverDomain: DOMAIN,
-      ownerIrkPub: owner.publicKey,
-      markerStore: marker,
-      runner: runner1,
-      installAuthorizedKey: async () => {},
-      writeConfigFile: async () => {},
+    const deny = buildDebugAccessHttp({
+      controller: c,
+      denyCompanion: () => ({ status: 403, headers: {}, body: "companion" }),
     });
-    expect(first).toEqual({ enabled: true });
-    expect(marker.marked).toBe(true);
-
-    const runner2 = recordingRunner();
-    const second = await runDebugAccessGate({
-      serverDomain: DOMAIN,
-      ownerIrkPub: owner.publicKey,
-      markerStore: marker,
-      runner: runner2,
-      installAuthorizedKey: async () => {
-        throw new Error("should not run on the second pass");
-      },
-    });
-    expect(second).toEqual({ enabled: false, reason: "already-enabled" });
-    expect(runner2.calls).toHaveLength(0);
+    expect((await deny("/api/screens/debug-access", "POST", req(signed())))?.status).toBe(403);
+    expect(await allow("/api/screens/other", "GET", req(null))).toBeNull();
+    c.stop();
   });
+});
 
-  it("(f) case-insensitive FQDN match still enables", async () => {
-    const owner = makeKey(8);
-    const grant: DebugAccessGrant = {
-      serverDomain: DOMAIN.toUpperCase(),
-      sshAuthorizedKey: "",
-      issuedAt: 3,
-    };
-    await writeBlob({ debugGrant: grantSibling(grant, owner) });
-
-    const out = await runDebugAccessGate({
-      serverDomain: DOMAIN,
-      ownerIrkPub: owner.publicKey,
-      markerStore: memMarker(),
-      runner: recordingRunner(),
-      writeConfigFile: async () => {},
-    });
-    expect(out).toEqual({ enabled: true });
-  });
-
-  // v1-sec GAP 2 — a debug grant yields a LAN/console ROOT shell, so on a box
-  // with a pinned admin master root it must clear the SAME authority boundary as
-  // wipe/transfer/decommission (admin-root-signed), NOT the membership IRK. A
-  // membership-IRK-only grant would otherwise be an escalation AROUND Slice D.
-  describe("admin-root authority boundary (Slice D)", () => {
-    const grant: DebugAccessGrant = {
-      serverDomain: DOMAIN,
-      sshAuthorizedKey: SSH_KEY,
-      issuedAt: 42,
-    };
-
-    it("(g) admin root PINNED + membership-IRK-only grant → REJECTED (no debug user)", async () => {
-      const owner = makeKey(10); // membership IRK
-      const adminRoot = makeKey(20); // the pinned admin master root
-      // Signed by the OWNER IRK only — never the admin root.
-      await writeBlob({ debugGrant: grantSibling(grant, owner) });
-
-      const runner = recordingRunner();
-      const marker = memMarker();
-      const out = await runDebugAccessGate({
-        serverDomain: DOMAIN,
-        ownerIrkPub: owner.publicKey,
-        adminRootPub: adminRoot.publicKey,
-        username: "alice",
-        markerStore: marker,
-        runner,
-      });
-
-      expect(out).toEqual({ enabled: false, reason: "rejected" });
-      expect(runner.calls).toHaveLength(0); // no useradd / chpasswd / sshd
-      expect(marker.marked).toBe(false);
-    });
-
-    it("(h) admin root PINNED + admin-root-signed grant → ACCEPTED", async () => {
-      const owner = makeKey(10);
-      const adminRoot = makeKey(20);
-      // Signed by the ADMIN ROOT — the proper authority for a root shell.
-      await writeBlob({ debugGrant: grantSibling(grant, adminRoot) });
-
-      const runner = recordingRunner();
-      const out = await runDebugAccessGate({
-        serverDomain: DOMAIN,
-        ownerIrkPub: owner.publicKey,
-        adminRootPub: adminRoot.publicKey,
-        username: "alice",
-        markerStore: memMarker(),
-        runner,
-        installAuthorizedKey: async () => {},
-        writeConfigFile: async () => {},
-      });
-
-      expect(out).toEqual({ enabled: true });
-      expect(runner.calls.some(([c]) => c === "useradd")).toBe(true);
-    });
-
-    it("(i) admin root ABSENT (legacy box) + owner-IRK grant → ACCEPTED", async () => {
-      const owner = makeKey(10);
-      await writeBlob({ debugGrant: grantSibling(grant, owner) });
-
-      const out = await runDebugAccessGate({
-        serverDomain: DOMAIN,
-        ownerIrkPub: owner.publicKey,
-        // no adminRootPub → legacy owner-IRK path, unchanged
-        username: "alice",
-        markerStore: memMarker(),
-        runner: recordingRunner(),
-        installAuthorizedKey: async () => {},
-        writeConfigFile: async () => {},
-      });
-
-      expect(out).toEqual({ enabled: true });
-    });
+describe("the recipe sibling", () => {
+  it("reads the debugGrant string or object from the install blob", async () => {
+    const p = join(dir, "install-blob.json");
+    await writeFile(p, JSON.stringify({ serverDomain: DOMAIN, debugGrant: JSON.stringify(signed()) }));
+    expect(await debugGrantFromInstallBlob(p)).toEqual(signed());
+    await writeFile(p, JSON.stringify({ serverDomain: DOMAIN, debugGrant: signed() }));
+    expect(await debugGrantFromInstallBlob(p)).toEqual(signed());
+    await writeFile(p, JSON.stringify({ serverDomain: DOMAIN }));
+    expect(await debugGrantFromInstallBlob(p)).toBeNull();
+    expect(await debugGrantFromInstallBlob(join(dir, "missing.json"))).toBeNull();
   });
 });

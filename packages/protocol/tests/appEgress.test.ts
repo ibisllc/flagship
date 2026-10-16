@@ -6,7 +6,7 @@ import {
   verifyAppEgressGrant,
   type AppEgressGrant,
 } from "../src/appEgress.js";
-import { signDebugAccessGrant } from "../src/debugAccess.js";
+import { signDebugAccessRevoke } from "../src/debugAccess.js";
 import { hex as bytesToHex } from "../src/canonicalBase.js";
 import { deriveIRK } from "../src/keys.js";
 
@@ -60,7 +60,7 @@ describe("AppEgressGrant (owner approval of a live app's internet hosts)", () =>
   });
 
   it("never accepts another envelope's signature", () => {
-    const debug = signDebugAccessGrant({ serverDomain: GRANT.serverDomain, sshAuthorizedKey: "", issuedAt: GRANT.issuedAt }, irk);
+    const debug = signDebugAccessRevoke({ serverDomain: GRANT.serverDomain, issuedAt: GRANT.issuedAt }, irk);
     expect(verifyAppEgressGrant(GRANT, debug, irk.publicKey)).toBe(false);
   });
 
