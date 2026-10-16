@@ -37,7 +37,7 @@ import { DEV_PG_PREFIX, isFilesVolume, isProdFilesVolume } from "../dataLayer/na
 import { AppSqlError, compactCell, type AppSqlRunner } from "../dataLayer/appSql.js";
 import { FILES_HELPER_IMAGE } from "../volumeDump.js";
 import type { BuildToolDataHooks } from "./buildToolHost.js";
-import { datasetToSql, generateSynthetic } from "../dataLayer/synth/index.js";
+import { datasetToSql, generateSynthetic, sequenceResyncSql } from "../dataLayer/synth/index.js";
 import { pickPgUrlForApp } from "../runMigration.js";
 import { migrationFiles } from "../llm/serviceName.js";
 import { readCarriedBinaries } from "../llm/serviceSource.js";
@@ -406,13 +406,16 @@ export class StagingRunner implements StagingHost {
         // Sample rows from the schema the migrations made. Best-effort: an
         // app still runs on empty tables.
         try {
-          const seed = datasetToSql(
-            generateSynthetic({
-              sql: migrations.map((m) => m.sql).join("\n"),
-              seedHex: createHash("sha256").update(`flagship/staging-seed/v1|${buildId}`).digest("hex"),
-            }),
-          );
-          if (/\bINSERT\b/.test(seed)) await this.deps.runSql({ pgUrl, sql: seed });
+          const dataset = generateSynthetic({
+            sql: migrations.map((m) => m.sql).join("\n"),
+            seedHex: createHash("sha256").update(`flagship/staging-seed/v1|${buildId}`).digest("hex"),
+          });
+          const seed = datasetToSql(dataset);
+          if (/\bINSERT\b/.test(seed)) {
+            await this.deps.runSql({ pgUrl, sql: seed });
+            const resync = sequenceResyncSql(dataset);
+            if (resync) await this.deps.runSql({ pgUrl, sql: resync }).catch(() => {});
+          }
         } catch {
           /* empty tables */
         }

@@ -319,6 +319,24 @@ export function datasetToSql(ds: SyntheticDataset): string {
   return lines.join("\n") + "\n";
 }
 
+/**
+ * Run after `datasetToSql`'s INSERTs. The rows carry their own ids, which
+ * leaves a serial or identity column's sequence at 1: the app's first INSERT
+ * then hit a duplicate key, and an AI testing a staging copy "fixed" the app
+ * for a fault only the sample data had.
+ */
+export function sequenceResyncSql(ds: SyntheticDataset): string {
+  const lines: string[] = [];
+  for (const t of ds.pg) {
+    for (const c of t.columns) {
+      if (!t.rows.some((r) => typeof r[c] === "number")) continue;
+      const seq = `pg_get_serial_sequence(${sqlLiteral(`"${t.table}"`)}, ${sqlLiteral(c)})`;
+      lines.push(`SELECT setval(${seq}, (SELECT COALESCE(MAX("${c}"), 0) + 1 FROM "${t.table}")::bigint, false) WHERE ${seq} IS NOT NULL;`);
+    }
+  }
+  return lines.length ? lines.join("\n") + "\n" : "";
+}
+
 function sqlLiteral(v: string | number | boolean | null): string {
   if (v === null) return "NULL";
   if (typeof v === "number") return String(v);

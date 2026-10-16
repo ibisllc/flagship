@@ -6,7 +6,7 @@
  * `docs/dev-prod-dataspace-harness-spec.md` §2.
  */
 export { parseSchema } from "./schemaParse.js";
-export { generateSynthetic, datasetToSql } from "./generate.js";
+export { generateSynthetic, datasetToSql, sequenceResyncSql } from "./generate.js";
 export type {
   AppSchema,
   SchemaTable,

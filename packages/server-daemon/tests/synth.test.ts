@@ -3,6 +3,7 @@ import {
   parseSchema,
   generateSynthetic,
   datasetToSql,
+  sequenceResyncSql,
 } from "../src/dataLayer/synth/index.js";
 
 const SCHEMA = `
@@ -109,6 +110,19 @@ describe("synth generator", () => {
   it("emits FK-safe SQL (users INSERTs precede notes INSERTs)", () => {
     const sql = datasetToSql(generateSynthetic({ sql: SCHEMA, seedHex: SEED }));
     expect(sql.indexOf('INTO "users"')).toBeLessThan(sql.indexOf('INTO "notes"'));
+  });
+
+  it("moves each id sequence past the sample rows", () => {
+    const ds = generateSynthetic({
+      sql: "CREATE TABLE todos (id bigserial PRIMARY KEY, text text NOT NULL, done boolean NOT NULL DEFAULT false);",
+      seedHex: SEED,
+    });
+    const sql = sequenceResyncSql(ds);
+    expect(sql).toBe(
+      `SELECT setval(pg_get_serial_sequence('"todos"', 'id'), (SELECT COALESCE(MAX("id"), 0) + 1 FROM "todos")::bigint, false) WHERE pg_get_serial_sequence('"todos"', 'id') IS NOT NULL;\n`,
+    );
+    // Text-only tables own no sequence.
+    expect(sequenceResyncSql(generateSynthetic({ sql: "CREATE TABLE tags (name text PRIMARY KEY);", seedHex: SEED }))).toBe("");
   });
 });
 
