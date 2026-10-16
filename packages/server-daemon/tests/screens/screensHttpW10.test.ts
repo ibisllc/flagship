@@ -37,6 +37,9 @@ import {
   type NotifyOwnerCallback,
 } from "../../src/llm/vibeCodeSession.js";
 import type { HttpRequest } from "../../src/runtime.js";
+import { ServicePlatform } from "../../src/servicePlatform.js";
+import { AppRunner, type CommandRunner } from "../../src/serviceRunner.js";
+import { swkOps } from "../helpers/keyCustody.js";
 
 const SERVER_FQDN = "home.alice.flagship.services";
 const USERNAME = "alice";
@@ -72,222 +75,125 @@ function hex(b: Uint8Array): string {
   return s;
 }
 
-/**
- * Minimal stub ServicePlatform whose setEnv delegates to the supplied
- * AppEnvStore + checks the signature with the supplied IRK pubkey.
- * Production wiring uses the real ServicePlatform; we model the slice
- * the W10 handler hits.
- */
-function stubServicePlatform(
-  store: AppEnvStore,
-  irkPub: Uint8Array,
-): ScreensHttpDeps["servicePlatform"] {
-  return {
-    list: () => [],
-    byServiceId: () => null,
-    byLabel: () => null,
-    setEnv: async ({ request, signature, verify }) => {
-      if (!verify(request, signature, irkPub)) {
-        return { ok: false, reason: "invalid signature" };
-      }
-      const serviceId = `${request.creator}-${request.slug}`;
-      await store.put(serviceId, request.env);
-      return { ok: true };
-    },
-  } as unknown as ScreensHttpDeps["servicePlatform"];
+const NOW = 1_000_000;
+
+function realPlatform(store: AppEnvStore, irkPub: Uint8Array): ScreensHttpDeps["servicePlatform"] {
+  const swkBytes = new Uint8Array(32);
+  swkBytes[0] = 7;
+  const cmd: CommandRunner = {
+    run: async () => {},
+    capture: async () => ({ stdout: "", stderr: "" }),
+  };
+  return new ServicePlatform({
+    host: { username: USERNAME, irkPub },
+    swk: swkOps(swkBytes),
+    appRunner: new AppRunner(cmd),
+    dataProvisioner: null,
+    envStore: store,
+    now: () => NOW,
+  }) as unknown as ScreensHttpDeps["servicePlatform"];
+}
+
+function envHarness(seedByte: number) {
+  const store = new InMemoryAppEnvStore();
+  const seed = new Uint8Array(32);
+  seed[0] = seedByte;
+  const irkPub = ed.getPublicKey(seed);
+  const handle = buildScreensHttp({
+    gate: fakeGate(),
+    serverFqdn: SERVER_FQDN,
+    username: USERNAME,
+    daemonVersion: "test",
+    startedAt: 0,
+    servicePlatform: realPlatform(store, irkPub),
+    appEnvStore: store,
+    now: () => NOW,
+  });
+  const sign = (env: Record<string, string>, issuedAt = NOW) => {
+    const request: SetServiceEnvRequest = {
+      serverId: SERVER_FQDN,
+      creator: "alice",
+      slug: "todos",
+      env,
+      issuedAt,
+    };
+    return { request, signature: hex(signSetServiceEnv(request, { publicKey: irkPub, privateKey: seed })) };
+  };
+  const post = (path: string, body: unknown) =>
+    handle(
+      req({
+        method: "POST",
+        path,
+        headers: { "x-flagship-session": "tok-good", "content-type": "application/json" },
+        body: Buffer.from(JSON.stringify(body)),
+      }),
+    );
+  const names = async (appId: string) => {
+    const r = await handle(req({ path: `/api/screens/services/${appId}/env`, headers: { "x-flagship-session": "tok-good" } }));
+    return JSON.parse(r!.body as string).names as string[];
+  };
+  const set = (appId: string, name: string, value: string) =>
+    post(`/api/screens/services/${appId}/env/set`, { name, value, ...sign({ [name]: value }) });
+  const unset = (appId: string, name: string) =>
+    post(`/api/screens/services/${appId}/env/unset`, { name, ...sign({}) });
+  return { store, handle, sign, post, names, set, unset };
 }
 
 describe("W10 — services env-var KV editor", () => {
+  const appId = "alice--todos";
+
   it("round-trip: set → list returns names (no values) → unset", async () => {
-    const store = new InMemoryAppEnvStore();
-    const seed = new Uint8Array(32);
-    seed[0] = 0xa1;
-    const irkPub = ed.getPublicKey(seed);
-    const handle = buildScreensHttp({
-      gate: fakeGate(),
-      serverFqdn: SERVER_FQDN,
-      username: USERNAME,
-      daemonVersion: "test",
-      startedAt: 0,
-      servicePlatform: stubServicePlatform(store, irkPub),
-      appEnvStore: store,
-      now: () => 1_000,
-    });
-
+    const h = envHarness(0xa1);
     const SECRET_VALUE = "sk-DO-NOT-LEAK-XYZ-123456";
-    const appId = "alice-todos";
-    const envelope: SetServiceEnvRequest = {
-      serverId: SERVER_FQDN,
-      creator: "alice",
-      slug: "todos",
-      env: { OPENAI_API_KEY: SECRET_VALUE },
-      issuedAt: 1_000,
-    };
-    const sig = signSetServiceEnv(envelope, { publicKey: irkPub, privateKey: seed });
-
-    const setResp = await handle(
-      req({
-        method: "POST",
-        path: `/api/screens/services/${appId}/env/set`,
-        headers: {
-          "x-flagship-session": "tok-good",
-          "content-type": "application/json",
-        },
-        body: Buffer.from(
-          JSON.stringify({
-            name: "OPENAI_API_KEY",
-            value: SECRET_VALUE,
-            request: envelope,
-            signature: hex(sig),
-          }),
-        ),
-      }),
-    );
+    const setResp = await h.set(appId, "OPENAI_API_KEY", SECRET_VALUE);
     expect(setResp?.status).toBe(200);
-    const setBody = JSON.parse(setResp!.body as string);
-    expect(setBody.ok).toBe(true);
+    expect(JSON.parse(setResp!.body as string).ok).toBe(true);
     // Crucial invariant: the response body NEVER carries the value.
     expect(setResp!.body as string).not.toContain(SECRET_VALUE);
+    expect(await h.names(appId)).toEqual(["OPENAI_API_KEY"]);
 
-    const listResp = await handle(
-      req({
-        path: `/api/screens/services/${appId}/env`,
-        headers: { "x-flagship-session": "tok-good" },
-      }),
-    );
-    expect(listResp?.status).toBe(200);
-    const listBody = JSON.parse(listResp!.body as string);
-    expect(listBody.names).toEqual(["OPENAI_API_KEY"]);
-    expect(listResp!.body as string).not.toContain(SECRET_VALUE);
-
-    // Unset — owner asserts the new state has no env vars at all.
-    const unsetEnvelope: SetServiceEnvRequest = {
-      serverId: SERVER_FQDN,
-      creator: "alice",
-      slug: "todos",
-      env: {},
-      issuedAt: 2_000,
-    };
-    const unsetSig = signSetServiceEnv(unsetEnvelope, {
-      publicKey: irkPub,
-      privateKey: seed,
-    });
-    const unsetResp = await handle(
-      req({
-        method: "POST",
-        path: `/api/screens/services/${appId}/env/unset`,
-        headers: {
-          "x-flagship-session": "tok-good",
-          "content-type": "application/json",
-        },
-        body: Buffer.from(
-          JSON.stringify({
-            name: "OPENAI_API_KEY",
-            request: unsetEnvelope,
-            signature: hex(unsetSig),
-          }),
-        ),
-      }),
-    );
+    const unsetResp = await h.unset(appId, "OPENAI_API_KEY");
     expect(unsetResp?.status).toBe(200);
     expect(JSON.parse(unsetResp!.body as string).ok).toBe(true);
+    expect(await h.names(appId)).toEqual([]);
+  });
 
-    const finalList = await handle(
-      req({
-        path: `/api/screens/services/${appId}/env`,
-        headers: { "x-flagship-session": "tok-good" },
-      }),
-    );
-    expect(JSON.parse(finalList!.body as string).names).toEqual([]);
+  it("a second set keeps the first variable, and unset drops only its own name", async () => {
+    const h = envHarness(0xa4);
+    expect((await h.set(appId, "A_KEY", "one"))?.status).toBe(200);
+    expect((await h.set(appId, "B_KEY", "two"))?.status).toBe(200);
+    expect(await h.names(appId)).toEqual(["A_KEY", "B_KEY"]);
+    expect((await h.set(appId, "A_KEY", "uno"))?.status).toBe(200);
+    expect(await h.store.get(appId)).toEqual({ A_KEY: "uno", B_KEY: "two" });
+
+    expect((await h.unset(appId, "A_KEY"))?.status).toBe(200);
+    expect(await h.store.get(appId)).toEqual({ B_KEY: "two" });
+  });
+
+  it("an unset whose signed map is not empty is refused and changes nothing", async () => {
+    const h = envHarness(0xa5);
+    await h.set(appId, "A_KEY", "one");
+    const r = await h.post(`/api/screens/services/${appId}/env/unset`, { name: "A_KEY", ...h.sign({ OTHER: "x" }) });
+    expect(r?.status).toBe(400);
+    expect(await h.store.get(appId)).toEqual({ A_KEY: "one" });
   });
 
   it("rejects /set when (creator,slug) does not match :appId in the URL", async () => {
-    const store = new InMemoryAppEnvStore();
-    const seed = new Uint8Array(32);
-    seed[0] = 0xa2;
-    const irkPub = ed.getPublicKey(seed);
-    const handle = buildScreensHttp({
-      gate: fakeGate(),
-      serverFqdn: SERVER_FQDN,
-      username: USERNAME,
-      daemonVersion: "test",
-      startedAt: 0,
-      servicePlatform: stubServicePlatform(store, irkPub),
-      appEnvStore: store,
-    });
-    const envelope: SetServiceEnvRequest = {
-      serverId: SERVER_FQDN,
-      creator: "alice",
-      slug: "todos",
-      env: { FOO: "bar" },
-      issuedAt: 1_000,
-    };
-    const sig = signSetServiceEnv(envelope, { publicKey: irkPub, privateKey: seed });
-    const resp = await handle(
-      req({
-        method: "POST",
-        path: `/api/screens/services/alice-OTHER/env/set`,
-        headers: {
-          "x-flagship-session": "tok-good",
-          "content-type": "application/json",
-        },
-        body: Buffer.from(
-          JSON.stringify({
-            name: "FOO",
-            value: "bar",
-            request: envelope,
-            signature: hex(sig),
-          }),
-        ),
-      }),
-    );
-    expect(resp?.status).toBe(400);
-    expect(JSON.parse(resp!.body as string).error).toContain("creator,slug");
+    const h = envHarness(0xa2);
+    for (const wrong of ["alice--OTHER", "alice-todos"]) {
+      const resp = await h.post(`/api/screens/services/${wrong}/env/set`, { name: "FOO", value: "bar", ...h.sign({ FOO: "bar" }) });
+      expect(resp?.status).toBe(400);
+      expect(JSON.parse(resp!.body as string).error).toContain("creator,slug");
+    }
   });
 
   it("rejects /set when the body's name/value is not present in request.env", async () => {
-    const store = new InMemoryAppEnvStore();
-    const seed = new Uint8Array(32);
-    seed[0] = 0xa3;
-    const irkPub = ed.getPublicKey(seed);
-    const handle = buildScreensHttp({
-      gate: fakeGate(),
-      serverFqdn: SERVER_FQDN,
-      username: USERNAME,
-      daemonVersion: "test",
-      startedAt: 0,
-      servicePlatform: stubServicePlatform(store, irkPub),
-      appEnvStore: store,
-    });
-    const envelope: SetServiceEnvRequest = {
-      serverId: SERVER_FQDN,
-      creator: "alice",
-      slug: "todos",
-      env: { FOO: "bar" },
-      issuedAt: 1_000,
-    };
-    const sig = signSetServiceEnv(envelope, { publicKey: irkPub, privateKey: seed });
-    const resp = await handle(
-      req({
-        method: "POST",
-        path: `/api/screens/services/alice-todos/env/set`,
-        headers: {
-          "x-flagship-session": "tok-good",
-          "content-type": "application/json",
-        },
-        // Wrong value on the body vs envelope.
-        body: Buffer.from(
-          JSON.stringify({
-            name: "FOO",
-            value: "DIFFERENT",
-            request: envelope,
-            signature: hex(sig),
-          }),
-        ),
-      }),
-    );
+    const h = envHarness(0xa3);
+    // Wrong value on the body vs envelope.
+    const resp = await h.post(`/api/screens/services/${appId}/env/set`, { name: "FOO", value: "DIFFERENT", ...h.sign({ FOO: "bar" }) });
     expect(resp?.status).toBe(400);
     expect(JSON.parse(resp!.body as string).error).toContain("name/value");
+    expect(await h.names(appId)).toEqual([]);
   });
 });
 

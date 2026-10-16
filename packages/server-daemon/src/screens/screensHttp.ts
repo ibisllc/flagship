@@ -39,7 +39,7 @@ import {
   type PdfText,
 } from "../llm/vibeCodeAttachments.js";
 import type { Attachment, FetchLike } from "@flagship/llm-providers";
-import { parseServiceId, verifySetServiceEnv } from "@flagship/protocol";
+import { composeServiceId, parseServiceId, verifySetServiceEnv } from "@flagship/protocol";
 import { checkServiceName, type NameHolders, type ServiceNameDeps } from "../llm/serviceName.js";
 import type { EditableService } from "../buildmodes/buildOrchestrator.js";
 import { EDIT_SOURCE_MAX_BYTES } from "../llm/vibeCodeStartStreaming.js";
@@ -1253,7 +1253,7 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       }
       // Cross-check: the envelope's (creator,slug) must compose to the
       // URL's appId, and `name`+`value` must be present in `request.env`.
-      const expectedAppId = `${r.creator}-${r.slug}`;
+      const expectedAppId = composeServiceId(r.creator, r.slug);
       if (expectedAppId !== appId) {
         return jerr(400, "envelope (creator,slug) does not match :appId");
       }
@@ -1270,6 +1270,7 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
         request: r,
         signature: signatureBytes,
         verify: verifySetServiceEnv,
+        change: { kind: "merge" },
       });
       if (!result.ok) {
         // Generic reason — never include the value.
@@ -1293,7 +1294,7 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
           typeof r.env !== "object" || r.env === null) {
         return jerr(400, "malformed request envelope");
       }
-      const expectedAppId = `${r.creator}-${r.slug}`;
+      const expectedAppId = composeServiceId(r.creator, r.slug);
       if (expectedAppId !== appId) {
         return jerr(400, "envelope (creator,slug) does not match :appId");
       }
@@ -1312,6 +1313,7 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
         request: r,
         signature: signatureBytes,
         verify: verifySetServiceEnv,
+        change: { kind: "unset", name: body.name },
       });
       if (!result.ok) return jerr(400, result.reason);
       const out: ServiceEnvOpResponse = { ok: true };

@@ -231,12 +231,11 @@ export function verifyUninstallService(r: UninstallServiceRequest, sig: Bytes, i
  * sealed at rest on the box. The vibecoding model sees the env-var
  * NAMES (so generated code can reference them) but NEVER the values.
  *
- * Semantics: **full replace**. `env` is the complete desired set for
- * the app — the daemon stores exactly this map (an empty map clears
- * all env). Full-replace is the simplest correct semantics: the phone
- * always holds the authoritative key list (it's the only place the
- * user types them), so there is no merge ambiguity and a removed key
- * is just absent from the next signed order. The map values are part
+ * Semantics depend on the route that carries it. `/api/services/:id/env`
+ * stores exactly this map (an empty map clears all env). The screens
+ * editor's `/env/set` merges it into what is stored (a client knows the
+ * names but never the values, so it signs only the one it sets) and
+ * `/env/unset` signs an empty map and drops one name. The map values are part
  * of the canonical bytes so a MITM can't swap a value against a
  * captured signature; the values are SECRET — the daemon never logs
  * them, never returns them on any surface, and seals them at rest.
@@ -245,7 +244,7 @@ export interface SetServiceEnvRequest {
   serverId: ServerId;
   creator: string;
   slug: string;
-  /** Full desired env set for the service. Values are SECRET. */
+  /** Env pairs to store (see the route's semantics above). Values are SECRET. */
   env: Record<string, string>;
   issuedAt: number;
 }

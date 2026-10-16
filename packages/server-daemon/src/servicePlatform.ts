@@ -510,8 +510,11 @@ export class ServicePlatform {
   /**
    * Apply an owner-signed `SetServiceEnvRequest`: verify the IRK signature
    * (same trust root as install/uninstall), then store the env sealed
-   * at rest. Full-replace semantics — the request carries the complete
-   * desired env set. The new values take effect on the next deploy
+   * at rest. `change` picks how the signed map meets what is stored:
+   * `replace` (the default) stores exactly the signed map; `merge` adds or
+   * overwrites only the signed names, since a client holds names but never
+   * values and can only sign the one it is setting; `unset` drops one name
+   * and needs an empty signed map. The new values take effect on the next deploy
    * (the app's process env is set at container start); we do not hot-
    * swap a running container's env. Reserved `FLAGSHIP_`-prefixed keys
    * are rejected so an owner can never shadow a daemon-injected var.
@@ -523,8 +526,10 @@ export class ServicePlatform {
     request: SetServiceEnvRequest;
     signature: Bytes;
     verify: (req: SetServiceEnvRequest, sig: Bytes, irkPub: Bytes) => boolean;
+    change?: { kind: "replace" } | { kind: "merge" } | { kind: "unset"; name: string };
   }): Promise<{ ok: true } | { ok: false; reason: string }> {
     const { request: r, signature, verify } = args;
+    const change = args.change ?? { kind: "replace" };
     if (Math.abs(this.now() - r.issuedAt) > this.maxAgeMs) {
       return { ok: false, reason: "stale request" };
     }
@@ -539,9 +544,20 @@ export class ServicePlatform {
         return { ok: false, reason: "reserved FLAGSHIP_ env name" };
       }
     }
+    if (change.kind === "unset" && Object.keys(r.env).length > 0) {
+      return { ok: false, reason: "an unset order must sign an empty env" };
+    }
     const serviceId = ServicePlatform.serviceId(r.creator, r.slug);
     try {
-      await this.deps.envStore.put(serviceId, { ...r.env });
+      let next: Record<string, string>;
+      if (change.kind === "replace") {
+        next = { ...r.env };
+      } else {
+        const held = (await this.deps.envStore.get(serviceId)) ?? {};
+        next = { ...held, ...r.env };
+        if (change.kind === "unset") delete next[change.name];
+      }
+      await this.deps.envStore.put(serviceId, next);
     } catch {
       // Never surface a value in a thrown error.
       return { ok: false, reason: "failed to persist env" };
