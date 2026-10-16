@@ -911,7 +911,11 @@
             <label class="inline-check mt-2">
               <input type="checkbox" id="cs-debug-friendly" /> Debug-friendly server
             </label>
-            <p id="cs-debug-friendly-hint" class="faint-sm">Anyone with physical access to this server can log into its console. Only turn this on for a server you're actively debugging.</p>
+            <p id="cs-debug-friendly-hint" class="faint-sm">Anyone with this key can read everything on this server while it's on. It turns off by itself 7 days from now.</p>
+            <div id="cs-debug-key-row" class="hidden">
+              <label class="caption mt-1" for="cs-debug-ssh-key">SSH public key</label>
+              <textarea id="cs-debug-ssh-key" class="full-width" rows="2" spellcheck="false" autocomplete="off" placeholder="ssh-ed25519 AAAA… you@computer"></textarea>
+            </div>
           </div>
 
           <div class="row-2 mt-2">

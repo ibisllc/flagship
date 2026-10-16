@@ -16,22 +16,23 @@ function hexToBytes(hex: string): Uint8Array {
 const KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINBKsjJ0K7SrOhNovUYV5ObQIkq3GgFrr4UgozLJd4c3";
 
 describe("webapp debug-friendly grant verifies under @flagship/protocol", () => {
-  it("toggle ON: the embedded v2 debugGrant verifies under the admin root (byte-identical canonical)", async () => {
-    const adminSeed = new Uint8Array(32).fill(0x07);
+  it("toggle ON: the embedded v2 grant names the pasted key, ends in 7 days and verifies under the admin root", async () => {
+    const adminSeed = new Uint8Array(32).fill(0x5a);
     const adminPub = ed25519.getPublicKey(adminSeed);
     const serverDomain = "kitchen.alice.flagship.services";
     const issuedAt = 1_750_000_000_000;
 
-    const signWithIrk = async (_umk: Uint8Array, bytes: Uint8Array) => ed25519.sign(bytes, adminSeed);
-
+    const sign = async (_umk: Uint8Array, bytes: Uint8Array) => ed25519.sign(bytes, adminSeed);
     const carrierJson = await buildDebugGrant({
       serverDomain,
-      sshPublicKey: `  ${KEY} harry@laptop `,
+      sshPublicKey: `${KEY} harry@laptop`,
       issuedAt,
-      signWithIrk,
-      umk: new Uint8Array(0),
+      sign,
+      umk: new Uint8Array(1),
     });
 
+    // The recipe sibling is a JSON STRING `{grant,signatureHex}` (the shape the
+    // builder + box consume).
     const carrier = JSON.parse(carrierJson) as {
       grant: { serverDomain: string; sshPublicKey: string; issuedAt: number; expiresAt: number };
       signatureHex: string;
@@ -42,21 +43,23 @@ describe("webapp debug-friendly grant verifies under @flagship/protocol", () => 
       issuedAt,
       expiresAt: issuedAt + 7 * 24 * 60 * 60 * 1000,
     });
-
-    // Verify EXACTLY the way the box does.
     expect(verifyDebugAccessGrant(carrier.grant, hexToBytes(carrier.signatureHex), adminPub)).toBe(true);
     const otherPub = ed25519.getPublicKey(new Uint8Array(32).fill(0x33));
     expect(verifyDebugAccessGrant(carrier.grant, hexToBytes(carrier.signatureHex), otherPub)).toBe(false);
   });
 
-  it("refuses a grant without a usable SSH key", async () => {
-    const signWithIrk = async () => new Uint8Array(64);
-    await expect(
-      buildDebugGrant({ serverDomain: "a.b.flagship.services", sshPublicKey: "", signWithIrk, umk: new Uint8Array(0) }),
-    ).rejects.toThrow("Debug access needs an SSH public key.");
-    await expect(
-      buildDebugGrant({ serverDomain: "a.b.flagship.services", sshPublicKey: "hello world", signWithIrk, umk: new Uint8Array(0) }),
-    ).rejects.toThrow("That isn't an SSH public key this server can use.");
+  it("refuses a missing or unusable key before signing", async () => {
+    let signed = false;
+    const sign = async () => {
+      signed = true;
+      return new Uint8Array(64);
+    };
+    const base = { serverDomain: "kitchen.alice.flagship.services", sign, umk: new Uint8Array(1) };
+    await expect(buildDebugGrant({ ...base, sshPublicKey: "" })).rejects.toThrow("Debug access needs an SSH public key.");
+    await expect(buildDebugGrant({ ...base, sshPublicKey: "hello" })).rejects.toThrow(
+      "That isn't an SSH public key this server can use.",
+    );
+    expect(signed).toBe(false);
   });
 });
 
@@ -84,10 +87,12 @@ describe("debug-friendly + embed-secrets toggle wiring (webapp)", () => {
     );
   });
 
-  it("the debug-friendly subtext warns about physical console access", () => {
+  it("the debug-friendly subtext warns about the key and the 7-day end, and asks for a key", () => {
     expect(INDEX_HTML).toContain(
-      "Anyone with physical access to this server can log into its console. Only turn this on for a server you're actively debugging.",
+      "Anyone with this key can read everything on this server while it's on. It turns off by itself 7 days from now.",
     );
+    expect(INDEX_HTML).toContain('id="cs-debug-ssh-key"');
+    expect(CREATE_SRC).toContain("debugSshKey = debugFriendly ? readDebugSshKey()");
   });
 
   it("debug-friendly is gated behind Advanced mode in readDebugFriendly", () => {

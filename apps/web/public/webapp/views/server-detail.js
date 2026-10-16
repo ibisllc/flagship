@@ -131,6 +131,8 @@ import {
 import { serverSharingHtml, wireServerSharing } from "./server-sharing.js";
 import { accountReadFetch } from "../lib/accountRead.js";
 import { canSignAdminOrders } from "../lib/addServerGate.js";
+import { isAdminDevice } from "../lib/memberRoles.js";
+import { debugAccessBannerHtml, debugAccessCardHtml, wireDebugAccess } from "./debug-access.js";
 
 registerView("view-server-detail");
 
@@ -399,6 +401,7 @@ export async function renderServerDetail() {
     const detailPod = findPod(lookedUp ? [lookedUp] : [], body?.serverFqdn);
     if (!detailFqdn && body?.serverFqdn) startHealthWatch(body.serverFqdn);
     root.innerHTML = `
+      ${body.debugAccess ? debugAccessBannerHtml(body.debugAccess) : ""}
       <div class="card">
         <div class="row"><span class="label">FQDN</span><span class="value">${escapeHtml(body.serverFqdn)}</span></div>
         <div class="row"><span class="label">Username</span><span class="value">${escapeHtml(body.username)}</span></div>
@@ -502,6 +505,7 @@ export async function renderServerDetail() {
           </p>
         </div>
       </div>
+      ${debugAccessCardHtml(body.debugAccess, { isAdmin: isAdminDevice(session), fqdn: body.serverFqdn })}
       <h2 class="mt-4">Diagnostics</h2>
       <div class="card" id="journal-card">
         <label class="caption">Unit</label>
@@ -562,6 +566,7 @@ export async function renderServerDetail() {
     wireLockPower(body);
     wireDeadMan(body);
     wireJournal(body);
+    wireDebugAccess(body);
     wireMakeLeader(body);
     wireServerSharing(body);
     wireServerApps(body.serverFqdn);

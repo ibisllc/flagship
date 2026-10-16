@@ -563,6 +563,16 @@
         "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/LanDirect.kt", "class LanDirectFallbackInterceptor"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/HttpClientFactory.kt", "LanAwareSocketFactory\\(\\)"]] },
         "web": { "status": "na", "reason": "A browser can't route a site to a LAN address with valid TLS (docs/lan-direct.md); the webapp stays on the relay.", "anchors": [] }
       }
+    },
+    {
+      "id": "debug-access",
+      "title": "Debug access: an admin device lets an SSH key in for 1 h / 24 h / 7 days, renews or turns it off; a banner while it's on",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "missing", "reason": "Being built (debug-access v2).", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/DebugAccess.swift", "flagship/debug-access/v2"]] },
+        "android": { "status": "missing", "reason": "Being built (debug-access v2).", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/DebugAccess.kt", "flagship/debug-access/v2"]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/debugAccess.js", "flagship/debug-access/v2"], ["apps/web/public/webapp/views/debug-access.js", "debugAccessBanner"], ["apps/web/public/webapp/views/debug-access.js", "DEBUG_ADMIN_ONLY"], ["apps/web/public/webapp/views/create-server.js", "readDebugSshKey"], ["apps/web/public/webapp/lib/activityFeed.js", "server\\.debug-access\\.revoked"]] }
+      }
     }
   ]
 }

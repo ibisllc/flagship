@@ -276,7 +276,12 @@
 //       devices that can sign it.
 //  v119: co-managers invite people to a shared server's apps at Member and
 //       withdraw their own invites; the owner sees who invited.
-const SHELL_VERSION = "v119";
+//  v120: debug access on the server page (an SSH key for 1 h / 24 h / 7
+//       days, signed by the admin root; renew, turn off, a banner while it's
+//       on; lib/debugAccess.js + views/debug-access.js), the create flow's
+//       debug-friendly server asks for an SSH key and signs a v2 grant, and
+//       Activity labels the four debug-access entries.
+const SHELL_VERSION = "v120";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -326,6 +331,7 @@ const OPTIONAL_SHELL = [
   "/lib/auditLog.js",
   "/lib/accountRead.js",
   "/lib/serverOrder.js",
+  "/lib/debugAccess.js",
   "/lib/totp.js",
   "/lib/edToMont.js",
   "/lib/bootApproval.js",
@@ -434,6 +440,7 @@ const OPTIONAL_SHELL = [
   "/views/pod-pair.js",
   "/views/server-detail.js",
   "/views/server-sharing.js",
+  "/views/debug-access.js",
   "/views/shared-server.js",
   "/views/share-accept.js",
   "/views/services-list.js",

@@ -12,6 +12,7 @@ import {
   signWithAdminRoot as ksSignWithAdminRoot,
 } from "../keystore.js";
 import { sensitiveSigner } from "../lib/adminRoot.js";
+import { DEBUG_ACCESS_MAX_MS, buildDebugAccessGrant, normalizeSshPublicKey } from "../lib/debugAccess.js";
 import { canAddServers, recipeAdminRootPin, refuseAddServer, throwIfAddServerRefused } from "../lib/addServerGate.js";
 import { getActiveProfile } from "../lib/profiles.js";
 import { toast } from "../lib/toast.js";
@@ -295,12 +296,24 @@ function readInputs() {
   // after the box registers. ON (advanced/offline) ⇒ embed `swkHex` in the recipe.
   const embedSecrets = readEmbedSecrets();
   // Debug-friendly server: an Advanced-only opt-in. When ON the minter signs an
-  // owner-IRK `flagship/debug-access/v1` grant and embeds it as the recipe's
-  // unsigned `debugGrant` sibling; the box-side gate verifies it under the
-  // config-pinned owner IRK before enabling the console `debug` user. Default OFF
-  // ⇒ no grant ⇒ a production image.
+  // admin-root `flagship/debug-access/v2` grant for the pasted SSH key (7 days)
+  // and embeds it as the recipe's unsigned `debugGrant` sibling; the box lets
+  // that key in as `debug` only after verifying it. Default OFF ⇒ no grant ⇒ a
+  // production image. A missing or unusable key is refused here, before
+  // anything is minted.
   const debugFriendly = readDebugFriendly();
-  return { serverName, backupPolicy, recipeTtlMs, bootUnlockMode, diskEncryption, embedSecrets, debugFriendly };
+  const debugSshKey = debugFriendly ? readDebugSshKey() : "";
+  return { serverName, backupPolicy, recipeTtlMs, bootUnlockMode, diskEncryption, embedSecrets, debugFriendly, debugSshKey };
+}
+
+// The pasted SSH public key for a debug-friendly server, normalized; throws
+// the sentence to show when it's missing or isn't one. Exported for the test.
+export function readDebugSshKey() {
+  const raw = String($("cs-debug-ssh-key")?.value ?? "").trim();
+  if (!raw) throw new Error("Debug access needs an SSH public key.");
+  const key = normalizeSshPublicKey(raw);
+  if (!key) throw new Error("That isn't an SSH public key this server can use.");
+  return key;
 }
 
 // Read the embed-secrets choice. Only honored when Advanced mode is on; the
@@ -323,42 +336,24 @@ export function readDebugFriendly() {
   return !!dbg.checked;
 }
 
-const DEBUG_KEY_TYPES = [
-  "ssh-ed25519",
-  "sk-ssh-ed25519@openssh.com",
-  "ecdsa-sha2-nistp256",
-  "ecdsa-sha2-nistp384",
-  "ecdsa-sha2-nistp521",
-  "sk-ecdsa-sha2-nistp256@openssh.com",
-  "ssh-rsa",
-];
-
 // Build the recipe's unsigned `debugGrant` sibling: a `flagship/debug-access/v2`
-// grant (docs/recipe-delivery-and-remote-install.md "Debug access") naming the
-// box, one SSH public key (`<type> <base64>`) and an end time, which the box
-// verifies before letting that key in as `debug`. Returns the carrier JSON
-// STRING `{grant,signatureHex}`. `signWithIrk`/`umk` are injectable for the
-// unit test.
+// grant for one SSH key, ending 7 days after it is signed (the box reads it at
+// first boot and lets the key in until then). Signed with the sensitive-order
+// key (the admin root; the IRK only on an account without one). Returns the
+// carrier JSON STRING `{grant,signatureHex}`, the same shape iOS/Android mint
+// and the box consumes. `sign`/`umk` are injectable for the unit test.
 export async function buildDebugGrant({
   serverDomain,
   sshPublicKey,
   issuedAt = Date.now(),
-  expiresAt = issuedAt + 7 * 24 * 60 * 60 * 1000,
-  signWithIrk: signFn = signWithIrk,
+  sign = sensitiveSigner(),
   umk,
 }) {
-  const parts = String(sshPublicKey ?? "").trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) throw new Error("Debug access needs an SSH public key.");
-  const at = parts.findIndex((p) => DEBUG_KEY_TYPES.includes(p));
-  if (at < 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(parts[at + 1] ?? "")) {
-    throw new Error("That isn't an SSH public key this server can use.");
-  }
-  const grant = { serverDomain, sshPublicKey: `${parts[at]} ${parts[at + 1]}`, issuedAt, expiresAt };
-  const canonical = new TextEncoder().encode(
-    ["flagship/debug-access/v2", grant.serverDomain, grant.sshPublicKey, String(issuedAt), String(expiresAt)].join("|"),
+  const carrier = await buildDebugAccessGrant(
+    { serverDomain, sshPublicKey, durationMs: DEBUG_ACCESS_MAX_MS },
+    { now: () => issuedAt, sign, umk },
   );
-  const sig = await signFn(umk, canonical);
-  return JSON.stringify({ grant, signatureHex: bytesToHex(sig) });
+  return JSON.stringify(carrier);
 }
 
 // Read the disk-encryption choice from the "Encrypt disk" checkbox. The box
@@ -785,16 +780,15 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
     markSwkDepositPending(blob.serverDomain);
     if (pairingOrderJson) markPairingDepositPending(blob.serverDomain, pairingOrderJson);
   }
-  // Debug-friendly server (Advanced opt-in): sign + embed the owner-IRK
-  // debug-access grant as the recipe's unsigned `debugGrant` sibling. Absent
-  // (the production default) ⇒ the recipe carries no grant ⇒ the box stays a
-  // production image. The grant is consent-as-crypto: the box only enables the
-  // console debug user if this verifies under its config-pinned owner IRK.
+  // Debug-friendly server (Advanced opt-in): sign + embed the admin-root
+  // debug-access grant for the pasted key as the recipe's unsigned `debugGrant`
+  // sibling. Absent (the production default) ⇒ the recipe carries no grant ⇒
+  // the box stays a production image. Consent-as-crypto: the box lets the key
+  // in only if this verifies under its pinned admin root.
   if (inputs.debugFriendly) {
     bundle.debugGrant = await buildDebugGrant({
       serverDomain: blob.serverDomain,
       sshPublicKey: inputs.debugSshKey,
-      signWithIrk: sensitiveSigner(),
       umk: session.umk,
     });
   }
@@ -869,10 +863,19 @@ function syncAdvancedVisibility() {
     const dbg = $("cs-debug-friendly");
     if (dbg) dbg.checked = false;
   }
+  syncDebugKeyVisibility();
+}
+
+// The SSH key field shows only while "Debug-friendly server" is on.
+function syncDebugKeyVisibility() {
+  const row = $("cs-debug-key-row");
+  if (!row) return;
+  row.classList.toggle("hidden", !$("cs-debug-friendly")?.checked);
 }
 
 export function initCreateServerView() {
   wireServerNameValidation();
+  $("cs-debug-friendly")?.addEventListener("change", syncDebugKeyVisibility);
   $("cs-advanced")?.addEventListener("change", syncAdvancedVisibility);
   syncAdvancedVisibility();
   $("cs-save-draft")?.addEventListener("click", () => handleSaveDraft());

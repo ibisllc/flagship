@@ -31,6 +31,10 @@ export const BOX_EVENT_LABELS = Object.freeze({
   "share.left": { label: "A person left a share", icon: "🤝" },
   "share.signed-in": { label: "A shared person signed in", icon: "🤝" },
   "server.update": { label: "Server updated by a co-manager", icon: "⬆️" },
+  "server.debug-access.granted": { label: "Debug access turned on", icon: "🔑" },
+  "server.debug-access.renewed": { label: "Debug access renewed", icon: "🔑" },
+  "server.debug-access.expired": { label: "Debug access ended", icon: "🔒" },
+  "server.debug-access.revoked": { label: "Debug access turned off", icon: "🔒" },
   "server.state.corrupt": { label: "This server found a damaged settings file and locked it down", icon: "⚠️" },
 });
 
