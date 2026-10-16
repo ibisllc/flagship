@@ -6,7 +6,9 @@ import type {
   ServerStorage,
 } from "@flagship/storage";
 import {
+  parseServerShareAcceptAdmin,
   signPhoneOrder,
+  signServerShareAcceptAdmin,
   signUpdateOrder,
   type PhoneOrder,
   type UpdateOrder,
@@ -115,6 +117,36 @@ export async function handleListDemoUsers(
  * delegated public key as FLAGSHIP_PSK_PUB_HEX. Real-account rows can never
  * enter this path.
  */
+export interface DemoShareAcceptDeps {
+  storage: DemoUsersStorage;
+  demoIrkKek: Uint8Array;
+}
+
+/**
+ * `POST /api/dev/sample-user/:u/share-accept` — a demo account's device holds
+ * no admin root (the operator runs the account; its root is derived here), so
+ * `.com` signs that account's share acceptance (#12,
+ * `flagship/server-share-accept-admin/v1`) for it, and the shared server
+ * checks it exactly as it checks a real account's (docs/share-a-server.md
+ * §5.1). Knowing a demo username is the capability, as for pairing; the
+ * signature can only ever serve as a share acceptance.
+ */
+export async function handleDemoShareAccept(
+  deps: DemoShareAcceptDeps,
+  username: string,
+  body: { admit?: unknown } | undefined,
+): Promise<HandlerResponseWithHeaders> {
+  const row = await deps.storage.get(username.toLowerCase());
+  if (!row) return notFound("no such demo user");
+  const admit = parseServerShareAcceptAdmin(body?.admit);
+  if (!admit) return malformed("admit must be a flagship/server-share-accept-admin/v1 envelope");
+  const root = deriveDemoAdminRoot(deps.demoIrkKek, row.username);
+  if (admit.keyKind !== "admin-root" || admit.keyPubHex !== bytesToHex(root.publicKey)) {
+    return malformed("admit must name this demo account's admin root");
+  }
+  return ok({ signature: bytesToHex(signServerShareAcceptAdmin(admit, root)) }, { "cache-control": "private, no-store" });
+}
+
 export async function handlePairDemoUser(
   deps: DemoPairingDeps,
   username: string,

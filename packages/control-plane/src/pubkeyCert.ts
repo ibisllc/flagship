@@ -1,6 +1,9 @@
 import {
+  ACCOUNT_KEY_ATTESTATION_TTL_MS,
   ed,
+  signAccountKeyAttestation,
   signUserPubKeyBinding,
+  verifyCaSignedAccountKeyAttestation,
   verifyCaSignedUserPubKeyBinding,
   type CaTrustChain,
   type Keypair,
@@ -144,6 +147,40 @@ export async function handleUserPubKeyCert(
     },
     { "cache-control": `public, max-age=${cacheMaxAgeSec}` },
   );
+}
+
+/**
+ * `GET /api/users/:u/account-key-attestation` — the CA's word that a key is
+ * the account's current sensitive key: its admin root, else its IRK (the
+ * `authorizeSensitiveComOp` rule). The attestation names no account: a
+ * device of the account fetches it about its own account and seals it into a
+ * share acceptance, so the shared server checks "an admin device of the
+ * joining account accepted" without asking `.com` who joined
+ * (docs/share-a-server.md §5.1). Public, like `/api/username/:u`, which
+ * already serves both keys.
+ */
+export async function handleAccountKeyAttestation(
+  deps: PubkeyCertDeps,
+  username: string,
+): Promise<HandlerResponseWithHeaders> {
+  const now = (deps.now ?? (() => Date.now()))();
+  const u = await deps.usernames.get(username.toLowerCase());
+  if (!u) return notFound("username not registered");
+  const admin = typeof u.adminRootPubHex === "string" && /^[0-9a-f]{64}$/i.test(u.adminRootPubHex) ? u.adminRootPubHex.toLowerCase() : null;
+  const attestation = signAccountKeyAttestation(
+    {
+      keyKind: admin ? "admin-root" : "irk",
+      keyPubHex: admin ?? u.irkPubHex.toLowerCase(),
+      issuedAt: now,
+      expiresAt: now + ACCOUNT_KEY_ATTESTATION_TTL_MS,
+    },
+    deps.ca.keypair,
+  );
+  const gateResp = evaluateCaGate(deps.caGate, "AccountKeyAttestation", u.username, now, () =>
+    verifyCaSignedAccountKeyAttestation(attestation, deps.caGate!.caTrustChain, now),
+  );
+  if (gateResp) return gateResp;
+  return ok({ attestation }, { "cache-control": "private, no-store" });
 }
 
 /**
