@@ -281,7 +281,10 @@
 //       on; lib/debugAccess.js + views/debug-access.js), the create flow's
 //       debug-friendly server asks for an SSH key and signs a v2 grant, and
 //       Activity labels the four debug-access entries.
-const SHELL_VERSION = "v120";
+//  v121: turning debug access on or renewing it (and a debug-friendly
+//       recipe) asks for this device's passphrase again (lib/freshUnlock.js),
+//       one fresh unlock per grant.
+const SHELL_VERSION = "v121";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -332,6 +335,7 @@ const OPTIONAL_SHELL = [
   "/lib/accountRead.js",
   "/lib/serverOrder.js",
   "/lib/debugAccess.js",
+  "/lib/freshUnlock.js",
   "/lib/totp.js",
   "/lib/edToMont.js",
   "/lib/bootApproval.js",

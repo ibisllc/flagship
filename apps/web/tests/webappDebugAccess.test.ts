@@ -118,18 +118,18 @@ describe("the server page's Debug access section", () => {
   it("refuses non-admin devices and bad keys before asking or signing", async () => {
     const view = await load("views/debug-access.js");
     let asked = false;
-    const confirm = async () => ((asked = true), true);
+    const freshUnlock = async () => ((asked = true), { ok: true });
     const fetchJson = async () => {
       throw new Error("must not send");
     };
     const base = { fqdn: FQDN, durationId: "24h", renewing: false };
-    expect(await view.submitDebugOn({ ...base, rawKey: KEY }, { session: { umk: new Uint8Array(1), adminRootSeed: null }, confirm, fetchJson }))
+    expect(await view.submitDebugOn({ ...base, rawKey: KEY }, { session: { umk: new Uint8Array(1), adminRootSeed: null }, freshUnlock, fetchJson }))
       .toEqual({ ok: false, error: "Only an admin device can turn debug access on or off." });
-    expect(await view.submitDebugOn({ ...base, rawKey: "" }, { session: ADMIN, confirm, fetchJson }))
+    expect(await view.submitDebugOn({ ...base, rawKey: "" }, { session: ADMIN, freshUnlock, fetchJson }))
       .toEqual({ ok: false, error: "Debug access needs an SSH public key." });
-    expect(await view.submitDebugOn({ ...base, rawKey: "not a key" }, { session: ADMIN, confirm, fetchJson }))
+    expect(await view.submitDebugOn({ ...base, rawKey: "not a key" }, { session: ADMIN, freshUnlock, fetchJson }))
       .toEqual({ ok: false, error: "That isn't an SSH public key this server can use." });
-    expect(await view.submitDebugOff({ fqdn: FQDN }, { session: { umk: null, adminRootSeed: ADMIN_SEED }, confirm, fetchJson }))
+    expect(await view.submitDebugOff({ fqdn: FQDN }, { session: { umk: null, adminRootSeed: ADMIN_SEED }, freshUnlock, fetchJson }))
       .toEqual({ ok: false, error: "Unlock the webapp first." });
     expect(asked).toBe(false);
   });
@@ -145,7 +145,7 @@ describe("the server page's Debug access section", () => {
       if (path.endsWith("/revoke")) return { ok: true, change: "revoked", debugAccess: OFF };
       return { ok: true, change: posts.length > 1 ? "renewed" : "granted", debugAccess: ON };
     };
-    const deps = { session: ADMIN, confirm: async () => true, fetchJson, sign: adminSign };
+    const deps = { session: ADMIN, freshUnlock: async () => ({ ok: true }), confirm: async () => true, fetchJson, sign: adminSign };
 
     const on = await view.submitDebugOn({ fqdn: FQDN, rawKey: `${KEY} me@laptop`, durationId: "1h", renewing: false }, deps);
     expect(on).toEqual({ ok: true, change: "granted", view: ON });
@@ -176,10 +176,48 @@ describe("the server page's Debug access section", () => {
     let sent = false;
     const r = await view.submitDebugOn(
       { fqdn: FQDN, rawKey: KEY, durationId: "24h", renewing: false },
-      { session: ADMIN, confirm: async () => false, fetchJson: async () => ((sent = true), {}) },
+      { session: ADMIN, freshUnlock: async () => ({ ok: false, cancelled: true }), fetchJson: async () => ((sent = true), {}) },
     );
     expect(r).toEqual({ ok: false, cancelled: true });
     expect(sent).toBe(false);
+  });
+
+  it("a wrong passphrase signs and sends nothing", async () => {
+    const view = await load("views/debug-access.js");
+    let sent = false;
+    const r = await view.submitDebugOn(
+      { fqdn: FQDN, rawKey: KEY, durationId: "24h", renewing: true },
+      {
+        session: ADMIN,
+        freshUnlock: async () => ({ ok: false, error: "That passphrase doesn't unlock this device." }),
+        fetchJson: async () => ((sent = true), {}),
+      },
+    );
+    expect(r).toEqual({ ok: false, error: "That passphrase doesn't unlock this device." });
+    expect(sent).toBe(false);
+  });
+});
+
+describe("fresh unlock per grant", () => {
+  const seed = new Uint8Array(32).fill(9);
+  it("passes only when the passphrase unwraps the session's own key", async () => {
+    const { confirmFreshUnlock, FRESH_UNLOCK_WRONG } = await load("lib/freshUnlock.js");
+    const session = { umk: seed };
+    let asked: { type?: string; message?: string } = {};
+    const prompt = async (o: { type?: string; message?: string }) => ((asked = o), "right");
+    const unlock = async (p: string) => {
+      if (p !== "right") throw new Error("bad");
+      return new Uint8Array(seed);
+    };
+    expect(await confirmFreshUnlock({ title: "t", message: "m." }, { prompt, unlock, session })).toEqual({ ok: true });
+    expect(asked.type).toBe("password");
+    expect(asked.message).toContain("passphrase");
+    expect(await confirmFreshUnlock({ title: "t", message: "m." }, { prompt: async () => "wrong", unlock, session }))
+      .toEqual({ ok: false, error: FRESH_UNLOCK_WRONG });
+    expect(await confirmFreshUnlock({ title: "t", message: "m." }, { prompt, unlock: async () => new Uint8Array(32), session }))
+      .toEqual({ ok: false, error: FRESH_UNLOCK_WRONG });
+    expect(await confirmFreshUnlock({ title: "t", message: "m." }, { prompt: async () => null, unlock, session }))
+      .toEqual({ ok: false, cancelled: true });
   });
 });
 

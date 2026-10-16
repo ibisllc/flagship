@@ -9,6 +9,7 @@ import { boxClient } from "../lib/api.js";
 import { getSession } from "../lib/state.js";
 import { isAdminDevice } from "../lib/memberRoles.js";
 import { inlineConfirm } from "../lib/modal.js";
+import { confirmFreshUnlock } from "../lib/freshUnlock.js";
 import { toast } from "../lib/toast.js";
 import { boxErrorText, humanError } from "../lib/humanError.js";
 import { formatDateTime } from "../lib/dateFormat.js";
@@ -135,13 +136,16 @@ export async function submitDebugOn({ fqdn, rawKey, durationId, renewing }, deps
   const key = normalizeSshPublicKey(raw);
   if (!key) return { ok: false, error: "That isn't an SSH public key this server can use." };
   const dur = DEBUG_DURATIONS.find((d) => d.id === durationId) ?? DEBUG_DURATIONS.find((d) => d.id === DEBUG_DEFAULT_DURATION);
-  const ok = await (deps.confirm ?? inlineConfirm)({
-    title: renewing ? "Renew debug access?" : "Turn on debug access?",
-    message: `${DEBUG_WARNING} It stays on for ${dur.label}.`,
-    okLabel: renewing ? "Renew" : "Turn on",
-    danger: true,
-  });
-  if (!ok) return { ok: false, cancelled: true };
+  // One fresh unlock per grant, like an admin invite: an open tab alone can't sign it.
+  const unlocked = await (deps.freshUnlock ?? confirmFreshUnlock)(
+    {
+      title: renewing ? "Renew debug access?" : "Turn on debug access?",
+      message: `${DEBUG_WARNING} It stays on for ${dur.label}.`,
+      okLabel: renewing ? "Renew" : "Turn on",
+    },
+    { session },
+  );
+  if (!unlocked.ok) return unlocked.cancelled ? { ok: false, cancelled: true } : { ok: false, error: unlocked.error };
   const fetchJson = deps.fetchJson ?? ((path, init) => boxClient(fqdn).fetch(path, init));
   try {
     const res = await turnOnDebugAccess({ serverDomain: fqdn, sshPublicKey: key, durationMs: dur.ms, fetchJson }, { ...deps, umk: session.umk });

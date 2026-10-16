@@ -552,7 +552,20 @@ test.describe("gym webapp total", () => {
 
     await page.fill("#debug-access-ssh-key", `${GYM_DEBUG_KEY} me@laptop`);
     await page.selectOption("#debug-access-duration", "1h");
+    // seedPairedPod switched to the "smoketest" profile: wrap this session's key
+    // there too, so the fresh unlock below finds it under the passphrase.
+    await page.evaluate(async (pass) => {
+      const [{ getSession }, ks] = await Promise.all([import("/lib/state.js"), import("/keystore.js")]);
+      await ks.persistSeedForProfile(getSession().umk, "smoketest", pass);
+    }, PASSPHRASE);
     await page.click("#debug-access-on-btn");
+    // One fresh unlock per grant: a wrong passphrase sends nothing.
+    await expect(page.locator(".modal-message")).toContainText("read everything on this server");
+    await page.fill(".modal-input", "not-the-passphrase");
+    await page.locator("[data-modal-ok]").click();
+    await expect.poll(() => sent.length).toBe(0);
+    await page.click("#debug-access-on-btn");
+    await page.fill(".modal-input", PASSPHRASE);
     await page.locator("[data-modal-ok]").click();
     await expect(page.locator("#debug-access-banner")).toContainText("Debug access is on until", { timeout: 10_000 });
     await expect(page.locator("#debug-access-pill")).toHaveText("On");
@@ -564,6 +577,7 @@ test.describe("gym webapp total", () => {
 
     await expect(page.locator("#debug-access-on-btn")).toHaveText("Renew");
     await page.click("#debug-access-on-btn");
+    await page.fill(".modal-input", PASSPHRASE);
     await page.locator("[data-modal-ok]").click();
     await expect.poll(() => sent.length).toBe(2);
 

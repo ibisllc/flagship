@@ -33,6 +33,7 @@ import { markPairingDepositPending, clearPairingDeposit } from "../lib/pairingDe
 import { setSessionToken, setSessionTokenForPod } from "../lib/api.js";
 import { attachRestoreOrder } from "../lib/serverBackupFormat.js";
 import { throwIfRateLimited } from "../lib/rateLimited.js";
+import { confirmFreshUnlock } from "../lib/freshUnlock.js";
 
 registerView("view-create-server");
 
@@ -467,6 +468,15 @@ async function handleRecipeDownload() {
   let inputs;
   try { inputs = readInputs(); }
   catch (e) { console.error(e); return toast(humanError(e), "err"); }
+  // A debug grant takes one fresh unlock, like the server page's Turn on.
+  if (inputs.debugFriendly) {
+    const unlocked = await confirmFreshUnlock({
+      title: "Make a debug-friendly server?",
+      message: "Anyone with this key can read everything on this server while it's on. It turns off by itself 7 days from now.",
+      okLabel: "Create recipe",
+    });
+    if (!unlocked.ok) return unlocked.cancelled ? undefined : toast(unlocked.error, "err");
+  }
 
   // Phase 2: the account is now opened FIRST (standalone username claim
   // + device bind), so by the time the user reaches "Add a server" the
