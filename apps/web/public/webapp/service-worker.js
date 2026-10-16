@@ -224,8 +224,10 @@
 //       sign-in signs with the device key on own servers and the share key
 //       on shared ones. (v97-v100 belong to feature branches.)
 //  v102: feat/marketplace only: main's shell plus the branch's files
-//       (marketplace, tier status, allowance, install, developer views), so
-//       it runs a version above main's; bump it past main's on rebase.
+//       (marketplace, tier status, allowance, install, developer views, and
+//       the Pro "Separate list on each server" switch: lib/listScope.js, an
+//       access-lists push that opens the activity), so it runs a version
+//       above main's; bump it past main's on rebase.
 const SHELL_VERSION = "v102";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
@@ -301,6 +303,7 @@ const OPTIONAL_SHELL = [
   "/lib/appPlacement.js",
   "/lib/serverMonitoring.js",
   "/lib/memberRoles.js",
+  "/lib/listScope.js",
   "/lib/serverShare.js",
   "/lib/serverShares.js",
   "/lib/serverArchive.js",
@@ -726,6 +729,23 @@ self.addEventListener("push", (event) => {
         requireInteraction: false,
         icon: "/icon.svg",
         data: { kind: "invite-created", deepLink: "/?view=account-audit" },
+      }),
+    );
+    return;
+  }
+
+  // Pro ended, so apps with a separate access list on each server went back to
+  // one list (feat/marketplace). The push names no app or person; the
+  // activity view shows the box's row.
+  if (data && (data.category === "access-lists" || data.kind === "access-lists")) {
+    event.waitUntil(
+      self.registration.showNotification("Flagship", {
+        body: "Pro ended, so your apps use one access list on all your servers again.",
+        tag: "flagship-access-lists",
+        renotify: true,
+        requireInteraction: false,
+        icon: "/icon.svg",
+        data: { kind: "access-lists", deepLink: "/?view=account-audit" },
       }),
     );
     return;

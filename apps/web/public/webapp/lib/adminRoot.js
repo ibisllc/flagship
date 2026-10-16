@@ -56,6 +56,7 @@ export const SENSITIVE_TAGS = new Set([
   "flagship/service-access-mode/v2", //    open to all / members only
   "flagship/service-allow-remove/v2", //   remove a person from an app
   "flagship/uninstall-service/v1", //      uninstall an app
+  "flagship/app-list-scope/v1", //         a separate access list on each server (Pro, feat/marketplace)
   // `.com`-side (authorizeSensitiveComOp)
   "flagship/server-update/v1", //          in-place server update (2-of-2)
   "flagship/account-self-delete/v1", //    account deletion

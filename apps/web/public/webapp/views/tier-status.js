@@ -4,6 +4,7 @@ import { $, registerView, show } from "../lib/router.js";
 import { screensFetch, ScreensError } from "../lib/api.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml, skeletonCards } from "../lib/util.js";
+import { fetchSeparateListsSummary, separateListsWarning } from "../lib/listScope.js";
 
 registerView("view-tier-status");
 
@@ -16,7 +17,12 @@ export async function renderTierStatus() {
   const root = $("tier-status-content");
   root.innerHTML = skeletonCards(2);
   try {
-    const body = await screensFetch("/api/screens/tier-status");
+    const [body, lists] = await Promise.all([
+      screensFetch("/api/screens/tier-status"),
+      fetchSeparateListsSummary({ fetchJson: (path) => screensFetch(path) }),
+    ]);
+    // Pro ending sends apps with separate lists back to one list (feat/marketplace).
+    const listsWarning = separateListsWarning(lists);
     const tierBadge = body.tier === "free"
       ? '<span class="pill">free</span>'
       : body.tier === "promo"
@@ -30,6 +36,7 @@ export async function renderTierStatus() {
       <div class="card">
         <div class="row"><span class="label">Tier</span><span>${tierBadge}</span></div>
       </div>
+      ${listsWarning ? `<div class="card mt-3 warn" id="tier-status-separate-lists-warning" data-testid="tier-status-separate-lists-warning"><p class="note">${escapeHtml(listsWarning)}</p></div>` : ""}
       <h2 class="mt-4">LLM credits</h2>
       <div class="card">
         ${typeof llmDay === "number"
