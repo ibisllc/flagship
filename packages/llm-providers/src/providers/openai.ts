@@ -192,6 +192,18 @@ export const openaiStreaming: StreamingLLMProvider = {
 };
 
 /** The OpenAI chat-completions stream, shared by every compatible adapter. */
+/**
+ * Waits before retrying a request the provider refused for a moment (rate
+ * limit, overload, a gateway error). Tests set it to zeros.
+ */
+export const transientRetry = { delaysMs: [2000, 6000] };
+
+/** A refusal that says "try again shortly": the turn is retried, not failed. */
+export function isTransientProviderFailure(status: number, body: string): boolean {
+  if ([408, 425, 429, 500, 502, 503, 504, 529].includes(status)) return true;
+  return /engine_overloaded|overloaded|model busy|server busy|temporarily unavailable|try again later|retry later/i.test(body);
+}
+
 export async function streamOpenAiCompatible(
   req: ChatRequest,
   cfg: ProviderConfig,
@@ -208,20 +220,28 @@ export async function streamOpenAiCompatible(
   const body = openAiChatBody(req, openAiTokenField(base), { stream: true, effortStyle });
   let res: Awaited<ReturnType<StreamingFetchLike>>;
   let errorText: string | undefined;
-  try {
-    ({ res, errorText } = await sendAdapting(`${base}|${req.model}`, body, (b) =>
-      f(`${base}/v1/chat/completions`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${cfg.apiKey}`,
-        },
-        body: JSON.stringify(b),
-      }),
-    ));
-  } catch (e) {
-    onEvent({ kind: "error", message: e instanceof Error ? e.message : String(e) });
-    return;
+  // Nothing has streamed yet, so a refusal that says "try again shortly"
+  // (DeepInfra's engine_overloaded, a 429, a gateway 503) is retried before
+  // the turn fails: one busy minute at the provider used to fail a whole build.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      ({ res, errorText } = await sendAdapting(`${base}|${req.model}`, body, (b) =>
+        f(`${base}/v1/chat/completions`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${cfg.apiKey}`,
+          },
+          body: JSON.stringify(b),
+        }),
+      ));
+    } catch (e) {
+      onEvent({ kind: "error", message: e instanceof Error ? e.message : String(e) });
+      return;
+    }
+    const delay = transientRetry.delaysMs[attempt];
+    if (res.ok || delay === undefined || !isTransientProviderFailure(res.status, errorText ?? "")) break;
+    await new Promise((r) => setTimeout(r, delay));
   }
   if (!res.ok) {
     onEvent({ kind: "error", message: (errorText || "<no body>").slice(0, 512), status: res.status });
