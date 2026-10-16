@@ -62,6 +62,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
+
+    // The watch app's screens run under Robolectric (wear/src/test): the
+    // phone emulator can't hold the watch build (same applicationId).
+    testOptions { unitTests.isIncludeAndroidResources = true }
 }
 
 dependencies {
@@ -86,4 +90,11 @@ dependencies {
     implementation("androidx.wear.watchface:watchface-complications-data-source-ktx:1.2.1")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+    testImplementation("org.robolectric:robolectric:4.13")
+    testImplementation("androidx.test:core:1.6.1")
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    testImplementation("androidx.compose.ui:ui-test-manifest")
+    // The test host activity the Compose rule launches (debug builds only).
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

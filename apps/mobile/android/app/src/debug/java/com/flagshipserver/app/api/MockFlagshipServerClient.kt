@@ -143,13 +143,40 @@ class MockFlagshipServerClient(
         _revokedAuthCodes += req.request.serial
     }
 
+    /** The gym's rate limiter (GymSeams.rateLimited): `.com`'s 429 body. */
+    private fun rateLimit(endpoint: String) {
+        if (endpoint !in com.flagshipserver.app.core.GymSeams.rateLimited) return
+        val body = """{"error":"rate-limited","endpoint":"$endpoint","limit":"ip","retryAfterSec":720,"message":"Too many tries from your network. Try again in about 12 minutes."}"""
+        throw com.flagshipserver.app.core.RateLimitedException.parse(429, body)!!
+    }
+
+    /** The gym's admin-pinned `.com`: a sensitive order the IRK signed is a 403. */
+    private fun requireAdmin(what: String, bytes: ByteArray, sig: String) {
+        try {
+            MockSignatures.requireAdmin(what, bytes, sig)
+        } catch (e: ScreensError.Http) {
+            throw HttpException(403, e.body)
+        }
+    }
+
     override suspend fun releaseServerName(req: ReleaseServerNameRequest) {
         tick()
+        requireAdmin(
+            "release-name",
+            com.flagshipserver.app.core.ReleaseServerName.canonicalBytes(req.request.username, req.request.serverDomain, req.request.issuedAt),
+            req.signature,
+        )
         _releasedServerNames += req
     }
 
     override suspend fun revokeServer(req: ServerRevocationRequest) {
         tick()
+        val r = req.request
+        requireAdmin(
+            "revoke",
+            com.flagshipserver.app.core.ServerRevocationClaim.canonicalBytes(r.userId, r.revokedServerId, r.reason, r.issuedAt),
+            req.signature,
+        )
         _revokedServers += req
         _activeRevocations[req.request.revokedServerId.lowercase()] = req.request.reason
     }
@@ -162,6 +189,11 @@ class MockFlagshipServerClient(
         if (_releasedServerNames.any { it.request.serverDomain.lowercase() == domain }) {
             throw HttpException(409, """{"error":"this server was deleted, transferred or retired and can't be restored"}""")
         }
+        requireAdmin(
+            "unrevoke",
+            com.flagshipserver.app.core.ServerUnrevocation.canonicalBytes(req.request.username, req.request.serverDomain, req.request.issuedAt),
+            req.signature,
+        )
         _activeRevocations.remove(domain) ?: return UnrevokeServerResponse(ok = true, alreadyActive = true)
         _unrevokedServers += req
         return UnrevokeServerResponse(ok = true, unrevokedAt = nowMs(), dnsRepublished = 0)
@@ -670,6 +702,7 @@ class MockFlagshipServerClient(
         body: TotpEnrollConfirmRequest,
     ): TotpEnrollConfirmResponse {
         tick()
+        rateLimit("totp-verify")
         val u = username.lowercase()
         if (totpSecretByUser[u] == null) {
             throw HttpException(409, "no staged TOTP secret; call enroll-begin first")
@@ -807,6 +840,7 @@ class MockFlagshipServerClient(
 
     override suspend fun mintWatchDelegate(username: String, body: WatchDelegateMintRequest): WatchDelegateMintResponse {
         tick()
+        rateLimit("watch-delegate")
         val u = username.lowercase()
         // The Worker rejects any scope set other than ["boot-approval"]
         // (core.WatchDelegateKey.BOOT_APPROVAL_SCOPE; inlined so the api

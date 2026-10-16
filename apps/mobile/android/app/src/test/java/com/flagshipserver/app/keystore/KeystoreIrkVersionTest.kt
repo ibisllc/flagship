@@ -87,6 +87,26 @@ class KeystoreIrkVersionTest {
         assertNotEquals(v1.toList(), v2.toList())
     }
 
+    /** irkPubHex read the un-versioned slot deriveIRK no longer writes, so
+     *  on any install since versions it threw (update, migrate, delete,
+     *  transfer and the trust override all call it). */
+    @Test fun irkPubHex_isThePublicHalfOfTheCurrentVersion() = runBlocking {
+        val pub1 = Keystore.irkPubHex()
+        val seed1 = Keystore.requireIrkSeedForVersion(1)
+        assertEquals(
+            com.flagshipserver.app.core.HexUtil.encode(com.google.crypto.tink.subtle.Ed25519Sign.KeyPair.newKeyPairFromSeed(seed1).publicKey),
+            pub1,
+        )
+        Keystore.setCurrentIrkVersion(2)
+        val pub2 = Keystore.irkPubHex()
+        val seed2 = Keystore.requireIrkSeedForVersion(2)
+        assertEquals(
+            com.flagshipserver.app.core.HexUtil.encode(com.google.crypto.tink.subtle.Ed25519Sign.KeyPair.newKeyPairFromSeed(seed2).publicKey),
+            pub2,
+        )
+        assertNotEquals(pub1, pub2)
+    }
+
     @Test fun deriveIrk_isIdempotentAtSameVersion() = runBlocking {
         Keystore.deriveIRK("first", version = 3)
         val first = Keystore.requireIrkSeedForVersion(3)

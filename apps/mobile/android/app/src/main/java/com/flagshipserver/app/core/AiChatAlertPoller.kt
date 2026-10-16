@@ -45,9 +45,17 @@ class AiChatAlertPoller(
     private val currentServer: () -> String? = { null },
     /** An app on [server] reached its disk limit: say so once per app. */
     private val notifyStorageFull: (serviceId: String, server: String?) -> Unit = { _, _ -> },
+    /** Every box this device has a session on, each drained with its own
+     *  cursor so an alert names the box it came from. Empty: only [client],
+     *  the current server. */
+    private val sources: () -> List<AlertSource> = { emptyList() },
 ) {
-    /** ACK cursor — the highest alert id we've drained. */
-    private var cursor: Int = 0
+    /** One box's alert outbox. */
+    class AlertSource(val server: String, val client: PhoneAlertClient)
+
+    /** ACK cursor per server ("" for the current server's [client]): the
+     *  highest alert id drained there. */
+    private val cursors = HashMap<String, Int>()
     /** Dedup set so a re-drain (e.g. after a failed ACK) won't re-notify the
      *  same pending tool. Keyed by "<sessionId>|<toolUseId>". */
     private val notified = mutableSetOf<String>()
@@ -78,8 +86,21 @@ class AiChatAlertPoller(
      *  notifier is dedup-guarded so a re-drain won't double-notify. Returns the
      *  number of AI-chat alerts handled (for tests / pull-to-refresh). */
     suspend fun drainOnce(): Int {
+        val boxes = sources()
+        if (boxes.isEmpty()) return drain(key = "", client, currentServer()?.takeIf { it.isNotEmpty() })
+        var handled = 0
+        for (box in boxes.distinctBy { it.server.lowercase() }) {
+            handled += drain(key = box.server.lowercase(), box.client, box.server)
+        }
+        return handled
+    }
+
+    private suspend fun drain(key: String, client: PhoneAlertClient, server: String?): Int {
+        val cursor = cursors[key] ?: 0
         val resp = try {
             client.fetchAlerts(cursor)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (t: Throwable) {
             return 0
         }
@@ -87,7 +108,6 @@ class AiChatAlertPoller(
 
         var maxId = cursor
         var handled = 0
-        val server = currentServer()?.takeIf { it.isNotEmpty() }
         for (env in resp.events) {
             if (env.id > maxId) maxId = env.id
             val alert = env.alert
@@ -113,7 +133,7 @@ class AiChatAlertPoller(
         }
 
         if (maxId > cursor) {
-            cursor = maxId
+            cursors[key] = maxId
             // Best-effort ACK — a failure just means we re-drain next tick.
             try {
                 client.ackAlerts(maxId)
@@ -123,4 +143,10 @@ class AiChatAlertPoller(
         }
         return handled
     }
+}
+
+/** The FCM service's handle on the poller: a content-free `generic` push
+ *  may mean a build chat needs the owner, so it drains every box at once. */
+object AiChatAlertBridge {
+    @Volatile var onWake: (() -> Unit)? = null
 }

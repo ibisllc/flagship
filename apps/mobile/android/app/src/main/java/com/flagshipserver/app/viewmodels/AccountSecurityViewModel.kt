@@ -112,7 +112,7 @@ class AccountSecurityViewModel(
             )
         } catch (e: Throwable) {
             val msg = e.message.orEmpty()
-            val friendly = if (msg.contains("503")) {
+            val friendly = com.flagshipserver.app.core.RateLimitedException.messageOf(e) ?: if (msg.contains("503")) {
                 "Multi-device + 2FA isn't configured on this server yet. Try again later."
             } else {
                 "Couldn't start enrollment: $msg"
@@ -160,7 +160,8 @@ class AccountSecurityViewModel(
             )
         } catch (e: Throwable) {
             val msg = e.message.orEmpty()
-            val friendly = if (msg.contains("401")) {
+            // A refused 429 says when to try again in `.com`'s own words.
+            val friendly = com.flagshipserver.app.core.RateLimitedException.messageOf(e) ?: if (msg.contains("401")) {
                 "That code didn't match. Try again with a fresh code from your authenticator."
             } else {
                 "Couldn't confirm: $msg"
@@ -210,7 +211,7 @@ class AccountSecurityViewModel(
             _phase.value = AccountSecurityPhase.Disabled
         } catch (e: Throwable) {
             val msg = e.message.orEmpty()
-            val friendly = when {
+            val friendly = com.flagshipserver.app.core.RateLimitedException.messageOf(e) ?: when {
                 msg.contains("401") -> "That code didn't match. Try a fresh code from your authenticator."
                 msg.contains("409") -> "Disable refused — other devices are still trusted on this account. Disconnect them first."
                 else -> "Couldn't disable: $msg"

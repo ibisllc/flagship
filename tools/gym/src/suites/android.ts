@@ -14,7 +14,7 @@
  * nowhere else.
  */
 
-import type { Scenario } from "../scenario.js";
+import type { Dimension, Scenario } from "../scenario.js";
 import { android, androidTotal, shot } from "./helpers.js";
 
 const PKG = "com.flagshipserver.app.gym";
@@ -1250,9 +1250,270 @@ const OCTOBER: readonly Scenario[] = [
   ),
 ];
 
+// ───────────────────── the button sweep (total gym) ─────────────────────
+//
+// One Compose test per row presses a screen's controls and asserts each
+// effect: where it lands, what the mock box or `.com` received, and which key
+// signed it ("<order>:admin" / ":share", MockSignatures: the mocks verify like
+// an admin-pinned account, so an order slipping back to the IRK fails).
+// Reached by tapping from a tab (deep links only where a link is the entry:
+// a browser's QR, a backup's download page).
+
+const sweep =
+  (cls: string, dimension: Dimension) =>
+  (
+    id: string,
+    goal: string,
+    method: string,
+    presses: readonly string[],
+    effects: readonly string[],
+    shots: readonly string[],
+  ): Scenario =>
+    androidTotal(`android-${id}`, goal, `${PKG}.${cls}#${method}`, {
+      steps: [
+        { kind: "launch", describe: "Launch in smoke mode (flagship.smoke* extras: mock box, mock .com)." },
+        ...presses.map((h) => ({ kind: "tap" as const, describe: `Press ${h}.`, handle: h })),
+      ],
+      assertions: effects.map((e) =>
+        e.includes(":") || e.includes(" ")
+          ? { describe: e, expect: "present" as const }
+          : { describe: `${e} shows`, handle: e, expect: "present" as const },
+      ),
+      screenshots: shots.map((s) => shot(s, s)),
+      dimension,
+    });
+
+const home = sweep("GymHomeTest", "D1");
+const HOME_SWEEP: readonly Scenario[] = [
+  home("home-add-import-choices", "Add/Import a server: each choice lands on its flow, Cancel closes.", "addImportMenuEachChoiceLandsOnItsFlow",
+    ["home-add-server", "home-co-manage", "home-import-backup"], ["share-link-open", "import-backup-choose"], ["add-import-menu", "co-manage", "import-backup"]),
+  home("home-co-manage-accept", "Co-manage: a pasted share link opens the offer; Accept shows the code to read to the owner.", "coManageAcceptsAPastedShareLink",
+    ["home-co-manage", "share-link-open", "share-accept-button"], ["share-accept-sas"], ["share-offer", "share-accepted"]),
+  home("home-row-make-leader", "Row menu → Make leader: Office first, gray badge, order signed with the admin root.", "rowMenuMakeLeaderSignsTheOrder",
+    ["pod-card-make-leader"], ["server-order:admin", "leader-badge-pending"], ["row-menu", "leader-moved"]),
+  home("home-row-delete", "Row menu → Delete: typed name gate, admin-signed release, row gone.", "rowMenuDeleteNeedsTheTypedName",
+    ["pod-card-delete", "delete-server-confirm"], ["release-name:admin"], ["delete-typed", "deleted"]),
+  home("home-delete-cancel", "Delete dialog Cancel keeps the server and sends nothing.", "deleteDialogCancelKeepsTheServer",
+    ["pod-card-delete"], ["delete-server-dialog"], ["deleted"]),
+  home("home-non-admin-read-only", "A non-admin device: no reorder, Make leader or Delete on Home or the server page.", "nonAdminRowMenuOnlyOpens",
+    [], ["sd-leader-admin-only", "sd-danger-admin-only"], ["non-admin-menu", "non-admin-server-page"]),
+  home("home-send-backup", "A server waiting for its backup: row menu → Send the backup opens the import.", "awaitingBackupRowSendsTheBackup",
+    ["pod-card-send-backup"], ["import-backup-choose"], ["send-backup"]),
+  home("home-order-move-actions", "Server order a11y Move down / Move up: reorders, signed with the admin root each time.", "moveDownActionReordersAndSigns",
+    ["home-server-row-<id> Move down", "Move up"], ["server-order:admin"], ["moved-down"]),
+  home("home-order-drag", "Dragging a row's handle reorders and signs the order.", "dragHandleReorders",
+    ["home-server-handle-<id>"], ["server-order:admin"], ["dragged"]),
+  home("home-search-chips", "Search with no match, the Offline chip, All.", "searchAndStatusChipsFilterTheList",
+    ["Search servers", "Offline", "All"], ["No servers match"], ["no-match", "offline-chip"]),
+  home("home-pod-switcher-pick", "The pod switcher makes the picked server current.", "podSwitcherPicksAnotherServer",
+    ["pod-switcher", "pod-switcher-item-<id>"], ["the mock box answers as Office"], ["switched"]),
+  home("home-trust-sliver", "The red trust sliver: Not now, then Continue anyway signs the exception.", "trustSliverAsksBeforeContinuing",
+    ["global-trust-bar", "Not now", "Continue anyway"], ["no Couldn't continue toast"], ["trust-ask", "trust-continued"]),
+  home("home-ops-sliver", "The operations sliver opens the running build's chat.", "operationsSliverOpensTheChat",
+    ["global-operations-bar"], ["vibecode-envvar-send-btn"], ["chat-from-sliver"]),
+];
+
+const page = sweep("GymServerPageTest", "D1");
+const SERVER_SWEEP: readonly Scenario[] = [
+  page("server-non-admin-read-only", "A non-admin device: every server-page control off with 'Only an admin device can change this server…', the share card read-only, nothing signed.", "nonAdminDeviceSeesThePageReadOnly",
+    [], ["sd-server-admin-only", "share-admin-only"], ["non-admin-server-page"]),
+  page("server-update-latest", "Update to latest: signed with the admin root, deposited, shown as sent.", "updateToLatestOrdersTheNewRelease",
+    ["sd-update-server", "update-latest-btn"], ["server-update:admin", "sd-update-pending"], ["update-sheet", "update-sent"]),
+  page("server-update-go-back", "Advanced: the warning, Go back to an older release (signed).", "updateAdvancedGoesBackToAnOlderRelease",
+    ["update-advanced", "Go back"], ["server-update:admin"], ["update-advanced"]),
+  page("server-update-typed", "Advanced: a typed commit and Order update (signed).", "updateAdvancedOrdersATypedCommit",
+    ["update-advanced", "update-order-btn"], ["server-update:admin"], ["update-advanced"]),
+  page("server-revoke-unrevoke", "Revoke: reason, a short tap does nothing, a 1.5 s hold revokes; Un-revoke restores. Both admin-signed.", "revokeHoldToConfirmThenUnrevoke",
+    ["sd-revoke-server", "revoke-reason-stolen", "revoke-confirm-hold", "sd-unrevoke-server"], ["revoke:admin", "unrevoke:admin"], ["revoke-sheet", "revoked", "unrevoked"]),
+  page("server-revoke-cancel", "Revoke sheet Cancel sends nothing.", "revokeCancelLeavesTheServer",
+    ["sd-revoke-server", "Cancel"], ["no revoke on the mock .com"], ["revoke-sheet"]),
+  page("server-delete", "Delete from the page: typed name, admin-signed release, gone from Home.", "deleteFromThePage",
+    ["sd-delete-server", "delete-server-confirm"], ["release-name:admin"], ["deleted"]),
+  page("server-power", "Power: Cancel sends nothing; Lock and turn off sends the admin-signed order to the box.", "powerAsksThenSendsTheSignedOrder",
+    ["sd-power-restart", "Cancel", "sd-power-off"], ["power:admin"], ["power-confirm", "powering-off"]),
+  page("server-dead-man", "Dead-man lock: on, lapse → restart, Keep unlocked, Tighten now; each signed.", "deadManLockPolicyAndAffirm",
+    ["sd-deadman-toggle", "deadman-lockout-restart", "sd-deadman-affirm", "Tighten now (5 min)"], ["deadman-policy:admin", "deadman-affirm:admin"], ["deadman-on"]),
+  page("server-front-page", "Front page: pick Plants and Save (admin-signed).", "frontPagePicksAnApp",
+    ["Plants — plants", "sd-front-page-save"], ["front-page:admin"], ["front-page"]),
+  page("server-journal", "Journal: pick a unit and View journal.", "journalFetchesTheChosenUnit",
+    ["sd-journal-unit-flagship-data-services", "sd-journal-fetch"], ["the unit's lines"], ["journal"]),
+  page("server-waiting-box", "A box waiting for its phone: Approve and Deny; Deny closes the card.", "waitingBoxOffersApproveAndDeny",
+    ["sd-deny-unlock"], ["sd-approve-unlock"], ["waiting-box", "denied"]),
+  page("server-migrate", "Migrate: Start migration deposits the order on .com.", "migrateStartsTheHandOver",
+    ["sd-migrate-server", "migrate-start"], ["migration start on the mock .com"], ["migrate", "migrate-started"]),
+];
+
+const archive = sweep("GymArchiveTest", "D1");
+const ARCHIVE_SWEEP: readonly Scenario[] = [
+  archive("archive-backup-suggested", "Backup/clone: Copy the passcode, I've saved it, Make the backup, Download both, Save both files.", "backupWithTheSuggestedPasscode",
+    ["sd-backup-server", "Copy", "backup-passcode-saved", "backup-start", "backup-download", "backup-share"], ["backup-share"], ["backup-passcode", "backup-downloaded"]),
+  archive("archive-backup-own", "Backup/clone with your own passcode typed twice.", "backupWithYourOwnPasscode",
+    ["backup-use-own-passcode", "backup-passcode-saved", "backup-start"], ["backup-download"], ["backup-passcode"]),
+  archive("archive-import-waiting", "Import a real sealed backup into the server waiting for it: pick, passcode, send, restored.", "importABackupIntoTheServerWaitingForIt",
+    ["pod-card-send-backup", "import-backup-choose", "import-backup-unlock", "import-backup-send-existing", "import-backup-done"], ["import-backup-done"], ["restored"]),
+  archive("archive-import-wrong-passcode", "Import: a wrong passcode is refused before anything is sent.", "importRefusesAWrongPasscode",
+    ["home-import-backup", "import-backup-choose", "import-backup-unlock"], ["nothing sent"], ["wrong-passcode"]),
+  archive("archive-import-other-file", "Import: one file picked asks for the data file it names.", "importAsksForTheOtherFile",
+    ["home-import-backup", "import-backup-choose"], ["import-backup-files"], ["needs-data-file"]),
+  archive("archive-approve-download", "A backup's browser download page link: the code, Approve signed with the admin root.", "approveABackupDownloadFromTheBrowserLink",
+    ["backup-approve"], ["backup-download:admin"], ["approve-download"]),
+  archive("archive-dont-approve", "Don't approve sends nothing.", "dontApproveABackupDownload",
+    ["Don't approve"], ["no approval on the mock box"], ["approve-download"]),
+];
+
+const share = sweep("GymShareTest", "D3");
+const SHARE_SWEEP: readonly Scenario[] = [
+  share("share-code-mismatch", "Owner: It doesn't on a code that doesn't match revokes that share.", "ownerCodeDoesNotMatchRevokes",
+    ["It doesn't"], ["the row leaves"], ["code-mismatch"]),
+  share("share-level-switches", "Owner: Sam's level, start-up and app-data switches re-sign the grant with the admin root.", "ownerChangesLevelAndSwitches",
+    ["share-level-view", "share-unlock-<id>", "share-data-<id>"], ["share-grant:admin"], ["sam-changed"]),
+  share("share-remove", "Owner: Remove → Keep, then Stop sharing (admin-signed revoke).", "ownerRemovesAShare",
+    ["share-remove-<id>", "Keep", "share-remove-confirm"], ["share-revoke:admin"], ["sam-removed"]),
+  share("share-sheet-options", "Owner: the sheet's Back and options, Copy link, Share…, Done; the pending link's Copy and Cancel.", "ownerSheetOptionsCopyShareAndCancel",
+    ["share-server-open", "share-opt-unlock", "share-opt-data", "share-create", "Copy link", "Share…", "Cancel"], ["share-revoke:admin", "the link on the clipboard and in the share sheet"], ["share-link"]),
+  share("share-notify-to-start", "Co-manager: notify me to start it registers the push, signed with the share key; off drops it.", "coManagerNotifyToStart",
+    ["shared-notices-switch"], ["share-push:share"], ["notices-on"]),
+  share("share-co-manager-update", "Co-manager at Can manage: Not now, then Update (share-key order to the box).", "coManagerUpdatesTheServer",
+    ["shared-approve-startup", "shared-update-button", "shared-update-confirm"], ["share-update:share"], ["co-manager-update"]),
+  share("share-co-manager-app", "Co-manager: a shared app's page and Open <app>.", "coManagerOpensASharedApp",
+    ["shared-app-row-<id>", "shared-app-open"], ["the browser opens"], ["shared-app"]),
+  share("share-co-manager-leave", "Co-manager: Leave → Stay, then Leave (share-key order).", "coManagerLeavesAfterStay",
+    ["shared-leave", "Stay", "shared-leave-confirm"], ["share-leave:share"], ["left"]),
+];
+
+const apps = sweep("GymAppsTest", "D3");
+const APPS_SWEEP: readonly Scenario[] = [
+  apps("apps-search", "Services search with no match.", "servicesSearchFindsAnApp", ["Search"], ["no Plants"], ["services-no-match"]),
+  apps("apps-env", "Environment: add a variable, Save, Remove.", "envVariableAddAndRemove",
+    ["service-detail-env-row", "service-env-add-btn", "service-env-save-btn", "Remove"], ["service-env-row-GYM_COLOR"], ["env-added"]),
+  apps("apps-uninstall", "Uninstall: Cancel, then the admin-signed order.", "uninstallAsksThenSignsWithTheAdminRoot",
+    ["service-detail-uninstall-btn", "Cancel", "Uninstall"], ["uninstall:admin"], ["uninstalled"]),
+  apps("apps-runs-on", "Runs on: tick Office copies (admin-signed); untick Home → Cancel, then Remove.", "runsOnTickCopiesAndUntickRemoves",
+    ["runs-on-toggle-<office>", "runs-on-toggle-<home>", "runs-on-remove-confirm"], ["app-copy:admin", "uninstall:admin"], ["copied"]),
+  apps("apps-egress", "v1 internet approval: Allow, then Stop (each admin-signed).", "egressAllowThenStop",
+    ["service-detail-egress-allow", "service-detail-egress-stop"], ["app-egress:admin"], ["egress-approved"]),
+  apps("apps-edit", "Edit with AI (describe) or an IDE (MCP).", "editWithAiOrAnIde",
+    ["service-detail-edit", "edit-service-ai", "edit-service-ide"], ["edit-describe-start", "build-mcp-create"], ["edit-ai", "edit-ide"]),
+  apps("apps-adapter-report", "Report an adaptation: type and Send report.", "reportAnAdaptation",
+    ["service-detail-report-adapter", "adapter-report-send"], ["the report on the mock box"], ["adapter-reported"]),
+  apps("apps-copy-address", "Copy the app's address.", "copyTheAppsAddress", ["Copy"], ["the address on the clipboard"], ["app-copied"]),
+  apps("apps-access-deny-ignore", "Access list on the page: Deny (admin-signed deny rule), Ignore.", "accessDenyAndIgnoreOnThePage",
+    ["service-detail-access-deny", "service-detail-access-ignore"], ["app-access:admin"], ["access-answered"]),
+  apps("apps-access-editor", "Access list editor: add a line and Save (admin-signed).", "accessListEditorSaves",
+    ["service-detail-access-view", "access-list-save"], ["app-access:admin"], ["access-list-saved"]),
+  apps("apps-access-draft", "A suggested list: Review opens it, Dismiss drops it.", "accessDraftReviewAndDismiss",
+    ["service-detail-access-draft-review", "service-detail-access-draft-dismiss"], ["the draft dismissed on the box"], ["draft-review"]),
+  apps("apps-access-mode-open", "Members only, then back to Open to all: two admin-signed mode orders.", "accessModeBackToOpen",
+    ["service-access-mode-members", "service-access-members-only-confirm", "service-access-mode-open"], ["access-mode:admin"], ["open-again"]),
+  apps("apps-group-invite", "A group invite (approve each), Copy link, Share….", "groupInviteLinkCopyAndShare",
+    ["service-access-add-group", "service-access-approve-toggle", "service-access-create-invite", "service-access-copy-btn", "service-access-share-sheet"], ["service-access-share-url"], ["group-link"]),
+  apps("apps-invite-rank-revoke", "An invite's rank (admin-signed rank order) and its revoke.", "inviteRankThenRevoke",
+    ["service-access-role-<id>", "service-access-role-<id>-manager", "service-access-remove-<id>", "service-access-remove-confirm"], ["app-rank:admin"], ["invite-revoked"]),
+  apps("apps-rank-master-refused", "A Master-rank device can invite; a refused one sees why it can't.", "masterAndRefusedDevicesSeeTheirRank",
+    [], ["service-access-add-person", "service-access-cant-invite"], ["master", "refused"]),
+  apps("apps-api-keys", "API keys: write scope, Copy, Done, Revoke the old key.", "apiKeyScopeCopyDoneAndRevoke",
+    ["service-detail-api-keys-create", "api-key-create-scope-write", "api-key-created-copy", "api-key-created-done", "service-detail-api-key-revoke", "api-key-revoke-confirm"], ["the key revoked on the box"], ["api-keys"]),
+  apps("apps-database", "Database: paging, CSV export, a SELECT, and a write confirmed and admin-signed.", "databasePagingCsvSqlAndSignedWrite",
+    ["db-next", "db-prev", "db-export-csv", "db-run-sql", "db-sql-run", "db-confirm-write"], ["app-db-write:admin"], ["db-grid", "db-write"]),
+  apps("apps-back-up-now", "Back up now with the app's data, then Save backup.", "appBackUpNowAndSave",
+    ["service-detail-backup-data", "service-detail-backup-now", "service-detail-backup-save"], ["the backup in the share sheet"], ["app-backup"]),
+];
+
+const build = sweep("GymBuildTest", "D2");
+const BUILD_SWEEP: readonly Scenario[] = [
+  build("build-help-sessions", "The chooser's help and Build sessions.", "chooserHelpAndBuildSessions",
+    ["build-source-help", "Done", "build-source-journal-link"], ["Build sessions"], ["build-help", "build-sessions"]),
+  build("build-discard", "Discard an open build: Cancel, then Discard build.", "discardAnOpenBuild",
+    ["build-discard-<id>", "Cancel", "Discard build"], ["the build discarded on the box"], ["discarded"]),
+  build("build-restart-deploy", "A git build a box restart cut off: the box's sentence, Deploy as it is.", "aBuildCutOffByARestartDeploysAsItIs",
+    ["build-journal-deploy"], ["build-journal-adapt-failed", "build-journal-deployed"], ["restart-failed", "restart-deployed"]),
+  build("build-restart-run-ai", "…or Run the AI again with Flagship Inference.", "aBuildCutOffByARestartRunsTheAiAgain",
+    ["build-journal-run-ai", "build-key-use-free-ai"], ["build-journal-deployed"], ["restart-ai-again"]),
+  build("build-git-install", "Git: Check repo, Flagship-ready, Install it.", "gitCheckThenInstall",
+    ["build-git-check", "Install it"], ["Installed"], ["git-ready"]),
+  build("build-git-adapt", "Git not ready: share switch, Check again, the AI; cut off by a restart → Deploy.", "gitNotReadyAdaptsWithTheAi",
+    ["build-git-share", "build-git-recheck", "build-git-adapt", "build-key-use-free-ai", "build-git-deploy-anyway"], ["Installed"], ["git-cut-off"]),
+  build("build-ide", "IDE connection: Copy key, Copy IDE config, Regenerate key, View journal.", "ideConnectionCopyAndRegenerate",
+    ["build-mcp-create", "Copy key", "Copy IDE config", "Regenerate key", "View journal"], ["the key rotated on the box"], ["mcp"]),
+  build("build-scratch", "From scratch with Flagship Inference: name, prompt, visibility, Build.", "fromScratchWithFlagshipInference",
+    ["build-src-scratch", "build-key-use-free-ai", "vibe-describe-visibility-<v>", "vibe-describe-build"], ["the start on the box"], ["key-step", "scratch-started"]),
+  build("build-chat-env-send", "Chat: answer the AI's env var.", "chatAnswersAnEnvVar",
+    ["global-operations-bar", "vibecode-envvar-send-btn"], ["the reply set on the box"], ["env-sent"]),
+  build("build-chat-env-decline", "Chat: decline the env var.", "chatDeclinesAnEnvVar",
+    ["vibecode-envvar-decline-btn"], ["the reply declined on the box"], ["env-sent"]),
+  build("build-chat-continue-deploy", "A ready chat takes a new message; Deploy.", "readyChatContinuesAndDeploys",
+    ["vibecode-continue-send-btn", "vibecode-deploy-btn"], ["the message and the deploy on the box"], ["chat-deployed"]),
+  build("build-chat-provider-switch", "A failed chat continues on a saved key's model: the reply carries its credential and model.", "failedChatContinuesOnAnotherProvider",
+    ["ai-key-add", "model-menu", "model-item-<key>-gpt-5.4-mini", "vibecode-continue-send-btn"], ["the reply on openai / gpt-5.4-mini"], ["model-menu", "provider-switched"]),
+];
+
+const settingsSweep = sweep("GymSettingsTest", "D3");
+const SETTINGS_SWEEP: readonly Scenario[] = [
+  settingsSweep("settings-lock", "Lock the app, then unlock.", "lockThenUnlock", ["settings-lock-btn", "biometric-unlock-btn"], ["settings-title"], ["locked"]),
+  settingsSweep("settings-lock-sign-out-cancel", "The lock screen's Sign out asks first; Cancel keeps the lock.", "lockScreenSignOutCancel",
+    ["settings-lock-btn", "Sign out", "Cancel"], ["biometric-lock-screen"], ["locked"]),
+  settingsSweep("settings-sign-out", "Sign out: Cancel, then out to Welcome; Welcome's three entries.", "signOutCancelThenSignOutToWelcome",
+    ["settings-sign-out-btn", "Cancel", "Sign out", "I already have an account", "Join with a pairing code", "Create your account"], ["Welcome"], ["welcome", "create-account"]),
+  settingsSweep("settings-remove-delete-cancel", "Remove this device and Delete account stop at Cancel.", "removeDeviceAndDeleteAccountStopAtCancel",
+    ["settings-remove-device-btn", "Cancel", "settings-delete-account-btn", "Cancel"], ["settings-title"], ["delete-account"]),
+  settingsSweep("settings-browser-sessions", "Browser sessions: browsers only (not this phone); Cancel, then Revoke.", "browserSessionsListBrowsersOnlyAndRevoke",
+    ["settings-browser-sessions", "revoke-session-f9e8d7c6", "Cancel", "Revoke"], ["the session revoked on the box"], ["browser-revoked"]),
+  settingsSweep("settings-trusted-devices", "Trusted devices: a device's menu; Revoke asks first.", "trustedDevicesMenuAsksFirst",
+    ["settings-trusted-devices", "trusted-device-menu-<id>", "trusted-device-disconnect", "Cancel"], ["device-menu"], ["device-menu"]),
+  settingsSweep("settings-rows", "Profiles, Privacy, Peer-backup, Remote, Companion requests, Secured sessions, Process URL, Cloud recovery, Back up account key open their screens.", "rowsOpenTheirScreens",
+    ["settings-profiles", "settings-privacy", "settings-peer-backup", "settings-remote", "settings-companion-requests", "settings-secured-sessions", "settings-process-url", "settings-cloud-recovery", "settings-backup-key"], ["each screen's landmark"], ["settings-profiles"]),
+  settingsSweep("settings-process-url", "Process URL: paste a link and Open.", "processUrlSubmitsAPastedLink", ["process-url-submit"], ["process-url"], ["process-url"]),
+  settingsSweep("settings-peer-backup", "Peer-backup: the participation switch.", "peerBackupToggle", ["peer-backup-toggle"], ["peer-backup-participation-pill"], ["settings-peer-backup"]),
+  settingsSweep("settings-2fa", "Two-factor: Continue, the code, Verify, saved, Done.", "twoFactorEnrolment",
+    ["account-security-enable-btn", "account-security-step1-continue", "account-security-verify-btn", "account-security-saved-toggle", "account-security-done-btn"], ["account-security-disable-btn"], ["2fa-on"]),
+  settingsSweep("settings-2fa-429", "Two-factor refused by .com's rate limiter: its sentence, never a status code.", "twoFactorRateLimitedSaysWhen",
+    ["account-security-verify-btn"], ["Too many tries from your network. Try again in about 12 minutes."], ["2fa-rate-limited"]),
+  settingsSweep("settings-watch-429", "Quick approve from watch refused by the rate limiter: the sentence.", "watchQuickApproveRateLimitedSaysWhen",
+    ["watch-delegate-toggle"], ["Too many tries from your network. Try again in about 12 minutes."], ["watch-rate-limited"]),
+  settingsSweep("settings-ai-keys", "AI keys: add two, Make default, Delete.", "aiKeysAddMakeDefaultAndDelete",
+    ["ai-key-add", "ai-key-provider-openai", "ai-key-provider-anthropic", "Make default", "Delete"], ["two keys, then one"], ["two-keys"]),
+  settingsSweep("settings-free-ai", "Flagship Inference: Make default and Add your own key.", "flagshipInferenceMakeDefaultAndAddOwnKey",
+    ["free-ai-make-default", "free-ai-add-own-key"], ["ai-key-field"], ["free-ai"]),
+  settingsSweep("settings-remote-qr", "Remote: a browser's QR link → the code → approve → connected (ticket sent over the relay).", "remoteApprovesABrowserFromItsQr",
+    ["Codes match: approve"], ["Browser connected to"], ["remote-ask", "remote-connected"]),
+];
+
+const activity = sweep("GymActivityTest", "D8");
+const ACTIVITY_SWEEP: readonly Scenario[] = [
+  activity("activity-feed", "Activity merges the box's log and the account's events; owner writes left out; Refresh.", "feedMergesTheBoxLogAndAccountEvents",
+    ["Refresh"], ["Server updated", "A shared person signed in by Sam", "A device joined the account"], ["activity-feed"]),
+  activity("activity-server-filter", "The server filter keeps account-wide rows.", "serverFilterKeepsAccountRows",
+    ["pod-switcher", "pod-switcher-item-<office>"], ["A device joined the account"], ["activity-office"]),
+  activity("activity-approvals-audit", "Open approvals; Open audit log and Load more.", "openApprovalsAndTheAuditLog",
+    ["Open approvals", "Open audit log", "audit-log-load-more"], ["audit-log-list"], ["approvals", "audit-log"]),
+];
+
+const WATCH: readonly Scenario[] = [
+  androidTotal(
+    "android-watch-quick-approve",
+    "D4: Settings → Account security → Quick approve from watch: on registers the delegate grant (renewal date), off revokes it.",
+    `${PKG}.GymWatchTest#quickApproveFromWatchTogglesTheDelegateGrant`,
+    {
+      steps: [{ kind: "tap", describe: "Quick approve from watch.", handle: "watch-delegate-toggle" }],
+      assertions: [{ describe: "Grant active", handle: "watch-delegate-active", expect: "present" }],
+      screenshots: [shot("watch-quick-approve-off", "Off."), shot("watch-quick-approve-on", "On.")],
+      dimension: "D4",
+    },
+  ),
+];
+
 export const ANDROID_GYM_SCENARIOS: readonly Scenario[] = [
   ...EVERY_MERGE,
   ...TOTAL,
   ...FEATURE_MIRRORS,
   ...OCTOBER,
+  ...WATCH,
+  ...HOME_SWEEP,
+  ...SERVER_SWEEP,
+  ...ARCHIVE_SWEEP,
+  ...SHARE_SWEEP,
+  ...APPS_SWEEP,
+  ...BUILD_SWEEP,
+  ...SETTINGS_SWEEP,
+  ...ACTIVITY_SWEEP,
 ];

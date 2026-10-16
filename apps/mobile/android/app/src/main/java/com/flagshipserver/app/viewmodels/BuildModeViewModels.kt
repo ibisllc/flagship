@@ -410,6 +410,14 @@ class BuildGitViewModel(
         const val SHARE_LABEL = "Anonymously share your adaptation"
         const val SHARE_NOTE = "Others can then install this repo without AI. Nothing about you or your server is included."
         const val CHECK_AGAIN = "Check again"
+        const val RUN_AI_AGAIN = "Run the AI again"
+        const val DEPLOY = "Deploy"
+
+        /** A box restart cut the AI's work (or the box putting the build
+         *  live) off: its files are kept, so the build can be deployed as it
+         *  is, or the AI run again. The box's sentences (buildOrchestrator.ts
+         *  INTERRUPTED_AI_REASON / INTERRUPTED_GO_LIVE_REASON). */
+        fun interrupted(reason: String?): Boolean = reason?.contains("restarted while", ignoreCase = true) == true
 
         /** A verdict card (and the not-live and closed cards) takes the
          *  "Check repo" button's place; each carries its own "Check again". */
@@ -566,7 +574,22 @@ class BuildJournalViewModel(
      *  the list then covers builds started on any of them. Empty: only
      *  [client] / [fetchLiveSessions], the server the screen is on. */
     private val servers: () -> List<Server> = { emptyList() },
+    private val pollIntervalMs: Long = 3_000,
 ) {
+    /** What the detail page offers for the build's own state: an AI adapt
+     *  that failed (a box restart brings an interrupted one back failed,
+     *  with the box's sentence) can be deployed as it is or run again. */
+    sealed interface DetailAdapt {
+        data object None : DetailAdapt
+        data class Failed(val reason: String, val canRunAi: Boolean) : DetailAdapt
+        data class Working(val text: String) : DetailAdapt
+        data class Adapted(val fileCount: Int) : DetailAdapt
+        data class Deployed(val url: String) : DetailAdapt
+    }
+
+    private val _detailAdapt = MutableStateFlow<DetailAdapt>(DetailAdapt.None)
+    val detailAdapt: StateFlow<DetailAdapt> = _detailAdapt.asStateFlow()
+
     /** One server's own clients, for the list across servers. */
     class Server(
         val podId: String,
@@ -651,6 +674,79 @@ class BuildJournalViewModel(
         } catch (t: Throwable) {
             _detail.value = LoadingState.Failed(friendly(t))
         }
+        // Best-effort: an older box (or a scratch build) has no state route.
+        val state = try {
+            client.state(buildId).state
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            null
+        }
+        val adapt = state?.adapt
+        _detailAdapt.value = if (adapt?.status == "failed" && !adapt.reason.isNullOrBlank()) {
+            DetailAdapt.Failed(adapt.reason, canRunAi = state.sealed != true)
+        } else {
+            DetailAdapt.None
+        }
+    }
+
+    /** Put the build live as it is (its files survived the restart). */
+    fun deployAgain(buildId: String): Job = scope.launch {
+        val before = _detailAdapt.value
+        _detailAdapt.value = DetailAdapt.Working("Installing…")
+        try {
+            _detailAdapt.value = DetailAdapt.Deployed(client.deploy(buildId).url)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            _detailAdapt.value = DetailAdapt.Failed(t.boxError() ?: friendly(t), canRunAi = (before as? DetailAdapt.Failed)?.canRunAi ?: false)
+        }
+    }
+
+    /** Run the AI on the build again with [credential], and follow it. */
+    fun runAiAgain(buildId: String, credential: com.flagshipserver.app.api.LlmProviderCredential?): Job = scope.launch {
+        _detailAdapt.value = DetailAdapt.Working(BuildGitViewModel.ADAPTING_DEFAULT)
+        try {
+            val r = client.adaptStart(buildId, com.flagshipserver.app.api.BuildAdaptRequest(credential = credential, background = true))
+            if (r.started != true) {
+                _detailAdapt.value = adaptEnded(r.fileCount ?: 0, r.deployed, r.deployedUrl, null)
+                return@launch
+            }
+            var misses = 0
+            while (true) {
+                delay(pollIntervalMs)
+                val st = try {
+                    client.state(buildId).state.also { misses = 0 }
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (t: Throwable) {
+                    if (++misses >= 5) throw t
+                    continue
+                }
+                val a = st.adapt
+                when (a?.status) {
+                    "done" -> {
+                        _detailAdapt.value = adaptEnded(a.fileCount ?: 0, a.deployed, a.deployedUrl, a.reason)
+                        return@launch
+                    }
+                    "failed" -> {
+                        _detailAdapt.value = DetailAdapt.Failed(a.reason ?: "The AI couldn't adapt this repo.", canRunAi = st.sealed != true)
+                        return@launch
+                    }
+                    else -> _detailAdapt.value = DetailAdapt.Working(BuildGitViewModel.adaptingHeadline(a?.phase))
+                }
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (t: Throwable) {
+            _detailAdapt.value = DetailAdapt.Failed(t.boxError() ?: friendly(t), canRunAi = !(t is ScreensError.Http && t.status == 409))
+        }
+    }
+
+    private fun adaptEnded(fileCount: Int, deployed: Boolean?, url: String?, reason: String?): DetailAdapt = when {
+        deployed == true && url != null -> DetailAdapt.Deployed(url)
+        deployed == false && !reason.isNullOrBlank() -> DetailAdapt.Failed(reason, canRunAi = false)
+        else -> DetailAdapt.Adapted(fileCount)
     }
 
     fun clearDetail() { _detail.value = LoadingState.Idle }

@@ -66,12 +66,17 @@ class WearMainActivity : ComponentActivity() {
     }
 }
 
+/** [sync] and [approve] reach the phone; a test hands in its own. */
 @Composable
-private fun WearApp() {
+internal fun WearApp(
+    sync: suspend (android.content.Context) -> Unit = { WatchStore.sync(it) },
+    approve: suspend (android.content.Context, PendingApproval) -> com.flagshipserver.companion.ApproveReply =
+        { c, a -> PhoneApprover.approve(c, a) },
+) {
     val ctx = LocalContext.current
     val nav = rememberSwipeDismissableNavController()
     val context by WatchStore.context.collectAsState()
-    LaunchedEffect(Unit) { WatchStore.sync(ctx) }
+    LaunchedEffect(Unit) { sync(ctx) }
     val data = context ?: WatchContext.EMPTY
     SwipeDismissableNavHost(navController = nav, startDestination = "home") {
         composable("home") { Home(data) { nav.navigate("approve/${android.net.Uri.encode(it.id)}") } }
@@ -81,7 +86,7 @@ private fun WearApp() {
             var shown by remember { mutableStateOf<PendingApproval?>(null) }
             WatchProjection.approvals(data).firstOrNull { it.id == id }?.let { shown = it }
             val approval = shown
-            if (approval == null) Gone() else Approve(approval) { nav.popBackStack() }
+            if (approval == null) Gone() else Approve(approval, approve) { nav.popBackStack() }
         }
     }
 }
@@ -161,17 +166,16 @@ private fun Home(data: WatchContext, onApproval: (PendingApproval) -> Unit) {
 
 @Composable
 private fun StatusDot(statusRaw: String) {
-    val color = when (PodStatusText.tone(statusRaw)) {
-        PodStatusText.Tone.GOOD -> Color(0xFF4FBE7A)
-        PodStatusText.Tone.BAD -> Color(0xFFE5655F)
-        PodStatusText.Tone.WAITING -> Color(0xFFE8A33D)
-        PodStatusText.Tone.NEUTRAL -> Color(0xFF9AA0A6)
-    }
+    val color = Color(com.flagshipserver.companion.StatusPalette.dark(PodStatusText.tone(statusRaw)))
     Box(Modifier.size(10.dp).background(color, CircleShape))
 }
 
 @Composable
-private fun Approve(approval: PendingApproval, onDone: () -> Unit) {
+private fun Approve(
+    approval: PendingApproval,
+    approve: suspend (android.content.Context, PendingApproval) -> com.flagshipserver.companion.ApproveReply,
+    onDone: () -> Unit,
+) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
@@ -193,13 +197,13 @@ private fun Approve(approval: PendingApproval, onDone: () -> Unit) {
             Spacer(Modifier.height(10.dp))
             when {
                 busy -> CircularProgressIndicator()
-                approved -> Text("Approved", color = Color(0xFF4FBE7A), modifier = Modifier.testTag("watch-approved"))
+                approved -> Text("Approved", color = Color(com.flagshipserver.companion.StatusPalette.DARK_OK), modifier = Modifier.testTag("watch-approved"))
                 else -> Button(
                     onClick = {
                         busy = true
                         error = null
                         scope.launch {
-                            val reply = PhoneApprover.approve(ctx, approval)
+                            val reply = approve(ctx, approval)
                             busy = false
                             if (reply.ok) approved = true else error = reply.errorMessage ?: "Approval failed."
                         }
@@ -209,7 +213,7 @@ private fun Approve(approval: PendingApproval, onDone: () -> Unit) {
             }
             error?.let {
                 Spacer(Modifier.height(6.dp))
-                Text(it, color = Color(0xFFE5655F), style = MaterialTheme.typography.caption3, textAlign = TextAlign.Center)
+                Text(it, color = Color(com.flagshipserver.companion.StatusPalette.DARK_ERR), style = MaterialTheme.typography.caption3, textAlign = TextAlign.Center)
             }
         }
     }

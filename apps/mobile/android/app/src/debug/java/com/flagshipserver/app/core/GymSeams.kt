@@ -42,6 +42,26 @@ object GymSeams {
     @Volatile
     var importBackupFile: java.io.File? = null
 
+    /** The mock box and `.com` check every signed order the way the real
+     *  ones do on an admin-pinned account (MockSignatures): admin orders
+     *  under the account's admin root, a co-manager's under its share key.
+     *  Off outside smoke mode, so previews and unit tests can send fakes. */
+    @Volatile
+    var verifySignatures: Boolean = false
+
+    /** The gym account's admin root: a fixed, obviously fake seed. An admin
+     *  device holds it in its Keystore (SmokeMode installs it); the mocks
+     *  pin its public key whichever device runs. */
+    val GYM_ADMIN_ROOT_SEED: ByteArray = ByteArray(32) { 0xAD.toByte() }
+
+    val gymAdminRootPub: ByteArray by lazy {
+        com.google.crypto.tink.subtle.Ed25519Sign.KeyPair.newKeyPairFromSeed(GYM_ADMIN_ROOT_SEED).publicKey
+    }
+
+    /** Endpoints the mock `.com` refuses with a 429 and `retryAfterSec`, as
+     *  the real rate limiter does ("totp-verify", "recovery-lookup", …). */
+    val rateLimited: MutableSet<String> = java.util.Collections.synchronizedSet(mutableSetOf())
+
     /** Back to production behaviour (a launch without the gym's extras). */
     fun reset() {
         forceAdminRoot = false
@@ -49,5 +69,7 @@ object GymSeams {
         bypassBiometricGates = false
         fakePasskeysNoPrfOnCreate = false
         importBackupFile = null
+        verifySignatures = false
+        rateLimited.clear()
     }
 }

@@ -149,6 +149,11 @@ class MockScreensClient(
         tick()
         egressCalls.add(serviceId to req)
         egressError?.let { throw it }
+        MockSignatures.requireAdmin(
+            "app-egress",
+            com.flagshipserver.app.core.AppEgressGrant.canonicalBytes(req.grant.serverDomain, req.grant.serviceId, req.grant.hosts, req.grant.issuedAt),
+            req.signature,
+        )
         val current = egressFixture[serviceId] ?: throw ScreensError.Http(404, """{"error":"no such service"}""")
         val next = current.copy(approved = req.grant.hosts.filter { it in current.declared })
         egressFixture[serviceId] = next
@@ -192,6 +197,11 @@ class MockScreensClient(
         tick()
         accessCalls.add(serviceId to req)
         accessError?.let { throw it }
+        MockSignatures.requireAdmin(
+            "app-access",
+            com.flagshipserver.app.core.AppAccessList.canonicalBytes(req.grant.serverDomain, req.grant.serviceId, req.grant.listSha256, req.grant.issuedAt),
+            req.signature,
+        )
         val current = accessFixture[serviceId] ?: throw ScreensError.Http(404, """{"error":"no such service"}""")
         val parsed = com.flagshipserver.app.core.AppAccessList.parse(req.list)
         if (!parsed.ok) {
@@ -259,6 +269,11 @@ class MockScreensClient(
             throw ScreensError.Http(400, """{"error":"malformed grant"}""")
         }
         if (g.serverDomain != boxFqdn()) throw ScreensError.Http(403, """{"error":"grant names another server"}""")
+        MockSignatures.requireAdmin(
+            "app-api-key",
+            com.flagshipserver.app.core.AppApiKey.canonicalBytes(g.serverDomain, g.serviceId, g.keyId, g.scope, g.expiresAt, g.issuedAt),
+            req.signature,
+        )
         if (keys.any { it.keyId == g.keyId }) throw ScreensError.Http(409, """{"error":"key id exists"}""")
         keys.add(
             AppApiKeyInfo(
@@ -367,6 +382,13 @@ class MockScreensClient(
     override suspend fun serviceCopy(req: AppCopyRequest): AppCopyResponse {
         tick()
         copyError?.let { throw it }
+        MockSignatures.requireAdmin(
+            "app-copy",
+            com.flagshipserver.app.core.AppCopy.canonicalBytes(
+                com.flagshipserver.app.core.AppCopy.Grant(req.grant.sourceServer, req.grant.targetServer, req.grant.serviceId, req.grant.issuedAt),
+            ),
+            req.signature,
+        )
         copyRequests.add(req)
         val id = "copy-${copyRequests.size}"
         copies.add(
@@ -391,6 +413,12 @@ class MockScreensClient(
     override suspend fun uninstallService(serviceId: String, body: UninstallServiceBody) {
         tick()
         uninstallError?.let { throw it }
+        val r = body.request
+        MockSignatures.requireAdmin(
+            "uninstall",
+            com.flagshipserver.app.core.UninstallServiceOrder.canonicalBytes(r.serverId, r.creator, r.slug, r.issuedAt),
+            body.signature,
+        )
         uninstalls.add(serviceId to body)
     }
 
@@ -468,6 +496,13 @@ class MockScreensClient(
         tick()
         setAppRankCalls.add(serviceId to req)
         memberRoleStatus?.let { memberRoleStatus = null; throw ScreensError.Http(it, """{"error":"refused"}""") }
+        MockSignatures.requireAdmin(
+            "app-rank",
+            com.flagshipserver.app.core.AppAccessOrders.canonicalBytes(
+                com.flagshipserver.app.core.AppAccessOrders.Rank(req.order.serviceRef, req.order.target, req.order.rank, req.order.issuedAt),
+            ),
+            req.signature,
+        )
         val cur = appMembers(serviceId)
         val t = req.order.target
         val role = req.order.rank
@@ -554,6 +589,13 @@ class MockScreensClient(
             if (g.sqlSha256 != com.flagshipserver.app.core.AppDbWrite.sqlSha256(req.sql)) {
                 throw ScreensError.Http(403, """{"error":"the statement is not the one that was signed"}""")
             }
+            MockSignatures.requireAdmin(
+                "app-db-write",
+                com.flagshipserver.app.core.AppDbWrite.canonicalBytes(
+                    com.flagshipserver.app.core.AppDbWrite.Grant(g.serverDomain, g.serviceId, g.store, g.sqlSha256, g.issuedAt),
+                ),
+                req.signature,
+            )
             if (!dbUsedOrders.add("$serviceId|$store|${g.sqlSha256}|${g.issuedAt}")) {
                 throw ScreensError.Http(409, """{"error":"this signed order was already used: sign it again"}""")
             }
@@ -635,6 +677,7 @@ class MockScreensClient(
     override suspend fun vibeCodeDeployStart(sessionId: String, credential: LlmProviderCredential?): VibeCodeDeployReply {
         tick()
         deployCredentials.add(credential)
+        chatDeploys += sessionId
         deployPolls[sessionId] = 0
         return VibeCodeDeployReply(ok = true, started = true)
     }
@@ -678,11 +721,36 @@ class MockScreensClient(
                     "f9e8d7c6", now() - 60_000L * 60, false,
                     kind = "remote", expiresAt = now() + 60_000L * 60 * 3,
                 ),
-            )
+            ).filter { it.tokenPrefix !in revokedPairedSessions }
         )
     }
 
-    override suspend fun revokePairedSession(tokenPrefix: String) { tick() }
+    /** The box's activity log (docs/server-backup-and-clone.md "Activity"):
+     *  an update, an app, a backup, a co-manager's sign-in, and an owner write
+     *  the feed leaves out. */
+    var boxActivityFixture: List<BoxActivityEntry> = listOf(
+        BoxActivityEntry(seq = 6, ts = now() - 60_000L * 5, action = "server.update.applied", kind = "server.update.applied", detail = "4b1e0c9d"),
+        BoxActivityEntry(seq = 5, ts = now() - 60_000L * 30, action = "post /api/screens/services/plants/env"),
+        BoxActivityEntry(seq = 4, ts = now() - 60_000L * 60, action = "server.backup.created", kind = "server.backup.created", detail = "2 files"),
+        BoxActivityEntry(
+            seq = 3, ts = now() - 60_000L * 120, action = "share.signed-in", kind = "share.signed-in",
+            actor = BoxActivityActor(kind = "share", label = "Sam"),
+        ),
+        BoxActivityEntry(seq = 2, ts = now() - 60_000L * 60 * 24, action = "app.installed", kind = "app.installed", target = "bright-maple--plants"),
+    )
+
+    override suspend fun boxActivity(limit: Int, before: Int?): List<BoxActivityEntry> {
+        tick()
+        return boxActivityFixture.filter { before == null || (it.seq ?: 0) < before }.take(limit)
+    }
+
+    /** Paired sessions revoked here; the list leaves them out after. */
+    val revokedPairedSessions: MutableList<String> = mutableListOf()
+
+    override suspend fun revokePairedSession(tokenPrefix: String) {
+        tick()
+        revokedPairedSessions += tokenPrefix
+    }
 
     override suspend fun ordersSend(req: OrdersSendRequest): OrdersSendResponse {
         tick(); return OrdersSendResponse(ok = true, response = null)
@@ -815,9 +883,41 @@ class MockScreensClient(
         return ServiceEnvOpResponse(ok = true)
     }
 
+    /** Which build chat this box serves: "env" (the AI asks for an env var),
+     *  "ready" (ready to deploy, takes a new message) or "failed" (takes one). */
+    var chatVariant: String = "env"
+    /** Every reply sent to a chat, in order. */
+    val chatReplies: MutableList<Pair<String, VibeCodeReplyRequest>> = mutableListOf()
+    /** Chats the owner deployed from the chat. */
+    val chatDeploys: MutableList<String> = mutableListOf()
+
     override suspend fun vibeCodeSessionState(sessionId: String): VibeCodeSessionPublicState {
         tick()
         val n = now()
+        val continued = chatReplies.any { it.first == sessionId && it.second.envVarStatus == null }
+        if (chatVariant != "env" || continued) {
+            val provider = chatReplies.lastOrNull { it.first == sessionId }?.second?.credential?.provider ?: "flagship"
+            return VibeCodeSessionPublicState(
+                id = sessionId,
+                appId = "bright-maple--plants",
+                status = when {
+                    continued -> "ready-to-deploy"
+                    chatVariant == "failed" -> "failed"
+                    else -> "ready-to-deploy"
+                },
+                messages = listOf(
+                    VibeCodeSessionMessage(role = "user", text = "Build me a plants tracker", timestamp = n - 30_000),
+                    VibeCodeSessionMessage(role = "assistant", text = "The plants tracker is ready to deploy.", timestamp = n - 5_000),
+                ) + chatReplies.filter { it.first == sessionId }.mapNotNull { (_, r) ->
+                    r.text?.let { VibeCodeSessionMessage(role = "user", text = it, timestamp = n - 1_000) }
+                },
+                failureReason = if (chatVariant == "failed" && !continued) "The app didn't start: port 8080 never answered." else null,
+                canContinue = true,
+                provider = provider,
+                model = chatReplies.lastOrNull { it.first == sessionId }?.second?.model,
+                conversationTokens = 1_200,
+            )
+        }
         return VibeCodeSessionPublicState(
             id = sessionId,
             appId = "bright-maple--plants",
@@ -858,6 +958,7 @@ class MockScreensClient(
 
     override suspend fun vibeCodeSessionReply(sessionId: String, req: VibeCodeReplyRequest): VibeCodeReplyResponse {
         tick()
+        chatReplies += sessionId to req
         return VibeCodeReplyResponse(ok = true)
     }
 
@@ -879,6 +980,7 @@ class MockScreensClient(
 
     override suspend fun vibeCodeDeploy(sessionId: String): BuildDeployResponse {
         tick()
+        chatDeploys += sessionId
         return BuildDeployResponse(
             ok = true,
             serviceId = "bright-maple-habits",
@@ -1198,6 +1300,7 @@ class MockScreensClient(
 
     override suspend fun serverArchiveApprove(req: ServerArchiveApproveRequest) {
         tick()
+        MockSignatures.requireAdmin("backup-download", req.approval.canonicalBytes(), req.signature)
         archiveApprovals += req
     }
 

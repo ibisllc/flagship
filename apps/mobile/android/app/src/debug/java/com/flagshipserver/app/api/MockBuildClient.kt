@@ -101,8 +101,13 @@ class MockBuildClient(
         return BuildAdaptReply(ok = true, started = true)
     }
 
+    /** A build's state as the box reports it before any adapt here (e.g. one
+     *  a box restart brought back failed). Cleared once an adapt starts. */
+    val stateFixture: MutableMap<String, BuildState> = mutableMapOf()
+
     override suspend fun state(buildId: String): BuildStateResponse {
         tick()
+        if (adaptStartCalls.none { it.first == buildId }) stateFixture[buildId]?.let { return BuildStateResponse(state = it) }
         val adapt = if (adaptStartCalls.any { it.first == buildId }) {
             adaptStatusFixture ?: BuildAdaptStatus(status = "done", fileCount = 12, deployed = false)
         } else {

@@ -53,6 +53,17 @@ class TokensTest {
         assertReadable("dark onAccent on primary", DarkColors.onAccent, DarkColors.primary)
     }
 
+    /** The widget and the Wear OS app draw status with the same tokens. */
+    @Test
+    fun theCompanionStatusPaletteIsTheAppsTokens() {
+        val p = com.flagshipserver.companion.StatusPalette
+        val t = com.flagshipserver.companion.PodStatusText.Tone.entries
+        assertEquals(LightColors.success, Color(p.light(t[0])))
+        assertEquals(listOf(LightColors.success, LightColors.danger, LightColors.warning, LightColors.textMuted), t.map { Color(p.light(it)) })
+        assertEquals(listOf(DarkColors.success, DarkColors.danger, DarkColors.warning, DarkColors.textMuted), t.map { Color(p.dark(it)) })
+        assertEquals(DarkColors.text, Color(p.DARK_INK))
+    }
+
     @Test
     fun noPureBlackOrWhiteAsPageOrTextColour() {
         for (c in listOf(LightColors, DarkColors)) {

@@ -43,9 +43,12 @@ object MockServerShares {
     /** A link to Mina's Studio the phone hasn't opened yet (the gym types it in). */
     val STUDIO_LINK: String = ServerShare.buildShareLink("https://flagshipserver.com", "5a".repeat(16), ByteArray(32) { 0x5a })
 
+    /** The latest world, for the gym to check what reached `.com` and the boxes. */
+    @Volatile var lastWorld: MockShareWorld? = null
+
     /** The share runtime the smoke shell provides: [username] owns [homeDomain]. */
     fun runtime(username: String, homeDomain: String, homeStkPubHex: String, memberScreens: ScreensClient): ServerShareRuntime {
-        val world = MockShareWorld(username, homeDomain, homeStkPubHex)
+        val world = MockShareWorld(username, homeDomain, homeStkPubHex).also { lastWorld = it }
         return ServerShareRuntime(
             client = world.client(world.phone),
             memberScreens = { _, _ -> memberScreens },
@@ -54,15 +57,17 @@ object MockServerShares {
     }
 }
 
-/** Fixed account keys: an obviously fake UMK, IRK and admin root per account. */
+/** Fixed account keys: an obviously fake UMK, IRK and admin root per account
+ *  (every account is admin-pinned, so sensitive orders use the admin root). */
 class MockShareKeys(seed: Byte, val username: String) : ShareKeys {
     val umkSeed = ByteArray(32) { seed }
     val irk = ByteArray(32) { (seed + 1).toByte() }
     val irkPub: ByteArray = Ed25519Sign.KeyPair.newKeyPairFromSeed(irk).publicKey
     private val adminSeed = ByteArray(32) { (seed + 2).toByte() }
-    val adminPubHex: String = HexUtil.encode(Ed25519Sign.KeyPair.newKeyPairFromSeed(adminSeed).publicKey)
+    val adminPub: ByteArray = Ed25519Sign.KeyPair.newKeyPairFromSeed(adminSeed).publicKey
+    val adminPubHex: String = HexUtil.encode(adminPub)
     override suspend fun umk(reason: String): ByteArray = umkSeed
-    override suspend fun sensitive(reason: String): Ed25519Sign = Ed25519Sign(irk)
+    override suspend fun sensitive(reason: String): Ed25519Sign = Ed25519Sign(adminSeed)
     override suspend fun accountKey(reason: String): Ed25519Sign = Ed25519Sign(irk)
     override suspend fun irkSeed(reason: String): ByteArray = irk
     override fun adminRootPubHex(): String = adminPubHex
@@ -83,6 +88,22 @@ class MockShareWorld(
     private val garageStk = ByteArray(32) { 0x61 }
     private val garageStkPubHex = HexUtil.encode(Ed25519Sign.KeyPair.newKeyPairFromSeed(garageStk).publicKey)
     private val diskKey = ByteArray(32) { 0x71 }
+
+    /** Each server's owner: its admin root signs the grants and revokes the
+     *  box keeps (an admin-pinned box refuses any other key). */
+    private val ownerOf = mapOf(
+        homeDomain to phone,
+        MockServerShares.GARAGE_DOMAIN to jordan,
+        MockServerShares.PHOTOS_DOMAIN to mina,
+    )
+
+    /** Co-manager updates the Garage box took (target commits). */
+    val updates = mutableListOf<String>()
+
+    /** Shares with a start-up push registered on `.com` (shareId → member key). */
+    val pushes = HashMap<String, String>()
+
+    private fun sig(b: JsonObject?): ByteArray? = str(b, "signature")?.let(HexUtil::decode)
 
     /** Whose IRK each server's disk key is sealed to on `.com`. */
     private val diskKeyOwner = mapOf(
@@ -203,6 +224,16 @@ class MockShareWorld(
         }
     }
 
+    /** GYM: a fresh link from Mina for her "Studio" server, to drive the
+     *  accept flow from a pasted link. */
+    suspend fun mintLinkForPhone(): String {
+        seedOnce()
+        return client(mina, seeding = true).createOffer(
+            "mina-park", "studio.mina-park.flagship.services", "Studio", HexUtil.encode(mina.irkPub),
+            ShareOptions("Bright", ServerShare.LEVEL_VIEW, unlockAtBoot = false, seeAppData = false),
+        ).link
+    }
+
     private suspend fun accept(keys: MockShareKeys, link: String) {
         val member = client(keys, seeding = true)
         member.accept(member.open(ServerShare.parseShareLink(link)!!))
@@ -316,7 +347,16 @@ class MockShareWorld(
                         row.acceptance = sealed
                         ok()
                     }
-                    "/push" -> if (row.unlockCopy == null) err(403, "unlock-not-shared") else ok(buildJsonObject { put("ok", true) })
+                    "/push" -> {
+                        val p = ServerShare.parseServerSharePush(b?.get("push")) ?: return err(400, "malformed")
+                        if (!com.flagshipserver.app.api.MockSignatures.checkShareKey("share-push", HexUtil.decode(p.memberPubHex)!!, p.canonicalBytes(), str(b, "signature"))) {
+                            return err(403, "bad-signature")
+                        }
+                        if (row.unlockCopy == null) err(403, "unlock-not-shared") else {
+                            if (p.op == ServerShare.OP_PUT) pushes[id] = p.memberPubHex else pushes.remove(id)
+                            ok(buildJsonObject { put("ok", true) })
+                        }
+                    }
                     else -> {
                         row.ended = true
                         ok()
@@ -386,6 +426,10 @@ class MockShareWorld(
             }
             path == "/api/screens/shares" -> {
                 val g = ServerShare.parseServerShareGrant(b?.get("grant")) ?: return err(400, "malformed grant")
+                val owner = ownerOf[host] ?: return err(404, "no such server")
+                if (!com.flagshipserver.app.api.MockSignatures.checkAdminKey("share-grant", owner.adminPub, g.canonicalBytes(), str(b, "signature"))) {
+                    return err(403, "admin-key-required")
+                }
                 if (held[host]?.containsKey(g.shareId) != true) {
                     adminRefusal(ServerShare.parseServerShareAccept(b?.get("accept")), ServerShare.parseShareAcceptAdminProof(b?.get("acceptAdmin")))?.let { return it }
                 }
@@ -394,6 +438,10 @@ class MockShareWorld(
             }
             path == "/api/screens/shares/revoke" -> {
                 val r = ServerShare.parseServerShareRevoke(b?.get("revoke")) ?: return err(400, "malformed")
+                val owner = ownerOf[host] ?: return err(404, "no such server")
+                if (!com.flagshipserver.app.api.MockSignatures.checkAdminKey("share-revoke", owner.adminPub, r.canonicalBytes(), str(b, "signature"))) {
+                    return err(403, "admin-key-required")
+                }
                 held[host]?.remove(r.shareId)
                 ended.getOrPut(host) { HashSet() } += r.shareId
                 ok()
@@ -417,6 +465,9 @@ class MockShareWorld(
             }
             path == "/api/shares/session" -> {
                 val s = ServerShare.parseServerShareSession(b?.get("session")) ?: return err(400, "malformed")
+                if (!com.flagshipserver.app.api.MockSignatures.checkShareKey("share-session", HexUtil.decode(s.memberPubHex)!!, s.canonicalBytes(), str(b, "signature"))) {
+                    return err(403, "bad-signature")
+                }
                 if (!nonces.remove(s.nonceHex)) return err(403, "unknown or used nonce")
                 if (s.shareId in ended[host].orEmpty()) return err(403, "share-ended")
                 val g = held[host]?.get(s.shareId)?.takeIf { it.memberPubHex == s.memberPubHex } ?: return err(403, "not-shared")
@@ -432,12 +483,27 @@ class MockShareWorld(
                 val g = held[domain]?.get(id) ?: return err(401, "share-session")
                 ok(buildJsonObject {
                     put("shareId", g.shareId); put("level", g.level); put("unlockAtBoot", g.unlockAtBoot)
-                    put("seeAppData", g.seeAppData); put("serverDomain", domain); put("canUpdate", false)
+                    put("seeAppData", g.seeAppData); put("serverDomain", domain)
+                    // A manage-level share may move the box to an endorsed release.
+                    put("canUpdate", g.level == ServerShare.LEVEL_MANAGE)
                 })
+            }
+            path == "/api/shares/update" -> {
+                val u = ServerShare.parseServerShareUpdate(b?.get("update")) ?: return err(400, "malformed")
+                val g = held[host]?.get(u.shareId)?.takeIf { it.memberPubHex == u.memberPubHex } ?: return err(403, "not-shared")
+                if (!com.flagshipserver.app.api.MockSignatures.checkShareKey("share-update", HexUtil.decode(u.memberPubHex)!!, u.canonicalBytes(), str(b, "signature"))) {
+                    return err(403, "bad-signature")
+                }
+                if (g.level != ServerShare.LEVEL_MANAGE) return err(403, "share-view-only")
+                updates += u.targetCommit
+                ok(buildJsonObject { put("ok", true); put("targetCommit", u.targetCommit) })
             }
             path == "/api/shares/invites" || path == "/api/shares/invites/withdraw" -> coInvite(m, path, uri.rawQuery, b, h)
             path == "/api/shares/leave" -> {
                 val l = ServerShare.parseServerShareLeave(b?.get("leave")) ?: return err(400, "malformed")
+                if (!com.flagshipserver.app.api.MockSignatures.checkShareKey("share-leave", HexUtil.decode(l.memberPubHex)!!, l.canonicalBytes(), str(b, "signature"))) {
+                    return err(403, "bad-signature")
+                }
                 held[host]?.remove(l.shareId)
                 ended.getOrPut(host) { HashSet() } += l.shareId
                 ok()

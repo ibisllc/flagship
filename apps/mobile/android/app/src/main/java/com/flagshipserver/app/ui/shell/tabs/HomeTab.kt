@@ -315,6 +315,7 @@ fun HomeTab() {
                 serverOrderIssuedAt = app.serverOrderIssuedAt.collectAsState().value,
                 serverOrderAcks = app.serverOrderAcks.collectAsState().value,
                 canAddServers = AddServerGate.allows(app),
+                canChangeServers = com.flagshipserver.app.core.AdminOrderGate.allows(app),
                 onOpenPod = { pod ->
                     nav.navigate("server-detail/${pod.podId}")
                 },

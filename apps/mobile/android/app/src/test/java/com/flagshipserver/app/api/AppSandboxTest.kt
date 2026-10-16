@@ -30,6 +30,18 @@ class AppSandboxTest {
         )
     }
 
+    /** The box also reads unavailable while its internet firewall is down
+     *  (6fd0877d9), retrying every 30 seconds: say that, not "the sandbox". */
+    @Test
+    fun aDownFirewallSaysSoWithItsRetry() {
+        val n = detail(""","appSandbox":{"state":"unavailable","reason":"its internet firewall isn't running: docker is not available"}""").appSandbox!!.notice!!
+        assertTrue(n.danger)
+        assertEquals(
+            "Apps can't start on this server: its internet firewall isn't running (docker is not available). The server tries again every 30 seconds.",
+            n.text,
+        )
+    }
+
     @Test
     fun readyAndOffSayNothing_startingSaysItsBeingSetUp() {
         assertNull(detail(""","appSandbox":{"state":"ready","version":"runsc"}""").appSandbox!!.notice)
