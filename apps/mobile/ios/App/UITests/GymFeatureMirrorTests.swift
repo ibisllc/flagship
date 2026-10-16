@@ -182,6 +182,18 @@ final class GymFeatureMirrorTests: XCTestCase {
     /// honestly: a non-admin device (no admin master root — the demo default)
     /// shows NO Rotate-admin card; with `-smoke-admin-root` the card + the
     /// Rotate control render.
+    /// "Quick approve from Apple Watch" says what it needs: the app unlocked
+    /// on this iPhone (the phone answers the watch only then).
+    func test_quickApproveNoteNamesTheUnlockedApp() throws {
+        let app = launch(tab: "settings")
+        openAccountSecurity(app)
+        let note = app.staticTexts["watch-delegate-note"]
+        XCTAssertTrue(revealBySwipe(app, note), "The watch card explains Quick approve.")
+        XCTAssertTrue(note.label.contains("while Flagship is unlocked on this iPhone"), "Got: \(note.label)")
+        XCTAssertFalse(note.label.contains("without unlocking"))
+        gymShot(app, "quick-approve-note")
+    }
+
     func test_adminRootStateGatesRotateCard() throws {
         // Non-admin half: no seed → the rotate card must be absent.
         var app = launch(tab: "settings")
