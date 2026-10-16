@@ -197,10 +197,13 @@ async function importGcmKey(householdKey) {
  * lowercase hex of `nonce || ciphertext+tag`. .com stores this verbatim and
  * cannot open it (no UMK → no household key).
  */
-export async function sealInviteBundle(bundle, householdKey, inviteId) {
+export async function sealInviteBundle(bundle, householdKey, inviteId, fixedNonce) {
   if (!bundle || typeof bundle.name !== "string") throw err("bundle.name required", "400");
   const key = await importGcmKey(householdKey);
-  const nonce = randomBytes(12);
+  if (fixedNonce !== undefined && !(fixedNonce instanceof Uint8Array && fixedNonce.length === 12)) {
+    throw err("nonce must be 12 bytes", "400");
+  }
+  const nonce = fixedNonce ?? randomBytes(12);
   const ct = new Uint8Array(
     await crypto.subtle.encrypt(
       { name: "AES-GCM", iv: nonce, additionalData: bundleAad(inviteId) },
@@ -432,9 +435,12 @@ export function canonicalKnockBytes(k) {
 
 const DEVICE_ID_RE = /^[0-9a-f]{32}$/;
 
-/** Who signed an invite's create: "admin", "member" (any device of the account), or null (old rows). */
+/**
+ * Who signed an invite's create: "admin", "member" (another device of the
+ * account), "co-manager" (someone the server is shared with), or null (old rows).
+ */
 export function inviteTierOf(v) {
-  return v === "admin" || v === "member" ? v : null;
+  return v === "admin" || v === "member" || v === "co-manager" ? v : null;
 }
 
 function comApiBase(comBase) {

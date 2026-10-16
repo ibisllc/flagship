@@ -843,7 +843,8 @@ export function accountMemberRowHtml(row, ctx = { isAdmin: false, devicePub: "",
  * and Remove/Revoke where this device may withdraw it.
  */
 export function peopleRowHtml(i, members, labelOf, ctx = { isAdmin: false, deviceId: "", devicePub: "", managerClass: false, members: null, deviceNames: null }) {
-  const name = i.bundle?.name ?? "unknown";
+  // A co-manager's invitee is named under their key, which this account can't open.
+  const name = i.bundle?.name ?? (i.creatorTier === "co-manager" ? "Someone they invited" : "unknown");
   const photo = i.bundle?.photo;
   const isGroup = i.maxRedemptions !== null && i.maxRedemptions !== undefined;
   let statusText;

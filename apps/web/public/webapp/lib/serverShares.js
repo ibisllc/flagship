@@ -9,6 +9,7 @@
 // init) (A's own session on the box) and openDiskKey(serverDomain).
 
 import * as ss from "./serverShare.js";
+import * as si from "./serviceInvite.js";
 import { controlApex, bootOrigin } from "./apex.js";
 import { getSession } from "./state.js";
 import { boxClient, ScreensError } from "./api.js";
@@ -1094,5 +1095,160 @@ export async function orderShareUpdate(entry, { targetCommit, fromCommit }, deps
     const code = e?.body?.code;
     const text = UPDATE_ERRORS[code] ?? (typeof e?.body?.error === "string" ? e.body.error : humanError(e));
     throw new ShareError(text, code ?? "update-failed", e?.status);
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Co-manager invites (docs/service-access-gating.md "Co-manager invites"):
+// at "Can manage", B invites people to the shared server's apps at Member
+// while B stays manager-class there, and withdraws only B's own invites. The
+// create and the withdraw are signed with B's member key and go to the box
+// over the share session; the box relays them to `.com`. Names are sealed
+// under B's share-invite bundle key, so only B's devices read them.
+// ──────────────────────────────────────────────────────────────────────
+
+export const CO_INVITE_OPEN = "Invite people";
+export const CO_INVITE_LINE = "People you invite join as Member. You can withdraw your own invites.";
+export const CO_INVITE_NAME_HINT = "Only your devices see it.";
+export const CO_INVITE_LINK_LINE = "Send the link over a private channel. Whoever opens it joins as Member.";
+export const CO_INVITE_YOURS = "Your invites";
+export const CO_INVITE_NONE = "You haven't invited anyone to this app yet.";
+export const CO_INVITE_WITHDRAW = "Withdraw";
+export const CO_INVITE_WITHDRAW_TITLE = "Withdraw this invite?";
+export const CO_INVITE_UNNAMED = "Someone";
+/** Why B can't invite (the box sends the same sentence as `whyText`; this is the fallback). */
+export const CO_INVITE_WHY = Object.freeze({
+  "not-shared": "This server isn't shared with you anymore.",
+  "view-only": "You can view this server but not manage it, so you can't invite people to its apps.",
+  demoted: "An admin made you a Member of this app, so you can't invite people to it.",
+  refused: "An admin turned off your access to this app.",
+  "catching-up": "This server is catching up with the app's other servers. Try again in a moment.",
+});
+
+export function coInviteWithdrawMessage(appName) {
+  return `The link stops working, and anyone who joined through it loses access to ${appName}.`;
+}
+
+/** "Not opened yet", "1 person joined", "3 of 10 joined", "3 joined" (a group with no limit). */
+export function coInviteStatusText(inv, nowMs = Date.now()) {
+  const n = Number.isInteger(inv?.joined) ? inv.joined : 0;
+  let text;
+  if (inv?.maxRedemptions === null || inv?.maxRedemptions === undefined) {
+    text = n === 0 ? "Not opened yet" : n === 1 ? "1 person joined" : `${n} people joined`;
+  } else {
+    text = inv.maxRedemptions === 0 ? `${n} joined` : `${n} of ${inv.maxRedemptions} joined`;
+  }
+  if (typeof inv?.expiresAt === "number" && inv.expiresAt <= nowMs) text += " · expired";
+  return text;
+}
+
+/** The box's own sentence for a refusal it explained (a coded error), else `fallback`. */
+function boxErrorText(e, fallback) {
+  const b = e?.body;
+  if (b && typeof b === "object" && typeof b.error === "string" && typeof b.code === "string") {
+    if (b.code === "malformed" || b.code === "invalid-signature") return fallback;
+    return b.error;
+  }
+  return fallback;
+}
+
+/**
+ * Whether B may invite to `serviceRef` and B's own invites there, names
+ * opened with B's bundle key: `{canInvite, why, whyText, rank, ownerAid,
+ * invites:[{inviteId, name, createdAt, joined, maxRedemptions, expiresAt}]}`.
+ */
+export async function fetchShareInvites(entry, serviceRef, deps = {}) {
+  const d = ctx(deps);
+  needUmk(d);
+  const client = deps.client ?? shareBoxClient(entry, deps);
+  let body;
+  try {
+    body = await client.fetch(`/api/shares/invites?service=${encodeURIComponent(serviceRef)}`);
+  } catch (e) {
+    throw new ShareError(boxErrorText(e, "Couldn't read your invites from this server."), e?.body?.code ?? "invites", e?.status);
+  }
+  const key = await ss.deriveShareInviteBundleKey(d.umk, entry.shareId);
+  const invites = [];
+  for (const i of Array.isArray(body?.invites) ? body.invites : []) {
+    if (typeof i?.inviteId !== "string") continue;
+    let name = null;
+    try {
+      name = (await si.openInviteBundle(i.encryptedBundle, key, i.inviteId)).name;
+    } catch {
+      name = null;
+    }
+    invites.push({
+      inviteId: i.inviteId,
+      name,
+      createdAt: typeof i.createdAt === "number" ? i.createdAt : null,
+      joined: Number.isInteger(i.joined) ? i.joined : 0,
+      maxRedemptions: typeof i.maxRedemptions === "number" ? i.maxRedemptions : null,
+      expiresAt: typeof i.expiresAt === "number" ? i.expiresAt : null,
+    });
+  }
+  const why = typeof body?.why === "string" ? body.why : null;
+  const canInvite = body?.canInvite === true;
+  return {
+    canInvite,
+    why,
+    whyText: canInvite ? "" : (typeof body?.whyText === "string" && body.whyText) || CO_INVITE_WHY[why] || "",
+    rank: typeof body?.rank === "string" ? body.rank : null,
+    ownerAid: typeof body?.ownerAid === "string" && /^[0-9a-f]{64}$/.test(body.ownerAid) ? body.ownerAid : null,
+    invites,
+  };
+}
+
+/**
+ * Invite someone (or a group: `group = {maxRedemptions, expiresAt?}`) to an
+ * app on the shared server at Member. Signs `flagship/service-invite/create/v1`
+ * with B's member key and posts it to the box. Resolves to `{inviteId, link}`.
+ */
+export async function createShareInvite(entry, { serviceRef, ownerAid, name, group = null }, deps = {}) {
+  const d = ctx(deps);
+  const member = await memberKey(d, entry.shareId);
+  const label = String(name ?? "").trim();
+  if (!label) throw new ShareError(group ? "Give the group a name." : "Give them a name.", "no-name");
+  if (!/^[0-9a-f]{64}$/.test(String(ownerAid ?? ""))) throw new ShareError("This server can't take invites yet.", "no-owner");
+  const random = deps.random ?? ((n) => crypto.getRandomValues(new Uint8Array(n)));
+  const secret = random(32);
+  const inviteId = bytesToHex(random(32));
+  const key = await ss.deriveShareInviteBundleKey(d.umk, entry.shareId);
+  const create = {
+    inviteId,
+    authorAID: hexToBytes(ownerAid),
+    serviceRef,
+    secretHash: await si.serviceInviteSecretHash(secret),
+    encryptedBundle: await si.sealInviteBundle({ name: label }, key, inviteId),
+    issuedAt: d.now(),
+    ...(group ? { maxRedemptions: group.maxRedemptions } : {}),
+    ...(group && typeof group.expiresAt === "number" ? { expiresAt: group.expiresAt } : {}),
+  };
+  const signature = await sigHex(signRaw(member.seed, si.canonicalCreateBytes(create)));
+  const client = deps.client ?? shareBoxClient(entry, deps);
+  try {
+    await client.fetch("/api/shares/invites", {
+      method: "POST",
+      body: JSON.stringify({ request: { ...create, authorAID: ownerAid }, signature }),
+    });
+  } catch (e) {
+    throw new ShareError(boxErrorText(e, "Couldn't create the invite. Try again."), e?.body?.code ?? "invite-failed", e?.status);
+  }
+  return {
+    inviteId,
+    link: si.buildInviteLink(`https://${lower(entry.serverDomain)}`, bytesToHex(secret), { authorAID: ownerAid, inviteId, serviceRef }),
+  };
+}
+
+/** Withdraw one of B's own invites: `flagship/service-invite/revoke/v1` signed with B's member key. */
+export async function withdrawShareInvite(entry, inviteId, deps = {}) {
+  const d = ctx(deps);
+  const member = await memberKey(d, entry.shareId);
+  const revoke = { inviteId, issuedAt: d.now() };
+  const signature = await sigHex(signRaw(member.seed, si.canonicalRevokeBytes(revoke)));
+  const client = deps.client ?? shareBoxClient(entry, deps);
+  try {
+    return await client.fetch("/api/shares/invites/withdraw", { method: "POST", body: JSON.stringify({ revoke, signature }) });
+  } catch (e) {
+    throw new ShareError(boxErrorText(e, "Couldn't withdraw the invite. Try again."), e?.body?.code ?? "withdraw-failed", e?.status);
   }
 }

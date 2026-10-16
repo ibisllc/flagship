@@ -1552,6 +1552,28 @@ const TOTAL: readonly Scenario[] = [
     },
   ),
   webTotal(
+    "web-total-share-co-manager-invites",
+    "Co-manager invites (docs/service-access-gating.md \"Co-manager invites\"): at Can manage each app on the shared page offers Invite people; the co-manager adds a person at Member (signed with the share's member key, posted to the box over the share session) and gets a link on the shared server; their own invites list with Withdraw, which asks first; demoted to Member in an app, the panel shows the box's sentence and no add or Withdraw.",
+    "gym share co-manager invites people at Member and withdraws their own",
+    {
+      steps: [
+        { kind: "launch", describe: "Open a server shared at Can manage." },
+        { kind: "tap", describe: "Invite people on notes.", handle: '[data-invite-open="notes"]' },
+        { kind: "tap", describe: "+ Add person, name them, Create invite link.", handle: "[data-co-create]" },
+        { kind: "tap", describe: "Withdraw your own invite, confirm.", handle: "[data-co-withdraw]" },
+        { kind: "tap", describe: "Invite people on photos, where an admin demoted you.", handle: '[data-invite-open="photos"]' },
+      ],
+      assertions: [
+        { describe: "Member-only line", handle: '[data-invite-panel="notes"] [data-co-invite-line]', expect: "text", text: "People you invite join as Member." },
+        { describe: "Link on the shared server", handle: '[data-invite-panel="notes"] [data-co-link]', expect: "present" },
+        { describe: "Demoted line", handle: '[data-invite-panel="photos"] [data-co-invite-why]', expect: "text", text: "An admin made you a Member of this app, so you can't invite people to it." },
+        { describe: "No Withdraw when demoted", handle: '[data-invite-panel="photos"] [data-co-withdraw]', expect: "absent" },
+      ],
+      screenshots: [shot("co-invite-link", "A co-manager's new invite link."), shot("co-invite-demoted", "Demoted in an app: why they can't invite.")],
+      dimension: "D1",
+    },
+  ),
+  webTotal(
     "web-total-apps-admin-only-orders",
     "Admin-only app orders (lib/addServerGate.js canSignAdminOrders; the box takes them only under the admin root): on a device without the admin root the app page shows waiting hosts with no Allow/Deny, API keys with no Create/Revoke, no Remove app, each with its one-line reason, and a writing SQL statement gets the reason instead of Confirm and run; nothing is signed or sent for the box to refuse.",
     "gym apps a non-admin device sees the admin-only app orders read-only, with the reason",

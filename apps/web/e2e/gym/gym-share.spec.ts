@@ -360,3 +360,103 @@ test.describe("gym webapp share", () => {
     await expect(page.locator("#view-shared-server")).toBeVisible({ timeout: 10_000 });
   });
 });
+
+test.describe("gym webapp share co-manager invites", () => {
+  test("gym share co-manager invites people at Member and withdraws their own", async ({ page }, testInfo) => {
+    await reachHome(page);
+    const fx = await fixtures(page);
+    const ownerAid = "c4".repeat(32);
+    const created: Array<Record<string, unknown>> = [];
+    const withdrawn: string[] = [];
+    const inviteRows = async () =>
+      page.evaluate(
+        async ({ shareId, rows }) => {
+          const ss = await import("/lib/serverShare.js");
+          const si = await import("/lib/serviceInvite.js");
+          const { getSession } = await import("/lib/state.js");
+          const key = await ss.deriveShareInviteBundleKey(getSession().umk, shareId);
+          return Promise.all(
+            rows.map(async (r: { inviteId: string; name: string; joined: number }) => ({
+              inviteId: r.inviteId,
+              createdAt: Date.now(),
+              encryptedBundle: await si.sealInviteBundle({ name: r.name }, key, r.inviteId),
+              maxRedemptions: null,
+              expiresAt: null,
+              joined: r.joined,
+            })),
+          );
+        },
+        { shareId: fx.alice.shareId, rows: [{ inviteId: "a1".repeat(32), name: "Jo", joined: 1 }] },
+      );
+    const existing = await inviteRows();
+    await stub(page, [
+      ["/api/share-inbox", (b) => ({ json: (b as { request: { op: string } }).request.op === "list" ? { entries: [{ entryId: fx.alice.entryId, ct: fx.alice.ct, createdAt: 1 }] } : { ok: true } })],
+      [`${SHARED_BOX}/api/shares/nonce`, { nonce: "11".repeat(32) }],
+      [`${SHARED_BOX}/api/shares/session`, { token: "fss_gym", expiresAt: Date.now() + 3_600_000, level: "manage", unlockAtBoot: false, seeAppData: false }],
+      [`${SHARED_BOX}/api/shares/me`, { shareId: fx.alice.shareId, level: "manage", unlockAtBoot: false, seeAppData: false, serverDomain: SHARED_BOX }],
+      [`${SHARED_BOX}/api/shares/invites/withdraw`, (b) => {
+        withdrawn.push((b as { revoke: { inviteId: string } }).revoke.inviteId);
+        return { json: { ok: true, pruned: 1, comNotified: true } };
+      }],
+      [`${SHARED_BOX}/api/shares/invites?service=photos`, {
+        serviceRef: "photos", canInvite: false, why: "demoted",
+        whyText: "An admin made you a Member of this app, so you can't invite people to it.",
+        rank: "member", ownerAid, invites: existing,
+      }],
+      [`${SHARED_BOX}/api/shares/invites`, (b, url) => {
+        if (b) {
+          created.push(b as Record<string, unknown>);
+          return { json: { created: true, inviteId: (b as { request: { inviteId: string } }).request.inviteId, tier: "co-manager" } };
+        }
+        void url;
+        const mine = created.map((c) => (c as { request: { inviteId: string; encryptedBundle: string } }).request)
+          .filter((r) => !withdrawn.includes(r.inviteId))
+          .map((r) => ({ inviteId: r.inviteId, createdAt: Date.now(), encryptedBundle: r.encryptedBundle, maxRedemptions: null, expiresAt: null, joined: 0 }));
+        return { json: { serviceRef: "notes", canInvite: true, why: null, whyText: null, rank: "manager", ownerAid, invites: mine } };
+      }],
+      [`/api/server-shares/${fx.alice.shareId}`, { shareId: fx.alice.shareId, serverDomain: SHARED_BOX, state: "accepted", offer: fx.alice.offer, unlock: false }],
+      [`${SHARED_BOX}/api/screens/server-detail`, serverDetail(SHARED_BOX, "alice")],
+      [`${SHARED_BOX}/api/screens/apps-list`, APPS],
+      [`${SHARED_BOX}/api/screens/server-metrics`, METRICS],
+      ["/api/users/smoketest/pods", { pods: [] }],
+    ]);
+    await page.evaluate(async () => {
+      const { renderHome } = await import("/views/home.js");
+      await renderHome();
+    });
+    await page.locator("#shared-with-me [data-open-share]", { hasText: "home" }).click({ position: { x: 20, y: 20 } });
+    await expect(page.locator("#view-shared-server")).toBeVisible();
+
+    await page.locator('[data-invite-open="notes"]').click({ timeout: 10_000 });
+    const notes = page.locator('[data-invite-panel="notes"]');
+    await expect(notes.locator("[data-co-invite-line]")).toHaveText("People you invite join as Member. You can withdraw your own invites.", { timeout: 10_000 });
+    await expect(notes.locator("[data-co-none]")).toBeVisible();
+    await notes.locator('[data-co-add="person"]').click();
+    await notes.locator("input[data-co-name]").fill("Alex");
+    await notes.locator("[data-co-create]").click();
+    await expect(notes.locator("[data-co-link]")).toHaveValue(
+      new RegExp(`^https://${SHARED_BOX.replace(/\./g, "\\.")}/invite#[0-9a-f]{64}&a=${ownerAid}&i=[0-9a-f]{64}&s=notes$`),
+      { timeout: 10_000 },
+    );
+    expect(created).toHaveLength(1);
+    expect((created[0]!.request as { authorAID: string; serviceRef: string }).authorAID).toBe(ownerAid);
+    await expect(notes.locator("[data-co-invite]")).toContainText("Alex");
+    await notes.evaluate((el) => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 160));
+    await shot(page, testInfo, "co-invite-link");
+
+    await notes.locator("[data-co-withdraw]").click();
+    await page.locator("[data-modal-ok]").click();
+    await expect(notes.locator("[data-co-none]")).toBeVisible({ timeout: 10_000 });
+    expect(withdrawn).toHaveLength(1);
+
+    await page.locator('[data-invite-open="photos"]').click();
+    const photos = page.locator('[data-invite-panel="photos"]');
+    await expect(photos.locator("[data-co-invite-why]")).toHaveText("An admin made you a Member of this app, so you can't invite people to it.", { timeout: 10_000 });
+    await expect(photos.locator("[data-co-invite]")).toContainText("Jo");
+    await expect(photos.locator("[data-co-invite]")).toContainText("1 person joined");
+    await expect(photos.locator("[data-co-withdraw]")).toHaveCount(0);
+    await expect(photos.locator("[data-co-add]")).toHaveCount(0);
+    await photos.evaluate((el) => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 160));
+    await shot(page, testInfo, "co-invite-demoted");
+  });
+});

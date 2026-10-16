@@ -36,6 +36,7 @@ const INFO_TOKEN = "flagship/server-share/token/v1";
 const INFO_LINK_KEY = "flagship/server-share/link-key/v1";
 const INFO_INBOX = "flagship/share-inbox/v1";
 const INFO_INBOX_KEY = "flagship/share-inbox-key/v1";
+const INFO_INVITE_BUNDLE = "flagship/share-invite-bundle/v1";
 const SAS_TAG = "flagship/server-share/sas/v1";
 export const AAD_SHARE_OFFER = "flagship/server-share/offer/v1";
 export const AAD_SHARE_ACCEPTANCE = "flagship/server-share/acceptance/v1";
@@ -156,6 +157,16 @@ export async function deriveShareMemberKey(umkSeed, shareId) {
 /** Sign with B's member key for one share (its sign-ins to that server's apps). */
 export async function signWithShareMemberKey(umkSeed, shareId, bytes) {
   return edSign((await deriveShareMemberKey(umkSeed, shareId)).seed, bytes);
+}
+
+/**
+ * Seals the names of the people B invites to the shared server's apps
+ * (serviceInvite.js sealInviteBundle with this key in place of a household
+ * key): `HKDF(UMK, "flagship/share-invite-bundle/v1|<shareId>")`, 32 raw bytes.
+ */
+export async function deriveShareInviteBundleKey(umkSeed, shareId) {
+  checkShareId(shareId);
+  return hk(umkSeedOf(umkSeed), `${INFO_INVITE_BUNDLE}|${shareId}`);
 }
 
 /** Signs B's "Shared with me" inbox requests; its public key is the inbox id. */

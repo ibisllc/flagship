@@ -109,16 +109,19 @@ export async function setAppRank({ serviceId, target, rank, umk, signWithIrk, fe
  *   accountMembers:[{kind:"device", deviceId, devicePub, tier, rank, set, refused}
  *                  |{kind:"co-manager", shareId, label, rank, set, refused}],
  *   members:[{aid, role, grants:[{inviteId, role, tier}], direct}],
- *   invites:[{inviteId, role, set, tier, creatorPub, creatorDeviceId}]}`.
- * `tier` is who signed an invite: "admin", "member" (its joins stay Member
- * unless an admin raises them) or null (invites from before tiers were
- * recorded). An account member's `rank` is null when refused.
+ *   invites:[{inviteId, role, set, tier, creatorPub, creatorDeviceId,
+ *             creatorShareId, creatorLabel}]}`.
+ * `tier` is who signed an invite: "admin", "member" (another device; its
+ * joins stay Member unless an admin raises them), "co-manager" (someone the
+ * server is shared with, named by `creatorLabel`; Member too) or null
+ * (invites from before tiers were recorded). An account member's `rank` is
+ * null when refused.
  */
 export async function fetchMembers(serviceId, { fetchJson }) {
   return normalizeMembers(await fetchJson(membersPath(serviceId)));
 }
 
-const tierOf = (v) => (v === "admin" || v === "member" ? v : null);
+const tierOf = (v) => (v === "admin" || v === "member" || v === "co-manager" ? v : null);
 const hexOrNull = (v, len) => (typeof v === "string" && new RegExp(`^[0-9a-f]{${len}}$`).test(v.toLowerCase()) ? v.toLowerCase() : null);
 
 function normalizeAccountMember(m) {
@@ -161,6 +164,8 @@ export function normalizeMembers(body) {
           tier: tierOf(i?.tier),
           creatorPub: hexOrNull(i?.creatorPub, 64),
           creatorDeviceId: hexOrNull(i?.creatorDeviceId, 32),
+          creatorShareId: hexOrNull(i?.creatorShareId, 32),
+          creatorLabel: typeof i?.creatorLabel === "string" && i.creatorLabel ? i.creatorLabel : null,
         }))
       : [],
   };
@@ -229,9 +234,14 @@ export function canRevokeInvite(invite, { isAdmin, deviceId, devicePub = "", man
 /**
  * "Invited by …" for a row, or "" for rows from before creators were recorded.
  * `deviceNames` maps device id → the name decrypted from the account directory
- * (null when this device can't read it).
+ * (null when this device can't read it). A co-manager's invite is named by
+ * the owner's label for the share, from the box's list (`members`).
  */
-export function invitedByText(invite, { deviceId, deviceNames }) {
+export function invitedByText(invite, { deviceId, deviceNames, members = null }) {
+  if (invite?.creatorTier === "co-manager") {
+    const label = members?.invites?.find((i) => i.inviteId === invite.inviteId)?.creatorLabel ?? null;
+    return label ? `Invited by ${label} (co-manager)` : "Invited by a co-manager";
+  }
   const by = invite?.creatorDeviceId ?? null;
   if (by === null && (invite?.creatorTier ?? null) === null) return "";
   if (by !== null && by === deviceId) return "Invited by this device";

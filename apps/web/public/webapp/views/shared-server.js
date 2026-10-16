@@ -2,6 +2,9 @@
 // the "Shared with me" section on Home and the page for one shared server.
 // The page shows only what the share's level reaches; the owner's own
 // sections (power, transfer, updates, sharing, danger zone…) are not on it.
+// At "Can manage" each app has "Invite people": invites at Member signed
+// with this share's member key, and withdrawing your own
+// (docs/service-access-gating.md "Co-manager invites").
 
 import { $, registerView, show } from "../lib/router.js";
 import { getSession } from "../lib/state.js";
@@ -24,6 +27,21 @@ import {
   sendAccessList,
 } from "../lib/appAccess.js";
 import {
+  CO_INVITE_LINE,
+  CO_INVITE_LINK_LINE,
+  CO_INVITE_NAME_HINT,
+  CO_INVITE_NONE,
+  CO_INVITE_OPEN,
+  CO_INVITE_UNNAMED,
+  CO_INVITE_WHY,
+  CO_INVITE_WITHDRAW,
+  CO_INVITE_WITHDRAW_TITLE,
+  CO_INVITE_YOURS,
+  coInviteStatusText,
+  coInviteWithdrawMessage,
+  createShareInvite,
+  fetchShareInvites,
+  withdrawShareInvite,
   DATA_TITLE,
   LEVEL_TEXT,
   MEMBERS_ONLY_HINT,
@@ -222,12 +240,58 @@ function appRowHtml(app, raw, canManage, seeAppData = false) {
             <span class="shared-app-actions">
               ${seeAppData ? `<button class="secondary btn-xs" data-db-open="${escapeHtml(app.serviceId)}">${escapeHtml(SHARED_DB_OPEN)}</button>` : ""}
               ${canManage ? `<button class="secondary btn-xs" data-access-open="${escapeHtml(app.serviceId)}">Internet access</button>` : ""}
+              ${canManage ? `<button class="secondary btn-xs" data-invite-open="${escapeHtml(app.serviceId)}">${escapeHtml(CO_INVITE_OPEN)}</button>` : ""}
             </span>
           </div>
           ${app.url ? `<a class="muted-sm mono text-xs truncate" href="${escapeHtml(app.url)}" target="_blank" rel="noopener">${escapeHtml(app.url.replace(/^https?:\/\//, ""))}</a>` : ""}
           ${membersOnly}
           <div class="hidden mt-2" data-access-editor="${escapeHtml(app.serviceId)}"></div>
+          <div class="hidden mt-2" data-invite-panel="${escapeHtml(app.serviceId)}"></div>
         </div>`;
+}
+
+/**
+ * The "Invite people" panel for one app. `state` is fetchShareInvites'
+ * answer. Pure, so tests can check every state (can invite, demoted, …).
+ */
+export function coInvitePanelHtml(state, nowMs = Date.now()) {
+  const top = state.canInvite
+    ? `<p class="note" data-co-invite-line>${escapeHtml(CO_INVITE_LINE)}</p>
+      <div class="row-2 mt-1" data-co-invite-add>
+        <button class="secondary btn-xs" type="button" data-co-add="person">+ Add person</button>
+        <button class="secondary btn-xs" type="button" data-co-add="group">+ Add group</button>
+      </div>
+      <div class="hidden mt-2" data-co-form>
+        <label data-co-name-label>Name <span class="faint-sm">(${escapeHtml(CO_INVITE_NAME_HINT)})</span></label>
+        <input data-co-name type="text" autocomplete="off" maxlength="120" placeholder="Alex" />
+        <div class="hidden mt-1" data-co-group>
+          <label>Max uses <span class="faint-sm">(0 = unlimited)</span></label>
+          <input data-co-maxn type="number" min="0" step="1" value="10" />
+          <label class="mt-1">Expires in days <span class="faint-sm">(optional)</span></label>
+          <input data-co-days type="number" min="0" step="1" placeholder="30" />
+        </div>
+        <p class="faint-sm mt-1">Rank: Member</p>
+        <button class="full-width mt-2" type="button" data-co-create>Create invite link</button>
+      </div>
+      <div class="hidden mt-2" data-co-result>
+        <input type="text" readonly data-co-link aria-label="Invite link" />
+        <p class="note mt-1">${escapeHtml(CO_INVITE_LINK_LINE)}</p>
+        <button class="secondary btn-xs mt-1" type="button" data-co-copy>Copy link</button>
+      </div>`
+    : `<p class="note" data-co-invite-why>${escapeHtml(state.whyText || CO_INVITE_WHY[state.why] || "")}</p>`;
+  const rows = (state.invites ?? [])
+    .map(
+      (i) => `
+        <div class="row" data-co-invite="${escapeHtml(i.inviteId)}">
+          <span><span class="weight-600">${escapeHtml(i.name ?? CO_INVITE_UNNAMED)}</span><span class="faint-sm"> · ${escapeHtml(coInviteStatusText(i, nowMs))}</span></span>
+          ${state.canInvite ? `<button class="secondary btn-xs" type="button" data-co-withdraw="${escapeHtml(i.inviteId)}" data-co-withdraw-name="${escapeHtml(i.name ?? CO_INVITE_UNNAMED)}">${escapeHtml(CO_INVITE_WITHDRAW)}</button>` : ""}
+        </div>`,
+    )
+    .join("");
+  return `
+      ${top}
+      <p class="weight-600 mt-2 text-sm">${escapeHtml(CO_INVITE_YOURS)}</p>
+      ${rows || `<p class="faint-sm" data-co-none>${escapeHtml(CO_INVITE_NONE)}</p>`}`;
 }
 
 /**
@@ -265,6 +329,7 @@ export function sharedServerHtml({ entry, me, detail, apps, startups = [] }) {
       </div>
       <h2 class="mt-4">Apps</h2>
       <div class="card" id="shared-apps-card">
+        ${rows.length && !canManage ? `<p class="faint-sm" data-co-invite-view>${escapeHtml(CO_INVITE_WHY["view-only"])}</p>` : ""}
         ${rows.length ? rows.map((a) => appRowHtml(a, raw.get(a.serviceId), canManage, !!me.seeAppData)).join("") : `<p class="faint-sm">No apps on this server yet.</p>`}
       </div>
       ${canManage && me.canUpdate === true ? updateCardHtml(detail) : ""}
@@ -374,6 +439,115 @@ function wirePage(entry, my, { canManage, startups, apps = [], me = null }) {
       const id = btn.getAttribute("data-access-open");
       const app = serverAppRows(apps, []).find((a) => a.serviceId === id);
       void toggleAccessEditor(entry, id, app?.name ?? id);
+    });
+  });
+  document.querySelectorAll("[data-invite-open]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.getAttribute("data-invite-open");
+      const app = serverAppRows(apps, []).find((a) => a.serviceId === id);
+      void toggleInvitePanel(entry, id, app?.name ?? id);
+    });
+  });
+}
+
+/** Open (or close) an app's "Invite people" panel and wire it. */
+async function toggleInvitePanel(entry, serviceId, appName, { reopen = false } = {}) {
+  const slot = document.querySelector(`[data-invite-panel="${CSS.escape(serviceId)}"]`);
+  if (!slot) return;
+  if (!reopen && !slot.classList.contains("hidden")) {
+    slot.classList.add("hidden");
+    slot.innerHTML = "";
+    return;
+  }
+  slot.classList.remove("hidden");
+  slot.innerHTML = `<p class="faint-sm">Loading…</p>`;
+  let state;
+  try {
+    state = await fetchShareInvites(entry, serviceId);
+  } catch (e) {
+    slot.innerHTML = `<p class="err-text">${escapeHtml(shareErrorText(e))}</p>`;
+    return;
+  }
+  slot.innerHTML = coInvitePanelHtml(state);
+  wireInvitePanel(entry, serviceId, appName, slot, state);
+}
+
+function wireInvitePanel(entry, serviceId, appName, slot, state) {
+  let kind = "person";
+  const q = (sel) => slot.querySelector(sel);
+  slot.querySelectorAll("[data-co-add]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      kind = btn.getAttribute("data-co-add");
+      q("[data-co-form]")?.classList.remove("hidden");
+      q("[data-co-result]")?.classList.add("hidden");
+      q("[data-co-group]")?.classList.toggle("hidden", kind !== "group");
+      const label = q("[data-co-name-label]");
+      if (label) label.firstChild.textContent = kind === "group" ? "Group name " : "Name ";
+      const input = q("[data-co-name]");
+      if (input) {
+        input.placeholder = kind === "group" ? "Chess club" : "Alex";
+        input.focus();
+      }
+    });
+  });
+  q("[data-co-create]")?.addEventListener("click", async (ev) => {
+    const btn = ev.currentTarget;
+    btn.disabled = true;
+    try {
+      let group = null;
+      if (kind === "group") {
+        const maxN = Number(q("[data-co-maxn]")?.value ?? "10");
+        const days = Number(q("[data-co-days]")?.value || "0");
+        group = {
+          maxRedemptions: Number.isInteger(maxN) && maxN >= 0 ? maxN : 10,
+          ...(Number.isFinite(days) && days > 0 ? { expiresAt: Date.now() + Math.round(days * 86_400_000) } : {}),
+        };
+      }
+      const made = await createShareInvite(entry, {
+        serviceRef: serviceId,
+        ownerAid: state.ownerAid,
+        name: q("[data-co-name]")?.value ?? "",
+        group,
+      });
+      await toggleInvitePanel(entry, serviceId, appName, { reopen: true });
+      const result = slot.querySelector("[data-co-result]");
+      const link = slot.querySelector("[data-co-link]");
+      if (result && link) {
+        link.value = made.link;
+        result.classList.remove("hidden");
+        slot.querySelector("[data-co-copy]")?.addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(made.link);
+            toast("Link copied", "ok");
+          } catch {
+            link.select();
+          }
+        });
+      }
+      toast("Invite created", "ok");
+    } catch (e) {
+      toast(shareErrorText(e), "err");
+      btn.disabled = false;
+    }
+  });
+  slot.querySelectorAll("[data-co-withdraw]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const ok = await inlineConfirm({
+        title: CO_INVITE_WITHDRAW_TITLE,
+        message: coInviteWithdrawMessage(appName),
+        okLabel: CO_INVITE_WITHDRAW,
+        danger: true,
+      });
+      if (!ok) return;
+      btn.disabled = true;
+      try {
+        await withdrawShareInvite(entry, btn.getAttribute("data-co-withdraw"));
+        toast("Invite withdrawn", "ok");
+        await toggleInvitePanel(entry, serviceId, appName, { reopen: true });
+      } catch (e) {
+        toast(shareErrorText(e), "err");
+        btn.disabled = false;
+      }
     });
   });
 }
