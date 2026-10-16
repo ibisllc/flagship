@@ -473,10 +473,11 @@ def test_pairing_cover_lifecycle(tmp_path):
         return session
 
     m = make_model(tmp_path, pair_factory=factory)
-    m.set_pair_debug(True)
     m.start_pairing()
     assert m.state.is_pairing and m.show_pairing_cover
-    assert session.debug is True
+    # Studio never asks the phone for debug access (Mac and Windows don't either).
+    assert session.debug is False
+    assert not hasattr(m, "set_pair_debug")
 
     m._handle_pair_event(
         PairEvent(event="ready", human_code="ABCD-1234", qr_terminal="█▀█")

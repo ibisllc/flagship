@@ -75,6 +75,12 @@ from vm.server_tier import ServerDestination, ServerTier
 MODE_SIMPLE = "simple"
 MODE_ADVANCED = "advanced"
 
+DEBUG_ACCESS_HINT = (
+    "Debug access (SSH with your own key) is turned on in the Flagship app: "
+    "choose “Debug-friendly server” when you make the recipe, or "
+    "use Debug access on the server’s page later."
+)
+
 # Reported to /api/iso-manifest as `builderVersion`; stamped at release.
 BUILDER_VERSION = VERSION
 
@@ -243,8 +249,6 @@ class WizardState:
     pair_code: Optional[str] = None
     pair_sas: Optional[str] = None
     pair_status: Optional[str] = None
-    # Advanced: request an owner-signed debug-access grant during pairing.
-    pair_debug: bool = False
     # Optional Wi-Fi baked into a USB installer (never part of the recipe).
     wifi_ssid: str = ""
     wifi_password: str = ""
@@ -1173,7 +1177,9 @@ class WizardModel:
         s.is_pairing = True
         self._notify()
 
-        session = self._pair_session_factory(s.pair_debug)
+        # Studio never asks the phone for debug access: the owner turns it on
+        # in the app (the recipe's debug-friendly option or the server page).
+        session = self._pair_session_factory(False)
         self._pair = session
 
         def run() -> None:
@@ -1195,10 +1201,6 @@ class WizardModel:
             pair.cancel()
         self._pairing_opted_out = True
         self._end_pairing(None)
-
-    def set_pair_debug(self, value: bool) -> None:
-        self.state.pair_debug = bool(value)
-        self._notify()
 
     def _end_pairing(self, status: Optional[str], failed: bool = False) -> None:
         self._pair = None
@@ -1530,17 +1532,14 @@ def build_window(application, model: Optional[WizardModel] = None):
     )
     pair_btn.connect("clicked", lambda _b: wizard_model.start_pairing())
     pair_row.append(pair_btn)
-    pair_debug_check = Gtk.CheckButton(label="Request debug access (Advanced)")
-    pair_debug_check.set_tooltip_text(
-        "Asks your phone to sign a debug-access grant. The box verifies it "
-        "against your owner key; without it the image is production (no "
-        "console, no SSH)."
-    )
-    pair_debug_check.connect(
-        "toggled", lambda cb: wizard_model.set_pair_debug(cb.get_active())
-    )
-    pair_row.append(pair_debug_check)
     step1["body"].append(pair_row)
+    # Debug access is the owner's choice in the app, as on Mac and Windows:
+    # never a Studio checkbox.
+    debug_hint = Gtk.Label(xalign=0.0)
+    debug_hint.set_wrap(True)
+    debug_hint.add_css_class("dim-label")
+    debug_hint.set_text(DEBUG_ACCESS_HINT)
+    step1["body"].append(debug_hint)
 
     recipe_status = Gtk.Label(xalign=0.0)
     recipe_status.set_wrap(True)
@@ -2281,9 +2280,6 @@ def build_window(application, model: Optional[WizardModel] = None):
         )
         verify_btn.set_sensitive(s.recipe_path is not None and not s.is_running)
         pair_btn.set_sensitive(not s.is_running and not s.is_pairing)
-        pair_debug_check.set_sensitive(not s.is_pairing)
-        if pair_debug_check.get_active() != s.pair_debug:
-            pair_debug_check.set_active(s.pair_debug)
         cancel_btn.set_sensitive(s.is_running)
         if s.is_running:
             log_spinner.start()

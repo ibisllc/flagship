@@ -66,8 +66,10 @@ SSH (debug VMs only), Delete. Selecting a row opens its detail pane.
   the shared `flagship-build pair --emit-events` CLI and renders the QR / code /
   SAS natively; the delivered recipe behaves exactly like a dropped-in file.
 - **Debug is consent-as-crypto.** SSH + the serial console exist IFF the recipe
-  carries the phone-signed `debugGrant` sibling (mint with the pairing debug
-  toggle, or `flagship-build pair --debug`). The grant names one SSH key and an
+  carries the phone-signed `debugGrant` sibling. As on Mac and Windows, Studio
+  has no debug checkbox: the owner picks "Debug-friendly server" in the app when
+  making the recipe (or turns on Debug access on the server page later, which
+  doesn't need Studio at all). The grant names one SSH key and an
   end time; the box itself lets that key in as `debug` once it has verified the
   grant, until it ends (nothing bakes the key into the image, and there is no
   password). A production VM gets NO console device and NO forwarded port —
