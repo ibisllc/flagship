@@ -14,7 +14,7 @@
 // Shape mirrors lib/aiChatAlerts.js's `startAiChatAlertPoll` (an `active()`-
 // gated foreground loop with an injected fetcher + timers) and lib/boxInbox.js
 // (a tiny observable the UI subscribes to). Everything is dependency-injected
-// so the whole loop is unit-testable with a Mock fetch — no real network, no
+// so the whole loop is unit-testable with an injected fetch — no real network, no
 // DOM, no hang.
 //
 // GRACEFUL FALLBACK (critical): if /stream errors / is unreachable / returns
@@ -35,7 +35,7 @@ export const LIVE_SYNC_JITTER_MS = 500;
 export const LIVE_SYNC_FALLBACK_MS = 5_000;
 
 /**
- * Fetch ONE live-sync snapshot. The client method (with its Mock-friendly DI):
+ * Fetch ONE live-sync snapshot. The client method (with its injectable fetch):
  * pass the last `cursor` you saw; the server returns immediately if anything
  * changed (or you sent none / a stale one), else holds and returns on the next
  * change or a ~25s timeout. Returns the parsed body `{ cursor, username, pods,

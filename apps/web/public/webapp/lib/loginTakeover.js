@@ -35,7 +35,7 @@
 // signature gate) to swap the IRK and open the account fully.
 // Web Push integration, cross-device add-device QR, and live PRF crypto
 // stay out of scope — `recoverFromCloud` is injected and remains the
-// existing Mock/popup sub-origin flow.
+// existing popup sub-origin flow.
 //
 // All side-effecting collaborators are injected so the branch logic is
 // unit-testable without IndexedDB / the DOM / the network / a real

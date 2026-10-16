@@ -1,7 +1,7 @@
 /**
  * Settings and the account with no backend, reached by clicking from Home:
- * every Settings row and its Back, Appearance/Privacy/About, the developer
- * toggle, Sign out and Remove this device with cloud recovery set up, the
+ * every Settings row and its Back, Appearance/Privacy/About, no developer
+ * tools, Sign out and Remove this device with cloud recovery set up, the
  * Delete account ceremony (signed under the admin root), a demo account's
  * Settings, Browser sessions (only browsers opened through Remote), the
  * Remote browsers list, two-factor enrolment and disable, Profiles, Open
@@ -147,29 +147,18 @@ test.describe("gym webapp account", () => {
     await expect(page.locator("#view-settings-tab")).toBeVisible();
   });
 
-  test("gym account the developer toggle shows Send order and is remembered", async ({ page }, testInfo) => {
+  test("gym account Settings has no developer tools, even with ?debug=1", async ({ page }, testInfo) => {
     await reachHome(page, { kind: "admin", servers: [HOME] });
     const m = await mock(page);
     baseAccount(m);
+    await page.evaluate(() => history.replaceState({}, "", "/?debug=1"));
     await openSettings(page);
-    const toggle = page.locator("#settings-debug-toggle");
-    await expect(page.locator("#settings-developer-row")).toBeHidden();
-    await toggle.check();
-    await expect(page.locator("#settings-developer-row")).toBeVisible();
-    expect(await page.evaluate(() => localStorage.getItem("flagship.debug"))).toBe("1");
-    await page.click("#settings-tab-orders-debug");
-    await expect(page.locator("#view-orders-debug")).toBeVisible();
-    await shot(page, testInfo, "settings-orders-debug");
-    await page.click("#orders-debug-back");
-    // Opening Settings again reflects the stored setting.
-    await openSettings(page);
-    await expect(toggle).toBeChecked();
-    await page.click("#settings-tab-create-server");
-    await expect(page.locator("#view-create-server")).toBeVisible({ timeout: 10_000 });
-    await openSettings(page);
-    await toggle.uncheck();
-    await expect(page.locator("#settings-developer-row")).toBeHidden();
+    await expect(page.locator("#view-settings-tab")).not.toContainText("DEVELOPER");
+    for (const id of ["#settings-debug-toggle", "#settings-developer-row", "#settings-tab-orders-debug", "#view-orders-debug"]) {
+      await expect(page.locator(id)).toHaveCount(0);
+    }
     expect(await page.evaluate(() => localStorage.getItem("flagship.debug"))).toBeNull();
+    await shot(page, testInfo, "settings-no-developer-tools");
   });
 
   test("gym account sign out with cloud recovery asks first, then erases this device's key", async ({ page }, testInfo) => {

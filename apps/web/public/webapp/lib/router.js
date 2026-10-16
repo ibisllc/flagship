@@ -65,7 +65,7 @@ export function setSubtitle(text) {
 /**
  * Highlight the tab bar entry matching the active view (if any).
  * Sub-screens (server-detail, app-detail, vibe-code, browser-viewer,
- * orders-debug, pair, pod-pair, create-server) inherit their parent
+ * pair, pod-pair, create-server) inherit their parent
  * tab via VIEW_TABS so users always know where they are.
  */
 function syncTabBar(viewId) {
@@ -100,7 +100,6 @@ export function parseViewQuery() {
       // dispatcher can open that session's chat.
       sessionId: params.get("sessionId") ?? null,
       server: params.get("sessionId") ? params.get("server") ?? null : null,
-      debug: params.get("debug") === "1",
     };
   } catch {
     return null;
@@ -135,17 +134,8 @@ function resolveViewAlias(alias) {
   return aliases[a] ?? `view-${a}`;
 }
 
-export function isDebug() {
-  try {
-    return new URLSearchParams(window.location.search).get("debug") === "1"
-      || localStorage.getItem("flagship.debug") === "1";
-  } catch {
-    return false;
-  }
-}
-
 /**
- * Strip ?view= / ?serverId= / ?serviceId= / ?debug= from the URL bar once
+ * Strip ?view= / ?serverId= / ?serviceId= from the URL bar once
  * we've consumed them, so a deep-link doesn't keep firing on every
  * subsequent reload. Kept side-effecting (no return) — callers don't
  * need the URL object.

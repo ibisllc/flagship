@@ -115,7 +115,6 @@ export const HOME_BUTTON_ICONS = {
   "open-vibe-code":         sparklesIcon,
   "open-paired-sessions":   usersIcon,
   "open-install-progress":  downloadIcon,
-  "open-orders-debug":      sendIcon,
   // #32 — only entry point is service-detail.js; legacy id kept so a
   // pinned fork's CSS still resolves the icon. New code should not
   // reference "open-browser-viewer" — bind to sd-open-browser instead.

@@ -561,8 +561,6 @@ export function authCodeAdminCanonicalBytes(code, adminRootPubHex) {
   return new TextEncoder().encode(`${TAG_AUTH_CODE_ADMIN}|${inner}`);
 }
 
-// Exported so the GYM-ONLY `window.__gymCreate` seam can drive the same
-// compose-and-sign path as the download action.
 export async function mintInstallBlobBundle(session, username, inputs, opts = {}) {
   const { serverName, recipeTtlMs } = inputs;
   // §7a.1: only "approve" is carried on the wire; "auto" is the absent-field

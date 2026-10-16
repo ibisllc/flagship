@@ -17,7 +17,7 @@ import {
   setActiveKeystoreProfile,
   unlockUmk,
 } from "./keystore.js";
-import { setSubtitle, show, $, registerView, setViewTab, isDebug, currentViewId } from "./lib/router.js";
+import { setSubtitle, show, $, registerView, setViewTab, currentViewId } from "./lib/router.js";
 import { toast } from "./lib/toast.js";
 import { humanError } from "./lib/humanError.js";
 import {
@@ -116,9 +116,8 @@ import { initEditServiceView } from "./views/edit-service.js";
 import { initRecoveryView, enterRecovery } from "./views/recovery.js";
 import { initAccountDeleteView, enterAccountDelete } from "./views/account-delete.js";
 import { initInstallProgressView, enterInstallProgress } from "./views/install-progress.js";
-import { initOrdersDebugView, enterOrdersDebug } from "./views/orders-debug.js";
 import { initBrowserViewerView } from "./views/browser-viewer.js";
-import { initCreateServerView, enterCreateServer } from "./views/create-server.js";
+import { initCreateServerView } from "./views/create-server.js";
 import { initActivityView, renderActivity } from "./views/activity.js";
 import { initAccountAuditView } from "./views/account-audit.js";
 import { initBootApprovalView, enterBootApproval } from "./views/boot-approval.js";
@@ -188,7 +187,6 @@ const SUB_VIEW_TABS = {
   "view-companion-dock": "settings",
   "view-companion-requests": "settings",
   "view-profiles": "settings",
-  "view-orders-debug": "settings",
   // Settings sub-screens that previously left the tab bar dark.
   "view-trusted-devices": "settings",
   "view-account-delete": "settings",
@@ -252,32 +250,9 @@ async function enterSettingsTab() {
   decorateSettingsTab();
   applyDemoSettingsRestrictions(isDemoProfile(getActiveProfile()));
   void refreshSessionGates();
-  // Reflect the debug toggle's current state every time the tab is opened.
-  const toggle = $("settings-debug-toggle");
-  const row = $("settings-developer-row");
-  if (toggle && row) {
-    const on = isDebug();
-    toggle.checked = on;
-    row.classList.toggle("hidden", !on);
-  }
   // P14 Phase 2 — refresh the companion-requests badge on Settings entry.
   // Best-effort; an older daemon (503) leaves the badge at 0.
   refreshCompanionRequestsBadge().catch(() => { /* swallow */ });
-}
-
-/**
- * #33 — promote ?debug=1 in the URL to a sticky localStorage flag the
- * first time we see it. Power users can curl-style enable the
- * developer surfaces by reloading with ?debug=1; subsequent reloads
- * remember the setting until they untick it from Settings → Advanced.
- */
-function persistDebugFlagFromUrl() {
-  try {
-    const url = new URL(window.location.href);
-    if (url.searchParams.get("debug") === "1") {
-      localStorage.setItem("flagship.debug", "1");
-    }
-  } catch { /* ignore */ }
 }
 
 function wireTabBar() {
@@ -342,8 +317,6 @@ function wireSettingsTabEntries() {
   wire("settings-tab-companion-dock", enterCompanionDock);
   wire("settings-tab-companion-requests", enterCompanionRequests);
   wire("settings-tab-profiles", enterProfiles);
-  wire("settings-tab-orders-debug", enterOrdersDebug);
-  wire("settings-tab-create-server", enterCreateServer);
   // App group — static informational sub-screens.
   wire("settings-tab-appearance", () => show("view-appearance"));
   wire("settings-tab-privacy", () => show("view-privacy"));
@@ -354,18 +327,6 @@ function wireSettingsTabEntries() {
   // Danger zone — Delete account. "Remove this device" (settings-reset) and
   // the session buttons are wired in views/settings.js.
   wire("settings-tab-account-delete", enterAccountDelete);
-
-  // Debug toggle — flips localStorage and reveals the developer row.
-  const toggle = $("settings-debug-toggle");
-  const row = $("settings-developer-row");
-  toggle?.addEventListener("change", () => {
-    const on = !!toggle.checked;
-    try {
-      if (on) localStorage.setItem("flagship.debug", "1");
-      else localStorage.removeItem("flagship.debug");
-    } catch { /* private-mode storage failure — non-fatal */ }
-    row?.classList.toggle("hidden", !on);
-  });
 }
 
 function wireActivityEntries() {
@@ -496,7 +457,6 @@ async function runTrustOverride(certHash) {
 }
 
 async function boot() {
-  persistDebugFlagFromUrl();
   // Maintainer-trust enforcement: install the global .com fetch guard BEFORE
   // any backend call so that, the moment a verdict flips untrusted, every
   // .com call short-circuits — no matter which lib makes it. (No verdict yet ⇒
@@ -565,7 +525,6 @@ async function boot() {
     mod.initPostRecoveryView?.();
   } catch { /* not shipped yet — fine */ }
   initInstallProgressView();
-  initOrdersDebugView();
   initBrowserViewerView();
   initCreateServerView();
   initActivityView();

@@ -783,33 +783,6 @@ test.describe("gym webapp misc", () => {
     await shot(page, testInfo, "browser-viewer-stream");
   });
 
-  test("gym misc Send order (debug) signs the chosen order with its fields", async ({ page }, testInfo) => {
-    const keys = await reachHome(page, { kind: "admin", servers: [HOME] });
-    const m = await mock(page);
-    basePods(m);
-    m.post("/api/screens/orders/send", { ok: true, accepted: true });
-    await openSettings(page);
-    await page.check("#settings-debug-toggle");
-    await page.click("#settings-tab-orders-debug");
-    await expect(page.locator("#view-orders-debug")).toBeVisible();
-    await expect(page.locator("#od-fields")).toContainText("no extra fields");
-    await page.selectOption("#od-kind", "backup-app");
-    await page.fill("#od-creator", "smoketest");
-    await page.fill("#od-slug", "notes");
-    await page.selectOption("#od-includeUserData", "true");
-    await page.fill("#od-password", "pw-gym");
-    await page.click("#od-send");
-    await expect(page.locator("#od-result")).toContainText('"accepted": true', { timeout: 10_000 });
-    const sent = m.last("/api/screens/orders/send")!;
-    expect(sent.body.kind).toBe("backup-app");
-    const env = JSON.parse(Buffer.from(sent.body.envelope, "base64").toString("utf8"));
-    expect(env.request).toMatchObject({ type: "backup-app", creator: "smoketest", slug: "notes", includeUserData: true, password: "pw-gym", serverId: HOME });
-    const orderCanon = (r: { serverId: string; creator: string; slug: string; includeUserData: boolean; password: string; issuedAt: number }) =>
-      `flagship/order/backup-app/v1|${r.serverId}|${r.creator}|${r.slug}|${r.includeUserData ? "1" : "0"}|${r.password}|${r.issuedAt}`;
-    expect(await verifies(page, orderCanon, env.request, env.signature, keys.irkPubHex)).toBe(true);
-    await shot(page, testInfo, "orders-debug-sent");
-  });
-
   test("gym misc create server mints a recipe with its expiry and boot mode, approved under the admin root", async ({ page }, testInfo) => {
     const keys = await reachHome(page, { kind: "admin", servers: [HOME] });
     const m = await mock(page);

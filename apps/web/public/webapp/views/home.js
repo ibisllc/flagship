@@ -308,7 +308,7 @@ export function classifyServer(server, pod, opts = {}) {
   // on each pod entry (alongside the existing `lastReported`). When present,
   // trust it as the authoritative signal — it folds in the latest HELLO
   // timestamps and avoids the client computing stale ages off a cached
-  // `lastReported`. When absent (pre-update Worker / test fixture), the
+  // `lastReported`. When absent (pre-update Worker), the
   // existing `lastReported`-age logic acts as the faithful fallback.
   //
   // Mapping:

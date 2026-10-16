@@ -199,14 +199,6 @@ export const WEB_MISC: readonly Scenario[] = [
     [["browser-viewer-stream", "Streaming."]],
   ),
   row(
-    "web-total-misc-orders-debug",
-    "Send order (debug), after the developer toggle: the kind picks its fields, and Sign & send posts an IRK-signed envelope carrying exactly those fields; the box's answer shows.",
-    "gym misc Send order (debug) signs the chosen order with its fields",
-    "#od-send",
-    [{ describe: "Result", handle: "#od-result", expect: "present" }],
-    [["orders-debug-sent", "Sent."]],
-  ),
-  row(
     "web-total-misc-create-recipe",
     "Create a server (from Add/Import): name, a 12-hour expiry and 'Authorize each boot' produce a downloaded, secret-free recipe whose AuthCode is IRK-signed, pins the admin root and is approved by it; the RCK is registered under the admin root.",
     "gym misc create server mints a recipe with its expiry and boot mode, approved under the admin root",

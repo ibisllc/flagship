@@ -317,21 +317,6 @@
           </div>
         </div>
 
-        <div class="fs-group-section">
-          <div class="fs-group-header">DEVELOPER</div>
-          <div class="card stack-md">
-            <label class="inline-check">
-              <input type="checkbox" id="settings-debug-toggle" /> Show developer tools
-            </label>
-            <p class="faint-sm" id="settings-debug-hint">
-              Enables the "Send order" debug panel and other developer surfaces.
-            </p>
-            <div id="settings-developer-row" class="hidden">
-              <button class="secondary full-width" id="settings-tab-orders-debug">Send order (debug)</button>
-              <button class="secondary full-width mt-2" id="settings-tab-create-server">Create a server</button>
-            </div>
-          </div>
-        </div>
       </section>
 
       <!-- Settings → App → Appearance. Static: the webapp follows the
@@ -845,32 +830,6 @@
           <button class="secondary" id="bv-refresh">Refresh tabs</button>
           <button class="secondary" id="browser-viewer-back">← Back</button>
         </div>
-      </section>
-
-      <!-- View 17: Debug send-order panel (P2.9) -->
-      <section id="view-orders-debug" class="hidden">
-        <h2>Send phone order</h2>
-        <div class="card">
-          <p class="note">
-            Build, sign, and send any of the 12 phone-order types to the paired pod. The order is signed with your IRK and dispatched via /api/screens/orders/send.
-          </p>
-          <label>Order kind</label>
-          <select id="od-kind">
-            <option value="noop">noop</option>
-            <option value="shut-down">shut-down</option>
-            <option value="set-backup-policy">set-backup-policy</option>
-            <option value="revoke-self">revoke-self</option>
-            <option value="add-paired-session">add-paired-session</option>
-            <option value="remove-paired-session">remove-paired-session</option>
-            <option value="add-subscriber">add-subscriber</option>
-            <option value="remove-subscriber">remove-subscriber</option>
-            <option value="backup-app">backup-app</option>
-          </select>
-          <div id="od-fields" class="mt-2"></div>
-          <button id="od-send" class="full-width mt-2">Sign &amp; send</button>
-          <div id="od-result" class="mt-2 text-sm"></div>
-        </div>
-        <button class="secondary full-width mt-2" id="orders-debug-back">← Back</button>
       </section>
 
       <!-- View 20: First-run wizard (#25) + peer-backup opt-in (#95). The

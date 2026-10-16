@@ -112,16 +112,12 @@ export const WEB_ACCOUNT: readonly Scenario[] = [
     [["settings-about", "About."]],
   ),
   row(
-    "web-total-settings-developer-toggle",
-    "Show developer tools reveals Send order and Create a server, is remembered in localStorage, and unticking hides them again.",
-    "gym account the developer toggle shows Send order and is remembered",
-    [
-      ["Tick the toggle.", "#settings-debug-toggle"],
-      ["Send order.", "#settings-tab-orders-debug"],
-      ["Create a server.", "#settings-tab-create-server"],
-    ],
-    [{ describe: "Orders debug view", handle: "#view-orders-debug", expect: "present" }],
-    [["settings-orders-debug", "Send order (debug)."]],
+    "web-total-settings-no-developer-tools",
+    "Settings has no developer section, Send order panel or debug toggle, and ?debug=1 in the address turns nothing on.",
+    "gym account Settings has no developer tools, even with ?debug=1",
+    [["Open Settings with ?debug=1.", '[data-tab-target="settings"]']],
+    [{ describe: "Settings", handle: "#view-settings-tab", expect: "present" }],
+    [["settings-no-developer-tools", "Settings without a developer section."]],
   ),
   row(
     "web-total-settings-sign-out-enrolled",

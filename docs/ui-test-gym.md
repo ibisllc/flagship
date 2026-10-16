@@ -539,7 +539,7 @@ Column), `GlobalTrustBar.kt`, `Toaster.kt`, `SecureWindow.kt` (FLAG_SECURE),
 - **Settings/security:** `settings.js`, `account-security.js`, `paired-sessions.js`.
 - **Multi-device/peer:** `peer-backup.js`, `companion-dock.js`,
   `companion-requests.js`, `profiles.js`, `invite-issue.js`, `invite-manage.js`.
-- **Debug:** `orders-debug.js`, `url-controller.js`.
+- **Debug:** `url-controller.js`.
 - **Key lib chrome (matching D4/D5/D6):** `activeOperations.js` +
   `operationsBar.js` (teal sliver), `trustSliver.js` + `trustOverride.js` +
   `serverTrust.js` + `maintainerTrust.js` (red trust sliver + override),

@@ -120,7 +120,6 @@ describe("/webapp PWA static surface", () => {
       "/webapp/views/vibe-code.js",
       "/webapp/views/recovery.js",
       "/webapp/views/install-progress.js",
-      "/webapp/views/orders-debug.js",
       "/webapp/views/browser-viewer.js",
     ]) {
       const r = await app.inject({ method: "GET", url: path });
@@ -143,7 +142,6 @@ describe("/webapp PWA static surface", () => {
       // install-progress.js no longer uses a /api/screens/* BFF — it reads the
       // SINGLE canonical provisioning channel directly
       // (GET /api/order/<serial>/status on flagshipserver.com).
-      ["/api/screens/orders/send", "/webapp/views/orders-debug.js"],
       ["/api/screens/browser-tabs/list/", "/webapp/views/browser-viewer.js"],
     ];
     for (const [endpoint, view] of want) {
@@ -163,25 +161,6 @@ describe("/webapp PWA static surface", () => {
     // as escaped-slash regex literals.
     expect(r.body).toContain("\\/api\\/screens\\/orders\\/send");
     expect(r.body).toContain("\\/api\\/screens\\/app-backup\\/start");
-  });
-
-  it("orders-debug view enumerates the standard PhoneOrder kinds", async () => {
-    const app = buildServer();
-    const r = await app.inject({ method: "GET", url: "/webapp/views/orders-debug.js" });
-    expect(r.statusCode).toBe(200);
-    // Each order kind's tag prefix appears in the canonical-bytes
-    // builder, so the test catches drift between webapp and protocol.
-    for (const tag of [
-      "flagship/order/noop/v1",
-      "flagship/order/shut-down/v1",
-      "flagship/order/set-backup-policy/v1",
-      "flagship/order/revoke-self/v1",
-      "flagship/order/add-paired-session/v2",
-      "flagship/order/remove-paired-session/v1",
-      "flagship/order/backup-app/v1",
-    ]) {
-      expect(r.body).toContain(tag);
-    }
   });
 
   it("/webapp/lib/leases.js exposes the auto-unlock lease surface (sign + post + revoke)", async () => {
@@ -393,7 +372,7 @@ describe("/webapp PWA static surface", () => {
     // v56 picks each new app's server, lists a server's apps and copies apps between servers.
     // v57 titles a server's page with its name.
     // v58 shows one status pill per app across its servers, and each server's state on the app page.
-    expect(r.body).toContain('SHELL_VERSION = "v123"');
+    expect(r.body).toContain('SHELL_VERSION = "v124"');
     expect(r.body).toContain("event.data?.json");
     // Must keep the empty-payload fallback (some pushes have no body).
     expect(r.body).toContain("Flagship has an update for you");

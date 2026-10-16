@@ -297,7 +297,9 @@
 //       account reopens with its passphrase as the same admin device;
 //       auto-pair reads serverDomain; open git builds reopen where they
 //       stand.
-const SHELL_VERSION = "v123";
+//  v124: no developer surfaces in the shipped webapp: the sticky debug URL
+//       flag, Settings' Developer section and its Send order panel are gone.
+const SHELL_VERSION = "v124";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -471,7 +473,6 @@ const OPTIONAL_SHELL = [
   "/views/service-env.js",
   "/views/recovery.js",
   "/views/install-progress.js",
-  "/views/orders-debug.js",
   "/views/browser-viewer.js",
   "/views/account-audit.js",
   "/views/boot-approval.js",

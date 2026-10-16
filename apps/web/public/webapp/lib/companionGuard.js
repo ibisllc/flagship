@@ -60,7 +60,6 @@ const UNAVAILABLE_IDS = [
   "settings-tab-join-account",
   "settings-reset",
   "settings-tab-account-delete",
-  "settings-tab-create-server",
   "settings-tab-companion-dock",
   "settings-tab-companion-requests",
   "services-list-open-vibe-code",

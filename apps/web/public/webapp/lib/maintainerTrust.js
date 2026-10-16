@@ -14,7 +14,7 @@
 // and the fail-closed behaviour are ported faithfully from
 //   maintainers/packages/protocol/src/{canonical,verifier,caEndorsement}.ts
 // (the v2 LOCKED model). It is pinned by cross-platform vectors generated from
-// the real package (apps/web/tests/fixtures/maintainerTrust.webapp.vectors.json).
+// the real package (maintainerTrust.webapp.vectors.json under apps/web/tests).
 //
 // CRYPTO: Ed25519 verify uses WebCrypto subtle. This app already hard-depends
 // on WebCrypto X25519 (lib/leases.js — Chrome 130+/Safari 17+/Firefox 130+);

@@ -12,7 +12,7 @@
 //     graceModel derivation, kind)
 //   - apps/mobile/ios/.../accountResolve (LoginViewModel)
 //   - apps/mobile/android/.../accountResolve
-// per the lockstep rule + the Mock-matches-Worker-wire invariant.
+// per the lockstep rule + the client-matches-Worker-wire invariant.
 //
 // See docs/login-and-account-redesign.md ("The unified login decision
 // tree" + "The keystone: a consolidated preflight endpoint").
