@@ -24,8 +24,9 @@
  */
 
 import { existsSync, readdirSync } from "node:fs";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { withFileLock } from "./durableFile.js";
 
 export interface AppAuthTokens {
   /** Mint a new token for `serviceId`. Overwrites any existing token. */
@@ -106,17 +107,17 @@ export class FileAppAuthTokens implements AppAuthTokens {
   }
 
   async mint(serviceId: string): Promise<string> {
-    if (!existsSync(this.dir)) await mkdir(this.dir, { recursive: true });
-    const existing = this.byServiceId.get(serviceId);
-    if (existing) this.byToken.delete(existing);
-    const token = generateToken();
-    const file = join(this.dir, `${serviceId}.token`);
-    const tmp = `${file}.tmp`;
-    await writeFile(tmp, token, { mode: 0o600 });
-    await rename(tmp, file);
-    this.byToken.set(token, serviceId);
-    this.byServiceId.set(serviceId, token);
-    return token;
+    // One mint per app at a time: two at once each dropped only the token
+    // before them, so the first one's token stayed valid in memory.
+    return withFileLock(join(this.dir, `${serviceId}.token`), async (write) => {
+      const token = generateToken();
+      await write(token);
+      const existing = this.byServiceId.get(serviceId);
+      if (existing) this.byToken.delete(existing);
+      this.byToken.set(token, serviceId);
+      this.byServiceId.set(serviceId, token);
+      return token;
+    });
   }
 
   async resolve(token: string): Promise<string | null> {
@@ -124,13 +125,15 @@ export class FileAppAuthTokens implements AppAuthTokens {
   }
 
   async forget(serviceId: string): Promise<void> {
-    const t = this.byServiceId.get(serviceId);
-    if (t) {
-      this.byToken.delete(t);
-      this.byServiceId.delete(serviceId);
-    }
     const file = join(this.dir, `${serviceId}.token`);
-    await rm(file, { force: true });
+    await withFileLock(file, async () => {
+      const t = this.byServiceId.get(serviceId);
+      if (t) {
+        this.byToken.delete(t);
+        this.byServiceId.delete(serviceId);
+      }
+      await rm(file, { force: true });
+    });
   }
 
   async tokenForApp(serviceId: string): Promise<string | null> {

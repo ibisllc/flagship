@@ -4,8 +4,9 @@
  * Only the repo's public address and the adapter's hash: nothing private.
  */
 
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { writeFileDurable } from "../durableFile.js";
 
 export interface AdapterOrigin {
   repo: string;
@@ -56,9 +57,7 @@ export class FileAdapterOrigins implements AdapterOrigins {
     else if (!this.map.delete(serviceId)) return Promise.resolve();
     const snapshot = JSON.stringify(Object.fromEntries(this.map));
     const next = this.chain.then(async () => {
-      await mkdir(dirname(this.path), { recursive: true });
-      await writeFile(`${this.path}.tmp`, snapshot);
-      await rename(`${this.path}.tmp`, this.path);
+      await writeFileDurable(this.path, snapshot, 0o644);
     });
     this.chain = next.catch(() => {});
     return next;

@@ -27,8 +27,9 @@
  */
 
 import { existsSync, readdirSync } from "node:fs";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { withFileLock } from "./durableFile.js";
 import type { ServicePlatform, InstalledService } from "./servicePlatform.js";
 import type { AppDistributionInfo } from "./updateServer.js";
 
@@ -91,16 +92,15 @@ export class FileSubscriberRegistry implements SubscriberRegistry {
     }
   }
 
-  private async writeAll(serviceId: string, fqdns: Set<string>): Promise<void> {
-    if (!existsSync(this.dir)) await mkdir(this.dir, { recursive: true });
-    const tmp = `${this.path(serviceId)}.tmp`;
-    const sorted = [...fqdns].sort();
-    if (sorted.length === 0) {
-      await rm(this.path(serviceId), { force: true });
-      return;
-    }
-    await writeFile(tmp, JSON.stringify(sorted, null, 2));
-    await rename(tmp, this.path(serviceId));
+  /** Read, change and write one app's list in turn with every other change to it. */
+  private change(serviceId: string, f: (s: Set<string>) => boolean): Promise<void> {
+    const path = this.path(serviceId);
+    return withFileLock(path, async (write) => {
+      const s = await this.readAll(serviceId);
+      if (!f(s)) return;
+      if (s.size === 0) await rm(path, { force: true });
+      else await write(JSON.stringify([...s].sort(), null, 2), 0o644);
+    });
   }
 
   async subscribersFor(serviceId: string): Promise<Set<string>> {
@@ -109,15 +109,14 @@ export class FileSubscriberRegistry implements SubscriberRegistry {
 
   async add(serviceId: string, fqdn: string): Promise<void> {
     validateFqdn(fqdn);
-    const s = await this.readAll(serviceId);
-    s.add(fqdn.toLowerCase());
-    await this.writeAll(serviceId, s);
+    await this.change(serviceId, (s) => {
+      s.add(fqdn.toLowerCase());
+      return true;
+    });
   }
 
   async remove(serviceId: string, fqdn: string): Promise<void> {
-    const s = await this.readAll(serviceId);
-    if (!s.delete(fqdn.toLowerCase())) return;
-    await this.writeAll(serviceId, s);
+    await this.change(serviceId, (s) => s.delete(fqdn.toLowerCase()));
   }
 
   async list(serviceId: string): Promise<string[]> {

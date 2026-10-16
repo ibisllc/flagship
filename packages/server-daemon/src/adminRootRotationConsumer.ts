@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { readFile, rename } from "node:fs/promises";
 import { dirname } from "node:path";
+import { writeFileDurable } from "./durableFile.js";
 import {
   verifyAdminRootRotation,
   type AdminRootRotation,
@@ -99,10 +100,7 @@ export function fileAdminRootPinStore(pinPath: string): AdminRootPinStore {
       }
     },
     async write(pin) {
-      await mkdir(dirname(pinPath), { recursive: true, mode: 0o700 });
-      const tmp = `${pinPath}.tmp`;
-      await writeFile(tmp, JSON.stringify(pin, null, 2), { mode: 0o600 });
-      await rename(tmp, pinPath);
+      await writeFileDurable(pinPath, JSON.stringify(pin, null, 2));
     },
   };
 }

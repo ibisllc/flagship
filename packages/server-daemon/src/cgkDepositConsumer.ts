@@ -1,4 +1,5 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
+import { writeFileDurable } from "./durableFile.js";
 import {
   carrierHexToCgkDelivery,
   openAndVerifyCgkDelivery,
@@ -87,10 +88,9 @@ export function fileCgkMarkerStore(markerPath: string): CgkClaimMarkerStore {
       }
     },
     async mark(cgkHex) {
-      await writeFile(
+      await writeFileDurable(
         markerPath,
         JSON.stringify({ claimedAt: Date.now(), cgkPrefix: cgkHex.slice(0, 8) }),
-        { mode: 0o600 },
       );
     },
   };

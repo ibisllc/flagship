@@ -31,7 +31,8 @@ import {
   existsSync,
   mkdirSync,
 } from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { writeFileDurable } from "./durableFile.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
@@ -252,7 +253,8 @@ export class UpdateServer {
     try {
       await this.git(args.repoPath, ["bundle", "create", tmpBundle, range]);
       const bytes = await readFile(tmpBundle);
-      await writeFile(cacheFile, bytes);
+      // Whole or not at all: a reader checks the cache by existence.
+      await writeFileDurable(cacheFile, bytes, 0o644);
       return bytes;
     } finally {
       await rm(tmp, { recursive: true, force: true });

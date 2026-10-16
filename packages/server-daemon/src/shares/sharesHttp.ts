@@ -16,8 +16,9 @@
  *  - A poller reads ended shares back from `.com` and verifies each itself.
  */
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { readFile } from "node:fs/promises";
+import { writeFileDurable } from "../durableFile.js";
+import { join } from "node:path";
 import {
   parseServerShareAccept,
   parseServerShareGrant,
@@ -79,7 +80,6 @@ const MAX_NONCES = 1000;
 /** Share-session bearer tokens: `<dataDir>/share-sessions.json`, mode 0600. */
 export class ShareSessionStore {
   private byToken = new Map<string, { shareId: string; expiresAt: number }>();
-  private chain: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly path: string | null,
@@ -135,12 +135,8 @@ export class ShareSessionStore {
     const path = this.path;
     const now = this.now();
     const body = JSON.stringify(Object.fromEntries([...this.byToken].filter(([, v]) => v.expiresAt > now)));
-    this.chain = this.chain.then(async () => {
-      await mkdir(dirname(path), { recursive: true });
-      await writeFile(`${path}.tmp`, body, { mode: 0o600 });
-      await rename(`${path}.tmp`, path);
-    });
-    return this.chain;
+    // Queued per path; one failed write no longer blocks every later one.
+    return writeFileDurable(path, body);
   }
 }
 

@@ -18,8 +18,9 @@
  * for one use. Companion sessions get 403 (screensHttp denies them before
  * this handler runs).
  */
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { writeFileDurable } from "../durableFile.js";
 import { appDbSqlSha256, parseAppDbWriteGrant, verifyAppDbWriteGrant } from "@flagship/protocol";
 import { shareCallerOf } from "../shares/sharesHttp.js";
 import { authorizeSensitiveOrder } from "../adminAuthorityLocal.js";
@@ -91,9 +92,7 @@ export class DbWriteLedger {
     if (!path) return Promise.resolve();
     const body = JSON.stringify({ used: Object.fromEntries(this.used) });
     const next = this.chain.then(async () => {
-      await mkdir(dirname(path), { recursive: true });
-      await writeFile(`${path}.tmp`, body, { mode: 0o600 });
-      await rename(`${path}.tmp`, path);
+      await writeFileDurable(path, body);
     });
     this.chain = next.catch(() => {});
     return next;

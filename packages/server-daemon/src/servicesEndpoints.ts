@@ -1,5 +1,6 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { writeFileDurable } from "./durableFile.js";
 
 /**
  * Daemon-side client for the `/api/services/endpoints` discovery
@@ -122,10 +123,7 @@ export function parseServicesEndpoints(body: unknown): ServicesEndpoints | null 
 }
 
 async function persistCache(path: string, endpoints: ServicesEndpoints): Promise<void> {
-  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  const tmp = `${path}.tmp`;
-  await writeFile(tmp, JSON.stringify(endpoints, null, 2) + "\n", { mode: 0o644 });
-  await rename(tmp, path);
+  await writeFileDurable(path, JSON.stringify(endpoints, null, 2) + "\n", 0o644);
 }
 
 async function loadCache(path: string): Promise<ServicesEndpoints | null> {

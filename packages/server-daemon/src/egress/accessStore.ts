@@ -18,8 +18,9 @@
  * host the manifest's `network.egress` suggests that the list doesn't
  * decide yet. A draft opens nothing until the owner signs it as a list.
  */
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { readFile, rename } from "node:fs/promises";
 import { dirname } from "node:path";
+import { writeFileDurable } from "../durableFile.js";
 import {
   DEFAULT_ACCESS_LIST,
   accessListFromEgressHosts,
@@ -542,10 +543,7 @@ export class AppAccessStore {
     const next = this.chain.then(async () => {
       const blob = swk.sealWithSwk(new TextEncoder().encode(JSON.stringify(snapshot)));
       const hex = Buffer.concat([Buffer.from(blob.nonce), Buffer.from(blob.ciphertext)]).toString("hex");
-      await mkdir(dirname(path), { recursive: true });
-      const tmp = `${path}.tmp`;
-      await writeFile(tmp, hex, { mode: 0o600 });
-      await rename(tmp, path);
+      await writeFileDurable(path, hex);
     });
     this.chain = next.catch(() => {});
     return next;

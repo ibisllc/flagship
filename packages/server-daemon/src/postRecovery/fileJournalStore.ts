@@ -21,17 +21,22 @@
  */
 
 import { existsSync } from "node:fs";
-import { appendFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { withFileLock } from "../durableFile.js";
 import type { EncryptedJournalRow, JournalStore } from "./stableIdReissuer.js";
 
 export class FileJournalStore implements JournalStore {
   constructor(private readonly path: string) {}
 
   async append(row: EncryptedJournalRow): Promise<void> {
-    await this.ensureDir();
     const line = JSON.stringify(row) + "\n";
-    await appendFile(this.path, line, { mode: 0o600 });
+    // In turn with a prune's rewrite, which would otherwise drop a row
+    // appended between its read and its rename.
+    await withFileLock(this.path, async () => {
+      await this.ensureDir();
+      await appendFile(this.path, line, { mode: 0o600 });
+    });
   }
 
   async listAll(): Promise<EncryptedJournalRow[]> {
@@ -61,24 +66,18 @@ export class FileJournalStore implements JournalStore {
 
   async deleteOlderThan(cutoffMs: number): Promise<number> {
     if (!existsSync(this.path)) return 0;
-    const all = await this.listAll();
-    const kept = all.filter((r) => r.rewrittenAt >= cutoffMs);
-    const removed = all.length - kept.length;
-    if (removed === 0) return 0;
-    await this.atomicRewrite(kept);
-    return removed;
+    return withFileLock(this.path, async (write) => {
+      const all = await this.listAll();
+      const kept = all.filter((r) => r.rewrittenAt >= cutoffMs);
+      const removed = all.length - kept.length;
+      if (removed === 0) return 0;
+      await write(kept.map((r) => JSON.stringify(r)).join("\n") + (kept.length > 0 ? "\n" : ""));
+      return removed;
+    });
   }
 
   private async ensureDir(): Promise<void> {
     await mkdir(dirname(this.path), { recursive: true, mode: 0o700 });
-  }
-
-  private async atomicRewrite(rows: EncryptedJournalRow[]): Promise<void> {
-    await this.ensureDir();
-    const tmp = `${this.path}.tmp`;
-    const body = rows.map((r) => JSON.stringify(r)).join("\n") + (rows.length > 0 ? "\n" : "");
-    await writeFile(tmp, body, { mode: 0o600 });
-    await rename(tmp, this.path);
   }
 }
 

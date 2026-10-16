@@ -29,8 +29,9 @@
  */
 
 import { existsSync, readdirSync } from "node:fs";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { withFileLock } from "../durableFile.js";
 import { type SealedBlob } from "@flagship/protocol";
 import type { SwkOps } from "../keyCustodian.js";
 import { parseRelayFlag, type LlmCredential } from "../llmHarness.js";
@@ -151,15 +152,15 @@ export class FileBuildCredentialStore implements BuildCredentialStore {
   async put(id: string, cred: LlmCredential): Promise<void> {
     const ok = validate(cred);
     if (!ok) throw new Error("invalid credential");
-    if (!existsSync(this.dir)) await mkdir(this.dir, { recursive: true });
-    const file = credFilePath(this.dir, id);
     const blob = this.swk.sealWithSwk(
       new TextEncoder().encode(JSON.stringify(ok)),
     );
-    const tmp = `${file}.tmp`;
-    await writeFile(tmp, sealedToHex(blob), { mode: 0o600 });
-    await rename(tmp, file);
-    this.cache.set(id, { ...ok });
+    // In turn with other changes to this id, so a forget can't be undone by
+    // a put still in flight (the key would stay on disk).
+    await withFileLock(credFilePath(this.dir, id), async (write) => {
+      await write(sealedToHex(blob));
+      this.cache.set(id, { ...ok });
+    });
   }
 
   async get(id: string): Promise<LlmCredential | null> {
@@ -181,7 +182,11 @@ export class FileBuildCredentialStore implements BuildCredentialStore {
     // written (put rejects it), so there is nothing to remove — skip the
     // disk op rather than interpolating an untrusted id into a path.
     if (!BUILD_ID_RE.test(id)) return;
-    await rm(credFilePath(this.dir, id), { force: true });
+    const file = credFilePath(this.dir, id);
+    await withFileLock(file, async () => {
+      this.cache.delete(id);
+      await rm(file, { force: true });
+    });
   }
 
   private unseal(hex: string): LlmCredential | null {

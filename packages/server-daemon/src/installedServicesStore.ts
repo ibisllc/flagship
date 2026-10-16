@@ -9,8 +9,9 @@
  * per-app database passwords), replaced atomically on every save.
  */
 
-import { readFile, rename, writeFile, mkdir } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { writeFileDurable } from "./durableFile.js";
 import type { SwkOps } from "./keyCustodian.js";
 import type { AppDataCredentials } from "./dataLayer/provisioner.js";
 import type { AppMembershipSnapshot } from "./membership.js";
@@ -76,9 +77,6 @@ export class SealedInstalledServicesStore implements InstalledServicesStore {
   private async write(services: PersistedService[]): Promise<void> {
     const blob = this.swk.sealWithSwk(new TextEncoder().encode(JSON.stringify({ v: 1, services })));
     const hex = Buffer.concat([Buffer.from(blob.nonce), Buffer.from(blob.ciphertext)]).toString("hex");
-    await mkdir(dirname(this.path), { recursive: true });
-    const tmp = `${this.path}.tmp`;
-    await writeFile(tmp, hex, { mode: 0o600 });
-    await rename(tmp, this.path);
+    await writeFileDurable(this.path, hex);
   }
 }

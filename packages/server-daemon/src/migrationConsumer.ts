@@ -1,4 +1,5 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
+import { writeFileDurable } from "./durableFile.js";
 import {
   isMigrationDisposition,
   signServerMigrationAck,
@@ -155,7 +156,7 @@ export function fileMigrationMarkerStore(
       }
     },
     async save(m) {
-      await writeFile(path, JSON.stringify(m), { mode: 0o600 });
+      await writeFileDurable(path, JSON.stringify(m));
     },
   };
 }

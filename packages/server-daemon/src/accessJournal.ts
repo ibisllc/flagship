@@ -14,8 +14,9 @@
  * a person through an invite, the first withdraw of an invite.
  */
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { writeFileDurable } from "./durableFile.js";
 import type { AppRankOrder, ServiceAccessModeOrder, ServiceAllowRemoveOrder } from "@flagship/protocol";
 
 export type AccessEntry =
@@ -225,10 +226,7 @@ export class AccessJournal {
     this.writing = this.writing.then(async () => {
       const out: Record<string, AppJournal> = {};
       for (const [ref, j] of this.byApp) out[ref] = j;
-      await mkdir(dirname(this.path), { recursive: true });
-      const tmp = `${this.path}.tmp`;
-      await writeFile(tmp, JSON.stringify(out), { mode: 0o600 });
-      await rename(tmp, this.path);
+      await writeFileDurable(this.path, JSON.stringify(out));
     }).catch(() => {});
     return this.writing;
   }

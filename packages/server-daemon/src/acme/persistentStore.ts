@@ -1,5 +1,6 @@
-import { mkdir, readdir, readFile, writeFile, rename } from "node:fs/promises";
+import { mkdir, readdir, readFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
+import { withFileLock, writeFileDurable } from "../durableFile.js";
 
 /**
  * Plain-PEM persistent store for ACME state. Production daemons run on
@@ -115,7 +116,6 @@ export class PersistentAcmeStore {
     serverFqdn: string,
     cert: { certPem: string; privateKeyPem: string; names: string[]; notAfter: number },
   ): Promise<void> {
-    await ensureDir(this.certDir());
     const base = this.certBase(serverFqdn);
     const meta = {
       names: cert.names,
@@ -124,10 +124,14 @@ export class PersistentAcmeStore {
     };
     // Order: cert, key, meta. Meta is what we use to decide "we have a
     // good cert" on startup; writing it last guarantees the cert and key
-    // exist by the time meta does.
-    await atomicWrite(`${base}.pem`, cert.certPem);
-    await atomicWrite(`${base}.key`, cert.privateKeyPem);
-    await atomicWrite(`${base}.meta.json`, JSON.stringify(meta, null, 2) + "\n");
+    // exist by the time meta does. One save per name at a time, so two
+    // overlapping saves can't leave one cert's PEM beside the other's key.
+    await withFileLock(base, async () => {
+      await ensureDir(this.certDir());
+      await atomicWrite(`${base}.pem`, cert.certPem);
+      await atomicWrite(`${base}.key`, cert.privateKeyPem);
+      await atomicWrite(`${base}.meta.json`, JSON.stringify(meta, null, 2) + "\n");
+    });
   }
 }
 
@@ -137,9 +141,7 @@ async function ensureDir(path: string): Promise<void> {
 
 async function atomicWrite(path: string, content: string): Promise<void> {
   await ensureDir(dirname(path));
-  const tmp = `${path}.tmp`;
-  await writeFile(tmp, content, { mode: 0o600 });
-  await rename(tmp, path);
+  await writeFileDurable(path, content);
 }
 
 /**

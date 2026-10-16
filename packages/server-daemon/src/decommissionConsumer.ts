@@ -1,4 +1,5 @@
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
+import { removeDurable, writeFileDurable } from "./durableFile.js";
 import {
   verifyServerDecommission,
   type AdminGrantView,
@@ -157,10 +158,9 @@ export function fileMarkerStore(markerPath = "/var/flagship/decommissioned"): De
   const pendingPath = `${markerPath}.awaiting-confirm`;
   return {
     async markAwaitingConfirm(order) {
-      await writeFile(
+      await writeFileDurable(
         pendingPath,
         JSON.stringify({ nonce: order.nonce, issuedAt: order.issuedAt, retiredStkPubHex: order.retiredStkPubHex }),
-        { mode: 0o600 },
       );
     },
     async awaitingConfirmNonce() {
@@ -172,7 +172,7 @@ export function fileMarkerStore(markerPath = "/var/flagship/decommissioned"): De
       }
     },
     async clearAwaitingConfirm() {
-      await rm(pendingPath, { force: true });
+      await removeDurable(pendingPath);
     },
     async has() {
       try {
@@ -183,14 +183,13 @@ export function fileMarkerStore(markerPath = "/var/flagship/decommissioned"): De
       }
     },
     async mark(order) {
-      await writeFile(
+      await writeFileDurable(
         markerPath,
         JSON.stringify({
           decommissionedAt: order.issuedAt,
           retiredStkPubHex: order.retiredStkPubHex,
           diskDisposition: order.diskDisposition,
         }),
-        { mode: 0o600 },
       );
     },
   };

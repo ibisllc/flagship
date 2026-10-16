@@ -1,6 +1,6 @@
 import { execFile, execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { removeDurable, writeFileDurable } from "./durableFile.js";
+import { removeDurable, withFileLock, writeFileDurable } from "./durableFile.js";
 import { promisify } from "node:util";
 import {
   verifyUpdateOrder,
@@ -196,9 +196,13 @@ export function fileUsedNonceStore(path: string): UsedNonceStore {
       return (await load()).includes(nonce.toLowerCase());
     },
     async mark(nonce) {
-      const nonces = await load();
-      nonces.push(nonce.toLowerCase());
-      await writeFileDurable(path, JSON.stringify({ nonces: nonces.slice(-MAX_STORED_NONCES) }));
+      // Read-modify-write in turn: the update consumer and a co-manager's
+      // update share this file, and two marks at once kept only one nonce.
+      await withFileLock(path, async (write) => {
+        const nonces = await load();
+        nonces.push(nonce.toLowerCase());
+        await write(JSON.stringify({ nonces: nonces.slice(-MAX_STORED_NONCES) }));
+      });
     },
   };
 }

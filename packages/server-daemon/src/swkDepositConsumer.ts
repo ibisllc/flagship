@@ -1,4 +1,5 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
+import { writeFileDurable } from "./durableFile.js";
 import {
   carrierHexToSwkDelivery,
   openAndVerifySwkDelivery,
@@ -99,10 +100,9 @@ export function fileSwkMarkerStore(markerPath: string): SwkClaimMarkerStore {
       }
     },
     async mark(swkHex) {
-      await writeFile(
+      await writeFileDurable(
         markerPath,
         JSON.stringify({ claimedAt: Date.now(), swkPrefix: swkHex.slice(0, 8) }),
-        { mode: 0o600 },
       );
     },
   };

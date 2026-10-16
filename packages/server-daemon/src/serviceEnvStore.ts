@@ -28,8 +28,9 @@
  */
 
 import { existsSync, readdirSync } from "node:fs";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
+import { withFileLock } from "./durableFile.js";
 import { type SealedBlob } from "@flagship/protocol";
 import type { SwkOps } from "./keyCustodian.js";
 
@@ -137,15 +138,15 @@ export class FileAppEnvStore implements AppEnvStore {
   }
 
   async put(serviceId: string, env: AppEnv): Promise<void> {
-    if (!existsSync(this.dir)) await mkdir(this.dir, { recursive: true });
     const blob = this.swk.sealWithSwk(
       new TextEncoder().encode(JSON.stringify(env)),
     );
-    const file = join(this.dir, `${serviceId}.env`);
-    const tmp = `${file}.tmp`;
-    await writeFile(tmp, sealedToHex(blob), { mode: 0o600 });
-    await rename(tmp, file);
-    this.cache.set(serviceId, { ...env });
+    // In turn with other changes to this app's env, so the cache always
+    // matches the file and a forget can't be undone by a put still in flight.
+    await withFileLock(join(this.dir, `${serviceId}.env`), async (write) => {
+      await write(sealedToHex(blob));
+      this.cache.set(serviceId, { ...env });
+    });
   }
 
   async get(serviceId: string): Promise<AppEnv | null> {
@@ -159,8 +160,11 @@ export class FileAppEnvStore implements AppEnvStore {
   }
 
   async forget(serviceId: string): Promise<void> {
-    this.cache.delete(serviceId);
-    await rm(join(this.dir, `${serviceId}.env`), { force: true });
+    const file = join(this.dir, `${serviceId}.env`);
+    await withFileLock(file, async () => {
+      this.cache.delete(serviceId);
+      await rm(file, { force: true });
+    });
   }
 
   private unseal(hex: string): AppEnv | null {

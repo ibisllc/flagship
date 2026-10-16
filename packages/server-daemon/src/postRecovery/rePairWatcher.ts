@@ -47,8 +47,9 @@
  */
 
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { writeFileDurable } from "../durableFile.js";
 import type { AlertInbox } from "../alertInbox.js";
 import type { ReissuanceAlert } from "../phoneAlerts.js";
 import type { ReissuanceReport, ReissuerDeps } from "./stableIdReissuer.js";
@@ -315,10 +316,7 @@ export class RePairWatcher {
   }
 
   private async persist(): Promise<void> {
-    await mkdir(dirname(this.deps.statePath), { recursive: true, mode: 0o700 });
-    const tmp = `${this.deps.statePath}.tmp`;
-    await writeFile(tmp, JSON.stringify(this.state, null, 2), { mode: 0o600 });
-    await rename(tmp, this.deps.statePath);
+    await writeFileDurable(this.deps.statePath, JSON.stringify(this.state, null, 2));
   }
 }
 

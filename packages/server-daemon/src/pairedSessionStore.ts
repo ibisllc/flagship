@@ -15,8 +15,9 @@
  */
 
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { writeFileDurable } from "./durableFile.js";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
 import type { PairedSessionGate } from "./alertInboxHttp.js";
 
@@ -233,9 +234,7 @@ export class FilePairedSessionStore implements PairedSessionGate {
     await mkdir(dirname(this.path), { recursive: true, mode: 0o700 });
     const obj: Record<string, PairedSession> = {};
     for (const [t, info] of this.byToken) obj[t] = { ...info };
-    const tmp = `${this.path}.tmp`;
-    await writeFile(tmp, JSON.stringify(obj, null, 2), { mode: 0o600 });
-    await rename(tmp, this.path);
+    await writeFileDurable(this.path, JSON.stringify(obj, null, 2));
   }
 }
 

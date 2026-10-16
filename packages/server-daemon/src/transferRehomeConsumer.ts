@@ -1,5 +1,5 @@
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { readFile } from "node:fs/promises";
+import { removeDurable, writeFileDurable } from "./durableFile.js";
 import {
   verifyAdminRootTransfer,
   verifyRehomeAuthorization,
@@ -176,7 +176,7 @@ export async function readRehomeMarker(markerPath: string): Promise<RehomeMarker
 }
 
 async function writeRehomeMarker(markerPath: string, m: RehomeMarker): Promise<void> {
-  await writeFile(markerPath, JSON.stringify(m), { mode: 0o600 });
+  await writeFileDurable(markerPath, JSON.stringify(m));
 }
 
 export interface CheckRehomeOptions {
@@ -538,14 +538,12 @@ export async function reconcileAdminRootPinOnRehome(args: {
   }
 
   if (override.kind === "unpin") {
-    await rm(pinPath, { force: true });
+    await removeDurable(pinPath);
     log("[rehome] admin root UNPINNED (acquirer account has no admin root); pin file removed");
   } else {
-    // Same atomic write-then-rename + modes as fileAdminRootPinStore.
-    await mkdir(dirname(pinPath), { recursive: true, mode: 0o700 });
-    const tmp = `${pinPath}.tmp`;
-    await writeFile(
-      tmp,
+    // Same durable write + mode as fileAdminRootPinStore.
+    await writeFileDurable(
+      pinPath,
       JSON.stringify(
         {
           adminRootPubHex: override.adminRootPubHex,
@@ -555,16 +553,14 @@ export async function reconcileAdminRootPinOnRehome(args: {
         null,
         2,
       ),
-      { mode: 0o600 },
     );
-    await rename(tmp, pinPath);
     log(
       `[rehome] admin-root pin RESET to the acquirer's root ` +
         `${override.adminRootPubHex.slice(0, 12)}… (giver-era pins can no longer override)`,
     );
   }
 
-  await writeFile(
+  await writeFileDurable(
     appliedPath,
     JSON.stringify({
       newServerDomain: marker.newServerDomain,
@@ -572,7 +568,6 @@ export async function reconcileAdminRootPinOnRehome(args: {
       newAdminRootPubHex: marker.newAdminRootPubHex,
       appliedAt: (args.now ?? Date.now)(),
     }),
-    { mode: 0o600 },
   );
   return override.kind === "unpin" ? "unpinned" : "repinned";
 }

@@ -1,6 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, writeFile, rename, readFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { readFile } from "node:fs/promises";
 import {
   verifyDeadManAffirmation,
   verifySetDeadManPolicy,
@@ -9,6 +8,7 @@ import {
   type SetDeadManPolicy,
 } from "@flagship/protocol";
 import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
+import { writeFileDurable } from "./durableFile.js";
 
 /**
  * Lock & power-off + dead-man heartbeat-lock (docs/lock-and-poweroff.md).
@@ -69,10 +69,7 @@ export interface AutoUnlockSuppressor {
 export class BootUnlockModeSuppressor implements AutoUnlockSuppressor {
   constructor(private readonly path = "/boot/flagship-lock-once") {}
   async suppress(): Promise<void> {
-    await mkdir(dirname(this.path), { recursive: true });
-    const tmp = `${this.path}.tmp`;
-    await writeFile(tmp, "approve-once\n", { mode: 0o644 });
-    await rename(tmp, this.path);
+    await writeFileDurable(this.path, "approve-once\n", 0o644);
   }
 }
 
@@ -354,10 +351,7 @@ export class DeadManController {
   }
 
   private async saveState(): Promise<void> {
-    await mkdir(dirname(this.statePath), { recursive: true });
-    const tmp = `${this.statePath}.tmp`;
-    await writeFile(tmp, JSON.stringify(this.state), { mode: 0o600 });
-    await rename(tmp, this.statePath);
+    await writeFileDurable(this.statePath, JSON.stringify(this.state));
   }
 }
 

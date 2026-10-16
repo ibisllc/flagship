@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
+import { writeFileDurable } from "./durableFile.js";
 import { promisify } from "node:util";
 import {
   verifyServersSelfDelete,
@@ -144,10 +145,9 @@ export function fileMarkerStore(markerPath: string): SelfDeleteMarkerStore {
       }
     },
     async mark(order) {
-      await writeFile(
+      await writeFileDurable(
         markerPath,
         JSON.stringify({ wipedAt: order.issuedAt, username: order.username }),
-        { mode: 0o600 },
       );
     },
   };

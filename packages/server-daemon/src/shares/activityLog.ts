@@ -4,8 +4,9 @@
  * anything that identifies it elsewhere. Bodies, SQL, prompts and tokens are
  * never written. `<dataDir>/activity.jsonl`, mode 0600, newest 2000 kept.
  */
-import { appendFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { writeFileDurable } from "../durableFile.js";
 
 export type ActivityActor = { kind: "owner" } | { kind: "share"; shareId: string; label: string };
 
@@ -86,8 +87,7 @@ export class ActivityLog {
       .then(async () => {
         await mkdir(dirname(path), { recursive: true });
         if (snapshot !== null) {
-          await writeFile(`${path}.tmp`, snapshot, { mode: 0o600 });
-          await rename(`${path}.tmp`, path);
+          await writeFileDurable(path, snapshot);
         } else {
           await appendFile(path, `${JSON.stringify(e)}\n`, { mode: 0o600 });
         }

@@ -6,8 +6,9 @@
  * `<dataDir>/shares.json` (mode 0600). Every grant re-verifies against the
  * owner's sensitive key on load, so a file edit can't add a share.
  */
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { readFile } from "node:fs/promises";
+import { writeFileDurable } from "../durableFile.js";
+import { join } from "node:path";
 import {
   parseServerShareAccept,
   parseServerShareGrant,
@@ -52,7 +53,6 @@ export class ShareStore {
   private readonly ended = new Map<string, EndedShare>();
   /** `.com` share-ends cursor (ms). */
   private endsCursor = 0;
-  private chain: Promise<void> = Promise.resolve();
   private readonly now: () => number;
 
   /** `path` null ⇒ memory only (tests). */
@@ -217,13 +217,9 @@ export class ShareStore {
     if (!this.path) return Promise.resolve();
     const path = this.path;
     const body = JSON.stringify({ active: [...this.active.values()], ended: [...this.ended.values()], endsCursor: this.endsCursor });
-    this.chain = this.chain.then(async () => {
-      await mkdir(dirname(path), { recursive: true });
-      const tmp = `${path}.tmp`;
-      await writeFile(tmp, body, { mode: 0o600 });
-      await rename(tmp, path);
-    });
-    return this.chain;
+    // Queued per path; one failed write no longer blocks every later one
+    // (a revoke that never reached the disk came back on restart).
+    return writeFileDurable(path, body);
   }
 }
 

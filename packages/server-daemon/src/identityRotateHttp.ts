@@ -17,10 +17,10 @@
  * paths so the runtime falls through to other handlers / the default.
  */
 
-import { mkdir, rename, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { ed } from "@flagship/protocol";
 import type { PairedSessionGate } from "./alertInboxHttp.js";
+import { writeFileDurable } from "./durableFile.js";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
 
 const J = { "content-type": "application/json" } as const;
@@ -49,10 +49,7 @@ export function buildIdentityRotateHandlers(deps: IdentityRotateHttpDeps) {
     const pub = ed.getPublicKey(priv);
     const privHex = bytesToHex(priv);
 
-    await mkdir(dirname(deps.pendingPath), { recursive: true, mode: 0o700 });
-    const tmp = `${deps.pendingPath}.tmp`;
-    await writeFile(tmp, privHex + "\n", { mode: 0o600 });
-    await rename(tmp, deps.pendingPath);
+    await writeFileDurable(deps.pendingPath, privHex + "\n");
 
     return {
       status: 200,

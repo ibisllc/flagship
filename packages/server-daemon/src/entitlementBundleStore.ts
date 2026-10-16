@@ -1,6 +1,7 @@
-import { readFile, mkdir, rename, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { RootEntitlement, ServiceEntitlement } from "@flagship/protocol";
+import { writeFileDurable } from "./durableFile.js";
 import type { EntitlementBundle } from "./tunnel/tunnelClient.js";
 
 /**
@@ -167,15 +168,12 @@ export function serializeEntitlementBundle(bundle: EntitlementBundle): string {
   return JSON.stringify(file, null, 2);
 }
 
-/** Atomically persist a bundle (write tmp → rename, 0600). */
+/** Durably persist a bundle (0600), in turn with any other write to it. */
 export async function writeEntitlementBundle(
   path: string,
   bundle: EntitlementBundle,
 ): Promise<void> {
-  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  const tmp = `${path}.tmp`;
-  await writeFile(tmp, serializeEntitlementBundle(bundle), { mode: 0o600 });
-  await rename(tmp, path);
+  await writeFileDurable(path, serializeEntitlementBundle(bundle));
 }
 
 /**

@@ -18,8 +18,9 @@
  * A grant's expiry is a refresh horizon, not an authority horizon
  * (device-admin-tier-spec §4.1).
  */
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { writeFileDurable } from "./durableFile.js";
 import {
   DEVICE_SCOPES,
   verifyDeviceCapabilityGrant,
@@ -200,10 +201,7 @@ export class AccountDeviceBook {
 
   private async persist(): Promise<void> {
     const grants = [...this.byPub.values()].map((d) => d.grant);
-    await mkdir(dirname(this.opts.path), { recursive: true });
-    const tmp = `${this.opts.path}.tmp`;
-    await writeFile(tmp, JSON.stringify({ grants }), { mode: 0o600 });
-    await rename(tmp, this.opts.path);
+    await writeFileDurable(this.opts.path, JSON.stringify({ grants }));
   }
 }
 

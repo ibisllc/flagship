@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { setDockerRepairedHook } from "./dockerHealth.js";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { readFile, rename, rm, stat } from "node:fs/promises";
+import { withFileLock, writeFileDurable } from "./durableFile.js";
 import { dirname, join } from "node:path";
 import { buildModelRedactor } from "./llm/modelPrivacy.js";
 import { X509Certificate } from "node:crypto";
@@ -526,10 +527,7 @@ export async function swkHexFromInstallBlob(): Promise<string | null> {
 /** Persist the SWK hex to /var/flagship/swk.hex (mode 0600). A deposit claim
  *  MUST observe write failure so it never marks a consumed secret as durable. */
 export async function persistSwkHex(path: string, swkHex: string): Promise<void> {
-  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  const tmp = `${path}.tmp`;
-  await writeFile(tmp, swkHex.trim() + "\n", { mode: 0o600 });
-  await rename(tmp, path);
+  await writeFileDurable(path, swkHex.trim() + "\n");
 }
 
 /** Snapshot the certificate metadata the synchronous screens BFF needs. */
@@ -558,10 +556,7 @@ export function liveCertInfo(
  *  on the next boot. Non-fatal: a write failure just means the next boot re-polls. */
 export async function persistCgkHex(path: string, cgkHex: string): Promise<void> {
   try {
-    await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-    const tmp = `${path}.tmp`;
-    await writeFile(tmp, cgkHex.trim() + "\n", { mode: 0o600 });
-    await rename(tmp, path);
+    await writeFileDurable(path, cgkHex.trim() + "\n");
   } catch (e) {
     console.warn(
       `[daemon] could not persist cgk.hex (${(e as Error).message}); will re-poll the cgk lane next boot`,
@@ -1566,7 +1561,7 @@ async function main(): Promise<void> {
         // and the tunnel claims the name.
         const markerPath =
           process.env.FLAGSHIP_REHOME_MARKER ?? `${dataDir}/transfer-rehome.json`;
-        await writeFile(
+        await writeFileDurable(
           markerPath,
           JSON.stringify({
             newServerDomain: serverDomain,
@@ -1575,7 +1570,6 @@ async function main(): Promise<void> {
             oldServerDomain: myServerDomain,
             claimedAt: Date.now(),
           }),
-          { mode: 0o600 },
         );
         console.log(
           `[migration] take-over complete — re-homing ${myServerDomain} → ${serverDomain}; restarting`,
@@ -3969,11 +3963,7 @@ function defaultExecutor(deps: ExecutorDeps): OrderExecutor {
 }
 
 async function persistBakPubKey(path: string, bakPubKey: Uint8Array): Promise<void> {
-  const hex = bytesToHexLocal(bakPubKey);
-  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  const tmp = `${path}.tmp`;
-  await writeFile(tmp, hex + "\n", { mode: 0o600 });
-  await rename(tmp, path);
+  await writeFileDurable(path, bytesToHexLocal(bakPubKey) + "\n");
 }
 
 /**
@@ -4027,20 +4017,17 @@ async function rotateIdentity(
   //    that fails post-restart can be rolled back manually.
   try {
     const prev = await readFile(activePrivPath);
-    await writeFile(`${activePrivPath}.previous`, prev, { mode: 0o600 });
+    await writeFileDurable(`${activePrivPath}.previous`, prev);
   } catch {
     // no prior identity — fresh-box rotation is unusual but not fatal
   }
 
   // 2. Atomically swap active = pending, plus the boot PEM.
-  await writeFile(`${activePrivPath}.tmp`, pendingHex + "\n", { mode: 0o600 });
-  await rename(`${activePrivPath}.tmp`, activePrivPath);
+  await writeFileDurable(activePrivPath, pendingHex + "\n");
   const newPubHex = bytesToHexLocal(newIdentityPubKey);
-  await writeFile(`${activePubPath}.tmp`, newPubHex + "\n", { mode: 0o644 });
-  await rename(`${activePubPath}.tmp`, activePubPath);
+  await writeFileDurable(activePubPath, newPubHex + "\n", 0o644);
   // Boot PEM gets the new priv as PKCS8 so boot-stage.sh can sign with it.
-  await writeFile(`${bootPemPath}.tmp`, pkcs8PemFromRaw(pendingPriv), { mode: 0o600 });
-  await rename(`${bootPemPath}.tmp`, bootPemPath);
+  await writeFileDurable(bootPemPath, pkcs8PemFromRaw(pendingPriv));
 
   // 3. Drop the pending file so the next rotate has to start fresh.
   try {
@@ -4192,12 +4179,13 @@ function bytesToHexStr(b: Uint8Array): string {
  * crash mid-update.
  */
 async function persistRotatedIrk(configPath: string, newIrkHex: string): Promise<void> {
-  const raw = await readFile(configPath, "utf8");
-  const obj = JSON.parse(raw) as Record<string, unknown>;
-  obj.irkPublicKey = newIrkHex;
-  const tmp = `${configPath}.tmp`;
-  await writeFile(tmp, JSON.stringify(obj, null, 2));
-  await rename(tmp, configPath);
+  await withFileLock(configPath, async (write) => {
+    const raw = await readFile(configPath, "utf8");
+    const obj = JSON.parse(raw) as Record<string, unknown>;
+    obj.irkPublicKey = newIrkHex;
+    const mode = (await stat(configPath)).mode & 0o777;
+    await write(JSON.stringify(obj, null, 2), mode);
+  });
 }
 
 const invokedDirectly = import.meta.url === `file://${process.argv[1]}`;

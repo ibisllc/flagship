@@ -22,7 +22,7 @@ import {
   existsSync,
   readdirSync,
 } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -32,6 +32,7 @@ import {
   type UpdatePullRequest,
 } from "@flagship/protocol";
 import { LineageVerifier, type LineageVerdict } from "./updatePack/lineageVerifier.js";
+import { writeFileDurable } from "./durableFile.js";
 
 const execFileP = promisify(execFile);
 
@@ -614,12 +615,7 @@ export class FileAppPullStateStore implements AppPullStateStore {
   }
 
   async put(serviceId: string, state: AppPullState): Promise<void> {
-    if (!existsSync(this.dir)) await mkdir(this.dir, { recursive: true });
-    const tmp = `${this.path(serviceId)}.tmp`;
-    await writeFile(tmp, JSON.stringify(state, null, 2));
-    // atomic replace
-    const { rename } = await import("node:fs/promises");
-    await rename(tmp, this.path(serviceId));
+    await writeFileDurable(this.path(serviceId), JSON.stringify(state, null, 2), 0o644);
   }
 
   async list(): Promise<string[]> {

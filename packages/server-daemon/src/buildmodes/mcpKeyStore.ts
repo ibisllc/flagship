@@ -16,9 +16,10 @@
 
 import { existsSync, readdirSync } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { openLlmPayload, sealLlmPayload, type Bytes, type SealedBlob } from "@flagship/protocol";
+import { withFileLock } from "../durableFile.js";
 
 const KEY_PREFIX = "fmcp_";
 
@@ -130,18 +131,23 @@ export class FileMcpKeyStore implements McpKeyStore {
   }
 
   async mint(buildId: string, label?: string): Promise<McpKeyRecord> {
-    const prev = this.byBuild.get(buildId);
-    if (prev) this.byHash.delete(hashKey(prev.key));
     const rec: McpKeyRecord = {
       buildId,
       key: generateKey(this.rand),
       createdAt: this.now(),
       ...(label != null ? { label } : {}),
     };
-    await this.persist(rec);
-    this.byBuild.set(buildId, rec);
-    this.byHash.set(hashKey(rec.key), buildId);
-    return rec;
+    // One change per build at a time: two mints at once each dropped only
+    // the key before them, so the first new key stayed valid, and a revoke
+    // racing a mint could leave a key on disk that came back on restart.
+    return withFileLock(this.file(buildId), async (write) => {
+      await write(sealedToHex(sealLlmPayload(new TextEncoder().encode(JSON.stringify(rec)), this.swk)));
+      const prev = this.byBuild.get(buildId);
+      if (prev) this.byHash.delete(hashKey(prev.key));
+      this.byBuild.set(buildId, rec);
+      this.byHash.set(hashKey(rec.key), buildId);
+      return rec;
+    });
   }
 
   async resolve(key: string): Promise<string | null> {
@@ -154,10 +160,13 @@ export class FileMcpKeyStore implements McpKeyStore {
   }
 
   async revoke(buildId: string): Promise<void> {
-    const prev = this.byBuild.get(buildId);
-    if (prev) this.byHash.delete(hashKey(prev.key));
-    this.byBuild.delete(buildId);
-    await rm(join(this.dir, `${encodeURIComponent(buildId)}.mcpkey`), { force: true });
+    const file = this.file(buildId);
+    await withFileLock(file, async () => {
+      const prev = this.byBuild.get(buildId);
+      if (prev) this.byHash.delete(hashKey(prev.key));
+      this.byBuild.delete(buildId);
+      await rm(file, { force: true });
+    });
   }
 
   async list(): Promise<Array<{ buildId: string; createdAt: number; label?: string }>> {
@@ -168,13 +177,8 @@ export class FileMcpKeyStore implements McpKeyStore {
     }));
   }
 
-  private async persist(rec: McpKeyRecord): Promise<void> {
-    if (!existsSync(this.dir)) await mkdir(this.dir, { recursive: true });
-    const blob = sealLlmPayload(new TextEncoder().encode(JSON.stringify(rec)), this.swk);
-    const file = join(this.dir, `${encodeURIComponent(rec.buildId)}.mcpkey`);
-    const tmp = `${file}.tmp`;
-    await writeFile(tmp, sealedToHex(blob), { mode: 0o600 });
-    await rename(tmp, file);
+  private file(buildId: string): string {
+    return join(this.dir, `${encodeURIComponent(buildId)}.mcpkey`);
   }
 
   private unseal(hex: string): McpKeyRecord | null {

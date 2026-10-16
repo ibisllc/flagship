@@ -1,4 +1,5 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
+import { writeFileDurable } from "./durableFile.js";
 import { openPairingOrderEnvelope } from "@flagship/protocol";
 
 /**
@@ -63,10 +64,9 @@ export function filePairingMarkerStore(markerPath: string): PairingClaimMarkerSt
       }
     },
     async mark(token) {
-      await writeFile(
+      await writeFileDurable(
         markerPath,
         JSON.stringify({ claimedAt: Date.now(), tokenPrefix: token.slice(0, 8) }),
-        { mode: 0o600 },
       );
     },
   };

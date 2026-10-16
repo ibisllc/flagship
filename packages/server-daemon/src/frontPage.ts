@@ -1,8 +1,8 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { readFile } from "node:fs/promises";
 import { verifyPhoneOrder, type AdminGrantView, type PhoneOrder } from "@flagship/protocol";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
 import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
+import { writeFileDurable } from "./durableFile.js";
 
 /**
  * Owner-assignable apex ("front page") — the box's root domain 302s to one
@@ -50,10 +50,7 @@ export class FrontPageStore {
 
   async set(label: string | null): Promise<void> {
     this.label = label && label.length > 0 ? label : null;
-    await mkdir(dirname(this.statePath), { recursive: true });
-    const tmp = `${this.statePath}.tmp`;
-    await writeFile(tmp, JSON.stringify({ label: this.label }), { mode: 0o644 });
-    await rename(tmp, this.statePath);
+    await writeFileDurable(this.statePath, JSON.stringify({ label: this.label }), 0o644);
   }
 }
 

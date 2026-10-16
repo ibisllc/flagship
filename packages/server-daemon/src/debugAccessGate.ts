@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { writeFileDurable } from "./durableFile.js";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import {
@@ -156,10 +157,9 @@ export function fileDebugMarkerStore(markerPath: string): DebugMarkerStore {
       }
     },
     async mark(grant) {
-      await writeFile(
+      await writeFileDurable(
         markerPath,
         JSON.stringify({ enabledAt: grant.issuedAt, serverDomain: grant.serverDomain }),
-        { mode: 0o600 },
       );
     },
   };
