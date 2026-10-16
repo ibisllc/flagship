@@ -5,6 +5,7 @@ import { aiStaging } from "./aiStaging.js";
 import { apiKeys } from "./apiKeys.js";
 import { appCopy } from "./appCopy.js";
 import { archive } from "./archive.js";
+import { backups } from "./backups.js";
 import { core } from "./core.js";
 import { enforcement } from "./enforcement.js";
 import { gating } from "./gating.js";
@@ -44,6 +45,7 @@ export const GROUPS: Group[] = [
   mcpIde,
   activity,
   quota,
+  backups,
   oneList,
   update,
   lifecycle,

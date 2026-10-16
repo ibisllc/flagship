@@ -8,6 +8,18 @@
 import { randomBytes } from "node:crypto";
 import { bytesToHex } from "@noble/hashes/utils";
 import {
+  archiveKeysDigest,
+  deriveServerArchiveKey,
+  mintArchiveKeys,
+  openBackupWithAccountKey,
+  parseBackupFile,
+  signArchiveDownloadApproval,
+  signArchiveKeysDeposit,
+  signServerRestoreOrder,
+  type ArchiveDownloadApproval,
+  type ArchiveKeysDeposit,
+  type Keypair,
+  type ServerRestoreOrder,
   signRootEntitlement,
   signServerDecommission,
   signServerMigrationControl,
@@ -73,9 +85,16 @@ async function answerEntitlement(acct: Account, fqdn: string, stkHex: string, mi
   throw new Error(`no entitlement request from ${fqdn} in ${minutes} min`);
 }
 
+/** An admin device's batch of `count` backup keys for `b` (signed by `signer`, the admin root unless told). */
+export function depositKeys(acct: Account, b: Box, session: Record<string, string>, count: number, signer: Keypair = acct.keys.adminRoot) {
+  const keys = mintArchiveKeys({ seed: acct.keys.umk }, count, (n) => new Uint8Array(randomBytes(n)));
+  const deposit: ArchiveKeysDeposit = { serverDomain: b.fqdn, count, digest: archiveKeysDigest(keys), issuedAt: Date.now() };
+  return postJson(`https://${b.fqdn}/api/screens/server-archive/backups/keys`, { deposit, signature: bytesToHex(signArchiveKeysDeposit(deposit, signer)), keys }, session);
+}
+
 export const migrate: Group = {
   name: "migrate",
-  title: "migrate the real account's home onto home2: peer backup, admin-signed order, attach + restore, freeze, take-over, new entitlement, old box wipes",
+  title: "migrate the real account's home onto home2: backup keys, admin-signed order, attach, paused backup, box-to-box pull + restore, freeze, take-over, new entitlement, old box wipes",
   needs: ["R1", "R2"],
   phase: 1,
   async run({ R, rec, box }) {
@@ -88,41 +107,83 @@ export const migrate: Group = {
     const oldStk = await stkOf(x.fqdn);
     const newStk = await stkOf(y.fqdn);
 
-    const backedUp = await rec.check("home runs an app and backs itself up to its peer (manifest on .com)", async () => {
+    const ready = await rec.check("home runs an app, and an admin device gives it backup keys (the IRK's batch is refused)", async () => {
       assert(/^[0-9a-f]{64}$/.test(oldStk) && /^[0-9a-f]{64}$/.test(newStk) && oldStk !== newStk, `STKs ${oldStk} / ${newStk}`);
       await installWhoami(acct, x, SLUG, { enabled: true, public_routes: ["/*"] });
       await waitServing(`https://${SLUG}.${x.fqdn}/`);
-      for (const [b, s] of [[x, xs], [y, ys]] as const) {
-        const t = await postJson(`https://${b.fqdn}/api/screens/peer-backup/toggle`, { participate: true }, s);
-        assert(t.status === 200, `${b.serverName} peer-backup toggle ${t.status}: ${short(t.text)}`);
-      }
-      const deadline = Date.now() + 8 * 60_000;
-      while (Date.now() < deadline) {
-        const m = await tryHttp(`https://${CONTROL}/api/server/${encodeURIComponent(x.fqdn)}/backup-manifest`);
-        if (m.status === 200) return `manifest on .com (${m.text.length} B)`;
-        await sleep(15_000);
-      }
-      throw new Error("no backup manifest for home in 8 min");
+      const byIrk = await depositKeys(acct, x, xs, 2, acct.keys.irk);
+      assert(byIrk.status === 403, `IRK-signed keys ${byIrk.status}: ${short(byIrk.text)}`);
+      const r = await depositKeys(acct, x, xs, 3);
+      assert(r.status === 200 && r.json?.keysLeft === 3, `keys ${r.status}: ${short(r.text)}`);
+      return "keysLeft 3";
     });
-    if (!backedUp) return;
+    if (!ready) return;
 
     const order = (signer = acct.keys.adminRoot) => {
       const o: ServerMigrationOrder = { serverDomain: x.fqdn, oldStkPubHex: oldStk, diskDisposition: "wipe-after-handoff", nonce: randomBytes(32).toString("hex"), issuedAt: Date.now() };
       return postJson(`https://${CONTROL}/api/server/${encodeURIComponent(x.fqdn)}/migration`, { ...mailboxAuth(acct), order: o, signature: bytesToHex(signServerMigrationOrder(o, signer)) });
     };
-    const started = await rec.check("the owner starts the migration (admin-root signed; the IRK is refused)", async () => {
+    const started = await rec.check("the owner starts the migration (admin-root signed; the IRK is refused) and home2 attaches", async () => {
       const byIrk = await order(acct.keys.irk);
       assert(byIrk.status === 403, `IRK-signed order ${byIrk.status}: ${short(byIrk.text)}`);
       const r = await order();
       assert(r.status === 200 && r.json?.phase === "initiated", `${r.status}: ${short(r.text)}`);
-      return "initiated";
+      const m = await waitPhase(x.fqdn, /^provisioned$/, 8, (t) => rec.log(t));
+      assert(m.newServerDomain === y.fqdn && String(m.newStkPubHex).toLowerCase() === newStk, `attached by ${m.newServerDomain}`);
+      return `attached ${m.attachedAt}`;
     });
     if (!started) return;
 
-    const seeded = await rec.check("home2 attaches and restores home's backup on its own (pre-seeded)", async () => {
-      const m = await waitPhase(x.fqdn, /^pre-seeded$/, 15, (s) => rec.log(s));
-      assert(m.newServerDomain === y.fqdn && String(m.newStkPubHex).toLowerCase() === newStk, `attached by ${m.newServerDomain}`);
-      return `attached ${short(m.attachedAt)} pre-seeded ${short(m.preSeededAt)}`;
+    let saved: { archiveId: string; bytes: number; sha256: string } | null = null;
+    const paused = await rec.check("home pauses its apps (a calm moving page) and makes the move's backup", async () => {
+      const run = await postJson(`https://${x.fqdn}/api/screens/server-archive/backups/run`, { purpose: "migrate" }, xs);
+      assert(run.status === 202 && /^[0-9a-f]{32}$/.test(run.json?.archiveId), `run ${run.status}: ${short(run.text)}`);
+      const id = run.json.archiveId as string;
+      const page = await tryHttp(`https://${SLUG}.${x.fqdn}/`, { headers: { accept: "text/html" } });
+      assert(page.status === 503 && /moving/i.test(page.text), `app during the move ${page.status}: ${short(page.text, 120)}`);
+      for (let i = 0; i < 60; i++) {
+        const l = await http(`https://${x.fqdn}/api/screens/server-archive/backups`, { headers: xs });
+        const e = (l.json?.backups ?? []).find((b: { archiveId: string }) => b.archiveId === id);
+        if (e && !l.json?.running) {
+          assert(l.json.migratePause, `no migratePause while moving: ${short(l.json)}`);
+          saved = { archiveId: id, bytes: e.bytes, sha256: e.sha256 };
+          return `${id.slice(0, 8)}… ${e.bytes} B`;
+        }
+        if (l.json?.lastRun?.ok === false) throw new Error(`backup failed: ${l.json.lastRun.reason}`);
+        await sleep(10_000);
+      }
+      throw new Error("the move's backup never finished");
+    });
+    if (!paused || !saved) return;
+    const sv = saved as { archiveId: string; bytes: number; sha256: string };
+
+    const seeded = await rec.check("home2 takes the restore order, pulls the backup box to box from an approved link, restores it, and pre-seeds", async () => {
+      const bf = await http(`https://${x.fqdn}/api/screens/server-archive/backups/${sv.archiveId}/backup-file`, { headers: xs });
+      const opened = openBackupWithAccountKey(parseBackupFile(bf.text), deriveServerArchiveKey({ seed: acct.keys.umk }, sv.archiveId));
+      assert(opened, "the move's backup doesn't open with the account key");
+      const restore: ServerRestoreOrder = { serverDomain: y.fqdn, archiveId: sv.archiveId, bytes: sv.bytes, sha256: sv.sha256, issuedAt: Date.now() };
+      const ro = await postJson(`https://${y.fqdn}/api/screens/server-restore/order`, { order: restore, signatureHex: bytesToHex(signServerRestoreOrder(restore, acct.keys.adminRoot)) }, ys);
+      assert(ro.status === 200 && ro.json?.waiting?.archiveId === sv.archiveId, `restore order ${ro.status}: ${short(ro.text)}`);
+      const link = await postJson(`https://${x.fqdn}/api/screens/server-archive/backups/${sv.archiveId}/link`, {}, xs);
+      assert(link.status === 200 && link.json?.path, `link ${link.status}: ${short(link.text)}`);
+      const requestId = randomBytes(16).toString("hex");
+      const approval: ArchiveDownloadApproval = { serverDomain: x.fqdn, archiveId: sv.archiveId, requestId, issuedAt: Date.now() };
+      const ap = await postJson(`https://${x.fqdn}/api/screens/server-archive/approve`, { approval, signature: bytesToHex(signArchiveDownloadApproval(approval, acct.keys.adminRoot)) }, xs);
+      assert(ap.status === 200, `approve ${ap.status}: ${short(ap.text)}`);
+      const pull = await postJson(`https://${y.fqdn}/api/screens/server-restore/pull`, { url: `https://${x.fqdn}${link.json.path}`, requestId }, ys);
+      assert(pull.status === 202, `pull ${pull.status}: ${short(pull.text)}`);
+      let last = "";
+      for (let i = 0; i < 90; i++) {
+        const st = (await http(`https://${y.fqdn}/api/screens/server-restore`, { headers: ys })).json?.restore;
+        last = `${st?.state} ${st?.received}/${st?.bytes} ${short(st?.reason ?? "", 120)}`;
+        if (st?.state === "ready") break;
+        if (st?.reason && st?.state !== "uploading") throw new Error(`pull: ${last}`);
+        await sleep(5000);
+      }
+      const c = await postJson(`https://${y.fqdn}/api/screens/server-restore/commit`, { key: bytesToHex(opened.contentKey) }, ys);
+      assert(c.status === 202, `commit ${c.status}: ${short(c.text)} (${last})`);
+      const m = await waitPhase(x.fqdn, /^pre-seeded$/, 20, (t) => rec.log(t));
+      return `pulled ${sv.bytes} B, pre-seeded ${m.preSeededAt}`;
     });
     if (!seeded) return;
 

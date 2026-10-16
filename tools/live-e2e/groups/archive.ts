@@ -28,6 +28,7 @@ import {
 } from "@flagship/protocol";
 import { pair, pods } from "../lib/fleet.js";
 import { CONTROL, assert, http, postJson, short, sleep, tryHttp } from "../lib/harness.js";
+import { BUNDLE_MAGIC, splitBundle } from "../lib/bundle.js";
 import { PY_APP } from "./runtimes.js";
 import type { Group } from "./types.js";
 
@@ -109,7 +110,7 @@ export const archive: Group = {
       const first = await http(base);
       assert(first.status === 303 && /\?r=[0-9a-f]{32}/.test(first.headers.get("location") ?? ""), `page ${first.status} ${first.headers.get("location")}`);
       const r = randomBytes(16).toString("hex");
-      const before = await http(`${base}/file?r=${r}`);
+      const before = await http(`${base}/bundle?r=${r}`);
       assert(before.status === 403, `unapproved download ${before.status}`);
       const approval: ArchiveDownloadApproval = { serverDomain: src.fqdn, archiveId, requestId: r, issuedAt: Date.now() };
       const byIrk = await postJson(`https://${src.fqdn}/api/screens/server-archive/approve`, { approval, signature: bytesToHex(signArchiveDownloadApproval(approval, A.keys.irk)) }, s);
@@ -118,17 +119,23 @@ export const archive: Group = {
       assert(ok.status === 200, `approval ${ok.status}: ${short(ok.text)}`);
       const st = await http(`${base}/status?r=${r}`);
       assert(st.json?.approved === true, `status ${short(st.text)}`);
-      const range = await fetch(`${base}/file?r=${r}`, { headers: { range: "bytes=0-99" } });
+      const total = Number(link.json.bundleBytes);
+      const range = await fetch(`${base}/bundle?r=${r}`, { headers: { range: "bytes=0-99" } });
       const head = Buffer.from(await range.arrayBuffer());
-      assert(range.status === 206 && head.length === 100 && range.headers.get("content-range") === `bytes 0-99/${m.bytes}`, `range ${range.status} ${range.headers.get("content-range")} ${head.length}`);
-      assert(head.toString("latin1").startsWith("flagship-backup-data/v2\n"), "not a data file");
-      const bad = await fetch(`${base}/file?r=${r}`, { headers: { range: `bytes=${m.bytes + 10}-` } });
+      assert(range.status === 206 && head.length === 100 && range.headers.get("content-range") === `bytes 0-99/${total}`, `range ${range.status} ${range.headers.get("content-range")} ${head.length}`);
+      assert(head.subarray(0, 8).toString("latin1") === BUNDLE_MAGIC, "not a .flagship file");
+      const bad = await fetch(`${base}/bundle?r=${r}`, { headers: { range: `bytes=${total + 10}-` } });
       assert(bad.status === 416, `unsatisfiable range ${bad.status}`);
-      const full = await fetch(`${base}/file?r=${r}`);
-      data = Buffer.from(await full.arrayBuffer());
+      const full = await fetch(`${base}/bundle?r=${r}`);
+      const bundle = Buffer.from(await full.arrayBuffer());
+      const bundleSha = createHash("sha256").update(bundle).digest("hex");
+      assert(full.status === 200 && bundle.length === total && bundleSha === link.json.bundleSha256, `full ${full.status} ${bundle.length} B sha ${bundleSha.slice(0, 12)}`);
+      const parts = splitBundle(bundle);
+      assert(openBackupWithAccountKey(parseBackupFile(parts.backupText), accountKek), "the file's metadata part doesn't open with the account key");
+      data = parts.data;
       const sha = createHash("sha256").update(data).digest("hex");
-      assert(full.status === 200 && data.length === m.bytes && sha === m.sha256, `full ${full.status} ${data.length} B sha ${sha.slice(0, 12)}`);
-      return `206 + 416 + 200 (${data.length} B, sha256 ok)`;
+      assert(data.length === m.bytes && sha === m.sha256, `data part ${data.length} B sha ${sha.slice(0, 12)} vs ${m.bytes}/${m.sha256.slice(0, 12)}`);
+      return `206 + 416 + 200: one ${bundle.length} B .flagship file, data part ${data.length} B (sha256 ok)`;
     });
     if (!data) return;
     const bytes = data as Buffer;

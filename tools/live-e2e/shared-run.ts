@@ -4,7 +4,7 @@
  * groups against it, and always tears the fleet down.
  *
  *   account A: `home` (demo flow) + `home2` (gym provision, same account)
- *   account B: `home` (demo flow) — a second, unrelated account
+ *   account B: `home` (demo flow) — a second, unrelated account; `home2` (unpaired) takes its backup
  *   account R: `home` + `home2` (a REAL account: admin root pinned, read tokens, admin-only
  *              add-server; both boxes share the SWK a phone derives for `home`, so `home`
  *              can migrate onto `home2`)
@@ -127,7 +127,7 @@ async function main(): Promise<number> {
     return 2;
   }
   const groups: Group[] = wanted.length ? GROUPS.filter((g) => wanted.includes(g.name)) : GROUPS;
-  const needs = new Set<Slot>(flag("--all-boxes") ? ["A1", "A2", "A3", "B1", "R1", "R2"] : groups.flatMap((g) => g.needs));
+  const needs = new Set<Slot>(flag("--all-boxes") ? ["A1", "A2", "A3", "B1", "B2", "R1", "R2"] : groups.flatMap((g) => g.needs));
   const keep = flag("--keep");
   const reusePath = opt("--reuse");
   const dir = runDir("live-run");
@@ -171,7 +171,7 @@ async function main(): Promise<number> {
   // group needs them. A box is provisioned up front unless a released box's
   // last phase comes before its first one: then it starts once that box is
   // gone, so the fleet's DNS records never peak above what the shared zone holds.
-  const RELEASABLE: Slot[] = ["A2", "A3", "R1", "R2"];
+  const RELEASABLE: Slot[] = ["A2", "A3", "B2", "R1", "R2"];
   const plan = new Map<Slot, number>();
   for (const s of needs) {
     const before = flag("--all-boxes") || !RELEASABLE.includes(s) ? [] : [...needs].filter((r) => r !== s && RELEASABLE.includes(r) && lastPhase(r) < firstPhase(s));
@@ -205,7 +205,7 @@ async function main(): Promise<number> {
   let A: Account | undefined;
   let B: Account | undefined;
   let R: Account | undefined;
-  const SLOT_NAME: Record<Slot, string> = { A1: "home", A2: "home2", A3: "home3", B1: "home", R1: "home", R2: "home2" };
+  const SLOT_NAME: Record<Slot, string> = { A1: "home", A2: "home2", A3: "home3", B1: "home", B2: "home2", R1: "home", R2: "home2" };
   const accountOf = (s: Slot) => (s[0] === "A" ? A : s[0] === "B" ? B : R);
   const slotBox = (s: Slot): Box | undefined => accountOf(s)?.boxes.find((b) => b.serverName === SLOT_NAME[s]);
   const accountMade = new Map<string, Promise<Account>>();
