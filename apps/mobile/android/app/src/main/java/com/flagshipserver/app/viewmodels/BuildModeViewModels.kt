@@ -562,7 +562,35 @@ class BuildJournalViewModel(
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     private val fetchLiveSessions: suspend () -> List<VibeCodeSessionMeta> = { emptyList() },
     private val discardSession: suspend (String) -> Unit = { throw ScreensError.NotImplemented("discard") },
+    /** Every server this device can ask (the webapp's fetchBuildsOnServers):
+     *  the list then covers builds started on any of them. Empty: only
+     *  [client] / [fetchLiveSessions], the server the screen is on. */
+    private val servers: () -> List<Server> = { emptyList() },
 ) {
+    /** One server's own clients, for the list across servers. */
+    class Server(
+        val podId: String,
+        val name: String,
+        val build: BuildClient,
+        val fetchLiveSessions: suspend () -> List<VibeCodeSessionMeta>,
+        val discardSession: suspend (String) -> Unit,
+    )
+
+    private var sessionServer: Map<String, Server> = emptyMap()
+    private var buildServer: Map<String, Server> = emptyMap()
+
+    /** Servers whose builds couldn't be read (named under the list). */
+    private val _failedServers = MutableStateFlow<List<String>>(emptyList())
+    val failedServers: StateFlow<List<String>> = _failedServers.asStateFlow()
+
+    /** Whether the list spans more than one server (rows then name theirs). */
+    private val _multiServer = MutableStateFlow(false)
+    val multiServer: StateFlow<Boolean> = _multiServer.asStateFlow()
+
+    /** The server a session or build row lives on; null on a one-server list. */
+    fun serverOfSession(sessionId: String): Server? = sessionServer[sessionId]
+    fun serverOfBuild(buildId: String): Server? = buildServer[buildId]
+
     private val _list = MutableStateFlow<LoadingState<List<BuildSummary>>>(LoadingState.Idle)
     val list: StateFlow<LoadingState<List<BuildSummary>>> = _list.asStateFlow()
 
@@ -575,6 +603,8 @@ class BuildJournalViewModel(
     val liveSessions: StateFlow<List<VibeCodeSessionMeta>> = _liveSessions.asStateFlow()
 
     fun loadList(): Job = scope.launch {
+        val all = servers()
+        if (all.isNotEmpty()) return@launch loadAcross(all)
         _list.value = LoadingState.Loading
         val sessions = async { runCatching { fetchLiveSessions() }.getOrDefault(emptyList()) }
         try {
@@ -587,6 +617,31 @@ class BuildJournalViewModel(
             // box can't build services (unlike loadDetail's session-scoped 404).
             _list.value = LoadingState.Failed(friendlyBuildEntry(t))
         }
+    }
+
+    private suspend fun loadAcross(all: List<Server>) {
+        _list.value = LoadingState.Loading
+        _multiServer.value = all.size > 1
+        class Result(val server: Server, val builds: List<BuildSummary>?, val sessions: List<VibeCodeSessionMeta>, val error: Throwable?)
+        val results = kotlinx.coroutines.coroutineScope {
+            all.map { srv ->
+                async {
+                    val sessions = async { runCatching { srv.fetchLiveSessions() }.getOrDefault(emptyList()) }
+                    val builds = runCatching { srv.build.sessions().builds }
+                    Result(srv, builds.getOrNull(), sessions.await(), builds.exceptionOrNull())
+                }
+            }.map { it.await() }
+        }
+        sessionServer = results.flatMap { r -> r.sessions.map { it.sessionId to r.server } }.toMap()
+        buildServer = results.flatMap { r -> r.builds.orEmpty().map { it.buildId to r.server } }.toMap()
+        _failedServers.value = results.filter { it.error != null }.map { it.server.name }
+        val ok = results.filter { it.builds != null }
+        if (ok.isEmpty()) {
+            _list.value = LoadingState.Failed(friendlyBuildEntry(results.firstNotNullOf { it.error }))
+            return
+        }
+        _liveSessions.value = BuildSessions.newestFirst(results.flatMap { it.sessions })
+        _list.value = LoadingState.Loaded(ok.flatMap { it.builds.orEmpty() }.sortedByDescending { it.startedAt })
     }
 
     fun loadDetail(buildId: String): Job = scope.launch {
@@ -607,7 +662,7 @@ class BuildJournalViewModel(
     fun discard(session: VibeCodeSessionMeta): Job = scope.launch {
         _discardError.value = null
         try {
-            discardSession(session.sessionId)
+            (sessionServer[session.sessionId]?.discardSession ?: discardSession)(session.sessionId)
             _liveSessions.value = _liveSessions.value.filterNot { it.sessionId == session.sessionId }
         } catch (t: Throwable) {
             _discardError.value = t.userFacing()
@@ -618,7 +673,7 @@ class BuildJournalViewModel(
     fun discard(build: BuildSummary): Job = scope.launch {
         _discardError.value = null
         try {
-            client.discard(build.buildId)
+            (buildServer[build.buildId]?.build ?: client).discard(build.buildId)
             loadList().join()
         } catch (t: Throwable) {
             _discardError.value = t.boxError() ?: t.userFacing()
@@ -629,6 +684,28 @@ class BuildJournalViewModel(
 /** Pure parts of the build sessions screen. Mirror of iOS BuildJournalScreen /
  *  BuildJournalViewModel and the webapp lib/vibeSessions.js. */
 object BuildSessions {
+    /** The servers the build list asks: each live server this device has a
+     *  session on, once per box (mock mode hands every pod the same clients). */
+    fun servers(pods: List<com.flagshipserver.app.core.PodInfo>, clients: com.flagshipserver.app.core.PodClients): List<BuildJournalViewModel.Server> =
+        pods.filter { !it.isRevoked && it.status != com.flagshipserver.app.core.PodInfo.Status.PENDING }
+            .mapNotNull { pod ->
+                val build = clients.build(pod) ?: return@mapNotNull null
+                val screens = clients.screens(pod) ?: return@mapNotNull null
+                BuildJournalViewModel.Server(
+                    podId = pod.podId,
+                    name = pod.name,
+                    build = build,
+                    fetchLiveSessions = { screens.vibeCodeSessions().sessions },
+                    discardSession = { screens.vibeCodeDiscard(it) },
+                ) to build
+            }
+            .distinctBy { System.identityHashCode(it.second) }
+            .map { it.first }
+
+    /** The line under the list naming servers whose builds couldn't be read. */
+    fun unreadServersLine(names: List<String>): String =
+        "Couldn't read builds on ${names.joinToString(", ")}."
+
     /** Past builds the box no longer holds a session for. */
     fun endedBuilds(builds: List<BuildSummary>, sessions: List<VibeCodeSessionMeta>): List<BuildSummary> {
         val live = sessions.mapTo(HashSet()) { it.sessionId }

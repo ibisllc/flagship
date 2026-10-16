@@ -179,6 +179,50 @@ class BuildSessionsTest {
         assertTrue(failing.list.value is LoadingState.Loaded)
     }
 
+    /** The list spans every server this device can ask (the webapp's
+     *  fetchBuildsOnServers): rows name their server, discard goes to it, and
+     *  a server that can't be read is named instead of failing the list. */
+    @Test fun theListCoversEveryServer_andDiscardGoesToTheRowsServer() = runTest {
+        val homeBuilds = MockBuildClient(simulatedLatencyMs = 0).apply {
+            sessionsFixture = BuildSessionsResponse(builds = listOf(
+                BuildSummary(buildId = "h1", mode = "git", name = "notes", startedAt = 1, lastAt = 2, entryCount = 1, lastKind = "deployed"),
+            ))
+        }
+        val officeBuilds = MockBuildClient(simulatedLatencyMs = 0).apply {
+            sessionsFixture = BuildSessionsResponse(builds = listOf(
+                BuildSummary(buildId = "o1", mode = "git", name = "wiki", startedAt = 3, lastAt = 4, entryCount = 1, lastKind = "deployed"),
+            ))
+        }
+        val discardedOn = mutableListOf<String>()
+        val home = BuildJournalViewModel.Server("home", "Home", homeBuilds,
+            fetchLiveSessions = { listOf(VibeCodeSessionMeta("chat-h", 5, "streaming")) },
+            discardSession = { discardedOn += "home:$it" })
+        val office = BuildJournalViewModel.Server("office", "Office", officeBuilds,
+            fetchLiveSessions = { listOf(VibeCodeSessionMeta("chat-o", 6, "failed")) },
+            discardSession = { discardedOn += "office:$it" })
+        val broken = BuildJournalViewModel.Server("cabin", "Cabin",
+            object : com.flagshipserver.app.api.BuildClient by MockBuildClient(simulatedLatencyMs = 0) {
+                override suspend fun sessions(): BuildSessionsResponse = throw java.io.IOException("offline")
+            },
+            fetchLiveSessions = { emptyList() }, discardSession = {})
+        val vm = BuildJournalViewModel(MockBuildClient(simulatedLatencyMs = 0), scope = backgroundScope, servers = { listOf(home, office, broken) })
+        vm.loadList().join()
+
+        assertTrue(vm.multiServer.value)
+        assertEquals(listOf("o1", "h1"), (vm.list.value as LoadingState.Loaded).value.map { it.buildId })
+        assertEquals(listOf("chat-o", "chat-h"), vm.liveSessions.value.map { it.sessionId })
+        assertEquals("office", vm.serverOfSession("chat-o")?.podId)
+        assertEquals("home", vm.serverOfBuild("h1")?.podId)
+        assertEquals(listOf("Cabin"), vm.failedServers.value)
+        assertEquals("Couldn't read builds on Cabin.", BuildSessions.unreadServersLine(vm.failedServers.value))
+
+        vm.discard(vm.liveSessions.value.first { it.sessionId == "chat-o" }).join()
+        assertEquals(listOf("office:chat-o"), discardedOn)
+        vm.discard((vm.list.value as LoadingState.Loaded).value.first { it.buildId == "h1" }).join()
+        assertEquals(listOf("h1"), homeBuilds.discardCalls)
+        assertTrue(officeBuilds.discardCalls.isEmpty())
+    }
+
     @Test fun openBuildsAreSeparateAndDiscardable() = runTest {
         val client = MockBuildClient(simulatedLatencyMs = 0).apply {
             sessionsFixture = BuildSessionsResponse(

@@ -90,6 +90,7 @@ import com.flagshipserver.app.ui.components.FSPillKind
 import com.flagshipserver.app.ui.components.FSPrimaryButton
 import com.flagshipserver.app.ui.components.FSSecondaryButton
 import com.flagshipserver.app.ui.shell.tabs.openBuildSessions
+import com.flagshipserver.app.ui.shell.tabs.navigateOnPod
 import com.flagshipserver.app.ui.shell.tabs.openVibeSession
 import com.flagshipserver.app.ui.shell.tabs.vibeSessionChatRoute
 import com.flagshipserver.app.ui.theme.FS
@@ -997,13 +998,20 @@ private fun CodeBlock(text: String) {
 fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
     val client = LocalBuildClient.current
     val screens = LocalScreensClient.current
+    val appState = com.flagshipserver.app.core.LocalAppState.current
+    val podClients = com.flagshipserver.app.core.LocalPodClients.current
     val vm = remember {
         BuildJournalViewModel(
             client,
             fetchLiveSessions = { screens.vibeCodeSessions().sessions },
             discardSession = { screens.vibeCodeDiscard(it) },
+            // The list covers every server this device has a session on, as
+            // the webapp's does; a build started anywhere shows up.
+            servers = { BuildSessions.servers(appState.pods.value, podClients) },
         )
     }
+    val multiServer by vm.multiServer.collectAsState()
+    val failedServers by vm.failedServers.collectAsState()
     val list by vm.list.collectAsState()
     val detail by vm.detail.collectAsState()
     val liveSessions by vm.liveSessions.collectAsState()
@@ -1040,7 +1048,10 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
                             if (anyOpen) {
                                 SectionCaption("Open on your server")
                                 open.forEach { b ->
-                                    BuildTile(b, startedOnly = true) { nav.navigate("build/journal/${b.buildId}") }
+                                    val on = vm.serverOfBuild(b.buildId)
+                                    BuildTile(b, startedOnly = true, server = on?.name?.takeIf { multiServer }) {
+                                        nav.navigateOnPod("build/journal/${b.buildId}", on?.podId)
+                                    }
                                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                                         TextButton(
                                             onClick = { confirmDiscardBuild = b },
@@ -1051,8 +1062,9 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
                                     }
                                 }
                                 liveSessions.forEach { session ->
-                                    SessionTile(session, BuildSessions.name(session, builds)) {
-                                        nav.openVibeSession(vibeSessionChatRoute(session.sessionId))
+                                    val on = vm.serverOfSession(session.sessionId)
+                                    SessionTile(session, BuildSessions.name(session, builds), server = on?.name?.takeIf { multiServer }) {
+                                        nav.openVibeSession(vibeSessionChatRoute(session.sessionId), on?.podId)
                                     }
                                     if (session.canDiscard) {
                                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -1070,7 +1082,20 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
                             if (ended.isNotEmpty()) {
                                 if (anyOpen) Spacer(Modifier.height(FS.space.s2))
                                 SectionCaption("Past builds")
-                                ended.forEach { b -> BuildTile(b) { nav.navigate("build/journal/${b.buildId}") } }
+                                ended.forEach { b ->
+                                    val on = vm.serverOfBuild(b.buildId)
+                                    BuildTile(b, server = on?.name?.takeIf { multiServer }) {
+                                        nav.navigateOnPod("build/journal/${b.buildId}", on?.podId)
+                                    }
+                                }
+                            }
+                            if (failedServers.isNotEmpty()) {
+                                Text(
+                                    BuildSessions.unreadServersLine(failedServers),
+                                    color = FS.colors.textMuted,
+                                    style = TextStyle(fontSize = 13.sp),
+                                    modifier = Modifier.testTag("build-sessions-unread-servers"),
+                                )
                             }
                         }
                     }
@@ -1118,7 +1143,7 @@ private fun SectionCaption(text: String) {
 }
 
 @Composable
-private fun SessionTile(session: VibeCodeSessionMeta, title: String, onClick: () -> Unit) {
+private fun SessionTile(session: VibeCodeSessionMeta, title: String, server: String? = null, onClick: () -> Unit) {
     val shape = RoundedCornerShape(FS.radius.md)
     val active = session.isActive
     Row(
@@ -1137,7 +1162,7 @@ private fun SessionTile(session: VibeCodeSessionMeta, title: String, onClick: ()
             Text(title, color = FS.colors.text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
             Spacer(Modifier.height(FS.space.s1))
             Text(
-                "Started ${fmtTimestamp(session.startedAt)}",
+                listOfNotNull("Started ${fmtTimestamp(session.startedAt)}", server?.let { "on $it" }).joinToString(" "),
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 13.sp),
             )
@@ -1165,7 +1190,7 @@ private fun sessionPill(status: String): FSPillKind = when (status) {
 }
 
 @Composable
-private fun BuildTile(b: BuildSummary, startedOnly: Boolean = false, onClick: () -> Unit) {
+private fun BuildTile(b: BuildSummary, startedOnly: Boolean = false, server: String? = null, onClick: () -> Unit) {
     FSCard(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         padding = PaddingValues(FS.space.s5),
@@ -1177,7 +1202,8 @@ private fun BuildTile(b: BuildSummary, startedOnly: Boolean = false, onClick: ()
         )
         Spacer(Modifier.height(FS.space.s1))
         Text(
-            if (startedOnly) "Started ${fmtTimestamp(b.startedAt)}" else BuildSessions.pastBuildSubtitle(b, fmtTimestamp(b.startedAt)),
+            (if (startedOnly) "Started ${fmtTimestamp(b.startedAt)}" else BuildSessions.pastBuildSubtitle(b, fmtTimestamp(b.startedAt))) +
+                (server?.let { " on $it" } ?: ""),
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 13.sp),
         )
