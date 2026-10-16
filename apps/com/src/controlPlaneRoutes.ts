@@ -1372,6 +1372,7 @@ export async function tryControlPlane(
         {
           invites: storage.serviceInvites,
           usernames: storage.usernames,
+          servers: storage.servers,
           grants: storage.deviceCapabilityGrants,
           identities: storage.deviceIdentities,
           auditEvents: storage.auditEvents,

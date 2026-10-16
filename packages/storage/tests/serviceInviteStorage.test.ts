@@ -314,6 +314,13 @@ describe("ServiceInviteStorage parity", () => {
           const listed = await store.listForAuthor(AUTHOR);
           expect(listed.find((x) => x.inviteId === "id1")?.creatorTier).toBe("member");
         }));
+
+      it("keeps a co-manager's invite with its member key and no device", () =>
+        run(async (store) => {
+          await store.create({ ...mk({ inviteId: "id3", secretHash: "33".repeat(32) }), creatorTier: "co-manager", creatorPubHex: "ee".repeat(32) });
+          const r = await store.get("id3");
+          expect([r?.creatorTier, r?.creatorPubHex, r?.creatorDeviceId]).toEqual(["co-manager", "ee".repeat(32), null]);
+        }));
     });
   }
 });

@@ -87,13 +87,20 @@ SENSITIVE_HANDLERS=(
 #     the signed revoke; the box prunes only for a revoke it verifies itself.
 #     Removing other people, changing a rank or the open/members-only mode stay
 #     admin-only.
+#   - invite CREATE, co-manager tier (owner decision 2026-10-16, docs "Co-manager
+#     invites"): `coManagerRelaySigner` accepts a create signed by a co-manager's
+#     per-share member key only when the account's own live server vouches for
+#     it (its STK signs flagship/service-invite-co-manager/v1 over the create's
+#     signature). Member tier; the box re-checks the share and the rank at every
+#     join. `revokedByCreator` lets that member key withdraw its own invite.
 #
 # Nothing else may call these helpers; a new entry here needs an owner decision.
 MEMBERSHIP_KEY_EXCEPTIONS=(
   "packages/control-plane/src/serviceInvites.ts|handleCreateServiceInvite|deviceInviteSigner"
+  "packages/control-plane/src/serviceInvites.ts|handleCreateServiceInvite|coManagerRelaySigner"
   "packages/control-plane/src/serviceInvites.ts|handleRevokeServiceInvite|revokedByCreator"
 )
-MEMBERSHIP_KEY_HELPERS='deviceInviteSigner|memberInviteSigner|revokedByCreator|verifyAccountSigned'
+MEMBERSHIP_KEY_HELPERS='deviceInviteSigner|memberInviteSigner|coManagerRelaySigner|revokedByCreator|verifyAccountSigned'
 
 # A gate token proves the handler routes authorization through the master-admin
 # path. `signerRoot` covers the admin-scope grant-mint discriminator (§3.3),

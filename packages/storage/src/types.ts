@@ -1823,7 +1823,9 @@ export interface ServiceInviteRecord {
    * can invite"): `admin` (the admin root or an admin-granted device; on an
    * account with no admin root, the account key) or `member` (any device's
    * membership key, AID or IRK, on an admin-pinned account: its joins are
-   * capped at Member by the box). NULL on rows from before 0100.
+   * capped at Member by the box), or `co-manager` (a co-manager's per-share
+   * member key, vouched for by the shared box's STK; docs "Co-manager
+   * invites"). NULL on rows from before 0100.
    */
   creatorTier: ServiceInviteCreatorTier | null;
   /** The key the create verified under (hex): the only non-admin key that may revoke it. */
@@ -1843,7 +1845,7 @@ export interface ServiceInviteRecord {
 }
 
 /** Which authority signed an invite's create. */
-export type ServiceInviteCreatorTier = "admin" | "member";
+export type ServiceInviteCreatorTier = "admin" | "member" | "co-manager";
 
 /** Result of a redeem attempt against `.com`. */
 export type ServiceInviteRedeemResult =

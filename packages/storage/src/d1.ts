@@ -4743,7 +4743,8 @@ function rowToServiceInvite(r: ServiceInviteRow, boundAIDs: string[]): ServiceIn
     redemptions: r.redemptions ?? 0,
     approvalMode: r.approval_mode === "manual" ? "manual" : "auto",
     boundAIDs,
-    creatorTier: r.creator_tier === "admin" || r.creator_tier === "member" ? r.creator_tier : null,
+    creatorTier:
+      r.creator_tier === "admin" || r.creator_tier === "member" || r.creator_tier === "co-manager" ? r.creator_tier : null,
     creatorPubHex: r.creator_pub_hex ?? null,
     creatorDeviceId: r.creator_device_id ?? null,
     revokeSig: r.revoke_sig ?? null,

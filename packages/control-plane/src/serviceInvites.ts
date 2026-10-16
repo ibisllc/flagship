@@ -34,12 +34,22 @@
  * Member and lets people in only while the creating device may still invite
  * in that app, so `.com`'s record is never what keeps a rank down. A revoke is
  * kept with its signature so the box can verify it before pruning anyone.
+ *
+ * Co-manager invites (owner decision 2026-10-16, docs "Co-manager invites"):
+ * someone another account shares a server with at "Can manage" invites at
+ * Member, signing the create with their per-share member key. `.com` never
+ * learns who shares with whom, so it can't tie that key to the account
+ * itself: the shared box vouches for it with an STK-signed
+ * `flagship/service-invite-co-manager/v1` naming the key and the create's
+ * signature. The row's tier is `co-manager` and its creator key the member
+ * key, which may withdraw it. `.com` stores nothing else about the share.
  */
 
 import {
   verifyCreateServiceInvite,
   verifyRedeemServiceInvite,
   verifyRevokeServiceInvite,
+  verifyServiceInviteCoManagerRelay,
   verifyServiceInviteCreateQuery,
   verifyServiceInviteListQuery,
   type CreateServiceInvite,
@@ -184,8 +194,65 @@ interface CreateBody {
      * signature it is attribution only.
      */
     deviceId?: unknown;
+    /** A co-manager's create: the member key it is signed with (64 hex), named by the relay. */
+    creatorPubHex?: unknown;
   };
   signature?: unknown;
+  /** A co-manager's create, relayed by the shared box (its STK signs `flagship/service-invite-co-manager/v1`). */
+  relay?: { serverDomain?: unknown; issuedAt?: unknown; signature?: unknown };
+}
+
+/**
+ * A co-manager's create, vouched for by the shared box: the relay names a
+ * live server of this account and verifies under its STK, it binds this very
+ * create (inviteId, app, creator key, create signature), and the create
+ * verifies under the creator key. Returns the creator key, or a refusal.
+ */
+async function coManagerRelaySigner(
+  deps: ServiceInviteDeps,
+  username: string,
+  body: CreateBody,
+  create: CreateServiceInvite,
+  sig: Uint8Array,
+  now: number,
+  freshnessMs: number,
+): Promise<{ ok: true; pubHex: string } | { ok: false; res: HandlerResponseWithHeaders }> {
+  const relay = body.relay!;
+  const creator = body.request?.creatorPubHex;
+  if (
+    typeof creator !== "string" ||
+    !HEX64.test(creator) ||
+    typeof relay.serverDomain !== "string" ||
+    relay.serverDomain.length === 0 ||
+    relay.serverDomain.length > 253 ||
+    typeof relay.issuedAt !== "number" ||
+    !Number.isSafeInteger(relay.issuedAt) ||
+    typeof relay.signature !== "string" ||
+    !HEX128.test(relay.signature)
+  ) {
+    return { ok: false, res: malformed("malformed co-manager relay") };
+  }
+  if (Math.abs(now - relay.issuedAt) > freshnessMs) return { ok: false, res: forbidden("stale request") };
+  const stkPub = await resolveServerStk(deps, username, relay.serverDomain.toLowerCase());
+  if (!stkPub) return { ok: false, res: forbidden("invalid signature") };
+  const pubHex = creator.toLowerCase();
+  const relayOk = verifyServiceInviteCoManagerRelay(
+    {
+      username,
+      serverDomain: relay.serverDomain.toLowerCase(),
+      inviteId: create.inviteId,
+      serviceRef: create.serviceRef,
+      creatorPubHex: pubHex,
+      createSigHex: String(body.signature).toLowerCase(),
+      issuedAt: relay.issuedAt,
+    },
+    hexToBytes(relay.signature),
+    stkPub,
+  );
+  if (!relayOk || !verifyCreateServiceInvite(create, sig, hexToBytes(pubHex))) {
+    return { ok: false, res: forbidden("invalid signature") };
+  }
+  return { ok: true, pubHex };
 }
 
 function parseApprovalMode(raw: unknown): ServiceInviteApprovalMode | undefined | { error: string } {
@@ -270,24 +337,36 @@ export async function handleCreateServiceInvite(
   } catch {
     return malformed("invalid signature hex");
   }
+  let tier: ServiceInviteCreatorTier;
+  let creatorPubHex: string;
+  let creatorDeviceId: string | undefined;
+  // A co-manager's create comes only through the shared box's relay (the
+  // documented exception in scripts/admin-authority-guard.sh): Member tier.
+  const relayed = body.relay !== undefined && body.relay !== null;
+  if (relayed && typeof body.relay !== "object") return malformed("malformed co-manager relay");
+  if (relayed && approvalMode === "manual") return malformed("a co-manager's invite lets people in when they open it");
   // Who may invite: the admin gate first (admin root / admin-granted device;
   // on an account with no admin root, the account's own AID or IRK, as
   // before). A create the gate refused may still come from a device's own
   // account device key: a MEMBER invite on an admin-pinned account.
-  const createAuthz = await authorizeSensitiveComOp(
-    { grants: deps.grants, now: deps.now },
-    {
-      username: userV.label,
-      userRec,
-      verifyWith: (pub) => verifyCreateServiceInvite(create, sig, hexToBytes(pub)),
-      alsoAcceptAid: true,
-      now,
-    },
-  );
-  let tier: ServiceInviteCreatorTier;
-  let creatorPubHex: string;
-  let creatorDeviceId: string | undefined;
-  if (createAuthz.ok) {
+  const createAuthz = relayed
+    ? null
+    : await authorizeSensitiveComOp(
+        { grants: deps.grants, now: deps.now },
+        {
+          username: userV.label,
+          userRec,
+          verifyWith: (pub) => verifyCreateServiceInvite(create, sig, hexToBytes(pub)),
+          alsoAcceptAid: true,
+          now,
+        },
+      );
+  if (relayed) {
+    const co = await coManagerRelaySigner(deps, userV.label, body, create, sig, now, freshnessMs);
+    if (!co.ok) return co.res;
+    tier = "co-manager";
+    creatorPubHex = co.pubHex;
+  } else if (createAuthz?.ok) {
     tier = "admin";
     creatorPubHex = createAuthz.signerPubHex.toLowerCase();
     // An admin-granted device signed with its own key: that names it. The
@@ -328,7 +407,7 @@ export async function handleCreateServiceInvite(
     ...(creatorDeviceId ? { creatorDeviceId } : {}),
   });
   if (!res.ok) return conflict(res.reason);
-  if (tier === "member") await tellAdmins(deps, userV.label, now, creatorDeviceId);
+  if (tier !== "admin") await tellAdmins(deps, userV.label, now, creatorDeviceId);
   return ok({ created: true, inviteId: r.inviteId, tier });
 }
 
@@ -507,8 +586,20 @@ async function revokedByCreator(
   invite: { creatorTier: ServiceInviteCreatorTier | null; creatorPubHex: string | null },
   verify: (pub: Uint8Array) => boolean,
 ): Promise<string | null> {
-  const creator = invite.creatorTier === "member" ? invite.creatorPubHex?.toLowerCase() : undefined;
-  if (!creator || !deps.identities) return null;
+  const creator =
+    invite.creatorTier === "member" || invite.creatorTier === "co-manager" ? invite.creatorPubHex?.toLowerCase() : undefined;
+  if (!creator) return null;
+  // A co-manager withdraws their own invite with the member key it was made
+  // with. Withdrawing only ever takes access away, so `.com` needn't know
+  // whether the share still stands (the box checks that before pruning).
+  if (invite.creatorTier === "co-manager") {
+    try {
+      return verify(hexToBytes(creator)) ? creator : null;
+    } catch {
+      return null;
+    }
+  }
+  if (!deps.identities) return null;
   const device = await deps.identities.getByPub(username, creator);
   if (!device || device.revokedAt !== null) return null;
   try {
