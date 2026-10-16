@@ -41,13 +41,15 @@ class AiChatAlertPollerTest {
     private fun poller(
         client: FakeClient,
         ops: ActiveOperationsCenter,
+        server: String? = null,
         notify: (String, AiChatRequest) -> Unit,
     ) = AiChatAlertPoller(
         operations = ops,
         client = client,
         isActiveGate = { true },
-        notify = notify,
+        notify = { s, r, _ -> notify(s, r) },
         pollIntervalMs = 1,
+        currentServer = { server },
     )
 
     @Test fun drainFeedsSliverNotifiesAndAcks() = runTest {
@@ -173,5 +175,24 @@ class AiChatAlertPollerTest {
         val resp = PhoneAlertsResponse.parse("""{"events":[],"size":0}""")
         assertTrue(resp.events.isEmpty())
         assertEquals(0, resp.size)
+    }
+
+    /** The alert names the server it was drained from, so the chat opens
+     *  there even after the owner switches servers (webapp aiChatDeepLink). */
+    @Test fun theAlertNamesItsServer() = runTest {
+        val ops = ActiveOperationsCenter()
+        val client = FakeClient(PhoneAlertsResponse(listOf(aiChatEnv(3, "sess-b", AiChatRequest.REQUEST_ENV_VAR, "tool-9")), 1))
+        var notifiedServer: String? = null
+        AiChatAlertPoller(
+            operations = ops, client = client, isActiveGate = { true },
+            notify = { _, _, server -> notifiedServer = server },
+            pollIntervalMs = 1, currentServer = { "home.harry.flagship.services" },
+        ).drainOnce()
+        assertEquals(DeepLink.VibeCodeChat("sess-b", "home.harry.flagship.services"), ops.operations.value.first().target)
+        assertEquals("home.harry.flagship.services", notifiedServer)
+        assertEquals(
+            com.flagshipserver.app.core.Endpoints.appRoute("vibecode/sess-b", mapOf("server" to "home.harry.flagship.services")),
+            com.flagshipserver.app.push.FlagshipFcmService.aiChatDeepLink("sess-b", "home.harry.flagship.services"),
+        )
     }
 }

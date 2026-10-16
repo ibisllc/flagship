@@ -348,7 +348,7 @@
       "ref": "ios",
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/PushNotifications.swift", "vibecode-needs-you"], ["apps/mobile/ios/Sources/FlagshipUI/ViewModels/AiChatAlertPoller.swift", "vibeCodeChatOnServer"]] },
-        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/push/FlagshipFcmService.kt", "appRoute\\(\"vibecode/"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/push/FlagshipFcmService.kt", "fun aiChatDeepLink"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/push/FlagshipFcmService.kt", "\"server\" to it"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/service-worker.js", "vibecode-needs-you"]] }
       }
     },

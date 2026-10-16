@@ -40,6 +40,11 @@ class PlacementNavState {
 fun NavController.navigateOnPod(route: String, podId: String?, pinned: Boolean = false) {
     navigate(route)
     if (podId.isNullOrEmpty()) return
+    markOnPod(podId, pinned)
+}
+
+/** Mark the screen just navigated to as working on [podId]. */
+fun NavController.markOnPod(podId: String, pinned: Boolean = false) {
     currentBackStackEntry?.savedStateHandle?.let {
         it[KEY_POD] = podId
         it[KEY_PINNED] = pinned

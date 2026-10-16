@@ -140,6 +140,13 @@ class FlagshipFcmService : FirebaseMessagingService() {
         /** Every channel (one per kind of push, see NotificationChannels). */
         fun ensureChannel(context: Context) = NotificationChannels.ensureAll(context)
 
+        /** The chat's link, naming the server the session is on (the webapp's aiChatDeepLink). */
+        fun aiChatDeepLink(sessionId: String, server: String?): String =
+            com.flagshipserver.app.core.Endpoints.appRoute(
+                "vibecode/$sessionId",
+                server?.takeIf { it.isNotEmpty() }?.let { mapOf("server" to it) } ?: emptyMap(),
+            )
+
         /**
          * #91 — raise an app-initiated LOCAL notification that an AI build chat
          * is waiting on the owner. Value-free copy (driven only by the pending
@@ -149,9 +156,9 @@ class FlagshipFcmService : FirebaseMessagingService() {
          * POST_NOTIFICATIONS permission isn't granted the system drops it
          * silently — the operations sliver already carries the signal.
          */
-        fun showAiChatNotification(context: Context, sessionId: String, isEnvVar: Boolean) {
+        fun showAiChatNotification(context: Context, sessionId: String, isEnvVar: Boolean, server: String? = null) {
             ensureChannel(context)
-            val deepLink = com.flagshipserver.app.core.Endpoints.appRoute("vibecode/$sessionId")
+            val deepLink = aiChatDeepLink(sessionId, server)
             val intent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
                 data = deepLink.toUri()

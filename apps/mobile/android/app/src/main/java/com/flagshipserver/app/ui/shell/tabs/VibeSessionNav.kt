@@ -21,10 +21,12 @@ fun openVibeSessionStack(stack: List<String>, sessionRoute: String): List<String
 }
 
 /** Applies [openVibeSessionStack] to the live back stack. */
-fun NavController.openVibeSession(sessionRoute: String) {
+fun NavController.openVibeSession(sessionRoute: String, podId: String? = null) {
     val hasChooser = runCatching { getBackStackEntry(BUILD_CHOOSER_ROUTE) }.isSuccess
     if (!hasChooser) navigate(BUILD_CHOOSER_ROUTE)
     navigate(sessionRoute) { popUpTo(BUILD_CHOOSER_ROUTE) }
+    // The session lives on [podId]: the chat works on that server.
+    if (!podId.isNullOrEmpty()) markOnPod(podId)
 }
 
 const val BUILD_SESSIONS_ROUTE = "build/journal"

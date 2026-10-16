@@ -38,7 +38,12 @@ sealed interface DeepLink {
     /** W10 — vibe-code chat surface for the given session id. Fired
      *  by the `vibecode-needs-you` push when the AI is awaiting an
      *  env-var or talkToUser response. */
-    data class VibeCodeChat(val sessionId: String) : DeepLink
+    data class VibeCodeChat(
+        val sessionId: String,
+        /** The server (fqdn) the session lives on, so the chat opens there
+         *  even after the owner switched servers; null: the current one. */
+        val server: String? = null,
+    ) : DeepLink
 
     /** A git/mcp build's own surface — its journal timeline. Used as the
      *  global-operations-sliver tap target for a non-scratch build (which,
@@ -300,7 +305,7 @@ sealed interface DeepLink {
                     val pathId = uri.path?.trim('/').orEmpty()
                     val queryId = params["sessionId"].orEmpty()
                     val id = if (pathId.isNotEmpty()) pathId else queryId
-                    if (id.isEmpty()) null else VibeCodeChat(id)
+                    if (id.isEmpty()) null else VibeCodeChat(id, params["server"]?.takeIf { it.isNotEmpty() })
                 }
                 "install-progress" -> InstallProgress(params["serial"]?.takeIf { it.isNotEmpty() })
                 "deadman" -> uri.path?.trim('/')?.takeIf { it.isNotEmpty() }?.let { Deadman(it) }

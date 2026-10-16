@@ -38,8 +38,11 @@ class AiChatAlertPoller(
     private val isActiveGate: () -> Boolean,
     /** Raise a LOCAL notification for a paused build. Injected so tests don't
      *  touch NotificationManager; the app wires the FCM-channel notifier. */
-    private val notify: (sessionId: String, request: AiChatRequest) -> Unit,
+    private val notify: (sessionId: String, request: AiChatRequest, server: String?) -> Unit,
     private val pollIntervalMs: Long = 5_000L,
+    /** The server (fqdn) the alerts are drained from: the current one. The
+     *  chat and the notification name it, so they open on that box. */
+    private val currentServer: () -> String? = { null },
 ) {
     /** ACK cursor — the highest alert id we've drained. */
     private var cursor: Int = 0
@@ -81,6 +84,7 @@ class AiChatAlertPoller(
 
         var maxId = cursor
         var handled = 0
+        val server = currentServer()?.takeIf { it.isNotEmpty() }
         for (env in resp.events) {
             if (env.id > maxId) maxId = env.id
             val alert = env.alert
@@ -92,11 +96,11 @@ class AiChatAlertPoller(
                 id = alert.sessionId,
                 subject = "AI build",
                 onServer = null,
-                target = DeepLink.VibeCodeChat(alert.sessionId),
+                target = DeepLink.VibeCodeChat(alert.sessionId, server),
             )
             val dedupKey = "${alert.sessionId}|${alert.toolUseId}"
             if (notified.add(dedupKey)) {
-                notify(alert.sessionId, alert.request)
+                notify(alert.sessionId, alert.request, server)
             }
             handled += 1
         }

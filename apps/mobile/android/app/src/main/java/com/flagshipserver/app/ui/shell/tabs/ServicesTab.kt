@@ -47,6 +47,7 @@ fun ServicesTab() {
     val nav = rememberNavController()
     val placement = remember { PlacementNavState() }
     val deepLinker = LocalDeepLinker.current
+    val appState = com.flagshipserver.app.core.LocalAppState.current
     val pending by deepLinker.pending.collectAsState()
     LaunchedEffect(pending) {
         when (val link = pending) {
@@ -72,7 +73,9 @@ fun ServicesTab() {
                 deepLinker.consume()
                 val onIt = nav.currentDestination?.route == "vibe-code-chat/{sessionId}" &&
                     nav.currentBackStackEntry?.arguments?.getString("sessionId") == link.sessionId
-                if (!onIt) nav.openVibeSession(vibeSessionChatRoute(link.sessionId))
+                // Open it on the server the alert came from (it 404s anywhere else).
+                val podId = link.server?.let { s -> appState.pods.value.firstOrNull { it.fqdn.equals(s, ignoreCase = true) }?.podId }
+                if (!onIt) nav.openVibeSession(vibeSessionChatRoute(link.sessionId), podId)
             }
             // A tap on the ops sliver for a git/mcp build opens its journal —
             // the build's own surface (it has no vibe-code chat session).

@@ -137,6 +137,10 @@ class AppLinkTest {
     @Test fun appLinkForm_parsedWithoutAppLink() {
         // Paste surfaces (Process URL) call DeepLink.parse directly.
         assertEquals(DeepLink.VibeCodeChat("s1"), DeepLink.parse(Uri.parse("https://flagshipserver.com/app/vibecode/s1")))
+        assertEquals(
+            DeepLink.VibeCodeChat("s1", "home.harry.flagship.services"),
+            DeepLink.parse(Uri.parse("https://flagshipserver.com/app/vibecode/s1?server=home.harry.flagship.services")),
+        )
     }
 
     // ── The Worker's push deepLinks ──────────────────────────────────

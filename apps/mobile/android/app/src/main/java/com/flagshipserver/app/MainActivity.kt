@@ -410,13 +410,16 @@ class MainActivity : FragmentActivity() {
                     operations = operations,
                     client = livePhoneAlerts,
                     isActiveGate = { appState.isPaired.value && appState.isUnlocked.value },
-                    notify = { sessionId, request ->
+                    notify = { sessionId, request, server ->
                         FlagshipFcmService.showAiChatNotification(
                             appContext,
                             sessionId,
                             isEnvVar = request == com.flagshipserver.app.api.AiChatRequest.REQUEST_ENV_VAR,
+                            server = server,
                         )
                     },
+                    // The alert client reads the current server's session.
+                    currentServer = { appState.sessionPod?.fqdn },
                 )
             }
             LaunchedEffect(useLive, sessionToken != null) {
