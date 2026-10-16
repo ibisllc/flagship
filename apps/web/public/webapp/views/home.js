@@ -364,6 +364,10 @@ export function classifyServer(server, pod, opts = {}) {
   // staleness before flipping the dot off — handles a transient
   // tunnel hiccup without lighting up the home screen.
   if (ageMs > 15 * 60 * 1000) return { kind: "offline", label: `Offline (${formatAge(ageMs)} ago)` };
+  // A server created to restore a backup, until the backup is in
+  // (docs/server-backup-and-clone.md).
+  if (pod.awaitingBackup?.state === "restoring") return { kind: "restoring-backup", label: "Restoring its backup" };
+  if (pod.awaitingBackup) return { kind: "awaiting-backup", label: "Waiting for its backup" };
   // Cert expiry within 30d — surface as warning even when daemon is online.
   if (pod.currentCert?.validUntil) {
     const msToExpiry = pod.currentCert.validUntil - Date.now();
@@ -416,6 +420,8 @@ export function statusBucketForKind(kind) {
       return "online";
     case "waiting-for-approval":
     case "coming-online":
+    case "awaiting-backup":
+    case "restoring-backup":
       return "pending";
     default:
       // never-seen, offline, revoked, cert-expired → offline bucket.
@@ -498,7 +504,7 @@ export function renderServerCard(server, pod, opts = {}) {
   const c = classifyServer(server, pod, opts);
   const pillClass = c.kind === "online" ? "pill ok"
     : c.kind === "revoked" || c.kind === "cert-expired" ? "pill err"
-    : c.kind === "cert-expiring-soon" || c.kind === "waiting-for-approval" ? "pill warn"
+    : c.kind === "cert-expiring-soon" || c.kind === "waiting-for-approval" || c.kind === "awaiting-backup" ? "pill warn"
     : "pill";
   const apps = pod?.appsServed ?? [];
   const serviceCount = Array.isArray(apps) ? apps.length : 0;
@@ -523,6 +529,12 @@ export function renderServerCard(server, pod, opts = {}) {
   // on the card itself. Every other server deletes from its own page.
   const deadDelete = c.kind === "never-seen"
     ? `<div class="row mt-2"><button class="secondary danger full-width js-delete-server" data-fqdn="${escapeHtml(server.serverId)}">Delete server</button></div>`
+    : "";
+  // A server waiting for its backup: send it (pick the files again), or give
+  // up and delete it, right from the card.
+  const awaitingBackup = c.kind === "awaiting-backup"
+    ? `<div class="row-2 mt-2"><button class="full-width js-send-backup" data-fqdn="${escapeHtml(server.serverId)}">Send the backup</button>` +
+      `<button class="secondary danger full-width js-delete-server" data-fqdn="${escapeHtml(server.serverId)}">Delete server</button></div>`
     : "";
   // L3 — a box waiting for the owner to approve its boot/unlock is ACTIONABLE:
   // iOS/Android approve straight from the card, so the webapp card gets an
@@ -549,6 +561,7 @@ export function renderServerCard(server, pod, opts = {}) {
   return `
     ${row}
     ${deadDelete}
+    ${awaitingBackup}
     ${approveUnlock}
   `;
 }
@@ -1277,6 +1290,15 @@ function wireHomeListControls(list) {
       void deleteRegisteredServer(fqdn, entry?.identityPubKey);
     });
   });
+  list.querySelectorAll(".js-send-backup").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const { openImportBackup } = await import("./import-backup.js");
+      openImportBackup({ targetFqdn: btn.getAttribute("data-fqdn") || "" }).catch((err) => {
+        if (err?.code !== "cancelled") toast(humanError(err), "err");
+      });
+    });
+  });
   // A pending order (never registered) keeps the plain free-the-name release.
   list.querySelectorAll(".js-delete-dead-server").forEach((btn) => {
     btn.addEventListener("click", (e) => {
@@ -1572,7 +1594,8 @@ export async function renderHome() {
       const cls = classifyServer(s, pod, { hasLiveUnlockRequest });
       const bucket = statusBucketForKind(cls.kind);
       registered.push({ server: s, pod, hasLiveUnlockRequest, bucket });
-      if (bucket === "pending") {
+      // A server waiting for its backup is up, not deploying: no sliver op.
+      if (bucket === "pending" && cls.kind !== "awaiting-backup" && cls.kind !== "restoring-backup") {
         deployPods.push({
           podId: String(s.serverId ?? ""),
           name: serverShortName(s.serverId),

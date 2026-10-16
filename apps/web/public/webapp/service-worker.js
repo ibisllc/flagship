@@ -227,7 +227,11 @@
 //       running server (moved off the create-server page) and Import a
 //       backup, without the clone explainer. (v102-v105 belong to feature
 //       branches.)
-const SHELL_VERSION = "v106";
+//  v107: Backups are two files (a passcode-protected backup file and the
+//       data file); Import a backup restores onto a new server made from
+//       the backup's settings, which waits for the app to send it
+//       (lib/serverBackupFormat.js, vendor/noble-hashes/sha2.js).
+const SHELL_VERSION = "v107";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -266,6 +270,7 @@ const OPTIONAL_SHELL = [
   "/vendor/noble-hashes/blake2.js",
   "/vendor/noble-hashes/_blake.js",
   "/vendor/noble-hashes/_md.js",
+  "/vendor/noble-hashes/sha2.js",
   "/vendor/noble-hashes/_u64.js",
   "/vendor/noble-hashes/utils.js",
   "/vendor/noble-hashes/crypto.js",
@@ -304,6 +309,7 @@ const OPTIONAL_SHELL = [
   "/lib/serverShare.js",
   "/lib/serverShares.js",
   "/lib/serverArchive.js",
+  "/lib/serverBackupFormat.js",
   "/lib/appBackup.js",
   "/lib/activityFeed.js",
   "/lib/accountAccess.js",

@@ -21,7 +21,8 @@ import { controlApex, serverFqdn } from "../lib/apex.js";
 import { buildPairingOrder } from "../lib/bootApproval.js";
 import { markSwkDepositPending, clearSwkDeposit } from "../lib/swkDeposit.js";
 import { markPairingDepositPending, clearPairingDeposit } from "../lib/pairingDeposit.js";
-import { setSessionToken } from "../lib/api.js";
+import { setSessionToken, setSessionTokenForPod } from "../lib/api.js";
+import { attachRestoreOrder } from "../lib/serverBackupFormat.js";
 import { throwIfRateLimited } from "../lib/rateLimited.js";
 
 registerView("view-create-server");
@@ -44,7 +45,7 @@ const RESERVED_SERVER_LABELS = new Set([
   "broadcast", "servers", "all",
 ]);
 /** True iff `name` is a syntactically valid, non-reserved server name. */
-function isValidServerName(name) {
+export function isValidServerName(name) {
   return typeof name === "string"
     && SERVER_NAME_RE.test(name)
     && !RESERVED_SERVER_LABELS.has(name);
@@ -391,7 +392,7 @@ export function clampRecipeTtlMs(raw) {
  * The bundle the webapp already produces (`onWireBlob`) is identical
  * to that shape; we just splat the signature into `blobSignatureHex`.
  */
-function downloadRecipe(blobBundle) {
+export function downloadRecipe(blobBundle) {
   const recipe = { ...blobBundle.blob, blobSignatureHex: blobBundle.blobSignature };
   // Secret-free pairing (offline/embed): carry the unsigned plaintext
   // `pairingOrder` sibling (the owner-IRK-signed `add-paired-session` order) into
@@ -694,9 +695,23 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
   try {
     const pairing = await buildPairingOrder({ serverDomain: blob.serverDomain });
     setSessionToken(pairing.token);
+    setSessionTokenForPod(blob.serverDomain, pairing.token);
     pairingOrderJson = pairing.pairingOrderJson;
   } catch (e) {
+    if (inputs.restore) throw e;
     console.warn("create-time pairing order build failed (non-fatal):", e);
+  }
+  // A server made to restore a backup (docs/server-backup-and-clone.md): the
+  // owner-signed restore order rides beside the pairing order, so the box
+  // waits for exactly that backup from the moment it is paired.
+  if (inputs.restore && pairingOrderJson) {
+    pairingOrderJson = await attachRestoreOrder(pairingOrderJson, {
+      serverDomain: blob.serverDomain,
+      archiveId: inputs.restore.archiveId,
+      bytes: inputs.restore.bytes,
+      sha256: inputs.restore.sha256,
+      sign: (bytes) => signWithIrk(session.umk, bytes),
+    });
   }
 
   const bundle = { blob: onWireBlob, blobSignature: bytesToHex(blobSig) };
@@ -729,6 +744,33 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
     });
   }
   return bundle;
+}
+
+/**
+ * Make a server from a backup's saved settings: the same signed recipe, the
+ * same deliverable (the recipe file for Flagship Studio), plus the restore
+ * order. Resolves to the new server's domain.
+ */
+export async function createServerForRestore({ serverName, bootUnlockMode, diskEncryption, restore }) {
+  const session = getSession();
+  if (!session.umk || !session.irk) throw new Error("Unlock the webapp first");
+  if (!isValidServerName(serverName)) throw new Error("That name can't be used for a server.");
+  const username = await ensureUsername();
+  const inputs = {
+    serverName,
+    backupPolicy: "phone-only",
+    recipeTtlMs: DEFAULT_RECIPE_TTL_MS,
+    bootUnlockMode,
+    diskEncryption,
+    embedSecrets: false,
+    debugFriendly: false,
+    restore,
+  };
+  const bundle = await mintInstallBlobBundle(session, username, inputs, { skipClaim: !!session.username });
+  downloadRecipe(bundle);
+  const { restore: _restore, ...draft } = inputs;
+  await saveDraft({ ...draft, status: "delivered", deliveredAt: Date.now(), code: bundle.blob.authCode.serial }).catch(() => {});
+  return { serverDomain: bundle.blob.serverDomain, serial: bundle.blob.authCode.serial };
 }
 
 /** Live inline validation for the server-name field — mirrors the

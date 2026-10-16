@@ -87,14 +87,16 @@ import {
   BACKUP_EXCLUDES_NOTE,
   BACKUP_NOTE,
   BACKUP_TITLE,
-  backupFileName,
+  PASSCODE_NOTE,
   backupDownloadLink,
+  backupStatus,
   downloadHere,
   formatBytes,
   forgetBackup,
   startServerBackup,
   waitForBackup,
 } from "../lib/serverArchive.js";
+import { generatePasscode, passcodeProblem } from "../lib/serverBackupFormat.js";
 import {
   startMigration,
   fetchMigration,
@@ -1481,8 +1483,9 @@ function wireBackup(body) {
   });
 }
 
-// Make the backup on the server, then hand the user the file. One dialog, no
-// choices: it works, shows progress, and ends with the download.
+// Make the backup on the server, then hand the user its two files. The first
+// step sets the passcode (a suggested one, or the user's own); a backup that
+// is already being made is followed instead.
 async function openBackupDialog(body) {
   const session = getSession();
   if (!session.umk) {
@@ -1491,19 +1494,43 @@ async function openBackupDialog(body) {
   }
   const serverFqdn = body.serverFqdn;
   const client = boxClient(serverFqdn);
+  const suggested = generatePasscode();
   const dlg = document.createElement("dialog");
   dlg.className = "modal-card";
   dlg.setAttribute("aria-label", BACKUP_TITLE);
   dlg.innerHTML = `
     <h3 class="modal-title">${escapeHtml(BACKUP_TITLE)}</h3>
-    <p class="modal-message" data-bk-status>Making the backup…</p>
-    <progress class="full-width" data-bk-bar max="100" value="0"></progress>
-    <p class="note small">${escapeHtml(BACKUP_EXCLUDES_NOTE)}</p>
-    <p class="note small hidden" data-bk-hint></p>
+    <div data-bk-pass class="hidden">
+      <p class="note">Set the backup's passcode. ${escapeHtml(PASSCODE_NOTE)}</p>
+      <div data-bk-suggested>
+        <label class="caption" for="bk-suggested">Suggested passcode</label>
+        <div class="row-2">
+          <input id="bk-suggested" class="mono" readonly value="${escapeHtml(suggested)}" />
+          <button class="secondary" data-bk-copy-pass>Copy</button>
+        </div>
+        <button class="linklike mt-2" data-bk-own>Use my own passcode instead</button>
+      </div>
+      <div data-bk-own-fields class="hidden">
+        <label class="caption" for="bk-pass1">Your passcode</label>
+        <input id="bk-pass1" type="password" class="full-width" autocomplete="new-password" data-bk-pass1 />
+        <label class="caption mt-2" for="bk-pass2">Type it again</label>
+        <input id="bk-pass2" type="password" class="full-width" autocomplete="new-password" data-bk-pass2 />
+        <p class="note small" data-bk-pass-rule></p>
+        <button class="linklike mt-2" data-bk-use-suggested>Use the suggested passcode</button>
+      </div>
+      <label class="row mt-2"><input type="checkbox" data-bk-written /> <span>I've saved the passcode somewhere safe</span></label>
+      <button class="full-width mt-2" data-bk-go disabled>Make the backup</button>
+    </div>
+    <div data-bk-progress class="hidden">
+      <p class="modal-message" data-bk-status>Making the backup…</p>
+      <progress class="full-width" data-bk-bar max="100" value="0"></progress>
+      <p class="note small">${escapeHtml(BACKUP_EXCLUDES_NOTE)}</p>
+      <p class="note small hidden" data-bk-hint></p>
+    </div>
     <p class="modal-error err-text hidden" data-bk-error></p>
     <div class="row-2 mt-3">
       <button class="secondary" data-bk-close>Close</button>
-      <button class="hidden" data-bk-save>Download backup</button>
+      <button class="hidden" data-bk-save>Download both files</button>
     </div>
     <div class="row-2 mt-2">
       <button class="secondary hidden" data-bk-copy>Copy download link</button>
@@ -1512,14 +1539,17 @@ async function openBackupDialog(body) {
   `;
   document.body.appendChild(dlg);
   dlg.showModal();
-  const statusEl = dlg.querySelector("[data-bk-status]");
-  const barEl = dlg.querySelector("[data-bk-bar]");
-  const errEl = dlg.querySelector("[data-bk-error]");
-  const saveBtn = dlg.querySelector("[data-bk-save]");
-  const copyBtn = dlg.querySelector("[data-bk-copy]");
-  const removeBtn = dlg.querySelector("[data-bk-remove]");
-  const hintEl = dlg.querySelector("[data-bk-hint]");
-  const closeBtn = dlg.querySelector("[data-bk-close]");
+  const q = (sel) => dlg.querySelector(sel);
+  const passEl = q("[data-bk-pass]");
+  const progressEl = q("[data-bk-progress]");
+  const statusEl = q("[data-bk-status]");
+  const barEl = q("[data-bk-bar]");
+  const errEl = q("[data-bk-error]");
+  const saveBtn = q("[data-bk-save]");
+  const copyBtn = q("[data-bk-copy]");
+  const removeBtn = q("[data-bk-remove]");
+  const hintEl = q("[data-bk-hint]");
+  const closeBtn = q("[data-bk-close]");
   let closed = false;
   const cleanup = () => {
     closed = true;
@@ -1528,79 +1558,142 @@ async function openBackupDialog(body) {
   };
   closeBtn.addEventListener("click", cleanup);
   dlg.addEventListener("close", () => { closed = true; });
-
-  try {
-    await startServerBackup({ client, umk: session.umk });
-    const archive = await waitForBackup({
-      client,
-      onProgress: (a) => {
-        if (closed) throw Object.assign(new Error("closed"), { code: "cancelled" });
-        const { done, total, app } = a.progress || {};
-        statusEl.textContent = total ? `Backing up ${app || "apps"} (${Math.min(done + 1, total)} of ${total})…` : "Making the backup…";
-        barEl.value = total ? Math.round((done / total) * 100) : 0;
-      },
-    });
-    barEl.value = 100;
-    statusEl.textContent = `Backup ready (${formatBytes(archive.bytes)}). Your browser saves it straight to disk.`;
-    if (Array.isArray(archive.left) && archive.left.length > 0) {
-      errEl.textContent = `Left out (no source to rebuild them from): ${archive.left.map((a) => a.name).join(", ")}.`;
-      errEl.classList.remove("hidden");
-    }
-    const link = await backupDownloadLink({ client });
-    saveBtn.classList.remove("hidden");
-    copyBtn.classList.remove("hidden");
-    removeBtn.classList.remove("hidden");
-    hintEl.textContent =
-      `Download here, or copy the link to open it on another computer: that page asks the Flagship app on your phone to approve. ` +
-      `The link works until ${new Date(link.expiresAt).toLocaleString()}; a download that stops picks up where it left off.`;
-    hintEl.classList.remove("hidden");
-    saveBtn.addEventListener("click", async () => {
-      saveBtn.disabled = true;
-      try {
-        await downloadHere({
-          client,
-          serverDomain: serverFqdn,
-          archiveId: archive.archiveId,
-          umk: session.umk,
-          signWithIrk: sensitiveSigner(),
-        });
-        toast("Download started", "ok");
-      } catch (e) {
-        errEl.textContent = humanError(e);
-        errEl.classList.remove("hidden");
-      } finally {
-        saveBtn.disabled = false;
-      }
-    });
-    copyBtn.addEventListener("click", async () => {
-      try {
-        await navigator.clipboard.writeText(link.url);
-        toast("Download link copied", "ok");
-      } catch {
-        toast("Couldn't copy the link", "err");
-      }
-    });
-    removeBtn.addEventListener("click", async () => {
-      removeBtn.disabled = true;
-      try {
-        await forgetBackup({ client });
-        statusEl.textContent = "The server's copy is removed; the link no longer works.";
-        saveBtn.classList.add("hidden");
-        copyBtn.classList.add("hidden");
-        removeBtn.classList.add("hidden");
-        hintEl.classList.add("hidden");
-      } catch (e) {
-        errEl.textContent = humanError(e);
-        errEl.classList.remove("hidden");
-        removeBtn.disabled = false;
-      }
-    });
-  } catch (e) {
-    if (closed || e?.code === "cancelled") return;
+  const showError = (e) => {
     errEl.textContent = humanError(e);
     errEl.classList.remove("hidden");
-    statusEl.textContent = "The backup didn't finish.";
-    barEl.classList.add("hidden");
+  };
+
+  // The passcode the backup gets: null until the user's choice is good.
+  let own = false;
+  const chosenPasscode = () => {
+    if (!own) return suggested;
+    const p1 = q("[data-bk-pass1]").value;
+    const p2 = q("[data-bk-pass2]").value;
+    if (passcodeProblem(p1) || p1 !== p2) return null;
+    return p1;
+  };
+  const refreshGo = () => {
+    const rule = q("[data-bk-pass-rule]");
+    if (own) {
+      const p1 = q("[data-bk-pass1]").value;
+      const p2 = q("[data-bk-pass2]").value;
+      rule.textContent = !p1 ? "At least 12 characters with three kinds (lower, upper, digits, symbols), or 20 of anything."
+        : passcodeProblem(p1) ?? (p2 && p1 !== p2 ? "The two don't match." : "Good.");
+    }
+    q("[data-bk-go]").disabled = !(chosenPasscode() && q("[data-bk-written]").checked);
+  };
+  q("[data-bk-own]").addEventListener("click", () => {
+    own = true;
+    q("[data-bk-suggested]").classList.add("hidden");
+    q("[data-bk-own-fields]").classList.remove("hidden");
+    refreshGo();
+  });
+  q("[data-bk-use-suggested]").addEventListener("click", () => {
+    own = false;
+    q("[data-bk-suggested]").classList.remove("hidden");
+    q("[data-bk-own-fields]").classList.add("hidden");
+    refreshGo();
+  });
+  for (const sel of ["[data-bk-pass1]", "[data-bk-pass2]", "[data-bk-written]"]) {
+    q(sel).addEventListener("input", refreshGo);
+    q(sel).addEventListener("change", refreshGo);
+  }
+  q("[data-bk-copy-pass]").addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(suggested);
+      toast("Passcode copied", "ok");
+    } catch {
+      toast("Couldn't copy the passcode", "err");
+    }
+  });
+
+  const run = async (passcode) => {
+    passEl.classList.add("hidden");
+    progressEl.classList.remove("hidden");
+    try {
+      statusEl.textContent = passcode ? "Protecting the backup with its passcode…" : "Making the backup…";
+      await startServerBackup({ client, umk: session.umk, passcode });
+      const archive = await waitForBackup({
+        client,
+        onProgress: (a) => {
+          if (closed) throw Object.assign(new Error("closed"), { code: "cancelled" });
+          const { done, total, app } = a.progress || {};
+          statusEl.textContent = total ? `Backing up ${app || "apps"} (${Math.min(done + 1, total)} of ${total})…` : "Making the backup…";
+          barEl.value = total ? Math.round((done / total) * 100) : 0;
+        },
+      });
+      barEl.value = 100;
+      statusEl.textContent = `Backup ready: ${archive.backupFileName} and ${archive.dataFileName} (${formatBytes(archive.bytes)}). Keep the two files together; your browser saves them straight to disk.`;
+      if (Array.isArray(archive.left) && archive.left.length > 0) {
+        errEl.textContent = `Left out (no source to rebuild them from): ${archive.left.map((a) => a.name).join(", ")}.`;
+        errEl.classList.remove("hidden");
+      }
+      const link = await backupDownloadLink({ client });
+      saveBtn.classList.remove("hidden");
+      copyBtn.classList.remove("hidden");
+      removeBtn.classList.remove("hidden");
+      hintEl.textContent =
+        `Download here, or copy the link to open it on another computer: that page asks the Flagship app on your phone to approve. ` +
+        `The link works until ${new Date(link.expiresAt).toLocaleString()}; a download that stops picks up where it left off.`;
+      hintEl.classList.remove("hidden");
+      saveBtn.addEventListener("click", async () => {
+        saveBtn.disabled = true;
+        try {
+          await downloadHere({
+            client,
+            serverDomain: serverFqdn,
+            archiveId: archive.archiveId,
+            umk: session.umk,
+            signWithIrk: sensitiveSigner(),
+          });
+          toast("Downloads started", "ok");
+        } catch (e) {
+          showError(e);
+        } finally {
+          saveBtn.disabled = false;
+        }
+      });
+      copyBtn.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(link.url);
+          toast("Download link copied", "ok");
+        } catch {
+          toast("Couldn't copy the link", "err");
+        }
+      });
+      removeBtn.addEventListener("click", async () => {
+        removeBtn.disabled = true;
+        try {
+          await forgetBackup({ client });
+          statusEl.textContent = "The server's copy is removed; the link no longer works.";
+          saveBtn.classList.add("hidden");
+          copyBtn.classList.add("hidden");
+          removeBtn.classList.add("hidden");
+          hintEl.classList.add("hidden");
+        } catch (e) {
+          showError(e);
+          removeBtn.disabled = false;
+        }
+      });
+    } catch (e) {
+      if (closed || e?.code === "cancelled") return;
+      showError(e);
+      statusEl.textContent = "The backup didn't finish.";
+      barEl.classList.add("hidden");
+    }
+  };
+
+  q("[data-bk-go]").addEventListener("click", () => {
+    const passcode = chosenPasscode();
+    if (passcode) void run(passcode);
+  });
+  // A backup already under way (or ready) on this server: follow it.
+  const current = await backupStatus({ client }).catch(() => null);
+  if (current?.state === "building" || current?.state === "ready") {
+    void run(null);
+  } else {
+    passEl.classList.remove("hidden");
+    refreshGo();
   }
 }
 
@@ -2147,7 +2240,7 @@ async function openMigrateDialog(body) {
     initEl.classList.remove("hidden");
     backupEl.textContent = ctx.backupEnrolled
       ? "Peer-backup is enrolled — the new box restores from it while this one keeps serving."
-      : "No backup is enrolled for this server, and the migration moves data through backup. Enable backup first, or use Backup/clone server and import the file onto the new server instead.";
+      : "No backup is enrolled for this server, and the migration moves data through backup. Enable backup first, or use Backup/clone server and restore it from Home onto a new server instead.";
     actionBtn.textContent = "Start migration";
     actionBtn.classList.remove("hidden");
 

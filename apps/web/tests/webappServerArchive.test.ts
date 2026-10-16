@@ -7,20 +7,28 @@ import { fileURLToPath } from "node:url";
 // @ts-expect-error plain JS module
 import * as archive from "../public/webapp/lib/serverArchive.js";
 // @ts-expect-error plain JS module
+import * as fmt from "../public/webapp/lib/serverBackupFormat.js";
+// @ts-expect-error plain JS module
 import { boxEntryRow, mergeFeed } from "../public/webapp/lib/activityFeed.js";
 // @ts-expect-error plain JS module
-import { deriveServerArchiveKeyFromSeed } from "../public/webapp/keystore.js";
+import { deriveServerArchiveKeyFromSeed, signWithIrk } from "../public/webapp/keystore.js";
 // @ts-expect-error plain JS module
-import { importTargets } from "../public/webapp/views/import-backup.js";
+import { restoreNameFor, restoreNameProblem, serverWaitingFor, takenServerNames, savedSettingsLine } from "../public/webapp/views/import-backup.js";
+// @ts-expect-error plain JS module
+import { classifyServer, statusBucketForKind, renderServerCard } from "../public/webapp/views/home.js";
 
-const V = JSON.parse(
-  readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../../packages/protocol/test-vectors/server-archive/vectors.json"), "utf8"),
-) as { cases: Array<{ umkSeedHex: string; archiveIdHex: string; keyHex: string }>; invalidArchiveIds: string[] };
+const here = dirname(fileURLToPath(import.meta.url));
+const vectors = (name: string) => JSON.parse(readFileSync(join(here, `../../../packages/protocol/test-vectors/${name}/vectors.json`), "utf8"));
+const V = vectors("server-archive") as { cases: Array<{ umkSeedHex: string; archiveIdHex: string; keyHex: string }>; invalidArchiveIds: string[] };
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const B = vectors("server-backup") as any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const R = vectors("server-restore") as any;
 
 const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
 const seed = (h: string) => Uint8Array.from(Buffer.from(h, "hex"));
 
-describe("the webapp's archive key", () => {
+describe("the webapp's account key for backups", () => {
   it.each(V.cases.map((c) => [c.archiveIdHex, c] as const))("matches the shared vector %s", async (_id, c) => {
     expect(hex(await deriveServerArchiveKeyFromSeed(seed(c.umkSeedHex), c.archiveIdHex))).toBe(c.keyHex);
   });
@@ -34,29 +42,110 @@ describe("the webapp's archive key", () => {
   });
 });
 
-function headerFile(extra: Record<string, unknown> = {}, bytes = 100) {
-  const h = { magic: "flagship-archive", v: 1, archiveId: "00112233445566778899aabbccddeeff", createdAt: 5, sourceServer: "home.alice.flagship.services", frameBytes: 1048576, apps: [{ serviceId: "alice--wiki", name: "Wiki" }], ...extra };
-  const buf = Buffer.concat([Buffer.from(`${JSON.stringify(h)}\n`), Buffer.alloc(bytes, 1)]);
-  return new Blob([buf]);
-}
+describe("server-backup vectors (webapp port)", () => {
+  it("derives both slot keys, including Argon2id at the default cost", async () => {
+    expect(hex(await deriveServerArchiveKeyFromSeed(seed(B.umkSeedHex), B.archiveId))).toBe(B.accountKekHex);
+    expect(hex(await fmt.passcodeKek(B.passcode, B.slots.passcode.kdf))).toBe(B.passcodeKekHex);
+    expect(hex(await fmt.passcodeKek(B.defaultParamsKdf.passcode, B.defaultParamsKdf.kdf))).toBe(B.defaultParamsKdf.kekHex);
+  }, 60_000);
 
-describe("reading a picked file", () => {
-  it("reads the header", async () => {
-    const h = await archive.readArchiveHeader(headerFile());
-    expect(h).toMatchObject({ archiveId: "00112233445566778899aabbccddeeff", sourceServer: "home.alice.flagship.services", apps: [{ name: "Wiki" }] });
+  it("normalizes passcodes", async () => {
+    for (const n of B.normalize) expect(hex(await fmt.passcodeKek(n.input, B.slots.passcode.kdf))).toBe(n.kekHex);
   });
-  it.each([
-    [new Blob(["hello"]), /isn't a Flagship backup/],
-    [headerFile({ magic: "other" }), /isn't a Flagship backup/],
-    [headerFile({ v: 2 }), /newer version/],
-    [headerFile({ archiveId: "xx" }), /damaged/],
-  ])("refuses a bad file %#", async (f, why) => {
-    await expect(archive.readArchiveHeader(f)).rejects.toThrow(why);
+
+  it("re-creates the slots and the file byte for byte", async () => {
+    const key = seed(B.contentKeyHex);
+    const n = B.slotNonces;
+    const p = await fmt.wrapPasscodeSlot(B.archiveId, key, B.passcode, seed(n.passcodeSaltHex), seed(n.passcodeNonceHex), B.slots.passcode.kdf);
+    const a = await fmt.wrapAccountSlot(B.archiveId, key, seed(B.accountKekHex), seed(n.accountNonceHex));
+    expect(p).toEqual(B.slots.passcode);
+    expect(a).toEqual(B.slots.account);
+    expect(fmt.serializeBackupFile(await fmt.sealBackupFile(B.archiveId, key, [p, a], B.body, seed(n.bodyNonceHex)))).toBe(B.file);
+  });
+
+  it("opens with the account key or the passcode, and refuses the wrong ones", async () => {
+    const f = fmt.parseBackupFile(B.file);
+    const viaAccount = await fmt.openWithAccountKey(f, seed(B.accountKekHex));
+    expect(hex(viaAccount.contentKey)).toBe(B.contentKeyHex);
+    expect(viaAccount.body).toEqual(B.body);
+    const viaPass = await fmt.openWithPasscode(f, B.passcode);
+    expect(viaPass.body).toEqual(B.body);
+    await expect(fmt.openWithPasscode(f, B.wrongPasscode)).rejects.toThrow(/doesn't open/);
+    const other = await deriveServerArchiveKeyFromSeed(seed(B.wrongUmkSeedHex), B.archiveId);
+    expect(await fmt.openWithAccountKey(f, other)).toBeNull();
+  });
+
+  it.each(B.tampered.map((t: { why: string }) => [t.why, t]))("refuses a tampered file: %s", async (why, t) => {
+    const f = fmt.parseBackupFile((t as { file: string }).file);
+    await expect(fmt.openWithPasscode(f, B.passcode)).rejects.toThrow();
+    const acct = await fmt.openWithAccountKey(f, seed(B.accountKekHex)).catch(() => null);
+    if (why === "passcode params changed") expect(acct?.via).toBe("account");
+    else expect(acct).toBeNull();
+  });
+
+  it.each(B.malformed.map((t: { why: string }) => [t.why, t]))("refuses a malformed file: %s", (_why, t) => {
+    const m = t as { file: string; code: string };
+    let err: { code?: string } | null = null;
+    try {
+      fmt.parseBackupFile(m.file);
+    } catch (e) {
+      err = e as { code?: string };
+    }
+    expect(err?.code).toBe(m.code);
+  });
+
+  it("generates passcodes and applies the rules", () => {
+    const bytes = seed(B.generatedPasscode.rngBytesHex);
+    let i = 0;
+    expect(fmt.generatePasscode((n: number) => bytes.slice(i, (i += n)))).toBe(B.generatedPasscode.passcode);
+    for (const p of B.passcodeRules.ok) expect(fmt.passcodeProblem(p)).toBeNull();
+    for (const p of B.passcodeRules.weak) expect(fmt.passcodeProblem(p)).not.toBeNull();
+    expect(fmt.BACKUP_PASSCODE_ALPHABET).toBe(B.alphabet);
   });
 });
 
-describe("backup and import calls", () => {
-  it("starts a backup with an id and the derived key, never the UMK", async () => {
+describe("server-restore vectors (webapp port)", () => {
+  it.each(R.cases.map((c: unknown, i: number) => [i, c]))("signs case #%i beside the pairing order", async (_i, c) => {
+    const k = c as { order: { serverDomain: string; archiveId: string; bytes: number; sha256: string; issuedAt: number }; canonical: string; signature: string };
+    expect(new TextDecoder().decode(fmt.serverRestoreCanonicalBytes(k.order))).toBe(k.canonical);
+    const json = await fmt.attachRestoreOrder(JSON.stringify({ request: { type: "add-paired-session" }, signature: "ab" }), {
+      ...k.order,
+      sign: (bytes: Uint8Array) => signWithIrk(seed(R.umkSeedHex), bytes),
+    });
+    const o = JSON.parse(json);
+    expect(o.request).toEqual({ type: "add-paired-session" });
+    expect(o.restore).toEqual({ order: k.order, signatureHex: k.signature });
+  });
+  it.each(R.invalid.map((c: unknown, i: number) => [i, c]))("refuses invalid #%i", (_i, c) => {
+    expect(() => fmt.serverRestoreCanonicalBytes(c)).toThrow();
+  });
+});
+
+describe("picked files", () => {
+  const dataBlob = (body: Buffer) => new Blob([Buffer.concat([Buffer.from(fmt.BACKUP_DATA_MAGIC), body])]);
+  it("tells the backup file from the data file", async () => {
+    expect(await fmt.classifyPicked(new Blob([B.file]))).toBe("backup");
+    expect(await fmt.classifyPicked(dataBlob(Buffer.alloc(10)))).toBe("data");
+    expect(await fmt.classifyPicked(new Blob(["hello"]))).toBeNull();
+    expect(await fmt.classifyPicked(new Blob(['{"magic":"other"}']))).toBeNull();
+  });
+  it("checks the data file's size and SHA-256 in slices", async () => {
+    const blob = dataBlob(Buffer.alloc(5000, 3));
+    const raw = Buffer.from(await blob.arrayBuffer());
+    const data = { fileName: "home.flagship-data", bytes: raw.length, sha256: hex(sha256(raw)), frameBytes: 1048576 };
+    const seen: number[] = [];
+    await fmt.checkDataFile(blob, data, { sliceBytes: 1000, onProgress: (n: number) => seen.push(n) });
+    expect(seen.at(-1)).toBe(raw.length);
+    expect(seen.length).toBe(Math.ceil(raw.length / 1000));
+    await expect(fmt.checkDataFile(blob, { ...data, bytes: raw.length + 1 })).rejects.toThrow(/isn't this backup's/);
+    await expect(fmt.checkDataFile(blob, { ...data, sha256: "00".repeat(32) })).rejects.toThrow(/doesn't match/);
+    const notData = new Blob([Buffer.alloc(raw.length, 1)]);
+    await expect(fmt.checkDataFile(notData, data)).rejects.toThrow(/isn't a Flagship backup's data file/);
+  });
+});
+
+describe("backup and restore calls", () => {
+  it("starts a backup with the content key and both slots, never the UMK or the passcode", async () => {
     const calls: Array<{ path: string; body: any }> = [];
     const client = {
       fetch: async (path: string, init: any) => {
@@ -64,11 +153,18 @@ describe("backup and import calls", () => {
         calls.push({ path, body: JSON.parse(init.body) });
       },
     };
-    const umk = seed(V.cases[0]!.umkSeedHex);
-    const id = await archive.startServerBackup({ client, umk, rng: () => seed(V.cases[0]!.archiveIdHex) });
-    expect(id).toBe(V.cases[0]!.archiveIdHex);
-    expect(calls[0]).toEqual({ path: "/api/screens/server-archive/start", body: { archiveId: id, key: V.cases[0]!.keyHex } });
-    expect(JSON.stringify(calls)).not.toContain(V.cases[0]!.umkSeedHex);
+    const umk = seed(B.umkSeedHex);
+    const id = await archive.startServerBackup({ client, umk, passcode: B.passcode, argonParams: { m: 64, t: 1, p: 1 } });
+    expect(calls).toHaveLength(1);
+    const { archiveId, key, slots } = calls[0]!.body;
+    expect(archiveId).toBe(id);
+    expect(slots.map((s: any) => s.kind)).toEqual(["passcode", "account"]);
+    // The slots the box writes open with both the passcode and this account.
+    const file = fmt.parseBackupFile(fmt.serializeBackupFile(await fmt.sealBackupFile(archiveId, seed(key), slots, B.body, new Uint8Array(12))));
+    expect(hex((await fmt.openWithPasscode(file, B.passcode)).contentKey)).toBe(key);
+    expect(hex((await fmt.openWithAccountKey(file, await deriveServerArchiveKeyFromSeed(umk, archiveId))).contentKey)).toBe(key);
+    expect(JSON.stringify(calls)).not.toContain(B.umkSeedHex);
+    expect(JSON.stringify(calls)).not.toContain(B.passcode);
   });
 
   it("follows a backup already being made instead of starting another", async () => {
@@ -79,78 +175,135 @@ describe("backup and import calls", () => {
         posts.push(path);
       },
     };
-    expect(await archive.startServerBackup({ client, umk: seed(V.cases[0]!.umkSeedHex) })).toBe("aa".repeat(16));
+    expect(await archive.startServerBackup({ client, umk: seed(B.umkSeedHex) })).toBe("aa".repeat(16));
     expect(posts).toEqual([]);
   });
 
-  it("uploads in order, then commits with the key for the archive's own id", async () => {
-    const puts: number[] = [];
-    const posts: string[] = [];
+  it("uploads from where the server has got to, and follows its count after a refusal", async () => {
+    const offsets: number[] = [];
     const client = {
       baseUrl: "https://clone.alice.flagship.services",
       token: () => "tok",
-      fetch: vi.fn(async (path: string, init: any) => void posts.push(`${path} ${init.body}`)),
+      fetch: vi.fn(async () => ({ archiveId: "aa", received: 3 })),
     };
+    let refused = false;
     const fetchImpl = vi.fn(async (url: string, init: any) => {
-      expect(init.method).toBe("POST");
-      puts.push(Number(new URL(url).searchParams.get("offset")));
+      const offset = Number(new URL(url).searchParams.get("offset"));
+      offsets.push(offset);
       expect(init.headers["x-flagship-session"]).toBe("tok");
-      return new Response(JSON.stringify({ received: 1 }), { status: 200 });
+      if (offset === 7 && !refused) {
+        refused = true;
+        return new Response(JSON.stringify({ error: "chunk out of order", received: 5 }), { status: 409 });
+      }
+      return new Response(JSON.stringify({ received: offset + init.body.length }), { status: 200 });
     });
-    const file = headerFile({ archiveId: V.cases[0]!.archiveIdHex }, archive.UPLOAD_CHUNK_BYTES + 10);
-    await archive.importBackup({ client, file, umk: seed(V.cases[0]!.umkSeedHex), fetchImpl });
-    expect(puts).toEqual([0, archive.UPLOAD_CHUNK_BYTES]);
-    expect(posts[0]).toContain("server-restore/start");
-    expect(posts[1]).toContain(V.cases[0]!.keyHex);
+    await archive.uploadDataFile({ client, blob: new Blob([Buffer.alloc(12)]), archiveId: "aa", fetchImpl, chunkBytes: 4 });
+    expect(offsets).toEqual([3, 7, 5, 9]);
   });
 
   it("shows the server's own words when a chunk is refused", async () => {
-    const client = { baseUrl: "https://x", token: () => "t", fetch: async () => ({}) };
-    const fetchImpl = async () => new Response(JSON.stringify({ error: "chunk out of order" }), { status: 409 });
-    await expect(archive.importBackup({ client, file: headerFile({ archiveId: V.cases[0]!.archiveIdHex }), umk: seed(V.cases[0]!.umkSeedHex), fetchImpl })).rejects.toThrow("chunk out of order");
+    const client = { baseUrl: "https://x", token: () => "t", fetch: async () => ({ received: 0 }) };
+    const fetchImpl = async () => new Response(JSON.stringify({ error: "bad chunk size" }), { status: 400 });
+    await expect(archive.uploadDataFile({ client, blob: new Blob(["abc"]), archiveId: "aa", fetchImpl })).rejects.toThrow("bad chunk size");
   });
 
-  it("downloads through a server link the browser saves to disk (no in-page buffering)", async () => {
+  it("hands over the content key, and says the server keeps waiting when the restore fails", async () => {
+    const posts: any[] = [];
+    await archive.commitRestore({ client: { fetch: async (p: string, i: any) => void posts.push([p, JSON.parse(i.body)]) }, contentKey: seed(B.contentKeyHex) });
+    expect(posts).toEqual([["/api/screens/server-restore/commit", { key: B.contentKeyHex }]]);
+    const client = { fetch: async () => ({ waiting: { archiveId: "aa" }, restore: { state: "failed", reason: "wrong key" } }) };
+    await expect(archive.waitForRestore({ client })).rejects.toThrow(/wrong key\. The server keeps waiting/);
+  });
+
+  it("downloading here approves a fresh request, then lets the browser fetch both files", async () => {
+    const calls: string[] = [];
     const client = {
-      baseUrl: "https://home.alice.flagship.services/",
-      fetch: async (path: string, init: any) => {
-        expect(path).toBe("/api/screens/server-archive/link");
-        expect(init.method).toBe("POST");
-        return { path: `/api/archive-download/${"ab".repeat(32)}`, fileName: "home-2026-10-15.flagship-backup", bytes: 9, expiresAt: 5 };
+      baseUrl: "https://home.alice.flagship.services",
+      fetch: async (path: string) => {
+        calls.push(path);
+        return path.endsWith("/link") ? { path: `/api/archive-download/${"ab".repeat(32)}`, backupFileName: "home.flagship-backup", dataFileName: "home.flagship-data", expiresAt: 1 } : {};
       },
     };
-    const link = await archive.backupDownloadLink({ client });
-    expect(link.url).toBe(`https://home.alice.flagship.services/api/archive-download/${"ab".repeat(32)}`);
-    const clicked: any[] = [];
-    const doc = {
-      body: { appendChild: () => {} },
-      createElement: () => ({ click() { clicked.push({ href: this.href, download: this.download }); }, remove() {} }),
-    };
-    archive.startBrowserDownload(link.url, link.fileName, doc);
-    expect(clicked).toEqual([{ href: link.url, download: "home-2026-10-15.flagship-backup" }]);
-    expect((archive as any).downloadBackup).toBeUndefined();
+    const clicked: Array<{ href: string; download: string }> = [];
+    const doc = { body: { appendChild: () => {} }, createElement: () => ({ click() { clicked.push({ href: (this as any).href, download: (this as any).download }); }, remove() {} }) };
+    await archive.downloadHere({
+      client,
+      serverDomain: "home.alice.flagship.services",
+      archiveId: "00112233445566778899aabbccddeeff",
+      umk: seed(B.umkSeedHex),
+      signWithIrk: async () => new Uint8Array(64),
+      rng: () => seed("0f1e2d3c4b5a69788796a5b4c3d2e1f0"),
+      doc,
+      gapMs: 0,
+    });
+    const base = `https://home.alice.flagship.services/api/archive-download/${"ab".repeat(32)}`;
+    expect(calls).toEqual(["/api/screens/server-archive/link", "/api/screens/server-archive/approve"]);
+    expect(clicked).toEqual([
+      { href: `${base}/backup?r=0f1e2d3c4b5a69788796a5b4c3d2e1f0`, download: "home.flagship-backup" },
+      { href: `${base}/file?r=0f1e2d3c4b5a69788796a5b4c3d2e1f0`, download: "home.flagship-data" },
+    ]);
   });
 
-  it("names the saved file after the server and the day", () => {
-    expect(archive.backupFileName("Home.alice.flagship.services", Date.UTC(2026, 9, 15))).toBe("Home-2026-10-15.flagship-backup");
+  it("names the two files after the server and the day", () => {
+    expect(archive.backupFileNames("Home.alice.flagship.services", Date.UTC(2026, 9, 15))).toEqual({
+      backup: "Home-2026-10-15.flagship-backup",
+      data: "Home-2026-10-15.flagship-data",
+    });
   });
   it("sizes read the way people say them", () => {
     expect(archive.formatBytes(900 * 1024)).toBe("900 KB");
     expect(archive.formatBytes(5 * 1024 * 1024)).toBe("5.0 MB");
     expect(archive.formatBytes(3 * 1024 ** 3)).toBe("3.0 GB");
   });
+  it("routes the download approval to the admin root like every owner order", async () => {
+    // @ts-expect-error plain JS module
+    const { SENSITIVE_TAGS } = await import("../public/webapp/lib/adminRoot.js");
+    expect(SENSITIVE_TAGS.has("flagship/archive-download/v1")).toBe(true);
+  });
 });
 
-describe("import targets", () => {
-  it("lists only online servers this device has a session for", () => {
-    const now = 1_000_000;
-    const pods = [
-      { serverDomain: "a.alice.flagship.services", online: true, lastReportAt: now },
-      { serverDomain: "b.alice.flagship.services", online: false, lastReportAt: 0 },
-    ];
-    const got = importTargets(pods, { hasSession: () => true, now });
-    expect(got.map((t: any) => t.fqdn)).not.toContain("b.alice.flagship.services");
-    for (const t of got) expect(t.label).not.toContain("[object");
+describe("the restore form", () => {
+  const pods = [
+    { serverDomain: "home.alice.flagship.services" },
+    { serverDomain: "old.alice.flagship.services", revokedAt: 5 },
+    { serverDomain: "clone.alice.flagship.services", awaitingBackup: { archiveId: "aa".repeat(16), state: "waiting" } },
+  ];
+  const pending = [{ fqdn: "new.alice.flagship.services", serverName: "new" }];
+  const taken = takenServerNames(pods, pending);
+
+  it("fills in the saved name only when the account doesn't use it", () => {
+    expect([...taken].sort()).toEqual(["clone", "home", "new", "old"]);
+    expect(restoreNameFor("home", taken)).toBe("");
+    expect(restoreNameFor("media", taken)).toBe("media");
+    expect(restoreNameFor("www", taken)).toBe("");
+  });
+  it("checks names as the user types", () => {
+    expect(restoreNameProblem("home", taken)).toMatch(/already have a server called "home"/);
+    expect(restoreNameProblem("-bad", taken)).toMatch(/Lowercase/);
+    expect(restoreNameProblem("", taken)).toMatch(/Pick a name/);
+    expect(restoreNameProblem("media", taken)).toBeNull();
+  });
+  it("finds a server waiting for this backup", () => {
+    expect(serverWaitingFor(pods, "aa".repeat(16))).toBe("clone.alice.flagship.services");
+    expect(serverWaitingFor(pods, "bb".repeat(16))).toBeNull();
+  });
+  it("says which settings come from the backup", () => {
+    expect(savedSettingsLine({ bootUnlockMode: "approve", diskEncryption: "luks" })).toMatch(/asks your phone at every start, disk encrypted/);
+  });
+});
+
+describe("Home shows a server waiting for its backup", () => {
+  const server = { serverId: "clone.alice.flagship.services" };
+  const pod = (awaitingBackup: unknown) => ({ liveness: "live", lastReported: Date.now(), awaitingBackup });
+  it("labels it, keeps it out of the online bucket, and offers Send and Delete", () => {
+    const c = classifyServer(server, pod({ archiveId: "aa".repeat(16), state: "waiting" }));
+    expect(c).toEqual({ kind: "awaiting-backup", label: "Waiting for its backup" });
+    expect(statusBucketForKind(c.kind)).toBe("pending");
+    expect(classifyServer(server, pod({ archiveId: "aa".repeat(16), state: "restoring" })).label).toBe("Restoring its backup");
+    const html = renderServerCard(server, pod({ archiveId: "aa".repeat(16), state: "waiting" }));
+    expect(html).toContain("js-send-backup");
+    expect(html).toContain("js-delete-server");
+    expect(classifyServer(server, pod(undefined)).kind).toBe("online");
   });
 });
 
@@ -175,13 +328,9 @@ describe("the Activity list", () => {
 });
 
 describe("browser download approval (flagship/archive-download/v1)", () => {
-  const AD = JSON.parse(
-    readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../../packages/protocol/test-vectors/archive-download/vectors.json"), "utf8"),
-  ) as { umkSeedHex: string; pub: string; cases: Array<{ serverDomain: string; archiveId: string; requestId: string; issuedAt: number; canonical: string; code: string; signature: string }>; invalid: any[] };
+  const AD = vectors("archive-download") as { umkSeedHex: string; cases: Array<{ serverDomain: string; archiveId: string; requestId: string; issuedAt: number; canonical: string; code: string; signature: string }>; invalid: any[] };
 
   it("matches the shared vectors: canonical bytes, code, and the IRK signature", async () => {
-    // @ts-expect-error plain JS module
-    const { signWithIrk } = await import("../public/webapp/keystore.js");
     for (const c of AD.cases) {
       const a = { serverDomain: c.serverDomain, archiveId: c.archiveId, requestId: c.requestId, issuedAt: c.issuedAt };
       expect(new TextDecoder().decode(archive.archiveDownloadCanonicalBytes(a))).toBe(c.canonical);
@@ -197,35 +346,5 @@ describe("browser download approval (flagship/archive-download/v1)", () => {
       expect(posted).toEqual([{ path: "/api/screens/server-archive/approve", body: { approval: a, signature: c.signature } }]);
     }
     for (const bad of AD.invalid) expect(() => archive.archiveDownloadCanonicalBytes(bad)).toThrow();
-  });
-
-  it("downloading here approves a fresh request, then lets the browser fetch the file", async () => {
-    const calls: string[] = [];
-    const client = {
-      baseUrl: "https://home.alice.flagship.services",
-      fetch: async (path: string) => {
-        calls.push(path);
-        return path.endsWith("/link") ? { path: `/api/archive-download/${"ab".repeat(32)}`, fileName: "home.flagship-backup", expiresAt: 1 } : {};
-      },
-    };
-    const clicked: string[] = [];
-    const doc = { body: { appendChild: () => {} }, createElement: () => ({ click() { clicked.push(this.href); }, remove() {} }) };
-    await archive.downloadHere({
-      client,
-      serverDomain: "home.alice.flagship.services",
-      archiveId: "00112233445566778899aabbccddeeff",
-      umk: seed(AD.umkSeedHex),
-      signWithIrk: async () => new Uint8Array(64),
-      rng: () => seed("0f1e2d3c4b5a69788796a5b4c3d2e1f0"),
-      doc,
-    });
-    expect(calls).toEqual(["/api/screens/server-archive/link", "/api/screens/server-archive/approve"]);
-    expect(clicked).toEqual([`https://home.alice.flagship.services/api/archive-download/${"ab".repeat(32)}/file?r=0f1e2d3c4b5a69788796a5b4c3d2e1f0`]);
-  });
-
-  it("routes the approval to the admin root like every owner order", async () => {
-    // @ts-expect-error plain JS module
-    const { SENSITIVE_TAGS } = await import("../public/webapp/lib/adminRoot.js");
-    expect(SENSITIVE_TAGS.has("flagship/archive-download/v1")).toBe(true);
   });
 });
