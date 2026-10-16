@@ -508,6 +508,23 @@ class MainActivity : FragmentActivity() {
             }
             val pushOn by privacy.pushNotificationsEnabled.collectAsState()
             LaunchedEffect(pushOn) { accessCenter.refresh() }
+
+            // Pending installs this device created: poll each order's status
+            // while the app runs, so the setup notification and the watch
+            // advance without a push or an open install screen.
+            val currentFlagshipServer = androidx.compose.runtime.rememberUpdatedState(effectiveFlagshipServer)
+            val pendingWatchers = remember {
+                com.flagshipserver.app.core.PendingPodWatchers(
+                    app = appState,
+                    server = { currentFlagshipServer.value },
+                    report = { u -> com.flagshipserver.app.companion.ProvisionProgressCenter.report(applicationContext, u) },
+                )
+            }
+            val watchedPods by appState.pods.collectAsState()
+            val watcherScope = androidx.compose.runtime.rememberCoroutineScope()
+            LaunchedEffect(watchedPods, isForeground, accessPaired) {
+                if (isForeground && accessPaired) pendingWatchers.sync(watcherScope) else pendingWatchers.stopAll()
+            }
             LaunchedEffect(useLive, isForeground, accessPaired, accessUnlocked) {
                 if (isForeground && accessPaired && accessUnlocked) runCatching { pushSwitch.resync() }
             }
