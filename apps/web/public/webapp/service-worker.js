@@ -306,7 +306,10 @@
 //  v127: joining and taking over an account ask for this browser's
 //       passphrase and unlock with it after a reload; a backup file's
 //       takeover finishes.
-const SHELL_VERSION = "v127";
+//  v128: a pending server opens its setup view; Create a server speaks to a
+//       browser; the model menu keeps focus; admin invites, rank orders and
+//       share grants take one fresh unlock.
+const SHELL_VERSION = "v128";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
