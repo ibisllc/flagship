@@ -95,17 +95,22 @@ function stopPolling() {
   }
 }
 
+// Where Back goes: Activity's View report opens it from Activity, recovery
+// from the Settings tab.
+let backTo = "view-settings-tab";
+
 export function initPostRecoveryView() {
   $("post-recovery-back")?.addEventListener("click", () => {
     stopPolling();
-    show("view-home");
+    show(backTo);
   });
   $("post-recovery-refresh")?.addEventListener("click", () => {
     void pollOnce();
   });
 }
 
-export function enterPostRecovery() {
+export function enterPostRecovery({ back = "view-settings-tab" } = {}) {
+  backTo = back;
   show("view-post-recovery");
   startPolling();
 }

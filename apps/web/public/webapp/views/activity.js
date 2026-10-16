@@ -23,6 +23,7 @@ import { fetchPodInventory } from "./home.js";
 import { toast } from "../lib/toast.js";
 import { formatDateTime } from "../lib/dateFormat.js";
 import { accountReadFetch } from "../lib/accountRead.js";
+import { getSession } from "../lib/state.js";
 
 registerView("view-activity", { tab: "activity" });
 
@@ -79,18 +80,28 @@ function fmtDate(unixMs) {
 
 const COM_BASE = controlApex();
 
+/** The signed-in account (the session, else this profile's username slot;
+ *  the old `sessionV1` slot is read last for profiles that still carry it). */
+function activeUsername() {
+  const fromSession = getSession()?.username;
+  if (fromSession) return fromSession;
+  try {
+    const name = profileGet("username");
+    if (name) return name;
+    const raw = profileGet("sessionV1");
+    return raw ? JSON.parse(raw).username ?? "" : "";
+  } catch {
+    return "";
+  }
+}
+
 async function fanOut() {
   // The fetch helpers throw ScreensError on non-2xx; recovery + detail
   // are tolerated as missing (a fresh pod has no install history yet,
   // and not every daemon ships post-recovery). The audit feed lives
   // on .com (not on the daemon) so it uses a separate fetch keyed
   // by the user's username.
-  const username = (() => {
-    try {
-      const raw = profileGet("sessionV1");
-      return raw ? JSON.parse(raw).username ?? "" : "";
-    } catch { return ""; }
-  })();
+  const username = activeUsername();
   const [boxes, recovery, audit] = await Promise.all([
     fetchBoxEvents(),
     screensFetch("/api/screens/post-recovery/status")
@@ -152,12 +163,7 @@ export async function renderActivity() {
   // Refresh the online-pod set so the multi-pod switcher reflects the current
   // fleet (parity with the Services switcher). Best-effort + non-blocking: a
   // failure leaves the switcher hidden, never blocks the feed.
-  const switcherUsername = (() => {
-    try {
-      const raw = profileGet("sessionV1");
-      return raw ? JSON.parse(raw).username ?? "" : "";
-    } catch { return ""; }
-  })();
+  const switcherUsername = activeUsername();
   try {
     const { statusByDomain } = await fetchPodInventory(switcherUsername);
     activityPods = [...statusByDomain.values()];
@@ -207,7 +213,10 @@ export async function renderActivity() {
       <button class="secondary full-width mt-2" id="activity-see-all-audit">See all account history</button>
     `;
     wireActivityPodSwitcher(root);
-    $("activity-feed-open-recovery")?.addEventListener("click", () => show("view-post-recovery"));
+    $("activity-feed-open-recovery")?.addEventListener("click", async () => {
+      const { enterPostRecovery } = await import("./post-recovery.js");
+      enterPostRecovery({ back: "view-activity" });
+    });
     $("activity-see-all-audit")?.addEventListener("click", () => {
       enterAccountAudit().catch(() => { /* silent — toast on the view itself */ });
     });
