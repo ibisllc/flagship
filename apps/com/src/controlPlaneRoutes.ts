@@ -177,7 +177,8 @@ import {
   handleFreeAiAllowance,
   handleFreeAiStatus,
   handleFreeAiToken,
-  freeAiConfigFromEnv,
+  freeAiConfigFrom,
+  inferenceLineup,
   recordFreeAiUsage,
   chargeMultiplier,
   type FreeAiDeps,
@@ -234,6 +235,7 @@ import {
 import { createDemoCreateSettings, createDemoServerRouter, demoCreateMissingConfig } from "./demoCloud.js";
 import { createUpCloudClient, parseUpCloudLabels } from "./upcloud.js";
 import { handleGymTeardown, type GymTeardownBody } from "./gymCloud.js";
+import { loadInferenceSettings } from "./inferenceModelRoutes.js";
 
 export interface ControlPlaneEnv {
   DB?: D1Database;
@@ -349,7 +351,8 @@ export interface ControlPlaneEnv {
    * The free AI promotion's numbers (plain vars, all optional; see
    * `freeAiConfigFromEnv`): starter reserve, weekly top-up and the
    * all-accounts daily cap in weighted tokens, the input/output weights, and
-   * an end date (ISO 8601 or epoch ms) after which free AI stops.
+   * an end date (ISO 8601 or epoch ms) after which free AI stops. The
+   * server-side settings (`/api/admin/inference-settings`) override them.
    */
   AI_PROMO_STARTER_TOKENS?: string;
   AI_PROMO_WEEKLY_TOKENS?: string;
@@ -3172,6 +3175,7 @@ export async function tryControlPlane(
     method === "POST" &&
     (ROUTE_RE.FREE_AI_TOKEN.test(path) || ROUTE_RE.FREE_AI_STATUS.test(path) || ROUTE_RE.FREE_AI_ALLOWANCE.test(path))
   ) {
+    const inferenceSettings = await loadInferenceSettings(env);
     const freeAi: FreeAiDeps = {
       usernames: storage.usernames,
       servers: storage.servers,
@@ -3180,7 +3184,8 @@ export async function tryControlPlane(
       tiers: storage.tiers,
       endpoint: parseBlessedInferenceEndpoint(env.FLAGSHIP_INFERENCE_ENDPOINT),
       tokenSecret: env.FLAGSHIP_INFERENCE_TOKEN_SECRET,
-      config: freeAiConfigFromEnv(env),
+      config: freeAiConfigFrom(env, inferenceSettings),
+      lineup: inferenceLineup(inferenceSettings),
     };
     const body = await readJson(request);
     if (ROUTE_RE.FREE_AI_TOKEN.test(path)) return finish(await handleFreeAiToken(freeAi, body));
@@ -3286,13 +3291,17 @@ export async function tryControlPlane(
     // The same report also charges the free AI promotion (weekly top-up,
     // then starter reserve, plus the all-accounts daily counter).
     if (res.status === 200 && reportedFor && usageBody) {
+      const inferenceSettings = await loadInferenceSettings(env);
       await recordFreeAiUsage(
-        { meter, tiers: storage.tiers, config: freeAiConfigFromEnv(env) },
+        { meter, tiers: storage.tiers, config: freeAiConfigFrom(env, inferenceSettings) },
         reportedFor,
         usageBody.inputTokens ?? 0,
         usageBody.outputTokens ?? 0,
-        // Charged at the catalog model's multiplier (.com's own table, not the shim's word).
-        chargeMultiplier(typeof usageBody.model === "string" ? usageBody.model : undefined),
+        // Charged at the catalog model's multiplier (.com's own settings, not the shim's word).
+        chargeMultiplier(
+          typeof usageBody.model === "string" ? usageBody.model : undefined,
+          inferenceLineup(inferenceSettings),
+        ),
       );
     }
     return finish(res);

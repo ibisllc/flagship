@@ -44,7 +44,7 @@ import { readServiceSource, writeSourceTree } from "../../../../packages/server-
 import { withoutBuildFiles } from "../../../../packages/server-daemon/src/buildmodes/buildWorkspace.js";
 import type { AgentRunner } from "../../../../packages/server-daemon/src/buildmodes/buildAgent.js";
 import type { StagingHost } from "../../../../packages/server-daemon/src/buildmodes/staging.js";
-import { DEFAULT_WEIGHTS, totalsOf, type CallRecord, type Totals } from "./accounting.js";
+import { DEFAULT_WEIGHTS, EVAL_LINEUP, totalsOf, type CallRecord, type Totals } from "./accounting.js";
 import type { BudgetGuard } from "./budget.js";
 import { callContext, type CallContext } from "./context.js";
 import { MAX_OWNER_ANSWERS, ownerAnswer } from "./ownerScript.js";
@@ -154,7 +154,7 @@ export async function runOne(o: RunOptions): Promise<RunResult> {
   const started = Date.now();
   const calls: CallRecord[] = [];
   const steps: StepResult[] = [];
-  const served = inferenceCatalog().find((m) => m.id === o.model);
+  const served = inferenceCatalog(EVAL_LINEUP).find((m) => m.id === o.model);
   if (!served) throw new Error(`unknown model ${o.model}`);
   const liveDir = join(o.workDir, o.runId, "apps");
   await mkdir(liveDir, { recursive: true });
@@ -171,7 +171,7 @@ export async function runOne(o: RunOptions): Promise<RunResult> {
   const harness = new LlmHarness({ swk: NO_SWK, fetchImpl: o.host.fetchLike, streamingFetchImpl: o.host.streamingFetchLike });
   const catalog = new ModelCatalog({
     baseUrl: "https://com.build-eval.test",
-    fetch: async () => ({ ok: true, json: async () => inferenceCatalogResponse(DEFAULT_WEIGHTS) }),
+    fetch: async () => ({ ok: true, json: async () => inferenceCatalogResponse(DEFAULT_WEIGHTS, EVAL_LINEUP) }),
   });
   const redact = buildModelRedactor(() => ({ username: EVAL_USERNAME, serverFqdn: EVAL_SERVER, extra: [] }));
   const defaultModels = defaultModelsFromEnv({});

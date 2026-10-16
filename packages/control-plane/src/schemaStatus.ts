@@ -69,6 +69,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0101",
   // The signed revoke beside each revoked service invite (the box verifies it).
   "0102",
+  // Flagship Inference's server-side settings and their history.
+  "0103",
 ];
 
 export interface SchemaStatusDeps {

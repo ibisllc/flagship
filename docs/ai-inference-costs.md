@@ -749,9 +749,13 @@ Notes:
   compaction (`packages/server-daemon/src/llm/contextCompaction.ts`) triggers
   early enough on either upstream.
 
-To change the lineup: edit `INFERENCE_MODELS` (ids must exist with tool
-calling on every upstream listed), update this table, run the tests, deploy
-`.com`. The shim needs no change.
+To add or remove a model: edit `INFERENCE_MODELS` (ids must exist with tool
+calling on every upstream listed, each with a probed thinking switch),
+update this table, run the tests, deploy `.com`. The shim needs no change.
+Which models are offered, the default, multipliers, descriptions and the
+allowance are server-side settings since 2026-10-15
+(`docs/runbooks/inference-settings.md`); a multiplier set there replaces the
+computed one.
 
 ## 16. Measured builds (2026-10-15)
 
@@ -835,3 +839,18 @@ for **$0.55**, plus GLM rerun on its final setting ($0.16):
   turn with no manifest (open).
 - The allowance decision stands: a first build is 16–38 credits at the
   median on every model.
+
+**What we pay per credit** (list prices, all 40 runs of each model):
+Medium $0.057, GLM $0.052, High $0.060, Low $0.165 per 1,000 credits. The
+computed multipliers keep the first three within 15% of each other; Low
+costs about 3× per credit (36% cached input, $0.95 output), so its 1×
+undercharges.
+
+**Decision (owner, 2026-10-15):** GLM (Medium multimodal 2×) is the default
+(9/10, reads images, cheapest per credit); Low is off, priced at 3× should it
+come back; Medium and High stay; the allowance stays at 2,000 starter, 500 a
+week and 50,000 a day. Spent in full that is about $0.11 per starter and
+$0.03 per week per account, and at most about $2.75 a day (~$85 a month)
+for everyone together at the daily cap. These are the shipped settings
+(`INFERENCE_SETTINGS_DEFAULTS`) and can be changed without a deploy
+(`docs/runbooks/inference-settings.md`).

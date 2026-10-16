@@ -107,7 +107,9 @@ older `.com` divide the token fields by 1,000 themselves.
 What it costs per customer and per token, on a hosted API or our own GPU,
 and the price for later token sales: `docs/ai-inference-costs.md`.
 
-**The allowance** (all `.com` vars, each optional; numbers are *weighted*
+**The allowance** (`.com` vars, each optional, under the server-side
+settings that override them without a deploy,
+`docs/runbooks/inference-settings.md`; numbers are *weighted*
 tokens, input × `AI_PROMO_INPUT_WEIGHT` + output × `AI_PROMO_OUTPUT_WEIGHT`,
 default 1 and 4, since output costs more to serve):
 
@@ -191,9 +193,11 @@ An effort control shows only when the chosen model lists effort levels
 for it).
 
 - **Flagship Inference:** the catalog `.com` serves
-  (`GET /api/inference/models`, `packages/control-plane/src/inferenceModels.ts`):
-  Low 1× (Qwen3.6-35B-A3B), Medium 1× (DeepSeek-V4-Flash, text only),
-  Medium multimodal 2× (GLM-5.3-Flash), High 3.5× (MiniMax-M3). A call
+  (`GET /api/inference/models`, models in
+  `packages/control-plane/src/inferenceModels.ts`, what's offered in
+  `inferenceSettings.ts`): Medium 1× (DeepSeek-V4-Flash, text only),
+  Medium multimodal 2× (GLM-5.3-Flash, the default), High 3.5× (MiniMax-M3);
+  Low (Qwen3.6-35B-A3B) is off since 2026-10-15. A call
   costs (input × 1 + output × 4) × multiplier / 1,000 credits; how the
   multipliers come from real cost plus a 1.25 margin is
   `docs/ai-inference-costs.md` §15. The shim learns the chosen model from the

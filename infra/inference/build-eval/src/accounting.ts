@@ -10,7 +10,7 @@
  * kept alongside as `creditsShown`.
  */
 
-import { INFERENCE_PRICING, chargeMultiplier } from "@flagship/control-plane";
+import { INFERENCE_MODELS, INFERENCE_PRICING, chargeMultiplier, inferenceLineup } from "@flagship/control-plane";
 import { creditsFor } from "../../shim/src/meter.js";
 import { costUsd } from "./prices.js";
 
@@ -69,9 +69,18 @@ export function weightedOf(u: { inputTokens: number; outputTokens: number }, w =
   return Math.max(0, u.inputTokens) * w.inputWeight + Math.max(0, u.outputTokens) * w.outputWeight;
 }
 
+/**
+ * Production's lineup and multipliers (the shipped settings), with every
+ * model on, so a model the menus don't offer (Low) can still be measured
+ * instead of quietly running on the default.
+ */
+export const EVAL_LINEUP = inferenceLineup({
+  models: Object.fromEntries(INFERENCE_MODELS.map((m) => [m.id, { enabled: true }])),
+});
+
 /** Weighted tokens `.com` charges for one call: the model multiplier applied, rounded up. */
 export function chargedWeighted(model: string, u: { inputTokens: number; outputTokens: number }, w = DEFAULT_WEIGHTS): number {
-  return Math.ceil(weightedOf(u, w) * Math.max(1, chargeMultiplier(model)));
+  return Math.ceil(weightedOf(u, w) * Math.max(1, chargeMultiplier(model, EVAL_LINEUP)));
 }
 
 export function emptyTotals(): Totals {
@@ -103,7 +112,7 @@ export function totalsOf(calls: readonly CallRecord[], w = DEFAULT_WEIGHTS): Tot
     t.cachedTokens += c.cachedTokens;
     t.weightedTokens += weightedOf(c, w);
     charged += chargedWeighted(c.model, c, w);
-    t.creditsShown += creditsFor(c, Math.max(1, chargeMultiplier(c.model)), {
+    t.creditsShown += creditsFor(c, Math.max(1, chargeMultiplier(c.model, EVAL_LINEUP)), {
       ...w,
       creditTokens: INFERENCE_PRICING.creditTokens,
     });

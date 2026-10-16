@@ -22,7 +22,8 @@
  * Tokens are weighted (an output token costs more to serve; the apps show
  * them as credits of {@link TOKENS_PER_CREDIT}); raw input and output are
  * recorded too ("ai-promo-input"/"ai-promo-output"). All numbers
- * are `.com` config ({@link freeAiConfigFromEnv}). Minting records nothing,
+ * are `.com` config: env vars ({@link freeAiConfigFromEnv}) under the
+ * server-side settings (inferenceSettings.ts `freeAiConfigFrom`). Minting records nothing,
  * so the apps mint a fresh pass for every build start and reply.
  */
 
@@ -37,7 +38,7 @@ import type {
 import { hexToBytes } from "./hex.js";
 import type { InferenceEndpoint } from "./inferenceEndpoint.js";
 import { mintScopedInferenceToken, verifyScopedInferenceToken } from "./inferenceToken.js";
-import { resolveInferenceModel } from "./inferenceModels.js";
+import { resolveInferenceModel, type InferenceLineup } from "./inferenceSettings.js";
 import { meterCheck, meterRecord, sameForEveryTier, type MeterDeps, type MeterResource } from "./meter.js";
 import { forbidden, malformed, notFound, type HandlerResponse } from "./types.js";
 
@@ -164,6 +165,8 @@ export interface FreeAiDeps {
   endpoint: InferenceEndpoint | null;
   tokenSecret: string | undefined;
   config?: FreeAiConfig;
+  /** The models on offer (inferenceSettings.ts); the shipped lineup when absent. */
+  lineup?: InferenceLineup;
   freshnessMs?: number;
   now?: () => number;
   /** Test seam for the pass's key id. */
@@ -394,7 +397,7 @@ export async function handleFreeAiToken(
  * carries the `code` and `message` the shim hands the box.
  */
 export async function handleFreeAiAllowance(
-  deps: Pick<FreeAiDeps, "meter" | "tiers" | "tokenSecret" | "config" | "now">,
+  deps: Pick<FreeAiDeps, "meter" | "tiers" | "tokenSecret" | "config" | "lineup" | "now">,
   body: { token?: unknown; model?: unknown } | undefined,
 ): Promise<HandlerResponse> {
   if (!deps.tokenSecret) {
@@ -418,10 +421,10 @@ export async function handleFreeAiAllowance(
       remainingTokens: stop ? 0 : credits.remainingTokens,
       allowanceTokens: credits.allowanceTokens,
       ...(stop ?? {}),
-      // The catalog model the box asked for (unknown ⇒ the default): its
+      // The catalog model the box asked for (unknown or turned off ⇒ the default): its
       // multiplier, modalities and id on each upstream, and how a call's
       // tokens become credits, so the shim routes it and tells the box its cost.
-      model: resolveInferenceModel(typeof body.model === "string" ? body.model : undefined),
+      model: resolveInferenceModel(typeof body.model === "string" ? body.model : undefined, deps.lineup),
       inputWeight: cfgOf(deps).inputWeight,
       outputWeight: cfgOf(deps).outputWeight,
       creditTokens: TOKENS_PER_CREDIT,

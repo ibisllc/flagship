@@ -935,7 +935,12 @@ metal), plus the Debian 13.7.0 check. Record results under "Desktop Studio".
     each model's switch, except GLM, which fails every build switched off
     and gets none; replies get per-model caps. Remeasured with thinking off
     (§16): High 9/10 (was 6/10), GLM 9/10. Live with the next shim and
-    `.com` deploys. Open: Qwen sometimes asks its questions as plain text
+    `.com` deploys. Lineup decided the same day: GLM (Medium multimodal
+    2×) is the default, Low is off (3× if turned back on), Medium and High
+    stay, allowance unchanged; at most ~$85 a month at the daily cap. The
+    lineup and allowance are server-side settings now, changed without a
+    deploy: `npm run inference-settings` (`docs/runbooks/inference-settings.md`,
+    D1 `inference_settings`, migration 0103). Open: Qwen sometimes asks its questions as plain text
     and the box deploys with no manifest. The description stays at 30
     characters. Paid-tier AI allowances (1M/5M/20M) in `meter.ts` are
     placeholders until payments.

@@ -105,7 +105,7 @@ describe("a mock run through the box's build loop", () => {
       stopped: null,
     });
     expect(md).toMatch(/Mock run/);
-    expect(md).toMatch(/\| Low 1× \(Qwen3\.6-35B-A3B\) \| 1\/1 \|/);
+    expect(md).toMatch(/\| Low 3× \(Qwen3\.6-35B-A3B\) \| 1\/1 \|/);
     expect(md).toMatch(/first builds per starter/);
     expect(STATIC_CHECK_BODY).toMatch(/not started/);
   });

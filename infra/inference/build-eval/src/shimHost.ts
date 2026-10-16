@@ -24,7 +24,7 @@ import { INFERENCE_PRICING, mintScopedInferenceToken, resolveInferenceModel } fr
 import type { FetchLike, StreamingFetchLike } from "@flagship/llm-providers";
 import shim, { type Env } from "../../shim/src/index.js";
 import type { CallRecord } from "./accounting.js";
-import { DEFAULT_WEIGHTS } from "./accounting.js";
+import { DEFAULT_WEIGHTS, EVAL_LINEUP } from "./accounting.js";
 import type { BudgetGuard } from "./budget.js";
 import { callContext } from "./context.js";
 import { MockUpstream } from "./mockModel.js";
@@ -223,7 +223,7 @@ export class ShimHost {
         ok: true,
         remainingTokens: Number.MAX_SAFE_INTEGER,
         allowanceTokens: Number.MAX_SAFE_INTEGER,
-        model: resolveInferenceModel(typeof body.model === "string" ? body.model : undefined),
+        model: resolveInferenceModel(typeof body.model === "string" ? body.model : undefined, EVAL_LINEUP),
         inputWeight: DEFAULT_WEIGHTS.inputWeight,
         outputWeight: DEFAULT_WEIGHTS.outputWeight,
         creditTokens: INFERENCE_PRICING.creditTokens,

@@ -70,8 +70,8 @@ describe("free AI routes", () => {
       const allowance = await post(env, "/api/free-ai/allowance", { token });
       expect(allowance.body).toMatchObject({ ok: true, remainingTokens: 1000 });
 
-      // 100 in + 50 out × 4 = 300 weighted, all from this week's 400.
-      expect((await post(env, "/api/llm-promo/usage", { token, inputTokens: 100, outputTokens: 50 })).status).toBe(200);
+      // 100 in + 50 out × 4 = 300 weighted on Medium (1×), all from this week's 400.
+      expect((await post(env, "/api/llm-promo/usage", { token, inputTokens: 100, outputTokens: 50, model: "medium" })).status).toBe(200);
       const status = await post(env, "/api/free-ai/status", signedBody());
       expect(status.body).toMatchObject({
         available: true,
@@ -79,7 +79,7 @@ describe("free AI routes", () => {
         credits: { week: { used: 300, remaining: 100 }, starter: { used: 0, remaining: 600 }, remainingTokens: 700 },
       });
 
-      await post(env, "/api/llm-promo/usage", { token, inputTokens: 700, outputTokens: 0 });
+      await post(env, "/api/llm-promo/usage", { token, inputTokens: 700, outputTokens: 0, model: "medium" });
       const spent = await post(env, "/api/free-ai/token", signedBody());
       expect(spent.status).toBe(429);
       expect(spent.body.code).toBe("free-ai-used-up");

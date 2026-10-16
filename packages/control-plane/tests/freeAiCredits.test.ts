@@ -325,7 +325,7 @@ describe("free AI allowance (the shim's check)", () => {
       ok: true,
       remainingTokens: 4000,
       allowanceTokens: 4000,
-      model: { id: "low", multiplier: 1 },
+      model: { id: "medium-vision", multiplier: 2 },
     });
     await recordFreeAiUsage(deps, "alice", 4000, 0);
     expect((await handleFreeAiAllowance(deps, { token })).body).toMatchObject({

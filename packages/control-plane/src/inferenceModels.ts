@@ -1,19 +1,16 @@
 /**
- * Flagship Inference's model catalog: the models the owner can pick from in
- * the build chat, what each costs in credits, and which id each upstream
- * knows it by. `.com` serves it (`GET /api/inference/models`), the meter shim
- * learns the chosen model from the allowance check, and metering charges
- * weighted tokens × the model's multiplier.
+ * Flagship Inference's model definitions: each model the shim can call, which
+ * id each upstream knows it by, what it costs us there, and its thinking
+ * switch. Adding a model here needs a probe (tool calling on every listed
+ * upstream, a working `thinkingOff`), so it is reviewed like code.
  *
- * Config lives here, as typed data deployed with `.com` (not D1): changes are
- * rare, they should be reviewed like code, and the multipliers are computed
- * from the prices below by one tested function. To change the lineup, edit
- * INFERENCE_MODELS (ids must exist on every listed upstream with tool
- * calling, each with a probed `thinkingOff`), run the tests, and deploy `.com`. docs/ai-inference-costs.md §15
- * records the current lineup and how the multipliers came out.
+ * What the owner offers from these (which are on, the default, multipliers,
+ * descriptions, the allowance) is server-side settings in
+ * `inferenceSettings.ts`, changed without a deploy
+ * (docs/runbooks/inference-settings.md). Computed multipliers come from the
+ * prices below by one tested function; a setting can override one.
+ * docs/ai-inference-costs.md §15–16 record the lineup and the measurements.
  */
-
-import type { InferenceCatalogResponse, InferenceModel } from "@flagship/protocol";
 
 /** Top-level chat-completions fields, as an upstream takes them. */
 export type RequestFields = Readonly<Record<string, unknown>>;
@@ -47,7 +44,6 @@ export interface CatalogEntry {
    * only stops a runaway reply and costs nothing unless used.
    */
   maxOutputTokens: number;
-  default?: boolean;
   /** For a text-only model: the catalog id to switch to for an image. */
   visionAlternative?: string;
   /**
@@ -64,7 +60,8 @@ export interface CatalogEntry {
  * tokens, docs/ai-inference-costs.md §13), at its dearest upstream. Its
  * multiplier is that cost over the base model's, times the margin, rounded UP
  * to the step so a model never costs us more than its credits bring in; the
- * base model is 1× by definition (the allowance is budgeted on it).
+ * base model is 1× by definition. It is only the price reference: it need
+ * not be offered (Low isn't, since 2026-10-15).
  */
 export const INFERENCE_PRICING = {
   baseModel: "low",
@@ -89,7 +86,6 @@ export const INFERENCE_MODELS: readonly CatalogEntry[] = [
     contextTokens: 262_144,
     modalities: ["text", "image"],
     maxOutputTokens: 32_768,
-    default: true,
     upstream: {
       // Thinks by default. Probed 2026-10-15: no reasoning_content, 4 output tokens.
       deepinfra: {
@@ -173,88 +169,6 @@ export function multiplierFor(
   return Math.max(1, stepped);
 }
 
-function formatMultiplier(m: number): string {
+export function formatMultiplier(m: number): string {
   return Number.isInteger(m) ? `${m}×` : `${m.toFixed(1).replace(/\.0$/, "")}×`;
-}
-
-/** The catalog with multipliers and menu labels, as `.com` serves it. */
-export function inferenceCatalog(models: readonly CatalogEntry[] = INFERENCE_MODELS): InferenceModel[] {
-  const base = models.find((m) => m.id === INFERENCE_PRICING.baseModel) ?? models[0];
-  if (!base) return [];
-  return models.map((e) => {
-    const multiplier = multiplierFor(e, base);
-    return {
-      id: e.id,
-      tier: e.tier,
-      model: e.model,
-      multiplier,
-      label: `${e.tier} ${formatMultiplier(multiplier)} (${e.model})`,
-      descriptor: e.descriptor,
-      contextTokens: e.contextTokens,
-      modalities: [...e.modalities],
-      // Flagship Inference never thinks, so the apps offer no effort for it.
-      reasoning: false,
-      ...(e.default ? { default: true } : {}),
-      ...(e.visionAlternative ? { visionAlternative: e.visionAlternative } : {}),
-      upstream: Object.fromEntries(Object.entries(e.upstream).map(([k, v]) => [k, v.id])),
-    };
-  });
-}
-
-export function defaultInferenceModel(models: readonly CatalogEntry[] = INFERENCE_MODELS): CatalogEntry {
-  return models.find((m) => m.default) ?? models[0]!;
-}
-
-/** `GET /api/inference/models`. */
-export function inferenceCatalogResponse(weights: { inputWeight: number; outputWeight: number }): InferenceCatalogResponse {
-  return {
-    models: inferenceCatalog(),
-    defaultModel: defaultInferenceModel().id,
-    creditTokens: INFERENCE_PRICING.creditTokens,
-    inputWeight: weights.inputWeight,
-    outputWeight: weights.outputWeight,
-  };
-}
-
-/** What the shim needs about the model a call asked for (unknown ⇒ the default). */
-export interface ResolvedInferenceModel {
-  id: string;
-  multiplier: number;
-  modalities: string[];
-  /** The model's output cap per call. */
-  maxOutputTokens: number;
-  upstream: Record<string, { id: string; maxPriceIn: number; maxPriceOut: number; thinkingOff: RequestFields }>;
-  /** The label of the model to switch to for images. */
-  visionAlternative?: string;
-}
-
-export function resolveInferenceModel(id: string | undefined): ResolvedInferenceModel {
-  const entry = INFERENCE_MODELS.find((m) => m.id === id) ?? defaultInferenceModel();
-  const served = inferenceCatalog();
-  const me = served.find((m) => m.id === entry.id)!;
-  const alt = entry.visionAlternative ? served.find((m) => m.id === entry.visionAlternative) : undefined;
-  return {
-    id: entry.id,
-    multiplier: me.multiplier,
-    modalities: [...entry.modalities],
-    maxOutputTokens: entry.maxOutputTokens,
-    upstream: Object.fromEntries(
-      Object.entries(entry.upstream).map(([k, v]) => [
-        k,
-        { id: v.id, maxPriceIn: v.inUsd, maxPriceOut: v.outUsd, thinkingOff: v.thinkingOff },
-      ]),
-    ),
-    ...(alt ? { visionAlternative: alt.label } : {}),
-  };
-}
-
-/**
- * The multiplier to charge a usage report at. An id the catalog doesn't know
- * (a shim and `.com` out of step) is charged at the dearest model's rate.
- */
-export function chargeMultiplier(id: string | undefined): number {
-  const served = inferenceCatalog();
-  if (id === undefined) return served.find((m) => m.id === defaultInferenceModel().id)?.multiplier ?? 1;
-  const hit = served.find((m) => m.id === id);
-  return hit ? hit.multiplier : Math.max(1, ...served.map((m) => m.multiplier));
 }

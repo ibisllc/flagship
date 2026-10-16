@@ -67,8 +67,8 @@ multiplier assumes.
 The box sends a catalog id (`low`, `medium`, …). `.com`'s allowance check
 answers with that model's multiplier, modalities, output cap, and per
 upstream its id and the fields that turn its thinking off there
-(`packages/control-plane/src/inferenceModels.ts`); an unknown id gets the
-default model. The shim sends the primary its id. When
+(`packages/control-plane/src/inferenceModels.ts`, offered per
+`inferenceSettings.ts`); an unknown or turned-off id gets the default model. The shim sends the primary its id. When
 the primary answers 5xx, times out or drops the connection, the same request
 (with the fallback's id and key) goes to the fallback, once, before any byte
 reaches the box. A 4xx about the request (bad parameters, too long, rate

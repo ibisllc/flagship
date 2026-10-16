@@ -8,6 +8,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { tmpdir } from "node:os";
 import { inferenceCatalog } from "@flagship/control-plane";
+import { EVAL_LINEUP } from "./accounting.js";
 import { BudgetGuard, RunEstimator } from "./budget.js";
 import { DockerStaging, dockerAvailable } from "./dockerStage.js";
 import { keyRedactor, loadKey } from "./key.js";
@@ -152,7 +153,7 @@ async function main(argv: string[]): Promise<number> {
   await writeFile(join(o.out, "summary.md"), report);
   await writeFile(
     join(o.out, "summary.json"),
-    `${redact(JSON.stringify({ meta, catalog: inferenceCatalog(), runs: results.map(({ calls: _calls, ...r }) => r) }, null, 2))}\n`,
+    `${redact(JSON.stringify({ meta, catalog: inferenceCatalog(EVAL_LINEUP), runs: results.map(({ calls: _calls, ...r }) => r) }, null, 2))}\n`,
   );
   log(
     `\n${results.length} runs in ${Math.round((Date.now() - started) / 1000)} s` +
@@ -169,7 +170,7 @@ function crashedRun(
   why: string,
   wallMs: number,
 ): RunResult {
-  const served = inferenceCatalog().find((m) => m.id === p.model);
+  const served = inferenceCatalog(EVAL_LINEUP).find((m) => m.id === p.model);
   const zero = { calls: 0, turns: 0, compactions: 0, inputTokens: 0, outputTokens: 0, cachedTokens: 0, weightedTokens: 0, credits: 0, creditsShown: 0, costUsd: 0 };
   return {
     runId: p.runId,

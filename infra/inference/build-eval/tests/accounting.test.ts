@@ -22,7 +22,8 @@ const call = (over: Partial<CallRecord>): CallRecord => ({
 describe("weighted tokens and credits", () => {
   it("weights output 4× and applies the model's multiplier, rounded up, as .com charges", () => {
     expect(weightedOf({ inputTokens: 1000, outputTokens: 100 })).toBe(1400);
-    expect(chargedWeighted("low", { inputTokens: 1000, outputTokens: 100 })).toBe(1400);
+    // Low is off in the menus but still measured, at the 3× it would charge.
+    expect(chargedWeighted("low", { inputTokens: 1000, outputTokens: 100 })).toBe(4200);
     expect(chargeMultiplier("high")).toBe(3.5);
     expect(chargedWeighted("high", { inputTokens: 1001, outputTokens: 0 })).toBe(Math.ceil(1001 * 3.5));
     expect(chargedWeighted("medium-vision", { inputTokens: 10, outputTokens: 1 })).toBe(28);
@@ -38,7 +39,7 @@ describe("weighted tokens and credits", () => {
     expect(t.turns).toBe(2);
     expect(t.compactions).toBe(1);
     expect(t.weightedTokens).toBe(440_000 + 28_000 + 5_000);
-    expect(t.credits).toBe((440_000 + 28_000 + 5_000 * 3.5) / 1000);
+    expect(t.credits).toBe(((440_000 + 28_000) * 3 + 5_000 * 3.5) / 1000);
     expect(t.cachedTokens).toBe(300_000);
     // Low: cached input costs the same as fresh on DeepInfra.
     const low = (420_000 * 0.1 + 12_000 * 0.95) / 1e6;

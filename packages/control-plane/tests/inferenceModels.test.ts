@@ -58,16 +58,19 @@ describe("multipliers come from real cost plus the margin", () => {
     expect(buildCost(two)).toBeCloseTo((0.3 * 424_000 + 0.95 * 13_000) / 1e6, 10);
   });
 
-  it("serves today's lineup with labels the menu shows", () => {
+  it("serves today's lineup with labels the menu shows: GLM the default, Low off", () => {
     const cat = inferenceCatalog();
     expect(cat.map((m) => [m.id, m.multiplier])).toEqual([
-      ["low", 1],
       ["medium", 1],
       ["medium-vision", 2],
       ["high", 3.5],
     ]);
-    expect(cat[0]!.label).toBe("Low 1× (Qwen3.6-35B-A3B)");
-    expect(cat.find((m) => m.id === "medium-vision")!.label).toBe("Medium multimodal 2× (GLM-5.3-Flash)");
+    expect(cat[0]!.label).toBe("Medium 1× (DeepSeek-V4-Flash)");
+    expect(cat.find((m) => m.id === "medium-vision")).toMatchObject({
+      label: "Medium multimodal 2× (GLM-5.3-Flash)",
+      default: true,
+    });
+    expect(cat.filter((m) => m.default)).toHaveLength(1);
     for (const m of cat) {
       expect(m.multiplier).toBe(multiplierFor(INFERENCE_MODELS.find((e) => e.id === m.id)!, base));
       expect(m.multiplier % INFERENCE_PRICING.step).toBe(0);
@@ -77,7 +80,6 @@ describe("multipliers come from real cost plus the margin", () => {
   it("keeps the catalog coherent", () => {
     const ids = new Set(INFERENCE_MODELS.map((m) => m.id));
     expect(ids.size).toBe(INFERENCE_MODELS.length);
-    expect(INFERENCE_MODELS.filter((m) => m.default)).toHaveLength(1);
     expect(INFERENCE_MODELS.some((m) => m.modalities.includes("image"))).toBe(true);
     for (const m of INFERENCE_MODELS) {
       expect(Object.keys(m.upstream).sort()).toEqual(["deepinfra", "openrouter"]);
@@ -87,7 +89,10 @@ describe("multipliers come from real cost plus the margin", () => {
       }
     }
     expect(INFERENCE_PRICING.creditTokens).toBe(TOKENS_PER_CREDIT);
-    expect(inferenceCatalogResponse({ inputWeight: 1, outputWeight: 4 })).toMatchObject({ defaultModel: "low", creditTokens: 1000 });
+    expect(inferenceCatalogResponse({ inputWeight: 1, outputWeight: 4 })).toMatchObject({
+      defaultModel: "medium-vision",
+      creditTokens: 1000,
+    });
   });
 
   it("never thinks: every upstream names its switch, and the menu offers no effort", () => {
@@ -103,7 +108,7 @@ describe("multipliers come from real cost plus the margin", () => {
     expect(INFERENCE_MODELS.find((m) => m.id === "medium-vision")!.upstream.deepinfra!.thinkingOff).toEqual({});
   });
 
-  it("resolves a call's model for the shim, unknown ids to the default", () => {
+  it("resolves a call's model for the shim, unknown and turned-off ids to the default", () => {
     const m = resolveInferenceModel("medium");
     expect(m).toMatchObject({
       id: "medium",
@@ -120,9 +125,13 @@ describe("multipliers come from real cost plus the margin", () => {
     });
     expect(m.upstream.deepinfra!.thinkingOff).toEqual({ reasoning_effort: "none" });
     expect(resolveInferenceModel("high").maxOutputTokens).toBe(24_576);
-    expect(resolveInferenceModel("flagship-free").id).toBe("low");
+    expect(resolveInferenceModel("flagship-free").id).toBe("medium-vision");
+    // A box (or an app's saved choice) still asking for Low runs on the default.
+    expect(resolveInferenceModel("low")).toMatchObject({ id: "medium-vision", multiplier: 2 });
     expect(chargeMultiplier("high")).toBe(3.5);
-    expect(chargeMultiplier(undefined)).toBe(1);
+    expect(chargeMultiplier(undefined)).toBe(2);
+    // Low is priced at 3× while off, should a call already on it report late.
+    expect(chargeMultiplier("low")).toBe(3);
     expect(chargeMultiplier("no-such-model")).toBe(3.5);
   });
 });
