@@ -147,7 +147,7 @@ class KeyfileImportViewModel(
                     // the Worker now requires at initiate even for single-
                     // device accounts. The keyfile sheet has no second-
                     // factor field (yet); route via the sign-in flow.
-                    "This account has a second factor enrolled. Use \"I already have an account\" to sign in — it will ask for your authenticator or recovery code."
+                    "This account has a second factor enrolled. Choose \"Connect to an existing account\" and sign in with your account name — it will ask for your authenticator or recovery code."
                 else
                     "Couldn't start bringing this device in: ${t.message}",
             )

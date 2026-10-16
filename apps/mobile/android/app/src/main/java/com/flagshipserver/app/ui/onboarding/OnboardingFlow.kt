@@ -6,7 +6,9 @@
 //     │      "add your first server" CTA. A server is a separate, later,
 //     │      repeatable resource added from Home; the claim no longer
 //     │      rides inside CreateServer's registerControlPlane.)
-//     └─ I already have an account → JoinAccountContainer (username-first
+//     └─ Connect to an existing account → ConnectAccountScreen, one page:
+//          join with a pairing code (scan, or paste a code or link) →
+//          JoinDeviceScreen; or sign in with the account name (username-first
 //          resolveAccount preflight) → demo opens the sandbox directly;
 //          single/multi drive the REAL login state machine
 //          (RealAccountLoginContainer / LoginViewModel) — Phase 3;
@@ -15,7 +17,16 @@
 
 package com.flagshipserver.app.ui.onboarding
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import com.flagshipserver.app.core.Base64URL
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -56,6 +67,14 @@ fun OnboardingFlow(onFinished: () -> Unit) {
             )
         }
     }
+    // Edge-to-edge (Android 15+): the root pads only the top and sides, so
+    // every onboarding screen keeps clear of the navigation bar (and the
+    // keyboard) here.
+    Box(
+        Modifier
+            .fillMaxSize()
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)),
+    ) {
     NavHost(navController = nav, startDestination = "welcome") {
         composable("welcome") { WelcomeScreen(nav) }
         composable("username") {
@@ -102,7 +121,7 @@ fun OnboardingFlow(onFinished: () -> Unit) {
             )
         }
         // Phase 3b — cross-device pairing, INCOMING side. Two entries:
-        //   join-device            → in-app scanner first (Welcome CTA).
+        //   join-device            → in-app scanner first (Scan a code).
         //   join-device-link/{…}   → arrived via the App-Links deeplink
         //                            (sid + pk already known; skip scan).
         composable("join-device") {
@@ -128,14 +147,28 @@ fun OnboardingFlow(onFinished: () -> Unit) {
                 onCancel = { nav.popBackStack() },
             )
         }
-        composable("recover") {
-            // Username-first Join. resolveAccount branches:
+        composable("connect") {
+            // One page, both ways in. Sign in by name: resolveAccount
+            // branches —
             //   demo            → device attached + sandbox open → done
             //   single | multi  → drive the REAL login state machine,
             //                     threading the preflight resolution
-            //   unknown         → handled inside the container (state)
-            JoinAccountContainer(
+            //   unknown         → an inline state on the page
+            // Join with a pairing code: the incoming JoinDeviceScreen (the
+            // scanner, or straight in with a pasted link).
+            ConnectAccountScreen(
                 onDemoOpened = onFinished,
+                onJoin = { link ->
+                    if (link == null) {
+                        nav.navigate("join-device")
+                    } else {
+                        nav.navigate(
+                            "join-device-link/" +
+                                URLEncoder.encode(link.sid, "UTF-8") + "/" +
+                                URLEncoder.encode(Base64URL.encode(link.adminPubKey), "UTF-8"),
+                        )
+                    }
+                },
                 onRecover = { resolution ->
                     // Phase 3 — the real single/multi state machine,
                     // driven entirely off the preflight. The resolution
@@ -170,5 +203,5 @@ fun OnboardingFlow(onFinished: () -> Unit) {
             )
         }
     }
+    }
 }
-

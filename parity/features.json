@@ -247,7 +247,7 @@
       "ref": "ios",
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/ConnectAccountScreen.swift", "Connect to an existing account"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/WelcomeScreen.swift", "welcome-connect"]] },
-        "android": { "status": "missing", "reason": "Welcome still has the old separate entries.", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/onboarding/ConnectAccountScreen.kt", "Connect to an existing account"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/WelcomeScreen.kt", "welcome-connect"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/onboarding/ConnectAccountScreen.kt", "Connect to an existing account"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/WelcomeScreen.kt", "welcome-connect"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/index.html", "data-testid=\"welcome-connect\"[^>]*>Connect to an existing account<"], ["apps/web/public/webapp/lib/connectAccount.js", "export function readNameField"]] }
       }
     },
@@ -297,7 +297,7 @@
       "ref": "ios",
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift", "case \\.joinAccount"]] },
-        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/onboarding/JoinAccountContainer.kt", "fun "], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/SettingsScreen.kt", "join-device-scan"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/onboarding/ConnectAccountScreen.kt", "fun ConnectAccountScreen"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/SettingsScreen.kt", "join-device-scan"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/views/join.js", "export async function openJoinAnotherAccount"], ["apps/web/public/webapp/index.html", "settings-tab-join-account"]] }
       }
     },

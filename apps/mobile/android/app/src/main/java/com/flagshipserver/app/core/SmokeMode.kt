@@ -14,6 +14,7 @@
 //   iOS -smoke-dead             ↔ --es flagship.smokePods dead
 //   iOS -smoke-awaiting-backup  ↔ --es flagship.smokePods awaiting-backup
 //   iOS -smoke-username <name>  ↔ --es flagship.smokeUsername <name>
+//   iOS -smoke-onboarding       ↔ --ez flagship.smokeOnboarding true
 //
 // PRODUCTION SAFETY: MainActivity only calls into here when the app is
 // debuggable (ApplicationInfo.FLAG_DEBUGGABLE) AND the smokeMode extra is set —
@@ -48,6 +49,8 @@ data class SmokeModeConfig(
     val seedShares: Boolean = false,
     /** This device's rank in the mock box's apps when not an admin (GymSeams.deviceRank). */
     val deviceRank: String? = null,
+    /** Start unpaired on Welcome against the mock clients (iOS `-smoke-onboarding`). */
+    val onboarding: Boolean = false,
 ) {
     companion object {
         const val EXTRA_SMOKE_MODE = "flagship.smokeMode"
@@ -60,6 +63,7 @@ data class SmokeModeConfig(
         const val EXTRA_SMOKE_ACCESS_ALERT = "flagship.smokeAccessAlert"
         const val EXTRA_SMOKE_SHARES = "flagship.smokeShares"
         const val EXTRA_SMOKE_DEVICE_RANK = "flagship.smokeDeviceRank"
+        const val EXTRA_SMOKE_ONBOARDING = "flagship.smokeOnboarding"
 
         const val SMOKE_USERNAME = "smoketest"
 
@@ -82,6 +86,7 @@ data class SmokeModeConfig(
                 seedShares = intent.getBooleanExtra(EXTRA_SMOKE_SHARES, false),
                 deviceRank = intent.getStringExtra(EXTRA_SMOKE_DEVICE_RANK)?.trim()?.lowercase()
                     ?.takeIf { it in setOf("member", "manager", "master", "refused") },
+                onboarding = intent.getBooleanExtra(EXTRA_SMOKE_ONBOARDING, false),
             )
         }
     }
@@ -99,6 +104,11 @@ object SmokeMode {
         operations: ActiveOperationsCenter,
         trust: TrustCenter,
     ): RootDestination {
+        if (config.onboarding) {
+            if (appState.isPaired.value) appState.signOut()
+            GymSeams.bypassBiometricGates = true
+            return config.tab
+        }
         if (!appState.isPaired.value) {
             val user = config.username
             val pods = when (config.podsVariant) {

@@ -37,6 +37,38 @@ const EVERY_MERGE: readonly Scenario[] = [
     },
   ),
   android(
+    "android-connect-account-page",
+    "Welcome offers Create your account + one Connect to an existing account; the connect page holds sign-in by account name above an 'or' and the pairing code (scan + paste) below; a name in the code field gets a sentence (flagship.smokeOnboarding).",
+    `${PKG}.GymOnboardingTest#connectPageHoldsSignInAndPairing`,
+    {
+      steps: [
+        { kind: "launch", describe: "Launch with flagship.smokeOnboarding (unpaired, mock clients)." },
+        { kind: "tap", describe: "Connect to an existing account.", handle: "welcome-connect" },
+        { kind: "tap", describe: "Join with an account name typed as the code.", handle: "connect-pair-continue" },
+      ],
+      assertions: [
+        { describe: "Sign-in field", handle: "connect-name-field", expect: "present" },
+        { describe: "Scan a code", handle: "connect-scan", expect: "present" },
+      ],
+      screenshots: [shot("welcome", "Welcome."), shot("connect-account", "The connect page.")],
+      dimension: "D1",
+    },
+  ),
+  android(
+    "android-connect-link-to-join",
+    "A pairing link typed into the account-name field opens the join flow (flagship.smokeOnboarding).",
+    `${PKG}.GymOnboardingTest#pairingLinkTypedAsTheNameOpensJoin`,
+    {
+      steps: [
+        { kind: "type", describe: "Paste a /join link as the name.", handle: "connect-name-field" },
+        { kind: "tap", describe: "Continue.", handle: "connect-name-continue" },
+      ],
+      assertions: [{ describe: "Join screen", handle: "join-device", expect: "present" }],
+      screenshots: [shot("connect-link-to-join", "The join flow.")],
+      dimension: "D1",
+    },
+  ),
+  android(
     "android-home-tab",
     "The Home tab renders its large-title landmark in smoke mode.",
     `${PKG}.GymEveryMergeTest#homeTabRenders`,

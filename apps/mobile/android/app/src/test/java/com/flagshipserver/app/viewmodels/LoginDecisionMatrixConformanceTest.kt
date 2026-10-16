@@ -219,7 +219,7 @@ class LoginDecisionMatrixConformanceTest {
         }
         val app = AppState()
         val r = server.resolveAccount("demoalice")
-        // The JoinAccountContainer demo branch: DemoFixtures.activate.
+        // The ConnectAccountScreen demo branch: DemoFixtures.activate.
         DemoFixtures.activate(app, r.username, demoServer = r.demoServer)
         assertTrue(app.isPaired.first())
         assertEquals("demoalice", app.currentUser.first())

@@ -16,6 +16,11 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import android.app.Activity
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -100,7 +105,8 @@ fun SecureAccountOverlay(onDismiss: () -> Unit) {
     Box(
         Modifier
             .fillMaxSize()
-            .background(FS.colors.bg),
+            .background(FS.colors.bg)
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)),
     ) {
         NavHost(navController = nav, startDestination = "secure") {
             composable("secure") {

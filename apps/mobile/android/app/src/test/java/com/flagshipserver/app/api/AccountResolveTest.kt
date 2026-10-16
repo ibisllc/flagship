@@ -127,7 +127,7 @@ class AccountResolveTest {
             )
         }
         val app = AppState()
-        // Drive the JoinAccountContainer's demo branch logic directly:
+        // Drive the ConnectAccountScreen demo branch logic directly:
         // resolve → kind==demo → DemoFixtures.activate(demoServer).
         val r = mock.resolveAccount("demoalice")
         assertEquals(AccountResolution.AccountKind.Demo, r.accountKind)
