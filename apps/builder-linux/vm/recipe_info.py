@@ -93,7 +93,7 @@ def read_recipe_fields(recipe_json: bytes) -> RecipeFields:
 
 
 def debug_grant(recipe_json: bytes) -> Optional[str]:
-    """The owner-IRK-signed flagship/debug-access/v1 grant, if the phone baked
+    """The admin-signed flagship/debug-access/v2 grant, if the phone baked
     one in at mint time. Its PRESENCE is the only debug signal the host app may
     act on (consent-as-crypto). Absent => production => no console, ever.
 

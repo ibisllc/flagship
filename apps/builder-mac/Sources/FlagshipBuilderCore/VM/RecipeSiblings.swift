@@ -7,10 +7,10 @@ import Foundation
 /// `{blob, blobSignature, …}` envelope — so this reads the raw bytes, not the
 /// flattened form `RecipeLoader.normalizeEnvelope` produces.
 public enum RecipeSiblings {
-    /// The owner-IRK-signed `flagship/debug-access/v1` grant, if the phone
+    /// The admin-signed `flagship/debug-access/v2` grant, if the phone
     /// baked one in at mint time. Its PRESENCE is the only debug signal the
     /// host app may act on (consent-as-crypto): the box verifies the grant
-    /// against the owner IRK; the host merely decides whether a serial
+    /// against its pinned admin root; the host merely decides whether a serial
     /// console is worth attaching. Absent ⇒ production ⇒ no console, ever.
     ///
     /// Matches the engine's `asStr`: a non-empty string is passed through; an
