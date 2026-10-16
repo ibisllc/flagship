@@ -411,7 +411,7 @@ describe("/webapp PWA static surface", () => {
     // v57 titles a server's page with its name.
     // v58 shows one status pill per app across its servers, and each server's state on the app page.
     // v117 is feat/marketplace's own shell (main's plus its views).
-    expect(r.body).toContain('SHELL_VERSION = "v117"');
+    expect(r.body).toContain('SHELL_VERSION = "v118"');
     expect(r.body).toContain("event.data?.json");
     // Must keep the empty-payload fallback (some pushes have no body).
     expect(r.body).toContain("Flagship has an update for you");
