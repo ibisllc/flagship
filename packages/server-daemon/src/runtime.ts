@@ -19,6 +19,7 @@ import {
   type AppApiKeysHttp,
 } from "./appApiKeys.js";
 import { FileAppEnvStore, type AppEnvStore } from "./serviceEnvStore.js";
+import { fileUsedNonceStore } from "./updateConsumer.js";
 import { AppRunner, buildStartCheck, realCommandRunner, setBuildDiskWatch, setFilesVolumeGuard, type CommandRunner } from "./serviceRunner.js";
 import { ensureGvisor } from "./appSandbox/gvisor.js";
 import { keepAppSandbox, setEgressFence } from "./appSandbox/state.js";
@@ -1460,6 +1461,8 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
       pullStateStore: apOpts.pullStateStore ?? null,
       cloneService: apOpts.cloneService ?? null,
       envStore,
+      envNonceStore: opts.dataDir ? fileUsedNonceStore(`${opts.dataDir}/data/app-env-used-nonces.json`) : null,
+      serverFqdn: opts.serverFqdn,
       onServiceInstalled: (app) => egress.noteInstalled(app.serviceId, egressSuggestions(app.manifest.network)),
       onServiceRemoved: async (slug: string) => {
         await egress.pruneUninstalled();

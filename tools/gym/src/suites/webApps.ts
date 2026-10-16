@@ -277,7 +277,7 @@ export const WEB_APPS: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-members-service-env",
-    "Configure environment: Save refuses an empty name, saves a variable (IRK-signed set-service-env, the value cleared and never shown), Remove after confirm unsets one, a declined confirm sends nothing, and Back clears a typed value.",
+    "Configure environment: Save refuses an empty name and a name the box can't take, saves a variable (one IRK-signed service-env-change naming it and its value's SHA-256, a fresh nonce, the value cleared and never shown), Remove after confirm signs an unset of that one name and the other stays, a declined confirm sends nothing, and Back clears a typed value.",
     "gym members Configure environment saves and removes a variable",
     {
       steps: [

@@ -2,8 +2,9 @@
 //
 // Mirrors the iOS/Android ServiceEnvScreen. Routes:
 //   GET    /api/screens/services/<appId>/env         → list NAMES (no values)
-//   POST   /api/screens/services/<appId>/env/set     → set { name, value }
-//   POST   /api/screens/services/<appId>/env/unset   → unset { name }
+//   POST   /api/screens/services/<appId>/env/set     → { change, value, signature }
+//   POST   /api/screens/services/<appId>/env/unset   → { change, signature }
+// Each is one IRK-signed flagship/service-env-change/v1 naming the variable.
 //
 // The value is typed in the form, signed under the owner's IRK, and
 // POSTed once over the daemon's TLS. The browser does NOT save the
@@ -13,21 +14,18 @@
 import { $, registerView, show } from "../lib/router.js";
 import { screensFetch, ScreensError } from "../lib/api.js";
 import { getSession } from "../lib/state.js";
-import { signWithIrk, bytesToHex } from "../keystore.js";
+import { signWithIrk } from "../keystore.js";
+import { envNameError, signedEnvChangeBody } from "../lib/serviceEnvChange.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
 
 registerView("view-service-env");
 
 let currentAppId = null;
-let currentCreator = null;
-let currentSlug = null;
 let currentServerFqdn = null;
 
-export async function enterServiceEnv(appId, creator, slug, serverFqdn) {
+export async function enterServiceEnv(appId, _creator, _slug, serverFqdn) {
   currentAppId = appId;
-  currentCreator = creator;
-  currentSlug = slug;
   currentServerFqdn = serverFqdn;
   show("view-service-env");
   await reload();
@@ -86,28 +84,13 @@ function renderList(names) {
   }
 }
 
-/**
- * Canonical-bytes for SetServiceEnvRequest. Mirrors
- * `canonicalSetServiceEnv` in @flagship/protocol/auth.ts:
- *
- *   "flagship/set-service-env/v1"
- *      | serverId | creator | slug | <pairCount>
- *      | <sortedKey>=<value>... | issuedAt
- */
-function canonicalSetServiceEnv(serverId, creator, slug, env, issuedAt) {
-  const pairs = Object.keys(env)
-    .sort()
-    .map((k) => `${k}=${env[k]}`);
-  const s = [
-    "flagship/set-service-env/v1",
-    serverId,
-    creator,
-    slug,
-    String(pairs.length),
-    ...pairs,
-    String(issuedAt),
-  ].join("|");
-  return new TextEncoder().encode(s);
+/** The owner-IRK-signed request body for one change (lib/serviceEnvChange.js). */
+function signedBody(op, name, value) {
+  const session = getSession();
+  return signedEnvChangeBody(
+    { serverId: currentServerFqdn, serviceId: currentAppId, op, name, ...(op === "set" ? { value } : {}) },
+    (bytes) => signWithIrk(session.umk, bytes),
+  );
 }
 
 async function submit() {
@@ -116,40 +99,21 @@ async function submit() {
   const name = nameEl.value.trim();
   const value = valueEl.value;
   if (!name) return toast("Name required", "err");
+  const bad = envNameError(name);
+  if (bad) return toast(bad, "err");
   if (!value) return toast("Value required", "err");
-  const session = getSession();
-  if (!session?.umk) return toast("Sign in first.", "err");
+  if (!getSession()?.umk) return toast("Sign in first.", "err");
 
-  const issuedAt = Date.now();
-  const envelope = {
-    serverId: currentServerFqdn,
-    creator: currentCreator,
-    slug: currentSlug,
-    env: { [name]: value },
-    issuedAt,
-  };
-  let signature;
+  let body;
   try {
-    const canon = canonicalSetServiceEnv(
-      envelope.serverId,
-      envelope.creator,
-      envelope.slug,
-      envelope.env,
-      envelope.issuedAt,
-    );
-    const sig = await signWithIrk(session.umk, canon);
-    signature = bytesToHex(sig);
+    body = await signedBody("set", name, value);
   } catch (e) {
     return toast(`Sign failed: ${e.message ?? e}`, "err");
   }
-
   try {
     await screensFetch(
       `/api/screens/services/${encodeURIComponent(currentAppId)}/env/set`,
-      {
-        method: "POST",
-        body: JSON.stringify({ name, value, request: envelope, signature }),
-      },
+      { method: "POST", body: JSON.stringify(body) },
     );
   } catch (e) {
     return toast(
@@ -168,41 +132,18 @@ async function submit() {
 async function unset(name) {
   if (!name) return;
   if (!confirm(`Remove "${name}"?`)) return;
-  const session = getSession();
-  if (!session?.umk) return toast("Sign in first.", "err");
-
-  const issuedAt = Date.now();
-  // Owner's intent: env becomes empty (full-replace semantics on
-  // setEnv mean the daemon will accept this as "drop everything we
-  // had"). The user is asserting the new state lacks the named key.
-  const envelope = {
-    serverId: currentServerFqdn,
-    creator: currentCreator,
-    slug: currentSlug,
-    env: {},
-    issuedAt,
-  };
-  let signature;
+  if (!getSession()?.umk) return toast("Sign in first.", "err");
+  // The signed change names this one variable; the others stay.
+  let body;
   try {
-    const canon = canonicalSetServiceEnv(
-      envelope.serverId,
-      envelope.creator,
-      envelope.slug,
-      envelope.env,
-      envelope.issuedAt,
-    );
-    const sig = await signWithIrk(session.umk, canon);
-    signature = bytesToHex(sig);
+    body = await signedBody("unset", name);
   } catch (e) {
     return toast(`Sign failed: ${e.message ?? e}`, "err");
   }
   try {
     await screensFetch(
       `/api/screens/services/${encodeURIComponent(currentAppId)}/env/unset`,
-      {
-        method: "POST",
-        body: JSON.stringify({ name, request: envelope, signature }),
-      },
+      { method: "POST", body: JSON.stringify(body) },
     );
   } catch (e) {
     return toast(
@@ -213,7 +154,3 @@ async function unset(name) {
   toast(`Removed ${name}`);
   await reload();
 }
-
-// Exposed so service-detail.js can drive this from the per-app
-// detail view's "Configure environment" entry point.
-export { canonicalSetServiceEnv };

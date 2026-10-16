@@ -493,25 +493,28 @@ async function vibeAppEnv(
   st: RunState,
 ): Promise<StageResult> {
   const name = "vibeAppEnv";
-  const { signSetServiceEnv } = await import("@flagship/protocol");
+  const { signServiceEnvChange, serviceEnvValueSha256 } = await import("@flagship/protocol");
   const creator = plan.username;
   const slug = "e2e-env";
   // The decisive value: it must reach the container env but never the
   // model. The model only ever sees the NAME `E2E_ENV_PROOF`.
   const proof = `proof-${bytesToHex(randBytes(8))}`;
 
-  // 1. Owner-signed set-app-env order (same trust root as install).
-  const setReq = {
+  // 1. Owner-signed env change (same trust root as install).
+  const change = {
     serverId: st.serverFqdn,
-    creator,
-    slug,
-    env: { E2E_ENV_PROOF: proof },
+    serviceId: `${creator}--${slug}`,
+    op: "set" as const,
+    name: "E2E_ENV_PROOF",
+    valueSha256: serviceEnvValueSha256(proof),
     issuedAt: deps.clock(),
+    nonce: bytesToHex(randBytes(16)),
   };
-  const setSig = signSetServiceEnv(setReq, deps.identity.irk);
-  const setUrl = `https://${st.serverFqdn}/api/services/${creator}-${slug}/env`;
+  const setSig = signServiceEnvChange(change, deps.identity.irk);
+  const setUrl = `https://${st.serverFqdn}/api/services/${change.serviceId}/env`;
   const setRes = await deps.http.post(setUrl, {
-    request: setReq,
+    change,
+    value: proof,
     signature: bytesToHex(setSig),
   });
   if (setRes.status < 200 || setRes.status >= 300) {

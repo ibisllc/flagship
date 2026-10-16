@@ -573,9 +573,14 @@ test.describe("gym webapp inference", () => {
     const set = seen.find((s) => s.path.endsWith("/env/set"))!;
     expect(set.host).toBe(OFFICE);
     expect(set.body).toMatchObject({
-      name: "WEATHER_API_KEY",
       value: "wx-secret-123",
-      request: { serverId: OFFICE, creator: "smoketest", slug: "weather", env: { WEATHER_API_KEY: "wx-secret-123" } },
+      change: {
+        serverId: OFFICE,
+        serviceId: "smoketest--weather",
+        op: "set",
+        name: "WEATHER_API_KEY",
+        valueSha256: "99b9bc0bb8aa4be4d8fccfe0f2d4dc8fe369902dae6478c93f261f032c464f2a",
+      },
     });
     expect(set.body.signature).toMatch(/^[0-9a-f]{128}$/);
     // The ack carries a fresh pass minted for OFFICE and the model choice.

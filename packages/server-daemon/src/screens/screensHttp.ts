@@ -39,7 +39,7 @@ import {
   type PdfText,
 } from "../llm/vibeCodeAttachments.js";
 import type { Attachment, FetchLike } from "@flagship/llm-providers";
-import { composeServiceId, parseServiceId, verifySetServiceEnv } from "@flagship/protocol";
+import { parseServiceEnvChange, parseServiceId } from "@flagship/protocol";
 import { checkServiceName, type NameHolders, type ServiceNameDeps } from "../llm/serviceName.js";
 import type { EditableService } from "../buildmodes/buildOrchestrator.js";
 import { EDIT_SOURCE_MAX_BYTES } from "../llm/vibeCodeStartStreaming.js";
@@ -70,8 +70,6 @@ import type {
   ServerDetailResponse,
   ServiceEnvListResponse,
   ServiceEnvOpResponse,
-  ServiceEnvSetRequest,
-  ServiceEnvUnsetRequest,
   UrlControllerClaimRequest,
   UrlControllerOwnedResponse,
   VerifyCustomDomainRequest,
@@ -1260,86 +1258,35 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
         return jerr(502, "failed to list env names");
       }
     }
-    const envSetM = /^\/api\/screens\/services\/([^/]+)\/env\/set$/.exec(path);
-    if (envSetM && method === "POST") {
+    // One signed change per call: the URL's op and :appId must be the ones
+    // the signature names. A set's value rides beside the change; only its
+    // hash is signed.
+    const envChangeM = /^\/api\/screens\/services\/([^/]+)\/env\/(set|unset)$/.exec(path);
+    if (envChangeM && method === "POST") {
       if (!deps.servicePlatform) return jerr(503, "service platform not configured");
-      const appId = decodeURIComponent(envSetM[1]!);
-      const body = parseJson(req.body) as ServiceEnvSetRequest | null;
-      if (!body || typeof body.name !== "string" || body.name.length === 0) {
-        return jerr(400, "name required");
-      }
-      if (typeof body.value !== "string") return jerr(400, "value required");
-      if (typeof body.signature !== "string") return jerr(400, "signature required");
-      const r = body.request;
-      if (!r || typeof r.serverId !== "string" || typeof r.creator !== "string" ||
-          typeof r.slug !== "string" || typeof r.issuedAt !== "number" ||
-          typeof r.env !== "object" || r.env === null) {
-        return jerr(400, "malformed request envelope");
-      }
-      // Cross-check: the envelope's (creator,slug) must compose to the
-      // URL's appId, and `name`+`value` must be present in `request.env`.
-      const expectedAppId = composeServiceId(r.creator, r.slug);
-      if (expectedAppId !== appId) {
-        return jerr(400, "envelope (creator,slug) does not match :appId");
-      }
-      if (!(body.name in r.env) || r.env[body.name] !== body.value) {
-        return jerr(400, "name/value not present in request.env");
+      const appId = decodeURIComponent(envChangeM[1]!);
+      const op = envChangeM[2] as "set" | "unset";
+      const body = parseJson(req.body) as { change?: unknown; value?: unknown; signature?: unknown } | null;
+      const change = parseServiceEnvChange(body?.change);
+      if (!change) return jerr(400, "malformed env change");
+      if (change.serviceId !== appId) return jerr(400, "the change names another app");
+      if (change.op !== op) return jerr(400, `the change is not an ${op}`);
+      if (typeof body!.signature !== "string") return jerr(400, "signature required");
+      if (op === "set" ? typeof body!.value !== "string" : body!.value !== undefined) {
+        return jerr(400, op === "set" ? "value required" : "an unset carries no value");
       }
       let signatureBytes: Uint8Array;
       try {
-        signatureBytes = hexToBytesLocal(body.signature);
+        signatureBytes = hexToBytesLocal(body!.signature);
       } catch {
         return jerr(400, "invalid hex signature");
       }
-      const result = await deps.servicePlatform.setEnv({
-        request: r,
+      const result = await deps.servicePlatform.changeEnv({
+        change,
+        ...(op === "set" ? { value: body!.value as string } : {}),
         signature: signatureBytes,
-        verify: verifySetServiceEnv,
-        change: { kind: "merge" },
       });
-      if (!result.ok) {
-        // Generic reason — never include the value.
-        return jerr(400, result.reason);
-      }
-      const out: ServiceEnvOpResponse = { ok: true };
-      return jok(out);
-    }
-    const envUnsetM = /^\/api\/screens\/services\/([^/]+)\/env\/unset$/.exec(path);
-    if (envUnsetM && method === "POST") {
-      if (!deps.servicePlatform) return jerr(503, "service platform not configured");
-      const appId = decodeURIComponent(envUnsetM[1]!);
-      const body = parseJson(req.body) as ServiceEnvUnsetRequest | null;
-      if (!body || typeof body.name !== "string" || body.name.length === 0) {
-        return jerr(400, "name required");
-      }
-      if (typeof body.signature !== "string") return jerr(400, "signature required");
-      const r = body.request;
-      if (!r || typeof r.serverId !== "string" || typeof r.creator !== "string" ||
-          typeof r.slug !== "string" || typeof r.issuedAt !== "number" ||
-          typeof r.env !== "object" || r.env === null) {
-        return jerr(400, "malformed request envelope");
-      }
-      const expectedAppId = composeServiceId(r.creator, r.slug);
-      if (expectedAppId !== appId) {
-        return jerr(400, "envelope (creator,slug) does not match :appId");
-      }
-      // Defense-in-depth: the new env map must NOT include the unset
-      // name. The owner is asserting "the new state lacks this name."
-      if (body.name in r.env) {
-        return jerr(400, "request.env still contains the name being unset");
-      }
-      let signatureBytes: Uint8Array;
-      try {
-        signatureBytes = hexToBytesLocal(body.signature);
-      } catch {
-        return jerr(400, "invalid hex signature");
-      }
-      const result = await deps.servicePlatform.setEnv({
-        request: r,
-        signature: signatureBytes,
-        verify: verifySetServiceEnv,
-        change: { kind: "unset", name: body.name },
-      });
+      // Generic reasons only — never a value.
       if (!result.ok) return jerr(400, result.reason);
       const out: ServiceEnvOpResponse = { ok: true };
       return jok(out);

@@ -27,10 +27,15 @@ import {
   type InstallServiceRequest,
   type Keypair,
   type MembershipMutation,
-  type SetServiceEnvRequest,
+  type ServiceEnvChange,
+  serviceEnvChangeCanonicalBytes,
+  serviceEnvValueSha256,
+  verifyServiceEnvChange,
+  parseServiceEnvChange,
   type UninstallServiceRequest,
 } from "@flagship/protocol";
 import type { AppEnv } from "./serviceEnvStore.js";
+import type { UsedNonceStore } from "./updateConsumer.js";
 import type { SwkOps } from "./keyCustodian.js";
 import { AppRunner, type AppSpec, type StartCheck } from "./serviceRunner.js";
 import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
@@ -182,6 +187,13 @@ export interface ServicePlatformDeps {
    */
   envStore?: import("./serviceEnvStore.js").AppEnvStore | null;
   /**
+   * Spent nonces of env changes (`changeEnv`), kept across restarts so a
+   * captured order can't be replayed. Null keeps them in memory (tests).
+   */
+  envNonceStore?: UsedNonceStore | null;
+  /** This box's FQDN: an env change must name it. Unset skips the check (tests). */
+  serverFqdn?: string;
+  /**
    * Fired after a service is successfully uninstalled (the container is stopped
    * + the data/env/token/route state is torn down locally). The per-service
    * leadership gossip wires this to RELEASE the box's `<slug>.<user>` route at
@@ -226,9 +238,12 @@ export class ServicePlatform {
   /** Whether a new app may come onto this server (the backup policy's limit): null, or the sentence why not. */
   private admitNewApp: (() => string | null) | null = null;
 
+  private readonly envNonces: UsedNonceStore;
+
   constructor(private readonly deps: ServicePlatformDeps) {
     this.maxAgeMs = deps.maxAgeMs ?? 5 * 60_000;
     this.now = deps.now ?? (() => Date.now());
+    this.envNonces = deps.envNonceStore ?? memoryUsedNonceStore();
   }
 
   /** Gate every new app (install, copy, import) on the backup policy's limit. Redeploys aren't gated. */
@@ -518,56 +533,57 @@ export class ServicePlatform {
   }
 
   /**
-   * Apply an owner-signed `SetServiceEnvRequest`: verify the IRK signature
-   * (same trust root as install/uninstall), then store the env sealed
-   * at rest. `change` picks how the signed map meets what is stored:
-   * `replace` (the default) stores exactly the signed map; `merge` adds or
-   * overwrites only the signed names, since a client holds names but never
-   * values and can only sign the one it is setting; `unset` drops one name
-   * and needs an empty signed map. The new values take effect on the next deploy
-   * (the app's process env is set at container start); we do not hot-
-   * swap a running container's env. Reserved `FLAGSHIP_`-prefixed keys
-   * are rejected so an owner can never shadow a daemon-injected var.
+   * Apply one owner-signed `flagship/service-env-change/v1`: set or unset the
+   * single variable the signature names. Same trust root as install /
+   * uninstall (the owner IRK, or the box's own identity). The order must be
+   * fresh and its nonce unused (each is spent once, kept across restarts), so
+   * a captured order can't be played again, and a `set` value must hash to
+   * the signed `valueSha256`. The new value takes effect on the next deploy
+   * (the app's env is set at container start).
    *
-   * The values are SECRET: this method never logs them, never returns
-   * them, and never surfaces them in an error.
+   * The values are SECRET: this method never logs them, never returns them,
+   * and never surfaces them in an error.
    */
-  async setEnv(args: {
-    request: SetServiceEnvRequest;
+  async changeEnv(args: {
+    change: ServiceEnvChange;
+    /** The value for a `set`; absent for an `unset`. */
+    value?: string;
     signature: Bytes;
-    verify: (req: SetServiceEnvRequest, sig: Bytes, irkPub: Bytes) => boolean;
-    change?: { kind: "replace" } | { kind: "merge" } | { kind: "unset"; name: string };
   }): Promise<{ ok: true } | { ok: false; reason: string }> {
-    const { request: r, signature, verify } = args;
-    const change = args.change ?? { kind: "replace" };
-    if (Math.abs(this.now() - r.issuedAt) > this.maxAgeMs) {
+    const { change: c, signature } = args;
+    try {
+      serviceEnvChangeCanonicalBytes(c);
+    } catch (e) {
+      return { ok: false, reason: (e as Error).message };
+    }
+    if (this.deps.serverFqdn && c.serverId.toLowerCase() !== this.deps.serverFqdn.toLowerCase()) {
+      return { ok: false, reason: "this change is for another server" };
+    }
+    if (Math.abs(this.now() - c.issuedAt) > this.maxAgeMs) {
       return { ok: false, reason: "stale request" };
     }
-    if (!this.verifyHostAuthority(r, signature, verify)) {
+    if (!this.verifyHostAuthority(c, signature, verifyServiceEnvChange)) {
       return { ok: false, reason: "invalid signature (must be host's IRK)" };
+    }
+    if (c.op === "set") {
+      if (typeof args.value !== "string" || serviceEnvValueSha256(args.value) !== c.valueSha256) {
+        return { ok: false, reason: "the value doesn't match the signed change" };
+      }
+    } else if (args.value !== undefined) {
+      return { ok: false, reason: "an unset carries no value" };
     }
     if (!this.deps.envStore) {
       return { ok: false, reason: "no env store configured" };
     }
-    for (const k of Object.keys(r.env)) {
-      if (k.startsWith("FLAGSHIP_")) {
-        return { ok: false, reason: "reserved FLAGSHIP_ env name" };
-      }
+    if (await this.envNonces.has(c.nonce, c.issuedAt)) {
+      return { ok: false, reason: "this change was already applied" };
     }
-    if (change.kind === "unset" && Object.keys(r.env).length > 0) {
-      return { ok: false, reason: "an unset order must sign an empty env" };
-    }
-    const serviceId = ServicePlatform.serviceId(r.creator, r.slug);
+    await this.envNonces.mark(c.nonce);
     try {
-      let next: Record<string, string>;
-      if (change.kind === "replace") {
-        next = { ...r.env };
-      } else {
-        const held = (await this.deps.envStore.get(serviceId)) ?? {};
-        next = { ...held, ...r.env };
-        if (change.kind === "unset") delete next[change.name];
-      }
-      await this.deps.envStore.put(serviceId, next);
+      const next = { ...((await this.deps.envStore.get(c.serviceId)) ?? {}) };
+      if (c.op === "set") next[c.name] = args.value!;
+      else delete next[c.name];
+      await this.deps.envStore.put(c.serviceId, next);
     } catch {
       // Never surface a value in a thrown error.
       return { ok: false, reason: "failed to persist env" };
@@ -1139,7 +1155,7 @@ function randomPort(): number {
 // HTTP surface (consumed by runtime.ts's default handler)
 // ──────────────────────────────────────────────────────────────────────
 
-import { verifyInstallService, verifyUninstallService, verifySetServiceEnv, ed } from "@flagship/protocol";
+import { verifyInstallService, verifyUninstallService, ed } from "@flagship/protocol";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
 
 export interface ServiceHttpDeps {
@@ -1170,11 +1186,11 @@ export function buildServiceHttpHandlers(deps: ServiceHttpDeps) {
       if (req.method === "POST") return installService(deps, req);
       return { status: 405, headers: J, body: JSON.stringify({ error: "method not allowed" }) };
     }
-    // Owner-signed set-service-env. Mirrors the install/uninstall envelope
-    // trust root (host IRK). Values are SECRET — never echoed back.
+    // One owner-signed env change (flagship/service-env-change/v1), the
+    // same trust root as install/uninstall. Values are SECRET, never echoed.
     const envM = /^\/api\/services\/([^/]+)\/env$/.exec(req.path);
     if (envM && req.method === "POST") {
-      return setServiceEnv(deps, envM[1]!, req);
+      return changeServiceEnv(deps, decodeURIComponent(envM[1]!), req);
     }
     if (req.path.startsWith("/api/services/") && req.method === "DELETE") {
       const serviceId = req.path.slice("/api/services/".length);
@@ -1303,40 +1319,20 @@ async function uninstallService(deps: ServiceHttpDeps, serviceId: string, req: H
 }
 
 /**
- * Owner-signed set-app-env. The request body mirrors install/uninstall
- * (`{ request, signature }`). The response NEVER echoes env values — a
- * success is a bare `{ ok: true }`; an error is a generic reason that
- * never interpolates a value.
+ * Owner-signed env change: `{ change, value?, signature }`. The response
+ * never echoes a value; an error is a generic reason that never names one.
  */
-async function setServiceEnv(deps: ServiceHttpDeps, serviceId: string, req: HttpRequest): Promise<HttpResponse> {
-  const body = safeJsonParse(req.body.toString("utf8")) as {
-    request?: Record<string, unknown>;
-    signature?: string;
-  } | null;
-  if (!body || typeof body.signature !== "string") {
+async function changeServiceEnv(deps: ServiceHttpDeps, serviceId: string, req: HttpRequest): Promise<HttpResponse> {
+  const body = safeJsonParse(req.body.toString("utf8")) as { change?: unknown; value?: unknown; signature?: unknown } | null;
+  const change = parseServiceEnvChange(body?.change);
+  if (!body || !change || typeof body.signature !== "string") {
     return { status: 400, headers: J, body: JSON.stringify({ error: "malformed body" }) };
   }
-  const r = body.request ?? {};
-  if (
-    typeof r.serverId !== "string" ||
-    typeof r.creator !== "string" ||
-    typeof r.slug !== "string" ||
-    typeof r.issuedAt !== "number" ||
-    typeof r.env !== "object" ||
-    r.env === null ||
-    Array.isArray(r.env)
-  ) {
-    return { status: 400, headers: J, body: JSON.stringify({ error: "malformed request" }) };
+  if (change.serviceId !== serviceId) {
+    return { status: 400, headers: J, body: JSON.stringify({ error: "serviceId / change mismatch" }) };
   }
-  const env: Record<string, string> = {};
-  for (const [k, v] of Object.entries(r.env as Record<string, unknown>)) {
-    if (typeof v !== "string") {
-      return { status: 400, headers: J, body: JSON.stringify({ error: "env values must be strings" }) };
-    }
-    env[k] = v;
-  }
-  if (ServicePlatform.serviceId(r.creator, r.slug) !== serviceId) {
-    return { status: 400, headers: J, body: JSON.stringify({ error: "serviceId / (creator,slug) mismatch" }) };
+  if (body.value !== undefined && typeof body.value !== "string") {
+    return { status: 400, headers: J, body: JSON.stringify({ error: "value must be a string" }) };
   }
   let signature: Uint8Array;
   try {
@@ -1344,16 +1340,10 @@ async function setServiceEnv(deps: ServiceHttpDeps, serviceId: string, req: Http
   } catch {
     return { status: 400, headers: J, body: JSON.stringify({ error: "invalid hex" }) };
   }
-  const result = await deps.platform.setEnv({
-    request: {
-      serverId: r.serverId,
-      creator: r.creator,
-      slug: r.slug,
-      env,
-      issuedAt: r.issuedAt,
-    },
+  const result = await deps.platform.changeEnv({
+    change,
+    ...(typeof body.value === "string" ? { value: body.value } : {}),
     signature,
-    verify: verifySetServiceEnv,
   });
   if (!result.ok) {
     return { status: 400, headers: J, body: JSON.stringify({ error: result.reason }) };
@@ -1369,6 +1359,17 @@ void ed; // silence unused-import; kept for future when the daemon needs raw sig
  * already rejects them at write time, this guards a legacy/forged blob
  * on disk). Returns a plain map; values are not logged anywhere.
  */
+/** Spent env-change nonces, in memory (tests and store-less runs). */
+function memoryUsedNonceStore(): UsedNonceStore {
+  const used = new Set<string>();
+  return {
+    has: async (nonce) => used.has(nonce.toLowerCase()),
+    mark: async (nonce) => {
+      used.add(nonce.toLowerCase());
+    },
+  };
+}
+
 function sanitizeOwnerEnv(env: AppEnv | null): Record<string, string> {
   if (!env) return {};
   const out: Record<string, string> = {};

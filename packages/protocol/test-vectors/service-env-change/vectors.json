@@ -1,0 +1,172 @@
+{
+  "about": "flagship/service-env-change/v1: one change to an app's environment variables, signed by the IRK. Canonical: tag|serverId|serviceId|op|name|valueSha256|issuedAt|nonce. op is set (valueSha256 = lowercase hex SHA-256 of the value's UTF-8) or unset (valueSha256 empty). name matches ^[A-Za-z_][A-Za-z0-9_]{0,127}$ and never starts with FLAGSHIP_; serviceId is creator--slug; nonce is 32 lowercase hex. Key: the protocol IRK derived from the UMK seed.",
+  "umkSeedHex": "3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c",
+  "pub": "e30f89102a8a27cd8b4570ffb8254ea5586a5252d638d661451edc9992e52dfc",
+  "cases": [
+    {
+      "change": {
+        "serverId": "home.alice.flagship.services",
+        "serviceId": "alice--weatherbot",
+        "op": "set",
+        "name": "OPENAI_API_KEY",
+        "valueSha256": "e0af5a5e4f889b9add80637ed964016306db6a23e18782c759ee32bdb8230a62",
+        "issuedAt": 1792000000000,
+        "nonce": "0123456789abcdef0123456789abcdef"
+      },
+      "value": "sk-test-1234567890",
+      "canonical": "flagship/service-env-change/v1|home.alice.flagship.services|alice--weatherbot|set|OPENAI_API_KEY|e0af5a5e4f889b9add80637ed964016306db6a23e18782c759ee32bdb8230a62|1792000000000|0123456789abcdef0123456789abcdef",
+      "signature": "1dbec6b61e037974fa9509a6ff6f14577c2aaa64395f7dee79c30efc7c78a2690919f01ce57127a963286d594857ac59f31143dbb1ee11a2bb3e78415c7e1d0d"
+    },
+    {
+      "change": {
+        "serverId": "home.alice.flagship.services",
+        "serviceId": "alice--weatherbot",
+        "op": "set",
+        "name": "DATABASE_URL",
+        "valueSha256": "2ff44fc6bbf3263cc395f8827f44d54997e3ea93b5599d7b2b3416a97d44ca95",
+        "issuedAt": 1792000000001,
+        "nonce": "fedcba9876543210fedcba9876543210"
+      },
+      "value": "postgres://u:p@db/x?opt=a|b",
+      "canonical": "flagship/service-env-change/v1|home.alice.flagship.services|alice--weatherbot|set|DATABASE_URL|2ff44fc6bbf3263cc395f8827f44d54997e3ea93b5599d7b2b3416a97d44ca95|1792000000001|fedcba9876543210fedcba9876543210",
+      "signature": "07b98826788fdcf60f4663d9c995d9fb45b46fa9e0c78df723a1b5001e105a27c2c3ef5ecd4fe830b4db2624655fccc356e21452574687f21e7a3dc9b77d090c"
+    },
+    {
+      "change": {
+        "serverId": "home.alice.flagship.services",
+        "serviceId": "alice--weatherbot",
+        "op": "set",
+        "name": "GREETING",
+        "valueSha256": "c2a59c71097b678dc5af2eb1f98ddc575b63948b0fa6740071a945673aaada4d",
+        "issuedAt": 1792000000002,
+        "nonce": "00112233445566778899aabbccddeeff"
+      },
+      "value": "héllo wörld ✓",
+      "canonical": "flagship/service-env-change/v1|home.alice.flagship.services|alice--weatherbot|set|GREETING|c2a59c71097b678dc5af2eb1f98ddc575b63948b0fa6740071a945673aaada4d|1792000000002|00112233445566778899aabbccddeeff",
+      "signature": "99173a0de73793e7248dca97509e763cc1ccb97b0283d09e465d1bf091cf51d7e4d0b59291bfb11ad9589ce111c272753202ef69d85d4f1d2dc0d55c30c0b302"
+    },
+    {
+      "change": {
+        "serverId": "home.alice.flagship.services",
+        "serviceId": "alice--weatherbot",
+        "op": "unset",
+        "name": "OPENAI_API_KEY",
+        "valueSha256": "",
+        "issuedAt": 1792000000003,
+        "nonce": "ffeeddccbbaa99887766554433221100"
+      },
+      "canonical": "flagship/service-env-change/v1|home.alice.flagship.services|alice--weatherbot|unset|OPENAI_API_KEY||1792000000003|ffeeddccbbaa99887766554433221100",
+      "signature": "720ff8addd2d07fc305b259bff5e31c0c9d46a5cfcf0ca246fb99cee7e1b8e1b7c44b453c74f80e38ddc2c4dd914d2e1f405878d10e923aa8f61bdb7209bb209"
+    }
+  ],
+  "invalid": [
+    {
+      "serverId": "",
+      "serviceId": "alice--weatherbot",
+      "op": "set",
+      "name": "OPENAI_API_KEY",
+      "valueSha256": "e0af5a5e4f889b9add80637ed964016306db6a23e18782c759ee32bdb8230a62",
+      "issuedAt": 1792000000000,
+      "nonce": "0123456789abcdef0123456789abcdef"
+    },
+    {
+      "serverId": "home.alice.flagship.services",
+      "serviceId": "alice-weatherbot",
+      "op": "set",
+      "name": "OPENAI_API_KEY",
+      "valueSha256": "e0af5a5e4f889b9add80637ed964016306db6a23e18782c759ee32bdb8230a62",
+      "issuedAt": 1792000000000,
+      "nonce": "0123456789abcdef0123456789abcdef"
+    },
+    {
+      "serverId": "home.alice.flagship.services",
+      "serviceId": "alice--weatherbot",
+      "op": "replace",
+      "name": "OPENAI_API_KEY",
+      "valueSha256": "e0af5a5e4f889b9add80637ed964016306db6a23e18782c759ee32bdb8230a62",
+      "issuedAt": 1792000000000,
+      "nonce": "0123456789abcdef0123456789abcdef"
+    },
+    {
+      "serverId": "home.alice.flagship.services",
+      "serviceId": "alice--weatherbot",
+      "op": "set",
+      "name": "my-key",
+      "valueSha256": "e0af5a5e4f889b9add80637ed964016306db6a23e18782c759ee32bdb8230a62",
+      "issuedAt": 1792000000000,
+      "nonce": "0123456789abcdef0123456789abcdef"
+    },
+    {
+      "serverId": "home.alice.flagship.services",
+      "serviceId": "alice--weatherbot",
+      "op": "set",
+      "name": "1KEY",
+      "valueSha256": "e0af5a5e4f889b9add80637ed964016306db6a23e18782c759ee32bdb8230a62",
+      "issuedAt": 1792000000000,
+      "nonce": "0123456789abcdef0123456789abcdef"
+    },
+    {
+      "serverId": "home.alice.flagship.services",
+      "serviceId": "alice--weatherbot",
+      "op": "set",
+      "name": "FLAGSHIP_APP_ID",
+      "valueSha256": "e0af5a5e4f889b9add80637ed964016306db6a23e18782c759ee32bdb8230a62",
+      "issuedAt": 1792000000000,
+      "nonce": "0123456789abcdef0123456789abcdef"
+    },
+    {
+      "serverId": "home.alice.flagship.services",
+      "serviceId": "alice--weatherbot",
+      "op": "set",
+      "name": "OPENAI_API_KEY",
+      "valueSha256": "",
+      "issuedAt": 1792000000000,
+      "nonce": "0123456789abcdef0123456789abcdef"
+    },
+    {
+      "serverId": "home.alice.flagship.services",
+      "serviceId": "alice--weatherbot",
+      "op": "set",
+      "name": "OPENAI_API_KEY",
+      "valueSha256": "E0AF5A5E4F889B9ADD80637ED964016306DB6A23E18782C759EE32BDB8230A62",
+      "issuedAt": 1792000000000,
+      "nonce": "0123456789abcdef0123456789abcdef"
+    },
+    {
+      "serverId": "home.alice.flagship.services",
+      "serviceId": "alice--weatherbot",
+      "op": "unset",
+      "name": "OPENAI_API_KEY",
+      "valueSha256": "e0af5a5e4f889b9add80637ed964016306db6a23e18782c759ee32bdb8230a62",
+      "issuedAt": 1792000000000,
+      "nonce": "0123456789abcdef0123456789abcdef"
+    },
+    {
+      "serverId": "home.alice.flagship.services",
+      "serviceId": "alice--weatherbot",
+      "op": "set",
+      "name": "OPENAI_API_KEY",
+      "valueSha256": "e0af5a5e4f889b9add80637ed964016306db6a23e18782c759ee32bdb8230a62",
+      "issuedAt": 1792000000000,
+      "nonce": "0123"
+    },
+    {
+      "serverId": "home.alice.flagship.services",
+      "serviceId": "alice--weatherbot",
+      "op": "set",
+      "name": "OPENAI_API_KEY",
+      "valueSha256": "e0af5a5e4f889b9add80637ed964016306db6a23e18782c759ee32bdb8230a62",
+      "issuedAt": 1792000000000,
+      "nonce": "0123456789ABCDEF0123456789ABCDEF"
+    },
+    {
+      "serverId": "home.alice.flagship.services",
+      "serviceId": "alice--weatherbot",
+      "op": "set",
+      "name": "OPENAI_API_KEY",
+      "valueSha256": "e0af5a5e4f889b9add80637ed964016306db6a23e18782c759ee32bdb8230a62",
+      "issuedAt": -1,
+      "nonce": "0123456789abcdef0123456789abcdef"
+    }
+  ]
+}

@@ -635,17 +635,12 @@ export interface ReleaseStatusResponse {
 //
 // /api/screens/services/:appId/env
 //   - GET    → { names } — env var NAMES set on this app. NEVER values.
-//   - POST  /set    body { name, value, request, signature } where
-//                    `request` is the SetServiceEnvRequest envelope (the
-//                    full canonical-bytes-signed envelope per
-//                    @flagship/protocol auth.ts; `value` mirrors the
-//                    only entry of `request.env` and is carried as a
-//                    separate field purely for UI clarity — the daemon
-//                    cross-checks). On success the response is a bare
-//                    { ok: true }; the value is NEVER echoed.
-//   - POST  /unset  body { name, request, signature } where `request` is
-//                    the full SetServiceEnvRequest carrying the desired
-//                    set MINUS the dropped name. Same gate as /set.
+//   - POST  /set    body { change, value, signature }: `change` is a signed
+//                    flagship/service-env-change/v1 with op "set" naming the
+//                    one variable and the SHA-256 of `value`. On success the
+//                    response is a bare { ok: true }; the value is NEVER echoed.
+//   - POST  /unset  body { change, signature }: op "unset", no value.
+//   Each change's nonce is spent once (a replay is refused).
 //
 // The values flow ONLY over the daemon's TLS surface; the phone never
 // persists them and they never appear in any log.
@@ -655,34 +650,30 @@ export interface ServiceEnvListResponse {
   names: string[];
 }
 
-export interface ServiceEnvSetRequest {
-  /** Env var name being set (mirrors the only key in request.env). */
+/** A signed flagship/service-env-change/v1 (@flagship/protocol serviceEnvChange.ts). */
+export interface ServiceEnvChangeWire {
+  serverId: string;
+  /** `<creator>--<slug>`; must equal the URL's :appId. */
+  serviceId: string;
+  op: "set" | "unset";
   name: string;
+  /** Lowercase hex SHA-256 of the value (set); "" (unset). */
+  valueSha256: string;
+  issuedAt: number;
+  /** 32 lowercase hex, used once. */
+  nonce: string;
+}
+
+export interface ServiceEnvSetRequest {
+  change: ServiceEnvChangeWire;
   /** Env var value. NEVER logged. NEVER echoed by the daemon. */
   value: string;
-  /**
-   * Owner-IRK-signed SetServiceEnvRequest envelope (canonical bytes per
-   * @flagship/protocol auth.ts → signSetServiceEnv). The daemon
-   * re-verifies under the host's IRK and rejects on mismatch.
-   */
-  request: {
-    serverId: string;
-    creator: string;
-    slug: string;
-    /** Full desired env map for the app. Values are SECRET. */
-    env: Record<string, string>;
-    issuedAt: number;
-  };
-  /** Hex Ed25519 signature over canonicalSetServiceEnv(request). */
+  /** Hex Ed25519 signature over the change's canonical bytes. */
   signature: string;
 }
 
 export interface ServiceEnvUnsetRequest {
-  /** Env var name being removed. */
-  name: string;
-  /** Owner-IRK-signed envelope — same canonical-bytes contract. */
-  request: ServiceEnvSetRequest["request"];
-  /** Hex Ed25519 signature. */
+  change: ServiceEnvChangeWire;
   signature: string;
 }
 

@@ -391,6 +391,7 @@ const OPTIONAL_SHELL = [
   "/lib/memberRoles.js",
   "/lib/serverShare.js",
   "/lib/serverShares.js",
+  "/lib/serviceEnvChange.js",
   "/lib/serverArchive.js",
   "/lib/savedBackups.js",
   "/lib/migrateArchive.js",

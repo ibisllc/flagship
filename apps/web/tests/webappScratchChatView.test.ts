@@ -111,7 +111,8 @@ describe("webapp build chat: the AI waits on the owner of a live app", () => {
 
   it("sends the value through the signed env path, then tells the AI it was set", async () => {
     const body = await asset("/webapp/views/vibe-code.js");
-    expect(body).toContain("canonicalSetServiceEnv(envelope.serverId, creator, slug, envelope.env, envelope.issuedAt)");
+    expect(body).toContain("signedEnvChangeBody(");
+    expect(body).toContain(`op: "set", name, value`);
     expect(body).toContain("/env/set`");
     expect(body).toContain('const body = { envVarStatus: status };');
     expect(body).toContain('answerEnvVar("declined")');
