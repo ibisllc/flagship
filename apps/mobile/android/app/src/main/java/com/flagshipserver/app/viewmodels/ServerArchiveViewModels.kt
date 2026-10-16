@@ -50,7 +50,7 @@ private fun message(t: Throwable, fallback: String): String = when {
 
 /** The server page: the user sets the backup's passcode, this device makes the
  *  content key and its two key slots, the box seals the backup, and this device
- *  downloads the two files for the user to save wherever they like. */
+ *  downloads its one `.flagship` file for the user to save wherever they like. */
 class ServerBackupViewModel(
     val serverFqdn: String,
     private val client: ScreensClient,
@@ -73,8 +73,8 @@ class ServerBackupViewModel(
         data class Building(val label: String, val fraction: Double) : Phase
         data class Ready(val bytes: Long) : Phase
         data class Downloading(val fraction: Double) : Phase
-        /** The backup file, then the data file. */
-        data class Saved(val files: List<File>) : Phase
+        /** The one `.flagship` file, on this device until the user saves it. */
+        data class Saved(val file: File) : Phase
         data class Failed(val message: String) : Phase
     }
 
@@ -159,7 +159,7 @@ class ServerBackupViewModel(
                 if (s.state == "failed") throw IllegalStateException("The backup failed: ${s.reason ?: "the backup couldn't be made"}.")
                 if (s.state == "ready") {
                     status = s
-                    _phase.value = Phase.Ready(s.bytes ?: 0)
+                    _phase.value = Phase.Ready(s.bundleBytes ?: s.bytes ?: 0)
                     return
                 }
                 val p = s.progress
@@ -178,28 +178,25 @@ class ServerBackupViewModel(
         }
     }
 
-    /** Download both files: the small backup file, and the data file in 4 MiB
-     *  parts, several at once, resuming an interrupted download and checking
-     *  the server's SHA-256. */
+    /** Download the backup's one `.flagship` file in 4 MiB parts, several at
+     *  once, resuming an interrupted download and checking the server's SHA-256. */
     suspend fun download() {
         val s = status
-        val total = s?.bytes
+        val total = s?.bundleBytes
         if (_phase.value !is Phase.Ready || s == null || total == null) return
         _phase.value = Phase.Downloading(0.0)
         val dir = downloadDir().apply { mkdirs() }
         val stem = ServerArchive.fileStem(serverFqdn, s.startedAt)
         val part = File(dir, "${s.archiveId}.part")
         val state = File(dir, "${s.archiveId}.json")
-        val dataFile = File(dir, s.dataFileName ?: "$stem.${ServerBackupFormat.DATA_EXTENSION}")
-        val backupFile = File(dir, s.backupFileName ?: "$stem.${ServerBackupFormat.BACKUP_EXTENSION}")
+        val bundle = File(dir, s.bundleFileName ?: "$stem.${ServerBackupFormat.BUNDLE_EXTENSION}")
         try {
-            val backupBytes = client.serverArchiveBackupFile()
             ArchiveDownloader.download(
                 total = total,
-                sha256 = s.sha256,
+                sha256 = s.bundleSha256,
                 file = part,
                 stateFile = state,
-                fetch = { offset -> client.serverArchiveChunk(offset) },
+                fetch = { offset -> client.serverArchiveBundleChunk(offset) },
                 progress = { received ->
                     if (_phase.value is Phase.Downloading) {
                         _phase.value = Phase.Downloading(if (total > 0) received.toDouble() / total else 1.0)
@@ -207,13 +204,12 @@ class ServerBackupViewModel(
                 },
             )
             withContext(Dispatchers.IO) {
-                dataFile.delete()
-                check(part.renameTo(dataFile)) { "The backup couldn't be saved on this device." }
+                bundle.delete()
+                check(part.renameTo(bundle)) { "The backup couldn't be saved on this device." }
                 state.delete()
-                backupFile.writeBytes(backupBytes)
             }
             runCatching { client.serverArchiveForget() }
-            _phase.value = Phase.Saved(listOf(backupFile, dataFile))
+            _phase.value = Phase.Saved(bundle)
         } catch (e: CancellationException) {
             // The parts already in stay for the next try.
             _phase.value = Phase.Ready(total)
@@ -291,11 +287,48 @@ class LocalPickedFile(private val file: File) : PickedFile {
     override fun open(): InputStream = file.inputStream()
 }
 
+/** One part of a picked file (the data part of a `.flagship` file), streamed
+ *  from where it is: never copied or held in memory. */
+class PartOfPickedFile(private val whole: PickedFile, private val offset: Long, override val size: Long) : PickedFile {
+    override val name: String get() = whole.name
+    override fun open(): InputStream {
+        val s = whole.open()
+        var left = offset
+        while (left > 0) {
+            val n = s.skip(left)
+            if (n > 0) left -= n else if (s.read() < 0) throw java.io.IOException("the file ends early") else left -= 1
+        }
+        return LimitedInputStream(s, size)
+    }
+    override fun release() = whole.release()
+}
+
+private class LimitedInputStream(private val inner: InputStream, private var left: Long) : java.io.FilterInputStream(inner) {
+    override fun read(): Int {
+        if (left <= 0) return -1
+        val b = inner.read()
+        if (b >= 0) left -= 1
+        return b
+    }
+    override fun read(b: ByteArray, off: Int, len: Int): Int {
+        if (left <= 0) return -1
+        val n = inner.read(b, off, minOf(len.toLong(), left).toInt())
+        if (n > 0) left -= n
+        return n
+    }
+    override fun skip(n: Long): Long {
+        val k = inner.skip(minOf(n, left))
+        if (k > 0) left -= k
+        return k
+    }
+    override fun available(): Int = minOf(inner.available().toLong(), left).toInt()
+}
+
 /** Home → Add/Import a server → Import a backup, or a waiting server's "Send
  *  the backup" (docs/server-backup-and-clone.md, "Restore a backup"): pick the
- *  two files, open the backup (this account's key, else its passcode), check
- *  the data file, pick a name, make the server with the existing create
- *  screen, then wait for it and send it the backup. */
+ *  one `.flagship` file, open its metadata part (this account's key, else its
+ *  passcode), stream its data part for the check, pick a name, make the server
+ *  with the existing create screen, then wait for it and send it the data part. */
 class ImportBackupViewModel(
     private val username: String,
     /** Every server name the account uses (pending ones too). */
@@ -349,11 +382,10 @@ class ImportBackupViewModel(
 
     private val _phase = MutableStateFlow<Phase>(Phase.Pick)
     val phase: StateFlow<Phase> = _phase.asStateFlow()
-    var backupFileName by mutableStateOf<String?>(null)
+    /** The picked `.flagship` file and its size. */
+    var fileName by mutableStateOf<String?>(null)
         private set
-    var dataFileName by mutableStateOf<String?>(null)
-        private set
-    var dataFileSize by mutableStateOf<Long?>(null)
+    var fileSize by mutableStateOf<Long?>(null)
         private set
     var opened by mutableStateOf<ServerBackupFormat.Opened?>(null)
         private set
@@ -367,7 +399,8 @@ class ImportBackupViewModel(
 
     private val takenNames: Set<String> = takenNames.map { it.lowercase() }.toSet()
     private var file: ServerBackupFormat.File? = null
-    private var backupPicked: PickedFile? = null
+    private var picked: PickedFile? = null
+    /** The data part of [picked]. */
     private var dataPicked: PickedFile? = null
     private var sendJob: Job? = null
     private var sendingTo: String? = null
@@ -377,59 +410,44 @@ class ImportBackupViewModel(
 
     // ── Files ──────────────────────────────────────────────────────
 
-    /** The user picked one or both files. */
-    suspend fun choose(files: List<PickedFile>) {
+    /** The user picked a `.flagship` file: read its header and metadata part
+     *  only (the data part is streamed later, from where the file is). */
+    suspend fun choose(f: PickedFile) {
         fileError = null
-        for (f in files) {
-            val head = withContext(Dispatchers.IO) {
-                try {
-                    f.open().use { ServerBackupFormat.readUpTo(it, 64) }
-                } catch (_: Exception) {
-                    ByteArray(0)
-                }
-            }
-            when (ServerBackupFormat.classify(head, f.size)) {
-                ServerBackupFormat.PickedKind.BACKUP -> {
-                    try {
-                        val bytes = withContext(Dispatchers.IO) { f.open().use { ServerBackupFormat.readUpTo(it, ServerBackupFormat.BACKUP_FILE_MAX_BYTES + 1) } }
-                        val parsed = ServerBackupFormat.parse(bytes)
-                        file = parsed
-                        opened = null
-                        backupPicked?.takeIf { it !== f }?.release()
-                        backupPicked = f
-                        backupFileName = f.name
-                    } catch (e: ServerBackupFormat.FormatException) {
-                        fileError = e.message
-                        f.release()
-                    } catch (_: Exception) {
-                        fileError = "That backup file couldn't be read."
-                        f.release()
-                    }
-                }
-                ServerBackupFormat.PickedKind.DATA -> {
-                    dataPicked?.takeIf { it !== f }?.release()
-                    dataPicked = f
-                    dataFileName = f.name
-                    dataFileSize = f.size
-                }
-                null -> {
-                    f.release()
-                    fileError = "${f.name} isn't a Flagship backup file or data file."
+        val read = withContext(Dispatchers.IO) {
+            runCatching {
+                f.open().use { input ->
+                    val head = ServerBackupFormat.readUpTo(input, ServerBackupFormat.BUNDLE_HEADER_BYTES)
+                    val layout = ServerBackupFormat.parseBundleHeader(head, f.size)
+                    val meta = ServerBackupFormat.readUpTo(input, layout.metaLength)
+                    if (meta.size != layout.metaLength) throw ServerBackupFormat.BundleException("This backup is cut short: it ends before its data.")
+                    layout to ServerBackupFormat.parse(meta)
                 }
             }
         }
+        val (layout, parsed) = read.getOrElse { t ->
+            if (t is CancellationException) throw t
+            f.release()
+            fileError = when (t) {
+                is ServerBackupFormat.BundleException -> t.message
+                is ServerBackupFormat.FormatException -> t.message
+                else -> "That backup couldn't be read."
+            }
+            return
+        }
+        picked?.takeIf { it !== f }?.release()
+        picked = f
+        dataPicked = PartOfPickedFile(f, layout.dataOffset, layout.dataLength)
+        file = parsed
+        opened = null
+        fileName = f.name
+        fileSize = f.size
         advance()
     }
 
-    /** The line under the picker: what's picked, and what's still missing. */
-    val filesSummary: String
-        get() {
-            val b = backupFileName?.let { "Backup file: $it" } ?: "Backup file: not picked yet"
-            val want = opened?.body?.data?.fileName
-            val d = dataFileName?.let { "Data file: $it (${ServerArchive.formatBytes(dataFileSize ?: 0)})" }
-                ?: "Data file: not picked yet${want?.let { " ($it)" } ?: ""}"
-            return "$b\n$d"
-        }
+    /** The line under the picker: what's picked. */
+    val fileSummary: String
+        get() = fileName?.let { "$it (${ServerArchive.formatBytes(fileSize ?: 0)})" } ?: "No backup picked yet"
 
     /** One line on what the backup holds, once it is open. */
     val summary: String?
@@ -514,8 +532,12 @@ class ImportBackupViewModel(
         } catch (t: Throwable) {
             data.release()
             dataPicked = null
-            dataFileName = null
-            fileError = (t as? ServerBackupFormat.DataCheckException)?.message ?: "The data file couldn't be checked."
+            picked = null
+            file = null
+            opened = null
+            fileName = null
+            fileSize = null
+            fileError = checkMessage(t)
             _phase.value = Phase.Pick
             return
         }
@@ -604,9 +626,8 @@ class ImportBackupViewModel(
         sendJob?.cancel()
         sendJob = null
         sendingTo = null
-        backupPicked?.release()
-        dataPicked?.release()
-        backupPicked = null
+        picked?.release()
+        picked = null
         dataPicked = null
     }
 
@@ -737,7 +758,7 @@ class ImportBackupViewModel(
 
     class ImportException(val kind: Kind, why: String = "") : Exception(
         when (kind) {
-            Kind.UNREADABLE -> "The data file can't be read any more (was its drive removed?)."
+            Kind.UNREADABLE -> "The backup file can't be read any more (was its drive removed?)."
             Kind.VANISHED -> "The restore disappeared from the server."
             Kind.OTHER_BACKUP -> "That server is waiting for a different backup."
             Kind.FAILED -> "The restore failed: $why."
@@ -750,6 +771,20 @@ class ImportBackupViewModel(
         if (t is ImportException) t.message ?: "The restore failed." else message(t, "The restore failed.")
 
     companion object {
+        /** Why a picked file's data part failed its check, said of the one file. */
+        fun checkMessage(t: Throwable): String = when ((t as? ServerBackupFormat.DataCheckException)?.kind) {
+            ServerBackupFormat.DataCheckException.Kind.UNREADABLE -> "The backup file can't be read any more (was its drive removed?)."
+            null -> "The backup couldn't be checked."
+            else -> "This backup was changed or is damaged."
+        }
+
+        /** The result's lines: "Restored N apps", then each app that failed, with the box's reason. */
+        fun resultLines(apps: List<ServerRestoreApp>): List<String> {
+            val ok = apps.count { it.state == "done" }
+            return listOf("Restored $ok app${if (ok == 1) "" else "s"}") +
+                apps.filter { it.state == "failed" }.map { "Couldn't restore: ${it.name}: ${(it.reason ?: "it couldn't be restored").trimEnd('.', ' ')}" }
+        }
+
         /** The name the form starts with: the saved server's, unless the account uses it. */
         fun suggestedName(saved: String, taken: Set<String>): String {
             val n = saved.lowercase()

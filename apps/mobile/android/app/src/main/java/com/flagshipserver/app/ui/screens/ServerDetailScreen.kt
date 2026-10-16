@@ -379,6 +379,8 @@ fun ServerDetailScreen(
                 DebugAccessCard(vm = vm, onChanged = { detailVm?.load() })
             }
             Spacer(Modifier.height(FS.space.s6))
+            ServerBackupsSection(serverDomain = d.value.serverFqdn)
+            Spacer(Modifier.height(FS.space.s4))
             BackupMigrateCard(serverDomain = d.value.serverFqdn)
             Spacer(Modifier.height(FS.space.s6))
             UpdateServerCard(

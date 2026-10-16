@@ -63,6 +63,9 @@ data class SmokeModeConfig(
     /** Persist a signed-in device (keystore profile + account key, lock on)
      *  so a later plain launch is a cold start of a real account. */
     val persistSession: Boolean = false,
+    /** The mock box's saved backups and policy (iOS `-smoke-backups`):
+     *  "empty" | "failed" | "unset" | "over" | "restore-partial" | null (the default box). */
+    val backups: String? = null,
 ) {
     companion object {
         const val EXTRA_SMOKE_MODE = "flagship.smokeMode"
@@ -79,6 +82,7 @@ data class SmokeModeConfig(
         const val EXTRA_SMOKE_FAKE_PASSKEYS = "flagship.smokeFakePasskeys"
         const val EXTRA_SMOKE_REAL_BIOMETRICS = "flagship.smokeRealBiometrics"
         const val EXTRA_SMOKE_PERSIST_SESSION = "flagship.smokePersistSession"
+        const val EXTRA_SMOKE_BACKUPS = "flagship.smokeBackups"
 
         const val SMOKE_USERNAME = "smoketest"
 
@@ -105,6 +109,8 @@ data class SmokeModeConfig(
                 fakePasskeys = intent.getBooleanExtra(EXTRA_SMOKE_FAKE_PASSKEYS, false),
                 realBiometrics = intent.getBooleanExtra(EXTRA_SMOKE_REAL_BIOMETRICS, false),
                 persistSession = intent.getBooleanExtra(EXTRA_SMOKE_PERSIST_SESSION, false),
+                backups = intent.getStringExtra(EXTRA_SMOKE_BACKUPS)?.trim()?.lowercase()
+                    ?.takeIf { it in setOf("empty", "failed", "unset", "over", "restore-partial") },
             )
         }
     }

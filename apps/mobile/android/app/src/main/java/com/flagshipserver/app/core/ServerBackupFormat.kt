@@ -432,6 +432,49 @@ object ServerBackupFormat {
         if (HexUtil.encode(h.digest()) != info.sha256) throw DataCheckException(DataCheckException.Kind.MISMATCH)
     }
 
+    // ── The one file ───────────────────────────────────────────────
+    //
+    // `<name>.flagship`: 8 bytes `FLGSHBK1`, the metadata part's length L as a
+    // u64 big-endian (1..262144), the metadata part (the backup-file JSON),
+    // then the data part to the end. Must pass
+    // packages/protocol/test-vectors/server-backup-bundle/vectors.json.
+
+    const val BUNDLE_EXTENSION = "flagship"
+    const val BUNDLE_MAGIC = "FLGSHBK1"
+    const val BUNDLE_HEADER_BYTES = 16
+
+    class BundleException(message: String) : Exception(message)
+
+    /** Where a `.flagship` file's two parts are. */
+    data class BundleLayout(val metaOffset: Long, val metaLength: Int, val dataOffset: Long, val dataLength: Long)
+
+    fun bundleHeader(metaLength: Int): ByteArray {
+        if (metaLength < 1 || metaLength > BACKUP_FILE_MAX_BYTES) throw BundleException("The backup's metadata part has a bad length.")
+        val out = ByteArray(BUNDLE_HEADER_BYTES)
+        BUNDLE_MAGIC.toByteArray(Charsets.US_ASCII).copyInto(out)
+        java.nio.ByteBuffer.wrap(out, 8, 8).putLong(metaLength.toLong())
+        return out
+    }
+
+    /** Read a `.flagship` file's header ([fileBytes]: the whole file's size).
+     *  Throws a [BundleException] with the sentence the user sees. */
+    fun parseBundleHeader(head: ByteArray, fileBytes: Long): BundleLayout {
+        if (head.size < BUNDLE_HEADER_BYTES) throw BundleException("This file is too short to be a Flagship backup.")
+        if (!head.copyOfRange(0, 8).contentEquals(BUNDLE_MAGIC.toByteArray(Charsets.US_ASCII))) {
+            throw BundleException("This file isn't a Flagship backup.")
+        }
+        val len = java.nio.ByteBuffer.wrap(head, 8, 8).long
+        // A u64 above Long.MAX_VALUE reads negative here: damaged either way.
+        if (len < 1 || len > BACKUP_FILE_MAX_BYTES) throw BundleException("This backup's header is damaged.")
+        val dataOffset = BUNDLE_HEADER_BYTES + len
+        if (fileBytes <= dataOffset) throw BundleException("This backup is cut short: it ends before its data.")
+        return BundleLayout(BUNDLE_HEADER_BYTES.toLong(), len.toInt(), dataOffset, fileBytes - dataOffset)
+    }
+
+    /** The `.flagship` name for a part named `<stem>.flagship-backup` / `.flagship-data`. */
+    fun bundleFileName(partName: String): String =
+        partName.replace(Regex("\\.flagship-(backup|data)$"), "") + ".$BUNDLE_EXTENSION"
+
     // ── The restore order ──────────────────────────────────────────
 
     data class RestoreOrder(
@@ -462,5 +505,15 @@ object ServerBackupFormat {
             "\"archiveId\":\"${order.archiveId}\",\"bytes\":${order.bytes}," +
             "\"sha256\":\"${order.sha256}\",\"issuedAt\":${order.issuedAt}}"
         return pairingJson.dropLast(1) + ",\"restore\":{\"order\":$o,\"signatureHex\":\"$signatureHex\"}}"
+    }
+
+    /** The pairing order's JSON with the signed backup policy beside it
+     *  (`{request, signature, backupPolicy: {order, signatureHex}}`): the box
+     *  takes it when the pairing order verifies (docs/server-backup-and-clone.md, "Backup policy"). */
+    fun attachBackupPolicy(pairingJson: String, order: BackupPolicyOrder, signatureHex: String): String {
+        if (!pairingJson.endsWith("}")) return pairingJson
+        val o = "{\"serverDomain\":${JsonPrimitive(order.serverDomain)},\"policy\":${JsonPrimitive(order.policy)}," +
+            "\"phoneReserveBytes\":${order.phoneReserveBytes},\"issuedAt\":${order.issuedAt}}"
+        return pairingJson.dropLast(1) + ",\"backupPolicy\":{\"order\":$o,\"signatureHex\":\"$signatureHex\"}}"
     }
 }

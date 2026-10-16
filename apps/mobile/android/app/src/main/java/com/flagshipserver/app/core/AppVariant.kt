@@ -37,6 +37,9 @@ interface AppVariant {
     /** Gym: treat this device as holding the admin root. */
     val forceAdminRoot: Boolean
 
+    /** Gym: the file Import a backup hands over instead of the system picker. */
+    val gymImportBackupFile: java.io.File?
+
     /** Gym: pass the biometric prompts (an emulator has no screen lock). */
     val bypassBiometricGates: Boolean
 

@@ -37,11 +37,17 @@ object GymSeams {
     @Volatile
     var fakePasskeysNoPrfOnCreate: Boolean = false
 
+    /** The file Import a backup's picker hands over (the system picker can't
+     *  be driven from the gym). Only the instrumentation sets it. */
+    @Volatile
+    var importBackupFile: java.io.File? = null
+
     /** Back to production behaviour (a launch without the gym's extras). */
     fun reset() {
         forceAdminRoot = false
         deviceRank = null
         bypassBiometricGates = false
         fakePasskeysNoPrfOnCreate = false
+        importBackupFile = null
     }
 }

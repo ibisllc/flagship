@@ -80,6 +80,7 @@ abstract class GymBase {
      * @param accessAlert raise the app-wide access dialogs from the mock box
      * @param shares provide the in-memory share world (owner card, shared with me)
      * @param deviceRank this (non-admin) device's rank in the mock box's apps: "member" | "manager" | "master" | "refused"
+     * @param backups the mock box's saved backups and policy: "empty" | "failed" | "unset" | "over" | "restore-partial"
      */
     protected fun launch(
         tab: String,
@@ -98,6 +99,7 @@ abstract class GymBase {
         persistSession: Boolean = false,
         /** An App Link to open at launch (e.g. a share link). */
         deepLink: String? = null,
+        backups: String? = null,
     ) {
         // A test may relaunch with different seeds (e.g. the admin/non-admin
         // state pair) — close the prior scenario so activities never stack.
@@ -121,6 +123,7 @@ abstract class GymBase {
             if (realBiometrics) putExtra(SmokeModeConfig.EXTRA_SMOKE_REAL_BIOMETRICS, true)
             if (persistSession) putExtra(SmokeModeConfig.EXTRA_SMOKE_PERSIST_SESSION, true)
             if (deepLink != null) data = android.net.Uri.parse(deepLink)
+            if (backups != null) putExtra(SmokeModeConfig.EXTRA_SMOKE_BACKUPS, backups)
         }
         scenario = ActivityScenario.launch(intent)
         composeRule.waitForIdle()

@@ -73,6 +73,8 @@ object Variant : AppVariant {
                 )
             }
         }
+        screens.seedBackups(cfg.backups)
+        MockScreensClient.smokeInstance = screens
         val build = MockBuildClient()
         // Smoke mode has no `.com` or box: an in-memory share world instead.
         val shares = if (!cfg.seedShares) null else {
@@ -106,6 +108,7 @@ object Variant : AppVariant {
     override val usesMockClients: Boolean get() = mockRun
     override val forceAdminRoot: Boolean get() = GymSeams.forceAdminRoot
     override val bypassBiometricGates: Boolean get() = GymSeams.bypassBiometricGates
+    override val gymImportBackupFile: java.io.File? get() = GymSeams.importBackupFile
 
     override fun defaultScreens(): ScreensClient = MockScreensClient()
     override fun defaultBuild(): BuildClient = MockBuildClient()

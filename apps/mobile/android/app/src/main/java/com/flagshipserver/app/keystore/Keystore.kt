@@ -399,6 +399,18 @@ object Keystore {
             ?: throw IllegalStateException("server archive key")
     }
 
+    /** [count] fresh archive ids with their account-slot keys, for a box's
+     *  scheduled backups (docs/server-backup-and-clone.md, "Scheduled backups").
+     *  Biometric-gated (the same session as the deposit's signature). */
+    suspend fun mintServerArchiveKeys(count: Int, reason: String = "Authorize Flagship"): List<com.flagshipserver.app.core.ArchiveKey> {
+        BiometricAuthority.current()?.ensureFresh(title = "Authorize Flagship", subtitle = reason)
+        return com.flagshipserver.app.core.ArchiveKeys.mint(loadOrCreateUmkSeed(), count)
+    }
+
+    /** True when signing a sensitive order now would show the biometric prompt
+     *  (the session hasn't been opened yet); background work then waits for a tap. */
+    fun sensitiveSigningNeedsPrompt(): Boolean = BiometricAuthority.current()?.isFresh() == false
+
     data class X25519KeyPair(val privateKey: ByteArray, val publicKey: ByteArray)
 
     /** Load (or create + persist) the per-device X25519 keypair used to

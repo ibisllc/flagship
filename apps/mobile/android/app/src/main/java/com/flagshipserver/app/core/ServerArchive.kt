@@ -19,9 +19,9 @@ object ServerArchive {
     const val EXCLUDES_NOTE =
         "Holds your apps' source, data and settings, never system images: the new server rebuilds each app, so any Flagship server can restore it. Not included: the server's keys and certificate, peer backups, and the Git host."
     const val PASSCODE_NOTE =
-        "Anyone with both files and this passcode can restore the backup, on any account, so keep it somewhere safe and apart from the files. It can't be reset. Your own devices open your backups without it."
+        "Anyone with the backup file and this passcode can restore the backup, on any account, so keep it somewhere safe and apart from the file. It can't be reset. Your own devices open your backups without it."
     const val IMPORT_INTRO =
-        "Pick the backup's two files (the .flagship-backup and its .flagship-data) from wherever you keep them. " +
+        "Pick the backup's .flagship file from wherever you keep it. " +
             "You choose a name; everything else comes from the backup. Then set up the new server as usual, " +
             "and this screen sends it the backup as soon as it comes online."
 
@@ -62,7 +62,7 @@ object ServerArchive {
         return out
     }
 
-    /** `<server label>-<yyyy-MM-dd>`: the two files are this plus `.flagship-backup` / `.flagship-data`. */
+    /** `<server label>-<yyyy-MM-dd>`: the backup file is this plus `.flagship`. */
     fun fileStem(sourceServer: String, createdAtMs: Long): String {
         val label = sourceServer.substringBefore('.').filter { it.isLetterOrDigit() || it == '-' }
         val f = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }

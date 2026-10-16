@@ -87,7 +87,7 @@ class ServerArchiveViewModelTest {
         assertTrue(vm.canStart)
         vm.start()
         val ready = vm.phase.value as? ServerBackupViewModel.Phase.Ready ?: return@runBlocking fail("expected ready, got ${vm.phase.value}")
-        assertEquals(5_000L, ready.bytes)
+        assertEquals(c.archiveBundle.size.toLong(), ready.bytes)
         val start = c.archiveStarts.first()
         assertTrue(ServerArchive.isArchiveId(start.archiveId))
         assertEquals(listOf("passcode", "account"), start.slots.map { it.kind })
@@ -101,10 +101,9 @@ class ServerArchiveViewModelTest {
 
         vm.download()
         val saved = vm.phase.value as? ServerBackupViewModel.Phase.Saved ?: return@runBlocking fail("expected saved, got ${vm.phase.value}")
-        assertEquals(listOf("flagship-backup", "flagship-data"), saved.files.map { it.extension })
-        assertArrayEquals(c.archiveBackupFile, saved.files[0].readBytes())
-        assertArrayEquals(c.archiveBytes, saved.files[1].readBytes())
-        assertTrue("the server drops its copy once the files are safe here", c.archiveForgotten)
+        assertEquals("home-1970-01-01.flagship", saved.file.name)
+        assertArrayEquals("one file: header, metadata part, data part", c.archiveBundle, saved.file.readBytes())
+        assertTrue("the server drops its copy once the file is safe here", c.archiveForgotten)
     }
 
     @Test fun backupDownloadIsPartsAtOnceAndChecked() = runBlocking {
@@ -116,7 +115,7 @@ class ServerArchiveViewModelTest {
         vm.start()
         vm.download()
         val saved = vm.phase.value as? ServerBackupViewModel.Phase.Saved ?: return@runBlocking fail("expected saved, got ${vm.phase.value}")
-        assertArrayEquals(c.archiveBytes, saved.files[1].readBytes())
+        assertArrayEquals(c.archiveBundle, saved.file.readBytes())
     }
 
     @Test fun aBackupAlreadyMadeIsFollowed() = runBlocking {
@@ -124,7 +123,7 @@ class ServerArchiveViewModelTest {
         c.archiveStarts += ServerArchiveStartRequest("00112233445566778899aabbccddeeff", "00".repeat(32), emptyList())
         val vm = backupVM(c)
         vm.load()
-        assertEquals(ServerBackupViewModel.Phase.Ready(5_000), vm.phase.value)
+        assertEquals(ServerBackupViewModel.Phase.Ready(c.archiveBundle.size.toLong()), vm.phase.value)
     }
 
     @Test fun backupFailureIsShownNotThrown() = runBlocking {
@@ -140,8 +139,8 @@ class ServerArchiveViewModelTest {
     // ── Restore ────────────────────────────────────────────────────
 
     private class Backup(
-        val backupFile: File,
-        val dataFile: File,
+        /** The one `.flagship` file. */
+        val file: File,
         val archiveId: String,
         val contentKey: ByteArray,
         val dataBytes: Long,
@@ -159,11 +158,12 @@ class ServerArchiveViewModelTest {
             """"data":{"fileName":"$name-2026-10-14.flagship-data","bytes":${data.size},"sha256":"$sha","frameBytes":1048576}}"""
         val account = ServerBackupFormat.wrapAccountSlot(id, key, accountKek, ByteArray(12))
         val file = ServerBackupFormat.sealFile(id, key, listOf(account), body.toByteArray(), ByteArray(12) { 1 })
-        val backupFile = File(dir, "$name-2026-10-14.flagship-backup").apply { writeText(ServerBackupFormat.serialize(file)) }
         if (corruptData) data[data.size - 1] = (data[data.size - 1].toInt() xor 1).toByte()
-        val dataFile = File(dir, "$name-2026-10-14.flagship-data").apply { writeBytes(data) }
-        return Backup(backupFile, dataFile, id, key, data.size.toLong(), sha)
+        return Backup(writeBundle(dir, name, ServerBackupFormat.serialize(file).toByteArray(), data), id, key, data.size.toLong(), sha)
     }
+
+    private fun writeBundle(dir: File, name: String, meta: ByteArray, data: ByteArray): File =
+        File(dir, "$name-2026-10-14.flagship").apply { writeBytes(ServerBackupFormat.bundleHeader(meta.size) + meta + data) }
 
     private fun importVM(
         c: MockScreensClient,
@@ -199,11 +199,9 @@ class ServerArchiveViewModelTest {
         val c = client()
         val restored = mutableListOf<String>()
         val vm = importVM(c, onRestored = { restored += it })
-        vm.choose(listOf(LocalPickedFile(b.backupFile)))
-        assertEquals("the data file is still missing", ImportBackupViewModel.Phase.Pick, vm.phase.value)
-        assertTrue("it names the file it still needs", vm.filesSummary.contains("home-2026-10-14.flagship-data"))
-        vm.choose(listOf(LocalPickedFile(b.dataFile)))
+        vm.choose(LocalPickedFile(b.file))
         assertEquals(ImportBackupViewModel.Phase.Name, vm.phase.value)
+        assertTrue(vm.fileSummary, vm.fileSummary.startsWith("home-2026-10-14.flagship ("))
         assertEquals("the saved name, since the account has no server called that", "home", vm.name)
         assertEquals("Copied from the backup: asks your phone at every start, disk encrypted.", vm.settingsLine)
         assertTrue(vm.previewFqdn, vm.previewFqdn.startsWith("home.alice."))
@@ -236,7 +234,7 @@ class ServerArchiveViewModelTest {
     @Test fun aNameTheAccountUsesIsNotSuggestedAndIsRefused() = runBlocking {
         val b = makeBackup()
         val vm = importVM(client(), taken = setOf("home"))
-        vm.choose(listOf(LocalPickedFile(b.backupFile), LocalPickedFile(b.dataFile)))
+        vm.choose(LocalPickedFile(b.file))
         assertEquals(ImportBackupViewModel.Phase.Name, vm.phase.value)
         assertEquals("", vm.name)
         assertEquals("You already have a server called \"home\": pick another name.", vm.nameProblem)
@@ -253,7 +251,7 @@ class ServerArchiveViewModelTest {
     @Test fun anotherAccountsBackupAsksForThePasscode() = runBlocking {
         val b = makeBackup()
         val vm = importVM(client(), kek = ByteArray(32))
-        vm.choose(listOf(LocalPickedFile(b.backupFile), LocalPickedFile(b.dataFile)))
+        vm.choose(LocalPickedFile(b.file))
         assertEquals(ImportBackupViewModel.Phase.Passcode, vm.phase.value)
         vm.passcode = "wrong one"
         vm.unlock()
@@ -263,15 +261,17 @@ class ServerArchiveViewModelTest {
 
     @Test fun theRealPasscodeOpensABackupOfAnotherAccount() = runBlocking {
         val b = makeBackup()
-        val raw = ServerBackupFormat.parse(b.backupFile.readBytes())
+        val bytes = b.file.readBytes()
+        val layout = ServerBackupFormat.parseBundleHeader(bytes.copyOf(16), bytes.size.toLong())
+        val raw = ServerBackupFormat.parse(bytes.copyOfRange(16, layout.dataOffset.toInt()))
         val pass = ServerBackupFormat.passcodeSlot(raw.archiveId, b.contentKey, "correct horse battery staple", m = 64, t = 1, p = 1)
-        b.backupFile.writeText(ServerBackupFormat.serialize(raw.copy(slots = listOf(pass) + raw.slots)))
+        writeBundle(b.file.parentFile!!, "home", ServerBackupFormat.serialize(raw.copy(slots = listOf(pass) + raw.slots)).toByteArray(), bytes.copyOfRange(layout.dataOffset.toInt(), bytes.size))
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default).also { scopes += it }
         val vm = ImportBackupViewModel(
             username = "alice", takenNames = emptySet(), clientFor = { client() },
             accountKek = { ByteArray(32) }, pollMs = 1, scope = scope,
         )
-        vm.choose(listOf(LocalPickedFile(b.backupFile), LocalPickedFile(b.dataFile)))
+        vm.choose(LocalPickedFile(b.file))
         assertEquals(ImportBackupViewModel.Phase.Passcode, vm.phase.value)
         vm.passcode = "  correct horse battery staple "
         vm.unlock()
@@ -283,16 +283,16 @@ class ServerArchiveViewModelTest {
     @Test fun aChangedDataFileIsRefusedBeforeAnythingIsMade() = runBlocking {
         val b = makeBackup(corruptData = true)
         val vm = importVM(client())
-        vm.choose(listOf(LocalPickedFile(b.backupFile), LocalPickedFile(b.dataFile)))
+        vm.choose(LocalPickedFile(b.file))
         assertEquals(ImportBackupViewModel.Phase.Pick, vm.phase.value)
-        assertEquals("The data file doesn't match the backup file: it was changed or is damaged.", vm.fileError)
-        assertNull("it asks for the data file again", vm.dataFileName)
+        assertEquals("This backup was changed or is damaged.", vm.fileError)
+        assertNull("it asks for the file again", vm.fileName)
     }
 
     @Test fun aServerWaitingForThisBackupIsOffered() = runBlocking {
         val b = makeBackup()
         val vm = importVM(client(), waiting = mapOf(b.archiveId to "clone.alice.flagship.services"))
-        vm.choose(listOf(LocalPickedFile(b.backupFile), LocalPickedFile(b.dataFile)))
+        vm.choose(LocalPickedFile(b.file))
         assertEquals(ImportBackupViewModel.Phase.ChooseTarget("clone.alice.flagship.services"), vm.phase.value)
         vm.showName()
         assertEquals(ImportBackupViewModel.Phase.Name, vm.phase.value)
@@ -304,7 +304,7 @@ class ServerArchiveViewModelTest {
         c.restoreWaiting = ServerRestoreWaiting(b.archiveId, b.dataBytes, b.sha256)
         c.restoreAlreadyReceived = 4L * 1024 * 1024
         val vm = importVM(c, waiting = mapOf(b.archiveId to "clone.alice.flagship.services"))
-        vm.choose(listOf(LocalPickedFile(b.backupFile), LocalPickedFile(b.dataFile)))
+        vm.choose(LocalPickedFile(b.file))
         vm.send("clone.alice.flagship.services")
         waitFor { vm.phase.value is ImportBackupViewModel.Phase.Done }
         assertEquals(listOf(4L * 1024 * 1024, 8L * 1024 * 1024), c.restoreChunks.map { it.first })
@@ -329,7 +329,7 @@ class ServerArchiveViewModelTest {
             waitingServers = mapOf(b.archiveId to "clone.alice.flagship.services"),
             clientFor = { c }, accountKek = { accountKek }, pollMs = 1, scope = scope,
         )
-        vm.choose(listOf(LocalPickedFile(b.backupFile), LocalPickedFile(b.dataFile)))
+        vm.choose(LocalPickedFile(b.file))
         vm.send("clone.alice.flagship.services")
         waitFor { vm.phase.value.let { it is ImportBackupViewModel.Phase.Done || it is ImportBackupViewModel.Phase.Failed } }
         // The mock says it holds nothing, so the retry starts over from 0 and finishes.
@@ -343,7 +343,7 @@ class ServerArchiveViewModelTest {
         c.restoreWaiting = ServerRestoreWaiting(b.archiveId, b.dataBytes, b.sha256)
         c.restoreFailure = "the backup's data file can't be opened: wrong key, or it was changed or cut short"
         val vm = importVM(c, waiting = mapOf(b.archiveId to "clone.alice.flagship.services"))
-        vm.choose(listOf(LocalPickedFile(b.backupFile), LocalPickedFile(b.dataFile)))
+        vm.choose(LocalPickedFile(b.file))
         vm.send("clone.alice.flagship.services")
         waitFor { vm.phase.value is ImportBackupViewModel.Phase.Failed }
         val failed = vm.phase.value as ImportBackupViewModel.Phase.Failed
@@ -356,7 +356,7 @@ class ServerArchiveViewModelTest {
         val c = client()
         c.restoreWaiting = ServerRestoreWaiting("ffeeddccbbaa99887766554433221100", 10, "ab".repeat(32))
         val vm = importVM(c, waiting = mapOf(b.archiveId to "clone.alice.flagship.services"))
-        vm.choose(listOf(LocalPickedFile(b.backupFile), LocalPickedFile(b.dataFile)))
+        vm.choose(LocalPickedFile(b.file))
         vm.send("clone.alice.flagship.services")
         waitFor { vm.phase.value is ImportBackupViewModel.Phase.Failed }
         assertEquals("That server is waiting for a different backup.", (vm.phase.value as ImportBackupViewModel.Phase.Failed).message)
@@ -364,11 +364,89 @@ class ServerArchiveViewModelTest {
     }
 
     @Test fun pickingSomethingElseExplainsWhy() = runBlocking {
-        val f = File(tmp(), "x.txt").apply { writeText("hello\n") }
         val vm = importVM(client())
-        vm.choose(listOf(LocalPickedFile(f)))
-        assertEquals("x.txt isn't a Flagship backup file or data file.", vm.fileError)
+        vm.choose(LocalPickedFile(File(tmp(), "x.txt").apply { writeText("hello\n") }))
+        assertEquals("This file is too short to be a Flagship backup.", vm.fileError)
         assertEquals(ImportBackupViewModel.Phase.Pick, vm.phase.value)
+        vm.choose(LocalPickedFile(File(tmp(), "y.txt").apply { writeText("this is a plain text file, not a backup\n") }))
+        assertEquals("This file isn't a Flagship backup.", vm.fileError)
+        assertNull(vm.fileName)
+    }
+
+    @Test fun aTruncatedFileIsRefusedWithASentence() = runBlocking {
+        val b = makeBackup()
+        val bytes = b.file.readBytes()
+        val layout = ServerBackupFormat.parseBundleHeader(bytes.copyOf(16), bytes.size.toLong())
+        val vm = importVM(client())
+        // Cut inside the metadata part: the header says more than the file holds.
+        val cut = File(tmp(), "cut.flagship").apply { writeBytes(bytes.copyOf(40)) }
+        vm.choose(LocalPickedFile(cut))
+        assertEquals("This backup is cut short: it ends before its data.", vm.fileError)
+        assertEquals(ImportBackupViewModel.Phase.Pick, vm.phase.value)
+        // Cut inside the data part: the metadata opens, the data check refuses it.
+        val short = File(tmp(), "short.flagship").apply { writeBytes(bytes.copyOf(layout.dataOffset.toInt() + 1000)) }
+        vm.choose(LocalPickedFile(short))
+        assertEquals("This backup was changed or is damaged.", vm.fileError)
+        assertEquals(ImportBackupViewModel.Phase.Pick, vm.phase.value)
+    }
+
+    @Test fun aRestoreWithAFailedAppEndsAndNamesIt() = runBlocking {
+        val b = makeBackup()
+        val c = client()
+        c.restoreWaiting = ServerRestoreWaiting(b.archiveId, b.dataBytes, b.sha256)
+        c.restoreApps = listOf(
+            com.flagshipserver.app.api.ServerRestoreApp("alice--wiki", "Wiki", "done"),
+            com.flagshipserver.app.api.ServerRestoreApp("alice--notes", "Notes", "failed", "its image didn't build"),
+        )
+        val restored = mutableListOf<String>()
+        val vm = importVM(c, waiting = mapOf(b.archiveId to "clone.alice.flagship.services"), onRestored = { restored += it })
+        vm.choose(LocalPickedFile(b.file))
+        vm.send("clone.alice.flagship.services")
+        waitFor { vm.phase.value is ImportBackupViewModel.Phase.Done }
+        val done = vm.phase.value as ImportBackupViewModel.Phase.Done
+        assertEquals(listOf("Restored 1 app", "Couldn't restore: Notes: its image didn't build"), ImportBackupViewModel.resultLines(done.apps))
+        assertEquals("Home stops showing it waiting", listOf("clone.alice.flagship.services"), restored)
+    }
+
+    @Test fun aMultiGigabyteFileIsStreamedNeverHeld() = runBlocking {
+        // A sparse file: the data part is 2.2 GB of zeros after its first line,
+        // so offsets pass Int.MAX_VALUE without the disk or the heap holding it.
+        val dir = tmp()
+        val id = "00112233445566778899aabbccddeeff"
+        val key = ByteArray(32) { 0x42 }
+        val magic = ServerBackupFormat.DATA_MAGIC.toByteArray()
+        val dataBytes = 2_200_000_000L
+        val h = MessageDigest.getInstance("SHA-256")
+        h.update(magic)
+        val zeros = ByteArray(1 shl 20)
+        var left = dataBytes - magic.size
+        while (left > 0) {
+            val n = minOf(left, zeros.size.toLong()).toInt()
+            h.update(zeros, 0, n)
+            left -= n
+        }
+        val sha = HexUtil.encode(h.digest())
+        val body = """{"createdAt":1792000000000,"server":{"name":"big","domain":"big.alice.flagship.services","bootUnlockMode":"auto","diskEncryption":"luks"},""" +
+            """"apps":[],"left":[],"includes":[],"excludes":[],""" +
+            """"data":{"fileName":"big.flagship-data","bytes":$dataBytes,"sha256":"$sha","frameBytes":1048576}}"""
+        val account = ServerBackupFormat.wrapAccountSlot(id, key, accountKek, ByteArray(12))
+        val meta = ServerBackupFormat.serialize(ServerBackupFormat.sealFile(id, key, listOf(account), body.toByteArray(), ByteArray(12) { 1 })).toByteArray()
+        val f = File(dir, "big.flagship")
+        java.io.RandomAccessFile(f, "rw").use { raf ->
+            raf.write(ServerBackupFormat.bundleHeader(meta.size))
+            raf.write(meta)
+            raf.write(magic)
+            raf.setLength(16L + meta.size + dataBytes)
+        }
+        val c = client()
+        c.restoreWaiting = ServerRestoreWaiting(id, dataBytes, sha)
+        val vm = importVM(c, waiting = mapOf(id to "clone.alice.flagship.services"))
+        vm.choose(LocalPickedFile(f))
+        assertEquals(ImportBackupViewModel.Phase.ChooseTarget("clone.alice.flagship.services"), vm.phase.value)
+        vm.send("clone.alice.flagship.services")
+        waitFor(timeoutMs = 300_000) { vm.phase.value is ImportBackupViewModel.Phase.Done }
+        assertEquals(dataBytes, c.restoreChunks.sumOf { it.second.toLong() })
+        assertEquals("the last part starts past 2 GiB", (dataBytes - 1) / (4L * 1024 * 1024) * 4L * 1024 * 1024, c.restoreChunks.last().first)
     }
 
     @Test fun describesEachApp() {

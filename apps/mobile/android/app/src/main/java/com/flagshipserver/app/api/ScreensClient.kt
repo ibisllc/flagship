@@ -239,10 +239,8 @@ interface ScreensClient {
         throw ScreensError.NotImplemented("server backup")
     suspend fun serverArchiveStatus(): ServerArchiveStatus? =
         throw ScreensError.NotImplemented("server backup")
-    suspend fun serverArchiveChunk(offset: Long): ByteArray =
-        throw ScreensError.NotImplemented("server backup")
-    /** The small backup file (JSON) of the ready backup. */
-    suspend fun serverArchiveBackupFile(): ByteArray =
+    /** ≤ 4 MiB of the ready backup's one `.flagship` file, from [offset]. */
+    suspend fun serverArchiveBundleChunk(offset: Long): ByteArray =
         throw ScreensError.NotImplemented("server backup")
     suspend fun serverArchiveForget(): Unit =
         throw ScreensError.NotImplemented("server backup")
@@ -257,6 +255,33 @@ interface ScreensClient {
         throw ScreensError.NotImplemented("server import")
     suspend fun serverRestoreStatus(): ServerRestoreStatusResponse =
         throw ScreensError.NotImplemented("server import")
+
+    // Saved backups (docs/server-backup-and-clone.md, "Scheduled backups"):
+    // `/api/screens/server-archive/backups`, owner sessions only.
+    suspend fun savedBackups(): SavedBackupsView =
+        throw ScreensError.NotImplemented("saved backups")
+    /** 400 `{error}` with the box's sentence when the schedule is refused. */
+    suspend fun putBackupSchedule(schedule: BackupSchedule): SavedBackupsView =
+        throw ScreensError.NotImplemented("saved backups")
+    suspend fun depositBackupKeys(req: BackupKeysRequest): SavedBackupsView =
+        throw ScreensError.NotImplemented("saved backups")
+    /** 202 `{archiveId}`; 409 `code: no-keys` when the box has no keys, 409 when busy. */
+    suspend fun runBackupNow(): BackupRunResponse =
+        throw ScreensError.NotImplemented("saved backups")
+    /** ≤ 4 MiB of a saved backup's one `.flagship` file, from [offset]. */
+    suspend fun savedBackupBundleChunk(archiveId: String, offset: Long): ByteArray =
+        throw ScreensError.NotImplemented("saved backups")
+    suspend fun savedBackupLink(archiveId: String): SavedBackupLink =
+        throw ScreensError.NotImplemented("saved backups")
+    suspend fun deleteSavedBackup(archiveId: String): SavedBackupsView =
+        throw ScreensError.NotImplemented("saved backups")
+
+    // The backup policy and the size limit it puts on app data.
+    suspend fun backupPolicy(): BackupPolicyView =
+        throw ScreensError.NotImplemented("backup policy")
+    /** 403 not an admin / another server, 409 `code: over-backup-limit` or a newer policy, all `{error}`. */
+    suspend fun setBackupPolicy(req: BackupPolicyRequest): BackupPolicyView =
+        throw ScreensError.NotImplemented("backup policy")
 
     /** What this box did, newest first (`before` is the `seq` cursor). */
     suspend fun boxActivity(limit: Int = 100, before: Int? = null): List<BoxActivityEntry> = emptyList()

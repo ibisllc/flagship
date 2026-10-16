@@ -442,6 +442,43 @@ data class ServerDetailResponse(
     val appSandbox: AppSandbox? = null,
     /** Owner debug access (an SSH key let in until a set time). Absent from older daemons. */
     val debugAccess: DebugAccessView? = null,
+    /** Disk use and each app's limits (docs/app-runtimes.md 5.3). Absent from older daemons. */
+    val storage: ServerStorage? = null,
+)
+
+/** One store's use and limit (`limitBytes` null: no limit but the disk). */
+@Serializable
+data class StoreUsage(
+    val usedBytes: Long = 0,
+    val limitBytes: Long? = null,
+    /** At its limit: new writes fail. */
+    val full: Boolean = false,
+    val enforced: Boolean = false,
+    /** Postgres: INSERT and UPDATE are refused. */
+    val writesBlocked: Boolean = false,
+    /** Postgres: it grew past its limit while blocked, so its database is closed until it is under again. */
+    val stopped: Boolean = false,
+)
+
+@Serializable
+data class AppStorage(
+    val files: StoreUsage? = null,
+    val postgres: StoreUsage? = null,
+)
+
+@Serializable
+data class AppStorageEntry(
+    val serviceId: String,
+    val files: StoreUsage? = null,
+    val postgres: StoreUsage? = null,
+)
+
+@Serializable
+data class ServerStorage(
+    /** `off`, `on` (apps can't write more) or `hard` (their folders are read-only). */
+    val brake: String = "off",
+    val capped: Boolean = false,
+    val apps: List<AppStorageEntry> = emptyList(),
 )
 
 /** The box's debug access state (docs/recipe-delivery-and-remote-install.md "Debug access"). */
@@ -581,6 +618,8 @@ data class AppDetailResponse(
     val browserTabs: List<BrowserTabRef>,
     val lastBackup: BackupSummary? = null,
     val recentLogs: List<String>,
+    /** The app's use against its disk limits (docs/app-runtimes.md 5.3). Absent until measured and on older boxes. */
+    val storage: AppStorage? = null,
     /** The owner can change its code from the phone (built on this box, with
      *  its source there). Absent on older boxes. */
     val editable: Boolean? = null,

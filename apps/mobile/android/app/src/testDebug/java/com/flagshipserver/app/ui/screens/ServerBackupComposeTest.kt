@@ -76,20 +76,20 @@ class ServerBackupComposeTest {
         assertEquals(emptyList<String>(), sent)
     }
 
-    @Test fun theImportScreenAsksForBothFiles() {
+    @Test fun theImportScreenAsksForTheOneFile() {
         val vm = ImportBackupViewModel(username = "harry", takenNames = emptySet(), clientFor = { null }, accountKek = { ByteArray(32) })
         var picks = 0
         composeRule.setContent { FlagshipTheme { ImportBackupScreen(vm = vm, pickFiles = { picks++ }) } }
         composeRule.onNodeWithText("Import a backup").assertIsDisplayed()
-        composeRule.onNodeWithText("Backup file: not picked yet", substring = true).assertIsDisplayed()
-        composeRule.onNodeWithText("Choose the backup files").performClick()
+        composeRule.onNodeWithText("No backup picked yet").assertIsDisplayed()
+        composeRule.onNodeWithText("Choose the backup file").performClick()
         assertEquals(1, picks)
     }
 
     @Test fun theImportScreenOpenedFromAWaitingServerNamesIt() {
         val vm = ImportBackupViewModel(username = "harry", takenNames = emptySet(), targetFqdn = clone.fqdn, clientFor = { null }, accountKek = { ByteArray(32) })
         composeRule.setContent { FlagshipTheme { ImportBackupScreen(vm = vm, pickFiles = {}) } }
-        composeRule.onNodeWithText("clone is waiting for its backup. Pick the backup's two files and this screen sends it.").assertIsDisplayed()
+        composeRule.onNodeWithText("clone is waiting for its backup. Pick the backup file and this screen sends it.").assertIsDisplayed()
     }
 
     @Test fun theBackupStartsWithThePasscode() {
@@ -109,6 +109,7 @@ class ServerBackupComposeTest {
             }
         }
         composeRule.onNodeWithText("k7qm-2xhd-9twp-4frn-6cyb").assertIsDisplayed()
+        composeRule.onNodeWithText("You'll need this passcode to import the backup into an account that isn't yours. Your own account opens it without the passcode.").assertIsDisplayed()
         composeRule.onNodeWithTag("backup-start").assertIsNotEnabled()
         composeRule.onNodeWithTag("backup-use-own-passcode").performClick()
         composeRule.onNodeWithText("At least 12 characters", substring = true).assertIsDisplayed()
