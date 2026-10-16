@@ -8,6 +8,10 @@
 import { randomBytes } from "node:crypto";
 import { bytesToHex } from "@noble/hashes/utils";
 import {
+  buildCgkDelivery,
+  cgkDeliveryToCarrierHex,
+  deriveCGK,
+  signDeviceEndpointClaim,
   deriveAppAccountId,
   deriveHouseholdKey,
   randomServiceInviteId,
@@ -73,6 +77,49 @@ export const oneList: Group = {
       }
       throw new Error(`${what}: not within ${Math.round(ms / 1000)} s`);
     };
+
+    // Gym boxes have no phone to hand them the account's cloud gossip key, so
+    // gossip (and with it per-app leadership) is off until the gym deposits it,
+    // as the owner's phone does after a box registers.
+    const gossiping = await rec.check("both boxes get the cloud gossip key and gossip", async () => {
+      const list = await pods(A.username);
+      const cgk = deriveCGK(A.keys.umk);
+      for (const b of [b1, b2]) {
+        const stkHex = String(list.find((p) => p.serverDomain === b.fqdn)?.identityPubKey ?? "").toLowerCase();
+        assert(/^[0-9a-f]{64}$/.test(stkHex), `no STK for ${b.serverName}`);
+        const now = Date.now();
+        const { delivery, signature } = buildCgkDelivery({
+          serverDomain: b.fqdn,
+          cgk,
+          boxIdentityPub: Buffer.from(stkHex, "hex"),
+          irk: A.keys.irk,
+          issuedAt: now,
+        });
+        const nonce = randomBytes(32);
+        const auth = { username: A.username, endpointLabel: "device", phoneIrkPub: A.keys.irk.publicKey, issuedAt: now, expiresAt: now + 120_000, nonce };
+        const r = await postJson(`https://${CONTROL}/api/server/${encodeURIComponent(b.fqdn)}/cgk-deposit`, {
+          auth: { ...auth, phoneIrkPub: bytesToHex(auth.phoneIrkPub), nonce: bytesToHex(nonce) },
+          authSignature: bytesToHex(signDeviceEndpointClaim(auth, A.keys.irk)),
+          deposit: {
+            serverDomain: b.fqdn,
+            requestNonceHex: randomBytes(32).toString("hex"),
+            stkPub: stkHex,
+            sealed: cgkDeliveryToCarrierHex(delivery, signature),
+            issuedAt: now,
+          },
+        });
+        assert(r.status === 200, `cgk deposit ${b.serverName} ${r.status}: ${short(r.text)}`);
+      }
+      await until("both boxes gossip", async () => {
+        for (const b of [b1, b2]) {
+          const r = await tryHttp(`https://${b.fqdn}/api/leads`, {}, 15_000);
+          if (r.json?.gossipActive !== true) return false;
+        }
+        return true;
+      }, 8 * 60_000, 15_000);
+      return "gossipActive on both";
+    });
+    if (!gossiping) return;
 
     const ready = await rec.check("the same app on both boxes, home first in the server order (home leads)", async () => {
       const list = await pods(A.username);
