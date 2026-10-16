@@ -32,14 +32,19 @@ import { createReadStream } from "node:fs";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import {
   archiveDownloadCode,
+  archiveKeysDigest,
   parseArchiveDownloadApproval,
+  parseArchiveKeys,
+  parseArchiveKeysDeposit,
   parseBackupSlots,
+  wrapAccountSlot,
   type ArchiveDownloadApproval,
+  type ArchiveKeysDeposit,
   type BackupBody,
   type BackupSlot,
 } from "@flagship/protocol";
 import { renderDownloadPage } from "./downloadPage.js";
-import { mkdir, open, rm, stat, statfs } from "node:fs/promises";
+import { mkdir, open, readFile, rm, stat, statfs } from "node:fs/promises";
 import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
@@ -47,10 +52,14 @@ import { ARCHIVE_EXCLUDES, ARCHIVE_INCLUDES, buildServerArchive, estimateServerA
 import { ARCHIVE_FRAME_BYTES, ArchiveError, writeBackupFile } from "./format.js";
 import { installArchive, unpackArchive, type ArchiveRestoreDeps, type RestoreAppResult } from "./restore.js";
 import type { RestoreWait } from "./restoreWait.js";
+import { KEY_POOL_LOW, KEY_POOL_MAX, SAVED_BACKUP_FILE, SAVED_DATA_FILE, SavedBackups, type SavedBackupMeta, type SavedState } from "./saved.js";
+import { isDue, nextRunAt, parseSchedule, retained, slotStartAtOrBefore } from "./schedule.js";
 
 export const ARCHIVE_PATH = "/api/screens/server-archive";
 export const DOWNLOAD_PATH = "/api/archive-download/";
 export const RESTORE_PATH = "/api/screens/server-restore";
+/** The saved backups (Back up now into the list, and the schedule). */
+export const SAVED_PATH = `${ARCHIVE_PATH}/backups`;
 export const ARCHIVE_CHUNK_BYTES = 4 * 1024 * 1024;
 const KEEP_MS = 24 * 60 * 60_000;
 const MIN_FREE_BYTES = 1024 * 1024 * 1024;
@@ -86,6 +95,17 @@ export interface ServerArchiveServiceOptions {
   authorizeDownload?: (a: ArchiveDownloadApproval, sig: Uint8Array) => boolean;
   /** `https://<control apex>`: the download page's QR is `<this>/app/backup-download#…`. */
   appLinkBase?: string;
+  /** Saved backups: Back up now into a list, and the schedule. Absent ⇒ those routes answer 404. */
+  saved?: {
+    /** `<dataDir>/server-backups`: kept across restarts (never under `dir`). */
+    dir: string;
+    /** Check an admin device's `flagship/server-archive-keys/v1` under this box's sensitive-order authority. */
+    authorizeKeys: (d: ArchiveKeysDeposit, sig: Uint8Array) => boolean;
+    /** Size of the disk holding `dir` (default: statfs). */
+    diskBytes?: (dir: string) => Promise<number>;
+    /** Share of the disk saved backups may take. Default 0.5. */
+    maxDiskShare?: number;
+  };
   now?: () => number;
   log?: (m: string) => void;
 }
@@ -106,11 +126,6 @@ interface BackupJob {
   /** Apps that couldn't go in (no source, no public image), with why. */
   left?: Array<{ serviceId: string; name: string; reason: string }>;
   reason?: string;
-  /** Download-link token (hex), minted on request; dies with the backup. */
-  linkToken?: string;
-  downloadedNoted?: boolean;
-  /** Browser requests the owner approved with a signature. */
-  approved?: Set<string>;
 }
 
 /** `bytes=a-b` / `bytes=a-` / `bytes=-n` against `size`; null = no usable Range (serve it all). */
@@ -194,6 +209,7 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
 
   async function sweep(): Promise<void> {
     if (backup && backup.state !== "building" && now() - backup.startedAt > KEEP_MS) {
+      links.delete(backup.archiveId);
       backup = null;
       await dropBackupFiles();
     }
@@ -205,6 +221,63 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     } catch {
       return { bootUnlockMode: "auto", diskEncryption: "luks" };
     }
+  }
+
+  /**
+   * Make one archive: size it, check the disk, seal the data file, write the
+   * backup file around the slots. Shared by Back up now (the owner's slots)
+   * and the saved/scheduled backups (an account slot from the key pool).
+   */
+  async function makeArchive(a: {
+    archiveId: string;
+    key: Buffer;
+    slots: BackupSlot[];
+    dataPath: string;
+    backupPath: string;
+    dataName: string;
+    job: { progress: { done: number; total: number; app: string }; estimatedBytes?: number };
+    /** Free room (e.g. drop older saved backups) until `need` bytes are free; returns the bytes free after. */
+    makeRoom?: (need: number, estimate: number) => Promise<number>;
+  }): Promise<{ bytes: number; sha256: string; backupBytes: number; apps: Array<{ serviceId: string; name: string }>; left: Array<{ serviceId: string; name: string; reason: string }>; createdAt: number }> {
+    // Size it first: the data file, one app's scratch, and headroom so
+    // the apps keep working. A box that can't size something goes ahead
+    // on the flat minimum it already passed.
+    a.job.progress = { done: 0, total: 0, app: "Checking free space" };
+    const est = await estimateServerArchive({ ...opts.build, workDir: scratch });
+    if (est) {
+      a.job.estimatedBytes = est.archiveBytes;
+      const need = est.archiveBytes + est.largestAppBytes + HEADROOM_BYTES;
+      let have = await free(opts.dir);
+      if (a.makeRoom) have = await a.makeRoom(need, est.archiveBytes);
+      if (have < need) {
+        throw new NotEnoughSpace(
+          `this server needs about ${gb(need)} free to make this backup and has ${gb(have)}. Free some space (or remove apps you don't need) and try again`,
+        );
+      }
+    }
+    const r = await buildServerArchive(
+      { ...opts.build, workDir: scratch },
+      {
+        archiveId: a.archiveId,
+        key: a.key,
+        outPath: a.dataPath,
+        onProgress: (done, total, app) => {
+          a.job.progress = { done, total, app };
+        },
+      },
+    );
+    const fqdn = opts.build.serverFqdn;
+    const body: BackupBody = {
+      createdAt: r.createdAt,
+      server: { name: fqdn.split(".")[0] ?? fqdn, domain: fqdn, ...(await settings()) },
+      apps: r.apps,
+      left: r.left,
+      includes: ARCHIVE_INCLUDES,
+      excludes: ARCHIVE_EXCLUDES,
+      data: { fileName: a.dataName, bytes: r.bytes, sha256: r.sha256, frameBytes: ARCHIVE_FRAME_BYTES },
+    };
+    const written = await writeBackupFile(a.backupPath, { archiveId: a.archiveId, key: a.key, slots: a.slots, body, nonce: randomBytes(12) });
+    return { ...r, backupBytes: written.bytes };
   }
 
   function startBackup(req: HttpRequest): Promise<HttpResponse> {
@@ -224,51 +297,21 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
       if ((await free(opts.dir)) < MIN_FREE_BYTES) return err(507, "this server doesn't have enough free disk space to make a backup");
       running = true;
       const job: BackupJob = { archiveId: b.archiveId, state: "building", startedAt: now(), progress: { done: 0, total: 0, app: "" } };
+      if (backup) links.delete(backup.archiveId);
       backup = job;
       await dropBackupFiles();
       note("server.backup.started", "Started a backup of this server.");
       const key = Buffer.from(b.key, "hex");
       const archiveId = b.archiveId;
-      void (async () => {
-        // Size it first: the data file, one app's scratch, and headroom so
-        // the apps keep working. A box that can't size something goes ahead
-        // on the flat minimum it already passed.
-        job.progress = { done: 0, total: 0, app: "Checking free space" };
-        const est = await estimateServerArchive({ ...opts.build, workDir: scratch });
-        if (est) {
-          job.estimatedBytes = est.archiveBytes;
-          const need = est.archiveBytes + est.largestAppBytes + HEADROOM_BYTES;
-          const have = await free(opts.dir);
-          if (have < need) {
-            throw new NotEnoughSpace(
-              `this server needs about ${gb(need)} free to make this backup and has ${gb(have)}. Free some space (or remove apps you don't need) and try again`,
-            );
-          }
-        }
-        const r = await buildServerArchive(
-          { ...opts.build, workDir: scratch },
-          {
-            archiveId,
-            key,
-            outPath: dataFile,
-            onProgress: (done, total, app) => {
-              job.progress = { done, total, app };
-            },
-          },
-        );
-        const fqdn = opts.build.serverFqdn;
-        const body: BackupBody = {
-          createdAt: r.createdAt,
-          server: { name: fqdn.split(".")[0] ?? fqdn, domain: fqdn, ...(await settings()) },
-          apps: r.apps,
-          left: r.left,
-          includes: ARCHIVE_INCLUDES,
-          excludes: ARCHIVE_EXCLUDES,
-          data: { fileName: dataFileName(fqdn, job.startedAt), bytes: r.bytes, sha256: r.sha256, frameBytes: ARCHIVE_FRAME_BYTES },
-        };
-        const written = await writeBackupFile(backupFile, { archiveId, key, slots, body, nonce: randomBytes(12) });
-        return { ...r, backupBytes: written.bytes };
-      })()
+      void makeArchive({
+        archiveId,
+        key,
+        slots,
+        dataPath: dataFile,
+        backupPath: backupFile,
+        dataName: dataFileName(opts.build.serverFqdn, job.startedAt),
+        job,
+      })
         .then((r) => {
           job.state = "ready";
           job.bytes = r.bytes;
@@ -301,14 +344,75 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     })();
   }
 
-  async function chunk(req: HttpRequest): Promise<HttpResponse> {
-    if (!backup || backup.state !== "ready") return err(404, "no backup is ready");
+  // -------------------------------------------------------------------------
+  // Downloads (Back up now's backup and every saved backup)
+  // -------------------------------------------------------------------------
+
+  /** A finished backup the owner can fetch. */
+  interface Downloadable {
+    archiveId: string;
+    bytes: number;
+    sha256: string;
+    dataPath: string;
+    backupPath: string;
+    backupFileName: string;
+    dataFileName: string;
+    /** null: kept until it is removed (saved backups). */
+    expiresAt: number | null;
+  }
+  /** Download links, by archive id; they die with the backup (and at a restart). */
+  const links = new Map<string, { token: string; approved: Set<string> }>();
+  const downloadedNoted = new Set<string>();
+
+  function manualDownloadable(): Downloadable | null {
+    if (!backup || backup.state !== "ready" || backup.bytes === undefined) return null;
+    return {
+      archiveId: backup.archiveId,
+      bytes: backup.bytes,
+      sha256: backup.sha256 ?? "",
+      dataPath: dataFile,
+      backupPath: backupFile,
+      backupFileName: backupFileName(opts.build.serverFqdn, backup.startedAt),
+      dataFileName: dataFileName(opts.build.serverFqdn, backup.startedAt),
+      expiresAt: backup.startedAt + KEEP_MS,
+    };
+  }
+
+  function savedDownloadable(m: SavedBackupMeta): Downloadable {
+    return {
+      archiveId: m.archiveId,
+      bytes: m.bytes,
+      sha256: m.sha256,
+      dataPath: join(store!.entryDir(m.archiveId), SAVED_DATA_FILE),
+      backupPath: join(store!.entryDir(m.archiveId), SAVED_BACKUP_FILE),
+      backupFileName: m.backupFileName,
+      dataFileName: m.dataFileName,
+      expiresAt: null,
+    };
+  }
+
+  async function savedById(archiveId: string): Promise<Downloadable | null> {
+    if (!store || !/^[0-9a-f]{32}$/.test(archiveId)) return null;
+    const m = (await store.list()).find((x) => x.archiveId === archiveId);
+    return m ? savedDownloadable(m) : null;
+  }
+
+  async function allDownloadables(): Promise<Downloadable[]> {
+    const out: Downloadable[] = [];
+    const m = manualDownloadable();
+    if (m) out.push(m);
+    if (store) for (const meta of await store.list()) out.push(savedDownloadable(meta));
+    return out;
+  }
+
+  async function chunk(d: Downloadable | null, req: HttpRequest): Promise<HttpResponse> {
+    if (!d) return err(404, "no backup is ready");
     const q = new URLSearchParams(req.path.includes("?") ? req.path.slice(req.path.indexOf("?") + 1) : "");
     const offset = Number(q.get("offset") ?? "0");
-    if (!Number.isSafeInteger(offset) || offset < 0 || offset > (backup.bytes ?? 0)) return err(400, "bad offset");
-    const len = Math.min(ARCHIVE_CHUNK_BYTES, (backup.bytes ?? 0) - offset);
+    if (!Number.isSafeInteger(offset) || offset < 0 || offset > d.bytes) return err(400, "bad offset");
+    const len = Math.min(ARCHIVE_CHUNK_BYTES, d.bytes - offset);
     const buf = Buffer.alloc(len);
-    const fh = await open(dataFile, "r");
+    const fh = await open(d.dataPath, "r");
     try {
       let read = 0;
       while (read < len) {
@@ -320,40 +424,32 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     } finally {
       await fh.close();
     }
-    if (offset + len >= (backup.bytes ?? 0)) noteDownloaded(backup);
+    if (offset + len >= d.bytes) noteDownloaded(d);
     return {
       status: 200,
       headers: {
         "content-type": "application/octet-stream",
-        "x-flagship-archive-bytes": String(backup.bytes),
-        "x-flagship-archive-sha256": backup.sha256 ?? "",
+        "x-flagship-archive-bytes": String(d.bytes),
+        "x-flagship-archive-sha256": d.sha256,
         "cache-control": "no-store",
       },
       body: buf,
     };
   }
 
-  async function readBackupFile(): Promise<Buffer | null> {
+  async function backupFileResponse(d: Downloadable | null): Promise<HttpResponse> {
+    if (!d) return err(404, "no backup is ready");
+    let text: Buffer;
     try {
-      const fh = await open(backupFile, "r");
-      try {
-        return await fh.readFile();
-      } finally {
-        await fh.close();
-      }
+      text = await readFile(d.backupPath);
     } catch {
-      return null;
+      return err(404, "no backup is ready");
     }
-  }
-
-  async function backupFileResponse(job: BackupJob): Promise<HttpResponse> {
-    const text = await readBackupFile();
-    if (!text) return err(404, "no backup is ready");
     return {
       status: 200,
       headers: {
         "content-type": "application/json",
-        "content-disposition": `attachment; filename="${backupFileName(opts.build.serverFqdn, job.startedAt)}"`,
+        "content-disposition": `attachment; filename="${d.backupFileName}"`,
         "cache-control": "no-store",
         "x-content-type-options": "nosniff",
       },
@@ -361,28 +457,37 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     };
   }
 
-  function noteDownloaded(job: BackupJob): void {
-    if (job.downloadedNoted) return;
-    job.downloadedNoted = true;
-    note("server.backup.downloaded", "The backup was downloaded.");
+  function noteDownloaded(d: Downloadable): void {
+    if (downloadedNoted.has(d.archiveId)) return;
+    downloadedNoted.add(d.archiveId);
+    note("server.backup.downloaded", d.expiresAt === null ? "A saved backup was downloaded." : "The backup was downloaded.");
   }
 
-  function mintLink(): HttpResponse {
-    if (!backup || backup.state !== "ready") return err(404, "no backup is ready");
-    backup.linkToken ??= randomBytes(32).toString("hex");
+  function mintLink(d: Downloadable | null): HttpResponse {
+    if (!d) return err(404, "no backup is ready");
+    let l = links.get(d.archiveId);
+    if (!l) {
+      l = { token: randomBytes(32).toString("hex"), approved: new Set() };
+      links.set(d.archiveId, l);
+    }
     return json(200, {
-      path: `${DOWNLOAD_PATH}${backup.linkToken}`,
-      backupFileName: backupFileName(opts.build.serverFqdn, backup.startedAt),
-      dataFileName: dataFileName(opts.build.serverFqdn, backup.startedAt),
-      bytes: backup.bytes,
-      sha256: backup.sha256,
-      expiresAt: backup.startedAt + KEEP_MS,
+      path: `${DOWNLOAD_PATH}${l.token}`,
+      backupFileName: d.backupFileName,
+      dataFileName: d.dataFileName,
+      bytes: d.bytes,
+      sha256: d.sha256,
+      expiresAt: d.expiresAt,
     });
   }
 
-  function tokenMatches(job: BackupJob | null, token: string): job is BackupJob & { linkToken: string } {
-    if (!job?.linkToken || !/^[0-9a-f]{64}$/.test(token)) return false;
-    return timingSafeEqual(Buffer.from(job.linkToken, "hex"), Buffer.from(token, "hex"));
+  async function byToken(token: string): Promise<{ d: Downloadable; link: { token: string; approved: Set<string> } } | null> {
+    if (!/^[0-9a-f]{64}$/.test(token)) return null;
+    const want = Buffer.from(token, "hex");
+    for (const d of await allDownloadables()) {
+      const l = links.get(d.archiveId);
+      if (l && timingSafeEqual(Buffer.from(l.token, "hex"), want)) return { d, link: l };
+    }
+    return null;
   }
 
   /** `POST .../approve`: the owner's signed approval for one browser request. */
@@ -395,11 +500,13 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     }
     const a = parseArchiveDownloadApproval(b.approval);
     if (!a || typeof b.signature !== "string" || !/^[0-9a-f]{128}$/.test(b.signature)) return err(400, "malformed approval");
-    if (!backup || backup.state !== "ready" || a.archiveId !== backup.archiveId) return err(404, "that backup isn't ready on this server any more");
+    const d = (await allDownloadables()).find((x) => x.archiveId === a.archiveId);
+    const l = d ? links.get(d.archiveId) : undefined;
+    if (!d || !l) return err(404, "that backup isn't ready on this server any more");
     if (a.serverDomain !== opts.build.serverFqdn) return err(403, "the approval is for a different server");
     if (Math.abs(now() - a.issuedAt) > 5 * 60_000) return err(403, "the approval is stale: approve again");
     if (!opts.authorizeDownload || !opts.authorizeDownload(a, Buffer.from(b.signature, "hex"))) return err(403, "invalid signature");
-    (backup.approved ??= new Set()).add(a.requestId);
+    l.approved.add(a.requestId);
     note("server.backup.download-approved", "A browser download of the backup was approved.");
     return json(200, { ok: true });
   }
@@ -429,12 +536,13 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     const r = q.get("r") ?? "";
     const validR = /^[0-9a-f]{32}$/.test(r);
     await sweep();
-    const job = backup;
-    if (!tokenMatches(job, token) || job.state !== "ready" || job.bytes === undefined) {
+    const found = await byToken(token);
+    if (!found) {
       return kind === ""
         ? html(404, "<!doctype html><meta charset=utf-8><title>Link expired</title><p>This download link has expired or was replaced by a newer backup.</p>")
         : err(404, "this download link has expired or was replaced by a newer backup");
     }
+    const { d, link } = found;
     const base = `${DOWNLOAD_PATH}${token}`;
     if (kind === "") {
       // A fresh request id per page, kept in the URL so a reload or a retry
@@ -444,28 +552,28 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
       return html(
         200,
         renderDownloadPage({
-          appLink: `${appLinkBase}/app/backup-download#s=${encodeURIComponent(opts.build.serverFqdn)}&a=${job.archiveId}&r=${r}`,
+          appLink: `${appLinkBase}/app/backup-download#s=${encodeURIComponent(opts.build.serverFqdn)}&a=${d.archiveId}&r=${r}`,
           code: archiveDownloadCode(r),
-          backupFileName: backupFileName(opts.build.serverFqdn, job.startedAt),
-          dataFileName: dataFileName(opts.build.serverFqdn, job.startedAt),
-          sizeText: gb(job.bytes),
+          backupFileName: d.backupFileName,
+          dataFileName: d.dataFileName,
+          sizeText: gb(d.bytes),
           statusUrl: `${base}/status?r=${r}`,
           backupUrl: `${base}/backup?r=${r}`,
           fileUrl: `${base}/file?r=${r}`,
-          expiresText: new Date(job.startedAt + KEEP_MS).toUTCString(),
+          expiresText: d.expiresAt === null ? "the backup is removed from the server" : new Date(d.expiresAt).toUTCString(),
         }),
       );
     }
     if (!validR) return err(400, "r must be 16 bytes of lowercase hex");
-    const approved = job.approved?.has(r) === true;
+    const approved = link.approved.has(r);
     if (kind === "status") return json(200, { approved });
     if (!approved) return err(403, "this download hasn't been approved: scan the QR on the download page with the Flagship app");
-    if (kind === "backup") return backupFileResponse(job);
-    const size = job.bytes;
-    const etag = `"${job.sha256 ?? job.archiveId}"`;
+    if (kind === "backup") return backupFileResponse(d);
+    const size = d.bytes;
+    const etag = `"${d.sha256 || d.archiveId}"`;
     const fileHeaders: Record<string, string> = {
       "content-type": "application/octet-stream",
-      "content-disposition": `attachment; filename="${dataFileName(opts.build.serverFqdn, job.startedAt)}"`,
+      "content-disposition": `attachment; filename="${d.dataFileName}"`,
       "accept-ranges": "bytes",
       etag,
       "cache-control": "no-store",
@@ -477,16 +585,265 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
       return { status: 416, headers: { ...fileHeaders, "content-range": `bytes */${size}` }, body: "" };
     }
     const { start, end } = range ?? { start: 0, end: size - 1 };
-    if (method === "GET" && end === size - 1) noteDownloaded(job);
+    if (method === "GET" && end === size - 1) noteDownloaded(d);
     return {
       status: range ? 206 : 200,
       headers: { ...fileHeaders, ...(range ? { "content-range": `bytes ${start}-${end}/${size}` } : {}) },
       body: "",
       stream: {
         length: size === 0 ? 0 : end - start + 1,
-        open: () => createReadStream(dataFile, { start, end }),
+        open: () => createReadStream(d.dataPath, { start, end }),
       },
     };
+  }
+
+  // -------------------------------------------------------------------------
+  // Saved backups: Back up now into the list, and the schedule
+  // -------------------------------------------------------------------------
+
+  const store = opts.saved ? new SavedBackups(opts.saved.dir) : null;
+  let savedState: SavedState | null = null;
+  let keyPool: Array<{ archiveId: string; kekHex: string }> = [];
+  let savedJob: {
+    archiveId: string;
+    trigger: "schedule" | "now";
+    startedAt: number;
+    progress: { done: number; total: number; app: string };
+    estimatedBytes?: number;
+  } | null = null;
+  const NO_KEYS =
+    "an admin device of your account hasn't approved backups for this server yet: open this server in the Flagship app on an admin device";
+
+  async function state(): Promise<SavedState> {
+    if (!savedState) savedState = await store!.loadState();
+    return savedState;
+  }
+
+  async function diskBytes(): Promise<number> {
+    if (opts.saved?.diskBytes) return opts.saved.diskBytes(opts.saved.dir);
+    const s = await statfs(opts.saved!.dir);
+    return Number(s.blocks) * Number(s.bsize);
+  }
+
+  /** Drop saved backups the schedule no longer keeps. */
+  async function applyRetention(): Promise<void> {
+    const s = await state();
+    const all = await store!.list();
+    const keep = retained(all.map((m) => ({ id: m.archiveId, createdAt: m.createdAt })), s.schedule);
+    for (const m of all) {
+      if (keep.has(m.archiveId)) continue;
+      await store!.remove(m.archiveId);
+      links.delete(m.archiveId);
+    }
+  }
+
+  /**
+   * Room for a new saved backup: drop the oldest saved ones (never the newest)
+   * while the disk is short, or while saved backups would take more than their
+   * share of the disk.
+   */
+  async function makeRoomForSaved(need: number, estimate: number): Promise<number> {
+    const share = opts.saved?.maxDiskShare ?? 0.5;
+    const cap = share * (await diskBytes());
+    let all = await store!.list();
+    let have = await free(opts.dir);
+    const used = () => all.reduce((n, m) => n + m.bytes + m.backupBytes, 0);
+    while (all.length > 1 && (have < need || used() + estimate > cap)) {
+      const oldest = all[all.length - 1]!;
+      await store!.remove(oldest.archiveId);
+      links.delete(oldest.archiveId);
+      note("server.backup.removed", `Removed the backup from ${new Date(oldest.createdAt).toISOString().slice(0, 10)} to make room for a new one.`);
+      all = all.slice(0, -1);
+      have = await free(opts.dir);
+    }
+    return have;
+  }
+
+  function savedStem(at: number): string {
+    const label = (opts.build.serverFqdn.split(".")[0] ?? "").replace(/[^A-Za-z0-9-]/g, "") || "server";
+    const iso = new Date(at).toISOString();
+    return `${label}-${iso.slice(0, 10)}-${iso.slice(11, 13)}${iso.slice(14, 16)}`;
+  }
+
+  /** Start a saved backup now (Back up now, or the schedule). */
+  async function runSaved(trigger: "schedule" | "now"): Promise<HttpResponse> {
+    if (!store) return err(404, "this server doesn't keep backups");
+    if (running) return err(409, "a backup or restore is already running here");
+    const s = await state();
+    const k = keyPool[0];
+    if (!k) return err(409, NO_KEYS, { code: "no-keys" });
+    // The key leaves the pool (on disk) before it is used, so it is never used twice.
+    keyPool = keyPool.slice(1);
+    await store.saveKeys(keyPool);
+    s.usedIds.push(k.archiveId);
+    const startedAt = now();
+    if (trigger === "schedule") {
+      const slot = slotStartAtOrBefore(s.schedule, startedAt);
+      s.history.triesThisSlot = s.history.triesSlot === slot ? s.history.triesThisSlot + 1 : 1;
+      s.history.triesSlot = slot;
+    }
+    s.history.lastAttemptAt = startedAt;
+    await store.saveState(s);
+    running = true;
+    const job = { archiveId: k.archiveId, trigger, startedAt, progress: { done: 0, total: 0, app: "" } } as NonNullable<typeof savedJob>;
+    savedJob = job;
+    const key = randomBytes(32);
+    const kek = Buffer.from(k.kekHex, "hex");
+    const stem = savedStem(startedAt);
+    const dir = store.buildingDir(k.archiveId);
+    void (async () => {
+      await mkdir(dir, { recursive: true, mode: 0o700 });
+      const slot = wrapAccountSlot(k.archiveId, key, kek, randomBytes(12));
+      kek.fill(0);
+      return makeArchive({
+        archiveId: k.archiveId,
+        key,
+        slots: [slot],
+        dataPath: join(dir, SAVED_DATA_FILE),
+        backupPath: join(dir, SAVED_BACKUP_FILE),
+        dataName: `${stem}.flagship-data`,
+        job,
+        makeRoom: makeRoomForSaved,
+      });
+    })()
+      .then(async (r) => {
+        await store.commit({
+          archiveId: k.archiveId,
+          createdAt: startedAt,
+          trigger,
+          bytes: r.bytes,
+          sha256: r.sha256,
+          backupBytes: r.backupBytes,
+          backupFileName: `${stem}.flagship-backup`,
+          dataFileName: `${stem}.flagship-data`,
+          apps: r.apps,
+          left: r.left,
+        });
+        s.history.lastOk = true;
+        s.lastRun = { at: startedAt, ok: true, trigger, archiveId: k.archiveId };
+        await store.saveState(s);
+        await applyRetention();
+        note(
+          "server.backup.created",
+          `${trigger === "schedule" ? "Scheduled backup" : "Backup"} saved on this server: ${r.apps.length} app${r.apps.length === 1 ? "" : "s"}.` +
+            (r.left.length > 0 ? ` Left out: ${r.left.map((x) => x.name).join(", ")} (no source to rebuild from).` : ""),
+          r.left.length === 0,
+        );
+        log(`[server-archive] saved backup ${k.archiveId} ready (${r.bytes} bytes)`);
+      })
+      .catch(async (e: Error) => {
+        const reason = e.message || "the backup couldn't be made";
+        await rm(dir, { recursive: true, force: true }).catch(() => {});
+        s.history.lastOk = false;
+        s.lastRun = { at: startedAt, ok: false, trigger, reason };
+        await store.saveState(s).catch(() => {});
+        note("server.backup.failed", `The ${trigger === "schedule" ? "scheduled " : ""}backup failed: ${reason}`, false);
+        log(`[server-archive] saved backup failed: ${reason}`);
+      })
+      .finally(async () => {
+        key.fill(0);
+        savedJob = null;
+        running = false;
+        await rm(scratch, { recursive: true, force: true }).catch(() => {});
+      });
+    return json(202, { archiveId: k.archiveId });
+  }
+
+  async function savedView() {
+    const s = await state();
+    const backups = await store!.list();
+    const t = now();
+    return {
+      schedule: s.schedule,
+      nextRunAt: keyPool.length === 0 ? null : nextRunAt(s.schedule, s.history, t),
+      lastRun: s.lastRun,
+      running: savedJob
+        ? { archiveId: savedJob.archiveId, trigger: savedJob.trigger, startedAt: savedJob.startedAt, progress: savedJob.progress, ...(savedJob.estimatedBytes !== undefined ? { estimatedBytes: savedJob.estimatedBytes } : {}) }
+        : null,
+      keysLeft: keyPool.length,
+      /** How many keys the apps should send (one approval), 0 while the pool is full enough. */
+      keysWanted: keyPool.length < KEY_POOL_LOW ? Math.min(400, KEY_POOL_MAX - keyPool.length) : 0,
+      ...(keyPool.length === 0 && s.schedule.frequency !== "off" ? { waitingReason: NO_KEYS } : {}),
+      usedBytes: backups.reduce((n, m) => n + m.bytes + m.backupBytes, 0),
+      backups,
+    };
+  }
+
+  async function putSchedule(req: HttpRequest): Promise<HttpResponse> {
+    let body: unknown;
+    try {
+      body = JSON.parse(req.body.toString("utf8"));
+    } catch {
+      return err(400, "invalid json");
+    }
+    const parsed = parseSchedule(body);
+    if (typeof parsed === "string") return err(400, parsed);
+    const s = await state();
+    s.schedule = parsed;
+    await store!.saveState(s);
+    await applyRetention();
+    note(
+      "server.backup.schedule",
+      parsed.frequency === "off"
+        ? "Scheduled backups were turned off."
+        : `Scheduled backups: ${parsed.frequency}, keeping ${parsed.keepDaily} daily and ${parsed.keepWeekly} weekly.`,
+    );
+    return json(200, await savedView());
+  }
+
+  async function depositKeys(req: HttpRequest): Promise<HttpResponse> {
+    let b: { deposit?: unknown; signature?: unknown; keys?: unknown };
+    try {
+      b = JSON.parse(req.body.toString("utf8")) as typeof b;
+    } catch {
+      return err(400, "invalid json");
+    }
+    const d: ArchiveKeysDeposit | null = parseArchiveKeysDeposit(b.deposit);
+    const keys = parseArchiveKeys(b.keys);
+    if (!d || !keys || typeof b.signature !== "string" || !/^[0-9a-f]{128}$/.test(b.signature)) return err(400, "malformed keys");
+    if (d.serverDomain !== opts.build.serverFqdn) return err(403, "these keys are for a different server");
+    if (d.count !== keys.length || d.digest !== archiveKeysDigest(keys)) return err(400, "the keys don't match their signature");
+    if (Math.abs(now() - d.issuedAt) > 10 * 60_000) return err(403, "the approval is stale: approve again");
+    if (!opts.saved!.authorizeKeys(d, Buffer.from(b.signature, "hex"))) return err(403, "only an admin device of this account can approve backups");
+    const s = await state();
+    const have = new Set([...keyPool.map((k) => k.archiveId), ...s.usedIds]);
+    const fresh = keys.filter((k) => !have.has(k.archiveId));
+    keyPool = [...keyPool, ...fresh].slice(0, KEY_POOL_MAX);
+    await store!.saveKeys(keyPool);
+    return json(200, await savedView());
+  }
+
+  /** The schedule's tick: start a run when one is due. */
+  async function tick(): Promise<void> {
+    if (!store || running || keyPool.length === 0) return;
+    const s = await state();
+    if (!isDue(s.schedule, s.history, now())) return;
+    await runSaved("schedule");
+  }
+
+  async function handleSaved(path: string, method: string, req: HttpRequest): Promise<HttpResponse> {
+    if (!store) return err(404, "this server doesn't keep backups");
+    const rest = path.slice(SAVED_PATH.length);
+    if (rest === "" && method === "GET") return json(200, await savedView());
+    if (rest === "/schedule" && method === "PUT") return putSchedule(req);
+    if (rest === "/keys" && method === "POST") return depositKeys(req);
+    if (rest === "/run" && method === "POST") return runSaved("now");
+    const m = /^\/([0-9a-f]{32})(\/backup-file|\/chunk|\/link)?$/.exec(rest);
+    if (!m) return err(404, "not found");
+    const id = m[1]!;
+    const sub = m[2] ?? "";
+    if (sub === "" && method === "DELETE") {
+      if (savedJob?.archiveId === id) return err(409, "the backup is still being made");
+      if (!(await savedById(id))) return err(404, "that backup isn't on this server");
+      await store.remove(id);
+      links.delete(id);
+      note("server.backup.removed", "A saved backup was deleted.");
+      return json(200, await savedView());
+    }
+    if (sub === "/backup-file" && method === "GET") return backupFileResponse(await savedById(id));
+    if (sub === "/chunk" && method === "GET") return chunk(await savedById(id), req);
+    if (sub === "/link" && method === "POST") return mintLink(await savedById(id));
+    return err(405, "method not allowed");
   }
 
   function backupView() {
@@ -668,21 +1025,23 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
       if (!isServerArchivePath(path)) return null;
       if (ctx.companion) return err(403, "companion sessions can't back up or restore a server: open your owner app", { code: "companion-write-not-allowed" });
       await sweep();
+      if (path === SAVED_PATH || path.startsWith(`${SAVED_PATH}/`)) return handleSaved(path, method, req);
       switch (`${method} ${path}`) {
         case `POST ${ARCHIVE_PATH}/start`:
           return startBackup(req);
         case `GET ${ARCHIVE_PATH}`:
           return json(200, { archive: backupView() });
         case `GET ${ARCHIVE_PATH}/backup-file`:
-          return backup?.state === "ready" ? backupFileResponse(backup) : err(404, "no backup is ready");
+          return backupFileResponse(manualDownloadable());
         case `GET ${ARCHIVE_PATH}/chunk`:
-          return chunk(req);
+          return chunk(manualDownloadable(), req);
         case `POST ${ARCHIVE_PATH}/link`:
-          return mintLink();
+          return mintLink(manualDownloadable());
         case `POST ${ARCHIVE_PATH}/approve`:
           return approve(req);
         case `DELETE ${ARCHIVE_PATH}`:
           if (backup?.state === "building") return err(409, "the backup is still being made");
+          if (backup) links.delete(backup.archiveId);
           backup = null;
           await dropBackupFiles();
           return json(200, { ok: true });
@@ -705,6 +1064,19 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     async init(): Promise<void> {
       await rm(opts.dir, { recursive: true, force: true }).catch(() => {});
       if (!opts.wait?.current()) await rm(uploadDir, { recursive: true, force: true }).catch(() => {});
+      if (store) {
+        await store.init();
+        savedState = await store.loadState();
+        keyPool = await store.loadKeys();
+      }
+    },
+    /** One look at the schedule (the daemon calls it every few minutes). */
+    tick,
+    /** Check the schedule every `everyMs` (default 5 minutes) until stopped. */
+    startSchedule(everyMs = 5 * 60_000): () => void {
+      const t = setInterval(() => void tick().catch((e: Error) => log(`[server-archive] schedule tick failed: ${e.message}`)), everyMs);
+      if (typeof t.unref === "function") t.unref();
+      return () => clearInterval(t);
     },
     /** Wait for a running job (tests). */
     async settle(): Promise<void> {

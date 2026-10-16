@@ -10,6 +10,7 @@ import {
   signServerRevokeBySelf,
   verifyRootEntitlement,
   verifyArchiveDownloadApproval,
+  verifyArchiveKeysDeposit,
   verifyServerShareGrant,
   verifyServerShareRevoke,
   type Keypair,
@@ -2939,10 +2940,29 @@ async function wireRuntimeSurfaces(deps: {
           signature: sig,
           verify: verifyArchiveDownloadApproval,
         }),
+      // Saved and scheduled backups; their keys come signed from an admin device.
+      saved: {
+        dir: join(dataDir, "server-backups"),
+        authorizeKeys: (deposit, sig) =>
+          authorizeSensitiveOrder({
+            ownerIrkPub: cfg.irkPublicKey,
+            ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+            username: cfg.userId,
+            order: deposit,
+            signature: sig,
+            verify: verifyArchiveKeysDeposit,
+          }),
+      },
       ...(env.controlPlaneBaseUrl ? { appLinkBase: env.controlPlaneBaseUrl } : {}),
       log: (m) => console.log(m),
     });
     await service.init();
+    service.startSchedule(
+      (() => {
+        const raw = Number(process.env.FLAGSHIP_BACKUP_SCHEDULE_TICK_MS);
+        return Number.isFinite(raw) && raw >= 1_000 ? raw : 5 * 60_000;
+      })(),
+    );
     // The backup's download link carries its own token (no session), so a
     // browser or download manager can fetch it straight to disk.
     runtime.addHandler((req) => service.handleDownload(req));

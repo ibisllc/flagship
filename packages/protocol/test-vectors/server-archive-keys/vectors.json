@@ -1,0 +1,73 @@
+{
+  "about": "flagship/server-archive-keys/v1 (docs/server-backup-and-clone.md, Scheduled backups): an admin device's signed batch of archive ids and account-slot keys (kekHex = deriveServerArchiveKey(UMK, archiveId)) for a box's scheduled backups. digest = SHA-256 hex of the UTF-8 lines '<archiveId>:<kekHex>' joined with '\\n' in order. Canonical: tag|serverDomain|count|digest|issuedAt. count is 1..400. Key: the protocol IRK derived from the UMK seed.",
+  "umkSeedHex": "2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a",
+  "pub": "c49775473bf9dcf5ad1608c8e66823d55dc6889be27e42a029fd9de195c8d7e4",
+  "cases": [
+    {
+      "serverDomain": "home.harry.flagship.services",
+      "issuedAt": 1700000000000,
+      "keys": [
+        {
+          "archiveId": "00112233445566778899aabbccddeeff",
+          "kekHex": "4456b3691366394343de2048fd81b89e07e48646b4bb4de02a5a570269d610a4"
+        }
+      ],
+      "digest": "0ac6dd540d2e847ea8e8dc911f1cbeb3937461fb04fcc8b65870306a4e46c9bf",
+      "canonical": "flagship/server-archive-keys/v1|home.harry.flagship.services|1|0ac6dd540d2e847ea8e8dc911f1cbeb3937461fb04fcc8b65870306a4e46c9bf|1700000000000",
+      "signature": "39d3ec3c53b6c390b1599ffde07b5c488024db483ad1e1d589ace7861451e18b454aa0ec76e4cc00301ede3f709393d0c755d5b37ec972720306bcc3b828880e"
+    },
+    {
+      "serverDomain": "home2.harry.flagship.services",
+      "issuedAt": 1792000000000,
+      "keys": [
+        {
+          "archiveId": "ffeeddccbbaa99887766554433221100",
+          "kekHex": "51f5471a6e4dcf5343dce062dc3a951a22d2d9be30574c72b5211401a97dfc6c"
+        },
+        {
+          "archiveId": "0123456789abcdef0123456789abcdef",
+          "kekHex": "101a71e9b902c4045760f0e1070ccf5519f9af1c146bb9e9017e26ae5bb57fd5"
+        },
+        {
+          "archiveId": "fedcba9876543210fedcba9876543210",
+          "kekHex": "b964223fb394d6e329f3516cdb2c24fe13673912cbe6620288b335b47a93be4c"
+        }
+      ],
+      "digest": "48e7252df651ff6161ecce6be664c907a0b6c0acc3550a0e41255001b633e398",
+      "canonical": "flagship/server-archive-keys/v1|home2.harry.flagship.services|3|48e7252df651ff6161ecce6be664c907a0b6c0acc3550a0e41255001b633e398|1792000000000",
+      "signature": "e2dbb1ae60d9cd23657c1dd17393f0ba4fe584762e71218d3bd67624aa6dbb353258a61f00f5543af690b7febc5cdd91b0ac2ad8e5eb812570502a4af3c52e02"
+    }
+  ],
+  "invalid": [
+    {
+      "serverDomain": "",
+      "count": 1,
+      "digest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "issuedAt": 1
+    },
+    {
+      "serverDomain": "home.harry.flagship.services",
+      "count": 0,
+      "digest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "issuedAt": 1
+    },
+    {
+      "serverDomain": "home.harry.flagship.services",
+      "count": 401,
+      "digest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "issuedAt": 1
+    },
+    {
+      "serverDomain": "home.harry.flagship.services",
+      "count": 1,
+      "digest": "ZZ",
+      "issuedAt": 1
+    },
+    {
+      "serverDomain": "home.harry.flagship.services",
+      "count": 1,
+      "digest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "issuedAt": -1
+    }
+  ]
+}

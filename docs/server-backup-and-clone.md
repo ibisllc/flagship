@@ -116,6 +116,82 @@ the device (the passcode never leaves it). It hands the box the content key
 and the slots over the pinned session; the box seals the data file, writes
 the backup file around the slots, wipes the key and never stores it.
 
+## Scheduled backups (saved on the server)
+
+The box makes the same two files on a schedule, by itself, whether or not
+an app is open, and keeps them on its own disk. Any of them downloads and
+imports exactly like a Back up now backup. Code: `serverArchive/schedule.ts`
+(when, retention), `serverArchive/saved.ts` (the folder),
+`serverArchive/service.ts` (runs, routes); `<dataDir>/server-backups/`.
+
+**Keys.** The box can't make a slot by itself: the account slot's key is
+`deriveServerArchiveKey(UMK, archiveId)` and the box never holds the UMK.
+So an **admin device** mints a batch of archive ids with their slot keys
+(up to 400 at a time, about a year of daily backups) and sends them signed:
+
+```
+flagship/server-archive-keys/v1|<serverDomain>|<count>|<digest>|<issuedAt>
+digest = SHA-256 hex of the lines "<archiveId>:<kekHex>" joined with "\n"
+```
+
+The box checks the signature under its sensitive-order authority (admin
+root, else IRK), that it names this server, that it is at most 10 minutes
+old and that the digest matches, and adds the keys it hasn't seen (it
+remembers used ids, so a replayed deposit can't bring one back) to
+`keys.json` (0600, at most 800). Each run takes one key out of the pool and
+writes the pool back *before* it seals anything, makes a fresh random
+content key, wraps it in an ordinary v2 **account slot**, and zeroes both
+when done. A scheduled backup has no passcode slot: it opens on any device
+of the account (the import flow tries the account slot first), and a
+backup to share or keep past the account is still made with Back up now
+and a passcode. The apps top the pool up when the box reports
+`keysWanted > 0` (fewer than 30 left), from an admin device only, with one
+approval (Face ID on the phones) for the whole batch; never on every page
+open. Vectors: `packages/protocol/test-vectors/server-archive-keys/vectors.json`.
+
+**Threat model.** The pool lets the box seal backups it will make later,
+never open one it already made: a used key is gone from the box. Someone
+who takes over a box can read the backups it makes from then on, with the
+keys still in its pool; they already hold the live data those backups are
+made from, so this adds nothing. They can't read earlier backups (copied
+off the box or still on it), and they can't make keys for a different
+server (the deposit names the server and is signed by the account).
+
+**Schedule** (`state.json`, changed by the owner, enforced by the box):
+`frequency` daily | weekly | off, `minuteOfDayUtc`, `weekdayUtc` (the apps
+show and set them in local time), `keepDaily`, `keepWeekly`. Default:
+daily at 03:00 UTC, keep 7 daily + 4 weekly. A run is due once per slot; a
+box that was off or busy for a slot catches up as soon as it is next
+checked (every 5 minutes); a failed run is retried an hour later, at most
+three times per slot. Back up now (`/run`) makes the same kind of backup
+into the same list, at any time.
+
+**Retention and disk.** After each backup the box keeps the newest backup
+of each of the `keepDaily` most recent days and of the `keepWeekly` most
+recent ISO weeks that have one, and always the newest of all, and deletes
+the rest. Before a run it sizes the backup as Back up now does; if the
+disk is short, or saved backups would then take more than half of the
+disk, it deletes the oldest saved backups first, never the newest, and if
+that isn't enough it fails with "needs about X GB, has Y GB". A failure
+is the box's sentence on `lastRun.reason` and in Activity.
+
+Routes (owner sessions only, like the rest):
+
+```
+GET    /api/screens/server-archive/backups                → { schedule, nextRunAt, lastRun, running, keysLeft, keysWanted, waitingReason?, usedBytes, backups: [...] }
+PUT    /api/screens/server-archive/backups/schedule       { frequency, minuteOfDayUtc, weekdayUtc, keepDaily, keepWeekly }
+POST   /api/screens/server-archive/backups/keys           { deposit, signature, keys: [{ archiveId, kekHex }] }
+POST   /api/screens/server-archive/backups/run            → 202 { archiveId }   (409 code no-keys)
+GET    /api/screens/server-archive/backups/<id>/backup-file
+GET    /api/screens/server-archive/backups/<id>/chunk?offset=N
+POST   /api/screens/server-archive/backups/<id>/link      (browser download, approved as below; expiresAt null)
+DELETE /api/screens/server-archive/backups/<id>
+```
+
+Each entry of `backups` is `{ archiveId, createdAt, trigger: schedule|now,
+bytes, sha256, backupBytes, backupFileName, dataFileName, apps, left }`;
+the file names carry the time (`home-2026-10-16-0300.flagship-backup`).
+
 ## Restore a backup
 
 1. **Pick the files.** Home → Add/Import a server → Import a backup. The user
