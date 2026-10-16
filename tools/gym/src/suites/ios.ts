@@ -1093,6 +1093,34 @@ const OCTOBER: readonly Scenario[] = [
     },
   ),
   iosTotal(
+    "ios-oct-debug-access",
+    "D1: an admin device (-smoke-admin-root) turns debug access on with a pasted SSH key for an hour (warning shown, Face ID per grant), the banner shows until when, then turns it off.",
+    O + "test_debugAccessOnBannerOff",
+    {
+      steps: [
+        { kind: "tap", describe: "Turn on.", handle: "sd-debug-access-on" },
+        { kind: "assert", describe: "The warning.", handle: "sd-debug-access-warning" },
+        { kind: "tap", describe: "Paste a key, 1 hour, Turn on.", handle: "sd-debug-access-submit" },
+        { kind: "assert", describe: "The banner.", handle: "sd-debug-access-banner" },
+        { kind: "tap", describe: "Turn off.", handle: "sd-debug-access-off" },
+      ],
+      assertions: [{ describe: "Turn on offered again", handle: "sd-debug-access-on", expect: "present" }],
+      screenshots: [shot("debug-access-form", "The form."), shot("debug-access-on", "On."), shot("debug-access-off", "Off.")],
+      dimension: "D1",
+    },
+  ),
+  iosTotal(
+    "ios-oct-debug-access-read-only",
+    "D3: a device without the admin root sees debug access read-only.",
+    O + "test_debugAccessReadOnlyOnANonAdminDevice",
+    {
+      steps: [{ kind: "assert", describe: "Admin-only line.", handle: "sd-debug-access-admin-only" }],
+      assertions: [{ describe: "No Turn on", handle: "sd-debug-access-on", expect: "absent" }],
+      screenshots: [shot("debug-access-read-only", "Read-only.")],
+      dimension: "D3",
+    },
+  ),
+  iosTotal(
     "ios-oct-offline-server",
     "D5: an offline server's page (Music) says it's offline (not 'Connecting…') and still offers Revoke.",
     O + "test_offlineServerPageSaysOffline",

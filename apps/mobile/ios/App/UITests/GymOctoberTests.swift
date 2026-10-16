@@ -483,6 +483,7 @@ final class GymOctoberTests: XCTestCase {
         XCTAssertTrue(reveal(app, note, tries: 16))
         XCTAssertEqual(note.label, "Only an admin device can turn debug access on or off.")
         XCTAssertFalse(app.buttons["sd-debug-access-on"].exists)
+        gymShot(app, "debug-access-read-only")
     }
 
     // ─── Offline server ──────────────────────────────────────────────────────
