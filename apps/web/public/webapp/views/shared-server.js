@@ -29,6 +29,9 @@ import {
   MEMBERS_ONLY_HINT,
   NOTIFY_LINE,
   NOTIFY_TITLE,
+  LEAVE_LABEL,
+  LEAVE_MESSAGE,
+  LEAVE_TITLE,
   SHARED_DB_OPEN,
   UNLOCK_TITLE,
   approveShareStartup,
@@ -182,7 +185,7 @@ function leaveHtml(name) {
       <h2 class="mt-4">Leave</h2>
       <div class="card" id="shared-leave-card">
         <p class="note">Stop using ${escapeHtml(name)}. You lose access right away; the owner can share it with you again.</p>
-        <button class="danger full-width mt-2" id="shared-leave-btn">Leave ${escapeHtml(name)}</button>
+        <button class="danger full-width mt-2" id="shared-leave-btn">${escapeHtml(LEAVE_LABEL)}</button>
       </div>`;
 }
 
@@ -343,8 +346,8 @@ function wirePage(entry, my, { canManage, startups, apps = [], me = null }) {
   const name = entry.serverName || entry.serverDomain;
   $("shared-leave-btn")?.addEventListener("click", async (ev) => {
     const ok = await inlineConfirm({
-      title: `Leave ${name}?`,
-      message: "You lose access right away. The owner can share it with you again.",
+      title: LEAVE_TITLE,
+      message: LEAVE_MESSAGE,
       okLabel: "Leave",
       danger: true,
     });

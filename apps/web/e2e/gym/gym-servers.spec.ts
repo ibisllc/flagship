@@ -309,7 +309,7 @@ test.describe("gym webapp servers", () => {
     await up.focus();
     await page.keyboard.press("Enter");
     await expect(page.locator("#toast")).toContainText(
-      "Your server order changed on another device. Showing the newest order.",
+      "Another device changed the order. Showing the latest one.",
       { timeout: 10_000 },
     );
     const post = sent.find((s) => s.url.includes("/api/accounts/smoketest/server-order"))!;

@@ -137,7 +137,7 @@ describe("saving the order", () => {
     const fetch = vi.fn(async () => fail(409, "stale"));
     await expect(saveServerOrder({ stks: [B, A] }, { fetch, comBase: "https://com", demo: false })).rejects.toMatchObject({
       status: 409,
-      message: expect.stringMatching(/another device/),
+      message: expect.stringMatching(/Another device changed the order/),
     });
   });
 

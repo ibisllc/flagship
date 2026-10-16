@@ -547,7 +547,7 @@ describe("the shared server's page", () => {
 
   it("at manage with start-up approval: status, apps with access lists, the start-up card and Leave, nothing of the owner's", () => {
     const html = sharedServerHtml({ entry, me: { level: "manage", unlockAtBoot: true, seeAppData: false }, detail, apps, startups: [startup] });
-    for (const want of ["home is starting. Unlock it?", "Approve start-up", "Live metrics", "notes", "Internet access", "Leave home", S]) {
+    for (const want of ["home is starting. Unlock it?", "Approve start-up", "Live metrics", "notes", "Internet access", "Leave this server", S]) {
       expect(html).toContain(want);
     }
     for (const owned of OWNER_ONLY) expect(html).not.toContain(owned);
@@ -579,7 +579,7 @@ describe("the shared server's page", () => {
     expect(html).not.toContain(shares.NOTIFY_TITLE);
     expect(html).not.toContain("Internet access");
     expect(html).not.toContain("Approve start-up");
-    expect(html).toContain("Leave home");
+    expect(html).toContain("Leave this server");
     for (const owned of OWNER_ONLY) expect(html).not.toContain(owned);
   });
 
@@ -625,7 +625,7 @@ describe("the shared server's page", () => {
     expect(ids["shared-server-sub"]!.textContent).toBe("Shared with you · Can manage");
     expect(html).toContain("notes");
     expect(html).toContain("Internet access");
-    expect(html).toContain("Leave home");
+    expect(html).toContain("Leave this server");
     for (const owned of OWNER_ONLY) expect(html).not.toContain(owned);
   });
 });

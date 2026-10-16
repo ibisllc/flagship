@@ -359,7 +359,7 @@ export async function saveServerOrder({ stks }, deps = {}) {
     if (!r.ok) {
       const body = await r.json().catch(() => ({}));
       const reason = r.status === 409
-        ? "Your server order changed on another device. Showing the newest order."
+        ? "Another device changed the order. Showing the latest one."
         : String(body?.error ?? `HTTP ${r.status}`);
       throw new ServerOrderError(reason, r.status);
     }

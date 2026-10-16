@@ -36,6 +36,10 @@ export const MEMBERS_ONLY_HINT = "Members only. You can open it: you co-manage t
 export const DATA_TITLE = "Can see app data";
 export const DATA_LINE = "They can open each app's Database section.";
 export const SHARED_DB_OPEN = "Database";
+// The words iOS uses (ShareServerScreens "Leave this server").
+export const LEAVE_LABEL = "Leave this server";
+export const LEAVE_TITLE = "Leave this server?";
+export const LEAVE_MESSAGE = "You lose access at once. The owner would have to share it with you again.";
 export const SHARED_DB_WRITE_REFUSED = "Only someone who can manage this server can change its apps' data. You can read it.";
 
 export class ShareError extends Error {
