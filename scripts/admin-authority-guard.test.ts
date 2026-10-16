@@ -181,12 +181,13 @@ describe("admin-authority-guard.sh — the allowlist matches the §2 sensitive .
     for (const e of expected) expect(script).toContain(e);
   });
 
-  it("the membership-key exceptions are exactly the two invite paths (owner decision 2026-10-15)", () => {
+  it("the membership-key exceptions are exactly the invite paths (owner decisions 2026-10-15 and 2026-10-16)", () => {
     const script = readFileSync(SCRIPT, "utf8");
     const block = /MEMBERSHIP_KEY_EXCEPTIONS=\(([\s\S]*?)\)/.exec(script)?.[1] ?? "";
     const entries = [...block.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
     expect(entries).toEqual([
       "packages/control-plane/src/serviceInvites.ts|handleCreateServiceInvite|deviceInviteSigner",
+      "packages/control-plane/src/serviceInvites.ts|handleCreateServiceInvite|coManagerRelaySigner",
       "packages/control-plane/src/serviceInvites.ts|handleRevokeServiceInvite|revokedByCreator",
     ]);
   });
@@ -194,6 +195,7 @@ describe("admin-authority-guard.sh — the allowlist matches the §2 sensitive .
   it("the real invite handlers do call their documented helper (the exception is load-bearing)", () => {
     const src = readFileSync(join(__dirname, "../packages/control-plane/src/serviceInvites.ts"), "utf8");
     expect(src).toMatch(/deviceInviteSigner\(deps, userV\.label/);
+    expect(src).toMatch(/coManagerRelaySigner\(deps, userV\.label/);
     expect(src).toMatch(/revokedByCreator\(deps, userV\.label/);
   });
 });
