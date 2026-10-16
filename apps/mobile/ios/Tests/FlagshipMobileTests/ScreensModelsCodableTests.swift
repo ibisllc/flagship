@@ -72,6 +72,10 @@ final class ScreensModelsCodableTests: XCTestCase {
         XCTAssertNil(try decode("").appSandbox)
         let n = try decode(#","appSandbox":{"state":"unavailable","reason":"no network"}"#).appSandbox?.notice
         XCTAssertEqual(n, AppSandbox.Notice(danger: true, text: "Apps can't start on this server: the sandbox they run in isn't working (no network). The server tries again every 10 minutes."))
+        let fw = try decode(#","appSandbox":{"state":"unavailable","reason":"its internet firewall isn't running: nftables missing"}"#).appSandbox?.notice
+        XCTAssertEqual(fw, AppSandbox.Notice(danger: true, text: "Apps can't start on this server: the internet firewall that keeps them to their allowed hosts isn't running (nftables missing). The server tries again every 30 seconds."))
+        XCTAssertEqual(try decode(#","appSandbox":{"state":"unavailable","reason":"its internet firewall isn't running"}"#).appSandbox?.notice?.text,
+                       "Apps can't start on this server: the internet firewall that keeps them to their allowed hosts isn't running. The server tries again every 30 seconds.")
         XCTAssertEqual(try decode(#","appSandbox":{"state":"starting"}"#).appSandbox?.notice?.danger, false)
         XCTAssertNil(try decode(#","appSandbox":{"state":"ready","version":"runsc"}"#).appSandbox?.notice)
     }

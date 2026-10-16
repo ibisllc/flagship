@@ -87,12 +87,13 @@ public struct ServerDetailResponse: Codable, Equatable, Sendable {
     public let recentInstallEvents: [RecentInstallEvent]
     /// Verdict of the most recent update order. Absent from older daemons.
     public var lastUpdate: LastUpdate? = nil
-    /// The sandbox every app runs in (gVisor). Absent from older daemons.
+    /// The sandbox every app runs in (gVisor plus the egress firewall). Absent from older daemons.
     public var appSandbox: AppSandbox? = nil
 }
 
 /// The box's app sandbox (docs/app-runtimes.md §5.1): `off`, `starting`,
-/// `ready` (with `version`) or `unavailable` (with `reason`: no app can start).
+/// `ready` (with `version`) or `unavailable` (with `reason`: no app can start,
+/// because gVisor isn't usable or the egress firewall is down).
 public struct AppSandbox: Codable, Equatable, Sendable {
     public let state: String
     public let version: String?
@@ -114,13 +115,29 @@ public struct AppSandbox: Codable, Equatable, Sendable {
         }
     }
 
+    /// The box's reason when its internet firewall (the egress gateway, part
+    /// of every app's sandbox) is down; it retries that every 30 seconds.
+    static let firewallPrefix = "its internet firewall isn't running"
+
     /// What the server page says, or nil. Matches the webapp's appSandboxNotice.
     public var notice: Notice? {
         switch state {
         case "unavailable":
+            let why = reason?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if why.hasPrefix(Self.firewallPrefix) {
+                var detail = String(why.dropFirst(Self.firewallPrefix.count))
+                if detail.hasPrefix(":") { detail.removeFirst() }
+                detail = detail.trimmingCharacters(in: .whitespaces)
+                return Notice(
+                    danger: true,
+                    text: "Apps can't start on this server: the internet firewall that keeps them to their allowed hosts isn't running"
+                        + (detail.isEmpty ? "" : " (\(detail))")
+                        + ". The server tries again every 30 seconds."
+                )
+            }
             return Notice(
                 danger: true,
-                text: "Apps can't start on this server: the sandbox they run in isn't working (\(reason ?? "unknown reason")). The server tries again every 10 minutes."
+                text: "Apps can't start on this server: the sandbox they run in isn't working (\(why.isEmpty ? "unknown reason" : why)). The server tries again every 10 minutes."
             )
         case "starting":
             return Notice(danger: false, text: "Setting up the sandbox apps run in. They start once it's ready.")
