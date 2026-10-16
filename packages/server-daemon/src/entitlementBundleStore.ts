@@ -177,6 +177,19 @@ export async function writeEntitlementBundle(
 }
 
 /**
+ * Whether a bundle names THIS box: its server name and its identity key. A
+ * box that took over another server's name (migration) or moved to another
+ * account still holds the bundle it booted with; the hub would refuse it, so
+ * the daemon discards it and asks the owner's phone for a fresh one.
+ */
+export function bundleFitsBox(bundle: EntitlementBundle, box: { serverFqdn: string; identityPub: Uint8Array }): boolean {
+  const r = bundle.rootEntitlement;
+  if (r.podCanonical.toLowerCase() !== box.serverFqdn.toLowerCase()) return false;
+  if (r.podPubKey.length !== box.identityPub.length) return false;
+  return r.podPubKey.every((b, i) => b === box.identityPub[i]);
+}
+
+/**
  * Load + parse the bundle from disk. Returns null if the file does not
  * exist (the caller decides whether that's fatal); throws on a present
  * but malformed file so the defect is loud.

@@ -19,6 +19,7 @@ import {
   type Keypair,
 } from "@flagship/protocol";
 import {
+  bundleFitsBox,
   defaultEntitlementBundlePath,
   loadEntitlementBundle,
   parseEntitlementBundle,
@@ -47,6 +48,15 @@ describe("entitlementBundleStore", () => {
 
   afterEach(async () => {
     await rm(dir, { recursive: true, force: true });
+  });
+
+  it("bundleFitsBox: only a bundle naming this server AND its identity key fits", () => {
+    const minted = mintDevEntitlements({ irk, podPubKey: stk.publicKey, username: USERNAME, podCanonical: POD_CANONICAL });
+    expect(bundleFitsBox(minted, { serverFqdn: POD_CANONICAL, identityPub: stk.publicKey })).toBe(true);
+    expect(bundleFitsBox(minted, { serverFqdn: POD_CANONICAL.toUpperCase(), identityPub: stk.publicKey })).toBe(true);
+    // A migrated box restarts as the old server's name, still holding its own bundle.
+    expect(bundleFitsBox(minted, { serverFqdn: "home2.alice.flagship.services", identityPub: stk.publicKey })).toBe(false);
+    expect(bundleFitsBox(minted, { serverFqdn: POD_CANONICAL, identityPub: makeKeypair(0x33).publicKey })).toBe(false);
   });
 
   it("round-trips a root-only bundle through disk and verifies under the IRK", async () => {

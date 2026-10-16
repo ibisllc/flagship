@@ -174,6 +174,7 @@ import {
   resolveServicesEndpoints,
 } from "./servicesEndpoints.js";
 import {
+  bundleFitsBox,
   defaultEntitlementBundlePath,
   loadEntitlementBundle,
 } from "./entitlementBundleStore.js";
@@ -2092,6 +2093,15 @@ async function loadEntitlementsOrExit(deps: {
     // through to the phone relay below to fetch a real IRK-signed one. (When
     // cfg is absent — demo/gym — we can't verify, so we present as-is, the
     // legacy behavior.)
+    // A bundle for another name or key is just as useless: a box that took
+    // over a migrated server's name restarts holding the bundle for its OLD
+    // name, and kept crash-looping on the check below.
+    if (loaded && cfg && !bundleFitsBox(loaded, { serverFqdn: env.serverFqdn, identityPub: identityKeypair.publicKey })) {
+      console.warn(
+        `[daemon] on-disk entitlement names ${loaded.rootEntitlement.podCanonical}, not this server (${env.serverFqdn}) and its key; discarding and requesting one from the phone`,
+      );
+      loaded = null;
+    }
     if (
       loaded &&
       cfg &&
