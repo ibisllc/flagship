@@ -65,6 +65,13 @@ const TAG_AUTH_CODE = "flagship/auth-code/v1";
 const TAG_AUTH_CODE_ADMIN = "flagship/auth-code-admin/v1";
 const TAG_RCK_REGISTER = "flagship/rck-register/v1";
 
+// The browser's words for each backup policy (the wire values stay).
+const BACKUP_POLICY_LABELS = Object.freeze({
+  "phone-only": "On my devices",
+  none: "None",
+  peer: "Reciprocal peer backup",
+});
+
 let activeDraftId = null;
 let _refreshGen = 0;
 
@@ -110,7 +117,7 @@ function renderDraftList(drafts) {
       </div>
       <div class="row">
         <span class="label">backup</span>
-        <span class="value">${escapeHtml(d.backupPolicy)}</span>
+        <span class="value">${escapeHtml(BACKUP_POLICY_LABELS[d.backupPolicy] ?? d.backupPolicy ?? "")}</span>
       </div>
       <div class="row">
         <span class="label">updated</span>

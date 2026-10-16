@@ -853,7 +853,7 @@
         <h2>Create a server</h2>
         <div class="card">
           <p class="note">
-            Compose a build-and-deliver draft. Save it for later, or deliver the signed recipe to a browser tab open at the QR on <a href="https://flagshipserver.com/" target="_blank" rel="noopener">flagshipserver.com</a> — it downloads the recipe for the Flagship Studio. The webapp signs with your IRK; the relay sees only opaque ciphertext.
+            Choose the new server's settings. Save them as a draft for later, or create the recipe: this browser signs it with your account key and downloads it, and you open it in Flagship Studio. flagshipserver.com never sees your keys.
           </p>
           <label>Subdomain</label>
           <input id="cs-server-name" type="text" placeholder="home" autocomplete="off"
@@ -863,11 +863,11 @@
           <p id="cs-server-name-error" class="note err hidden" role="alert"></p>
           <label>Backup policy</label>
           <select id="cs-backup-policy">
-            <option value="phone-only">Phone-only (default)</option>
+            <option value="phone-only">On my devices (default)</option>
             <option value="none">None</option>
             <option value="peer">Reciprocal peer backup</option>
           </select>
-          <p class="faint-sm">With phone-only backups, the server's data can't grow larger than your phone's free space.</p>
+          <p class="faint-sm">One of your devices keeps an encrypted backup of each app, so the server's data can't grow larger than that device's free space.</p>
           <label>Recipe expires in <span class="faint-sm">(hours; 0.5–24, default 6)</span></label>
           <input id="cs-ttl-hours" type="number" min="0.5" max="24" step="0.5" value="6" />
           <p class="faint-sm">After this window, the unused recipe can't install — re-mint here.</p>
@@ -877,12 +877,12 @@
             <label class="boot-unlock-option">
               <input type="radio" name="cs-boot-unlock" value="auto" checked />
               <span class="boot-unlock-title">Reboots on its own</span>
-              <span class="boot-unlock-desc faint-sm">Restarts by itself, no phone needed — good for flaky power or connections. flagshipserver.com still can't read your disk key, and you can revoke a stolen server from your phone. Not theft-proof: someone who powers it on first could boot it.</span>
+              <span class="boot-unlock-desc faint-sm">Restarts by itself, no approval needed — good for flaky power or connections. flagshipserver.com still can't read your disk key, and you can revoke a stolen server from any of your devices. Not theft-proof: someone who powers it on first could boot it.</span>
             </label>
             <label class="boot-unlock-option">
               <input type="radio" name="cs-boot-unlock" value="approve" />
               <span class="boot-unlock-title">Authorize each boot</span>
-              <span class="boot-unlock-desc faint-sm">Every restart waits for your approval on your phone. Nothing — not even flagshipserver.com — can start it without you. The cost: a power cut means it stays down until you approve.</span>
+              <span class="boot-unlock-desc faint-sm">Every restart waits for you to approve it from one of your devices. Nothing — not even flagshipserver.com — can start it without you. The cost: a power cut means it stays down until you approve.</span>
             </label>
           </div>
 
@@ -899,7 +899,7 @@
             <label class="inline-check mt-2">
               <input type="checkbox" id="cs-embed-secrets" /> Embed secrets for offline install
             </label>
-            <p id="cs-embed-secrets-hint" class="faint-sm">This embeds security keys directly in the recipe. Hence, the server will be able to boot even if the phone is offline.</p>
+            <p id="cs-embed-secrets-hint" class="faint-sm">This embeds security keys directly in the recipe, so the server can boot even when none of your devices is online.</p>
             <label class="inline-check mt-2">
               <input type="checkbox" id="cs-debug-friendly" /> Debug-friendly server
             </label>
