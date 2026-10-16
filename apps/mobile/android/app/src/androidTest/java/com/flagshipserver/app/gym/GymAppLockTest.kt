@@ -30,6 +30,26 @@ class GymAppLockTest : GymBase() {
                 .fetchSemanticsNodes().firstOrNull()?.config
                 ?.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
 
+    /** M12: a cold start of a signed-in device with the lock on opens on the
+     *  lock screen, never on Home. The first launch persists a signed-in
+     *  device; the second is a plain launcher start of it. */
+    @Test
+    fun aColdStartOfASignedInDeviceOpensLocked() {
+        launch(tab = "home", realBiometrics = true, persistSession = true, username = "gym-lock")
+        waitUntilExists("home-title")
+        try {
+            launchPlain()
+            waitUntilExists("biometric-lock-screen", timeoutMs = 15_000)
+            gymShot("cold-start-locked")
+            composeRule.waitUntil(20_000) {
+                val label = unlockLabel()
+                label != null && !label.contains("Authenticating")
+            }
+        } finally {
+            com.flagshipserver.app.keystore.Keystore.wipeAllProfiles()
+        }
+    }
+
     @Test
     fun theUnlockPromptAskedWhileTheScreenIsOffNeverSticks() {
         launch(tab = "home", realBiometrics = true)

@@ -14,6 +14,7 @@ object Variant : AppVariant {
     override fun applyLaunchOverrides(intent: Intent?) = Unit
 
     override fun gymLaunch(
+        context: android.content.Context,
         intent: Intent?,
         appState: AppState,
         operations: ActiveOperationsCenter,

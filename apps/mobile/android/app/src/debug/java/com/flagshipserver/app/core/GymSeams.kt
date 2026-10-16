@@ -36,4 +36,12 @@ object GymSeams {
      *  recovery set-up scenario. */
     @Volatile
     var fakePasskeysNoPrfOnCreate: Boolean = false
+
+    /** Back to production behaviour (a launch without the gym's extras). */
+    fun reset() {
+        forceAdminRoot = false
+        deviceRank = null
+        bypassBiometricGates = false
+        fakePasskeysNoPrfOnCreate = false
+    }
 }

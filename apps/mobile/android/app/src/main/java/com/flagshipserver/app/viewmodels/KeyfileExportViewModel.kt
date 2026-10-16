@@ -11,6 +11,8 @@
 package com.flagshipserver.app.viewmodels
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.launch
 import com.flagshipserver.app.keystore.Keyfile
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -68,21 +70,37 @@ class KeyfileExportViewModel(
     val suggestedFilename: String
         get() = (username.ifEmpty { "account" }) + ".flagshipkey"
 
-    /** Read the UMK + wrap it. On success → Ready(text). */
+    /** Read the UMK + wrap it, off the main thread (Argon2id with 64 MiB
+     *  takes seconds; on the main thread it froze the screen on "Creating…",
+     *  device bug M14). On success → Ready(text). */
     fun createBackup() {
         if (!canCreate) return
+        viewModelScope.launch { createBackupNow() }
+    }
+
+    suspend fun createBackupNow() {
+        if (!canCreate) return
         _phase.value = KeyfileExportPhase.Working
+        com.flagshipserver.app.core.ErrorLog.step("key-backup", "wrap start")
         try {
-            val seed = readUmkSeed()
-            val meta = Keyfile.Meta(
-                username = username,
-                accountId = accountId,
-                createdAt = nowIso(),
-            )
-            val text = Keyfile.wrap(umkSeed = seed, passphrase = _passphrase.value, meta = meta)
+            val passphrase = _passphrase.value
+            val text = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                val seed = readUmkSeed()
+                val meta = Keyfile.Meta(
+                    username = username,
+                    accountId = accountId,
+                    createdAt = nowIso(),
+                )
+                Keyfile.wrap(umkSeed = seed, passphrase = passphrase, meta = meta)
+            }
+            com.flagshipserver.app.core.ErrorLog.step("key-backup", "wrap done")
             _phase.value = KeyfileExportPhase.Ready(text)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (t: Throwable) {
-            _phase.value = KeyfileExportPhase.Failed("Couldn't create the backup file: ${t.message}")
+            _phase.value = KeyfileExportPhase.Failed(
+                "Couldn't create the backup file. " + com.flagshipserver.app.core.NetworkErrorHumanizer.humanize(t, "key-backup"),
+            )
         }
     }
 

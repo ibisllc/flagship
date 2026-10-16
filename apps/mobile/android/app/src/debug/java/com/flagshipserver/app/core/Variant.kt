@@ -32,12 +32,27 @@ object Variant : AppVariant {
     }
 
     override fun gymLaunch(
+        context: android.content.Context,
         intent: Intent?,
         appState: AppState,
         operations: ActiveOperationsCenter,
         trust: TrustCenter,
     ): GymLaunch? {
-        val cfg = SmokeModeConfig.from(intent) ?: return null
+        val cfg = SmokeModeConfig.from(intent)
+        if (cfg == null) {
+            // A normal launch in the same process as an earlier gym run (the
+            // gym's cold-start checks) must not inherit its seams.
+            mockRun = false
+            GymSeams.reset()
+            return null
+        }
+        if (cfg.persistSession) {
+            // A real-looking signed-in device: an active keystore profile with
+            // an account key and the lock on, as a cold start finds it.
+            com.flagshipserver.app.keystore.Keystore.setActiveProfile(cfg.username)
+            com.flagshipserver.app.keystore.Keystore.loadOrCreateUmkSeed()
+            PrivacySettings.fromContext(context).setRequireBiometricAtLaunch(true)
+        }
         val tab = SmokeMode.apply(config = cfg, appState = appState, operations = operations, trust = trust)
         mockRun = !cfg.live
         if (cfg.live) return GymLaunch(tab, mocks = null)
