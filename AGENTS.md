@@ -660,7 +660,10 @@ allowances (1M / 5M / 20M a month) are placeholders.
   file arms the switch as missed, a lost admin-root pin holds boot until
   the rotation chain is replayed from the seed, lost update nonces refuse
   older orders, a lost journal holds shared apps until caught up. Needs an
-  endorsed box release.
+  endorsed box release. All three apps show the Activity entry as a warning,
+  "This server found a damaged settings file and locked it down", with the
+  box's line (which file, what it means) under it (webapp shell v115;
+  iOS/Android need store builds).
 - **App "Back up now" (2026-10-15):** the box never mounted `/api/backups/<id>`,
   so every client's archive fetch 404'd; now mounted (owner sessions only).
   The webapp fetches it with the session and saves the Blob, like iOS/Android.

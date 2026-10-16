@@ -312,7 +312,17 @@ describe("the Activity list", () => {
     expect(boxEntryRow({ ts: 1, seq: 1, actor: { kind: "owner" }, action: "post /api/screens/x", ok: true })).toBeNull();
     expect(boxEntryRow({ ts: 1, seq: 2, actor: { kind: "owner" }, action: "server.backup.created", kind: "server.backup.created", detail: "Backup ready: 2 apps.", ok: true })).toMatchObject({ title: "Backup ready", detail: "Backup ready: 2 apps.", ok: true });
     expect(boxEntryRow({ ts: 1, seq: 3, actor: { kind: "share", shareId: "s", label: "Sam" }, action: "share.granted", ok: true })).toMatchObject({ title: "Shared this server by Sam" });
-    expect(boxEntryRow({ ts: 1, seq: 4, actor: { kind: "owner" }, action: "x", kind: "server.something.new", ok: false })).toMatchObject({ title: "Server something new", ok: false });
+    expect(boxEntryRow({ ts: 1, seq: 4, actor: { kind: "owner" }, action: "x", kind: "server.something.new", ok: false })).toMatchObject({ title: "Server something new", icon: "⚠️", ok: false });
+    expect(boxEntryRow({ ts: 1, seq: 5, actor: { kind: "owner" }, action: "x", kind: "server.something.newer", ok: true })).toMatchObject({ title: "Server something newer", icon: "•" });
+  });
+  it("shows a corrupt state file as a warning with the box's detail", () => {
+    const detail = "service-access.json couldn't be read and was set aside. Every app on this server is members-only until you open it again.";
+    expect(boxEntryRow({ ts: 1, seq: 6, actor: { kind: "owner" }, action: "server.state.corrupt", kind: "server.state.corrupt", detail, ok: false })).toMatchObject({
+      title: "This server found a damaged settings file and locked it down",
+      icon: "⚠️",
+      detail,
+      ok: false,
+    });
   });
   it("merges both sources newest first", () => {
     const rows = mergeFeed({

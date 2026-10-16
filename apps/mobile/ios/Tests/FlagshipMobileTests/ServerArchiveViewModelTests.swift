@@ -270,6 +270,15 @@ final class ServerArchiveViewModelTests: XCTestCase {
         XCTAssertEqual(BoxEventLabels.title(BoxActivityEntry(ts: 1, action: "x", kind: "server.something.new")), "Server something new")
     }
 
+    func testCorruptStateEntryReadsAsAWarning() {
+        let e = BoxActivityEntry(ts: 1, action: "server.state.corrupt", kind: "server.state.corrupt", detail: "service-access.json couldn't be read and was set aside.", ok: false)
+        XCTAssertEqual(BoxEventLabels.title(e), "This server found a damaged settings file and locked it down")
+        XCTAssertEqual(BoxEventLabels.symbol(e), "exclamationmark.triangle.fill")
+        XCTAssertEqual(AuditLogViewModel.label(for: "server-migration-taken-over"), "Moved a server to a new machine / VM")
+        XCTAssertEqual(AuditLogViewModel.label(for: "brand-new.kind"), "Brand new kind")
+        XCTAssertEqual(AuditLogViewModel.label(for: ""), "Account event")
+    }
+
     private func waitFor(_ cond: @MainActor () -> Bool, timeout: TimeInterval = 10) async throws {
         let end = Date().addingTimeInterval(timeout)
         while !cond() {

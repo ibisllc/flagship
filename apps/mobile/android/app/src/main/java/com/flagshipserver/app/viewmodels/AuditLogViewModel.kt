@@ -42,6 +42,9 @@ fun auditEventLabel(kind: String): String = when (kind) {
     "app-renamed"         -> "Renamed app URL"
     "server-created"      -> "Created server"
     "server-online"       -> "Server came online"
+    "server-migration-started"    -> "Started moving a server"
+    "server-migration-taken-over" -> "Moved a server to a new machine / VM"
+    "server-migration-aborted"    -> "Cancelled a server move"
     "server-revoked"      -> "Revoked server"
     "server-unrevoked"    -> "Restored server"
     "server-transfer-offered" -> "Offered a server transfer"
@@ -58,7 +61,9 @@ fun auditEventLabel(kind: String): String = when (kind) {
     "account-type-changed-multi-to-single" -> "Switched to single-device"
     "ct-unexpected-cert"  -> "Unexpected certificate observed"
     "invite-created"      -> "Someone was invited to an app"
-    else -> kind.replace('-', ' ').replaceFirstChar { it.uppercaseChar() }
+    else -> kind.replace(Regex("[._-]+"), " ").trim()
+        .ifEmpty { "Account event" }
+        .replaceFirstChar { it.uppercaseChar() }
 }
 
 /** The detail line to show under an event, or null. Some kinds record

@@ -31,6 +31,7 @@ describe("webapp audit labels", () => {
     expect(auditKindLabel("demo-vps-provisioned")).toBe("Demo server provisioned");
     expect(auditKindLabel("totp-enrolled")).toBe("Turned on authenticator codes");
     expect(auditKindLabel("re-pair-refused-no-credential")).toBe("Refused a device replacement");
+    expect(auditKindLabel("server-migration-taken-over")).toBe("Moved a server to a new machine / VM");
   });
 
   it("humanizes an unknown future kind instead of showing it raw", () => {

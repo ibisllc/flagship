@@ -432,7 +432,7 @@ export type AuditEventKind =
   | "app-renamed"            // V2 — voi.ci-aware Replace stem
   | "server-created"         // a box registered to the account for the first time
   | "server-online"          // a box reported live (cert serving) for the first time
-  | "server-migration-started"     // owner started moving a server to new hardware
+  | "server-migration-started"     // owner started moving a server to a new machine / VM
   | "server-migration-taken-over"  // the new box took over the name; the old one is retired
   | "server-migration-aborted"     // the owner cancelled before take-over
   // Plan A — demo-user lifecycle (docs/sample-users.md §13). Stored

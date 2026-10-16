@@ -61,6 +61,10 @@ class AuditLogViewModelTest {
         assertEquals("Turned on authenticator codes", auditEventLabel("totp-enrolled"))
         assertEquals("Refused a device replacement", auditEventLabel("re-pair-refused-no-credential"))
         assertEquals("Someone was invited to an app", auditEventLabel("invite-created"))
+        assertEquals("Started moving a server", auditEventLabel("server-migration-started"))
+        assertEquals("Moved a server to a new machine / VM", auditEventLabel("server-migration-taken-over"))
+        assertEquals("Cancelled a server move", auditEventLabel("server-migration-aborted"))
+        assertEquals("Account event", auditEventLabel(""))
         val invite = AuditEvent(seq = 1, eventKind = "invite-created", detail = "A device on your account invited someone to one of your apps.", devicePrefix = "01234567", postedAt = 1)
         assertEquals("A device on your account invited someone to one of your apps.", auditEventDisplayDetail(invite))
     }

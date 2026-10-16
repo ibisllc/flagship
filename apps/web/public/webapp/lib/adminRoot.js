@@ -62,7 +62,7 @@ export const SENSITIVE_TAGS = new Set([
   "flagship/servers-self-delete/v1", //    content wipe
   "flagship/server-transfer-offer/v1", //  transfer (giver)
   "flagship/server-transfer-claim/v2", //  transfer (acquirer; v2 binds their admin root pub)
-  "flagship/server-migration/v1", //       migrate to new hardware (order)
+  "flagship/server-migration/v1", //       migrate to a new machine / VM (order)
   "flagship/server-migration-control/v1", // migration confirm-ready / abort
   "flagship/release-server-name/v1", //    release server name
   "flagship/server-unrevoke/v1", //        un-revoke a lost/stolen server

@@ -31,6 +31,7 @@ export const BOX_EVENT_LABELS = Object.freeze({
   "share.left": { label: "A person left a share", icon: "🤝" },
   "share.signed-in": { label: "A shared person signed in", icon: "🤝" },
   "server.update": { label: "Server updated by a co-manager", icon: "⬆️" },
+  "server.state.corrupt": { label: "This server found a damaged settings file and locked it down", icon: "⚠️" },
 });
 
 function humanize(s) {
@@ -53,7 +54,7 @@ export function boxEntryRow(e, serverName = "") {
     at: e.ts,
     source: "server",
     server: serverName,
-    icon: known?.icon ?? "•",
+    icon: known?.icon ?? (e.ok === false ? "⚠️" : "•"),
     title: `${known?.label ?? humanize(key)}${by}`,
     detail: e.detail || (e.target && !e.detail ? String(e.target) : ""),
     ok: e.ok !== false,

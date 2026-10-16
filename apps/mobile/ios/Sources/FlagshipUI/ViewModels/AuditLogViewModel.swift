@@ -125,7 +125,7 @@ public final class AuditLogViewModel {
         case "server-created":      return "Created server"
         case "server-online":       return "Server came online"
         case "server-migration-started":     return "Started moving a server"
-        case "server-migration-taken-over":  return "Moved a server to new hardware"
+        case "server-migration-taken-over":  return "Moved a server to a new machine / VM"
         case "server-migration-aborted":     return "Cancelled a server move"
         case "server-revoked":      return "Revoked server"
         case "server-unrevoked":    return "Restored server"
@@ -154,7 +154,8 @@ public final class AuditLogViewModel {
         case "account-type-changed-multi-to-single": return "Switched to single-device"
         case "ct-unexpected-cert":  return "Unexpected certificate observed"
         default:
-            let words = kind.replacingOccurrences(of: "-", with: " ")
+            let words = kind.replacingOccurrences(of: "[._-]+", with: " ", options: .regularExpression).trimmingCharacters(in: .whitespaces)
+            if words.isEmpty { return "Account event" }
             return words.prefix(1).uppercased() + words.dropFirst()
         }
     }

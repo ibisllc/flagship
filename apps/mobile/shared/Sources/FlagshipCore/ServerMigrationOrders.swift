@@ -300,7 +300,7 @@ public enum ServerMigrationTimeline {
         if s.done { return "Migration complete — the server now runs on the new box." }
         switch s.phase {
         case "initiated":
-            return "Waiting for the new box to come online. Apply the recipe on the new hardware; it will attach itself here."
+            return "Waiting for the new box to come online. Apply the recipe on the new machine / VM; it will attach itself here."
         case "provisioned":
             if let attachedAt = s.attachedAt, nowMs - attachedAt > preSeedStuckMs {
                 return "The new box attached but hasn't restored any data yet. If this server has no backup enabled, enable backup first — the migration restores from it."

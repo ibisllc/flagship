@@ -191,7 +191,7 @@ export async function renderActivity() {
     const feed = rows.length === 0
       ? '<div class="card placeholder">Nothing has happened yet.</div>'
       : rows.map((r) => `
-        <div class="card${r.ok ? "" : " card-warn"}">
+        <div class="card${r.ok ? "" : " warning"}">
           <div class="row">
             <span class="value"><span aria-hidden="true">${escapeHtml(r.icon)}</span> ${escapeHtml(r.title)}</span>
             <span class="pill">${escapeHtml(fmtDate(r.at))}</span>

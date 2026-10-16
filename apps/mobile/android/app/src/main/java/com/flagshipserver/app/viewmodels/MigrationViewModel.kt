@@ -205,7 +205,7 @@ class MigrationViewModel(
         }
         _working.value = true
         try {
-            val reason = "Migrate $serverFqdn to new hardware"
+            val reason = "Migrate $serverFqdn to a new machine / VM"
             val irk = signer(reason)
             val pub = irkPubHex()
             val orderKey = orderSigner(reason)

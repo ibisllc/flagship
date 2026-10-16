@@ -246,7 +246,7 @@ export async function handlePostMigrationStart(
     deps,
     reg.username,
     "server-migration-started",
-    `Started moving ${host.toLowerCase()} to new hardware.`,
+    `Started moving ${host.toLowerCase()} to a new machine / VM.`,
     now,
   );
   return ok({ ok: true, phase: "initiated" });
@@ -544,7 +544,7 @@ export async function handlePostMigrationTakeOver(
     deps,
     session.username,
     "server-migration-taken-over",
-    `${host.toLowerCase()} moved to new hardware; the old server is retired${session.disposition === "wipe-after-handoff" ? " and being wiped" : " (data kept)"}.`,
+    `${host.toLowerCase()} moved to a new machine / VM; the old server is retired${session.disposition === "wipe-after-handoff" ? " and being wiped" : " (data kept)"}.`,
     now,
   );
   return ok({ ok: true, phase: "taken-over" });
@@ -682,7 +682,7 @@ export async function handlePostMigrationAbort(
     return conflict("migration already took over — past the point of no return");
   }
   await deps.serverMigrations.markAborted(host.toLowerCase(), now);
-  await auditMigration(deps, v.username, "server-migration-aborted", `Moving ${host.toLowerCase()} to new hardware was cancelled.`, now);
+  await auditMigration(deps, v.username, "server-migration-aborted", `Moving ${host.toLowerCase()} to a new machine / VM was cancelled.`, now);
   // Neutralize a deposited-but-unconsumed decommission order so the old box
   // never learns of a retracted eviction (and a mid-wait old box's migration
   // confirm poll sees `aborted` and powers off KEEPING its data).

@@ -255,7 +255,11 @@
 //       service-worker registration moves out of index.html into
 //       lib/swRegister.js, so the shell runs under a CSP with no inline
 //       script.
-const SHELL_VERSION = "v114";
+//  v115: migration wording says "a new machine / VM" (not "new
+//       hardware"); Activity names a damaged settings file the server
+//       locked down (server.state.corrupt), and failed or warning rows get
+//       the warning card and a ⚠️ when their kind is unknown.
+const SHELL_VERSION = "v115";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

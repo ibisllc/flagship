@@ -213,8 +213,8 @@ private fun FeedBody(feed: ActivityFeed, nav: NavController) {
             FSCard(padding = PaddingValues(FS.space.s3)) {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        item.title,
-                        color = FS.colors.text,
+                        if (item.warning) "⚠️ ${item.title}" else item.title,
+                        color = if (item.warning) FS.colors.warning else FS.colors.text,
                         style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Medium),
                     )
                     item.subtitle?.let { sub ->

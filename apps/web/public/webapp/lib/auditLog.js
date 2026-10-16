@@ -38,7 +38,7 @@ const COM_BASE = controlApex();
 export function auditKindLabel(kind) {
   const label = AUDIT_KIND_LABELS[kind];
   if (label) return label;
-  const words = String(kind ?? "").replace(/-/g, " ").trim();
+  const words = String(kind ?? "").replace(/[._-]+/g, " ").trim();
   return words ? words.charAt(0).toUpperCase() + words.slice(1) : "Account event";
 }
 
@@ -54,7 +54,7 @@ export const AUDIT_KIND_LABELS = Object.freeze({
   "server-created": "Created server",
   "server-online": "Server came online",
   "server-migration-started": "Started moving a server",
-  "server-migration-taken-over": "Moved a server to new hardware",
+  "server-migration-taken-over": "Moved a server to a new machine / VM",
   "server-migration-aborted": "Cancelled a server move",
   "server-revoked": "Revoked server",
   "server-unrevoked": "Restored server",

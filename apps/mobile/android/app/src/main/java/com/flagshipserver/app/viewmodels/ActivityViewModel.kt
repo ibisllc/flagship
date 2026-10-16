@@ -26,6 +26,8 @@ sealed interface ActivityItem {
     val at: Long
     val title: String
     val subtitle: String?
+    /** Something went wrong or was locked down: the row is shown as a warning. */
+    val warning: Boolean get() = false
 
     data class InstallEvent(
         val event: RecentInstallEvent,
@@ -41,6 +43,7 @@ sealed interface ActivityItem {
         override val at: Long = entry.ts,
         override val title: String = BoxEventLabels.title(entry) ?: "",
         override val subtitle: String? = entry.detail,
+        override val warning: Boolean = !entry.ok,
     ) : ActivityItem
 
     data class RecoverySnapshot(

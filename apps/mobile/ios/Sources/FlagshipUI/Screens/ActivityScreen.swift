@@ -233,10 +233,10 @@ public struct ActivityScreen: View {
     private func boxRow(entry: BoxActivityEntry, c: FSColors) -> some View {
         HStack(alignment: .top) {
             Image(systemName: BoxEventLabels.symbol(entry))
-                .foregroundColor(entry.ok ? c.primary : c.danger)
+                .foregroundColor(entry.ok ? c.primary : c.warning)
                 .frame(width: 22)
             VStack(alignment: .leading, spacing: 2) {
-                Text(BoxEventLabels.title(entry) ?? "").foregroundColor(c.text)
+                Text(BoxEventLabels.title(entry) ?? "").foregroundColor(entry.ok ? c.text : c.warning)
                 if let detail = entry.detail, !detail.isEmpty {
                     Text(detail).font(FS.font.bodySm()).foregroundColor(c.textMuted)
                 }

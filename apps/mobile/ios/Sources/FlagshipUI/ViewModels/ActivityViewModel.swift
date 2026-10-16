@@ -132,6 +132,7 @@ public enum BoxEventLabels {
         "share.left": "A person left a share",
         "share.signed-in": "A shared person signed in",
         "server.update": "Server updated by a co-manager",
+        "server.state.corrupt": "This server found a damaged settings file and locked it down",
     ]
 
     /// The row's title, or nil when the entry isn't worth a row (the log also

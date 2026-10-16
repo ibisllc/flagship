@@ -200,7 +200,7 @@ object ServerMigrationTimeline {
         if (s.done) return "Migration complete — the server now runs on the new box."
         return when (s.phase) {
             "initiated" ->
-                "Waiting for the new box to come online. Apply the recipe on the new hardware; it will attach itself here."
+                "Waiting for the new box to come online. Apply the recipe on the new machine / VM; it will attach itself here."
             "provisioned" -> {
                 val attachedAt = s.attachedAt
                 if (attachedAt != null && nowMs - attachedAt > PRE_SEED_STUCK_MS) {
