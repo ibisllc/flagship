@@ -440,10 +440,12 @@ test.describe("gym webapp features", () => {
     await expect(page.locator("#cs-embed-secrets")).not.toBeChecked();
     await expect(page.locator("#cs-debug-friendly")).toBeVisible();
     await expect(page.locator("#cs-debug-friendly")).not.toBeChecked();
-    // The debug-friendly warning copy (console-login consequence) renders.
-    await expect(page.locator("#cs-debug-friendly-hint")).toContainText(/physical access/i);
+    // The debug-friendly warning copy (what the key can do, and when it ends) renders.
+    await expect(page.locator("#cs-debug-friendly-hint")).toContainText(/read everything on this server/i);
     await expect(page.locator("#cs-embed-secrets-hint")).toContainText(/security keys directly in the recipe/i);
+    await expect(page.locator("#cs-debug-ssh-key")).toBeHidden();
     await page.locator("#cs-debug-friendly").check();
+    await expect(page.locator("#cs-debug-ssh-key")).toBeVisible();
     await shot(page, testInfo, "cs-advanced-open");
     // The reset rule: closing Advanced clears the armed debug choice…
     await advanced.uncheck();

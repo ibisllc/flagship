@@ -487,6 +487,110 @@ test.describe("gym webapp total", () => {
     await expect(dlg).toBeHidden({ timeout: 5_000 });
   });
 
+  // ─── Debug access (docs/recipe-delivery-and-remote-install.md) ──────────
+
+  const GYM_DEBUG_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINBKsjJ0K7SrOhNovUYV5ObQIkq3GgFrr4UgozLJd4c3";
+  const debugOn = () => ({
+    on: true,
+    expiresAt: Date.now() + 3_600_000,
+    keyFingerprint: "SHA256:2HS8bJpYBy7bDfWIQN304coFKT0s6CVPABFLYq+IX5E",
+    grantedBy: "admin",
+  });
+  const DEBUG_OFF = { on: false, expiresAt: null, keyFingerprint: null, grantedBy: null };
+
+  /** This device holds an admin root (or not), so the section offers the controls (or not). */
+  async function setAdminDevice(page: Page, admin: boolean): Promise<void> {
+    await page.evaluate(async (isAdmin) => {
+      const { getSession } = await import("/lib/state.js");
+      Object.assign(getSession(), {
+        umk: getSession().umk ?? new Uint8Array(32).fill(7),
+        adminRootSeed: isAdmin ? new Uint8Array(32).fill(0x5a) : null,
+      });
+    }, admin);
+  }
+
+  test("gym total webapp server-detail debug access turns on, renews and turns off", async ({ page }, testInfo) => {
+    // An admin device pastes a key, picks 1 hour, accepts the warning, and the
+    // signed grant goes to the box; the banner shows until when. Renew sends a
+    // new grant; Turn off signs the revoke and the banner goes. The box is
+    // route-stubbed, so nothing real is opened.
+    await reachHome(page);
+    await seedPairedPod(page);
+    await setAdminDevice(page, true);
+    await routePodJson(page, "/api/screens/server-detail", serverDetailBody({ debugAccess: DEBUG_OFF }));
+    const sent: Array<{ url: string; body: { grant?: { sshPublicKey: string; issuedAt: number; expiresAt: number }; signatureHex: string } }> = [];
+    await page.route(
+      (url) => url.href.startsWith(POD_BASE) && url.pathname === "/api/screens/debug-access",
+      async (route) => {
+        sent.push({ url: route.request().url(), body: route.request().postDataJSON() });
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ ok: true, change: sent.length > 1 ? "renewed" : "granted", debugAccess: debugOn() }),
+        });
+      },
+    );
+    await page.route(
+      (url) => url.href.startsWith(POD_BASE) && url.pathname === "/api/screens/debug-access/revoke",
+      async (route) => {
+        sent.push({ url: route.request().url(), body: route.request().postDataJSON() });
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ ok: true, change: "revoked", debugAccess: DEBUG_OFF }),
+        });
+      },
+    );
+    await page.evaluate(async () => {
+      const { enterServerDetail } = await import("/views/server-detail.js");
+      await enterServerDetail();
+    });
+    await expect(page.locator("#debug-access-card")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("#debug-access-pill")).toHaveText("Off");
+    await expect(page.locator("#debug-access-banner")).toBeHidden();
+    await expect(page.locator("#debug-access-warning")).toContainText("read everything on this server");
+
+    await page.fill("#debug-access-ssh-key", `${GYM_DEBUG_KEY} me@laptop`);
+    await page.selectOption("#debug-access-duration", "1h");
+    await page.click("#debug-access-on-btn");
+    await page.locator("[data-modal-ok]").click();
+    await expect(page.locator("#debug-access-banner")).toContainText("Debug access is on until", { timeout: 10_000 });
+    await expect(page.locator("#debug-access-pill")).toHaveText("On");
+    await expect(page.locator("#debug-access-key")).toContainText("SHA256:");
+    expect(sent[0]!.body.grant!.sshPublicKey).toBe(GYM_DEBUG_KEY);
+    expect(sent[0]!.body.grant!.expiresAt - sent[0]!.body.grant!.issuedAt).toBe(3_600_000);
+    expect(sent[0]!.body.signatureHex).toMatch(/^[0-9a-f]{128}$/);
+    await shot(page, testInfo, "debug-access-on");
+
+    await expect(page.locator("#debug-access-on-btn")).toHaveText("Renew");
+    await page.click("#debug-access-on-btn");
+    await page.locator("[data-modal-ok]").click();
+    await expect.poll(() => sent.length).toBe(2);
+
+    await page.click("#debug-access-off-btn");
+    await page.locator("[data-modal-ok]").click();
+    await expect(page.locator("#debug-access-banner")).toBeHidden({ timeout: 10_000 });
+    await expect(page.locator("#debug-access-pill")).toHaveText("Off");
+    expect(sent[2]!.url).toContain("/api/screens/debug-access/revoke");
+    await shot(page, testInfo, "debug-access-off");
+  });
+
+  test("gym total webapp server-detail debug access is read-only on a non-admin device", async ({ page }, testInfo) => {
+    await reachHome(page);
+    await seedPairedPod(page);
+    await setAdminDevice(page, false);
+    await routePodJson(page, "/api/screens/server-detail", serverDetailBody({ debugAccess: debugOn() }));
+    await page.evaluate(async () => {
+      const { enterServerDetail } = await import("/views/server-detail.js");
+      await enterServerDetail();
+    });
+    await expect(page.locator("#debug-access-banner")).toContainText("Debug access is on until", { timeout: 10_000 });
+    await expect(page.locator("#debug-access-admin-only")).toHaveText("Only an admin device can turn debug access on or off.");
+    await expect(page.locator("#debug-access-on-btn")).toHaveCount(0);
+    await expect(page.locator("#debug-access-off-btn")).toHaveCount(0);
+    await shot(page, testInfo, "debug-access-read-only");
+  });
+
   // ─── D5 — server-event seed states (server-detail cert) ──────────────────
 
   test("gym total webapp server-detail surfaces a near-expiry certificate", async ({ page }, testInfo) => {

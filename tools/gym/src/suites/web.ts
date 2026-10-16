@@ -533,6 +533,46 @@ const TOTAL: readonly Scenario[] = [
       dimension: "D6",
     },
   ),
+  webTotal(
+    "web-total-debug-access-admin",
+    "Debug access: an admin device pastes an SSH key, picks 1 hour and accepts the warning; the admin-signed grant goes to the box and the banner shows until when; Renew sends a new grant; Turn off signs the revoke and the banner goes.",
+    "gym total webapp server-detail debug access turns on, renews and turns off",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach server-detail as an admin device (routed BFF, debug access off)." },
+        { kind: "tap", describe: "Paste a key, pick 1 hour, Turn on, accept the warning.", handle: "#debug-access-on-btn" },
+        { kind: "assert", describe: "Banner shows until when.", handle: "#debug-access-banner" },
+        { kind: "tap", describe: "Renew.", handle: "#debug-access-on-btn" },
+        { kind: "tap", describe: "Turn off.", handle: "#debug-access-off-btn" },
+      ],
+      assertions: [
+        { describe: "Banner while on", handle: "#debug-access-banner", expect: "text", text: "Debug access is on until" },
+        { describe: "Key fingerprint shown", handle: "#debug-access-key", expect: "present" },
+      ],
+      screenshots: [
+        shot("debug-access-on", "Debug access on, with the banner."),
+        shot("debug-access-off", "Debug access turned off."),
+      ],
+      dimension: "D6",
+    },
+  ),
+  webTotal(
+    "web-total-debug-access-read-only",
+    "Debug access on a non-admin device: the banner and state show, the controls don't, with the admin-only line.",
+    "gym total webapp server-detail debug access is read-only on a non-admin device",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach server-detail as a non-admin device (debug access on)." },
+        { kind: "assert", describe: "Banner and admin-only line.", handle: "#debug-access-admin-only" },
+      ],
+      assertions: [
+        { describe: "Banner while on", handle: "#debug-access-banner", expect: "text", text: "Debug access is on until" },
+        { describe: "No Turn on button", handle: "#debug-access-on-btn", expect: "absent" },
+      ],
+      screenshots: [shot("debug-access-read-only", "Debug access read-only on a non-admin device.")],
+      dimension: "D6",
+    },
+  ),
 
   // ── D5 — server-event seed states (server-detail cert) ──
   webTotal(
