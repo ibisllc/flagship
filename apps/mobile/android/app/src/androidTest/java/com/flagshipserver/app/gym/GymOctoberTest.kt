@@ -198,6 +198,7 @@ class GymOctoberTest : GymBase() {
             composeRule.onAllNodesWithTag("service-detail-access-allow").fetchSemanticsNodes().size == before - 1
         }
         gymShot("service-access-allowed")
+        assertSigned("app-access", "admin")
     }
 
     // ─── Access control: Open to all / Members only ──────────────────────────
@@ -220,6 +221,7 @@ class GymOctoberTest : GymBase() {
                 .fetchSemanticsNodes().isNotEmpty()
         }
         gymShot("access-control-members-only")
+        assertSigned("access-mode", "admin")
     }
 
     private fun openAccessControl(adminRoot: Boolean = false, deviceRank: String? = null, waitFor: String = "service-access-add-person") {
@@ -250,6 +252,7 @@ class GymOctoberTest : GymBase() {
             composeRule.onAllNodesWithContentDescription("Rank: Refused").fetchSemanticsNodes().isNotEmpty()
         }
         gymShot("access-account-refused")
+        assertSigned("app-rank", "admin")
     }
 
     /** A non-admin device at Manager (the default): its rank shows read-only, it invites at Member. */
@@ -315,6 +318,7 @@ class GymOctoberTest : GymBase() {
         composeRule.onNodeWithTag("api-key-create-confirm").performClick()
         waitUntilExists("api-key-created-value", timeoutMs = 15_000)
         gymShot("api-key-created")
+        assertSigned("app-api-key", "admin")
     }
 
     @Test
@@ -420,7 +424,7 @@ class GymOctoberTest : GymBase() {
 
     @Test
     fun makeLeaderWaitsForTheServerToConfirm() {
-        launch(tab = "home", username = "bright-maple")
+        launch(tab = "home", username = "bright-maple", adminRoot = true)
         waitUntilTextExists("Office tower, work failover", timeoutMs = 20_000)
         composeRule.onNodeWithText("Office tower, work failover").performScrollTo().performClick()
         waitUntilExists("sd-make-leader", timeoutMs = 20_000)
@@ -430,6 +434,7 @@ class GymOctoberTest : GymBase() {
         waitUntilExists("sd-leader-pending", timeoutMs = 15_000)
         composeRule.onNodeWithTag("sd-leader-status").assertTextContains("This server leads")
         gymShot("server-order-pending")
+        assertSigned("server-order", "admin")
 
         // Home shows Office as the leader, in gray, until it confirms.
         Espresso.pressBack()
@@ -516,6 +521,7 @@ class GymOctoberTest : GymBase() {
         composeRule.waitUntil(10_000) { count("access-alert-title") == 0 && count("access-alert-done") == 0 }
         composeRule.onNodeWithTag("home-add-server").performScrollTo().assertIsDisplayed()
         gymShot("access-alert-answered")
+        assertEquals(listOf("app-access:admin", "app-access:admin"), signedChecks())
     }
 
     /** "Not now" closes the dialog and leaves the request on the box. */
@@ -539,7 +545,7 @@ class GymOctoberTest : GymBase() {
      *  sheet to a real link. */
     @Test
     fun shareServerOwnerSeesSharesAndConfirmsCode() {
-        launch(tab = "home", username = "bright-maple", shares = true)
+        launch(tab = "home", username = "bright-maple", shares = true, adminRoot = true)
         waitUntilTextExists("Living-room mini-PC", timeoutMs = 20_000)
         composeRule.onNodeWithText("Living-room mini-PC").performScrollTo().performClick()
         waitUntilExists("share-server-card", timeoutMs = 30_000)
@@ -571,6 +577,7 @@ class GymOctoberTest : GymBase() {
         waitUntilExists("share-link", timeoutMs = 15_000)
         assertTrue("A share link", textOf("share-link").contains("/share#s="))
         gymShot("share-link")
+        assertSigned("share-grant", "admin")
     }
 
     /** Only an admin device of the account accepts a co-manage share

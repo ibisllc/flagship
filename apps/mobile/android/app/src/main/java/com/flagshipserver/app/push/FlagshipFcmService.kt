@@ -72,11 +72,14 @@ class FlagshipFcmService : FirebaseMessagingService() {
         }
 
         // A `generic` push (§3a; `app-access` from an older box) names no
-        // app or host: the phone asks its boxes over the paired session, and
-        // a tap just opens the app, whose foreground fetch shows the request.
+        // app or host: an app's internet request, or a build chat waiting on
+        // the owner (ownerWake.ts). The phone asks its boxes over the paired
+        // sessions for both, and a tap just opens the app, whose foreground
+        // fetch shows what's waiting.
         val category = data["category"]
         if (category == GENERIC_CATEGORY || category == APP_ACCESS_CATEGORY) {
             com.flagshipserver.app.core.AccessRequestBridge.onAccessRequest?.invoke()
+            if (category == GENERIC_CATEGORY) com.flagshipserver.app.core.AiChatAlertBridge.onWake?.invoke()
             data["title"] = "Flagship"
             data["body"] = if (category == GENERIC_CATEGORY) GENERIC_TEXT else APP_ACCESS_TEXT
             data.remove("deepLink")

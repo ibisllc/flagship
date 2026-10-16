@@ -195,4 +195,34 @@ class AiChatAlertPollerTest {
             com.flagshipserver.app.push.FlagshipFcmService.aiChatDeepLink("sess-b", "home.harry.flagship.services"),
         )
     }
+
+    /** With every box as a source (a generic push may come from any of
+     *  them), each is drained with its own cursor and an alert names the box
+     *  that queued it, not the current server. */
+    @Test fun everyBoxIsDrainedAndAnAlertNamesItsBox() = runTest {
+        val ops = ActiveOperationsCenter()
+        val home = FakeClient(PhoneAlertsResponse(emptyList(), 0))
+        val office = FakeClient(PhoneAlertsResponse(listOf(aiChatEnv(12, "sess-o", AiChatRequest.TALK_TO_USER, "tool-1")), 1))
+        val notified = mutableListOf<Pair<String, String?>>()
+        val p = AiChatAlertPoller(
+            operations = ops, client = home, isActiveGate = { true },
+            notify = { s, _, server -> notified += s to server },
+            pollIntervalMs = 1, currentServer = { "home.harry.flagship.services" },
+            sources = {
+                listOf(
+                    AiChatAlertPoller.AlertSource("home.harry.flagship.services", home),
+                    AiChatAlertPoller.AlertSource("office.harry.flagship.services", office),
+                )
+            },
+        )
+        assertEquals(1, p.drainOnce())
+        assertEquals(listOf("sess-o" to "office.harry.flagship.services"), notified)
+        assertEquals(DeepLink.VibeCodeChat("sess-o", "office.harry.flagship.services"), ops.operations.value.first().target)
+        assertEquals(listOf(12), office.ackedThrough)
+        assertTrue(home.ackedThrough.isEmpty())
+
+        p.drainOnce()
+        assertEquals("each box keeps its own cursor", listOf(0, 0), home.fetchSinceCalls)
+        assertEquals(listOf(0, 12), office.fetchSinceCalls)
+    }
 }

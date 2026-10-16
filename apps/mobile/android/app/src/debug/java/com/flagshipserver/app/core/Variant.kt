@@ -7,12 +7,14 @@ import android.content.Intent
 import com.flagshipserver.app.api.AppAccessPending
 import com.flagshipserver.app.api.BuildClient
 import com.flagshipserver.app.api.FlagshipServerClient
+import com.flagshipserver.app.api.MockBoxDirect
 import com.flagshipserver.app.api.MockBuildClient
 import com.flagshipserver.app.api.MockFlagshipServerClient
 import com.flagshipserver.app.api.MockScreensClient
 import com.flagshipserver.app.api.MockSecretMailboxClient
 import com.flagshipserver.app.api.MockServerTransferClient
 import com.flagshipserver.app.api.MockServiceAccessClient
+import com.flagshipserver.app.api.PodDirect
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.SecretMailboxClient
 import com.flagshipserver.app.api.ServerTransferClient
@@ -44,6 +46,7 @@ object Variant : AppVariant {
             // gym's cold-start checks) must not inherit its seams.
             mockRun = false
             GymSeams.reset()
+            PodDirect.transport = { OkHttpJsonTransport() }
             return null
         }
         if (cfg.persistSession) {
@@ -89,15 +92,32 @@ object Variant : AppVariant {
         val accessBoxes: ((AppState) -> List<AccessBox>)? = if (!cfg.seedAccessAlert) null else { app ->
             app.currentPod?.let { listOf(AccessBox(it.podId, it.fqdn, screens)) }.orEmpty()
         }
+        val flagshipServer = MockFlagshipServerClient()
+        val relay = MockQrRelayClient()
+        val transfer = MockServerTransferClient()
+        val mailbox = MockSecretMailboxClient()
+        // The instrumented scenario (same process) checks what a button sent.
+        GymProbe.screens = screens
+        GymProbe.build = build
+        GymProbe.flagship = flagshipServer
+        GymProbe.mailbox = mailbox
+        GymProbe.transfer = transfer
+        GymProbe.relay = relay
+        GymProbe.access = MockServiceAccessClient.shared
+        cfg.chatVariant?.let { screens.chatVariant = it }
+        // Power, dead-man, journal and front page talk to the box directly.
+        val boxDirect = MockBoxDirect()
+        GymProbe.boxDirect = boxDirect
+        PodDirect.transport = { boxDirect }
         return GymLaunch(
             tab,
             GymMocks(
                 screens = screens,
                 build = build,
-                flagshipServer = MockFlagshipServerClient(),
-                relay = MockQrRelayClient(),
-                transfer = MockServerTransferClient(),
-                mailbox = MockSecretMailboxClient(),
+                flagshipServer = flagshipServer,
+                relay = relay,
+                transfer = transfer,
+                mailbox = mailbox,
                 podClients = FixedPodClients(screens, build),
                 shares = shares,
                 accessBoxes = accessBoxes,

@@ -48,6 +48,8 @@ fun ServicesTab() {
     val placement = remember { PlacementNavState() }
     val deepLinker = LocalDeepLinker.current
     val appState = com.flagshipserver.app.core.LocalAppState.current
+    val podClients = com.flagshipserver.app.core.LocalPodClients.current
+    val toasts = com.flagshipserver.app.core.LocalToastCenter.current
     val pending by deepLinker.pending.collectAsState()
     LaunchedEffect(pending) {
         when (val link = pending) {
@@ -73,9 +75,34 @@ fun ServicesTab() {
                 deepLinker.consume()
                 val onIt = nav.currentDestination?.route == "vibe-code-chat/{sessionId}" &&
                     nav.currentBackStackEntry?.arguments?.getString("sessionId") == link.sessionId
-                // Open it on the server the alert came from (it 404s anywhere else).
-                val podId = link.server?.let { s -> appState.pods.value.firstOrNull { it.fqdn.equals(s, ignoreCase = true) }?.podId }
-                if (!onIt) nav.openVibeSession(vibeSessionChatRoute(link.sessionId), podId)
+                // Open it on the server the alert came from (it 404s anywhere
+                // else). A server this device doesn't know, or none: ask the
+                // current server, then every other one it has a session on.
+                if (!onIt) {
+                    val pods = appState.pods.value
+                    val known = link.server?.let { s -> pods.firstOrNull { it.fqdn.equals(s, ignoreCase = true) } }
+                    val pod = known ?: run {
+                        val usable = pods.filter { !it.isRevoked && it.fqdn.isNotEmpty() && podClients.screens(it) != null }
+                        val fqdn = com.flagshipserver.app.core.SessionServerFinder.find(
+                            link.sessionId,
+                            first = listOf(appState.currentPod?.fqdn),
+                            more = { usable.map { it.fqdn } },
+                            probe = { f ->
+                                val p = usable.firstOrNull { it.fqdn.equals(f, ignoreCase = true) } ?: return@find false
+                                val screens = podClients.screens(p) ?: return@find false
+                                screens.vibeCodeSessionState(link.sessionId)
+                                true
+                            },
+                        )
+                        if (fqdn == null) {
+                            toasts.error(com.flagshipserver.app.core.SessionServerFinder.NOT_FOUND)
+                            nav.openBuildSessions()
+                            return@LaunchedEffect
+                        }
+                        pods.firstOrNull { it.fqdn.equals(fqdn, ignoreCase = true) }
+                    }
+                    nav.openVibeSession(vibeSessionChatRoute(link.sessionId), pod?.podId)
+                }
             }
             // A tap on the ops sliver for a git/mcp build opens its journal —
             // the build's own surface (it has no vibe-code chat session).

@@ -166,13 +166,17 @@ fun PendingServerScreen(pod: PodInfo, username: String? = null, onCancel: () -> 
                     // dropping it locally would strand the name as
                     // still-reserved.
                     try {
+                        // Releasing a name is a sensitive order: `.com` takes
+                        // only the admin root on an admin-pinned account
+                        // (serverRevoke.ts); the auth-code revoke stays IRK.
+                        val adminKey = Keystore.adminSigningKey("Cancel server ${pod.name}")
                         val irk = Keystore.deriveIRK("Cancel server ${pod.name}")
                         val now = System.currentTimeMillis()
                         // 1. Release the name. serverDomain =
                         // <server>.<user>.flagship.services, held on the pod
                         // as its fqdn.
                         val releaseBytes = ReleaseServerNameBytes.canonicalBytes(username, pod.fqdn, now)
-                        val releaseSig = HexUtil.encode(irk.sign(releaseBytes))
+                        val releaseSig = HexUtil.encode(adminKey.sign(releaseBytes))
                         flagshipServer.releaseServerName(
                             ReleaseServerNameRequest(
                                 request = ReleaseServerNameRequest.Inner(

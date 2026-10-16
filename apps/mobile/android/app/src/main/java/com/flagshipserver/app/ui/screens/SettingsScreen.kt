@@ -246,12 +246,14 @@ fun SettingsScreen(nav: NavController) {
                     title = "Cloud recovery",
                     subtitle = "Recover with your passphrase and cloud passkey.",
                     onClick = { nav.navigate("recovery") },
+                    testTag = "settings-cloud-recovery",
                 ),
                 FSSettingsRowData(
                     icon = Icons.Outlined.Save,
                     title = "Back up account key",
                     subtitle = "Save an encrypted key file to recover or move your account.",
                     onClick = { nav.navigate("keyfile-export") },
+                    testTag = "settings-backup-key",
                 ),
             )) + listOf(
                 FSSettingsRowData(
@@ -259,6 +261,7 @@ fun SettingsScreen(nav: NavController) {
                     title = "Profiles",
                     subtitle = "Switch between your clouds.",
                     onClick = { nav.navigate("profiles") },
+                    testTag = "settings-profiles",
                 ),
             ),
         )
@@ -276,6 +279,7 @@ fun SettingsScreen(nav: NavController) {
                     title = "Trusted devices",
                     subtitle = "Phones and tablets that hold your account keys — add, replace, or remove.",
                     onClick = { nav.navigate("trusted-devices") },
+                    testTag = "settings-trusted-devices",
                 ),
             )) + listOf(
                 // Phase 3b — this phone joins another account (or a second one
@@ -285,12 +289,14 @@ fun SettingsScreen(nav: NavController) {
                     title = "Scan a pairing code",
                     subtitle = "Add this phone to another account from a code its device shows.",
                     onClick = { nav.navigate("join-device-scan") },
+                    testTag = "settings-scan-pairing-code",
                 ),
                 FSSettingsRowData(
                     icon = Icons.Outlined.Computer,
                     title = "Browser sessions",
                     subtitle = "Browsers you opened through Remote.",
                     onClick = { nav.navigate("paired-sessions") },
+                    testTag = "settings-browser-sessions",
                 ),
             ),
         )
@@ -307,6 +313,7 @@ fun SettingsScreen(nav: NavController) {
                     title = "Remote",
                     subtitle = "Scan a one-time QR for a 4-hour read-only desktop view.",
                     onClick = { nav.navigate("companion-dock") },
+                    testTag = "settings-remote",
                 ),
                 // P14 Phase 2 — companion-requests inbox. Badge reflects
                 // the pending count fetched once when this screen appears.
@@ -316,6 +323,7 @@ fun SettingsScreen(nav: NavController) {
                     subtitle = companionRequestsSubtitle(companionPending),
                     badge = companionPending.takeIf { it > 0 },
                     onClick = { nav.navigate("companion-requests") },
+                    testTag = "settings-companion-requests",
                 ),
             ),
         )
@@ -356,6 +364,7 @@ fun SettingsScreen(nav: NavController) {
                     title = "Peer-backup",
                     subtitle = "How your backup is kept on other servers.",
                     onClick = { nav.navigate("peer-backup") },
+                    testTag = "settings-peer-backup",
                 ),
             ),
         )
@@ -412,6 +421,7 @@ fun SettingsScreen(nav: NavController) {
                     title = "Privacy",
                     subtitle = "Require unlock at launch, app-level gating.",
                     onClick = { nav.navigate("privacy") },
+                    testTag = "settings-privacy",
                 ),
                 // About — Android has no separate About screen, so the version /
                 // license card below IS the About surface. The row exists for

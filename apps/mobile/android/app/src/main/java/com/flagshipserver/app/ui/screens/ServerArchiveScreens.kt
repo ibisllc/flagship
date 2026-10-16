@@ -86,6 +86,7 @@ internal fun ServerBackupButton(serverDomain: String) {
         label = "Backup/clone server",
         onClick = { show = true },
         block = true,
+        enabled = !LocalServerReadOnly.current,
         modifier = Modifier.semantics { contentDescription = "sd-backup-server" },
     )
     if (show) ServerBackupDialog(serverDomain, onDismiss = { show = false })

@@ -326,7 +326,10 @@ object Keystore {
         p.apply()
     }
 
-    /** Public-key half of the IRK, hex-encoded. */
+    /** Public-key half of the IRK at the current version, hex-encoded: the key
+     *  [deriveIRK] signs with. It reads the per-version cache [deriveIRK]
+     *  writes (the un-versioned slot only on a v1 install from before
+     *  versions, which nothing writes any more). */
     suspend fun irkPubHex(): String {
         // deriveIRK caches the seed per version ("irk.seed.v<N>"); the old
         // unversioned slot is never written, so reading it threw a
@@ -576,6 +579,11 @@ object Keystore {
     fun importAdminRoot(seed: ByteArray) {
         require(seed.size == 32) { "admin root seed must be 32 bytes" }
         requirePrefs().edit().putString(adminRootSeedKey(), HexUtil.encode(seed)).apply()
+    }
+
+    /** Drop the active profile's admin root (the gym plays a non-admin device). */
+    fun forgetAdminRoot() {
+        requirePrefs().edit().remove(adminRootSeedKey()).apply()
     }
 
     /**

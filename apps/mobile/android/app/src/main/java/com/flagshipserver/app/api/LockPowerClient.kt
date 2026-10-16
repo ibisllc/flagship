@@ -131,7 +131,7 @@ data class JournalAck(
 /** Pod-direct client. [podBaseUrl] resolves `https://<serverDomain>` (the
  *  FQDN IS the pod). Pluggable transport for tests. */
 class LockPowerClient(
-    private val transport: JsonHttpTransport = OkHttpJsonTransport(),
+    private val transport: JsonHttpTransport = PodDirect.transport(),
     private val podBaseUrl: (serverDomain: String) -> String = { "https://$it" },
 ) {
     suspend fun sendPowerOff(serverDomain: String, body: PowerOffOrderRequest): OrderAck =

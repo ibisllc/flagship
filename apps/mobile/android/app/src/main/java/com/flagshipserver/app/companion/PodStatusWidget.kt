@@ -182,11 +182,11 @@ private fun LeaderBadge() {
 
 @Composable
 private fun StatusDot(statusRaw: String) {
-    val color = when (PodStatusText.tone(statusRaw)) {
-        PodStatusText.Tone.GOOD -> Color(0xFF2E9E5B)
-        PodStatusText.Tone.BAD -> Color(0xFFD64545)
-        PodStatusText.Tone.WAITING -> Color(0xFFE08A1E)
-        PodStatusText.Tone.NEUTRAL -> Color(0xFF8A8F98)
-    }
-    Box(modifier = GlanceModifier.size(8.dp).cornerRadius(4.dp).background(ColorProvider(color))) {}
+    // The app's status tokens (Tokens.kt), following the launcher's theme.
+    val tone = PodStatusText.tone(statusRaw)
+    val color = androidx.glance.color.ColorProvider(
+        day = Color(com.flagshipserver.companion.StatusPalette.light(tone)),
+        night = Color(com.flagshipserver.companion.StatusPalette.dark(tone)),
+    )
+    Box(modifier = GlanceModifier.size(8.dp).cornerRadius(4.dp).background(color)) {}
 }

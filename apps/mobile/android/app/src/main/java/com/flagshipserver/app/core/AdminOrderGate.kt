@@ -23,4 +23,7 @@ object AdminOrderGate {
     const val DATABASE_WRITE = "Only an admin device can change this app's data."
     /** The server page's orders (the webapp's SERVER_ADMIN_ONLY). */
     const val SERVER = "Only an admin device can change this server. This device can see it."
+    /** `.com` checks the server order under the admin root (serverOrder.ts). */
+    const val SERVER_ORDER = "Only an admin device can change the server order."
+    const val SHARE = "Only an admin device can share this server."
 }

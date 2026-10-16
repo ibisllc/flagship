@@ -36,7 +36,7 @@ class GymFeatureMirrorTest : GymBase() {
     /** Open the seeded "Home" pod's server-detail by tapping its unique
      *  description line (the pod NAME text would collide with the bottom tab). */
     private fun openHomePodDetail() {
-        launch(tab = "home")
+        launch(tab = "home", adminRoot = true)
         composeRule.onNodeWithText("Living-room mini-PC")
             .performScrollTo()
             .performClick()
