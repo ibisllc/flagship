@@ -356,7 +356,7 @@ row on `.com` (withdrawing only ever takes access away, so `.com` needn't
 know whether the share still stands); the box relays the co-manager's
 revoke there too. `.com` stores nothing about the share: no share id, no
 label, no level. Vectors: `packages/protocol/test-vectors/co-manager-invite/`
-(TypeScript and webapp pass them; Swift and Kotlin to port).
+(TypeScript, webapp, Swift and Kotlin pass them).
 
 **On redemption** (and on a join handed over by another server) the box
 verifies the create under the co-manager keys it knows for that app (its own
