@@ -54,10 +54,32 @@ final class KnockAuthorizeViewModelTests: XCTestCase {
             now: now)
     }
 
-    func testOwnServerWithoutADeviceIdFallsBackToTheAid() async throws {
+    /// Per-app identity: with no account device id, our own server is refused
+    /// rather than given the account-wide id (as the webapp does).
+    func testOwnServerWithoutADeviceIdRefusesAndSendsNothing() async throws {
         let fx = try fixture()
         let mock = MockServiceAccessClient()
-        let vm = friendVM(mock, fx: fx, owners: ownerStore(), ownServers: [server])
+        let vm = friendVM(mock, fx: fx, owners: ownerStore(), ownServers: [server], device: nil)
+        await vm.authorize()
+        XCTAssertEqual(vm.phase, .failed(KnockAuthorizeViewModel.noDeviceKeyMessage))
+        XCTAssertEqual(KnockAuthorizeViewModel.noDeviceKeyMessage,
+                       "This device isn't set up on your account yet. Sign in to your account on it again, then try again.")
+        XCTAssertTrue(mock.authorizeKnockCalls.isEmpty)
+    }
+
+    /// A demo account holds no device id: it signs in to its demo server
+    /// with the account id, as it always has.
+    func testDemoAccountWithoutADeviceIdUsesTheAccountId() async throws {
+        let fx = try fixture()
+        let mock = MockServiceAccessClient()
+        let umk = fx.friendUmk
+        let vm = KnockAuthorizeViewModel(
+            client: mock, store: InMemorySecuredSessionStore(),
+            serverDomain: server, svc: svc, serviceRef: ref, pageId: page,
+            ownServers: [server], owners: ownerStore(),
+            aid: { _ in ServiceInvite.deriveAccountId(umkSeed: umk)! },
+            deviceKey: { _ in nil }, isDemoAccount: true,
+            now: { 1_700_004_000_000 })
         await vm.authorize()
         XCTAssertEqual(vm.phase, .authorized)
         XCTAssertEqual(mock.authorizeKnockCalls.first?.authorization["visitorAID"], fx.friendAidPubHex)
@@ -145,7 +167,8 @@ final class KnockAuthorizeViewModelTests: XCTestCase {
         owners: InviteOwnerStore,
         ownServers: [String] = [],
         refreshOwnServers: (@MainActor () async -> [String])? = nil,
-        serverDomain: String? = nil
+        serverDomain: String? = nil,
+        device: Curve25519.Signing.PrivateKey? = try! Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 0xd0, count: 32))
     ) -> KnockAuthorizeViewModel {
         let umk = fx.friendUmk
         return KnockAuthorizeViewModel(
@@ -160,7 +183,13 @@ final class KnockAuthorizeViewModelTests: XCTestCase {
             owners: owners,
             aid: { _ in ServiceInvite.deriveAccountId(umkSeed: umk)! },
             appAid: { appRef, _ in ServiceInvite.deriveAppAccountId(umkSeed: umk, appRef: appRef)! },
+            deviceKey: { _ in device },
             now: { 1_700_004_000_000 })
+    }
+
+    /// This device's account device key, as `friendVM` signs own servers with.
+    private var devicePubHex: String {
+        HexUtil.encode(deviceKey().publicKey.rawRepresentation)
     }
 
     /// The id an invited box sees for the knock's app.
@@ -201,7 +230,7 @@ final class KnockAuthorizeViewModelTests: XCTestCase {
         XCTAssertEqual(mock.authorizeKnockCalls.first?.authorization["visitorAID"], appPubHex(fx))
     }
 
-    func testOwnServerUsesGlobalAidEvenWithAStoredRecord() async throws {
+    func testOwnServerUsesTheDeviceKeyEvenWithAStoredRecord() async throws {
         let fx = try fixture()
         let owners = ownerStore()
         owners.remember(serverDomain: server, ownerAidHex: fx.authorAidPubHex)
@@ -209,7 +238,7 @@ final class KnockAuthorizeViewModelTests: XCTestCase {
         let vm = friendVM(mock, fx: fx, owners: owners, ownServers: [server.uppercased()])
         await vm.authorize()
         XCTAssertEqual(vm.phase, .authorized)
-        XCTAssertEqual(mock.authorizeKnockCalls.first?.authorization["visitorAID"], fx.friendAidPubHex)
+        XCTAssertEqual(mock.authorizeKnockCalls.first?.authorization["visitorAID"], devicePubHex)
     }
 
     func testUnknownServerRefusesAndSendsNothing() async throws {
@@ -248,8 +277,8 @@ final class KnockAuthorizeViewModelTests: XCTestCase {
         XCTAssertTrue(mock.authorizeKnockCalls.isEmpty)
     }
 
-    /// The same record on a box the pods DO list: ours, so the global AID.
-    func testRecordNamingOurOwnAidInPodsUsesGlobalAid() async throws {
+    /// The same record on a box the pods DO list: ours, so the device key.
+    func testRecordNamingOurOwnAidInPodsUsesTheDeviceKey() async throws {
         let fx = try fixture()
         let owners = ownerStore()
         owners.remember(serverDomain: server, ownerAidHex: fx.friendAidPubHex)
@@ -260,12 +289,12 @@ final class KnockAuthorizeViewModelTests: XCTestCase {
         await vm.authorize()
         XCTAssertEqual(vm.phase, .authorized)
         XCTAssertEqual(refreshes, 1)
-        XCTAssertEqual(mock.authorizeKnockCalls.first?.authorization["visitorAID"], fx.friendAidPubHex)
+        XCTAssertEqual(mock.authorizeKnockCalls.first?.authorization["visitorAID"], devicePubHex)
     }
 
     /// Cold start from a deep link: pods not loaded yet, so one refresh finds
     /// the box among our servers before we'd refuse.
-    func testUnlistedServerRefreshesPodsOnceThenUsesGlobalAid() async throws {
+    func testUnlistedServerRefreshesPodsOnceThenUsesTheDeviceKey() async throws {
         let fx = try fixture()
         let mock = MockServiceAccessClient()
         var refreshes = 0
@@ -274,7 +303,7 @@ final class KnockAuthorizeViewModelTests: XCTestCase {
         await vm.authorize()
         XCTAssertEqual(vm.phase, .authorized)
         XCTAssertEqual(refreshes, 1)
-        XCTAssertEqual(mock.authorizeKnockCalls.first?.authorization["visitorAID"], fx.friendAidPubHex)
+        XCTAssertEqual(mock.authorizeKnockCalls.first?.authorization["visitorAID"], devicePubHex)
     }
 
     func testUnknownServerAfterRefreshRefusesAndSendsNothing() async throws {

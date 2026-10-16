@@ -64,10 +64,18 @@ public final class KnockAuthorizeViewModel {
     private var ownServers: Set<String>
     /// Re-reads the account's server list (FQDNs); nil = no refresh.
     private let refreshOwnServers: (@MainActor () async -> [String])?
+    private let isDemoAccount: Bool
     private let now: () -> Int64
 
     public static let notYourServerMessage =
         "This isn't one of your servers. Open its invite link on this phone first, then try again."
+    /// Our own server, but this profile has no account device id to sign
+    /// with. Refused rather than signing with the account-wide id, which
+    /// would let every app link this device (the webapp's NO_DEVICE_KEY).
+    public static let noDeviceKeyMessage =
+        "This device isn't set up on your account yet. Sign in to your account on it again, then try again."
+
+    struct NoDeviceKey: Error {}
 
     public init(
         client: any ServiceAccessClient,
@@ -84,8 +92,10 @@ public final class KnockAuthorizeViewModel {
         appAid: (@MainActor (_ serviceRef: String, _ reason: String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
         deviceKey: (@MainActor (String) async throws -> Curve25519.Signing.PrivateKey?)? = nil,
         shareKey: (@MainActor (_ shareId: String, _ reason: String) async throws -> Curve25519.Signing.PrivateKey)? = nil,
+        isDemoAccount: Bool = false,
         now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }
     ) {
+        self.isDemoAccount = isDemoAccount
         var shares: [String: String] = [:]
         for (host, shareId) in sharedServers {
             let h = InviteOwnerStore.normalizeHost(host)
@@ -147,7 +157,10 @@ public final class KnockAuthorizeViewModel {
 
     private func ownServerKey(_ reason: String) async throws -> Curve25519.Signing.PrivateKey {
         if let device = try await deviceKey(reason) { return device }
-        return try await aid(reason)
+        // A demo account's device has no device id (the operator runs the
+        // account): it keeps signing in with the account id, as before.
+        if isDemoAccount { return try await aid(reason) }
+        throw NoDeviceKey()
     }
 
     /// The site being signed in to, e.g. `notes.home.alice.flagship.services`
@@ -200,6 +213,8 @@ public final class KnockAuthorizeViewModel {
                 browserAgent: result.browserAgent,
                 startedAt: result.startedAt != 0 ? result.startedAt : ts))
             phase = .authorized
+        } catch is NoDeviceKey {
+            phase = .failed(Self.noDeviceKeyMessage)
         } catch ServiceAccessError.knockNotAllowed {
             phase = .failed("You don't have access to this service.")
         } catch ServiceAccessError.knockBadRequest {

@@ -89,7 +89,8 @@ public struct KnockAuthorizeScreen: View {
                     shareKey: { shareId, reason in
                         guard let flow = SharedWithMeStore.shared.flow else { throw ServerShareFlowError.notSignedIn }
                         return try await flow.memberKey(shareId: shareId, reason: reason)
-                    })
+                    },
+                    isDemoAccount: app.isDemoAccount)
             }
         }
     }
