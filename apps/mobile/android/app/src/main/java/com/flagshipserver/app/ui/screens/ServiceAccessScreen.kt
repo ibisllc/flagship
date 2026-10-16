@@ -76,7 +76,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.flagshipserver.app.api.AppAccountMember
-import com.flagshipserver.app.api.MockScreensClient
 import com.flagshipserver.app.core.AppMemberRole
 import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.core.LocalAppState
@@ -115,33 +114,30 @@ fun ServiceAccessScreen(nav: NavController, serviceId: String) {
         if (delim > 0) serviceId.substring(delim + 2).replaceFirstChar { it.uppercase() } else serviceId
     }
 
-    val live = com.flagshipserver.app.core.LocalDeveloperSettings.current?.useLiveClient?.collectAsState()?.value ?: true
     val server = com.flagshipserver.app.core.LocalFlagshipServerClient.current
-    val vm = remember(serviceId, serverDomain, live) {
-        val mockBox = screens is MockScreensClient
+    val vm = remember(serviceId, serverDomain, screens) {
         val profileDevice = { appState.activeProfile?.deviceId?.takeIf { it.length == 32 } }
-        // The mock box's device book names this phone by a fixed key; a real
+        // A debug gym run's mock box names this phone by a fixed key; a real
         // box by the account device key derived on this phone.
-        val deviceId = if (mockBox) ({ profileDevice() ?: MockScreensClient.SELF_DEVICE_ID }) else profileDevice
-        if (mockBox) {
+        val fixture = com.flagshipserver.app.core.Variant.serviceAccessFixture(screens)
+        if (fixture != null) {
+            val deviceId = { profileDevice() ?: fixture.selfDeviceId }
             ServiceAccessViewModel(
                 serverDomain = serverDomain, serviceRef = serviceId, username = username, screens = screens,
-                client = if (live) com.flagshipserver.app.api.ServiceAccessClient()
-                else com.flagshipserver.app.api.MockServiceAccessClient.shared,
+                client = fixture.client,
                 deviceId = deviceId,
-                deviceSigner = { _ -> Keystore.accountDeviceSigner(Keystore.currentUmkSeed(), username, deviceId() ?: MockScreensClient.SELF_DEVICE_ID) },
-                ownDevicePubHex = { MockScreensClient.SELF_DEVICE_PUB },
-                deviceNames = { MockScreensClient.DEVICE_NAMES },
+                deviceSigner = { _ -> Keystore.accountDeviceSigner(Keystore.currentUmkSeed(), username, deviceId()) },
+                ownDevicePubHex = { fixture.selfDevicePub },
+                deviceNames = { fixture.deviceNames },
                 isAdminDevice = { com.flagshipserver.app.core.AdminOrderGate.allows(appState) },
             )
         } else {
             ServiceAccessViewModel(
                 serverDomain = serverDomain, serviceRef = serviceId, username = username, screens = screens,
-                client = if (live) com.flagshipserver.app.api.ServiceAccessClient()
-                else com.flagshipserver.app.api.MockServiceAccessClient.shared,
-                deviceId = deviceId,
+                client = com.flagshipserver.app.api.ServiceAccessClient(),
+                deviceId = profileDevice,
                 deviceNames = {
-                    val id = deviceId()
+                    val id = profileDevice()
                     if (id == null) null
                     else com.flagshipserver.app.viewmodels.AccountDeviceNames.load(server, username, id)
                 },

@@ -9,48 +9,34 @@ package com.flagshipserver.app.core
 
 import androidx.compose.runtime.staticCompositionLocalOf
 import com.flagshipserver.app.api.BuildClient
-import com.flagshipserver.app.api.DemoConnectClient
 import com.flagshipserver.app.api.FlagshipServerClient
-import com.flagshipserver.app.api.MockBuildClient
-import com.flagshipserver.app.api.MockDemoConnectClient
-import com.flagshipserver.app.api.MockFlagshipServerClient
-import com.flagshipserver.app.api.MockScreensClient
-import com.flagshipserver.app.api.MockSecretMailboxClient
-import com.flagshipserver.app.api.MockServerTransferClient
 import com.flagshipserver.app.api.ServerTransferClient
 import com.flagshipserver.app.api.InMemorySessionStore
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.SecretMailboxClient
 import com.flagshipserver.app.api.SessionStoring
 
-val LocalScreensClient = staticCompositionLocalOf<ScreensClient> { MockScreensClient() }
+val LocalScreensClient = staticCompositionLocalOf<ScreensClient> { Variant.defaultScreens() }
 
 /** "Build a service" modes client (the `/api/build/` surface, paired-
  *  session gated). Production wires the live client (OkHttp + session
  *  token) in MainActivity; previews + tests get the in-memory Mock. */
-val LocalBuildClient = staticCompositionLocalOf<BuildClient> { MockBuildClient() }
+val LocalBuildClient = staticCompositionLocalOf<BuildClient> { Variant.defaultBuild() }
 
-val LocalFlagshipServerClient = staticCompositionLocalOf<FlagshipServerClient> { MockFlagshipServerClient() }
+val LocalFlagshipServerClient = staticCompositionLocalOf<FlagshipServerClient> { Variant.defaultFlagshipServer() }
 
-/** Plan A — the demo connect/cancel client. Production wires the live
- *  client (transport + server) in MainActivity; previews + tests get a
- *  Mock over the default MockFlagshipServerClient. */
-val LocalDemoConnectClient = staticCompositionLocalOf<DemoConnectClient> {
-    MockDemoConnectClient(MockFlagshipServerClient())
-}
-
-val LocalQrRelayClient = staticCompositionLocalOf<QrRelayClient> { MockQrRelayClient() }
+val LocalQrRelayClient = staticCompositionLocalOf<QrRelayClient> { Variant.defaultQrRelay() }
 
 /** Boot-secret RELAY mailbox client. Production wires the live client
  *  (OkHttp transport) in MainActivity; previews + tests get the in-memory
  *  Mock. The SecretRequestsScreen builds a SecretRequestCoordinator over this. */
-val LocalSecretMailboxClient = staticCompositionLocalOf<SecretMailboxClient> { MockSecretMailboxClient() }
+val LocalSecretMailboxClient = staticCompositionLocalOf<SecretMailboxClient> { Variant.defaultMailbox() }
 
 /** Transfer-a-box broker client (`.com`): deposits the giver's offer, polls for
  *  the acquirer's claim, hands off the re-sealed disk key. Hits `.com`, not a
  *  box-pinned pipe. Production MainActivity wires the live client; previews +
  *  tests get the in-memory Mock. */
-val LocalServerTransferClient = staticCompositionLocalOf<ServerTransferClient> { MockServerTransferClient() }
+val LocalServerTransferClient = staticCompositionLocalOf<ServerTransferClient> { Variant.defaultTransfer() }
 
 /** The pod session store backing the BFF (holds podBaseUrl + session token).
  *  Production MainActivity installs the EncryptedSessionStore; previews + tests
@@ -81,8 +67,6 @@ val LocalActiveOperationsCenter = staticCompositionLocalOf<ActiveOperationsCente
  *  MainActivity installs one instance; previews + tests get the default
  *  (UNKNOWN ⇒ trusted, no halt). */
 val LocalTrustCenter = staticCompositionLocalOf<TrustCenter> { TrustCenter() }
-
-val LocalDeveloperSettings = staticCompositionLocalOf<DeveloperSettings?> { null }
 
 /** C12 — PrivacySettings persistence handle. Null on previews and in
  *  unit tests; the production MainActivity always installs a real one. */

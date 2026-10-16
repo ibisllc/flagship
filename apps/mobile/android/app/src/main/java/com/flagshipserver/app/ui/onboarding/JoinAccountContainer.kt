@@ -6,7 +6,7 @@
 // /api/account/resolve/<u>, 200 ALWAYS) and branch on `kind`:
 //
 //   demo            → attach a fresh device + activate the sandbox via
-//                     DemoFixtures.activate(demoServer). No passkey, no
+//                     DemoAccount.activate(demoServer). No passkey, no
 //                     error — the username IS the capability.
 //   unknown         → render a clean "No Flagship account by that name"
 //                     STATE (not an error / 404).
@@ -44,7 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.flagshipserver.app.api.AccountResolution
 import com.flagshipserver.app.core.AppState
-import com.flagshipserver.app.core.DemoFixtures
+import com.flagshipserver.app.core.DemoAccount
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.core.LocalSessionStore
@@ -119,7 +119,7 @@ fun JoinAccountContainer(
                                 sessionStore.setDemoSession(DemoSessionRecord(resolution.username, demo))
                             }
                         }
-                        DemoFixtures.activate(
+                        DemoAccount.activate(
                             app,
                             resolution.username,
                             demoServer = resolution.demoServer,

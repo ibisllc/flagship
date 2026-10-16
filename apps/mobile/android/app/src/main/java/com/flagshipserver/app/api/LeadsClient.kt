@@ -134,13 +134,3 @@ object DirectLeadsInversion {
         return out.mapValues { (_, slugs) -> slugs.sorted() }
     }
 }
-
-/** In-memory mock: returns a configurable map (default null = "no fresher
- *  source"). Mirror of iOS `MockLeadsClient`. */
-class MockLeadsClient(var result: LeadsMap? = null) : LeadsClient {
-    val requested = mutableListOf<String>()
-    override suspend fun fetchLeads(podFqdn: String): LeadsMap? {
-        requested.add(podFqdn)
-        return result
-    }
-}

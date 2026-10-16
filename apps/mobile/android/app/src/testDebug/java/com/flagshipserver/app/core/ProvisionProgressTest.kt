@@ -217,7 +217,7 @@ class ProvisionProgressTest {
             region = "fsn1",
             image = "debian-12",
         )
-        val pod = DemoFixtures.samplePodFromDemoServer(block, "demoalice")
+        val pod = DemoAccount.samplePodFromDemoServer(block, "demoalice")
         assertEquals(PodInfo.Status.PENDING, pod.status)
         assertEquals("installing", pod.demoServer?.phase)
         assertEquals("1.2.3.4", pod.demoServer?.ip)

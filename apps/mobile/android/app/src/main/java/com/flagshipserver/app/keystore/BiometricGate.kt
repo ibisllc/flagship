@@ -14,7 +14,7 @@ class BiometricFailed(val code: Int, val errString: CharSequence) :
 
 object BiometricGate {
     suspend fun evaluate(activity: FragmentActivity, title: String, subtitle: String) {
-        if (com.flagshipserver.app.core.GymSeams.bypassBiometricGates) return
+        if (com.flagshipserver.app.core.Variant.bypassBiometricGates) return
         suspendCancellableCoroutine<Unit> { cont ->
             // BiometricPrompt's own docs mandate the main-thread executor — the
             // callback drives Compose state (AppState.markUnlocked) and, with

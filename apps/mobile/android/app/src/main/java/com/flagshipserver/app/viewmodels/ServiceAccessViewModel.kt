@@ -37,7 +37,7 @@ import com.flagshipserver.app.api.ServiceAccessClient
 import com.flagshipserver.app.api.ServiceInviteRow
 import com.flagshipserver.app.core.AppAccessOrders
 import com.flagshipserver.app.core.AppMemberRole
-import com.flagshipserver.app.core.GymSeams
+import com.flagshipserver.app.core.Variant
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.InviteLink
 import com.flagshipserver.app.core.ServiceInvite
@@ -105,7 +105,7 @@ class ServiceAccessViewModel(
     /** The box's owner-session API (members + ranks); null ⇒ no ranks shown. */
     private val screens: ScreensClient? = null,
     /** True when this device holds the account's admin root. */
-    private val isAdminDevice: () -> Boolean = { GymSeams.forceAdminRoot || Keystore.hasAdminRoot() },
+    private val isAdminDevice: () -> Boolean = { Variant.forceAdminRoot || Keystore.hasAdminRoot() },
     /** The admin root: every admin-only order, and an admin's invites and withdrawals. */
     private val adminSigner: suspend (reason: String) -> Ed25519Sign = { r -> Keystore.adminSigningKey(r) },
     /** This device's account device id (32 hex). */
