@@ -97,6 +97,9 @@ public final class PushNotifications: NSObject {
         if (kind ?? category) == inviteCreatedCategory { return .accountActivity }
         if let category, accountNoticeCategories.contains(category) { return nil }
         if kind == "vibecode-needs-you", let sessionId = info["sessionId"] as? String, !sessionId.isEmpty {
+            if let server = (info["server"] as? String)?.lowercased(), !server.isEmpty {
+                return .vibeCodeChatOnServer(sessionId: sessionId, serverFqdn: server)
+            }
             return .vibeCodeChat(sessionId: sessionId)
         }
         return nil
@@ -113,14 +116,16 @@ public final class PushNotifications: NSObject {
     /// `.vibeCodeChat(sessionId:)` exactly like a real Web-Push wake. Best-
     /// effort: if authorization wasn't granted the system drops it silently —
     /// the operations sliver already carries the signal.
-    public func notifyAiChatNeedsYou(sessionId: String, isEnvVar: Bool) {
+    public func notifyAiChatNeedsYou(sessionId: String, isEnvVar: Bool, server: String? = nil) {
         let content = UNMutableNotificationContent()
         content.title = "Flagship"
         content.body = isEnvVar
             ? "The AI needs an environment variable to continue."
             : "The AI is asking you a question."
         content.sound = .default
-        content.userInfo = ["kind": "vibecode-needs-you", "sessionId": sessionId]
+        var info: [String: String] = ["kind": "vibecode-needs-you", "sessionId": sessionId]
+        if let server, !server.isEmpty { info["server"] = server }
+        content.userInfo = info
         // Per-session identifier so a re-fire for the same session replaces the
         // prior banner rather than stacking.
         let request = UNNotificationRequest(

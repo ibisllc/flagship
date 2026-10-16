@@ -331,12 +331,13 @@ struct ContentView: View {
                 operations: operations,
                 client: client,
                 isActive: { [weak app] in (app?.isPaired ?? false) && (app?.isUnlocked ?? false) },
-                notify: { sessionId, request in
+                notify: { sessionId, request, server in
                     guard let delegate = UIApplication.shared.delegate as? AppDelegate,
                           let push = delegate.push else { return }
                     push.notifyAiChatNeedsYou(
                         sessionId: sessionId,
-                        isEnvVar: request == .requestEnvVar
+                        isEnvVar: request == .requestEnvVar,
+                        server: server
                     )
                 }
             )

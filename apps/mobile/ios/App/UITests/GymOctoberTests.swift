@@ -532,4 +532,17 @@ final class GymOctoberTests: XCTestCase {
         XCTAssertEqual(app.buttons["service-detail-remove-btn"].label, "Remove app")
         XCTAssertFalse(app.staticTexts["service-detail-remove-admin-only"].exists)
     }
+
+    /// An AI-needs-you alert names the server it came from; tapping it opens
+    /// the build chat bound to that server, not the one the app shows.
+    func test_aiNeedsYouOpensTheChatOnItsServer() throws {
+        let app = launch(tab: "home", ["-smoke-ops", "-smoke-ops-on-server"])
+        let opsBar = app.buttons["global-operations-bar"]
+        XCTAssertTrue(opsBar.waitForExistence(timeout: 15) || app.otherElements["global-operations-bar"].exists,
+                      "The waiting build shows in the operations sliver.")
+        if opsBar.exists { opsBar.tap() } else { app.otherElements["global-operations-bar"].tap() }
+        XCTAssertTrue(app.staticTexts["session gym-smoke"].waitForExistence(timeout: 15),
+                      "The sliver opens the chat on the server the alert named.")
+        gymShot(app, "ai-needs-you-on-server")
+    }
 }

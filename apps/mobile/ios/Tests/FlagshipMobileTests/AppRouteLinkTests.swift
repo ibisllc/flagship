@@ -20,6 +20,8 @@ final class AppRouteLinkTests: XCTestCase {
             ("create-server", .createServer),
             ("vibecode/sess-abc-42", .vibeCodeChat(sessionId: "sess-abc-42")),
             ("vibecode?sessionId=sess-xyz-99", .vibeCodeChat(sessionId: "sess-xyz-99")),
+            ("vibecode/sess-1?server=Home2.bright-maple.flagship.services",
+             .vibeCodeChatOnServer(sessionId: "sess-1", serverFqdn: "home2.bright-maple.flagship.services")),
             ("account/security?u=bright-maple", .accountSecurity),
             ("account/devices?u=bright-maple", .accountDevices),
             ("account/re-pair?u=bright-maple", .accountDevices),

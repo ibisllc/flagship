@@ -16,6 +16,7 @@ final class AiChatAlertPollerTests: XCTestCase {
     private final class FakeClient: PhoneAlertClient, @unchecked Sendable {
         var response: PhoneAlertsResponse
         var throwOnFetch = false
+        var server: String?
         private(set) var ackedThrough: [Int] = []
         private(set) var fetchSinceCalls: [Int] = []
 
@@ -27,6 +28,7 @@ final class AiChatAlertPollerTests: XCTestCase {
             return response
         }
         func ackAlerts(throughId: Int) async throws { ackedThrough.append(throughId) }
+        func boundServer() async -> String? { server }
     }
 
     private func aiChatEnv(_ id: Int, _ sessionId: String, _ request: PhoneAlert.AiChatRequest, _ toolUseId: String) -> PhoneAlertEnvelope {
@@ -42,7 +44,7 @@ final class AiChatAlertPollerTests: XCTestCase {
             operations: ops,
             client: client,
             isActive: { true },
-            notify: { sessionId, request in notified(sessionId, request) },
+            notify: { sessionId, request, _ in notified(sessionId, request) },
             pollIntervalNanos: 1
         )
     }
@@ -152,5 +154,38 @@ final class AiChatAlertPollerTests: XCTestCase {
         XCTAssertEqual(handled2, 1)
         XCTAssertEqual(client.fetchSinceCalls, [0, 0])
         XCTAssertEqual(client.ackedThrough, [5])
+    }
+
+    /// The alert names the box it came from: the sliver and the notification
+    /// open the chat there, whichever server the app shows by then.
+    func test_alertNamesItsServer() async {
+        let ops = ActiveOperationsCenter()
+        let client = FakeClient(PhoneAlertsResponse(events: [aiChatEnv(3, "sess-d", .requestEnvVar, "tool-1")], size: 1))
+        client.server = "home2.bright-maple.flagship.services"
+        var servers: [String?] = []
+        let poller = AiChatAlertPoller(operations: ops, client: client, isActive: { true },
+                                       notify: { _, _, server in servers.append(server) }, pollIntervalNanos: 1)
+        _ = await poller.drainOnce()
+        XCTAssertEqual(ops.operations.first?.target,
+                       .vibeCodeChatOnServer(sessionId: "sess-d", serverFqdn: "home2.bright-maple.flagship.services"))
+        XCTAssertEqual(servers, ["home2.bright-maple.flagship.services"])
+    }
+
+    /// Each box numbers its own alerts: switching servers starts that
+    /// server's drain from its own cursor, not the last server's.
+    func test_eachServerKeepsItsOwnCursor() async {
+        let ops = ActiveOperationsCenter()
+        let client = FakeClient(PhoneAlertsResponse(events: [aiChatEnv(9, "sess-a", .talkToUser, "tool-1")], size: 1))
+        client.server = "home.x"
+        let poller = makePoller(client, ops: ops) { _, _ in }
+        _ = await poller.drainOnce()
+        client.server = "home2.x"
+        client.response = PhoneAlertsResponse(events: [aiChatEnv(2, "sess-b", .talkToUser, "tool-1")], size: 1)
+        let handled = await poller.drainOnce()
+        XCTAssertEqual(handled, 1)
+        client.server = "home.x"
+        client.response = PhoneAlertsResponse(events: [], size: 0)
+        _ = await poller.drainOnce()
+        XCTAssertEqual(client.fetchSinceCalls, [0, 0, 9])
     }
 }

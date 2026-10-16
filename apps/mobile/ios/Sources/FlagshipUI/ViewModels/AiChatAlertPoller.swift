@@ -31,17 +31,20 @@ public final class AiChatAlertPoller {
 
     private let operations: ActiveOperationsCenter
     private let client: any PhoneAlertClient
-    /// Raise a LOCAL notification for a paused build. Injected so tests don't
-    /// touch UNUserNotificationCenter; the app wires `PushNotifications`.
-    private let notify: @MainActor (_ sessionId: String, _ request: PhoneAlert.AiChatRequest) -> Void
+    /// Raise a LOCAL notification for a paused build, naming the server the
+    /// alert came from (nil when the client can't say). Injected so tests
+    /// don't touch UNUserNotificationCenter; the app wires `PushNotifications`.
+    private let notify: @MainActor (_ sessionId: String, _ request: PhoneAlert.AiChatRequest, _ server: String?) -> Void
     /// Gate — only drain while this returns true (paired + unlocked). Mirrors
     /// the sliver's hide-under-lock so nothing surfaces over the lock screen.
     private let isActive: @MainActor () -> Bool
     private let pollIntervalNanos: UInt64
 
     private var task: Task<Void, Never>?
-    /// ACK cursor — the highest alert id we've drained.
-    private var cursor: Int = 0
+    /// ACK cursor per server ("" when the client names none) — the highest
+    /// alert id drained from it. Each box numbers its own alerts, so one
+    /// server's cursor would skip another's.
+    private var cursors: [String: Int] = [:]
     /// Dedup set so a re-drain (e.g. after a failed ACK) won't re-notify the
     /// same pending tool. Keyed by "<sessionId>|<toolUseId>".
     private var notified: Set<String> = []
@@ -50,7 +53,7 @@ public final class AiChatAlertPoller {
         operations: ActiveOperationsCenter,
         client: any PhoneAlertClient,
         isActive: @escaping @MainActor () -> Bool,
-        notify: @escaping @MainActor (_ sessionId: String, _ request: PhoneAlert.AiChatRequest) -> Void,
+        notify: @escaping @MainActor (_ sessionId: String, _ request: PhoneAlert.AiChatRequest, _ server: String?) -> Void,
         pollIntervalNanos: UInt64 = AiChatAlertPoller.pollInterval
     ) {
         self.operations = operations
@@ -85,6 +88,9 @@ public final class AiChatAlertPoller {
     /// number of AI-chat alerts handled (for tests / pull-to-refresh).
     @discardableResult
     public func drainOnce() async -> Int {
+        let server = await client.boundServer()
+        let key = server ?? ""
+        let cursor = cursors[key] ?? 0
         let resp: PhoneAlertsResponse
         do {
             resp = try await client.fetchAlerts(since: cursor)
@@ -108,22 +114,25 @@ public final class AiChatAlertPoller {
             // Surface in the operations sliver, deep-linking to the chat. Keyed
             // by the session so the live build feeder + this alert feeder
             // reconcile on the same op rather than dueling.
+            // Name the server, so the chat opens there even after the owner
+            // switched servers (the session lives on that box only).
             operations.upsertBuild(
                 id: sessionId,
                 subject: "AI build",
                 onServer: nil,
-                target: .vibeCodeChat(sessionId: sessionId)
+                target: server.map { .vibeCodeChatOnServer(sessionId: sessionId, serverFqdn: $0) }
+                    ?? .vibeCodeChat(sessionId: sessionId)
             )
-            let dedupKey = "\(sessionId)|\(toolUseId)"
+            let dedupKey = "\(key)|\(sessionId)|\(toolUseId)"
             if !notified.contains(dedupKey) {
                 notified.insert(dedupKey)
-                notify(sessionId, request)
+                notify(sessionId, request, server)
             }
             handled += 1
         }
 
         if maxId > cursor {
-            cursor = maxId
+            cursors[key] = maxId
             // Best-effort ACK — a failure just means we re-drain next tick.
             try? await client.ackAlerts(throughId: maxId)
         }

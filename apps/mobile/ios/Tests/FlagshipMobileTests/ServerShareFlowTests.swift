@@ -786,6 +786,8 @@ final class ServerShareFlowTests: XCTestCase {
         XCTAssertEqual(PushNotifications.link(forPush: ["category": "secret-request"]), .secretRequests)
         XCTAssertEqual(PushNotifications.link(forPush: ["kind": "secret-request"]), .secretRequests)
         XCTAssertEqual(PushNotifications.link(forPush: ["kind": "vibecode-needs-you", "sessionId": "s1"]), .vibeCodeChat(sessionId: "s1"))
+        XCTAssertEqual(PushNotifications.link(forPush: ["kind": "vibecode-needs-you", "sessionId": "s1", "server": "home2.x"]),
+                       .vibeCodeChatOnServer(sessionId: "s1", serverFqdn: "home2.x"))
         XCTAssertNil(PushNotifications.link(forPush: [:]))
         XCTAssertEqual(RootShell.tab(for: .sharedWithMe, selected: .settings), .home)
         XCTAssertEqual(HomeTab.startupShare([("a", false), ("b", true)]), "b")

@@ -9,6 +9,13 @@ public protocol PhoneAlertClient: Sendable {
     func fetchAlerts(since: Int) async throws -> PhoneAlertsResponse
     /// Acknowledge / drop alerts through `throughId` so they aren't re-delivered.
     func ackAlerts(throughId: Int) async throws
+    /// The server (FQDN) the next fetch reaches, so its alerts can name it
+    /// and its cursor is kept apart from other servers'. Nil when unknown.
+    func boundServer() async -> String?
+}
+
+public extension PhoneAlertClient {
+    func boundServer() async -> String? { nil }
 }
 
 /// URLSession-backed `PhoneAlertClient`, mirroring `LiveScreensClient`'s
@@ -32,6 +39,11 @@ public final class LivePhoneAlertClient: PhoneAlertClient, @unchecked Sendable {
     }
 
     private struct AckResponse: Decodable { let ok: Bool? }
+
+    public func boundServer() async -> String? {
+        guard let base = await store.podBaseUrl else { return nil }
+        return URL(string: base)?.host?.lowercased()
+    }
 
     private func request<T: Decodable>(_ path: String, method: String = "GET", body: Data? = nil) async throws -> T {
         guard let base = await store.podBaseUrl else { throw ScreensClientError.notPaired }

@@ -243,12 +243,16 @@ struct FlagshipApp: App {
         // gym's sliver scenario. The default DemoFixtures pods are all
         // online/offline (no pending), so without this the sliver — correctly
         // — stays hidden. Gym-only; production never passes the arg.
+        // `-smoke-ops-on-server` names the last server instead, as an
+        // AI-needs-you alert does, so the chat opens bound to that server.
         if args.contains("-smoke-ops") {
+            let server = args.contains("-smoke-ops-on-server") ? app.pods.last?.fqdn : nil
             operations.upsertBuild(
                 id: "build:gym-smoke",
                 subject: "blog",
                 onServer: "Home",
-                target: .vibeCodeChat(sessionId: "gym-smoke")
+                target: server.map { .vibeCodeChatOnServer(sessionId: "gym-smoke", serverFqdn: $0) }
+                    ?? .vibeCodeChat(sessionId: "gym-smoke")
             )
         }
         // `-smoke-awaiting-backup` marks the first online server as created to

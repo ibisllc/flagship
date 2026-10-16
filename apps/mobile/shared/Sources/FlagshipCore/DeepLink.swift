@@ -22,6 +22,10 @@ public enum DeepLink: Equatable, Sendable {
     /// id. Fired by the `vibecode-needs-you` push when the AI is
     /// awaiting an env-var or talkToUser response.
     case vibeCodeChat(sessionId: String)
+    /// The same chat on the server it runs on: an AI-needs-you alert names
+    /// the box it was drained from, so the chat reads, signs and sends
+    /// there even after the owner switched servers.
+    case vibeCodeChatOnServer(sessionId: String, serverFqdn: String)
     /// Open the "build a service" (vibe-code) flow on the Services tab.
     /// Triggered in-app from the Home quick action. Internal-only —
     /// not parseable from a URL.
@@ -322,13 +326,12 @@ public enum DeepLink: Equatable, Sendable {
             // The push payload uses the path form; we accept either
             // so deep-link tests can use whichever is more readable.
             let pathSession = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-            if !pathSession.isEmpty {
-                return .vibeCodeChat(sessionId: pathSession)
+            let session = pathSession.isEmpty ? (params["sessionId"] ?? "") : pathSession
+            if session.isEmpty { return nil }
+            if let server = params["server"]?.lowercased(), !server.isEmpty {
+                return .vibeCodeChatOnServer(sessionId: session, serverFqdn: server)
             }
-            if let id = params["sessionId"], !id.isEmpty {
-                return .vibeCodeChat(sessionId: id)
-            }
-            return nil
+            return .vibeCodeChat(sessionId: session)
         case "account":
             switch url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")) {
             case "security": return .accountSecurity

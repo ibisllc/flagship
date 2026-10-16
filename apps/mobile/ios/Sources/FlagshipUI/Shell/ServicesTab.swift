@@ -111,6 +111,12 @@ public struct ServicesTab: View {
                 path.openVibeSession(sessionId)
             }
             _ = linker.consume()
+        case .vibeCodeChatOnServer(let sessionId, let fqdn):
+            _ = linker.consume()
+            creation = nil
+            bind(fqdn)
+            path = []
+            path.openVibeSession(sessionId)
         case .startVibeCode:
             _ = linker.consume()
             startCreation(pinnedFqdn: nil)
