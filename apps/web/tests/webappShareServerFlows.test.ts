@@ -538,7 +538,8 @@ describe("the shared server's page", () => {
     expect(html).toContain(shares.NOTIFY_TITLE);
     expect(html).toContain("Flagship's service know this device helps with this server");
     expect(html.match(/data-members-only/g)).toHaveLength(1);
-    expect(html).toContain("Members only. You need an invite to use this app.");
+    expect(html).toContain("Members only. You can open it: you co-manage this server.");
+    expect(html).not.toContain("You need an invite");
     for (const owned of OWNER_ONLY) expect(html).not.toContain(owned);
   });
 

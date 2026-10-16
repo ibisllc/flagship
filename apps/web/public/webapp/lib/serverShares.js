@@ -30,7 +30,9 @@ export const NOTIFY_TITLE = "Notify this device when it needs to start";
 export const NOTIFY_LINE =
   "Turning this on lets Flagship's service know this device helps with this server, so it can wake you. The notice itself names no server.";
 export const NOTIFY_NOT_ALLOWED = "The owner hasn't let you approve this server's start-up.";
-export const MEMBERS_ONLY_HINT = "Members only. You need an invite to use this app.";
+// A share makes its holder a co-manager, Manager in every app of the server
+// (accessPrincipals.ts), so a members-only app still opens for them.
+export const MEMBERS_ONLY_HINT = "Members only. You can open it: you co-manage this server.";
 export const DATA_TITLE = "Can see app data";
 export const DATA_LINE = "They can open each app's Database section.";
 
