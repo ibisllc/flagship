@@ -90,17 +90,41 @@ async function createConnection() {
   }
 }
 
+// Each IDE wants its own shape (VS Code `servers`, Cline `streamableHttp`…);
+// the box sends one per IDE. An older box sends only the generic one.
+function ideChoices(conn) {
+  const list = Array.isArray(conn.ideConfigs) ? conn.ideConfigs.filter((c) => c && c.config) : [];
+  if (list.length > 0) return list;
+  return [{ id: "generic", name: "IDE", where: "Your IDE's MCP settings", config: conn.ideConfig }];
+}
+
+let ideChoice = "claude-code";
+
 function renderConnection(conn) {
   const box = $("build-mcp-conn");
   box.classList.remove("hidden");
-  const cfg = JSON.stringify(conn.ideConfig, null, 2);
+  const choices = ideChoices(conn);
+  const current = choices.find((c) => c.id === ideChoice) ?? choices[0];
+  const cfg = JSON.stringify(current.config, null, 2);
+  const tabs = choices.length > 1
+    ? `<div class="row-2 mt-2" id="mcp-ide-tabs">${choices
+        .map((c) => `<button class="${c.id === current.id ? "" : "secondary"}" data-mcp-ide="${escapeHtml(c.id)}">${escapeHtml(c.name)}</button>`)
+        .join("")}</div>`
+    : "";
+  const command = current.command
+    ? `<p class="note mt-2">Or run:</p><pre class="vc-transcript" id="mcp-command">${escapeHtml(current.command)}</pre>
+       <button class="secondary full-width" id="mcp-copy-cmd">Copy command</button>`
+    : "";
   box.innerHTML = `
     <div class="card">
-      <p class="note">Paste this into your IDE's MCP settings (Cursor: Settings → MCP; Cline: MCP servers). The key works only for this build.</p>
+      <p class="note">Add this to your IDE's own settings, not a file in your project (the address names your server). The key works only for this build.</p>
       <div class="row mt-2"><span class="label">URL</span><span class="value mono" id="mcp-url">${escapeHtml(conn.url)}</span></div>
       <div class="row"><span class="label">Key</span><span class="value mono" id="mcp-key">${escapeHtml(conn.key)}</span></div>
+      ${tabs}
+      <p class="note mt-2" id="mcp-ide-where">${escapeHtml(current.where ?? "")}</p>
       <button id="mcp-copy-cfg" class="full-width mt-2">Copy IDE config</button>
-      <pre class="vc-transcript mt-2">${escapeHtml(cfg)}</pre>
+      <pre class="vc-transcript mt-2" id="mcp-ide-config">${escapeHtml(cfg)}</pre>
+      ${command}
       <div class="row-2 mt-2">
         <button class="secondary" id="mcp-rotate">Regenerate key</button>
         <button class="secondary" id="mcp-journal">View journal</button>
@@ -110,6 +134,13 @@ function renderConnection(conn) {
       <div id="mcp-env-requests"></div>
     </div>`;
   $("mcp-copy-cfg").addEventListener("click", () => copy(cfg, "config copied"));
+  if (current.command) $("mcp-copy-cmd").addEventListener("click", () => copy(current.command, "command copied"));
+  for (const b of box.querySelectorAll("[data-mcp-ide]")) {
+    b.addEventListener("click", () => {
+      ideChoice = b.dataset.mcpIde;
+      renderConnection(conn);
+    });
+  }
   $("mcp-rotate").addEventListener("click", rotate);
   $("mcp-journal").addEventListener("click", () => enterBuildJournal(buildId, { server: (buildBox ?? boxClient()).fqdn }));
   $("mcp-deploy").addEventListener("click", deploy);

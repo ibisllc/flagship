@@ -227,6 +227,20 @@ export const WEB_BUILDS: readonly Scenario[] = [
     },
   ),
   webTotal(
+    "web-total-build-mcp-ide-configs",
+    "Connect your IDE: one tab per IDE (Claude Code, Cursor, VS Code, Cline) shows where its config goes, and Copy IDE config / Copy command put that IDE's own JSON or command on the clipboard verbatim.",
+    "gym builds an IDE connection shows each IDE's own config and copies it verbatim",
+    {
+      steps: [
+        { kind: "tap", describe: "Create a connection; Copy IDE config; Copy command.", handle: "#mcp-copy-cmd" },
+        { kind: "tap", describe: "VS Code tab; Copy IDE config.", handle: '[data-mcp-ide="vscode"]' },
+      ],
+      assertions: [{ describe: "VS Code's place", handle: "#mcp-ide-where", expect: "text", text: "MCP: Open User Configuration" }],
+      screenshots: [shot("mcp-ide-configs", "Each IDE's config.")],
+      dimension: "D1",
+    },
+  ),
+  webTotal(
     "web-total-build-key-step-controls",
     "The AI-key step: Back, + Add an API key and Cancel, adding a key with base URL, label and the relay off, a saved key's relay switch, Delete with Cancel and confirm, and Use this opening the chat on that key.",
     "gym builds the AI-key step adds, cancels, relays, deletes and uses saved keys",

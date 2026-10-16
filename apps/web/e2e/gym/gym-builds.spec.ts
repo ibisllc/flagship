@@ -735,6 +735,48 @@ test.describe("gym webapp builds", () => {
     await expect(page.locator(".build-journal-timeline")).toContainText("IDE connected", { timeout: 10_000 });
   });
 
+  test("gym builds an IDE connection shows each IDE's own config and copies it verbatim", async ({ page, context }, testInfo) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await reachHome(page, { kind: "admin", servers: [HOME] });
+    const ID = "gym-mcp-2";
+    const url = `https://${HOME}/mcp/build/${ID}`;
+    const headers = { Authorization: "Bearer fmcp_gym" };
+    const name = `flagship-${ID}`;
+    // The box's wire (buildOrchestrator mcpIdeConfigs).
+    const ideConfig = { mcpServers: { [name]: { type: "http", url, headers } } };
+    const command = `claude mcp add --scope user --transport http ${name} ${url} --header "Authorization: Bearer fmcp_gym"`;
+    const ideConfigs = [
+      { id: "claude-code", name: "Claude Code", where: "Run the command in a terminal, or pass the JSON with --mcp-config", config: ideConfig, command },
+      { id: "cursor", name: "Cursor", where: "~/.cursor/mcp.json", config: { mcpServers: { [name]: { url, headers } } } },
+      { id: "vscode", name: "VS Code", where: "Your user mcp.json (Command Palette → MCP: Open User Configuration)", config: { servers: { [name]: { type: "http", url, headers } } } },
+      { id: "cline", name: "Cline", where: "Cline → MCP Servers → Configure MCP Servers", config: { mcpServers: { [name]: { type: "streamableHttp", url, headers } } } },
+    ];
+    const m = aiRules(await mock(page));
+    m.post(onBox("/api/build/mcp"), { buildId: ID, connection: { url, key: "fmcp_gym", ideConfig, ideConfigs } });
+    m.get(onBox(`/api/build/sessions/${ID}/env-requests`), { requests: [] });
+    await openChooser(page);
+    await page.click("#build-src-mcp");
+    await page.click("#build-mcp-create");
+    await expect(page.locator("#mcp-key")).toHaveText("fmcp_gym", { timeout: 10_000 });
+    await expect(page.locator("#mcp-ide-tabs button")).toHaveText(["Claude Code", "Cursor", "VS Code", "Cline"]);
+
+    await page.click("#mcp-copy-cfg");
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(JSON.stringify(ideConfig, null, 2));
+    await page.click("#mcp-copy-cmd");
+    await expect(page.locator("#toast")).toContainText("command copied", { timeout: 10_000 });
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(command);
+
+    await page.click('[data-mcp-ide="vscode"]');
+    await expect(page.locator("#mcp-ide-where")).toContainText("MCP: Open User Configuration");
+    await expect(page.locator("#mcp-command")).toHaveCount(0);
+    await page.click("#mcp-copy-cfg");
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(JSON.stringify(ideConfigs[2]!.config, null, 2));
+    await page.click('[data-mcp-ide="cline"]');
+    await page.click("#mcp-copy-cfg");
+    expect(JSON.parse(await page.evaluate(() => navigator.clipboard.readText())).mcpServers[name].type).toBe("streamableHttp");
+    await shot(page, testInfo, "mcp-ide-configs");
+  });
+
   test("gym builds the AI-key step adds, cancels, relays, deletes and uses saved keys", async ({ page }, testInfo) => {
     await reachHome(page, { kind: "admin", servers: [HOME] });
     await saveKey(page, "Work key");

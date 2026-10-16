@@ -32,7 +32,7 @@ const HELP_ITEMS = [
   ["Import from a Git repo",
     "Paste the address of a code repository, for example on GitHub. If it is already set up for Flagship it installs as-is; otherwise the AI can adapt it for you."],
   ["Connect your IDE",
-    "For developers: work in Cursor or Cline on your computer with your own AI, connected to your server over MCP. No AI key is stored on the server."],
+    "For developers: work in your own IDE (Claude Code, Cursor, VS Code or Cline) with your own AI, connected to your server over MCP. No AI key is stored on the server."],
 ];
 
 export function initBuildSourceView() {

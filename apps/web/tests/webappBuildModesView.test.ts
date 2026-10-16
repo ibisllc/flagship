@@ -81,6 +81,19 @@ describe("webapp build-modes views", () => {
     expect(body).toMatch(/no model key on the box/i);
   });
 
+  it("mcp view offers each IDE's own config, and the generic one from an older box", async () => {
+    const body = await asset("/webapp/views/build-mcp.js");
+    // The box sends one config per IDE (VS Code `servers`, Cline `streamableHttp`…).
+    expect(body).toContain("conn.ideConfigs");
+    expect(body).toContain("data-mcp-ide");
+    expect(body).toContain("current.command");
+    expect(body).toContain('id="mcp-copy-cmd"');
+    // An older box sends only ideConfig.
+    expect(body).toContain("config: conn.ideConfig");
+    // The URL names the server: never a file in the project the IDE's agent reads.
+    expect(body).toMatch(/not a file in your project/);
+  });
+
   it("mcp view surfaces value-free env requests and reassures about the value", async () => {
     const body = await asset("/webapp/views/build-mcp.js");
     expect(body).toContain("/env-requests");
