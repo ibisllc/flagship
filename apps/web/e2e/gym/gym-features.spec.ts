@@ -128,6 +128,10 @@ async function seedPairedPod(page: Page): Promise<void> {
     store.setActiveCloudName("smoketest");
     api.setPodBaseUrl(podBase);
     api.setSessionToken("gym-fixture-session-token");
+    // The owner's device holds the account's admin root, as the first device
+    // of every account does: the server page's orders sign under it.
+    const { getSession } = await import("/lib/state.js");
+    getSession().adminRootSeed = crypto.getRandomValues(new Uint8Array(32));
   }, POD_BASE);
 }
 

@@ -206,6 +206,9 @@ test.describe("gym webapp share", () => {
       ["/api/screens/server-metrics", METRICS],
     ]);
     await page.evaluate(async (fqdn) => {
+      // The owner's admin device: sharing signs under the admin root.
+      const { getSession } = await import("/lib/state.js");
+      getSession().adminRootSeed = crypto.getRandomValues(new Uint8Array(32));
       const { enterServerDetail } = await import("/views/server-detail.js");
       await enterServerDetail(fqdn);
     }, OWNER_BOX);

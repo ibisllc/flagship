@@ -137,6 +137,10 @@ async function seedPairedPod(page: Page): Promise<void> {
     store.setActiveCloudName("smoketest");
     api.setPodBaseUrl(podBase);
     api.setSessionToken("gym-fixture-session-token");
+    // The owner's device holds the account's admin root, as the first device
+    // of every account does: the server page's orders sign under it.
+    const { getSession } = await import("/lib/state.js");
+    getSession().adminRootSeed = crypto.getRandomValues(new Uint8Array(32));
   }, POD_BASE);
 }
 
@@ -1128,7 +1132,7 @@ test.describe("gym webapp total", () => {
   test("gym total webapp set front page reflects the chosen label", async ({ page }, testInfo) => {
     // D6-G1 (simulated) — the front-page picker loads the current assignment +
     // the installed-services options (both unauthenticated pod GETs, stubbed),
-    // the owner picks a label and Saves; the IRK-signed POST is stubbed 200 and
+    // the owner picks a label and Saves; the admin-root-signed POST is stubbed 200 and
     // the UI confirms the new assignment in the status line. No real apex 302
     // (that's the live slice) — the client records the action + updates the UI.
     await reachHome(page);
