@@ -342,7 +342,10 @@ function wirePairServer(fqdn, pod) {
     try {
       const { autoPairPods } = await import("../lib/autoPair.js");
       const out = await autoPairPods([{ ...(pod ?? {}), serverDomain: fqdn, liveness: "live" }]);
-      if (!out.paired.includes(fqdn)) throw new Error("The server didn't accept the pairing. Try again in a moment.");
+      if (!out.paired.includes(fqdn)) {
+        const msg = "The server didn't accept the pairing. Try again in a moment.";
+        throw Object.assign(new Error(msg), { userMessage: msg });
+      }
       toast("Paired", "ok");
       await renderServerDetail();
     } catch (e) {

@@ -59,7 +59,9 @@ export function pickAutoPairTargets(pods, hasToken) {
   const out = [];
   const seen = new Set();
   for (const p of Array.isArray(pods) ? pods : []) {
-    const fqdn = String(p?.fqdn ?? "").trim().toLowerCase();
+    // `/pods` names a registered box `serverDomain` (only pending orders
+    // carry `fqdn`, and they aren't live).
+    const fqdn = String(p?.serverDomain ?? p?.fqdn ?? "").trim().toLowerCase();
     if (!fqdn || seen.has(fqdn)) continue;
     seen.add(fqdn);
     // Only pair a reachable box. `liveness === "live"` is the honest signal;

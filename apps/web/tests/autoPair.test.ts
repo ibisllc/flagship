@@ -20,6 +20,16 @@ describe("autoPair — target selection", () => {
     expect(pickAutoPairTargets(pods, has)).toEqual(["a.alice.flagship.services"]);
   });
 
+  it("reads a registered box's name from serverDomain, as /pods sends it", () => {
+    const pods = [
+      { serverDomain: "Home.alice.flagship.services", liveness: "live" },
+      { serverDomain: "cabin.alice.flagship.services", liveness: "unreachable" },
+      // A pending order names its box `fqdn` and isn't live yet.
+      { fqdn: "new.alice.flagship.services", state: "pending" },
+    ];
+    expect(pickAutoPairTargets(pods, () => false)).toEqual(["home.alice.flagship.services"]);
+  });
+
   it("treats a recent lastReported as live when liveness is absent", () => {
     const pods = [
       { fqdn: "e.alice.flagship.services", lastReported: Date.now() - 1000 },

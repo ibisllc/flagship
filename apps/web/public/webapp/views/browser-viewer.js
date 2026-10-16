@@ -156,8 +156,13 @@ function bindInputForwarding(img, s) {
 }
 
 export function initBrowserViewerView() {
-  $("browser-viewer-back")?.addEventListener("click", () => {
+  // Opened from an app's page: Back returns there.
+  $("browser-viewer-back")?.addEventListener("click", async () => {
     closeSocket();
+    if (activeAppId) {
+      const { enterServiceDetail } = await import("./service-detail.js");
+      return enterServiceDetail(activeAppId);
+    }
     show("view-home");
   });
   $("bv-refresh")?.addEventListener("click", () => {
