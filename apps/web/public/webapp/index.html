@@ -861,13 +861,29 @@
                  aria-describedby="cs-server-name-hint" />
           <p id="cs-server-name-hint" class="faint-sm">lowercase letters, digits, and hyphens (not at the start or end) — e.g. media-server</p>
           <p id="cs-server-name-error" class="note err hidden" role="alert"></p>
-          <label>Backup policy</label>
-          <select id="cs-backup-policy">
-            <option value="phone-only">On my devices (default)</option>
-            <option value="none">None</option>
-            <option value="peer">Reciprocal peer backup</option>
-          </select>
-          <p class="faint-sm">One of your devices keeps an encrypted backup of each app, so the server's data can't grow larger than that device's free space.</p>
+          <label class="mt-3">Backup policy</label>
+          <div id="cs-backup-policy" class="boot-unlock-options">
+            <label class="boot-unlock-option">
+              <input type="radio" name="cs-backup-policy" value="phone-only" checked />
+              <span class="boot-unlock-title">Phone-side backups</span>
+              <span class="boot-unlock-desc faint-sm">Your server makes an encrypted backup every night and your phone keeps a copy, over Wi-Fi while charging. Your server's apps can hold up to the space you reserve here.</span>
+            </label>
+            <label class="boot-unlock-option">
+              <input type="radio" name="cs-backup-policy" value="peer" />
+              <span class="boot-unlock-title">Peer-distributed backups</span>
+              <span class="boot-unlock-desc faint-sm">Encrypted pieces of your backup are kept on other Flagship servers, and yours keeps theirs. Your apps can use up to a third of this server's disk; the rest holds other servers' pieces.</span>
+            </label>
+            <label class="boot-unlock-option">
+              <input type="radio" name="cs-backup-policy" value="none" />
+              <span class="boot-unlock-title">No backups</span>
+              <span class="boot-unlock-desc faint-sm err">Nothing is backed up. If this server's disk fails, its apps and data are gone. You can still use Back up now on the server page.</span>
+            </label>
+          </div>
+          <div id="cs-reserve-row">
+            <label for="cs-reserve-gb">Space on your phone <span class="faint-sm">(GB)</span></label>
+            <input id="cs-reserve-gb" type="number" min="1" max="4096" step="1" value="16" />
+            <p class="faint-sm">Keep this much free on your phone for the backup.</p>
+          </div>
           <label>Recipe expires in <span class="faint-sm">(hours; 0.5–24, default 6)</span></label>
           <input id="cs-ttl-hours" type="number" min="0.5" max="24" step="0.5" value="6" />
           <p class="faint-sm">After this window, the unused recipe can't install — re-mint here.</p>

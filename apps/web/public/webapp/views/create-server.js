@@ -32,6 +32,7 @@ import { markSwkDepositPending, clearSwkDeposit } from "../lib/swkDeposit.js";
 import { markPairingDepositPending, clearPairingDeposit } from "../lib/pairingDeposit.js";
 import { setSessionToken, setSessionTokenForPod } from "../lib/api.js";
 import { attachRestoreOrder } from "../lib/serverBackupFormat.js";
+import { DEFAULT_WEB_RESERVE_GB, attachBackupPolicy, policyFromDraft } from "../lib/backupPolicy.js";
 import { throwIfRateLimited } from "../lib/rateLimited.js";
 import { confirmFreshUnlock } from "../lib/freshUnlock.js";
 import { enterPendingServer, rememberPendingOrder } from "./pending-server.js";
@@ -273,7 +274,8 @@ async function resumeDraft(id) {
   if (!d) return toast("Draft not found", "err");
   activeDraftId = id;
   $("cs-server-name").value = d.serverName || "";
-  $("cs-backup-policy").value = d.backupPolicy || "phone-only";
+  setBackupPolicyChoice(d.backupPolicy);
+  if (d.reserveGb) $("cs-reserve-gb").value = String(d.reserveGb);
   restoreDiskEncryption(d.diskEncryption);
   toast(`Resumed ${d.serverName}`);
 }
@@ -286,7 +288,8 @@ function readInputs() {
   if (RESERVED_SERVER_LABELS.has(serverName)) {
     throw new Error(`server name "${serverName}" is reserved`);
   }
-  const backupPolicy = $("cs-backup-policy").value;
+  const backupPolicy = readBackupPolicyChoice();
+  const reserveGb = readReserveGb();
   // Recipe TTL in millis. Picker UI emits hours via #cs-ttl-hours;
   // absent input = default 6 hours.
   const ttlEl = $("cs-ttl-hours");
@@ -312,7 +315,7 @@ function readInputs() {
   // anything is minted.
   const debugFriendly = readDebugFriendly();
   const debugSshKey = debugFriendly ? readDebugSshKey() : "";
-  return { serverName, backupPolicy, recipeTtlMs, bootUnlockMode, diskEncryption, embedSecrets, debugFriendly, debugSshKey };
+  return { serverName, backupPolicy, reserveGb, recipeTtlMs, bootUnlockMode, diskEncryption, embedSecrets, debugFriendly, debugSshKey };
 }
 
 // The pasted SSH public key for a debug-friendly server, normalized; throws
@@ -373,6 +376,25 @@ export function readDiskEncryption() {
   // A checkbox: `checked` true ⇒ encrypted. Absent control ⇒ default encrypted.
   if (!el) return "luks";
   return el.checked ? "luks" : "none";
+}
+
+// The backup policy radios (draft values "phone-only" | "peer" | "none") and
+// the phone reserve shown only for phone-side backups.
+function readBackupPolicyChoice() {
+  const checked = document.querySelector('input[name="cs-backup-policy"]:checked');
+  return checked ? checked.value : "phone-only";
+}
+function setBackupPolicyChoice(v) {
+  const want = v === "peer" || v === "none" ? v : "phone-only";
+  for (const el of document.querySelectorAll('input[name="cs-backup-policy"]')) el.checked = el.value === want;
+  syncReserveVisibility();
+}
+function syncReserveVisibility() {
+  $("cs-reserve-row")?.classList.toggle("hidden", readBackupPolicyChoice() !== "phone-only");
+}
+function readReserveGb() {
+  const n = Math.round(Number($("cs-reserve-gb")?.value));
+  return Number.isFinite(n) && n >= 1 ? n : DEFAULT_WEB_RESERVE_GB;
 }
 
 // Read the selected boot-unlock mode from the radio group. Defaults to
@@ -794,6 +816,22 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
     });
   }
 
+  // The backup policy the owner picked rides beside the pairing order, signed
+  // (docs/server-backup-and-clone.md, "Backup policy"): the box takes it when
+  // the pairing order verifies and enforces its size limit from then on.
+  if (pairingOrderJson) {
+    try {
+      pairingOrderJson = await attachBackupPolicy(pairingOrderJson, {
+        serverDomain: blob.serverDomain,
+        policy: policyFromDraft(inputs.backupPolicy),
+        reserveGb: inputs.reserveGb,
+        sign: (bytes) => sensitiveSigner()(session.umk, bytes),
+      });
+    } catch (e) {
+      console.warn("backup policy not attached (the server page will ask):", e);
+    }
+  }
+
   const bundle = { blob: onWireBlob, blobSignature: bytesToHex(blobSig) };
   // SWK + pairing provisioning (secret-free recipe, docs/recipe-delivery-and-remote-install.md).
   //   embed-secrets ON (advanced/offline): bake BOTH the box's deterministic SWK
@@ -839,6 +877,8 @@ export async function createServerForRestore({ serverName, bootUnlockMode, diskE
   const inputs = {
     serverName,
     backupPolicy: "phone-only",
+    // Room for the restored apps under the phone-side limit, with space to grow.
+    reserveGb: Math.max(DEFAULT_WEB_RESERVE_GB, Math.ceil(((restore?.bytes ?? 0) * 2) / 1024 ** 3)),
     recipeTtlMs: DEFAULT_RECIPE_TTL_MS,
     bootUnlockMode,
     diskEncryption,
@@ -910,6 +950,8 @@ export function initCreateServerView() {
   $("cs-debug-friendly")?.addEventListener("change", syncDebugKeyVisibility);
   $("cs-advanced")?.addEventListener("change", syncAdvancedVisibility);
   syncAdvancedVisibility();
+  for (const el of document.querySelectorAll('input[name="cs-backup-policy"]')) el.addEventListener("change", syncReserveVisibility);
+  syncReserveVisibility();
   $("cs-save-draft")?.addEventListener("click", () => handleSaveDraft());
   $("cs-download-recipe")?.addEventListener("click", () => handleRecipeDownload().catch((e) => { console.error(e); toast(humanError(e), "err"); }));
   $("cs-follow-setup")?.addEventListener("click", () => {
@@ -919,7 +961,7 @@ export function initCreateServerView() {
     hideFollowSetup();
     activeDraftId = null;
     $("cs-server-name").value = "";
-    $("cs-backup-policy").value = "phone-only";
+    setBackupPolicyChoice("phone-only");
     restoreDiskEncryption(null);
     setStatus("idle", "idle");
   });

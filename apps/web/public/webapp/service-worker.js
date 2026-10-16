@@ -309,7 +309,7 @@
 //  v128: a pending server opens its setup view; Create a server speaks to a
 //       browser; the model menu keeps focus; admin invites, rank orders and
 //       share grants take one fresh unlock.
-const SHELL_VERSION = "v128";
+const SHELL_VERSION = "v129";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
@@ -392,6 +392,8 @@ const OPTIONAL_SHELL = [
   "/lib/serverShare.js",
   "/lib/serverShares.js",
   "/lib/serverArchive.js",
+  "/lib/savedBackups.js",
+  "/lib/backupPolicy.js",
   "/lib/serverBackupFormat.js",
   "/lib/appBackup.js",
   "/lib/activityFeed.js",
@@ -471,6 +473,7 @@ const OPTIONAL_SHELL = [
   "/views/pod-pair.js",
   "/views/server-detail.js",
   "/views/server-sharing.js",
+  "/views/server-backups.js",
   "/views/debug-access.js",
   "/views/shared-server.js",
   "/views/share-accept.js",

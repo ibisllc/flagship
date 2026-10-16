@@ -129,6 +129,7 @@ import {
   wireMonitoringPane,
 } from "../lib/serverMonitoring.js";
 import { serverSharingHtml, wireServerSharing } from "./server-sharing.js";
+import { backupsSectionHtml, wireBackupsSection } from "./server-backups.js";
 import { accountReadFetch } from "../lib/accountRead.js";
 import { SERVER_ADMIN_ONLY, canSignAdminOrders } from "../lib/addServerGate.js";
 import { isAdminDevice } from "../lib/memberRoles.js";
@@ -575,6 +576,7 @@ export async function renderServerDetail() {
       </div>
       ${serverSharingHtml(body)}
 
+      ${backupsSectionHtml(body)}
       <h2 class="mt-4">Backup / Migrate</h2>
       <div class="card" id="backup-migrate-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
         <button id="backup-start-btn" class="full-width">Backup/clone server</button>
@@ -617,6 +619,7 @@ export async function renderServerDetail() {
     wireUpdate(body);
     wireMigrate(body);
     wireBackup(body);
+    wireBackupsSection(body);
     wireDangerZone(body.serverFqdn, body.username, {
       revoked: isRestorableRevokedPod(detailPod),
       pod: detailPod,
@@ -1569,7 +1572,7 @@ async function openBackupDialog(body) {
     <p class="modal-error err-text hidden" data-bk-error></p>
     <div class="row-2 mt-3">
       <button class="secondary" data-bk-close>Close</button>
-      <button class="hidden" data-bk-save>Download both files</button>
+      <button class="hidden" data-bk-save>Download the backup</button>
     </div>
     <div class="row-2 mt-2">
       <button class="secondary hidden" data-bk-copy>Copy download link</button>
@@ -1662,7 +1665,7 @@ async function openBackupDialog(body) {
         },
       });
       barEl.value = 100;
-      statusEl.textContent = `Backup ready: ${archive.backupFileName} and ${archive.dataFileName} (${formatBytes(archive.bytes)}). Keep the two files together; your browser saves them straight to disk.`;
+      statusEl.textContent = `Backup ready: ${archive.bundleFileName} (${formatBytes(archive.bundleBytes)}). Your browser saves it straight to disk.`;
       if (Array.isArray(archive.left) && archive.left.length > 0) {
         errEl.textContent = `Left out (no source to rebuild them from): ${archive.left.map((a) => a.name).join(", ")}.`;
         errEl.classList.remove("hidden");
@@ -1685,7 +1688,7 @@ async function openBackupDialog(body) {
             umk: session.umk,
             signWithIrk: sensitiveSigner(),
           });
-          toast("Downloads started", "ok");
+          toast("Download started", "ok");
         } catch (e) {
           showError(e);
         } finally {

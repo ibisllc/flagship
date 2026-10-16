@@ -593,6 +593,16 @@
         "android": { "status": "missing", "reason": "Being built (debug-access v2).", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/DebugAccess.kt", "flagship/debug-access/v2"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/debugAccess.js", "flagship/debug-access/v2"], ["apps/web/public/webapp/views/debug-access.js", "debugAccessBanner"], ["apps/web/public/webapp/views/debug-access.js", "DEBUG_ADMIN_ONLY"], ["apps/web/public/webapp/views/create-server.js", "readDebugSshKey"], ["apps/web/public/webapp/lib/activityFeed.js", "server\\.debug-access\\.revoked"]] }
       }
+    },
+    {
+      "id": "scheduled-backups",
+      "title": "Backups section: backup policy (phone / peer / none) with its size limit, scheduled backups (last / next run, schedule, saved list with Download and Delete, Back up now), one .flagship file; phones keep a copy",
+      "ref": "ios",
+      "surfaces": {
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/views/server-backups.js", "export function backupsSectionHtml"], ["apps/web/public/webapp/lib/savedBackups.js", "flagship/server-archive-keys/v1"], ["apps/web/public/webapp/lib/backupPolicy.js", "flagship/backup-policy/v1"], ["apps/web/public/webapp/lib/serverBackupFormat.js", "FLGSHBK1"], ["apps/web/public/webapp/views/create-server.js", "attachBackupPolicy"]] },
+        "ios": { "status": "missing", "reason": "being built by the backup agent's iOS sub-agent (2026-10-16)" },
+        "android": { "status": "missing", "reason": "being built by the backup agent's Android sub-agent (2026-10-16)" }
+      }
     }
   ]
 }
