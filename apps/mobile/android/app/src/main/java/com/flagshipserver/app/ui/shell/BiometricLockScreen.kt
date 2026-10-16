@@ -242,9 +242,13 @@ private suspend fun tryUnlock(
         BiometricAuthority.current()?.markFresh()
         setStatus(Status.Idle)
     } catch (_: BiometricCancelled) {
-        setStatus(Status.Failed("Cancelled. Tap above to try again."))
+        setStatus(Status.Failed("Cancelled. Tap below to try again."))
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        // The screen went away mid-request: back to idle, never a spinner.
+        setStatus(Status.Failed("Tap below to unlock."))
+        throw e
     } catch (e: Throwable) {
         // UX-B — never leak the raw exception text to the user.
-        setStatus(Status.Failed(NetworkErrorHumanizer.humanize(e)))
+        setStatus(Status.Failed(NetworkErrorHumanizer.humanize(e, "app-lock")))
     }
 }

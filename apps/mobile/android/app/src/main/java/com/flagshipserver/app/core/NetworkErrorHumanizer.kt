@@ -49,6 +49,7 @@ object NetworkErrorHumanizer {
         SERVER_PROBLEM,
         REQUEST_PROBLEM,
         PASSKEY,
+        BIOMETRIC,
         UNKNOWN,
     }
 
@@ -71,6 +72,9 @@ object NetworkErrorHumanizer {
             rateLimit != null -> Classified(Kind.RATE_LIMITED, rateLimit.userMessage)
             t is AddServerRefused || AddServerGate.isServerRefusal(t) -> Classified(Kind.REQUEST_PROBLEM, AddServerGate.ADMIN_ONLY)
             passkeyError(t) != null -> Classified(Kind.PASSKEY, passkeySentence(passkeyError(t)!!))
+            t is com.flagshipserver.app.keystore.BiometricCancelled ->
+                Classified(Kind.BIOMETRIC, "Cancelled. Try again when you're ready.")
+            t is com.flagshipserver.app.keystore.BiometricFailed -> Classified(Kind.BIOMETRIC, biometricSentence(t))
             t is HttpException -> classifyStatus(t.status)
             t is HasHttpStatus -> classifyStatus(t.httpStatus)
             isOffline(t) -> Classified(
@@ -104,6 +108,18 @@ object NetworkErrorHumanizer {
             cur = cur.cause
         }
         return null
+    }
+
+    private fun biometricSentence(e: com.flagshipserver.app.keystore.BiometricFailed): String = when {
+        e.isLockout -> "Too many tries. Unlock your phone with its PIN, pattern or password, then try again."
+        e.code == com.flagshipserver.app.keystore.BiometricFailed.NOT_STARTED ->
+            "Your phone didn't show the fingerprint check. Try again."
+        e.code == com.flagshipserver.app.keystore.BiometricFailed.SCREEN_GONE ->
+            "The app closed before the check finished. Try again."
+        e.code == androidx.biometric.BiometricPrompt.ERROR_NO_DEVICE_CREDENTIAL ||
+            e.code == androidx.biometric.BiometricPrompt.ERROR_NO_BIOMETRICS ->
+            "Set a screen lock (PIN, pattern, password or fingerprint) on this phone, then try again."
+        else -> "Couldn't check your fingerprint or screen lock. Try again."
     }
 
     const val PASSKEY_NO_KEY =
