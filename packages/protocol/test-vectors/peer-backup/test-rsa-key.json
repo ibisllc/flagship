@@ -1,0 +1,14 @@
+{
+  "about": "TEST ONLY: the RSA key the peer-backup vectors are signed with. Never a real key.",
+  "jwk": {
+    "kty": "RSA",
+    "n": "v5R-RZTEX64iIQoutInofV2mqJM103RC5dwuo3KEQVdVt3gG2lJedcro3mzW1k7MynpEGZEzGu3io-F-MnwLBHhRcLiZKXsPGE6yWGkfs7cWogHiZkWsdputykFob2LXAu4L5LKk975bCva8MOyttXnH8ymYLwcGv6NRwO7ZR6mZeB5GQEff75YCeCOSz8vQ3rn3uZlNDnixFcTIKJ41oxmWNu7eWwMNLdJtie-Sd_4sCDAAUXCrFTk_nxIZrmQ3Nqy0wafx9wDLT14NGAP_V3_-wFkz3BiM3h9dGaE0LGBpYw9lDpfcfmrtVbquRWyEXk6lsPp8ROfLpxFmXuVqrw",
+    "e": "AQAB",
+    "d": "BlYxvdJxLMSa0cklvCH9nYi6w11CWZ3avDVsTReAfJRlCOsAhJ_wPbXG8XVCWLDr9ClXVeZbShSi1PUKuNfCgFTZRY2z8miYGlLSclTHA1yjp05bP_-_XkyOH7nKUjjZaZOyTM-3eVxQY_-L2cbSUUWkayYUJ9lAv2QpbZfyehZfkzB6doFHXi97Drs4EsX7AMOiIEeANUfAOMKVurjW5HdVM26_ng2ffQKrlemOdw2n9qUS3h59CvdTxj1cUd2h3bJO58VBfR8JNqpxk62-LER6DfxfSUepIx4MGQNxQzzjIKfK7umEqqS04ggHMB3M03g_gHVdIJgYAGrotg8qiQ",
+    "p": "9ohU0AFz1UlRJPkXf1qMbVXSBxB6ZHfD9mcMh2JahrSsUTQ-06DEn-bz7-IMLYvQLuMLs8oN82vO42lbadNqK_NgQgkabHaxGnSfiyIEmWYMPCofKdkVgibHG_C4yAH51iKvYxbTB5ks4OTbQhI_o7YxkPXh3oW5zRH-7FSiZBk",
+    "q": "xu_sIRBK_hyb2cxkWnWJWCIS_-TK0BLp-qqb8kAoEga9eTa0K16VZpmyH0Aujd2mscBjbrIAGUNP169HcaBt_Qda-VG0zjdxM-s8Ut9wTh8mallJBGVeqO8cu0oBgl7Lb0AT0AANoSNLQrbMB1zsl5HX7SrbHNkrog0zIJW_3gc",
+    "dp": "aful6l4Ve-Wu-qQTE-7LW91_EwZkd3h9SBp46mK_5BUb1zUMpVIB9XQF_mRBM_tdHisBRuNgJ_t6z4zlfZMjm41fHkRnlaVY8bSdOeT_8SpLrDm3d_gZJQCirEJKTcF7tDDpEUIoqqWRA4WfNMI_lZOnr1flKBJ5E83et56SyVE",
+    "dq": "bu3Z_ZXYO1o4jXore0WPEFXvwkER1nS1g9EepDaiIWsgvDaEwKo9JLkPWd2wF-tAyF0_FLqs02l1XA-hBvsuWamAUQX-i_7eYNULDisJtIYqJaMj1A-yeQDcRJM_xDKXvbE9Wv6smu3TSaAkpPZr9xicDuOWyr9OVU6G8-SM2IE",
+    "qi": "H_xztAiYRh-9Se5l6rm35hO0QqB6XQcSd9IxWVb72tU0hot87ttdEVcbaeNA59aEkoU2NSLqKOi098b3T_AzCTEEa90RUvd5p8tYfQOlUQC9NtHsXfliFF3riYaI_gnz0oGmBlOjy__IpRiaNBXQuDyvoz9PI5ZgMey2duUhawM"
+  }
+}

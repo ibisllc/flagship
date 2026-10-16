@@ -50,3 +50,6 @@ export * from "./archiveKeys.js";
 export * from "./backupPolicy.js";
 export * from "./serverBackup.js";
 export * from "./aiModels.js";
+export * from "./blindRsa.js";
+export * from "./peerBackupNet.js";
+export * from "./peerBackupMail.js";

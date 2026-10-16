@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodeShards, encodeShards } from "../src/erasure.js";
+import { decodeShards, encodeOneShard, encodeShards } from "../src/erasure.js";
 import { gfDiv, gfInv, gfMul, gfPow } from "../src/gf256.js";
 
 describe("GF(2^8) primitives", () => {
@@ -129,5 +129,38 @@ describe("Reed-Solomon encode/decode (real K-of-N over GF(2^8))", () => {
     expect(() => encodeShards(new Uint8Array(8), 0, 3)).toThrow();
     expect(() => encodeShards(new Uint8Array(8), 5, 3)).toThrow();
     expect(() => encodeShards(new Uint8Array(8), 1, 256)).toThrow();
+  });
+});
+
+describe("erasure code is MDS for every k-of-n in use", () => {
+  // 3/5: the same-account code. 4/8: peer backup between accounts. 1/1 and
+  // 1/2: the gym's network constants. The rest: tests and headroom.
+  const inUse: Array<[number, number]> = [[1, 1], [1, 2], [2, 3], [3, 5], [3, 6], [4, 6], [4, 8], [10, 16]];
+  for (const [k, n] of inUse) {
+    it(`every ${k} of ${n} shards decode`, () => {
+      const data = new Uint8Array(k * 7 + 3).map((_, i) => (i * 37 + 11) & 255);
+      const s = encodeShards(data, k, n);
+      let checked = 0;
+      const pick = (start: number, chosen: number[]): void => {
+        if (chosen.length === k) {
+          const set = new Set(chosen);
+          const rec = s.shards.map((x, i) => (set.has(i) ? x : null));
+          expect(decodeShards(rec, k, n, data.length)).toEqual(data);
+          checked++;
+          return;
+        }
+        for (let i = start; i < n; i++) pick(i + 1, [...chosen, i]);
+      };
+      pick(0, []);
+      expect(checked).toBeGreaterThan(0);
+    });
+  }
+
+  it("encodeOneShard re-makes any shard from the data shards", () => {
+    const data = new Uint8Array(4 * 50).map((_, i) => (i * 13) & 255);
+    const s = encodeShards(data, 4, 8);
+    for (let i = 0; i < 8; i++) {
+      expect(encodeOneShard(s.shards.slice(0, 4), i, 4, 8)).toEqual(s.shards[i]);
+    }
   });
 });

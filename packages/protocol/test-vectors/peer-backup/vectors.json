@@ -1,0 +1,112 @@
+{
+  "about": "Peer backup between accounts (docs/peer-backup.md). Keys: SWK = deriveSWK(UMK, serverId); PBK = HKDF-SHA256(SWK, salt empty, info 'flagship/peer-backup-key/v1'); rootKey = HKDF(PBK, info 'flagship/pb-root/v1'); brickKey = HKDF(PBK, info 'flagship/pb-brick/v1|'+brickIdHex); brickId = HMAC-SHA256(PBK, 'flagship/pb-brick-id/v1|gen|seg|shard|rev')[0..16]. Bricks: AES-256-CTR IV 0. Merkle: leaf SHA-256(0x00||leaf), node SHA-256(0x01||l||r). Root: AES-256-GCM(rootKey, nonce, JSON, aad 'flagship/pb-root/v1|'+serverId). Filler: AES-256-CTR(HMAC-SHA256(secret, 'flagship/pb-filler/v1|pik|index'), counter = offset/16). Tokens: RFC 9474 RSABSSA-SHA384-PSS-Randomized over 'flagship/pb-token/v1|serialHex'.",
+  "umkSeedHex": "5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c5c",
+  "serverId": "home.harry.flagship.services",
+  "swkHex": "6d410c13236686fa20d18fc98d1569a958144f80a59e674e3e34727dddefd6ad",
+  "pbkHex": "1c4f2f63a9ef608c51bbb3fd3034fcb2eebfb175309e74e9ecd7cf6a3ff2ee34",
+  "rootKeyHex": "6c41c801202f8e78595d4e655d18a0503476d6c6026b76408f5a1ec7bff93980",
+  "brick": {
+    "generation": 3,
+    "segment": 7,
+    "shard": 5,
+    "rev": 1,
+    "brickIdHex": "8d1a75f419a08c7406aa73607008ef4b",
+    "brickKeyHex": "8fccbccf00a928b349649310ffcbe8ee12937a38edddc739af326388f772f9c6",
+    "plainHex": "030a11181f262d343b424950575e656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d848b9299a0a7aeb5bcc3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959ca3aab1b8bfc6cdd4dbe2e9f0f7fe050c131a21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940474e555c636a71787f868d949ba2a9b0b7bec5ccd3dae1e8eff6fd040b121920272e353c434a51585f666d747b828990979ea5acb3bac1c8cfd6dde4ebf2f900070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0e7eef5fc",
+    "brickHex": "b0e8fb121bf0be86944c9ac26d6004b78d7834af346679b7e09f30a7885755681cc29cd60a77d51d9ab8c371b5a5940347d33067e62caa5d1ad9a18f855834f8252a5ef423397fa0ecb21941bcb9a077d2fa86927c7b53ccaa37b31bf42acbf7c0b281bc42478d7124aa9ce66ac17a17823e3a49c77902eb0c46130385e57d1fc02d73089dde2a412516cfaa1b157e77e0ad9fb4441cb824568beb7384159c0c8c35003554c933320e2ffd12736554f8ce9a60343bdf74081168d16685c39105850951ffe32d30aa15a82e42bfa68deb5daa0b14f1531b4f9d6c2769f3fdd55cbef7a5b5f8e01e4bae2a132cb0d0e3171b38aa8b7a63adeba88fa3adc64d9a05",
+    "leafBytes": 64,
+    "merkleRootHex": "7d209dd73b9de030deef71c5efaeceb857404a1c1d0ad073cb8ca3ceae52c1e9",
+    "leaf2PathHex": [
+      "31b2f2889b0c43c1c64bae0d4b42a107fea5242a028e30240696f2be35167c6b",
+      "72a68cd12370517e3d965a2e826b0337247b3a70fd701bc1e537fd16fa246123"
+    ]
+  },
+  "root": {
+    "json": "{\"v\":1,\"serverId\":\"home.harry.flagship.services\",\"generation\":3,\"revision\":2,\"createdAt\":1792000000000,\"network\":{\"brickBytes\":4194304,\"leafBytes\":1024,\"k\":1,\"n\":1,\"slotBricks\":64,\"leaseMs\":7776000000,\"diversity\":\"account+network\"},\"archive\":{\"archiveId\":\"00112233445566778899aabbccddeeff\",\"createdAt\":1791990000000,\"bytes\":1000,\"sha256\":\"abababababababababababababababababababababababababababababababab\",\"backupFile\":\"{\\\"v\\\":2,\\\"slots\\\":[]}\"},\"payloadBytes\":1000,\"segments\":1,\"indexSegments\":1,\"stripes\":[[{\"pikPubHex\":\"d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737\",\"xPubHex\":\"0faa684ed28867b97f4a6a2dee5df8ce974e76b7018e3f22a1c4cf2678570f20\",\"leaseId\":\"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\",\"leaseKeySeedHex\":\"efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef\",\"rev\":0,\"expiresAt\":1799776000000}]],\"indexRoots\":[\"7d209dd73b9de030deef71c5efaeceb857404a1c1d0ad073cb8ca3ceae52c1e9\",\"7d209dd73b9de030deef71c5efaeceb857404a1c1d0ad073cb8ca3ceae52c1e9\"]}",
+    "nonceHex": "0102030405060708090a0b0c",
+    "sealed": {
+      "nonceHex": "0102030405060708090a0b0c",
+      "ciphertextHex": "0ba5a8ac56c8ac217e50d909b07964718121f4effc25ca7b194ae1638d90f362d93ec966cfeb50f81281749519b45a28c0f3f39e8ad7d6e5fe95d4c8e64e7aac3f0efbf0548b4d20d14a8017ef87da5a6b69bd8418ef2361f1a80b43a9edac3b16e5b95f4577baf65246ef5f60f30b03942321f45df09449ce04ba52bc2901e199b86b8e5d3f197002461cf7354a852fae973484c27b514704df3e66c4e492cb716aa3cb7ed68eb3ff4f0bfb1222b3e7bf45ccb6af3ffe981b1da1642b546967c0708f65f19319e23b890f0d6cf99be547c8129f50b2fae9e902f21de00f5cff4819c58a53d924b9ee5ec73efa448abcb78d2ebfe7b26974f9ac3743152ea36ba6deb262ab848beb94d0a3a5bad5d6a5cc695c8a68c5ae64f929da1787183b66ec612065b490779fb36e2821035f069a4dd9943aa41c79bb587513f588c7887e334ae2e250c9c9ef67eaecca072fc0aac99bfdd7f318cee2ae372762447023298549e8243b457deaeed94af6148e85ba67ef49e5d5bef22196a6e08a5b3494348016512ddead73135badf749d9d1bc9ec3661f87e1417ee7ff2851e511bd1de80a6df9c0bacd6de72aa7535a609961aad5c0db5c3fb5354156420da133c99824cb92db0076e22ce5b353424ab09c559e8c7f2b8656f2a2f6f4fbbd49c69305a64faa4928c6838409c6ac88887cf29b0f351646ee0507fe96b5454d71e4d1db6ab265ac29be473ba9ad2143cb153823ffb4718de6d4b4b6b8bea724ecad4ef9d30866849b10093e4c96f54faad277d2d3cef2b760508fbb4e1677251ff1ec5c3c1ca4f4cfdb97408166d87646a348d4c1abe22e133c8a09bd493e51372b36bb9080ec21ff25db9018790b2eb4c256316773673c9defb8605b3093440b28465a89b123bd341bd0d7116da851a315c8e1e0708f277ee53523549b8b4342caf9457fc6fbf95a72dcc1e1725f3809e0881e58daf843c9a748c1c4b6943abd92eae16fdd1fc9e980cdf5c14f4874147dc665b2a75f2b999e3a266be109aff44d7584e1c3d5458423b6b815bf9ff9d28d8ad47266a5bb748ec024dc4f32c7b57ff105bd5a94996e76927506cd249a2798ebc14d18b93ed671f4b12b9d8ce6033b04a51e4f95842893eec52aafec0a9e36859c9b3b61aec15f094a67c58d9152f24669f89782fd2c2cde05294b17d49829504dcc75764c1a97fb94c33f24dfb8c33d349edb1bd626a996506f5f4e06c70efb2af0d77b8c8aa8aad4176baa9389656d0a6810df0115689d922b40bf7ded245c737010964a0ef66b4f4fad0830df4b25857633c05fad636a76b725ca676b21be3cc5792af7c8dd1feb87b1f96a497a362b23d3c0910d4567b63b5dd4198a2a3db0e005040d59e6589eeb4ffe7fb3af2a51165ca971a2"
+    }
+  },
+  "mailbox": {
+    "pikSeedHex": "1111111111111111111111111111111111111111111111111111111111111111",
+    "pikPubHex": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+    "epoch": 2961,
+    "mailboxId": "a568d2ca18b63c172b8e7f52723eeade",
+    "announceCanonical": "flagship/pb-mailbox-announce/v1|d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737|2961",
+    "announceSigHex": "e8f6727b8826fa33bd60f655e35e0809974ef90e1e8a907a9aeffc86fc6bc03feb9bc0e61905f46efac5fc561334f7783f41ce0bfc4112ef5148936f61a3660d"
+  },
+  "mail": {
+    "xSecretHex": "2222222222222222222222222222222222222222222222222222222222222222",
+    "xPubHex": "0faa684ed28867b97f4a6a2dee5df8ce974e76b7018e3f22a1c4cf2678570f20",
+    "ephSecretHex": "5555555555555555555555555555555555555555555555555555555555555555",
+    "plaintextHex": "0000003f7b226f70223a22627269636b2e676574222c226c656173654964223a226364636463646364636463646364636463646364636463646364636463646364227d6869",
+    "requestHex": "0138ab664bd86f77d7e66bdd9ae0792913a94fd8b33a1260027e4b46c1f4884c67aabbccddeeff001122334455692b8d9b19ef9b5e982de0b488e270ba03792eab1c434bd7216498e66c6968b87e13562f8a23b991c471b480f8bcce756a941cc7b204a3867cb9196620ecac80d7e06992356b18976cb6fda6105bbb4e64e6680df0",
+    "responsePlainHex": "6f6b",
+    "responseHex": "01665544332211ffeeddccbbaa7583ab9d136e47df162750630a1b2e685e3e"
+  },
+  "filler": {
+    "secretHex": "3333333333333333333333333333333333333333333333333333333333333333",
+    "pikPubHex": "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737",
+    "index": 9,
+    "keyHex": "de895b6041623fb71f7991f4070c283bc2d23538983a7adcd6dbad695e648a0b",
+    "first32Hex": "efc759f96bd6f8315c68c2c135e4b345352c5692ad3d88a2a28f919dd773a0aa",
+    "at1024First32Hex": "41a49a784fb41e261cba84e96c49c67420a55a645609cc62f33ef6a7ca490eb8",
+    "nonceHex": "99999999999999999999999999999999",
+    "answerLeaf1Of64": "0f6ec89fd0627427fffe6b6ffd553418ef4454b7da7e8209d3cc0b5a3984ac2f"
+  },
+  "tags": {
+    "secretHex": "4444444444444444444444444444444444444444444444444444444444444444",
+    "username": "Harry",
+    "accountTag": "e017d06531d1968a",
+    "prefixes": [
+      [
+        "203.0.113.77",
+        "203.0.113.0/24"
+      ],
+      [
+        "2001:db8:abcd:12::1",
+        "2001:db8:abcd::/48"
+      ],
+      [
+        "::1",
+        "0:0:0::/48"
+      ],
+      [
+        "nope",
+        null
+      ]
+    ],
+    "netTag": "7615826bec021d28"
+  },
+  "token": {
+    "publicJwk": {
+      "kty": "RSA",
+      "n": "v5R-RZTEX64iIQoutInofV2mqJM103RC5dwuo3KEQVdVt3gG2lJedcro3mzW1k7MynpEGZEzGu3io-F-MnwLBHhRcLiZKXsPGE6yWGkfs7cWogHiZkWsdputykFob2LXAu4L5LKk975bCva8MOyttXnH8ymYLwcGv6NRwO7ZR6mZeB5GQEff75YCeCOSz8vQ3rn3uZlNDnixFcTIKJ41oxmWNu7eWwMNLdJtie-Sd_4sCDAAUXCrFTk_nxIZrmQ3Nqy0wafx9wDLT14NGAP_V3_-wFkz3BiM3h9dGaE0LGBpYw9lDpfcfmrtVbquRWyEXk6lsPp8ROfLpxFmXuVqrw",
+      "e": "AQAB"
+    },
+    "serialHex": "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+    "prefixHex": "6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f",
+    "saltHex": "7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a",
+    "rHex": "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f",
+    "messageUtf8": "flagship/pb-token/v1|5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e",
+    "blindedHex": "3a56580124303f1d1f7f4f3a2833d6a6405993c1eb021745bd216fa3da7d4c9599c06c2c67e87069928a72c179f46af0f25efc0b8e51c5ae98ff1b3dac0a9a87e11bdcabfbf615e5f24423af7e8adf940aac7a4d76cd6fd2f27f7762c280e3de4d998d05c2161d4a49f6ead1d2635aabe79d69a46dce6ee7e6774567002fd63fe61b909dddec6fc19a985df9cf107d9e31e95e9b63e28e2d787a44ffd2c03746555f39e7ccdba758435af1439254e284f2696afa7d91bb216954ab7a642a888fe17d2a855e25001ec4c658dc10c7a6222dfefc5a778fa83fb1128c9a8e2991ffcc3c351a295f28c9d6ac3215481b0410ccd00d81356357fbe049b32663f28fd2",
+    "blindSigHex": "73a2dbefe067ec68247f4a7972be09f95712191b8f4c343baf41a64c42e85ca1b7cef514308170bc432a4ab9648362efa0eba637152b8fc712ec27b75c5e7ce41558d3457edcd117aaa348619eba1f886bef991e6bf7f4b44c3c3d1c21cad0f5e3e6b4fc2f7348eefd48c6655d4f6c3ff20a48ca4c7b7d2743de8613f80d2a989691a584b9e9136d350b97fd5f9b23c1190a05376874bbb3d4c8c46149d41292c18f18c56d8bbb4f7836b4fcd1d17b79911aec2d038d3ed0a00f3e13bca4251f16cad52fa2231485913baeabd26b9d6836db908a81cbd67fd6c4b1323d69b2f26ef47870e910335b157612e1107386891241ef3627d37fe3f3aa722796b0a461",
+    "sigHex": "01cbbd73f16c4397cb3dbc6df508205e46c6a030a5893e29db07499a54f2a179512a9e166d316b164a4d7848f05ad5110f57ae551e81e31d759a15b2b702eafcedf13bb4f5c10ae761d3b5f5380be09d67c658b696d169b8028e6ee450f36f4f48fe72f19b3ff5f565578145bfea365223993413d0c5aaa6f0cd36648bcc15a48e07a0123285b2ce7b85b8e7cc4815e4d0efa3db8a76d81a90a995e59cad389b1f7f76b6487fa93092ab87942a1067d88044416a28b2c77929b253be3c62fd01f9fb711d7439f109eb034b6551af79783aa5dd95e01109156dd3b958fa2c48d867883ec6c5bd97e0c910ace1a24832f74e6f86b72e98c7c8cc7eb145195e5724"
+  },
+  "canonical": {
+    "checkin": "flagship/pb-checkin/v1|home.harry.flagship.services|d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737|0faa684ed28867b97f4a6a2dee5df8ce974e76b7018e3f22a1c4cf2678570f20|1073741824|12|0|1792000000000",
+    "pikBind": "flagship/pb-pik-bind/v1|home.harry.flagship.services|d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737|0faa684ed28867b97f4a6a2dee5df8ce974e76b7018e3f22a1c4cf2678570f20",
+    "directory": "flagship/pb-directory/v1|home.harry.flagship.services|1792000000000",
+    "tokens": "flagship/pb-tokens/v1|home.harry.flagship.services|1|c402519309f6e00e36a48cb2b27eb0682f976f6692d8dc16c75450b35e8581d2|1792000000000",
+    "redeem": "flagship/pb-redeem/v1|home.harry.flagship.services|d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737|2a691087b3eb2b1e108742f9b570dc76a205576a579ae2c5fccdf2fc2dc462a8|1792000000000",
+    "fillerFetch": "flagship/pb-filler-fetch/v1|home.harry.flagship.services|9|1792000000000",
+    "fillerProof": "flagship/pb-filler-proof/v1|home.harry.flagship.services|abababababababababababababababab|cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd|1792000000000",
+    "rootDeposit": "flagship/pb-root-deposit/v1|home.harry.flagship.services|3|2|efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef|1792000000000",
+    "op": {
+      "argsJson": "{\"op\":\"brick.get\",\"leaseId\":\"cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd\",\"brickId\":\"8d1a75f419a08c7406aa73607008ef4b\"}",
+      "text": "flagship/pb-op/v1|brick.get|a568d2ca18b63c172b8e7f52723eeade|cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd|1792000000000|01010101010101010101010101010101|a7a0b4b2eafe2dd31143c3ea328efdaeb855f2c7541bb508a3d2b77dd9181055|e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  }
+}
