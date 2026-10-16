@@ -25,9 +25,13 @@
         android:allowBackup="false"
         android:fullBackupContent="false">
 
+        <!-- singleTop: an intent for the running app (launcher, `am start`,
+             a link) reaches the open activity through onNewIntent instead of
+             stacking a fresh one, so a half-finished flow survives it. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.Flagship">
             <!-- LAUNCHER lives on the two activity-aliases below (icon switcher),
                  not here, so exactly one branded icon appears in the drawer. -->
