@@ -11,6 +11,7 @@ import {
   verifyArchiveDownloadApproval,
   verifyServerShareGrant,
   verifyServerShareRevoke,
+  verifyAppListScope,
   type Keypair,
   type ServerRevokeBySelf,
   type ServerShareRevoke,
@@ -268,6 +269,9 @@ import { AccessPrincipals, AccountDeviceBook } from "./accessPrincipals.js";
 import { AccessJournal } from "./accessJournal.js";
 import { buildAccessSync, deriveAccessSyncKey, type AccessPeers, type AccessSync } from "./accessSync.js";
 import { buildPodsPeers } from "./accessPeers.js";
+import { AccessScopes, PlanCheck } from "./accessScope.js";
+import { buildListScopeHttp } from "./accessScopeHttp.js";
+import { caTrustChainFromFolder } from "./releaseVerifier.js";
 import { BoxReadToken } from "./boxReadToken.js";
 
 /**
@@ -993,6 +997,9 @@ async function main(): Promise<void> {
   // once gossip is up (below).
   const accessSyncRef: { current: AccessSync | null } = { current: null };
   const accessPeersRef: { current: AccessPeers | null } = { current: null };
+  // Separate lists per server (feat/marketplace): the owner's surface, wired by
+  // wireOwnerHandlers once the sync exists.
+  const listScopeRef: ListScopeRef = { current: null };
   const {
     pullStateStore,
     updateServer,
@@ -1353,6 +1360,7 @@ async function main(): Promise<void> {
       serviceAccessRef,
       accessPrincipals,
       accessSyncRef,
+      listScopeRef,
       runtime,
       cfg,
       env: env as RuntimeEnv,
@@ -1408,6 +1416,18 @@ async function main(): Promise<void> {
     servicePlatformRef: servicePlatformRefForServer,
     identityKeypair,
     backupLoop,
+    listScopeRef,
+    notifyListsMerged: cfg
+      ? () =>
+          void sendPushRelay({
+            category: "access-lists",
+            targetUsername: cfg.userId,
+            signer: custodian,
+            controlPlaneBaseUrl: env.controlPlaneBaseUrl!,
+            logTag: "[access-scope] lists-merged push",
+            log: (l) => console.log(l),
+          })
+      : null,
   });
 
   // ---- Peer-backup periodic pass ----
@@ -1662,6 +1682,7 @@ async function main(): Promise<void> {
 
 /** Late-binding cell for the ServicePlatform (built only once the runtime is up). */
 type ServicePlatformRef = { current: ServicePlatform | null };
+type ListScopeRef = { current: ((path: string, method: string, req: HttpRequest) => Promise<HttpResponse | null>) | null };
 
 interface PeerBackupBundle {
   backupLoop: BackupLoop | null;
@@ -2144,6 +2165,7 @@ async function wireRuntimeSurfaces(deps: {
   serviceAccessRef: { current: ServiceAccessStore | null };
   accessPrincipals: AccessPrincipals;
   accessSyncRef: { current: AccessSync | null };
+  listScopeRef: ListScopeRef;
   serverOrder: ServerOrderHolder | null;
   runtime: DaemonRuntime;
   cfg: ServerConfig | null;
@@ -3017,6 +3039,16 @@ async function wireRuntimeSurfaces(deps: {
           },
         }
       : null,
+    listScope: {
+      handle: (path, method, req) =>
+        deps.listScopeRef.current
+          ? deps.listScopeRef.current(path, method, req)
+          : Promise.resolve({
+              status: 503,
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ error: "access control isn't ready yet" }),
+            }),
+    },
     appApiKeys: runtime.appApiKeys,
     accessAlerts: accessAlertSetting,
     serverOrder: deps.serverOrder,
@@ -3263,6 +3295,9 @@ async function wireOwnerHandlers(deps: {
   identityKeypair: Keypair;
   /** Peer-backup loop (null when no SWK) — flushed on a finalBackup decommission. */
   backupLoop: BackupLoop | null;
+  listScopeRef: ListScopeRef;
+  /** The content-free push when Pro ended and apps went back to one list. */
+  notifyListsMerged: (() => void) | null;
 }): Promise<void> {
   const { runtime, cfg, env, autoUnlockSuppressor, hostPowerRunner, identityKeypair } = deps;
   if (!cfg) return;
@@ -3407,6 +3442,61 @@ async function wireOwnerHandlers(deps: {
         return a ? { manifest: a.manifest } : null;
       },
     });
+    // Separate lists per server (feat/marketplace): honoured only while the
+    // box holds a CA-signed attestation that the account is Pro.
+    const selfRepo = process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship";
+    const planReader = new BoxReadToken({
+      comBaseUrl: env.controlPlaneBaseUrl,
+      username: cfg.userId,
+      serverFqdn: env.serverFqdn,
+      boxPublicKey: () => identityKeypair.publicKey,
+      signAsBox: (msg) => ed.sign(msg, identityKeypair.privateKey),
+    });
+    const plan = new PlanCheck({
+      path: `${accessDataDir}/data/flagship-access/plan-attestation.json`,
+      username: cfg.userId,
+      chain: () => {
+        try {
+          return caTrustChainFromFolder({ gitRepoPath: selfRepo });
+        } catch {
+          return null;
+        }
+      },
+      fetchAttestation: async () => {
+        const base = env.controlPlaneBaseUrl.replace(/\/+$/, "");
+        const r = await planReader.fetch(`${base}/api/users/${encodeURIComponent(cfg.userId)}/plan-attestation`);
+        return r.ok ? await r.json() : null;
+      },
+      log: (m) => console.warn(m),
+    });
+    await plan.load();
+    const scopeAuthority = {
+      ownerIrkPub: cfg.irkPublicKey,
+      ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+      username: cfg.userId,
+    };
+    const scopes = new AccessScopes({
+      path: `${accessDataDir}/data/flagship-access/access-scope.json`,
+      plan,
+      verify: (order, sigHex) => {
+        let sig: Uint8Array;
+        try {
+          sig = hexToBytes(sigHex);
+        } catch {
+          return false;
+        }
+        return authorizeSensitiveOrder({
+          order,
+          signature: sig,
+          verify: verifyAppListScope,
+          ...scopeAuthority,
+          activeGrants: deviceBook.adminGrants(),
+          now: Date.now(),
+        });
+      },
+      log: (m) => console.warn(m),
+    });
+    await scopes.load();
     const sync = buildAccessSync({
       selfFqdn: env.serverFqdn,
       journal,
@@ -3416,12 +3506,42 @@ async function wireOwnerHandlers(deps: {
       key: cgk ? deriveAccessSyncKey(cgk) : null,
       installed: (ref) => installedIds().includes(ref),
       apps: installedIds,
+      scopes,
+      planRefresh: () => void plan.refreshSoon().catch(() => {}),
       log: (m) => console.log(m),
     });
+    scopes.onTransition((ref, change) => sync.onScopeChange(ref, change));
+    // Pro ended (verifiably): every app with separate lists goes back to one.
+    // The app's lead server tells the owner, with nothing about which app.
+    plan.onChange((state) => {
+      void scopes.planChanged(state).then((merged) => {
+        if (merged.length === 0) return;
+        const self = env.serverFqdn.toLowerCase();
+        const leads = merged.some((ref) => (deps.accessPeersRef.current?.leaderFor(ref)?.toLowerCase() ?? self) === self);
+        if (!leads) return;
+        deps.activityLog.note(
+          "access.lists.merged",
+          "Pro ended, so apps that had a separate access list on each server went back to one list.",
+        );
+        deps.notifyListsMerged?.();
+      });
+    });
+    plan.start();
     deps.accessSyncRef.current = sync;
+    deps.listScopeRef.current = buildListScopeHttp({
+      selfFqdn: env.serverFqdn,
+      scopes,
+      plan,
+      sync: () => deps.accessSyncRef.current,
+      peers: () => deps.accessPeersRef.current as (AccessPeers & { inOrder?(r: string): string[] }) | null,
+      installed: (ref) => installedIds().includes(ref),
+    });
     runtime.addHandler(sync.handle);
     sync.start();
-    process.once("SIGTERM", () => sync.stop());
+    process.once("SIGTERM", () => {
+      sync.stop();
+      plan.stop();
+    });
   }
   // gating v2 revocation convergence: poll `.com` revoked-since on the
   // daemon-status heartbeat cadence + self-prune (the instant owner-prune stays
