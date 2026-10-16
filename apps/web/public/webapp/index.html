@@ -3,13 +3,14 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#14120D" />
+    <meta name="theme-color" content="#F7F6F2" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0A0A09" media="(prefers-color-scheme: dark)" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Flagship" />
     <meta name="description" content="Flagship — a personal cloud you actually own." />
-    <meta name="color-scheme" content="dark" />
+    <meta name="color-scheme" content="light dark" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="icon" href="/favicon.ico" sizes="any" />
@@ -311,15 +312,14 @@
         </div>
       </section>
 
-      <!-- Settings → App → Appearance. Static: the webapp keeps a fixed
-           dark surface by design so server screens read the same anywhere. -->
+      <!-- Settings → App → Appearance. Static: the webapp follows the
+           device's light or dark setting, like the website and the phone apps. -->
       <section id="view-appearance" class="hidden">
         <h2>Appearance</h2>
         <div class="card">
           <p class="note">
-            The Flagship app uses a single dark theme so your server screens
-            read the same on every device. There's nothing to configure here
-            yet — theme options are coming in a later release.
+            Flagship follows your device's light or dark setting. There's
+            nothing to configure here yet.
           </p>
         </div>
         <button class="secondary full-width mt-2" id="appearance-back">← Back</button>
@@ -882,12 +882,12 @@
           <div id="cs-boot-unlock" class="boot-unlock-options">
             <label class="boot-unlock-option">
               <input type="radio" name="cs-boot-unlock" value="auto" checked />
-              <span class="boot-unlock-title">🔄 Reboots on its own</span>
+              <span class="boot-unlock-title">Reboots on its own</span>
               <span class="boot-unlock-desc faint-sm">Restarts by itself, no phone needed — good for flaky power or connections. flagshipserver.com still can't read your disk key, and you can revoke a stolen server from your phone. Not theft-proof: someone who powers it on first could boot it.</span>
             </label>
             <label class="boot-unlock-option">
               <input type="radio" name="cs-boot-unlock" value="approve" />
-              <span class="boot-unlock-title">🔐 Authorize each boot</span>
+              <span class="boot-unlock-title">Authorize each boot</span>
               <span class="boot-unlock-desc faint-sm">Every restart waits for your approval on your phone. Nothing — not even flagshipserver.com — can start it without you. The cost: a power cut means it stays down until you approve.</span>
             </label>
           </div>

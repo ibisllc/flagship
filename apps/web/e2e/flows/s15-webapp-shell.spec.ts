@@ -1,9 +1,10 @@
 /**
  * S15 — webapp PWA shell visuals.
  *
- * Verifies the webapp shares the brand DNA with the marketing site
- * (Geist + Geist Mono + Instrument Serif, single teal accent)
- * while running on the paired-ink surface that suits an app shell.
+ * Verifies the webapp shares the brand DNA with the marketing site:
+ * the site's tokens (paper canvas in light, near-black in dark), Geist +
+ * Geist Mono, one teal accent, square-cornered mono buttons and the
+ * site's mono wordmark in the header.
  *
  * Behavioral coverage of the views themselves lives in S1–S13. This
  * spec only checks the chrome — header pill, button paradigm, label
@@ -16,7 +17,7 @@ import { test, expect, bootstrapToHome } from "../fixtures/pod-sim.js";
 const PASSPHRASE = "correct-horse-battery-staple-shell-test";
 
 test.describe("S15 — webapp brand DNA", () => {
-  test("webapp loads with paired-ink palette + teal accent", async ({ page }) => {
+  test("webapp loads with the site's palette + teal accent", async ({ page }) => {
     await page.goto("/");
     await expect(page.locator("#view-bootstrap")).toBeVisible();
 
@@ -34,9 +35,9 @@ test.describe("S15 — webapp brand DNA", () => {
       };
     });
 
-    // Paired-ink canvas (warm off-black, not pure #0a0a0a from the old
-    // identity).
-    expect(tokens.canvas.toLowerCase()).not.toContain("#0a0a0a");
+    // The site's canvas (warm paper / warm near-black), not pure #0a0a0a
+    // from the old identity.
+    expect(["#f7f6f2", "#0a0a09"]).toContain(tokens.canvas.toLowerCase());
     // Accent is brand teal (#14B8A6), shared with the marketing
     // surface via tokens.css. The OLD amber (#B26016/#D38347) and the
     // even-older palette greens/blue are gone.
@@ -47,27 +48,30 @@ test.describe("S15 — webapp brand DNA", () => {
     expect(tokens.fontSans.toLowerCase()).toContain("geist");
     expect(tokens.renderedBody.toLowerCase()).toContain("geist");
     expect(tokens.fontMono.toLowerCase()).toContain("mono");
-    expect(tokens.fontDisplay.toLowerCase()).toContain("instrument");
+    // No display serif: titles are Geist, like the site's.
+    expect(tokens.fontDisplay.toLowerCase()).not.toContain("instrument");
   });
 
-  test("webapp header carries the editorial display-serif title", async ({
+  test("webapp header carries the site's mono wordmark", async ({
     page,
   }) => {
     await page.goto("/");
     await expect(page.locator("#view-bootstrap")).toBeVisible();
     const header = page.locator("header h1#title");
     await expect(header).toContainText("Flagship");
-    // The header h1 resolves to the display-serif stack (via the new
-    // /style.css). We don't pin to an exact font-family string —
-    // Chromium may rewrite the stack — but we check the resolved
-    // family starts with Instrument Serif.
-    const fontFamily = await header.evaluate((el) =>
-      getComputedStyle(el).fontFamily.toLowerCase(),
-    );
-    expect(fontFamily).toContain("instrument");
+    // The header h1 is the site's wordmark: Geist Mono, uppercase, wide
+    // tracking, with the logo mark drawn before it.
+    const styles = await header.evaluate((el) => ({
+      fontFamily: getComputedStyle(el).fontFamily.toLowerCase(),
+      textTransform: getComputedStyle(el).textTransform,
+      mark: getComputedStyle(el, "::before").backgroundImage,
+    }));
+    expect(styles.fontFamily).toContain("mono");
+    expect(styles.textTransform).toBe("uppercase");
+    expect(styles.mark).toContain("svg");
   });
 
-  test("webapp manifest carries the paired-ink theme-color + new icons", async ({
+  test("webapp manifest carries the dark canvas theme-color + new icons", async ({
     request,
     page,
   }) => {
@@ -79,9 +83,9 @@ test.describe("S15 — webapp brand DNA", () => {
       : `${page.url().replace(/\/$/, "")}${manifestHref}`);
     expect(r.status()).toBe(200);
     const manifest = await r.json();
-    // theme + background match the new ink canvas, not the old #0a0a0a.
-    expect(manifest.theme_color.toLowerCase()).toBe("#14120d");
-    expect(manifest.background_color.toLowerCase()).toBe("#14120d");
+    // theme + background match the site's dark canvas, not the old #0a0a0a.
+    expect(manifest.theme_color.toLowerCase()).toBe("#0a0a09");
+    expect(manifest.background_color.toLowerCase()).toBe("#0a0a09");
     expect(manifest.icons.length).toBeGreaterThanOrEqual(2);
     // Categories field added in the revamp.
     expect(manifest.categories).toContain("productivity");
@@ -91,11 +95,15 @@ test.describe("S15 — webapp brand DNA", () => {
     page,
   }) => {
     await page.goto("/");
-    const themeColor = await page
-      .locator('meta[name="theme-color"]')
-      .first()
+    // One theme-color per scheme, matching the site's two canvases.
+    const light = await page
+      .locator('meta[name="theme-color"][media="(prefers-color-scheme: light)"]')
       .getAttribute("content");
-    expect((themeColor ?? "").toLowerCase()).toBe("#14120d");
+    const dark = await page
+      .locator('meta[name="theme-color"][media="(prefers-color-scheme: dark)"]')
+      .getAttribute("content");
+    expect((light ?? "").toLowerCase()).toBe("#f7f6f2");
+    expect((dark ?? "").toLowerCase()).toBe("#0a0a09");
     const appleIcon = await page.locator('link[rel="apple-touch-icon"]').getAttribute("href");
     expect(appleIcon).toBeTruthy();
     // iOS ignores SVG touch icons, so the webapp ships a 180×180 PNG of the
@@ -163,7 +171,7 @@ test.describe("S15 — webapp brand DNA", () => {
     expect(styles.background).not.toBe("rgb(0, 0, 0)");
   });
 
-  test("primary CTA renders as a pill with accent-on background", async ({
+  test("primary CTA renders as the site's square teal button", async ({
     page,
   }) => {
     await page.goto("/");
@@ -177,12 +185,12 @@ test.describe("S15 — webapp brand DNA", () => {
         fontFamily: cs.fontFamily,
       };
     });
-    // Pill (>= 22px radius means it's effectively round-capped).
-    expect(parseFloat(styles.radius)).toBeGreaterThan(20);
-    // Background is the brand ink shade (the new buttons land on the
-    // ink color in the webapp). Not browser default light-gray.
-    expect(styles.background).not.toBe("rgb(239, 239, 239)");
-    expect(styles.fontFamily.toLowerCase()).toContain("geist");
+    // Square-cornered like the site's .btn (4px), never a pill.
+    expect(parseFloat(styles.radius)).toBeLessThanOrEqual(6);
+    // Brand teal fill (#14B8A6), not browser default light-gray.
+    expect(styles.background).toBe("rgb(20, 184, 166)");
+    // A plain-text label is set in Geist Mono, like the site's buttons.
+    expect(styles.fontFamily.toLowerCase()).toContain("geist mono");
   });
 
   test("section labels render in uppercase mono (label discipline)", async ({
@@ -192,9 +200,9 @@ test.describe("S15 — webapp brand DNA", () => {
     await page.goto("/");
     await bootstrapToHome(page, PASSPHRASE);
 
-    // Section h2 elements ("Identity", "Servers", "Session", etc.) all
-    // resolve to the mono stack + uppercase per the new style.css.
-    const h2 = page.locator("#view-home h2").first();
+    // Section h2 elements below a view's title ("Session", "Identity", …)
+    // are the site's eyebrow: mono stack + uppercase.
+    const h2 = page.locator("#view-home > h2").first();
     const styles = await h2.evaluate((el) => {
       const cs = getComputedStyle(el);
       return {

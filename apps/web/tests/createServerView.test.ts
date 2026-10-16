@@ -114,12 +114,12 @@ describe("create-server view — boot-unlock-mode chooser (§7a.1)", () => {
 
   it("offers both modes with the exact user-facing copy", () => {
     // Reboots-on-its-own (DEFAULT)
-    expect(INDEX_HTML).toContain("🔄 Reboots on its own");
+    expect(INDEX_HTML).toContain(">Reboots on its own<");
     expect(INDEX_HTML).toContain(
       "Restarts by itself, no phone needed — good for flaky power or connections. flagshipserver.com still can't read your disk key, and you can revoke a stolen server from your phone. Not theft-proof: someone who powers it on first could boot it.",
     );
     // Authorize-each-boot
-    expect(INDEX_HTML).toContain("🔐 Authorize each boot");
+    expect(INDEX_HTML).toContain(">Authorize each boot<");
     expect(INDEX_HTML).toContain(
       "Every restart waits for your approval on your phone. Nothing — not even flagshipserver.com — can start it without you. The cost: a power cut means it stays down until you approve.",
     );
