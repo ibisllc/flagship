@@ -10,7 +10,7 @@
  * adds the container checks.
  */
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdtempSync, rmSync } from "node:fs";
+import { chmodSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { LoopVolumes, MIN_IMAGE_BYTES } from "../src/appQuota/index.js";
@@ -60,7 +60,8 @@ describe.skipIf(!RUN)("files folders as sized disk images (real loop mounts)", (
   const root = RUN ? mkdtempSync("/var/tmp/flagship-quota-") : "";
   // A container reaches /data through its bind mount; this test writes by host path as uid 10001.
   if (RUN) chmodSync(root, 0o711);
-  const lv = new LoopVolumes(DOCKER ? realCommandRunner : withFakeDocker(), { root, log: () => {} });
+  const runner = DOCKER ? realCommandRunner : withFakeDocker();
+  const lv = new LoopVolumes(runner, { root, log: () => {} });
   const data = () => lv.dataPath(VOL);
 
   afterAll(async () => {
@@ -146,6 +147,21 @@ describe.skipIf(!RUN)("files folders as sized disk images (real loop mounts)", (
       out = String((e as { stderr?: Buffer }).stderr ?? e);
     }
     expect(out).toMatch(/No space left on device/);
+  });
+
+  it("an image no volume or app owns is set aside after a day, and deleted a week later", async () => {
+    const ORPH = "flagship-files-quotatest--orphan";
+    await lv.create(ORPH, 64 * MiB);
+    await runner.run("docker", ["volume", "rm", ORPH]);
+    const day = 24 * 60 * 60_000;
+    expect((await lv.sweepOrphans({ keep: new Set(), now: Date.now() })).setAside).toEqual([]);
+    const r = await lv.sweepOrphans({ keep: new Set([VOL]), now: Date.now() + 2 * day });
+    expect(r.setAside).toEqual([ORPH]);
+    expect(await lv.isMounted(ORPH)).toBe(false);
+    expect(await lv.listImages()).toEqual([VOL]);
+    expect(readdirSync(join(root, "orphaned"))).toHaveLength(1);
+    expect((await lv.sweepOrphans({ keep: new Set([VOL]), now: Date.now() + 10 * day })).deleted).toEqual([ORPH]);
+    expect(readdirSync(join(root, "orphaned"))).toHaveLength(0);
   });
 
   it("removing it deletes the image", async () => {

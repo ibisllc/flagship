@@ -24,7 +24,7 @@
  * Images live outside /var/flagship (never under a docker arg tripwire).
  */
 import { existsSync } from "node:fs";
-import { chmod, mkdir, open, readdir, readFile, rm, rmdir, stat, statfs, truncate } from "node:fs/promises";
+import { chmod, mkdir, open, readdir, readFile, rename, rm, rmdir, stat, statfs, truncate, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { CommandRunner } from "../serviceRunner.js";
 import { isFilesVolume } from "../dataLayer/naming.js";
@@ -64,6 +64,9 @@ export interface LoopHost {
   rm(path: string): Promise<void>;
   rmdir(path: string): Promise<void>;
   readdir(path: string): Promise<string[]>;
+  mtimeMs(path: string): Promise<number>;
+  rename(from: string, to: string): Promise<void>;
+  writeFile(path: string, data: string): Promise<void>;
 }
 
 export const realLoopHost: LoopHost = {
@@ -90,7 +93,17 @@ export const realLoopHost: LoopHost = {
   rm: (p) => rm(p, { force: true }),
   rmdir: (p) => rmdir(p),
   readdir: (p) => readdir(p),
+  mtimeMs: async (p) => (await stat(p)).mtimeMs,
+  rename: (a, b) => rename(a, b),
+  writeFile: (p, d) => writeFile(p, d, { mode: 0o600 }),
 };
+
+/** Where images no volume or app owns are set aside before they're ever deleted. */
+export const ORPHANED_DIR = "orphaned";
+/** An image must be this old, with no volume, app or move under way, before it's set aside. */
+export const ORPHAN_MIN_AGE_MS = 24 * 60 * 60_000;
+/** ...and stays set aside this long before it's deleted. */
+export const ORPHAN_KEEP_MS = 7 * 24 * 60 * 60_000;
 
 export type PrepareResult = "mounted" | "adopted" | "plain" | "absent";
 
@@ -217,13 +230,37 @@ export class LoopVolumes {
   async create(volume: string, sizeBytes: number, labels: Record<string, string> = {}): Promise<void> {
     assertVolume(volume);
     if ((await this.volumeDevice(volume)) !== null) throw new Error(`files volume ${volume} already exists`);
-    await this.makeImage(volume, sizeBytes);
+    await this.pending(volume, async () => {
+      await this.makeImage(volume, sizeBytes);
+      try {
+        await this.createBindVolume(volume, labels);
+      } catch (e) {
+        await this.dropImage(volume).catch(() => {});
+        throw e;
+      }
+    });
+  }
+
+  pendingPath(volume: string): string {
+    return join(this.root, `${volume}.pending`);
+  }
+
+  /**
+   * Mark an image as being made or moved while `fn` runs: the orphan sweep
+   * never touches a marked image. A step cut short (a crash between
+   * removing an old volume and binding the new one) leaves the mark, and
+   * `prepare` finishes the job and clears it.
+   */
+  private async pending(volume: string, fn: () => Promise<void>): Promise<void> {
+    await this.host.mkdir(this.root, 0o700);
+    await this.host.writeFile(this.pendingPath(volume), String(Date.now()));
     try {
-      await this.createBindVolume(volume, labels);
+      await fn();
     } catch (e) {
-      await this.dropImage(volume).catch(() => {});
+      if (!this.host.exists(this.imagePath(volume))) await this.host.rm(this.pendingPath(volume));
       throw e;
     }
+    await this.host.rm(this.pendingPath(volume));
   }
 
   /** Unmount and delete an image (its Docker volume is the caller's). */
@@ -263,6 +300,8 @@ export class LoopVolumes {
       // rather than let Docker make an empty one of that name.
       await this.mount(volume);
       await this.createBindVolume(volume, {});
+      await this.host.rm(this.pendingPath(volume));
+      this.log(`[app-quota] bound ${volume} to its disk image again`);
       return "mounted";
     }
     if (device === this.dataPath(volume)) {
@@ -276,9 +315,15 @@ export class LoopVolumes {
     const users = (await this.docker(["ps", "-aq", "--filter", `volume=${volume}`])).trim();
     if (users) return "plain";
     try {
-      await this.adopt(volume, sizeBytes);
+      await this.pending(volume, () => this.adopt(volume, sizeBytes));
     } catch (e) {
-      // The app keeps its folder as it was (no limit of its own) rather than not starting.
+      // Cut short after the old volume went: the files are in the image, and
+      // starting now would let Docker make an empty volume of that name. Fail
+      // this start; the next one binds the image again.
+      if ((await this.volumeDevice(volume).catch(() => "")) === null && this.host.exists(this.imagePath(volume))) {
+        throw new Error(`couldn't finish moving this app's files folder into its disk image (it will be retried): ${(e as Error).message}`);
+      }
+      // Otherwise the app keeps its folder as it was (no limit of its own) rather than not starting.
       this.log(`[app-quota] ${(e as Error).message}`);
       return "plain";
     }
@@ -419,6 +464,57 @@ export class LoopVolumes {
     return mounted;
   }
 
+  /**
+   * Set aside images nothing owns, and delete what was set aside a week ago.
+   * An image is set aside only when Docker answers and has no volume of its
+   * name, no installed app names it (`keep`), no make or move is marked under
+   * way, and it hasn't changed for a day. Setting aside unmounts it and moves
+   * it to `orphaned/<volume>.<ms>.img`: nothing is deleted on the first pass,
+   * and moving it back restores it.
+   */
+  async sweepOrphans(opts: { keep: ReadonlySet<string>; now?: number }): Promise<{ setAside: string[]; deleted: string[] }> {
+    const now = opts.now ?? Date.now();
+    const existing = new Set(
+      (await this.docker(["volume", "ls", "-q"]))
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean),
+    );
+    const setAside: string[] = [];
+    for (const volume of await this.listImages()) {
+      if (existing.has(volume) || opts.keep.has(volume) || this.host.exists(this.pendingPath(volume))) continue;
+      const changed = await this.host.mtimeMs(this.imagePath(volume)).catch(() => now);
+      if (now - changed < ORPHAN_MIN_AGE_MS) continue;
+      try {
+        const at = this.mountPath(volume);
+        if (await this.isMounted(volume)) await this.sh("umount", [at]);
+        if (this.host.exists(at)) {
+          await this.sh("chattr", ["-i", at]).catch(() => {});
+          await this.host.rmdir(at).catch(() => {});
+        }
+        const dir = join(this.root, ORPHANED_DIR);
+        await this.host.mkdir(dir, 0o700);
+        await this.host.rename(this.imagePath(volume), join(dir, `${volume}.${now}.img`));
+        setAside.push(volume);
+        this.log(`[app-quota] set aside the files image of ${volume}: no volume or app has used it for a day (${ORPHANED_DIR}/, deleted after 7 days)`);
+      } catch (e) {
+        this.log(`[app-quota] couldn't set aside the files image of ${volume}: ${(e as Error).message}`);
+      }
+    }
+    const deleted: string[] = [];
+    const dir = join(this.root, ORPHANED_DIR);
+    if (this.host.exists(dir)) {
+      for (const f of await this.host.readdir(dir)) {
+        const m = /^(.+)\.(\d+)\.img$/.exec(f);
+        if (!m || !isFilesVolume(m[1]!) || now - Number(m[2]) < ORPHAN_KEEP_MS) continue;
+        await this.host.rm(join(dir, f));
+        deleted.push(m[1]!);
+        this.log(`[app-quota] deleted the set-aside files image of ${m[1]} (a week unclaimed)`);
+      }
+    }
+    return { setAside, deleted };
+  }
+
   /** Unmount and delete every image (the box's self-delete). */
   async dropAll(): Promise<string[]> {
     const left: string[] = [];
@@ -429,6 +525,13 @@ export class LoopVolumes {
         left.push(volume);
         this.log(`[app-quota] couldn't delete the files image of ${volume}: ${(e as Error).message}`);
       }
+    }
+    if (!this.host.exists(this.root)) return left;
+    for (const f of await this.host.readdir(this.root)) if (f.endsWith(".pending")) await this.host.rm(join(this.root, f));
+    const dir = join(this.root, ORPHANED_DIR);
+    if (this.host.exists(dir)) {
+      for (const f of await this.host.readdir(dir)) await this.host.rm(join(dir, f));
+      await this.host.rmdir(dir).catch(() => {});
     }
     return left;
   }

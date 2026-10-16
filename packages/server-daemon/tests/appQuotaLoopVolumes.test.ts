@@ -23,7 +23,7 @@ function world() {
   let loopN = 0;
   const statfs = new Map<string, { blocks: number; bfree: number; bavail: number; bsize: number }>();
   let dockerDown = false;
-  const state = { failFallocateOver: Infinity };
+  const state = { failFallocateOver: Infinity, mtimes: new Map<string, number>(), failVolumeCreate: false };
 
   const host: LoopHost = {
     statfs: async (p) => statfs.get(p) ?? { blocks: 1000, bfree: 1000, bavail: 1000, bsize: 4096 },
@@ -47,7 +47,15 @@ function world() {
     rmdir: async (p) => {
       dirs.delete(p);
     },
-    readdir: async (p) => [...files.keys()].filter((f) => f.startsWith(`${p}/`)).map((f) => f.slice(p.length + 1)),
+    readdir: async (p) => [...new Set([...files.keys(), ...dirs].filter((f) => f.startsWith(`${p}/`)).map((f) => f.slice(p.length + 1).split("/")[0]!))],
+    mtimeMs: async (p) => state.mtimes.get(p) ?? 0,
+    rename: async (a, b) => {
+      files.set(b, files.get(a)!);
+      files.delete(a);
+    },
+    writeFile: async (p) => {
+      files.set(p, 1);
+    },
   };
 
   const capture = async (cmd: string, args: string[]) => {
@@ -66,6 +74,7 @@ function world() {
         return out(`${JSON.stringify(v.labels)}\n`);
       }
       if (a === "volume" && b === "create") {
+        if (state.failVolumeCreate) throw new Error("docker exited with code 1: create failed");
         const name = args.at(-1)!;
         const dev = args.find((x) => x.startsWith("device="))?.slice(7) ?? "";
         const labels: Record<string, string> = {};
@@ -121,6 +130,7 @@ function world() {
     users,
     statfs,
     setDockerDown: (d: boolean) => (dockerDown = d),
+    state,
     set failFallocateOver(n: number) {
       state.failFallocateOver = n;
     },
@@ -312,6 +322,97 @@ describe("LoopVolumes", () => {
     w.statfs.set(`${ROOT}/${VOL}`, { blocks: 1000, bfree: 900, bavail: 900, bsize: 4096 });
     expect(await admin.volumeBytes(VOL)).toBe(100 * 4096);
     await admin.removeVolume(VOL);
+    expect(w.files.size).toBe(0);
+  });
+});
+
+describe("orphaned images", () => {
+  const DAY = 24 * 60 * 60_000;
+  const NOW = 100 * DAY;
+  const IMG = `${ROOT}/${VOL}.img`;
+  const OTHER = "flagship-files-bob--old";
+
+  async function withOrphan() {
+    const w = world();
+    const lv = new LoopVolumes(w.runner, { host: w.host, log: () => {} });
+    await lv.create(VOL, 100 * MiB);
+    await lv.create(OTHER, 100 * MiB);
+    w.volumes.delete(VOL);
+    w.state.mtimes.set(IMG, NOW - 2 * DAY);
+    w.state.mtimes.set(`${ROOT}/${OTHER}.img`, NOW - 2 * DAY);
+    return { w, lv };
+  }
+
+  it("mark an image while it's made, and clear the mark once its volume is bound", async () => {
+    const w = world();
+    const lv = new LoopVolumes(w.runner, { host: w.host, log: () => {} });
+    const marks: boolean[] = [];
+    const run = w.runner.capture!;
+    w.runner.capture = async (c, a, o) => {
+      if (c === "docker" && a[1] === "create") marks.push(w.files.has(`${ROOT}/${VOL}.pending`));
+      return run(c, a, o);
+    };
+    await lv.create(VOL, 100 * MiB);
+    expect(marks).toEqual([true]);
+    expect(w.files.has(`${ROOT}/${VOL}.pending`)).toBe(false);
+  });
+
+  it("a move cut short keeps its mark until prepare binds the image again", async () => {
+    const w = world();
+    w.volumes.set(VOL, { device: "", mountpoint: `/var/lib/docker/volumes/${VOL}/_data`, labels: {} });
+    w.state.failVolumeCreate = true;
+    const lv = new LoopVolumes(w.runner, { host: w.host, log: () => {} });
+    // Starting now would let Docker make an empty volume of that name: the start fails instead.
+    await expect(lv.prepare(VOL, 64 * MiB)).rejects.toThrow(/couldn.t finish moving/);
+    // The old volume is gone, the copy is in the image, and the mark says a move is under way.
+    expect(w.volumes.has(VOL)).toBe(false);
+    expect(w.files.has(IMG)).toBe(true);
+    expect(w.files.has(`${ROOT}/${VOL}.pending`)).toBe(true);
+    w.state.mtimes.set(IMG, NOW - 2 * DAY);
+    expect((await lv.sweepOrphans({ keep: new Set(), now: NOW })).setAside).toEqual([]);
+    w.state.failVolumeCreate = false;
+    expect(await lv.prepare(VOL, 64 * MiB)).toBe("mounted");
+    expect(w.volumes.get(VOL)?.device).toBe(`${ROOT}/${VOL}/data`);
+    expect(w.files.has(`${ROOT}/${VOL}.pending`)).toBe(false);
+  });
+
+  it("set aside an image with no volume, no app, no mark and a day old, without deleting it", async () => {
+    const { w, lv } = await withOrphan();
+    const r = await lv.sweepOrphans({ keep: new Set(), now: NOW });
+    expect(r).toEqual({ setAside: [VOL], deleted: [] });
+    expect(w.files.has(IMG)).toBe(false);
+    expect(w.files.get(`${ROOT}/orphaned/${VOL}.${NOW}.img`)).toBe(100 * MiB);
+    expect(await lv.isMounted(VOL)).toBe(false);
+    expect(w.calls).toContain(`umount ${ROOT}/${VOL}`);
+    // The one with a volume stays.
+    expect(w.files.has(`${ROOT}/${OTHER}.img`)).toBe(true);
+    expect(await lv.listImages()).toEqual([OTHER]);
+  });
+
+  it("leave an image an installed app names, a young one, and everything when Docker doesn't answer", async () => {
+    const { w, lv } = await withOrphan();
+    expect((await lv.sweepOrphans({ keep: new Set([VOL]), now: NOW })).setAside).toEqual([]);
+    w.state.mtimes.set(IMG, NOW - DAY / 2);
+    expect((await lv.sweepOrphans({ keep: new Set(), now: NOW })).setAside).toEqual([]);
+    w.state.mtimes.set(IMG, NOW - 2 * DAY);
+    w.setDockerDown(true);
+    await expect(lv.sweepOrphans({ keep: new Set(), now: NOW })).rejects.toThrow(/Docker daemon/);
+    expect(w.files.has(IMG)).toBe(true);
+  });
+
+  it("delete what was set aside only after a week", async () => {
+    const { w, lv } = await withOrphan();
+    await lv.sweepOrphans({ keep: new Set(), now: NOW });
+    expect((await lv.sweepOrphans({ keep: new Set(), now: NOW + 6 * DAY })).deleted).toEqual([]);
+    expect((await lv.sweepOrphans({ keep: new Set(), now: NOW + 7 * DAY })).deleted).toEqual([VOL]);
+    expect([...w.files.keys()].some((f) => f.includes("/orphaned/"))).toBe(false);
+  });
+
+  it("self-delete drops set-aside images and marks too", async () => {
+    const { w, lv } = await withOrphan();
+    await lv.sweepOrphans({ keep: new Set(), now: NOW });
+    w.files.set(`${ROOT}/${OTHER}.pending`, 1);
+    expect(await lv.dropAll()).toEqual([]);
     expect(w.files.size).toBe(0);
   });
 });

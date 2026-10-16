@@ -1477,6 +1477,17 @@ export async function startDaemonRuntime(opts: DaemonRuntimeOptions): Promise<Da
             (failed.length ? `; ${failed.length} would not start: ${failed.join(", ")}` : ""),
         );
       }
+      // Files images no volume or installed app owns: set aside after a day,
+      // deleted a week later (loopVolumes.ts sweepOrphans). Only once the
+      // installed list is back, so an app's own image is never taken.
+      if (loopVolumes) {
+        const sweep = () => {
+          const keep = new Set((servicePlatformRef.current?.list() ?? []).flatMap((a) => (a.data?.files ? [a.data.files.volume] : [])));
+          void loopVolumes.sweepOrphans({ keep }).catch((e: Error) => console.warn(`[app-quota] orphan sweep skipped: ${e.message}`));
+        };
+        sweep();
+        setInterval(sweep, 24 * 60 * 60_000).unref();
+      }
     });
     const extras: string[] = [];
     if (apOpts.appAuthTokens) extras.push("app-tokens");
