@@ -935,8 +935,8 @@ All rebased onto `main` 2026-10-15 (the Oct 9 tips are kept as
 how far each branch is behind its parent and the conflicts a rebase would hit;
 `--apply` rebases and pushes the clean ones and lists the rest. A branch that
 changes the webapp runs its own shell version above its parent's
-(marketplace v97, custom-domains v98, custom-names v99, outbound-proxy v100
-over `main`'s v96):
+(marketplace v102, custom-domains v103, custom-names v104, outbound-proxy
+v105 over `main`'s v101):
 when `main` passes it, take the next unused number and move the tests' pins.
 Not compiled since the rebase: the iOS and Android code on any branch.
 
