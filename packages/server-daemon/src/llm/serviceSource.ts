@@ -8,6 +8,7 @@
 
 import { lstat, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
+import { isBoxWrittenBuildFile } from "../runtimes/buildFile.js";
 
 export const MAX_SOURCE_FILES = 2000;
 export const MAX_SOURCE_FILE_BYTES = 1024 * 1024;
@@ -40,8 +41,13 @@ export async function readServiceSource(workingDir: string, serviceId: string): 
       } else if (e.isFile()) {
         const buf = await readFile(full);
         if (!isText(buf)) continue;
+        const path = relative(root, full).split(sep).join("/");
+        const text = buf.toString("utf8");
+        // The box's own build files: an edit (an AI's, or an IDE's) would
+        // otherwise start from a Dockerfile it may not write.
+        if (isBoxWrittenBuildFile(path, text)) continue;
         if (++count > MAX_SOURCE_FILES) return `It has more than ${MAX_SOURCE_FILES} files.`;
-        files[relative(root, full).split(sep).join("/")] = buf.toString("utf8");
+        files[path] = text;
         bytes += buf.length;
       }
     }

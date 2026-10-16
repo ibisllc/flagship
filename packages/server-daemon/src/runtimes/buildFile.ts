@@ -78,6 +78,13 @@ export function runtimeBuildFile(i: RuntimeBuildInput): RuntimeBuild {
   return { ok: true, dockerfile: `${lines.join("\n")}\n`, dockerignore: `${RUNTIME_DOCKERIGNORE}\n` };
 }
 
+/** The build files the box wrote into an app's working tree: rewritten on every deploy, so never the app's own. */
+export function isBoxWrittenBuildFile(path: string, text: string): boolean {
+  if (path === "Dockerfile") return text.startsWith(HEADER);
+  if (path === ".dockerignore") return text === `${RUNTIME_DOCKERIGNORE}\n`;
+  return false;
+}
+
 /** `./public/` → `public`; null when it would leave the app's folder or isn't a plain path. */
 function normalizeRoot(root: string): string | null {
   if (!/^[A-Za-z0-9._/-]{1,200}$/.test(root)) return null;

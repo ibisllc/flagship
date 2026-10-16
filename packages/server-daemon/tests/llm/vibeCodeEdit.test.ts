@@ -16,6 +16,7 @@ import { swkOps } from "../helpers/keyCustody.js";
 import { VibeCodeSession, VibeCodeSessionRegistry } from "../../src/llm/vibeCodeSession.js";
 import { editSupplement } from "../../src/llm/vibeCodeStartStreaming.js";
 import { readServiceSource } from "../../src/llm/serviceSource.js";
+import { runtimeBuildFile } from "../../src/runtimes/buildFile.js";
 import { buildDeploySession } from "../../src/llm/deploySession.js";
 import { buildArtifactDeployer } from "../../src/buildmodes/deployArtifact.js";
 import { BuildOrchestrator, type EditableService } from "../../src/buildmodes/buildOrchestrator.js";
@@ -96,6 +97,29 @@ describe("reading a service's source", () => {
       if (r.ok) expect(Object.keys(r.files).sort()).toEqual(["flagship.app.json", "src/app.js"]);
       expect(await readServiceSource(dir, "alice--other")).toMatchObject({ ok: false });
       expect(await readServiceSource(dir, "../etc")).toMatchObject({ ok: false });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("leaves out the build files the box wrote, keeping an imported repo's own", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "src-"));
+    try {
+      const built = runtimeBuildFile({ base: "node-24", port: 8080, start: null, has: { packageLock: false, packageJson: true, requirements: false } });
+      if (!built.ok) throw new Error(built.reason);
+      await mkdir(join(dir, "alice--notes"), { recursive: true });
+      await writeFile(join(dir, "alice--notes", "flagship.app.json"), "{}");
+      await writeFile(join(dir, "alice--notes", "Dockerfile"), built.dockerfile);
+      await writeFile(join(dir, "alice--notes", ".dockerignore"), built.dockerignore);
+      const r = await readServiceSource(dir, "alice--notes");
+      expect(r.ok && Object.keys(r.files)).toEqual(["flagship.app.json"]);
+
+      await mkdir(join(dir, "alice--repo"), { recursive: true });
+      await writeFile(join(dir, "alice--repo", "flagship.app.json"), "{}");
+      await writeFile(join(dir, "alice--repo", "Dockerfile"), "FROM alpine\n");
+      await writeFile(join(dir, "alice--repo", ".dockerignore"), "node_modules\n");
+      const own = await readServiceSource(dir, "alice--repo");
+      expect(own.ok && Object.keys(own.files).sort()).toEqual([".dockerignore", "Dockerfile", "flagship.app.json"]);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
