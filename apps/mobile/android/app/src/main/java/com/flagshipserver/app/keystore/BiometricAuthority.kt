@@ -72,6 +72,19 @@ class BiometricAuthority internal constructor(
     }
 
     /**
+     * Always prompt, even inside an unlocked session: for consent that must be
+     * given per act (one biometric per debug-access grant, like an admin
+     * invite). With no foreground activity there is nobody to ask, so it refuses.
+     */
+    suspend fun confirmNow(title: String, subtitle: String) {
+        val p = prompter ?: throw IllegalStateException("Open Flagship to confirm this.")
+        mutex.withLock {
+            p.prompt(title, subtitle)
+            fresh = true
+        }
+    }
+
+    /**
      * Non-prompting query: true iff the biometric session is already fresh, so a
      * derive can proceed WITHOUT a prompt. The automatic (reconcile/background)
      * deposit path checks this so it never *initiates* a biometric — it rides an
@@ -101,6 +114,12 @@ class BiometricAuthority internal constructor(
          *  activity being destroyed must not unbind the one on screen). */
         fun clearIf(authority: BiometricAuthority?) {
             if (current === authority) current = null
+        }
+
+        /** [confirmNow] on the bound authority; refuses when none is bound. */
+        suspend fun confirmNow(subtitle: String) {
+            val a = current ?: throw IllegalStateException("Open Flagship to confirm this.")
+            a.confirmNow("Authorize Flagship", subtitle)
         }
 
         /** Test-only constructor — bypass the FragmentActivity wiring

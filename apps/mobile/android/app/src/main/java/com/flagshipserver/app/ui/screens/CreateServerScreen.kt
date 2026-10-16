@@ -205,14 +205,14 @@ fun CreateServerScreen(
     // the recipe is secret-free of the SWK and the phone DEPOSITS it once the box
     // registers (docs/recipe-delivery-and-remote-install.md).
     var embedSecrets by rememberSaveable { mutableStateOf(false) }
-    // ADVANCED — make this a debug-friendly server. Default OFF (a production box
-    // with no console login). ON (only reachable under Advanced mode) bakes an
-    // owner-IRK-signed `flagship/debug-access/v1` grant into the recipe as the
-    // UNSIGNED `debugGrant` sibling; the box-side gate verifies it under the
-    // config-pinned owner IRK + this box's FQDN before enabling the debug console
-    // user. Signed at MINT behind the SAME create biometric. Snaps back when
+    // ADVANCED — make this a debug-friendly server. Default OFF (a production
+    // box nobody can log into). ON (only reachable under Advanced mode) bakes an
+    // admin-signed `flagship/debug-access/v2` grant for the pasted SSH key into
+    // the recipe as the UNSIGNED `debugGrant` sibling; the box lets that key in
+    // as `debug` for 7 days once it has verified the grant. Snaps back when
     // Advanced mode is turned off.
     var debugFriendly by rememberSaveable { mutableStateOf(false) }
+    var debugSshKey by rememberSaveable { mutableStateOf("") }
     val swkDepositStore = remember { PendingSwkDepositStore.from(context) }
     val pairingDepositStore = remember { PendingPairingDepositStore.from(context) }
     // Per-service leadership (Phase 6): the per-cloud CGK is NEVER embedded in the
@@ -245,6 +245,7 @@ fun CreateServerScreen(
             diskEncryption = if (encryptDisk) null else "none",
             embedSecrets = embedSecrets,
             debugFriendly = debugFriendly,
+            debugSshKey = debugSshKey,
             swkDepositStore = swkDepositStore,
             cgkDepositStore = cgkDepositStore,
             pairingDepositStore = pairingDepositStore,
@@ -400,12 +401,14 @@ fun CreateServerScreen(
                 advancedMode = advancedMode,
                 onAdvancedMode = {
                     advancedMode = it
-                    if (!it) { embedSecrets = false; debugFriendly = false }
+                    if (!it) { embedSecrets = false; debugFriendly = false; debugSshKey = "" }
                 },
                 embedSecrets = embedSecrets,
                 onEmbedSecrets = { embedSecrets = it },
                 debugFriendly = debugFriendly,
                 onDebugFriendly = { debugFriendly = it },
+                debugSshKey = debugSshKey,
+                onDebugSshKey = { debugSshKey = it },
                 backupPolicy = backupPolicy,
                 onBackupPolicy = {
                     backupPolicy = it
@@ -521,6 +524,7 @@ fun CreateServerScreen(
                                 // phone deposits the SWK after registration.
                                 embedSecrets = embedSecrets,
                                 debugFriendly = debugFriendly,
+                                debugSshKey = debugSshKey,
                                 swkDepositStore = swkDepositStore,
                                 pairingDepositStore = pairingDepositStore,
                                 cgkDepositStore = cgkDepositStore,
@@ -647,6 +651,8 @@ private fun DesignPhase(
     onEmbedSecrets: (Boolean) -> Unit,
     debugFriendly: Boolean,
     onDebugFriendly: (Boolean) -> Unit,
+    debugSshKey: String,
+    onDebugSshKey: (String) -> Unit,
     backupPolicy: CreateServerDraftStore.BackupPolicy,
     onBackupPolicy: (CreateServerDraftStore.BackupPolicy) -> Unit,
     error: String?,
@@ -705,6 +711,8 @@ private fun DesignPhase(
                         onEmbedSecrets = onEmbedSecrets,
                         debugFriendly = debugFriendly,
                         onDebugFriendly = onDebugFriendly,
+                        debugSshKey = debugSshKey,
+                        onDebugSshKey = onDebugSshKey,
                     )
                 }
                 else -> {
@@ -853,6 +861,8 @@ private fun AdvancedModePicker(
     onEmbedSecrets: (Boolean) -> Unit,
     debugFriendly: Boolean,
     onDebugFriendly: (Boolean) -> Unit,
+    debugSshKey: String,
+    onDebugSshKey: (String) -> Unit,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
@@ -908,10 +918,21 @@ private fun AdvancedModePicker(
             )
         }
         Text(
-            "Anyone with physical access to this server can log into its console. Only turn this on for a server you're actively debugging.",
+            DebugAccess.CREATE_WARNING,
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 12.sp),
         )
+        if (debugFriendly) {
+            Spacer(Modifier.height(FS.space.s2))
+            FSField(
+                value = debugSshKey,
+                onValueChange = onDebugSshKey,
+                label = "SSH public key",
+                placeholder = "ssh-ed25519 AAAA… you@laptop",
+                error = debugSshKey.takeIf { it.isNotBlank() }?.let { debugSshKeyProblem(it) },
+                fieldTag = "cs-debug-ssh-key",
+            )
+        }
     }
 }
 
@@ -1179,9 +1200,11 @@ private suspend fun prepareDelivery(
     // recipe and NO deposit is owed; when false (the DEFAULT) the recipe is
     // secret-free of the SWK and a deposit is recorded as owed.
     embedSecrets: Boolean = false,
-    // Debug-friendly server (Advanced): when true, bake an owner-IRK-signed
-    // debug-access grant into the recipe as the UNSIGNED `debugGrant` sibling.
+    // Debug-friendly server (Advanced): when true, bake an admin-signed
+    // debug-access grant for [debugSshKey] into the recipe as the UNSIGNED
+    // `debugGrant` sibling.
     debugFriendly: Boolean = false,
+    debugSshKey: String? = null,
     swkDepositStore: PendingSwkDepositStore? = null,
     // Per-service leadership (Phase 6): the per-cloud CGK is NEVER embedded in the
     // recipe; it is owed on EVERY created server (independent of embed-secrets) and
@@ -1209,6 +1232,7 @@ private suspend fun prepareDelivery(
         diskEncryption = diskEncryption,
         embedSecrets = embedSecrets,
         debugFriendly = debugFriendly,
+        debugSshKey = debugSshKey,
         swkDepositStore = swkDepositStore,
         cgkDepositStore = cgkDepositStore,
         pairingDepositStore = pairingDepositStore,
@@ -1256,9 +1280,10 @@ internal suspend fun mintRecipeBundle(
     bootUnlockMode: String? = null,
     diskEncryption: String? = null,
     embedSecrets: Boolean = false,
-    // Debug-friendly server (Advanced): bake an owner-IRK-signed debug-access
-    // grant into the recipe as the UNSIGNED `debugGrant` sibling.
+    // Debug-friendly server (Advanced): bake an admin-signed debug-access grant
+    // for [debugSshKey] into the recipe as the UNSIGNED `debugGrant` sibling.
     debugFriendly: Boolean = false,
+    debugSshKey: String? = null,
     swkDepositStore: PendingSwkDepositStore? = null,
     cgkDepositStore: com.flagshipserver.app.core.PendingCgkDepositStore? = null,
     pairingDepositStore: PendingPairingDepositStore? = null,
@@ -1275,6 +1300,13 @@ internal suspend fun mintRecipeBundle(
         adminRootPubHex = if (Keystore.hasAdminRoot()) Keystore.adminRootPubHex() else null,
         isDemoAccount = isDemoAccount,
     )
+    // A debug-friendly server needs a usable key; say why before any prompt.
+    val debugKey = if (debugFriendly) {
+        debugSshKeyProblem(debugSshKey.orEmpty())?.let { throw IllegalArgumentException(it) }
+        DebugAccess.normalizeSshPublicKey(debugSshKey.orEmpty())
+    } else {
+        null
+    }
     // The subdomain IS what the user typed (validated as a DNS label in the
     // design step; no slugify). Normalize case only.
     val slug = ServerLabel.normalized(serverName)
@@ -1398,13 +1430,21 @@ internal suspend fun mintRecipeBundle(
     // independent of the embed-secrets choice.
     cgkDepositStore?.markPending(serverDomain)
 
-    // Debug-friendly server (Advanced): bake an owner-IRK-signed debug-access
-    // grant into the recipe as the UNSIGNED `debugGrant` sibling. Signed here
-    // behind the SAME create biometric (the IRK is already in hand) — no extra
-    // Face ID, no over-the-session consent round-trip. The box-side gate
-    // (debugAccessGate.ts) verifies it under the config-pinned owner IRK + this
-    // box's FQDN. nil for the production default (no debug grant).
-    val debugGrantSibling = if (debugFriendly) debugGrantEnvelope(serverDomain, irk, now) else null
+    // Debug-friendly server (Advanced): bake an admin-signed debug-access grant
+    // (the pasted key, 7 days) into the recipe as the UNSIGNED `debugGrant`
+    // sibling. An admin-pinned box takes it only from the admin root; a demo
+    // account (no root) signs with the IRK. Every grant asks for its own
+    // biometric, even in an unlocked session. null for the production default.
+    val debugGrantSibling = debugKey?.let { key ->
+        val reason = "Turn on debug access for $serverName"
+        val signer = if (adminRootPinHex != null) {
+            Keystore.adminRootKeyConfirmed(reason)
+        } else {
+            com.flagshipserver.app.keystore.BiometricAuthority.confirmNow(reason)
+            irk
+        }
+        debugGrantEnvelope(serverDomain, key, signer, now)
+    }
 
     val bundle = InstallBlobBundle(
         blob = WireBlob(
@@ -1442,23 +1482,32 @@ internal suspend fun mintRecipeBundle(
     )
 }
 
+/** Why a pasted key can't be used for debug access, or null when it can. */
+internal fun debugSshKeyProblem(input: String): String? = when {
+    input.isBlank() -> "Debug access needs an SSH public key."
+    DebugAccess.normalizeSshPublicKey(input) == null -> "That isn't an SSH public key this server can use."
+    else -> null
+}
+
 /**
- * Build the recipe's `debugGrant` sibling: an owner-IRK-signed
- * `flagship/debug-access/v1` grant (console-only — empty `sshAuthorizedKey`)
- * serialized to the EXACT `{grant:{serverDomain,sshAuthorizedKey,issuedAt},
- * signatureHex}` JSON the box-side gate consumes (`debugAccessGate.ts`). No box
- * STK in the canonical bytes, so it's signable at mint. Mirror of iOS
- * CreateServerViewModel.debugGrantEnvelope. `internal` so a unit test can pin
- * the byte-identical canonical + verify under the owner IRK.
+ * Build the recipe's `debugGrant` sibling: a `flagship/debug-access/v2` grant
+ * for [sshPublicKey] that ends 7 days after [now], as the `{grant,
+ * signatureHex}` JSON the box consumes (`debugAccessGate.ts`). No box STK in
+ * the canonical bytes, so it's signable at mint. `internal` for the unit test.
  */
 internal fun debugGrantEnvelope(
     serverDomain: String,
-    irk: Ed25519Sign,
+    sshPublicKey: String,
+    signer: Ed25519Sign,
     now: Long = System.currentTimeMillis(),
 ): String {
-    val grant = DebugAccess.Grant(serverDomain = serverDomain, sshAuthorizedKey = "", issuedAt = now)
-    val sig = try { DebugAccess.sign(grant, irk) } catch (_: Throwable) { "" }
-    return DebugAccess.envelopeJson(grant, sig)
+    val grant = DebugAccess.Grant(
+        serverDomain = serverDomain,
+        sshPublicKey = DebugAccess.normalizeSshPublicKey(sshPublicKey) ?: sshPublicKey,
+        issuedAt = now,
+        expiresAt = now + DebugAccess.MAX_MS,
+    )
+    return DebugAccess.envelopeJson(grant, DebugAccess.sign(grant, signer))
 }
 
 /** The QR delivery's order: `.com` accepts the server, then the recipe goes out.
