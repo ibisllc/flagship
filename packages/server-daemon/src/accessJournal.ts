@@ -206,6 +206,14 @@ export class AccessJournal {
     return [...this.byApp.keys()];
   }
 
+  /** Drop an app's entries but remember its peers (feat/marketplace: back to the lead server's list). */
+  async reset(serviceRef: string): Promise<void> {
+    const j = this.byApp.get(serviceRef);
+    if (!j || Object.keys(j.entries).length === 0) return;
+    j.entries = {};
+    await this.persist();
+  }
+
   async forget(serviceRef: string): Promise<void> {
     if (this.byApp.delete(serviceRef)) await this.persist();
   }

@@ -114,6 +114,7 @@ import {
 import type { UpdateOutcomeRecord } from "../updateOutcome.js";
 import { isAppDbPath } from "../dataLayer/ownerDb.js";
 import { isMemberRolesPath } from "../memberRoles.js";
+import { isListScopePath } from "../accessScopeHttp.js";
 import { isAppCopyPath } from "../appCopy/target.js";
 import { isServerArchivePath } from "../serverArchive/service.js";
 import type { ReleaseCatalogSource } from "../updateReleases.js";
@@ -201,6 +202,8 @@ export interface ScreensHttpDeps {
    * only (companions get 403 on every method, the list names members).
    */
   memberRoles?: { handle: (path: string, method: string, req: HttpRequest) => Promise<HttpResponse | null> } | null;
+  /** Separate lists per server (accessScopeHttp.ts, feat/marketplace): owner sessions; companions read only. */
+  listScope?: { handle: (path: string, method: string, req: HttpRequest) => Promise<HttpResponse | null> } | null;
   /**
    * Copying an app onto this server from another (appCopy/target.ts,
    * docs/app-placement.md §5): `POST /services/copy`, `GET /services/copies`
@@ -592,6 +595,13 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
       const denied = denyCompanionWrite(deps.pairedSessions ?? null, req);
       if (denied) return denied;
       const r = await deps.memberRoles.handle(path, method, req);
+      if (r) return r;
+    }
+
+    if (deps.listScope && isListScopePath(path)) {
+      const denied = method === "GET" ? null : denyCompanionWrite(deps.pairedSessions ?? null, req);
+      if (denied) return denied;
+      const r = await deps.listScope.handle(path, method, req);
       if (r) return r;
     }
 

@@ -33,6 +33,9 @@ export interface PodsPeersOptions {
 }
 
 export interface PodsPeers extends AccessPeers {
+  /** This box and the app's other live servers, in server order (feat/marketplace: the list picker). */
+  inOrder(serviceRef: string): string[];
+  servers(): string[];
   /** Re-read the servers and ask each which of this box's apps it runs. */
   refresh(): Promise<void>;
   start(everyMs?: number): void;
@@ -74,6 +77,14 @@ export function buildPodsPeers(opts: PodsPeersOptions): PodsPeers {
     },
     runners(ref) {
       return [...(runners.get(ref) ?? [])];
+    },
+    inOrder(ref) {
+      return [self, ...(runners.get(ref) ?? [])].sort(byOrder);
+    },
+    servers() {
+      return pods
+        .map((p) => p.serverDomain.toLowerCase())
+        .filter((d) => d !== self && pods.find((p) => p.serverDomain.toLowerCase() === d)?.liveness !== "never");
     },
     refresh,
     start(everyMs = 30_000) {
