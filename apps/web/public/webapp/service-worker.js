@@ -274,7 +274,9 @@
 //       down sandbox notice in the box's words; Build sessions reopens a
 //       git or IDE build a restart cut off; the server order only on
 //       devices that can sign it.
-const SHELL_VERSION = "v118";
+//  v119: co-managers invite people to a shared server's apps at Member and
+//       withdraw their own invites; the owner sees who invited.
+const SHELL_VERSION = "v119";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
