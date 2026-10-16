@@ -32,101 +32,80 @@ the type, Stripe wrote the docs, and Mullvad refused to add anything else.
 
 ## 2. Color
 
-Two themes. Dark is the default (the product lives on a phone at night, on a
-laptop in a coffee shop) but light must be first-class — the marketing site
-ships in light by default for daytime credibility.
+The website (flagshipserver.com) is the reference: `apps/web/public/tokens.css`
+holds the canonical values, and the webapp (`apps/web/public/webapp/style.css`)
+mirrors them. Two themes. The site opens in light (with a toggle); the webapp
+and the phone apps follow the device's setting. Both must be first-class.
 
 ### 2.1 Light theme
 
 | Token | Hex | Use |
 | --- | --- | --- |
-| `--bg` | `#FAFAF7` | Page background. Warm off-white, not clinical. |
-| `--surface` | `#FFFFFF` | Cards, modals, elevated panels. |
-| `--surface-sunken` | `#F2F1EC` | Inputs, code blocks, table headers. |
-| `--border` | `#E6E4DD` | Hairlines. 1px only, never 2px. |
-| `--text` | `#14140F` | Primary copy. Near-black, warm. |
-| `--text-muted` | `#6B6A63` | Secondary copy, captions, metadata. |
-| `--primary` / `--accent` | `#14B8A6` | The Flagship teal. CTAs, links, focus rings. |
-| `--primary-hover` | `#0E9488` | Hover / pressed state of `--primary`. |
-| `--success` | `#1F8A4C` | "Server online", "cert renewed", green padlock moments. |
-| `--warning` | `#B8651A` | Amber. "Cert renews in 3 days". |
-| `--danger` | `#C83A3A` | Destructive only. Confirmations, revoke, wipe. |
+| `--canvas` | `#F7F6F2` | Page background. Warm paper, not clinical white. |
+| `--canvas-2` | `#F0EEE8` | Inputs, hovered rows, quiet fills. |
+| `--surface` | `#FFFFFF` | Cards, settings groups, modals. |
+| `--rule` / `--border` | `#E5E3DC` | Hairlines. 1px only, never 2px (callout edges excepted). |
+| `--rule-strong` | `#C8C5BB` | Input and secondary-button outlines. |
+| `--ink` | `#14140F` | Primary copy. Near-black, warm. |
+| `--ink-muted` | `#555149` | Secondary copy, captions, mono labels. |
+| `--teal` | `#14B8A6` | The Flagship teal. Fills: primary buttons, selection, progress, the eyebrow rule. Text on it is dark ink (`#0A0A09`), never white or cream (contrast). |
+| `--accent` (webapp) | `#0F766E` | The teal deepened to pass AA as text: links, active tab, focus rings. |
+| `--ok` / `--warn` / `--err` (webapp) | `#15803D` / `#A15C07` / `#B91C1C` | Status text and icons; AA on paper. |
 
 ### 2.2 Dark theme
 
 | Token | Hex | Use |
 | --- | --- | --- |
-| `--bg` | `#0E0F12` | Page background. Slight blue-black, not pure. |
-| `--surface` | `#16181C` | Cards, modals. |
-| `--surface-sunken` | `#1C1F24` | Inputs, code blocks. |
-| `--border` | `#2A2D33` | Hairlines. |
-| `--text` | `#F2F1EC` | Primary copy — same warm off-white as light `--bg`. |
-| `--text-muted` | `#9A9A93` | Secondary copy. |
-| `--primary` / `--accent` | `#2DD4BF` | Lifted teal for legibility on dark. |
-| `--primary-hover` | `#5EEAD4` | Hover / pressed. |
-| `--success` | `#4FBE7A` | |
-| `--warning` | `#E5A050` | |
-| `--danger` | `#E86464` | |
+| `--canvas` | `#0A0A09` | Page background. Warm near-black, not pure. |
+| `--canvas-2` | `#14130F` | Inputs, hovered rows. |
+| `--surface` | `#1A1916` (site) / `#161512` (webapp) | Cards, modals. |
+| `--rule` / `--border` | `#25231C` | Hairlines. |
+| `--ink` | `#ECE7D6` | Primary copy — warm cream. |
+| `--ink-muted` | `#8A8478` (site) / `#A39D8F` (webapp) | Secondary copy. |
+| `--teal` / `--teal-bright` | `#14B8A6` / `#2DD4BF` | Fills / text and hover. |
+| `--ok` / `--warn` / `--err` | `#4ADE80` / `#FBBF24` / `#F87171` | Status. |
 
 **Rules.**
 
-- Pure `#000` and pure `#FFF` are banned. They look cheap on OLED and on paper-white displays.
-- Only `--primary`, `--success`, `--warning`, `--danger` may be saturated. Everything else lives on the warm-neutral axis.
-- Subtle gradients are allowed on **accent surfaces only** — the hero illustration, the "your server is ready" celebration card, the status pulse. Never on page or section backgrounds.
+- Pure `#000` and pure `#FFF` are banned as page or text colours. They look cheap on OLED and on paper-white displays. (A QR code's tile is the exception.)
+- Only teal and the three status colours may be saturated. Everything else lives on the warm-neutral axis.
+- No gradients on page or section backgrounds, buttons or bars. The landing hero's single soft glow is the only one.
 - Status colors are semantic, not decorative. Don't paint a button green just because it is encouraging.
 
 ---
 
 ## 3. Typography
 
-One pair, two roles. Both Google-Fonts-hosted and OFL-licensed, available as
-system fallbacks on every target platform.
+One family, two cuts, both self-hosted from `/fonts/`:
 
-- **Headings:** **Space Grotesk** — geometric but slightly humanist; reads as
-  "engineered" without being cold. Weights 500 and 600 only.
-- **Body:** **Inter** — boring on purpose. Weights 400, 500, 600. Use the
-  `cv11` and `ss03` OpenType features if available (curved single-storey `g`,
-  rounded zero) for a hint of personality.
-- **Mono:** **JetBrains Mono** for code, addresses, build codes, fingerprints.
-  Weights 400 and 500.
+- **Geist** for everything you read: titles (weight 500, tight negative
+  tracking), body (400), emphasis (500).
+- **Geist Mono** for the site's small uppercase voice: the wordmark, nav and
+  tab labels, eyebrows above sections, field labels, buttons with a plain-text
+  label, status tags, and anything that is a value (addresses, keys, codes,
+  versions).
 
-> Per-surface note (v1): the mobile apps (iOS/Android) ship the stack above.
-> The **webapp** deliberately ships its own platform-idiomatic stack (Geist /
-> Instrument Serif); per the v1 UX decision (`docs/v1-ux-spec.md` §S4) fonts stay
-> platform-native while the *semantic* tokens — teal accent, 4pt spacing grid,
-> `{6,10,16}` radii, and color roles — are unified across all three surfaces.
+No serif, no italic display face. The phone apps use their platform's system
+font with the same roles (a monospaced cut where the web uses Geist Mono).
 
-System fallbacks:
+### 3.1 Type scale
 
-```css
---font-heading: "Space Grotesk", ui-sans-serif, system-ui, -apple-system,
-                "Segoe UI", Roboto, sans-serif;
---font-body:    "Inter", ui-sans-serif, system-ui, -apple-system,
-                "Segoe UI", Roboto, sans-serif;
---font-mono:    "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas,
-                monospace;
-```
-
-### 3.1 Type scale (1.250 / major third, slightly compressed at the top)
-
-| Token | Size / line-height | Weight | Use |
+| Role | Size / line-height | Weight | Use |
 | --- | --- | --- | --- |
-| `display` | 56 / 60 px | 500 | Hero headline only. One per page. |
-| `h1` | 40 / 48 px | 500 | Section openers. |
-| `h2` | 28 / 36 px | 500 | Subsection. |
-| `h3` | 22 / 30 px | 600 | Card titles, modal titles. |
-| `h4` | 17 / 24 px | 600 | Inline group labels. |
-| `body` | 16 / 26 px | 400 | Default. |
-| `body-sm` | 14 / 22 px | 400 | Dense lists, table rows. |
-| `caption` | 13 / 18 px | 500 | Metadata, status pill text, timestamps. |
-| `mono` | 14 / 22 px | 400 | Code, fingerprints, build codes. |
+| `display` | clamp(40px, 6vw, 68px) / 1.04, −0.026em | 500 | Landing hero only. |
+| `h1` | clamp(30px, 4.8vw, 52px) / 1.05, −0.026em | 500 | Site page titles. |
+| `h2` | clamp(22px, 2.8vw, 30px) / 1.14, −0.018em | 500 | Site section titles; app screen titles (26–32px). |
+| `h3` | 15–18px | 500 | Card and modal titles. |
+| `body` | 15–15.5px / 1.55 | 400 | Default. |
+| `body-sm` | 14px / 1.55 | 400 | Notes, list subtitles. |
+| `eyebrow` | 11px mono, uppercase, 0.16–0.18em | 500 | Section labels, preceded by a 16px teal rule. |
+| `label` | 11–12px mono, uppercase, 0.1–0.14em | 500 | Field labels, buttons, tabs, status tags. |
 
 **Rules.**
 
-- Body line-length capped at **68 characters** (`max-width: 36rem`). Reading is the product.
-- Headings are sentence case. Title Case is reserved for proper nouns and product names.
-- Never use italics for emphasis; use weight (`500`) or the `--text` color against muted siblings.
-- Mono inline runs get a tiny (`-1px` letter-spacing, `0.92em` size) optical correction.
+- Body line-length capped near 60 characters (`--reading-width: 60ch`). Reading is the product.
+- Headings and copy are sentence case. Uppercase belongs only to the mono label voice above, never to a sentence or a paragraph.
+- Never use italics for emphasis; use weight (500) or `--ink` against muted siblings.
 
 ---
 
@@ -151,15 +130,15 @@ A strict 4-px grid: `4 / 8 / 12 / 16 / 24 / 32 / 48 / 64`.
 
 ## 5. Border radius
 
-Three sizes. Period.
+Small and square, like the site.
 
 | Token | px | Use |
 | --- | --- | --- |
-| `radius-sm` | 6 | Inputs, pills, small chips. |
-| `radius-md` | 10 | Buttons, cards, list items. |
-| `radius-lg` | 16 | Modals, hero cards, phone-screen sheet corners. |
+| `radius-xs` | 2 | Status tags, inline code, badges. |
+| `radius-sm` | 4 | Buttons, inputs, chips, icon squares, toasts. |
+| `radius-md` | 6 | Cards, settings groups, modals. |
 
-Pills (status indicators) override to `999px`. Avatars override to `50%`.
+Avatars and status dots are round. Nothing else is a pill.
 
 ---
 
@@ -209,73 +188,72 @@ private. It is allowed to be a little funny, but only at its own expense.
 ## 8. Component patterns
 
 Each pattern is described in flat prose so it can be implemented in vanilla
-CSS, Jetpack Compose, or SwiftUI without a framework.
+CSS, Jetpack Compose, or SwiftUI without a framework. `apps/web/public/components.css`
+(site) and `apps/web/public/webapp/style.css` (webapp) are the reference
+implementations.
 
 ### 8.1 Button
 
-Three variants, one size by default (40 px tall on web, 44 px on touch). Text
-is `body-sm` weight 600. Padding `12px / 20px`. Radius `radius-md` (10).
+44 px tall, padding `0 18px`, radius 4. A plain-text label is Geist Mono
+12px, uppercase, 0.1–0.12em tracking, weight 500; a button that holds richer
+content (a row, a tile, a card) keeps Geist and sentence case.
 
-- **Primary.** `--primary` background, white text. Hover: shifts to `--primary-hover`. Active: `translateY(0.5px)`. Focus: 2 px outline in `--primary` at `outline-offset: 2px`.
-- **Secondary.** `--surface` background, `--text` color, 1 px `--border` outline. Hover: border darkens to `--text-muted`.
-- **Ghost.** No background, no border. `--text` color. Hover: `--surface-sunken` background. Use inside cards and toolbars.
-- **Destructive.** Same shape as primary, but `--danger`. Always require confirmation.
+- **Primary (solid).** `--teal` fill, dark ink text (`#0A0A09`). Hover: `--teal-bright`. Active: `translateY(1px)`. Focus: 2 px outline in the text-safe teal at `outline-offset: 2px`.
+- **Secondary (outline).** Transparent, `--ink` text, 1 px `--rule-strong` outline. Hover: outline and text turn teal.
+- **Ghost / link.** No fill, no outline; a link-coloured underline on hover.
+- **Destructive.** Outline in `--err` with `--err` text; it fills red only under the pointer, so a screen with several never shouts. Always require confirmation.
 
 Disabled state: 40 % opacity, no hover, `cursor: not-allowed`.
 
 ### 8.2 Input
 
-Single-line text fields. 40 px tall, `--surface-sunken` background, 1 px
-`--border`. Padding `12px / 14px`, radius `radius-sm` (6). Label sits **above**
-the field at `caption` size, weight 500. Helper text sits below at `body-sm`,
-`--text-muted`. On focus: border becomes `--primary`, outline `2px`
-`--primary` at 25 % alpha. On error: border `--danger`, helper text
-`--danger`. Never use placeholder-as-label.
+44 px tall, `--canvas-2` background, 1 px `--rule-strong`, radius 4, padding
+`10px 14px`. Label sits **above** the field in the mono label voice. Helper
+text sits below at `body-sm`, muted. On focus: border `--teal`, a 3 px
+`--teal` ring at 10 % alpha, background `--canvas`. On error: border and helper
+text `--err`. A label that wraps its own checkbox or radio is a sentence and
+stays in Geist. Never use placeholder-as-label.
 
 ### 8.3 Card
 
-Background `--surface`, 1 px `--border`, radius `radius-md` (10), padding
-`space-6` (24) on desktop / `space-4` (16) on mobile. **No shadow** in either
-theme — separation is by border, not by elevation. The only exception is
-modals.
+Background `--surface`, 1 px `--rule`, radius 6, padding 16–20 px. **No
+shadow** in either theme — separation is by rule, not elevation; only floating
+layers (modals, menus, toasts, a dragged row) lift. A card never nests inside
+another card. Lists of related rows share one card with hairlines between rows
+(the site's 1 px-gap grids).
 
-A card title is `h3` (22 px). A card may contain at most one primary action,
-right-aligned in its footer.
+### 8.4 Callout
 
-### 8.4 Modal
+For a caution or an announcement: the tone's 8–10 % tint, a 2 px rule on the
+left edge in the tone (`--teal`, `--warn`, `--err`), radius 4. A bare line
+icon, never an icon inside a tinted tile.
 
-Centered, max-width 480 px (small) or 720 px (large). Background
-`--surface`, radius `radius-lg` (16), padding `space-8` (32). One shadow:
-`0 12px 40px rgba(0,0,0,0.18)` in light, `0 12px 40px rgba(0,0,0,0.6)` in
-dark. Backdrop: `rgba(14,15,18,0.5)` with a 4 px backdrop blur.
+### 8.5 Modal
 
-Title `h3`. Body `body`. Footer: secondary action left-or-ghost, primary
-action right. Esc closes. Click-outside closes only if the modal has no
-unsaved input.
+Centered, max-width 420–480 px, `--surface`, 1 px `--rule-strong`, radius 6,
+padding 24 px, one lift shadow. Backdrop: the canvas at ~72 % with a 4 px
+blur. Title `h3` in Geist 500. Footer: secondary left, primary right. Esc
+closes.
 
-### 8.5 Toast
+### 8.6 Toast
 
-Bottom-right on desktop, bottom-center on mobile. 320 px wide, radius
-`radius-md`, 1 px `--border`, `--surface` background. Left-edge accent: 3 px
-strip in the semantic color (`--success`, `--warning`, `--danger`, or
-`--primary` for neutral info). Auto-dismiss at 5 s for info / success, manual
-dismiss only for warning / danger. Stacks vertically with `space-2` gap.
+Bottom-center, radius 4, 1 px `--rule-strong`, `--surface` background, a 2 px
+left edge in the tone (`--teal` for info, `--ok`, `--warn`, `--err`).
 
-### 8.6 Status pill
+### 8.7 Status tag
 
-Inline with text or in a card header. Height 22 px, radius `999px`, padding
-`2px 10px`, `caption` text weight 500. A 6 px filled dot precedes the label.
+Inline with text or in a card header: a 6 px dot and Geist Mono 11px in a
+hairline tag (radius 2, padding `2px 7px`), dot, text and outline all in the
+status colour. No fill, no animation — the one live dot that breathes is a
+server's own online indicator on Home (an opacity pulse, like the site's
+"● LIVE").
 
-| Status | Dot | Background | Text |
-| --- | --- | --- | --- |
-| Online | `--success` | `--success` @ 12 % alpha | `--success` |
-| Renewing | `--warning` | `--warning` @ 12 % alpha | `--warning` |
-| Offline | `--danger` | `--danger` @ 12 % alpha | `--danger` |
-| Provisioning | `--primary` | `--primary` @ 12 % alpha | `--primary` |
-| Idle | `--text-muted` | `--surface-sunken` | `--text-muted` |
+### 8.8 Header and tabs
 
-The "Online" dot has a subtle 1.5 s pulse (scale 1.0 → 1.15 → 1.0). All other
-dots are static.
+The app header is the site's nav: the logo mark, a mono uppercase wordmark
+(0.22em tracking) and a hairline below; the screen's state rides on the right
+in the mono label voice. Tabs are mono uppercase labels with line icons; the
+active one is teal with a 2 px teal rule.
 
 ---
 
@@ -473,10 +451,10 @@ Notes:
 
 ## 11. Implementation notes
 
-- **Web (vanilla CSS):** ship the tokens as `:root` and `:root[data-theme="dark"]` custom properties; switch via `prefers-color-scheme` + a manual override in `localStorage`.
-- **iOS (SwiftUI):** mirror tokens in an `enum FSColor` / `enum FSSpace`; resolve the theme from `colorScheme` + an override in `UserDefaults`. The two fonts ship as bundled OTFs, registered at app launch.
-- **Android (Jetpack Compose):** put tokens in a `FlagshipColors` data class and a `FlagshipTypography` object, exposed via `MaterialTheme` overrides. Both fonts are available on Google Fonts' Compose `GoogleFont` provider — no bundling needed.
-- **Forbidden everywhere:** drop shadows on cards (modals only), gradient page backgrounds, glassmorphism / backdrop-blur on anything that isn't a modal scrim, neumorphic insets, animated stars / particles, "matrix"-style background canvases.
+- **Web (vanilla CSS):** ship the tokens as `:root` and `:root[data-theme="dark"]` custom properties. The site switches with a manual toggle kept in `localStorage` (`fs-theme`, light by default); the webapp follows `prefers-color-scheme`.
+- **iOS (SwiftUI):** mirror tokens in an `enum FSColor` / `enum FSSpace`; resolve the theme from `colorScheme`. Text uses the system font in the roles of §3 (monospaced design for the label voice).
+- **Android (Jetpack Compose):** put tokens in a `FlagshipColors` data class and a `FlagshipTypography` object, exposed via `MaterialTheme` overrides, with the same roles.
+- **Forbidden everywhere:** drop shadows on cards (floating layers only), gradient page backgrounds or buttons, glassmorphism (a sticky header or tab bar may blur what scrolls under it, like the site's nav; nothing else), neumorphic insets, animated stars / particles, "matrix"-style background canvases, emoji used as icons, icons inside tinted tiles, pill-shaped buttons and badges, centered hero-style empty states.
 - **Encouraged everywhere:** generous whitespace, hairline 1 px borders, exactly one accent hue per surface, real numbers in copy, sentence-case everything, dark mode that was actually drawn instead of inverted.
 
 ---
@@ -488,7 +466,7 @@ A page or screen passes review when:
 1. Every color is a token from §2.
 2. Every font size and line-height is from §3.1.
 3. Every spacing value is on the §4 grid.
-4. Every radius is one of the three in §5.
+4. Every radius is one of the three in §5 (or round, for dots and avatars).
 5. There is exactly one primary CTA above the fold.
 6. The copy could be read aloud to a non-technical friend without translation.
 7. With `prefers-reduced-motion: reduce`, the page is still fully usable.
