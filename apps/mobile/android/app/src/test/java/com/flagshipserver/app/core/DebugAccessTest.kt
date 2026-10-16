@@ -3,48 +3,35 @@ package com.flagshipserver.app.core
 import com.google.crypto.tink.subtle.Ed25519Sign
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/**
- * debug-access grant — Android signs byte-identically to TS + iOS
- * (pinned vector matches packages/protocol/tests/debugAccess.test.ts).
- */
+/** The sentences and edges of DebugAccess beyond the shared vectors. */
 class DebugAccessTest {
-    private val grant = DebugAccess.Grant(
-        serverDomain = "home.alice.flagship.services",
-        sshAuthorizedKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILEXAMPLE phone",
-        issuedAt = 1700L,
-    )
-    // pub for seed 0x07*32 (ed.getPublicKey).
-    private val irkPub = HexUtil.decode("ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c")!!
+    private val key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINBKsjJ0K7SrOhNovUYV5ObQIkq3GgFrr4UgozLJd4c3"
+    private val grant = DebugAccess.Grant("home.alice.flagship.services", key, 1_000L, 1_000L + DebugAccess.DEFAULT_MS)
 
-    @Test fun canonicalBytes() {
+    @Test fun saysWhyAGrantCantBeSigned() {
+        assertEquals("Debug access needs an SSH public key.", DebugAccess.grantProblem(grant.copy(sshPublicKey = "")))
+        assertEquals("That isn't an SSH public key this server can use.", DebugAccess.grantProblem(grant.copy(sshPublicKey = "$key me@laptop")))
+        assertEquals("Debug access has to end after it starts.", DebugAccess.grantProblem(grant.copy(expiresAt = 1_000L)))
         assertEquals(
-            "flagship/debug-access/v1|home.alice.flagship.services|ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILEXAMPLE phone|1700",
-            String(DebugAccess.canonicalBytes(grant)),
+            "Debug access can be on for at most 7 days at a time.",
+            DebugAccess.grantProblem(grant.copy(expiresAt = 1_000L + DebugAccess.MAX_MS + 1)),
         )
+        assertNull(DebugAccess.grantProblem(grant.copy(expiresAt = 1_000L + DebugAccess.MAX_MS)))
     }
 
-    // Cross-platform contract = canonical-bytes + key parity (any platform's
-    // sig verifies anywhere). The TS-pinned signature must verify under the
-    // pinned pub, and our own sign must verify under that same pub (proving
-    // seed→pub parity with TS).
-    @Test fun pinnedCrossPlatformSignatureVerifies() {
-        val pinned = "818ed03fb15414fe647aecd466524d8069df53f245dfe6dff7ab78da15ab976e922a39595e5e34ebdb4cec1e628efba0a4cc1cbd1efb1684234a8b8d4e21aa05"
-        assertTrue(DebugAccess.verify(grant, pinned, irkPub))
+    @Test fun durationsAreOneHourOneDayOneWeek() {
+        assertEquals(listOf(3_600_000L, 86_400_000L, 604_800_000L), DebugAccess.Duration.values().map { it.ms })
     }
 
-    @Test fun ownSignVerifiesUnderTsDerivedPub() {
-        val irk = Ed25519Sign(ByteArray(32) { 7 })
-        val sig = DebugAccess.sign(grant, irk)
-        assertTrue(DebugAccess.verify(grant, sig, irkPub))
-    }
-
-    @Test fun rejectsWrongKey() {
-        val irk = Ed25519Sign(ByteArray(32) { 7 })
-        val sig = DebugAccess.sign(grant, irk)
-        val wrongPub = ByteArray(32) { 9 }
-        assertFalse(DebugAccess.verify(grant, sig, wrongPub))
+    @Test fun aRevokeSignatureIsNotAGrantSignature() {
+        val signer = Ed25519Sign(ByteArray(32) { 7 })
+        val pub = Ed25519Sign.KeyPair.newKeyPairFromSeed(ByteArray(32) { 7 }).publicKey
+        val revokeSig = DebugAccess.signRevoke(DebugAccess.Revoke(grant.serverDomain, grant.issuedAt), signer)
+        assertFalse(DebugAccess.verify(grant, revokeSig, pub))
+        assertTrue(DebugAccess.verify(grant, DebugAccess.sign(grant, signer), pub))
     }
 }
