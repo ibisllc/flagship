@@ -185,6 +185,7 @@ public final class MockQrRelayClient: QrRelayClient, @unchecked Sendable {
             try? await Task.sleep(nanoseconds: UInt64(simulatedLatency * 1_000_000_000))
         }
         lastDeliver = (ciphertextBase64Url, nonceBase64Url)
+        GymProbe.note("relay delivered sealed payload")
         switch behavior {
         case .ackThenDelivered:   return
         case .peerMissing:         throw QrRelayError.peerMissing

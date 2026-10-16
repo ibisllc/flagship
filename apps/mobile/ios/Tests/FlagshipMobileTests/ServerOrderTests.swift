@@ -44,6 +44,18 @@ final class ServerOrderTests: XCTestCase {
 
     private func homeOrder(_ app: AppState) -> [String] { app.pods.map(\.podId) }
 
+    /// A device without the admin root never signs a server order with the
+    /// IRK: `.com` and the boxes would refuse it. The list goes back and the
+    /// owner reads why.
+    func testADeviceWithoutTheAdminRootDoesNotSignTheOrder() async throws {
+        let app = state()
+        let mailbox = MockSecretMailboxClient()
+        let outcome = await ServerOrderSaver(app: app, mailbox: mailbox, now: { 1_760_000_000_000 }).makeLeader(podId: "work")
+        XCTAssertEqual(outcome, .failed(AdminOrderGate.server))
+        XCTAssertTrue(mailbox.serverOrders.isEmpty)
+        XCTAssertEqual(homeOrder(app), ["home3", "leticia", "work"])
+    }
+
     // MARK: - Make leader from server detail, then Home
 
     func testMakeLeaderFromServerDetailPutsTheServerFirstOnHome() async throws {

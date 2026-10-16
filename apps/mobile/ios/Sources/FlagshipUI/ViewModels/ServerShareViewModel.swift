@@ -113,6 +113,15 @@ public enum ServerShareDemo {
 
     public static var isOn: Bool { args.contains("-smoke-mode") && args.contains("-smoke-shares") }
 
+    /// Gym-only (`-smoke-share-flows`): the transport the share flows run
+    /// over instead of the network (GymShareTransport), so a smoke launch
+    /// signs and sends real orders that the gym's mocks verify.
+    public nonisolated(unsafe) static var gymTransport: (any ServerShareTransport)?
+    /// The demo screens run the real flows (over `gymTransport`).
+    public static var flowsOn: Bool { isOn && gymTransport != nil }
+    /// The push token a smoke launch registers (no APNs on a simulator run).
+    public static let gymPushToken = String(repeating: "9a", count: 32)
+
     public static var route: String? {
         guard isOn, let i = args.firstIndex(of: "-smoke-share-route"), i + 1 < args.count else { return nil }
         return args[i + 1]
@@ -196,6 +205,17 @@ public enum ServerShareDemo {
     #endif
 }
 
+/// Sends over the network, or, in a smoke launch with the gym's share flows
+/// (`ServerShareDemo.gymTransport`), to the gym's transport.
+struct GymRoutedShareTransport: ServerShareTransport {
+    let live: any ServerShareTransport
+
+    func send(_ request: URLRequest) async throws -> (status: Int, body: Data) {
+        if let gym = ServerShareDemo.gymTransport { return try await gym.send(request) }
+        return try await live.send(request)
+    }
+}
+
 /// The live clients and Keystore-backed keys.
 public enum ServerShareServices {
     /// The box rides the same pinning as the screens client: a share token
@@ -205,8 +225,8 @@ public enum ServerShareServices {
     )
 
     public static let client = ServerShareClient(
-        com: URLSessionShareTransport(),
-        box: URLSessionShareTransport(session: pinnedSession)
+        com: GymRoutedShareTransport(live: URLSessionShareTransport()),
+        box: GymRoutedShareTransport(live: URLSessionShareTransport(session: pinnedSession))
     )
 
     public static func ownerKeys() -> ShareOwnerKeys {
@@ -507,6 +527,10 @@ public final class SharedWithMeStore {
 
     public func item(_ shareId: String) -> Item? { items.first { $0.entry.shareId == shareId } }
 
+    /// Actions go through the flow: always for real, and in smoke mode when
+    /// the gym's share transport answers them.
+    private var usesFlow: Bool { !demo || ServerShareDemo.flowsOn }
+
     /// Reads the inbox and signs in to each server to learn its level. Without
     /// `allowAuth` it runs only when the account key is already unlocked.
     public func load(allowAuth: Bool) async {
@@ -563,7 +587,7 @@ public final class SharedWithMeStore {
     public func session(for shareId: String, forceNew: Bool = false) async throws -> ShareSessionResponse {
         guard let i = items.firstIndex(where: { $0.entry.shareId == shareId }) else { throw ServerShareFlowError.shareEnded }
         if !forceNew, let s = items[i].session, s.expiresAt > ServerShareClock.nowMs() + 60_000 { return s }
-        guard let flow, !demo else { throw ServerShareFlowError.notSignedIn }
+        guard let flow, usesFlow else { throw ServerShareFlowError.notSignedIn }
         do {
             let s = try await flow.signIn(items[i].entry)
             if let j = items.firstIndex(where: { $0.entry.shareId == shareId }) {
@@ -585,6 +609,9 @@ public final class SharedWithMeStore {
         if demo {
             let m = MockScreensClient()
             m.simulatedLatency = 0
+            m.signingShareId = shareId
+            m.membersOnlyApps = ["bright-maple--wiki"]
+            m.mockBoxDomain = item(shareId)?.entry.serverDomain.lowercased()
             m.podContext = item(shareId).map { ServerShareNames.serverLabel(fromDomain: $0.entry.serverDomain) } ?? "garage"
             return m
         }
@@ -600,12 +627,12 @@ public final class SharedWithMeStore {
         items.removeAll { $0.entry.shareId == shareId }
         ended.insert(shareId)
         pushRegistry.forget(shareId)
-        if !demo { try? await flow?.deleteInboxEntry(it.entry.entryId) }
+        if usesFlow { try? await flow?.deleteInboxEntry(it.entry.entryId) }
     }
 
     public func leave(_ shareId: String) async throws {
         guard let it = item(shareId) else { return }
-        if !demo { try await flow?.leave(it.entry) }
+        if usesFlow { try await flow?.leave(it.entry) }
         items.removeAll { $0.entry.shareId == shareId }
         ended.insert(shareId)
         pushRegistry.forget(shareId)
@@ -628,7 +655,7 @@ public final class SharedWithMeStore {
 
     /// Manage level: move the server to an endorsed release.
     public func orderUpdate(_ shareId: String, targetCommit: String, fromCommit: String) async throws {
-        if demo { return }
+        if !usesFlow { return }
         guard let flow, let it = item(shareId) else { throw ServerShareFlowError.shareEnded }
         let s = try await session(for: shareId)
         _ = try await flow.orderUpdate(it.entry, shareToken: s.token, targetCommit: targetCommit, fromCommit: fromCommit)
@@ -639,10 +666,10 @@ public final class SharedWithMeStore {
     public func startupNoticeOn(_ shareId: String) -> Bool { pushRegistry.registration(shareId) != nil }
 
     public func setStartupNotice(_ shareId: String, on: Bool) async throws {
-        if demo { return }
+        if !usesFlow { return }
         guard let flow, let it = item(shareId) else { throw ServerShareFlowError.shareEnded }
         if on {
-            let token = try await pushToken()
+            let token = ServerShareDemo.flowsOn ? ServerShareDemo.gymPushToken : try await pushToken()
             let reg = try await flow.registerStartupPush(it.entry, platform: .apns, providerToken: token)
             pushRegistry.save(reg, for: shareId)
         } else if let reg = pushRegistry.registration(shareId) {

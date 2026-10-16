@@ -395,6 +395,8 @@ final class GymLiveTests: XCTestCase {
         // entry deterministically proves the create-server path is reachable live.
         if addServer.exists {
             addServer.tap()
+            // Add/Import asks which first (admin devices only see the button).
+            app.chooseAddNewServer()
             let nameField = app.textFields["cs-name-field"]
             XCTAssertTrue(
                 nameField.waitForExistence(timeout: 20),

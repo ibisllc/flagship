@@ -36,6 +36,9 @@ struct ShareServerCard: View {
     @State private var removing: OwnerShareRow?
 
     private var pod: PodInfo? { app.pods.first { $0.fqdn.lowercased() == serverDomain.lowercased() } }
+    /// Grants, revokes and offers take the admin root: other devices see the
+    /// card read-only instead of sending orders `.com` and the box refuse.
+    private var canShare: Bool { AdminOrderGate.allows(app) }
 
     var body: some View {
         let c = FSColors.scheme(scheme)
@@ -94,16 +97,19 @@ struct ShareServerCard: View {
         if model == nil {
             let store = sessionStore
             let fqdn = serverDomain.lowercased()
-            let demo = ServerShareDemo.isOn
+            let demo = ServerShareDemo.isOn && !ServerShareDemo.flowsOn
+            let gym = ServerShareDemo.flowsOn
+            let stk = pod?.identityPubKeyHex ?? ""
             model = ShareServerCardModel(
                 serverDomain: fqdn,
                 serverName: pod?.name ?? ServerShareNames.serverLabel(fromDomain: fqdn),
-                stkPubHex: pod?.identityPubKeyHex ?? "",
+                stkPubHex: stk.isEmpty && gym ? GymShareTransport.stkPubHex : stk,
                 flow: demo ? nil : app.currentUser.map {
                     ServerShareOwnerFlow(client: ServerShareServices.client, username: $0, keys: ServerShareServices.ownerKeys())
                 },
                 ownerToken: {
                     let t = await store.sessionToken(forPodId: PodInfo.podId(forFqdn: fqdn))
+                    if gym, t?.isEmpty ?? true { return "gym-owner" }
                     return (t?.isEmpty ?? true) ? nil : t
                 },
                 demo: demo
@@ -150,8 +156,14 @@ struct ShareServerCard: View {
                     Text(e).font(FS.font.bodySm()).foregroundColor(c.danger).fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("share-error")
                 }
-                FSPrimaryButton(ServerShareCopy.shareButton, enabled: model.busy == nil, block: true) { sharing = true }
-                    .accessibilityIdentifier("share-server-open")
+                if canShare {
+                    FSPrimaryButton(ServerShareCopy.shareButton, enabled: model.busy == nil, block: true) { sharing = true }
+                        .accessibilityIdentifier("share-server-open")
+                } else {
+                    Text(AdminOrderGate.share).font(FS.font.bodySm()).foregroundColor(c.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("share-admin-only")
+                }
             } else {
                 ProgressView().frame(maxWidth: .infinity)
             }
@@ -176,6 +188,9 @@ struct ShareServerCard: View {
                 }
             }
             switch row.status {
+            case .active where !canShare:
+                Text(ServerShareCopy.levelLine(row.level)).font(FS.font.caption()).foregroundColor(c.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
             case .active:
                 activeControls(row, model: model, busy: busy, c: c)
             case .awaitingConfirm(let sas):
@@ -185,11 +200,13 @@ struct ShareServerCard: View {
                     .accessibilityIdentifier("share-sas-\(row.shareId)")
                 Text("Only confirm if it matches. A different code means someone else opened the link.")
                     .font(FS.font.caption()).foregroundColor(c.textMuted).fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: FS.space.s2) {
-                    FSPrimaryButton("Confirm with Face ID", enabled: model.busy == nil) { Task { await model.confirm(row) } }
-                        .accessibilityIdentifier("share-confirm-\(row.shareId)")
-                    FSGhostButton("Cancel") { Task { await model.end(row) } }
-                        .disabled(model.busy != nil)
+                if canShare {
+                    HStack(spacing: FS.space.s2) {
+                        FSPrimaryButton("Confirm with Face ID", enabled: model.busy == nil) { Task { await model.confirm(row) } }
+                            .accessibilityIdentifier("share-confirm-\(row.shareId)")
+                        FSGhostButton("Cancel") { Task { await model.end(row) } }
+                            .disabled(model.busy != nil)
+                    }
                 }
             case .offered(let link, let expiresAt):
                 Text(ServerShareCopy.offered(row.label)).font(FS.font.bodySm()).foregroundColor(c.textMuted)
@@ -199,13 +216,17 @@ struct ShareServerCard: View {
                         UIPasteboard.general.string = link
                         toasts.success("Link copied.")
                     }
-                    FSGhostButton("Cancel") { Task { await model.end(row) } }
-                        .disabled(model.busy != nil)
+                    if canShare {
+                        FSGhostButton("Cancel") { Task { await model.end(row) } }
+                            .disabled(model.busy != nil)
+                    }
                 }
             case .acceptanceInvalid:
                 Text(ServerShareCopy.acceptanceInvalid).font(FS.font.bodySm()).foregroundColor(c.danger)
                     .fixedSize(horizontal: false, vertical: true)
-                FSGhostButton("Cancel") { Task { await model.end(row) } }.disabled(model.busy != nil)
+                if canShare {
+                    FSGhostButton("Cancel") { Task { await model.end(row) } }.disabled(model.busy != nil)
+                }
             }
         }
         .accessibilityElement(children: .contain)
@@ -230,11 +251,13 @@ struct ShareServerCard: View {
             set: { on in Task { await model.change(row, unlockAtBoot: on) } }
         ), c: c)
         .disabled(model.busy != nil)
+        .accessibilityIdentifier("share-unlock-\(row.shareId)")
         if row.needsStartupKey {
             HStack(spacing: FS.space.s2) {
                 Text(ServerShareCopy.startupKeyMissing).font(FS.font.caption()).foregroundColor(c.warning)
                 Spacer()
                 FSGhostButton("Set up") { Task { await model.sendStartupKey(row) } }.disabled(model.busy != nil)
+                    .accessibilityIdentifier("share-startup-setup-\(row.shareId)")
             }
         }
         optIn(ServerShareCopy.dataTitle, ServerShareCopy.dataLine, isOn: Binding(
@@ -242,6 +265,7 @@ struct ShareServerCard: View {
             set: { on in Task { await model.change(row, seeAppData: on) } }
         ), c: c)
         .disabled(model.busy != nil)
+        .accessibilityIdentifier("share-data-\(row.shareId)")
         FSGhostButton("Remove \(row.label)") { removing = row }
             .disabled(model.busy != nil)
             .accessibilityIdentifier("share-remove-\(row.shareId)")
@@ -360,7 +384,9 @@ struct ShareServerSheet: View {
             sectionHeader("ALSO LET THEM", c: c)
             optIn(ServerShareCopy.unlockTitle, ServerShareCopy.unlockLine, warning: ServerShareCopy.unlockHouseKey,
                   isOn: $draft.unlockAtBoot, c: c)
+                .accessibilityIdentifier("share-draft-unlock")
             optIn(ServerShareCopy.dataTitle, ServerShareCopy.dataLine, isOn: $draft.seeAppData, c: c)
+                .accessibilityIdentifier("share-draft-data")
         }
         if let e = model.errorMessage {
             Text(e).font(FS.font.bodySm()).foregroundColor(c.danger).fixedSize(horizontal: false, vertical: true)
@@ -403,6 +429,7 @@ struct ShareServerSheet: View {
                 toasts.success("Link copied.")
             } label: { Label("Copy link", systemImage: "doc.on.doc") }
                 .buttonStyle(.bordered)
+                .accessibilityIdentifier("share-copy-link")
         }
         Text("Anyone with the link can ask to join, so send it only to \(name).")
             .font(FS.font.caption()).foregroundColor(c.textMuted).fixedSize(horizontal: false, vertical: true)
@@ -496,10 +523,10 @@ struct ShareAcceptScreen: View {
                 }
                 #endif
                 let store = SharedWithMeStore.shared
-                let demo = ServerShareDemo.isOn
+                let demo = ServerShareDemo.isOn && !ServerShareDemo.flowsOn
                 model = ShareAcceptModel(store: store,
-                                         flow: demo ? store.flow : ServerShareServices.acceptFlow(username: app.currentUser,
-                                                                                                 isDemoAccount: app.isDemoAccount),
+                                         flow: ServerShareDemo.isOn ? store.flow : ServerShareServices.acceptFlow(username: app.currentUser,
+                                                                                                                 isDemoAccount: app.isDemoAccount),
                                          demo: demo)
                 if let shareId, let secretHex {
                     await model?.open(shareId: shareId, secretHex: secretHex)
@@ -541,7 +568,9 @@ struct ShareAcceptScreen: View {
             FSPrimaryButton("Open", enabled: !pasted.isEmpty, block: true) {
                 Task { badPaste = !(await model.open(text: pasted)) }
             }
+            .accessibilityIdentifier("share-accept-open")
             FSSecondaryButton("Scan a code", block: true) { scanning = true }
+                .accessibilityIdentifier("share-accept-scan")
         case .opening:
             ProgressView("Opening the link…").frame(maxWidth: .infinity)
         case .invitation(let inv), .accepting(let inv):
@@ -557,6 +586,7 @@ struct ShareAcceptScreen: View {
                     Text("\(entry.ownerName) confirmed. \(entry.displayName) is now under Shared with me on Home.")
                         .font(FS.font.bodySm()).foregroundColor(c.textMuted).fixedSize(horizontal: false, vertical: true)
                     FSPrimaryButton("Open \(entry.displayName)", block: true) { onOpenServer(entry.shareId) }
+                        .accessibilityIdentifier("share-accept-done-open")
                 }
             }
         case .failed(let msg):
@@ -755,6 +785,7 @@ struct SharedServerScreen: View {
                     }
                     .accessibilityIdentifier("shared-approve-startup")
                     FSGhostButton("Not now", block: true) { model.dismiss(s) }
+                        .accessibilityIdentifier("shared-startup-not-now")
                 }
             }
         }

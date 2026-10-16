@@ -536,6 +536,21 @@ public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Send
     public var removeAllowResult = RemoveAllowResult(ok: true, removed: true)
     public var rows: [ServiceInviteRow] = []
     public var redeemResult = RedeemResult(serviceRef: "alice--notes", boundAidHex: "00", firstBind: true)
+    /// Gym: the keys a visitor may present (public key hex → a name), so the
+    /// probe says which one a redeem / acceptance / knock was made with.
+    public var visitorLabels: [String: String] = [:]
+    /// Gym: checks a visitor's signature as the box does ("redeem", "accept",
+    /// "knock"); nil accepts any. A false answer is the box's 403.
+    public var verifyVisitorSignature: (@Sendable (_ kind: String, _ fields: [String: Any], _ signatureHex: String) -> Bool)?
+
+    private func visitor(_ kind: String, on server: String, key hex: String, fields: [String: Any], signatureHex: String) throws {
+        let who = visitorLabels[hex.lowercased()] ?? "an unknown key"
+        if let verify = verifyVisitorSignature, !verify(kind, fields, signatureHex) {
+            GymProbe.note("refused \(kind) on \(server): bad signature by \(who)")
+            throw ScreensClientError.http(status: 403, message: #"{"error":"invalid signature"}"#)
+        }
+        GymProbe.note("\(kind) on \(server) by \(who)")
+    }
     public var acceptResult = AcceptResult(bound: true, serviceRef: "alice--notes", boundAidHex: "00")
     public var authorizeKnockResult = AuthorizeKnockResult(
         secretId: String(repeating: "ab", count: 32),
@@ -596,6 +611,7 @@ public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Send
 
     public func withdrawInvite(serverDomain: String, revoke: [String: Any], signatureHex: String) async throws -> Int {
         lock.withLock { _withdraw.append(WithdrawCall(serverDomain: serverDomain, revoke: flatten(revoke), signatureHex: signatureHex)) }
+        GymProbe.note("withdrew invite \(revoke["inviteId"] as? String ?? "?") on the box")
         if let e = withdrawError { withdrawError = nil; throw e }
         try maybeThrow()
         return 0
@@ -604,18 +620,24 @@ public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Send
     public func redeemInvite(serverDomain: String, secretHex: String, visitorAidHex: String, aidSigHex: String, redeemedAt: Int64) async throws -> RedeemResult {
         try maybeThrow()
         lock.withLock { _redeem.append(RedeemCall(serverDomain: serverDomain, secretHex: secretHex, visitorAidHex: visitorAidHex)) }
+        try visitor("redeem", on: serverDomain, key: visitorAidHex,
+                    fields: ["secretHex": secretHex, "visitorAID": visitorAidHex, "redeemedAt": redeemedAt],
+                    signatureHex: aidSigHex)
         return redeemResult
     }
 
     public func acceptInvite(serverDomain: String, accept: [String: Any], acceptSigHex: String) async throws -> AcceptResult {
         lock.withLock { _accept.append(AcceptCall(serverDomain: serverDomain, accept: flatten(accept), acceptSigHex: acceptSigHex)) }
         try maybeThrow()
+        try visitor("accept", on: serverDomain, key: accept["contactAID"] as? String ?? "", fields: accept,
+                    signatureHex: acceptSigHex)
         return acceptResult
     }
 
     public func createInvite(controlBase: URL, username: String, request: [String: Any], signatureHex: String) async throws {
         try maybeThrow()
         lock.withLock { _create.append(CreateCall(username: username, request: flatten(request), signatureHex: signatureHex)) }
+        GymProbe.note("created invite for \(request["serviceRef"] as? String ?? "?")\(request["maxRedemptions"] != nil ? " (group)" : "")")
         if listsCreatedInvites, let id = request["inviteId"] as? String, let ref = request["serviceRef"] as? String {
             let maxN = request["maxRedemptions"] as? Int
             rows.append(ServiceInviteRow(
@@ -636,23 +658,28 @@ public final class MockServiceAccessClient: ServiceAccessClient, @unchecked Send
     public func revokeInvite(controlBase: URL, username: String, inviteId: String, request: [String: Any], signatureHex: String) async throws {
         try maybeThrow()
         lock.withLock { _revoke.append(RevokeCall(username: username, inviteId: inviteId, signatureHex: signatureHex)) }
+        GymProbe.note("revoked invite \(inviteId)")
         rows = rows.map { $0.inviteId == inviteId ? ServiceInviteRow(inviteId: $0.inviteId, serviceRef: $0.serviceRef, encryptedBundleHex: $0.encryptedBundleHex, boundAidHex: $0.boundAidHex, boundAt: $0.boundAt, createdAt: $0.createdAt, revokedAt: 1, boundAidsHex: $0.boundAidsHex, maxRedemptions: $0.maxRedemptions, expiresAt: $0.expiresAt, redemptions: $0.redemptions, approvalMode: $0.approvalMode, creatorTier: $0.creatorTier, creatorDeviceId: $0.creatorDeviceId) : $0 }
     }
 
     public func authorizeKnock(serverDomain: String, authorization: [String: Any], signatureHex: String) async throws -> AuthorizeKnockResult {
         lock.withLock { _authorizeKnock.append(AuthorizeKnockCall(serverDomain: serverDomain, authorization: flatten(authorization), signatureHex: signatureHex)) }
         try maybeThrow()
+        try visitor("knock", on: serverDomain, key: authorization["visitorAID"] as? String ?? "", fields: authorization,
+                    signatureHex: signatureHex)
         return authorizeKnockResult
     }
 
     public func sessionStatus(serverDomain: String, secretId: String) async throws -> SecuredSessionStatus {
         lock.withLock { _sessionStatus.append(SessionStatusCall(serverDomain: serverDomain, secretId: secretId)) }
+        GymProbe.note("checked secured session \(secretId)")
         try maybeThrow()
         return sessionStatusResult
     }
 
     public func closeSession(serverDomain: String, secretId: String) async throws {
         lock.withLock { _closeSession.append(CloseSessionCall(serverDomain: serverDomain, secretId: secretId)) }
+        GymProbe.note("closed secured session \(secretId)")
         try maybeThrow()
     }
 }

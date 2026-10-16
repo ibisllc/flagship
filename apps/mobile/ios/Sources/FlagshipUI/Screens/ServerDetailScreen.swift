@@ -9,6 +9,7 @@ import Flagship
 /// Danger zone (transfer, revoke, delete).
 public struct ServerDetailScreen: View {
     @Environment(\.colorScheme) private var scheme
+    @Environment(AppState.self) private var app
     let state: LoadingState<ServerDetailResponse>
     let metrics: LoadingState<ServerMetricsResponse>
     /// True for a registered box whose daemon never checked in (the install
@@ -236,6 +237,15 @@ public struct ServerDetailScreen: View {
                         DebugAccessBanner(expiresAt: until)
                     }
                     overview(d: d, c: c)
+                    if !AdminOrderGate.allows(app) {
+                        // The box takes this page's orders only under the
+                        // admin root: say so once instead of offering them.
+                        Text(AdminOrderGate.server)
+                            .font(FS.font.bodySm())
+                            .foregroundColor(c.textMuted)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .accessibilityIdentifier("sd-admin-only")
+                    }
                     if let apps {
                         if let n = d.appSandbox?.notice {
                             Text(n.text)
@@ -247,13 +257,14 @@ public struct ServerDetailScreen: View {
                         ServerAppsSection(controller: apps, onOpenApp: onOpenApp, onCreate: onCreateApp)
                     }
                     MonitoringPane(health: health, metrics: metrics, cert: certificate(d))
-                    deviceRow(d: d, c: c)
                     BootUnlockCard(serverDomain: d.serverFqdn)
                     ServerOrderCard(serverDomain: d.serverFqdn)
                     ShareServerCard(serverDomain: d.serverFqdn)
                     FrontPageCard(serverDomain: d.serverFqdn)
-                    LockPowerCard(serverDomain: d.serverFqdn)
-                    DeadManCard(serverDomain: d.serverFqdn, serverName: serverName ?? d.serverFqdn)
+                    if AdminOrderGate.allows(app) {
+                        LockPowerCard(serverDomain: d.serverFqdn)
+                        DeadManCard(serverDomain: d.serverFqdn, serverName: serverName ?? d.serverFqdn)
+                    }
                     JournalCard(serverDomain: d.serverFqdn)
                     ServerBackupsSection(serverDomain: d.serverFqdn)
                     UpdateServerCard(serverDomain: d.serverFqdn, currentCommit: d.currentCommit, lastUpdate: d.lastUpdate, onRefreshDetail: onRefreshDetail)
@@ -488,34 +499,6 @@ public struct ServerDetailScreen: View {
             issuer: verifiedCertStatus?.certIssuer,
             sans: d.certSans ?? verifiedCertStatus?.appsServed ?? []
         )
-    }
-
-    private func deviceRow(d: ServerDetailResponse, c: FSColors) -> some View {
-        sectionWrap("ACCESS", c: c) {
-            VStack(spacing: FS.space.s3) {
-                Button(action: onOpenSessions) {
-                    FSCard {
-                        HStack {
-                            Image(systemName: "iphone.gen3").foregroundColor(c.primary)
-                            Text("Paired devices")
-                            Spacer()
-                            Text("\(d.pairedSessionCount)").foregroundColor(c.textMuted)
-                            Image(systemName: "chevron.right").foregroundColor(c.textMuted)
-                        }
-                    }
-                }.buttonStyle(.plain)
-                Button(action: onOpenTier) {
-                    FSCard {
-                        HStack {
-                            Image(systemName: "creditcard").foregroundColor(c.primary)
-                            Text("Tier & usage")
-                            Spacer()
-                            Image(systemName: "chevron.right").foregroundColor(c.textMuted)
-                        }
-                    }
-                }.buttonStyle(.plain)
-            }
-        }
     }
 
     @ViewBuilder
@@ -1004,7 +987,9 @@ struct UpdateServerCard: View {
                             .foregroundColor(lastUpdate?.outcome == "applied" ? c.textMuted : c.danger)
                             .accessibilityIdentifier("sd-update-last-outcome")
                     }
-                    if let pending {
+                    if !AdminOrderGate.allows(app) {
+                        EmptyView()
+                    } else if let pending {
                         PendingUpdateNotice(
                             order: pending,
                             working: resendVm?.isWorking ?? false,
@@ -1380,6 +1365,9 @@ struct DangerZoneCard: View {
         return false
     }
 
+    /// Every danger-zone order is an admin device's (the webapp's rule too).
+    private var admin: Bool { AdminOrderGate.allows(app) }
+
     var body: some View {
         let c = FSColors.scheme(scheme)
         let toastCenter = toasts
@@ -1392,10 +1380,12 @@ struct DangerZoneCard: View {
                 .foregroundColor(c.textMuted)
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
-                    if canTransfer {
+                    if canTransfer && admin {
                         TransferButton(serverDomain: serverDomain)
                     }
-                    if revoked {
+                    if !admin {
+                        EmptyView()
+                    } else if revoked {
                         FSPrimaryButton(unrevoking ? "Restoring…" : "Un-revoke server", block: true) {
                             Task { await unrevoke(toasts: toastCenter, app: appState) }
                         }
@@ -1407,10 +1397,17 @@ struct DangerZoneCard: View {
                         }
                         .accessibilityIdentifier("sd-revoke-server")
                     }
-                    FSDangerButton("Delete and wipe this server", block: true) {
-                        showDelete = true
+                    if admin {
+                        FSDangerButton("Delete and wipe this server", block: true) {
+                            showDelete = true
+                        }
+                        .accessibilityIdentifier("sd-delete-server")
+                    } else {
+                        Text(AdminOrderGate.server)
+                            .font(FS.font.caption())
+                            .foregroundColor(c.textMuted)
+                            .accessibilityIdentifier("sd-danger-admin-only")
                     }
-                    .accessibilityIdentifier("sd-delete-server")
                 }
             }
         }
