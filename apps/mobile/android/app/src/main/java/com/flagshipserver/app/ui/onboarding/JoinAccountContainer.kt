@@ -10,10 +10,7 @@
 //                     error — the username IS the capability.
 //   unknown         → render a clean "No Flagship account by that name"
 //                     STATE (not an error / 404).
-//   single | multi  → Phase 1 hands off to the existing
-//                     RecoverFromWelcomeContainer (the WebAuthn-PRF
-//                     flow). Phase 3 replaces that with the real
-//                     single/multi state machine.
+//   single | multi  → the single/multi recovery state machine.
 //
 // The win over the old entry: it starts with username → resolve, not
 // the local-BlockStore "No recovery passkey on this device" throw.
