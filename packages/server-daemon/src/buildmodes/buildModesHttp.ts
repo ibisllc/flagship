@@ -39,6 +39,14 @@ export interface BuildModesHttpDeps {
 
 const J = { "content-type": "application/json" } as const;
 
+// IDEs show the 401 body as the server's error (Claude Code: "Error POSTing
+// to endpoint: <body>"), so it says what to do. It never says which: a key
+// that was replaced and a build that finished read the same.
+export const MISSING_MCP_KEY =
+  "This IDE connection has no key. Send this build's key as the header Authorization: Bearer <key>; the Flagship app shows it under Connect your IDE.";
+export const INVALID_MCP_KEY =
+  "This key doesn't open a build on this server: it was replaced, or the build has finished. Copy the current key from Connect your IDE in the Flagship app, or start a new connection there.";
+
 export function buildBuildModesHttpHandlers(deps: BuildModesHttpDeps) {
   const o = deps.orchestrator;
 
@@ -258,39 +266,47 @@ async function handleMcpTransport(
   }
   const key = bearer(req);
   if (!key) {
-    return { status: 401, headers: J, body: JSON.stringify({ error: "missing Authorization: Bearer <mcp-key>" }) };
+    return { status: 401, headers: J, body: JSON.stringify({ error: MISSING_MCP_KEY }) };
   }
   const message = parseJson(req.body);
   if (message == null) {
     return { status: 400, headers: J, body: JSON.stringify({ error: "invalid JSON-RPC body" }) };
   }
+  // The key must be the addressed build's own: another build's key is
+  // refused rather than quietly working on the build it belongs to.
+  const addressed = addressedBuild(path);
 
   // Batch support: an array of messages → an array of (non-null) responses.
   if (Array.isArray(message)) {
     const out = [];
     let authed = false;
     for (const msg of message) {
-      const r = await o.handleMcpRpc(key, msg);
+      const r = await o.handleMcpRpc(key, msg, addressed);
       authed = r.authed;
       if (!r.authed) break;
       if (r.response) out.push(r.response);
     }
-    if (!authed) return { status: 401, headers: J, body: JSON.stringify({ error: "invalid mcp key" }) };
+    if (!authed) return { status: 401, headers: J, body: JSON.stringify({ error: INVALID_MCP_KEY }) };
     return { status: 200, headers: J, body: JSON.stringify(out) };
   }
 
-  const r = await o.handleMcpRpc(key, message);
+  const r = await o.handleMcpRpc(key, message, addressed);
   if (!r.authed) {
-    return { status: 401, headers: J, body: JSON.stringify({ error: "invalid mcp key" }) };
+    return { status: 401, headers: J, body: JSON.stringify({ error: INVALID_MCP_KEY }) };
   }
   // A notification yields no response body (202 Accepted, per MCP).
   if (r.response == null) {
     return { status: 202, headers: J, body: "" };
   }
-  // The build id in the path is advisory; the key is authoritative. If
-  // they disagree, the key wins (the response is still for the keyed build).
-  void path;
   return { status: 200, headers: J, body: JSON.stringify(r.response) };
+}
+
+function addressedBuild(path: string): string {
+  try {
+    return decodeURIComponent(/^\/mcp\/build\/([^/]*)\/?$/.exec(path)?.[1] ?? "");
+  } catch {
+    return "";
+  }
 }
 
 function bearer(req: HttpRequest): string | null {

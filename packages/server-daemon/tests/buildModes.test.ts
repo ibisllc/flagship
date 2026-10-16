@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { deriveSWK } from "@flagship/protocol";
 import { BuildOrchestrator } from "../src/buildmodes/buildOrchestrator.js";
-import { buildBuildModesHttpHandlers } from "../src/buildmodes/buildModesHttp.js";
+import { INVALID_MCP_KEY, MISSING_MCP_KEY, buildBuildModesHttpHandlers } from "../src/buildmodes/buildModesHttp.js";
 import { GitImporter } from "../src/buildmodes/gitImport.js";
 import { InMemoryBuildJournal } from "../src/buildmodes/buildJournal.js";
 import { InMemoryMcpKeyStore } from "../src/buildmodes/mcpKeyStore.js";
@@ -442,6 +442,30 @@ describe("BuildOrchestrator — mcp mode", () => {
     expect(bad.authed).toBe(false);
   });
 
+  it("gives each IDE the config shape it documents", async () => {
+    const { o } = makeOrchestrator();
+    const { buildId, connection } = await o.createMcp();
+    const name = `flagship-${buildId}`;
+    const auth = { Authorization: `Bearer ${connection.key}` };
+    const by = Object.fromEntries(connection.ideConfigs.map((c) => [c.id, c]));
+    expect(Object.keys(by).sort()).toEqual(["claude-code", "cline", "cursor", "vscode"]);
+    expect(by["claude-code"]!.config).toEqual(connection.ideConfig);
+    expect(by["claude-code"]!.config).toEqual({ mcpServers: { [name]: { type: "http", url: connection.url, headers: auth } } });
+    expect(by["claude-code"]!.command).toBe(
+      `claude mcp add --scope user --transport http ${name} ${connection.url} --header "Authorization: Bearer ${connection.key}"`,
+    );
+    // Cursor picks the transport from `url`; VS Code's file is `servers`;
+    // Cline refuses `type: "http"` and reads a missing type as legacy SSE.
+    expect(by.cursor!.config).toEqual({ mcpServers: { [name]: { url: connection.url, headers: auth } } });
+    expect(by.vscode!.config).toEqual({ servers: { [name]: { type: "http", url: connection.url, headers: auth } } });
+    expect(by.cline!.config).toEqual({ mcpServers: { [name]: { type: "streamableHttp", url: connection.url, headers: auth } } });
+    // Never a project file: the URL names the server, and the IDE's agent reads the project.
+    for (const c of connection.ideConfigs) expect(c.where).not.toMatch(/in your project/);
+    const rotated = await o.rotateMcpKey(buildId);
+    expect(JSON.stringify(rotated!.ideConfigs)).toContain(rotated!.key);
+    expect(JSON.stringify(rotated!.ideConfigs)).not.toContain(connection.key);
+  });
+
   it("an MCP agent can write files, stage, test and finish; the box then puts it live", async () => {
     const { o, deployed, staging, mcpKeys } = makeOrchestrator();
     const { buildId, connection } = await o.createMcp();
@@ -562,18 +586,32 @@ describe("buildModesHttp", () => {
     // No bearer → 401.
     const noAuth = await handle(req({ method: "POST", path: `/mcp/build/x`, body: jbody({ jsonrpc: "2.0", id: 1, method: "ping" }) }));
     expect(noAuth!.status).toBe(401);
+    expect(JSON.parse(noAuth!.body as string).error).toBe(MISSING_MCP_KEY);
 
-    // With bearer → 200, ping result.
-    const ok = await handle(
-      req({
-        method: "POST",
-        path: `/mcp/build/x`,
-        headers: { authorization: `Bearer ${conn.key}` },
-        body: jbody({ jsonrpc: "2.0", id: 1, method: "ping" }),
-      }),
-    );
+    // A wrong (or replaced) key → 401 with the sentence the IDE shows, single and batch.
+    for (const body of [{ jsonrpc: "2.0", id: 1, method: "ping" }, [{ jsonrpc: "2.0", id: 1, method: "ping" }]]) {
+      const wrong = await handle(
+        req({ method: "POST", path: `/mcp/build/x`, headers: { authorization: "Bearer fmcp_00" }, body: jbody(body) }),
+      );
+      expect(wrong!.status).toBe(401);
+      expect(JSON.parse(wrong!.body as string).error).toBe(INVALID_MCP_KEY);
+    }
+
+    // With bearer, at its own build's URL → 200, ping result.
+    const ping = (path: string, key: string) =>
+      handle(req({ method: "POST", path, headers: { authorization: `Bearer ${key}` }, body: jbody({ jsonrpc: "2.0", id: 1, method: "ping" }) }));
+    const ok = await ping(new URL(conn.url).pathname, conn.key);
     expect(ok!.status).toBe(200);
     expect(JSON.parse(ok!.body as string).result).toEqual({});
+
+    // The key opens its own build only: at another build's URL it is refused,
+    // not quietly served as the build it belongs to.
+    const other = JSON.parse((await handle(req({ method: "POST", path: "/api/build/mcp", body: jbody({}) })))!.body as string);
+    const crossed = await ping(`/mcp/build/${other.buildId}`, conn.key);
+    expect(crossed!.status).toBe(401);
+    expect(JSON.parse(crossed!.body as string).error).toBe(INVALID_MCP_KEY);
+    expect((await ping(`/mcp/build/${other.buildId}`, other.connection.key))!.status).toBe(200);
+    expect((await ping(`/mcp/build/%E0%A4%A`, conn.key))!.status).toBe(401);
   });
 
   it("GET journal + sessions list", async () => {

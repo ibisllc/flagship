@@ -314,8 +314,25 @@ export interface BuildOrchestratorDeps {
 export interface McpConnectionInfo {
   url: string;
   key: string;
-  /** Drop-in JSON the user pastes into Cursor/Cline's mcp config. */
+  /** Drop-in `mcpServers` JSON for Claude Code's `.mcp.json` (VS Code reads that file too). */
   ideConfig: Record<string, unknown>;
+  /**
+   * The same connection in each IDE's own format, as the user pastes it:
+   * IDEs disagree on the shape (VS Code's `servers`, Cline's
+   * `streamableHttp`, Cursor's type-less entry), and a wrong one fails to
+   * load or quietly falls back to the legacy SSE transport.
+   */
+  ideConfigs: McpIdeConfig[];
+}
+
+export interface McpIdeConfig {
+  id: "claude-code" | "cursor" | "vscode" | "cline";
+  name: string;
+  /** Where the JSON goes. */
+  where: string;
+  config: Record<string, unknown>;
+  /** A one-line alternative to pasting the JSON, when the IDE has one. */
+  command?: string;
 }
 
 /** The single-file adapter for a git build, with the owner's choices taken out. */
@@ -1296,9 +1313,15 @@ export class BuildOrchestrator {
    * message to that build's MCP server. Returns null on auth failure
    * (the HTTP layer turns that into a 401) or for notifications.
    */
-  async handleMcpRpc(presentedKey: string, message: unknown): Promise<{ authed: boolean; response: JsonRpcResponse | null }> {
+  async handleMcpRpc(
+    presentedKey: string,
+    message: unknown,
+    /** The build the IDE addressed (`/mcp/build/:id`); a key for another build is refused, not redirected. */
+    addressed?: string,
+  ): Promise<{ authed: boolean; response: JsonRpcResponse | null }> {
     const buildId = await this.deps.mcpKeys.resolve(presentedKey);
     if (!buildId || this.sealedBuilds.has(buildId)) return { authed: false, response: null };
+    if (addressed !== undefined && addressed !== buildId) return { authed: false, response: null };
     let server = this.mcpServers.get(buildId);
     if (!server) {
       // A build sealed before a restart stays closed: its key was revoked,
@@ -1487,18 +1510,32 @@ export class BuildOrchestrator {
 
   private connectionInfo(buildId: string, key: string): McpConnectionInfo {
     const url = `${(this.deps.mcpBaseUrl ?? `https://${this.deps.serverFqdn}`).replace(/\/$/, "")}/mcp/build/${buildId}`;
-    return {
-      url,
-      key,
-      ideConfig: {
-        mcpServers: {
-          [`flagship-${buildId}`]: {
-            type: "http",
-            url,
-            headers: { Authorization: `Bearer ${key}` },
-          },
-        },
-      },
-    };
+    return { url, key, ...mcpIdeConfigs(`flagship-${buildId}`, url, key) };
   }
+}
+
+/**
+ * The connection in the shape each IDE documents for a remote Streamable-HTTP
+ * server with a header. Each goes in the IDE's user settings, never a file in
+ * the project: the URL names the server and account, and the IDE's agent
+ * reads the project.
+ */
+export function mcpIdeConfigs(name: string, url: string, key: string): Pick<McpConnectionInfo, "ideConfig" | "ideConfigs"> {
+  const headers = { Authorization: `Bearer ${key}` };
+  const ideConfig = { mcpServers: { [name]: { type: "http", url, headers } } };
+  return {
+    ideConfig,
+    ideConfigs: [
+      {
+        id: "claude-code",
+        name: "Claude Code",
+        where: "Run the command in a terminal, or pass the JSON with --mcp-config",
+        config: ideConfig,
+        command: `claude mcp add --scope user --transport http ${name} ${url} --header "Authorization: Bearer ${key}"`,
+      },
+      { id: "cursor", name: "Cursor", where: "~/.cursor/mcp.json (Cursor Settings → MCP → Add new global MCP server)", config: { mcpServers: { [name]: { url, headers } } } },
+      { id: "vscode", name: "VS Code", where: "Your user mcp.json (Command Palette → MCP: Open User Configuration)", config: { servers: { [name]: { type: "http", url, headers } } } },
+      { id: "cline", name: "Cline", where: "Cline → MCP Servers → Configure MCP Servers", config: { mcpServers: { [name]: { type: "streamableHttp", url, headers } } } },
+    ],
+  };
 }
