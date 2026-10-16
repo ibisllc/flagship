@@ -3,7 +3,7 @@
  *
  * A is the owner of server S; B is the account A shares S with. B's identity
  * toward S is a per-share key derived from B's UMK, so no owner can link B
- * across servers or apps. Eleven '|'-joined envelopes (§4 of the spec), the
+ * across servers or apps. Twelve '|'-joined envelopes (§4 of the spec), the
  * link-secret derivations, the 6-digit code both phones show, and the sealed
  * JSON payloads `.com` relays without being able to read.
  *

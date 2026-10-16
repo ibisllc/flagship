@@ -17,6 +17,7 @@ import {
 } from "@flagship/protocol";
 import { InMemoryStorage } from "@flagship/storage";
 import { handleCreateServiceInvite, handleRevokeServiceInvite } from "@flagship/control-plane";
+import { adminProof, testVerifyAcceptAdmin } from "../../../packages/server-daemon/tests/shares/acceptAdminFixture.js";
 import { ShareStore } from "../../../packages/server-daemon/src/shares/shareStore.js";
 import { ActivityLog } from "../../../packages/server-daemon/src/shares/activityLog.js";
 import { ShareSessionStore, buildShares } from "../../../packages/server-daemon/src/shares/sharesHttp.js";
@@ -59,10 +60,14 @@ async function world(level: "view" | "manage" = "manage") {
   await storage.servers.put({ serverDomain: S, username: "alice", identityPubKeyHex: hex(stk.publicKey), registeredAt: 1 });
   const comDeps = { invites: storage.serviceInvites, usernames: storage.usernames, servers: storage.servers };
 
-  const store = new ShareStore(null, { serverDomain: S, verifyOwnerGrant: (g, sig) => verifyServerShareGrant(g, sig, adminRoot.publicKey) });
+  const store = new ShareStore(null, {
+    serverDomain: S,
+    verifyOwnerGrant: (g, sig) => verifyServerShareGrant(g, sig, adminRoot.publicKey),
+    verifyAcceptAdmin: testVerifyAcceptAdmin(),
+  });
   const grant: ServerShareGrant = { serverDomain: S, shareId: SHARE, memberPubHex: hex(member.publicKey), level, unlockAtBoot: false, seeAppData: false, label: "Sam", issuedAt: Date.now() - 1000 };
   const accept = { serverDomain: S, shareId: SHARE, memberPubHex: hex(member.publicKey), acceptedAt: Date.now() - 2000 };
-  const put = await store.put(grant, hex(signServerShareGrant(grant, adminRoot)), accept, hex(signServerShareAccept(accept, member)));
+  const put = await store.put(grant, hex(signServerShareGrant(grant, adminRoot)), accept, hex(signServerShareAccept(accept, member)), adminProof(accept));
   expect(put.ok).toBe(true);
 
   const principals = new AccessPrincipals(hex(ownerAid.publicKey));
