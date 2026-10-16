@@ -1,11 +1,10 @@
-// Recovery management. Two phases:
-//   - Configure (this device): create a passkey for flagshipserver.com,
-//     run a PRF-extension assertion to derive a 32-byte secret, wrap
-//     the UMK seed under it, save the envelope to Block Store + post
-//     a copy to /api/recovery/register so a fresh device can fetch.
-//   - Restore (new device): pick the passkey, assert PRF, fetch the
-//     envelope from Block Store (or fall back to .com), decrypt, hand
-//     the seed back to Keystore.
+// Recovery management (Settings): configure cloud recovery on this device —
+// create a passkey for flagshipserver.com, run a PRF-extension assertion to
+// derive a 32-byte secret, wrap the UMK seed under it, save the envelope to
+// Block Store + post a copy to /api/recovery/register so a fresh device can
+// fetch. Restoring happens on the new device, from "I already have an
+// account" (RecoverAccountViewModel), never from here: this device already
+// holds the account key.
 //
 // MIRRORS: apps/mobile/ios/Sources/FlagshipUI/Screens/RecoveryScreen.swift +
 // apps/mobile/ios/Sources/Flagship/Recovery.swift.
@@ -29,6 +28,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -46,7 +47,6 @@ import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.keystore.KeystoreIrkAccess
 import com.flagshipserver.app.keystore.PasskeyCeremonyAdapter
 import com.flagshipserver.app.keystore.PasskeyRecoveryManager
-import com.flagshipserver.app.keystore.Recovery
 import com.flagshipserver.app.keystore.WrappedUmk
 import com.flagshipserver.app.ui.components.FSCard
 import com.flagshipserver.app.ui.components.FSField
@@ -60,7 +60,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private enum class RecoveryMode { Choose, Setup, Restore }
+private enum class RecoveryMode { Choose, Setup }
 private enum class CloudStatus { Unknown, NotConfigured, Configured, Failed }
 
 @Composable
@@ -143,7 +143,6 @@ fun RecoveryScreen(nav: NavController) {
             RecoveryMode.Choose -> ChooseCard(
                 cloudStatus = cloudStatus,
                 onSetup = { mode = RecoveryMode.Setup },
-                onRestore = { mode = RecoveryMode.Restore },
             )
             RecoveryMode.Setup -> SetupCard(
                 working = working,
@@ -211,49 +210,6 @@ fun RecoveryScreen(nav: NavController) {
                     mode = RecoveryMode.Choose
                 },
             )
-            RecoveryMode.Restore -> RestoreCard(
-                working = working,
-                passphrase = passphrase,
-                onPassphrase = { passphrase = it },
-                onRun = {
-                    if (activity == null) { error = "Open from foreground."; return@RestoreCard }
-                    scope.launch {
-                        working = true; error = null
-                        try {
-                            val envelope = blockStore.fetch()
-                                ?: throw IllegalStateException("no encrypted backup on this device; cross-device restore isn't available yet")
-                            val username = app.currentUser.value ?: "you"
-                            // The Block Store blob was sealed with the
-                            // passphrase-derived prfSalt, so re-derive it here
-                            // (Argon2id off the main thread) and assert with it.
-                            val secrets = withContext(Dispatchers.Default) {
-                                com.flagshipserver.app.keystore.RecoveryDerivation
-                                    .derivePassphraseSecrets(passphrase, username)
-                            }
-                            val prfSecret = passkeys.assertPrf(
-                                activity, envelope.credentialId, secrets.prfSalt,
-                            )
-                            val seed = Recovery.unwrap(
-                                wrappedUmkBase64 = envelope.wrappedUmkBase64,
-                                prfSecret = prfSecret,
-                            )
-                            require(seed.size == 32) { "recovered UMK isn't 32 bytes" }
-                            // TODO: persist seed into Keystore + invalidate cached IRK seed.
-                            passphrase = ""
-                            toasts.success("UMK recovered (${seed.size} bytes). Re-pair your servers next.")
-                            mode = RecoveryMode.Choose
-                        } catch (t: Throwable) {
-                            error = NetworkErrorHumanizer.humanize(t)
-                        } finally {
-                            working = false
-                        }
-                    }
-                },
-                onCancel = {
-                    passphrase = ""
-                    mode = RecoveryMode.Choose
-                },
-            )
         }
         Spacer(Modifier.height(FS.space.s3))
         HowRecoveryWorksCard()
@@ -265,7 +221,6 @@ fun RecoveryScreen(nav: NavController) {
 private fun ChooseCard(
     cloudStatus: CloudStatus,
     onSetup: () -> Unit,
-    onRestore: () -> Unit,
 ) {
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
@@ -286,7 +241,14 @@ private fun ChooseCard(
                 style = TextStyle(fontSize = 13.sp),
             )
             FSPrimaryButton(label = "Set up cloud recovery", onClick = onSetup, block = true)
-            FSGhostButton(label = "Restore from cloud", onClick = onRestore, block = true)
+            if (cloudStatus == CloudStatus.Configured) {
+                Text(
+                    RECOVER_ON_NEW_DEVICE,
+                    color = FS.colors.textMuted,
+                    style = TextStyle(fontSize = 13.sp),
+                    modifier = Modifier.semantics { testTag = "recovery-new-device-hint" },
+                )
+            }
         }
     }
 }
@@ -333,41 +295,6 @@ private fun SetupCard(
 }
 
 @Composable
-private fun RestoreCard(
-    working: Boolean,
-    passphrase: String,
-    onPassphrase: (String) -> Unit,
-    onRun: () -> Unit,
-    onCancel: () -> Unit,
-) {
-    val canSubmit = !working && passphrase.length >= CloudRecoveryEnrollment.MIN_PASSPHRASE
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Text("Restore from cloud", color = FS.colors.text,
-                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
-            Text(
-                "Enter your recovery passphrase, then confirm the passkey prompt.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp),
-            )
-            FSField(
-                value = passphrase,
-                onValueChange = onPassphrase,
-                label = "Recovery passphrase",
-                visualTransformation = PasswordVisualTransformation(),
-            )
-            FSPrimaryButton(
-                label = if (working) "Restoring…" else "Restore",
-                onClick = onRun,
-                enabled = canSubmit,
-                block = true,
-            )
-            FSGhostButton(label = "Back", onClick = onCancel)
-        }
-    }
-}
-
-@Composable
 private fun HowRecoveryWorksCard() {
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
@@ -384,3 +311,7 @@ private fun HowRecoveryWorksCard() {
         }
     }
 }
+
+/** Where restoring happens (iOS RecoveryScreen's line). */
+internal const val RECOVER_ON_NEW_DEVICE =
+    "If you lose this device, install Flagship on a new one, choose \"I already have an account,\" and recover with your passphrase."
