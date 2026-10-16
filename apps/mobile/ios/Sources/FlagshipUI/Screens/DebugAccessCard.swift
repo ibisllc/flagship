@@ -55,6 +55,7 @@ struct DebugAccessCard: View {
                 }
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("sd-debug-access")
         .task(id: serverDomain) {
             vm = DebugAccessViewModel(serverDomain: serverDomain, view: view, client: client, onChanged: onChanged)
