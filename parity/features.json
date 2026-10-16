@@ -555,6 +555,14 @@
       }
     },
     {
+      "id": "scheduled-backups",
+      "title": "Backups section: schedule, saved list, download, delete, Back up now; phone keeps a copy",
+      "ref": "ios",
+      "surfaces": {
+        "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/ScheduledBackups.swift", "enum ArchiveKeys"], ["apps/mobile/shared/Sources/FlagshipAPI/Models/SavedBackupModels.swift", "flagship/server-archive-keys/v1"], ["apps/mobile/shared/Sources/FlagshipAPI/Models/SavedBackupModels.swift", "flagship/backup-policy/v1"], ["apps/mobile/shared/Sources/FlagshipCore/ServerBackupBundle.swift", "FLGSHBK1"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerBackupsSection.swift", "struct ServerBackupsSection"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/ServerBackupsSection.swift", "Approve backups for this server"], ["apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerBackupsViewModel.swift", "Each backup is one \\.flagship file\\."], ["apps/mobile/ios/Sources/FlagshipUI/ViewModels/CreateServerViewModel.swift", "attachBackupPolicy"], ["apps/mobile/ios/Sources/FlagshipUI/Services/PhoneBackupTask.swift", "com\\.flagshipserver\\.app\\.backup-fetch"], ["apps/mobile/shared/Sources/FlagshipAPI/Client/LiveScreensClient.swift", "/api/screens/server-archive/backups"]] }
+      }
+    },
+    {
       "id": "activity-feed",
       "title": "Activity: the server's own events merged with account events",
       "ref": "ios",
