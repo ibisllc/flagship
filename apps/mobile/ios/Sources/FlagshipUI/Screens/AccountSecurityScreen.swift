@@ -183,7 +183,8 @@ public struct AccountSecurityScreen: View {
                 .accessibilityIdentifier("watch-delegate-toggle")
                 .disabled(vm.phase == .enabling || vm.phase == .disabling)
 
-                Text("Approve a server boot from your Watch without unlocking your iPhone. Other actions — revoke server, wipe & restart, replace device — always require unlock. Off by default.")
+                Text("Approve a server boot from your Apple Watch while Flagship is unlocked on this iPhone. Other actions (revoke server, wipe & restart, replace device) always need your iPhone. Off by default.")
+                    .accessibilityIdentifier("watch-delegate-note")
                     .font(FS.font.caption())
                     .foregroundColor(c.textMuted)
 

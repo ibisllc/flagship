@@ -16,7 +16,7 @@ struct PodStatusWidget: Widget {
             PodStatusWidgetView(entry: entry)
                 .containerBackground(.fill.tertiary, for: .widget)
         }
-        .configurationDisplayName("Pods")
+        .configurationDisplayName("Servers")
         .description("Online/offline status for your Flagship servers.")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
@@ -132,7 +132,7 @@ private struct PodStatusWidgetView: View {
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 4) {
             Image(systemName: "server.rack").foregroundStyle(.secondary)
-            Text("No pods yet").font(.headline)
+            Text("No servers yet").font(.headline)
             Text("Pair a server to see status here.")
                 .font(.caption).foregroundStyle(.secondary)
         }

@@ -43,14 +43,14 @@ struct ApproveUnlockIntent: AppIntent {
 /// page. Uses the App Group snapshot so the entity list reflects the
 /// user's actual pods (Spotlight surfaces these as suggestions).
 struct ShowPodIntent: AppIntent {
-    static var title: LocalizedStringResource = "Show pod"
+    static var title: LocalizedStringResource = "Show server"
     static var description = IntentDescription(
         "Open the detail page for a specific Flagship server."
     )
 
     static var openAppWhenRun: Bool = true
 
-    @Parameter(title: "Pod")
+    @Parameter(title: "Server")
     var pod: PodEntity
 
     func perform() async throws -> some IntentResult {
@@ -65,7 +65,7 @@ struct ShowPodIntent: AppIntent {
 /// sync with the user's actual servers without the intent extension
 /// having to load FlagshipCore.
 struct PodEntity: AppEntity {
-    static var typeDisplayRepresentation: TypeDisplayRepresentation = "Flagship Pod"
+    static var typeDisplayRepresentation: TypeDisplayRepresentation = "Flagship Server"
     static var defaultQuery = PodEntityQuery()
 
     var id: String
@@ -112,7 +112,7 @@ struct PodEntityQuery: EntityQuery {
 /// from the App Group snapshot, so a momentary network blip doesn't
 /// stall the response.
 struct PodStatusIntent: AppIntent {
-    static var title: LocalizedStringResource = "Pod status"
+    static var title: LocalizedStringResource = "Server status"
     static var description = IntentDescription(
         "Speak the current online/offline state of your Flagship servers."
     )
@@ -122,18 +122,18 @@ struct PodStatusIntent: AppIntent {
     func perform() async throws -> some IntentResult & ReturnsValue<String> & ProvidesDialog {
         let snap = PodStatusSnapshot.read()
         if snap.pods.isEmpty {
-            return .result(value: "no pods", dialog: "You don't have any Flagship pods yet.")
+            return .result(value: "no servers", dialog: "You don't have any Flagship servers yet.")
         }
         let online  = snap.pods.filter { $0.statusRaw == "online"  }.count
         let offline = snap.pods.filter { $0.statusRaw == "offline" }.count
         let total = snap.pods.count
         let speak: String
         if offline == 0 {
-            speak = "All \(total) pod\(total == 1 ? "" : "s") are online."
+            speak = total == 1 ? "Your server is online." : "All \(total) servers are online."
         } else if online == 0 {
-            speak = "All \(total) pod\(total == 1 ? "" : "s") are offline."
+            speak = total == 1 ? "Your server is offline." : "All \(total) servers are offline."
         } else {
-            speak = "\(online) of \(total) pods online, \(offline) offline."
+            speak = "\(online) of \(total) servers online, \(offline) offline."
         }
         return .result(value: speak, dialog: "\(speak)")
     }
@@ -146,10 +146,10 @@ struct FlagshipAppShortcuts: AppShortcutsProvider {
         AppShortcut(
             intent: PodStatusIntent(),
             phrases: [
-                "Get pod status with \(.applicationName)",
+                "Get server status with \(.applicationName)",
                 "What's my \(.applicationName) status",
             ],
-            shortTitle: "Pod status",
+            shortTitle: "Server status",
             systemImageName: "server.rack"
         )
         AppShortcut(
@@ -164,10 +164,10 @@ struct FlagshipAppShortcuts: AppShortcutsProvider {
         AppShortcut(
             intent: ShowPodIntent(),
             phrases: [
-                "Show my \(.applicationName) pod",
-                "Open a pod on \(.applicationName)",
+                "Show my \(.applicationName) server",
+                "Open a server on \(.applicationName)",
             ],
-            shortTitle: "Show pod",
+            shortTitle: "Show server",
             systemImageName: "house.fill"
         )
     }
