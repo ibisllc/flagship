@@ -94,6 +94,7 @@ import {
 } from "../lib/appApiKeys.js";
 import { formatWhen } from "../lib/dateFormat.js";
 import { DB_NOTE, DB_OPEN, DB_TITLE, canUseDatabase, dbErrorMessage, fetchDbStores } from "../lib/appDb.js";
+import { appStorageLines } from "../lib/appStorage.js";
 import { getActiveProfile } from "../lib/profiles.js";
 import { isDeviceFullyScoped } from "../lib/usersCheck.js";
 import { accountReadFetch } from "../lib/accountRead.js";
@@ -133,6 +134,22 @@ function formatStoreBytes(n) {
 }
 
 /** One data-layer store: a Postgres database (by store name) or the app's files folder (with its size). */
+/** The app's use against its limits (docs/app-runtimes.md §5.3), and why new data is refused when full. */
+export function renderAppStorage(storage) {
+  const lines = appStorageLines(storage);
+  if (lines.length === 0) return "";
+  return `
+          <div class="card" id="sd-storage">
+            ${lines
+              .map(
+                (l) => `<div class="row"><span class="label">${escapeHtml(l.label)}</span><span class="value">${escapeHtml(l.text)}</span></div>${
+                  l.note ? `<p class="note small err" data-sd-storage-full>${escapeHtml(l.note)}</p>` : ""
+                }`,
+              )
+              .join("")}
+          </div>`;
+}
+
 function renderStoreRow(i) {
   const label = i.store === "postgres" ? "Postgres" : i.store === "files" ? "Files" : String(i.store ?? "");
   const value =
@@ -194,6 +211,7 @@ export async function renderServiceDetail(serviceId) {
         ? '<div class="card placeholder">no stores</div>'
         : (body.dataLayerInstances ?? []).map(renderStoreRow).join("")
       }
+      ${renderAppStorage(body.storage)}
       ${hasBrowserBundle(body) ? `
         <h2 class="mt-4">Browser bundle</h2>
         <div class="card">

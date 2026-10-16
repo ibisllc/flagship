@@ -19,6 +19,7 @@ import {
 } from "./keystore.js";
 import { setSubtitle, show, $, registerView, setViewTab, currentViewId } from "./lib/router.js";
 import { toast } from "./lib/toast.js";
+import { STORAGE_FULL_ALERT } from "./lib/appStorage.js";
 import { humanError } from "./lib/humanError.js";
 import {
   initOperationsBar,
@@ -362,6 +363,29 @@ function getPodBaseUrlSafe() {
  * carries the signal). Never the pass/fail path — it's a courtesy wake.
  * @param {{title:string, body:string, tag:string, sessionId:string, server?:string}} n
  */
+/** "An app on this server is full": once per app per session, a toast and a notification that open its page. */
+function makeStorageFullPresenter() {
+  const seen = new Set();
+  return (a) => {
+    const key = `${a.server || ""}|${a.serviceId}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    const open = () => void import("./views/service-detail.js").then((m) => m.enterServiceDetail(a.serviceId, { server: a.server || "" }));
+    toast(STORAGE_FULL_ALERT, "err");
+    try {
+      if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+        const n = new Notification("Flagship", { body: STORAGE_FULL_ALERT, tag: `flagship-storage-${key}`, icon: "/icon.svg" });
+        n.onclick = () => {
+          window.focus();
+          open();
+        };
+      }
+    } catch {
+      /* the toast already said it */
+    }
+  };
+}
+
 function showAiChatNotification(n) {
   try {
     if (typeof Notification === "undefined" || Notification.permission !== "granted") {
@@ -605,6 +629,7 @@ async function boot() {
     // The alerts come from the current server: the chat opens there.
     server: () => currentPodFqdn(),
     open: (a) => void openVibeCodeSessionById(a.serviceId, { server: a.server || "" }),
+    storageFull: makeStorageFullPresenter(),
   });
   // The box wakes the owner with a content-free `generic` push when a build
   // needs them; tapping it drains the inbox now and lands on that chat, in an

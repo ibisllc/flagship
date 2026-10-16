@@ -13,6 +13,7 @@ import { toast } from "../lib/toast.js";
 import { inlineConfirm } from "../lib/modal.js";
 import { escapeHtml } from "../lib/util.js";
 import { formatBytes } from "../lib/serverArchive.js";
+import { serverStorageNotes } from "../lib/appStorage.js";
 import {
   DEFAULT_WEB_RESERVE_GB,
   POLICY_LABEL,
@@ -69,6 +70,7 @@ export function backupsSectionHtml(body) {
         <progress id="bk-usage-bar" class="full-width hidden" max="1" value="0"></progress>
         <p class="note small" id="bk-usage-line"></p>
         <p class="note small err hidden" id="bk-over" role="alert"></p>
+        ${serverStorageNotes(body.storage).map((t) => `<p class="note small err" data-bk-storage>${escapeHtml(t)}</p>`).join("")}
         <div class="note small hidden" id="bk-peer"></div>
         <button id="bk-policy-change" class="secondary full-width mt-2"${admin ? "" : " disabled"}>Change backup policy</button>
         <div id="bk-policy-editor" class="hidden mt-2">
