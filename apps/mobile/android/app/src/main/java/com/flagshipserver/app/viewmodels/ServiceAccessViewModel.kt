@@ -28,6 +28,9 @@ package com.flagshipserver.app.viewmodels
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import com.flagshipserver.app.api.AppAccountMember
+import com.flagshipserver.app.api.AppListScopeOrderBody
+import com.flagshipserver.app.api.AppListScopeRequest
+import com.flagshipserver.app.api.AppListScopeState
 import com.flagshipserver.app.api.AppMembersResponse
 import com.flagshipserver.app.api.AppRankOrderBody
 import com.flagshipserver.app.api.AppRankRequest
@@ -36,6 +39,7 @@ import com.flagshipserver.app.api.ScreensError
 import com.flagshipserver.app.api.ServiceAccessClient
 import com.flagshipserver.app.api.ServiceInviteRow
 import com.flagshipserver.app.core.AppAccessOrders
+import com.flagshipserver.app.core.AppListScope
 import com.flagshipserver.app.core.AppMemberRole
 import com.flagshipserver.app.core.GymSeams
 import com.flagshipserver.app.core.HexUtil
@@ -91,7 +95,7 @@ data class AccessPerson(
 )
 
 class ServiceAccessViewModel(
-    private val serverDomain: String,
+    serverDomain: String,
     private val serviceRef: String,
     private val username: String,
     private val client: ServiceAccessClient = ServiceAccessClient(),
@@ -103,7 +107,7 @@ class ServiceAccessViewModel(
     private val householdKey: suspend (reason: String) -> ByteArray = { r -> Keystore.deriveHouseholdKey(r) },
     private val now: () -> Long = { System.currentTimeMillis() },
     /** The box's owner-session API (members + ranks); null ⇒ no ranks shown. */
-    private val screens: ScreensClient? = null,
+    screens: ScreensClient? = null,
     /** True when this device holds the account's admin root. */
     private val isAdminDevice: () -> Boolean = { GymSeams.forceAdminRoot || Keystore.hasAdminRoot() },
     /** The admin root: every admin-only order, and an admin's invites and withdrawals. */
@@ -128,7 +132,19 @@ class ServiceAccessViewModel(
     },
     /** deviceId → name from the decrypted account directory; null when unreadable. */
     private val deviceNames: suspend () -> Map<String, String>? = { null },
+    /** Another server's screens client by its fqdn (null: no session there),
+     *  for the picker when the app keeps a separate list on each server. */
+    private val screensFor: (String) -> ScreensClient? = { null },
+    /** A server's display name by its fqdn. */
+    private val serverName: (String) -> String = AppListScope::firstLabel,
 ) : ViewModel() {
+    /** The server whose list the screen shows and edits: the one it opened
+     *  on, or the one picked while the app keeps a separate list on each server. */
+    private val homeDomain = serverDomain
+    private val homeBox = screens
+    private var domain = serverDomain
+    private var box: ScreensClient? = screens
+
     private val _phase = MutableStateFlow<ServiceAccessPhase>(ServiceAccessPhase.Idle)
     val phase: StateFlow<ServiceAccessPhase> = _phase.asStateFlow()
 
@@ -196,11 +212,11 @@ class ServiceAccessViewModel(
     val inviteBlockedLine: String? get() = if (canInvite) null else CANT_INVITE_LINE
 
     private fun createdHere(p: AccessPerson): Boolean {
-        val box = _members.value?.invite(p.inviteId)
+        val inv = _members.value?.invite(p.inviteId)
         val pub = _selfPub.value?.lowercase()
-        if (pub != null && box?.creatorPub?.lowercase() == pub) return true
+        if (pub != null && inv?.creatorPub?.lowercase() == pub) return true
         val own = ownDeviceId ?: return false
-        return (p.creatorDeviceId ?: box?.creatorDeviceId)?.lowercase() == own
+        return (p.creatorDeviceId ?: inv?.creatorDeviceId)?.lowercase() == own
     }
 
     /** Admin: every row. Otherwise only the invites this device made, while it may invite. */
@@ -257,7 +273,7 @@ class ServiceAccessViewModel(
 
     /** Read the account members, people and ranks from the box. */
     suspend fun refreshMembers() {
-        val s = screens ?: return
+        val s = box ?: return
         resolveSelf()
         _members.value = runCatching { s.appMembers(serviceRef) }.getOrNull()
         resolveDeviceNames()
@@ -297,7 +313,7 @@ class ServiceAccessViewModel(
 
     private suspend fun changeRank(busyKey: String, target: String, rank: String, reason: String, failure: String): Boolean {
         if (!isAdmin) return false
-        val s = screens ?: return false
+        val s = box ?: return false
         if (busyKey in _busyRoles.value) return false
         _busyRoles.value = _busyRoles.value + busyKey
         return try {
@@ -330,8 +346,9 @@ class ServiceAccessViewModel(
 
     suspend fun load() {
         _phase.value = ServiceAccessPhase.Loading
+        refreshListScope()
         try {
-            val state = client.getAccessState(serverDomain, serviceRef)
+            val state = client.getAccessState(domain, serviceRef)
             _restricted.value = state.isRestricted
             _allowCount.value = state.allowCount
             _phase.value = ServiceAccessPhase.Ready
@@ -340,6 +357,142 @@ class ServiceAccessViewModel(
         } catch (e: Throwable) {
             _phase.value = ServiceAccessPhase.Failed("Couldn't reach the box to load access settings.")
         }
+    }
+
+    // ── A separate list on each server (Pro; feat/marketplace) ─────────────
+
+    private val _listScope = MutableStateFlow<AppListScopeState?>(null)
+    /** The app's list scope as the shown server said it; null when it can't say (an older box). */
+    val listScope: StateFlow<AppListScopeState?> = _listScope.asStateFlow()
+    private val _busyScope = MutableStateFlow(false)
+    val busyScope: StateFlow<Boolean> = _busyScope.asStateFlow()
+    /** The box refused a separate list for want of Pro (402). */
+    private val _scopeNeedsPro = MutableStateFlow(false)
+    val scopeNeedsPro: StateFlow<Boolean> = _scopeNeedsPro.asStateFlow()
+    private val _shownServer = MutableStateFlow(serverDomain.lowercase())
+    /** The fqdn of the server whose list the screen shows. */
+    val shownServer: StateFlow<String> = _shownServer.asStateFlow()
+    /** The opening server's own name for itself, once it answered. */
+    private var homeSelf: String? = null
+
+    /** On: the app keeps (or has asked for) a separate list on each server. */
+    val listScopeOn: Boolean get() = _listScope.value?.let { it.separate || it.pending } == true
+
+    /** The switch: admin devices only, once the server said. */
+    val showsListScopeToggle: Boolean get() = isAdmin && _listScope.value != null
+
+    /** Off without Pro: the switch can't be turned on. */
+    val listScopeLocked: Boolean get() = !listScopeOn && _listScope.value?.isPro != true
+
+    val showsListScopeProLine: Boolean get() = isAdmin && _listScope.value != null && !listScopeOn && (listScopeLocked || _scopeNeedsPro.value)
+
+    val showsListScopePending: Boolean get() = _listScope.value?.pending == true
+
+    /** What a device that isn't an admin sees instead of the switch. */
+    val listScopeReadOnlyLine: String? get() = if (!isAdmin && _listScope.value?.separate == true) AppListScope.READ_ONLY_ON else null
+
+    /** The app's servers, in server order, while each keeps its own list. */
+    val pickerServers: List<String>
+        get() {
+            val st = _listScope.value ?: return emptyList()
+            if (!st.separate) return emptyList()
+            return st.servers.map { it.lowercase() }.distinct()
+        }
+
+    val showsServerPicker: Boolean get() = pickerServers.size > 1
+
+    fun serverLabel(fqdn: String): String = serverName(fqdn.lowercase())
+
+    /** The confirm dialog's title and text before turning the switch [on] or off. */
+    fun listScopeConfirm(on: Boolean): Pair<String, String> {
+        if (on) return AppListScope.ON_TITLE to AppListScope.ON_CONFIRM
+        val st = _listScope.value
+        val leader = st?.leader?.ifEmpty { st.self }?.ifEmpty { null } ?: _shownServer.value
+        return AppListScope.OFF_TITLE to AppListScope.offConfirm(serverLabel(leader))
+    }
+
+    /** Best-effort: an older box (404) or an offline one hides the switch. */
+    suspend fun refreshListScope() {
+        val s = box ?: run { _listScope.value = null; return }
+        val st = try {
+            s.appListScope(serviceRef)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            null
+        }
+        _listScope.value = st
+        val self = st?.self?.lowercase()?.takeIf { it.isNotEmpty() } ?: return
+        if (box === homeBox && homeSelf == null) homeSelf = self
+        _shownServer.value = self
+        // Each server keeps its own list: every call goes to the server shown.
+        if (st.separate) domain = self
+    }
+
+    /** Admin only: sign `flagship/app-list-scope/v1` and post it once, to the shown server. */
+    suspend fun setListScope(on: Boolean): Boolean {
+        val cur = _listScope.value ?: return false
+        if (!isAdmin || _busyScope.value) return false
+        if (on && !cur.isPro) {
+            _scopeNeedsPro.value = true
+            return false
+        }
+        val s = box ?: return false
+        _busyScope.value = true
+        val scope = if (on) AppListScope.SERVER else AppListScope.ACCOUNT
+        return try {
+            val key = adminSigner(if (on) "Give $serviceRef a separate list on each server" else "Use one list for $serviceRef on every server")
+            suspend fun send(at: Long): AppListScopeState {
+                val o = AppListScope.Order(serviceRef, scope, at)
+                return s.setAppListScope(serviceRef, AppListScopeRequest(AppListScopeOrderBody(o.serviceRef, o.scope, o.issuedAt), AppListScope.signHex(key, o)))
+            }
+            val first = now()
+            val next = try {
+                send(first)
+            } catch (e: ScreensError.Http) {
+                if (e.status != 409) throw e
+                send(maxOf(now(), first + 1))
+            }
+            _scopeNeedsPro.value = false
+            _listScope.value = next
+            if (on) {
+                next.self.lowercase().takeIf { it.isNotEmpty() }?.let { _shownServer.value = it; domain = it }
+            } else if (box !== homeBox) {
+                box = homeBox
+                domain = homeDomain
+                _shownServer.value = homeSelf ?: homeDomain.lowercase()
+                load()
+            }
+            true
+        } catch (e: ScreensError.Http) {
+            if (e.status == 402) _scopeNeedsPro.value = true
+            else _phase.value = ServiceAccessPhase.Failed(LIST_SCOPE_FAILED)
+            false
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            _phase.value = ServiceAccessPhase.Failed(LIST_SCOPE_FAILED)
+            false
+        } finally {
+            _busyScope.value = false
+        }
+    }
+
+    /** Show and edit [fqdn]'s own list: members, mode, invites and every order go there. */
+    suspend fun selectServer(fqdn: String): Boolean {
+        val target = fqdn.lowercase()
+        if (target == _shownServer.value || target !in pickerServers) return false
+        val client = if (target == homeSelf) homeBox else screensFor(target)
+        if (client == null) {
+            _phase.value = ServiceAccessPhase.Failed("This phone isn't set up on ${serverLabel(target)}.")
+            return false
+        }
+        box = client
+        domain = target
+        _shownServer.value = target
+        _members.value = null
+        load()
+        return true
     }
 
     /** Admin only: sign (admin root) + POST the v2 mode order. Returns success. */
@@ -355,7 +508,7 @@ class ServiceAccessViewModel(
                 put("mode", JsonPrimitive(order.mode))
                 put("issuedAt", JsonPrimitive(order.issuedAt))
             }
-            client.setAccessMode(serverDomain, request, AppAccessOrders.signHex(key, order))
+            client.setAccessMode(domain, request, AppAccessOrders.signHex(key, order))
             _restricted.value = restricted
             _phase.value = ServiceAccessPhase.Ready
             true
@@ -425,10 +578,10 @@ class ServiceAccessViewModel(
             // Carry the inviteId (&i=) ONLY for a manual-approve invite — the
             // friend signs the acceptance over it. Auto/group links stay bare.
             val linkInviteId = if (tier == InviteTier.PERSONAL_MANUAL) inviteId else null
-            val link = InviteLink.shareLink(serverDomain, HexUtil.encode(secret), HexUtil.encode(aid), linkInviteId, serviceRef)
+            val link = InviteLink.shareLink(domain, HexUtil.encode(secret), HexUtil.encode(aid), linkInviteId, serviceRef)
             _lastLink.value = link
             _roleNotice.value = null
-            val s = screens
+            val s = box
             if (admin && role != null && s != null && role.wire != _members.value?.defaultRole) {
                 try {
                     sendRank(s, AppAccessOrders.inviteTarget(inviteId), role.wire, "Give $trimmed a rank")
@@ -462,7 +615,7 @@ class ServiceAccessViewModel(
         _busyFinalize.value = true
         return try {
             client.acceptInvite(
-                serverDomain,
+                domain,
                 accept = parsed.accept,
                 acceptSigHex = parsed.acceptSigHex,
             )
@@ -508,7 +661,7 @@ class ServiceAccessViewModel(
             false
         }
         val boxOk = try {
-            client.withdrawInvite(serverDomain, revoke, sigHex)
+            client.withdrawInvite(domain, revoke, sigHex)
             true
         } catch (e: Throwable) {
             if (comOk) _phase.value = ServiceAccessPhase.Failed("Removed them, but the server is still catching up. Try again in a moment.")
@@ -534,7 +687,7 @@ class ServiceAccessViewModel(
                 put("aid", JsonPrimitive(order.aid))
                 put("issuedAt", JsonPrimitive(order.issuedAt))
             }
-            client.removeServiceAllow(serverDomain, request, AppAccessOrders.signHex(key, order))
+            client.removeServiceAllow(domain, request, AppAccessOrders.signHex(key, order))
             refreshPeople()
             refreshMembers()
             true
@@ -603,6 +756,7 @@ class ServiceAccessViewModel(
         private val DEVICE_ID = Regex("^[0-9a-f]{32}$")
 
         const val CANT_INVITE_LINE = "Only an admin can let you invite people to this app."
+        const val LIST_SCOPE_FAILED = "Couldn't change the list. Try again in a moment."
 
         fun create(
             context: Context,

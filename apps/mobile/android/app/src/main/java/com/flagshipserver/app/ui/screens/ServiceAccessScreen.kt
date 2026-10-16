@@ -117,8 +117,20 @@ fun ServiceAccessScreen(nav: NavController, serviceId: String) {
 
     val live = com.flagshipserver.app.core.LocalDeveloperSettings.current?.useLiveClient?.collectAsState()?.value ?: true
     val server = com.flagshipserver.app.core.LocalFlagshipServerClient.current
+    val podClients = com.flagshipserver.app.core.LocalPodClients.current
     val vm = remember(serviceId, serverDomain, live) {
         val mockBox = screens is MockScreensClient
+        // A server of the account by fqdn; the mock box names the demo's
+        // servers under its own account, so it matches by first label.
+        val podFor = { fqdn: String ->
+            val all = appState.pods.value
+            all.firstOrNull { it.fqdn.equals(fqdn, ignoreCase = true) }
+                ?: if (mockBox) all.firstOrNull { it.fqdn.substringBefore('.').equals(fqdn.substringBefore('.'), ignoreCase = true) } else null
+        }
+        val screensFor = { fqdn: String -> podFor(fqdn)?.let { podClients.screens(it) } }
+        val serverName = { fqdn: String ->
+            podFor(fqdn)?.name?.takeIf { it.isNotBlank() } ?: com.flagshipserver.app.core.AppListScope.firstLabel(fqdn)
+        }
         val profileDevice = { appState.activeProfile?.deviceId?.takeIf { it.length == 32 } }
         // The mock box's device book names this phone by a fixed key; a real
         // box by the account device key derived on this phone.
@@ -132,6 +144,8 @@ fun ServiceAccessScreen(nav: NavController, serviceId: String) {
                 deviceSigner = { _ -> Keystore.accountDeviceSigner(Keystore.currentUmkSeed(), username, deviceId() ?: MockScreensClient.SELF_DEVICE_ID) },
                 ownDevicePubHex = { MockScreensClient.SELF_DEVICE_PUB },
                 deviceNames = { MockScreensClient.DEVICE_NAMES },
+                screensFor = screensFor,
+                serverName = serverName,
             )
         } else {
             ServiceAccessViewModel(
@@ -144,6 +158,8 @@ fun ServiceAccessScreen(nav: NavController, serviceId: String) {
                     if (id == null) null
                     else com.flagshipserver.app.viewmodels.AccountDeviceNames.load(server, username, id)
                 },
+                screensFor = screensFor,
+                serverName = serverName,
             )
         }
     }
@@ -183,6 +199,10 @@ internal fun ServiceAccessContent(
     val busyAdd by vm.busyAdd.collectAsState()
     val busyFinalize by vm.busyFinalize.collectAsState()
     val deviceNames by vm.deviceNamesState.collectAsState()
+    val listScope by vm.listScope.collectAsState()
+    val busyScope by vm.busyScope.collectAsState()
+    val scopeNeedsPro by vm.scopeNeedsPro.collectAsState()
+    val shownServer by vm.shownServer.collectAsState()
 
     var adding by remember { mutableStateOf<InviteTier?>(null) }
     var name by remember { mutableStateOf("") }
@@ -194,6 +214,7 @@ internal fun ServiceAccessContent(
     var removing by remember { mutableStateOf<Set<String>>(emptySet()) }
     var confirmRemove by remember { mutableStateOf<AccessPerson?>(null) }
     var confirmMembersOnly by remember { mutableStateOf(false) }
+    var confirmScope by remember { mutableStateOf<Boolean?>(null) }
     var replyText by remember { mutableStateOf("") }
 
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -302,6 +323,24 @@ internal fun ServiceAccessContent(
                     )
                 }
             }
+        }
+
+        // A separate list on each server (a Pro option): the switch on admin
+        // devices, and while it's on the picker that retargets the whole screen.
+        if (listScope != null && (vm.showsListScopeToggle || vm.listScopeReadOnlyLine != null || vm.showsServerPicker)) {
+            ListScopeCard(
+                vm = vm,
+                busy = busyScope,
+                needsPro = scopeNeedsPro,
+                shownServer = shownServer,
+                onToggle = { on -> confirmScope = on },
+                onPick = { fqdn ->
+                    scope.launch {
+                        vm.selectServer(fqdn)
+                        (vm.phase.value as? ServiceAccessPhase.Failed)?.let { toasts.error(it.message) }
+                    }
+                },
+            )
         }
 
         // Account members: this account's devices and the co-managing accounts.
@@ -603,6 +642,30 @@ internal fun ServiceAccessContent(
         )
     }
 
+    confirmScope?.let { on ->
+        val (title, text) = vm.listScopeConfirm(on)
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmScope = null },
+            title = { Text(title) },
+            text = { Text(text) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        confirmScope = null
+                        scope.launch {
+                            if (vm.setListScope(on)) toasts.success(if (on) "Each server now keeps its own list." else "Every server now uses one list.")
+                            else (vm.phase.value as? ServiceAccessPhase.Failed)?.let { toasts.error(it.message) }
+                        }
+                    },
+                    modifier = Modifier.semantics { testTag = "service-access-list-scope-confirm" },
+                ) { Text(if (on) "Separate lists" else "One list") }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { confirmScope = null }) { Text("Cancel") }
+            },
+        )
+    }
+
     if (confirmMembersOnly) {
         val n = vm.memberPeopleCount
         androidx.compose.material3.AlertDialog(
@@ -619,6 +682,84 @@ internal fun ServiceAccessContent(
                 androidx.compose.material3.TextButton(onClick = { confirmMembersOnly = false }) { Text("Cancel") }
             },
         )
+    }
+}
+
+/** The "Separate list on each server" switch (admin devices; a Pro option),
+ *  its Pro / pending lines, and the server picker while each server keeps its
+ *  own list. No purchase link here (store anti-steering). */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ListScopeCard(
+    vm: ServiceAccessViewModel,
+    busy: Boolean,
+    needsPro: Boolean,
+    shownServer: String,
+    onToggle: (Boolean) -> Unit,
+    onPick: (String) -> Unit,
+) {
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            if (vm.showsListScopeToggle) {
+                val on = vm.listScopeOn
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(com.flagshipserver.app.core.AppListScope.TITLE, color = FS.colors.text, style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
+                        Text(com.flagshipserver.app.core.AppListScope.NOTE, color = FS.colors.textMuted, style = TextStyle(fontSize = 12.sp, lineHeight = 17.sp))
+                    }
+                    if (busy) CircularProgressIndicator(Modifier.size(14.dp).padding(end = FS.space.s2), strokeWidth = 2.dp, color = FS.colors.primary)
+                    Switch(
+                        checked = on,
+                        onCheckedChange = { want -> if (want != on) onToggle(want) },
+                        enabled = !busy && (on || !vm.listScopeLocked),
+                        modifier = Modifier.semantics { testTag = "service-access-list-scope-toggle" },
+                    )
+                }
+                if (vm.showsListScopeProLine || (needsPro && !on)) {
+                    Text(
+                        com.flagshipserver.app.core.AppListScope.PRO_LINE,
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 12.sp),
+                        modifier = Modifier.semantics { testTag = "service-access-list-scope-pro" },
+                    )
+                }
+            }
+            vm.listScopeReadOnlyLine?.let {
+                Text(
+                    it,
+                    color = FS.colors.textMuted,
+                    style = TextStyle(fontSize = 13.sp),
+                    modifier = Modifier.semantics { testTag = "service-access-list-scope-readonly" },
+                )
+            }
+            if (vm.showsListScopePending) {
+                Text(
+                    com.flagshipserver.app.core.AppListScope.PENDING_LINE,
+                    color = FS.colors.textMuted,
+                    style = TextStyle(fontSize = 12.sp),
+                    modifier = Modifier.semantics { testTag = "service-access-list-scope-pending" },
+                )
+            }
+            if (vm.showsServerPicker) {
+                val servers = vm.pickerServers
+                SingleChoiceSegmentedButtonRow(
+                    Modifier
+                        .fillMaxWidth()
+                        .semantics { testTag = "service-access-server-picker" },
+                ) {
+                    servers.forEachIndexed { i, fqdn ->
+                        val label = vm.serverLabel(fqdn)
+                        SegmentedButton(
+                            selected = fqdn == shownServer,
+                            onClick = { if (fqdn != shownServer) onPick(fqdn) },
+                            enabled = !busy,
+                            shape = SegmentedButtonDefaults.itemShape(index = i, count = servers.size),
+                            modifier = Modifier.semantics { testTag = "service-access-server-picker-${fqdn.substringBefore('.')}" },
+                        ) { Text(label, maxLines = 1) }
+                    }
+                }
+            }
+        }
     }
 }
 
