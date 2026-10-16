@@ -286,7 +286,7 @@ const TOTAL: readonly Scenario[] = [
   // D3 — settings: session tiers + grey-out gating.
   webTotal(
     "web-total-session-tiers-gated",
-    "D3-C1: the recovery-gated session actions (passkey-lock, remove-device) are greyed until recovery is enrolled.",
+    "D3-C1: the recovery-gated session actions (sign-out, remove-device) are greyed until recovery is enrolled.",
     "gym total webapp settings greys the recovery-gated session actions",
     {
       steps: [
@@ -296,7 +296,7 @@ const TOTAL: readonly Scenario[] = [
       ],
       assertions: [
         { describe: "PIN-lock present", handle: "#settings-pin-lock", expect: "present" },
-        { describe: "Passkey-lock greyed", handle: "#settings-signout", expect: "present" },
+        { describe: "Sign-out greyed", handle: "#settings-signout", expect: "present" },
         { describe: "Remove-device greyed", handle: "#settings-reset", expect: "present" },
       ],
       screenshots: [shot("session-tiers-gated", "The greyed session-tier cluster.")],
@@ -305,7 +305,7 @@ const TOTAL: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-greyed-action-ceremony",
-    "D3-C1: with no cloud recovery, tapping the greyed Lock-with-passkey routes into the last-device deletion ceremony (typed username gate); backing out sends nothing and keeps the key.",
+    "D3-C1: with no cloud recovery, tapping the greyed Sign out routes into the last-device deletion ceremony (typed username gate); backing out sends nothing and keeps the key.",
     "gym total webapp a greyed session action opens the last-device deletion ceremony",
     {
       steps: [

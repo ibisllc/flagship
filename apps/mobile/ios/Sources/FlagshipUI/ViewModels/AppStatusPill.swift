@@ -51,8 +51,18 @@ public enum AppServerState: Equatable, Sendable {
 
 public struct AppStatusPill: Equatable, Sendable {
     public enum Kind: Equatable, Sendable { case online, busy, idle, warning }
+    /// What the pill says, and what VoiceOver reads ("On 2 servers").
     public let label: String
     public let kind: Kind
+    /// Set on "On N servers": the services list shows N and Home's server
+    /// icon instead of the words.
+    public let serverCount: Int?
+
+    public init(label: String, kind: Kind, serverCount: Int? = nil) {
+        self.label = label
+        self.kind = kind
+        self.serverCount = serverCount
+    }
 
     public var fsKind: FSPillKind {
         switch kind {
@@ -82,7 +92,7 @@ public struct AppStatusPill: Equatable, Sendable {
         if states.contains(.editing) { return AppStatusPill(label: "Editing", kind: .busy) }
         let live = states.filter(\.isLive).count
         let on = live > 0 ? live : states.filter { $0 == .unknown }.count
-        if on > 0 { return AppStatusPill(label: on == 1 ? "On 1 server" : "On \(on) servers", kind: .online) }
+        if on > 0 { return AppStatusPill(label: on == 1 ? "On 1 server" : "On \(on) servers", kind: .online, serverCount: on) }
         if !states.isEmpty { return AppStatusPill(label: "Stopped", kind: .idle) }
         return AppStatusPill(label: "Can't reach", kind: .warning)
     }

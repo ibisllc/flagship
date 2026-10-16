@@ -79,7 +79,7 @@ async function runDelete() {
 }
 
 export function initAccountDeleteView() {
-  $("account-delete-back")?.addEventListener("click", () => show("view-settings"));
+  $("account-delete-back")?.addEventListener("click", () => show("view-settings-tab"));
   $("account-delete-confirm-input")?.addEventListener("input", refreshConfirmGate);
   $("account-delete-go")?.addEventListener("click", () => {
     runDelete().catch((e) => {

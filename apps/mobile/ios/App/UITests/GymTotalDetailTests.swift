@@ -306,7 +306,7 @@ final class GymTotalDetailTests: XCTestCase {
 
     // ═══════════════════ D3 — settings: gating, AI keys, security ════════════
 
-    /// D3-C1: with NO cloud recovery, the tier-2 "Lock with passkey" button is
+    /// D3-C1: with NO cloud recovery, the tier-2 "Sign out" button is
     /// greyed-but-tappable; tapping it shows the recovery-required TOAST instead
     /// of running the destructive sign-out. Asserts the toast copy and that NO
     /// destructive confirm dialog appeared. (`-smoke-no-recovery` forces the
@@ -318,7 +318,7 @@ final class GymTotalDetailTests: XCTestCase {
             "Settings should render."
         )
         let signOut = app.buttons["settings-sign-out-btn"]
-        XCTAssertTrue(revealBySwipe(app, signOut), "Settings should show the tier-2 lock-with-passkey row.")
+        XCTAssertTrue(revealBySwipe(app, signOut), "Settings should show the tier-2 Sign out button.")
         gymShot(app, "settings-tiers-gated")
         signOut.tap()
         // The recovery-required toast (ToastCenter). It surfaces as a static text
@@ -327,7 +327,7 @@ final class GymTotalDetailTests: XCTestCase {
             || app.otherElements.containing(NSPredicate(format: "label CONTAINS %@", "Set up account recovery")).firstMatch.waitForExistence(timeout: 3)
         XCTAssertTrue(toast, "Tapping the greyed tier-2 button should show the recovery-required toast.")
         // And it must NOT have run the destructive path: the sign-out confirm
-        // alert ("Lock with passkey?") should be absent.
+        // alert ("Sign out?") should be absent.
         XCTAssertFalse(
             app.alerts.firstMatch.exists,
             "The greyed tier-2 tap should NOT open the destructive sign-out confirm dialog."

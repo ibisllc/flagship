@@ -287,7 +287,13 @@ fun com.flagshipserver.app.core.AppStatus.Tone.pillKind(): FSPillKind = when (th
 }
 
 @Composable
-fun FSPill(label: String, kind: FSPillKind, modifier: Modifier = Modifier) {
+fun FSPill(
+    label: String,
+    kind: FSPillKind,
+    modifier: Modifier = Modifier,
+    /** An icon after the label, in gray (the services list's "2" and Home's server icon). */
+    trailingIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+) {
     val (fg, bg) = when (kind) {
         FSPillKind.Online -> FS.colors.success to FS.colors.success.copy(alpha = 0.12f)
         FSPillKind.Renewing -> FS.colors.warning to FS.colors.warning.copy(alpha = 0.12f)
@@ -311,11 +317,24 @@ fun FSPill(label: String, kind: FSPillKind, modifier: Modifier = Modifier) {
                 .clip(CircleShape)
                 .background(fg),
         )
-        Text(
-            text = label,
-            color = fg,
-            style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium),
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+        ) {
+            Text(
+                text = label,
+                color = fg,
+                style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Medium),
+            )
+            if (trailingIcon != null) {
+                androidx.compose.material3.Icon(
+                    trailingIcon,
+                    contentDescription = null,
+                    tint = FS.colors.textMuted,
+                    modifier = Modifier.size(12.dp),
+                )
+            }
+        }
     }
 }
 

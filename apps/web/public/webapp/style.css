@@ -526,6 +526,20 @@ button.danger, .btn.danger {
   color: var(--accent-on);
 }
 
+/* iOS's FSDangerButton: red outline and text on the surface (Settings'
+   session and Danger zone boxes). */
+button.danger-outline, .btn.danger-outline {
+  background: transparent;
+  border: 1px solid var(--err);
+  color: var(--err);
+}
+button.danger-outline:hover, .btn.danger-outline:hover { background: var(--err-soft); }
+button.danger-outline.gated, .btn.danger-outline.gated {
+  border-color: var(--ink-muted);
+  color: var(--ink-muted);
+  opacity: 1;
+}
+
 /* A quiet inline text-link button (e.g. the "Take over a box" affordance) —
    no fill/border so it reads as a secondary link, not a primary action. */
 button.linklike, .btn.linklike {
@@ -669,6 +683,12 @@ button.linklike:hover, .btn.linklike:hover {
   background: var(--accent-soft);
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.pill .pill-server-icon {
+  width: 12px;
+  height: 12px;
+  margin-left: -2px;
+  color: var(--ink-muted);
 }
 @keyframes pulse-dot {
   0%, 100% { transform: scale(1); opacity: 1; }

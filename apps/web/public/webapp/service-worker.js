@@ -234,7 +234,12 @@
 //  v108: Home's empty state carries the same Add/Import a server button as
 //       the list (no separate co-manage button), and only an admin device
 //       of the account sees it.
-const SHELL_VERSION = "v108";
+//  v109: the services list shows "On N servers" as N and the server icon;
+//       Settings moves Lock the app (was Lock with PIN code) and Sign out
+//       (was Lock with passkey) onto the tab in one box, and the Danger zone
+//       is a box of two red buttons, as on iOS, without explainer text;
+//       Browser sessions lists only browsers opened through Remote.
+const SHELL_VERSION = "v109";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

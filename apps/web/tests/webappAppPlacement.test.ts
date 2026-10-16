@@ -531,7 +531,7 @@ describe("§3 a server's apps", () => {
     expect(page).toContain('enterServiceDetail(btn.getAttribute("data-open-app"), { server: fqdn, from: "server" })');
     const sw = await asset("/webapp/service-worker.js");
     expect(sw).toContain('"/lib/appPlacement.js"');
-    expect(sw).toContain('SHELL_VERSION = "v108"');
+    expect(sw).toContain('SHELL_VERSION = "v109"');
   });
 });
 
@@ -650,6 +650,16 @@ describe("§6 an app's status pill", () => {
     expect(await label(["starting"])).toBe("On 1 server");
     expect(await label(["running", "starting", "running"])).toBe("On 3 servers");
     expect(await label(["running", "stopped"])).toBe("On 1 server");
+  });
+
+  it("the services list shows On N servers as N and Home's server icon, read aloud as the label", async () => {
+    const p = await loadPlacement();
+    const { serverIcon } = await load("lib/icons.js");
+    const html = p.appStatusPillHtml(p.combineAppStatus(["running", "starting", "running"]));
+    expect(html).toContain('aria-label="On 3 servers"');
+    expect(html).toContain(`>3<span class="pill-server-icon icon" aria-hidden="true">${serverIcon}</span>`);
+    expect(html).not.toContain(">On 3 servers<");
+    expect(p.appStatusPillHtml(p.combineAppStatus(["stopped"]))).toContain(">Stopped<");
   });
 
   it("else every server that answered says stopped → Stopped; an unreachable one doesn't count", async () => {

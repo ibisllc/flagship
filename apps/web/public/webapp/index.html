@@ -274,11 +274,23 @@
           </div>
         </div>
 
+        <!-- Session: lock (tier 1) and sign out (tier 2); the sign-out
+             confirmation carries the warning. -->
+        <div class="fs-group-section">
+          <div class="card stack-sm" id="settings-session-card">
+            <button class="danger-outline full-width" id="settings-pin-lock">Lock the app</button>
+            <button class="secondary full-width hidden" id="settings-pin-change">Change PIN</button>
+            <button class="danger-outline full-width" id="settings-signout">Sign out</button>
+          </div>
+        </div>
+
+        <!-- Danger zone, styled like a server page's: the confirmations carry
+             the warnings. -->
         <div class="fs-group-section">
           <div class="fs-group-header">DANGER ZONE</div>
-          <div class="fs-group">
-            <button class="fs-row" id="settings-tab-reset"><span class="fs-row-icon fs-row-icon--danger icon" data-row-icon="reset"></span><span class="fs-row-body"><span class="fs-row-title">Remove this device</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
-            <button class="fs-row" id="settings-tab-account-delete"><span class="fs-row-icon fs-row-icon--danger icon" data-row-icon="accountdelete"></span><span class="fs-row-body"><span class="fs-row-title">Delete account</span></span><span class="fs-row-chevron icon" data-row-icon="chevron"></span></button>
+          <div class="card stack-sm" id="settings-danger-zone-card">
+            <button class="danger-outline full-width" id="settings-reset">Remove this device from account</button>
+            <button class="danger-outline full-width" id="settings-tab-account-delete">Delete account</button>
           </div>
         </div>
 
@@ -1102,28 +1114,6 @@
           <button id="push-enable" class="full-width mt-2" style="display: none;">Allow browser notifications</button>
         </div>
 
-        <h2 class="mt-5">Session</h2>
-        <div class="card">
-          <p class="note">
-            Locks the app behind a PIN code. Nothing is interrupted.
-          </p>
-          <button class="secondary full-width mt-2" id="settings-pin-lock">Lock with PIN code</button>
-          <button class="secondary full-width mt-2 hidden" id="settings-pin-change">Change PIN</button>
-        </div>
-        <div class="card mt-2">
-          <p class="note" id="settings-signout-note">
-            Erases account key and deletes data. Sign back in with your recovery passkey.
-          </p>
-          <button class="secondary full-width mt-2" id="settings-signout">Lock with passkey</button>
-        </div>
-
-        <h2 class="mt-5">Danger zone</h2>
-        <div class="card danger-zone">
-          <p class="note">
-            Remove this device from your account. You may need account recovery to resume.
-          </p>
-          <button class="secondary full-width mt-2" id="settings-reset">Remove this device from account</button>
-        </div>
         <button class="secondary full-width mt-2" id="settings-back">← Back</button>
       </section>
 

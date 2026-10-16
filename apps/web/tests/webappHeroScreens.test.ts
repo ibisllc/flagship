@@ -148,7 +148,7 @@ describe("Settings tab — account name + grouped rounded sections", () => {
       "settings-tab-companion-dock",
       "settings-tab-companion-requests",
       "settings-tab-profiles",
-      "settings-tab-reset",
+      "settings-reset",
       "companion-requests-badge",
     ]) {
       expect(INDEX_HTML).toContain(`id="${id}"`);

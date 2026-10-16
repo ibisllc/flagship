@@ -632,6 +632,14 @@ allowances (1M / 5M / 20M a month) are placeholders.
   so every client's archive fetch 404'd; now mounted (owner sessions only).
   The webapp fetches it with the session and saves the Blob, like iOS/Android.
   Needs an endorsed box release and a `.com` deploy.
+- **Settings boxes + Browser sessions (2026-10-15):** "Lock with passkey" is
+  "Sign out"; it and the lock button share one box, and the Danger zone is a
+  box of two red buttons (no explainer text) on all three apps; the services
+  list shows "On N servers" as N and the server icon. The phone showed under
+  Browser sessions because the box listed every paired-session token (each
+  device's own included) unlabelled; `paired-sessions/list` now sends
+  `kind: remote|device` and the apps list only `remote`. Needs a `.com`
+  deploy (shell v109), an endorsed box release, iOS/Android store builds.
 - **Flagship Inference entry (2026-10-14):** free AI is a built-in provider,
   "Flagship Inference", first in every AI-key list, never removable, shown
   disabled (not hidden) once ended; the shim answers a context overflow with

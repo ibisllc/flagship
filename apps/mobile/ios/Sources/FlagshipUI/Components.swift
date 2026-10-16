@@ -201,13 +201,25 @@ public struct FSPill: View {
     @Environment(\.colorScheme) private var scheme
     let label: String
     let kind: FSPillKind
-    public init(_ label: String, kind: FSPillKind) { self.label = label; self.kind = kind }
+    /// An SF Symbol after the label, in gray (the services list's "2" and
+    /// Home's server icon).
+    let trailingIcon: String?
+    public init(_ label: String, kind: FSPillKind, trailingIcon: String? = nil) {
+        self.label = label; self.kind = kind; self.trailingIcon = trailingIcon
+    }
     public var body: some View {
         let c = FSColors.scheme(scheme)
         let (fg, bg) = colors(c, kind)
         HStack(spacing: 6) {
             Circle().fill(fg).frame(width: 6, height: 6)
-            Text(label).font(FS.font.caption()).foregroundColor(fg)
+            HStack(spacing: 3) {
+                Text(label).font(FS.font.caption()).foregroundColor(fg)
+                if let trailingIcon {
+                    Image(systemName: trailingIcon)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(c.textMuted)
+                }
+            }
         }
         .padding(.horizontal, 10).padding(.vertical, 2)
         .frame(minHeight: 22)

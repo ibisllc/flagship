@@ -548,7 +548,7 @@ const TOTAL_DETAIL: readonly Scenario[] = [
     {
       steps: [
         { kind: "launch", describe: "Launch -smoke-mode -smoke-tab settings -smoke-no-recovery." },
-        { kind: "tap", describe: "The greyed tier-2 lock-with-passkey.", handle: "settings-sign-out-btn" },
+        { kind: "tap", describe: "The greyed tier-2 Sign out.", handle: "settings-sign-out-btn" },
         { kind: "assert", describe: "The recovery-required toast.", handle: "Set up account recovery to use this." },
       ],
       assertions: [

@@ -59,10 +59,8 @@ import {
   monitorIcon,
   userIcon,
   hardDriveIcon,
-  unlockIcon,
   chevronRightIcon,
   alertCircleIcon,
-  alertTriangleIcon,
   downloadIcon,
 } from "./lib/icons.js";
 import { getSession, unlockSession } from "./lib/state.js";
@@ -73,7 +71,7 @@ import { initBootstrapView } from "./views/bootstrap.js";
 import { initUnlockView } from "./views/unlock.js";
 import { initPinViews } from "./views/pinLock.js";
 import { initHomeView, enterHome } from "./views/home.js";
-import { initSettingsView, renderProviders } from "./views/settings.js";
+import { initSettingsView, refreshSessionGates, renderProviders } from "./views/settings.js";
 import { initPodPairView, enterPodPair } from "./views/pod-pair.js";
 import { initServerDetailView, enterServerDetail } from "./views/server-detail.js";
 import { initSharedServerView } from "./views/shared-server.js";
@@ -222,8 +220,6 @@ const SETTINGS_ROW_ICONS = {
   appearance: monitorIcon,
   privacy: shieldIcon,
   about: alertCircleIcon,
-  reset: unlockIcon,
-  accountdelete: alertTriangleIcon,
   chevron: chevronRightIcon,
 };
 
@@ -251,6 +247,7 @@ async function enterSettingsTab() {
   show("view-settings-tab");
   decorateSettingsTab();
   applyDemoSettingsRestrictions(isDemoProfile(getActiveProfile()));
+  void refreshSessionGates();
   // Reflect the debug toggle's current state every time the tab is opened.
   const toggle = $("settings-debug-toggle");
   const row = $("settings-developer-row");
@@ -346,12 +343,9 @@ function wireSettingsTabEntries() {
   wire("appearance-back", () => show("view-settings-tab"));
   wire("privacy-back", () => show("view-settings-tab"));
   wire("about-back", () => show("view-settings-tab"));
-  // Danger zone — Delete account.
+  // Danger zone — Delete account. "Remove this device" (settings-reset) and
+  // the session buttons are wired in views/settings.js.
   wire("settings-tab-account-delete", enterAccountDelete);
-  $("settings-tab-reset")?.addEventListener("click", async () => {
-    const { handleReset } = await import("./views/unlock.js");
-    await handleReset();
-  });
 
   // Debug toggle — flips localStorage and reveals the developer row.
   const toggle = $("settings-debug-toggle");

@@ -7,7 +7,7 @@
 // THREAT MODEL (important — a PIN is low-entropy):
 //   - This defends the CASUAL threat: "someone grabbed my unlocked tab."
 //     It is NOT a defence against device theft + forensic disk access —
-//     that's tier-2 ("Lock with passkey", which wipes the key) + OS disk
+//     that's tier-2 ("Sign out", which wipes the key) + OS disk
 //     encryption. We never claim otherwise.
 //   - The wrapped UMK persists in IndexedDB so you can lock/unlock
 //     repeatedly. To stop an attacker who copies that blob off disk from

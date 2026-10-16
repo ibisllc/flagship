@@ -80,17 +80,17 @@ const EVERY_MERGE: readonly Scenario[] = [
   ),
   android(
     "android-settings-tab",
-    "The Settings tab renders its shell + the session-tiers cluster (account-security row + the tier-2 lock-with-passkey).",
+    "The Settings tab renders its shell + the session-tiers cluster (account-security row + the tier-2 Sign out).",
     `${PKG}.GymEveryMergeTest#settingsTabRenders`,
     {
       steps: [
         { kind: "launch", describe: "Launch smokeTab=settings." },
         { kind: "assert", describe: "Account-security row.", handle: "settings-open-account-security" },
-        { kind: "assert", describe: "Tier-2 lock-with-passkey row.", handle: "settings-sign-out-btn" },
+        { kind: "assert", describe: "Tier-2 Sign out row.", handle: "settings-sign-out-btn" },
       ],
       assertions: [
         { describe: "Account-security row present", handle: "settings-open-account-security", expect: "present" },
-        { describe: "Lock-with-passkey present", handle: "settings-sign-out-btn", expect: "present" },
+        { describe: "Sign out present", handle: "settings-sign-out-btn", expect: "present" },
       ],
       screenshots: [shot("cold-launch", "After launch."), shot("settings-ready", "Settings shell.")],
       dimension: "D3",

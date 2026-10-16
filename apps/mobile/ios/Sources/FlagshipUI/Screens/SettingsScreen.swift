@@ -148,7 +148,7 @@ public struct SettingsScreen: View {
     /// #52 — the Tier-2 sign-out gate, computed by the container
     /// (SettingsTab) via SignOutPolicy.evaluate so the demo exemption
     /// lives in ONE place. `.blockedNoRecovery` greys out the gated
-    /// buttons ("Lock with passkey" + "Remove this device") and routes a
+    /// buttons ("Sign out" + "Remove this device") and routes a
     /// tap to `onRecoveryRequired` instead of the destructive confirm.
     var signOutPolicy: SignOutPolicy = .allowed
     /// Fired when a recovery-gated button is tapped while still greyed
@@ -158,7 +158,7 @@ public struct SettingsScreen: View {
     var onRecoveryRequired: () -> Void = {}
     /// Fired when the action is account DEATH (`signOutPolicy ==
     /// .deletionCeremony` — no cloud recovery AND this is the last device).
-    /// Both the tier-2 "Lock with passkey" and the danger-zone "Remove this
+    /// Both the tier-2 "Sign out" and the danger-zone "Remove this
     /// device" confirm into the SAME ceremony: this routes the container to
     /// push the full-page irreversible warning (typed-username + biometric →
     /// owner-IRK self-delete bundle → local wipe → Welcome).
@@ -412,14 +412,14 @@ public struct SettingsScreen: View {
             Text("Your account keeps the same username and your pods keep their data. Every device currently on this account will be disconnected — including this phone, which becomes the new root of trust. You'll re-pair each one fresh.\n\nThis can't be undone from another device.")
         }
         .confirmationDialog(
-            "Lock with passkey?",
+            "Sign out?",
             isPresented: $signOutConfirm,
             titleVisibility: .visible
         ) {
             // Only reachable when recovery is enrolled (or in demo mode) —
             // the button is greyed and routes to a toast otherwise. The
             // same IRK comes back via the recovery passkey.
-            Button("Lock with passkey", role: .destructive) {
+            Button("Sign out", role: .destructive) {
                 onSignOut()
             }
             Button("Cancel", role: .cancel) {}
@@ -821,22 +821,19 @@ public struct SettingsScreen: View {
     ///     memory snoop while signed out. Re-entry is a passkey recovery
     ///     that restores the SAME key (instant re-pair, no rotation).
     ///     Gated on cloud recovery — see the confirmation dialog.
+    ///
+    /// Both buttons share one box and one look (owner, 2026-10-15); the
+    /// sign-out confirmation carries the warning.
     private func sessionActions(c: FSColors) -> some View {
-        // "Lock with passkey" (tier 2) is recovery-gated: greyed until
-        // cloud recovery is enrolled, and a tap on the greyed button
-        // surfaces a toast instead of running the key wipe.
+        // "Sign out" (tier 2) is recovery-gated: greyed until cloud
+        // recovery is enrolled, and a tap on the greyed button surfaces a
+        // toast instead of running the key wipe.
         let gated = signOutPolicy == .blockedNoRecovery
-        return VStack(spacing: FS.space.s3) {
-            VStack(alignment: .leading, spacing: FS.space.s2) {
-                Text("Locks Flagship behind your device unlock. Nothing is interrupted.")
-                    .font(FS.font.caption()).foregroundColor(c.textMuted)
-                FSGhostButton("Lock the app", block: true, large: true, action: onLock)
+        return FSCard {
+            VStack(alignment: .leading, spacing: FS.space.s3) {
+                FSDangerButton("Lock the app", block: true, large: true, action: onLock)
                     .accessibilityIdentifier("settings-lock-btn")
-            }
-            VStack(alignment: .leading, spacing: FS.space.s2) {
-                Text("Erases account key and deletes data. Sign back in with your recovery passkey.")
-                    .font(FS.font.caption()).foregroundColor(c.textMuted)
-                FSDangerButton("Lock with passkey", muted: gated, block: true, large: true) {
+                FSDangerButton("Sign out", muted: gated, block: true, large: true) {
                     if gated { onRecoveryRequired() }
                     else if signOutPolicy == .deletionCeremony { onDeleteAccount() }
                     else { signOutConfirm = true }
@@ -853,25 +850,22 @@ public struct SettingsScreen: View {
     /// account from scratch) to come back. Two-stage confirm so a
     /// fat-finger doesn't blow up the user's setup.
     private func dangerZone(c: FSColors) -> some View {
-        // Recovery-gated like "Lock with passkey": greyed until cloud
-        // recovery is enrolled, tap-while-greyed surfaces a toast.
+        // Recovery-gated like "Sign out": greyed until cloud recovery is
+        // enrolled, tap-while-greyed surfaces a toast. Boxed like a server
+        // page's Danger zone; the confirmations carry the warnings.
         let gated = signOutPolicy == .blockedNoRecovery
         return section("DANGER ZONE", c: c) {
-            VStack(alignment: .leading, spacing: FS.space.s2) {
-                Text("Remove this device from your account. You may need account recovery to resume.")
-                    .font(FS.font.caption()).foregroundColor(c.textMuted)
-                FSDangerButton("Remove this device from account", muted: gated, block: true) {
-                    if gated { onRecoveryRequired() }
-                    else if signOutPolicy == .deletionCeremony { onDeleteAccount() }
-                    else { showRemoveConfirm = true }
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s3) {
+                    FSDangerButton("Remove this device from account", muted: gated, block: true) {
+                        if gated { onRecoveryRequired() }
+                        else if signOutPolicy == .deletionCeremony { onDeleteAccount() }
+                        else { showRemoveConfirm = true }
+                    }
+                    .accessibilityIdentifier("remove-from-account-btn")
+                    FSDangerButton("Delete account", block: true, action: onDeleteAccount)
+                        .accessibilityIdentifier("settings-delete-account-btn")
                 }
-                .accessibilityIdentifier("remove-from-account-btn")
-
-                Text("Permanently delete your account, its username, and every server's data. This cannot be undone.")
-                    .font(FS.font.caption()).foregroundColor(c.textMuted)
-                    .padding(.top, FS.space.s2)
-                FSDangerButton("Delete account", block: true, action: onDeleteAccount)
-                    .accessibilityIdentifier("settings-delete-account-btn")
             }
         }
         .confirmationDialog(

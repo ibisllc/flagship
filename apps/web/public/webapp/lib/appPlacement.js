@@ -25,6 +25,7 @@ import { liveSync } from "./liveSync.js";
 import { controlApex } from "./apex.js";
 import { escapeHtml } from "./util.js";
 import { accountReadFetch } from "./accountRead.js";
+import { serverIcon } from "./icons.js";
 
 export const TAG_APP_COPY = "flagship/app-copy/v1";
 export const TAG_UNINSTALL_SERVICE = "flagship/uninstall-service/v1";
@@ -686,8 +687,15 @@ export function combineAppStatus(states) {
   return { kind: "unreachable", label: PILL_UNREACHABLE, count: 0 };
 }
 
+/** "On N servers" shows as "N" and Home's server icon; the label stays as
+ *  what a screen reader says. */
 export function appStatusPillHtml(status) {
-  return `<span class="pill${pillTone(status.kind)}" data-app-status="${escapeHtml(status.kind)}">${escapeHtml(status.label)}</span>`;
+  const attrs = `class="pill${pillTone(status.kind)}" data-app-status="${escapeHtml(status.kind)}"`;
+  if (status.kind === "on") {
+    const label = escapeHtml(status.label);
+    return `<span ${attrs} role="img" aria-label="${label}" title="${label}">${Number(status.count) || 0}<span class="pill-server-icon icon" aria-hidden="true">${serverIcon}</span></span>`;
+  }
+  return `<span ${attrs}>${escapeHtml(status.label)}</span>`;
 }
 
 /**

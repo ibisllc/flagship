@@ -65,13 +65,13 @@ export { refreshPushStatus };
 // successful probe proves recovery is enrolled.
 let sessionRecoveryEnrolled = false;
 
-/** Grey out the recovery-gated session buttons ("Lock with passkey" +
+/** Grey out the recovery-gated session buttons ("Sign out" +
  *  "Remove this device") until cloud recovery is enrolled. The buttons
  *  stay tappable while greyed — a tap surfaces a toast (see the click
  *  wiring in initSettingsView) instead of running the destructive path.
  *  Best-effort + async; defaults to the safe (not-enrolled ⇒ greyed)
  *  framing on any failure. */
-async function refreshSessionGates() {
+export async function refreshSessionGates() {
   // A demo holds no account key, so there is nothing for recovery to
   // protect: its session buttons just remove it from this browser.
   const demo = isDemoProfile(getActiveProfile());
@@ -491,7 +491,7 @@ export function initSettingsView() {
   // "Change PIN" requires the current PIN, then a new one (handled in the
   // set/change view). Visible only when a PIN is already set.
   $("settings-pin-change")?.addEventListener("click", () => startSetPin({ mode: "change" }));
-  // "Lock with passkey" (tier 2) is recovery-gated: greyed until cloud
+  // "Sign out" (tier 2) is recovery-gated: greyed until cloud
   // recovery is enrolled, and a tap-while-greyed surfaces a toast instead
   // of running the key wipe.
   $("settings-signout")?.addEventListener("click", () => {

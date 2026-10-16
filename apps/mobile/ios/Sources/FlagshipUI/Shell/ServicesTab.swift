@@ -433,8 +433,17 @@ private struct AppRow: View {
                 case nil:
                     EmptyView()
                 }
-                FSPill(pill.label, kind: pill.fsKind)
-                    .accessibilityIdentifier("app-row-status-\(app.serviceId)")
+                // "On N servers" shows as N and Home's server icon.
+                Group {
+                    if let n = pill.serverCount {
+                        FSPill("\(n)", kind: pill.fsKind, trailingIcon: "server.rack")
+                    } else {
+                        FSPill(pill.label, kind: pill.fsKind)
+                    }
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(pill.label)
+                .accessibilityIdentifier("app-row-status-\(app.serviceId)")
                 Image(systemName: "chevron.right").foregroundColor(c.textMuted)
             }
         }

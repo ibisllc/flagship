@@ -88,7 +88,9 @@ class AppStatusTest {
     }
 
     @Test fun elseCountsTheServersRunningIt() {
-        assertEquals(AppStatus.Pill("On 1 server", Tone.Online), combined(Running))
+        assertEquals(AppStatus.Pill("On 1 server", Tone.Online, serverCount = 1), combined(Running))
+        assertEquals(3, combined(Running, Running, Running).serverCount)
+        assertEquals(null, combined(Stopped).serverCount)
         assertEquals("On 1 server", combined(Running, Stopped).label)
         assertEquals("On 2 servers", combined(Running, Starting).label)
         assertEquals("On 3 servers", combined(Running, Running, Running).label)

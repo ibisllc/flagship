@@ -106,10 +106,9 @@ async function reachSettingsTab(page: Page): Promise<void> {
   await expect(page.locator("#view-settings-tab")).toBeVisible();
 }
 
-/** Reach the Settings DETAIL page (`#view-settings`) — the providers (AI-keys)
- *  section + the session-tier cluster (PIN lock / passkey-lock / remove-device)
- *  live here, reached from the tab's "AI keys" row. `renderProviders()`
- *  runs on entry, which is what greys the recovery-gated session actions. */
+/** Reach the Settings DETAIL page (`#view-settings`, the AI-keys manager),
+ *  reached from the tab's "AI keys" row. The session and Danger zone
+ *  buttons live on the tab itself (reachSettingsTab). */
 async function reachSettingsDetail(page: Page): Promise<void> {
   await reachSettingsTab(page);
   await page.click("#settings-tab-providers");
@@ -222,13 +221,14 @@ test.describe("gym webapp total", () => {
   // ─── D3 — settings: session tiers + grey-out gating ──────────────────────
 
   test("gym total webapp settings greys the recovery-gated session actions", async ({ page }, testInfo) => {
-    await reachSettingsDetail(page);
+    await reachSettingsTab(page);
     // The tier-1 PIN lock is always available.
     await expect(page.locator("#settings-pin-lock")).toBeVisible();
     // Tiers 2+3 are greyed until recovery is enrolled. With no backend the
     // recovery probe fails closed → not-enrolled → both carry `gated`.
     await expect(page.locator("#settings-signout")).toHaveClass(/gated/, { timeout: 10_000 });
     await expect(page.locator("#settings-reset")).toHaveClass(/gated/);
+    await page.locator("#settings-danger-zone-card").scrollIntoViewIfNeeded();
     await shot(page, testInfo, "session-tiers-gated");
   });
 
@@ -243,7 +243,7 @@ test.describe("gym webapp total", () => {
     page.on("request", (r) => {
       if (/\/api\/account\/self-delete|\/api\/devices\/.*\/revoke/.test(r.url())) destructive.push(r.url());
     });
-    await reachSettingsDetail(page);
+    await reachSettingsTab(page);
     await page.evaluate(async () => {
       const { getSession } = await import("/lib/state.js");
       getSession().username = "smoketest";
@@ -260,7 +260,7 @@ test.describe("gym webapp total", () => {
     await expect(go).toBeEnabled();
     await shot(page, testInfo, "deletion-ceremony");
     await page.click("#account-delete-back");
-    await expect(page.locator("#view-settings")).toBeVisible();
+    await expect(page.locator("#view-settings-tab")).toBeVisible();
     const keyKept = await page.evaluate(async () => {
       const { getSession } = await import("/lib/state.js");
       return getSession().umk instanceof Uint8Array;
@@ -319,7 +319,7 @@ test.describe("gym webapp total", () => {
   // ─── D4 — the webapp PIN lock (E3) ───────────────────────────────────────
 
   test("gym total webapp PIN-set rejects a mismatch then accepts a valid PIN", async ({ page }, testInfo) => {
-    await reachSettingsDetail(page);
+    await reachSettingsTab(page);
     // Tier-1 PIN lock → first-time set screen (no backend; WebCrypto + IndexedDB).
     await page.click("#settings-pin-lock");
     await expect(page.locator("#view-pin-set")).toBeVisible({ timeout: 10_000 });
@@ -340,7 +340,7 @@ test.describe("gym webapp total", () => {
   });
 
   test("gym total webapp PIN set then unlock returns to the shell", async ({ page }, testInfo) => {
-    await reachSettingsDetail(page);
+    await reachSettingsTab(page);
     await page.click("#settings-pin-lock");
     await expect(page.locator("#view-pin-set")).toBeVisible({ timeout: 10_000 });
     await page.fill("#pin-set-input", "4242");
@@ -859,7 +859,7 @@ test.describe("gym webapp total", () => {
     // (clearPin) and the app falls back to the passphrase unlock screen. We set
     // a PIN, then enter a wrong one 5x and assert it lands on #view-unlock. A
     // subsequent passphrase unlock works (the PIN is the real reset path).
-    await reachSettingsDetail(page);
+    await reachSettingsTab(page);
     await page.click("#settings-pin-lock");
     await expect(page.locator("#view-pin-set")).toBeVisible({ timeout: 10_000 });
     await page.fill("#pin-set-input", "1357");
@@ -891,7 +891,7 @@ test.describe("gym webapp total", () => {
     // D4-E3 (the reset rule) — choosing "Unlock with passphrase instead" from the
     // PIN screen, then unlocking, CLEARS the PIN (the passphrase is the real
     // key). Assert the PIN is gone after a passphrase unlock.
-    await reachSettingsDetail(page);
+    await reachSettingsTab(page);
     await page.click("#settings-pin-lock");
     await expect(page.locator("#view-pin-set")).toBeVisible({ timeout: 10_000 });
     await page.fill("#pin-set-input", "2468");
@@ -916,10 +916,10 @@ test.describe("gym webapp total", () => {
   });
 
   test("gym total webapp PIN change requires the current PIN", async ({ page }, testInfo) => {
-    // D4-E3 — once a PIN is set, "Lock with PIN code" surfaces the CHANGE flow
+    // D4-E3 — once a PIN is set, "Lock the app" (the PIN lock) surfaces the CHANGE flow
     // (current + new + confirm). A wrong current PIN is rejected; the change
     // never lands. Asserts the current-PIN field shows + a wrong current errors.
-    await reachSettingsDetail(page);
+    await reachSettingsTab(page);
     await page.click("#settings-pin-lock");
     await expect(page.locator("#view-pin-set")).toBeVisible({ timeout: 10_000 });
     await page.fill("#pin-set-input", "1111");
@@ -935,10 +935,10 @@ test.describe("gym webapp total", () => {
     await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
     await page.waitForTimeout(150);
     await page.evaluate(async () => {
-      const { renderProviders } = await import("/views/settings.js");
+      const { refreshSessionGates } = await import("/views/settings.js");
       const { show } = await import("/lib/router.js");
-      show("view-settings");
-      await renderProviders();
+      show("view-settings-tab");
+      await refreshSessionGates();
     });
     // Once a PIN is set, the SEPARATE "Change PIN" row appears (not the lock
     // button, which just re-locks); it opens the change flow.

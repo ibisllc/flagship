@@ -167,7 +167,7 @@ fun SettingsScreen(nav: NavController) {
         isDemoAccount = isDemoAccount,
         isLastDevice = isLastDevice,
     )
-    // The recovery-gated buttons ("Lock with passkey" + "Remove this
+    // The recovery-gated buttons ("Sign out" + "Remove this
     // device") stay greyed-but-tappable until recovery is enrolled; a
     // tap-while-greyed surfaces this toast instead of the destructive path.
     val ctx = LocalContext.current
@@ -293,7 +293,7 @@ fun SettingsScreen(nav: NavController) {
                 FSSettingsRowData(
                     icon = Icons.Outlined.Computer,
                     title = "Browser sessions",
-                    subtitle = "Per-server browser tabs paired with this account.",
+                    subtitle = "Browsers you opened through Remote.",
                     onClick = { nav.navigate("paired-sessions") },
                 ),
             ),
@@ -498,96 +498,78 @@ fun SettingsScreen(nav: NavController) {
         //     recovery sign-in that restores the SAME key (instant
         //     re-pair, no rotation). Gated on cloud recovery — see the
         //     confirmation dialog below.
-        Text(
-            "Locks Flagship behind biometrics. Nothing is interrupted.",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 13.sp),
-        )
-        Spacer(Modifier.height(FS.space.s2))
-        FSGhostButton(
-            label = "Lock with biometrics",
-            onClick = {
-                // Tier 1 — LOCK. Re-gate behind biometrics with zero side
-                // effects: no network, the key + session stay in the
-                // Keystore. Re-entry is the BiometricLockScreen.
-                app.lock()
-            },
-            block = true,
-            modifier = Modifier.testTag("settings-lock-btn"),
-        )
-        Spacer(Modifier.height(FS.space.s4))
-        Text(
-            "Erases account key and deletes data. Sign back in with your recovery passkey.",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 13.sp),
-        )
-        Spacer(Modifier.height(FS.space.s2))
-        FSDangerButton(
-            label = "Lock with passkey",
-            muted = sessionGated,
-            onClick = {
-                when {
-                    sessionGated -> showRecoveryRequiredToast()
-                    signOutPolicy == SignOutPolicy.DELETION_CEREMONY -> nav.navigate("delete-account")
-                    else -> showSignOutConfirm = true
-                }
-            },
-            block = true,
-            modifier = Modifier.testTag("settings-sign-out-btn"),
-        )
+        //
+        // Both share one box and one look (owner, 2026-10-15); the sign-out
+        // confirmation carries the warning.
+        FSCard(padding = PaddingValues(FS.space.s4)) {
+            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+                FSDangerButton(
+                    label = "Lock the app",
+                    onClick = {
+                        // Tier 1 — LOCK. Re-gate behind biometrics with zero side
+                        // effects: no network, the key + session stay in the
+                        // Keystore. Re-entry is the BiometricLockScreen.
+                        app.lock()
+                    },
+                    block = true,
+                    large = true,
+                    modifier = Modifier.testTag("settings-lock-btn"),
+                )
+                FSDangerButton(
+                    label = "Sign out",
+                    muted = sessionGated,
+                    onClick = {
+                        when {
+                            sessionGated -> showRecoveryRequiredToast()
+                            signOutPolicy == SignOutPolicy.DELETION_CEREMONY -> nav.navigate("delete-account")
+                            else -> showSignOutConfirm = true
+                        }
+                    },
+                    block = true,
+                    large = true,
+                    modifier = Modifier.testTag("settings-sign-out-btn"),
+                )
+            }
+        }
 
         Spacer(Modifier.height(FS.space.s6))
 
-        // C6a — danger zone. Same UX semantics as iOS SettingsScreen
-        // dangerZone(): two-stage confirm, copy adapts based on
-        // whether cloud recovery is enrolled. Strictly destructive —
-        // revokes the push token on .com AND wipes local Keystore.
+        // C6a — danger zone, boxed like a server page's. Same UX semantics as
+        // iOS SettingsScreen dangerZone(): the confirmations carry the
+        // warnings, and their copy adapts to whether cloud recovery is
+        // enrolled. Delete account opens the guarded deletion ceremony, which
+        // does the last-device + recovery gating and the final confirm.
         Text(
             "DANGER ZONE",
             color = FS.colors.textMuted,
             style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp),
         )
         Spacer(Modifier.height(FS.space.s2))
-        Text(
-            "Remove this device from your account. You may need account recovery to resume.",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 13.sp),
-        )
-        Spacer(Modifier.height(FS.space.s2))
-        FSDangerButton(
-            label = "Remove this device from account",
-            muted = sessionGated,
-            onClick = {
-                when {
-                    sessionGated -> showRecoveryRequiredToast()
-                    signOutPolicy == SignOutPolicy.DELETION_CEREMONY -> nav.navigate("delete-account")
-                    else -> showRemoveConfirm = true
-                }
-            },
-            block = true,
-            modifier = Modifier.testTag("settings-remove-device-btn"),
-        )
-
-        // Explicit Delete-account entry (spec S1 danger zone). The guarded
-        // deletion ceremony was previously only reachable via the Remove-device
-        // path when this happened to be the last device; give it a direct,
-        // always-present door. The ceremony screen itself does the last-device
-        // + recovery gating and the final confirm.
-        Spacer(Modifier.height(FS.space.s4))
-        Text(
-            "Permanently delete your account, its username, and every server's data. This cannot be undone.",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 13.sp),
-        )
-        Spacer(Modifier.height(FS.space.s2))
-        FSDangerButton(
-            label = "Delete account",
-            onClick = {
-                if (isDemoAccountSession) showDemoDeleteNotice = true else nav.navigate("delete-account")
-            },
-            block = true,
-            modifier = Modifier.testTag("settings-delete-account-btn"),
-        )
+        FSCard(padding = PaddingValues(FS.space.s4)) {
+            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+                FSDangerButton(
+                    label = "Remove this device from account",
+                    muted = sessionGated,
+                    onClick = {
+                        when {
+                            sessionGated -> showRecoveryRequiredToast()
+                            signOutPolicy == SignOutPolicy.DELETION_CEREMONY -> nav.navigate("delete-account")
+                            else -> showRemoveConfirm = true
+                        }
+                    },
+                    block = true,
+                    modifier = Modifier.testTag("settings-remove-device-btn"),
+                )
+                FSDangerButton(
+                    label = "Delete account",
+                    onClick = {
+                        if (isDemoAccountSession) showDemoDeleteNotice = true else nav.navigate("delete-account")
+                    },
+                    block = true,
+                    modifier = Modifier.testTag("settings-delete-account-btn"),
+                )
+            }
+        }
 
         if (showDemoDeleteNotice) {
             AlertDialog(
@@ -679,7 +661,7 @@ fun SettingsScreen(nav: NavController) {
 
         if (showSignOutConfirm) {
             // Only reachable when recovery is enrolled (or in demo mode) —
-            // the "Lock with passkey" button is greyed and routes to a
+            // the "Sign out" button is greyed and routes to a
             // toast otherwise.
             AlertDialog(
                 onDismissRequest = { showSignOutConfirm = false },
@@ -709,7 +691,7 @@ fun SettingsScreen(nav: NavController) {
                             app.signOut()
                         }
                     }) {
-                        Text("Lock with passkey", color = FS.colors.danger)
+                        Text("Sign out", color = FS.colors.danger)
                     }
                 },
                 dismissButton = {
@@ -717,7 +699,7 @@ fun SettingsScreen(nav: NavController) {
                         Text("Cancel")
                     }
                 },
-                title = { Text("Lock with passkey?") },
+                title = { Text("Sign out?") },
                 text = {
                     Text(
                         "This erases this device's account key and data so nothing " +

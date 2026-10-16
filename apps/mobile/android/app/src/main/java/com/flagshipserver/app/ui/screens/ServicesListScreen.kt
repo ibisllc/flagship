@@ -18,6 +18,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Stop
 import androidx.compose.material3.Icon
@@ -32,6 +33,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -270,10 +273,15 @@ private fun AppRow(app: AppSummary, me: String, onClick: () -> Unit) {
                 modifier = Modifier.testTag("services-row-egress-badge"),
             )
         }
+        // "On N servers" shows as N and Home's server icon; TalkBack reads the label.
+        val count = app.pill.serverCount
         FSPill(
-            label = app.pill.label,
+            label = count?.toString() ?: app.pill.label,
             kind = app.pill.tone.pillKind(),
-            modifier = Modifier.testTag("services-row-status"),
+            modifier = Modifier
+                .testTag("services-row-status")
+                .clearAndSetSemantics { contentDescription = app.pill.label },
+            trailingIcon = if (count != null) Icons.Outlined.Dns else null,
         )
         Text("›", color = FS.colors.textMuted, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
     }

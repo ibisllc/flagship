@@ -73,21 +73,22 @@ final class AppStatusPillTests: XCTestCase {
     }
 
     func test_rule3_onNServersCountsRunningAndStarting() {
-        XCTAssertEqual(combined([.running]), AppStatusPill(label: "On 1 server", kind: .online))
-        XCTAssertEqual(combined([.starting]), AppStatusPill(label: "On 1 server", kind: .online))
-        XCTAssertEqual(combined([.running, .starting]), AppStatusPill(label: "On 2 servers", kind: .online))
-        XCTAssertEqual(combined([.running, .running, .running]), AppStatusPill(label: "On 3 servers", kind: .online))
+        XCTAssertEqual(combined([.running]), AppStatusPill(label: "On 1 server", kind: .online, serverCount: 1))
+        XCTAssertEqual(combined([.starting]), AppStatusPill(label: "On 1 server", kind: .online, serverCount: 1))
+        XCTAssertEqual(combined([.running, .starting]), AppStatusPill(label: "On 2 servers", kind: .online, serverCount: 2))
+        XCTAssertEqual(combined([.running, .running, .running]), AppStatusPill(label: "On 3 servers", kind: .online, serverCount: 3))
     }
 
     func test_rule3_mixedServersCountOnlyTheLiveOnes() {
         XCTAssertEqual(combined([.running, .stopped]).label, "On 1 server")
         XCTAssertEqual(combined([.running, nil, .running]).label, "On 2 servers", "a server that didn't answer isn't counted")
         XCTAssertEqual(combined([.running, .unknown]).label, "On 1 server", "unknown is on that server but not running")
+        XCTAssertNil(combined([.stopped]).serverCount, "only On N servers shows as a count and the server icon")
     }
 
     func test_rule3_unknownEverywhereStillSaysOnNServers() {
-        XCTAssertEqual(combined([.unknown]), AppStatusPill(label: "On 1 server", kind: .online))
-        XCTAssertEqual(combined([.unknown, .unknown]), AppStatusPill(label: "On 2 servers", kind: .online),
+        XCTAssertEqual(combined([.unknown]), AppStatusPill(label: "On 1 server", kind: .online, serverCount: 1))
+        XCTAssertEqual(combined([.unknown, .unknown]), AppStatusPill(label: "On 2 servers", kind: .online, serverCount: 2),
                        "older boxes list the app but can't say: never Stopped")
         XCTAssertEqual(combined([.unknown, .stopped]).label, "On 1 server")
         XCTAssertEqual(combined([.unknown, nil]).label, "On 1 server")
@@ -177,7 +178,7 @@ final class ServicesListStatusTests: XCTestCase {
         let vm = model(home: box([app("u--notes", "unknown")]), office: box([app("u--notes", "unknown")]),
                        cabin: box([]))
         await vm.load()
-        XCTAssertEqual(vm.pill(for: "u--notes"), AppStatusPill(label: "On 2 servers", kind: .online))
+        XCTAssertEqual(vm.pill(for: "u--notes"), AppStatusPill(label: "On 2 servers", kind: .online, serverCount: 2))
     }
 
     func test_aServerThatStopsAnsweringKeepsItsAppsAsCantReach() async {

@@ -10,7 +10,9 @@ object AppStatus {
     /** How a pill is drawn: online (green), accent, idle (grey), warning. */
     enum class Tone { Online, Accent, Idle, Warning }
 
-    data class Pill(val label: String, val tone: Tone)
+    /** `serverCount` is set on "On N servers": the services list shows N and
+     *  Home's server icon, and the label is what TalkBack reads. */
+    data class Pill(val label: String, val tone: Tone, val serverCount: Int? = null)
 
     /** What one server says about one app it lists. */
     enum class ServerState { Running, Starting, Stopped, Deploying, Copying, Editing, Unknown }
@@ -60,7 +62,7 @@ object AppStatus {
         return STOPPED
     }
 
-    fun onServers(n: Int): Pill = Pill(if (n == 1) "On 1 server" else "On $n servers", Tone.Online)
+    fun onServers(n: Int): Pill = Pill(if (n == 1) "On 1 server" else "On $n servers", Tone.Online, serverCount = n)
 
     val DEPLOYING = Pill("Deploying", Tone.Accent)
     val EDITING = Pill("Editing", Tone.Accent)

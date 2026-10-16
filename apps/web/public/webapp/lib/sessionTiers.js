@@ -155,10 +155,10 @@ export async function signOut(deps) {
 export function signOutConfirmCopy(hasCloudRecovery) {
   if (hasCloudRecovery) {
     return {
-      title: "Lock with passkey?",
+      title: "Sign out?",
       message:
         "This erases this device's account key and data so nothing sensitive is left at rest. Your account and your servers are untouched — sign back in with your recovery passkey and the same key is restored, no re-pair.",
-      okLabel: "Lock with passkey",
+      okLabel: "Sign out",
       danger: true,
       blocked: false,
     };

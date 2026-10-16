@@ -61,12 +61,13 @@ describe("UX-B — raw HTTP status codes no longer reach users", () => {
 });
 
 describe("UX-C — recovery-gated session buttons are greyed + toast on tap", () => {
-  it("the settings card drops the old recovery CTA and reframes tier-2 as 'Lock with passkey'", () => {
+  it("the settings card drops the old recovery CTA and names tier-2 'Sign out'", () => {
     const html = readFileSync(join(WEBAPP, "index.html"), "utf8");
     // The swap-to-CTA design is gone in favour of a greyed button + toast.
     expect(html).not.toContain('id="settings-signout-recovery"');
     expect(html).toContain('id="settings-signout"');
-    expect(html).toContain("Lock with passkey");
+    expect(html).toContain('id="settings-signout">Sign out</button>');
+    expect(html).not.toContain("Lock with passkey");
   });
 
   it("settings.js greys the gated buttons until recovery is enrolled and toasts on a blocked tap", () => {
@@ -81,11 +82,11 @@ describe("UX-C — recovery-gated session buttons are greyed + toast on tap", ()
   });
 });
 
-describe("Tier-1 'Lock with PIN code' (webapp-only)", () => {
+describe("Tier-1 'Lock the app' locks with a PIN on the webapp", () => {
   it("the Session card carries the PIN lock + a hidden Change-PIN control", () => {
     const html = readFileSync(join(WEBAPP, "index.html"), "utf8");
     expect(html).toContain('id="settings-pin-lock"');
-    expect(html).toContain("Lock with PIN code");
+    expect(html).toContain('id="settings-pin-lock">Lock the app</button>');
     // Change PIN ships hidden — settings.js reveals it once a PIN is set.
     expect(html).toMatch(/class="[^"]*hidden[^"]*"\s+id="settings-pin-change"/);
     // The PIN unlock + set views exist, with the passphrase fallback.

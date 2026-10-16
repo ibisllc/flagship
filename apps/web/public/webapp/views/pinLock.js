@@ -103,7 +103,7 @@ async function handleSetPinSave() {
   }
   if (setMode === "change") {
     toast("PIN updated", "ok");
-    show("view-settings");
+    show("view-settings-tab");
   } else {
     // First-time set: lock immediately so the PIN is in effect.
     lockToPin();
@@ -139,7 +139,7 @@ export function initPinViews() {
   $("pin-unlock-go")?.addEventListener("click", () => handlePinUnlock().catch(() => {}));
   $("pin-unlock-passphrase")?.addEventListener("click", () => show("view-unlock"));
   $("pin-set-go")?.addEventListener("click", () => handleSetPinSave().catch(() => {}));
-  $("pin-set-cancel")?.addEventListener("click", () => show("view-settings"));
+  $("pin-set-cancel")?.addEventListener("click", () => show("view-settings-tab"));
 }
 
 export { hasPin };
