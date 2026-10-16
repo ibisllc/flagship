@@ -81,6 +81,17 @@ async function generateIdentity(page: Page): Promise<void> {
   await expect(page.locator("#toast")).toBeVisible({ timeout: 10_000 });
 }
 
+/** Play the account's admin device: seal an admin root for this identity, as
+ *  opening the account does, so the next unlock loads it. Creating a server is
+ *  for admin devices only (lib/addServerGate.js). */
+async function sealAdminRoot(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const ks = await import("/keystore.js");
+    const { getSession } = await import("/lib/state.js");
+    await ks.generateAdminRoot(getSession().umk);
+  });
+}
+
 /**
  * Reach a logged-in shell view with NO backend, via the proven S1 path:
  * bootstrap (mint identity, writes the wrapped UMK to IndexedDB) → RELOAD with
@@ -91,9 +102,10 @@ async function generateIdentity(page: Page): Promise<void> {
  * fetch (Home's empty state) or `show()` a static-chrome view + local
  * decoration (Settings / Activity / Services / create-server).
  */
-async function reachShell(page: Page, viewAlias: string): Promise<void> {
+async function reachShell(page: Page, viewAlias: string, { admin = false } = {}): Promise<void> {
   await coldLaunch(page);
   await generateIdentity(page);
+  if (admin) await sealAdminRoot(page);
   // generateIdentity already waited for the post-mint toast, so the wrapped UMK
   // is persisted; reload with the deep-link → boot sees it → unlock screen.
   await page.goto(`/index.html?view=${viewAlias}`);
@@ -263,7 +275,7 @@ test.describe("gym webapp", () => {
     page,
   }, testInfo) => {
     // `?view=create-server` lands directly on the reusable form after unlock.
-    await reachShell(page, "create-server");
+    await reachShell(page, "create-server", { admin: true });
     await expect(page.locator("#view-create-server")).toBeVisible({ timeout: 10_000 });
     // The form's load-bearing controls: name field + the disk-encryption
     // toggle + the backup-policy control (the A4 create-server contract).
@@ -276,7 +288,7 @@ test.describe("gym webapp", () => {
   test("gym webapp create-server rejects an invalid server name", async ({
     page,
   }, testInfo) => {
-    await reachShell(page, "create-server");
+    await reachShell(page, "create-server", { admin: true });
     await expect(page.locator("#view-create-server")).toBeVisible({ timeout: 10_000 });
     // An invalid name (uppercase/space) → the inline name-error surfaces and
     // the form stays on the create-server view (client-side validation, no
@@ -286,5 +298,18 @@ test.describe("gym webapp", () => {
     await expect(page.locator("#view-create-server")).toBeVisible();
     await expect(page.locator("#cs-server-name-error")).toBeVisible();
     await shot(page, testInfo, "create-server-name-invalid");
+  });
+
+  test("gym webapp create-server link on a non-admin device lands on Home with the refusal", async ({
+    page,
+  }, testInfo) => {
+    // No admin root sealed: this is another device of the account.
+    await reachShell(page, "create-server");
+    await expect(page.locator(".modal-title")).toHaveText("Admin devices only", { timeout: 10_000 });
+    await expect(page.locator(".modal-message")).toHaveText("Only an admin device of this account can add servers.");
+    await expect(page.locator("#view-create-server")).toBeHidden();
+    await shot(page, testInfo, "create-server-admin-only");
+    await page.click("[data-modal-ok]");
+    await expect(page.locator("#view-home")).toBeVisible();
   });
 });

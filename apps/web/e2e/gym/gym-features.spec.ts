@@ -60,10 +60,22 @@ async function generateIdentity(page: Page): Promise<void> {
   await expect(page.locator("#toast")).toBeVisible({ timeout: 10_000 });
 }
 
+/** Play the account's admin device: seal an admin root for this identity, as
+ *  opening the account does, so the next unlock loads it. Adding a server is
+ *  for admin devices only (lib/addServerGate.js). */
+async function sealAdminRoot(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const ks = await import("/keystore.js");
+    const { getSession } = await import("/lib/state.js");
+    await ks.generateAdminRoot(getSession().umk);
+  });
+}
+
 /** Bootstrap → reload(?view=<alias>) → passphrase unlock (the proven S1 path). */
-async function reachShell(page: Page, viewAlias: string): Promise<void> {
+async function reachShell(page: Page, viewAlias: string, { admin = false } = {}): Promise<void> {
   await coldLaunch(page);
   await generateIdentity(page);
+  if (admin) await sealAdminRoot(page);
   await page.goto(`/index.html?view=${viewAlias}`);
   await expect(page.locator("#view-unlock")).toBeVisible({ timeout: 10_000 });
   await page.fill("#unlock-passphrase", PASSPHRASE);
@@ -196,11 +208,14 @@ test.describe("gym webapp features", () => {
     await reachHome(page);
     await seedProfileUsername(page);
     await page.evaluate(async () => {
+      // Taking over a box is for the account's admin devices only.
+      const { getSession } = await import("/lib/state.js");
+      getSession().adminRootSeed = crypto.getRandomValues(new Uint8Array(32));
       const { renderHome } = await import("/views/home.js");
       await renderHome();
     });
-    await expect(page.locator("#empty-take-over")).toBeVisible({ timeout: 10_000 });
-    await page.click("#empty-take-over");
+    await expect(page.locator("#home-take-over")).toBeVisible({ timeout: 10_000 });
+    await page.click("#home-take-over");
     const dlg = page.locator('dialog[aria-label="Take over a box"]');
     await expect(dlg).toBeVisible({ timeout: 5_000 });
     await expect(dlg.locator("[data-claim-input]")).toBeVisible();
@@ -241,6 +256,28 @@ test.describe("gym webapp features", () => {
     // Cancel — the claim is never signed/POSTed (non-destructive).
     await dlg.locator("[data-confirm-cancel]").click();
     await expect(dlg).toBeHidden({ timeout: 5_000 });
+  });
+
+  test("gym total webapp take-over is refused on a device that is not an admin device", async ({ page }, testInfo) => {
+    // The non-admin counterpart: no Take over link on Home, and a /transfer
+    // link (which routes into enterTransferClaim) gets the refusal, not the
+    // paste/scan dialog.
+    await reachHome(page);
+    await seedProfileUsername(page);
+    await page.evaluate(async () => {
+      const { renderHome } = await import("/views/home.js");
+      await renderHome();
+    });
+    await expect(page.locator("#view-home")).toBeVisible();
+    await expect(page.locator("#home-take-over")).toHaveCount(0);
+    await page.evaluate(async () => {
+      const { enterTransferClaim } = await import("/views/transfer-claim.js");
+      await enterTransferClaim();
+    });
+    await expect(page.locator(".modal-title")).toHaveText("Admin devices only", { timeout: 5_000 });
+    await expect(page.locator(".modal-message")).toHaveText("Only an admin device of this account can add servers.");
+    await expect(page.locator('dialog[aria-label="Take over a box"]')).toHaveCount(0);
+    await shot(page, testInfo, "take-over-admin-only");
   });
 
   // ─── Box Request Inbox — the one-tap card + approve surface ──────────────
@@ -390,7 +427,7 @@ test.describe("gym webapp features", () => {
     // Advanced toggle: hidden + OFF by default (production posture), each with
     // its warning copy; turning Advanced OFF resets both (a closed Advanced
     // section can never leave a secret-embedding or debug choice armed).
-    await reachShell(page, "create-server");
+    await reachShell(page, "create-server", { admin: true });
     await expect(page.locator("#view-create-server")).toBeVisible({ timeout: 10_000 });
     const advanced = page.locator("#cs-advanced");
     await expect(advanced).toBeVisible();

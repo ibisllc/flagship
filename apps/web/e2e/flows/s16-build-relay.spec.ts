@@ -45,7 +45,12 @@ test.describe("S16 — Compose draft (#24)", () => {
 
     // Drive the view directly via its module entry hook (Settings → Developer
     // → "Create a server" and Home → "+ Add a server" both land here).
+    // Creating a server is for the account's admin devices only: play one.
     await page.evaluate(async () => {
+      const { getSession } = (await import("/lib/state.js" as string)) as {
+        getSession(): { adminRootSeed: Uint8Array | null };
+      };
+      getSession().adminRootSeed = crypto.getRandomValues(new Uint8Array(32));
       const m = (await import("/views/create-server.js" as string)) as {
         enterCreateServer(): Promise<void>;
       };

@@ -249,6 +249,9 @@ test.describe("gym webapp share", () => {
       ["/api/share-inbox", (b) => ({ json: (b as { request: { op: string } }).request.op === "list" ? { entries: [] } : { ok: true } })],
     ]);
     await page.evaluate(async (link) => {
+      // Co-managing a server adds it to the account: an admin device does it.
+      const { getSession } = await import("/lib/state.js");
+      getSession().adminRootSeed = crypto.getRandomValues(new Uint8Array(32));
       const { enterShareAccept } = await import("/views/share-accept.js");
       await enterShareAccept(link);
     }, { shareId: fx.alice.shareId, secretHex: fx.alice.secretHex });
@@ -258,6 +261,18 @@ test.describe("gym webapp share", () => {
     await expect(page.locator("[data-share-sas]")).toHaveText(/^\d{3} \d{3}$/, { timeout: 10_000 });
     await expect(page.locator("[data-share-waiting]")).toContainText("Waiting for the owner to confirm");
     await shot(page, testInfo, "member-code");
+  });
+
+  test("gym share link on a device that is not an admin device shows the refusal", async ({ page }, testInfo) => {
+    await reachHome(page);
+    const fx = await fixtures(page);
+    await page.evaluate(async (link) => {
+      const { enterShareAccept } = await import("/views/share-accept.js");
+      await enterShareAccept(link);
+    }, { shareId: fx.alice.shareId, secretHex: fx.alice.secretHex });
+    await expect(page.locator("#share-accept-content")).toContainText("Only an admin device of this account can add servers.", { timeout: 10_000 });
+    await expect(page.locator("[data-share-accept]")).toHaveCount(0);
+    await shot(page, testInfo, "member-admin-only");
   });
 
   test("gym share member home and shared server page", async ({ page }, testInfo) => {

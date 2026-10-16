@@ -233,6 +233,25 @@ const EVERY_MERGE: readonly Scenario[] = [
       dimension: "D1",
     },
   ),
+  web(
+    "web-create-server-admin-only",
+    "Creating a server is for admin devices only (lib/addServerGate.js): ?view=create-server on a device without the admin root lands on Home with 'Only an admin device of this account can add servers.' instead of the form.",
+    "gym webapp create-server link on a non-admin device lands on Home with the refusal",
+    {
+      steps: [
+        { kind: "launch", describe: "Bootstrap → reload(?view=create-server) → unlock, no admin root." },
+        { kind: "assert", describe: "The refusal, not the form.", handle: ".modal-title" },
+        { kind: "tap", describe: "OK.", handle: "[data-modal-ok]" },
+      ],
+      assertions: [
+        { describe: "Refusal", handle: ".modal-message", expect: "text", text: "Only an admin device of this account can add servers." },
+        { describe: "Create-server form not shown", handle: "#view-create-server:visible", expect: "absent" },
+        { describe: "Lands on Home", handle: "#view-home", expect: "present" },
+      ],
+      screenshots: [shot("create-server-admin-only", "The refusal on a non-admin device.")],
+      dimension: "D1",
+    },
+  ),
 ];
 
 // ───────────────────── total-gym Tier-1 tranche (§12-G5) ────────────────────
@@ -859,12 +878,12 @@ const TOTAL: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-transfer-claim",
-    "D1 (transfer-a-box, acquirer): Home's Take-over entry opens the paste/scan claim; a pasted offer is signature-verified (real in-page IRK signing) BEFORE the severe type-to-confirm; Cancel — no claim fires.",
+    "D1 (transfer-a-box, acquirer): on an admin device, Home's Take-over entry opens the paste/scan claim; a pasted offer is signature-verified (real in-page IRK signing) BEFORE the severe type-to-confirm; Cancel — no claim fires.",
     "gym total webapp take-over claim verifies an offer into the severe confirm",
     {
       steps: [
-        { kind: "launch", describe: "Reach Home (account open, no servers)." },
-        { kind: "tap", describe: "Someone handing you a box? Take over.", handle: "#empty-take-over" },
+        { kind: "launch", describe: "Reach Home (account open, no servers) on an admin device." },
+        { kind: "tap", describe: "Someone handing you a box? Take over.", handle: "#home-take-over" },
         { kind: "type", describe: "Paste a REAL signed offer (session-IRK-signed in-page).", handle: "[data-claim-input]" },
         { kind: "tap", describe: "Continue → verify.", handle: "[data-claim-continue]" },
         { kind: "assert", describe: "Severe confirm names the box; Take over gated.", handle: "[data-confirm-go]" },
@@ -879,6 +898,25 @@ const TOTAL: readonly Scenario[] = [
         shot("take-over-input", "The paste/scan input stage."),
         shot("take-over-confirm", "The severe type-to-confirm stage."),
       ],
+      dimension: "D1",
+    },
+  ),
+  webTotal(
+    "web-total-transfer-claim-admin-only",
+    "Adding a server is for admin devices only (lib/addServerGate.js): a device without the admin root has no Take over link, and a /transfer link gets 'Only an admin device of this account can add servers.' instead of the claim. Mirrors iOS and Android add-server-admin-only.",
+    "gym total webapp take-over is refused on a device that is not an admin device",
+    {
+      steps: [
+        { kind: "launch", describe: "Reach Home (account open, no admin root)." },
+        { kind: "assert", describe: "No Take over link.", handle: "#home-take-over" },
+        { kind: "assert", describe: "Opening the take-over flow shows the refusal.", handle: ".modal-title" },
+      ],
+      assertions: [
+        { describe: "No Take over link", handle: "#home-take-over", expect: "absent" },
+        { describe: "Refusal", handle: ".modal-message", expect: "text", text: "Only an admin device of this account can add servers." },
+        { describe: "No claim dialog", handle: 'dialog[aria-label="Take over a box"]', expect: "absent" },
+      ],
+      screenshots: [shot("take-over-admin-only", "The refusal on a non-admin device.")],
       dimension: "D1",
     },
   ),
@@ -1070,6 +1108,23 @@ const TOTAL: readonly Scenario[] = [
         { describe: "Waiting for the owner", handle: "[data-share-waiting]", expect: "text", text: "Waiting for the owner to confirm" },
       ],
       screenshots: [shot("member-offer", "The share offer."), shot("member-code", "The code, waiting for the owner.")],
+      dimension: "D1",
+    },
+  ),
+  webTotal(
+    "web-total-share-member-admin-only",
+    "Co-managing a server adds it to the account, so only an admin device may: on any other device a share link shows 'Only an admin device of this account can add servers.' and no Accept. Mirrors iOS and Android add-server-admin-only.",
+    "gym share link on a device that is not an admin device shows the refusal",
+    {
+      steps: [
+        { kind: "launch", describe: "Open the share link's accept view on a device without the admin root." },
+        { kind: "assert", describe: "Refusal in place of the offer.", handle: "#share-accept-content" },
+      ],
+      assertions: [
+        { describe: "Refusal", handle: "#share-accept-content", expect: "text", text: "Only an admin device of this account can add servers." },
+        { describe: "No Accept", handle: "[data-share-accept]", expect: "absent" },
+      ],
+      screenshots: [shot("member-admin-only", "The refusal on a non-admin device.")],
       dimension: "D1",
     },
   ),
