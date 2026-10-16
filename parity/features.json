@@ -172,6 +172,16 @@
       }
     },
     {
+      "id": "build-mcp-ide-configs",
+      "title": "Connect your IDE: each IDE's own config (Claude Code, Cursor, VS Code, Cline)",
+      "ref": "web",
+      "surfaces": {
+        "ios": { "status": "missing", "reason": "Shows and copies only the generic ideConfig, which Cline refuses and VS Code's mcp.json doesn't read.", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/ViewModels/BuildMcpViewModel.swift", "ideConfigs"]] },
+        "android": { "status": "missing", "reason": "Shows and copies only the generic ideConfig, which Cline refuses and VS Code's mcp.json doesn't read.", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/api/BuildClient.kt", "ideConfigs"]] },
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/views/build-mcp.js", "conn\\.ideConfigs"], ["apps/web/public/webapp/views/build-mcp.js", "data-mcp-ide"]] }
+      }
+    },
+    {
       "id": "build-chat-attachments",
       "title": "Build chat: CSV/JSON/PDF attachments",
       "ref": "ios",

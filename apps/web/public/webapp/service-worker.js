@@ -301,7 +301,9 @@
 //       flag, Settings' Developer section and its Send order panel are gone.
 //  v125: Welcome and the lock screens share one footer (primary, secondary
 //       right below, a gap, Patent Pending); the lock screens gain Sign out.
-const SHELL_VERSION = "v125";
+//  v126: Connect your IDE shows each IDE's own config (Claude Code, Cursor,
+//       VS Code, Cline) and Claude Code's one-line command.
+const SHELL_VERSION = "v126";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
