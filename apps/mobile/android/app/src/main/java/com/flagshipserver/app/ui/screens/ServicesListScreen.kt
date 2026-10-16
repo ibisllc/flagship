@@ -78,6 +78,9 @@ import com.flagshipserver.app.viewmodels.LoadingState
  * moved to the detail screen.
  */
 
+internal const val NO_SERVER_TITLE = "Add a server first"
+internal const val NO_SERVER_HINT = "Services run on your own server. Add one to start building."
+
 /** Presentation-only creator filter (mirrors iOS AppsOwnerFilter). */
 private enum class OwnerFilter(val label: String) { ALL("All"), YOURS("Yours"), SHARED("Shared") }
 
@@ -153,7 +156,10 @@ fun ServicesListScreen(nav: NavController) {
                 else PodSwitcherModel.matchesPod(app.canonicalUrl, filterPodName))
         }
 
-    val subtitle = when (val st = state) {
+    // No server yet: apps run on the owner's own server, so there is nothing
+    // to load (mirror of iOS ServicesTab.emptyOrList).
+    val noServer = pods.isEmpty()
+    val subtitle = if (noServer) "Nothing installed yet." else when (val st = state) {
         is LoadingState.Loading -> "Loading…"
         is LoadingState.Failed -> st.message
         else -> if (allApps.isEmpty()) "Nothing installed yet." else "${allApps.size} installed"
@@ -183,7 +189,23 @@ fun ServicesListScreen(nav: NavController) {
             style = TextStyle(fontSize = 17.sp, lineHeight = 24.sp),
         )
 
-        if (allApps.isEmpty() && state !is LoadingState.Loading) {
+        if (noServer) {
+            Spacer(Modifier.height(FS.space.s8))
+            FSCard(padding = PaddingValues(FS.space.s6), modifier = Modifier.testTag("services-no-server")) {
+                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+                    Text(
+                        text = NO_SERVER_TITLE,
+                        color = FS.colors.text,
+                        style = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
+                    )
+                    Text(
+                        text = NO_SERVER_HINT,
+                        color = FS.colors.textMuted,
+                        style = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
+                    )
+                }
+            }
+        } else if (allApps.isEmpty() && state !is LoadingState.Loading) {
             Spacer(Modifier.height(FS.space.s8))
             FSCard(padding = PaddingValues(FS.space.s6)) {
                 Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {

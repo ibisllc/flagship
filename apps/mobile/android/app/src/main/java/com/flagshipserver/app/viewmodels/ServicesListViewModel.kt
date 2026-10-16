@@ -91,11 +91,22 @@ class ServicesListViewModel(
         loadLinks(listed.map { it.app }.filter { it.serviceId !in _linksByServiceId.value })
     }
 
-    /** No servers known yet: the current server's list alone. */
-    private suspend fun single(): List<Listed> =
-        client.appsList().apps.map {
+    /** No servers known yet: the current server's list alone. With no
+     *  server paired at all (a new account) there is nothing to list, never
+     *  an error: the screen says to add a server first. */
+    private suspend fun single(): List<Listed> {
+        val apps = try {
+            client.appsList().apps
+        } catch (e: com.flagshipserver.app.api.ScreensError) {
+            if (e is com.flagshipserver.app.api.ScreensError.NotPaired ||
+                e is com.flagshipserver.app.api.ScreensError.NoSessionToken
+            ) return emptyList()
+            throw e
+        }
+        return apps.map {
             Listed(it, emptyList(), AppStatus.combined(listOf(AppStatus.of(it))), AppAccessViewModel.showsBadge(it))
         }
+    }
 
     /** Null when no server answered and none had answered before. */
     private suspend fun across(servers: List<PodInfo>): List<Listed>? {

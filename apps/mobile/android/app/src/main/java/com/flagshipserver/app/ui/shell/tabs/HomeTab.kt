@@ -82,7 +82,7 @@ fun HomeTab() {
             }
         }
     }
-    val vm = remember { HomeViewModel(client) }
+    val vm = remember(client) { HomeViewModel(client) }
     val mailbox = LocalSecretMailboxClient.current
     // #56 — reconcile the server list against ONE unauthenticated `/pods`
     // fetch (registered servers + active orders). Surfaces in-flight orders
@@ -189,7 +189,7 @@ fun HomeTab() {
     // from "Not now" recomposes Home and the banner disappears.
     val recoveryBannerStore = remember { RecoveryBannerStore.fromContext(ctx) }
 
-    LaunchedEffect(app.currentPodId.value) { vm.load() }
+    LaunchedEffect(app.currentPodId.value, vm) { vm.load() }
 
     // The pod-list reconcile + the account-level "which boxes are waiting for
     // approval?" feed now ride the app-scope LiveSync canal (the `/stream`

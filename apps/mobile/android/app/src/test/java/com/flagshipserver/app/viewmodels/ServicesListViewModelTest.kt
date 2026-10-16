@@ -115,6 +115,19 @@ class ServicesListViewModelTest {
         assertEquals(LoadingState.Failed(ServicesListViewModel.CANT_REACH), m.state.value)
     }
 
+    /** A new live account: no server and no session. Nothing to list, never
+     *  an error, never the mock's fixtures (device bug 2026-10-16). */
+    @Test fun noServerAndNoSessionListsNothing() = runTest {
+        for (err in listOf(com.flagshipserver.app.api.ScreensError.NotPaired, com.flagshipserver.app.api.ScreensError.NoSessionToken)) {
+            val live = object : ScreensClient by MockScreensClient(simulatedLatencyMs = 0) {
+                override suspend fun appsList(): AppsListResponse = throw err
+            }
+            val m = vm(emptyMap(), fallback = live)
+            m.refresh()
+            assertEquals(LoadingState.Loaded(emptyList<ServicesListViewModel.Listed>()), m.state.value)
+        }
+    }
+
     @Test fun withoutServersAsksTheCurrentClient() = runTest {
         val m = vm(emptyMap(), fallback = Box(listOf(app("notes", "stopped"))))
         m.refresh()

@@ -217,7 +217,7 @@ class MainActivity : FragmentActivity() {
         // and the live maintainer-trust check never runs (it would clobber the
         // seeded untrusted verdict). Debug-gated with the smoke seam above.
         if (isDebuggable && smokeInitialTab != null) {
-            devSettings.forceMockForSmokeRun()
+            if (smokeConfig?.live == true) devSettings.forceLiveForSmokeRun() else devSettings.forceMockForSmokeRun()
         }
         AiKeyStore.attach(applicationContext)
         com.flagshipserver.app.core.SecuredSessionStore.attach(applicationContext)
@@ -356,16 +356,14 @@ class MainActivity : FragmentActivity() {
         intent?.let { handleIntent(it) }
 
         setContent {
-            // Pivot Mock vs Live on the developer toggle + presence of
-            // a stored session token. The CompositionLocal swap is
-            // automatic — every screen that reads LocalScreensClient
-            // re-composes when the value changes.
+            // Pivot Mock vs Live on the developer toggle alone, as iOS does.
+            // Live never falls back to the mock: an account with no server
+            // (or no session yet) gets the live client's "not paired" answer,
+            // which each screen turns into its empty state, never fixtures.
             val useLive by devSettings.useLiveClient.collectAsState()
             val sessionToken by sessionStore.sessionToken.collectAsState()
-            val effectiveScreens: ScreensClient =
-                if (useLive && sessionToken != null) liveScreens else mockScreens
-            val effectiveBuild: BuildClient =
-                if (useLive && sessionToken != null) liveBuild else mockBuild
+            val effectiveScreens: ScreensClient = if (useLive) liveScreens else mockScreens
+            val effectiveBuild: BuildClient = if (useLive) liveBuild else mockBuild
             val effectiveRelay: QrRelayClient =
                 if (useLive) liveRelay else mockRelay
             val effectiveMailbox: SecretMailboxClient =
