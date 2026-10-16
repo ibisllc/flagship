@@ -221,7 +221,11 @@ describe("shares", () => {
   it("an unreadable share list loads with no share instead of stopping the daemon", async () => {
     const path = join(dir, "shares.json");
     await writeFile(path, '{"active": [{"grant"');
-    const s = new ShareStore(path, { serverDomain: "home.alice.flagship.services", verifyOwnerGrant: () => true });
+    const s = new ShareStore(path, {
+      serverDomain: "home.alice.flagship.services",
+      verifyOwnerGrant: () => true,
+      verifyAcceptAdmin: () => ({ ok: true, keyKind: "admin-root", keyPubHex: "00".repeat(32) }),
+    });
     await expect(s.load()).resolves.toEqual({ dropped: 0 });
     expect(s.list()).toEqual([]);
     await keptAsideAndReported(path);

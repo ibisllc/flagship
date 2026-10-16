@@ -12,16 +12,21 @@ import { join } from "node:path";
 import {
   parseServerShareAccept,
   parseServerShareGrant,
+  parseShareAcceptAdminProof,
   verifyServerShareAccept,
   type ServerShareAccept,
   type ServerShareGrant,
+  type ShareAcceptAdminProof,
 } from "@flagship/protocol";
+import type { AcceptAdminVerdict } from "./acceptAdmin.js";
 
 export interface HeldShare {
   grant: ServerShareGrant;
   signature: string;
   accept: ServerShareAccept;
   acceptSignature: string;
+  /** The joining account's admin proof, checked when the share went live (absent on shares from before 2026-10-16). */
+  acceptAdmin?: ShareAcceptAdminProof;
   /** First grant for this id (ms). */
   sharedAt: number;
   lastSeenAt: number | null;
@@ -36,12 +41,17 @@ export interface EndedShare {
 
 export type PutShareResult =
   | { ok: true; created: boolean; share: HeldShare }
-  | { ok: false; status: number; error: string };
+  | { ok: false; status: number; error: string; code?: string };
 
 export interface ShareStoreOptions {
   serverDomain: string;
   /** The owner's sensitive key signed this grant. */
   verifyOwnerGrant: (g: ServerShareGrant, sig: Uint8Array) => boolean;
+  /**
+   * Only an admin device of the joining account accepts (acceptAdmin.ts):
+   * checked once, on the first grant for a share id.
+   */
+  verifyAcceptAdmin: (accept: ServerShareAccept, proof: ShareAcceptAdminProof | undefined) => AcceptAdminVerdict;
   now?: () => number;
 }
 
@@ -104,11 +114,13 @@ export class ShareStore {
     const accept = parseServerShareAccept(o?.accept);
     if (!grant || !accept || typeof o.signature !== "string" || typeof o.acceptSignature !== "string") return null;
     if (!this.chainOk(grant, o.signature, accept, o.acceptSignature)) return null;
+    const acceptAdmin = o.acceptAdmin === undefined ? undefined : parseShareAcceptAdminProof(o.acceptAdmin);
     return {
       grant,
       signature: o.signature,
       accept,
       acceptSignature: o.acceptSignature,
+      ...(acceptAdmin ? { acceptAdmin } : {}),
       sharedAt: typeof o.sharedAt === "number" ? o.sharedAt : grant.issuedAt,
       lastSeenAt: typeof o.lastSeenAt === "number" ? o.lastSeenAt : null,
     };
@@ -154,6 +166,7 @@ export class ShareStore {
     signature: string,
     accept?: ServerShareAccept,
     acceptSignature?: string,
+    acceptAdmin?: ShareAcceptAdminProof,
   ): Promise<PutShareResult> {
     if (grant.serverDomain !== this.opts.serverDomain) return { ok: false, status: 403, error: "grant is for a different server" };
     if (this.ended.has(grant.shareId)) return { ok: false, status: 410, error: "share-ended" };
@@ -168,6 +181,10 @@ export class ShareStore {
     }
     if (!a || !aSig) return { ok: false, status: 400, error: "the first grant needs the acceptance" };
     if (!this.chainOk(grant, signature, a, aSig)) return { ok: false, status: 403, error: "invalid signature" };
+    if (!held) {
+      const verdict = this.opts.verifyAcceptAdmin(a, acceptAdmin);
+      if (!verdict.ok) return { ok: false, status: verdict.status, error: verdict.error, code: verdict.code };
+    }
     for (const other of this.active.values()) {
       if (other.grant.shareId !== grant.shareId && other.grant.memberPubHex === grant.memberPubHex) {
         return { ok: false, status: 409, error: "this key already holds another share" };
@@ -179,6 +196,7 @@ export class ShareStore {
       signature: signature.toLowerCase(),
       accept: a,
       acceptSignature: aSig.toLowerCase(),
+      ...(held ? (held.acceptAdmin ? { acceptAdmin: held.acceptAdmin } : {}) : acceptAdmin ? { acceptAdmin } : {}),
       sharedAt: held?.sharedAt ?? this.now(),
       lastSeenAt: held?.lastSeenAt ?? null,
     };

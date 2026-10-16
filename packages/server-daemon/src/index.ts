@@ -186,6 +186,8 @@ import { ActivityLog, defaultActivityLogPath } from "./shares/activityLog.js";
 import { quotaNotices } from "./appQuota/notices.js";
 import { withQuotaUsage } from "./appQuota/usage.js";
 import { ShareStore, defaultShareStorePath } from "./shares/shareStore.js";
+import { checkShareAcceptAdmin } from "./shares/acceptAdmin.js";
+import { caTrustChainFromFolder } from "./releaseVerifier.js";
 import { buildShareUpdate } from "./shares/shareUpdate.js";
 import { ShareInviteStore, buildShareInvites, defaultShareInviteStorePath } from "./shares/shareInvites.js";
 import {
@@ -3096,6 +3098,17 @@ async function wireRuntimeSurfaces(deps: {
       serverDomain: env.serverFqdn,
       verifyOwnerGrant: (g, sig) =>
         authorizeSensitiveOrder({ ...authority, order: g, signature: sig, verify: verifyServerShareGrant }),
+      // Only an admin device of the joining account accepts: its proof is
+      // checked against the maintainer CA chain this box ships with.
+      verifyAcceptAdmin: (accept, proof) => {
+        let chain = null;
+        try {
+          chain = caTrustChainFromFolder({ gitRepoPath: process.env.FLAGSHIP_SELF_REPO ?? "/opt/flagship" });
+        } catch {
+          chain = null;
+        }
+        return checkShareAcceptAdmin({ accept, proof, chain, now: Date.now() });
+      },
     });
     const { dropped } = await store.load();
     if (dropped > 0) console.warn(`[shares] dropped ${dropped} share(s) that no longer verify`);
