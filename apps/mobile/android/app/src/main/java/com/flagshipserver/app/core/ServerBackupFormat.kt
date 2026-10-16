@@ -463,4 +463,14 @@ object ServerBackupFormat {
             "\"sha256\":\"${order.sha256}\",\"issuedAt\":${order.issuedAt}}"
         return pairingJson.dropLast(1) + ",\"restore\":{\"order\":$o,\"signatureHex\":\"$signatureHex\"}}"
     }
+
+    /** The pairing order's JSON with the signed backup policy beside it
+     *  (`{request, signature, backupPolicy: {order, signatureHex}}`): the box
+     *  takes it when the pairing order verifies (docs/server-backup-and-clone.md, "Backup policy"). */
+    fun attachBackupPolicy(pairingJson: String, order: BackupPolicyOrder, signatureHex: String): String {
+        if (!pairingJson.endsWith("}")) return pairingJson
+        val o = "{\"serverDomain\":${JsonPrimitive(order.serverDomain)},\"policy\":${JsonPrimitive(order.policy)}," +
+            "\"phoneReserveBytes\":${order.phoneReserveBytes},\"issuedAt\":${order.issuedAt}}"
+        return pairingJson.dropLast(1) + ",\"backupPolicy\":{\"order\":$o,\"signatureHex\":\"$signatureHex\"}}"
+    }
 }

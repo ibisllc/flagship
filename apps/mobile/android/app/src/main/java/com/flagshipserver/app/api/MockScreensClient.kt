@@ -1130,7 +1130,276 @@ class MockScreensClient(
         )
     }
 
+    // Saved backups and the backup policy, answered like the box
+    // (serverArchive/service.ts, backupPolicy/http.ts): same shapes, same sentences.
+
+    var backupSchedule = BackupSchedule()
+    /** The box's key pool (archive ids it may still use). */
+    val backupKeyPool: MutableList<String> = MutableList(120) { "%032x".format(it + 1) }
+    private val backupUsedIds = mutableSetOf<String>()
+    /** The apps a backup holds; a Back up now takes one poll per app. */
+    var backupRunApps: List<ServerArchiveApp> = listOf(ServerArchiveApp("bright-maple--plants", "Plants"), ServerArchiveApp("bright-maple--wiki", "Wiki"))
+    /** Newest first. */
+    val savedBackupsList: MutableList<SavedBackup> = mutableListOf(
+        mockSavedBackup("%032x".format(9001), now() - 3_600_000L * 9, "schedule"),
+        mockSavedBackup("%032x".format(9000), now() - 3_600_000L * 33, "schedule"),
+    )
+    var backupLastRun: BackupLastRun? = savedBackupsList.firstOrNull()?.let { BackupLastRun(it.createdAt, true, "schedule", it.archiveId) }
+    var backupRunning: BackupRunning? = null
+    /** What the next run fails with (the box's sentence), or null. */
+    var backupRunFailure: String? = null
+    val backupSchedulePuts: MutableList<BackupSchedule> = mutableListOf()
+    val backupKeyDeposits: MutableList<BackupKeysRequest> = mutableListOf()
+    val backupDeletes: MutableList<String> = mutableListOf()
+    var backupRuns = 0
+        private set
+
+    var backupPolicyState = BackupPolicyState("phone", 32L * GB, now() - 86_400_000L)
+    val backupPolicyPosts: MutableList<BackupPolicyRequest> = mutableListOf()
+    /** The app data a backup would hold (null: not measured yet). */
+    var backupUsedBytes: Long? = (3.2 * GB).toLong()
+    var backupDiskBytes: Long = 360L * GB
+    /** The peer engine's status while the policy is "peer". */
+    var backupPeerStatus: kotlinx.serialization.json.JsonObject? = kotlinx.serialization.json.buildJsonObject {
+        put("state", JsonPrimitive("protected"))
+        put("lastPlacedAt", JsonPrimitive(now() - 3_600_000L * 8))
+        put("healthyBricks", JsonPrimitive(12))
+        put("totalBricks", JsonPrimitive(12))
+        put("hostingBytes", JsonPrimitive(5L * GB))
+        put("provenBytes", JsonPrimitive(5L * GB))
+        put("poolBytes", JsonPrimitive(240L * GB))
+        put("holders", JsonPrimitive(4))
+    }
+
+    private fun mockSavedBackup(id: String, at: Long, trigger: String): SavedBackup {
+        val sha = java.security.MessageDigest.getInstance("SHA-256").digest(archiveBytes).joinToString("") { "%02x".format(it) }
+        val stem = "home-" + java.text.SimpleDateFormat("yyyy-MM-dd-HHmm", java.util.Locale.US)
+            .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }.format(java.util.Date(at))
+        return SavedBackup(
+            archiveId = id,
+            createdAt = at,
+            trigger = trigger,
+            bytes = archiveBytes.size.toLong(),
+            sha256 = sha,
+            backupBytes = archiveBackupFile.size.toLong(),
+            backupFileName = "$stem.flagship-backup",
+            dataFileName = "$stem.flagship-data",
+            apps = backupRunApps,
+        )
+    }
+
+    private fun backupNoKeys() =
+        "an admin device of your account hasn't approved backups for this server yet: open this server in the Flagship app on an admin device"
+
+    private fun boxRefusal(status: Int, error: String, code: String? = null): ScreensError.Http {
+        val body = kotlinx.serialization.json.buildJsonObject {
+            put("error", JsonPrimitive(error))
+            if (code != null) put("code", JsonPrimitive(code))
+        }
+        return ScreensError.Http(status, body.toString())
+    }
+
+    /** The box's next slot (serverArchive/schedule.ts, without catch-up and retries). */
+    private fun backupNextRunAt(t: Long): Long? {
+        val s = backupSchedule
+        if (s.frequency == "off") return null
+        val day = 86_400_000L
+        var slot = Math.floorDiv(t, day) * day + s.minuteOfDayUtc * 60_000L
+        if (slot > t) slot -= day
+        if (s.frequency == "weekly") {
+            while (java.time.Instant.ofEpochMilli(slot).atZone(java.time.ZoneOffset.UTC).dayOfWeek.value % 7 != s.weekdayUtc) slot -= day
+        }
+        return slot + (if (s.frequency == "weekly") 7 else 1) * day
+    }
+
+    private fun savedView(): SavedBackupsView {
+        val active = backupPolicyState.policy != "none"
+        val pool = backupKeyPool.size
+        return SavedBackupsView(
+            schedule = backupSchedule,
+            scheduleActive = active,
+            nextRunAt = if (pool == 0 || !active) null else backupNextRunAt(now()),
+            lastRun = backupLastRun,
+            running = backupRunning,
+            keysLeft = pool,
+            keysWanted = if (pool < 30) minOf(400, 800 - pool) else 0,
+            waitingReason = if (pool == 0 && backupSchedule.frequency != "off") backupNoKeys() else null,
+            usedBytes = savedBackupsList.sumOf { it.totalBytes },
+            backups = savedBackupsList.toList(),
+        )
+    }
+
+    /** One poll of a running Back up now: the next app, then done. */
+    private fun advanceBackupRun() {
+        val r = backupRunning ?: return
+        val done = r.progress.done + 1
+        if (done < r.progress.total) {
+            backupRunning = r.copy(progress = ServerArchiveProgress(done, r.progress.total, backupRunApps.getOrNull(done)?.name ?: ""))
+            return
+        }
+        backupRunning = null
+        val failure = backupRunFailure
+        if (failure != null) {
+            backupLastRun = BackupLastRun(r.startedAt, false, r.trigger, reason = failure)
+            return
+        }
+        val b = mockSavedBackup(r.archiveId, r.startedAt, r.trigger)
+        savedBackupsList.add(0, b)
+        backupLastRun = BackupLastRun(r.startedAt, true, r.trigger, r.archiveId)
+    }
+
+    override suspend fun savedBackups(): SavedBackupsView {
+        tick()
+        advanceBackupRun()
+        return savedView()
+    }
+
+    override suspend fun putBackupSchedule(schedule: BackupSchedule): SavedBackupsView {
+        tick()
+        val s = schedule
+        val error = when {
+            s.frequency !in setOf("daily", "weekly", "off") -> "frequency must be daily, weekly or off"
+            s.minuteOfDayUtc !in 0..1439 -> "the time must be a minute of the day (0 to 1439)"
+            s.weekdayUtc !in 0..6 -> "the weekday must be 0 (Sunday) to 6"
+            s.keepDaily !in 0..60 -> "keep between 0 and 60 daily backups"
+            s.keepWeekly !in 0..52 -> "keep between 0 and 52 weekly backups"
+            s.keepDaily + s.keepWeekly == 0 -> "keep at least one backup"
+            else -> null
+        }
+        if (error != null) throw boxRefusal(400, error)
+        backupSchedulePuts += s
+        backupSchedule = s
+        return savedView()
+    }
+
+    override suspend fun depositBackupKeys(req: BackupKeysRequest): SavedBackupsView {
+        tick()
+        val d = req.deposit
+        if (!d.isValid || req.keys.isEmpty() || !Regex("^[0-9a-f]{128}$").matches(req.signature)) throw boxRefusal(400, "malformed keys")
+        if (d.count != req.keys.size || d.digest != com.flagshipserver.app.core.ArchiveKeys.digest(req.keys)) {
+            throw boxRefusal(400, "the keys don't match their signature")
+        }
+        if (kotlin.math.abs(now() - d.issuedAt) > 10 * 60_000L) throw boxRefusal(403, "the approval is stale: approve again")
+        backupKeyDeposits += req
+        val have = backupKeyPool.toSet() + backupUsedIds
+        backupKeyPool += req.keys.map { it.archiveId }.filter { it !in have }
+        while (backupKeyPool.size > 800) backupKeyPool.removeAt(backupKeyPool.lastIndex)
+        return savedView()
+    }
+
+    override suspend fun runBackupNow(): BackupRunResponse {
+        tick()
+        if (backupRunning != null) throw boxRefusal(409, "a backup or restore is already running here")
+        val id = backupKeyPool.removeFirstOrNull() ?: throw boxRefusal(409, backupNoKeys(), "no-keys")
+        backupUsedIds += id
+        backupRuns += 1
+        backupRunning = BackupRunning(
+            archiveId = id,
+            trigger = "now",
+            startedAt = now(),
+            progress = ServerArchiveProgress(0, backupRunApps.size, backupRunApps.firstOrNull()?.name ?: ""),
+        )
+        return BackupRunResponse(id)
+    }
+
+    private fun savedById(id: String): SavedBackup =
+        savedBackupsList.firstOrNull { it.archiveId == id } ?: throw boxRefusal(404, "no backup is ready")
+
+    override suspend fun savedBackupFile(archiveId: String): ByteArray {
+        tick()
+        savedById(archiveId)
+        return archiveBackupFile
+    }
+
+    override suspend fun savedBackupChunk(archiveId: String, offset: Long): ByteArray {
+        tick()
+        savedById(archiveId)
+        if (offset < 0 || offset > archiveBytes.size) throw boxRefusal(400, "bad offset")
+        val start = offset.toInt()
+        return archiveBytes.copyOfRange(start, minOf(start + 4 * 1024 * 1024, archiveBytes.size))
+    }
+
+    override suspend fun savedBackupLink(archiveId: String): SavedBackupLink {
+        tick()
+        val b = savedById(archiveId)
+        return SavedBackupLink("/api/archive-download/" + "ab".repeat(32), b.backupFileName, b.dataFileName, b.bytes, b.sha256, null)
+    }
+
+    override suspend fun deleteSavedBackup(archiveId: String): SavedBackupsView {
+        tick()
+        if (backupRunning?.archiveId == archiveId) throw boxRefusal(409, "the backup is still being made")
+        if (savedBackupsList.none { it.archiveId == archiveId }) throw boxRefusal(404, "that backup isn't on this server")
+        savedBackupsList.removeAll { it.archiveId == archiveId }
+        backupDeletes += archiveId
+        return savedView()
+    }
+
+    private fun gbText(n: Long) = com.flagshipserver.app.core.BackupsText.gb(n)
+
+    private fun backupLimit(p: BackupPolicyState): Long? = when (p.policy) {
+        "phone" -> p.phoneReserveBytes.takeIf { it > 0 }
+        "peer" -> backupDiskBytes / 3
+        else -> null
+    }
+
+    private fun policyView(): BackupPolicyView {
+        val p = backupPolicyState
+        val limit = backupLimit(p)
+        val used = backupUsedBytes
+        val over = limit != null && used != null && used >= limit
+        val why = if (p.policy == "phone") "the space your phone keeps for its backup" else "a third of its disk, so other servers can keep their backups on it"
+        return BackupPolicyView(
+            policy = p,
+            cap = BackupCap(
+                limitBytes = limit,
+                usedBytes = used,
+                measuredAt = used?.let { now() - 120_000L },
+                overLimit = over,
+                diskBytes = backupDiskBytes,
+                reservedForPeersBytes = if (p.policy == "peer") backupDiskBytes - backupDiskBytes / 3 else null,
+                apps = if (used != null) listOf(BackupCapApp("bright-maple--plants", used)) else emptyList(),
+                overReason = if (over) {
+                    "This server holds ${gbText(used!!)} of app data, over its backup limit of ${gbText(limit!!)} ($why). Remove apps or data, or change the backup policy on the server page."
+                } else {
+                    null
+                },
+            ),
+            peerJson = if (p.policy == "peer") backupPeerStatus else null,
+        )
+    }
+
+    override suspend fun backupPolicy(): BackupPolicyView {
+        tick()
+        return policyView()
+    }
+
+    override suspend fun setBackupPolicy(req: BackupPolicyRequest): BackupPolicyView {
+        tick()
+        val o = req.order
+        val used = backupUsedBytes
+        if (o.isValid && used != null) {
+            val limit = backupLimit(BackupPolicyState(o.policy, o.phoneReserveBytes, o.issuedAt))
+            if (limit != null && used > limit) {
+                val sentence = if (o.policy == "phone") {
+                    "This server holds ${gbText(used)} of app data, more than the ${gbText(limit)} the phone would keep. Reserve at least ${gbText(used)} on the phone, or remove apps or data first."
+                } else {
+                    "This server holds ${gbText(used)} of app data, more than a third of its disk (${gbText(limit)}), which is all a server may use with peer backups. Remove apps or data first, or choose another policy."
+                }
+                throw boxRefusal(409, sentence, "over-backup-limit")
+            }
+        }
+        if (!o.isValid) throw boxRefusal(400, "that backup policy is malformed")
+        if (!Regex("^[0-9a-f]{128}$").matches(req.signatureHex)) throw boxRefusal(403, "only an admin device of this account can set the backup policy")
+        val held = backupPolicyState.issuedAt
+        if (held != null && o.issuedAt < held) throw boxRefusal(409, "a newer backup policy is already set on this server")
+        backupPolicyPosts += req
+        backupPolicyState = BackupPolicyState(o.policy, o.phoneReserveBytes, o.issuedAt)
+        return policyView()
+    }
+
     companion object {
+        private const val GB = 1024L * 1024 * 1024
+
         /** The mock box's device book: this phone, and the account's other one. */
         const val SELF_DEVICE_ID = "0123456789abcdef0123456789abcdef"
         val SELF_DEVICE_PUB = "a1".repeat(32)

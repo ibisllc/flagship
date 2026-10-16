@@ -165,6 +165,8 @@ class MainActivity : FragmentActivity() {
             }
         }
         val sessionStore = EncryptedSessionStore.create(applicationContext)
+        // Keep a copy of each server's newest backup on this phone (in the background).
+        if (com.flagshipserver.app.core.SmokeModeConfig.from(intent) == null) runCatching { com.flagshipserver.app.core.BackupFetchWorker.schedule(applicationContext) }
         appState.onSignedOut = { sessionStore.setDemoSession(null) }
         if (!appState.isPaired.value && !Keystore.hasUmkSeed()) {
             sessionStore.demoSession()?.let { demo ->

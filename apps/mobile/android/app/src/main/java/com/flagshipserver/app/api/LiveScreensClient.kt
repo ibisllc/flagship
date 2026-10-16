@@ -394,6 +394,44 @@ class LiveScreensClient(
     override suspend fun serverRestoreStatus(): ServerRestoreStatusResponse =
         request("/api/screens/server-restore", ServerRestoreStatusResponse.serializer())
 
+    private val savedPath = "/api/screens/server-archive/backups"
+
+    override suspend fun savedBackups(): SavedBackupsView =
+        request(savedPath, SavedBackupsView.serializer())
+
+    override suspend fun putBackupSchedule(schedule: BackupSchedule): SavedBackupsView {
+        val body = json.encodeToString(BackupSchedule.serializer(), schedule).toByteArray()
+        return request("$savedPath/schedule", SavedBackupsView.serializer(), "PUT", body, readTimeoutSeconds = 30)
+    }
+
+    override suspend fun depositBackupKeys(req: BackupKeysRequest): SavedBackupsView {
+        val body = json.encodeToString(BackupKeysRequest.serializer(), req).toByteArray()
+        return request("$savedPath/keys", SavedBackupsView.serializer(), "POST", body, readTimeoutSeconds = 60)
+    }
+
+    override suspend fun runBackupNow(): BackupRunResponse =
+        request("$savedPath/run", BackupRunResponse.serializer(), "POST", ByteArray(0), readTimeoutSeconds = 30)
+
+    override suspend fun savedBackupFile(archiveId: String): ByteArray =
+        requestBytes("$savedPath/$archiveId/backup-file", readTimeoutSeconds = 60)
+
+    override suspend fun savedBackupChunk(archiveId: String, offset: Long): ByteArray =
+        requestBytes("$savedPath/$archiveId/chunk?offset=$offset", readTimeoutSeconds = 300)
+
+    override suspend fun savedBackupLink(archiveId: String): SavedBackupLink =
+        request("$savedPath/$archiveId/link", SavedBackupLink.serializer(), "POST", ByteArray(0), readTimeoutSeconds = 30)
+
+    override suspend fun deleteSavedBackup(archiveId: String): SavedBackupsView =
+        request("$savedPath/$archiveId", SavedBackupsView.serializer(), "DELETE", null, readTimeoutSeconds = 30)
+
+    override suspend fun backupPolicy(): BackupPolicyView =
+        request("/api/screens/backup-policy", BackupPolicyView.serializer())
+
+    override suspend fun setBackupPolicy(req: BackupPolicyRequest): BackupPolicyView {
+        val body = json.encodeToString(BackupPolicyRequest.serializer(), req).toByteArray()
+        return request("/api/screens/backup-policy", BackupPolicyView.serializer(), "POST", body, readTimeoutSeconds = 30)
+    }
+
     override suspend fun boxActivity(limit: Int, before: Int?): List<BoxActivityEntry> {
         val q = if (before != null) "&before=$before" else ""
         return request("/api/screens/activity?limit=$limit$q", BoxActivityResponse.serializer()).entries

@@ -248,6 +248,34 @@ interface ScreensClient {
     suspend fun serverRestoreStatus(): ServerRestoreStatusResponse =
         throw ScreensError.NotImplemented("server import")
 
+    // Saved backups (docs/server-backup-and-clone.md, "Scheduled backups"):
+    // `/api/screens/server-archive/backups`, owner sessions only.
+    suspend fun savedBackups(): SavedBackupsView =
+        throw ScreensError.NotImplemented("saved backups")
+    /** 400 `{error}` with the box's sentence when the schedule is refused. */
+    suspend fun putBackupSchedule(schedule: BackupSchedule): SavedBackupsView =
+        throw ScreensError.NotImplemented("saved backups")
+    suspend fun depositBackupKeys(req: BackupKeysRequest): SavedBackupsView =
+        throw ScreensError.NotImplemented("saved backups")
+    /** 202 `{archiveId}`; 409 `code: no-keys` when the box has no keys, 409 when busy. */
+    suspend fun runBackupNow(): BackupRunResponse =
+        throw ScreensError.NotImplemented("saved backups")
+    suspend fun savedBackupFile(archiveId: String): ByteArray =
+        throw ScreensError.NotImplemented("saved backups")
+    suspend fun savedBackupChunk(archiveId: String, offset: Long): ByteArray =
+        throw ScreensError.NotImplemented("saved backups")
+    suspend fun savedBackupLink(archiveId: String): SavedBackupLink =
+        throw ScreensError.NotImplemented("saved backups")
+    suspend fun deleteSavedBackup(archiveId: String): SavedBackupsView =
+        throw ScreensError.NotImplemented("saved backups")
+
+    // The backup policy and the size limit it puts on app data.
+    suspend fun backupPolicy(): BackupPolicyView =
+        throw ScreensError.NotImplemented("backup policy")
+    /** 403 not an admin / another server, 409 `code: over-backup-limit` or a newer policy, all `{error}`. */
+    suspend fun setBackupPolicy(req: BackupPolicyRequest): BackupPolicyView =
+        throw ScreensError.NotImplemented("backup policy")
+
     /** What this box did, newest first (`before` is the `seq` cursor). */
     suspend fun boxActivity(limit: Int = 100, before: Int? = null): List<BoxActivityEntry> = emptyList()
 
