@@ -1067,8 +1067,12 @@ first update after it (`docs/anonymous-vouchers.md`, $1 voucher unit). Detail: `
 5. Remove `DEV_LATE_LOG` / W12 debug endpoints in `controlPlaneRoutes.ts`.
 6. Quiet the box console: diagnose `journalctl -b -p warning` on a real box
    first, fix real warnings at the source, then add `quiet loglevel=3`.
-- Grant-gated debug SSH ships in v1 by owner decision; `debugAccessGate.ts` is
-  its only sanctioned home and the release guard enforces that.
+- Owner debug access ships at GA by owner decision (2026-10-16): SSH key only,
+  an admin-signed `flagship/debug-access/v2` grant naming the box, the key and
+  an end time (at most 7 days; renew or revoke from the server page), shown on
+  the server page and in Activity (docs/recipe-delivery-and-remote-install.md
+  "Debug access"). `debugAccessGate.ts` is its only sanctioned home; the
+  release guard fails any debug password anywhere, dev included.
 
 ### Environment traps
 

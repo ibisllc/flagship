@@ -142,31 +142,94 @@ Rationale: these are footguns/power-tools. One clearly-labelled gate keeps the
 default flow clean and safe, makes "advanced" a single mental switch, and means a
 normal user never sees an ISO picker, a secrets toggle, or a shell option.
 
-**GA note:** debug-mode / local-CLI is today a dev backstop. It must be a
-deliberate Advanced opt-in, **never default**, and stays bound to the existing
-"Bucket C" backdoor-disablement discipline (the release grep-gate
-`scripts/release-guard.sh` already guards the dev-only constants).
+**GA note:** debug access ships at GA (owner decisions 2026-07-05 and
+2026-10-16): an owner who knows what they're doing can let their own SSH key
+into their server for a while. It is never on by default, and it is SSH-key
+only. Specified in "Debug access" below.
 
-**Box-side enforcement (consent-as-crypto).** Debug access is no longer an
-unconditional builder bake — it is enabled at boot ONLY when the recipe carries an
-owner-IRK-signed grant the box itself verifies:
+## Debug access
 
-- The phone signs a `flagship/debug-access/v1` `DebugAccessGrant`
-  (`{serverDomain, sshAuthorizedKey, issuedAt}`; `packages/protocol/debugAccess.ts`)
-  behind Face ID when the user enables Advanced → Debug mode.
-- The builder embeds it as an **UNSIGNED top-level recipe sibling `debugGrant`** —
-  a JSON STRING of `{"grant":{"serverDomain":"…","sshAuthorizedKey":"…","issuedAt":N},"signatureHex":"…"}`
-  (exactly like `swkHex` / `pairingOrder`; NOT part of the signed install-blob
-  canonical bytes, so existing recipe signatures are untouched).
-- The daemon's `debugAccessGate` (`packages/server-daemon/src/debugAccessGate.ts`,
-  wired in `wireOwnerHandlers`) verifies the signature under the config-pinned
-  owner IRK AND that the grant names THIS box, then enables the `debug` user +
-  installs the SSH key. **No valid grant ⇒ a production image, no debug user.**
-  Idempotent via a local marker; never throws on an absent/forged/wrong-box grant.
+An owner lets one SSH public key in as the box's `debug` user (passwordless
+sudo) until a set time. Consent is crypto the box verifies, never a flag.
 
-⇒ The builder **MUST stop baking the `debug` console user into the preseed**; the
-box-side gate is now the sole path that enables it (Bucket C item 2 — the
-unconditional bake — is replaced by this owner-authorized gate).
+**Grant and revoke** (`packages/protocol/src/debugAccess.ts`; vectors in
+`packages/protocol/test-vectors/debug-access/`, passed by TS, Swift, Kotlin and
+the webapp; regenerate with `scripts/gen-debug-access-vectors.mjs`):
+
+    flagship/debug-access/v2|<serverDomain>|<sshPublicKey>|<issuedAt>|<expiresAt>
+    flagship/debug-access-revoke/v1|<serverDomain>|<issuedAt>
+
+- `sshPublicKey` is the key normalized to `<type> <base64>` (options and comment
+  dropped; the blob must decode and name the same type). Types: ssh-ed25519,
+  ecdsa-sha2-nistp256/384/521, the two `sk-` FIDO types, ssh-rsa. The apps show
+  the OpenSSH fingerprint (`SHA256:…`, no padding).
+- `expiresAt` is after `issuedAt` and at most 7 days later. The apps offer
+  1 hour, 24 hours (the default) and 7 days. Renewing is signing a new grant.
+- Both are sensitive orders: the admin root on an admin-pinned box (or an
+  admin device holding an admin grant the box's device book verifies); the IRK
+  only on a box with no admin root pinned. Co-managers and non-admin devices
+  can't sign one, and the apps don't offer it to them.
+- `flagship/debug-access/v1` (no expiry, optional key, password login) is gone:
+  a v1 grant is refused with "This debug access grant is from an older app."
+
+**Box** (`packages/server-daemon/src/debugAccessGate.ts`, the only place that
+lets anyone in over SSH):
+
+- A grant is taken only if it names this box, verifies under the authority
+  above, is newer than every grant and revoke taken before (`floorIssuedAt`,
+  so nothing replays), is within 10 minutes of the box clock when it comes
+  from a device, and hasn't ended. Refusals are sentences the apps show.
+- Opening: the `debug` user gets password `*` (no password; not "locked", so
+  key auth works), the key goes into the root-owned
+  `/etc/flagship/debug-ssh/authorized_keys` with OpenSSH's own
+  `expiry-time="…Z"` as a backstop, `/etc/sudoers.d/90-flagship-debug` gives
+  passwordless sudo, and `/etc/ssh/sshd_config.d/10-flagship-debug.conf` is a
+  `Match User debug` block: that key file, `AuthenticationMethods publickey`,
+  `PasswordAuthentication no`, `KbdInteractiveAuthentication no`.
+- Closing (at `expiresAt` by a timer plus a 30 s check, or at once on a
+  revoke): key file and sudoers removed, account set to `!` and expired,
+  `loginctl terminate-user debug` and `pkill -KILL -u debug`, sshd drop-in
+  removed. A grant for a different key closes the old key's sessions first.
+- State is `<dataDir>/debug-access.json`, written durably before access opens
+  and marked `ending` before it closes, so a restart finishes a half-done
+  close and never reopens an ended grant. An unreadable state file closes
+  access and refuses every grant signed before it was found. The v1 gate's
+  marker (`debug-access-done.json`) closes its password login on first start.
+- Activity: `server.debug-access.granted`, `.renewed`, `.expired`, `.revoked`.
+- server-detail carries `debugAccess: {on, expiresAt, keyFingerprint,
+  grantedBy: "admin" | "owner-key", lastEnded?}`.
+
+**Where grants come from:**
+
+- At install: the recipe's unsigned top-level `debugGrant` sibling (a JSON
+  string of `{grant, signatureHex}`, like `swkHex` / `pairingOrder`; not part of
+  the signed install blob). The phone or webapp signs it at mint time when the
+  owner turns on Advanced → "Debug-friendly server" and pastes a key; Studio
+  (Mac, Windows, Linux) and the CLI only carry it into install-blob.json. The
+  box reads it once, at first boot (it may be older than 10 minutes but must
+  not have ended). The CLI never bakes the grant's key into the image.
+- At runtime, from an admin device's server page:
+  - `GET /api/screens/debug-access` → the view above
+  - `POST /api/screens/debug-access` `{grant, signatureHex}` → `{ok, change:
+    "granted"|"renewed", debugAccess}`
+  - `POST /api/screens/debug-access/revoke` `{revoke, signatureHex}` → `{ok,
+    change: "revoked"|"unchanged", debugAccess}`
+  - refusals: `{error: "<sentence>"}` with 400/403/409/422; companion sessions
+    get 403; share sessions never reach the screens API.
+
+**Apps** (webapp, iOS, Android at parity): the server page has "Debug access"
+for an admin device: turn on (paste a key, pick 1 h / 24 h / 7 days, the
+warning "Anyone with this key can read everything on this server while it's
+on.", biometric), renew, turn off. While on, a banner reads "Debug access is
+on until <time>." Other devices see the state read-only. The Activity tab
+labels the four entries.
+
+**Release guard** (`scripts/release-guard.sh`): a `DEBUG_PASSWORD` constant, a
+`chpasswd` for the debug user, or `PasswordAuthentication yes` anywhere in
+shipping source fails every run, dev included; so does a gate file that no
+longer contains `verifyDebugAccessGrant`, `AuthenticationMethods publickey`,
+`PasswordAuthentication no` and `expiry-time=`. A `useradd … debug` outside
+the gate fails a release.
 
 ## Warning placement principle
 

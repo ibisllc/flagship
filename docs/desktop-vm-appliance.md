@@ -122,7 +122,8 @@ cross-platform desktop app is new surface.
 ## CLI / debug access
 
 Click a hosted server → **"Open CLI/console" — only if it was created Debug-friendly**
-(the owner-signed `flagship/debug-access/v1` grant is present). This falls straight out
+(an admin-signed `flagship/debug-access/v2` grant is present; see
+docs/recipe-delivery-and-remote-install.md "Debug access"). This falls straight out
 of the debug-access lockdown already shipped:
 
 - A **production (debug-off) VM has no usable console login** (no `debug` account,
@@ -130,15 +131,15 @@ of the debug-access lockdown already shipped:
   attach to its serial console, a production guest just shows a locked prompt — no way
   in. **The appliance's internal security is identical whether metal or VM.**
 - For a **debug-enabled** server, hosting makes it *lovely*: **one-click console**
-  (attach to the VM serial, or auto-SSH to the VM's local IP with the debug creds the
-  app already holds) — no LAN-IP hunting or password typing. Great for developers/
-  tinkerers, **without weakening production**.
+  (attach to the VM serial for boot logs, or SSH to the VM's local IP as `debug` with
+  the key the owner put in the grant; there is no debug password) — no LAN-IP
+  hunting. Great for developers/tinkerers, **without weakening production**.
 - **Hard guardrail:** the app must **never** mount a production VM's disk and inject a
   debug user to bypass the grant. "Production = no console, ever" must stay true on metal
   and VM alike. CLI access is gated on the phone-signed grant, period.
-- **Optional later:** "enable debug on an existing hosted server" → the app asks the
-  phone to sign a fresh debug-access grant, delivers it to the VM, console unlocks. Keeps
-  it phone-authorized (no silent host backdoor).
+- **Enabling debug on an existing server** is the server page's "Debug access" in the
+  apps (an admin device signs a fresh grant and sends it to the box). Keeps it
+  phone-authorized (no silent host backdoor).
 
 ## Recipe delivery
 

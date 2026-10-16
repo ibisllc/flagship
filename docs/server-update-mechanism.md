@@ -106,7 +106,7 @@ signer ∈ {owner IRK, admin device-capability chain} via `adminAuthorityLocal`;
   operation is a **known, audited, blessed** change, not arbitrary commands.
 - **Boundary — do NOT duplicate existing owner-only grants.** Pure runtime toggles that
   are already first-class owner-signed grants stay as they are: e.g. **"allow SSH / debug
-  console" is the existing `flagship/debug-access/v1` grant** (owner-signed, single-sig —
+  console" is the existing `flagship/debug-access/v2` grant** (admin-signed, single-sig —
   it's config on already-blessed code, the owner's choice on their box; see
   `packages/server-daemon/src/debugAccessGate.ts`). The update channel is for changing the
   **code / the set of blessed operations**, not re-implementing runtime config toggles.
