@@ -47,7 +47,7 @@ public enum AdminOrderGate {
 
     public static let removeApp = "Only an admin device can remove an app."
     public static let runsOn = "Only an admin device can change where this app runs."
-    public static let accessList = "Only an admin device can change what this app may reach."
+    public static let accessList = "Only an admin device can change this app's internet access."
     public static let apiKeys = "Only an admin device can create or revoke API keys."
     public static let dataWrite = "Only an admin device can change this app's data."
 }
