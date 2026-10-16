@@ -1,0 +1,126 @@
+{
+  "about": "Co-manager invites (owner decision 2026-10-16; docs/service-access-gating.md \"Co-manager invites\"). A co-manager (account B, sharing server S at Can manage) invites people to an app on S at Member. B's device signs the ordinary flagship/service-invite/create/v1 with its per-share member key (deriveShareMemberKey(memberUmk, shareId), see test-vectors/server-share), with authorAID = the owner's AID (GET /api/shares/invites gives it) and the invitee's name sealed with sealInviteBundle under deriveShareInviteBundleKey(memberUmk, shareId) = HKDF-SHA256(UMK, salt empty, info \"flagship/share-invite-bundle/v1|<shareId>\", 32) instead of a household key (AES-256-GCM, AAD flagship/service-invite/bundle/v1|<inviteId>, hex nonce12||ct+tag; plaintext JSON {\"name\":…}). B withdraws with flagship/service-invite/revoke/v1 signed by the same member key. The box relays B's create to .com with flagship/service-invite-co-manager/v1, signed by its STK (only boxes sign it; ports need only reproduce the string). Every platform must: derive keys.memberPubHex and keys.bundleKeyHex; seal each bundle to the given hex with the given nonce and open it back; rebuild each canonical string from its fields and verify the signature under keys.memberPubHex (relay: keys.stkPubHex); and fail every reject case.",
+  "keys": {
+    "ownerUmkSeedHex": "2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a",
+    "ownerAidPubHex": "c4ef5ad4a7469261696505f9dc0a9511824cf1b6d606253e5fb958061a8cbcbd",
+    "memberUmkSeedHex": "5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b",
+    "shareId": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+    "memberPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+    "otherShareId": "ffeeddccbbaa99887766554433221100",
+    "otherMemberPubHex": "610e122913762c8403c7f631754e6865703bd1488b0d922ac8566d86e301d60d",
+    "bundleKeyInfo": "flagship/share-invite-bundle/v1|0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+    "bundleKeyHex": "d59374202bd53b939f4582d4302a09c64d2a7e78937f7da5094027b3d22ab302",
+    "stkSeedHex": "7777777777777777777777777777777777777777777777777777777777777777",
+    "stkPubHex": "c853ad0f0cd2b619aea92ceec4fd56a24d6499d584ce79257e45cfd8139b60a7"
+  },
+  "bundles": [
+    {
+      "inviteId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "plaintext": "{\"name\":\"Alex\"}",
+      "nonceHex": "000102030405060708090a0b",
+      "sealedHex": "000102030405060708090a0b27a8e9ad14c70f9dcdcc8a857b3c54daaa7dd1ae8f7e5d04b3abc79acfa6d5"
+    },
+    {
+      "inviteId": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+      "plaintext": "{\"name\":\"Chess club\"}",
+      "nonceHex": "000102030405060708090a0b",
+      "sealedHex": "000102030405060708090a0b27a8e9ad14c70f9dcdce8e85706d09645072dd36c53fd5414cd736b256b6dddd2ba1cb5b94"
+    }
+  ],
+  "creates": [
+    {
+      "kind": "personal",
+      "fields": {
+        "inviteId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "authorAID": "c4ef5ad4a7469261696505f9dc0a9511824cf1b6d606253e5fb958061a8cbcbd",
+        "serviceRef": "harry--chess",
+        "secretHash": "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
+        "encryptedBundle": "000102030405060708090a0b27a8e9ad14c70f9dcdcc8a857b3c54daaa7dd1ae8f7e5d04b3abc79acfa6d5",
+        "issuedAt": 1792000000000
+      },
+      "canonical": "flagship/service-invite/create/v1|a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1|c4ef5ad4a7469261696505f9dc0a9511824cf1b6d606253e5fb958061a8cbcbd|harry--chess|c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3|000102030405060708090a0b27a8e9ad14c70f9dcdcc8a857b3c54daaa7dd1ae8f7e5d04b3abc79acfa6d5|1792000000000",
+      "signatureHex": "42f6ab13a9e463f65dd2488ed1168cf4cfd0c337e7b2c9e3d9214e43531ce4962a4ce145c33a976d1b67e159ef50d6373c668a625a8fa04266c262b717178901"
+    },
+    {
+      "kind": "group",
+      "fields": {
+        "inviteId": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+        "authorAID": "c4ef5ad4a7469261696505f9dc0a9511824cf1b6d606253e5fb958061a8cbcbd",
+        "serviceRef": "harry--chess",
+        "secretHash": "d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4",
+        "encryptedBundle": "000102030405060708090a0b27a8e9ad14c70f9dcdce8e85706d09645072dd36c53fd5414cd736b256b6dddd2ba1cb5b94",
+        "issuedAt": 1792000000000,
+        "maxRedemptions": 10,
+        "expiresAt": 1794592000000
+      },
+      "canonical": "flagship/service-invite/create/v1|b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2|c4ef5ad4a7469261696505f9dc0a9511824cf1b6d606253e5fb958061a8cbcbd|harry--chess|d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4d4|000102030405060708090a0b27a8e9ad14c70f9dcdce8e85706d09645072dd36c53fd5414cd736b256b6dddd2ba1cb5b94|1792000000000|maxN=10|exp=1794592000000",
+      "signatureHex": "f5d75d6b02d8a1f845cf6d16344ff127e9f09bdba1d8971a97b5f4d26099a0ddb9f8dbbd217721fbfabfc5b3adb9b09720340c060ce170874abebfd415afe50c"
+    }
+  ],
+  "revoke": {
+    "fields": {
+      "inviteId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "issuedAt": 1792000600000
+    },
+    "canonical": "flagship/service-invite/revoke/v1|a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1|1792000600000",
+    "signatureHex": "a7ba0363b5e3db2d59fc3bf5e9f7999f5ec767738c34808a49b81ff28dc0d8d59d09ddbec2b9a94cf614ee3b2958f5c3632020fd4e9232bdb9291d123488da07"
+  },
+  "relay": {
+    "fields": {
+      "username": "harry",
+      "serverDomain": "home.harry.flagship.services",
+      "inviteId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "serviceRef": "harry--chess",
+      "creatorPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+      "createSigHex": "42f6ab13a9e463f65dd2488ed1168cf4cfd0c337e7b2c9e3d9214e43531ce4962a4ce145c33a976d1b67e159ef50d6373c668a625a8fa04266c262b717178901",
+      "issuedAt": 1792000001000
+    },
+    "canonical": "flagship/service-invite-co-manager/v1|harry|home.harry.flagship.services|a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1|harry--chess|eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff|42f6ab13a9e463f65dd2488ed1168cf4cfd0c337e7b2c9e3d9214e43531ce4962a4ce145c33a976d1b67e159ef50d6373c668a625a8fa04266c262b717178901|1792000001000",
+    "signatureHex": "22087e40d349c41165f599ec36cec9c7467ca2b5387cb41b78423da1e036aa5e5cd7797dcb8ab9256ac72d43b25830cf10d05e19240d2b454ebd9ee6d9c0c10c"
+  },
+  "reject": [
+    {
+      "why": "the create signed by the same account's member key for ANOTHER share (another server) is not this co-manager",
+      "envelope": "create",
+      "fields": {
+        "inviteId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "authorAID": "c4ef5ad4a7469261696505f9dc0a9511824cf1b6d606253e5fb958061a8cbcbd",
+        "serviceRef": "harry--chess",
+        "secretHash": "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
+        "encryptedBundle": "000102030405060708090a0b27a8e9ad14c70f9dcdcc8a857b3c54daaa7dd1ae8f7e5d04b3abc79acfa6d5",
+        "issuedAt": 1792000000000
+      },
+      "signatureHex": "d4056709d23f96a54a55838a481ab2464149cbaf28f4774a9a6c607e365b8d724bf3b77031ede2aef9c5ba2c8f0a81c7e430120bddd37030fe19ad4010236104",
+      "verifyUnder": "memberPubHex"
+    },
+    {
+      "why": "a signature over another app's create",
+      "envelope": "create",
+      "fields": {
+        "inviteId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "authorAID": "c4ef5ad4a7469261696505f9dc0a9511824cf1b6d606253e5fb958061a8cbcbd",
+        "serviceRef": "harry--chess",
+        "secretHash": "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
+        "encryptedBundle": "000102030405060708090a0b27a8e9ad14c70f9dcdcc8a857b3c54daaa7dd1ae8f7e5d04b3abc79acfa6d5",
+        "issuedAt": 1792000000000
+      },
+      "signatureHex": "72434bd2dbea538e5ea9bc9681687bed995e795da18b87e4c79d57b3d0a2f40ee6c95f05c5c42e654cc4dc7d386d8382c072ac7003a3f89ddde16a949202d303",
+      "verifyUnder": "memberPubHex"
+    },
+    {
+      "why": "the relay signed by the member key instead of the box's STK",
+      "envelope": "relay",
+      "fields": {
+        "username": "harry",
+        "serverDomain": "home.harry.flagship.services",
+        "inviteId": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "serviceRef": "harry--chess",
+        "creatorPubHex": "eb56f183498a5c3525f67fb61d8262403bda4fbd358362e4f5d96e717c5c6eff",
+        "createSigHex": "42f6ab13a9e463f65dd2488ed1168cf4cfd0c337e7b2c9e3d9214e43531ce4962a4ce145c33a976d1b67e159ef50d6373c668a625a8fa04266c262b717178901",
+        "issuedAt": 1792000001000
+      },
+      "signatureHex": "1ceeeb3abffa8b0e5190898a91d0afb4258576d33765308878898bbc2c56f09b3901c6051fd51b0027fbc9245630ca5d18964ab6017b6299bd2c7663a25f8601",
+      "verifyUnder": "stkPubHex"
+    }
+  ]
+}

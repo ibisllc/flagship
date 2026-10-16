@@ -102,10 +102,12 @@ export function sealInviteBundle(
   bundle: InviteBundle,
   householdKey: Bytes,
   inviteId: string,
+  fixedNonce?: Bytes,
 ): string {
   if (householdKey.length !== 32) {
     throw new Error("household key must be 32 bytes");
   }
+  if (fixedNonce !== undefined && fixedNonce.length !== 12) throw new Error("nonce must be 12 bytes");
   const plaintext = new TextEncoder().encode(
     JSON.stringify(
       bundle.photo !== undefined
@@ -113,8 +115,7 @@ export function sealInviteBundle(
         : { name: bundle.name },
     ),
   );
-  const nonce = new Uint8Array(12);
-  crypto.getRandomValues(nonce);
+  const nonce = fixedNonce ?? crypto.getRandomValues(new Uint8Array(12));
   const ct = gcm(householdKey, nonce, bundleAad(inviteId)).encrypt(plaintext);
   const out = new Uint8Array(nonce.length + ct.length);
   out.set(nonce, 0);
@@ -630,6 +631,81 @@ export function verifyServiceInviteCreateQuery(
   } catch {
     return false;
   }
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Co-manager invite relay — STK-signed by the shared box (docs/
+// service-access-gating.md "Co-manager invites"). A co-manager signs the
+// create with its per-share member key; `.com` can't tie that key to the
+// owner's account (it never learns who shares with whom), so the box that
+// holds the share vouches for it: it checked the share is at "Can manage" and
+// the co-manager is manager-class in the app, then posts the create to `.com`
+// with this attestation. `.com` checks the STK against the owner's registered
+// server and the create's signature under `creatorPubHex`. Only boxes sign it.
+// ──────────────────────────────────────────────────────────────────────
+
+export const TAG_SERVICE_INVITE_CO_MANAGER = "flagship/service-invite-co-manager/v1";
+
+export interface ServiceInviteCoManagerRelay {
+  /** The owner's account (the `.com` path segment), lowercase. */
+  username: string;
+  /** The box that holds the share and signs this. */
+  serverDomain: string;
+  inviteId: string;
+  serviceRef: string;
+  /** The co-manager's member key for this share (64 lowercase hex): the create's signer. */
+  creatorPubHex: string;
+  /** The create's signature (128 lowercase hex), so the relay binds that exact create. */
+  createSigHex: string;
+  issuedAt: number;
+}
+
+function canonicalCoManagerRelay(r: ServiceInviteCoManagerRelay): Bytes {
+  validateNoSepCtrl("username", r.username);
+  validateNoSepCtrl("serverDomain", r.serverDomain);
+  validateNoSepCtrl("inviteId", r.inviteId);
+  validateNoSepCtrl("serviceRef", r.serviceRef);
+  if (!/^[0-9a-f]{64}$/.test(r.creatorPubHex)) throw new Error("creatorPubHex must be 64 lowercase hex");
+  if (!/^[0-9a-f]{128}$/.test(r.createSigHex)) throw new Error("createSigHex must be 128 lowercase hex");
+  if (!Number.isSafeInteger(r.issuedAt) || r.issuedAt < 0) throw new Error("issuedAt must be a non-negative integer");
+  return new TextEncoder().encode(
+    [
+      TAG_SERVICE_INVITE_CO_MANAGER,
+      r.username,
+      r.serverDomain,
+      r.inviteId,
+      r.serviceRef,
+      r.creatorPubHex,
+      r.createSigHex,
+      r.issuedAt,
+    ].join("|"),
+  );
+}
+
+export function serviceInviteCoManagerRelayCanonicalBytes(r: ServiceInviteCoManagerRelay): Bytes {
+  return canonicalCoManagerRelay(r);
+}
+
+export function signServiceInviteCoManagerRelay(r: ServiceInviteCoManagerRelay, stk: Keypair): Bytes {
+  return ed.sign(canonicalCoManagerRelay(r), stk.privateKey);
+}
+
+export function verifyServiceInviteCoManagerRelay(r: ServiceInviteCoManagerRelay, sig: Bytes, stkPub: Bytes): boolean {
+  try {
+    return ed.verify(sig, canonicalCoManagerRelay(r), stkPub);
+  } catch {
+    return false;
+  }
+}
+
+/** The canonical create string (for vectors and ports). */
+export function createServiceInviteCanonicalBytes(c: CreateServiceInvite): Bytes {
+  return canonicalCreate(c);
+}
+
+/** The canonical revoke string (for vectors and ports). */
+export function revokeServiceInviteCanonicalBytes(r: RevokeServiceInvite): Bytes {
+  return canonicalRevoke(r);
 }
 
 /** SHA-256 hex of a 32-byte capability secret — the form `.com` stores + indexes. */

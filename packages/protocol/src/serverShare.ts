@@ -33,6 +33,8 @@ const INFO_TOKEN = "flagship/server-share/token/v1";
 const INFO_LINK_KEY = "flagship/server-share/link-key/v1";
 const INFO_INBOX = "flagship/share-inbox/v1";
 const INFO_INBOX_KEY = "flagship/share-inbox-key/v1";
+export const INFO_SHARE_INVITE_BUNDLE = "flagship/share-invite-bundle/v1";
+const INFO_INVITE_BUNDLE = INFO_SHARE_INVITE_BUNDLE;
 const SAS_TAG = "flagship/server-share/sas/v1";
 export const AAD_SHARE_OFFER = "flagship/server-share/offer/v1";
 export const AAD_SHARE_ACCEPTANCE = "flagship/server-share/acceptance/v1";
@@ -73,6 +75,17 @@ function keypair(seed: Bytes): Keypair {
 export function deriveShareMemberKey(umk: UserMasterKey, shareId: string): Keypair {
   checkShareId(shareId);
   return keypair(hk(umk.seed, `${INFO_MEMBER}|${shareId}`));
+}
+
+/**
+ * Seals the names of the people B invites to the shared server's apps
+ * (`sealInviteBundle` with this key instead of a household key). B's devices
+ * re-derive it; the owner's devices can't open it (they see "Invited by
+ * <label>").
+ */
+export function deriveShareInviteBundleKey(umk: UserMasterKey, shareId: string): Bytes {
+  checkShareId(shareId);
+  return hk(umk.seed, `${INFO_INVITE_BUNDLE}|${shareId}`);
 }
 
 /** Signs B's "Shared with me" inbox requests; its public key is the inbox id. */
