@@ -49,7 +49,7 @@ import {
   type BackupSlot,
 } from "@flagship/protocol";
 import { renderDownloadPage } from "./downloadPage.js";
-import { mkdir, open, readFile, rm, stat, statfs } from "node:fs/promises";
+import { mkdir, open, readFile, rename, rm, stat, statfs } from "node:fs/promises";
 import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import type { HttpRequest, HttpResponse } from "../runtime.js";
@@ -1280,6 +1280,66 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     return json(202, { archiveId: w.archiveId, received: job.received });
   }
 
+  /** The peer engine's fetch of a lost server's backup from the bricks on other servers (setPeerFetcher). */
+  let peerFetcher:
+    | ((w: { serverId: string; pbk: Uint8Array; archiveId: string; bytes: number; sha256: string; outPath: string; onProgress?: (received: number) => void }) => Promise<{ dataPath: string }>)
+    | null = null;
+
+  /**
+   * `POST .../server-restore/from-peers { serverId, pbkHex }`: the backup this
+   * server waits for comes from the peer engine instead of an upload (the
+   * lost server's id and its PBK from the owner's device). The commit checks
+   * it as for an upload.
+   */
+  async function fromPeers(req: HttpRequest): Promise<HttpResponse> {
+    if (!peerFetcher) return err(404, "this server can't restore from peer backups");
+    let b: { serverId?: unknown; pbkHex?: unknown };
+    try {
+      b = JSON.parse(req.body.toString("utf8")) as typeof b;
+    } catch {
+      return err(400, "invalid json");
+    }
+    const w = waiting();
+    if (!w) return err(409, "this server isn't waiting for a backup", { code: "not-waiting" });
+    if (typeof b.serverId !== "string" || !/^[a-z0-9.-]+$/.test(b.serverId)) return err(400, "serverId must be the lost server's address");
+    if (typeof b.pbkHex !== "string" || !/^[0-9a-f]{64}$/.test(b.pbkHex)) return err(400, "pbkHex must be 32 bytes of lowercase hex");
+    const started = await startRestore({ ...req, body: Buffer.from(JSON.stringify({ archiveId: w.archiveId, bytes: w.bytes })) });
+    if (started.status !== 202) return started;
+    const job = restore!;
+    if (job.state === "ready" || pulling) return json(202, { archiveId: w.archiveId, received: job.received });
+    pulling = true;
+    job.reason = undefined;
+    const fetcher = peerFetcher;
+    const pbk = Buffer.from(b.pbkHex, "hex");
+    void (async () => {
+      const out = await fetcher({
+        serverId: b.serverId as string,
+        pbk,
+        archiveId: w.archiveId,
+        bytes: w.bytes,
+        sha256: w.sha256,
+        outPath: uploadFile,
+        onProgress: (n) => {
+          job.received = Math.min(n, job.bytes);
+        },
+      });
+      if (out.dataPath !== uploadFile) await rename(out.dataPath, uploadFile);
+      if ((await uploadedBytes()) !== job.bytes) throw new ArchiveError("the backup from other servers came back the wrong size");
+      job.received = job.bytes;
+      job.state = "ready";
+      note("server.restore.pulled", "The backup arrived from the servers keeping its pieces.");
+    })()
+      .catch((e: Error) => {
+        job.reason = e.message || "the backup couldn't be fetched from other servers";
+        log(`[server-archive] from-peers failed: ${job.reason}`);
+      })
+      .finally(() => {
+        pbk.fill(0);
+        pulling = false;
+      });
+    return json(202, { archiveId: w.archiveId, received: job.received });
+  }
+
   /** `POST .../server-restore/probe { url }`: how fast this server reads from the old one (for the downtime estimate). */
   async function probe(req: HttpRequest): Promise<HttpResponse> {
     let b: { url?: unknown };
@@ -1382,6 +1442,8 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
           return pull(req);
         case `POST ${RESTORE_PATH}/probe`:
           return probe(req);
+        case `POST ${RESTORE_PATH}/from-peers`:
+          return fromPeers(req);
         case `POST ${ARCHIVE_PATH}/probe-link`:
           return mintProbe();
         case `POST ${RESTORE_PATH}/start`:
@@ -1414,6 +1476,10 @@ export function buildServerArchiveService(opts: ServerArchiveServiceOptions) {
     /** The peer engine plugs in here: told of each saved backup, and asked which it still needs. */
     setSavedHooks(h: typeof hooks): void {
       hooks = h;
+    },
+    /** The peer engine plugs in its fetch of a lost server's backup (POST .../server-restore/from-peers). */
+    setPeerFetcher(fn: typeof peerFetcher): void {
+      peerFetcher = fn;
     },
     /** Check the schedule every `everyMs` (default 5 minutes) until stopped. */
     startSchedule(everyMs = 5 * 60_000): () => void {

@@ -3117,6 +3117,10 @@ async function wireRuntimeSurfaces(deps: {
       onArchiveSaved: (meta, files) => peerEngine.onArchiveSaved(meta, files),
       pinnedArchiveIds: () => peerEngine.pinnedArchiveIds(),
     });
+    // A new server restoring a lost one from its pieces on other servers.
+    serverArchiveService.setPeerFetcher((w) =>
+      peerEngine.fetchArchive({ ...w, ...(w.onProgress ? { onProgress: (done: number) => w.onProgress!(done) } : {}) }),
+    );
   }
   peerEngine?.start();
 

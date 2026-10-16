@@ -368,6 +368,10 @@ GET    /api/screens/server-restore          → { waiting: { archiveId, bytes, s
 POST   /api/screens/server-restore/start    { archiveId, bytes }  → { received }   (409 code not-waiting | other-backup)
 POST   /api/screens/server-restore/chunk?offset=N      (raw bytes, in order)
 POST   /api/screens/server-restore/commit   { key }
+POST   /api/screens/server-restore/order    { order, signatureHex }   (a restore order after pairing: Migrate; refused on a server with apps)
+POST   /api/screens/server-restore/pull     { url, requestId }        (box to box from an approved link, data part only, resumable)
+POST   /api/screens/server-restore/from-peers { serverId, pbkHex }    (the lost server's backup from its pieces on other servers, via the peer engine)
+POST   /api/screens/server-restore/probe    { url }                   (time a probe link of the old server → bytesPerSecond)
 ```
 
 One backup and one restore at a time. The box's copy of a backup expires

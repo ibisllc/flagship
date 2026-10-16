@@ -667,3 +667,66 @@ describe("Migrate on the archive path", () => {
     expect((await call(w2.svc, "GET", SAVED_PATH)).json().lastRun.reason).toMatch(/needs about/);
   });
 });
+
+describe("restore from peer backups", () => {
+  it("a waiting server takes its backup from the peer engine, then restores it like an upload", async () => {
+    const w = await world();
+    await giveKeys(w, 1);
+    const id = await runNow(w);
+    const b = (await call(w.svc, "GET", SAVED_PATH)).json().backups[0];
+    const data = await readFile(join(w.dir, "server-backups", id, "data.flagship-data"));
+    const opened = openBackupWithAccountKey(parseBackupFile(String((await call(w.svc, "GET", `${SAVED_PATH}/${id}/backup-file`)).body)), deriveServerArchiveKey(UMK, id))!;
+    const dst = platformFor(dstBox, "t".repeat(40));
+    const tOps = fakeOps();
+    const wait = buildRestoreWait({ path: join(w.dir, "pw.json"), donePath: join(w.dir, "pd.json"), serverDomain: DST, ownerIrkPub: owner.publicKey, username: "harry" });
+    await wait.load();
+    const target = buildServerArchiveService({
+      dir: join(w.dir, "p-archives"),
+      uploadDir: join(w.dir, "p-upload"),
+      wait,
+      build: { serverFqdn: DST, apps: () => dst.platform.list(), containerName: () => "", ops: tOps.ops, envStore: null, access: null, accessList: null },
+      restore: {
+        serverFqdn: DST,
+        platform: dst.platform,
+        dataProvisioner: dst.provisioner,
+        ops: tOps.ops,
+        signInstall: (r) => dstBox.signInstallService(r),
+        envStore: new InMemoryAppEnvStore(),
+        access: null,
+        egress: null,
+        sourceDir: join(w.dir, "p-clones"),
+        buildImage: async (a) => {
+          await writeSourceTree(a.contextDir, a.files, { binaries: a.binaries });
+          tOps.images.add(a.image);
+          return { ok: true as const };
+        },
+        pullImage: async () => {},
+      },
+      freeBytes: async () => 1e12,
+    });
+    const tcall = async (method: string, path: string, body?: unknown) => {
+      const r = await target.handle(path.split("?")[0]!, method, req(method, path, body), { companion: false });
+      return { status: r!.status, json: () => JSON.parse(String(r!.body)) as Record<string, any> };
+    };
+    const body = { serverId: SRC, pbkHex: "ee".repeat(32) };
+    expect((await tcall("POST", `${RESTORE_PATH}/from-peers`, body)).status).toBe(404);
+    const asked: Array<{ serverId: string; archiveId: string; bytes: number; sha256: string }> = [];
+    target.setPeerFetcher(async (a) => {
+      asked.push({ serverId: a.serverId, archiveId: a.archiveId, bytes: a.bytes, sha256: a.sha256 });
+      expect(Buffer.from(a.pbk).toString("hex")).toBe("ee".repeat(32));
+      const out = join(w.dir, "from-peers.bin");
+      await writeFile(out, data);
+      a.onProgress?.(data.length);
+      return { dataPath: out };
+    });
+    expect((await tcall("POST", `${RESTORE_PATH}/from-peers`, body)).json().code).toBe("not-waiting");
+    const order = { serverDomain: DST, archiveId: id, bytes: b.bytes, sha256: b.sha256, issuedAt: Date.now() };
+    expect((await tcall("POST", `${RESTORE_PATH}/order`, { order, signatureHex: Buffer.from(signServerRestoreOrder(order, owner)).toString("hex") })).status).toBe(200);
+    expect((await tcall("POST", `${RESTORE_PATH}/from-peers`, body)).status).toBe(202);
+    await expect.poll(async () => (await tcall("GET", RESTORE_PATH)).json().restore.state).toBe("ready");
+    expect(asked).toEqual([{ serverId: SRC, archiveId: id, bytes: b.bytes, sha256: b.sha256 }]);
+    expect((await tcall("POST", `${RESTORE_PATH}/commit`, { key: Buffer.from(opened.contentKey).toString("hex") })).status).toBe(202);
+    await target.settle();
+    expect((await tcall("GET", RESTORE_PATH)).json().restore).toMatchObject({ state: "done", apps: [{ serviceId: SERVICE, state: "done" }] });
+  });
+});
