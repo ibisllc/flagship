@@ -38,6 +38,7 @@ import {
   splitAdapterFile,
   type RepoAdapter,
 } from "@flagship/protocol";
+import { checkRateLimit, clientIp, rateLimitedResponse, type RateLimitEnv } from "./rateLimit.js";
 
 export const ADAPTER_SUBMIT_PATH = "/api/adapters/submit";
 export const ADAPTER_COMPLAIN_PATH = "/api/adapters/complain";
@@ -50,7 +51,7 @@ export interface AdapterBucketLike {
   delete(keys: string | string[]): Promise<void>;
 }
 
-export interface AdapterIndexEnv {
+export interface AdapterIndexEnv extends RateLimitEnv {
   DB?: D1Database;
   ADAPTERS_BUCKET?: AdapterBucketLike;
   FLAGSHIP_ADMIN_SECRET?: string;
@@ -186,6 +187,10 @@ interface Submission {
 }
 
 async function submit(request: Request, env: AdapterIndexEnv, ctx?: WaitUntilLike): Promise<Response> {
+  // The address is a counter key only (a hashed object id holding hit
+  // times); nothing about the sender is stored with the adapter.
+  const rl = await checkRateLimit(env, { endpoint: "adapter-submit", ip: clientIp(request) }, ctx);
+  if (rl.limited) return rateLimitedResponse(rl);
   const body = await readJsonObject(request);
   if (
     !body ||
@@ -682,6 +687,12 @@ async function complain(request: Request, env: AdapterIndexEnv, ctx?: WaitUntilL
     stage: stage as Complaint["stage"],
     detail: typeof detail === "string" && detail.length > 0 ? detail : null,
   };
+  const rl = await checkRateLimit(
+    env,
+    { endpoint: "adapter-complain", ip: clientIp(request), subject: c.file },
+    ctx,
+  );
+  if (rl.limited) return rateLimitedResponse(rl);
   const work = recordComplaint(c, env).catch(() => undefined);
   if (ctx) ctx.waitUntil(work);
   return json({ received: true }, 202);

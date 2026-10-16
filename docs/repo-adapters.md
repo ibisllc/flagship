@@ -162,6 +162,10 @@ The loop is designed to run with nobody watching it.
   publish retires the adapter, removing it from the public store. A review
   failure retires one too. Retired adapters stay in D1 with their reports,
   and an identical file can't come back. The next box's AI makes a new one.
+- **Budgets:** one address counts once per adapter a day, one adapter takes
+  at most 10 reports an hour, and an address sends at most 10 reports and 20
+  submits an hour (`apps/com/src/rateLimit.ts`). The counters hold hit times
+  under a hashed id; nothing about the sender is stored with a report.
 - **Learning:** once a week, with the review key set, the Worker asks a cheap
   model what went wrong across new retirements and how the harness (adapt
   prompt, build tools, manifest contract) could prevent it. Answers are kept

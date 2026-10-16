@@ -16,6 +16,7 @@ import {
   type AdapterIndexEnv,
 } from "../src/adapterIndex.js";
 import { route, type RouteEnv } from "../src/route.js";
+import { memoryRateLimits } from "./rateLimitFakes.js";
 
 const ORIGIN = "https://flagshipserver.com";
 const REPO = "https://github.com/me/notes";
@@ -856,6 +857,43 @@ describe("POST /api/adapters/complain", () => {
     await complain({ repo: REPO, file: sha, stage: "start" });
     await Promise.all(fx.pending.splice(0));
     expect(await complaints()).toEqual([]);
+  });
+
+  it("counts one address once per adapter a day, and caps one adapter's reports an hour", async () => {
+    const { ns } = memoryRateLimits();
+    const f = makeFixture({ RATE_LIMITS: ns });
+    try {
+      const from = (ip: string, file: string) =>
+        call(post("/api/adapters/complain", { repo: REPO, file, stage: "build" }, { "cf-connecting-ip": ip }), f);
+      const file = "c".repeat(64);
+      expect((await from("198.51.100.1", file)).status).toBe(202);
+      const again = await from("198.51.100.1", file);
+      expect(again.status).toBe(429);
+      expect(((await again.json()) as { message: string }).message).toMatch(/^Too many tries from your network/);
+      // The same address may still report a different adapter.
+      expect((await from("198.51.100.1", "d".repeat(64))).status).toBe(202);
+      // Every try counts toward the adapter's hour (the refused one too):
+      // eight more addresses fill it, the next is refused.
+      for (let i = 2; i <= 9; i++) expect((await from(`198.51.100.${i}`, file)).status).toBe(202);
+      expect((await from("198.51.100.10", file)).status).toBe(429);
+    } finally {
+      f.close();
+    }
+  });
+
+  it("budgets submits per address", async () => {
+    const { ns } = memoryRateLimits();
+    const f = makeFixture({ RATE_LIMITS: ns });
+    try {
+      const statuses: number[] = [];
+      for (let i = 0; i < 6; i++) {
+        statuses.push((await call(post("/api/adapters/submit", submission(), { "cf-connecting-ip": "198.51.100.7" }), f)).status);
+      }
+      expect(statuses).toEqual([202, 202, 202, 202, 202, 429]);
+      await Promise.all(f.pending.splice(0));
+    } finally {
+      f.close();
+    }
   });
 });
 
