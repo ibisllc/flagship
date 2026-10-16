@@ -367,6 +367,8 @@ public struct BuildGitScreen: View {
     }
     static let notAdaptedText = "This repo is not yet adapted for Flagship."
     static let adaptButton = "Use AI to adapt and deploy"
+    static let runAgainButton = "Run the AI again"
+    static let deployKeptButton = "Deploy it"
     static let shareToggle = "Anonymously share your adaptation"
     static let shareNote = "Others can then install this repo without AI. Nothing about you or your server is included."
     static let checkAgain = "Check again"
@@ -421,6 +423,11 @@ public struct BuildGitScreen: View {
                         FSSecondaryButton(AiKeyRelayCopy.turnOff, block: true) { vm.turnRelayOffForAdaptKey() }
                             .accessibilityIdentifier("build-git-relay-off")
                     }
+                    if vm.keptFiles {
+                        // The box kept what the cut-off run wrote: put it live as is.
+                        FSSecondaryButton(Self.deployKeptButton, block: true) { Task { await vm.deploy() } }
+                            .accessibilityIdentifier("build-git-deploy-kept")
+                    }
                     if vm.sealed {
                         // This build went to the box to go live; a new AI run
                         // needs a new build.
@@ -429,7 +436,7 @@ public struct BuildGitScreen: View {
                         }
                         .accessibilityIdentifier("build-git-check-again-sealed")
                     } else {
-                        FSPrimaryButton(Self.adaptButton, block: true) { onBuildWithAI() }
+                        FSPrimaryButton(vm.keptFiles ? Self.runAgainButton : Self.adaptButton, block: true) { onBuildWithAI() }
                             .accessibilityIdentifier("build-git-adapt")
                         VStack(alignment: .leading, spacing: FS.space.s1) {
                             Toggle(Self.shareToggle, isOn: $vm.share)
@@ -730,12 +737,16 @@ public struct BuildJournalScreen: View {
     /// Open a chat: its session id and, when the list spans servers, the
     /// server it runs on.
     var onResume: (String, String?) -> Void = { _, _ in }
+    /// Open a kept git build on its server, to run the AI again or deploy.
+    var onOpenGitBuild: (String, String?) -> Void = { _, _ in }
     @State private var confirmDiscard: VibeCodeSessionMeta?
     @State private var confirmDiscardBuild: BuildSummary?
 
-    public init(vm: BuildJournalViewModel, onResume: @escaping (String, String?) -> Void = { _, _ in }) {
+    public init(vm: BuildJournalViewModel, onResume: @escaping (String, String?) -> Void = { _, _ in },
+                onOpenGitBuild: @escaping (String, String?) -> Void = { _, _ in }) {
         self.vm = vm
         self.onResume = onResume
+        self.onOpenGitBuild = onOpenGitBuild
     }
 
     public var body: some View {
@@ -756,6 +767,7 @@ public struct BuildJournalScreen: View {
                         }
                         .buttonStyle(.plain)
                         Text("Build timeline").font(FS.font.h2())
+                        failureCard(c: c)
                         detailBody(c: c)
                     }
                     Spacer().frame(height: FS.space.s8)
@@ -906,6 +918,25 @@ public struct BuildJournalScreen: View {
                         }
                     }
                     .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    /// A kept build whose last run failed (a restart cut off the AI or the
+    /// go-live): the box's sentence, and a way back into the build.
+    @ViewBuilder
+    private func failureCard(c: FSColors) -> some View {
+        if let id = vm.openedBuildId, let reason = vm.openedFailure {
+            FSCard {
+                Text(reason).font(FS.font.body()).foregroundColor(c.danger)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("build-journal-failed-reason")
+                if vm.openedMode == "git" {
+                    FSPrimaryButton(vm.openedSealed ? "Deploy it again" : "Run the AI again or deploy", block: true) {
+                        onOpenGitBuild(id, vm.buildServer[id])
+                    }
+                    .accessibilityIdentifier("build-journal-open-git")
                 }
             }
         }

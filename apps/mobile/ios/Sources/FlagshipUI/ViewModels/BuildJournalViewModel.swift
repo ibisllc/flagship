@@ -15,6 +15,13 @@ public final class BuildJournalViewModel {
     public private(set) var detail: LoadingState<[BuildJournalEntry]> = .idle
     /// The build whose timeline `detail` holds (nil when showing the list).
     public private(set) var openedBuildId: String?
+    /// Why the opened build's last run failed, as the box says it (a restart
+    /// cuts off an AI run or a go-live and keeps the files).
+    public private(set) var openedFailure: String?
+    /// The opened build's mode ("git" | "mcp" | "scratch"), once known.
+    public private(set) var openedMode: String?
+    /// The opened build was handed to the box to go live: no AI may run on it.
+    public private(set) var openedSealed = false
     /// Every chat the box holds (active, ready, failed, deployed, cancelled;
     /// finished ones for 30 days), newest activity first.
     public private(set) var liveSessions: [VibeCodeSessionMeta] = []
@@ -148,11 +155,21 @@ public final class BuildJournalViewModel {
 
     public func loadDetail(buildId: String) async {
         openedBuildId = buildId
+        openedFailure = nil
+        openedMode = nil
+        openedSealed = false
         detail = .loading
+        let c = clientFor(buildServer[buildId])
         do {
-            detail = .loaded(try await clientFor(buildServer[buildId]).buildJournal(buildId: buildId).entries)
+            detail = .loaded(try await c.buildJournal(buildId: buildId).entries)
         } catch {
             detail = .failed(ScreensClientError.userFacing(error))
+        }
+        // Only a build the box still holds has a state; a past one 404s.
+        if let st = try? await c.buildState(buildId: buildId).state, openedBuildId == buildId {
+            openedMode = st.mode
+            openedSealed = st.sealed == true
+            if st.adapt?.status == "failed" { openedFailure = st.adapt?.reason ?? "The AI couldn't finish this build." }
         }
     }
 

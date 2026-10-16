@@ -55,6 +55,9 @@ public final class BuildGitViewModel {
     public private(set) var sealed = false
     /// The key the last adapt ran with, for "Turn the relay off for this key".
     public private(set) var adaptCredential: LlmProviderCredential?
+    /// The box reported the AI run failed but kept the build's files (e.g. a
+    /// restart cut it off): the card offers to run the AI again or deploy.
+    public private(set) var keptFiles = false
 
     private var lastVerdict: BuildGitResponse?
     private let client: any ScreensClient
@@ -121,6 +124,7 @@ public final class BuildGitViewModel {
         assignedName = nil
         buildId = nil
         sealed = false
+        keptFiles = false
         share = true
         phase = .checking
         do {
@@ -215,6 +219,7 @@ public final class BuildGitViewModel {
                             reason: status?.reason)
                 return
             case "failed":
+                keptFiles = status?.reason != nil
                 failAdapt(status?.reason ?? "The AI couldn't adapt this repo.")
                 return
             default:
@@ -260,6 +265,40 @@ public final class BuildGitViewModel {
         errorMessage = message
         if let v = lastVerdict { phase = .verdict(v) } else { phase = .idle }
     }
+
+    /// Open a build the box kept (Build sessions → a git build whose AI run
+    /// failed, e.g. cut off by a restart): show the box's reason with the
+    /// not-ready card, so the owner can run the AI again or deploy.
+    public func resume(buildId id: String) async {
+        reset()
+        buildId = id
+        phase = .checking
+        do {
+            let r = try await client.buildState(buildId: id)
+            let st = r.state
+            assignedName = st.name
+            sealed = st.sealed == true
+            if let a = st.adapt, a.status == "done", a.deployed == true, let url = a.deployedUrl ?? st.deployedUrl {
+                phase = .installed(url: url)
+                return
+            }
+            if let a = st.adapt, a.status == "failed" {
+                let v = BuildGitResponse(buildId: id, fit: false, reason: Self.noManifestReason,
+                                         fileCount: r.files.count, name: st.name)
+                lastVerdict = v
+                keptFiles = true
+                errorMessage = a.reason ?? "The AI couldn't adapt this repo."
+                phase = .verdict(v)
+                return
+            }
+            phase = .adapted(fileCount: st.adapt?.fileCount ?? r.files.count)
+        } catch {
+            phase = .idle
+            errorMessage = ScreensClientError.boxReason(error) ?? ScreensClientError.userFacing(error)
+        }
+    }
+
+    static let noManifestReason = "no flagship.app.json"
 
     public func deploy() async {
         guard let buildId else { return }
@@ -326,6 +365,7 @@ public final class BuildGitViewModel {
         shouldFallBackToScratch = false
         buildId = nil
         sealed = false
+        keptFiles = false
         adaptCredential = nil
         lastVerdict = nil
     }

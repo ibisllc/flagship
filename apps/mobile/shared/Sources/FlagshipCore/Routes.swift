@@ -58,6 +58,10 @@ public enum AppsRoute: Hashable, Sendable {
     /// git build mode — paste a repo URL → fitness verdict → install /
     /// AI-adapt.
     case buildGit
+    /// A git build the box kept (Build sessions), reopened on the git screen:
+    /// its AI run failed (e.g. a restart cut it off), so the owner can run
+    /// the AI again or deploy what it wrote.
+    case buildGitResume(buildId: String)
     /// mcp build mode — connect Cursor/Cline with the user's own AI.
     case buildMcp
     /// Build-journal viewer. `buildId == nil` opens the list of past

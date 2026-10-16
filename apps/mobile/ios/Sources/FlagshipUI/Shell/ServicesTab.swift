@@ -208,12 +208,17 @@ public struct ServicesTab: View {
                                         onPickServer: { pod in bind(pod.fqdn) })
         case .buildGit:
             BuildGitContainer(path: $path, holder: buildCred)
+        case .buildGitResume(let buildId):
+            BuildGitContainer(path: $path, holder: buildCred, resumeBuildId: buildId)
         case .buildMcp:
             BuildMcpContainer(path: $path)
         case .buildJournal(let buildId):
             BuildJournalContainer(buildId: buildId, onResume: { sessionId, fqdn in
                 if let fqdn { bind(fqdn) }
                 path.openVibeSession(sessionId)
+            }, onOpenGitBuild: { id, fqdn in
+                if let fqdn { bind(fqdn) }
+                path.append(.buildGitResume(buildId: id))
             })
         case .buildKey(let purpose):
             BuildKeyContainer(purpose: purpose, path: $path, holder: buildCred)
@@ -883,6 +888,8 @@ struct BuildSourceChooserContainer: View {
 struct BuildGitContainer: View {
     @Binding var path: [AppsRoute]
     let holder: BuildCredentialHolder
+    /// Reopen this kept build instead of starting a new check.
+    var resumeBuildId: String? = nil
     @Environment(\.screensClient) private var client
     @State private var vm: BuildGitViewModel?
     var body: some View {
@@ -909,7 +916,12 @@ struct BuildGitContainer: View {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .task { if vm == nil { vm = BuildGitViewModel(client: client) } }
+        .task {
+            guard vm == nil else { return }
+            let model = BuildGitViewModel(client: client)
+            vm = model
+            if let resumeBuildId { await model.resume(buildId: resumeBuildId) }
+        }
     }
 }
 
@@ -987,6 +999,7 @@ struct BuildMcpContainer: View {
 struct BuildJournalContainer: View {
     let buildId: String?
     var onResume: (String, String?) -> Void = { _, _ in }
+    var onOpenGitBuild: (String, String?) -> Void = { _, _ in }
     @Environment(\.screensClient) private var client
     @Environment(\.podScreensClients) private var podClients
     @Environment(AppState.self) private var app
@@ -994,7 +1007,7 @@ struct BuildJournalContainer: View {
     var body: some View {
         Group {
             if let vm {
-                BuildJournalScreen(vm: vm, onResume: onResume)
+                BuildJournalScreen(vm: vm, onResume: onResume, onOpenGitBuild: onOpenGitBuild)
             } else {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             }

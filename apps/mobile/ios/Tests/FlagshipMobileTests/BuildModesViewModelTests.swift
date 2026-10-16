@@ -160,6 +160,59 @@ final class BuildModesViewModelTests: XCTestCase {
         guard case .verdict = vm.phase else { return XCTFail("expected verdict, got \(vm.phase)") }
     }
 
+    /// A restart cut the AI off: the box keeps the files and says so, and
+    /// the card offers to run the AI again or deploy what it wrote.
+    func test_gitVM_adaptCutOffByARestart_offersRunAgainAndDeploy() async {
+        let client = makeClient()
+        let reason = "The server restarted while the AI was working on this build. Its files are kept: run the AI again, or deploy."
+        client.buildAdaptStatusFixture = BuildAdaptStatus(status: "failed", reason: reason)
+        let vm = BuildGitViewModel(client: client)
+        vm.pollInterval = .milliseconds(1)
+        vm.gitUrl = "https://github.com/me/hello"
+        await vm.checkRepo()
+        await vm.adapt()
+        XCTAssertEqual(vm.errorMessage, reason)
+        XCTAssertTrue(vm.keptFiles)
+        guard case .verdict = vm.phase else { return XCTFail("expected verdict, got \(vm.phase)") }
+        await vm.deploy()
+        guard case .installed = vm.phase else { return XCTFail("expected installed, got \(vm.phase)") }
+    }
+
+    /// Build sessions reopens a kept git build whose run failed: the reason
+    /// shows on the not-ready card with both ways forward.
+    func test_gitVM_resumeAKeptBuild_showsTheBoxReason() async {
+        let client = makeClient()
+        let reason = "The server restarted while the AI was working on this build. Its files are kept: run the AI again, or deploy."
+        client.buildStateFixtures["bld-kept"] = BuildStateResponse(
+            state: .init(buildId: "bld-kept", mode: "git", name: "recipes", adapt: BuildAdaptStatus(status: "failed", reason: reason)),
+            files: ["package.json", "server.js"])
+        let vm = BuildGitViewModel(client: client)
+        await vm.resume(buildId: "bld-kept")
+        XCTAssertEqual(vm.buildId, "bld-kept")
+        XCTAssertEqual(vm.errorMessage, reason)
+        XCTAssertTrue(vm.keptFiles)
+        XCTAssertFalse(vm.sealed)
+        guard case .verdict(let v) = vm.phase else { return XCTFail("expected verdict, got \(vm.phase)") }
+        XCTAssertFalse(v.fit)
+        XCTAssertEqual(BuildGitScreen.notReadyText(v), BuildGitScreen.notAdaptedText)
+        await vm.deploy()
+        XCTAssertEqual(client.buildDeployCalls, ["bld-kept"])
+    }
+
+    func test_journalVM_detailOfAFailedKeptBuild_carriesTheReason() async {
+        let client = makeClient()
+        let reason = "The server restarted while it was putting this build live. Its files are kept: deploy it again."
+        client.buildStateFixtures["bld-kept"] = BuildStateResponse(
+            state: .init(buildId: "bld-kept", mode: "git", adapt: BuildAdaptStatus(status: "failed", reason: reason), sealed: true))
+        let vm = BuildJournalViewModel(client: client)
+        await vm.loadDetail(buildId: "bld-kept")
+        XCTAssertEqual(vm.openedFailure, reason)
+        XCTAssertEqual(vm.openedMode, "git")
+        XCTAssertTrue(vm.openedSealed)
+        await vm.loadDetail(buildId: "bld-plants01")
+        XCTAssertNil(vm.openedFailure)
+    }
+
     func test_gitVM_exportAdapter_savesTheFileToShare() async throws {
         let client = makeClient()
         let vm = BuildGitViewModel(client: client)
