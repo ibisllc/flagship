@@ -100,6 +100,8 @@ export interface AccessSync {
   reconcileOnce(): Promise<void>;
   /** Retry failed pushes once. */
   flushOnce(): Promise<void>;
+  /** Whether `peer` runs the app and answers (an authenticated pull with this box's digest). */
+  probe(peer: string, serviceRef: string): Promise<boolean>;
   /** Drop an uninstalled app's journal and pending hand-overs. */
   forget(serviceRef: string): Promise<void>;
   start(): void;
@@ -356,6 +358,11 @@ export function buildAccessSync(opts: AccessSyncOptions): AccessSync {
     reconcileOnce,
     flushOnce,
     catchUpAll: tickCatchUp,
+    async probe(peer, ref) {
+      if (!shared(ref)) return false;
+      const r = await post("pull", peer.toLowerCase(), ref, { digest: opts.journal.digest(ref) });
+      return !!r && r.ok;
+    },
     async forget(ref) {
       opts.store.setCatchingUp(ref, false);
       for (const byRef of outbox.values()) byRef.delete(ref);

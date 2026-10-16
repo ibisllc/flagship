@@ -267,6 +267,7 @@ import { providerRelay } from "./tunnel/relayFetch.js";
 import { AccessPrincipals, AccountDeviceBook } from "./accessPrincipals.js";
 import { AccessJournal } from "./accessJournal.js";
 import { buildAccessSync, deriveAccessSyncKey, type AccessPeers, type AccessSync } from "./accessSync.js";
+import { buildPodsPeers } from "./accessPeers.js";
 import { BoxReadToken } from "./boxReadToken.js";
 
 /**
@@ -1598,27 +1599,6 @@ async function main(): Promise<void> {
         // Light up `/api/leads` with the LIVE full map (it served gossipActive:false
         // until now). result.leadsSnapshot reflects the current SiblingView on demand.
         leadsSnapshotRef.current = result.leadsSnapshot;
-        // Where an app's other servers are, for the one-list-per-app hand-over.
-        if (result.view) {
-          const view = result.view;
-          const slugOf = (ref: string) => servicePlatformRefForServer.current?.byServiceId(ref)?.slug ?? null;
-          accessPeersRef.current = {
-            leaderFor: (ref) => {
-              const slug = slugOf(ref);
-              return slug ? (result.leadsSnapshot().leads[slug]?.leaderFqdn ?? null) : null;
-            },
-            runners: (ref) => {
-              const slug = slugOf(ref);
-              if (!slug) return [];
-              const rank = (stk: string) => serverOrder?.rankOf(stk) ?? null;
-              return view
-                .liveMembers(Date.now(), rank)
-                .filter((m) => m.liveness === "live" && m.services.includes(slug))
-                .sort((a, b) => (a.orderRank ?? Number.MAX_SAFE_INTEGER) - (b.orderRank ?? Number.MAX_SAFE_INTEGER) || a.birthDate - b.birthDate)
-                .map((m) => m.domain);
-            },
-          };
-        }
         // Back-patch the on-service-delete teardown so an uninstall releases the
         // box's `<slug>.<user>` route at the hub + re-announces.
         if (result.releaseRouteForRemovedService) {
@@ -1631,6 +1611,36 @@ async function main(): Promise<void> {
     }
     return null;
   })();
+
+  // Where each app's other servers are, for one access list per app: the
+  // account's servers from .com, their order as this box holds it, and which
+  // of them run an app asked of them directly (docs/service-access-gating.md).
+  if (cfg && env.controlPlaneBaseUrl && env.serverFqdn) {
+    const podsReader = new BoxReadToken({
+      comBaseUrl: env.controlPlaneBaseUrl,
+      username: cfg.userId,
+      serverFqdn: env.serverFqdn,
+      boxPublicKey: () => identityKeypair.publicKey,
+      signAsBox: (msg) => ed.sign(msg, identityKeypair.privateKey),
+    });
+    const base = env.controlPlaneBaseUrl.replace(/\/+$/, "");
+    const user = cfg.userId;
+    const peers = buildPodsPeers({
+      selfFqdn: env.serverFqdn,
+      fetchPods: async () => {
+        const r = await podsReader.fetch(`${base}/api/users/${encodeURIComponent(user)}/pods`);
+        if (!r.ok) return null;
+        const body = (await r.json()) as { pods?: unknown };
+        return Array.isArray(body.pods) ? (body.pods as never) : null;
+      },
+      rankOf: (stk) => serverOrder?.rankOf(stk) ?? null,
+      apps: () => servicePlatformRefForServer.current?.list().map((a) => a.serviceId) ?? [],
+      probe: (peer, ref) => accessSyncRef.current?.probe(peer, ref) ?? Promise.resolve(false),
+      log: (m) => console.warn(m),
+    });
+    accessPeersRef.current = peers;
+    peers.start();
+  }
 
   // ---- Bring up the daemon-local HTTP API (phone/loopback only) ----
   await wireLocalHttpApi({ cfg });

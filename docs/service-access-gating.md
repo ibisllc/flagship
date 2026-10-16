@@ -360,9 +360,16 @@ the overrides of the account's devices and co-managers. A person who joins on
 one server is in on all of them; an admin order sent to any of them holds on
 all of them.
 
-**The leader holds it.** The app's lead server is the gossip leader for its
-slug: the live server highest in the owner's server order that runs it
-(`docs/server-order.md`). A change accepted on any box (a v2 mode order, a v2
+**The leader holds it.** The app's lead server is the live server highest in
+the owner's server order that runs it (`docs/server-order.md`), the same rule
+as the gossip election. Each box works it out itself every 30 seconds: the
+account's servers and their liveness from `.com`'s `/pods` (read token), their
+positions from the server order the box holds and verified, and which of them
+run the app by asking them directly (an authenticated pull; 404 = not there),
+so `.com` is never asked about apps or members (`accessPeers.ts`). It doesn't
+lean on the gossip frames: the box-to-hub broadcast (`broadcast--<user>.<apex>`
+on :443) has no TLS terminator on the hub yet, so cross-box gossip never
+reaches a sibling (found by the gym, 2026-10-15; open). A change accepted on any box (a v2 mode order, a v2
 removal, an app-rank order, a join, a withdraw) is verified there as usual,
 kept in that app's **journal**, and handed to the leader; the leader verifies
 and applies it, keeps it, and copies it out to the app's other servers in

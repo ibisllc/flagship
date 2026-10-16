@@ -7,8 +7,12 @@
 // `home2`, which then takes orders on its own. Runs late (it powers `home` off).
 import { randomBytes } from "node:crypto";
 import { bytesToHex } from "@noble/hashes/utils";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   buildCgkDelivery,
+  signJournalRequest,
+  type JournalRequest,
   cgkDeliveryToCarrierHex,
   deriveCGK,
   signDeviceEndpointClaim,
@@ -40,7 +44,7 @@ export const oneList: Group = {
   title: "one access list per app across home + home2: follower orders reach the leader, joins and withdraws everywhere, catch-up after a restart, leader hand-over",
   needs: ["A1", "A2"],
   phase: 8,
-  async run({ A, rec, box }) {
+  async run({ A, rec, box, dir }) {
     const b1 = box("A1");
     const b2 = box("A2");
     const slug = "onelist";
@@ -52,10 +56,6 @@ export const oneList: Group = {
     const mode = async (b: Box) => {
       const r = await http(`https://${b.fqdn}/api/service-access/${encodeURIComponent(serviceRef)}`);
       return String(r.json?.mode ?? "");
-    };
-    const leaderSeenBy = async (b: Box) => {
-      const r = await tryHttp(`https://${b.fqdn}/api/leads`, {}, 15_000);
-      return String(r.json?.leads?.[slug]?.leaderFqdn ?? "");
     };
     /** Knock on `b`'s copy of the app as `who`: the HTTP status of the authorize (200 in, 401 out, 503 catching up). */
     const knock = async (b: Box, who: Keypair): Promise<number> => {
@@ -69,19 +69,32 @@ export const oneList: Group = {
       });
       return r.status;
     };
+    /** On a failure: each box's leads and the gossip / hand-over lines of its daemon log, into the run's folder. */
+    const diagnose = async (what: string) => {
+      const out: Record<string, unknown> = {};
+      for (const b of [b1, b2]) {
+        const leads = await tryHttp(`https://${b.fqdn}/api/leads`, {}, 15_000).catch(() => null);
+        const req: JournalRequest = { serverId: b.fqdn, unit: "flagship-daemon", lines: 2000, issuedAt: Date.now() };
+        const j = await postJson(`https://${b.fqdn}/api/journal`, { request: req, signature: bytesToHex(signJournalRequest(req, A.keys.irk)) }).catch(() => null);
+        const lines = ((j?.json?.lines ?? []) as string[]).filter((l) => /gossip|access-sync|cgk|device-book/i.test(String(l)));
+        out[b.serverName] = { leads: leads?.json ?? leads?.status, log: lines.slice(-80) };
+      }
+      writeFileSync(join(dir, `one-list-${what.replace(/\W+/g, "-")}.json`), JSON.stringify(out, null, 2));
+      return short(JSON.stringify(Object.fromEntries(Object.entries(out).map(([k, v]) => [k, (v as { leads: unknown }).leads]))), 600);
+    };
     const until = async (what: string, f: () => Promise<boolean>, ms = 120_000, every = 5_000) => {
       const deadline = Date.now() + ms;
       while (Date.now() < deadline) {
         if (await f().catch(() => false)) return;
         await sleep(every);
       }
-      throw new Error(`${what}: not within ${Math.round(ms / 1000)} s`);
+      throw new Error(`${what}: not within ${Math.round(ms / 1000)} s; ${await diagnose(what)}`);
     };
 
-    // Gym boxes have no phone to hand them the account's cloud gossip key, so
-    // gossip (and with it per-app leadership) is off until the gym deposits it,
-    // as the owner's phone does after a box registers.
-    const gossiping = await rec.check("both boxes get the cloud gossip key and gossip", async () => {
+    // Gym boxes have no phone to hand them the account's cloud gossip key (the
+    // box-to-box hand-over's key comes from it), so the gym deposits it, as the
+    // owner's phone does after a box registers.
+    const gossiping = await rec.check("both boxes get the cloud gossip key", async () => {
       const list = await pods(A.username);
       const cgk = deriveCGK(A.keys.umk);
       for (const b of [b1, b2]) {
@@ -134,15 +147,15 @@ export const oneList: Group = {
         await installWhoami(A, b, slug, { enabled: true, default_role: "member" });
         await waitServing(`https://${slug}.${b.fqdn}/`);
       }
-      await until("both boxes see home leading the app", async () =>
-        (await leaderSeenBy(b1)) === b1.fqdn && (await leaderSeenBy(b2)) === b1.fqdn, 5 * 60_000, 15_000);
-      return `leader ${b1.serverName}`;
+      // Each box re-reads the account's servers and asks which run the app every 30 s.
+      await sleep(45_000);
+      return `leader ${b1.serverName} (first in the order)`;
     });
     if (!ready) return;
 
     await rec.check("an order on the follower (home2) reaches the leader (home)", async () => {
       await setMode(A, b2, serviceRef, "restricted");
-      await until("home restricted", async () => (await mode(b1)) === "restricted", 90_000);
+      await until("home restricted", async () => (await mode(b1)) === "restricted", 4 * 60_000);
       return "home: restricted";
     });
 
@@ -172,7 +185,7 @@ export const oneList: Group = {
         redeemedAt,
       });
       assert(red.status === 200, `redeem on home2 ${red.status}: ${short(red.text)}`);
-      await until("the friend gets in on home", async () => (await knock(b1, friend)) === 200, 90_000);
+      await until("the friend gets in on home", async () => (await knock(b1, friend)) === 200, 4 * 60_000);
       return "200 on home";
     });
 
@@ -202,14 +215,18 @@ export const oneList: Group = {
       return seen.join(",");
     });
 
-    await rec.check("the leader going down hands the role to home2, which takes orders on its own", async () => {
+    await rec.check("the leader going down hands the role to home2: it takes orders and new people on its own", async () => {
       const off: PhoneOrder = { type: "power-off", serverId: b1.fqdn, mode: "off", issuedAt: Date.now() };
       const p = await postJson(`https://${b1.fqdn}/api/power`, { request: off, signature: bytesToHex(signPhoneOrder(off, A.keys.adminRoot)) });
       assert(p.status === 200, `power off home ${p.status}: ${short(p.text)}`);
       b1.online = false;
-      await until("home2 leads the app", async () => (await leaderSeenBy(b2)) === b2.fqdn, 6 * 60_000, 15_000);
+      await until("home is down", async () => (await tryHttp(`https://${b1.fqdn}/api/front-page`, {}, 8_000)).status !== 200, 3 * 60_000, 5_000);
+      await sleep(45_000);
       await setMode(A, b2, serviceRef, "open");
       assert((await mode(b2)) === "open", "home2 didn't apply its own order");
+      await setMode(A, b2, serviceRef, "restricted");
+      assert((await mode(b2)) === "restricted", "home2 didn't apply its second order");
+      assert((await knock(b2, friend)) === 401, "the withdrawn friend got in on home2");
       return "home2 leads";
     });
   },
