@@ -824,7 +824,7 @@ test.describe("gym webapp misc", () => {
     expect(await signer(page, keys, rckCanon, rck.body.request, rck.body.signature)).toBe("admin");
     await shot(page, testInfo, "create-server-recipe");
   });
-  test("gym misc a second browser joins the account through Add a device and opens it", async ({ page, browser }, testInfo) => {
+  test("gym misc a second browser joins the account through Add a device, opens it, and unlocks it after a reload", async ({ page, browser }, testInfo) => {
     test.setTimeout(150_000);
     // One relay for both browsers, playing `.com`'s qr-pipe (apps/com/src/buildRelay.ts).
     const hub = relayHub();
@@ -851,6 +851,18 @@ test.describe("gym webapp misc", () => {
       await joiner.goto(`${joinUrl.pathname}${joinUrl.search}`);
       await expect(joiner.locator("#view-join")).toBeVisible({ timeout: 15_000 });
 
+      // First the passphrase that will lock the account in this browser.
+      const JOIN_PASS = "joiner-chose-this";
+      await expect(joiner.locator(".modal-title")).toHaveText("Lock this browser", { timeout: 10_000 });
+      await joiner.fill(".modal-input", "short");
+      await joiner.click("[data-modal-ok]");
+      await expect(joiner.locator("[data-modal-error]")).toHaveText("Use at least 8 characters");
+      await joiner.fill(".modal-input", JOIN_PASS);
+      await joiner.click("[data-modal-ok]");
+      await expect(joiner.locator(".modal-title")).toHaveText("Confirm passphrase");
+      await joiner.fill(".modal-input", JOIN_PASS);
+      await joiner.click("[data-modal-ok]");
+
       // Both screens show the same code before either side goes on.
       const adminSas = page.locator("#add-device-sas");
       const joinSas = joiner.locator("#join-sas");
@@ -876,6 +888,24 @@ test.describe("gym webapp misc", () => {
       await expect(joiner.locator("#view-join")).toBeHidden({ timeout: 15_000 });
       const joined = await joiner.evaluate(async () => (await import("/lib/state.js")).getSession().username);
       expect(joined).toBe(USER);
+
+      // A reload locks the app; the passphrase the joiner chose opens it again.
+      const umkHex = await joiner.evaluate(async () => (await import("/keystore.js")).bytesToHex((await import("/lib/state.js")).getSession().umk));
+      await joiner.goto("/index.html");
+      await expect(joiner.locator("#view-unlock")).toBeVisible({ timeout: 15_000 });
+      await joiner.fill("#unlock-passphrase", "not-the-passphrase");
+      await joiner.click("#unlock-go");
+      await expect(joiner.locator("#view-unlock")).toBeVisible();
+      await joiner.fill("#unlock-passphrase", JOIN_PASS);
+      await joiner.click("#unlock-go");
+      await expect(joiner.locator("#view-unlock")).toBeHidden({ timeout: 15_000 });
+      const reopened = await joiner.evaluate(async () => {
+        const { getSession } = await import("/lib/state.js");
+        const s = getSession();
+        return { username: s.username, umkHex: (await import("/keystore.js")).bytesToHex(s.umk) };
+      });
+      expect(reopened).toEqual({ username: USER, umkHex });
+      await shot(joiner, testInfo, "join-reload-unlocked");
     } finally {
       await other.close();
     }

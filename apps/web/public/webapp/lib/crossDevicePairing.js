@@ -45,6 +45,7 @@
 
 import { controlApex } from "./apex.js";
 import { throwIfRateLimited } from "./rateLimited.js";
+import { isLocalPassphrase } from "./localPassphrase.js";
 import { persistAdminRootSeed as ksPersistAdminRootSeed } from "../keystore.js";
 
 const APEX = controlApex();
@@ -523,8 +524,9 @@ export function parseSealedBundle(plaintext, opts = {}) {
  *    2. Resolve the account's CURRENT IRK pub and VERIFY the admit under
  *       it (reject a bad vouch BEFORE persisting anything).
  *    3. Mint this profile's FRESH device key — wrap the recovered UMK
- *       under the NEW profile's keystore record (per-profile keying;
- *       NEVER clobbers an existing profile).
+ *       under the passphrase the owner chose (`localPassphrase`), in the
+ *       NEW profile's keystore record (per-profile keying; NEVER clobbers
+ *       an existing profile).
  *    4. Derive this device's IRK pub (from the seed); the admit's
  *       `newDevicePubHex` MUST equal it (the admin vouched for THIS key).
  *    5. Register push (the incoming device's token) + POST
@@ -549,7 +551,7 @@ export function parseSealedBundle(plaintext, opts = {}) {
  *    setUsername?: (username: string) => void,
  *    bytesToHex?: (b: Uint8Array) => string,
  *    hexToBytes?: (hex: string) => Uint8Array,
- *    makePassphrase?: () => string,
+ *    localPassphrase: string,
  *    fetch?: typeof fetch,
  *    baseUrl?: string,
  *    now?: () => number,
@@ -559,7 +561,11 @@ export function parseSealedBundle(plaintext, opts = {}) {
 export async function runIncomingJoin(deps) {
   const toHex = deps.bytesToHex || defaultBytesToHex;
   const hexToBytes = deps.hexToBytes || defaultHexToBytes;
-  const makePassphrase = deps.makePassphrase || randomLocalPassphrase;
+  // The key is wrapped under the passphrase the owner chose here: the lock
+  // screen asks for exactly that one after a reload.
+  if (!isLocalPassphrase(deps.localPassphrase)) {
+    throw new Error("choose a passphrase of 8+ characters to lock this browser");
+  }
   const now = deps.now ?? (() => Date.now());
   const fetchPub = deps.fetchAccountIrkPubHex || fetchAccountIrkPubHex;
   const verify = deps.verifyAdmit || verifyAdmit;
@@ -603,7 +609,7 @@ export async function runIncomingJoin(deps) {
   if (typeof deps.setActiveKeystoreProfile === "function") {
     deps.setActiveKeystoreProfile(username);
   }
-  await deps.persistSeedForProfile(seed, username, makePassphrase());
+  await deps.persistSeedForProfile(seed, username, deps.localPassphrase);
   if (typeof deps.setUsername === "function") deps.setUsername(username);
   // Slice D (D-4): if the admin sealed the admin root into the bundle, store it
   // device-local (under THIS profile — active profile is now `username`) BEFORE
@@ -653,16 +659,6 @@ export async function runIncomingJoin(deps) {
   const quarantine = quarantineTimeline({ quarantineUntil }, now());
 
   return { username, quarantine, admitResponse, promotedAdmin: !!adminRootSeed };
-}
-
-/** Random URL-safe local at-rest wrap passphrase. Like the demo /
- *  takeover paths, the received-seed's local passphrase is generated, not
- *  typed — the SAS-verified relay + admit are the real gates. */
-function randomLocalPassphrase() {
-  const bytes = (globalThis.crypto || crypto).getRandomValues(new Uint8Array(24));
-  let s = "";
-  for (const b of bytes) s += b.toString(16).padStart(2, "0");
-  return s;
 }
 
 async function safeText(resp) {

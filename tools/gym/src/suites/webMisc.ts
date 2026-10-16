@@ -209,11 +209,11 @@ export const WEB_MISC: readonly Scenario[] = [
   ),
   row(
     "web-total-misc-join-second-browser",
-    "Two browsers through a mocked qr-pipe relay: Add a device's link opens /join in the other, both show the same code, each confirms, the admin's IRK-signed admit is verified and posted, the new browser joins under review, and Open <account> leaves the join screen signed in to the account.",
-    "gym misc a second browser joins the account through Add a device and opens it",
+    "Two browsers through a mocked qr-pipe relay: Add a device's link opens /join in the other, which first asks for the passphrase that locks this browser (a short one refused, then typed twice); both show the same code, each confirms, the admin's IRK-signed admit is verified and posted, the new browser joins under review, and Open <account> leaves the join screen signed in to the account. After a reload the lock screen refuses a wrong passphrase and the chosen one opens the same account key.",
+    "gym misc a second browser joins the account through Add a device, opens it, and unlocks it after a reload",
     "#join-open",
     [{ describe: "Admin confirm", handle: "#add-device-confirm", expect: "present" }],
-    [["join-admin-sas", "The admin's code."], ["join-under-review", "The new browser under review."]],
+    [["join-admin-sas", "The admin's code."], ["join-under-review", "The new browser under review."], ["join-reload-unlocked", "Unlocked after a reload with the chosen passphrase."]],
     "D4",
   ),
 ];

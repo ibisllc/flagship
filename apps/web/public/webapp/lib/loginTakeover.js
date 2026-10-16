@@ -55,6 +55,7 @@ export const TAKEOVER_IRK_VERSION = 2;
  *  a normal `ukey.dkey`. Reach enforcement is Phase 4+ / server-side —
  *  here we record the label on the local profile. */
 import { generateDeviceId } from "./accountMetadata.js";
+import { askLocalPassphrase, isLocalPassphrase } from "./localPassphrase.js";
 
 /** Canonical-bytes tag for the re-pair initiate envelope. MUST match
  *  packages/protocol/src/auth.ts TAG_RE_PAIR_INITIATE and the Worker. */
@@ -265,7 +266,7 @@ export function isCredentialRequiredError(err) {
  *    totpProof?: {code: string, method: "totp"|"recovery"},
  *    requestSecondFactor?: (methods: string[]) => Promise<{code: string, method: "totp"|"recovery"}|null>,
  *    bytesToHex?: (b: Uint8Array) => string,
- *    makePassphrase?: () => string,
+ *    localPassphrase: string,           the passphrase the owner chose to lock this browser
  *    setUsername?: (username: string) => void,
  *    addProfile?: (profile: object, opts?: object) => unknown,
  *    dispatchInitialView?: () => Promise<void>|void,
@@ -289,8 +290,12 @@ export async function runTakeover(resolution, deps) {
     throw new Error("runTakeover: multi-device takeover requires a recovery TOTP or recovery code");
   }
 
+  // The recovered key is wrapped under the passphrase the owner chose: the
+  // lock screen asks for exactly that one after a reload.
+  if (!isLocalPassphrase(deps.localPassphrase)) {
+    throw new Error("runTakeover: choose a passphrase of 8+ characters to lock this browser");
+  }
   const toHex = deps.bytesToHex || defaultBytesToHex;
-  const makePassphrase = deps.makePassphrase || randomLocalPassphrase;
   const now = deps.now ?? (() => Date.now());
 
   // 1 — credentialed unwrap of the cloud-stored UMK seed.
@@ -312,7 +317,7 @@ export async function runTakeover(resolution, deps) {
   if (typeof deps.setActiveKeystoreProfile === "function") {
     deps.setActiveKeystoreProfile(username);
   }
-  await deps.bootstrapFromExistingSeed(makePassphrase(), seed);
+  await deps.bootstrapFromExistingSeed(deps.localPassphrase, seed);
   if (typeof deps.setUsername === "function") deps.setUsername(username);
   await deps.unlockSession(seed, username);
 
@@ -424,10 +429,12 @@ export async function runTakeover(resolution, deps) {
  *    - multi       → 24h-grace explainer → collect the recovery
  *                    TOTP/code (injected `prompt`) → {@link runTakeover}
  *                    with the `totpProof`.
+ *  Both then ask (injected `prompt`) for the passphrase that locks the key
+ *  in this browser, unless `takeoverDeps.localPassphrase` carries one.
  *
  *  Returns a tagged outcome so callers + tests assert which branch ran:
  *    { outcome: "no-recovery" }
- *    { outcome: "cancelled" }            (user backed out of the explainer/factor)
+ *    { outcome: "cancelled" }            (user backed out of the explainer/factor/passphrase)
  *    { outcome: "takeover", takeover }   (re-pair initiated; admin labelled)
  *
  *  @param {object} resolution
@@ -466,6 +473,12 @@ export async function loginRealAccount(resolution, deps) {
     if (!totpProof) return { outcome: "cancelled" };
   }
 
+  // The passphrase that locks the recovered key in this browser, chosen by
+  // the owner (the lock screen asks for it after a reload).
+  const localPassphrase =
+    deps.takeoverDeps?.localPassphrase ?? (await askLocalPassphrase(deps.prompt));
+  if (!localPassphrase) return { outcome: "cancelled" };
+
   // #52 — SINGLE accounts with an enrolled second factor are told so
   // by the Worker's 401 at initiate; wire the same collector in as the
   // on-demand prompt so runTakeover can retry with the proof. (Multi
@@ -474,6 +487,7 @@ export async function loginRealAccount(resolution, deps) {
   try {
     takeover = await runTakeover(resolution, {
       ...deps.takeoverDeps,
+      localPassphrase,
       totpProof,
       requestSecondFactor: async () => collectRecoveryFactor(deps.prompt),
     });
@@ -752,17 +766,6 @@ export async function finishTakeover(takeover, deps = {}) {
     if (typeof deps.openAccount === "function") await deps.openAccount();
   }
   return result;
-}
-
-/** Random URL-safe local-wrap passphrase. Like the demo path, the
- *  recovered-seed's local at-rest passphrase is generated rather than
- *  typed — the cloud-recovery credential is the real gate, and a typed
- *  passphrase here would just be friction. */
-function randomLocalPassphrase() {
-  const bytes = (globalThis.crypto || crypto).getRandomValues(new Uint8Array(24));
-  let s = "";
-  for (const b of bytes) s += b.toString(16).padStart(2, "0");
-  return s;
 }
 
 async function safeText(resp) {

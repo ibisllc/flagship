@@ -118,6 +118,7 @@ describe("Phase 3 — runIncomingJoin stores the admin root iff present", () => 
       deviceIrkPubHex: "ab".repeat(32),
       setActiveKeystoreProfile: vi.fn(),
       persistSeedForProfile: vi.fn(async () => {}),
+      localPassphrase: "chosen-passphrase",
       persistAdminRootSeed: vi.fn(async () => {}),
       unlockSession: vi.fn(async () => {}),
       fetchAccountIrkPubHex: vi.fn(async () => "dd".repeat(32)),

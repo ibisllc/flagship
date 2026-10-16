@@ -124,7 +124,7 @@ function fakeTakeoverDeps(overrides: Record<string, any> = {}) {
     deriveIrkVersioned: vi.fn(async () => ({ publicKey: new Uint8Array(32).fill(0xb2) })),
     signWithIrkVersioned: vi.fn(async () => new Uint8Array(64).fill(0xcc)),
     bytesToHex: toHex,
-    makePassphrase: () => "fixed-local-passphrase",
+    localPassphrase: "fixed-local-passphrase",
     setUsername: vi.fn(),
     addProfile: vi.fn((p: object) => calls.profiles.push(p)),
     dispatchInitialView: vi.fn(async () => {}),

@@ -420,6 +420,7 @@ const OPTIONAL_SHELL = [
   "/lib/humanError.js",
   "/lib/journal.js",
   "/lib/liveSync.js",
+  "/lib/localPassphrase.js",
   "/lib/lockAndPower.js",
   "/lib/loginTakeover.js",
   "/lib/maintainerTrust.js",

@@ -475,7 +475,7 @@ describe("webapp keystore — per-profile keying (multi-profile device keys)", (
       signWithIrkVersioned: (s: Uint8Array, v: number, b: Uint8Array) =>
         k.signWithIrkVersioned(s, v, b),
       bytesToHex: k.bytesToHex,
-      makePassphrase: () => PASS,
+      localPassphrase: PASS,
       fetch: (() => okJson(200, { completesAt: 1, graceMs: 1, accountType: "single" })) as any,
       now: () => 0,
     });

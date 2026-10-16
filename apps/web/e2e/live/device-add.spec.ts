@@ -290,6 +290,12 @@ test("full device-add: a second device joins the SAME cloud, quarantined, after 
       m.enterJoin(link);
     }, parsed as { sid: string; pk: string });
     await expect(d2.locator("#view-join")).toBeVisible({ timeout: 20_000 });
+    // The passphrase that locks the joined account in this browser, typed twice.
+    for (const title of ["Lock this browser", "Confirm passphrase"]) {
+      await expect(d2.locator(".modal-title")).toHaveText(title, { timeout: 10_000 });
+      await d2.fill(".modal-input", "device-two-passphrase");
+      await d2.click("[data-modal-ok]");
+    }
     await shot(d2, "d2-join-opened");
 
     // ── Wait for BOTH screens to display the SAS (peer-connect on the relay). ──

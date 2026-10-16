@@ -4,6 +4,8 @@
 // app.js via lib/crossDevicePairing.joinLinkFromLocation), or from a
 // pasted link. This is the add-profile pairing receiver:
 //
+//   0. ask the owner to choose the passphrase that locks the account's key
+//      in this browser (the lock screen asks for it after a reload).
 //   1. mint a FRESH device key for THIS profile (its own Ed25519 seed —
 //      "every install is a new device"), derive its IRK pub.
 //   2. connect the relay to the admin's session, derive + SHOW the SAS;
@@ -48,6 +50,8 @@ import {
 } from "../lib/crossDevicePairing.js";
 import { makeIncomingRelay } from "../lib/pairingRelay.js";
 import { set as profileSet } from "../lib/profilesStore.js";
+import { inlinePrompt } from "../lib/modal.js";
+import { askLocalPassphrase } from "../lib/localPassphrase.js";
 
 registerView("view-join");
 
@@ -119,6 +123,14 @@ async function startJoin() {
   }
   const { sid, pk } = pendingLink;
 
+  // The passphrase that locks the account's key in this browser, chosen now
+  // so the admin isn't kept waiting once the codes match.
+  const localPassphrase = await askLocalPassphrase(inlinePrompt);
+  if (!localPassphrase) {
+    setStatus("idle", "cancelled.");
+    return;
+  }
+
   // Mint this profile's fresh device key BEFORE we connect.
   setStatus("active", "preparing this device…");
   const device = await mintDeviceKey();
@@ -168,6 +180,7 @@ async function startJoin() {
       deviceId: device.deviceId,
       setActiveKeystoreProfile,
       persistSeedForProfile,
+      localPassphrase,
       persistAdminRootSeed,
       unlockSession,
       verifyEd25519: verifyWithEd25519Pub,

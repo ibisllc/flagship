@@ -105,7 +105,7 @@ function fakeTakeoverDeps(overrides: Record<string, any> = {}) {
       return new Uint8Array(64).fill(0xcc);
     }),
     bytesToHex: toHex,
-    makePassphrase: () => "fixed-local-passphrase",
+    localPassphrase: "fixed-local-passphrase",
     setUsername: vi.fn((u: string) => { calls.username = u; }),
     addProfile: vi.fn((p: object) => { calls.profiles.push(p); }),
     dispatchInitialView: vi.fn(async () => { calls.dispatched = true; }),
@@ -350,6 +350,50 @@ describe("loginTakeover loginRealAccount — full branch orchestration", () => {
     expect(out.outcome).toBe("takeover");
     expect(out.takeover.deviceId).toMatch(/^[0-9a-f]{32}$/);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks the owner to choose this browser's passphrase and wraps the recovered key under it", async () => {
+    const { loginRealAccount } = await loadLib();
+    const { deps, calls } = fakeTakeoverDeps();
+    delete (deps as Record<string, unknown>).localPassphrase;
+    const titles: string[] = [];
+    const prompt = vi.fn(async (opts: { title: string; validate: (v: string) => string | null }) => {
+      titles.push(opts.title);
+      if (opts.title === "Lock this browser") expect(opts.validate("short")).toBeTruthy();
+      return "owner-chose-this";
+    });
+    const out = await loginRealAccount(singleResolution("harry"), {
+      showState: vi.fn(),
+      confirm: vi.fn(async () => true),
+      prompt,
+      takeoverDeps: deps,
+    });
+    expect(out.outcome).toBe("takeover");
+    expect(titles).toEqual(["Lock this browser", "Confirm passphrase"]);
+    expect(calls.localPass).toBe("owner-chose-this");
+  });
+
+  it("cancelling the passphrase stops before the recovery unwrap", async () => {
+    const { loginRealAccount } = await loadLib();
+    const { deps, fetchMock } = fakeTakeoverDeps();
+    delete (deps as Record<string, unknown>).localPassphrase;
+    const out = await loginRealAccount(singleResolution("harry"), {
+      showState: vi.fn(),
+      confirm: vi.fn(async () => true),
+      prompt: vi.fn(async () => null),
+      takeoverDeps: deps,
+    });
+    expect(out).toEqual({ outcome: "cancelled" });
+    expect(deps.recoverFromCloud).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("runTakeover refuses to start without a chosen passphrase", async () => {
+    const { runTakeover } = await loadLib();
+    const { deps } = fakeTakeoverDeps();
+    delete (deps as Record<string, unknown>).localPassphrase;
+    await expect(runTakeover(singleResolution("harry"), deps)).rejects.toThrow(/passphrase/);
+    expect(deps.recoverFromCloud).not.toHaveBeenCalled();
   });
 
   it("single → cancelling the grace explainer aborts (no takeover)", async () => {

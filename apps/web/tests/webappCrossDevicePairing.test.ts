@@ -471,7 +471,7 @@ describe("crossDevicePairing — runIncomingJoin (verify + persist under NEW pro
       setUsername: () => {},
       bytesToHex: k.bytesToHex,
       hexToBytes: k.hexToBytes,
-      makePassphrase: () => PASS,
+      localPassphrase: PASS,
       fetch: fetchMock as any,
       now: () => 100,
     });
@@ -541,7 +541,7 @@ describe("crossDevicePairing — runIncomingJoin (verify + persist under NEW pro
       addProfile: vi.fn(),
       bytesToHex: k.bytesToHex,
       hexToBytes: k.hexToBytes,
-      makePassphrase: () => PASS,
+      localPassphrase: PASS,
       fetch: fetchMock as any,
     })).rejects.toThrow(/did not verify/);
 
@@ -583,9 +583,68 @@ describe("crossDevicePairing — runIncomingJoin (verify + persist under NEW pro
       addProfile: vi.fn(),
       bytesToHex: k.bytesToHex,
       hexToBytes: k.hexToBytes,
-      makePassphrase: () => PASS,
+      localPassphrase: PASS,
       fetch: vi.fn() as any,
     })).rejects.toThrow(/different device/);
+  });
+
+  /** A promoted join of "harry" on a browser with no account yet. */
+  async function promotedJoin(k: any, runIncomingJoin: any, buildDeviceAdmit: any, localPassphrase: string | undefined) {
+    const harrySeed = new Uint8Array(32).fill(0x21);
+    const harryIrk = deriveIRK({ seed: harrySeed });
+    const adminSeed = new Uint8Array(32).fill(0x5a);
+    const deviceIrkPubHex = k.bytesToHex((await k.deriveIrkFromSeed(new Uint8Array(32).fill(0x99))).publicKey);
+    const admit = buildDeviceAdmit({ username: "harry", deviceId: DEVICE_ID, newDevicePubHex: deviceIrkPubHex, issuedAt: 1 });
+    const bundle = JSON.stringify({
+      umkSeedHex: k.bytesToHex(harrySeed),
+      admit,
+      admitSig: toHex(signDeviceAdmit(admit as DeviceAdmit, harryIrk)),
+      wrappedAdminRoot: k.bytesToHex(adminSeed),
+    });
+    const run = runIncomingJoin({
+      bundlePlaintext: bundle,
+      deviceIrkPubHex,
+      deviceId: DEVICE_ID,
+      fetchAccountIrkPubHex: async () => k.bytesToHex(harryIrk.publicKey),
+      verifyEd25519: k.verifyWithEd25519Pub,
+      setActiveKeystoreProfile: k.setActiveKeystoreProfile,
+      persistSeedForProfile: k.persistSeedForProfile,
+      persistAdminRootSeed: k.persistAdminRootSeed,
+      unlockSession: () => {},
+      registerPush: async () => ({ request: { username: "harry" }, signatureHex: "dd".repeat(64) }),
+      addProfile: () => {},
+      bytesToHex: k.bytesToHex,
+      hexToBytes: k.hexToBytes,
+      ...(localPassphrase === undefined ? {} : { localPassphrase }),
+      fetch: vi.fn().mockResolvedValue(jsonResponse(200, { ok: true, quarantineUntil: 2 })) as any,
+      now: () => 1,
+    });
+    return { run, harrySeed, adminSeed };
+  }
+
+  it("a joined browser unlocks after a reload with the passphrase its owner chose, still an admin device", async () => {
+    const k = await loadKeystore();
+    const { runIncomingJoin, buildDeviceAdmit } = await loadPairing();
+    const chosen = "the-owner-chose-this";
+    const { run, harrySeed, adminSeed } = await promotedJoin(k, runIncomingJoin, buildDeviceAdmit, chosen);
+    await run;
+    // A reload: the lock screen unwraps the active profile's record with
+    // what the owner types.
+    expect(k.activeProfileId()).toBe("harry");
+    const seed = await k.unlockUmk(chosen);
+    expect(Array.from(seed)).toEqual(Array.from(harrySeed));
+    expect(Array.from((await k.loadAdminRootSeed(seed))!)).toEqual(Array.from(adminSeed));
+  });
+
+  it("a join with no chosen passphrase is refused before anything is stored", async () => {
+    const k = await loadKeystore();
+    const { runIncomingJoin, buildDeviceAdmit } = await loadPairing();
+    for (const pass of [undefined, "short"]) {
+      const { run } = await promotedJoin(k, runIncomingJoin, buildDeviceAdmit, pass);
+      await expect(run).rejects.toThrow(/passphrase/);
+    }
+    const store = DATABASES.get("flagship-webapp")?.get("keystore");
+    expect(store?.has("wrappedUmk.harry") ?? false).toBe(false);
   });
 });
 
