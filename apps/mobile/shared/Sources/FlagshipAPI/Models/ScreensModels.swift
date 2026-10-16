@@ -89,6 +89,53 @@ public struct ServerDetailResponse: Codable, Equatable, Sendable {
     public var lastUpdate: LastUpdate? = nil
     /// The sandbox every app runs in (gVisor). Absent from older daemons.
     public var appSandbox: AppSandbox? = nil
+    /// Owner debug access: an SSH key let in as `debug` until it ends.
+    /// Absent from older daemons.
+    public var debugAccess: DebugAccessView? = nil
+}
+
+/// Owner debug access as the box reports it (docs/recipe-delivery-and-remote-install.md
+/// "Debug access"): `GET /api/screens/debug-access` and server-detail's `debugAccess`.
+public struct DebugAccessView: Codable, Equatable, Sendable {
+    public struct Ended: Codable, Equatable, Sendable {
+        public let at: Int64
+        /// "expired" | "revoked".
+        public let why: String
+        public init(at: Int64, why: String) {
+            self.at = at
+            self.why = why
+        }
+    }
+    public let on: Bool
+    public let expiresAt: Int64?
+    public let keyFingerprint: String?
+    /// "admin" | "owner-key".
+    public let grantedBy: String?
+    public let lastEnded: Ended?
+
+    public init(on: Bool, expiresAt: Int64? = nil, keyFingerprint: String? = nil,
+                grantedBy: String? = nil, lastEnded: Ended? = nil) {
+        self.on = on
+        self.expiresAt = expiresAt
+        self.keyFingerprint = keyFingerprint
+        self.grantedBy = grantedBy
+        self.lastEnded = lastEnded
+    }
+
+    public static let off = DebugAccessView(on: false)
+}
+
+/// The box's answer to a grant or revoke: `{ok, change, debugAccess}`.
+public struct DebugAccessChange: Codable, Equatable, Sendable {
+    public let ok: Bool
+    /// "granted" | "renewed" | "revoked" | "unchanged".
+    public let change: String
+    public let debugAccess: DebugAccessView
+    public init(ok: Bool, change: String, debugAccess: DebugAccessView) {
+        self.ok = ok
+        self.change = change
+        self.debugAccess = debugAccess
+    }
 }
 
 /// The box's app sandbox (docs/app-runtimes.md §5.1): `off`, `starting`,

@@ -310,6 +310,12 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
     public func deliverServerOrder(_ order: SignedServerOrderWire) async throws -> ServerOrderAck {
         try await request("/api/screens/server-order", method: "POST", body: try JSONEncoder().encode(order))
     }
+    public func debugAccessGrant(body: String) async throws -> DebugAccessChange {
+        try await request("/api/screens/debug-access", method: "POST", body: Data(body.utf8))
+    }
+    public func debugAccessRevoke(body: String) async throws -> DebugAccessChange {
+        try await request("/api/screens/debug-access/revoke", method: "POST", body: Data(body.utf8))
+    }
     public func accessAlertsSetting() async throws -> AccessAlertsSetting {
         try await request("/api/screens/settings/access-alerts")
     }

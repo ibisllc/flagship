@@ -429,6 +429,62 @@ final class GymOctoberTests: XCTestCase {
         gymShot(app, "update-card")
     }
 
+    // ─── Debug access ────────────────────────────────────────────────────────
+
+    /// An admin device turns debug access on with a pasted SSH key for an
+    /// hour (with the warning shown), the page shows the banner, then turns
+    /// it off and the banner goes.
+    func test_debugAccessOnBannerOff() throws {
+        let app = launch(tab: "home", ["-smoke-admin-root"])
+        openServerPage(app, named: "Home")
+        let on = app.buttons["sd-debug-access-on"]
+        XCTAssertTrue(reveal(app, on, tries: 16), "An admin device can turn debug access on.")
+        on.tap()
+
+        let warning = app.staticTexts["sd-debug-access-warning"]
+        XCTAssertTrue(warning.waitForExistence(timeout: 5))
+        XCTAssertEqual(warning.label, "Anyone with this key can read everything on this server while it's on.")
+        let field = app.descendants(matching: .any)["sd-debug-access-key-field"]
+        XCTAssertTrue(reveal(app, field))
+        field.tap()
+        field.typeText("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINBKsjJ0K7SrOhNovUYV5ObQIkq3GgFrr4UgozLJd4c3 gym@laptop")
+        app.buttons["1 hour"].tap()
+        gymShot(app, "debug-access-form")
+        let submit = app.buttons["sd-debug-access-submit"]
+        XCTAssertTrue(reveal(app, submit))
+        submit.tap()
+
+        let off = app.buttons["sd-debug-access-off"]
+        XCTAssertTrue(off.waitForExistence(timeout: 15), "Once on, it can be turned off.")
+        XCTAssertTrue(app.buttons["sd-debug-access-renew"].exists, "Once on, it can be renewed.")
+        XCTAssertTrue(app.staticTexts["sd-debug-access-key"].label.hasPrefix("Key SHA256:"))
+        let banner = app.descendants(matching: .any)["sd-debug-access-banner"]
+        for _ in 0..<12 where !banner.exists { app.swipeDown() }
+        XCTAssertTrue(banner.waitForExistence(timeout: 15), "The server page shows the banner while it's on.")
+        XCTAssertTrue(banner.label.hasPrefix("Debug access is on until "), "Got: \(banner.label)")
+        gymShot(app, "debug-access-on")
+
+        XCTAssertTrue(reveal(app, off, tries: 16))
+        off.tap()
+        let confirm = app.buttons["sd-debug-access-confirm-off"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+        confirm.tap()
+        XCTAssertTrue(app.buttons["sd-debug-access-on"].waitForExistence(timeout: 15), "Turned off, it offers Turn on again.")
+        for _ in 0..<12 { app.swipeDown() }
+        XCTAssertFalse(app.descendants(matching: .any)["sd-debug-access-banner"].exists, "The banner goes when it's off.")
+        gymShot(app, "debug-access-off")
+    }
+
+    /// A device without the admin root sees the state but can't change it.
+    func test_debugAccessReadOnlyOnANonAdminDevice() throws {
+        let app = launch(tab: "home")
+        openServerPage(app, named: "Home")
+        let note = app.staticTexts["sd-debug-access-admin-only"]
+        XCTAssertTrue(reveal(app, note, tries: 16))
+        XCTAssertEqual(note.label, "Only an admin device can turn debug access on or off.")
+        XCTAssertFalse(app.buttons["sd-debug-access-on"].exists)
+    }
+
     // ─── Offline server ──────────────────────────────────────────────────────
 
     /// A server that stopped reporting (Music) doesn't answer: its page says
