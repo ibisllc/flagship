@@ -5,7 +5,7 @@ import Flagship
 import FlagshipAPI
 import FlagshipCore
 
-/// "Migrate to new hardware" — the server-migration orchestrator for the
+/// "Migrate to new machine / VM" — the server-migration orchestrator for the
 /// server-detail screen (docs/server-migration.md). Same owner, same
 /// `<server>.<user>` name, NEW box.
 ///

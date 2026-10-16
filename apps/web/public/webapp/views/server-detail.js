@@ -85,7 +85,6 @@ import {
 import { resolveReplacementContext } from "../lib/serverReplacement.js";
 import {
   BACKUP_EXCLUDES_NOTE,
-  BACKUP_NOTE,
   BACKUP_TITLE,
   PASSCODE_NOTE,
   backupDownloadLink,
@@ -108,6 +107,7 @@ import {
   migrationSteps,
   migrationWaitCopy,
   DEFAULT_MIGRATION_DISPOSITION,
+  MIGRATE_LABEL,
 } from "../lib/serverMigration.js";
 import { getSession } from "../lib/state.js";
 import { toast } from "../lib/toast.js";
@@ -501,12 +501,7 @@ export async function renderServerDetail() {
       </div>
       <h2 class="mt-4">Diagnostics</h2>
       <div class="card" id="journal-card">
-        <p class="note">
-          Read the recent system journal from the box — owner-only, signed with
-          your key and fetched straight from the server (flagshipserver.com never
-          sees it). Useful when a server is online but something isn't working.
-        </p>
-        <label class="caption mt-2">Unit</label>
+        <label class="caption">Unit</label>
         <select id="journal-unit" class="full-width">
           ${JOURNAL_UNITS.map(
             (u) => `<option value="${escapeHtml(u)}"${u === JOURNAL_DEFAULT_UNIT ? " selected" : ""}>${escapeHtml(u)}</option>`,
@@ -529,6 +524,12 @@ export async function renderServerDetail() {
       </div>
       ${serverSharingHtml(body)}
 
+      <h2 class="mt-4">Backup / Migrate</h2>
+      <div class="card" id="backup-migrate-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
+        <button id="backup-start-btn" class="full-width">Backup/clone server</button>
+        <button id="migrate-start-btn" class="full-width mt-2">${escapeHtml(MIGRATE_LABEL)}</button>
+      </div>
+
       <h2 class="mt-4">Update Firmware</h2>
       <div class="card" id="update-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
         <div class="row mt-2">
@@ -543,21 +544,6 @@ export async function renderServerDetail() {
           Waiting for this server to report its current version — it can't be
           updated in place until it does.
         </p>
-      </div>
-
-      <h2 class="mt-4">Backup</h2>
-      <div class="card" id="backup-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
-        <p class="note">${escapeHtml(BACKUP_NOTE)}</p>
-        <button id="backup-start-btn" class="full-width mt-2">Backup/clone server</button>
-      </div>
-
-      <h2 class="mt-4">Migrate</h2>
-      <div class="card" id="migrate-card" data-server-fqdn="${escapeHtml(body.serverFqdn)}">
-        <p class="note">
-          Move this server to new hardware, same name and data. The old server
-          is retired and wiped once the new one has taken over.
-        </p>
-        <button id="migrate-start-btn" class="full-width mt-2">Migrate to new hardware</button>
       </div>
 
       ${renderDangerZoneCard({
@@ -2049,7 +2035,7 @@ export async function openUpdateDialog(body, { sendAgain = false } = {}) {
   });
 }
 
-// ---- Migrate to new hardware (docs/server-migration.md) ----------------
+// ---- Migrate to new machine / VM (docs/server-migration.md) -------------
 
 function wireMigrate(body) {
   $("migrate-start-btn")?.addEventListener("click", () => {
@@ -2086,7 +2072,7 @@ async function openMigrateDialog(body) {
 
   const dlg = document.createElement("dialog");
   dlg.className = "modal-card";
-  dlg.setAttribute("aria-label", "Migrate to new hardware");
+  dlg.setAttribute("aria-label", MIGRATE_LABEL);
   dlg.innerHTML = `
     <h3 class="modal-title">Migrate ${escapeHtml(serverFqdn)}</h3>
     <p class="modal-message" data-mig-loading>Checking for a migration in progress…</p>

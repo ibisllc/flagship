@@ -29,9 +29,6 @@ struct JournalCard: View {
                 .foregroundColor(c.textMuted)
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
-                    Text("Read the box's recent system log when a server is online but something isn't working. Only you can — it's signed with your key and never leaves your server.")
-                        .font(FS.font.caption())
-                        .foregroundColor(c.textMuted)
                     if JournalUnits.all.count > 1 {
                         Picker("Unit", selection: $unit) {
                             ForEach(JournalUnits.all, id: \.self) { u in Text(u).tag(u) }

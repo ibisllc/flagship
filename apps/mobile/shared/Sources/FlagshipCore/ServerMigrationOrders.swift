@@ -109,7 +109,7 @@ public struct ServerMigrationControl: Equatable, Sendable {
     }
 }
 
-/// Pure (testable) builders for the "Migrate to new hardware" flow — the exact
+/// Pure (testable) builders for the "Migrate to new machine / VM" flow — the exact
 /// wire bodies the `.com` migration lane accepts, mirroring the webapp's
 /// `lib/serverMigration.js`. Split like `ReplaceServerFlow` so the
 /// crypto/canonical-bytes is `swift test`-able without the UIKit-bound VM.

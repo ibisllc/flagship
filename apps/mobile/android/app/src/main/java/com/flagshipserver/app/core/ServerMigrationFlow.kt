@@ -1,4 +1,4 @@
-// Pure (JVM-testable) builders for the "Migrate to new hardware" flow
+// Pure (JVM-testable) builders for the "Migrate to new machine / VM" flow
 // (docs/server-migration.md) — the exact wire bodies the `.com` migration lane
 // accepts, byte-identical to the webapp lib/serverMigration.js + iOS
 // FlagshipCore ServerMigrationFlow. The Compose VM derives the keys behind the

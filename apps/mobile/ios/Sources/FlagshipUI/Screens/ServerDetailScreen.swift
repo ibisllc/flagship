@@ -251,8 +251,7 @@ public struct ServerDetailScreen: View {
                     LockPowerCard(serverDomain: d.serverFqdn)
                     DeadManCard(serverDomain: d.serverFqdn, serverName: serverName ?? d.serverFqdn)
                     JournalCard(serverDomain: d.serverFqdn)
-                    ServerBackupCard(serverDomain: d.serverFqdn)
-                    MigrateServerCard(serverDomain: d.serverFqdn)
+                    BackupMigrateCard(serverDomain: d.serverFqdn)
                     UpdateServerCard(serverDomain: d.serverFqdn, currentCommit: d.currentCommit, lastUpdate: d.lastUpdate, onRefreshDetail: onRefreshDetail)
                 }
                 // The health report comes from the directory, not the box, so
@@ -880,15 +879,37 @@ struct TransferButton: View {
     }
 }
 
-/// "Migrate to new hardware" entry on server-detail (docs/server-migration.md).
+/// The server page's Backup / Migrate card: just the two action buttons.
+struct BackupMigrateCard: View {
+    @Environment(\.colorScheme) private var scheme
+
+    let serverDomain: String
+
+    var body: some View {
+        let c = FSColors.scheme(scheme)
+        VStack(alignment: .leading, spacing: FS.space.s3) {
+            Text("BACKUP / MIGRATE")
+                .font(.system(size: 12, weight: .semibold))
+                .tracking(1)
+                .foregroundColor(c.textMuted)
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s2) {
+                    ServerBackupButton(serverDomain: serverDomain)
+                    MigrateServerButton(serverDomain: serverDomain)
+                }
+            }
+        }
+    }
+}
+
+/// "Migrate to new machine / VM" entry on server-detail (docs/server-migration.md).
 /// Same owner, same address, NEW box: the guided flow provisions a replacement,
 /// pre-seeds it from backup, and hands the name over — the old box is wiped only
 /// after a confirmed take-over. Owner-only; the migration order is admin-signed
 /// behind the biometric inside `MigrationViewModel`. Distinct from Replace
 /// (retire-first, then re-create) — migration keeps the old box serving until
 /// the new one is ready.
-struct MigrateServerCard: View {
-    @Environment(\.colorScheme) private var scheme
+struct MigrateServerButton: View {
     @Environment(\.serverMigrationClient) private var migration
     @Environment(\.secretMailboxClient) private var mailbox
     @Environment(\.screensClient) private var screens
@@ -899,24 +920,10 @@ struct MigrateServerCard: View {
     @State private var showSheet = false
 
     var body: some View {
-        let c = FSColors.scheme(scheme)
-        VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("MIGRATE")
-                .font(.system(size: 12, weight: .semibold))
-                .tracking(1)
-                .foregroundColor(c.textMuted)
-            FSCard {
-                VStack(alignment: .leading, spacing: FS.space.s2) {
-                    Text("Move this server to new hardware, same name and data. The old server is retired and wiped once the new one has taken over.")
-                        .font(FS.font.caption())
-                        .foregroundColor(c.textMuted)
-                    FSPrimaryButton("Migrate to new hardware", block: true) {
-                        showSheet = true
-                    }
-                    .accessibilityIdentifier("sd-migrate-server")
-                }
-            }
+        FSPrimaryButton("Migrate to new machine / VM", block: true) {
+            showSheet = true
         }
+        .accessibilityIdentifier("sd-migrate-server")
         .sheet(isPresented: $showSheet) {
             NavigationStack {
                 MigrateServerScreen(

@@ -1,4 +1,4 @@
-// "Migrate to new hardware" orchestrator (docs/server-migration.md): the
+// "Migrate to new machine / VM" orchestrator (docs/server-migration.md): the
 // initiate ceremony (STK from the directory, backup gate, admin-signed order +
 // SWK hold), the timeline poll, the one-tap hand-off (confirm-ready + freeze
 // under one ceremony, freeze-only retry from `ready`), and abort. Mirror of

@@ -8,7 +8,7 @@
 
 ## Goal + the user's flow
 
-From the **server page → "Migrate to new hardware"**:
+From the **server page → "Migrate to new machine / VM"**:
 1. Mint a **replacement** for THIS server (same `<server>.<user>` name + owner, a *new*
    box), on any target (USB-burned box, the desktop **VM appliance**, or native install).
 2. The new box **comes online** and **restores this server's data**.

@@ -1,4 +1,4 @@
-// Webapp client for "Migrate to new hardware" (docs/server-migration.md).
+// Webapp client for "Migrate to new machine / VM" (docs/server-migration.md).
 //
 // Four contracts pinned here:
 //   1. MIRROR BYTES — the webapp's canonical order/control builders reproduce
@@ -40,6 +40,7 @@ import {
   migrationSteps,
   migrationWaitCopy,
   MIGRATION_DISPOSITIONS,
+  MIGRATE_LABEL,
   PRESEED_STUCK_MS,
 } from "../public/webapp/lib/serverMigration.js";
 import { SENSITIVE_TAGS, makeSensitiveSigner } from "../public/webapp/lib/adminRoot.js";
@@ -399,5 +400,33 @@ describe("timeline mapping (the spec's 8 steps)", () => {
     expect(migrationWaitCopy({ ...base, abortedAt: 1 }, 2)).toMatch(
       /old server stays active with all its data/i,
     );
+  });
+});
+
+describe("the server page's Backup / Migrate card", () => {
+  it("holds only the backup and migrate buttons, under one title, before Update", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const src = readFileSync(resolve(__dirname, "../public/webapp/views/server-detail.js"), "utf8");
+    expect(MIGRATE_LABEL).toBe("Migrate to new machine / VM");
+    const card = src.match(/<h2 class="mt-4">Backup \/ Migrate<\/h2>\s*<div class="card" id="backup-migrate-card"[^>]*>([\s\S]*?)<\/div>/);
+    expect(card).not.toBeNull();
+    const inner = card![1]!;
+    expect(inner).toContain('id="backup-start-btn"');
+    expect(inner).toContain('id="migrate-start-btn"');
+    expect(inner).toContain("${escapeHtml(MIGRATE_LABEL)}");
+    expect(inner).not.toMatch(/<p\b/);
+    expect(src).not.toContain('id="backup-card"');
+    expect(src).not.toContain('id="migrate-card"');
+    expect(src.indexOf("Backup / Migrate")).toBeLessThan(src.indexOf("Update Firmware"));
+  });
+
+  it("Diagnostics opens straight on its controls, with no explainer", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const src = readFileSync(resolve(__dirname, "../public/webapp/views/server-detail.js"), "utf8");
+    const card = src.match(/<div class="card" id="journal-card">\s*([\s\S]*?)<button id="journal-fetch-btn"/);
+    expect(card).not.toBeNull();
+    expect(card![1]).not.toMatch(/<p\b/);
   });
 });

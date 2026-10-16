@@ -25,9 +25,6 @@ object ServerArchive {
     const val UPLOAD_CHUNK_BYTES = 4 * 1024 * 1024
     const val HEADER_MAX_BYTES = 64 * 1024
 
-    const val BACKUP_NOTE =
-        "Makes one file with all of this server's apps and their data. Keep it safe: only your own devices can open it. " +
-            "To clone this server, add the new server first, then choose Add/Import a server → Import a backup."
     const val EXCLUDES_NOTE =
         "Holds your apps' source, data and settings, never system images: the server you import onto rebuilds each app, so any Flagship server can open it. Not included: API keys, the server's name and certificate, peer backups, and the Git host."
     const val CLONE_HINT =

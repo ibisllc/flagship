@@ -108,7 +108,7 @@ interface SecretMailboxClient {
     suspend fun depositUpdate(serverDomain: String, body: UpdateDepositBody)
 
     /** POST /api/server/:domain/migration — phone, IRK mailbox-auth. Phase 1 of
-     *  "Migrate to new hardware" (docs/server-migration.md): deposits the
+     *  "Migrate to new machine / VM" (docs/server-migration.md): deposits the
      *  admin-signed ServerMigrationOrder. Throws on non-2xx (409 ⇒ a different
      *  migration is already in progress). */
     suspend fun depositMigrationStart(serverDomain: String, body: MigrationStartBody)

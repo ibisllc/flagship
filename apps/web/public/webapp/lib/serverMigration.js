@@ -1,4 +1,4 @@
-// "Migrate to new hardware" — webapp client for the server-migration
+// "Migrate to new machine / VM" — webapp client for the server-migration
 // orchestration (docs/server-migration.md). Same owner, same
 // `<server>.<user>` name, NEW box: the phone initiates an admin-signed
 // migration session on `.com`, the owner provisions a provisional second pod
@@ -54,6 +54,7 @@ export const TAG_SERVER_MIGRATION_CONTROL = "flagship/server-migration-control/v
  *  match @flagship/protocol MigrationDisposition. */
 export const MIGRATION_DISPOSITIONS = ["keep", "wipe-after-handoff"];
 export const DEFAULT_MIGRATION_DISPOSITION = "wipe-after-handoff";
+export const MIGRATE_LABEL = "Migrate to new machine / VM";
 
 function defaultBytesToHex(b) {
   let s = "";

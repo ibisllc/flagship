@@ -3,39 +3,25 @@ import UniformTypeIdentifiers
 import FlagshipAPI
 import FlagshipCore
 
-/// "Backup/clone server" entry on a server's page (docs/server-backup-and-clone.md).
-struct ServerBackupCard: View {
-    @Environment(\.colorScheme) private var scheme
+/// "Backup/clone server" button in the server page's Backup / Migrate card
+/// (docs/server-backup-and-clone.md).
+struct ServerBackupButton: View {
     @Environment(\.podScreensClients) private var clients
 
     let serverDomain: String
     @State private var showSheet = false
 
     var body: some View {
-        let c = FSColors.scheme(scheme)
-        VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("BACKUP")
-                .font(.system(size: 12, weight: .semibold))
-                .tracking(1)
-                .foregroundColor(c.textMuted)
-            FSCard {
-                VStack(alignment: .leading, spacing: FS.space.s2) {
-                    Text(ServerArchive.backupNote)
-                        .font(FS.font.caption())
-                        .foregroundColor(c.textMuted)
-                    FSPrimaryButton("Backup/clone server", block: true) { showSheet = true }
-                        .accessibilityIdentifier("sd-backup-server")
+        FSPrimaryButton("Backup/clone server", block: true) { showSheet = true }
+            .accessibilityIdentifier("sd-backup-server")
+            .sheet(isPresented: $showSheet) {
+                NavigationStack {
+                    ServerBackupSheet(vm: ServerBackupViewModel(serverFqdn: serverDomain, clients: clients))
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) { Button("Done") { showSheet = false } }
+                        }
                 }
             }
-        }
-        .sheet(isPresented: $showSheet) {
-            NavigationStack {
-                ServerBackupSheet(vm: ServerBackupViewModel(serverFqdn: serverDomain, clients: clients))
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) { Button("Done") { showSheet = false } }
-                    }
-            }
-        }
     }
 }
 

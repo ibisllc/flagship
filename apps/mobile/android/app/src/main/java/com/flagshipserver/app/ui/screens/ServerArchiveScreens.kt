@@ -56,31 +56,16 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
-/** The server page's Backup section. */
+/** "Backup/clone server" button in the server page's Backup / Migrate card. */
 @Composable
-internal fun ServerBackupCard(serverDomain: String) {
+internal fun ServerBackupButton(serverDomain: String) {
     var show by remember { mutableStateOf(false) }
-    Text(
-        "Backup",
-        color = FS.colors.text,
-        style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+    FSPrimaryButton(
+        label = "Backup/clone server",
+        onClick = { show = true },
+        block = true,
+        modifier = Modifier.semantics { contentDescription = "sd-backup-server" },
     )
-    Spacer(Modifier.height(FS.space.s2))
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Text(
-                ServerArchive.BACKUP_NOTE,
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-            )
-            FSPrimaryButton(
-                label = "Backup/clone server",
-                onClick = { show = true },
-                block = true,
-                modifier = Modifier.semantics { contentDescription = "sd-backup-server" },
-            )
-        }
-    }
     if (show) ServerBackupDialog(serverDomain, onDismiss = { show = false })
 }
 

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Server-migration client — "Migrate to new hardware" (docs/server-migration.md):
+/// Server-migration client — "Migrate to new machine / VM" (docs/server-migration.md):
 /// same owner, same `<server>.<user>` name, NEW box. Mirrors the webapp's
 /// `lib/serverMigration.js` wire bodies + the control-plane handlers
 /// (`packages/control-plane/src/serverMigration.ts`) exactly:

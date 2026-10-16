@@ -28,7 +28,7 @@ private struct MigrateCallout: View {
     }
 }
 
-/// "Migrate to new hardware" (docs/server-migration.md) — one screen, two
+/// "Migrate to new machine / VM" (docs/server-migration.md) — one screen, two
 /// modes: no session yet → the admin-signed INITIATE ceremony; live session →
 /// the 8-step progress timeline with the phase-appropriate action (hand off /
 /// abort). Mirrors the webapp's migrate dialog.

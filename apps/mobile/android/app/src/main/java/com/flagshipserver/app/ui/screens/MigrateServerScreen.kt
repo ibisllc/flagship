@@ -1,4 +1,4 @@
-// "Migrate to new hardware" Compose screen (docs/server-migration.md). Mirror
+// "Migrate to new machine / VM" Compose screen (docs/server-migration.md). Mirror
 // of iOS FlagshipUI/Screens/MigrateServerScreen.swift — one screen, two modes:
 // no session yet → the admin-signed INITIATE ceremony; live session → the
 // 8-step progress timeline with the phase-appropriate action (hand off /

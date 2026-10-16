@@ -363,16 +363,14 @@ fun ServerDetailScreen(
             Spacer(Modifier.height(FS.space.s6))
             JournalCard(serverDomain = d.value.serverFqdn)
             Spacer(Modifier.height(FS.space.s6))
+            BackupMigrateCard(serverDomain = d.value.serverFqdn)
+            Spacer(Modifier.height(FS.space.s6))
             UpdateServerCard(
                 serverDomain = d.value.serverFqdn,
                 currentCommit = d.value.currentCommit,
                 lastUpdate = d.value.lastUpdate,
                 onRefresh = { detailVm?.load() },
             )
-            Spacer(Modifier.height(FS.space.s6))
-            ServerBackupCard(serverDomain = d.value.serverFqdn)
-            Spacer(Modifier.height(FS.space.s6))
-            MigrateCard(serverDomain = d.value.serverFqdn)
         }
 
         // The health report comes from the directory, not the box, so it still
@@ -1046,13 +1044,6 @@ private fun JournalCard(serverDomain: String) {
     Spacer(Modifier.height(FS.space.s2))
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Text(
-                "Read the box's recent system log when a server is online but something " +
-                    "isn't working. Only you can — it's signed with your key and never " +
-                    "leaves your server.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp),
-            )
             // Unit picker — which systemd unit's journal to fetch (mirror of the
             // iOS segmented Picker over JournalUnits.all + the webapp <select>).
             if (JournalUnits.ALL.size > 1) {
@@ -1791,15 +1782,33 @@ private fun TransferButton(serverDomain: String) {
     }
 }
 
-// "Migrate to new hardware" entry on server-detail (docs/server-migration.md).
+// The server page's Backup / Migrate card: just the two action buttons.
+// Mirror of iOS BackupMigrateCard.
+@Composable
+private fun BackupMigrateCard(serverDomain: String) {
+    Text(
+        "Backup / Migrate",
+        color = FS.colors.text,
+        style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+    )
+    Spacer(Modifier.height(FS.space.s2))
+    FSCard(padding = PaddingValues(FS.space.s4)) {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+            ServerBackupButton(serverDomain = serverDomain)
+            MigrateServerButton(serverDomain = serverDomain)
+        }
+    }
+}
+
+// "Migrate to new machine / VM" entry on server-detail (docs/server-migration.md).
 // Same owner, same address, NEW box: the guided flow provisions a replacement,
 // pre-seeds it from backup, and hands the name over — the old box is wiped
 // only after a confirmed take-over. Owner-only; the migration order is
 // admin-signed behind the biometric inside MigrationViewModel. Distinct from
 // the old box keeps serving until the new one is ready, then is retired and
-// wiped. Mirror of iOS MigrateServerCard.
+// wiped. Mirror of iOS MigrateServerButton.
 @Composable
-private fun MigrateCard(serverDomain: String) {
+private fun MigrateServerButton(serverDomain: String) {
     val app = LocalAppState.current
     val mailbox = LocalSecretMailboxClient.current
     val screens = LocalScreensClient.current
@@ -1807,27 +1816,12 @@ private fun MigrateCard(serverDomain: String) {
     val username by app.currentUser.collectAsState()
     var showSheet by remember { mutableStateOf(false) }
 
-    Text(
-        "Migrate",
-        color = FS.colors.text,
-        style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+    FSPrimaryButton(
+        label = "Migrate to new machine / VM",
+        onClick = { showSheet = true },
+        block = true,
+        modifier = Modifier.semantics { contentDescription = "sd-migrate-server" },
     )
-    Spacer(Modifier.height(FS.space.s2))
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            Text(
-                "Move this server to new hardware, same name and data. The old server is retired and wiped once the new one has taken over.",
-                color = FS.colors.textMuted,
-                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-            )
-            FSPrimaryButton(
-                label = "Migrate to new hardware",
-                onClick = { showSheet = true },
-                block = true,
-                modifier = Modifier.semantics { contentDescription = "sd-migrate-server" },
-            )
-        }
-    }
 
     if (showSheet) {
         val vm = remember(serverDomain) {
