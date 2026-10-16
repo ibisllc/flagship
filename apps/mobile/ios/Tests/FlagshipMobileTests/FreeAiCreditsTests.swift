@@ -461,6 +461,22 @@ final class FreeAiCreditsTests: XCTestCase {
         XCTAssertEqual(s.credential, c)
         XCTAssertEqual(s.model, "flagship-free")
     }
+
+    /// The env-var answer resumes the AI, so it carries the key and the model
+    /// choice as any message does (a Flagship pass would otherwise run out).
+    func test_envVarAnswer_carriesTheKeyAndTheModel() throws {
+        let c = LlmProviderCredential(provider: "flagship", apiKey: "t", source: "promo")
+        let ack = VibeCodeSessionScreen.envVarAck("set", credential: c, model: "glm-5.3-flash", effort: "low")
+        XCTAssertEqual(ack.envVarStatus, "set")
+        XCTAssertNil(ack.text)
+        XCTAssertEqual(ack.credential, c)
+        XCTAssertEqual(ack.model, "glm-5.3-flash")
+        XCTAssertEqual(ack.effort, "low")
+        let noModel = VibeCodeSessionScreen.envVarAck("declined", credential: nil, model: nil, effort: "low")
+        XCTAssertNil(noModel.effort, "no effort without a model")
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(ack)) as? [String: Any])
+        XCTAssertEqual(json["model"] as? String, "glm-5.3-flash")
+    }
 }
 
 private extension Data {

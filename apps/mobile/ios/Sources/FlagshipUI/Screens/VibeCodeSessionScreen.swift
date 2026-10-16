@@ -626,9 +626,8 @@ public struct VibeCodeSessionScreen: View {
             _ = try await client.serviceEnvSet(
                 appId: appId,
                 ServiceEnvSetRequest(name: name, value: envValueDraft, request: envelope, signature: signature))
-            _ = try await client.vibeCodeSessionReply(
-                sessionId: sessionId,
-                VibeCodeReplyRequest(text: nil, envVarStatus: "set", credential: try await messageCredential(switching: false)))
+            _ = try await client.vibeCodeSessionReply(sessionId: sessionId, try await envVarAck("set"))
+            noteSent()
             envValueDraft = ""
             await reload()
         } catch {
@@ -636,13 +635,26 @@ public struct VibeCodeSessionScreen: View {
         }
     }
 
+    /// The env-var answer resumes the AI, so it carries what any message
+    /// does (as on the webapp and Android): the key for the chosen model and
+    /// the model choice.
+    private func envVarAck(_ status: String) async throws -> VibeCodeReplyRequest {
+        let model = menu.isActive ? menu.wireModel : nil
+        return Self.envVarAck(status, credential: try await messageCredential(), model: model, effort: menu.wireEffort)
+    }
+
+    nonisolated static func envVarAck(_ status: String, credential: LlmProviderCredential?,
+                                      model: String?, effort: String?) -> VibeCodeReplyRequest {
+        VibeCodeReplyRequest(text: nil, envVarStatus: status, credential: credential,
+                             model: model, effort: model == nil ? nil : effort)
+    }
+
     private func declineEnvVar() async {
         submitting = true
         defer { submitting = false }
         do {
-            _ = try await client.vibeCodeSessionReply(
-                sessionId: sessionId,
-                VibeCodeReplyRequest(text: nil, envVarStatus: "declined", credential: try await messageCredential(switching: false)))
+            _ = try await client.vibeCodeSessionReply(sessionId: sessionId, try await envVarAck("declined"))
+            noteSent()
             await reload()
         } catch {
             errorMessage = ScreensClientError.userFacing(error)
