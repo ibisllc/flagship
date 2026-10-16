@@ -42,6 +42,9 @@ export interface Box {
   via: "demo" | "gym-provision";
   online: boolean;
   session?: string;
+  /** The AuthCode serial a gym-provisioned box registered with (its install events are keyed by it). */
+  serial?: string;
+  ipv4?: string | null;
 }
 
 export interface DemoKeys {
@@ -267,7 +270,7 @@ export async function addBox(acct: Account, serverName: string, opts: AddBoxOpti
     120_000,
   );
   assert(r.status === 200, `gym provision ${r.status}: ${short(r.text, 300)}`);
-  const box: Box = { account: acct.username, serverName, fqdn: serverDomain, serverId: r.json.serverId, via: "gym-provision", online: false };
+  const box: Box = { account: acct.username, serverName, fqdn: serverDomain, serverId: r.json.serverId, via: "gym-provision", online: false, serial: authCode.serial, ipv4: r.json.ipv4 ?? null };
   acct.boxes.push(box);
   return box;
 }
@@ -299,6 +302,14 @@ export async function waitOnline(box: Box, minutes = 20, log?: (s: string) => vo
     await sleep(20_000);
   }
   throw new Error(`${box.fqdn} not online+serving in ${minutes} min (last: ${last})`);
+}
+
+/** What a box that never came online told .com: its install events and its /pods row. */
+export async function stallReport(box: Box): Promise<Record<string, unknown>> {
+  const row = (await pods(box.account).catch(() => [])).find((p) => p.serverDomain === box.fqdn) ?? null;
+  const events = box.serial ? (await tryHttp(`https://${CONTROL}/api/install-events/${encodeURIComponent(box.serial)}`)).json : null;
+  const byDomain = (await tryHttp(`https://${CONTROL}/api/server/by-domain/${encodeURIComponent(box.fqdn)}`)).json;
+  return { fqdn: box.fqdn, serverId: box.serverId, ipv4: box.ipv4 ?? null, pods: row, byDomain, installEvents: events };
 }
 
 /** The demo box's UpCloud id, once the Worker has recorded it. */

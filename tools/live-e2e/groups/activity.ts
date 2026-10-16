@@ -10,7 +10,7 @@ export const activity: Group = {
   title: "home's activity log: installs, API keys, DB write, remote, share, backup — in order, no secrets",
   needs: ["A1"],
   phase: 4,
-  async run({ A, rec, box }) {
+  async run({ A, rec, box, groupOk }) {
     const b = box("A1");
     const session = await pair(A, b);
     const r = await http(`https://${b.fqdn}/api/screens/activity?limit=500`, { headers: { "x-flagship-session": session } });
@@ -22,18 +22,23 @@ export const activity: Group = {
       return `${entries.length} entries`;
     });
     const has = (pred: (e: (typeof entries)[number]) => boolean) => entries.some(pred);
-    const expected: Array<[string, (e: (typeof entries)[number]) => boolean]> = [
-      ["app.installed (python app)", (e) => e.kind === "app.installed" && String(e.target ?? "").endsWith("--pyapp")],
-      ["API key created", (e) => e.action === "post services/:id/api-keys" && e.ok],
-      ["API key revoked", (e) => e.action === "delete services/:id/api-keys/:id" && e.ok],
-      ["signed DB write", (e) => e.action === "db.write" && e.ok],
-      ["remote ticket minted", (e) => e.action === "post companion/mint-ticket" && e.ok],
-      ["a companion's refused write (ok=false)", (e) => e.ok === false && /companion|app-backup|vibe-code|services/.test(e.action)],
-      ["share granted", (e) => e.action === "share.granted" || e.action === "share.changed"],
-      ["share left", (e) => e.action === "share.left"],
-      ["backup created", (e) => e.kind === "server.backup.created"],
+    // [what, the group that does it, how to find it]
+    const expected: Array<[string, string, (e: (typeof entries)[number]) => boolean]> = [
+      ["app.installed (python app)", "runtimes", (e) => e.kind === "app.installed" && String(e.target ?? "").endsWith("--pyapp")],
+      ["API key created", "api-keys", (e) => e.action === "post services/:id/api-keys" && e.ok],
+      ["API key revoked", "api-keys", (e) => e.action === "delete services/:id/api-keys/:id" && e.ok],
+      ["signed DB write", "api-keys", (e) => e.action === "db.write" && e.ok],
+      ["remote ticket minted", "remote", (e) => e.action === "post companion/mint-ticket" && e.ok],
+      ["a companion's refused write (ok=false)", "remote", (e) => e.ok === false && /companion|app-backup|vibe-code|services/.test(e.action)],
+      ["share granted", "share", (e) => e.action === "share.granted" || e.action === "share.changed"],
+      ["share left", "share", (e) => e.action === "share.left"],
+      ["backup created", "archive", (e) => e.kind === "server.backup.created"],
     ];
-    for (const [label, pred] of expected) {
+    for (const [label, source, pred] of expected) {
+      if (!groupOk(source)) {
+        rec.skip(`it records: ${label}`, `the ${source} group didn't pass, so it may not have done it`);
+        continue;
+      }
       await rec.check(`it records: ${label}`, () => {
         assert(has(pred), `not in: ${short([...new Set(entries.map((e) => e.kind ?? e.action))], 400)}`);
         return "";

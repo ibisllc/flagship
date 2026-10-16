@@ -12,6 +12,8 @@ export interface GroupCtx {
   rec: Recorder;
   dir: string;
   box(slot: Slot): Box;
+  /** Whether an earlier group ran and passed every check (for checks that read what it left behind). */
+  groupOk(name: string): boolean;
   /** Records a box a group provisioned itself, so teardown reaps it even if the group crashes. */
   adopt(acct: Account, box: Box): void;
 }

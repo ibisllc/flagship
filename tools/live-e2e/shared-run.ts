@@ -41,12 +41,14 @@ import {
   rememberRealAccount,
   demoServerId,
   freshUsername,
+  stallReport,
   sweep,
   teardown,
   waitOnline,
   type Box,
 } from "./lib/fleet.js";
 import { GROUPS, type Group, type GroupCtx, type Slot } from "./groups/index.js";
+import { acmeBudget } from "./lib/acmeProbe.js";
 
 const args = process.argv.slice(2);
 const flag = (name: string): boolean => args.includes(name);
@@ -146,6 +148,15 @@ async function main(): Promise<number> {
     });
   }
 
+  if (!reusePath && !flag("--skip-acme-check")) {
+    // Gym and prod certificates share flagship.services' Let's Encrypt budget.
+    const budget = await acmeBudget(SERVICES);
+    log(`Let's Encrypt budget for ${SERVICES}: ${budget.ok ? "room" : "EXHAUSTED"} (${budget.detail})`);
+    if (!budget.ok) {
+      log("not provisioning: every new box (gym or prod) would fail to get a certificate; try again in a few hours");
+      return 3;
+    }
+  }
   const startedAt = new Date();
   const summary: Record<string, { pass: number; fail: number; skip: number }> = {};
   try {
@@ -204,10 +215,15 @@ async function main(): Promise<number> {
       await Promise.all(
         boxes.map((b) =>
           fleetRec.check(`${b.serverName}.${b.account} online + serving (≤20 min)`, async () => {
-            const r = await waitOnline(b, 20, (s) => fleetRec.log(s));
-            if (!b.serverId) b.serverId = await demoServerId(b.account).catch(() => null);
-            saveFleet(dir, accounts);
-            return r;
+            try {
+              const r = await waitOnline(b, 20, (s) => fleetRec.log(s));
+              if (!b.serverId) b.serverId = await demoServerId(b.account).catch(() => null);
+              saveFleet(dir, accounts);
+              return r;
+            } catch (e) {
+              writeJson(dir, `stall-${b.fqdn}.json`, await stallReport(b).catch((x) => ({ error: String(x) })));
+              throw e;
+            }
           }),
         ),
       );
@@ -247,6 +263,10 @@ async function main(): Promise<number> {
           rec.skip(g.title, `box(es) ${missing.join(",")} not online`);
         } else {
           const ctx: GroupCtx = {
+            groupOk: (name) => {
+              const s = summary[name];
+              return !!s && s.fail === 0 && s.skip === 0 && s.pass > 0;
+            },
             A: A!,
             B,
             R,
