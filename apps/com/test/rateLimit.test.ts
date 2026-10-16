@@ -85,6 +85,7 @@ describe("rateLimit — endpoint detection", () => {
   it("rate-limits the monetization voucher-redeem + allowance reads per-IP", () => {
     expect(endpointFor("POST", "/api/voucher/redeem")).toBe("voucher-redeem");
     expect(endpointFor("GET", "/api/users/alice/allowance")).toBe("user-allowance");
+    expect(endpointFor("GET", "/api/users/alice/plan-attestation")).toBe("user-allowance");
     // The voucher ISSUE path is admin-only (no edge bucket); only redeem is here.
     expect(endpointFor("POST", "/api/admin/voucher/issue")).toBeNull();
     expect(LIMITS["voucher-redeem"]?.every((a) => a.axis === "ip")).toBe(true);
