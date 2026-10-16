@@ -87,34 +87,34 @@ private struct TrustSliverLine: View {
             HStack(spacing: FS.space.s2) {
                 Image(systemName: "exclamationmark.shield.fill")
                     .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(.white)
+                    .foregroundColor(c.onDanger)
                 Text(failure.label)
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white)
+                    .foregroundColor(c.onDanger)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 if serverCount > 1 {
                     Text("\(serverCount) servers")
                         .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(.white.opacity(0.9))
+                        .foregroundColor(c.onDanger.opacity(0.9))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(Color.white.opacity(0.18))
+                        .background(c.onDanger.opacity(0.18))
                         .clipShape(Capsule())
                 }
                 Spacer(minLength: FS.space.s2)
                 if overridden {
                     Text("continuing")
                         .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(.white)
+                        .foregroundColor(c.onDanger)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(Color.white.opacity(0.22))
+                        .background(c.onDanger.opacity(0.22))
                         .clipShape(Capsule())
                 } else {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.white.opacity(0.85))
+                        .foregroundColor(c.onDanger.opacity(0.85))
                 }
             }
             .padding(.horizontal, FS.space.s4)

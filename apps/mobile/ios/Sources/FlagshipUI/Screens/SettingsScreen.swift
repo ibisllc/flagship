@@ -928,8 +928,8 @@ public struct SettingsScreen: View {
             Text(label).font(.system(size: 13, weight: .semibold))
                 .frame(maxWidth: .infinity)
                 .frame(height: 46)
-                .foregroundColor(selected ? .white : c.text)
-                .background(selected ? c.primary : c.surfaceSunken)
+                .foregroundColor(selected ? c.onPrimary : c.text)
+                .background(selected ? c.primaryFill : c.surfaceSunken)
                 .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
         }
         .buttonStyle(.plain)
@@ -956,8 +956,8 @@ public struct SettingsScreen: View {
             }
             .frame(maxWidth: .infinity)
             .frame(height: 46)
-            .foregroundColor(selected ? .white : c.text)
-            .background(selected ? c.primary : c.surfaceSunken)
+            .foregroundColor(selected ? c.onPrimary : c.text)
+            .background(selected ? c.primaryFill : c.surfaceSunken)
             .clipShape(RoundedRectangle(cornerRadius: FS.radius.sm))
         }
         .buttonStyle(.plain)

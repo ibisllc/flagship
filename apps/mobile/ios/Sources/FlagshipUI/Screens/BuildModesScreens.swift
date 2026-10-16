@@ -64,7 +64,7 @@ public struct BuildSourceChooserScreen: View {
                             if activeSessions > 0 {
                                 Text("\(activeSessions)")
                                     .font(.system(size: 13, weight: .bold))
-                                    .foregroundColor(.white)
+                                    .foregroundColor(c.onSuccess)
                                     .padding(.horizontal, 8).padding(.vertical, 2)
                                     .background(Capsule().fill(c.success))
                                     .accessibilityLabel("\(activeSessions) active")

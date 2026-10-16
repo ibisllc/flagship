@@ -212,8 +212,8 @@ struct HoldToApproveButton: View {
                 .font(.system(size: 14, weight: .semibold))
                 .frame(maxWidth: .infinity)
                 .frame(height: 40)
-                .foregroundColor(.white)
-                .background(enabled ? c.primary : c.textMuted)
+                .foregroundColor(enabled ? c.onPrimary : c.surface)
+                .background(enabled ? c.primaryFill : c.textMuted)
                 .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
         }
         .disabled(!enabled)

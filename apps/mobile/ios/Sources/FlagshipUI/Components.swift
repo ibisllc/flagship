@@ -31,8 +31,8 @@ public struct FSPrimaryButton: View {
                 .frame(maxWidth: block ? .infinity : nil)
                 .frame(minHeight: large ? 48 : 44)
                 .padding(.horizontal, large ? FS.space.s6 : FS.space.s5)
-                .background(c.primary.opacity(enabled ? 1 : 0.4))
-                .foregroundColor(.white)
+                .background(c.primaryFill.opacity(enabled ? 1 : 0.4))
+                .foregroundColor(c.onPrimary)
                 .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
         }
         .disabled(!enabled)

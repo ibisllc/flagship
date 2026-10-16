@@ -43,13 +43,13 @@ public struct FSChip: View {
                 if let count {
                     Text("\(count)")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(selected ? .white.opacity(0.9) : c.textMuted)
+                        .foregroundColor(selected ? c.onPrimary.opacity(0.8) : c.textMuted)
                 }
             }
-            .foregroundColor(selected ? .white : c.text)
+            .foregroundColor(selected ? c.onPrimary : c.text)
             .padding(.horizontal, FS.space.s4)
             .frame(height: 34)
-            .background(selected ? c.primary : c.surface)
+            .background(selected ? c.primaryFill : c.surface)
             .overlay(
                 Capsule().stroke(selected ? Color.clear : c.border, lineWidth: 1)
             )
@@ -296,10 +296,10 @@ public struct FSAnnouncementCard: View {
                 Button(action: onCta) {
                     Text(ctaLabel)
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.white)
+                        .foregroundColor(tint == nil ? c.onPrimary : .white)
                         .padding(.horizontal, 20)
                         .frame(height: 40)
-                        .background(accent)
+                        .background(tint ?? c.primaryFill)
                         .clipShape(RoundedRectangle(cornerRadius: FS.radius.md))
                 }
                 .buttonStyle(.plain)
@@ -467,7 +467,7 @@ public struct FSSettingsRow: View {
                 if let badge, badge > 0 {
                     Text("\(badge)")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(.white)
+                        .foregroundColor(c.onDanger)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 2)
                         .background(c.danger)

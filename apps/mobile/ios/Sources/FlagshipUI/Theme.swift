@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// Flagship design tokens for SwiftUI. Mirrors `tokens.css` and the
-/// Compose `Tokens.kt`. Source of truth: `/docs/design-system.md`.
+/// Flagship design tokens for SwiftUI, in the website's hand: the values the
+/// webapp's `style.css` uses (paper canvas in light, warm near-black in dark,
+/// cream ink, one teal). Source of truth: `/docs/design-system.md` §2 and §5.
 ///
 /// Usage:
 ///
@@ -24,45 +25,62 @@ public struct FSColors {
     public let border: Color
     public let text: Color
     public let textMuted: Color
+    /// The teal as text, icons, links and outlines: `--accent`, deepened to
+    /// #0F766E in light so it passes AA on paper.
     public let primary: Color
     public let primaryHover: Color
+    /// The teal as a fill (primary buttons, selection, bars): `--teal`.
+    public let primaryFill: Color
+    /// Text and icons on `primaryFill`: dark ink, never white (contrast).
+    public let onPrimary: Color
     public let success: Color
     public let warning: Color
     public let danger: Color
+    /// Text on a `success` / `danger` fill (white in light, ink in dark).
+    public let onSuccess: Color
+    public let onDanger: Color
+
+    /// `#RRGGBB` as a Color, so the tokens read like the CSS they mirror.
+    static func hex(_ v: UInt32) -> Color {
+        Color(red: Double((v >> 16) & 0xFF) / 255, green: Double((v >> 8) & 0xFF) / 255, blue: Double(v & 0xFF) / 255)
+    }
 
     static let light = FSColors(
-        bg: Color(red: 0.980, green: 0.980, blue: 0.969),
-        surface: .white,
-        surfaceSunken: Color(red: 0.949, green: 0.945, blue: 0.925),
-        // Sidebar tint tracks the warm-neutral axis (was a blue cast).
-        sidebar: Color(red: 0.945, green: 0.957, blue: 0.953),
-        border: Color(red: 0.902, green: 0.894, blue: 0.867),
-        text: Color(red: 0.078, green: 0.078, blue: 0.059),
-        textMuted: Color(red: 0.420, green: 0.416, blue: 0.388),
-        // Brand teal (web --teal #14B8A6); pressed/aux = --teal-deep #0F8B7E.
-        primary: Color(red: 0.078, green: 0.722, blue: 0.651),
-        primaryHover: Color(red: 0.059, green: 0.545, blue: 0.494),
-        success: Color(red: 0.122, green: 0.541, blue: 0.298),
-        warning: Color(red: 0.722, green: 0.396, blue: 0.102),
-        danger: Color(red: 0.784, green: 0.227, blue: 0.227)
+        bg: hex(0xF7F6F2),
+        surface: hex(0xFFFFFF),
+        surfaceSunken: hex(0xEFEDE7),
+        sidebar: hex(0xF0EEE8),
+        border: hex(0xDEDBD3),
+        text: hex(0x14140F),
+        textMuted: hex(0x555149),
+        primary: hex(0x0F766E),
+        primaryHover: hex(0x0B5F58),
+        primaryFill: hex(0x14B8A6),
+        onPrimary: hex(0x0A0A09),
+        success: hex(0x15803D),
+        warning: hex(0xA15C07),
+        danger: hex(0xB91C1C),
+        onSuccess: hex(0xFFFFFF),
+        onDanger: hex(0xFFFFFF)
     )
 
     static let dark = FSColors(
-        bg: Color(red: 0.055, green: 0.059, blue: 0.071),
-        surface: Color(red: 0.086, green: 0.094, blue: 0.110),
-        surfaceSunken: Color(red: 0.110, green: 0.122, blue: 0.141),
-        // Sidebar tint tracks the warm-neutral axis (was a blue cast).
-        sidebar: Color(red: 0.082, green: 0.094, blue: 0.106),
-        border: Color(red: 0.165, green: 0.176, blue: 0.200),
-        text: Color(red: 0.949, green: 0.945, blue: 0.925),
-        textMuted: Color(red: 0.604, green: 0.604, blue: 0.576),
-        // Brand teal lifted for dark legibility (web --teal-bright #2DD4BF);
-        // pressed/aux = --teal #14B8A6.
-        primary: Color(red: 0.176, green: 0.831, blue: 0.749),
-        primaryHover: Color(red: 0.078, green: 0.722, blue: 0.651),
-        success: Color(red: 0.310, green: 0.745, blue: 0.478),
-        warning: Color(red: 0.898, green: 0.627, blue: 0.314),
-        danger: Color(red: 0.910, green: 0.392, blue: 0.392)
+        bg: hex(0x0A0A09),
+        surface: hex(0x161512),
+        surfaceSunken: hex(0x121110),
+        sidebar: hex(0x14130F),
+        border: hex(0x2D2B24),
+        text: hex(0xECE7D6),
+        textMuted: hex(0xA39D8F),
+        primary: hex(0x2DD4BF),
+        primaryHover: hex(0x5EEAD4),
+        primaryFill: hex(0x14B8A6),
+        onPrimary: hex(0x0A0A09),
+        success: hex(0x4ADE80),
+        warning: hex(0xFBBF24),
+        danger: hex(0xF87171),
+        onSuccess: hex(0x0A0A09),
+        onDanger: hex(0x0A0A09)
     )
 
     static var current: FSColors {
@@ -90,10 +108,12 @@ public enum FSSpace {
     public static let s16: CGFloat = 64
 }
 
+/// Small and square, like the site (design-system §5): 4 for buttons,
+/// inputs and chips, 6 for cards and sheets.
 public enum FSRadius {
-    public static let sm: CGFloat = 6
-    public static let md: CGFloat = 10
-    public static let lg: CGFloat = 16
+    public static let sm: CGFloat = 4
+    public static let md: CGFloat = 4
+    public static let lg: CGFloat = 6
     public static let pill: CGFloat = 999
 }
 
@@ -124,10 +144,10 @@ public enum FSFont {
     public static func h2() -> Font { .system(size: 28, weight: .medium) }
     public static func h3() -> Font { .system(size: 22, weight: .semibold) }
     public static func h4() -> Font { .system(size: 17, weight: .semibold) }
-    public static func body() -> Font { .system(size: 16, weight: .regular) }
+    public static func body() -> Font { .system(size: 15, weight: .regular) }
     public static func bodySm() -> Font { .system(size: 14, weight: .regular) }
-    public static func caption() -> Font { .system(size: 13, weight: .medium) }
-    public static func mono() -> Font { .system(size: 14, weight: .regular, design: .monospaced) }
+    public static func caption() -> Font { .system(size: 12, weight: .medium) }
+    public static func mono() -> Font { .system(size: 13, weight: .regular, design: .monospaced) }
 }
 
 /// Wrap an entire screen with this to get the Flagship background and
