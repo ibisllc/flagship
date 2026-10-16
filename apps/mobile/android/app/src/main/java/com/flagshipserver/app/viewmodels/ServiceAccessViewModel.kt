@@ -217,11 +217,14 @@ class ServiceAccessViewModel(
         if (isAdmin) return true
         if (!canInvite) return false
         val tier = p.creatorTier ?: _members.value?.inviteTier(p.inviteId)
+        if (tier == CO_MANAGER_TIER || _members.value?.inviteTier(p.inviteId) == CO_MANAGER_TIER) return false
         return tier != "admin" && createdHere(p)
     }
 
     /** "Invited by <device>", resolved on this phone; null on rows from before tiers. */
     fun invitedBy(p: AccessPerson, names: Map<String, String>? = _deviceNames.value): String? {
+        val box = _members.value?.invite(p.inviteId)
+        if (p.creatorTier == CO_MANAGER_TIER || box?.tier == CO_MANAGER_TIER) return coManagerInvitedBy(box?.creatorLabel)
         val creator = (p.creatorDeviceId ?: _members.value?.invite(p.inviteId)?.creatorDeviceId)?.lowercase()
         if (p.creatorTier == null && creator == null) return null
         if (createdHere(p)) return "Invited by this device"
@@ -576,7 +579,8 @@ class ServiceAccessViewModel(
     }
 
     private fun toPerson(row: ServiceInviteRow, hh: ByteArray): AccessPerson {
-        var name = "unknown"
+        // A co-manager's invitee is named under their key, which this account can't open.
+        var name = if (row.creatorTier == CO_MANAGER_TIER) CO_MANAGERS_INVITEE else "unknown"
         var photo: String? = null
         runCatching { ServiceInvite.openBundle(row.encryptedBundleHex, hh, row.inviteId) }
             .getOrNull()?.let { name = it.name; photo = it.photo }
@@ -615,6 +619,13 @@ class ServiceAccessViewModel(
         const val CANT_INVITE_LINE = "Only an admin can let you invite people to this app."
         const val DEVICE_NOT_LISTED_LINE = "Your server doesn't list this device yet. Refresh in a minute."
         const val RANKS_UNKNOWN_LINE = "Couldn't read your rank in this app from your server."
+
+        /** An invite made by someone the server is shared with (docs/service-access-gating.md "Co-manager invites"). */
+        const val CO_MANAGER_TIER = "co-manager"
+        const val CO_MANAGERS_INVITEE = "Someone they invited"
+
+        fun coManagerInvitedBy(label: String?): String =
+            if (!label.isNullOrBlank()) "Invited by $label (co-manager)" else "Invited by a co-manager"
 
         fun create(
             context: Context,

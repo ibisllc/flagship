@@ -961,6 +961,86 @@ class ServerShareClient(
     suspend fun memberSigner(entry: SharedEntry, reason: String): Ed25519Sign =
         ServerShare.deriveShareMemberKey(keys.umk(reason), entry.shareId)
 
+    // ── Co-manager invites (docs/service-access-gating.md "Co-manager invites") ──
+
+    /** A box call over this share's session, signing in again once if the box says it expired. */
+    private suspend fun withShareSession(entry: SharedEntry, send: suspend (String) -> HttpResponse): HttpResponse {
+        val notShared = ShareInviteRefusal("not-shared", ShareCoInviteCopy.WHY.getValue("not-shared"))
+        val s = (signIn(entry) as? ShareSignIn.In)?.session ?: throw notShared
+        val r = send(s.token)
+        if (r.status != 401) return r
+        forgetSession(entry.shareId)
+        val again = (signIn(entry, reuse = false) as? ShareSignIn.In)?.session ?: throw notShared
+        return send(again.token)
+    }
+
+    private fun inviteRefusal(r: HttpResponse, fallback: String): ShareInviteRefusal {
+        val o = errorObject(r)
+        val code = (o?.get("code") as? JsonPrimitive)?.content
+        val error = (o?.get("error") as? JsonPrimitive)?.content
+        return ShareInviteRefusal(code, ShareInviteRefusal.text(code, error, fallback))
+    }
+
+    /** Whether B may invite to [serviceRef] and B's own invites there, names opened with B's bundle key. */
+    suspend fun coInvites(entry: SharedEntry, serviceRef: String): ShareCoInviteState {
+        val r = withShareSession(entry) { boxCall("GET", entry.serverDomain, "/api/shares/invites?service=${enc(serviceRef)}", it) }
+        if (r.status !in 200..299) throw inviteRefusal(r, ShareCoInviteCopy.READ_FAILED)
+        val body = decode(r, ShareInvitesWire.serializer())
+        val umk = keys.umk("See who you invited to ${entry.serverName}")
+        return ShareCoInviteState.from(body, ServerShare.deriveShareInviteBundleKey(umk, entry.shareId))
+    }
+
+    /**
+     * Invite someone (or a group) to an app on the shared server at Member:
+     * `flagship/service-invite/create/v1` signed with B's member key, handed to
+     * the box, and the link built on the shared server.
+     */
+    suspend fun createCoInvite(
+        entry: SharedEntry,
+        serviceRef: String,
+        ownerAid: String?,
+        name: String,
+        group: ShareCoInviteGroup? = null,
+    ): ShareCoInviteCreated {
+        val label = name.trim()
+        if (label.isEmpty()) {
+            throw ShareInviteRefusal("no-name", if (group == null) ShareCoInviteCopy.NO_NAME else ShareCoInviteCopy.NO_GROUP_NAME)
+        }
+        if (ownerAid == null || !Regex("^[0-9a-f]{64}$").matches(ownerAid)) {
+            throw ShareInviteRefusal("no-owner", ShareCoInviteCopy.NO_OWNER)
+        }
+        val umk = keys.umk("Invite someone to ${entry.serverName}")
+        val secret = random(32)
+        val inviteId = HexUtil.encode(random(32))
+        val request = ShareInviteCreateRequest(
+            inviteId = inviteId,
+            authorAID = ownerAid,
+            serviceRef = serviceRef,
+            secretHash = ServiceInvite.secretHash(secret),
+            encryptedBundle = ServiceInvite.sealBundle(
+                ServiceInvite.Bundle(name = label), ServerShare.deriveShareInviteBundleKey(umk, entry.shareId), inviteId,
+            ),
+            issuedAt = now(),
+            maxRedemptions = group?.maxRedemptions,
+            expiresAt = group?.expiresAt,
+        )
+        val sig = HexUtil.encode(ServerShare.deriveShareMemberKey(umk, entry.shareId).sign(request.canonicalBytes()))
+        val body = ShareInviteCreateBody(request, sig)
+        val r = withShareSession(entry) { boxPost(entry.serverDomain, "/api/shares/invites", it, body, ShareInviteCreateBody.serializer()) }
+        if (r.status !in 200..299) throw inviteRefusal(r, ShareCoInviteCopy.CREATE_FAILED)
+        val link = InviteLink.shareLink(entry.serverDomain.lowercase(), HexUtil.encode(secret), ownerAid, inviteId, serviceRef)
+        return ShareCoInviteCreated(inviteId, link)
+    }
+
+    /** Withdraw one of B's own invites: `flagship/service-invite/revoke/v1` signed with B's member key. */
+    suspend fun withdrawCoInvite(entry: SharedEntry, inviteId: String) {
+        val member = ServerShare.deriveShareMemberKey(keys.umk("Withdraw an invite to ${entry.serverName}"), entry.shareId)
+        val revoke = ShareInviteRevoke(inviteId, now())
+        val body = ShareInviteWithdrawBody(revoke, HexUtil.encode(member.sign(revoke.canonicalBytes())))
+        val r = withShareSession(entry) { boxPost(entry.serverDomain, "/api/shares/invites/withdraw", it, body, ShareInviteWithdrawBody.serializer()) }
+        if (r.status !in 200..299) throw inviteRefusal(r, ShareCoInviteCopy.WITHDRAW_FAILED)
+    }
+
     // ── HTTP ─────────────────────────────────────────────────────────────
 
     private suspend fun call(t: JsonHttpTransport, method: String, url: String, body: String? = null, headers: Map<String, String> = emptyMap()): HttpResponse =

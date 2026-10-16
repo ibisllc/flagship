@@ -129,10 +129,12 @@ object ServiceInvite {
     }
 
     /** Seal { name, photo? } under the household key, bound to inviteId.
-     *  Returns lowercase hex of nonce || ciphertext || tag. */
-    fun sealBundle(bundle: Bundle, householdKey: ByteArray, inviteId: String): String {
+     *  Returns lowercase hex of nonce || ciphertext || tag. [fixedNonce] is for
+     *  test vectors only. */
+    fun sealBundle(bundle: Bundle, householdKey: ByteArray, inviteId: String, fixedNonce: ByteArray? = null): String {
         require(householdKey.size == 32) { "household key must be 32 bytes" }
-        val nonce = ByteArray(12).also(rng::nextBytes)
+        require(fixedNonce == null || fixedNonce.size == 12) { "nonce must be 12 bytes" }
+        val nonce = fixedNonce ?: ByteArray(12).also(rng::nextBytes)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(householdKey, "AES"), GCMParameterSpec(128, nonce))
         cipher.updateAAD(bundleAad(inviteId))
