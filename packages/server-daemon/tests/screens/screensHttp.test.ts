@@ -48,7 +48,7 @@ function fakeGate(allowToken = "tok-good") {
   };
 }
 
-function fakePairedSessions(sessions: Array<{ token: string; addedAt: number }>) {
+function fakePairedSessions(sessions: Array<{ token: string; addedAt: number; label?: string; companion?: true; expiresAt?: number }>) {
   const map = new Map(sessions.map((s) => [s.token, s]));
   return {
     list: () => [...map.values()],
@@ -339,6 +339,34 @@ describe("screens HTTP — P1.12 paired-sessions/list", () => {
     // Full tokens are never returned
     expect(JSON.stringify(body)).not.toContain(PHONE_TOKEN);
     expect(JSON.stringify(body)).not.toContain(LAPTOP_TOKEN);
+  });
+
+  // Regression: the phone app's own session (paired by a signed order) was
+  // listed like a browser, so the iPhone showed under Settings → Browser
+  // sessions. Each row now says whether it is a Remote browser or a device.
+  it("tells Remote browsers from the account's own devices and drops expired Remote sessions", async () => {
+    const PHONE_TOKEN = "phone-tok-12345abcdef";
+    const REMOTE_TOKEN = "remote-tok-67890zyxwv";
+    const STALE_TOKEN = "stale-tok-00000aaaaaa";
+    const future = Date.now() + 60 * 60_000;
+    const handle = buildScreensHttp({
+      ...COMMON,
+      gate: fakeGate(PHONE_TOKEN),
+      pairedSessions: fakePairedSessions([
+        { token: PHONE_TOKEN, addedAt: 100 },
+        { token: REMOTE_TOKEN, addedAt: 200, companion: true, expiresAt: future },
+        { token: STALE_TOKEN, addedAt: 50, companion: true, expiresAt: 1 },
+      ]),
+    });
+    const r = await handle(req({
+      path: "/api/screens/paired-sessions/list",
+      headers: { "x-flagship-session": PHONE_TOKEN },
+    }));
+    const body = JSON.parse(r!.body as string);
+    expect(body.sessions).toEqual([
+      { tokenPrefix: PHONE_TOKEN.slice(0, 12), addedAt: 100, current: true, kind: "device" },
+      { tokenPrefix: REMOTE_TOKEN.slice(0, 12), addedAt: 200, current: false, kind: "remote", expiresAt: future },
+    ]);
   });
 });
 

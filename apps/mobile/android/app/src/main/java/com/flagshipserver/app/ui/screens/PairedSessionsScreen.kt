@@ -1,5 +1,5 @@
 // Browser-sessions list — Settings → Browser sessions. Lists every
-// remote-browser session on the leader pod; tap to revoke.
+// browser docked through Remote on the current server; tap to revoke.
 
 package com.flagshipserver.app.ui.screens
 
@@ -56,7 +56,9 @@ fun PairedSessionsScreen(nav: NavController) {
     LaunchedEffect(Unit) {
         try {
             sessions.clear()
-            sessions.addAll(client.pairedSessionsList().sessions)
+            // The box also lists the session this phone (and every other device of
+            // the account) paired itself with: those are Trusted devices.
+            sessions.addAll(client.pairedSessionsList().sessions.filter { it.isBrowserSession })
         } catch (t: Throwable) {
             error = t.message
         } finally {

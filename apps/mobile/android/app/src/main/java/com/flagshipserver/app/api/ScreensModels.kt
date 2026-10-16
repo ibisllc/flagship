@@ -700,7 +700,18 @@ data class PairedSessionSummary(
     val tokenPrefix: String,
     val addedAt: Long,
     val current: Boolean,
-)
+    /** "remote": a browser docked through Remote. "device": the session one
+     *  of the account's own devices (this phone included) paired itself
+     *  with; those are Trusted devices. Null from a box that predates it. */
+    val kind: String? = null,
+    /** When a remote session stops working (unix ms). */
+    val expiresAt: Long? = null,
+) {
+    /** Settings → Browser sessions lists Remote browsers only. On a box that
+     *  doesn't say, this device's own session is still never a browser. */
+    val isBrowserSession: Boolean
+        get() = if (kind != null) kind == "remote" else !current
+}
 
 @Serializable
 data class PairedSessionsListResponse(val sessions: List<PairedSessionSummary>)

@@ -9,16 +9,30 @@ import { formatWhen } from "../lib/dateFormat.js";
 
 registerView("view-paired-sessions");
 
+/**
+ * Browser sessions are browsers docked through Remote (`kind: "remote"`).
+ * The box also lists the session each of the account's own devices paired
+ * itself with (`kind: "device"`): those are Trusted devices, so they stay
+ * out. A box from before `kind` existed lists everything; there, at least
+ * this device's own session is never shown as a browser.
+ */
+export function browserSessions(sessions) {
+  return (Array.isArray(sessions) ? sessions : []).filter((s) =>
+    s?.kind === "remote" || (s?.kind == null && !s?.current),
+  );
+}
+
 export async function renderPairedSessions() {
   const root = $("paired-sessions-content");
   root.innerHTML = skeletonCards(3);
   try {
     const body = await screensFetch("/api/screens/paired-sessions/list");
-    if (!body.sessions?.length) {
-      root.innerHTML = '<div class="card placeholder">no browser sessions</div>';
+    const sessions = browserSessions(body.sessions);
+    if (!sessions.length) {
+      root.innerHTML = '<div class="card placeholder">No browser sessions. Browsers you open through Remote show here.</div>';
       return;
     }
-    root.innerHTML = body.sessions.map((s) => `
+    root.innerHTML = sessions.map((s) => `
       <div class="card">
         <div class="row row-top">
           <div>

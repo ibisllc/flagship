@@ -102,6 +102,16 @@ describe("FilePairedSessionStore", () => {
     expect(r).toBeNull();
   });
 
+  it("list() marks Remote (companion) sessions, so the owner's list can tell them from devices", async () => {
+    const s = new FilePairedSessionStore(defaultPairedSessionPath(dir));
+    await s.add("d".repeat(32), 10);
+    await s.addCompanion({ token: "r".repeat(32), addedAt: 20, expiresAt: 99 });
+    expect(s.list()).toEqual([
+      { token: "d".repeat(32), addedAt: 10 },
+      { token: "r".repeat(32), addedAt: 20, companion: true, expiresAt: 99 },
+    ]);
+  });
+
   it("malformed JSON on disk is treated as empty (boot doesn't fail)", async () => {
     const path = defaultPairedSessionPath(dir);
     await writeFile(path, "{not json}");

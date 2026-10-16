@@ -74,7 +74,10 @@ public final class SettingsViewModel {
         trustedDevices = .loading
         do {
             let ss = try await screens.pairedSessionsList()
-            browserSessions = .loaded(ss.sessions)
+            // The box also lists the session this phone (and every other
+            // device of the account) paired itself with: those belong under
+            // Trusted devices, not Browser sessions.
+            browserSessions = .loaded(ss.sessions.filter(\.isBrowserSession))
         } catch {
             browserSessions = .failed(error.localizedDescription)
         }

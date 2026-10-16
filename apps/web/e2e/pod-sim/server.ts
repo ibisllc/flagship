@@ -257,6 +257,7 @@ export async function startPodSim(opts: PodSimOptions): Promise<PodSim> {
         token: (o.raw as { token: string }).token,
         label: (o.raw as { label?: string }).label ?? "(unnamed)",
         addedAt: o.receivedAt,
+        kind: "device",
       })),
   }));
 

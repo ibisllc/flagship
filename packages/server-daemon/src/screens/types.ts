@@ -341,6 +341,15 @@ export interface PairedSessionSummary {
   addedAt: number;
   /** True if this is the calling client's own session. */
   current: boolean;
+  /**
+   * "remote": a browser docked through Remote (a companion session, read-only,
+   * expires). "device": a session one of the account's own devices paired with
+   * a signed order (its phone, tablet or webapp, listed under Trusted devices).
+   * Only "remote" sessions are browser sessions.
+   */
+  kind: "remote" | "device";
+  /** When a remote session stops working (unix ms). */
+  expiresAt?: number;
 }
 
 export interface PairedSessionsListResponse {

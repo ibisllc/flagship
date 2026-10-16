@@ -167,10 +167,12 @@ export class FilePairedSessionStore implements PairedSessionGate {
     return n;
   }
 
-  list(): Array<{ token: string; addedAt: number }> {
+  list(): Array<{ token: string; addedAt: number; companion?: true; expiresAt?: number }> {
     return [...this.byToken.entries()].map(([token, info]) => ({
       token,
       addedAt: info.addedAt,
+      ...(info.companion ? { companion: true as const } : {}),
+      ...(typeof info.expiresAt === "number" ? { expiresAt: info.expiresAt } : {}),
     }));
   }
 

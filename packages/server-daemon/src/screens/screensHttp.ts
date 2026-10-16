@@ -58,6 +58,7 @@ import type {
   OrdersSendRequest,
   OrdersSendResponse,
   OwnedUrl,
+  PairedSessionSummary,
   PairedSessionsListResponse,
   PeerBackupStatusResponse,
   PeerBackupToggleRequest,
@@ -768,11 +769,18 @@ export function buildScreensHttp(deps: ScreensHttpDeps) {
     if (path === "/api/screens/paired-sessions/list" && method === "GET") {
       if (!deps.pairedSessions) return jerr(503, "paired-sessions not configured");
       const callerToken = (deps.resolveCallerToken ?? defaultResolveCallerToken)(req);
-      const sessions = deps.pairedSessions.list().map((s) => ({
-        tokenPrefix: s.token.slice(0, 12),
-        addedAt: s.addedAt,
-        current: callerToken !== null && s.token === callerToken,
-      }));
+      const nowMs = Date.now();
+      const sessions: PairedSessionSummary[] = deps.pairedSessions
+        .list()
+        // An expired Remote session can no longer sign in; don't list it.
+        .filter((s) => !(s.companion && typeof s.expiresAt === "number" && s.expiresAt <= nowMs))
+        .map((s) => ({
+          tokenPrefix: s.token.slice(0, 12),
+          addedAt: s.addedAt,
+          current: callerToken !== null && s.token === callerToken,
+          kind: s.companion ? "remote" : "device",
+          ...(s.companion && typeof s.expiresAt === "number" ? { expiresAt: s.expiresAt } : {}),
+        }));
       const body: PairedSessionsListResponse = { sessions };
       return jok(body);
     }

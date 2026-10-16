@@ -451,6 +451,27 @@ public struct PairedSessionSummary: Codable, Equatable, Sendable {
     public let tokenPrefix: String
     public let addedAt: Int64
     public let current: Bool
+    /// "remote": a browser docked through Remote. "device": the session one
+    /// of the account's own devices (this phone included) paired itself with;
+    /// those are Trusted devices. Nil from a box that predates the field.
+    public let kind: String?
+    /// When a remote session stops working (unix ms).
+    public let expiresAt: Int64?
+
+    public init(tokenPrefix: String, addedAt: Int64, current: Bool, kind: String? = nil, expiresAt: Int64? = nil) {
+        self.tokenPrefix = tokenPrefix
+        self.addedAt = addedAt
+        self.current = current
+        self.kind = kind
+        self.expiresAt = expiresAt
+    }
+
+    /// Settings → Browser sessions lists Remote browsers only. On a box that
+    /// doesn't say, this device's own session is still never a browser.
+    public var isBrowserSession: Bool {
+        if let kind { return kind == "remote" }
+        return !current
+    }
 }
 
 public struct PairedSessionsListResponse: Codable, Equatable, Sendable {

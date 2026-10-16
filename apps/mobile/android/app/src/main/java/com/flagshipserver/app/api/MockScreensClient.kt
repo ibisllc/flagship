@@ -617,8 +617,12 @@ class MockScreensClient(
         tick()
         return PairedSessionsListResponse(
             sessions = listOf(
-                PairedSessionSummary("a1b2c3d4", now() - 60_000L * 60 * 24 * 14, true),
-                PairedSessionSummary("f9e8d7c6", now() - 60_000L * 60 * 24 * 3, false),
+                // This phone's own session: a Trusted device, not a browser.
+                PairedSessionSummary("a1b2c3d4", now() - 60_000L * 60 * 24 * 14, true, kind = "device"),
+                PairedSessionSummary(
+                    "f9e8d7c6", now() - 60_000L * 60, false,
+                    kind = "remote", expiresAt = now() + 60_000L * 60 * 3,
+                ),
             )
         )
     }

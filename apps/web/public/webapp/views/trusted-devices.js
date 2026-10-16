@@ -230,9 +230,7 @@ async function renderTrustedDevices() {
         <div class="card">
           <div class="weight-600">Just this device</div>
           <p class="note small">
-            Sign in on a phone or tablet to add a trusted device. Browser
-            sessions like this webapp aren't trusted devices — they're
-            per-pod paired tokens, listed under "Browser sessions" instead.
+            Sign in on a phone or tablet to add a trusted device.
           </p>
         </div>
         ${renderDangerZone()}`;
