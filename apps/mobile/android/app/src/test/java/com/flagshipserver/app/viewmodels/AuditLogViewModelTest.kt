@@ -61,6 +61,8 @@ class AuditLogViewModelTest {
         assertEquals("Turned on authenticator codes", auditEventLabel("totp-enrolled"))
         assertEquals("Refused a device replacement", auditEventLabel("re-pair-refused-no-credential"))
         assertEquals("Someone was invited to an app", auditEventLabel("invite-created"))
+        assertEquals("Deleted account", auditEventLabel("account-deleted"))
+        assertEquals("Username reclaimed", auditEventLabel("username-reclaimed"))
         assertEquals("Started moving a server", auditEventLabel("server-migration-started"))
         assertEquals("Moved a server to a new machine / VM", auditEventLabel("server-migration-taken-over"))
         assertEquals("Cancelled a server move", auditEventLabel("server-migration-aborted"))
