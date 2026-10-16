@@ -51,13 +51,14 @@ export interface LoadedBlob {
    */
   swkHex?: string;
   /**
-   * Owner-authorized debug-access grant — the JSON string `{grant,signatureHex}`
-   * the phone signs behind Face ID when the user approves the builder's "Debug
-   * mode" toggle (the `flagship/debug-access/v1` envelope). NOT part of the
-   * signed InstallBlob — a top-level recipe sibling (like {@link pairingOrder} /
-   * {@link swkHex}). Threaded into install-blob.json via
-   * {@link UserDataOptions.debugGrant}; the box-side gate verifies it under the
-   * owner IRK before enabling the debug user/SSH. Undefined for production recipes.
+   * Owner debug access — the JSON string `{grant,signatureHex}` an admin
+   * device signs behind Face ID when the owner turns on "Debug-friendly
+   * server" (the `flagship/debug-access/v2` envelope: an SSH key and an end
+   * time). NOT part of the signed InstallBlob — a top-level recipe sibling
+   * (like {@link pairingOrder} / {@link swkHex}). Threaded into
+   * install-blob.json via {@link UserDataOptions.debugGrant}; the box verifies
+   * it under its pinned admin root before letting the key in. Undefined for
+   * production recipes.
    */
   debugGrant?: string;
   /** Where the blob came from — useful for the auto-shred step. */
@@ -76,27 +77,6 @@ export class BuilderLoadError extends Error {
   ) {
     super(message);
     this.name = "BuilderLoadError";
-  }
-}
-
-/**
- * Extract the OpenSSH authorized key to bake at install time from a recipe's
- * debug-access grant (the `{grant,signatureHex}` JSON string on {@link
- * LoadedBlob.debugGrant}). A grant with a NON-EMPTY `grant.sshAuthorizedKey` is
- * the owner's Face-ID-signed consent to bake that key (verified box-side against
- * the pinned owner IRK); we thread it into {@link UserDataOptions.debugSshAuthorizedKey}
- * so a debug-friendly VM/USB can be SSH-diagnosed pre-daemon. An empty key (the
- * common debug-console-only grant) ⇒ undefined ⇒ no debug SSH stub, and a
- * production recipe (no grant) ⇒ undefined ⇒ the normal provisioning bootstrap.
- */
-export function debugSshKeyFromGrant(debugGrant?: string): string | undefined {
-  if (!debugGrant) return undefined;
-  try {
-    const parsed = JSON.parse(debugGrant) as { grant?: { sshAuthorizedKey?: unknown } };
-    const key = parsed?.grant?.sshAuthorizedKey;
-    return typeof key === "string" && key.trim().length > 0 ? key : undefined;
-  } catch {
-    return undefined;
   }
 }
 

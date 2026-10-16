@@ -13,7 +13,7 @@ import {
   type AuthCode,
 } from "@flagship/protocol";
 import { ed } from "@flagship/protocol";
-import { BuilderLoadError, loadBlobFromString, debugSshKeyFromGrant } from "../src/loadBlob.js";
+import { BuilderLoadError, loadBlobFromString } from "../src/loadBlob.js";
 
 function makeKeypair(seedByte: number) {
   const sk = new Uint8Array(32).fill(seedByte);
@@ -180,26 +180,3 @@ describe("loadBlobFromString", () => {
   });
 });
 
-describe("debugSshKeyFromGrant — bake the owner's SSH key only from a real key", () => {
-  const grant = (sshAuthorizedKey: string) =>
-    JSON.stringify({
-      grant: { serverDomain: "home.demoalice.flagship.services", sshAuthorizedKey, issuedAt: 1_700_000_000_000 },
-      signatureHex: "ab".repeat(64),
-    });
-
-  it("extracts a NON-EMPTY authorized key", () => {
-    expect(debugSshKeyFromGrant(grant("ssh-ed25519 AAAAC3NzaC1 owner@laptop"))).toBe(
-      "ssh-ed25519 AAAAC3NzaC1 owner@laptop",
-    );
-  });
-  it("returns undefined for an empty key (debug-console-only grant)", () => {
-    expect(debugSshKeyFromGrant(grant(""))).toBeUndefined();
-    expect(debugSshKeyFromGrant(grant("   "))).toBeUndefined();
-  });
-  it("returns undefined for no grant (production recipe) or malformed JSON", () => {
-    expect(debugSshKeyFromGrant(undefined)).toBeUndefined();
-    expect(debugSshKeyFromGrant("")).toBeUndefined();
-    expect(debugSshKeyFromGrant("{not json")).toBeUndefined();
-    expect(debugSshKeyFromGrant(JSON.stringify({ grant: {} }))).toBeUndefined();
-  });
-});

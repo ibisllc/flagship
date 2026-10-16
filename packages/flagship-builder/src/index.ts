@@ -8,7 +8,6 @@ export {
   loadBlobFromFile,
   loadBlobFromStdin,
   loadBlobFromString,
-  debugSshKeyFromGrant,
   BuilderLoadError,
   type LoadedBlob,
 } from "./loadBlob.js";

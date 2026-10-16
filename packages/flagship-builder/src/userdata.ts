@@ -125,14 +125,14 @@ export interface UserDataOptions {
    */
   swkHex?: string;
   /**
-   * Owner-authorized debug-access grant (`flagship/debug-access/v1`) as the JSON
-   * string `{grant,signatureHex}` — the consent artifact the phone signs behind
-   * Face ID when the user approves the builder's "Debug mode" toggle. Embedded
-   * into install-blob.json as the UNSIGNED `debugGrant` sibling so the box-side
-   * gate (server-daemon `debugAccessGate`) can verify it under the config-pinned
-   * owner IRK before enabling the debug console user / SSH — no valid grant ⇒ a
-   * production image. NOT part of the signed InstallBlob; absent ⇒ byte-identical
-   * to before. Carried from the recipe via {@link LoadedBlob.debugGrant}.
+   * Owner debug access (`flagship/debug-access/v2`) as the JSON string
+   * `{grant,signatureHex}`: an SSH key and an end time, signed behind Face ID
+   * by an admin device. Embedded into install-blob.json as the UNSIGNED
+   * `debugGrant` sibling so the box (server-daemon `debugAccessGate`) can
+   * verify it under its pinned admin root before letting that key in as
+   * `debug` until the end time — no valid grant ⇒ a production image. NOT part
+   * of the signed InstallBlob; absent ⇒ byte-identical to before. Carried from
+   * the recipe via {@link LoadedBlob.debugGrant}.
    */
   debugGrant?: string;
 }
@@ -565,9 +565,10 @@ export function buildBootstrapScript(args: BootstrapTemplateArgs): string {
   if (args.debugSshAuthorizedKey) return buildBootstrapScriptDebug(args);
   // PRODUCTION ONLY: the bootstrap no longer bakes any console-login account or
   // banner. Debug access is 100% runtime + owner-grant-gated (the daemon's
-  // debugAccessGate creates + passwords its own `debug` user only on a verified
-  // owner-IRK `flagship/debug-access/v1` grant), so there is no inline backdoor
-  // to keep or strip — and the `flagship` admin ships with a LOCKED password.
+  // debugAccessGate lets an SSH key in as its own `debug` user only on a
+  // verified admin-signed `flagship/debug-access/v2` grant, until it ends), so
+  // there is no inline backdoor to keep or strip — and the `flagship` admin
+  // ships with a LOCKED password.
   return args.encryptRoot
     ? buildBootstrapScriptEncrypted(args)
     : buildBootstrapScriptPlain(args);

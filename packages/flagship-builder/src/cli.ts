@@ -32,7 +32,6 @@ import {
   runWriteImageCommand,
   remasterIsoWithInstaller,
   detectIsoFamily,
-  debugSshKeyFromGrant,
   buildBootstrapFromRecipe,
   buildInstallBlobJsonFromRecipe,
   applianceBaseFormat,
@@ -158,11 +157,10 @@ async function cmdUserData(rest: string[]): Promise<void> {
     pairingOrder: loaded.pairingOrder,
     swkHex: loaded.swkHex,
     debugGrant: loaded.debugGrant,
-    // The debug SSH key baked at install time (SSH-diagnosable pre-daemon). An
-    // explicit --debug-ssh-key[-file] (dev / e2e diagnosis) OVERRIDES the key
-    // carried in the owner-Face-ID-signed debug grant (the production path).
-    debugSshAuthorizedKey:
-      (await resolveDebugSshKey(rest)) ?? debugSshKeyFromGrant(loaded.debugGrant),
+    // Dev / e2e diagnosis only (--debug-ssh-key[-file]). The owner's debug
+    // grant never feeds this: its key is let in by the box itself, with an
+    // expiry, after the box verifies the grant.
+    debugSshAuthorizedKey: await resolveDebugSshKey(rest),
     // LUKS is the locked default. --plaintext-root is an undocumented debug
     // escape (bisect a boot failure against the proven unencrypted path).
     encryptRoot: !rest.includes("--plaintext-root"),
@@ -219,11 +217,10 @@ async function cmdPrepare(rest: string[]): Promise<void> {
     pairingOrder: loaded.pairingOrder,
     swkHex: loaded.swkHex,
     debugGrant: loaded.debugGrant,
-    // The debug SSH key baked at install time (SSH-diagnosable pre-daemon). An
-    // explicit --debug-ssh-key[-file] (dev / e2e diagnosis) OVERRIDES the key
-    // carried in the owner-Face-ID-signed debug grant (the production path).
-    debugSshAuthorizedKey:
-      (await resolveDebugSshKey(rest)) ?? debugSshKeyFromGrant(loaded.debugGrant),
+    // Dev / e2e diagnosis only (--debug-ssh-key[-file]). The owner's debug
+    // grant never feeds this: its key is let in by the box itself, with an
+    // expiry, after the box verifies the grant.
+    debugSshAuthorizedKey: await resolveDebugSshKey(rest),
     // LUKS is the locked default. --plaintext-root is an undocumented debug
     // escape (bisect a boot failure against the proven unencrypted path).
     encryptRoot: !rest.includes("--plaintext-root"),

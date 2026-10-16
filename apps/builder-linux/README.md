@@ -67,10 +67,11 @@ SSH (debug VMs only), Delete. Selecting a row opens its detail pane.
   SAS natively; the delivered recipe behaves exactly like a dropped-in file.
 - **Debug is consent-as-crypto.** SSH + the serial console exist IFF the recipe
   carries the phone-signed `debugGrant` sibling (mint with the pairing debug
-  toggle, or `flagship-build pair --debug`). The grant's `sshAuthorizedKey` is
-  baked by the shared CLI at remaster time (`debugSshKeyFromGrant`), so a
-  debug-friendly recipe yields an SSH-able first boot; a production VM gets NO
-  console device and NO forwarded port — there is no host-side override.
+  toggle, or `flagship-build pair --debug`). The grant names one SSH key and an
+  end time; the box itself lets that key in as `debug` once it has verified the
+  grant, until it ends (nothing bakes the key into the image, and there is no
+  password). A production VM gets NO console device and NO forwarded port —
+  there is no host-side override.
 - **"Open in SSH"** opens your terminal (`$TERMINAL`, else
   x-terminal-emulator / gnome-terminal / konsole / xterm) at
   `ssh -p <hostfwd-port> debug@127.0.0.1` — a local loopback forward into a VM
