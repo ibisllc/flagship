@@ -3,8 +3,10 @@
  *
  *  - Public: `GET /api/shares/nonce`, `POST /api/shares/session` (the other
  *    account signs in with its per-share key), `POST /api/shares/leave`, and
- *    over a share session `GET /api/shares/me` and `POST /api/shares/update`
- *    (a co-manager moves the box to an endorsed release, shareUpdate.ts).
+ *    over a share session `GET /api/shares/me`, `POST /api/shares/update`
+ *    (a co-manager moves the box to an endorsed release, shareUpdate.ts) and
+ *    `/api/shares/invites*` (a co-manager invites people at Member,
+ *    shareInvites.ts).
  *  - Owner (behind the paired-session gate): `GET/POST /api/screens/shares`,
  *    `POST /api/screens/shares/revoke`, `GET /api/screens/activity`.
  *  - `gate(paired)`: the screens gate. An owner session passes as before; a
@@ -39,6 +41,8 @@ import { isServerArchivePath } from "../serverArchive/service.js";
 import { shareRefusal, shareRouteNeed } from "./shareRoutes.js";
 import { hexBytes, type HeldShare, type ShareStore } from "./shareStore.js";
 import type { ShareUpdateOrder } from "./shareUpdate.js";
+import type { ShareInvites } from "./shareInvites.js";
+import type { ShareEnd } from "../accessJournal.js";
 
 export interface ShareCaller {
   shareId: string;
@@ -158,6 +162,8 @@ export interface SharesDeps {
   isCompanion?: (req: HttpRequest) => boolean;
   /** A co-manager's update order; absent where the box can't update itself. */
   serverUpdate?: ShareUpdateOrder | null;
+  /** A co-manager's invites to the apps (absent: the routes answer 503). */
+  invites?: ShareInvites | null;
   now?: () => number;
   log?: (m: string) => void;
 }
@@ -195,12 +201,19 @@ export function buildShares(deps: SharesDeps) {
     return held ? callerFrom(held) : null;
   }
 
-  async function endShare(shareId: string, reason: "revoked" | "left", actor: ActivityActor): Promise<boolean> {
+  /**
+   * End a share. `end` is its signed proof (the owner's revoke, the
+   * co-manager's leave): the apps the co-manager invited people to keep it in
+   * their journal, so their other servers stop taking those invites too.
+   */
+  async function endShare(shareId: string, reason: "revoked" | "left", actor: ActivityActor, end?: ShareEnd): Promise<boolean> {
+    const held = deps.store.get(shareId);
     const ended = await deps.store.end(shareId, reason);
     await deps.sessions.dropShare(shareId);
     if (ended) {
       deps.activity.record({ actor, action: reason === "left" ? "share.left" : "share.revoked", target: ended.label, ok: true });
       log(`[shares] ${shareId.slice(0, 8)} ${reason}`);
+      if (held && end) await deps.invites?.onShareChange({ grant: held.grant, signature: held.signature, end }).catch(() => {});
     }
     return ended !== null;
   }
@@ -254,8 +267,16 @@ export function buildShares(deps: SharesDeps) {
       const held = deps.store.get(l.shareId);
       if (!held) return json(200, { ok: true, alreadyEnded: true });
       if (held.grant.memberPubHex !== l.memberPubHex) return err(403, "not this share's key");
-      await endShare(l.shareId, "left", actorOf(callerFrom(held)));
+      await endShare(l.shareId, "left", actorOf(callerFrom(held)), { kind: "leave", leave: { ...l }, signature: String(b!.signature).toLowerCase() });
       return json(200, { ok: true });
+    }
+
+    if (path === "/api/shares/invites" || path === "/api/shares/invites/withdraw") {
+      const c = resolve(req);
+      if (!c) return err(401, "share session ended or expired", { code: "share-session" });
+      if (!deps.invites) return err(503, "This server can't take invites yet.", { code: "no-invites" });
+      const r = await deps.invites.handle(c, req);
+      if (r) return r;
     }
 
     if (path === "/api/shares/update" && method === "POST") {
@@ -328,6 +349,8 @@ export function buildShares(deps: SharesDeps) {
         target: grant.label,
         ok: true,
       });
+      // A level change reaches the other servers of every app this share invited people to.
+      if (!r.created) await deps.invites?.onShareChange({ grant: r.share.grant, signature: r.share.signature }).catch(() => {});
       return json(200, { ok: true, created: r.created, share: { shareId: grant.shareId, level: grant.level } });
     }
     if (path === "/api/screens/shares/revoke" && method === "POST") {
@@ -338,7 +361,11 @@ export function buildShares(deps: SharesDeps) {
       if (!r || !sig || sig.length !== 64) return err(400, "malformed revoke");
       if (r.serverDomain !== deps.serverDomain) return err(403, "revoke is for a different server");
       if (!deps.verifyOwnerRevoke(r, sig)) return err(403, "invalid signature");
-      const ended = await endShare(r.shareId, "revoked", { kind: "owner" });
+      const ended = await endShare(r.shareId, "revoked", { kind: "owner" }, {
+        kind: "revoke",
+        revoke: { ...r },
+        signature: String(b!.signature).toLowerCase(),
+      });
       return json(200, { ok: true, ...(ended ? {} : { alreadyEnded: true }) });
     }
     return null;
@@ -430,14 +457,16 @@ export async function pollShareEndsOnce(d: ShareEndsPollerDeps): Promise<number>
     if (e.kind === "revoke") {
       const r = parseServerShareRevoke(e.revoke);
       if (!r || r.serverDomain !== d.serverDomain || !d.verifyOwnerRevoke(r, sig)) continue;
-      if (await d.shares.endShare(r.shareId, "revoked", { kind: "owner" })) ended++;
+      const proof: ShareEnd = { kind: "revoke", revoke: { ...r }, signature: String(e.signature).toLowerCase() };
+      if (await d.shares.endShare(r.shareId, "revoked", { kind: "owner" }, proof)) ended++;
     } else if (e.kind === "leave") {
       const l = parseServerShareLeave(e.leave);
       if (!l || l.serverDomain !== d.serverDomain) continue;
       const held = d.store.get(l.shareId);
       if (!held || held.grant.memberPubHex !== l.memberPubHex) continue;
       if (!verifyServerShareLeave(l, sig, hexBytes(l.memberPubHex)!)) continue;
-      if (await d.shares.endShare(l.shareId, "left", { kind: "share", shareId: l.shareId, label: held.grant.label })) ended++;
+      const proof: ShareEnd = { kind: "leave", leave: { ...l }, signature: String(e.signature).toLowerCase() };
+      if (await d.shares.endShare(l.shareId, "left", { kind: "share", shareId: l.shareId, label: held.grant.label }, proof)) ended++;
     }
   }
   await d.store.setCursor(cursor);

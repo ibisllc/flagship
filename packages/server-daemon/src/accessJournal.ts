@@ -11,7 +11,8 @@
  * which entries arrive doesn't matter.
  *
  * One entry is kept per key: the newest order for a target, the first join of
- * a person through an invite, the first withdraw of an invite.
+ * a person through an invite, the first withdraw of an invite, and per share
+ * whose co-manager invited people to the app the newest grant, or its end.
  */
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -35,7 +36,26 @@ export type AccessEntry =
       accept: { inviteId: string; serviceRef: string; contactAID: string; acceptedAt: number };
       acceptSig: string;
     }
-  | { kind: "withdraw"; revoke: { inviteId: string; issuedAt: number }; signature: string };
+  | { kind: "withdraw"; revoke: { inviteId: string; issuedAt: number }; signature: string }
+  /**
+   * A co-manager who invited people to the app (docs/service-access-gating.md
+   * "Co-manager invites"): the owner's signed share grant
+   * (`flagship/server-share/v1`, its level), and once the share ended the
+   * owner's signed revoke or the co-manager's signed leave. Lets the app's
+   * other servers, which don't hold the share, check the inviter is still a
+   * co-manager at "Can manage".
+   */
+  | {
+      kind: "share";
+      grant: Record<string, unknown>;
+      signature: string;
+      end?: ShareEnd;
+    };
+
+/** How a share ended, with its proof. */
+export type ShareEnd =
+  | { kind: "revoke"; revoke: Record<string, unknown>; signature: string }
+  | { kind: "leave"; leave: Record<string, unknown>; signature: string };
 
 /** Which entry an entry supersedes (one per key) and how it orders against it. */
 export function entryKey(e: AccessEntry): string {
@@ -52,6 +72,8 @@ export function entryKey(e: AccessEntry): string {
       return `join:${e.accept.inviteId}/${e.accept.contactAID.toLowerCase()}`;
     case "withdraw":
       return `withdraw:${e.revoke.inviteId}`;
+    case "share":
+      return `share:${String(e.grant.shareId)}`;
   }
 }
 
@@ -68,11 +90,23 @@ function entryTime(e: AccessEntry): number {
       return e.accept.acceptedAt;
     case "withdraw":
       return e.revoke.issuedAt;
+    case "share":
+      return Number(e.grant.issuedAt);
   }
 }
 
 function latestWins(e: AccessEntry): boolean {
   return e.kind === "rank" || e.kind === "mode" || e.kind === "remove";
+}
+
+/** Whether `e` replaces `prev` under the same key. A share's end is final; otherwise the newer grant. */
+function supersedes(e: AccessEntry, prev: AccessEntry): boolean {
+  if (e.kind === "share" && prev.kind === "share") {
+    if (prev.end) return false;
+    if (e.end) return true;
+    return entryTime(e) > entryTime(prev);
+  }
+  return latestWins(e) && entryTime(e) > entryTime(prev);
 }
 
 export function entryHash(e: AccessEntry): string {
@@ -112,6 +146,16 @@ export function parseEntry(v: unknown): AccessEntry | null {
     case "withdraw": {
       const rv = r.revoke as Record<string, unknown> | undefined;
       if (!obj(rv) || typeof rv.inviteId !== "string" || typeof rv.issuedAt !== "number" || !sig(r.signature)) return null;
+      return r as unknown as AccessEntry;
+    }
+    case "share": {
+      const g = r.grant as Record<string, unknown> | undefined;
+      if (!obj(g) || !sig(r.signature) || typeof g.shareId !== "string" || typeof g.issuedAt !== "number") return null;
+      if (r.end !== undefined) {
+        const end = r.end as Record<string, unknown>;
+        if (!obj(end) || !sig(end.signature)) return null;
+        if (!(end.kind === "revoke" && obj(end.revoke)) && !(end.kind === "leave" && obj(end.leave))) return null;
+      }
       return r as unknown as AccessEntry;
     }
     default:
@@ -182,7 +226,7 @@ export class AccessJournal {
     const prev = j.entries[key];
     if (prev) {
       if (entryHash(prev) === entryHash(e)) return false;
-      if (!latestWins(e) || entryTime(e) <= entryTime(prev)) return false;
+      if (!supersedes(e, prev)) return false;
     } else if (Object.keys(j.entries).length >= JOURNAL_CAP) {
       return false;
     }

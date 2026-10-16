@@ -56,6 +56,12 @@ import {
   verifyRevokeServiceInvite,
   verifyServiceAccessModeV2,
   verifyServiceAllowRemoveV2,
+  parseServerShareGrant,
+  parseServerShareLeave,
+  parseServerShareRevoke,
+  verifyServerShareGrant,
+  verifyServerShareLeave,
+  verifyServerShareRevoke,
   type AdminGrantView,
   type AppMemberRoleTarget,
   type RevokeServiceInvite,
@@ -134,10 +140,43 @@ export interface MemberRoles {
    * a withdrawn link lets nobody new in, whichever server they join on.
    */
   withdrawn: Record<string, string>;
+  /**
+   * shareId → what this box verified about a co-manager who invited people to
+   * the app (docs/service-access-gating.md "Co-manager invites"): the owner's
+   * newest share grant (its key, level and label) or that the share ended,
+   * from a `share` journal entry. The app's other servers, which don't hold
+   * the share, check a co-manager's invites against it.
+   */
+  coManagers: Record<string, CoManagerRecord>;
 }
 
-/** Who signed an invite's create (docs/service-access-gating.md "Account members"). */
-export type InviteTier = "admin" | "member";
+/** A co-manager as an app's journal knows them (the box that holds the share uses its share store). */
+export interface CoManagerRecord {
+  pub: string;
+  level: "view" | "manage";
+  label: string;
+  /** The server the share is for. */
+  serverDomain: string;
+  /** The grant's issuedAt. */
+  issuedAt: number;
+  ended: boolean;
+}
+
+/**
+ * Who signed an invite's create (docs/service-access-gating.md "Account
+ * members"): an admin, a non-admin device of the account (`member`), or a
+ * co-manager's per-share member key (`co-manager`). The last two let people
+ * in at Member only, and only while their creator may still invite there.
+ */
+export type InviteTier = "admin" | "member" | "co-manager";
+
+/** A tier whose joins are capped at Member (and sticky once seen). */
+export function cappedTier(t: string | undefined | null): boolean {
+  return t === "member" || t === "co-manager";
+}
+
+/** Why a co-manager can't invite to an app now (the box's reason; clients word it). */
+export type CoManagerInviteRefusal = "not-shared" | "view-only" | "demoted" | "refused" | "catching-up";
 
 /** An admin override of an account device or co-manager in one app. */
 export type AccountRank = MemberRole | "refused";
@@ -175,7 +214,26 @@ function higher(a: MemberRole | null, b: MemberRole | null): MemberRole | null {
 }
 
 function emptyRoles(): MemberRoles {
-  return { aids: {}, invites: {}, grants: {}, seq: {}, tiers: {}, creators: {}, ranks: {}, withdrawn: {} };
+  return { aids: {}, invites: {}, grants: {}, seq: {}, tiers: {}, creators: {}, ranks: {}, withdrawn: {}, coManagers: {} };
+}
+
+function readCoManagers(v: unknown, into: Record<string, CoManagerRecord>): void {
+  if (!v || typeof v !== "object") return;
+  for (const [id, r] of Object.entries(v as Record<string, unknown>)) {
+    if (!/^[0-9a-f]{32}$/.test(id) || !r || typeof r !== "object") continue;
+    const o = r as Record<string, unknown>;
+    if (typeof o.pub !== "string" || !/^[0-9a-f]{64}$/.test(o.pub)) continue;
+    if (o.level !== "view" && o.level !== "manage") continue;
+    if (typeof o.serverDomain !== "string" || typeof o.issuedAt !== "number") continue;
+    into[id] = {
+      pub: o.pub,
+      level: o.level,
+      label: typeof o.label === "string" ? o.label : "",
+      serverDomain: o.serverDomain,
+      issuedAt: o.issuedAt,
+      ended: o.ended === true,
+    };
+  }
 }
 
 function readRoles(v: unknown): MemberRoles {
@@ -193,6 +251,7 @@ function readRoles(v: unknown): MemberRoles {
   strMap(r.creators, out.creators);
   strMap(r.ranks, out.ranks);
   strMap(r.withdrawn, out.withdrawn);
+  readCoManagers(r.coManagers, out.coManagers);
   for (const [k, v] of Object.entries(out.creators)) if (!/^[0-9a-f]{64}$/.test(v)) delete out.creators[k];
   for (const [k, v] of Object.entries(out.withdrawn)) if (!/^\d+:[0-9a-f]{128}$/.test(v)) delete out.withdrawn[k];
   for (const [k, v] of Object.entries(out.ranks)) {
@@ -214,6 +273,7 @@ function copyRoles(r: MemberRoles): MemberRoles {
     creators: { ...r.creators },
     ranks: { ...r.ranks },
     withdrawn: { ...r.withdrawn },
+    coManagers: Object.fromEntries(Object.entries(r.coManagers).map(([k, v]) => [k, { ...v }])),
   };
 }
 
@@ -284,6 +344,11 @@ export class ServiceAccessStore {
        * carries). Read once when `statePath` doesn't exist yet, then moved.
        */
       legacyPath?: string;
+      /**
+       * This box's FQDN: a co-manager of this server is checked against the
+       * share store (the principals), never against a journal record of it.
+       */
+      serverDomain?: string;
     } = {},
   ) {
     this.statePath = statePath;
@@ -294,7 +359,10 @@ export class ServiceAccessStore {
     this.onCorrupt = opts.onCorrupt;
     this.ownerAidHex = opts.ownerAidHex?.toLowerCase() ?? null;
     this.principals = opts.principals ?? null;
+    this.selfDomain = opts.serverDomain?.toLowerCase() ?? null;
   }
+
+  private readonly selfDomain: string | null;
 
   /** Wire (or replace) who-is-who on this box. */
   setPrincipals(p: PrincipalResolver): void {
@@ -727,7 +795,7 @@ export class ServiceAccessStore {
   async setInviteTier(serviceRef: string, inviteId: string, tier: InviteTier): Promise<void> {
     const e = this.entry(serviceRef);
     const was = e.roles.tiers[inviteId];
-    if (was === tier || was === "member") return;
+    if (was === tier || cappedTier(was)) return;
     e.roles.tiers[inviteId] = tier;
     await this.persist();
   }
@@ -735,7 +803,7 @@ export class ServiceAccessStore {
   /** Who signed an invite's create, as the box verified it (null: recorded before tiers). */
   inviteTier(serviceRef: string, inviteId: string): InviteTier | null {
     const t = this.byService.get(serviceRef)?.roles.tiers[inviteId];
-    return t === "admin" || t === "member" ? t : null;
+    return t === "admin" || t === "member" || t === "co-manager" ? t : null;
   }
 
   /** Record the key that signed an invite's create (first one wins). */
@@ -757,7 +825,7 @@ export class ServiceAccessStore {
    * (the default may be `master`, and old `admin` maps to master too).
    */
   private unsetRank(e: ServiceAccessEntry | undefined, inviteId: string, defaultRole: string): MemberRole {
-    if (e?.roles.tiers[inviteId] === "member") return "member";
+    if (cappedTier(e?.roles.tiers[inviteId])) return "member";
     return ladderRole(defaultRole) ?? "member";
   }
 
@@ -792,7 +860,7 @@ export class ServiceAccessStore {
       const set = ladderRole(e.roles.grants[`${id}/${aid}`]) ?? ladderRole(e.roles.invites[id]);
       // A member invite's join counts as set (at Member), so the app's
       // default never stands in for it.
-      if (set !== null || e.roles.tiers[id] === "member") anySet = true;
+      if (set !== null || cappedTier(e.roles.tiers[id])) anySet = true;
       best = higher(best, set ?? this.unsetRank(e, id, defaultRole));
     }
     return anySet ? best : null;
@@ -834,6 +902,80 @@ export class ServiceAccessStore {
     else e.roles.grants[`${target.inviteId}/${target.aid}`] = role;
     await this.persist();
     return "ok";
+  }
+
+  /**
+   * Keep what a verified `share` journal entry says about a co-manager of the
+   * app: the newer grant replaces an older one; an end is final.
+   */
+  async noteCoManager(serviceRef: string, shareId: string, rec: CoManagerRecord): Promise<"applied" | "unchanged" | "stale"> {
+    const e = this.entry(serviceRef);
+    const prev = e.roles.coManagers[shareId];
+    if (prev) {
+      if (prev.ended) return rec.ended ? "unchanged" : "stale";
+      if (prev.pub !== rec.pub) return "stale";
+      if (!rec.ended && rec.issuedAt <= prev.issuedAt) return rec.issuedAt === prev.issuedAt ? "unchanged" : "stale";
+    }
+    e.roles.coManagers[shareId] = { ...rec, pub: rec.pub.toLowerCase(), serverDomain: rec.serverDomain.toLowerCase() };
+    await this.persist();
+    return "applied";
+  }
+
+  /** The journal's record of the co-manager holding `pubHex` in an app, or null. */
+  coManagerRecord(serviceRef: string, pubHex: string): (CoManagerRecord & { shareId: string }) | null {
+    const pub = pubHex.toLowerCase();
+    const all = this.byService.get(serviceRef)?.roles.coManagers ?? {};
+    for (const [shareId, r] of Object.entries(all)) if (r.pub === pub) return { ...r, shareId };
+    return null;
+  }
+
+  /**
+   * The co-managers an app knows of that may sign its invites' creates: this
+   * server's own (the share store) and, from the journal, other servers'
+   * whose share hasn't ended.
+   */
+  coManagerKeys(serviceRef: string): { pub: string; shareId: string; label: string }[] {
+    const out = new Map<string, { pub: string; shareId: string; label: string }>();
+    for (const p of this.principals?.coManagers() ?? []) out.set(p.pub, { pub: p.pub, shareId: p.shareId, label: p.label });
+    for (const [shareId, r] of Object.entries(this.byService.get(serviceRef)?.roles.coManagers ?? {})) {
+      if (r.ended || r.serverDomain === this.selfDomain || out.has(r.pub)) continue;
+      out.set(r.pub, { pub: r.pub, shareId, label: r.label });
+    }
+    return [...out.values()];
+  }
+
+  /**
+   * Whether the co-manager behind `pubHex` may invite people to an app right
+   * now (at Member), or why not: their share must still stand at "Can manage"
+   * and no admin order may have demoted them below Manager or refused them
+   * there (docs/service-access-gating.md "Co-manager invites"). The box
+   * holding the share asks its share store; the app's other servers the
+   * journal's record of it.
+   */
+  coManagerInviteStanding(
+    serviceRef: string,
+    pubHex: string,
+  ): { ok: true; shareId: string; label: string } | { ok: false; why: CoManagerInviteRefusal } {
+    const pub = pubHex.toLowerCase();
+    const p = this.principal(pub);
+    let shareId: string;
+    let level: "view" | "manage";
+    let label: string;
+    if (p?.kind === "co-manager") {
+      ({ shareId, level, label } = p);
+    } else if (p) {
+      return { ok: false, why: "not-shared" };
+    } else {
+      const rec = this.coManagerRecord(serviceRef, pub);
+      if (!rec || rec.ended || rec.serverDomain === this.selfDomain) return { ok: false, why: "not-shared" };
+      ({ shareId, level, label } = rec);
+    }
+    if (level !== "manage") return { ok: false, why: "view-only" };
+    if (this.catchingUp.has(serviceRef)) return { ok: false, why: "catching-up" };
+    const set = accountRank(this.byService.get(serviceRef)?.roles.ranks[`share:${shareId}`]);
+    if (set === "refused") return { ok: false, why: "refused" };
+    if (set === "member") return { ok: false, why: "demoted" };
+    return { ok: true, shareId, label };
   }
 
   /** Apply a verified override of an account device (`device:<pub>`) or co-manager (`share:<id>`). */
@@ -1870,6 +2012,9 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
       if (opts.ownerAidPub) candidates.push({ pub: bytesToHex(opts.ownerAidPub), tier: "admin" });
       candidates.push({ pub: bytesToHex(opts.ownerIrkPub), tier: "admin" });
     }
+    // A co-manager's per-share member key (this server's shares, and other
+    // servers' from the app's journal): Member only (docs "Co-manager invites").
+    for (const k of opts.store.coManagerKeys(c.serviceRef)) candidates.push({ pub: k.pub, tier: "co-manager" });
     if (hint) candidates.sort((a, b) => (a.pub === hint ? -1 : b.pub === hint ? 1 : 0));
     const hit = candidates.find((k) => verifyCreateServiceInvite(create, sig, hexToBytes(k.pub)));
     if (!hit) return null;
@@ -1925,10 +2070,55 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
     }
   }
 
+  /**
+   * A `share` entry: the owner's grant verified under the admin-only key, and
+   * its end (the owner's revoke under that key, or the co-manager's leave
+   * under the grant's member key) when there is one.
+   */
+  function verifiedShare(e: Extract<AccessEntry, { kind: "share" }>): { shareId: string; rec: CoManagerRecord } | null {
+    const g = parseServerShareGrant(e.grant);
+    if (!g) return null;
+    let sig: Uint8Array;
+    try {
+      sig = hexToBytes(e.signature);
+    } catch {
+      return null;
+    }
+    if (!adminSigned(g, sig, verifyServerShareGrant)) return null;
+    let ended = false;
+    if (e.end) {
+      let endSig: Uint8Array;
+      try {
+        endSig = hexToBytes(e.end.signature);
+      } catch {
+        return null;
+      }
+      if (e.end.kind === "revoke") {
+        const r = parseServerShareRevoke(e.end.revoke);
+        if (!r || r.shareId !== g.shareId || r.serverDomain !== g.serverDomain) return null;
+        if (!adminSigned(r, endSig, verifyServerShareRevoke)) return null;
+      } else {
+        const l = parseServerShareLeave(e.end.leave);
+        if (!l || l.shareId !== g.shareId || l.serverDomain !== g.serverDomain || l.memberPubHex !== g.memberPubHex) return null;
+        if (!verifyServerShareLeave(l, endSig, hexToBytes(g.memberPubHex))) return null;
+      }
+      ended = true;
+    }
+    return {
+      shareId: g.shareId,
+      rec: { pub: g.memberPubHex, level: g.level, label: g.label, serverDomain: g.serverDomain, issuedAt: g.issuedAt, ended },
+    };
+  }
+
   async function applyEntry(serviceRef: string, e: AccessEntry): Promise<EntryResult> {
     switch (e.kind) {
       case "rank":
         return "skipped";
+      case "share": {
+        const v = verifiedShare(e);
+        if (!v || !opts.serviceInstalled(serviceRef)) return "refused";
+        return opts.store.noteCoManager(serviceRef, v.shareId, v.rec);
+      }
       case "mode": {
         const o = parseServiceAccessModeV2(e.order);
         if (!o || o.serviceRef !== serviceRef || !opts.serviceInstalled(serviceRef)) return "refused";
@@ -2020,8 +2210,12 @@ export function buildServiceAccessHttp(opts: ServiceAccessHttpOptions): ServiceA
    * stop working; whoever already joined stays). Null when the join may go on.
    */
   function creatorRefusal(v: { serviceRef: string; inviteId: string; tier: InviteTier; creatorPub: string }): HttpResponse | null {
-    if (v.tier !== "member") return null;
+    if (v.tier === "admin") return null;
     const recorded = opts.store.inviteCreator(v.serviceRef, v.inviteId) ?? v.creatorPub;
+    if (v.tier === "co-manager") {
+      if (opts.store.coManagerInviteStanding(v.serviceRef, recorded).ok) return null;
+      return bad(403, "the person who sent this invite can no longer invite people to this app: ask for a new link");
+    }
     const p = opts.store.principal(recorded);
     if (p && isManagerClass(opts.store.accountRank(v.serviceRef, p))) return null;
     return bad(403, "the device that sent this invite can no longer invite people to this app: ask for a new link");
@@ -2066,7 +2260,10 @@ export const ADMIN_ORDER_MAX_SKEW_MS = 10 * 60_000;
  * be pruned.
  */
 export function buildInviteWithdrawVerifier(opts: {
-  store: Pick<ServiceAccessStore, "servicesWithInvite" | "inviteCreator" | "inviteTier" | "principal" | "accountRank">;
+  store: Pick<
+    ServiceAccessStore,
+    "servicesWithInvite" | "inviteCreator" | "inviteTier" | "principal" | "accountRank" | "coManagerInviteStanding"
+  >;
   adminSigned: (r: RevokeServiceInvite, sig: Uint8Array) => boolean;
 }): (r: RevokeServiceInvite, sig: Uint8Array) => string[] {
   return (r, sig) => {
@@ -2074,7 +2271,8 @@ export function buildInviteWithdrawVerifier(opts: {
     if (refs.length === 0) return [];
     if (opts.adminSigned(r, sig)) return refs;
     return refs.filter((ref) => {
-      if (opts.store.inviteTier(ref, r.inviteId) !== "member") return false;
+      const tier = opts.store.inviteTier(ref, r.inviteId);
+      if (tier !== "member" && tier !== "co-manager") return false;
       const creator = opts.store.inviteCreator(ref, r.inviteId);
       if (!creator) return false;
       let ok = false;
@@ -2084,6 +2282,7 @@ export function buildInviteWithdrawVerifier(opts: {
         ok = false;
       }
       if (!ok) return false;
+      if (tier === "co-manager") return opts.store.coManagerInviteStanding(ref, creator).ok;
       const p = opts.store.principal(creator);
       return p !== null && isManagerClass(opts.store.accountRank(ref, p));
     });

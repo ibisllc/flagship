@@ -30,9 +30,12 @@ import {
 
 export type DeviceTier = "admin" | "member";
 
+/** A share's level (docs/share-a-server.md §1): only "manage" may invite. */
+export type ShareLevel = "view" | "manage";
+
 export type Principal =
   | { kind: "device"; pub: string; deviceId: string | null; tier: DeviceTier; legacy: boolean }
-  | { kind: "co-manager"; pub: string; shareId: string; label: string };
+  | { kind: "co-manager"; pub: string; shareId: string; label: string; level: ShareLevel };
 
 /** What the access store asks about a signing key. */
 export interface PrincipalResolver {
@@ -209,6 +212,7 @@ export interface ShareView {
   shareId: string;
   memberPubHex: string;
   label: string;
+  level: ShareLevel;
 }
 
 /**
@@ -226,7 +230,7 @@ export class AccessPrincipals implements PrincipalResolver {
     const d = this.book?.classify(pub);
     if (d) return d;
     const s = this.shares?.().find((x) => x.memberPubHex.toLowerCase() === pub);
-    if (s) return { kind: "co-manager", pub, shareId: s.shareId, label: s.label };
+    if (s) return { kind: "co-manager", pub, shareId: s.shareId, label: s.label, level: s.level };
     if (!this.book && this.ownerAid && pub === this.ownerAid) {
       return { kind: "device", pub, deviceId: null, tier: "admin", legacy: true };
     }
@@ -248,6 +252,7 @@ export class AccessPrincipals implements PrincipalResolver {
       pub: s.memberPubHex.toLowerCase(),
       shareId: s.shareId,
       label: s.label,
+      level: s.level,
     }));
   }
 

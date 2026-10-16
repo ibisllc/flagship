@@ -142,7 +142,7 @@ async function box(opts: { pinned?: boolean; defaultRole?: string; grants?: Reco
   await book.refresh();
   const principals = new AccessPrincipals(hex(ownerAid.publicKey));
   principals.book = book;
-  principals.shares = () => [{ shareId: SHARE_ID, memberPubHex: hex(coManager.publicKey), label: "Sam" }];
+  principals.shares = () => [{ shareId: SHARE_ID, memberPubHex: hex(coManager.publicKey), label: "Sam", level: "manage" as const }];
   const store = new ServiceAccessStore(join(dir, "data/flagship-access/service-access.json"), {
     ownerAidHex: hex(ownerAid.publicKey),
     principals,
@@ -404,7 +404,7 @@ describe("admin orders override the defaults (demotion works)", () => {
       ]),
     );
     expect(l.invites).toEqual([
-      { inviteId, role: "member", set: false, tier: "member", creatorPub: hex(tablet.publicKey), creatorDeviceId: TABLET_ID },
+      { inviteId, role: "member", set: false, tier: "member", creatorPub: hex(tablet.publicKey), creatorDeviceId: TABLET_ID, creatorShareId: null, creatorLabel: null },
     ]);
     expect(JSON.stringify(l)).not.toContain('"owner"');
   });

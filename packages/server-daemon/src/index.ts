@@ -184,6 +184,7 @@ import { DbWriteLedger, buildOwnerDbHttp } from "./dataLayer/ownerDb.js";
 import { ActivityLog, defaultActivityLogPath } from "./shares/activityLog.js";
 import { ShareStore, defaultShareStorePath } from "./shares/shareStore.js";
 import { buildShareUpdate } from "./shares/shareUpdate.js";
+import { ShareInviteStore, buildShareInvites, defaultShareInviteStorePath } from "./shares/shareInvites.js";
 import {
   ShareSessionStore,
   buildShares,
@@ -2953,7 +2954,7 @@ async function wireRuntimeSurfaces(deps: {
     if (dropped > 0) console.warn(`[shares] dropped ${dropped} share(s) that no longer verify`);
     // A co-manager's devices are Manager in every app by default.
     deps.accessPrincipals.shares = () =>
-      store.list().map((h) => ({ shareId: h.grant.shareId, memberPubHex: h.grant.memberPubHex, label: h.grant.label }));
+      store.list().map((h) => ({ shareId: h.grant.shareId, memberPubHex: h.grant.memberPubHex, label: h.grant.label, level: h.grant.level }));
     const sessions = new ShareSessionStore(defaultShareSessionPath(dataDir));
     await sessions.load();
     const activity = deps.activityLog;
@@ -2998,6 +2999,24 @@ async function wireRuntimeSurfaces(deps: {
           });
         })()
       : null;
+    // A co-manager's invites to the apps (shares/shareInvites.ts).
+    const inviteStore = new ShareInviteStore(defaultShareInviteStorePath(dataDir));
+    await inviteStore.load();
+    const invites = env.controlPlaneBaseUrl
+      ? buildShareInvites({
+          serverDomain: env.serverFqdn,
+          username: cfg.userId,
+          ownerAidHex: cfg.ownerAidPub ? bytesToHexStr(cfg.ownerAidPub) : null,
+          controlPlaneBaseUrl: env.controlPlaneBaseUrl,
+          stk: identityKeypair,
+          store: inviteStore,
+          access: () => deps.serviceAccessRef.current,
+          installed: (ref) => (runtime.servicePlatform?.list() ?? []).some((a) => a.serviceId === ref),
+          record: (ref, e) => deps.accessSyncRef.current?.record(ref, e),
+          activity,
+          log: (m) => console.log(m),
+        })
+      : null;
     const shares = buildShares({
       serverDomain: env.serverFqdn,
       store,
@@ -3006,6 +3025,7 @@ async function wireRuntimeSurfaces(deps: {
       verifyOwnerRevoke,
       isCompanion: (req) => pairedSessions.isCompanionRequest(req),
       serverUpdate,
+      invites,
     });
     runtime.addHandler(shares.handlePublic);
     if (env.controlPlaneBaseUrl) {
@@ -3422,6 +3442,7 @@ async function wireOwnerHandlers(deps: {
   const accessStore = new ServiceAccessStore(`${accessDataDir}/data/flagship-access/service-access.json`, {
     legacyPath: "/var/flagship/service-access.json",
     principals: deps.accessPrincipals,
+    serverDomain: env.serverFqdn,
     ...(cfg.ownerAidPub ? { ownerAidHex: bytesToHexStr(cfg.ownerAidPub) } : {}),
     onCorrupt: ({ error }) =>
       console.error(

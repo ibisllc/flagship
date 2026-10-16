@@ -202,9 +202,11 @@ export function buildAccessSync(opts: AccessSyncOptions): AccessSync {
   /** Apply what a peer handed over; returns the entries new to this box. */
   async function take(ref: string, raw: unknown[]): Promise<AccessEntry[]> {
     const fresh: AccessEntry[] = [];
-    for (const v of raw) {
-      const e = parseEntry(v);
-      if (!e) continue;
+    // A co-manager's share record first, so the joins through their invites
+    // in the same batch find it.
+    const parsed = raw.map(parseEntry).filter((e): e is AccessEntry => e !== null);
+    parsed.sort((a, b) => Number(b.kind === "share") - Number(a.kind === "share"));
+    for (const e of parsed) {
       let r: EntryResult;
       try {
         r = await opts.apply(ref, e);

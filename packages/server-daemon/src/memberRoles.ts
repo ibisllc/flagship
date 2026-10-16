@@ -8,7 +8,8 @@
  *            accountMembers:[{kind:"device", deviceId, devicePub, tier, rank, set, refused}
  *                           |{kind:"co-manager", shareId, label, rank, set, refused}],
  *            members:[{aid, role, grants:[{inviteId, role, tier}], direct}],
- *            invites:[{inviteId, role, set, tier, creatorPub, creatorDeviceId}] }
+ *            invites:[{inviteId, role, set, tier, creatorPub, creatorDeviceId,
+ *                      creatorShareId, creatorLabel}] }
  *   POST /api/screens/services/:id/members/rank   { order, signature }   (flagship/app-rank/v1)
  *
  * Account members are the devices of the account that owns the box (from the
@@ -102,6 +103,7 @@ export interface MemberRolesHttpOptions extends SensitiveAuthority {
     | "accountPeople"
     | "accountRank"
     | "rankOverride"
+    | "coManagerRecord"
   >;
   /** The admin devices' grants from the device book (admin-only orders). */
   adminGrants?: () => readonly AdminGrantView[];
@@ -121,7 +123,9 @@ export interface MemberRolesHttpOptions extends SensitiveAuthority {
 export function buildRankEntryApplier(
   opts: Omit<MemberRolesHttpOptions, "serverDomain" | "onEntry">,
 ): (serviceRef: string, entry: AccessEntry) => Promise<EntryResult> {
-  const core = rankCore(opts);
+  // A share target from another server: that server holds the share, this
+  // one may not (the order is admin-signed and per app, so it holds anyway).
+  const core = rankCore(opts, { anyShare: true });
   return async (serviceRef, entry) => {
     if (entry.kind !== "rank") return "skipped";
     const order = parseAppRankOrder(entry.order);
@@ -139,7 +143,7 @@ export function buildRankEntryApplier(
   };
 }
 
-function rankCore(opts: Omit<MemberRolesHttpOptions, "serverDomain" | "onEntry">) {
+function rankCore(opts: Omit<MemberRolesHttpOptions, "serverDomain" | "onEntry">, flags: { anyShare?: boolean } = {}) {
   const now = opts.now ?? (() => Date.now());
   function adminSigned<T>(order: T, sig: Uint8Array, verify: (o: T, s: Uint8Array, p: Uint8Array) => boolean): boolean {
     return authorizeSensitiveOrder({
@@ -179,13 +183,20 @@ function rankCore(opts: Omit<MemberRolesHttpOptions, "serverDomain" | "onEntry">
     return null;
   }
 
+  /** A co-manager of this server, or one the app's journal knows invited people to it. */
+  function knownShare(serviceId: string, shareId: string): boolean {
+    if (opts.store.accountPeople().some((x) => x.kind === "co-manager" && x.shareId === shareId)) return true;
+    const rec = opts.store.roles(serviceId).coManagers[shareId];
+    return !!rec && !rec.ended;
+  }
+
   /** Apply a verified app-rank order; null when applied. */
   async function applyRank(serviceId: string, order: { target: string; rank: string; issuedAt: number }): Promise<HttpResponse | null> {
     const target = parseAppRankTarget(order.target)!;
     if (target.kind === "device" || target.kind === "share") {
       const p = target.kind === "device" ? opts.store.principal(target.pub) : null;
       if (target.kind === "device" && p?.kind !== "device") return err(422, "not a device of this account");
-      if (target.kind === "share" && !opts.store.accountPeople().some((x) => x.kind === "co-manager" && x.shareId === target.shareId)) {
+      if (target.kind === "share" && !flags.anyShare && !knownShare(serviceId, target.shareId)) {
         return err(422, "not an account that co-manages this server");
       }
       const key = target.kind === "device" ? rankKey(p!) : order.target;
@@ -243,13 +254,23 @@ export function buildMemberRolesHttp(
     const invites = [...known].map((inviteId) => {
       const creatorPub = opts.store.inviteCreator(serviceId, inviteId);
       const creator = creatorPub ? opts.store.principal(creatorPub) : null;
+      const tier = opts.store.inviteTier(serviceId, inviteId);
+      // A co-manager's invite names them by the owner's label for the share.
+      const co =
+        tier === "co-manager" && creatorPub
+          ? creator?.kind === "co-manager"
+            ? { shareId: creator.shareId, label: creator.label }
+            : opts.store.coManagerRecord(serviceId, creatorPub)
+          : null;
       return {
         inviteId,
         role: opts.store.inviteRole(serviceId, inviteId, defaultRole),
         set: inviteId in set.invites,
-        tier: opts.store.inviteTier(serviceId, inviteId),
+        tier,
         creatorPub,
         creatorDeviceId: creator?.kind === "device" ? creator.deviceId : null,
+        creatorShareId: co?.shareId ?? null,
+        creatorLabel: co?.label ?? null,
       };
     });
     return json(200, {

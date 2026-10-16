@@ -36,6 +36,7 @@ import { ActivityLog } from "../../src/shares/activityLog.js";
 import { shareRefusal, shareRouteNeed } from "../../src/shares/shareRoutes.js";
 import { ShareStore } from "../../src/shares/shareStore.js";
 import { ShareSessionStore, buildShares, pollShareEndsOnce } from "../../src/shares/sharesHttp.js";
+import type { ShareInvites } from "../../src/shares/shareInvites.js";
 
 const BOX = "home.harry.flagship.services";
 const hex = (b: Uint8Array) => Buffer.from(b).toString("hex");
@@ -74,7 +75,7 @@ const APP = {
   membership: { members: { list: () => [] } },
 };
 
-function setup(opts: { withAdminRoot?: boolean; dir?: string } = {}) {
+function setup(opts: { withAdminRoot?: boolean; dir?: string; invites?: ShareInvites } = {}) {
   const auth = authority(opts.withAdminRoot ?? false);
   const dir = opts.dir ?? null;
   const store = new ShareStore(dir ? join(dir, "shares.json") : null, {
@@ -86,7 +87,7 @@ function setup(opts: { withAdminRoot?: boolean; dir?: string } = {}) {
   const activity = new ActivityLog(dir ? join(dir, "activity.jsonl") : null, now);
   const verifyOwnerRevoke = (r: Parameters<typeof verifyServerShareRevoke>[0], sig: Uint8Array) =>
     authorizeSensitiveOrder({ ...auth, order: r, signature: sig, verify: verifyServerShareRevoke });
-  const shares = buildShares({ serverDomain: BOX, store, sessions, activity, verifyOwnerRevoke, now, log: () => {} });
+  const shares = buildShares({ serverDomain: BOX, store, sessions, activity, verifyOwnerRevoke, now, log: () => {}, invites: opts.invites ?? null });
   const paired = {
     check: (r: HttpRequest): HttpResponse | null =>
       r.headers["x-flagship-session"] === OWNER_TOKEN ? null : { status: 401, body: '{"error":"unauthorized"}' },
@@ -436,5 +437,53 @@ describe("app data at manage level", () => {
     expect((await ok.send(owner)).status).toBe(403);
     expect((await ok.send(member)).status).toBe(200);
     expect(ok.ran).toEqual([true]);
+  });
+});
+
+describe("co-manager invites (docs/service-access-gating.md \"Co-manager invites\")", () => {
+  function withInvites() {
+    const changes: { level: string; end: string | null }[] = [];
+    const handled: string[] = [];
+    const invites = {
+      handle: async (c: { shareId: string }, r: HttpRequest) => {
+        handled.push(`${c.shareId}:${r.method} ${r.path}`);
+        return { status: 200, headers: {}, body: "{}" };
+      },
+      onShareChange: async (ch: { grant: ServerShareGrant; end?: { kind: string } }) => {
+        changes.push({ level: ch.grant.level, end: ch.end?.kind ?? null });
+      },
+    } as unknown as ShareInvites;
+    return { x: setup({ invites }), changes, handled };
+  }
+
+  it("hands /api/shares/invites to the invites handler only over a share session", async () => {
+    const { x, handled } = withInvites();
+    await grant(x, { level: "manage" });
+    expect((await x.http(req("GET", "/api/shares/invites?service=harry-weather", null)))!.status).toBe(401);
+    const s = await signIn(x);
+    expect((await x.http(req("GET", "/api/shares/invites?service=harry-weather", s.body.token)))!.status).toBe(200);
+    expect((await x.http(req("POST", "/api/shares/invites/withdraw", s.body.token, {})))!.status).toBe(200);
+    expect(handled).toEqual([`${SHARE}:GET /api/shares/invites?service=harry-weather`, `${SHARE}:POST /api/shares/invites/withdraw`]);
+  });
+
+  it("tells the invites handler about a level change and about the end, with its signed proof", async () => {
+    const { x, changes } = withInvites();
+    await grant(x, { level: "manage" });
+    clock += 1;
+    await grant(x, { level: "view", issuedAt: clock }, owner, false);
+    const revoke = { serverDomain: BOX, shareId: SHARE, issuedAt: clock };
+    expect(parse(await x.http(req("POST", "/api/screens/shares/revoke", OWNER_TOKEN, { revoke, signature: hex(signServerShareRevoke(revoke, owner)) }))).status).toBe(200);
+    expect(changes).toEqual([
+      { level: "view", end: null },
+      { level: "view", end: "revoke" },
+    ]);
+  });
+
+  it("a leave reaches it with the co-manager's signed leave", async () => {
+    const { x, changes } = withInvites();
+    await grant(x, { level: "manage" });
+    const leave = { serverDomain: BOX, shareId: SHARE, memberPubHex: hex(member.publicKey), issuedAt: clock };
+    expect((await x.http(req("POST", "/api/shares/leave", null, { leave, signature: hex(signServerShareLeave(leave, member)) })))!.status).toBe(200);
+    expect(changes).toEqual([{ level: "manage", end: "leave" }]);
   });
 });
