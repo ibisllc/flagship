@@ -499,6 +499,50 @@ final class GymOctoberTests: XCTestCase {
         gymShot(app, "shared-server-member")
     }
 
+    // ─── Only an admin device accepts a co-manage share (docs/share-a-server.md §5.1) ──
+
+    /// An admin device opens a share link and accepts: the mock `.com`
+    /// (ShareAcceptMockWorld) serves the attestation of the account's admin
+    /// root and takes the sealed acceptance only when its #12 verifies under
+    /// that root, so the code appears only for an admin-root-signed proof.
+    func test_shareAcceptAdminDeviceSignsWithTheAdminRoot() throws {
+        let app = launch(tab: "home", ["-smoke-shares", "-smoke-share-route", "accept-admin", "-smoke-admin-root"])
+        let accept = app.buttons["share-accept"]
+        XCTAssertTrue(accept.waitForExistence(timeout: 20), "An admin device is offered Accept.")
+        XCTAssertFalse(app.staticTexts["share-accept-admin-only"].exists)
+        gymShot(app, "share-accept-admin-offer")
+        accept.tap()
+        let sas = app.staticTexts["share-accept-sas"]
+        XCTAssertTrue(sas.waitForExistence(timeout: 20), "The mock .com took the admin-root-signed acceptance: read the code.")
+        gymShot(app, "share-accept-admin-code")
+    }
+
+    /// A device without the admin root never gets an Accept button: the link
+    /// says only an admin device of the account can accept.
+    func test_shareAcceptNonAdminDeviceSeesWhy() throws {
+        let app = launch(tab: "home", ["-smoke-shares", "-smoke-share-route", "accept-admin"])
+        let why = app.descendants(matching: .any)["add-server-admin-only"]
+        XCTAssertTrue(why.waitForExistence(timeout: 20), "A non-admin device sees why instead of the flow.")
+        XCTAssertTrue(why.label.contains("Only an admin device of your account can accept a co-manage invitation."), why.label)
+        XCTAssertFalse(app.buttons["share-accept"].exists, "No Accept button on a non-admin device.")
+        gymShot(app, "share-accept-non-admin")
+    }
+
+    /// The owner confirms an acceptance an older app sent with no admin proof:
+    /// the (mock) box refuses it and the card shows the box's own sentence.
+    func test_shareOwnerConfirmShowsTheBoxRefusal() throws {
+        let app = launch(tab: "home", ["-smoke-shares", "-smoke-share-route", "owner-refused", "-smoke-admin-root"])
+        let riley = String(repeating: "c3", count: 16)
+        let confirm = app.buttons["share-confirm-\(riley)"]
+        XCTAssertTrue(reveal(app, confirm), "Riley's acceptance waits for the owner's code check.")
+        confirm.tap()
+        let error = app.staticTexts["share-error"]
+        XCTAssertTrue(error.waitForExistence(timeout: 20), "The box's refusal shows on the card.")
+        XCTAssertEqual(error.label,
+                       "Only an admin device of their account can accept a co-manage invitation. Cancel this link and send a new one for them to open on an admin device.")
+        gymShot(app, "share-owner-refused")
+    }
+
     // ─── Co-manager invites (docs/service-access-gating.md "Co-manager invites") ──
 
     private func openSharedApp(_ app: XCUIApplication, _ serviceId: String) {

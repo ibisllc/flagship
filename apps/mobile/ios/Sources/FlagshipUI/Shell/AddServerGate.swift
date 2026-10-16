@@ -61,6 +61,8 @@ public struct AddServerRefused: LocalizedError, Equatable {
 /// isn't an admin device of the account.
 struct AddServerAdminOnlyScreen: View {
     @Environment(\.colorScheme) private var scheme
+    /// A share link says why in its own words (docs/share-a-server.md §5.1).
+    var message: String = AddServerGate.adminOnlyMessage
 
     var body: some View {
         let c = FSColors.scheme(scheme)
@@ -73,7 +75,7 @@ struct AddServerAdminOnlyScreen: View {
                 Text("Admin devices only")
                     .font(FS.font.h3())
                     .foregroundColor(c.text)
-                Text(AddServerGate.adminOnlyMessage)
+                Text(message)
                     .font(FS.font.body())
                     .foregroundColor(c.textMuted)
                     .multilineTextAlignment(.center)

@@ -41,6 +41,14 @@ public struct ServerShareHTTPError: Error, Equatable, Sendable {
     public var isShareEnded: Bool { code == "share-ended" || error == "share-ended" }
     /// The box doesn't hold a grant for this key yet (the owner hasn't confirmed).
     public var isNotShared: Bool { code == "not-shared" || error == "not-shared" }
+    /// The box refused a first grant's acceptance (docs/share-a-server.md §5.1);
+    /// `error` is the sentence the owner sees.
+    public var acceptRefusal: String? {
+        guard let code, ["accept-not-admin", "accept-signature", "accept-stale", "accept-unverifiable"].contains(code),
+              let error, !error.isEmpty
+        else { return nil }
+        return error
+    }
 }
 
 // MARK: - Wire types
@@ -254,6 +262,8 @@ struct ShareGrantBody: Encodable {
     let signature: String
     let accept: ServerShareAccept?
     let acceptSignature: String?
+    /// The joining account's admin proof, on the first grant (docs/share-a-server.md §5.1).
+    var acceptAdmin: ShareAcceptAdminProof? = nil
 }
 
 struct SharePushBody: Encodable {
@@ -341,6 +351,22 @@ public final class ServerShareClient: Sendable {
                        headers: [Self.shareTokenHeader: token])
     }
 
+    /// `.com`'s CA attestation of this account's sensitive key (§5.1). The
+    /// device asks about its own account; the attestation names none.
+    public func accountKeyAttestation(username: String) async throws -> AccountKeyAttestation {
+        struct R: Decodable { let attestation: AccountKeyAttestation }
+        let r: R = try await send(com, apex(), "GET", "/api/users/\(seg(username))/account-key-attestation", body: nil as String?)
+        return r.attestation
+    }
+
+    /// A demo account's devices hold no admin root: `.com` signs its #12.
+    public func demoShareAccept(username: String, admit: ServerShareAcceptAdmin) async throws -> String {
+        struct B: Encodable { let admit: ServerShareAcceptAdmin }
+        struct R: Decodable { let signature: String }
+        let r: R = try await send(com, apex(), "POST", "/api/dev/sample-user/\(seg(username))/share-accept", body: B(admit: admit))
+        return r.signature
+    }
+
     public func accept(shareId: String, token: String, acceptanceHex: String) async throws {
         struct B: Encodable { let acceptance: String }
         try await sendVoid(com, apex(), "POST", "/api/server-shares/\(shareId)/accept",
@@ -412,9 +438,11 @@ public final class ServerShareClient: Sendable {
     }
 
     public func boxGrant(serverDomain: String, ownerToken: String, grant: ServerShareGrant, signature: String,
-                         accept: ServerShareAccept?, acceptSignature: String?) async throws {
+                         accept: ServerShareAccept?, acceptSignature: String?,
+                         acceptAdmin: ShareAcceptAdminProof? = nil) async throws {
         try await sendVoid(box, try boxURL(serverDomain), "POST", "/api/screens/shares",
-                           body: ShareGrantBody(grant: grant, signature: signature, accept: accept, acceptSignature: acceptSignature),
+                           body: ShareGrantBody(grant: grant, signature: signature, accept: accept,
+                                                acceptSignature: acceptSignature, acceptAdmin: acceptAdmin),
                            headers: [Self.sessionHeader: ownerToken])
     }
 

@@ -77,6 +77,8 @@ public enum ServerShareCopy {
         if let e = error as? ServerShareFlowError { return e.errorDescription ?? "Something went wrong." }
         if let e = error as? ShareUpdateRefusal { return e.message }
         if let e = error as? ShareInviteRefusal { return e.message }
+        if let e = error as? ShareAcceptRefusal { return e.message }
+        if let e = error as? ServerShareHTTPError, let sentence = e.acceptRefusal { return sentence }
         if let e = error as? ServerShareHTTPError {
             switch e.status {
             case 0: return "Couldn't reach the server. Check your connection and try again."
@@ -115,8 +117,10 @@ public enum ServerShareDemo {
         switch route {
         case "owner", "sheet":
             return pods.first(where: { $0.status == .online }).map { .serverDetail(podId: $0.podId) }
-        case "accept":
+        case "accept", "accept-admin":
             return .acceptShare(shareId: nil, secretHex: nil)
+        case "owner-refused":
+            return pods.first(where: { $0.status == .online }).map { .serverDetail(podId: $0.podId) }
         case "member":
             return entries().first.map { .sharedServer(shareId: $0.shareId) }
         case "member-view":
@@ -208,6 +212,34 @@ public enum ServerShareServices {
                 return [k.bak.rawRepresentation, k.irk.rawRepresentation]
             }
         )
+    }
+
+    /// The account's admin key for accepting a co-manage share (§5.1): the
+    /// admin root this device holds (one Face ID), the IRK for an account with
+    /// none, and `.com`'s signer for a demo account.
+    @MainActor
+    public static func acceptAdminKeys(username: String, isDemoAccount: Bool) -> ShareAcceptAdminKeys {
+        ShareAcceptAdminKeys(
+            username: username,
+            isDemo: isDemoAccount,
+            adminRootPubHex: Keystore.hasAdminRoot ? Keystore.adminRootPubHex() : nil,
+            adminRoot: { reason in try await Keystore.adminRootKey(reason: reason) },
+            irk: { reason in try await Keystore.deriveIRK(reason: reason) }
+        )
+    }
+
+    /// The flow that accepts a share link on this device.
+    @MainActor
+    public static func acceptFlow(username: String?, isDemoAccount: Bool) -> ServerShareMemberFlow {
+        ServerShareMemberFlow(client: client, umkSeed: umkSeed,
+                              admin: username.map { acceptAdminKeys(username: $0, isDemoAccount: isDemoAccount) })
+    }
+
+    /// Smoke mode (`-smoke-share-route accept-admin|owner-refused`): a client
+    /// whose `.com` and box are `ShareAcceptMockWorld`, with the real wire.
+    public static func mockClient(_ world: ShareAcceptMockWorld) -> ServerShareClient {
+        ServerShareClient(com: world, box: world, apex: { URL(string: "https://flagshipserver.com")! },
+                          boxBase: { URL(string: "https://\($0)") })
     }
 
     public static let umkSeed: @Sendable (String) async throws -> Data = { reason in
@@ -695,6 +727,10 @@ public final class ShareAcceptModel {
         self.demo = demo
         self.pollEvery = pollEvery
     }
+
+    /// Only an admin device of the account accepts (docs/share-a-server.md
+    /// §5.1); any other device sees why instead of an Accept button.
+    public var canAccept: Bool { demo || (flow?.admin?.isAdminDevice ?? false) }
 
     /// Pasted or scanned text. Returns false when it isn't a share link.
     @discardableResult

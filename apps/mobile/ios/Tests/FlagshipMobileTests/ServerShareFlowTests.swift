@@ -44,6 +44,11 @@ final class FakeShareBackend: ServerShareTransport, @unchecked Sendable {
     var pushTokens: [String: [String: (platform: String, token: String)]] = [:]
     var lastPushBody: [String: Any]?
     var lastUpdateBody: [String: Any]?
+    /// The joining account's admin root, as `.com` attests it (§5.1).
+    var joinAdminPub: Data = Data()
+    var attestationReads = 0
+    /// A demo account's admin root, which `.com` holds and signs #12 with.
+    var demoAdmin: Curve25519.Signing.PrivateKey?
 
     init(domain: String, ownerSensitivePub: Data, ownerAccountPub: Data, stk: Curve25519.Signing.PrivateKey) {
         self.domain = domain
@@ -90,6 +95,19 @@ final class FakeShareBackend: ServerShareTransport, @unchecked Sendable {
         func tokenOk(_ row: Row) -> Bool {
             guard let token, let h = try? ServerShare.shareTokenHash(token) else { return false }
             return h == row.tokenHash
+        }
+        if m == "GET", p.hasSuffix("/account-key-attestation") {
+            attestationReads += 1
+            let now = ServerShareClock.nowMs()
+            return (200, ["attestation": AccountKeyAttestation(
+                keyKind: .adminRoot, keyPubHex: HexUtil.encode(joinAdminPub), issuedAt: now - 1000, expiresAt: now + 86_400_000,
+                signedBy: String(repeating: "ca", count: 32), signature: String(repeating: "00", count: 64)).jsonObject()])
+        }
+        if m == "POST", p.hasPrefix("/api/dev/sample-user/"), p.hasSuffix("/share-accept") {
+            guard let demoAdmin, let admit = ServerShareAcceptAdmin.parse(jsonObject: b["admit"] as Any),
+                  admit.keyPubHex == HexUtil.encode(demoAdmin.publicKey.rawRepresentation)
+            else { return (400, ["error": "admit must name this demo account's admin root"]) }
+            return (200, ["signature": HexUtil.encode(try! admit.sign(with: demoAdmin))])
         }
         if m == "POST", p.hasSuffix("/server-shares"), parts.count == 4 {
             guard let offer = ServerShareOffer.parse(jsonObject: b["offer"] as Any),
@@ -257,6 +275,14 @@ final class FakeShareBackend: ServerShareTransport, @unchecked Sendable {
                           let pub = HexUtil.decode(a.memberPubHex), verify(a, b["acceptSignature"], pub),
                           a.memberPubHex == g.memberPubHex, a.shareId == g.shareId
                     else { return (400, ["error": "the first grant needs the acceptance"]) }
+                    // Only an admin device of the joining account accepts (acceptAdmin.ts).
+                    guard let proofObj = b["acceptAdmin"], let proof = ShareAcceptAdminProof(jsonObject: proofObj) else {
+                        return (403, ["error": ShareAcceptMockWorld.notAdminSentence, "code": "accept-not-admin"])
+                    }
+                    guard proof.admit.shareId == a.shareId, proof.admit.memberPubHex == a.memberPubHex,
+                          proof.admit.acceptedAt == a.acceptedAt, proof.admit.keyPubHex == HexUtil.encode(joinAdminPub),
+                          verify(proof.admit, proof.signature, joinAdminPub)
+                    else { return (403, ["error": ShareAcceptMockWorld.badSignatureSentence, "code": "accept-signature"]) }
                 }
                 grants[g.shareId] = (g, b["signature"] as! String)
                 return (200, ["ok": true])
@@ -337,6 +363,7 @@ final class ServerShareFlowTests: XCTestCase {
     let ownerUmk = Data((0..<32).map { _ in UInt8.random(in: 0...255) })
     let memberUmk = Data((0..<32).map { _ in UInt8.random(in: 0...255) })
     let diskKey = Data((0..<64).map { _ in UInt8.random(in: 0...255) })
+    let memberAdmin = Curve25519.Signing.PrivateKey()
 
     var backend: FakeShareBackend!
     var owner: ServerShareOwnerFlow!
@@ -356,7 +383,17 @@ final class ServerShareFlowTests: XCTestCase {
                                  diskKeySeeds: { _ in [irk.rawRepresentation] }),
             apexOrigin: { "https://flagshipserver.com" })
         let seed = memberUmk
-        member = ServerShareMemberFlow(client: backend.client(), umkSeed: { _ in seed })
+        backend.joinAdminPub = memberAdmin.publicKey.rawRepresentation
+        member = ServerShareMemberFlow(client: backend.client(), umkSeed: { _ in seed }, admin: adminKeys(memberAdmin))
+    }
+
+    /// The joining account's admin device: it holds `key` as its admin root.
+    func adminKeys(_ key: Curve25519.Signing.PrivateKey?, demo: Bool = false) -> ShareAcceptAdminKeys {
+        ShareAcceptAdminKeys(
+            username: "bob", isDemo: demo,
+            adminRootPubHex: key.map { HexUtil.encode($0.publicKey.rawRepresentation) },
+            adminRoot: { _ in guard let key else { throw ServerShareFlowError.notAdminDevice }; return key },
+            irk: { _ in Curve25519.Signing.PrivateKey() })
     }
 
     private var stkHex: String { HexUtil.encode(stk.publicKey.rawRepresentation) }
@@ -433,6 +470,83 @@ final class ServerShareFlowTests: XCTestCase {
         XCTAssertEqual(inbox.first?.serverName, "Home")
     }
 
+    // MARK: Only an admin device of the joining account accepts (docs/share-a-server.md §5.1)
+
+    func test_accept_sealsAdminProof_signedByTheAdminRoot_andTheBoxTakesIt() async throws {
+        let (row, accepted) = try await shareAndConfirm()
+        XCTAssertEqual(row.status, .active)
+        let body = try XCTUnwrap(backend.lastGrantBody)
+        let proof = try XCTUnwrap(ShareAcceptAdminProof(jsonObject: try XCTUnwrap(body["acceptAdmin"])))
+        XCTAssertEqual(proof.admit.keyKind, .adminRoot)
+        XCTAssertEqual(proof.admit.keyPubHex, HexUtil.encode(memberAdmin.publicKey.rawRepresentation))
+        XCTAssertEqual(proof.admit.shareId, row.shareId)
+        XCTAssertTrue(proof.admit.verify(signature: HexUtil.decode(proof.signature)!, publicKey: memberAdmin.publicKey.rawRepresentation))
+        XCTAssertEqual(proof.attestation.keyPubHex, proof.admit.keyPubHex)
+        XCTAssertEqual(backend.attestationReads, 1)
+        XCTAssertFalse(accepted.sas.isEmpty)
+    }
+
+    func test_nonAdminDevice_cannotAccept_andNothingIsSent() async throws {
+        let (_, parts) = try await create()
+        let seed = memberUmk
+        let phone = ServerShareMemberFlow(client: backend.client(), umkSeed: { _ in seed }, admin: adminKeys(nil))
+        XCTAssertFalse(phone.admin?.isAdminDevice ?? true)
+        let inv = try await phone.open(shareId: parts.shareId, secretHex: parts.secretHex)
+        do {
+            _ = try await phone.accept(inv)
+            XCTFail("a non-admin device accepted")
+        } catch ServerShareFlowError.notAdminDevice {}
+        XCTAssertEqual(ServerShareFlowError.notAdminDevice.errorDescription,
+                       "Only an admin device of your account can accept a co-manage invitation.")
+        XCTAssertEqual(backend.attestationReads, 0)
+        XCTAssertFalse(backend.didCall("POST", "com.test", "/server-shares/\(parts.shareId)/accept"))
+    }
+
+    func test_adminRootTheAccountNoLongerPins_isNotAnAdminDevice() async throws {
+        let (_, parts) = try await create()
+        let seed = memberUmk
+        let stale = ServerShareMemberFlow(client: backend.client(), umkSeed: { _ in seed },
+                                          admin: adminKeys(Curve25519.Signing.PrivateKey()))
+        let inv = try await stale.open(shareId: parts.shareId, secretHex: parts.secretHex)
+        do {
+            _ = try await stale.accept(inv)
+            XCTFail("a rotated-away admin root accepted")
+        } catch ServerShareFlowError.notAdminDevice {}
+        XCTAssertFalse(backend.didCall("POST", "com.test", "/server-shares/\(parts.shareId)/accept"))
+    }
+
+    func test_demoAccount_acceptsThroughComsSigner_andTheBoxTakesIt() async throws {
+        let demoRoot = Curve25519.Signing.PrivateKey()
+        backend.demoAdmin = demoRoot
+        backend.joinAdminPub = demoRoot.publicKey.rawRepresentation
+        let seed = memberUmk
+        member = ServerShareMemberFlow(client: backend.client(), umkSeed: { _ in seed }, admin: adminKeys(nil, demo: true))
+        let (row, _) = try await shareAndConfirm()
+        XCTAssertEqual(row.status, .active)
+        XCTAssertTrue(backend.didCall("POST", "com.test", "/share-accept"))
+    }
+
+    func test_ownerConfirm_showsTheBoxSentence_forAnAcceptanceWithNoProof() async throws {
+        let (_, parts) = try await create()
+        let secret = HexUtil.decode(parts.secretHex)!
+        let m = try ServerShare.deriveShareMemberKey(umkSeed: memberUmk, shareId: parts.shareId)
+        let accept = ServerShareAccept(serverDomain: domain, shareId: parts.shareId,
+                                       memberPubHex: HexUtil.encode(m.publicKey.rawRepresentation), acceptedAt: 1)
+        let payload = ShareAcceptancePayload(accept: accept, signature: HexUtil.encode(try accept.sign(with: m)))
+        backend.rows[parts.shareId]?.acceptHex = try ServerShare.seal(
+            key: ServerShare.shareLinkKey(secret), aad: ServerShare.shareAad(ServerShare.aadAcceptance, parts.shareId),
+            plaintext: payload.jsonData())
+        let snap = try await owner.load(serverDomain: domain, ownerToken: backend.ownerToken, readInvitations: true)
+        let row = try XCTUnwrap(snap.rows.first)
+        do {
+            try await owner.confirm(row, serverDomain: domain, serverName: "Home", ownerToken: backend.ownerToken)
+            XCTFail("the box took an acceptance with no admin proof")
+        } catch let e as ShareAcceptRefusal {
+            XCTAssertEqual(e.code, "accept-not-admin")
+            XCTAssertEqual(ServerShareCopy.message(for: e), ShareAcceptMockWorld.notAdminSentence)
+        }
+    }
+
     func test_ownerSees_invalidAcceptance_whenTamperedForAnotherServer() async throws {
         let (_, parts) = try await create()
         let secret = HexUtil.decode(parts.secretHex)!
@@ -455,7 +569,7 @@ final class ServerShareFlowTests: XCTestCase {
         XCTAssertEqual(first.sas, again.sas)
 
         let otherSeed = Data(repeating: 3, count: 32)
-        let other = ServerShareMemberFlow(client: backend.client(), umkSeed: { _ in otherSeed })
+        let other = ServerShareMemberFlow(client: backend.client(), umkSeed: { _ in otherSeed }, admin: adminKeys(memberAdmin))
         do {
             _ = try await other.accept(inv)
             XCTFail("a second account took the link")
@@ -679,6 +793,18 @@ final class ServerShareFlowTests: XCTestCase {
         XCTAssertTrue(store.items.isEmpty)
         let inbox = try await member.inbox()
         XCTAssertTrue(inbox.isEmpty, "an ended share leaves the inbox")
+    }
+
+    @MainActor
+    func test_acceptModel_offersAccept_onlyOnAnAdminDevice() {
+        let store = SharedWithMeStore(flow: member, keysUnlocked: { true }, makeScreensClient: { _, _ in MockScreensClient() })
+        XCTAssertTrue(ShareAcceptModel(store: store, flow: member).canAccept)
+        let seed = memberUmk
+        let phone = ServerShareMemberFlow(client: backend.client(), umkSeed: { _ in seed }, admin: adminKeys(nil))
+        XCTAssertFalse(ShareAcceptModel(store: store, flow: phone).canAccept)
+        let demo = ServerShareMemberFlow(client: backend.client(), umkSeed: { _ in seed }, admin: adminKeys(nil, demo: true))
+        XCTAssertTrue(ShareAcceptModel(store: store, flow: demo).canAccept)
+        XCTAssertFalse(ShareAcceptModel(store: store, flow: ServerShareMemberFlow(client: backend.client(), umkSeed: { _ in seed })).canAccept)
     }
 
     @MainActor

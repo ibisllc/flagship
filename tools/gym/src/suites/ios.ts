@@ -1193,6 +1193,52 @@ const OCTOBER: readonly Scenario[] = [
     },
   ),
   iosTotal(
+    "ios-oct-share-accept-admin",
+    "Only an admin device accepts a co-manage share (docs/share-a-server.md §5.1): an admin device's Accept signs flagship/server-share-accept-admin/v1 with the admin root and seals it with .com's attestation; the mock .com (ShareAcceptMockWorld) takes it only when #12 verifies under the attested root, then the code shows.",
+    O + "test_shareAcceptAdminDeviceSignsWithTheAdminRoot",
+    {
+      steps: [
+        { kind: "launch", describe: "A share link on an admin device (-smoke-admin-root)." },
+        { kind: "tap", describe: "Accept.", handle: "share-accept" },
+      ],
+      assertions: [{ describe: "The code to read to the owner", handle: "share-accept-sas", expect: "present" }],
+      screenshots: [shot("share-accept-admin-offer", "Accept offered."), shot("share-accept-admin-code", "Accepted.")],
+      dimension: "D4",
+    },
+  ),
+  iosTotal(
+    "ios-oct-share-accept-non-admin",
+    "A device without the admin root opening a share link reads 'Only an admin device of your account can accept a co-manage invitation.' and gets no Accept button.",
+    O + "test_shareAcceptNonAdminDeviceSeesWhy",
+    {
+      steps: [{ kind: "launch", describe: "A share link on a non-admin device." }],
+      assertions: [
+        { describe: "Why", handle: "add-server-admin-only", expect: "text", text: "Only an admin device of your account can accept a co-manage invitation." },
+        { describe: "No Accept", handle: "share-accept", expect: "absent" },
+      ],
+      screenshots: [shot("share-accept-non-admin", "The refusal.")],
+      dimension: "D4",
+    },
+  ),
+  iosTotal(
+    "ios-oct-share-owner-refused",
+    "The owner confirms an acceptance an older app sent with no admin proof: the box refuses it (accept-not-admin) and the Shared with card shows the box's own sentence.",
+    O + "test_shareOwnerConfirmShowsTheBoxRefusal",
+    {
+      steps: [{ kind: "tap", describe: "Confirm Riley's code.", handle: "share-confirm-c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3" }],
+      assertions: [
+        {
+          describe: "The box's sentence",
+          handle: "share-error",
+          expect: "text",
+          text: "Only an admin device of their account can accept a co-manage invitation.",
+        },
+      ],
+      screenshots: [shot("share-owner-refused", "The refusal on the card.")],
+      dimension: "D4",
+    },
+  ),
+  iosTotal(
     "ios-oct-share-co-manager",
     "D3: a co-manager sees 'Shared with me' on Home and the shared server's page: approve start-up, leave, never delete or revoke.",
     O + "test_sharedServerCoManagerView",

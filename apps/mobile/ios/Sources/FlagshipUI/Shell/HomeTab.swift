@@ -306,7 +306,11 @@ public struct HomeTab: View {
     @ViewBuilder
     private func destination(for route: HomeRoute) -> some View {
         if route.addsServerToAccount, !AddServerGate.allows(app) {
-            AddServerAdminOnlyScreen()
+            if case .acceptShare = route {
+                AddServerAdminOnlyScreen(message: ServerShareFlowError.notAdminDeviceMessage)
+            } else {
+                AddServerAdminOnlyScreen()
+            }
         } else {
             flowDestination(for: route)
         }
