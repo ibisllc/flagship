@@ -242,7 +242,9 @@
 //  v110: A server's page merges Backup and Migrate into one "Backup /
 //       Migrate" card of buttons ("Migrate to new machine / VM"), placed
 //       before Update; Diagnostics loses its explainer.
-const SHELL_VERSION = "v110";
+//  v111: Import a backup and Backup/clone server word their steps like iOS:
+//       the passcode note, the passcode prompt and the waiting text.
+const SHELL_VERSION = "v111";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
