@@ -131,16 +131,20 @@ the backup file around the slots, wipes the key and never stores it.
    the user types, like the create form. Everything else is copied.
 5. **Create.** The app makes the server exactly as the create flow does
    (same recipe, same burn/host screen: Studio, the recipe file, USB) and
-   signs, with the account's IRK, a **restore order**
+   signs, with the account's admin root (the IRK only on a demo account,
+   which pins none), a **restore order**
 
    `flagship/server-restore/v1|<serverDomain>|<archiveId>|<bytes>|<sha256>|<issuedAt>`
 
    that rides beside the create-time pairing order
    (`{request, signature, restore: {order, signatureHex}}`), in the recipe
    (advanced/offline) or in the sealed pairing deposit (the default). Vectors:
-   `packages/protocol/test-vectors/server-restore/vectors.json`.
+   `packages/protocol/test-vectors/server-restore/vectors.json`; the admin
+   root's signature in `test-vectors/add-server/vectors.json`.
 6. **The box waits.** When the pairing order verifies, the box checks the
-   restore order under its pinned owner IRK and that it names this box, then
+   restore order under its sensitive-order key (the pinned admin root; the
+   owner IRK only on a box with none: adding a server is admin-only, owner
+   rule 2026-10-16) and that it names this box, then
    keeps it (`<dataDir>/restore-wait.json`, `serverArchive/restoreWait.ts`).
    Its heartbeat carries `awaitingBackup: {archiveId, state}` (advisory,
    unsigned), `.com` relays it on `/pods`, and Home shows **Waiting for its

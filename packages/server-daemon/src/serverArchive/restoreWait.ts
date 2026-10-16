@@ -5,9 +5,12 @@
  * size, SHA-256) when it creates the server; the order rides beside the
  * create-time pairing order, so the box learns it the moment it is paired.
  *
- * Only a verified order (under the owner's pinned IRK, naming this box) puts
- * the box in the waiting state, and the box then accepts that data file and no
- * other. The state is kept on disk until the backup is in: a failed or
+ * Only a verified order naming this box puts the box in the waiting state.
+ * Restoring a backup adds a server, which is admin-only (owner rule
+ * 2026-10-16): on a box with an admin root pinned the order must be signed by
+ * that root (the IRK, which every device holds, is refused), as for the
+ * box's other sensitive orders; a box with none takes the owner IRK. The box
+ * then accepts that data file and no other. The state is kept on disk until the backup is in: a failed or
  * abandoned upload leaves the box waiting (Home says so; the owner can send
  * the backup again or delete the server). Once the apps are restored it is
  * cleared for good (a done marker keeps a replayed order from re-arming it).
@@ -15,6 +18,7 @@
 import { readFile } from "node:fs/promises";
 import { hexToBytes } from "@noble/hashes/utils";
 import { openRestoreFromPairingJson, parseServerRestoreOrder, verifyServerRestoreOrder, type ServerRestoreOrder } from "@flagship/protocol";
+import { authorizeSensitiveOrder } from "../adminAuthorityLocal.js";
 import { removeDurable, writeFileDurable } from "../durableFile.js";
 import type { AwaitingBackup } from "../daemonStatusHeartbeat.js";
 
@@ -45,6 +49,10 @@ export function buildRestoreWait(opts: {
   donePath: string;
   serverDomain: string;
   ownerIrkPub: Uint8Array;
+  /** The pinned admin root; when set, only it authorizes a restore. */
+  adminRootPub?: Uint8Array;
+  /** The owning account (for the sensitive-order gate). */
+  username: string;
   onChange?: () => void;
   note?: (kind: string, detail: string) => void;
   now?: () => number;
@@ -55,6 +63,16 @@ export function buildRestoreWait(opts: {
   let state: RestoreWaitState | null = null;
   let restoring = false;
   const done = new Set<string>();
+  const authorized = (order: ServerRestoreOrder, sig: Uint8Array): boolean =>
+    authorizeSensitiveOrder<ServerRestoreOrder>({
+      order,
+      signature: sig,
+      verify: verifyServerRestoreOrder,
+      ownerIrkPub: opts.ownerIrkPub,
+      ...(opts.adminRootPub ? { adminRootPub: opts.adminRootPub } : {}),
+      username: opts.username,
+      now: now(),
+    });
 
   const changed = () => {
     try {
@@ -85,7 +103,7 @@ export function buildRestoreWait(opts: {
         sig &&
         order.serverDomain.toLowerCase() === opts.serverDomain.toLowerCase() &&
         !done.has(order.archiveId) &&
-        verifyServerRestoreOrder(order, hexToBytes(sig), opts.ownerIrkPub)
+        authorized(order, hexToBytes(sig))
       ) {
         state = { order, signatureHex: sig, adoptedAt: typeof raw.adoptedAt === "number" ? raw.adoptedAt : now() };
       } else {
@@ -95,7 +113,7 @@ export function buildRestoreWait(opts: {
     },
     current: () => state,
     async adoptFromPairingJson(json) {
-      const r = openRestoreFromPairingJson(json, opts.ownerIrkPub, opts.serverDomain);
+      const r = openRestoreFromPairingJson(json, authorized, opts.serverDomain);
       if (!r) return false;
       if (done.has(r.order.archiveId)) return false;
       if (state && state.order.archiveId === r.order.archiveId) return true;

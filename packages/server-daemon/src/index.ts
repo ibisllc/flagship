@@ -1143,6 +1143,8 @@ async function main(): Promise<void> {
         donePath: `${dataDir}/restore-done.json`,
         serverDomain: env.serverFqdn!,
         ownerIrkPub: cfg.irkPublicKey,
+        ...(cfg.adminRootPub ? { adminRootPub: cfg.adminRootPub } : {}),
+        username: cfg.userId,
         onChange: () => statusHeartbeatRef.current?.backupWaitChanged(),
         note: (kind, detail) => activityLog.note(kind, detail),
         log: (m) => console.log(m),

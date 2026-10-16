@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   archiveDownloadCode,
+  ed,
   deriveIRK,
   deriveServerArchiveKey,
   openBackupWithAccountKey,
@@ -69,7 +70,7 @@ function lateWait(ref: { current: RestoreWait | null }): RestoreWait {
 
 /** A restore-wait that has adopted the owner's order for `file` on `domain`. */
 async function waitingFor(dir: string, domain: string, file: Buffer, over: Partial<ServerRestoreOrder> = {}): Promise<RestoreWait> {
-  const wait = buildRestoreWait({ path: join(dir, `wait-${domain}.json`), donePath: join(dir, `done-${domain}.json`), serverDomain: domain, ownerIrkPub: owner.publicKey });
+  const wait = buildRestoreWait({ path: join(dir, `wait-${domain}.json`), donePath: join(dir, `done-${domain}.json`), serverDomain: domain, ownerIrkPub: owner.publicKey, username: "harry" });
   await wait.load();
   const order: ServerRestoreOrder = {
     serverDomain: domain,
@@ -466,7 +467,7 @@ describe("Backup/clone server", () => {
   it("only the owner's signed order for THIS server puts it in the waiting state", async () => {
     const w = await world();
     const file = await backUp(w);
-    const paths = { path: join(w.dir, "w.json"), donePath: join(w.dir, "d.json"), serverDomain: DST, ownerIrkPub: owner.publicKey };
+    const paths = { path: join(w.dir, "w.json"), donePath: join(w.dir, "d.json"), serverDomain: DST, ownerIrkPub: owner.publicKey, username: "harry" };
     const wait = buildRestoreWait(paths);
     await wait.load();
     const order: ServerRestoreOrder = { serverDomain: DST, archiveId: ARCHIVE_ID, bytes: file.length, sha256: "ab".repeat(32), issuedAt: 1 };
@@ -486,6 +487,36 @@ describe("Backup/clone server", () => {
     const third = buildRestoreWait(paths);
     await third.load();
     expect(third.current()).toBeNull();
+  });
+
+  it("an admin-pinned box takes a restore order only from the admin root (adding a server is admin-only)", async () => {
+    const w = await world();
+    const file = await backUp(w);
+    const adminSeed = new Uint8Array(32).fill(0x22);
+    const admin = { privateKey: adminSeed, publicKey: ed.getPublicKey(adminSeed) };
+    const deviceSeed = new Uint8Array(32).fill(0x44);
+    const device = { privateKey: deviceSeed, publicKey: ed.getPublicKey(deviceSeed) };
+    const legacy = { path: join(w.dir, "w2.json"), donePath: join(w.dir, "d2.json"), serverDomain: DST, ownerIrkPub: owner.publicKey, username: "harry" };
+    const paths = { ...legacy, adminRootPub: admin.publicKey };
+    const order: ServerRestoreOrder = { serverDomain: DST, archiveId: ARCHIVE_ID, bytes: file.length, sha256: "ab".repeat(32), issuedAt: 1 };
+    const json = (k: { privateKey: Uint8Array; publicKey: Uint8Array }) =>
+      JSON.stringify({ request: {}, signature: "", restore: { order, signatureHex: Buffer.from(signServerRestoreOrder(order, k)).toString("hex") } });
+
+    // An IRK-signed order a box with no admin root took is dropped once one is pinned.
+    const before = buildRestoreWait(legacy);
+    await before.load();
+    expect(await before.adoptFromPairingJson(json(owner))).toBe(true);
+    const wait = buildRestoreWait(paths);
+    await wait.load();
+    expect(wait.current()).toBeNull();
+
+    expect(await wait.adoptFromPairingJson(json(owner))).toBe(false);
+    expect(await wait.adoptFromPairingJson(json(device))).toBe(false);
+    expect(wait.current()).toBeNull();
+    expect(await wait.adoptFromPairingJson(json(admin))).toBe(true);
+    const again = buildRestoreWait(paths);
+    await again.load();
+    expect(again.current()?.order).toEqual(order);
   });
 
   it("a wrong key fails the restore, installs nothing, and leaves the server waiting", async () => {
