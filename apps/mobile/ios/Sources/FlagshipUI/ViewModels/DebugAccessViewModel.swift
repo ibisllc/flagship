@@ -29,7 +29,10 @@ public final class DebugAccessViewModel {
     public private(set) var notice: String?
 
     private let client: any ScreensClient
-    private let signer: Signer
+    /// Turning on or renewing: a fresh Face ID every time, never the unlocked session.
+    private let grantSigner: Signer
+    /// Turning off: the unlocked session may sign it.
+    private let revokeSigner: Signer
     private let now: () -> Int64
     private let defaults: UserDefaults
     private let onChanged: () async -> Void
@@ -39,7 +42,8 @@ public final class DebugAccessViewModel {
         view: DebugAccessView?,
         client: any ScreensClient,
         canManage: Bool = GymSeams.forceAdminRoot || Keystore.hasAdminRoot,
-        signer: Signer? = nil,
+        grantSigner: Signer? = nil,
+        revokeSigner: Signer? = nil,
         now: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) },
         defaults: UserDefaults = .standard,
         onChanged: @escaping () async -> Void = {}
@@ -48,7 +52,8 @@ public final class DebugAccessViewModel {
         self.view = view ?? .off
         self.client = client
         self.canManage = canManage
-        self.signer = signer ?? { reason in try await ServerOrderSaver.sensitiveOrderKey(reason: reason) }
+        self.grantSigner = grantSigner ?? { reason in try await Self.freshSensitiveKey(reason: reason) }
+        self.revokeSigner = revokeSigner ?? { reason in try await ServerOrderSaver.sensitiveOrderKey(reason: reason) }
         self.now = now
         self.defaults = defaults
         self.onChanged = onChanged
@@ -56,6 +61,16 @@ public final class DebugAccessViewModel {
     }
 
     static func keyDefaultsKey(_ domain: String) -> String { "flagship.debugAccess.key.\(domain.lowercased())" }
+
+    /// One fresh biometric per grant (like an admin invite), then the admin
+    /// root with that context; the IRK only on a device without one.
+    static func freshSensitiveKey(reason: String) async throws -> Curve25519.Signing.PrivateKey {
+        let context = try await BiometricGate().evaluateReturningContext(reason: reason)
+        if Keystore.hasAdminRoot { return try Keystore.adminRootKey(authenticatedBy: context) }
+        Keystore.cacheSessionUMK(authenticatedBy: context)
+        if let irk = Keystore.sessionIRKIfCached() { return irk }
+        return try await Keystore.deriveIRK(reason: reason)
+    }
 
     /// The box sent a newer server-detail.
     public func adopt(_ v: DebugAccessView?) {
@@ -97,7 +112,7 @@ public final class DebugAccessViewModel {
         busy = true
         defer { busy = false }
         do {
-            let key = try await signer(isOn ? "Renew debug access" : "Turn on debug access")
+            let key = try await grantSigner(isOn ? "Renew debug access" : "Turn on debug access")
             let body = DebugAccess.envelopeJSON(grant, signatureHex: try DebugAccess.sign(grant, key: key))
             let r = try await client.debugAccessGrant(body: body)
             view = r.debugAccess
@@ -118,7 +133,7 @@ public final class DebugAccessViewModel {
         defer { busy = false }
         do {
             let revoke = DebugAccess.Revoke(serverDomain: serverDomain, issuedAt: now())
-            let key = try await signer("Turn off debug access")
+            let key = try await revokeSigner("Turn off debug access")
             let body = DebugAccess.revokeJSON(revoke, signatureHex: try DebugAccess.sign(revoke, key: key))
             let r = try await client.debugAccessRevoke(body: body)
             view = r.debugAccess
