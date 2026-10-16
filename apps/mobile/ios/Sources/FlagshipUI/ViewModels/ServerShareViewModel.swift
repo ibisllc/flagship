@@ -33,7 +33,9 @@ public enum ServerShareCopy {
 
     public static let notifyTitle = "Notify this device when it needs to start"
     public static let notifyNote = "Turning this on lets Flagship's service know this device helps with this server, so it can wake you. The notice itself names no server."
-    public static let membersOnlyHint = "Members only. You need an invite to use this app."
+    /// The box counts an active share as a co-manager, at Manager rank in
+    /// every app (AGENTS.md "Three ranks"), so no invite is needed.
+    public static let membersOnlyHint = "Members only. As a co-manager you can open it."
 
     public static func updateButton(_ r: ReleaseEntry) -> String {
         "Update to \(r.tag.isEmpty ? String(r.commit.prefix(8)) : r.tag)"

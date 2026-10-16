@@ -824,7 +824,7 @@ final class ServerShareFlowTests: XCTestCase {
         XCTAssertTrue(try app(",\"accessMode\":\"members-only\"").isMembersOnly)
         XCTAssertFalse(try app(",\"accessMode\":\"open\"").isMembersOnly)
         XCTAssertFalse(try app("").isMembersOnly)
-        XCTAssertEqual(ServerShareCopy.membersOnlyHint, "Members only. You need an invite to use this app.")
+        XCTAssertEqual(ServerShareCopy.membersOnlyHint, "Members only. As a co-manager you can open it.")
         XCTAssertEqual(ServerShareCopy.unlockHouseKey,
                        "Only give this to someone you'd give a house key. Ending the share deletes their copy, but they could have kept one.")
     }
