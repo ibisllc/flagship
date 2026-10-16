@@ -63,6 +63,7 @@ import { runAdapterInsights } from "./adapterInsights.js";
 import { runModelCapabilityRefresh } from "./inferenceModelRoutes.js";
 import { pruneRateLimitLog } from "./rateLimitLog.js";
 import type { AdapterBucketLike } from "./adapterIndex.js";
+import { pruneLateLogs, type LateLogBucket } from "./lateLog.js";
 
 /** Scope of one row that the dump emits. */
 export type DumpRow =
@@ -118,6 +119,8 @@ export interface ScheduledEnv {
   ADAPTERS_REPO?: string;
   /** Optional: AI review of adapters, and the weekly private insight on retired ones. */
   ADAPTER_REVIEW_ANTHROPIC_KEY?: string;
+  /** Holds installer log tails (lateLog.ts), pruned to their TTL here. */
+  ISO_TEMP_BUCKET?: LateLogBucket;
 }
 
 /**
@@ -387,6 +390,13 @@ export async function scheduled(
       ctx.waitUntil(
         pruneRateLimitLog(env.DB, now).catch((e) => {
           console.error("[rate-limit-log] prune failed", (e as Error).message);
+        }),
+      );
+    }
+    if (env.ISO_TEMP_BUCKET) {
+      ctx.waitUntil(
+        pruneLateLogs(env.ISO_TEMP_BUCKET, now).catch((e) => {
+          console.error("[late-log] prune failed", (e as Error).message);
         }),
       );
     }

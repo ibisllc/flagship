@@ -149,7 +149,16 @@ export type RateLimitEndpoint =
   // Free AI credits: an IRK-signed token mint (one per build start and per
   // reply) or a status read. Minting records nothing, so this only fences
   // signature-check load from one address.
-  | "free-ai";
+  | "free-ai"
+  // Installer logs (/api/dev/late-log/<label>): posted by an installer that
+  // holds no credential yet, so per-IP plus per label (`subject`), which keeps
+  // one source from flooding the bucket or rotating out a box's own log.
+  | "dev-late-log"
+  // Repo adapter index (adapterIndex.ts): anonymous. A submit can cost
+  // hundreds of source fetches; three complaints retire an adapter, so they
+  // are also budgeted per adapter and per (address, adapter).
+  | "adapter-submit"
+  | "adapter-complain";
 
 /**
  * Endpoints that refuse when the counter can't be reached: each one gates
@@ -163,7 +172,7 @@ const FAIL_CLOSED: ReadonlySet<RateLimitEndpoint> = new Set<RateLimitEndpoint>([
 ]);
 
 interface AxisLimit {
-  axis: "ip" | "irk" | "usernameHash";
+  axis: "ip" | "irk" | "usernameHash" | "subject" | "ipSubject";
   /** Per-axis request budget. */
   limit: number;
   /** Window in seconds. */
@@ -315,6 +324,25 @@ export const LIMITS: Record<RateLimitEndpoint, AxisLimit[]> = {
     { axis: "ip", limit: 30, windowSec: 60 },
     { axis: "ip", limit: 600, windowSec: 3600 },
   ],
+  // A real install posts a handful of chunks (Wi-Fi bring-up, a failure tail).
+  "dev-late-log": [
+    { axis: "ip", limit: 10, windowSec: 60 },
+    { axis: "ip", limit: 60, windowSec: 3600 },
+    { axis: "subject", limit: 30, windowSec: 3600 },
+  ],
+  // A box adapts a repo with up to 2 fix rounds, each one submit.
+  "adapter-submit": [
+    { axis: "ip", limit: 5, windowSec: 60 },
+    { axis: "ip", limit: 20, windowSec: 3600 },
+  ],
+  // One address counts once per adapter a day (a box retrying a failed
+  // install isn't a second report); one adapter takes at most 10 reports an
+  // hour from everyone.
+  "adapter-complain": [
+    { axis: "ip", limit: 10, windowSec: 3600 },
+    { axis: "ipSubject", limit: 1, windowSec: 86_400 },
+    { axis: "subject", limit: 10, windowSec: 3600 },
+  ],
 };
 
 export interface RateLimitInput {
@@ -325,6 +353,8 @@ export interface RateLimitInput {
   irkPub?: string;
   /** Username hash (last path segment) for the recovery endpoint. */
   usernameHash?: string;
+  /** The thing acted on (a log label, an adapter's file hash). */
+  subject?: string;
 }
 
 export interface RateLimitedResult {
@@ -447,6 +477,8 @@ function identifierFor(input: RateLimitInput, axis: AxisLimit["axis"]): string |
   if (axis === "ip") return input.ip;
   if (axis === "irk") return input.irkPub ?? null;
   if (axis === "usernameHash") return input.usernameHash ?? null;
+  if (axis === "subject") return input.subject ?? null;
+  if (axis === "ipSubject") return input.ip && input.subject ? `${input.ip}|${input.subject}` : null;
   return null;
 }
 
@@ -483,7 +515,13 @@ export function rateLimitedResponse(result: RateLimitedResult): Response {
 /** "Too many tries from your network. Try again in about 12 minutes." */
 export function rateLimitedMessage(axis: AxisLimit["axis"], retryAfterSec: number): string {
   const who =
-    axis === "ip" ? "from your network" : axis === "irk" ? "from this account" : "for this account name";
+    axis === "ip" || axis === "ipSubject"
+      ? "from your network"
+      : axis === "irk"
+        ? "from this account"
+        : axis === "usernameHash"
+          ? "for this account name"
+          : "for this one";
   return `Too many tries ${who}. Try again ${retryAfterPhrase(retryAfterSec)}.`;
 }
 
@@ -635,6 +673,9 @@ export function endpointFor(method: string, pathname: string): RateLimitEndpoint
   if (m === "POST" && (pathname === "/api/free-ai/token" || pathname === "/api/free-ai/status")) {
     return "free-ai";
   }
+  if (m === "POST" && /^\/api\/dev\/late-log\/[^/]+$/.test(pathname)) {
+    return "dev-late-log";
+  }
   return null;
 }
 
@@ -693,6 +734,17 @@ export function extractIrkPub(endpoint: RateLimitEndpoint, body: unknown): strin
   return typeof candidate === "string" && /^[0-9a-fA-F]{64}$/.test(candidate)
     ? candidate.toLowerCase()
     : undefined;
+}
+
+/** The late-log label a POST names, the subject of its budget. */
+export function extractSubject(pathname: string): string | undefined {
+  const m = pathname.match(/^\/api\/dev\/late-log\/([^/]+)$/);
+  if (!m) return undefined;
+  try {
+    return decodeURIComponent(m[1]!);
+  } catch {
+    return m[1]!;
+  }
 }
 
 /** Pull the username hash out of the recovery path (`/api/recovery/by-username/<hash>[/fetch]`). */

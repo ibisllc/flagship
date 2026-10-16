@@ -236,6 +236,7 @@ import { createDemoCreateSettings, createDemoServerRouter, demoCreateMissingConf
 import { createUpCloudClient, parseUpCloudLabels } from "./upcloud.js";
 import { handleGymTeardown, type GymTeardownBody } from "./gymCloud.js";
 import { loadInferenceSettings } from "./inferenceModelRoutes.js";
+import { handleLateLog, type LateLogBucket } from "./lateLog.js";
 
 export interface ControlPlaneEnv {
   DB?: D1Database;
@@ -495,20 +496,8 @@ interface ProvisioningBaseBucket {
   } | null>;
 }
 
-interface ProvisioningTempBucket {
-  put(
-    key: string,
-    value: ReadableStream<Uint8Array> | Uint8Array | string,
-    options?: { httpMetadata?: { contentType?: string } },
-  ): Promise<unknown>;
-  /** Used by W12 debug log-exfil (POST/GET /api/dev/late-log/:label). */
-  list(options: {
-    prefix?: string;
-    limit?: number;
-  }): Promise<{ objects: Array<{ key: string }> }>;
-  /** Used by W12 debug log-exfil. */
-  get(key: string): Promise<{ text(): Promise<string> } | null>;
-}
+/** list/get/delete are the installer logs' (lateLog.ts). */
+type ProvisioningTempBucket = LateLogBucket;
 
 const ROUTE_RE = {
   USAGE_REPORT: /^\/api\/usage\/report$/,
@@ -785,7 +774,8 @@ const ROUTE_RE = {
   // W12 debug — observability for the d-i+late-command pipeline. The
   // installer POSTs short progress markers via curl; the operator GETs
   // the concatenated log. Backed by ISO_TEMP_BUCKET (already provisioned
-  // for W11). Unauthenticated for dev; remove before public launch.
+  // for W11). Writes unauthenticated but bounded, reads admin-only
+  // (lateLog.ts); removal is GA close-out item 5.
   DEV_LATE_LOG: /^\/api\/dev\/late-log\/([^/]+)$/,
   // W12 debug — put a Hetzner server into rescue mode + return its
   // root password. The Worker has HCLOUD_TOKEN; the operator's laptop
@@ -3562,50 +3552,10 @@ export async function tryControlPlane(
     );
   }
 
-  // W12 debug — unauthenticated late-command log exfil. Returns 503
-  // when ISO_TEMP_BUCKET isn't bound. Each POST stores one timestamped
-  // chunk under `late-log/<label>/<ts>.txt`; GET lists + concatenates.
-  // The label is opaque (typically `<serverDomain>` or `<username>`).
+  // W12 debug — installer log tails (lateLog.ts): unauthenticated, bounded
+  // writes; admin-only reads. route.ts budgets the writes.
   if ((m = path.match(ROUTE_RE.DEV_LATE_LOG))) {
-    if (!env.ISO_TEMP_BUCKET) {
-      return new Response("ISO_TEMP_BUCKET unbound\n", { status: 503 });
-    }
-    const label = decodeURIComponent(m[1]!);
-    if (!/^[A-Za-z0-9._-]{1,128}$/.test(label)) {
-      return new Response("invalid label\n", { status: 400 });
-    }
-    if (method === "POST") {
-      const body = await request.text();
-      if (body.length > 64 * 1024) {
-        return new Response("chunk too large\n", { status: 413 });
-      }
-      const ts = Date.now();
-      const key = `late-log/${label}/${ts}-${Math.random().toString(36).slice(2, 8)}.txt`;
-      await env.ISO_TEMP_BUCKET.put(key, body, {
-        httpMetadata: { contentType: "text/plain" },
-      });
-      return new Response(`stored ${body.length}B as ${key}\n`, {
-        status: 200,
-        headers: { "content-type": "text/plain" },
-      });
-    }
-    if (method === "GET") {
-      const listed = await env.ISO_TEMP_BUCKET.list({
-        prefix: `late-log/${label}/`,
-        limit: 1000,
-      });
-      const keys = (listed.objects ?? []).map((o) => o.key).sort();
-      const chunks: string[] = [];
-      for (const k of keys) {
-        const obj = await env.ISO_TEMP_BUCKET.get(k);
-        if (obj) chunks.push(`# ── ${k} ──\n${await obj.text()}\n`);
-      }
-      return new Response(chunks.length > 0 ? chunks.join("") : `no entries for ${label}\n`, {
-        status: 200,
-        headers: { "content-type": "text/plain" },
-      });
-    }
-    return new Response("method not allowed\n", { status: 405 });
+    return handleLateLog(request, env, m[1]!);
   }
 
   // W12 debug — Hetzner rescue mode enabler. POST returns the rescue
