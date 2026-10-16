@@ -18,6 +18,7 @@ public struct TierStatusScreen: View {
         let c = FSColors.scheme(scheme)
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s6) {
+                if let warning = vm.separateListsWarning { separateListsCard(warning, c: c) }
                 switch vm.state {
                 case .idle, .loading:
                     ForEach(0..<2, id: \.self) { _ in ServerCardSkeleton() }
@@ -121,6 +122,18 @@ public struct TierStatusScreen: View {
                 FSCard { Text(n).font(FS.font.mono()).foregroundColor(c.text) }
             }
         }
+    }
+
+    private func separateListsCard(_ text: String, c: FSColors) -> some View {
+        FSCard {
+            HStack(alignment: .top, spacing: FS.space.s3) {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundColor(c.warning)
+                Text(text).font(FS.font.bodySm()).foregroundColor(c.text)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("tier-status-separate-lists-warning")
     }
 
     // MARK: - Bits

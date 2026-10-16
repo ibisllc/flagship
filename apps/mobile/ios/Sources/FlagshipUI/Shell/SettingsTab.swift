@@ -378,7 +378,10 @@ public struct SettingsTab: View {
                 catalog: { [server] in await ModelMenuCache.catalog { try await server.inferenceModels() } }
             )
         case .tierStatus:
-            TierStatusScreen(vm: TierStatusViewModel(client: client))
+            TierStatusScreen(vm: TierStatusViewModel(
+                client: client,
+                serverNames: Dictionary(app.pods.map { ($0.fqdn.lowercased(), AppPlacementCopy.serverName($0)) },
+                                        uniquingKeysWith: { a, _ in a })))
         case .recovery:
             RecoveryContainer(onShowPostRecoveryProgress: { path.append(.postRecoveryProgress) })
         case .accountSecurity:

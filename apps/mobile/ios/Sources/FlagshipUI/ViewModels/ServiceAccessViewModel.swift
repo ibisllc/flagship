@@ -28,6 +28,11 @@ import FlagshipCore
 /// in the app is Manager or Master invites at Member and withdraws only the
 /// invites it made, signing with its account device key; below that it
 /// can't invite.
+///
+/// A Pro account may give the app a separate list on each server (a signed
+/// `flagship/app-list-scope/v1`, admin devices only; feat/marketplace). While
+/// it has one, a server picker re-targets the whole screen: mode, members,
+/// ranks, invite links and withdrawals all go to the picked server.
 @Observable
 @MainActor
 public final class ServiceAccessViewModel {
@@ -74,10 +79,12 @@ public final class ServiceAccessViewModel {
         public let creatorTier: String?
         /// The account device id that created the invite; nil on old rows.
         public let creatorDeviceId: String?
+        /// How many times the link was used, as `.com` counts it (groups).
+        public let redemptions: Int?
         public var id: String { inviteId }
         public var isGroup: Bool { groupMax != nil }
         public init(inviteId: String, name: String, photo: String?, bound: Bool, boundAID: String?, groupBoundAIDs: [String] = [], groupMax: Int? = nil, manual: Bool = false,
-                    creatorTier: String? = nil, creatorDeviceId: String? = nil) {
+                    creatorTier: String? = nil, creatorDeviceId: String? = nil, redemptions: Int? = nil) {
             self.inviteId = inviteId
             self.name = name
             self.photo = photo
@@ -88,6 +95,7 @@ public final class ServiceAccessViewModel {
             self.manual = manual
             self.creatorTier = creatorTier
             self.creatorDeviceId = creatorDeviceId
+            self.redemptions = redemptions
         }
     }
 
@@ -104,7 +112,9 @@ public final class ServiceAccessViewModel {
     public private(set) var phase: Phase = .idle
     public private(set) var restricted = false
     public private(set) var allowCount = 0
-    public private(set) var people: [Person] = []
+    /// The invited people and groups the shown server's list holds.
+    public var people: [Person] { Self.peopleOnShownServer(invited, members: members, scope: listScope) }
+    private var invited: [Person] = []
     /// Set after a successful create so the screen can surface the share-link.
     public private(set) var lastInviteLink: String?
     /// The tier the last-created link was for (so the screen can label it).
@@ -127,13 +137,26 @@ public final class ServiceAccessViewModel {
     /// This device's account device key (public, lowercase hex), once known.
     public private(set) var ownDevicePub: String?
 
+    /// The app's list scope as the shown server holds it; nil when it can't
+    /// say (an older box), which hides the switch.
+    public private(set) var listScope: AppListScopeState?
+    public private(set) var busyScope = false
+    /// The box refused a separate list for want of Pro.
+    public private(set) var scopeNeedsPro = false
+    /// The server whose list the screen shows and edits.
+    public private(set) var shownServer: String
+
     /// Does this device hold the account's admin root?
     public let isAdminDevice: Bool
     /// This device's account device id.
     public let deviceId: String?
 
     private let client: any ServiceAccessClient
-    private let serverDomain: String
+    /// The server the screen opened on, and its screens client.
+    public let homeServer: String
+    private let homeScreens: (any ScreensClient)?
+    private let podScreens: (@MainActor (String) async -> any ScreensClient)?
+    private let serverNames: [String: String]
     private let serviceRef: String
     private let username: String
     private let controlBase: URL
@@ -141,8 +164,8 @@ public final class ServiceAccessViewModel {
     /// link's author key and signs the list query; the household decrypts the
     /// listed bundles.
     private let authorAidKeys: @MainActor (String) async throws -> (aid: Curve25519.Signing.PrivateKey, household: Data)
-    /// The box's owner-session API (members + ranks); nil ⇒ no ranks shown.
-    private let screens: (any ScreensClient)?
+    /// The shown box's owner-session API (members + ranks); nil ⇒ no ranks shown.
+    private var screens: (any ScreensClient)?
     /// The admin root, on an admin device, behind a prompt that also opens
     /// the session's account keys, so the AID that follows costs none.
     private let adminSigner: AppAccessSigner
@@ -161,6 +184,8 @@ public final class ServiceAccessViewModel {
         controlBase: URL = Endpoints.controlBaseUrl,
         authorAidKeys: (@MainActor (String) async throws -> (aid: Curve25519.Signing.PrivateKey, household: Data))? = nil,
         screens: (any ScreensClient)? = nil,
+        podScreens: (@MainActor (String) async -> any ScreensClient)? = nil,
+        serverNames: [String: String] = [:],
         isAdminDevice: Bool? = nil,
         adminSigner: AppAccessSigner? = nil,
         deviceId: String? = nil,
@@ -171,6 +196,11 @@ public final class ServiceAccessViewModel {
     ) {
         let device = deviceId?.lowercased()
         self.screens = screens
+        self.homeScreens = screens
+        self.podScreens = podScreens
+        self.serverNames = Dictionary(serverNames.map { ($0.key.lowercased(), $0.value) }, uniquingKeysWith: { a, _ in a })
+        self.homeServer = serverDomain
+        self.shownServer = serverDomain
         self.isAdminDevice = isAdminDevice ?? Keystore.hasAdminRoot
         self.adminSigner = adminSigner ?? { reason in try await ServerOrderSaver.sensitiveOrderKey(reason: reason) }
         self.deviceId = device
@@ -183,7 +213,6 @@ public final class ServiceAccessViewModel {
         }
         self.loadDeviceNames = deviceNames ?? { nil }
         self.client = client
-        self.serverDomain = serverDomain
         self.serviceRef = serviceRef
         self.username = username
         self.controlBase = controlBase
@@ -196,13 +225,14 @@ public final class ServiceAccessViewModel {
     public func load() async {
         phase = .loading
         do {
-            let state = try await client.getAccessState(serverDomain: serverDomain, serviceRef: serviceRef)
+            let state = try await client.getAccessState(serverDomain: shownServer, serviceRef: serviceRef)
             restricted = state.isRestricted
             allowCount = state.allowCount
             phase = .ready
             async let people: Void = refreshPeople()
             async let roles: Void = refreshMembers()
-            _ = await (people, roles)
+            async let scope: Void = refreshListScope()
+            _ = await (people, roles, scope)
             noteOwnDeviceKey(ownDeviceKey())
             await loadNamesIfNeeded()
         } catch {
@@ -373,6 +403,161 @@ public final class ServiceAccessViewModel {
         }
     }
 
+    // MARK: separate list on each server (Pro)
+
+    public static let scopeTitle = "Separate list on each server"
+    public static let scopeNote = "Each server keeps its own members and invites."
+    public static let scopeProLine = "Comes with Pro."
+    public static let scopePendingLine = "Waiting for this server to confirm Pro."
+    public static let scopeReadOnlyOn = "Each server has its own list."
+    public static let scopeOnTitle = "A separate list on each server?"
+    public static let scopeOnConfirm = "Each server keeps its current list. Changes you make on one server stay on it."
+    public static let scopeOffTitle = "One list on every server?"
+
+    public static func scopeOffConfirm(leaderName: String) -> String {
+        "Every server will use \(leaderName)'s list. People who joined on other servers since lose access."
+    }
+
+    /// Read the app's scope from the shown server. A server picked from the
+    /// list that can't say keeps the last answer, so the picker stays.
+    public func refreshListScope() async {
+        guard let screens else { listScope = nil; return }
+        if let s = try? await screens.appListScope(serviceId: serviceRef) {
+            listScope = s
+        } else if showingHome {
+            listScope = nil
+        }
+    }
+
+    /// The switch is an admin device's alone, and only on a box that knows it.
+    public var showsScopeToggle: Bool { isAdminDevice && listScope != nil }
+
+    /// On while the app has a separate list, or one is waiting for Pro.
+    public var scopeOn: Bool { listScope.map { $0.isSeparate || $0.pending } ?? false }
+
+    /// Turning it on needs Pro; turning it off never does.
+    public var canToggleScope: Bool {
+        guard showsScopeToggle, !busyScope, let listScope else { return false }
+        return scopeOn || listScope.isPro
+    }
+
+    /// "Comes with Pro." under a switch that can't be turned on (no purchase
+    /// link in the app: store rules).
+    public var scopeProNote: String? {
+        guard showsScopeToggle, let listScope, !scopeOn else { return nil }
+        return scopeNeedsPro || !listScope.isPro ? Self.scopeProLine : nil
+    }
+
+    public var scopePendingNote: String? { listScope?.pending == true ? Self.scopePendingLine : nil }
+
+    /// What a non-admin device sees instead of the switch.
+    public var scopeReadOnlyNote: String? {
+        guard !isAdminDevice, listScope?.isSeparate == true else { return nil }
+        return Self.scopeReadOnlyOn
+    }
+
+    /// The servers the picker offers, in the owner's server order.
+    public var pickerServers: [String] {
+        guard let listScope, listScope.isSeparate else { return [] }
+        return listScope.servers.contains(shownServerKey) ? listScope.servers : [shownServerKey] + listScope.servers
+    }
+
+    public var showingHome: Bool { shownServer.lowercased() == homeServer.lowercased() }
+
+    /// The picker's selection: the shown server as the list names it.
+    public var shownServerKey: String { shownServer.lowercased() }
+
+    /// One list: no picker; a separate list on a single server needs none.
+    public var showsServerPicker: Bool { pickerServers.count >= 2 }
+
+    /// A server's name as this device knows it, else its first DNS label.
+    public func serverName(_ fqdn: String) -> String {
+        let f = fqdn.lowercased()
+        if let name = serverNames[f]?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty { return name }
+        return f.split(separator: ".").first.map(String.init) ?? f
+    }
+
+    /// The confirm line for turning it off: whose list every server takes.
+    public var scopeOffConfirmText: String {
+        let leader = listScope.map { $0.leader.isEmpty ? $0.selfFqdn : $0.leader } ?? ""
+        return Self.scopeOffConfirm(leaderName: serverName(leader.isEmpty ? shownServerKey : leader))
+    }
+
+    /// Sign `flagship/app-list-scope/v1` with the admin root and post it to
+    /// the shown server, which hands it to the app's other servers. Returns
+    /// whether the box took it; a 402 sets `scopeNeedsPro`.
+    @discardableResult
+    public func setSeparateLists(_ on: Bool) async -> Bool {
+        guard showsScopeToggle, let screens, !busyScope else { return false }
+        if on, listScope?.isPro != true {
+            scopeNeedsPro = true
+            return false
+        }
+        busyScope = true
+        defer { busyScope = false }
+        do {
+            let key = try await adminSigner(on ? "Give \(serviceRef) a separate list on each server"
+                                               : "Give \(serviceRef) one list on every server")
+            var issuedAt = now()
+            for attempt in 0..<2 {
+                let order = AppListScopeOrder(serviceRef: serviceRef, separate: on, issuedAt: issuedAt)
+                let sig = try key.signature(for: try order.canonicalBytes())
+                do {
+                    listScope = try await screens.setAppListScope(
+                        serviceId: serviceRef, AppListScopeRequest(order: order, signature: HexUtil.encode(sig)))
+                    break
+                } catch ScreensClientError.http(let status, _) where status == 409 && attempt == 0 {
+                    issuedAt = max(now(), issuedAt + 1)
+                }
+            }
+            scopeNeedsPro = false
+            if !on, !showingHome {
+                await showServer(homeServer)
+            } else {
+                await refreshMembers()
+            }
+            return true
+        } catch ScreensClientError.http(let status, _) where status == 402 {
+            scopeNeedsPro = true
+            return false
+        } catch {
+            phase = .failed(on ? "Couldn't give each server its own list. Try again in a moment."
+                               : "Couldn't go back to one list. Try again in a moment.")
+            return false
+        }
+    }
+
+    /// Show and edit another server's list: every call the screen makes then
+    /// goes to that server, with this device's session there.
+    public func showServer(_ fqdn: String) async {
+        let f = fqdn.lowercased()
+        guard f != shownServer.lowercased() else { return }
+        if f == homeServer.lowercased() {
+            screens = homeScreens
+            shownServer = homeServer
+        } else {
+            guard pickerServers.contains(f), let podScreens else { return }
+            screens = await podScreens(f)
+            shownServer = f
+        }
+        members = nil
+        lastInviteLink = nil
+        lastInviteTier = nil
+        await load()
+    }
+
+    /// With a separate list on each server, the invites `.com` lists for the
+    /// app (it doesn't know which server a link points at) narrow to the ones
+    /// the shown server knows, plus links nobody has used yet. One list: all.
+    public static func peopleOnShownServer(_ people: [Person], members: AppMembersResponse?,
+                                           scope: AppListScopeState?) -> [Person] {
+        guard scope?.isSeparate == true, let members else { return people }
+        let known = Set(members.invites.map(\.inviteId) + members.members.flatMap { $0.grants.map(\.inviteId) })
+        return people.filter { p in
+            known.contains(p.inviteId) || (!p.bound && p.groupBoundAIDs.isEmpty && (p.redemptions ?? 0) == 0)
+        }
+    }
+
     // MARK: mode
 
     /// Admin-root-sign + POST the mode change. Reverts `restricted` on failure.
@@ -384,7 +569,7 @@ public final class ServiceAccessViewModel {
             let key = try await adminSigner(want ? "Make \(serviceRef) members only" : "Open \(serviceRef) to all")
             let order = ServiceAccessModeOrder(serviceRef: serviceRef, restricted: want, issuedAt: now())
             let sig = try key.signature(for: try order.canonicalBytes())
-            _ = try await client.setAccessMode(serverDomain: serverDomain, request: order.request,
+            _ = try await client.setAccessMode(serverDomain: shownServer, request: order.request,
                                                signatureHex: HexUtil.encode(sig))
             // The members list never changes with the mode.
             restricted = want
@@ -450,7 +635,7 @@ public final class ServiceAccessViewModel {
             try await client.createInvite(controlBase: controlBase, username: username, request: request, signatureHex: HexUtil.encode(sig))
 
             let link = ServiceInviteLinks.inviteLink(
-                serverDomain: serverDomain, secretHex: HexUtil.encode(secret),
+                serverDomain: shownServer, secretHex: HexUtil.encode(secret),
                 authorAidHex: HexUtil.encode(aidPub),
                 inviteId: tier.isManual ? inviteId : nil,
                 serviceRef: serviceRef)
@@ -519,11 +704,11 @@ public final class ServiceAccessViewModel {
 
         if !aids.isEmpty, !sigHex.isEmpty {
             do {
-                _ = try await client.withdrawInvite(serverDomain: serverDomain, revoke: revoke, signatureHex: sigHex)
+                _ = try await client.withdrawInvite(serverDomain: shownServer, revoke: revoke, signatureHex: sigHex)
                 for aid in legacy {
                     let order = ServiceAllowRemoveOrder(serviceRef: serviceRef, aid: aid.lowercased(), issuedAt: now())
                     let sig = try key.signature(for: try order.canonicalBytes())
-                    _ = try await client.removeServiceAllow(serverDomain: serverDomain, request: order.request,
+                    _ = try await client.removeServiceAllow(serverDomain: shownServer, request: order.request,
                                                             signatureHex: HexUtil.encode(sig))
                 }
             } catch {
@@ -561,7 +746,7 @@ public final class ServiceAccessViewModel {
             ]
             let rows = try await client.listInvites(
                 controlBase: controlBase, username: username, query: query, signatureHex: HexUtil.encode(qSig))
-            people = rows
+            invited = rows
                 .filter { $0.serviceRef == serviceRef && $0.revokedAt == nil }
                 .map { row in
                     var name = "unknown"
@@ -582,7 +767,8 @@ public final class ServiceAccessViewModel {
                         groupMax: row.maxRedemptions,
                         manual: row.approvalMode == "manual",
                         creatorTier: row.creatorTier,
-                        creatorDeviceId: row.creatorDeviceId)
+                        creatorDeviceId: row.creatorDeviceId,
+                        redemptions: row.redemptions)
                 }
         } catch {
             // Keep the last-known list; the load-phase error is already surfaced.

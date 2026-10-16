@@ -11,6 +11,8 @@ import FlagshipCore
 ///   - Account members: this account's devices (names decrypted on the
 ///     phone) and the accounts co-managing the server, each with its rank;
 ///     on an admin device a rank menu and Refuse per row,
+///   - on a Pro account, "Separate list on each server" (admin devices) and,
+///     while it is on, a server picker that re-targets the whole screen,
 ///   - in both modes, Members (n): people and groups with a rank each
 ///     (a signed `flagship/app-rank/v1` order), + Add person / + Add group
 ///     (the rank chosen at creation), remove (withdraw), and who invited
@@ -28,6 +30,7 @@ public struct ServiceAccessScreen: View {
     @Environment(\.screensClient) private var screens
     @Environment(\.serviceAccessKeys) private var keys
     @Environment(\.flagshipServerClient) private var server
+    @Environment(\.podScreensClients) private var podClients
     @Environment(AppState.self) private var app
     @Environment(ToastCenter.self) private var toasts
 
@@ -50,6 +53,8 @@ public struct ServiceAccessScreen: View {
     @State private var confirmRemove: ServiceAccessViewModel.Person?
     @State private var groupMaxText = "10"
     @State private var groupExpires = true
+    /// The list-scope switch's pick awaiting its confirm; nil: none.
+    @State private var confirmScope: Bool?
 
     enum Mode: String, CaseIterable, Identifiable {
         case open, membersOnly
@@ -72,6 +77,7 @@ public struct ServiceAccessScreen: View {
             VStack(alignment: .leading, spacing: FS.space.s4) {
                 headerCard(c: c)
                 modeCard(c: c)
+                scopeCard(c: c)
                 accountMembersSection(c: c)
                 membersSection(c: c)
                 Spacer().frame(height: FS.space.s12)
@@ -97,6 +103,20 @@ public struct ServiceAccessScreen: View {
         .onChange(of: confirmMembersOnly) { _, shown in
             // Dismissed without choosing: the toggle goes back.
             if !shown && !applyingMode { pendingMode = nil }
+        }
+        .confirmationDialog(
+            confirmScope == true ? ServiceAccessViewModel.scopeOnTitle : ServiceAccessViewModel.scopeOffTitle,
+            isPresented: Binding(get: { confirmScope != nil }, set: { if !$0 { confirmScope = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button(confirmScope == true ? "Separate lists" : "One list") {
+                if let want = confirmScope { Task { await applyScope(want) } }
+                confirmScope = nil
+            }
+            .accessibilityIdentifier("service-access-list-scope-confirm")
+            Button("Cancel", role: .cancel) { confirmScope = nil }
+        } message: {
+            Text(confirmScope == true ? ServiceAccessViewModel.scopeOnConfirm : (vm?.scopeOffConfirmText ?? ""))
         }
         .confirmationDialog(
             confirmRemove?.isGroup == true ? "Revoke \(confirmRemove?.name ?? "this group")?" : "Remove \(confirmRemove?.name ?? "this person")?",
@@ -192,6 +212,67 @@ public struct ServiceAccessScreen: View {
                     .font(FS.font.caption())
                     .foregroundColor(c.textMuted)
                     .accessibilityIdentifier("service-access-mode-status")
+            }
+        }
+    }
+
+    // MARK: separate list on each server (Pro)
+
+    @ViewBuilder
+    private func scopeCard(c: FSColors) -> some View {
+        if let vm, vm.showsScopeToggle || vm.scopeReadOnlyNote != nil {
+            FSCard {
+                VStack(alignment: .leading, spacing: FS.space.s3) {
+                    if vm.showsScopeToggle {
+                        Toggle(isOn: Binding(get: { vm.scopeOn }, set: { want in onPickScope(want) })) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(ServiceAccessViewModel.scopeTitle).foregroundColor(c.text)
+                                Text(ServiceAccessViewModel.scopeNote)
+                                    .font(FS.font.caption()).foregroundColor(c.textMuted)
+                            }
+                        }
+                        .tint(c.primary)
+                        .disabled(!vm.canToggleScope)
+                        .accessibilityIdentifier("service-access-list-scope-toggle")
+                        if let pro = vm.scopeProNote {
+                            Text(pro).font(FS.font.caption()).foregroundColor(c.textMuted)
+                                .accessibilityIdentifier("service-access-list-scope-pro")
+                        }
+                    } else if let note = vm.scopeReadOnlyNote {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(ServiceAccessViewModel.scopeTitle).foregroundColor(c.text)
+                            Text(note).font(FS.font.caption()).foregroundColor(c.textMuted)
+                                .accessibilityIdentifier("service-access-list-scope-readonly")
+                        }
+                    }
+                    if let pending = vm.scopePendingNote {
+                        Text(pending).font(FS.font.caption()).foregroundColor(c.warning)
+                            .accessibilityIdentifier("service-access-list-scope-pending")
+                    }
+                    if vm.showsServerPicker { serverPicker(vm) }
+                }
+            }
+        }
+    }
+
+    /// Which server's list the whole screen shows and edits.
+    @ViewBuilder
+    private func serverPicker(_ vm: ServiceAccessViewModel) -> some View {
+        let servers = vm.pickerServers
+        let picker = Picker("Server", selection: Binding(
+            get: { vm.shownServerKey },
+            set: { f in Task { await showServer(f) } }
+        )) {
+            ForEach(servers, id: \.self) { f in Text(vm.serverName(f)).tag(f) }
+        }
+        .accessibilityIdentifier("service-access-server-picker")
+        if servers.count <= 3 {
+            picker.pickerStyle(.segmented)
+        } else {
+            HStack {
+                Text("Server").foregroundColor(FSColors.scheme(scheme).text)
+                Spacer()
+                picker.pickerStyle(.menu)
             }
         }
     }
@@ -613,6 +694,7 @@ public struct ServiceAccessScreen: View {
         let fixtureNames = keys?.deviceNames
         let account = username
         let directory = server
+        let pods = podClients
         let m = vm ?? ServiceAccessViewModel(
             client: client,
             serverDomain: serverDomain,
@@ -620,6 +702,9 @@ public struct ServiceAccessScreen: View {
             username: username,
             authorAidKeys: keys?.authorAidKeys,
             screens: screens,
+            podScreens: { fqdn in await pods.client(forFqdn: fqdn) },
+            serverNames: Dictionary(app.pods.map { ($0.fqdn.lowercased(), AppPlacementCopy.serverName($0)) },
+                                    uniquingKeysWith: { a, _ in a }),
             isAdminDevice: keys?.isAdminDevice,
             adminSigner: keys?.adminSigner,
             deviceId: deviceId,
@@ -663,6 +748,33 @@ public struct ServiceAccessScreen: View {
                 toasts.success(want == .membersOnly ? "Now members only." : "Now open to all.")
             }
         }
+    }
+
+    @MainActor
+    private func onPickScope(_ want: Bool) {
+        guard let vm, want != vm.scopeOn, vm.canToggleScope else { return }
+        confirmScope = want
+    }
+
+    @MainActor
+    private func applyScope(_ want: Bool) async {
+        guard let vm else { return }
+        if await vm.setSeparateLists(want) {
+            toasts.success(want ? "Each server now keeps its own list." : "Every server now uses one list.")
+        } else if vm.scopeNeedsPro {
+            return
+        } else if case .failed(let msg) = vm.phase {
+            toasts.error(msg)
+        }
+    }
+
+    @MainActor
+    private func showServer(_ fqdn: String) async {
+        guard let vm else { return }
+        adding = nil
+        pendingMode = nil
+        await vm.showServer(fqdn)
+        if case .failed(let msg) = vm.phase { toasts.error(msg) }
     }
 
     @MainActor

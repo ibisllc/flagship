@@ -310,6 +310,67 @@ final class GymOctoberTests: XCTestCase {
         gymShot(app, "access-control-invited-by")
     }
 
+    // ─── A separate access list on each server (Pro, feat/marketplace) ──────
+
+    private func listScopeToggle(_ app: XCUIApplication) -> XCUIElement {
+        let toggle = app.switches["service-access-list-scope-toggle"]
+        XCTAssertTrue(reveal(app, toggle), "An admin device sees the separate-lists switch.")
+        return toggle
+    }
+
+    func test_accessControlListScopeLockedWithoutPro() throws {
+        let app = launch(tab: "apps", ["-smoke-access-fixture", "-smoke-list-scope", "free"])
+        openPlantsAccess(app)
+        app.swipeDown(); app.swipeDown()
+        let toggle = listScopeToggle(app)
+        XCTAssertFalse(toggle.isEnabled, "Without Pro the switch can't be turned on.")
+        XCTAssertEqual(toggle.value as? String, "0")
+        let pro = app.staticTexts["service-access-list-scope-pro"]
+        XCTAssertTrue(pro.exists)
+        XCTAssertEqual(pro.label, "Comes with Pro.")
+        XCTAssertFalse(app.descendants(matching: .any)["service-access-server-picker"].exists, "One list: no picker.")
+        gymShot(app, "access-control-list-scope-locked")
+    }
+
+    func test_accessControlListScopeTurnOnShowsServerPicker() throws {
+        let app = launch(tab: "apps", ["-smoke-access-fixture", "-smoke-list-scope", "pro"])
+        openPlantsAccess(app)
+        app.swipeDown(); app.swipeDown()
+        let toggle = listScopeToggle(app)
+        XCTAssertTrue(toggle.isEnabled, "With Pro the switch can be turned on.")
+        XCTAssertFalse(app.staticTexts["service-access-list-scope-pro"].exists)
+        gymShot(app, "access-control-list-scope-off")
+
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+        let confirm = app.buttons.matching(NSPredicate(format: "label == %@", "Separate lists")).firstMatch
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5), "Turning it on asks first.")
+        confirm.tap()
+        let picker = app.segmentedControls["service-access-server-picker"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 15), "A separate list on each server shows the server picker.")
+        XCTAssertTrue(picker.buttons["Home"].exists && picker.buttons["Office"].exists,
+                      "The picker names the app's servers.")
+        XCTAssertEqual(toggle.value as? String, "1")
+        gymShot(app, "access-control-list-scope-on")
+
+        picker.buttons["Office"].tap()
+        expectation(for: NSPredicate(format: "isSelected == true"), evaluatedWith: picker.buttons["Office"])
+        waitForExpectations(timeout: 15)
+        XCTAssertTrue(app.staticTexts["service-access-members-title"].waitForExistence(timeout: 10),
+                      "The picked server's list loads.")
+        gymShot(app, "access-control-list-scope-office")
+    }
+
+    func test_tierStatusWarnsAboutSeparateLists() throws {
+        let app = launch(tab: "settings", ["-smoke-access-fixture", "-smoke-list-scope", "separate"])
+        let row = app.buttons["settings-open-subscription"]
+        XCTAssertTrue(reveal(app, row), "Settings offers the plan screen.")
+        row.tap()
+        let warning = app.descendants(matching: .any)["tier-status-separate-lists-warning"]
+        XCTAssertTrue(warning.waitForExistence(timeout: 15), "Pro with a separate list on each server warns first.")
+        XCTAssertTrue(warning.label.contains("When Pro ends it will use Home's list."), "Got: \(warning.label)")
+        gymShot(app, "tier-status-separate-lists")
+    }
+
     // ─── Server order: Make leader stays gray until the box confirms ─────────
 
     func test_makeLeaderWaitsForTheServerToConfirm() throws {

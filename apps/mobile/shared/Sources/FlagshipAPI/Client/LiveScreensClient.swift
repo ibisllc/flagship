@@ -382,6 +382,16 @@ public final class LiveScreensClient: ScreensClient, @unchecked Sendable {
         let body = try JSONEncoder().encode(req)
         return try await request("/api/screens/services/\(segment(serviceId))/members/rank", method: "POST", body: body)
     }
+    public func appListScope(serviceId: String) async throws -> AppListScopeState {
+        try await request("/api/screens/services/\(segment(serviceId))/list-scope")
+    }
+    public func setAppListScope(serviceId: String, _ req: AppListScopeRequest) async throws -> AppListScopeState {
+        let body = try JSONEncoder().encode(req)
+        return try await request("/api/screens/services/\(segment(serviceId))/list-scope", method: "POST", body: body)
+    }
+    public func accessListsSummary() async throws -> AccessListsSummary {
+        try await request("/api/screens/access-lists/summary", timeout: 30)
+    }
     @discardableResult
     public func deliverServerOrder(_ order: SignedServerOrderWire) async throws -> ServerOrderAck {
         try await request("/api/screens/server-order", method: "POST", body: try JSONEncoder().encode(order))
