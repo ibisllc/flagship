@@ -446,6 +446,73 @@ the total gym is *Tier-1 breadth + a curated Tier-2 slice*.
   on-demand** cadence, not per PR. This is the home of the total gym's **vertical
   slice + live-contract** scenarios.
 
+### Tier 2 today — the shared live fleet (`tools/live-e2e/shared-run.ts`)
+
+The live tier that runs is protocol-level: a harness plays the phone, the
+browser and the visitors against real UpCloud boxes (label `flagship-env=gym`)
+and the gym Worker. It provisions ONE fleet per run and always tears it down
+through `/api/gym/teardown`, then sweeps any gym server or DNS record still
+left (the `flagship.services` zone is shared with prod and capped).
+
+| Slot | Box | Made by |
+|---|---|---|
+| A1, A2, A3 | demo account A's `home`, `home2`, `home3` (home3 stays unpaired: the restore target) | demo flow, `/api/gym/provision` |
+| B1 | demo account B's `home` (the co-manager, the scripted model, the real-model chat) | demo flow |
+| R1, R2 | a REAL account R (admin root pinned, read tokens, admin-only add-server); both boxes share the SWK a phone derives for `home` | `/api/gym/provision` with `swkHex` + `backupIntervalMs` |
+
+Groups (`--list` prints them; `--groups a,b` runs a subset):
+
+| Phase | Groups |
+|---|---|
+| 1 | `core`, `gating`, `invites` (incl. a second admin device), `enforcement`, `runtimes` (incl. staging reaches nothing), `real-account` (incl. a new account with no server), `migrate` (R: home → home2, the old box wipes) |
+| 2 | `server-order`, `access-lists`, `ai-staging`, `share` (view vs manage, co-manager update, Manager sign-in, `.com` offer + unlock + push, leave), `api-keys` (+ signed DB writes), `remote` (QR pipe, companion), `ai-chat` (real DeepInfra models, continue + provider switch) |
+| 3 | `app-copy` (lan-hint signature, copy over the LAN), `archive` (backup with two key slots, approved Range download, restore onto home3) |
+| 4 | `activity` |
+| 8 | `one-list` (powers home off) |
+| 9 | `update`, `lifecycle` (delete = wipe-now order + release; the box wipes itself) |
+
+```sh
+bash scripts/gym-refresh.sh                       # gym branch + D1 + Worker + Fly app
+set -a; . .gym-secrets.env; set +a
+npx tsx tools/live-e2e/shared-run.ts              # everything; exit 0 green, 1 red, 3 inconclusive
+npx tsx tools/live-e2e/shared-run.ts --keep       # leave the fleet up for --reuse
+npx tsx tools/live-e2e/shared-run.ts --teardown --reuse gym-results/<run>/fleet.json
+npx tsx tools/live-e2e/sweep-cli.ts [--destroy]   # list / reap every gym server and DNS record
+npx tsx tools/live-e2e/probe-cli.ts <user> <server> GET /api/screens/server-restore   # one owner call
+```
+
+**Two budgets the gym shares with prod**, both checked before anything is
+provisioned (the run exits 3 instead of spending boxes):
+
+- **DNS records.** Every box adds about 8 records to the `flagship.services`
+  Cloudflare zone (200-record cap), and prod holds ~150 of them (2026-10-16). A
+  run whose fleet would push the zone past the cap is refused; the runner
+  keeps the fleet at four boxes at a time by releasing R's boxes after phase 1
+  and only then starting home2 and home3. Two runs on 2026-10-16 went red
+  because the zone was full (boxes registered, never got a certificate).
+- **Let's Encrypt certificates.** `flagship.services` is not on the Public
+  Suffix List, so every gym and prod certificate comes out of ONE "50 new
+  certificates per registered domain per week" budget (one gym run ≈ 7). The
+  runner opens, and never finalises, an order first and refuses when it is
+  refused (`tools/live-e2e/acme-budget-cli.ts` asks the same).
+
+`ai-chat` reads the DeepInfra key from `$DEEPINFRA_KEY_FILE` (default
+`~/.config/flagship/deepinfra-eval.key`) and skips without it; its token use
+lands in `gym-results/<run>/ai-usage.json`. Hold the gym lock
+(`/private/tmp/claude-501/flagship-locks/gym.lock`) while refreshing or running.
+
+**Still not covered live, and why:** phone-approval disk unlock, a co-manager's
+start-up approval and its push, Watch/Wear delegate approval and first-boot
+update (they need an approve-mode, LUKS-sealed box: the VM appliance as an
+UpCloud template, §5.5 of the 2026-10-16 audit); a FORWARD update and the
+rollback drill (gym boxes run unendorsed `main`, so `update` moves to an older
+endorsed release); Flagship Inference through the meter shim (no gym shim);
+hub gossip between sibling boxes (`broadcast--<user>` has no DNS or TLS
+terminator); the read token a box mints with its STK (the harness never holds
+a box key); a phone on the box's own Wi-Fi (LAN-direct is checked box to box
+on the provider's private network only); the apps' buttons themselves (the
+live UI tier, §5.4 of the audit).
+
 **Rule of thumb:** Tier 1 answers "does the UI work, and does it show the right
 thing for a given state?"; Tier 2 answers "does the UI talk to a real box
 correctly, and does the action have the real effect?". The every-merge gym is

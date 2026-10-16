@@ -18,7 +18,8 @@ import {
   type Keypair,
   type RegisterRck,
 } from "@flagship/protocol";
-import { REAL_PRIMARY_DEVICE_ID, issueAuthCode, mintDeviceGrant, newAuthCode } from "../lib/fleet.js";
+import { REAL_PRIMARY_DEVICE_ID, createRealAccount, issueAuthCode, mintDeviceGrant, newAuthCode, type Account } from "../lib/fleet.js";
+import { accountReadHeaders } from "../readToken.js";
 import { ADMIN, CONTROL, SERVICES, adminHeaders, assert, http, postJson, short, sleep, tryHttp } from "../lib/harness.js";
 import type { Group } from "./types.js";
 
@@ -98,6 +99,18 @@ export const realAccount: Group = {
       const unknown = await mintDevice(unknownId, { privateKey: deriveAccountDeviceKeySeed(acct.keys.umk, user, unknownId), publicKey: ed.getPublicKey(deriveAccountDeviceKeySeed(acct.keys.umk, user, unknownId)) });
       assert(unknown.status === 403, `unregistered device mint ${unknown.status}`);
       return `${days.toFixed(1)} days; unregistered device 403`;
+    });
+
+    await rec.check("a brand-new real account with no server: /pods lists nothing, its admin device is on record", async () => {
+      // The apps must show an empty Home for it, never sample data (manual test M2, 2026-10-16).
+      const fresh = await createRealAccount();
+      const tok = await mintIrkFor(fresh);
+      const r = await http(`https://${CONTROL}/api/users/${fresh.username}/pods`, { headers: { authorization: `Bearer ${tok}` } });
+      assert(r.status === 200 && Array.isArray(r.json?.pods) && r.json.pods.length === 0, `/pods ${r.status}: ${short(r.text)}`);
+      const g = await http(`https://${CONTROL}/api/users/${fresh.username}/device-grants`, { headers: { authorization: `Bearer ${tok}` } });
+      const rows = JSON.stringify(g.json ?? {});
+      assert(g.status === 200 && rows.includes(REAL_PRIMARY_DEVICE_ID), `device-grants ${g.status}: ${short(g.text)}`);
+      return `${fresh.username}: 0 servers, admin device listed`;
     });
 
     // ── adding a server is admin-only ─────────────────────────────────────
@@ -180,6 +193,12 @@ export const realAccount: Group = {
     });
   },
 };
+
+/** An IRK-minted read token for `acct`. */
+async function mintIrkFor(acct: Account): Promise<string> {
+  const h = await accountReadHeaders(CONTROL, acct.username, acct.keys.irk);
+  return h.authorization!.replace(/^Bearer /, "");
+}
 
 async function rateLimitRefusals(): Promise<number> {
   assert(ADMIN, "admin secret");

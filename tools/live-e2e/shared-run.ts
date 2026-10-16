@@ -32,7 +32,10 @@ import { readFileSync } from "node:fs";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils";
 import { deriveSWK, ed } from "@flagship/protocol";
 import { join } from "node:path";
-import { ADMIN, CONTROL, KEK, Recorder, SERVICES, runDir, writeJson } from "./lib/harness.js";
+import { ADMIN, CONTROL, KEK, Recorder, SERVICES, runDir, tryHttp, writeJson } from "./lib/harness.js";
+
+/** The shared flagship.services DNS zone's record cap (gym and prod together). */
+const DNS_ZONE_CAP = Number(process.env.GYM_DNS_ZONE_CAP || 200);
 import {
   Account,
   addBox,
@@ -159,11 +162,126 @@ async function main(): Promise<number> {
   }
   const startedAt = new Date();
   const summary: Record<string, { pass: number; fail: number; skip: number }> = {};
+  const fleetRec = new Recorder("fleet");
+  const phases = [...new Set(groups.map((g) => g.phase))].sort((x, y) => x - y);
+  const firstPhase = (s: Slot) => Math.min(...groups.filter((g) => g.needs.includes(s)).map((g) => g.phase));
+  const lastPhase = (s: Slot) => Math.max(...groups.filter((g) => g.needs.includes(s)).map((g) => g.phase));
+  // A1 and B1 are their demo accounts' first box (released only with the
+  // account); the others are gym-provisioned and can go as soon as no later
+  // group needs them. A box is provisioned up front unless a released box's
+  // last phase comes before its first one: then it starts once that box is
+  // gone, so the fleet's DNS records never peak above what the shared zone holds.
+  const RELEASABLE: Slot[] = ["A2", "A3", "R1", "R2"];
+  const plan = new Map<Slot, number>();
+  for (const s of needs) {
+    const before = flag("--all-boxes") || !RELEASABLE.includes(s) ? [] : [...needs].filter((r) => r !== s && RELEASABLE.includes(r) && lastPhase(r) < firstPhase(s));
+    plan.set(s, before.length ? Math.max(...before.map(lastPhase)) : -Infinity);
+  }
+  // Boxes up at once, phase by phase: up from its kick (start, or the end of
+  // phase plan(s)) until released after its last phase.
+  const alive = (s: Slot, p: number) => plan.get(s)! < p && (!RELEASABLE.includes(s) || flag("--all-boxes") || p <= lastPhase(s));
+  const alivePeak = Math.max(0, ...phases.map((p) => [...needs].filter((s) => alive(s, p)).length));
+  const accountsNeeded = new Set([...needs].map((s) => s[0]));
+
+  if (!reusePath) {
+    const z = await sweep(false).catch(() => null);
+    const zoneRecords = typeof z?.body?.zoneRecords === "number" ? z.body.zoneRecords : null;
+    const leftover = Number(z?.body?.dnsWouldDelete ?? 0) + (Array.isArray(z?.body?.servers) ? z.body.servers.length : 0);
+    if (leftover) {
+      log(`another run's gym servers or DNS records are still up (${leftover}); reap them with tools/live-e2e/sweep-cli.ts --destroy once no gym run is in progress`);
+      return 3;
+    }
+    if (zoneRecords !== null) {
+      // Each gym box adds about 8 records to the shared flagship.services zone, each account about 2.
+      const need = alivePeak * 9 + accountsNeeded.size * 2;
+      log(`DNS zone: ${zoneRecords} of ${DNS_ZONE_CAP} records; this run adds up to ~${need} (peak ${alivePeak} boxes)`);
+      if (zoneRecords + need > DNS_ZONE_CAP - 5) {
+        log("not provisioning: the shared zone would fill and new boxes (prod's too) couldn't get their DNS-01 records; run fewer groups (--groups) or free prod records");
+        return 3;
+      }
+    }
+  }
+
+  let A: Account | undefined;
+  let B: Account | undefined;
+  let R: Account | undefined;
+  const SLOT_NAME: Record<Slot, string> = { A1: "home", A2: "home2", A3: "home3", B1: "home", R1: "home", R2: "home2" };
+  const accountOf = (s: Slot) => (s[0] === "A" ? A : s[0] === "B" ? B : R);
+  const slotBox = (s: Slot): Box | undefined => accountOf(s)?.boxes.find((b) => b.serverName === SLOT_NAME[s]);
+  const accountMade = new Map<string, Promise<Account>>();
+  const ensureAccount = (letter: string): Promise<Account> => {
+    let p = accountMade.get(letter);
+    if (!p) {
+      p = (async () => {
+        let acct: Account;
+        if (letter === "R") {
+          acct = await createRealAccount();
+          R = acct;
+        } else {
+          acct = await createDemoAccount(freshUsername(letter === "A" ? "ga" : "gb"));
+          if (letter === "A") A = acct;
+          else B = acct;
+        }
+        accounts.push(acct);
+        saveFleet(dir, accounts);
+        return acct;
+      })();
+      accountMade.set(letter, p);
+    }
+    return p;
+  };
+  const provisioned = new Map<Slot, Promise<void>>();
+  const provision = (s: Slot): Promise<void> => {
+    let p = provisioned.get(s);
+    if (!p) {
+      p = (async () => {
+        const made = await fleetRec.check(`provision ${s} (${SLOT_NAME[s]} of account ${s[0]})`, async () => {
+          const acct = await ensureAccount(s[0]!);
+          if (s === "A1" || s === "B1") return `${acct.username}: ${acct.box("home").fqdn} (demo flow)`;
+          const extras = s[0] === "R"
+            ? { provisionExtras: { swkHex: bytesToHex(deriveSWK({ seed: acct.keys.umk }, `home.${acct.username}.${SERVICES}`)), backupIntervalMs: 60_000 } }
+            : {};
+          const b = await addBox(acct, SLOT_NAME[s], extras);
+          saveFleet(dir, accounts);
+          return `${b.fqdn} (${b.serverId})`;
+        });
+        const b = slotBox(s);
+        if (!made || !b) return;
+        await fleetRec.check(`${b.serverName}.${b.account} online + serving (≤20 min)`, async () => {
+          try {
+            const r = await waitOnline(b, 20, (m) => fleetRec.log(m));
+            if (!b.serverId) b.serverId = await demoServerId(b.account).catch(() => null);
+            saveFleet(dir, accounts);
+            return r;
+          } catch (e) {
+            writeJson(dir, `stall-${b.fqdn}.json`, await stallReport(b).catch((x) => ({ error: String(x) })));
+            throw e;
+          }
+        });
+      })();
+      provisioned.set(s, p);
+    }
+    return p;
+  };
+  const release = async (s: Slot): Promise<void> => {
+    const b = slotBox(s);
+    if (!b || keep || reusePath || b.via !== "gym-provision" || !b.serverId) return;
+    const r = await tryHttp(`https://${CONTROL}/api/gym/teardown`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-admin-secret": ADMIN },
+      body: JSON.stringify({ serverIds: [b.serverId], serverDomains: [b.fqdn] }),
+    }, 300_000);
+    b.online = false;
+    log(`released ${s} (${b.fqdn}): ${r.status} ${JSON.stringify(r.json ?? r.text).slice(0, 160)}`);
+  };
+
   try {
     // ── provision ────────────────────────────────────────────────────────
-    const fleetRec = new Recorder("fleet");
     if (reusePath) {
       accounts = loadFleet(reusePath);
+      A = accounts.find((a) => a.demo && a.username.startsWith("ga"));
+      B = accounts.find((a) => a.demo && a.username.startsWith("gb"));
+      R = accounts.find((a) => !a.demo);
       log(`reusing fleet from ${reusePath}: ${accounts.map((a) => a.boxes.map((b) => b.fqdn).join(" ")).join(" ")}`);
       await Promise.all(
         accounts.flatMap((a) => a.boxes).map((b) =>
@@ -171,90 +289,17 @@ async function main(): Promise<number> {
         ),
       );
     } else {
-      const wantA = needs.has("A1") || needs.has("A2") || needs.has("A3");
-      const wantB = needs.has("B1");
-      const kicks: Promise<unknown>[] = [];
-      if (wantA) {
-        kicks.push(
-          fleetRec.check("create account A + its home box (demo flow)", async () => {
-            const a = await createDemoAccount(freshUsername("ga"));
-            accounts.push(a);
-            saveFleet(dir, accounts);
-            // More boxes need the account registered first.
-            const more = await Promise.all((["A2", "A3"] as const).filter((s) => needs.has(s)).map((s) => addBox(a, s === "A2" ? "home2" : "home3")));
-            saveFleet(dir, accounts);
-            return [`${a.username}: ${a.box("home").fqdn}`, ...more.map((b) => `${b.fqdn} (${b.serverId})`)].join(" + ");
-          }),
-        );
-      }
-      if (wantB) {
-        kicks.push(
-          fleetRec.check("create account B + its home box (demo flow)", async () => {
-            const b = await createDemoAccount(freshUsername("gb"));
-            accounts.push(b);
-            saveFleet(dir, accounts);
-            return `${b.username}: ${b.box("home").fqdn}`;
-          }),
-        );
-      }
-      if (needs.has("R1") || needs.has("R2")) {
-        kicks.push(
-          fleetRec.check("create REAL account R (admin root pinned) + its boxes (admin-approved add-server)", async () => {
-            const r = await createRealAccount();
-            accounts.push(r);
-            saveFleet(dir, accounts);
-            const provisionExtras = { swkHex: bytesToHex(deriveSWK({ seed: r.keys.umk }, `home.${r.username}.${SERVICES}`)), backupIntervalMs: 60_000 };
-            const made = await Promise.all((["R1", "R2"] as const).filter((s) => needs.has(s)).map((s) => addBox(r, s === "R1" ? "home" : "home2", { provisionExtras })));
-            saveFleet(dir, accounts);
-            return `${r.username}: ${made.map((b) => `${b.fqdn} (${b.serverId})`).join(" + ")}`;
-          }),
-        );
-      }
-      await Promise.all(kicks);
-      const boxes = accounts.flatMap((a) => a.boxes);
-      await Promise.all(
-        boxes.map((b) =>
-          fleetRec.check(`${b.serverName}.${b.account} online + serving (≤20 min)`, async () => {
-            try {
-              const r = await waitOnline(b, 20, (s) => fleetRec.log(s));
-              if (!b.serverId) b.serverId = await demoServerId(b.account).catch(() => null);
-              saveFleet(dir, accounts);
-              return r;
-            } catch (e) {
-              writeJson(dir, `stall-${b.fqdn}.json`, await stallReport(b).catch((x) => ({ error: String(x) })));
-              throw e;
-            }
-          }),
-        ),
-      );
+      // Every account the run needs exists up front (its demo box with it).
+      for (const letter of accountsNeeded) void ensureAccount(letter).catch(() => undefined);
+      if (accountsNeeded.has("A")) void provision("A1");
+      if (accountsNeeded.has("B")) void provision("B1");
+      for (const s of needs) if (plan.get(s) === -Infinity) void provision(s);
     }
-    writeJson(dir, "fleet-checks.json", fleetRec.results);
-    summary.fleet = { pass: fleetRec.passed, fail: fleetRec.failed, skip: fleetRec.skipped };
-
-    const A = accounts.find((a) => a.demo && a.username.startsWith("ga"));
-    const B = accounts.find((a) => a.demo && a.username.startsWith("gb"));
-    const R = accounts.find((a) => !a.demo);
-    const slotBox = (s: Slot): Box | undefined => {
-      switch (s) {
-        case "A1":
-          return A?.boxes.find((b) => b.serverName === "home");
-        case "A2":
-          return A?.boxes.find((b) => b.serverName === "home2");
-        case "A3":
-          return A?.boxes.find((b) => b.serverName === "home3");
-        case "B1":
-          return B?.boxes.find((b) => b.serverName === "home");
-        case "R1":
-          return R?.boxes.find((b) => b.serverName === "home");
-        case "R2":
-          return R?.boxes.find((b) => b.serverName === "home2");
-      }
-    };
 
     // ── groups, phase by phase ───────────────────────────────────────────
-    const phases = [...new Set(groups.map((g) => g.phase))].sort((x, y) => x - y);
     for (const phase of phases) {
       const inPhase = groups.filter((g) => g.phase === phase);
+      if (!reusePath) await Promise.all([...new Set(inPhase.flatMap((g) => g.needs))].map(provision));
       log(`phase ${phase}: ${inPhase.map((g) => g.name).join(", ")}`);
       const runOne = async (g: Group): Promise<void> => {
         const rec = new Recorder(g.name);
@@ -291,8 +336,14 @@ async function main(): Promise<number> {
       };
       if (inPhase.every((g) => g.parallel !== false)) await Promise.all(inPhase.map(runOne));
       else for (const g of inPhase) await runOne(g);
+      if (!reusePath) {
+        await Promise.all([...needs].filter((s) => RELEASABLE.includes(s) && lastPhase(s) === phase).map(release));
+        for (const s of needs) if (plan.get(s) === phase) void provision(s);
+      }
     }
   } finally {
+    writeJson(dir, "fleet-checks.json", fleetRec.results);
+    summary.fleet = { pass: fleetRec.passed, fail: fleetRec.failed, skip: fleetRec.skipped };
     await doTeardown("end of run");
     if (keep && !reusePath) log(`--keep: fleet left up. Reuse: --reuse ${join(dir, "fleet.json")}`);
   }

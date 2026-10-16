@@ -12,7 +12,7 @@ export const serverOrder: Group = {
   name: "server-order",
   title: "server order on .com + both boxes, leader acknowledgement, reorder",
   needs: ["A1", "A2"],
-  phase: 1,
+  phase: 2,
   async run({ A, rec, box }) {
     const b1 = box("A1");
     const b2 = box("A2");

@@ -77,7 +77,7 @@ export const migrate: Group = {
   name: "migrate",
   title: "migrate the real account's home onto home2: peer backup, admin-signed order, attach + restore, freeze, take-over, new entitlement, old box wipes",
   needs: ["R1", "R2"],
-  phase: 2,
+  phase: 1,
   async run({ R, rec, box }) {
     const acct = R!;
     const x: Box = box("R1");
