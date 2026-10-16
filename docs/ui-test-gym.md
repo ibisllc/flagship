@@ -466,7 +466,7 @@ Groups (`--list` prints them; `--groups a,b` runs a subset):
 |---|---|
 | 1 | `core`, `gating`, `invites` (incl. a second admin device), `enforcement`, `runtimes` (incl. staging reaches nothing), `real-account` (incl. a new account with no server), `migrate` (R: home → home2, the old box wipes) |
 | 2 | `server-order`, `access-lists`, `ai-staging`, `share` (view vs manage, co-manager update, Manager sign-in, `.com` offer + unlock + push, leave), `api-keys` (+ signed DB writes), `remote` (QR pipe, companion), `ai-chat` (real DeepInfra models, continue + provider switch) |
-| 3 | `app-copy` (lan-hint signature, copy over the LAN), `archive` (backup with two key slots, approved Range download, restore onto home3) |
+| 3 | `app-copy` (lan-hint signature, copy over the LAN), `archive` (backup with two key slots, approved Range download, restore onto home3), `mcp-ide` (an IDE over MCP as a scripted JSON-RPC client: test copy with no network and sample data, live with a valid cert, Change this app keeps live data and API keys, key scoping and its sentences, no identity in any answer) |
 | 4 | `activity` |
 | 8 | `one-list` (powers home off) |
 | 9 | `update`, `lifecycle` (delete = wipe-now order + release; the box wipes itself) |
@@ -484,10 +484,10 @@ npx tsx tools/live-e2e/probe-cli.ts <user> <server> GET /api/screens/server-rest
 **Two budgets the gym shares with prod**, both checked before anything is
 provisioned (the run exits 3 instead of spending boxes):
 
-- **DNS records.** Every box adds about 8 records to the `flagship.services`
+- **DNS records.** Every account adds about 8 records and every box about 4 to the `flagship.services`
   Cloudflare zone (200-record cap), and prod holds ~150 of them (2026-10-16). A
   run whose fleet would push the zone past the cap is refused; the runner
-  keeps the fleet at four boxes at a time by releasing R's boxes after phase 1
+  keeps the fleet at four boxes at a time (~40 records) by releasing R's boxes after phase 1
   and only then starting home2 and home3. Two runs on 2026-10-16 went red
   because the zone was full (boxes registered, never got a certificate).
 - **Let's Encrypt certificates.** `flagship.services` is not on the Public

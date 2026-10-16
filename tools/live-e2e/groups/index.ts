@@ -10,6 +10,7 @@ import { enforcement } from "./enforcement.js";
 import { gating } from "./gating.js";
 import { invites } from "./invites.js";
 import { lifecycle } from "./lifecycle.js";
+import { mcpIde } from "./mcpIde.js";
 import { migrate } from "./migrate.js";
 import { oneList } from "./oneList.js";
 import { realAccount } from "./realAccount.js";
@@ -39,6 +40,7 @@ export const GROUPS: Group[] = [
   migrate,
   appCopy,
   archive,
+  mcpIde,
   activity,
   oneList,
   update,

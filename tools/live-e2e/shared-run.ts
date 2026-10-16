@@ -192,8 +192,8 @@ async function main(): Promise<number> {
       return 3;
     }
     if (zoneRecords !== null) {
-      // Each gym box adds about 8 records to the shared flagship.services zone, each account about 2.
-      const need = alivePeak * 9 + accountsNeeded.size * 2;
+      // Measured live: an account adds ~8 records to the shared zone (CAA + its name), each box ~4.
+      const need = alivePeak * 4 + accountsNeeded.size * 8;
       log(`DNS zone: ${zoneRecords} of ${DNS_ZONE_CAP} records; this run adds up to ~${need} (peak ${alivePeak} boxes)`);
       if (zoneRecords + need > DNS_ZONE_CAP - 5) {
         log("not provisioning: the shared zone would fill and new boxes (prod's too) couldn't get their DNS-01 records; run fewer groups (--groups) or free prod records");
