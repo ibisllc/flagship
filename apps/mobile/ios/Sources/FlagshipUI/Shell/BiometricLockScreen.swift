@@ -88,6 +88,8 @@ struct BiometricLockScreen: View {
                     .accessibilityIdentifier("lock-sign-out-btn")
             }
         }
+        // .contain keeps Unlock's and Sign out's own ids under the screen's.
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("biometric-lock-screen")
         .accessibilityAddTraits(.isModal)
         .confirmationDialog(

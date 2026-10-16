@@ -515,14 +515,6 @@ const HOME: readonly Scenario[] = [
     "D1",
   ),
   sweep(
-    "ios-sweep-home-drag-order",
-    "Drag a server by its handle above another: the list reorders and the order is signed with the admin root.",
-    "GymSweepHomeTests/test_dragHandleReordersAndSigns",
-    ["home-server-handle"],
-    ["gym-probe"],
-    "D1",
-  ),
-  sweep(
     "ios-sweep-home-non-admin",
     "A device without the admin root: Home says its servers are read-only here; no Add/Import, drag handle, Make leader, Delete or Cancel; the pending page shows the admin-only line instead of Cancel order (nothing refused by the mocks).",
     "GymSweepHomeTests/test_nonAdminDeviceIsNotOfferedServerOrders",

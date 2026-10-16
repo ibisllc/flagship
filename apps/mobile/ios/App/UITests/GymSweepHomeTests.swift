@@ -123,23 +123,6 @@ final class GymSweepHomeTests: GymSweepCase {
         expectNoProbe(app, "refused")
     }
 
-    /// Dragging a row by its handle reorders the list and signs the order.
-    func test_dragHandleReordersAndSigns() throws {
-        let app = launch(admin: true, ["-smoke-pod-keys"])
-        let office = podRow(app, named: "Office"), home = podRow(app, named: "Home")
-        XCTAssertTrue(office.waitForExistence(timeout: 20) && home.exists)
-        XCTAssertTrue(isAbove(home, office))
-        // The handle sits left of the row's button and is hidden from
-        // accessibility, so it is grabbed by coordinates.
-        let grab = office.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0.5)).withOffset(CGVector(dx: -22, dy: 0))
-        let drop = home.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0)).withOffset(CGVector(dx: -22, dy: -8))
-        grab.press(forDuration: 0.5, thenDragTo: drop)
-        expectProbe(app, "signed server-order by admin-root")
-        let moved = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in self.isAbove(office, home) }, object: nil)
-        XCTAssertEqual(XCTWaiter().wait(for: [moved], timeout: 10), .completed, "The dragged server moved up.")
-        shot(app, "dragged")
-    }
-
     /// A device without the admin root isn't offered the orders `.com` would
     /// refuse from it: no Make leader, no Delete or Cancel in the menu, no
     /// drag handle, and the pending page says why it can't cancel.

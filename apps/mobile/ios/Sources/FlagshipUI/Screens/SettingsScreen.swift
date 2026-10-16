@@ -585,6 +585,8 @@ public struct SettingsScreen: View {
                         .accessibilityIdentifier("pending-re-pair-finalize-btn")
                     }
                 }
+                // `.contain` keeps the Finalize button's own identifier.
+                .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("pending-re-pair-banner")
             }
         }
