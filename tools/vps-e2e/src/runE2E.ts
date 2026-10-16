@@ -24,8 +24,10 @@
  */
 
 import {
+  authCodeAdminCanonical,
   authCodeCanonical,
   authCodeIssueBody,
+  authCodeJson,
   claimBody,
   claimCanonical,
   installBlobCanonical,
@@ -126,6 +128,9 @@ async function mintBuildCode(
   const irkPubHex = bytesToHex(identity.irk.publicKey);
   const delegatedPubHex = bytesToHex(identity.delegated.publicKey);
   const rckPubHex = bytesToHex(identity.rck.publicKey);
+  // Adding a server is admin-only on `.com`: the account pins an admin root
+  // at claim time, and it approves the AuthCode and signs the RCK.
+  const adminRootPubHex = bytesToHex(identity.adminRoot.publicKey);
 
   // 1a — claim username
   const claimAt = clock();
@@ -136,7 +141,7 @@ async function mintBuildCode(
     name,
     http.post(
       `${plan.comBase}/api/username/claim`,
-      claimBody(plan.username, irkPubHex, claimAt, bytesToHex(claimSig)),
+      claimBody(plan.username, irkPubHex, claimAt, bytesToHex(claimSig), adminRootPubHex),
     ),
   );
 
@@ -152,19 +157,21 @@ async function mintBuildCode(
     userPubKeyHex: irkPubHex,
     issuedAt: acAt,
     expiresAt: acAt + 60 * 60_000,
+    adminRootPubKeyHex: adminRootPubHex,
   };
   const acSig = identity.signWithIrk(authCodeCanonical(code));
+  const acAdminSig = identity.signWithAdminRoot(authCodeAdminCanonical(code));
   await expectOk(
     name,
     http.post(
       `${plan.comBase}/api/auth-code/issue`,
-      authCodeIssueBody(code, bytesToHex(acSig)),
+      authCodeIssueBody(code, bytesToHex(acSig), bytesToHex(acAdminSig)),
     ),
   );
 
   // 1c — register the routing-control-key for this subdomain
   const rckAt = clock();
-  const rckSig = identity.signWithIrk(
+  const rckSig = identity.signWithAdminRoot(
     rckRegisterCanonical(plan.username, st.serverFqdn, rckPubHex, rckAt),
   );
   await expectOk(
@@ -210,17 +217,7 @@ async function mintBuildCode(
     serverName: blob.serverName,
     phoneDelegatedPubKey: blob.phoneDelegatedPubKeyHex,
     registrationUrl: blob.registrationUrl,
-    authCode: {
-      version: blob.authCode.version,
-      serial: blob.authCode.serial,
-      username: blob.authCode.username,
-      serverName: blob.authCode.serverName,
-      serverDomain: blob.authCode.serverDomain,
-      delegatedPubKey: blob.authCode.delegatedPubKeyHex,
-      userPubKey: blob.authCode.userPubKeyHex,
-      issuedAt: blob.authCode.issuedAt,
-      expiresAt: blob.authCode.expiresAt,
-    },
+    authCode: authCodeJson(blob.authCode),
     authCodeUserSignature: blob.authCodeUserSignatureHex,
     installerGitRef: blob.installerGitRef,
     rckPubKey: blob.rckPubKeyHex,

@@ -25,14 +25,18 @@ export function makeIdentity(seeds?: {
   irk: Uint8Array;
   delegated: Uint8Array;
   rck: Uint8Array;
+  adminRoot?: Uint8Array;
 }): IdentityHelper {
   const irk = makeKey(seeds?.irk);
   const delegated = makeKey(seeds?.delegated);
   const rck = makeKey(seeds?.rck);
+  const adminRoot = makeKey(seeds?.adminRoot ?? (seeds ? new Uint8Array(32).fill(4) : undefined));
   return {
     irk,
     delegated,
     rck,
+    adminRoot,
     signWithIrk: (msg) => ed.sign(msg, irk.privateKey),
+    signWithAdminRoot: (msg) => ed.sign(msg, adminRoot.privateKey),
   };
 }

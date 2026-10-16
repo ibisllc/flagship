@@ -13,6 +13,7 @@
 
 export const TAG_CLAIM = "flagship/claim-username/v1";
 export const TAG_AUTH_CODE = "flagship/auth-code/v1";
+export const TAG_AUTH_CODE_ADMIN = "flagship/auth-code-admin/v1";
 export const TAG_INSTALL_BLOB = "flagship/install-blob/v1";
 export const TAG_RCK_REGISTER = "flagship/rck-register/v1";
 export const TAG_DEVICE_ENDPOINT_CLAIM = "flagship/device-endpoint-claim/v1";
@@ -52,6 +53,8 @@ export interface AuthCode {
   userPubKeyHex: string;
   issuedAt: number;
   expiresAt: number;
+  /** The admin root the new box pins (`ar=`); `.com` refuses an add without it. */
+  adminRootPubKeyHex?: string;
 }
 
 /** Exact /api/username/claim body. */
@@ -60,10 +63,12 @@ export function claimBody(
   irkPubHex: string,
   issuedAt: number,
   signatureHex: string,
+  adminRootPubHex?: string,
 ): unknown {
   return {
     request: { username, irkPub: irkPubHex, issuedAt },
     signature: signatureHex,
+    ...(adminRootPubHex ? { adminRootPub: adminRootPubHex } : {}),
   };
 }
 
@@ -75,8 +80,8 @@ export function claimCanonical(
   return canonical([TAG_CLAIM, username, irkPubHex, issuedAt]);
 }
 
-export function authCodeCanonical(c: AuthCode): Uint8Array {
-  return canonical([
+function authCodeParts(c: AuthCode): (string | number)[] {
+  return [
     TAG_AUTH_CODE,
     c.version,
     c.serial,
@@ -87,24 +92,42 @@ export function authCodeCanonical(c: AuthCode): Uint8Array {
     c.userPubKeyHex,
     c.issuedAt,
     c.expiresAt,
-  ]);
+    ...(c.adminRootPubKeyHex ? [`ar=${c.adminRootPubKeyHex}`] : []),
+  ];
+}
+
+export function authCodeCanonical(c: AuthCode): Uint8Array {
+  return canonical(authCodeParts(c));
+}
+
+/** The admin root's approval of a new server: `flagship/auth-code-admin/v1|<AuthCode>`. */
+export function authCodeAdminCanonical(c: AuthCode): Uint8Array {
+  if (!c.adminRootPubKeyHex) throw new Error("auth-code admin approval needs the AuthCode's admin root");
+  return canonical([TAG_AUTH_CODE_ADMIN, ...authCodeParts(c)]);
+}
+
+/** The AuthCode's JSON form (issue body, install blob). */
+export function authCodeJson(c: AuthCode): Record<string, unknown> {
+  return {
+    version: c.version,
+    serial: c.serial,
+    username: c.username,
+    serverName: c.serverName,
+    serverDomain: c.serverDomain,
+    delegatedPubKey: c.delegatedPubKeyHex,
+    userPubKey: c.userPubKeyHex,
+    issuedAt: c.issuedAt,
+    expiresAt: c.expiresAt,
+    ...(c.adminRootPubKeyHex ? { adminRootPubKey: c.adminRootPubKeyHex } : {}),
+  };
 }
 
 /** Exact /api/auth-code/issue body. */
-export function authCodeIssueBody(c: AuthCode, signatureHex: string): unknown {
+export function authCodeIssueBody(c: AuthCode, signatureHex: string, adminSignatureHex?: string): unknown {
   return {
-    code: {
-      version: c.version,
-      serial: c.serial,
-      username: c.username,
-      serverName: c.serverName,
-      serverDomain: c.serverDomain,
-      delegatedPubKey: c.delegatedPubKeyHex,
-      userPubKey: c.userPubKeyHex,
-      issuedAt: c.issuedAt,
-      expiresAt: c.expiresAt,
-    },
+    code: authCodeJson(c),
     signature: signatureHex,
+    ...(adminSignatureHex ? { adminSignature: adminSignatureHex } : {}),
   };
 }
 

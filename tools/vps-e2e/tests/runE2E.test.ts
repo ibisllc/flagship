@@ -554,3 +554,78 @@ describe("account read token claim", () => {
     expect(ok).toBe(true);
   });
 });
+
+const fromHex = (h: string) => Uint8Array.from(Buffer.from(h, "hex"));
+
+describe("add-server admin approval (.com refuses an IRK-only add)", () => {
+  it("the AuthCode and its admin approval match @flagship/protocol byte for byte", async () => {
+    const { verifyAuthCode, verifyAuthCodeAdmin } = await import("@flagship/protocol");
+    const { authCodeAdminCanonical, authCodeCanonical, bytesToHex } = await import("../src/wire.js");
+    const identity = makeIdentity(SEEDS);
+    const code = {
+      version: 1,
+      serial: "01ABCDEF0123456789ABCDEF01",
+      username: "alice",
+      serverName: "home",
+      serverDomain: FQDN,
+      delegatedPubKeyHex: bytesToHex(identity.delegated.publicKey),
+      userPubKeyHex: bytesToHex(identity.irk.publicKey),
+      issuedAt: 1_000,
+      expiresAt: 2_000,
+      adminRootPubKeyHex: bytesToHex(identity.adminRoot.publicKey),
+    };
+    const proto = {
+      version: 1,
+      serial: code.serial,
+      username: code.username,
+      serverName: code.serverName,
+      serverDomain: code.serverDomain,
+      delegatedPubKey: identity.delegated.publicKey,
+      userPubKey: identity.irk.publicKey,
+      issuedAt: code.issuedAt,
+      expiresAt: code.expiresAt,
+      adminRootPubKey: identity.adminRoot.publicKey,
+    };
+    expect(verifyAuthCode(proto, identity.signWithIrk(authCodeCanonical(code)), identity.irk.publicKey)).toBe(true);
+    const adminSig = identity.signWithAdminRoot(authCodeAdminCanonical(code));
+    expect(verifyAuthCodeAdmin(proto, adminSig, identity.adminRoot.publicKey)).toBe(true);
+    expect(verifyAuthCodeAdmin(proto, adminSig, identity.irk.publicKey)).toBe(false);
+  });
+
+  it("mintBuildCode pins the admin root on the claim, approves the AuthCode and signs the RCK with it", async () => {
+    const { verifyAuthCodeAdmin, verifyRegisterRck } = await import("@flagship/protocol");
+    const bodies: Record<string, any> = {};
+    const http: HttpClient = {
+      get: async () => okJson({ status: "ok" }),
+      post: async (u, body) => {
+        for (const p of ["/api/username/claim", "/api/auth-code/issue", "/api/routing/register-rck"]) {
+          if (u.includes(p)) bodies[p] = body;
+        }
+        return okJson({ ok: true });
+      },
+    };
+    const { provider } = fakeProvider();
+    await runE2E(PLAN, deps(http, provider));
+    const identity = makeIdentity(SEEDS);
+    const adminHex = Buffer.from(identity.adminRoot.publicKey).toString("hex");
+    expect(bodies["/api/username/claim"].adminRootPub).toBe(adminHex);
+    const issue = bodies["/api/auth-code/issue"];
+    const c = issue.code;
+    expect(c.adminRootPubKey).toBe(adminHex);
+    const proto = {
+      ...c,
+      delegatedPubKey: fromHex(c.delegatedPubKey),
+      userPubKey: fromHex(c.userPubKey),
+      adminRootPubKey: fromHex(c.adminRootPubKey),
+    };
+    expect(verifyAuthCodeAdmin(proto, fromHex(issue.adminSignature), identity.adminRoot.publicKey)).toBe(true);
+    const rck = bodies["/api/routing/register-rck"];
+    const rckReq = {
+      username: rck.request.username,
+      subdomain: rck.request.subdomain,
+      rckPubKey: fromHex(rck.request.rckPubKey),
+      issuedAt: rck.request.issuedAt,
+    };
+    expect(verifyRegisterRck(rckReq, fromHex(rck.signature), identity.adminRoot.publicKey)).toBe(true);
+  });
+});

@@ -153,6 +153,10 @@ export interface IdentityHelper {
   readonly rck: Keypair;
   /** Sign canonical bytes with the IRK private key. */
   signWithIrk(msg: Uint8Array): Uint8Array;
+  /** The account's admin root: adding a server is admin-only on `.com`. */
+  readonly adminRoot: Keypair;
+  /** Sign canonical bytes with the admin root private key. */
+  signWithAdminRoot(msg: Uint8Array): Uint8Array;
 }
 
 /**

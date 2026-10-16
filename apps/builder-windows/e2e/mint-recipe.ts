@@ -7,13 +7,14 @@
  *
  *   1. POST /api/username/suggest        — names are claimable only if
  *      recently suggested (docs/username-suggestion-queue.md).
- *   2. Claim it for a FRESH IRK           (flagship/claim-username/v1).
- *   3. Mint + record an AuthCode          (POST /api/auth-code/issue).
- *   4. Register the RCK                   (flagship/rck-register/v1).
+ *   2. Claim it for a FRESH IRK + admin root (flagship/claim-username/v1).
+ *   3. Mint + record an AuthCode, approved by the admin root
+ *      (POST /api/auth-code/issue, flagship/auth-code-admin/v1).
+ *   4. Register the RCK, admin-root-signed (flagship/rck-register/v1).
  *   5. Build + self-sign the InstallBlob v2 with diskEncryption:"none"
  *      (proves the VM loop with NO phone in the unlock path) and an
- *      owner-IRK-signed debugGrant sibling (serial console for diagnosis —
- *      the box-side gate verifies it against this same IRK).
+ *      admin-root-signed debugGrant sibling (serial console for diagnosis —
+ *      the box pins the admin root from the AuthCode and checks it).
  *
  * Writes the issued-envelope recipe JSON + a .identity.json sidecar (the
  * IRK, for later owner-signed journal queries; NEVER part of the recipe).
@@ -26,6 +27,7 @@ import { dirname, resolve } from "node:path";
 import {
   ed,
   signAuthCode,
+  signAuthCodeAdmin,
   signInstallBlob,
   signClaimUsername,
   signRegisterRck,
@@ -81,10 +83,15 @@ async function main(): Promise<void> {
 
   // 2. Claim it for a fresh IRK.
   const irk = keypairFromSeed(randomBytes(32));
+  // Adding a server is admin-only (`.com` refuses an IRK-only add): the
+  // account pins an admin root at claim time, and that root approves the
+  // AuthCode, signs the RCK and the debug grant, as the apps do.
+  const adminRoot = keypairFromSeed(randomBytes(32));
   const claim: ClaimUsername = { username, irkPub: irk.publicKey, issuedAt: Date.now() };
   const claimRes = await post("/api/username/claim", {
     request: { username, irkPub: bytesToHex(irk.publicKey), issuedAt: claim.issuedAt },
     signature: bytesToHex(signClaimUsername(claim, irk)),
+    adminRootPub: bytesToHex(adminRoot.publicKey),
   });
   assert(claimRes.status === 200, `claim failed (${claimRes.status}): ${claimRes.text.slice(0, 160)}`);
   console.log("username claimed");
@@ -102,6 +109,7 @@ async function main(): Promise<void> {
     userPubKey: irk.publicKey,
     issuedAt: Date.now(),
     expiresAt: Date.now() + 24 * 3_600_000,
+    adminRootPubKey: adminRoot.publicKey,
   };
   const authCodeSig = signAuthCode(authCode, irk);
   const issueRes = await post("/api/auth-code/issue", {
@@ -115,8 +123,10 @@ async function main(): Promise<void> {
       userPubKey: bytesToHex(authCode.userPubKey),
       issuedAt: authCode.issuedAt,
       expiresAt: authCode.expiresAt,
+      adminRootPubKey: bytesToHex(adminRoot.publicKey),
     },
     signature: bytesToHex(authCodeSig),
+    adminSignature: bytesToHex(signAuthCodeAdmin(authCode, adminRoot)),
   });
   assert(issueRes.status === 200 || issueRes.status === 201,
     `auth-code issue failed (${issueRes.status}): ${issueRes.text.slice(0, 160)}`);
@@ -137,7 +147,7 @@ async function main(): Promise<void> {
       rckPubKey: bytesToHex(rck.publicKey),
       issuedAt: rckReg.issuedAt,
     },
-    signature: bytesToHex(signRegisterRck(rckReg, irk)),
+    signature: bytesToHex(signRegisterRck(rckReg, adminRoot)),
   });
   assert(rckRes.status === 200, `register-rck failed (${rckRes.status}): ${rckRes.text.slice(0, 160)}`);
   console.log("RCK registered");
@@ -164,7 +174,9 @@ async function main(): Promise<void> {
     sshAuthorizedKey: "",
     issuedAt: Date.now(),
   };
-  const grantSigHex = bytesToHex(signDebugAccessGrant(grant, irk));
+  // The box pins the admin root from the AuthCode and then takes a debug
+  // grant only from it.
+  const grantSigHex = bytesToHex(signDebugAccessGrant(grant, adminRoot));
 
   const envelope = {
     blob: {
@@ -184,6 +196,7 @@ async function main(): Promise<void> {
         userPubKey: bytesToHex(authCode.userPubKey),
         issuedAt: authCode.issuedAt,
         expiresAt: authCode.expiresAt,
+        adminRootPubKey: bytesToHex(adminRoot.publicKey),
       },
       authCodeUserSignature: bytesToHex(authCodeSig),
       installerGitRef: blob.installerGitRef,
@@ -202,6 +215,8 @@ async function main(): Promise<void> {
     serverDomain,
     irkPubHex: bytesToHex(irk.publicKey),
     irkPrivHex: bytesToHex(irk.privateKey),
+    adminRootPubHex: bytesToHex(adminRoot.publicKey),
+    adminRootPrivHex: bytesToHex(adminRoot.privateKey),
     rckPubHex: bytesToHex(rck.publicKey),
     rckPrivHex: bytesToHex(rck.privateKey),
   }, null, 2));
