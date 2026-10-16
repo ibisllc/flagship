@@ -323,24 +323,39 @@ export function readDebugFriendly() {
   return !!dbg.checked;
 }
 
-// Build the recipe's unsigned `debugGrant` sibling: an owner-IRK-signed
-// `flagship/debug-access/v1` grant the box-side gate (server-daemon
-// debugAccessGate.ts) verifies before enabling the console debug user. The
-// signable scope is `serverDomain|sshAuthorizedKey|issuedAt` (sshAuthorizedKey
-// "", issuedAt = now) — no box STK, so it's signable at mint time since the
-// webapp already knows the box's FQDN. Returns the carrier JSON STRING
-// `{grant,signatureHex}`, the SAME shape the iOS/Android minter + the box gate
-// consume. `signWithIrk`/`umk` are injectable for the unit test (mirrors
-// buildSwkDeliveryCarrier).
+const DEBUG_KEY_TYPES = [
+  "ssh-ed25519",
+  "sk-ssh-ed25519@openssh.com",
+  "ecdsa-sha2-nistp256",
+  "ecdsa-sha2-nistp384",
+  "ecdsa-sha2-nistp521",
+  "sk-ecdsa-sha2-nistp256@openssh.com",
+  "ssh-rsa",
+];
+
+// Build the recipe's unsigned `debugGrant` sibling: a `flagship/debug-access/v2`
+// grant (docs/recipe-delivery-and-remote-install.md "Debug access") naming the
+// box, one SSH public key (`<type> <base64>`) and an end time, which the box
+// verifies before letting that key in as `debug`. Returns the carrier JSON
+// STRING `{grant,signatureHex}`. `signWithIrk`/`umk` are injectable for the
+// unit test.
 export async function buildDebugGrant({
   serverDomain,
+  sshPublicKey,
   issuedAt = Date.now(),
+  expiresAt = issuedAt + 7 * 24 * 60 * 60 * 1000,
   signWithIrk: signFn = signWithIrk,
   umk,
 }) {
-  const grant = { serverDomain, sshAuthorizedKey: "", issuedAt };
+  const parts = String(sshPublicKey ?? "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) throw new Error("Debug access needs an SSH public key.");
+  const at = parts.findIndex((p) => DEBUG_KEY_TYPES.includes(p));
+  if (at < 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(parts[at + 1] ?? "")) {
+    throw new Error("That isn't an SSH public key this server can use.");
+  }
+  const grant = { serverDomain, sshPublicKey: `${parts[at]} ${parts[at + 1]}`, issuedAt, expiresAt };
   const canonical = new TextEncoder().encode(
-    ["flagship/debug-access/v1", grant.serverDomain, grant.sshAuthorizedKey, String(grant.issuedAt)].join("|"),
+    ["flagship/debug-access/v2", grant.serverDomain, grant.sshPublicKey, String(issuedAt), String(expiresAt)].join("|"),
   );
   const sig = await signFn(umk, canonical);
   return JSON.stringify({ grant, signatureHex: bytesToHex(sig) });
@@ -778,7 +793,8 @@ export async function mintInstallBlobBundle(session, username, inputs, opts = {}
   if (inputs.debugFriendly) {
     bundle.debugGrant = await buildDebugGrant({
       serverDomain: blob.serverDomain,
-      signWithIrk,
+      sshPublicKey: inputs.debugSshKey,
+      signWithIrk: sensitiveSigner(),
       umk: session.umk,
     });
   }

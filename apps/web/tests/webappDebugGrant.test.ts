@@ -13,44 +13,50 @@ function hexToBytes(hex: string): Uint8Array {
   return out;
 }
 
+const KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINBKsjJ0K7SrOhNovUYV5ObQIkq3GgFrr4UgozLJd4c3";
+
 describe("webapp debug-friendly grant verifies under @flagship/protocol", () => {
-  it("toggle ON: the embedded debugGrant carrier verifies under the owner IRK (byte-identical canonical)", async () => {
-    const irkSeed = new Uint8Array(32).fill(0x07);
-    const irkPub = ed25519.getPublicKey(irkSeed);
+  it("toggle ON: the embedded v2 debugGrant verifies under the admin root (byte-identical canonical)", async () => {
+    const adminSeed = new Uint8Array(32).fill(0x07);
+    const adminPub = ed25519.getPublicKey(adminSeed);
     const serverDomain = "kitchen.alice.flagship.services";
     const issuedAt = 1_750_000_000_000;
 
-    // Mock the webapp's IRK signer the same way the SWK-delivery test does.
-    const signWithIrk = async (_umk: Uint8Array, bytes: Uint8Array) =>
-      ed25519.sign(bytes, irkSeed);
+    const signWithIrk = async (_umk: Uint8Array, bytes: Uint8Array) => ed25519.sign(bytes, adminSeed);
 
     const carrierJson = await buildDebugGrant({
       serverDomain,
+      sshPublicKey: `  ${KEY} harry@laptop `,
       issuedAt,
       signWithIrk,
       umk: new Uint8Array(0),
     });
 
-    // The recipe sibling is a JSON STRING `{grant,signatureHex}` (the shape the
-    // builder + box-side gate consume).
     const carrier = JSON.parse(carrierJson) as {
-      grant: { serverDomain: string; sshAuthorizedKey: string; issuedAt: number };
+      grant: { serverDomain: string; sshPublicKey: string; issuedAt: number; expiresAt: number };
       signatureHex: string;
     };
-    expect(carrier.grant.serverDomain).toBe(serverDomain);
-    expect(carrier.grant.sshAuthorizedKey).toBe("");
-    expect(carrier.grant.issuedAt).toBe(issuedAt);
+    expect(carrier.grant).toEqual({
+      serverDomain,
+      sshPublicKey: KEY,
+      issuedAt,
+      expiresAt: issuedAt + 7 * 24 * 60 * 60 * 1000,
+    });
 
     // Verify EXACTLY the way the box does.
-    expect(
-      verifyDebugAccessGrant(carrier.grant, hexToBytes(carrier.signatureHex), irkPub),
-    ).toBe(true);
-
-    // Negative control: a different owner IRK must NOT verify.
+    expect(verifyDebugAccessGrant(carrier.grant, hexToBytes(carrier.signatureHex), adminPub)).toBe(true);
     const otherPub = ed25519.getPublicKey(new Uint8Array(32).fill(0x33));
-    expect(
-      verifyDebugAccessGrant(carrier.grant, hexToBytes(carrier.signatureHex), otherPub),
-    ).toBe(false);
+    expect(verifyDebugAccessGrant(carrier.grant, hexToBytes(carrier.signatureHex), otherPub)).toBe(false);
+  });
+
+  it("refuses a grant without a usable SSH key", async () => {
+    const signWithIrk = async () => new Uint8Array(64);
+    await expect(
+      buildDebugGrant({ serverDomain: "a.b.flagship.services", sshPublicKey: "", signWithIrk, umk: new Uint8Array(0) }),
+    ).rejects.toThrow("Debug access needs an SSH public key.");
+    await expect(
+      buildDebugGrant({ serverDomain: "a.b.flagship.services", sshPublicKey: "hello world", signWithIrk, umk: new Uint8Array(0) }),
+    ).rejects.toThrow("That isn't an SSH public key this server can use.");
   });
 });
 
