@@ -227,6 +227,12 @@ struct ImportBackupContainer: View {
                     clients: clients,
                     onRestored: { fqdn in app.podsAwaitingBackup[fqdn.lowercased()] = nil }
                 )
+                // Gym-only: the file a `-smoke-restore-*` launch prepared (the
+                // system file picker can't be driven from a test).
+                if let file = GymSweepSeams.importFile {
+                    GymSweepSeams.importFile = nil
+                    await vm?.choose([file])
+                }
             }
         }
         .onDisappear { vm?.stop() }

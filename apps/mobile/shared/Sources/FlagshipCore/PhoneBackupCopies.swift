@@ -64,19 +64,6 @@ public final class PhoneBackupStore: @unchecked Sendable {
         }
     }
 
-    /// Forget servers that are no longer the account's (their copies go too).
-    public func keepOnly(_ fqdns: Set<String>) {
-        let keep = Set(fqdns.map { $0.lowercased() })
-        let gone = servers.filter { !keep.contains($0.fqdn) }
-        guard !gone.isEmpty else { return }
-        lock.withLock {
-            let list = ((defaults.data(forKey: Self.serversKey)).flatMap { try? JSONDecoder().decode([Server].self, from: $0) } ?? [])
-                .filter { keep.contains($0.fqdn) }
-            defaults.set(try? JSONEncoder().encode(list), forKey: Self.serversKey)
-        }
-        for s in gone { try? FileManager.default.removeItem(at: dir(s.fqdn)) }
-    }
-
     /// "Keep a copy on this phone" (on unless turned off).
     public func keepsCopy(_ fqdn: String) -> Bool {
         !(defaults.stringArray(forKey: Self.offKey) ?? []).contains(fqdn.lowercased())
