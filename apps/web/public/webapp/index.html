@@ -926,6 +926,7 @@
             <span class="pill" id="cs-status">idle</span>
           </div>
           <button id="cs-download-recipe" class="full-width mt-2">Create and download recipe</button>
+          <button id="cs-follow-setup" class="secondary full-width mt-2 hidden">Follow its setup</button>
           <a class="secondary full-width mt-2" href="https://flagshipserver.com/studio" target="_blank" rel="noopener">Get Flagship Studio</a>
         </div>
 
@@ -935,19 +936,19 @@
         <button class="secondary full-width mt-2" id="create-server-back">← Back</button>
       </section>
 
-      <!-- View 20b: Pending server placeholder (in-flight order) -->
+      <!-- View 20b: Pending server (recipe made, not online yet) -->
       <section id="view-pending-server" class="hidden">
-        <h2 id="pending-server-name">Pending server</h2>
+        <h2 id="pending-server-name">New server</h2>
         <div class="card">
-          <p class="note" id="pending-server-note">
-            We've delivered the signed install blob, but the new box hasn't
-            phoned home yet. Plug in the USB, power on, and this card will
-            flip to Online.
-          </p>
-          <div class="row"><span class="label">Subdomain</span><span class="value text-xs" id="pending-server-fqdn">—</span></div>
-          <div class="row"><span class="label">Auth-code serial</span><span class="value text-xs" id="pending-server-serial">—</span></div>
+          <span class="pill warn">Pending</span>
+          <p class="note mt-2" id="pending-server-note">Waiting for the server to start.</p>
+          <div id="pending-server-progress"></div>
         </div>
-        <div class="row-2">
+        <div class="card">
+          <div class="row"><span class="label">Address</span><span class="value text-xs" id="pending-server-fqdn">—</span></div>
+        </div>
+        <a class="secondary full-width" id="pending-server-howto" href="https://flagshipserver.com/docs/#burn" target="_blank" rel="noopener">How to write the USB and boot</a>
+        <div class="row-2 mt-2">
           <button class="danger" id="pending-server-cancel">Cancel order</button>
           <button class="secondary" id="pending-server-back">← Back</button>
         </div>

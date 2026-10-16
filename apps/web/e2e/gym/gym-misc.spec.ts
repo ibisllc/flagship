@@ -830,6 +830,13 @@ test.describe("gym webapp misc", () => {
     expect(rck.body.request.subdomain).toBe("attic.smoketest.flagship.services");
     expect(await signer(page, keys, rckCanon, rck.body.request, rck.body.signature)).toBe("admin");
     await shot(page, testInfo, "create-server-recipe");
+
+    // Follow its setup: the pending view, on the new order's own status channel.
+    m.get(`/api/order/${recipe.authCode.serial}/status`, { phase: "booting" });
+    await page.click("#cs-follow-setup");
+    await expect(page.locator("#view-pending-server")).toBeVisible();
+    await expect(page.locator("#pending-server-fqdn")).toHaveText("attic.smoketest.flagship.services");
+    await expect(page.locator("#pending-server-note")).toHaveText("Booting up", { timeout: 10_000 });
   });
   test("gym misc a second browser joins the account through Add a device, opens it, and unlocks it after a reload", async ({ page, browser }, testInfo) => {
     test.setTimeout(150_000);

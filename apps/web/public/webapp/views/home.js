@@ -1188,13 +1188,16 @@ function renderServerCards() {
   const cardsHtml = visible.length
     ? visible
         .map((e) => {
-          // A registered (non-pending) card is tappable → opens server-detail.
+          // A registered (non-pending) card is tappable → opens server-detail;
+          // a pending order's card opens its pending view.
           const openable = e.bucket !== "pending" && e.fields.fqdn;
           let attrs = openable
             ? ` data-open-fqdn="${escapeHtml(e.fields.fqdn)}"`
-            : "";
+            : e.pendingOrder
+              ? ` data-open-pending="${escapeHtml(e.fields.fqdn)}"`
+              : "";
           if (reorderable && e.orderStk) attrs += ` data-order-stk="${escapeHtml(e.orderStk)}"`;
-          let cls = openable ? `${e.cardClass} is-tappable` : e.cardClass;
+          let cls = openable || e.pendingOrder ? `${e.cardClass} is-tappable` : e.cardClass;
           if (showDragging && e.orderStk === draggingStk) cls += " is-dragging";
           return `<div class="card ${cls}"${attrs}>${e.html}</div>`;
         })
@@ -1252,6 +1255,16 @@ function wireHomeListControls(list) {
       }
       const { enterServerDetail } = await import("./server-detail.js");
       await enterServerDetail(fqdn);
+    });
+  });
+  list.querySelectorAll("[data-open-pending]").forEach((card) => {
+    card.addEventListener("click", async (ev) => {
+      if (ev.target.closest("button, a, input, label, select, textarea")) return;
+      const fqdn = card.getAttribute("data-open-pending");
+      const order = homeServerEntries.find((x) => x.pendingOrder && x.fields.fqdn === fqdn)?.pendingOrder;
+      if (!order) return;
+      const { enterPendingServer } = await import("./pending-server.js");
+      enterPendingServer({ name: order.serverName || serverShortName(order.fqdn), fqdn: order.fqdn, phase: order.phase ?? null });
     });
   });
   wireTakeOver(list);
@@ -1624,6 +1637,7 @@ export async function renderHome() {
           fqdn: String(order.fqdn ?? ""),
         },
         cardClass: "server-card server-card--pending",
+        pendingOrder: order,
       });
       deployPods.push({
         podId: String(order.fqdn ?? ""),
@@ -1765,18 +1779,20 @@ async function deleteRegisteredServer(serverDomain, identityPubKey) {
  * @param {string} serverDomain  `<server>.<user>.flagship.services`
  * @param {HTMLButtonElement} [btn]
  */
-async function deleteDeadServer(serverDomain, btn) {
-  if (!serverDomain) return;
+/** Release a never-registered server's name (a pending order's Delete, and
+ *  the pending view's Cancel order). Resolves true once the name is free. */
+export async function deleteDeadServer(serverDomain, btn, { label = "Delete server (free name)" } = {}) {
+  if (!serverDomain) return false;
   const session = getSession();
   const username = session.username;
   if (!username) {
     toast("Unlock the webapp first", "warn");
-    return;
+    return false;
   }
   const ok = confirm(
     `Delete "${serverDomain}"? This frees the name for reuse and the box can no longer come online. This server never checked in.`,
   );
-  if (!ok) return;
+  if (!ok) return false;
   if (btn) { btn.disabled = true; btn.textContent = "deleting…"; }
   try {
     const out = await releaseServerName({
@@ -1797,17 +1813,19 @@ async function deleteDeadServer(serverDomain, btn) {
       if (result.outcome !== "approved") {
         const { text, kind } = outcomeToastCopy(result.outcome);
         toast(text, kind);
-        if (btn) { btn.disabled = false; btn.textContent = "Delete server (free name)"; }
-        return;
+        if (btn) { btn.disabled = false; btn.textContent = label; }
+        return false;
       }
     }
     toast(`Deleted — "${serverDomain}" is free again`);
     await renderHome();
+    return true;
   } catch (e) {
     // Keep the card: the name is still reserved, so re-render would just hide
     // a name the user can't reuse. Surface the error + re-enable the button.
     toast(`Delete failed: ${e.message ?? e}`, "err");
-    if (btn) { btn.disabled = false; btn.textContent = "Delete server (free name)"; }
+    if (btn) { btn.disabled = false; btn.textContent = label; }
+    return false;
   }
 }
 

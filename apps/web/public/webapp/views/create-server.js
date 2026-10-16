@@ -34,6 +34,7 @@ import { setSessionToken, setSessionTokenForPod } from "../lib/api.js";
 import { attachRestoreOrder } from "../lib/serverBackupFormat.js";
 import { throwIfRateLimited } from "../lib/rateLimited.js";
 import { confirmFreshUnlock } from "../lib/freshUnlock.js";
+import { enterPendingServer, rememberPendingOrder } from "./pending-server.js";
 
 registerView("view-create-server");
 
@@ -524,6 +525,7 @@ async function handleRecipeDownload() {
     activeDraftId = saved.id;
     await refreshDrafts();
     setStatus("done", "Recipe downloaded — open it in Flagship Studio.");
+    followSetupOf({ serial: blobBundle.blob.authCode.serial, fqdn: blobBundle.blob.serverDomain, name: inputs.serverName });
   } catch (e) {
     setStatus("error", String(e.message || e));
   } finally {
@@ -532,6 +534,20 @@ async function handleRecipeDownload() {
       btn.textContent = "Create and download recipe";
     }
   }
+}
+
+/** The recipe is out: keep its serial for the pending view and offer to
+ *  follow the new server's setup there. */
+let followOrder = null;
+function followSetupOf(order) {
+  rememberPendingOrder(order);
+  followOrder = order;
+  $("cs-follow-setup")?.classList.remove("hidden");
+}
+
+function hideFollowSetup() {
+  followOrder = null;
+  $("cs-follow-setup")?.classList.add("hidden");
 }
 
 function setStatus(kind, text) {
@@ -834,6 +850,7 @@ export async function createServerForRestore({ serverName, bootUnlockMode, diskE
   downloadRecipe(bundle);
   const { restore: _restore, ...draft } = inputs;
   await saveDraft({ ...draft, status: "delivered", deliveredAt: Date.now(), code: bundle.blob.authCode.serial }).catch(() => {});
+  rememberPendingOrder({ serial: bundle.blob.authCode.serial, fqdn: bundle.blob.serverDomain, name: serverName });
   return { serverDomain: bundle.blob.serverDomain, serial: bundle.blob.authCode.serial };
 }
 
@@ -895,7 +912,11 @@ export function initCreateServerView() {
   syncAdvancedVisibility();
   $("cs-save-draft")?.addEventListener("click", () => handleSaveDraft());
   $("cs-download-recipe")?.addEventListener("click", () => handleRecipeDownload().catch((e) => { console.error(e); toast(humanError(e), "err"); }));
+  $("cs-follow-setup")?.addEventListener("click", () => {
+    if (followOrder) enterPendingServer(followOrder);
+  });
   $("cs-new")?.addEventListener("click", () => {
+    hideFollowSetup();
     activeDraftId = null;
     $("cs-server-name").value = "";
     $("cs-backup-policy").value = "phone-only";
@@ -909,6 +930,7 @@ export function initCreateServerView() {
 
 export async function enterCreateServer() {
   if (!canAddServers()) return refuseAddServer();
+  hideFollowSetup();
   show("view-create-server");
   await refreshDrafts();
 }

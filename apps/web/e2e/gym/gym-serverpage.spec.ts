@@ -275,6 +275,70 @@ test.describe("gym webapp server page and Home leftovers", () => {
     await expect(page.locator(`#servers-list .js-delete-dead-server[data-fqdn="${ATTIC}"]`)).toHaveCount(0, { timeout: 10_000 });
   });
 
+  test("gym serverpage a pending order's card opens its setup, follows it to live, and Cancel order frees the name", async ({ page }, testInfo) => {
+    const keys = await reachHome(page, { kind: "admin", servers: [HOME] });
+    let pending = true;
+    let phase = "installing";
+    const m = await mock(page);
+    m.get("/api/users/smoketest/pods", () => ({
+      json: { pods: [livePod(HOME)], pending: pending ? [{ fqdn: ATTIC, serverName: "attic", phase: "booting", createdAt: Date.now() - 60_000 }] : [] },
+    }));
+    m.get("/api/order/SERIAL-ATTIC/status", () => ({ json: { phase } }));
+    m.post(
+      "/api/server/release",
+      sensitive(page, keys, releaseCanon, (b) => ({ arg: b.request, sig: b.signature }), () => {
+        pending = false;
+        return { json: { ok: true, released: true } };
+      }),
+    );
+
+    // An order this browser didn't make: its phase comes from the account's pending list.
+    await renderHome(page);
+    const attic = page.locator(`#servers-list [data-open-pending="${ATTIC}"]`);
+    await expect(attic).toBeVisible({ timeout: 10_000 });
+    await attic.click();
+    const view = page.locator("#view-pending-server");
+    await expect(view).toBeVisible();
+    await expect(page.locator("#pending-server-name")).toHaveText("attic");
+    await expect(page.locator("#pending-server-fqdn")).toHaveText(ATTIC);
+    await expect(page.locator("#pending-server-note")).toHaveText("Booting up");
+    await expect(page.locator("#pending-server-progress .demo-step-active")).toContainText("Booting");
+    await expect(page.locator("#pending-server-howto")).toHaveAttribute("href", "https://flagshipserver.com/docs/#burn");
+    expect(m.sent("/api/order/", "GET")).toHaveLength(0);
+    await shot(page, testInfo, "pending-server-open");
+
+    // Cancel order asks first; declining sends nothing.
+    page.once("dialog", (d) => void d.dismiss());
+    await page.click("#pending-server-cancel");
+    await expect(view).toBeVisible();
+    expect(m.sent("/api/server/release")).toHaveLength(0);
+
+    // The order this browser made: its serial is kept, so its own status channel is followed to live.
+    await page.click("#pending-server-back");
+    await expect(page.locator("#view-home")).toBeVisible();
+    await page.evaluate(async (fqdn) => {
+      (await import("/views/pending-server.js")).rememberPendingOrder({ serial: "SERIAL-ATTIC", fqdn, name: "attic" });
+    }, ATTIC);
+    await page.locator(`#servers-list [data-open-pending="${ATTIC}"]`).click();
+    await expect(page.locator("#pending-server-note")).toHaveText("Installing", { timeout: 10_000 });
+    phase = "live";
+    await expect(page.locator("#view-home")).toBeVisible({ timeout: 15_000 });
+    expect(await page.evaluate(async (fqdn) => (await import("/views/pending-server.js")).rememberedSerial(fqdn), ATTIC)).toBeNull();
+
+    // Back to a still-pending order: Cancel order releases the name under the admin root.
+    phase = "booting";
+    await page.locator(`#servers-list [data-open-pending="${ATTIC}"]`).click();
+    await expect(view).toBeVisible();
+    page.once("dialog", (d) => void d.accept());
+    await page.click("#pending-server-cancel");
+    await sawToast(page, `Deleted — "${ATTIC}" is free again`);
+    const release = m.last("/api/server/release")!;
+    expect(release.body.request).toMatchObject({ username: USER, serverDomain: ATTIC });
+    expect(await signer(page, keys, releaseCanon, release.body.request, release.body.signature)).toBe("admin");
+    await expect(page.locator("#view-home")).toBeVisible();
+    await expect(page.locator(`#servers-list [data-open-pending="${ATTIC}"]`)).toHaveCount(0, { timeout: 10_000 });
+  });
+
   test("gym serverpage the empty Home links to Flagship Studio in a new tab", async ({ page }) => {
     await reachHome(page, { kind: "admin", servers: [HOME] });
     const m = await mock(page);
