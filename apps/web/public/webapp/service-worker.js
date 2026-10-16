@@ -303,7 +303,10 @@
 //       right below, a gap, Patent Pending); the lock screens gain Sign out.
 //  v126: Connect your IDE shows each IDE's own config (Claude Code, Cursor,
 //       VS Code, Cline) and Claude Code's one-line command.
-const SHELL_VERSION = "v126";
+//  v127: joining and taking over an account ask for this browser's
+//       passphrase and unlock with it after a reload; a backup file's
+//       takeover finishes.
+const SHELL_VERSION = "v127";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and
