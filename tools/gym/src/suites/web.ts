@@ -12,6 +12,13 @@
 
 import type { Scenario } from "../scenario.js";
 import { web, webTotal, shot } from "./helpers.js";
+import { WEB_SERVERS } from "./webServers.js";
+import { WEB_ARCHIVE } from "./webArchive.js";
+import { WEB_SHARING } from "./webSharing.js";
+import { WEB_BUILDS } from "./webBuilds.js";
+import { WEB_ACCOUNT } from "./webAccount.js";
+import { WEB_APPS } from "./webApps.js";
+import { WEB_SWEEP } from "./webSweep.js";
 
 // ───────────────────────── every-merge (fast gate) ─────────────────────────
 
@@ -1174,7 +1181,7 @@ const TOTAL: readonly Scenario[] = [
   // ── Servers: order + Leader badge, update card, un-revoke / delete — gym-servers.spec.ts ──
   webTotal(
     "web-total-server-order-drag",
-    "Server order (docs/server-order.md): dragging a server by its handle reorders Home at once (badge gray mid-drag), signs a flagship/server-order/v1 with the IRK and posts it to .com; the new leader's badge stays gray ('Leader, waiting for the server to confirm') until the box answers the hand-delivered order. The session holds no admin root, so it shows no Add/Import a server. Mirrors iOS sd-leader-pending, Android leader-badge / leader-badge-pending.",
+    "Server order (docs/server-order.md): dragging a server by its handle reorders Home at once (badge gray mid-drag), signs a flagship/server-order/v1 with the admin root (the mock refuses the IRK, as .com does on an admin-pinned account) and posts it to .com; the new leader's badge stays gray ('Leader, waiting for the server to confirm') until the box answers the hand-delivered order. Mirrors iOS sd-leader-pending, Android leader-badge / leader-badge-pending.",
     "gym servers home drag reorders and the leader badge stays gray until the leader confirms",
     {
       steps: [
@@ -1185,7 +1192,6 @@ const TOTAL: readonly Scenario[] = [
         { kind: "assert", describe: "Office box answers heldIssuedAt; badge turns green.", handle: "[data-order-leader]" },
       ],
       assertions: [
-        { describe: "No Add/Import a server on a non-admin device", handle: "#home-add-server", expect: "absent" },
         { describe: "List is reorderable", handle: "#servers-list [data-server-cards][data-reorderable]", expect: "present" },
         { describe: "Leader badge", handle: "#servers-list [data-order-leader]", expect: "text", text: "Leader" },
         { describe: "Gray until confirmed", handle: "#servers-list [data-order-leader-pending]", expect: "present" },
@@ -1268,7 +1274,7 @@ const TOTAL: readonly Scenario[] = [
   ),
   webTotal(
     "web-total-server-unrevoke",
-    "Reversible revoke: a revoked server's page says it can't connect until un-revoked and offers Un-revoke in place of Revoke; Un-revoke posts an IRK-signed flagship/server-unrevoke request, toasts the restore, and the page flips back to 'Revoke server (reversible)'. Mirrors iOS sd-unrevoke-server / server-detail-revoked.",
+    "Reversible revoke: a revoked server's page says it can't connect until un-revoked and offers Un-revoke in place of Revoke; Un-revoke posts an admin-root-signed flagship/server-unrevoke request (an IRK one is refused), toasts the restore, and the page flips back to 'Revoke server (reversible)'. Mirrors iOS sd-unrevoke-server / server-detail-revoked.",
     "gym servers un-revoke restores a revoked server",
     {
       steps: [
@@ -1867,4 +1873,14 @@ const TOTAL: readonly Scenario[] = [
 ];
 
 /** The webapp lane of the gym registry (every-merge subset + total tranche). */
-export const WEB_GYM_SCENARIOS: readonly Scenario[] = [...EVERY_MERGE, ...TOTAL];
+export const WEB_GYM_SCENARIOS: readonly Scenario[] = [
+  ...EVERY_MERGE,
+  ...TOTAL,
+  ...WEB_SERVERS,
+  ...WEB_ARCHIVE,
+  ...WEB_SHARING,
+  ...WEB_BUILDS,
+  ...WEB_ACCOUNT,
+  ...WEB_APPS,
+  ...WEB_SWEEP,
+];

@@ -2,137 +2,52 @@
  * Servers (docs/server-order.md, the update lane, reversible revoke): the
  * webapp's server surfaces with no backend. Home's server order (drag + the
  * keyboard steps, the Leader badge that stays gray until the leader holds the
- * order), the server page's update card (last-update verdict, the release
- * note, ordering an update and the pending state it leaves), and a revoked
- * server's Un-revoke and Delete.
+ * order), Add/Import a server, the server page's Make leader and update card
+ * (last-update verdict, the release list, ordering an update and the pending
+ * state it leaves), and a revoked server's Un-revoke and Delete.
  *
- * Crypto is real: orders are signed with the session's IRK and the specs
- * verify those signatures. `.com` and the boxes are one page.route router;
- * anything it doesn't know answers 404, so nothing reaches a network.
+ * Crypto is real. The session is an admin device unless a test says
+ * otherwise, and the mock answers every sensitive order the way `.com` does
+ * on an admin-pinned account (gymKit `sensitive`): only the admin root
+ * verifies, the IRK is refused. A demo account (no admin root pinned) keeps
+ * the IRK.
  */
 
-import { test, expect, type Page, type TestInfo, type Route } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+import {
+  HOME,
+  MEDIA,
+  OFFICE,
+  STK,
+  USER,
+  homeCard as card,
+  livePod,
+  mock,
+  offlinePod,
+  reachHome,
+  renderHome,
+  sensitive,
+  serverDetail,
+  shot,
+  signer,
+  type Keys,
+} from "./gymKit.js";
 
-const PASSPHRASE = "correct-horse-battery-staple-gym";
-const HOME = "home.smoketest.flagship.services";
-const OFFICE = "office.smoketest.flagship.services";
-const MEDIA = "media.smoketest.flagship.services";
-const STK = { [HOME]: "11".repeat(32), [OFFICE]: "22".repeat(32), [MEDIA]: "33".repeat(32) } as Record<string, string>;
 const COMMIT_RUNNING = "7ac1b50a".padEnd(40, "1");
 const COMMIT_ROLLED = "1584bfe8".padEnd(40, "2");
 const COMMIT_LATEST = "52d0b375".padEnd(40, "3");
+const COMMIT_OTHER = "9873b83e".padEnd(40, "4");
+const COMMIT_OLDER = "67cfd8da".padEnd(40, "5");
 
-async function shot(page: Page, testInfo: TestInfo, point: string): Promise<void> {
-  const file = testInfo.outputPath(`gym-screenshot-${point}.png`);
-  await page.screenshot({ path: file });
-  await testInfo.attach(`gym-screenshot:${point}`, { path: file, contentType: "image/png" });
-}
-
-async function reachHome(page: Page): Promise<void> {
-  await page.goto("/index.html");
-  await expect(page.locator("#view-bootstrap")).toBeVisible();
-  await page.click("#bootstrap-create");
-  await page.fill(".modal-input", PASSPHRASE);
-  await page.click("[data-modal-ok]");
-  await page.fill(".modal-input", PASSPHRASE);
-  await page.click("[data-modal-ok]");
-  await expect(page.locator("#toast")).toBeVisible({ timeout: 10_000 });
-  await page.goto("/index.html?view=home");
-  await expect(page.locator("#view-unlock")).toBeVisible({ timeout: 10_000 });
-  await page.fill("#unlock-passphrase", PASSPHRASE);
-  await page.click("#unlock-go");
-  await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
-  await page.waitForTimeout(150);
-  await page.evaluate(
-    async (boxes) => {
-      const store = await import("/lib/profilesStore.js");
-      store.ensureProfile("smoketest");
-      store.setActiveCloudName("smoketest");
-      store.set("username", "smoketest");
-      const { getSession } = await import("/lib/state.js");
-      getSession().username = "smoketest";
-      const api = await import("/lib/api.js");
-      api.setPodBaseUrl(`https://${boxes[0]}`);
-      api.setSessionToken("gym-fixture-session-token");
-      for (const b of boxes) api.setSessionTokenForPod(b, "gym-fixture-session-token");
-    },
-    [HOME, OFFICE],
-  );
-}
-
-type Answer = { status?: number; json: unknown } | null;
-type Rule = [string, unknown | ((body: unknown, url: URL) => Answer)];
-interface Sent {
-  url: string;
-  body: unknown;
-}
-
-/** One router for `.com` (same origin here) and every box: the first rule
- *  whose substring matches answers; anything else is a 404. The account
- *  read-token mint always succeeds. Returns the other POSTs it saw, in order. */
-async function stub(page: Page, rules: Rule[]): Promise<Sent[]> {
-  const sent: Sent[] = [];
-  await page.route(
-    (url) => url.pathname.startsWith("/api/") || url.hostname !== "127.0.0.1",
-    async (route: Route) => {
-      const req = route.request();
-      const url = new URL(req.url());
-      let body: unknown = null;
-      try {
-        body = req.postDataJSON();
-      } catch {
-        body = null;
-      }
-      if (req.method() === "POST" && !url.pathname.endsWith("/read-token")) sent.push({ url: url.href, body });
-      if (url.pathname.endsWith("/read-token")) {
-        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ token: "art1.gym.mac", expiresAt: Date.now() + 86_400_000 }) });
-        return;
-      }
-      for (const [needle, answer] of rules) {
-        if (!url.href.includes(needle)) continue;
-        const r = typeof answer === "function" ? (answer as (b: unknown, u: URL) => Answer)(body, url) : { json: answer };
-        if (!r) continue;
-        await route.fulfill({ status: r.status ?? 200, contentType: "application/json", body: JSON.stringify(r.json) });
-        return;
-      }
-      await route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ error: "gym: no stub" }) });
-    },
-  );
-  return sent;
-}
-
-function livePod(fqdn: string, extra: Record<string, unknown> = {}): Record<string, unknown> {
-  return {
-    serverDomain: fqdn,
-    identityPubKey: STK[fqdn],
-    liveness: "live",
-    lastReported: Date.now(),
-    registeredAt: Date.now() - 30 * 86_400_000,
-    ...extra,
-  };
-}
-
-function offlinePod(fqdn: string, extra: Record<string, unknown> = {}): Record<string, unknown> {
-  return {
-    serverDomain: fqdn,
-    identityPubKey: STK[fqdn],
-    liveness: "unreachable",
-    lastSeenMsAgo: 2 * 3_600_000,
-    lastReported: Date.now() - 2 * 3_600_000,
-    registeredAt: Date.now() - 20 * 86_400_000,
-    ...extra,
-  };
-}
+const ORDER_CANON = ["/lib/serverOrder.js", "canonicalServerOrderBytes"] as [string, string];
+const UNREVOKE_CANON = ["/lib/revokeServer.js", "canonicalUnrevokeBytes"] as [string, string];
+const UPDATE_CANON = ["/lib/serverUpdate.js", "canonicalUpdateOrderBytes"] as [string, string];
+const DECOMMISSION_CANON = ["/lib/serverReplacement.js", "canonicalDecommissionBytes"] as [string, string];
+const releaseCanon = (r: { username: string; serverDomain: string; issuedAt: number }) =>
+  `flagship/release-server-name/v1|${r.username}|${r.serverDomain}|${r.issuedAt}`;
 
 function wireOrder(stks: string[], issuedAt: number) {
-  return { order: { user: "smoketest", stks, issuedAt, nonce: "ab".repeat(32) }, signature: "00".repeat(64) };
-}
-
-async function renderHome(page: Page): Promise<void> {
-  await page.evaluate(async () => {
-    const { renderHome } = await import("/views/home.js");
-    await renderHome();
-  });
+  return { order: { user: USER, stks, issuedAt, nonce: "ab".repeat(32) }, signature: "00".repeat(64) };
 }
 
 /** Server cards top to bottom, as their fqdn. */
@@ -142,69 +57,53 @@ async function shownOrder(page: Page): Promise<string[]> {
   );
 }
 
-function card(page: Page, fqdn: string) {
-  return page.locator(`#servers-list [data-open-fqdn="${fqdn}"]`);
+async function openServer(page: Page, fqdn: string): Promise<void> {
+  await page.evaluate(async (fqdn) => {
+    const { enterServerDetail } = await import("/views/server-detail.js");
+    await enterServerDetail(fqdn);
+  }, fqdn);
 }
 
-/** Verify an Ed25519 signature made with the session's IRK. */
-async function signedByIrk(page: Page, kind: "server-order" | "unrevoke", body: unknown): Promise<boolean> {
-  return page.evaluate(
-    async ({ kind, body }) => {
-      const { getSession } = await import("/lib/state.js");
-      const irk = getSession().irk as { publicKey: Uint8Array };
-      let bytes: Uint8Array;
-      const b = body as { order?: unknown; request?: unknown; signature: string };
-      if (kind === "server-order") {
-        const { canonicalServerOrderBytes } = await import("/lib/serverOrder.js");
-        bytes = canonicalServerOrderBytes(b.order);
-      } else {
-        const { canonicalUnrevokeBytes } = await import("/lib/revokeServer.js");
-        bytes = canonicalUnrevokeBytes(b.request as { username: string; serverDomain: string; issuedAt: number });
-      }
-      const sig = Uint8Array.from((b.signature.match(/../g) ?? []).map((h) => parseInt(h, 16)));
-      const key = await crypto.subtle.importKey("raw", irk.publicKey, { name: "Ed25519" }, false, ["verify"]);
-      return crypto.subtle.verify({ name: "Ed25519" }, key, sig, bytes);
-    },
-    { kind, body },
-  );
+/** `.com`'s server-order endpoint for an admin-pinned account. */
+function serverOrderRule(page: Page, keys: Keys) {
+  return sensitive(page, keys, ORDER_CANON, (b) => ({ arg: b.order, sig: b.signature }), () => ({ json: { ok: true } }));
+}
+
+async function dragAbove(page: Page, moving: string, target: string, release = true): Promise<void> {
+  const handle = card(page, moving).locator(".js-order-handle");
+  const hb = (await handle.boundingBox())!;
+  const top = (await card(page, target).boundingBox())!;
+  await page.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(hb.x + hb.width / 2, top.y + 4, { steps: 8 });
+  if (release) await page.mouse.up();
 }
 
 test.describe("gym webapp servers", () => {
   test("gym servers home drag reorders and the leader badge stays gray until the leader confirms", async ({ page }, testInfo) => {
-    await reachHome(page);
+    const keys = await reachHome(page, { kind: "admin", servers: [HOME, OFFICE] });
     const t0 = Date.now() - 3_600_000;
     let releaseAck: () => void = () => {};
     const ackGate = new Promise<void>((resolve) => {
       releaseAck = resolve;
     });
-    const sent = await stub(page, [
-      [
-        "/api/users/smoketest/pods",
-        {
-          pods: [livePod(HOME, { orderIssuedAt: t0 }), livePod(OFFICE, { orderIssuedAt: t0 }), offlinePod(MEDIA)],
-          serverOrder: wireOrder([STK[HOME]!, STK[OFFICE]!, STK[MEDIA]!], t0),
-        },
-      ],
-      ["/api/accounts/smoketest/server-order", { ok: true }],
-    ]);
+    const m = await mock(page);
+    m.get("/api/users/smoketest/pods", {
+      pods: [livePod(HOME, { orderIssuedAt: t0 }), livePod(OFFICE, { orderIssuedAt: t0 }), offlinePod(MEDIA)],
+      serverOrder: wireOrder([STK[HOME]!, STK[OFFICE]!, STK[MEDIA]!], t0),
+    });
+    m.post("/api/accounts/smoketest/server-order", serverOrderRule(page, keys));
     // The office box answers the hand-delivered order only once the test lets
     // it, so the unconfirmed state is observable.
     let officeGot: { order: { issuedAt: number } } | null = null;
-    await page.route(`https://${OFFICE}/api/screens/server-order`, async (route) => {
-      officeGot = route.request().postDataJSON();
+    m.post(`https://${OFFICE}/api/screens/server-order`, async (call) => {
+      officeGot = call.body;
       await ackGate;
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ ok: true, heldIssuedAt: officeGot!.order.issuedAt }),
-      });
+      return { json: { ok: true, heldIssuedAt: call.body.order.issuedAt } };
     });
     await renderHome(page);
 
     await expect.poll(() => shownOrder(page)).toEqual([HOME, OFFICE, MEDIA]);
-    // This session holds no admin root, so it is not an admin device: no
-    // Add/Import a server (docs/service-access-gating.md "Account members").
-    await expect(page.locator("#home-add-server")).toHaveCount(0);
     await expect(page.locator("#servers-list [data-server-cards]")).toHaveAttribute("data-reorderable", "");
     // Only the leader wears a badge; home holds the saved order → green.
     await expect(page.locator("#servers-list [data-order-leader]")).toHaveCount(1);
@@ -215,12 +114,7 @@ test.describe("gym webapp servers", () => {
     await shot(page, testInfo, "order-confirmed");
 
     // Drag office by its handle above home.
-    const handle = card(page, OFFICE).locator(".js-order-handle");
-    const hb = (await handle.boundingBox())!;
-    const top = (await card(page, HOME).boundingBox())!;
-    await page.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(hb.x + hb.width / 2, top.y + 4, { steps: 8 });
+    await dragAbove(page, OFFICE, HOME, false);
     // Mid-drag: the list already shows the draft, and the badge is gray.
     await expect.poll(() => shownOrder(page)).toEqual([OFFICE, HOME, MEDIA]);
     await expect(page.locator("#servers-list .is-dragging")).toHaveAttribute("data-open-fqdn", OFFICE);
@@ -228,15 +122,14 @@ test.describe("gym webapp servers", () => {
     await shot(page, testInfo, "order-dragging");
     await page.mouse.up();
 
-    // The drop signs the new order and posts it to .com.
-    await expect.poll(() => sent.filter((s) => s.url.includes("/server-order")).length).toBeGreaterThan(0);
-    const post = sent.find((s) => s.url.includes("/api/accounts/smoketest/server-order"))!;
+    // The drop signs the new order with the admin root and posts it to .com.
+    const post = await m.waitFor("/api/accounts/smoketest/server-order");
     const wire = post.body as { order: { user: string; stks: string[]; issuedAt: number; nonce: string }; signature: string };
-    expect(wire.order.user).toBe("smoketest");
+    expect(wire.order.user).toBe(USER);
     expect(wire.order.stks).toEqual([STK[OFFICE], STK[HOME], STK[MEDIA]]);
     expect(wire.order.issuedAt).toBeGreaterThan(t0);
     expect(wire.order.nonce).toMatch(/^[0-9a-f]{64}$/);
-    expect(await signedByIrk(page, "server-order", wire)).toBe(true);
+    expect(await signer(page, keys, ORDER_CANON, wire.order, wire.signature)).toBe("admin");
 
     // Office leads now, but hasn't said it holds the new order: gray, with
     // the waiting label (Android: pod-leader-badge-pending).
@@ -250,20 +143,62 @@ test.describe("gym webapp servers", () => {
 
     // The order was also handed straight to the online box; its answer
     // confirms the badge.
-    await expect.poll(() => officeGot?.order.issuedAt ?? 0).toBe(wire.order.issuedAt);
+    await expect.poll(() => (officeGot as { order: { issuedAt: number } } | null)?.order.issuedAt ?? 0).toBe(wire.order.issuedAt);
     releaseAck();
     await expect(officeBadge).toHaveClass(/\bok\b/, { timeout: 10_000 });
     await expect(officeBadge).not.toHaveAttribute("data-order-leader-pending", "");
     await shot(page, testInfo, "order-leader-confirmed");
   });
 
-  test("gym servers home shows Add or Import a server above the list on an admin device only", async ({ page }, testInfo) => {
-    await reachHome(page);
-    await stub(page, [["/api/users/smoketest/pods", { pods: [livePod(HOME), livePod(OFFICE)] }]]);
-    await page.evaluate(async () => {
-      const { getSession } = await import("/lib/state.js");
-      getSession().adminRootSeed = crypto.getRandomValues(new Uint8Array(32));
+  test("gym servers a non-admin device sees the server order but can't change it or Make leader", async ({ page }, testInfo) => {
+    const keys = await reachHome(page, { kind: "non-admin", servers: [HOME, OFFICE] });
+    const t0 = Date.now() - 3_600_000;
+    const m = await mock(page);
+    m.get("/api/users/smoketest/pods", {
+      pods: [livePod(HOME, { orderIssuedAt: t0 }), livePod(OFFICE, { orderIssuedAt: t0 })],
+      serverOrder: wireOrder([STK[HOME]!, STK[OFFICE]!], t0),
     });
+    m.get(`${OFFICE}/api/screens/server-detail`, serverDetail(OFFICE));
+    m.post("/api/accounts/smoketest/server-order", serverOrderRule(page, keys));
+    await renderHome(page);
+    await expect.poll(() => shownOrder(page)).toEqual([HOME, OFFICE]);
+    // The admin-pinned account refuses an order this device could only sign
+    // with the IRK, so Home offers no handles (and no Add/Import).
+    await expect(card(page, HOME).locator("[data-order-leader]")).toHaveText("Leader");
+    await expect(page.locator("#servers-list [data-server-cards]")).not.toHaveAttribute("data-reorderable", "");
+    await expect(page.locator("#servers-list .js-order-handle")).toHaveCount(0);
+    await expect(page.locator("#home-add-server")).toHaveCount(0);
+    await shot(page, testInfo, "order-non-admin");
+
+    // The server page's Make leader is off, with the reason.
+    await card(page, OFFICE).click();
+    await expect(page.locator("#leader-pill")).toHaveText("Takes over while home is down", { timeout: 10_000 });
+    await expect(page.locator("#make-leader-btn")).toBeDisabled();
+    await expect(page.locator("[data-leader-admin-only]")).toHaveText("Only an admin device can change the server order.");
+    await page.locator("#leader-card").scrollIntoViewIfNeeded();
+    await shot(page, testInfo, "leader-non-admin");
+    expect(m.sent("/server-order")).toHaveLength(0);
+  });
+
+  test("gym servers a demo account shows its demo server and may add servers without an admin root", async ({ page }, testInfo) => {
+    await reachHome(page, { kind: "demo", servers: [HOME] });
+    const m = await mock(page);
+    m.get("/api/users/smoketest/pods", { pods: [livePod(HOME), livePod(OFFICE)] });
+    await renderHome(page);
+    // The operator runs a demo account, so its device stands in for an admin.
+    await expect(card(page, HOME)).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("#home-add-server")).toBeVisible();
+    const isAdmin = await page.evaluate(async () => !!(await import("/lib/state.js")).getSession().adminRootSeed);
+    expect(isAdmin).toBe(false);
+    await shot(page, testInfo, "home-demo");
+    await page.click("#home-add-server");
+    await expect(page.locator("[data-choice-add]")).toBeVisible();
+  });
+
+  test("gym servers home shows Add or Import a server above the list on an admin device only", async ({ page }, testInfo) => {
+    await reachHome(page, { kind: "admin", servers: [HOME, OFFICE] });
+    const m = await mock(page);
+    m.get("/api/users/smoketest/pods", { pods: [livePod(HOME), livePod(OFFICE)] });
     await renderHome(page);
     // "Add/Import a server" sits above the list (iOS/Android: home-add-server).
     await expect(page.locator("#home-add-server")).toHaveText("+ Add/Import a server");
@@ -280,19 +215,84 @@ test.describe("gym webapp servers", () => {
     await shot(page, testInfo, "home-add-import-menu");
   });
 
+  test("gym servers each Add or Import choice opens its flow and Cancel closes the menu", async ({ page }, testInfo) => {
+    await reachHome(page, { kind: "admin", servers: [HOME] });
+    const m = await mock(page);
+    m.get("/api/users/smoketest/pods", { pods: [livePod(HOME)] });
+    await renderHome(page);
+    const menu = page.locator('dialog[aria-label="Add or import a server"]');
+
+    // Cancel: the menu closes and Home stays.
+    await page.click("#home-add-server");
+    await expect(menu).toBeVisible();
+    await menu.locator("[data-choice-cancel]").click();
+    await expect(menu).toHaveCount(0);
+    await expect(page.locator("#view-home")).toBeVisible();
+
+    // Co-manage: asks for the owner's share link and refuses anything else.
+    await page.click("#home-add-server");
+    await menu.locator("[data-choice-co-manage]").click();
+    await expect(page.locator(".modal-title")).toHaveText("Open a share link");
+    await page.fill(".modal-input", "https://example.com/not-a-share");
+    await page.click("[data-modal-ok]");
+    await expect(page.locator("[data-modal-error]")).toHaveText("That isn't a share link.");
+    await shot(page, testInfo, "add-co-manage-prompt");
+    await page.click("[data-modal-cancel]");
+    await expect(page.locator(".modal-title")).toHaveCount(0);
+
+    // Import a backup: its picker dialog opens.
+    await page.click("#home-add-server");
+    await menu.locator("[data-choice-import]").click();
+    const imp = page.locator('dialog[aria-label="Import a backup"]');
+    await expect(imp).toBeVisible({ timeout: 10_000 });
+    await expect(imp.locator("[data-imp-file]")).toBeAttached();
+    await shot(page, testInfo, "add-import-dialog");
+    await page.keyboard.press("Escape");
+
+    // Create a new server: the create form.
+    await renderHome(page);
+    await page.click("#home-add-server");
+    await page.locator('dialog[aria-label="Add or import a server"] [data-choice-add]').click();
+    await expect(page.locator("#view-create-server")).toBeVisible({ timeout: 10_000 });
+    await shot(page, testInfo, "add-create-form");
+  });
+
+  test("gym servers a non-admin device with no servers is told only an admin device can add one", async ({ page }, testInfo) => {
+    await reachHome(page, { kind: "non-admin", servers: [HOME] });
+    const m = await mock(page);
+    m.get("/api/users/smoketest/pods", { pods: [] });
+    await renderHome(page);
+    const empty = page.locator("[data-home-empty-non-admin]");
+    await expect(empty).toBeVisible({ timeout: 10_000 });
+    await expect(empty).toContainText("Only an admin device of this account can add servers.");
+    await expect(page.locator("#home-add-server")).toHaveCount(0);
+    await shot(page, testInfo, "home-empty-non-admin");
+  });
+
+  test("gym servers an admin device with no servers gets Add or Import and Take over", async ({ page }, testInfo) => {
+    await reachHome(page, { kind: "admin", servers: [HOME] });
+    const m = await mock(page);
+    m.get("/api/users/smoketest/pods", { pods: [] });
+    await renderHome(page);
+    await expect(page.locator("#home-add-server")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("[data-home-empty-non-admin]")).toHaveCount(0);
+    await shot(page, testInfo, "home-empty-admin");
+    await page.click("#home-take-over");
+    await expect(page.locator('dialog[aria-label="Take over a box"] [data-claim-input]')).toBeVisible({ timeout: 10_000 });
+  });
+
   test("gym servers home keyboard reorder reverts when another device saved a newer order", async ({ page }, testInfo) => {
-    await reachHome(page);
+    const keys = await reachHome(page, { kind: "admin", servers: [HOME, OFFICE] });
     const t0 = Date.now() - 3_600_000;
-    const sent = await stub(page, [
-      [
-        "/api/users/smoketest/pods",
-        {
-          pods: [offlinePod(MEDIA), livePod(HOME, { orderIssuedAt: t0 }), livePod(OFFICE, { orderIssuedAt: t0 })],
-          serverOrder: wireOrder([STK[MEDIA]!, STK[HOME]!, STK[OFFICE]!], t0),
-        },
-      ],
-      ["/api/accounts/smoketest/server-order", () => ({ status: 409, json: { error: "stale order" } })],
-    ]);
+    const m = await mock(page);
+    m.get("/api/users/smoketest/pods", {
+      pods: [offlinePod(MEDIA), livePod(HOME, { orderIssuedAt: t0 }), livePod(OFFICE, { orderIssuedAt: t0 })],
+      serverOrder: wireOrder([STK[MEDIA]!, STK[HOME]!, STK[OFFICE]!], t0),
+    });
+    m.post(
+      "/api/accounts/smoketest/server-order",
+      sensitive(page, keys, ORDER_CANON, (b) => ({ arg: b.order, sig: b.signature }), () => ({ status: 409, json: { error: "stale order" } })),
+    );
     await renderHome(page);
 
     // Media is first but down, so home leads and says who it stands in for.
@@ -308,54 +308,115 @@ test.describe("gym webapp servers", () => {
     const up = page.getByRole("button", { name: "Move office up" });
     await up.focus();
     await page.keyboard.press("Enter");
-    await expect(page.locator("#toast")).toContainText(
-      "Another device changed the order. Showing the latest one.",
-      { timeout: 10_000 },
-    );
-    const post = sent.find((s) => s.url.includes("/api/accounts/smoketest/server-order"))!;
+    await expect(page.locator("#toast")).toContainText("Another device changed the order. Showing the latest one.", { timeout: 10_000 });
+    const post = m.last("/api/accounts/smoketest/server-order")!;
     expect((post.body as { order: { stks: string[] } }).order.stks).toEqual([STK[MEDIA], STK[OFFICE], STK[HOME]]);
     await expect.poll(() => shownOrder(page)).toEqual([MEDIA, HOME, OFFICE]);
     await expect(card(page, HOME).locator("[data-order-leader]")).toHaveText("Leader");
     await shot(page, testInfo, "order-reverted");
   });
 
+  test("gym servers Move down on Home saves the new order", async ({ page }, testInfo) => {
+    const keys = await reachHome(page, { kind: "admin", servers: [HOME, OFFICE] });
+    const t0 = Date.now() - 3_600_000;
+    const m = await mock(page);
+    m.get("/api/users/smoketest/pods", {
+      pods: [livePod(HOME, { orderIssuedAt: t0 }), livePod(OFFICE, { orderIssuedAt: t0 })],
+      serverOrder: wireOrder([STK[HOME]!, STK[OFFICE]!], t0),
+    });
+    m.post("/api/accounts/smoketest/server-order", serverOrderRule(page, keys));
+    await renderHome(page);
+    await page.getByRole("button", { name: "Move home down" }).focus();
+    await page.keyboard.press("Enter");
+    const post = await m.waitFor("/api/accounts/smoketest/server-order");
+    expect(post.body.order.stks).toEqual([STK[OFFICE], STK[HOME]]);
+    expect(await signer(page, keys, ORDER_CANON, post.body.order, post.body.signature)).toBe("admin");
+    await expect.poll(() => shownOrder(page)).toEqual([OFFICE, HOME]);
+    await shot(page, testInfo, "order-moved-down");
+  });
+
+  test("gym servers a Home server card opens its server page", async ({ page }, testInfo) => {
+    await reachHome(page, { kind: "admin", servers: [HOME, OFFICE] });
+    const m = await mock(page);
+    m.get("/api/users/smoketest/pods", { pods: [livePod(HOME), livePod(OFFICE)] });
+    m.get(`${OFFICE}/api/screens/server-detail`, serverDetail(OFFICE));
+    await renderHome(page);
+    await card(page, OFFICE).click();
+    await expect(page.locator("#view-server-detail")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("#leader-card")).toHaveAttribute("data-server-fqdn", OFFICE, { timeout: 10_000 });
+    await shot(page, testInfo, "home-card-opens-server");
+  });
+
+  test("gym servers Make leader puts this server first and waits for it to confirm", async ({ page }, testInfo) => {
+    const keys = await reachHome(page, { kind: "admin", servers: [HOME, OFFICE] });
+    const t0 = Date.now() - 3_600_000;
+    let releaseAck: () => void = () => {};
+    const ackGate = new Promise<void>((resolve) => {
+      releaseAck = resolve;
+    });
+    const m = await mock(page);
+    m.get("/api/users/smoketest/pods", {
+      pods: [livePod(HOME, { orderIssuedAt: t0 }), livePod(OFFICE, { orderIssuedAt: t0 })],
+      serverOrder: wireOrder([STK[HOME]!, STK[OFFICE]!], t0),
+    });
+    m.get(`${OFFICE}/api/screens/server-detail`, serverDetail(OFFICE));
+    m.post("/api/accounts/smoketest/server-order", serverOrderRule(page, keys));
+    m.post(`https://${OFFICE}/api/screens/server-order`, async (call) => {
+      await ackGate;
+      return { json: { ok: true, heldIssuedAt: call.body.order.issuedAt } };
+    });
+    m.post(`https://${HOME}/api/screens/server-order`, (call) => ({ json: { ok: true, heldIssuedAt: call.body.order.issuedAt } }));
+    await renderHome(page);
+    await openServer(page, OFFICE);
+
+    const pill = page.locator("#leader-pill");
+    const btn = page.locator("#make-leader-btn");
+    await expect(pill).toHaveText("Takes over while home is down", { timeout: 10_000 });
+    await expect(btn).toBeEnabled();
+    await page.locator("#leader-card").scrollIntoViewIfNeeded();
+    await shot(page, testInfo, "leader-card-second");
+
+    await btn.click();
+    const post = await m.waitFor("/api/accounts/smoketest/server-order");
+    expect(post.body.order.stks).toEqual([STK[OFFICE], STK[HOME]]);
+    expect(await signer(page, keys, ORDER_CANON, post.body.order, post.body.signature)).toBe("admin");
+    await expect(page.locator("#toast")).toContainText(`${OFFICE} is first in your server order`, { timeout: 10_000 });
+    // Leader, but gray with the waiting note until office holds the order.
+    await expect(pill).toHaveText("Leader");
+    await expect(pill).not.toHaveClass(/\bok\b/);
+    await expect(page.locator("#leader-confirm-note")).toHaveText("Waiting for it to confirm the new order.");
+    await expect(btn).toBeDisabled();
+    await shot(page, testInfo, "leader-waiting");
+    releaseAck();
+    await expect(pill).toHaveClass(/\bok\b/, { timeout: 10_000 });
+    await expect(page.locator("#leader-confirm-note")).toBeHidden();
+    await shot(page, testInfo, "leader-confirmed");
+  });
+
   test("gym servers update card shows the last update and orders the latest release", async ({ page }, testInfo) => {
-    await reachHome(page);
+    const keys = await reachHome(page, { kind: "admin", servers: [HOME] });
     const now = Date.now();
-    const sent = await stub(page, [
-      [
-        `${HOME}/api/screens/server-detail`,
-        {
-          serverFqdn: HOME,
-          username: "smoketest",
-          daemonVersion: "1.0.0",
-          currentCommit: COMMIT_RUNNING,
-          lastUpdate: { outcome: "rolled-back", targetCommit: COMMIT_ROLLED, previousCommit: COMMIT_RUNNING, at: now - 86_400_000 },
-          uptimeMs: 3_600_000,
-          certNotAfter: now + 60 * 86_400_000,
-          certSans: [HOME],
-          serviceCount: 1,
-          pairedSessionCount: 1,
-          recentInstallEvents: [],
-        },
+    const m = await mock(page);
+    m.get(
+      `${HOME}/api/screens/server-detail`,
+      serverDetail(HOME, {
+        currentCommit: COMMIT_RUNNING,
+        lastUpdate: { outcome: "rolled-back", targetCommit: COMMIT_ROLLED, previousCommit: COMMIT_RUNNING, at: now - 86_400_000 },
+      }),
+    );
+    m.get(`${HOME}/api/screens/updates`, {
+      latest: { commit: COMMIT_LATEST, tag: "v1.4.0" },
+      releases: [
+        { commit: COMMIT_LATEST, tag: "v1.4.0", relation: "newer" },
+        { commit: COMMIT_RUNNING, tag: "v1.3.2", relation: "current" },
       ],
-      [
-        `${HOME}/api/screens/updates`,
-        {
-          latest: { commit: COMMIT_LATEST, tag: "v1.4.0" },
-          releases: [
-            { commit: COMMIT_LATEST, tag: "v1.4.0", relation: "newer" },
-            { commit: COMMIT_RUNNING, tag: "v1.3.2", relation: "current" },
-          ],
-        },
-      ],
-      ["/api/users/smoketest/pods", { pods: [livePod(HOME)] }],
-      [`/api/server/${HOME}/update`, { ok: true, expiresAt: now + 3_600_000 }],
-    ]);
-    await page.evaluate(async (fqdn) => {
-      const { enterServerDetail } = await import("/views/server-detail.js");
-      await enterServerDetail(fqdn);
-    }, HOME);
+    });
+    m.get("/api/users/smoketest/pods", { pods: [livePod(HOME)] });
+    m.post(
+      `/api/server/${HOME}/update`,
+      sensitive(page, keys, UPDATE_CANON, (b) => ({ arg: b.order, sig: b.signature }), () => ({ json: { ok: true, expiresAt: now + 3_600_000 } })),
+    );
+    await openServer(page, HOME);
 
     // The box's own verdict on the last update (iOS: sd-update-last-outcome).
     const cardEl = page.locator("#update-card");
@@ -380,13 +441,13 @@ test.describe("gym webapp servers", () => {
     await dlg.locator("#update-latest-btn").click();
     await expect(dlg.locator("[data-update-pending='sent']")).toContainText("Update to v1.4.0 sent", { timeout: 10_000 });
 
-    const post = sent.find((s) => s.url.includes(`/api/server/${HOME}/update`))!;
+    const post = m.last(`/api/server/${HOME}/update`)!;
     const body = post.body as { order: Record<string, unknown>; signature: string; auth: { username: string } };
     expect(body.order.serverDomain).toBe(HOME);
     expect(body.order.targetCommit).toBe(COMMIT_LATEST);
     expect(body.order.fromCommit).toBe(COMMIT_RUNNING);
-    expect(body.signature).toMatch(/^[0-9a-f]{128}$/);
-    expect(body.auth.username).toBe("smoketest");
+    expect(await signer(page, keys, UPDATE_CANON, body.order, body.signature)).toBe("admin");
+    expect(body.auth.username).toBe(USER);
 
     // Done: the card shows the pending order instead of the button
     // (iOS: sd-update-pending), so it isn't sent twice.
@@ -399,34 +460,133 @@ test.describe("gym webapp servers", () => {
     await shot(page, testInfo, "update-pending");
   });
 
-  test("gym servers un-revoke restores a revoked server", async ({ page }, testInfo) => {
-    await reachHome(page);
-    let revoked = true;
-    const sent = await stub(page, [
-      [
-        "/api/users/smoketest/pods",
-        () => ({
-          json: {
-            pods: [
-              revoked
-                ? offlinePod(MEDIA, { revokedAt: Date.now() - 86_400_000, revocationReason: "lost" })
-                : offlinePod(MEDIA),
-            ],
-          },
-        }),
-      ],
-      [
-        "/api/server-registry/unrevoke",
-        () => {
-          revoked = false;
-          return { json: { ok: true, unrevokedAt: Date.now(), dnsRepublished: true } };
+  test("gym servers update dialog offers other releases, Go back under Advanced, a typed commit and Check again", async ({ page }, testInfo) => {
+    const keys = await reachHome(page, { kind: "admin", servers: [HOME] });
+    const m = await mock(page);
+    m.get(`${HOME}/api/screens/server-detail`, serverDetail(HOME, { currentCommit: COMMIT_RUNNING }));
+    let refreshed = 0;
+    m.get(`${HOME}/api/screens/updates`, (call) => {
+      if (call.url.searchParams.has("refresh")) refreshed++;
+      return {
+        json: {
+          latest: { commit: COMMIT_LATEST, tag: "v1.4.0" },
+          releases: [
+            { commit: COMMIT_LATEST, tag: "v1.4.0", relation: "newer" },
+            { commit: COMMIT_OTHER, tag: "v1.3.9", relation: "newer" },
+            { commit: COMMIT_RUNNING, tag: "v1.3.2", relation: "current" },
+            { commit: COMMIT_OLDER, tag: "v1.2.0", relation: "older" },
+          ],
         },
+      };
+    });
+    m.get("/api/users/smoketest/pods", { pods: [livePod(HOME)] });
+    m.post(
+      `/api/server/${HOME}/update`,
+      sensitive(page, keys, UPDATE_CANON, (b) => ({ arg: b.order, sig: b.signature }), () => ({ json: { ok: true, expiresAt: Date.now() + 3_600_000 } })),
+    );
+    await openServer(page, HOME);
+    await expect(page.locator("#update-server-btn")).toBeVisible({ timeout: 10_000 });
+    await page.click("#update-server-btn");
+    const dlg = page.locator('dialog[aria-label="Update this server"]');
+    await expect(dlg.locator("[data-update-others]")).toContainText("Other new releases", { timeout: 10_000 });
+    await expect(dlg.locator(`[data-update-others] [data-update-commit="${COMMIT_OTHER}"]`)).toHaveText("Update");
+
+    // Advanced: a release to go back to, and a typed commit that must be a full hash.
+    await dlg.locator("[data-update-advanced] summary").click();
+    await expect(dlg.locator(`[data-update-older] [data-update-commit="${COMMIT_OLDER}"]`)).toHaveText("Go back");
+    const target = dlg.locator("[data-update-target]");
+    const go = dlg.locator("[data-update-go]");
+    await target.fill("abc123");
+    await expect(dlg.locator("[data-update-target-hint]")).toHaveText("Enter the full 40-character commit hash of the blessed release.");
+    await expect(go).toBeDisabled();
+    await target.fill(COMMIT_RUNNING);
+    await expect(dlg.locator("[data-update-target-hint]")).toHaveText("The server is already running this release.");
+    await expect(go).toBeDisabled();
+    await target.fill(COMMIT_OLDER.toUpperCase());
+    await expect(dlg.locator("[data-update-target-hint]")).toBeHidden();
+    await expect(go).toBeEnabled();
+    await shot(page, testInfo, "update-advanced");
+
+    // Go back to the older release: the order names it.
+    await dlg.locator(`[data-update-older] [data-update-commit="${COMMIT_OLDER}"]`).click();
+    await expect(dlg.locator("[data-update-pending='sent']")).toContainText("Update to v1.2.0 sent", { timeout: 10_000 });
+    const post = m.last(`/api/server/${HOME}/update`)!;
+    expect(post.body.order.targetCommit).toBe(COMMIT_OLDER);
+    expect(await signer(page, keys, UPDATE_CANON, post.body.order, post.body.signature)).toBe("admin");
+    await shot(page, testInfo, "update-went-back");
+
+    // A server on the latest release offers Check again, which asks the box afresh.
+    await dlg.locator("[data-update-cancel]").click();
+    await page.evaluate(async () => (await import("/lib/serverUpdate.js")).clearPendingUpdate("home.smoketest.flagship.services"));
+    m.first("GET", `${HOME}/api/screens/updates`, (call: { url: URL }) => {
+      if (call.url.searchParams.has("refresh")) refreshed++;
+      return { json: { latest: null, releases: [{ commit: COMMIT_RUNNING, tag: "v1.3.2", relation: "current" }] } };
+    });
+    await openServer(page, HOME);
+    await expect(page.locator("#update-server-btn")).toBeVisible({ timeout: 10_000 });
+    await page.click("#update-server-btn");
+    const dlg2 = page.locator('dialog[aria-label="Update this server"]');
+    await expect(dlg2.locator("[data-update-latest]")).toContainText("This server is on the latest release.", { timeout: 10_000 });
+    const before = m.sent(`${HOME}/api/screens/updates`, "GET").length;
+    await dlg2.locator("[data-update-recheck]").click();
+    await expect.poll(() => m.sent(`${HOME}/api/screens/updates`, "GET").length).toBeGreaterThan(before);
+    await shot(page, testInfo, "update-latest-check-again");
+  });
+
+  test("gym servers an update the server hasn't picked up offers Send again and Forget it", async ({ page }, testInfo) => {
+    await reachHome(page, { kind: "admin", servers: [HOME] });
+    const m = await mock(page);
+    m.get(`${HOME}/api/screens/server-detail`, serverDetail(HOME, { currentCommit: COMMIT_RUNNING }));
+    m.get(`${HOME}/api/screens/updates`, {
+      latest: { commit: COMMIT_LATEST, tag: "v1.4.0" },
+      releases: [
+        { commit: COMMIT_LATEST, tag: "v1.4.0", relation: "newer" },
+        { commit: COMMIT_RUNNING, tag: "v1.3.2", relation: "current" },
       ],
-    ]);
-    await page.evaluate(async (fqdn) => {
-      const { enterServerDetail } = await import("/views/server-detail.js");
-      await enterServerDetail(fqdn);
-    }, MEDIA);
+    });
+    m.get("/api/users/smoketest/pods", { pods: [livePod(HOME)] });
+    // An order sent two days ago that the server never applied.
+    await page.evaluate(
+      async ({ fqdn, target, from }) => {
+        const u = await import("/lib/serverUpdate.js");
+        u.savePendingUpdate(fqdn, { targetCommit: target, targetTag: "v1.4.0", fromCommit: from, orderedAt: Date.now() - 2 * 86_400_000 });
+      },
+      { fqdn: HOME, target: COMMIT_LATEST, from: COMMIT_RUNNING },
+    );
+    await openServer(page, HOME);
+    const pending = page.locator("#update-pending [data-update-pending='stale']");
+    await expect(pending).toContainText("The server hasn't applied this update yet. It may be offline.", { timeout: 10_000 });
+    await page.locator("#update-card").scrollIntoViewIfNeeded();
+    await shot(page, testInfo, "update-stale");
+
+    // Send again reopens the release list.
+    await pending.locator("[data-update-send-again]").click();
+    const dlg = page.locator('dialog[aria-label="Update this server"]');
+    await expect(dlg.locator("#update-latest-btn")).toBeVisible({ timeout: 10_000 });
+    await dlg.locator("[data-update-cancel]").click();
+
+    // Forget it drops the order and brings the button back.
+    await page.locator("#update-pending [data-update-forget]").click();
+    await expect(page.locator("#update-pending")).toBeHidden();
+    await expect(page.locator("#update-server-btn")).toBeVisible();
+    await shot(page, testInfo, "update-forgotten");
+  });
+
+  test("gym servers un-revoke restores a revoked server", async ({ page }, testInfo) => {
+    const keys = await reachHome(page, { kind: "admin", servers: [HOME] });
+    let revoked = true;
+    const m = await mock(page);
+    m.get("/api/users/smoketest/pods", () => ({
+      json: { pods: [revoked ? offlinePod(MEDIA, { revokedAt: Date.now() - 86_400_000, revocationReason: "lost" }) : offlinePod(MEDIA)] },
+    }));
+    m.post(
+      "/api/server-registry/unrevoke",
+      sensitive(page, keys, UNREVOKE_CANON, (b) => ({ arg: b.request, sig: b.signature }), () => {
+        revoked = false;
+        return { json: { ok: true, unrevokedAt: Date.now(), dnsRepublished: true } };
+      }),
+    );
+    await openServer(page, MEDIA);
 
     // The box can't be reached (revoked): the page says so and offers
     // Un-revoke in place of Revoke (iOS: sd-unrevoke-server).
@@ -444,11 +604,11 @@ test.describe("gym webapp servers", () => {
       "Server restored. If it unlocks on its own, approve its unlock once from your phone.",
       { timeout: 10_000 },
     );
-    const post = sent.find((s) => s.url.includes("/api/server-registry/unrevoke"))!;
+    const post = m.last("/api/server-registry/unrevoke")!;
     const body = post.body as { request: { username: string; serverDomain: string; issuedAt: number }; signature: string };
-    expect(body.request.username).toBe("smoketest");
+    expect(body.request.username).toBe(USER);
     expect(body.request.serverDomain).toBe(MEDIA);
-    expect(await signedByIrk(page, "unrevoke", body)).toBe(true);
+    expect(await signer(page, keys, UNREVOKE_CANON, body.request, body.signature)).toBe("admin");
 
     // The page re-reads .com and flips back to the reversible Revoke.
     await expect(page.locator("#revoke-server-btn")).toHaveText("Revoke server (reversible)", { timeout: 10_000 });
@@ -456,20 +616,41 @@ test.describe("gym webapp servers", () => {
     await shot(page, testInfo, "unrevoked-server");
   });
 
+  test("gym servers a demo account un-revokes with the IRK", async ({ page }, testInfo) => {
+    const keys = await reachHome(page, { kind: "demo", servers: [HOME] });
+    let revoked = true;
+    const m = await mock(page);
+    m.get("/api/users/smoketest/pods", () => ({
+      json: { pods: [revoked ? offlinePod(MEDIA, { revokedAt: Date.now() - 86_400_000, revocationReason: "lost" }) : offlinePod(MEDIA)] },
+    }));
+    m.post(
+      "/api/server-registry/unrevoke",
+      sensitive(page, keys, UNREVOKE_CANON, (b) => ({ arg: b.request, sig: b.signature }), () => {
+        revoked = false;
+        return { json: { ok: true, unrevokedAt: Date.now(), dnsRepublished: true } };
+      }),
+    );
+    await openServer(page, MEDIA);
+    await expect(page.locator("#unrevoke-server-btn")).toBeVisible({ timeout: 10_000 });
+    await page.click("#unrevoke-server-btn");
+    await expect(page.locator("#revoke-server-btn")).toBeVisible({ timeout: 10_000 });
+    const post = m.last("/api/server-registry/unrevoke")!;
+    expect(await signer(page, keys, UNREVOKE_CANON, post.body.request, post.body.signature)).toBe("irk");
+    await shot(page, testInfo, "demo-unrevoked");
+  });
+
   test("gym servers delete a revoked server behind the typed-name gate", async ({ page }, testInfo) => {
-    await reachHome(page);
-    const sent = await stub(page, [
-      [
-        "/api/users/smoketest/pods",
-        { pods: [livePod(HOME), offlinePod(MEDIA, { revokedAt: Date.now() - 86_400_000, revocationReason: "stolen" })] },
-      ],
-      [`/api/server/${MEDIA}/decommission`, { ok: true }],
-      ["/api/server/release", { ok: true, released: true }],
-    ]);
-    await page.evaluate(async (fqdn) => {
-      const { enterServerDetail } = await import("/views/server-detail.js");
-      await enterServerDetail(fqdn);
-    }, MEDIA);
+    const keys = await reachHome(page, { kind: "admin", servers: [HOME] });
+    const m = await mock(page);
+    m.get("/api/users/smoketest/pods", {
+      pods: [livePod(HOME), offlinePod(MEDIA, { revokedAt: Date.now() - 86_400_000, revocationReason: "stolen" })],
+    });
+    m.post(
+      `/api/server/${MEDIA}/decommission`,
+      sensitive(page, keys, DECOMMISSION_CANON, (b) => ({ arg: b.order, sig: b.signature }), () => ({ json: { ok: true } })),
+    );
+    m.post("/api/server/release", sensitive(page, keys, releaseCanon, (b) => ({ arg: b.request, sig: b.signature }), () => ({ json: { ok: true, released: true } })));
+    await openServer(page, MEDIA);
     await expect(page.locator("#delete-server-btn")).toHaveText("Delete and wipe this server", { timeout: 10_000 });
     await page.click("#delete-server-btn");
 
@@ -484,24 +665,23 @@ test.describe("gym webapp servers", () => {
     await dlg.locator("[data-delete-input]").fill("Media ");
     await expect(go).toBeEnabled();
     await shot(page, testInfo, "delete-confirm");
-    expect(sent).toEqual([]);
+    expect(m.sent("/api/server/")).toEqual([]);
     await go.click();
 
-    // The box is asked to wipe itself, then the name is released.
-    await expect(page.locator("#toast")).toContainText(
-      "Deleted media. If it's online it will erase itself and power off.",
-      { timeout: 10_000 },
-    );
-    const decommission = sent.find((s) => s.url.includes(`/api/server/${MEDIA}/decommission`));
-    const release = sent.find((s) => s.url.includes("/api/server/release"));
+    // The box is asked to wipe itself, then the name is released: both under the admin root.
+    await expect(page.locator("#toast")).toContainText("Deleted media. If it's online it will erase itself and power off.", { timeout: 10_000 });
+    const decommission = m.last(`/api/server/${MEDIA}/decommission`);
+    const release = m.last("/api/server/release");
     expect(decommission).toBeTruthy();
     expect(release).toBeTruthy();
-    expect(sent.indexOf(decommission!)).toBeLessThan(sent.indexOf(release!));
+    expect(m.calls.indexOf(decommission!)).toBeLessThan(m.calls.indexOf(release!));
     const order = (decommission!.body as { order: { diskDisposition: string; retiredStkPubHex: string; podCanonical: string } }).order;
     expect(order.diskDisposition).toBe("wipe-now");
     expect(order.retiredStkPubHex).toBe(STK[MEDIA]);
     expect(order.podCanonical).toBe(MEDIA);
+    expect(await signer(page, keys, DECOMMISSION_CANON, order, decommission!.body.signature)).toBe("admin");
     expect((release!.body as { request: { serverDomain: string } }).request.serverDomain).toBe(MEDIA);
+    expect(await signer(page, keys, releaseCanon, release!.body.request, release!.body.signature)).toBe("admin");
 
     // Back on Home, the deleted server is gone even though the stale lists
     // still name it.
@@ -509,5 +689,20 @@ test.describe("gym webapp servers", () => {
     await expect(card(page, HOME)).toBeVisible({ timeout: 10_000 });
     await expect(card(page, MEDIA)).toHaveCount(0);
     await shot(page, testInfo, "deleted-home");
+  });
+
+  test("gym servers delete dialog Cancel sends nothing", async ({ page }, testInfo) => {
+    await reachHome(page, { kind: "admin", servers: [HOME] });
+    const m = await mock(page);
+    m.get("/api/users/smoketest/pods", { pods: [livePod(HOME), offlinePod(MEDIA, { revokedAt: Date.now() - 86_400_000, revocationReason: "lost" })] });
+    await openServer(page, MEDIA);
+    await page.click("#delete-server-btn");
+    const dlg = page.locator('dialog[aria-label="Delete server"]');
+    await dlg.locator("[data-delete-input]").fill("media");
+    await shot(page, testInfo, "delete-cancel");
+    await dlg.locator("[data-delete-cancel]").click();
+    await expect(dlg).toHaveCount(0);
+    expect(m.sent("/api/server/")).toEqual([]);
+    await expect(page.locator("#view-server-detail")).toBeVisible();
   });
 });
