@@ -759,6 +759,7 @@ export class OwnerEngine {
     healthyBricks: number;
     holders: Array<{ label: string; state: "ok" | "checking" | "failing" | "offline"; lastProofAt: number | null; bricks: number }>;
     keepUntil: number | null;
+    brickBytes: number | null;
   }> {
     const st = await this.state();
     const g = st.current ?? st.pending;
@@ -773,6 +774,7 @@ export class OwnerEngine {
         healthyBricks: 0,
         holders: [],
         keepUntil: null,
+        brickBytes: null,
       };
     }
     const net = g.root.network;
@@ -818,6 +820,7 @@ export class OwnerEngine {
       healthyBricks: healthy,
       holders,
       keepUntil,
+      brickBytes: net.brickBytes,
     };
   }
 

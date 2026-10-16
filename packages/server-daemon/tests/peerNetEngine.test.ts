@@ -64,6 +64,10 @@ describe("peer backup engine", () => {
     const s = await e.status();
     expect(s.v).toBe(2);
     expect(s.policy).toBe("peer");
+    // The v1 fields stay readable for clients and Migrate's pre-flight.
+    expect(s.participating).toBe(true);
+    expect(s.peersBackingYouUp).toEqual([]);
+    expect(s.stats).toEqual({ total: 0, durable: 0, atRisk: 0, yourBytesStored: 0, peerBytesHosted: 0 });
     expect(s.poolBytes).toBe(Math.floor((1 << 30) * 0.98));
     expect(["filling", "waiting-for-peers"]).toContain(s.state);
 

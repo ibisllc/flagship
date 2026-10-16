@@ -74,6 +74,17 @@ export interface PeerBackupStatusV2 extends PeerPolicyStatus {
   holderList: Array<{ label: string; state: "ok" | "checking" | "failing" | "offline"; lastProofAt: number | null; bricks: number }>;
   keepUntil: number | null;
   hosting: { poolBytes: number; realBytes: number; fillerBytes: number; provenBytes: number; leases: number; bricks: number; reliability: number | null; leaving: boolean };
+  /**
+   * The v1 fields, filled from v2 so clients built before v2 (and Migrate's
+   * pre-flight, which asks whether anyone holds this server's backup) keep
+   * reading it. Holders appear as "Server 1..n", never by name.
+   */
+  participating: boolean;
+  peersBackingYouUp: Array<{ peerFqdn: string; shardsHosted: number; lastSeenMs: number; online: boolean }>;
+  peersYouBackUp: never[];
+  shards: never[];
+  repair: { state: "idle"; lastTickMs: null; queued: number; completed24h: number };
+  stats: { total: number; durable: number; atRisk: number; yourBytesStored: number; peerBytesHosted: number };
 }
 
 export class PeerBackupEngine {
@@ -286,6 +297,23 @@ export class PeerBackupEngine {
         bricks: h.bricks,
         reliability: h.reliability,
         leaving: h.leaving,
+      },
+      participating: this.isPeer(),
+      peersBackingYouUp: own.holders.map((x) => ({
+        peerFqdn: x.label,
+        shardsHosted: x.bricks,
+        lastSeenMs: x.lastProofAt ?? 0,
+        online: x.state === "ok" || x.state === "checking",
+      })),
+      peersYouBackUp: [],
+      shards: [],
+      repair: { state: "idle", lastTickMs: null, queued: p.totalBricks - p.healthyBricks, completed24h: 0 },
+      stats: {
+        total: p.totalBricks,
+        durable: p.healthyBricks,
+        atRisk: p.totalBricks - p.healthyBricks,
+        yourBytesStored: p.healthyBricks * (own.brickBytes ?? 0),
+        peerBytesHosted: h.realBytes,
       },
     };
   }
