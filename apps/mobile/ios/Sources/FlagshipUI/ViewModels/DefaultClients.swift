@@ -6,6 +6,7 @@ import FlagshipAPI
 /// the real thing in Release builds, the in-process mock in Debug builds
 /// (unit tests and the gym), which are the only builds with mocks in them.
 public enum DefaultClients {
+    @MainActor
     public static func webAuthn() -> WebAuthnProvider {
         #if DEBUG
         MockWebAuthnProvider()
