@@ -7,7 +7,7 @@
 import { getSession } from "../lib/state.js";
 import { escapeHtml } from "../lib/util.js";
 import { toast } from "../lib/toast.js";
-import { humanError } from "../lib/humanError.js";
+import { userError } from "../lib/humanError.js";
 import { boxClient } from "../lib/api.js";
 import { serverFqdn } from "../lib/apex.js";
 import { loadAccountPods, podFqdn } from "../lib/appPlacement.js";
@@ -17,6 +17,7 @@ import { depositSwkIfNeeded } from "../lib/swkDeposit.js";
 import { depositCgkIfNeeded } from "../lib/cgkDeposit.js";
 import { depositPairingIfNeeded } from "../lib/pairingDeposit.js";
 import {
+  archiveErrorText,
   commitRestore,
   describeRestoreApp,
   formatBytes,
@@ -76,7 +77,7 @@ export function openAddOrImport({ onAdd, onCoManage }) {
   dlg.querySelector("[data-choice-import]").addEventListener("click", () => {
     close();
     openImportBackup().catch((e) => {
-      if (e?.code !== "cancelled") toast(humanError(e), "err");
+      if (e?.code !== "cancelled") toast(archiveErrorText(e), "err");
     });
   });
 }
@@ -225,7 +226,7 @@ export async function openImportBackup({ targetFqdn = null } = {}) {
   });
   const fail = (e) => {
     if (e?.code === "cancelled") return;
-    ui.errEl.textContent = humanError(e);
+    ui.errEl.textContent = archiveErrorText(e);
     show(ui.errEl);
   };
   const clearError = () => show(ui.errEl, false);
@@ -384,7 +385,7 @@ export async function openImportBackup({ targetFqdn = null } = {}) {
           }
           if (st && !st.waiting && st.restore?.state === "done") break;
           if (st?.waiting && st.waiting.archiveId !== state.parsed.archiveId) {
-            throw new Error(`${name} is waiting for a different backup.`);
+            throw userError(`${name} is waiting for a different backup.`);
           }
         }
         status(
@@ -430,7 +431,7 @@ export async function openImportBackup({ targetFqdn = null } = {}) {
           state.dataFile = f;
           state.checked = false;
         } else {
-          throw new Error(`${f.name} isn't a Flagship backup file or data file.`);
+          throw userError(`${f.name} isn't a Flagship backup file or data file.`);
         }
       }
       ui.fileEl.value = "";

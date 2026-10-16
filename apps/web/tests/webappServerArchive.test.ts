@@ -204,15 +204,17 @@ describe("backup and restore calls", () => {
   it("shows the server's own words when a chunk is refused", async () => {
     const client = { baseUrl: "https://x", token: () => "t", fetch: async () => ({ received: 0 }) };
     const fetchImpl = async () => new Response(JSON.stringify({ error: "bad chunk size" }), { status: 400 });
-    await expect(archive.uploadDataFile({ client, blob: new Blob(["abc"]), archiveId: "aa", fetchImpl })).rejects.toThrow("bad chunk size");
+    const e = await archive.uploadDataFile({ client, blob: new Blob(["abc"]), archiveId: "aa", fetchImpl }).catch((x: unknown) => x);
+    expect(archive.archiveErrorText(e)).toBe("Bad chunk size.");
   });
 
-  it("hands over the content key, and says the server keeps waiting when the restore fails", async () => {
+  it("hands over the content key, and shows the restore's own reason when it fails", async () => {
     const posts: any[] = [];
     await archive.commitRestore({ client: { fetch: async (p: string, i: any) => void posts.push([p, JSON.parse(i.body)]) }, contentKey: seed(B.contentKeyHex) });
     expect(posts).toEqual([["/api/screens/server-restore/commit", { key: B.contentKeyHex }]]);
     const client = { fetch: async () => ({ waiting: { archiveId: "aa" }, restore: { state: "failed", reason: "wrong key" } }) };
-    await expect(archive.waitForRestore({ client })).rejects.toThrow(/wrong key\. The server keeps waiting/);
+    const e = await archive.waitForRestore({ client }).catch((x: unknown) => x);
+    expect(archive.archiveErrorText(e)).toBe("The restore failed: wrong key.");
   });
 
   it("downloading here approves a fresh request, then lets the browser fetch both files", async () => {
@@ -356,5 +358,42 @@ describe("browser download approval (flagship/archive-download/v1)", () => {
       expect(posted).toEqual([{ path: "/api/screens/server-archive/approve", body: { approval: a, signature: c.signature } }]);
     }
     for (const bad of AD.invalid) expect(() => archive.archiveDownloadCanonicalBytes(bad)).toThrow();
+  });
+});
+
+describe("backup and restore errors keep their reason", () => {
+  const screensError = (status: number, error: string) => Object.assign(new Error(error), { name: "ScreensError", status, body: { error } });
+
+  it("shows the box's refusal of a backup that doesn't fit, as a sentence", async () => {
+    const need = "this server needs about 12 GB free to make this backup and has 3 GB. Free some space (or remove apps you don't need) and try again";
+    const client = {
+      fetch: async (_p: string, init: any) => {
+        if (!init) return { archive: null };
+        throw screensError(409, need);
+      },
+    };
+    const e = await archive.startServerBackup({ client, umk: seed(B.umkSeedHex), passcode: B.passcode, argonParams: { m: 64, t: 1, p: 1 } }).catch((x: unknown) => x);
+    expect(archive.archiveErrorText(e)).toBe(`T${need.slice(1)}.`);
+  });
+
+  it("shows a failed backup's own reason", async () => {
+    const client = { fetch: async () => ({ archive: { archiveId: "aa".repeat(16), state: "failed", reason: "the disk filled up." } }) };
+    const e = await archive.waitForBackup({ client }).catch((x: unknown) => x);
+    expect(archive.archiveErrorText(e)).toBe("The backup failed: the disk filled up.");
+  });
+
+  it("says a vanished backup, or a server waiting for another backup, in words", async () => {
+    const gone = await archive.waitForBackup({ client: { fetch: async () => ({ archive: null }) } }).catch((x: unknown) => x);
+    expect(archive.archiveErrorText(gone)).toBe("The backup disappeared from the server.");
+    expect(archive.archiveErrorText(screensError(409, "this server is waiting for a different backup"))).toBe("This server is waiting for a different backup.");
+  });
+
+  it("shows a wrong passcode as such", async () => {
+    const e = await fmt.openWithPasscode(fmt.parseBackupFile(B.file), B.wrongPasscode).catch((x: unknown) => x);
+    expect(archive.archiveErrorText(e)).toBe("That passcode doesn't open this backup.");
+  });
+
+  it("falls back to the plain-language copy when the box sent no reason", () => {
+    expect(archive.archiveErrorText({ status: 503 })).toMatch(/briefly unavailable/);
   });
 });

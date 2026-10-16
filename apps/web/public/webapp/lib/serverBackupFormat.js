@@ -39,6 +39,7 @@ export class BackupError extends Error {
     super(message);
     this.name = "BackupError";
     this.code = code;
+    this.userMessage = message;
   }
 }
 

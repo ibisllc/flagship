@@ -86,6 +86,7 @@ import { resolveReplacementContext } from "../lib/serverReplacement.js";
 import {
   BACKUP_EXCLUDES_NOTE,
   BACKUP_TITLE,
+  archiveErrorText,
   PASSCODE_NOTE,
   backupDownloadLink,
   backupStatus,
@@ -1463,7 +1464,7 @@ function wireBackup(body) {
     openBackupDialog(body).catch((e) => {
       if (e?.code !== "cancelled") {
         console.error("server backup failed", e);
-        toast(humanError(e), "err");
+        toast(archiveErrorText(e), "err");
       }
     });
   });
@@ -1545,7 +1546,7 @@ async function openBackupDialog(body) {
   closeBtn.addEventListener("click", cleanup);
   dlg.addEventListener("close", () => { closed = true; });
   const showError = (e) => {
-    errEl.textContent = humanError(e);
+    errEl.textContent = archiveErrorText(e);
     errEl.classList.remove("hidden");
   };
 

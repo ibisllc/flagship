@@ -9,6 +9,7 @@
 // writes the key anywhere. The format lives in serverBackupFormat.js.
 
 import { deriveServerArchiveKeyFromSeed } from "../keystore.js";
+import { asSentence, boxErrorText, userError } from "./humanError.js";
 import {
   BACKUP_DATA_EXTENSION,
   BACKUP_FILE_EXTENSION,
@@ -26,6 +27,14 @@ export const BACKUP_EXCLUDES_NOTE =
   "Holds your apps' source, data and settings, never system images: the new server rebuilds each app, so any Flagship server can restore it. Not included: the server's keys and certificate, peer backups, and the Git host.";
 export const PASSCODE_NOTE =
   "Anyone with both files and this passcode can restore the backup, on any account, so keep it somewhere safe and apart from the files. It can't be reset. Your own devices open your backups without it.";
+
+/** What a backup or restore step's failure says to the owner: this device's own
+ *  sentence, the box's reason (e.g. "needs about 12 GB"), else humanError. */
+export function archiveErrorText(e) {
+  return boxErrorText(e);
+}
+
+const trimStop = (s) => String(s ?? "").trim().replace(/[.\s]+$/, "");
 
 const toHex = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 const random = (n) => crypto.getRandomValues(new Uint8Array(n));
@@ -59,10 +68,10 @@ export function backupFileNames(sourceServer, createdAt) {
  * made (the dialog was closed and reopened) is followed instead.
  */
 export async function startServerBackup({ client, umk, passcode, rng = random, argonParams }) {
-  if (!umk) throw new Error("unlock the webapp first");
+  if (!umk) throw userError("Unlock the webapp first.");
   const current = await backupStatus({ client }).catch(() => null);
   if (current?.state === "building") return current.archiveId;
-  if (!passcode) throw new Error("choose a passcode first");
+  if (!passcode) throw userError("Choose a passcode first.");
   const archiveId = newArchiveId(rng);
   const contentKey = rng(32);
   try {
@@ -91,11 +100,11 @@ export async function waitForBackup({ client, onProgress, sleep = (ms) => new Pr
   const deadline = now() + timeoutMs;
   for (;;) {
     const a = await backupStatus({ client });
-    if (!a) throw new Error("the backup disappeared");
-    if (a.state === "failed") throw new Error(a.reason || "the backup couldn't be made");
+    if (!a) throw userError("The backup disappeared from the server.");
+    if (a.state === "failed") throw userError(`The backup failed: ${trimStop(a.reason) || "the backup couldn't be made"}.`);
     if (a.state === "ready") return a;
     onProgress?.(a);
-    if (now() > deadline) throw new Error("the backup is taking too long");
+    if (now() > deadline) throw userError("The backup is taking too long.");
     await sleep(pollMs);
   }
 }
@@ -138,7 +147,7 @@ export function archiveDownloadCode(requestId) {
  * the server, which checks it before serving the files to that request.
  */
 export async function approveArchiveDownload({ client, serverDomain, archiveId, requestId, umk, signWithIrk, now = Date.now }) {
-  if (!umk) throw new Error("unlock the webapp first");
+  if (!umk) throw userError("Unlock the webapp first.");
   const approval = { serverDomain: serverDomain.toLowerCase(), archiveId, requestId, issuedAt: now() };
   const sig = await signWithIrk(umk, archiveDownloadCanonicalBytes(approval));
   await client.fetch(`${ARCHIVE_PATH}/approve`, {
@@ -205,7 +214,7 @@ export async function uploadDataFile({ client, blob, archiveId, onBytes, fetchIm
     try {
       chunk = new Uint8Array(await blob.slice(offset, offset + chunkBytes).arrayBuffer());
     } catch {
-      throw new Error("The data file can't be read any more (was its drive removed?). The server keeps waiting: pick the backup again to carry on.");
+      throw userError("The data file can't be read any more (was its drive removed?). The server keeps waiting: pick the backup again to carry on.");
     }
     const res = await fetchImpl(`${client.baseUrl.replace(/\/+$/, "")}${RESTORE_PATH}/chunk?offset=${offset}`, {
       method: "POST",
@@ -222,7 +231,10 @@ export async function uploadDataFile({ client, blob, archiveId, onBytes, fetchIm
       offset = body.received;
       continue;
     }
-    if (!res.ok) throw new Error(body?.error || `the server answered ${res.status}`);
+    if (!res.ok) {
+      if (typeof body?.error === "string" && body.error) throw userError(asSentence(body.error), { status: res.status });
+      throw Object.assign(new Error(`the server answered ${res.status}`), { status: res.status });
+    }
     offset = Number(body?.received) || offset + chunk.length;
     onBytes?.(offset, blob.size);
   }
@@ -242,11 +254,11 @@ export async function waitForRestore({ client, onProgress, sleep = (ms) => new P
   for (;;) {
     if (isCancelled()) throw Object.assign(new Error("cancelled"), { code: "cancelled" });
     const { restore } = await restoreStatus({ client });
-    if (!restore) throw new Error("the restore disappeared");
-    if (restore.state === "failed") throw new Error(`${restore.reason || "the restore failed"}. The server keeps waiting for its backup.`);
+    if (!restore) throw userError("The restore disappeared from the server.");
+    if (restore.state === "failed") throw userError(`The restore failed: ${trimStop(restore.reason) || "unknown reason"}.`);
     if (restore.state === "done") return restore;
     onProgress?.(restore);
-    if (now() > deadline) throw new Error("the restore is taking too long");
+    if (now() > deadline) throw userError("The restore is taking too long.");
     await sleep(pollMs);
   }
 }

@@ -101,3 +101,32 @@ export function humanError(e, opts = {}) {
 }
 
 export const HUMAN_ERROR_COPY = COPY;
+
+/** An Error whose message is written for the person, so humanError shows it as is. */
+export function userError(message, props = {}) {
+  return Object.assign(new Error(message), props, { userMessage: message });
+}
+
+/** A box's terse reason ("this server is waiting for a different backup") as a sentence. */
+export function asSentence(text) {
+  const t = String(text ?? "").trim();
+  if (!t) return "";
+  const s = t[0].toUpperCase() + t.slice(1);
+  return /[.!?]$/.test(s) ? s : `${s}.`;
+}
+
+/**
+ * The box's own explanation of a refused request (`{"error": "…"}` on a 4xx/5xx,
+ * as ScreensError carries it), as a sentence; else humanError's copy. For flows
+ * whose box refusals are written for the owner (backup, restore, access orders).
+ */
+export function boxErrorText(e, opts = {}) {
+  if (e && typeof e === "object" && typeof e.userMessage === "string" && e.userMessage) return e.userMessage;
+  if (e && typeof e === "object" && e.rateLimited === true) return humanError(e, opts);
+  const status = statusOf(e);
+  const reason = e && typeof e === "object" && e.body && typeof e.body === "object" ? e.body.error : null;
+  if (status != null && status >= 400 && status <= 599 && typeof reason === "string" && reason.trim()) {
+    return asSentence(reason);
+  }
+  return humanError(e, opts);
+}
