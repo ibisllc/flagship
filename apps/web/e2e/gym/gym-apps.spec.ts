@@ -11,6 +11,7 @@
  */
 
 import { test, expect, type Page, type TestInfo } from "@playwright/test";
+import { sawToast, watchToasts } from "./gymKit.js";
 import { createHash } from "node:crypto";
 import { stubAccountReadToken } from "../fixtures/accountRead.js";
 
@@ -32,6 +33,7 @@ const sha256 = (s: string) => createHash("sha256").update(s, "utf8").digest("hex
 
 async function reachHome(page: Page): Promise<void> {
   await stubAccountReadToken(page);
+  await watchToasts(page);
   await page.goto("/index.html");
   await expect(page.locator("#view-bootstrap")).toBeVisible();
   await page.click("#bootstrap-create");
@@ -45,7 +47,8 @@ async function reachHome(page: Page): Promise<void> {
   await page.fill("#unlock-passphrase", PASSPHRASE);
   await page.click("#unlock-go");
   await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
-  await page.waitForTimeout(150);
+  // The unlock toasts once it has dispatched its view: the sync point.
+  await sawToast(page, "Unlocked", 30_000);
   await page.evaluate(
     async ({ HOME, MEDIA }) => {
       const store = await import("/lib/profilesStore.js");

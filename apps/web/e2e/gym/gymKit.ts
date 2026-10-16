@@ -36,8 +36,9 @@ export async function shot(page: Page, testInfo: TestInfo, point: string): Promi
   await testInfo.attach(`gym-screenshot:${point}`, { path: file, contentType: "image/png" });
 }
 
-/** Record every toast text in `window.__gymToasts` (a toast can be replaced
- *  before a poll sees it). Runs before any page script on every load. */
+/** Record every toast shown in `window.__gymToasts`, once per showing (the
+ *  webapp queues toasts, so one can be gone before a poll sees it). Runs
+ *  before any page script on every load. */
 export async function watchToasts(page: Page): Promise<void> {
   await page.addInitScript(() => {
     const w = window as unknown as { __gymToasts: string[] };
@@ -45,9 +46,18 @@ export async function watchToasts(page: Page): Promise<void> {
     const start = () => {
       const t = document.getElementById("toast");
       if (!t) return void setTimeout(start, 20);
+      let shown = "";
       const note = () => {
+        const visible = !t.classList.contains("hidden");
         const s = (t.textContent ?? "").trim();
-        if (s && w.__gymToasts[w.__gymToasts.length - 1] !== s) w.__gymToasts.push(s);
+        if (!visible || !s) {
+          shown = "";
+          return;
+        }
+        if (s !== shown) {
+          shown = s;
+          w.__gymToasts.push(s);
+        }
       };
       new MutationObserver(note).observe(t, { childList: true, characterData: true, subtree: true, attributes: true });
     };
@@ -56,11 +66,18 @@ export async function watchToasts(page: Page): Promise<void> {
   });
 }
 
-/** Wait until a toast containing `text` has shown (since the last load). */
-export async function sawToast(page: Page, text: string, timeout = 15_000): Promise<void> {
+/** How many toasts have shown since the last load: pass it to `sawToast` as
+ *  `after` to wait for a toast that comes after this point. */
+export async function toastMark(page: Page): Promise<number> {
+  return page.evaluate(() => ((window as unknown as { __gymToasts?: string[] }).__gymToasts ?? []).length);
+}
+
+/** Wait until a toast containing `text` has shown since the last load (or
+ *  since `after`, a `toastMark`). */
+export async function sawToast(page: Page, text: string, timeout = 15_000, after = 0): Promise<void> {
   await page.waitForFunction(
-    (t) => ((window as unknown as { __gymToasts?: string[] }).__gymToasts ?? []).some((s) => s.includes(t)),
-    text,
+    ({ t, after }) => ((window as unknown as { __gymToasts?: string[] }).__gymToasts ?? []).slice(after).some((s) => s.includes(t)),
+    { t: text, after },
     { timeout },
   );
 }

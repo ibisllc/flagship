@@ -10,6 +10,7 @@
  */
 
 import { test, expect, type Page, type TestInfo } from "@playwright/test";
+import { sawToast, watchToasts } from "./gymKit.js";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { stubAccountReadToken } from "../fixtures/accountRead.js";
@@ -32,6 +33,7 @@ async function shot(page: Page, testInfo: TestInfo, name: string, opts: Paramete
 
 async function reachHome(page: Page): Promise<void> {
   await stubAccountReadToken(page);
+  await watchToasts(page);
   await page.goto("/index.html");
   await expect(page.locator("#view-bootstrap")).toBeVisible();
   await page.click("#bootstrap-create");
@@ -45,7 +47,8 @@ async function reachHome(page: Page): Promise<void> {
   await page.fill("#unlock-passphrase", PASSPHRASE);
   await page.click("#unlock-go");
   await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
-  await page.waitForTimeout(150);
+  // The unlock toasts once it has dispatched its view: the sync point.
+  await sawToast(page, "Unlocked", 30_000);
   await page.evaluate(async () => {
     const store = await import("/lib/profilesStore.js");
     store.ensureProfile("smoketest");

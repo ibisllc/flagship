@@ -33,6 +33,7 @@
  */
 
 import { test, expect, type Page } from "@playwright/test";
+import { sawToast, watchToasts } from "./gymKit.js";
 import { stubAccountReadToken } from "../fixtures/accountRead.js";
 
 /** A passphrase that satisfies the bootstrap 8+ rule. */
@@ -45,6 +46,7 @@ async function shot(page: Page, testInfo: import("@playwright/test").TestInfo, p
 }
 
 async function coldLaunch(page: Page): Promise<void> {
+  await watchToasts(page);
   await page.goto("/index.html");
   await expect(page.locator("#view-bootstrap")).toBeVisible();
 }
@@ -87,7 +89,8 @@ async function reachHome(page: Page): Promise<void> {
   await stubAccountReadToken(page);
   await reachShell(page, "home");
   await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
-  await page.waitForTimeout(150);
+  // The unlock toasts once it has dispatched its view: the sync point.
+  await sawToast(page, "Unlocked", 30_000);
 }
 
 /** Seed the active profile + username on both the store AND the live session

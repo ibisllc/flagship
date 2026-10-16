@@ -33,6 +33,7 @@
 
 import { test, expect, type Page } from "@playwright/test";
 import { formatWhen } from "../../public/webapp/lib/dateFormat.js";
+import { sawToast, watchToasts } from "./gymKit.js";
 
 /** A passphrase that satisfies the bootstrap 8+ rule. */
 const PASSPHRASE = "correct-horse-battery-staple-gym";
@@ -44,6 +45,7 @@ async function shot(page: Page, testInfo: import("@playwright/test").TestInfo, p
 }
 
 async function coldLaunch(page: Page): Promise<void> {
+  await watchToasts(page);
   await page.goto("/index.html");
   await expect(page.locator("#view-bootstrap")).toBeVisible();
 }
@@ -81,6 +83,8 @@ async function reachShell(page: Page, viewAlias: string): Promise<void> {
   await expect(page.locator("#view-unlock")).toBeVisible({ timeout: 10_000 });
   await page.fill("#unlock-passphrase", PASSPHRASE);
   await page.click("#unlock-go");
+  // The unlock toasts once it has dispatched its view: the sync point.
+  await sawToast(page, "Unlocked", 30_000);
 }
 
 /**
@@ -94,9 +98,6 @@ async function reachShell(page: Page, viewAlias: string): Promise<void> {
 async function reachHome(page: Page): Promise<void> {
   await reachShell(page, "home");
   await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
-  // Belt-and-suspenders: let the unlock's dispatchInitialView microtasks drain so
-  // a late show("view-home") can't fire after we navigate onward.
-  await page.waitForTimeout(150);
 }
 
 /** Reach Home → the Settings TAB (the row-nav landing). */
@@ -335,7 +336,7 @@ test.describe("gym webapp total", () => {
     await page.fill("#pin-set-input", "1234");
     await page.fill("#pin-set-confirm", "1234");
     await page.click("#pin-set-go");
-    await expect(page.locator("#view-pin-unlock")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("#view-pin-unlock")).toBeVisible({ timeout: 30_000 });
     await shot(page, testInfo, "pin-locked");
   });
 
@@ -347,12 +348,12 @@ test.describe("gym webapp total", () => {
     await page.fill("#pin-set-confirm", "4242");
     await page.click("#pin-set-go");
     // Locked to the PIN screen; unlocking with the same PIN restores the shell.
-    await expect(page.locator("#view-pin-unlock")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("#view-pin-unlock")).toBeVisible({ timeout: 30_000 });
     await page.fill("#pin-unlock-input", "4242");
     await page.click("#pin-unlock-go");
     // After a successful PIN unlock the app leaves the lock screen (the unlock
     // view is hidden — the shell/home is shown). E3 roundtrip.
-    await expect(page.locator("#view-pin-unlock")).toBeHidden({ timeout: 10_000 });
+    await expect(page.locator("#view-pin-unlock")).toBeHidden({ timeout: 30_000 });
     await shot(page, testInfo, "pin-unlocked");
   });
 
@@ -983,12 +984,17 @@ test.describe("gym webapp total", () => {
     await page.fill("#pin-set-input", "1357");
     await page.fill("#pin-set-confirm", "1357");
     await page.click("#pin-set-go");
-    await expect(page.locator("#view-pin-unlock")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("#view-pin-unlock")).toBeVisible({ timeout: 30_000 });
     // Five wrong attempts (MAX_ATTEMPTS = 5 → clearPin + lockedOut on the 5th).
-    for (let i = 0; i < 5; i++) {
+    // Each attempt runs the PIN KDF; wait for its verdict before the next so
+    // a loaded machine can't overlap two attempts on one counter.
+    for (let left = 4; left >= 1; left--) {
       await page.fill("#pin-unlock-input", "0000");
       await page.click("#pin-unlock-go");
+      await expect(page.locator("#pin-unlock-error")).toHaveText(`Wrong PIN — ${left} ${left === 1 ? "try" : "tries"} left.`, { timeout: 30_000 });
     }
+    await page.fill("#pin-unlock-input", "0000");
+    await page.click("#pin-unlock-go");
     // Lockout → bounced to the passphrase screen, the PIN wiped.
     await expect(page.locator("#view-unlock")).toBeVisible({ timeout: 10_000 });
     await shot(page, testInfo, "pin-lockout");
@@ -1015,7 +1021,7 @@ test.describe("gym webapp total", () => {
     await page.fill("#pin-set-input", "2468");
     await page.fill("#pin-set-confirm", "2468");
     await page.click("#pin-set-go");
-    await expect(page.locator("#view-pin-unlock")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("#view-pin-unlock")).toBeVisible({ timeout: 30_000 });
     // Switch to the passphrase, then unlock. handleUnlock() clears the PIN then
     // dispatchInitialView()→Home; wait for HOME (the post-clearPin landing) — NOT
     // the already-hidden PIN-unlock view — before asserting the PIN is gone.
@@ -1023,8 +1029,9 @@ test.describe("gym webapp total", () => {
     await expect(page.locator("#view-unlock")).toBeVisible({ timeout: 10_000 });
     await page.fill("#unlock-passphrase", PASSPHRASE);
     await page.click("#unlock-go");
-    await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
-    await page.waitForTimeout(150);
+    // Home was hidden behind the lock screen: it showing is the unlock's
+    // dispatch finishing, after clearPin.
+    await expect(page.locator("#view-home")).toBeVisible({ timeout: 30_000 });
     const pinGone = await page.evaluate(async () => {
       const { hasPin } = await import("/lib/pinLock.js");
       return !(await hasPin());
@@ -1043,15 +1050,16 @@ test.describe("gym webapp total", () => {
     await page.fill("#pin-set-input", "1111");
     await page.fill("#pin-set-confirm", "1111");
     await page.click("#pin-set-go");
-    await expect(page.locator("#view-pin-unlock")).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("#view-pin-unlock")).toBeVisible({ timeout: 30_000 });
     // Unlock; the PIN-unlock handler runs dispatchInitialView() → Home. Wait for
     // that to SETTLE (the lock screen leaves + Home shows) before navigating to
     // settings, else the late dispatch clobbers settings back to Home.
     await page.fill("#pin-unlock-input", "1111");
     await page.click("#pin-unlock-go");
-    await expect(page.locator("#view-pin-unlock")).toBeHidden({ timeout: 10_000 });
-    await expect(page.locator("#view-home")).toBeVisible({ timeout: 10_000 });
-    await page.waitForTimeout(150);
+    await expect(page.locator("#view-pin-unlock")).toBeHidden({ timeout: 30_000 });
+    // Home was hidden behind the PIN screen: it showing is the dispatch's
+    // last step, so nothing moves the screen after this.
+    await expect(page.locator("#view-home")).toBeVisible({ timeout: 30_000 });
     await page.evaluate(async () => {
       const { refreshSessionGates } = await import("/views/settings.js");
       const { show } = await import("/lib/router.js");
