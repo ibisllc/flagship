@@ -195,7 +195,7 @@ class ServerBackupsViewModelTest {
 
         assertFalse(vm.changePolicy("phone", 2 * BackupsText.GB))
         assertEquals(
-            "This server holds 3.2 GB of app data, more than the 2.0 GB the phone would keep. Reserve at least 3.2 GB on the phone, or remove apps or data first.",
+            "This server holds 3.2 GB of app data, more than the 2.0 GB your device would keep. Reserve at least 3.2 GB on that device, or remove apps or data first.",
             vm.policyError,
         )
         assertEquals("peer", vm.policy!!.policy.policy)
@@ -208,7 +208,7 @@ class ServerBackupsViewModelTest {
         vm.load()
         assertTrue(vm.policy!!.cap.overLimit)
         assertEquals(
-            "This server holds 40 GB of app data, over its backup limit of 32 GB (the space your phone keeps for its backup). Remove apps or data, or change the backup policy on the server page.",
+            "This server holds 40 GB of app data, over its backup limit of 32 GB (the space your device keeps for its backup). Remove apps or data, or change the backup policy on the server page.",
             vm.policy!!.cap.overReason,
         )
     }

@@ -601,7 +601,7 @@
       "surfaces": {
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/views/server-backups.js", "export function backupsSectionHtml"], ["apps/web/public/webapp/lib/savedBackups.js", "flagship/server-archive-keys/v1"], ["apps/web/public/webapp/lib/backupPolicy.js", "flagship/backup-policy/v1"], ["apps/web/public/webapp/lib/serverBackupFormat.js", "FLGSHBK1"], ["apps/web/public/webapp/views/create-server.js", "attachBackupPolicy"]] },
         "ios": { "status": "missing", "reason": "being built by the backup agent's iOS sub-agent (2026-10-16)" },
-        "android": { "status": "missing", "reason": "being built by the backup agent's Android sub-agent (2026-10-16)" }
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/ServerBackupsSection.kt", "fun ServerBackupsSection"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/viewmodels/ServerBackupsViewModel.kt", "suspend fun backUpNow"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/BackupOrders.kt", "flagship/server-archive-keys/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/BackupOrders.kt", "flagship/backup-policy/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/BackupFetchWorker.kt", "PeriodicWorkRequestBuilder"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerBackupFormat.kt", "FLGSHBK1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/CreateServerScreen.kt", "attachBackupPolicy"]] }
       }
     }
   ]

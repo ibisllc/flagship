@@ -215,7 +215,7 @@ class GymBackupsTest : GymBase() {
         composeRule.onNodeWithTag("sd-backups-policy-save").performClick()
         waitUntilExists("sd-backups-policy-error", timeoutMs = 15_000)
         assertEquals(
-            "This server holds 3.2 GB of app data, more than the 1.0 GB the phone would keep. Reserve at least 3.2 GB on the phone, or remove apps or data first.",
+            "This server holds 3.2 GB of app data, more than the 1.0 GB your device would keep. Reserve at least 3.2 GB on that device, or remove apps or data first.",
             textOf("sd-backups-policy-error"),
         )
         gymShot("backups-policy-refused")

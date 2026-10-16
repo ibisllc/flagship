@@ -1354,7 +1354,7 @@ class MockScreensClient(
         val limit = backupLimit(p)
         val used = backupUsedBytes
         val over = limit != null && used != null && used >= limit
-        val why = if (p.policy == "phone") "the space your phone keeps for its backup" else "a third of its disk, so other servers can keep their backups on it"
+        val why = if (p.policy == "phone") "the space your device keeps for its backup" else "a third of its disk, so other servers can keep their backups on it"
         return BackupPolicyView(
             policy = p,
             cap = BackupCap(
@@ -1388,7 +1388,7 @@ class MockScreensClient(
             val limit = backupLimit(BackupPolicyState(o.policy, o.phoneReserveBytes, o.issuedAt))
             if (limit != null && used > limit) {
                 val sentence = if (o.policy == "phone") {
-                    "This server holds ${gbText(used)} of app data, more than the ${gbText(limit)} the phone would keep. Reserve at least ${gbText(used)} on the phone, or remove apps or data first."
+                    "This server holds ${gbText(used)} of app data, more than the ${gbText(limit)} your device would keep. Reserve at least ${gbText(used)} on that device, or remove apps or data first."
                 } else {
                     "This server holds ${gbText(used)} of app data, more than a third of its disk (${gbText(limit)}), which is all a server may use with peer backups. Remove apps or data first, or choose another policy."
                 }
