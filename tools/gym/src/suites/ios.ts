@@ -560,6 +560,24 @@ const TOTAL_DETAIL: readonly Scenario[] = [
     },
   ),
   iosTotal(
+    "ios-total-build-mcp-ide-configs",
+    "Connect your IDE shows each IDE's own config: Claude Code with its claude mcp add --scope user command, Cursor, VS Code (servers) and Cline (streamableHttp), each saying where it goes; URLs copy unescaped; keep it in the IDE's user settings.",
+    "FlagshipAppUITests/GymTotalDetailTests/test_buildMcpIdeConfigs",
+    {
+      steps: [
+        { kind: "tap", describe: "Create a connection.", handle: "build-mcp-create" },
+        { kind: "tap", describe: "VS Code.", handle: "VS Code" },
+        { kind: "tap", describe: "Cline.", handle: "Cline" },
+      ],
+      assertions: [
+        { describe: "Claude Code command", handle: "build-mcp-ide-command", expect: "present" },
+        { describe: "User-settings warning", handle: "build-mcp-user-settings", expect: "present" },
+      ],
+      screenshots: [shot("build-mcp-ide-claude-code", "Claude Code."), shot("build-mcp-ide-cline", "Cline.")],
+      dimension: "D2",
+    },
+  ),
+  iosTotal(
     "ios-total-build-journal-list",
     "D2-B10: the build journal opens from the chooser's View-past-builds link.",
     "FlagshipAppUITests/GymTotalDetailTests/test_buildJournalList",
