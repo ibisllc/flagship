@@ -1024,7 +1024,17 @@ class MockSecretMailboxClient : SecretMailboxClient {
     var directoryServerOrder: com.flagshipserver.app.core.ServerOrderWire? = null
     override suspend fun postServerOrder(username: String, wire: com.flagshipserver.app.core.ServerOrderWire) {
         serverOrderError?.let { serverOrderError = null; throw it }
+        adminOnly("server-order", com.flagshipserver.app.core.ServerOrderProtocol.canonicalBytes(wire.order), wire.signature)
         serverOrders.add(username to wire)
+    }
+
+    /** The gym's admin-pinned `.com`: an admin order the IRK signed is a 403. */
+    private fun adminOnly(what: String, bytes: ByteArray, sig: String) {
+        try {
+            MockSignatures.requireAdmin(what, bytes, sig)
+        } catch (e: ScreensError.Http) {
+            throw com.flagshipserver.app.core.HttpException(403, e.body)
+        }
     }
 
     /** When set, the next [depositDecommission] throws this, then clears it. */
@@ -1040,6 +1050,12 @@ class MockSecretMailboxClient : SecretMailboxClient {
     val updateDeposits: MutableList<Pair<String, UpdateDepositBody>> = mutableListOf()
     override suspend fun depositUpdate(serverDomain: String, body: UpdateDepositBody) {
         nextUpdateError?.let { nextUpdateError = null; throw it }
+        val o = body.order
+        adminOnly(
+            "server-update",
+            com.flagshipserver.app.core.ServerUpdateOrder.canonicalBytes(o.serverDomain, o.targetCommit, o.fromCommit, o.nonce, o.issuedAt),
+            body.signature,
+        )
         updateDeposits.add(serverDomain to body)
     }
 

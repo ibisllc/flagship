@@ -48,6 +48,12 @@ data class SmokeModeConfig(
     val seedShares: Boolean = false,
     /** This device's rank in the mock box's apps when not an admin (GymSeams.deviceRank). */
     val deviceRank: String? = null,
+    /** Endpoints the mock `.com` refuses with a 429 (GymSeams.rateLimited),
+     *  comma-separated: "totp-verify", "recovery-lookup", "pairing". */
+    val rateLimited: List<String>? = null,
+    /** The build chat the mock box serves (MockScreensClient.chatVariant):
+     *  "ready" | "failed" (continuable) | "env" (asks for an env var, the default). */
+    val chatVariant: String? = null,
 ) {
     companion object {
         const val EXTRA_SMOKE_MODE = "flagship.smokeMode"
@@ -60,6 +66,8 @@ data class SmokeModeConfig(
         const val EXTRA_SMOKE_ACCESS_ALERT = "flagship.smokeAccessAlert"
         const val EXTRA_SMOKE_SHARES = "flagship.smokeShares"
         const val EXTRA_SMOKE_DEVICE_RANK = "flagship.smokeDeviceRank"
+        const val EXTRA_SMOKE_RATE_LIMITED = "flagship.smokeRateLimited"
+        const val EXTRA_SMOKE_CHAT = "flagship.smokeChat"
 
         const val SMOKE_USERNAME = "smoketest"
 
@@ -82,6 +90,10 @@ data class SmokeModeConfig(
                 seedShares = intent.getBooleanExtra(EXTRA_SMOKE_SHARES, false),
                 deviceRank = intent.getStringExtra(EXTRA_SMOKE_DEVICE_RANK)?.trim()?.lowercase()
                     ?.takeIf { it in setOf("member", "manager", "master", "refused") },
+                rateLimited = intent.getStringExtra(EXTRA_SMOKE_RATE_LIMITED)
+                    ?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.takeIf { it.isNotEmpty() },
+                chatVariant = intent.getStringExtra(EXTRA_SMOKE_CHAT)?.trim()?.lowercase()
+                    ?.takeIf { it in setOf("ready", "failed", "env") },
             )
         }
     }
@@ -152,6 +164,23 @@ object SmokeMode {
         GymSeams.forceAdminRoot = config.seedAdminRoot
         GymSeams.deviceRank = config.deviceRank
         GymSeams.bypassBiometricGates = true
+        // The account is admin-pinned, as every real one is: an admin device
+        // holds the gym's admin root in its Keystore (so admin orders are
+        // signed with it, never the IRK), any other device doesn't, and the
+        // mocks verify every admin order under it. The smoke profile's own
+        // Keystore slot, so a real account's keys on this device are untouched.
+        com.flagshipserver.app.keystore.Keystore.setActiveProfile(config.username)
+        if (config.seedAdminRoot) {
+            com.flagshipserver.app.keystore.Keystore.importAdminRoot(GymSeams.GYM_ADMIN_ROOT_SEED)
+        } else {
+            com.flagshipserver.app.keystore.Keystore.forgetAdminRoot()
+        }
+        GymSeams.verifySignatures = true
+        com.flagshipserver.app.api.MockSignatures.clear()
+        // One process runs every scenario: start each with every app open.
+        com.flagshipserver.app.api.MockServiceAccessClient.shared.reset()
+        GymSeams.rateLimited.clear()
+        config.rateLimited?.let { GymSeams.rateLimited += it }
 
         if (config.seedTrustUntrusted) {
             trust.markUntrusted(

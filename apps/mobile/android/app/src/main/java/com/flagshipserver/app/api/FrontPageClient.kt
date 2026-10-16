@@ -56,7 +56,7 @@ data class FrontPageAck(val ok: Boolean = false, val label: String? = null)
 /** Pod-direct client. [podBaseUrl] resolves `https://<serverDomain>` (the
  *  FQDN IS the pod). Pluggable transport for tests. */
 class FrontPageClient(
-    private val transport: JsonHttpTransport = OkHttpJsonTransport(),
+    private val transport: JsonHttpTransport = PodDirect.transport(),
     private val podBaseUrl: (serverDomain: String) -> String = { "https://$it" },
 ) {
     suspend fun getFrontPage(serverDomain: String): FrontPageState =

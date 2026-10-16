@@ -271,8 +271,22 @@ fun ServerDetailScreen(
             style = TextStyle(fontSize = 28.sp, lineHeight = 36.sp, fontWeight = FontWeight.Medium),
         )
 
+        // Every order on this page signs under the admin root (`.com` and an
+        // admin-pinned box refuse the IRK): another device sees it read-only.
+        val serverReadOnly = !com.flagshipserver.app.core.AdminOrderGate.allows(LocalAppState.current)
+        if (serverReadOnly) {
+            Spacer(Modifier.height(FS.space.s3))
+            Text(
+                com.flagshipserver.app.core.AdminOrderGate.SERVER,
+                color = FS.colors.textMuted,
+                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                modifier = Modifier.testTag("sd-server-admin-only"),
+            )
+        }
+
         Spacer(Modifier.height(FS.space.s6))
 
+        androidx.compose.runtime.CompositionLocalProvider(LocalServerReadOnly provides serverReadOnly) {
         if (pod != null && pod.isRevoked) {
             RevokedServerCard(pod = pod)
             Spacer(Modifier.height(FS.space.s6))
@@ -384,6 +398,7 @@ fun ServerDetailScreen(
         if (pod != null) {
             Spacer(Modifier.height(FS.space.s6))
             DangerZoneCard(pod = pod, canTransfer = detail is LoadingState.Loaded, onDeleted = onBack)
+        }
         }
 
         Spacer(Modifier.height(FS.space.s12))
@@ -836,7 +851,7 @@ private fun FrontPageCard(serverDomain: String) {
                                 }
                             }
                         },
-                        enabled = !busy && selection != (current ?: ""),
+                        enabled = !busy && !LocalServerReadOnly.current && selection != (current ?: ""),
                         block = true,
                         modifier = Modifier.semantics { contentDescription = "sd-front-page-save" },
                     )
@@ -895,7 +910,15 @@ private fun LeaderCard(serverDomain: String) {
                     modifier = Modifier.testTag("sd-leader-pending"),
                 )
             }
-            if (index != 0) {
+            // `.com` takes the server order only under the admin root.
+            if (index != 0 && LocalServerReadOnly.current) {
+                Text(
+                    com.flagshipserver.app.core.AdminOrderGate.SERVER_ORDER,
+                    color = FS.colors.textMuted,
+                    style = TextStyle(fontSize = 12.sp),
+                    modifier = Modifier.testTag("sd-leader-admin-only"),
+                )
+            } else if (index != 0) {
                 FSPrimaryButton(
                     label = if (working) "Saving…" else "Make leader",
                     onClick = {
@@ -973,14 +996,14 @@ private fun PowerCard(serverDomain: String, isLuks: Boolean = true) {
             FSDangerButton(
                 label = if (busy) "Working…" else offLabel,
                 onClick = { if (!busy) pending = PowerMode.OFF },
-                enabled = !busy,
+                enabled = !busy && !LocalServerReadOnly.current,
                 block = true,
                 modifier = Modifier.semantics { contentDescription = "sd-power-off" },
             )
             FSDangerButton(
                 label = if (busy) "Working…" else restartLabel,
                 onClick = { if (!busy) pending = PowerMode.RESTART },
-                enabled = !busy,
+                enabled = !busy && !LocalServerReadOnly.current,
                 block = true,
                 modifier = Modifier.semantics { contentDescription = "sd-power-restart" },
             )
@@ -1204,7 +1227,7 @@ private fun DeadManCard(serverDomain: String) {
                 }
                 Switch(
                     checked = enabled,
-                    enabled = !busy,
+                    enabled = !busy && !LocalServerReadOnly.current,
                     onCheckedChange = { applyPolicy(it, window, lockout) },
                     modifier = Modifier.semantics { contentDescription = "sd-deadman-toggle" },
                 )
@@ -1217,7 +1240,7 @@ private fun DeadManCard(serverDomain: String) {
                         Row(
                             Modifier
                                 .fillMaxWidth()
-                                .selectable(selected = window == w, enabled = !busy, onClick = { applyPolicy(true, w, lockout) })
+                                .selectable(selected = window == w, enabled = !busy && !LocalServerReadOnly.current, onClick = { applyPolicy(true, w, lockout) })
                                 .semantics { contentDescription = "deadman-window-${w.windowMs}" },
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -1232,7 +1255,7 @@ private fun DeadManCard(serverDomain: String) {
                     for (m in listOf(PowerMode.OFF to "Turn off", PowerMode.RESTART to "Restart")) {
                         Row(
                             Modifier
-                                .selectable(selected = lockout == m.first, enabled = !busy, onClick = { applyPolicy(true, window, m.first) })
+                                .selectable(selected = lockout == m.first, enabled = !busy && !LocalServerReadOnly.current, onClick = { applyPolicy(true, window, m.first) })
                                 .semantics { contentDescription = "deadman-lockout-${m.first.wire}" },
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -1268,6 +1291,7 @@ private fun DeadManCard(serverDomain: String) {
                 FSGhostButton(
                     label = "Tighten now (5 min)",
                     onClick = { applyPolicy(true, DeadManWindow.TIGHTEN, lockout) },
+                    enabled = !LocalServerReadOnly.current,
                     block = true,
                 )
                 FSPrimaryButton(
@@ -1287,7 +1311,7 @@ private fun DeadManCard(serverDomain: String) {
                             }
                         }
                     },
-                    enabled = !busy,
+                    enabled = !busy && !LocalServerReadOnly.current,
                     block = true,
                     modifier = Modifier.semantics { contentDescription = "sd-deadman-affirm" },
                 )
@@ -1416,7 +1440,7 @@ internal fun UpdateServerCard(
                     label = if (latestTag == null) "Update this server" else "Update to latest",
                     onClick = { vm.clearFailure(); showSheet = true },
                     block = true,
-                    enabled = reported,
+                    enabled = reported && !LocalServerReadOnly.current,
                     modifier = Modifier.semantics { contentDescription = "sd-update-server" },
                 )
                 if (!reported) {
@@ -1755,6 +1779,7 @@ private fun TransferButton(serverDomain: String) {
         label = "Transfer to another account",
         onClick = { showSheet = true },
         block = true,
+        enabled = !LocalServerReadOnly.current,
         modifier = Modifier.semantics { contentDescription = "sd-transfer-server" },
     )
 
@@ -1819,6 +1844,7 @@ private fun MigrateServerButton(serverDomain: String) {
         label = "Migrate to new machine / VM",
         onClick = { showSheet = true },
         block = true,
+        enabled = !LocalServerReadOnly.current,
         modifier = Modifier.semantics { contentDescription = "sd-migrate-server" },
     )
 
@@ -1846,6 +1872,10 @@ private fun MigrateServerButton(serverDomain: String) {
     }
 }
 
+/** True on a device without the account's admin root: every order on the
+ *  server page would be refused, so its controls show off (AdminOrderGate). */
+internal val LocalServerReadOnly = androidx.compose.runtime.staticCompositionLocalOf { false }
+
 // Per-server danger zone: the reversible Revoke (hidden once revoked; the
 // revoked card offers Un-revoke) and Delete. Rendered whatever the box's state,
 // since neither needs the box to answer. Revoke keeps the hold-to-confirm sheet
@@ -1870,6 +1900,8 @@ private fun DangerZoneCard(pod: com.flagshipserver.app.core.PodInfo, canTransfer
         style = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
     )
     Spacer(Modifier.height(FS.space.s2))
+    // `.com` takes transfer, revoke and release only under the admin root.
+    val readOnly = LocalServerReadOnly.current
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             if (canTransfer) TransferButton(serverDomain = pod.fqdn)
@@ -1878,7 +1910,7 @@ private fun DangerZoneCard(pod: com.flagshipserver.app.core.PodInfo, canTransfer
                     label = "Revoke server (reversible)",
                     onClick = { showSheet = true },
                     block = true,
-                    enabled = !deleting,
+                    enabled = !deleting && !readOnly,
                     modifier = Modifier.semantics { contentDescription = "sd-revoke-server" },
                 )
             }
@@ -1886,7 +1918,7 @@ private fun DangerZoneCard(pod: com.flagshipserver.app.core.PodInfo, canTransfer
                 label = if (deleting) "Deleting…" else "Delete and wipe this server",
                 onClick = { confirmingDelete = true },
                 block = true,
-                enabled = !deleting,
+                enabled = !deleting && !readOnly,
                 modifier = Modifier.semantics { contentDescription = "sd-delete-server" },
             )
         }
@@ -1989,7 +2021,7 @@ private fun RevokedServerCard(pod: com.flagshipserver.app.core.PodInfo) {
                         }
                     }
                 },
-                enabled = !busy,
+                enabled = !busy && !LocalServerReadOnly.current,
                 block = true,
                 modifier = Modifier.semantics { contentDescription = "sd-unrevoke-server" },
             )

@@ -452,16 +452,32 @@ data class AppSandbox(
 ) {
     data class Notice(val danger: Boolean, val text: String)
 
-    /** What the server page says, or null. Matches the webapp's appSandboxNotice. */
+    /** What the server page says, or null. Matches the webapp's appSandboxNotice.
+     *  `unavailable` covers gVisor not working (retried every 10 minutes) and
+     *  the internet firewall being down (6fd0877d9: the reason starts "its
+     *  internet firewall isn't running: …", retried every 30 seconds). */
     val notice: Notice?
         get() = when (state) {
-            "unavailable" -> Notice(
-                danger = true,
-                text = "Apps can't start on this server: the sandbox they run in isn't working (${reason ?: "unknown reason"}). The server tries again every 10 minutes.",
-            )
+            "unavailable" -> {
+                val r = reason?.trim().orEmpty()
+                val firewall = r.startsWith(FIREWALL_PREFIX, ignoreCase = true)
+                Notice(
+                    danger = true,
+                    text = if (firewall) {
+                        val why = r.substring(FIREWALL_PREFIX.length).trimStart(':', ' ').ifEmpty { "it hasn't started" }
+                        "Apps can't start on this server: its internet firewall isn't running ($why). The server tries again every 30 seconds."
+                    } else {
+                        "Apps can't start on this server: the sandbox they run in isn't working (${r.ifEmpty { "unknown reason" }}). The server tries again every 10 minutes."
+                    },
+                )
+            }
             "starting" -> Notice(danger = false, text = "Setting up the sandbox apps run in. They start once it's ready.")
             else -> null
         }
+
+    private companion object {
+        const val FIREWALL_PREFIX = "its internet firewall isn't running"
+    }
 }
 
 /** The box's record of the last update order: applied, rolled back after the

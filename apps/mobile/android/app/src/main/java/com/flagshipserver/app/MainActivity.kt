@@ -220,6 +220,9 @@ class MainActivity : FragmentActivity() {
             devSettings.forceMockForSmokeRun()
         }
         AiKeyStore.attach(applicationContext)
+        // GYM: each smoke launch starts with no saved AI keys (the store is
+        // on-device and would carry one scenario's key into the next).
+        if (isDebuggable && smokeInitialTab != null) AiKeyStore.clear()
         com.flagshipserver.app.core.SecuredSessionStore.attach(applicationContext)
         com.flagshipserver.app.core.InviteOwners.attach(applicationContext)
         val okHttp = buildOkHttp()
@@ -293,6 +296,21 @@ class MainActivity : FragmentActivity() {
         val mockTransfer = MockServerTransferClient()
         val liveTransfer = LiveServerTransferClient(OkHttpJsonTransport(okHttp))
         val mockMailbox = MockSecretMailboxClient()
+        // GYM: hand the smoke run's mocks to the instrumented scenario.
+        if (smoke != null) {
+            com.flagshipserver.app.core.GymProbe.screens = mockScreens
+            com.flagshipserver.app.core.GymProbe.build = mockBuild
+            com.flagshipserver.app.core.GymProbe.flagship = mockFlagshipServer
+            com.flagshipserver.app.core.GymProbe.mailbox = mockMailbox
+            com.flagshipserver.app.core.GymProbe.transfer = mockTransfer
+            com.flagshipserver.app.core.GymProbe.relay = mockRelay
+            com.flagshipserver.app.core.GymProbe.access = com.flagshipserver.app.api.MockServiceAccessClient.shared
+            smoke.chatVariant?.let { mockScreens.chatVariant = it }
+            // Power, dead-man, journal and front page talk to the box directly.
+            val boxDirect = com.flagshipserver.app.api.MockBoxDirect()
+            com.flagshipserver.app.core.GymProbe.boxDirect = boxDirect
+            com.flagshipserver.app.api.PodDirect.transport = { boxDirect }
+        }
         // A′ pinning — every live /pods fetch reconciles the cert-pin
         // registry under STKs derived from THIS device's UMK. Live-only by
         // construction (the mock never invokes the observer), so demo/mock
@@ -420,7 +438,40 @@ class MainActivity : FragmentActivity() {
                     },
                     // The alert client reads the current server's session.
                     currentServer = { appState.sessionPod?.fqdn },
+                    // Every box this device has a session on, so an alert
+                    // from any of them names the box its chat is on.
+                    sources = run {
+                        val alertClients = HashMap<String, com.flagshipserver.app.api.PhoneAlertClient>()
+                        val build: () -> List<com.flagshipserver.app.core.AiChatAlertPoller.AlertSource> = {
+                            appState.pods.value.mapNotNull { pod ->
+                                if (pod.fqdn.isEmpty() || pod.demoServer != null || pod.isRevoked) return@mapNotNull null
+                                val token = sessionStore.sessionToken(forPodId = pod.podId) ?: return@mapNotNull null
+                                val c = synchronized(alertClients) {
+                                    alertClients.getOrPut("${pod.fqdn}|$token") {
+                                        val store = com.flagshipserver.app.api.InMemorySessionStore().apply {
+                                            setPodBaseUrl("https://${pod.fqdn}")
+                                            setSessionToken(token)
+                                        }
+                                        com.flagshipserver.app.api.LivePhoneAlertClient(client = okHttp, store = store)
+                                    }
+                                }
+                                com.flagshipserver.app.core.AiChatAlertPoller.AlertSource(pod.fqdn, c)
+                            }
+                        }
+                        build
+                    },
                 )
+            }
+            val aiWakeScope = androidx.compose.runtime.rememberCoroutineScope()
+            androidx.compose.runtime.DisposableEffect(aiChatPoller, useLive) {
+                com.flagshipserver.app.core.AiChatAlertBridge.onWake = if (!useLive) null else {
+                    {
+                        if (appState.isPaired.value && appState.isUnlocked.value) {
+                            aiWakeScope.launch { aiChatPoller.drainOnce() }
+                        }
+                    }
+                }
+                onDispose { com.flagshipserver.app.core.AiChatAlertBridge.onWake = null }
             }
             LaunchedEffect(useLive, sessionToken != null) {
                 if (useLive && sessionToken != null) {

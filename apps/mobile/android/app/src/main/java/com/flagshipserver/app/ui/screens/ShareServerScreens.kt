@@ -209,6 +209,7 @@ fun ShareServerCard(serverDomain: String, podId: String) {
 
     ShareServerCardContent(
         ui = ui,
+        readOnly = LocalServerReadOnly.current,
         onShare = { sheetOpen = true },
         onConfirm = { s -> scope.launch { if (vm.confirm(s)) toasts.success("${s.label} can now use this server.") } },
         onNoMatch = { s -> removing = s.shareId to s.label },
@@ -257,6 +258,8 @@ fun ShareServerCard(serverDomain: String, podId: String) {
 @Composable
 fun ShareServerCardContent(
     ui: OwnerShareUi,
+    /** A device without the admin root: every share order would be refused. */
+    readOnly: Boolean = false,
     onShare: () -> Unit,
     onConfirm: (AcceptedShare) -> Unit,
     onNoMatch: (AcceptedShare) -> Unit,
@@ -286,13 +289,13 @@ fun ShareServerCardContent(
                     }
                     shares.accepted.forEach { s ->
                         divider()
-                        AcceptedRow(s, busy = s.shareId in ui.busy, onConfirm = { onConfirm(s) }, onNoMatch = { onNoMatch(s) })
+                        AcceptedRow(s, busy = s.shareId in ui.busy || readOnly, onConfirm = { onConfirm(s) }, onNoMatch = { onNoMatch(s) })
                     }
                     shares.active.forEach { s ->
                         divider()
                         ActiveRow(
                             s,
-                            busy = s.shareId in ui.busy,
+                            busy = s.shareId in ui.busy || readOnly,
                             onLevel = { onLevel(s, it) },
                             onUnlock = { onUnlock(s, it) },
                             onData = { onData(s, it) },
@@ -301,15 +304,19 @@ fun ShareServerCardContent(
                     }
                     shares.pending.forEach { p ->
                         divider()
-                        PendingRow(p, busy = p.shareId in ui.busy, onCopy = { onCopy(p) }, onCancel = { onCancelOffer(p) })
+                        PendingRow(p, busy = p.shareId in ui.busy || readOnly, onCopy = { onCopy(p) }, onCancel = { onCancelOffer(p) })
                     }
                     shares.boxProblem?.let { Muted("$it Changes to who has access wait until it's back.") }
                 }
+            }
+            if (readOnly) {
+                Muted(com.flagshipserver.app.core.AdminOrderGate.SHARE, modifier = Modifier.testTag("share-admin-only"))
             }
             FSPrimaryButton(
                 label = "Share this server",
                 onClick = onShare,
                 block = true,
+                enabled = !readOnly,
                 modifier = Modifier.testTag("share-server-open"),
             )
         }

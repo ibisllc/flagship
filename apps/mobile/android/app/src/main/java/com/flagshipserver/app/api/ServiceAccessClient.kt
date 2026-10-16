@@ -429,17 +429,53 @@ class MockServiceAccessClient : ServiceAccessClient() {
     override suspend fun getAccessState(serverDomain: String, serviceRef: String): ServiceAccessState =
         ServiceAccessState(modes[serviceRef] ?: "open", 0)
 
+    /** Every mode order and removal this box took, in order. */
+    val modeOrders: MutableList<Pair<String, String>> = mutableListOf()
+    val removals: MutableList<String> = mutableListOf()
+    val withdrawals: MutableList<String> = mutableListOf()
+
+    /** Back to every app open with no invites (a new gym launch; one process runs them all). */
+    fun reset() {
+        modes.clear()
+        invites.clear()
+        modeOrders.clear()
+        removals.clear()
+        withdrawals.clear()
+    }
+
     override suspend fun setAccessMode(serverDomain: String, request: JsonObject, signatureHex: String): String {
         val ref = request["serviceRef"]?.jsonPrimitive?.contentOrNull
             ?: request["serviceId"]?.jsonPrimitive?.contentOrNull ?: ""
         val mode = request["mode"]?.jsonPrimitive?.contentOrNull ?: "open"
+        val at = request["issuedAt"]?.jsonPrimitive?.longOrNull ?: 0L
+        // The v2 mode order needs the admin key on an admin-pinned box.
+        MockSignatures.requireAdmin(
+            "access-mode",
+            com.flagshipserver.app.core.AppAccessOrders.canonicalBytes(com.flagshipserver.app.core.AppAccessOrders.Mode(ref, mode, at)),
+            signatureHex,
+        )
         modes[ref] = mode
+        modeOrders += ref to mode
         return mode
     }
 
-    override suspend fun removeServiceAllow(serverDomain: String, request: JsonObject, signatureHex: String): Boolean = true
+    override suspend fun removeServiceAllow(serverDomain: String, request: JsonObject, signatureHex: String): Boolean {
+        val ref = request["serviceRef"]?.jsonPrimitive?.contentOrNull ?: ""
+        val aid = request["aid"]?.jsonPrimitive?.contentOrNull ?: ""
+        val at = request["issuedAt"]?.jsonPrimitive?.longOrNull ?: 0L
+        MockSignatures.requireAdmin(
+            "access-remove",
+            com.flagshipserver.app.core.AppAccessOrders.canonicalBytes(com.flagshipserver.app.core.AppAccessOrders.Remove(ref, aid, at)),
+            signatureHex,
+        )
+        removals += aid
+        return true
+    }
 
-    override suspend fun withdrawInvite(serverDomain: String, revoke: JsonObject, signatureHex: String): Int = 0
+    override suspend fun withdrawInvite(serverDomain: String, revoke: JsonObject, signatureHex: String): Int {
+        revoke["inviteId"]?.jsonPrimitive?.contentOrNull?.let { withdrawals += it }
+        return 0
+    }
 
     override suspend fun listInvites(
         username: String,

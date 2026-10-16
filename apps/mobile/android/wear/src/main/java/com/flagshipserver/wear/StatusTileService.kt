@@ -82,8 +82,8 @@ class StatusTileService : TileService() {
 
     private companion object {
         const val RESOURCES_VERSION = "1"
-        const val WHITE = 0xFFFFFFFF.toInt()
-        const val GRAY = 0xFFB0B5BA.toInt()
-        const val AMBER = 0xFFE8A33D.toInt()
+        const val WHITE = com.flagshipserver.companion.StatusPalette.DARK_INK.toInt()
+        const val GRAY = com.flagshipserver.companion.StatusPalette.DARK_MUTED.toInt()
+        const val AMBER = com.flagshipserver.companion.StatusPalette.DARK_WARN.toInt()
     }
 }

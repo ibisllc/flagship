@@ -355,6 +355,74 @@ private fun SourceTile(title: String, body: String, onClick: () -> Unit, testTag
 
 // ── git ─────────────────────────────────────────────────────────
 
+/** The build's own state above its timeline: an AI adapt that failed (one a
+ *  box restart cut off comes back failed with the box's sentence) offers to
+ *  deploy the build as it is or run the AI again. */
+@Composable
+private fun DetailAdaptCard(buildId: String, vm: BuildJournalViewModel, nav: NavController) {
+    val state by vm.detailAdapt.collectAsState()
+    // Back from the AI-key step with a key: run the AI with it.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, buildId) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && vm.detailAdapt.value is BuildJournalViewModel.DetailAdapt.Failed) {
+                PendingBuildCredential.take()?.let { vm.runAiAgain(buildId, LlmProviderCredential.from(it)) }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+    when (val s = state) {
+        is BuildJournalViewModel.DetailAdapt.None -> return
+        is BuildJournalViewModel.DetailAdapt.Failed -> FSCard(padding = PaddingValues(FS.space.s5)) {
+            Text(
+                s.reason,
+                color = FS.colors.text,
+                style = TextStyle(fontSize = 15.sp, lineHeight = 22.sp),
+                modifier = Modifier.testTag("build-journal-adapt-failed"),
+            )
+            RelayFailureAction(s.reason)
+            Spacer(Modifier.height(FS.space.s4))
+            if (s.canRunAi) {
+                FSPrimaryButton(
+                    BuildGitViewModel.RUN_AI_AGAIN,
+                    onClick = { nav.navigate("build/git/key") },
+                    block = true,
+                    modifier = Modifier.testTag("build-journal-run-ai"),
+                )
+                Spacer(Modifier.height(FS.space.s2))
+                FSSecondaryButton(
+                    BuildGitViewModel.DEPLOY,
+                    onClick = { vm.deployAgain(buildId) },
+                    block = true,
+                    modifier = Modifier.testTag("build-journal-deploy"),
+                )
+            } else {
+                FSPrimaryButton(
+                    BuildGitViewModel.DEPLOY,
+                    onClick = { vm.deployAgain(buildId) },
+                    block = true,
+                    modifier = Modifier.testTag("build-journal-deploy"),
+                )
+            }
+        }
+        is BuildJournalViewModel.DetailAdapt.Working -> InfoCard(s.text, "This can take several minutes. You can leave this screen.")
+        is BuildJournalViewModel.DetailAdapt.Adapted -> FSCard(padding = PaddingValues(FS.space.s5)) {
+            Text("Adapted ✓", color = FS.colors.success, style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold))
+            Spacer(Modifier.height(FS.space.s2))
+            Text("The AI rewrote this repo into a Flagship service (${s.fileCount} file(s)).", color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
+            Spacer(Modifier.height(FS.space.s4))
+            FSPrimaryButton("Install it", onClick = { vm.deployAgain(buildId) }, block = true, modifier = Modifier.testTag("build-journal-deploy"))
+        }
+        is BuildJournalViewModel.DetailAdapt.Deployed -> FSCard(padding = PaddingValues(FS.space.s5)) {
+            Text("Installed ✓", color = FS.colors.success, style = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold), modifier = Modifier.testTag("build-journal-deployed"))
+            Spacer(Modifier.height(FS.space.s2))
+            Text(s.url, color = FS.colors.primary, style = TextStyle(fontSize = 14.sp, fontFamily = FontFamily.Monospace))
+        }
+    }
+    Spacer(Modifier.height(FS.space.s4))
+}
+
 @Composable
 fun BuildGitScreen(nav: NavController) {
     val client = LocalBuildClient.current
@@ -605,8 +673,19 @@ private fun VerdictCard(
             }
             adaptError?.let {
                 Spacer(Modifier.height(FS.space.s3))
-                Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
+                Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp), modifier = Modifier.testTag("build-git-adapt-error"))
                 RelayFailureAction(it)
+                // A restart cut the AI off: its files are kept, so the build
+                // can go live as it is (the button below runs the AI again).
+                if (BuildGitViewModel.interrupted(it)) {
+                    Spacer(Modifier.height(FS.space.s3))
+                    FSSecondaryButton(
+                        BuildGitViewModel.DEPLOY,
+                        onClick = { vm.deploy() },
+                        block = true,
+                        modifier = Modifier.testTag("build-git-deploy-anyway"),
+                    )
+                }
             }
             Spacer(Modifier.height(FS.space.s4))
             // The box's model rewrites the repo, so confirm an AI key first;
@@ -1029,6 +1108,7 @@ fun BuildJournalScreen(nav: NavController, buildId: String? = null) {
         onBack = { nav.popBackStack() },
     ) {
         if (buildId != null) {
+            DetailAdaptCard(buildId, vm, nav)
             when (val d = detail) {
                 is LoadingState.Loaded -> TimelineCard(buildId, d.value)
                 is LoadingState.Failed -> ErrorCardSimple(d.message)

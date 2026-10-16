@@ -100,6 +100,9 @@ fun HomeScreen(
     /** Only an admin device of the account sees "Add/Import a server", in
      *  the list and on the empty state ([showsAddServer]). */
     canAddServers: Boolean = true,
+    /** Reorder, Make leader and Delete are admin orders `.com` checks under
+     *  the admin root (AdminOrderGate): other devices list servers only. */
+    canChangeServers: Boolean = true,
     /** Move a server to the top of the order (docs/server-order.md). */
     onMakeLeader: (PodInfo) -> Unit,
     onRefresh: () -> Unit,
@@ -324,7 +327,7 @@ fun HomeScreen(
                         )
                     }
                 } else {
-                    val reorderable = q.isEmpty() && statusFilter == HomeStatusFilter.ALL &&
+                    val reorderable = canChangeServers && q.isEmpty() && statusFilter == HomeStatusFilter.ALL &&
                         pods.count(ServerOrderProtocol::orderable) >= 2
                     // The rows and the Leader badge read the same order: the
                     // drag's draft while one shows, else the committed order.
@@ -356,7 +359,8 @@ fun HomeScreen(
                             onDelete = { onDeleteServer(pod) },
                             leader = leader?.takeIf { it.podId == pod.podId },
                             leaderConfirmed = confirmed,
-                            canMakeLeader = ServerOrderProtocol.orderable(pod) && pod.podId != firstOrderable,
+                            canMakeLeader = canChangeServers && ServerOrderProtocol.orderable(pod) && pod.podId != firstOrderable,
+                            canDelete = canChangeServers,
                             rowModifier = rowModifier,
                             dragging = dragging,
                             handle = handle,
@@ -583,6 +587,8 @@ fun ServerRow(
     /** Set while the server waits for its backup, or restores it (docs/server-backup-and-clone.md). */
     backupWait: com.flagshipserver.app.api.AwaitingBackupWire? = null,
     onSendBackup: () -> Unit = {},
+    /** Delete releases the name, an admin order (AdminOrderGate). */
+    canDelete: Boolean = true,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val shownBackupWait = backupWait.takeIf { liveness == PodInfo.LivenessState.ONLINE }
@@ -708,13 +714,15 @@ fun ServerRow(
                 text = { Text("Open") },
                 onClick = { menuOpen = false; onOpen() },
             )
-            DropdownMenuItem(
-                text = {
-                    Text(if (pod.status == PodInfo.Status.PENDING) "Delete server (free name)" else "Delete server")
-                },
-                modifier = Modifier.testTag("pod-card-delete"),
-                onClick = { menuOpen = false; confirming = true },
-            )
+            if (canDelete) {
+                DropdownMenuItem(
+                    text = {
+                        Text(if (pod.status == PodInfo.Status.PENDING) "Delete server (free name)" else "Delete server")
+                    },
+                    modifier = Modifier.testTag("pod-card-delete"),
+                    onClick = { menuOpen = false; confirming = true },
+                )
+            }
         }
 
         // "Your server is being installed" — a thin determinate bar on a demo

@@ -21,4 +21,10 @@ object AdminOrderGate {
     const val ACCESS_LIST = "Only an admin device can change this app's internet access."
     const val API_KEYS = "Only an admin device can create or revoke API keys."
     const val DATABASE_WRITE = "Only an admin device can change this app's data."
+    /** `.com` checks the server order under the admin root (serverOrder.ts). */
+    const val SERVER_ORDER = "Only an admin device can change the server order."
+    /** Every order on a server's page (update, power, dead-man, front page,
+     *  backup, migrate, transfer, revoke, delete) signs under the admin root. */
+    const val SERVER = "Only an admin device can change this server. This device can see it."
+    const val SHARE = "Only an admin device can share this server."
 }

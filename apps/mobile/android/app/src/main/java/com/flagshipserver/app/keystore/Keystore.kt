@@ -326,13 +326,20 @@ object Keystore {
         p.apply()
     }
 
-    /** Public-key half of the IRK, hex-encoded. */
+    /** Public-key half of the IRK at the current version, hex-encoded: the key
+     *  [deriveIRK] signs with. It reads the per-version cache [deriveIRK]
+     *  writes (the un-versioned slot only on a v1 install from before
+     *  versions, which nothing writes any more). */
     suspend fun irkPubHex(): String {
         val p = requirePrefs()
-        val irkKey = pkey(KEY_IRK_SEED)
-        val seedHex = p.getString(irkKey, null) ?: run {
-            deriveIRK("init"); p.getString(irkKey, null)!!
-        }
+        val version = currentIrkVersion()
+        val cacheKey = "${pkey(KEY_IRK_SEED)}.v$version"
+        val seedHex = p.getString(cacheKey, null)
+            ?: p.getString(pkey(KEY_IRK_SEED), null)?.takeIf { version == 1 }
+            ?: run {
+                deriveIRK("init", version)
+                p.getString(cacheKey, null) ?: error("no IRK seed after deriving v$version")
+            }
         val seed = HexUtil.decode(seedHex)!!
         val pair = Ed25519Sign.KeyPair.newKeyPairFromSeed(seed)
         return HexUtil.encode(pair.publicKey)
@@ -554,6 +561,11 @@ object Keystore {
     fun importAdminRoot(seed: ByteArray) {
         require(seed.size == 32) { "admin root seed must be 32 bytes" }
         requirePrefs().edit().putString(adminRootSeedKey(), HexUtil.encode(seed)).apply()
+    }
+
+    /** Drop the active profile's admin root (the gym plays a non-admin device). */
+    fun forgetAdminRoot() {
+        requirePrefs().edit().remove(adminRootSeedKey()).apply()
     }
 
     /**
