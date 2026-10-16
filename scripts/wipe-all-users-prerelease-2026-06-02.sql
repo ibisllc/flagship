@@ -42,7 +42,9 @@
 -- health report per server). PRESERVED: adapter_insights (0086, anonymous),
 -- model_capabilities (0095, a public model catalog cache), rate_limit_log
 -- (0101, hourly counts with nothing about any caller) and inference_settings
--- (0103, operator config). wipe-all-users.test.ts now fails when a migration
+-- (0103, operator config). Through 0104: the pb_* peer-backup tables are
+-- wiped (holders, leases, spent serials, token counts, sealed roots).
+-- wipe-all-users.test.ts now fails when a migration
 -- adds a table that is neither wiped here nor named on the line below.
 -- PRESERVED-TABLES: marketplace_listings schema_version username_suggestion_queue repo_adapters adapter_blocklist adapter_attempts adapter_complaints adapter_insights model_capabilities rate_limit_log inference_settings
 --
@@ -88,6 +90,11 @@ DELETE FROM server_transfers;
 DELETE FROM server_evictions;
 DELETE FROM server_migrations;
 DELETE FROM peer_backup_manifests;
+DELETE FROM pb_holders;
+DELETE FROM pb_leases;
+DELETE FROM pb_token_serials;
+DELETE FROM pb_token_issue;
+DELETE FROM pb_roots;
 
 -- Cert authority + mint
 DELETE FROM acme_account_key_grants;

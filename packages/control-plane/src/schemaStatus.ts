@@ -71,6 +71,8 @@ export const KNOWN_MIGRATIONS: readonly string[] = [
   "0102",
   // Flagship Inference's server-side settings and their history.
   "0103",
+  // Peer backup between accounts: holders, leases, spent tokens, sealed roots.
+  "0104",
 ];
 
 export interface SchemaStatusDeps {

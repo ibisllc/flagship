@@ -32,6 +32,7 @@ import {
   type WaitUntilLike,
 } from "./adapterIndex.js";
 import { handleInferenceModelRoutes, isInferenceModelPath } from "./inferenceModelRoutes.js";
+import { handlePeerBackupNetRoute, isPeerBackupNetPath } from "./peerBackupNetworkRoutes.js";
 import { handleRateLimitReport, RATE_LIMIT_REPORT_PATH } from "./rateLimitReport.js";
 import {
   recordRateLimited,
@@ -338,6 +339,11 @@ export interface RouteEnv {
   AI_PROMO_INPUT_WEIGHT?: string;
   AI_PROMO_OUTPUT_WEIGHT?: string;
   AI_PROMO_ENDS_AT?: string;
+  /** Peer backup between accounts (peerBackupNetworkRoutes.ts). */
+  PB_TOKEN_RSA_JWK?: string;
+  PB_FILLER_SECRET?: string;
+  PB_TAG_SECRET?: string;
+  PB_NETWORK?: string;
   /** WebSocket URL daemons dial for the tunnel hub (discovery endpoint). */
   TUNNEL_HUB_URL?: string;
   /** Control-plane apex — a test env (gym) sets "gym.flagshipserver.com"; unset
@@ -679,6 +685,12 @@ async function routeImpl(
   }
   if (isInferenceModelPath(url.pathname)) {
     return handleInferenceModelRoutes(request, env);
+  }
+
+  // Peer backup between accounts: every call but the root read is signed by
+  // the box's STK; filler is capped per server per day in the handler.
+  if (isPeerBackupNetPath(url.pathname)) {
+    return handlePeerBackupNetRoute(request, env);
   }
 
   if (url.pathname === STATUS_RELAY_PATH) {
