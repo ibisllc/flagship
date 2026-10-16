@@ -15,19 +15,45 @@ package com.flagshipserver.app.keystore
 
 import android.app.Activity
 import android.content.Context
+import androidx.credentials.CreateCredentialResponse
 import androidx.credentials.CreatePublicKeyCredentialRequest
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
+import androidx.credentials.GetCredentialResponse
 import androidx.credentials.GetPublicKeyCredentialOption
 import androidx.credentials.PublicKeyCredential
 import androidx.credentials.exceptions.CreateCredentialException
+import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialException
+import kotlinx.coroutines.delay
 import com.flagshipserver.app.core.HexUtil
 import org.json.JSONObject
 import java.security.SecureRandom
 
-class PasskeyRecoveryManager(private val context: Context) {
+/** The two CredentialManager calls the recovery ceremony makes; tests pass
+ *  a fake passkey app. */
+interface CredentialCalls {
+    suspend fun create(activity: Activity, request: CreatePublicKeyCredentialRequest): CreateCredentialResponse
+    suspend fun get(activity: Activity, request: GetCredentialRequest): GetCredentialResponse
+}
+
+class CredentialManagerCalls(context: Context) : CredentialCalls {
     private val manager = CredentialManager.create(context)
+    override suspend fun create(activity: Activity, request: CreatePublicKeyCredentialRequest) =
+        manager.createCredential(activity, request)
+    override suspend fun get(activity: Activity, request: GetCredentialRequest) =
+        manager.getCredential(activity, request)
+}
+
+class PasskeyRecoveryManager(
+    private val calls: CredentialCalls,
+    /** Pause before re-asking a passkey app that wasn't ready right after a create. */
+    private val retryDelayMs: Long = 700,
+) {
+    constructor(context: Context) : this(
+        com.flagshipserver.app.core.Variant.credentialCalls() ?: CredentialManagerCalls(context),
+    )
+
     private val rng = SecureRandom()
 
     /** Outcome of a successful create — the relying party uses
@@ -36,13 +62,23 @@ class PasskeyRecoveryManager(private val context: Context) {
      *  (`^[0-9a-fA-F]{16,512}$`) and the webapp sends `bytesToHex(rawId)`;
      *  CredentialManager hands back base64url, so we decode → hex here so
      *  the on-wire id matches the webapp byte-for-byte. */
-    data class CreatedPasskey(val credentialId: String, val prfSecret: ByteArray)
+    data class CreatedPasskey(
+        val credentialId: String,
+        val prfSecret: ByteArray,
+        /** The passkey app that saved it, when its AAGUID is a known one. */
+        val provider: String? = null,
+    )
 
     sealed class RecoveryError(msg: String) : RuntimeException(msg) {
         object PrfUnavailable : RecoveryError("Authenticator doesn't support PRF; use offline codes instead.")
         data class CreateFailed(val cause0: Throwable) : RecoveryError("Couldn't create passkey: ${cause0.message}")
         data class GetFailed(val cause0: Throwable) : RecoveryError("Couldn't assert passkey: ${cause0.message}")
         data class ProtocolError(val reason: String) : RecoveryError("Recovery protocol error: $reason")
+        /** The passkey was saved, but the passkey app never handed back the
+         *  key Flagship derives from it (neither on create nor on the check
+         *  right after). */
+        data class KeyNotReturned(val credentialId: String, val cause0: Throwable?) :
+            RecoveryError("Passkey saved but no PRF output: ${cause0?.javaClass?.simpleName ?: "none"}")
     }
 
     /**
@@ -59,6 +95,9 @@ class PasskeyRecoveryManager(private val context: Context) {
         activity: Activity,
         username: String,
         prfEvalInput: ByteArray = Recovery.PRF_SALT,
+        /** Called just before the second passkey prompt, when the passkey app
+         *  didn't return the key on create, so the screen can say why. */
+        onSecondPrompt: () -> Unit = {},
     ): CreatedPasskey {
         val challenge = ByteArray(32).also(rng::nextBytes)
         val userId = username.toByteArray()
@@ -68,25 +107,45 @@ class PasskeyRecoveryManager(private val context: Context) {
             userId = userId,
             prfEvalInput = prfEvalInput,
         )
-        try {
-            val resp = manager.createCredential(activity, request)
-            val raw = (resp as? androidx.credentials.CreatePublicKeyCredentialResponse)
-                ?.registrationResponseJson
-                ?: throw RecoveryError.ProtocolError("no registration response JSON")
-            val obj = JSONObject(raw)
-            // CredentialManager returns the credential id base64url-encoded
-            // (WebAuthn JSON wire format). The Worker requires hex, so decode
-            // → hex right here; everything downstream (envelope key, upload,
-            // re-assert) carries the hex form, matching the webapp.
-            val rawIdB64u = obj.optString("id")
-            if (rawIdB64u.isEmpty()) throw RecoveryError.ProtocolError("missing credential id")
-            val credentialIdHex = HexUtil.encode(decodeB64Url(rawIdB64u))
-            // Immediately run an assertion with the new credential to harvest the PRF secret.
-            val prfSecret = assertPrf(activity, credentialIdHex, prfEvalInput)
-            return CreatedPasskey(credentialId = credentialIdHex, prfSecret = prfSecret)
+        val resp = try {
+            calls.create(activity, request)
         } catch (e: CreateCredentialException) {
             throw RecoveryError.CreateFailed(e)
         }
+        val raw = (resp as? androidx.credentials.CreatePublicKeyCredentialResponse)
+            ?.registrationResponseJson
+            ?: throw RecoveryError.ProtocolError("no registration response JSON")
+        val obj = JSONObject(raw)
+        // CredentialManager returns the credential id base64url-encoded
+        // (WebAuthn JSON wire format). The Worker requires hex, so decode
+        // → hex right here; everything downstream (envelope key, upload,
+        // re-assert) carries the hex form, matching the webapp.
+        val rawIdB64u = obj.optString("id")
+        if (rawIdB64u.isEmpty()) throw RecoveryError.ProtocolError("missing credential id")
+        val credentialIdHex = HexUtil.encode(decodeB64Url(rawIdB64u))
+        val provider = providerName(obj)
+
+        // Some passkey apps return the PRF output on create (the same value a
+        // later assertion gives for this input): no second prompt then.
+        prfFirst(obj)?.let { return CreatedPasskey(credentialIdHex, it, provider) }
+
+        // Many (Samsung Pass among them) return it only on an assertion, and
+        // some aren't ready to answer one the instant the create sheet closes:
+        // ask again after a short pause before giving up.
+        onSecondPrompt()
+        var last: Throwable? = null
+        repeat(CREATE_ASSERT_ATTEMPTS) { attempt ->
+            if (attempt > 0) delay(retryDelayMs)
+            try {
+                return CreatedPasskey(credentialIdHex, assertPrf(activity, credentialIdHex, prfEvalInput), provider)
+            } catch (e: RecoveryError.GetFailed) {
+                if (e.cause0 is GetCredentialCancellationException) throw e
+                last = e
+            } catch (e: RecoveryError.PrfUnavailable) {
+                last = e
+            }
+        }
+        throw RecoveryError.KeyNotReturned(credentialIdHex, last)
     }
 
     /**
@@ -113,21 +172,50 @@ class PasskeyRecoveryManager(private val context: Context) {
             prfEvalInput = prfEvalInput,
         )
         val req = GetCredentialRequest(credentialOptions = listOf(getOption))
-        try {
-            val resp = manager.getCredential(activity, req)
-            val pkc = resp.credential as? PublicKeyCredential
-                ?: throw RecoveryError.ProtocolError("non-publickey credential returned")
-            val obj = JSONObject(pkc.authenticationResponseJson)
-            val ext = obj.optJSONObject("clientExtensionResults")
-                ?.optJSONObject("prf")
-                ?.optJSONObject("results")
-                ?: throw RecoveryError.PrfUnavailable
-            val first = ext.optString("first")
-            if (first.isEmpty()) throw RecoveryError.PrfUnavailable
-            return decodeB64Url(first)
+        val resp = try {
+            calls.get(activity, req)
         } catch (e: GetCredentialException) {
             throw RecoveryError.GetFailed(e)
         }
+        val pkc = resp.credential as? PublicKeyCredential
+            ?: throw RecoveryError.ProtocolError("non-publickey credential returned")
+        return prfFirst(JSONObject(pkc.authenticationResponseJson)) ?: throw RecoveryError.PrfUnavailable
+    }
+
+    /** `clientExtensionResults.prf.results.first`, decoded, or null. */
+    private fun prfFirst(obj: JSONObject): ByteArray? {
+        val first = obj.optJSONObject("clientExtensionResults")
+            ?.optJSONObject("prf")
+            ?.optJSONObject("results")
+            ?.optString("first")
+            .orEmpty()
+        return if (first.isEmpty()) null else decodeB64Url(first)
+    }
+
+    /** The passkey app's name from the registration's AAGUID (authenticator
+     *  data bytes 37..52), when it is one we know. */
+    private fun providerName(obj: JSONObject): String? {
+        val authData = obj.optJSONObject("response")?.optString("authenticatorData").orEmpty()
+        if (authData.isEmpty()) return null
+        val bytes = runCatching { decodeB64Url(authData) }.getOrNull() ?: return null
+        if (bytes.size < 53) return null
+        return KNOWN_PROVIDERS[HexUtil.encode(bytes.copyOfRange(37, 53))]
+    }
+
+    companion object {
+        /** One assertion right after the create, then retries for a passkey
+         *  app that wasn't ready yet. */
+        const val CREATE_ASSERT_ATTEMPTS = 3
+
+        /** Passkey apps by AAGUID (the community passkey-aaguids list). */
+        val KNOWN_PROVIDERS = mapOf(
+            "ea9b8d664d011d213ce4b6b48cb575d4" to "Google Password Manager",
+            "53414d53554e47000000000000000000" to "Samsung Pass",
+            "bada5566a7aa401fbd9645619a55120d" to "1Password",
+            "d548826e79b4db40a3d811116f7e8349" to "Bitwarden",
+            "531126d6e717415c93203d9aa6981239" to "Dashlane",
+            "fbfc3007154e4ecc8c0b6e020557d7bd" to "iCloud Keychain",
+        )
     }
 
     // ── request builders ────────────────────────────────────────────
@@ -228,9 +316,16 @@ class PasskeyRecoveryManager(private val context: Context) {
 class PasskeyCeremonyAdapter(
     private val manager: PasskeyRecoveryManager,
     private val activity: android.app.Activity,
+    /** Before a second passkey prompt right after a create (see createPasskey). */
+    private val onSecondPrompt: () -> Unit = {},
 ) : CloudRecoveryEnrollment.PasskeyCeremony {
+    /** The passkey app the last create saved to, when known. */
+    var lastProvider: String? = null
+        private set
+
     override suspend fun create(username: String, prfEvalInput: ByteArray): Pair<String, ByteArray> {
-        val created = manager.createPasskey(activity, username, prfEvalInput)
+        val created = manager.createPasskey(activity, username, prfEvalInput, onSecondPrompt)
+        lastProvider = created.provider
         return created.credentialId to created.prfSecret
     }
 

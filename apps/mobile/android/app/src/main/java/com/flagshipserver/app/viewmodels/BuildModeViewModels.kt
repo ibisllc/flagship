@@ -34,10 +34,10 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
-private fun friendly(t: Throwable): String = when (t) {
-    is ScreensError.Http -> NetworkErrorHumanizer.humanize(t)
-    is ScreensError -> t.message ?: "Something went wrong."
-    else -> t.message ?: "Something went wrong."
+private fun friendly(t: Throwable): String {
+    if (t is ScreensError.Http) return NetworkErrorHumanizer.humanize(t, "build")
+    com.flagshipserver.app.core.ErrorLog.caught("build", t, NetworkErrorHumanizer.errorCode(t))
+    return t.message ?: "Something went wrong."
 }
 
 /**

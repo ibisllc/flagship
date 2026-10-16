@@ -65,6 +65,7 @@ import com.flagshipserver.app.core.LocalFlagshipServerClient
 import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.keystore.BlockStoreUmkStore
 import com.flagshipserver.app.keystore.CloudRecoveryEnrollment
+import com.flagshipserver.app.core.NetworkErrorHumanizer
 import com.flagshipserver.app.keystore.Keystore
 import com.flagshipserver.app.keystore.KeystoreIrkAccess
 import com.flagshipserver.app.keystore.PasskeyAvailability
@@ -153,6 +154,7 @@ fun SecureAccountScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var passphrase by remember { mutableStateOf("") }
     var passphraseConfirm by remember { mutableStateOf("") }
+    var note by remember { mutableStateOf<String?>(null) }
 
     fun configureCloudThenContinue() {
         if (activity == null) {
@@ -160,7 +162,7 @@ fun SecureAccountScreen(
             return
         }
         scope.launch {
-            working = true; error = null
+            working = true; error = null; note = null
             try {
                 val username = app.currentUser.value ?: "you"
                 // Biometric IRK consent up front, then Argon2id + the wrap /
@@ -173,10 +175,11 @@ fun SecureAccountScreen(
                 } catch (_: Throwable) {
                     null
                 }
+                val ceremony = PasskeyCeremonyAdapter(passkeys, activity) { note = SECOND_PASSKEY_PROMPT }
                 val result = withContext(Dispatchers.Default) {
                     CloudRecoveryEnrollment.enroll(
                         server = flagshipServer,
-                        passkeys = PasskeyCeremonyAdapter(passkeys, activity),
+                        passkeys = ceremony,
                         irk = irkMaterial.signer,
                         username = username,
                         umkSeed = umk,
@@ -188,22 +191,31 @@ fun SecureAccountScreen(
                         adminRootSeed = Keystore.adminRootSeed(),
                     )
                 }
-                blockStore.save(
-                    WrappedUmk(
-                        credentialId = result.credentialId,
-                        wrappedUmkBase64 = result.wrappedUmk,
-                    ),
-                )
+                // Block Store is a convenience copy; the escrow is done.
+                runCatching {
+                    blockStore.save(
+                        WrappedUmk(
+                            credentialId = result.credentialId,
+                            wrappedUmkBase64 = result.wrappedUmk,
+                        ),
+                    )
+                }.onFailure {
+                    com.flagshipserver.app.core.ErrorLog.caught(
+                        "secure-account-blockstore", it, NetworkErrorHumanizer.errorCode(it),
+                    )
+                }
                 app.setHasCloudRecovery(true)
+                RecoveryProviderStore.write(ctx, ceremony.lastProvider)
                 passphrase = ""; passphraseConfirm = ""
                 toasts.success("Cloud backup configured.")
                 onDone()
             } catch (t: Throwable) {
                 // Never trap the user: surface the error and let them
                 // pick the file option or skip instead.
-                error = t.message ?: "Couldn't set up cloud backup. Try a backup file instead."
+                error = if (t is CloudRecoveryEnrollment.ValidationError) t.message
+                else NetworkErrorHumanizer.humanize(t, "secure-account-cloud")
             } finally {
-                working = false
+                working = false; note = null
             }
         }
     }
@@ -272,6 +284,11 @@ fun SecureAccountScreen(
         if (error != null) {
             FSCard(padding = PaddingValues(FS.space.s3)) {
                 Text(error!!, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp))
+            }
+        }
+        if (working && note != null) {
+            FSCard(padding = PaddingValues(FS.space.s3)) {
+                Text(note!!, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
             }
         }
 

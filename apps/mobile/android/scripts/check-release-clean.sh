@@ -9,8 +9,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 fail=0
-CLASS_RE='/(Mock[A-Z][A-Za-z0-9]*|DemoFixtures|SmokeMode|SmokeModeConfig|GymSeams|FixedPodClients|DeveloperSettings|DeveloperScreen[A-Za-z]*)(\$[^/]*)?\.class$'
-STRING_RE='flagship\.smoke|flagship\.apexHost|unlock developer|Developer unlocked|MockScreensClient|bright-maple|Personal notes \+ recipes|useLiveClient|mockLatency'
+CLASS_RE='/(Mock[A-Z][A-Za-z0-9]*|DemoFixtures|SmokeMode|SmokeModeConfig|GymSeams|FixedPodClients|FakePasskeyApp|DeveloperSettings|DeveloperScreen[A-Za-z]*)(\$[^/]*)?\.class$'
+STRING_RE='flagship\.smoke|flagship\.apexHost|unlock developer|Developer unlocked|MockScreensClient|bright-maple|Personal notes \+ recipes|useLiveClient|mockLatency|fake-passkey'
 
 check_module() {
   local module=$1 classes=$2 apk=$3

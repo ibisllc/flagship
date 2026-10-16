@@ -15,8 +15,12 @@
 //   - ServerProblem — a 5xx from the backend (transient; try again).
 //   - RequestProblem — a 4xx other than the cert case (check your connection /
 //     the link).
+//   - Passkey — the passkey app refused, was cancelled, or didn't hand back
+//     the key Flagship derives (PasskeyRecoveryManager.RecoveryError).
 //   - Unknown — anything we can't classify; never leak a raw status/stack to
-//     the user.
+//     the user. Its sentence carries a short code, and [humanize] logs the
+//     class and message under the same code (never keys or passphrases), so
+//     a report can be matched to the log.
 //
 // Raw HTTP status codes and exception messages are intentionally kept OUT of
 // the user-facing string (UX-B): a bare "HTTP 503" or "SSLHandshakeException"
@@ -44,6 +48,7 @@ object NetworkErrorHumanizer {
         OFFLINE,
         SERVER_PROBLEM,
         REQUEST_PROBLEM,
+        PASSKEY,
         UNKNOWN,
     }
 
@@ -65,6 +70,7 @@ object NetworkErrorHumanizer {
             )
             rateLimit != null -> Classified(Kind.RATE_LIMITED, rateLimit.userMessage)
             t is AddServerRefused || AddServerGate.isServerRefusal(t) -> Classified(Kind.REQUEST_PROBLEM, AddServerGate.ADMIN_ONLY)
+            passkeyError(t) != null -> Classified(Kind.PASSKEY, passkeySentence(passkeyError(t)!!))
             t is HttpException -> classifyStatus(t.status)
             t is HasHttpStatus -> classifyStatus(t.httpStatus)
             isOffline(t) -> Classified(
@@ -73,13 +79,58 @@ object NetworkErrorHumanizer {
             )
             else -> Classified(
                 Kind.UNKNOWN,
-                "Something went wrong. Please try again.",
+                "Something went wrong (code ${errorCode(t)}). Please try again.",
             )
         }
     }
 
-    /** Convenience: just the human string (UX-B mapping). */
-    fun humanize(t: Throwable): String = classify(t).message
+    /** The human string (UX-B mapping). Logs what it hides: the error's
+     *  class, message and causes, tagged with [where] and the error code. */
+    fun humanize(t: Throwable, where: String = "error"): String {
+        val c = classify(t)
+        ErrorLog.caught(where, t, errorCode(t))
+        return c.message
+    }
+
+    /** A short, stable code for an error's class, shown to the person and
+     *  logged beside the details. */
+    fun errorCode(t: Throwable): String =
+        "%04X".format((t.javaClass.name.hashCode() xor (t.cause?.javaClass?.name?.hashCode() ?: 0)) and 0xFFFF)
+
+    private fun passkeyError(t: Throwable): com.flagshipserver.app.keystore.PasskeyRecoveryManager.RecoveryError? {
+        var cur: Throwable? = t
+        while (cur != null) {
+            if (cur is com.flagshipserver.app.keystore.PasskeyRecoveryManager.RecoveryError) return cur
+            cur = cur.cause
+        }
+        return null
+    }
+
+    const val PASSKEY_NO_KEY =
+        "Your passkey app didn't return the key Flagship needs. Try again, or pick Google Password Manager."
+
+    private fun passkeySentence(e: com.flagshipserver.app.keystore.PasskeyRecoveryManager.RecoveryError): String {
+        return when (e) {
+            is com.flagshipserver.app.keystore.PasskeyRecoveryManager.RecoveryError.PrfUnavailable,
+            is com.flagshipserver.app.keystore.PasskeyRecoveryManager.RecoveryError.KeyNotReturned -> PASSKEY_NO_KEY
+            is com.flagshipserver.app.keystore.PasskeyRecoveryManager.RecoveryError.CreateFailed -> when (e.cause0) {
+                is androidx.credentials.exceptions.CreateCredentialCancellationException ->
+                    "You cancelled saving the passkey. Try again when you're ready."
+                is androidx.credentials.exceptions.CreateCredentialNoCreateOptionException ->
+                    "No passkey app on this phone can save a passkey. Turn on Google Password Manager or another passkey app in Settings, then try again."
+                else -> "Your passkey app couldn't save a passkey. Try again, or pick Google Password Manager."
+            }
+            is com.flagshipserver.app.keystore.PasskeyRecoveryManager.RecoveryError.GetFailed -> when (e.cause0) {
+                is androidx.credentials.exceptions.GetCredentialCancellationException ->
+                    "You cancelled the passkey check. Try again when you're ready."
+                is androidx.credentials.exceptions.NoCredentialException ->
+                    "Couldn't find your Flagship passkey on this phone. Check that the passkey app holding it is signed in, then try again."
+                else -> "Your passkey app couldn't check the passkey. Try again."
+            }
+            is com.flagshipserver.app.keystore.PasskeyRecoveryManager.RecoveryError.ProtocolError ->
+                "Your passkey app sent an answer Flagship couldn't read. Try again, or pick Google Password Manager."
+        }
+    }
 
     /** True only for the box cert-fingerprint hard-fail — NOT for ordinary
      *  TLS / network failures, so plain offline errors aren't over-alarmed. */
