@@ -335,6 +335,7 @@ const OPTIONAL_SHELL = [
   "/lib/freeAi.js",
   "/lib/modelMenu.js",
   "/lib/modelGroups.js",
+  "/lib/vibeTranscript.js",
   "/lib/appDb.js",
   "/lib/knockIdentity.js",
   "/lib/appPlacement.js",

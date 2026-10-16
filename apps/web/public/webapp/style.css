@@ -2707,6 +2707,7 @@ section h2.fs-hero-title::before { content: none; }
 .mm-loading { padding: 8px 10px; }
 .vc-msg-credits { align-self: flex-start; margin: -4px 0 0 4px; font-size: 11px; color: var(--ink-muted); }
 .vc-summarised { align-self: center; font-size: 11px; color: var(--ink-faint); }
+.vc-jump-latest { display: block; margin: var(--space-1) 0 0 auto; }
 .vc-attach-error { margin: 0; font-size: 13px; }
 .vc-attach-notice { margin: 0; font-size: 12px; }
 .settings-default-model { margin-top: var(--space-2); display: flex; flex-direction: column; gap: 4px; }

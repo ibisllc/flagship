@@ -40,6 +40,7 @@ import { $, registerView, show } from "../lib/router.js";
 import { ScreensError, boxClient, currentPodFqdn } from "../lib/api.js";
 import { creationTarget, loadAccountPods, mountCreationPicker, sessionServers } from "../lib/appPlacement.js";
 import { findSessionServer } from "../lib/vibeSessions.js";
+import { hiddenMessagesText, isAtBottom, transcriptWindow } from "../lib/vibeTranscript.js";
 import { activeOperations } from "../lib/activeOperations.js";
 import { toast } from "../lib/toast.js";
 import { escapeHtml } from "../lib/util.js";
@@ -152,6 +153,10 @@ let menuSignature = "";
 let menuLoad = 0;
 // The session's latest public state (needsCredential, canContinue, size).
 let lastState = null;
+// Whether the transcript follows the newest message: true until the owner
+// scrolls up, so a poll never drags them back down while they read.
+let followTail = true;
+let followSession = null;
 
 const client = () => box ?? boxClient();
 const boxFetch = (path, init) => client().fetch(path, init);
@@ -848,11 +853,18 @@ function render(state) {
     extra = [{ role: "assistant", text: state.pendingRequest.payload.message }];
   }
   const all = messages.concat(extra);
+  if (followSession !== activeSessionId) {
+    followSession = activeSessionId;
+    followTail = true;
+  }
   if (all.length === 0) {
     log.innerHTML = '<div class="card placeholder">Say what you\'d like to build to get started.</div>';
   } else {
     const summarised = state.summarised ? `<div class="vc-summarised">${escapeHtml(SUMMARISED_NOTE)}</div>` : "";
-    log.innerHTML = summarised + all
+    const { hidden, messages: shown } = transcriptWindow(all);
+    const older = hidden > 0 ? `<div class="vc-summarised" data-vc-hidden>${escapeHtml(hiddenMessagesText(hidden))}</div>` : "";
+    const keepTop = log.scrollTop;
+    log.innerHTML = summarised + older + shown
       .map((m) => {
         const side = m.role === "user" ? "vc-msg-user" : "vc-msg-ai";
         const who = m.role === "user" ? "You" : "AI";
@@ -864,8 +876,9 @@ function render(state) {
           </div>${creditsMarkup(m)}`;
       })
       .join("");
-    log.scrollTop = log.scrollHeight;
+    log.scrollTop = followTail ? log.scrollHeight : keepTop;
   }
+  paintJumpToLatest();
 
   // The composer takes a message when the AI asked a question, or when the
   // chat is ready to deploy or failed (the owner carries on from there).
@@ -1177,7 +1190,25 @@ function reset() {
   }
 }
 
+/** "Jump to latest" shows while the owner has scrolled up from the newest message. */
+function paintJumpToLatest() {
+  const btn = $("vc-jump-latest");
+  if (btn) btn.classList.toggle("hidden", followTail);
+}
+
 export function initVibeCodeView() {
+  $("vc-messages")?.addEventListener("scroll", (e) => {
+    const atBottom = isAtBottom(e.currentTarget);
+    if (atBottom === followTail) return;
+    followTail = atBottom;
+    paintJumpToLatest();
+  });
+  $("vc-jump-latest")?.addEventListener("click", () => {
+    const log = $("vc-messages");
+    followTail = true;
+    if (log) log.scrollTop = log.scrollHeight;
+    paintJumpToLatest();
+  });
   $("vc-send")?.addEventListener("click", send);
   $("vc-deploy-go")?.addEventListener("click", triggerDeploy);
   $("vc-reset")?.addEventListener("click", reset);
