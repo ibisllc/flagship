@@ -2,11 +2,15 @@
 // mirror of iOS ServerShareDemo): an in-memory `.com`, boot worker and boxes
 // that answer ServerShareClient the way the real ones do, seeded by running
 // the real client flows. The phone owns Home: Alex accepted a link (compare
-// the code), Sam can manage it. Three servers are shared with the phone:
+// the code), Sam can manage it. Four servers are shared with the phone:
 // Garage (can manage and approve its start-up, which is waiting), Photos
 // (accepted, the owner hasn't confirmed yet) and Cabin (can view). On Garage
 // the co-manager invites (docs/service-access-gating.md "Co-manager
 // invites"): Plants takes invites, in Wiki an admin made them a Member.
+// Mina's Studio is offered to the phone and not yet accepted
+// ([MockServerShares.STUDIO_LINK]). Accepting needs the joining account's
+// admin proof, which this `.com` and these boxes check as the real ones do
+// (docs/share-a-server.md §5.1).
 
 package com.flagshipserver.app.core
 
@@ -35,6 +39,9 @@ object MockServerShares {
     const val CABIN_DOMAIN = "cabin.jordan-reyes.flagship.services"
     /** The AID the shared boxes name as their owner (the authorAID of co-manager invites). */
     val OWNER_AID = "c4".repeat(32)
+    const val STUDIO_DOMAIN = "studio.mina-park.flagship.services"
+    /** A link to Mina's Studio the phone hasn't opened yet (the gym types it in). */
+    val STUDIO_LINK: String = ServerShare.buildShareLink("https://flagshipserver.com", "5a".repeat(16), ByteArray(32) { 0x5a })
 
     /** The share runtime the smoke shell provides: [username] owns [homeDomain]. */
     fun runtime(username: String, homeDomain: String, homeStkPubHex: String, memberScreens: ScreensClient): ServerShareRuntime {
@@ -47,15 +54,19 @@ object MockServerShares {
     }
 }
 
-/** Fixed account keys: an obviously fake UMK and IRK per account. */
-class MockShareKeys(seed: Byte) : ShareKeys {
+/** Fixed account keys: an obviously fake UMK, IRK and admin root per account. */
+class MockShareKeys(seed: Byte, val username: String) : ShareKeys {
     val umkSeed = ByteArray(32) { seed }
     val irk = ByteArray(32) { (seed + 1).toByte() }
     val irkPub: ByteArray = Ed25519Sign.KeyPair.newKeyPairFromSeed(irk).publicKey
+    private val adminSeed = ByteArray(32) { (seed + 2).toByte() }
+    val adminPubHex: String = HexUtil.encode(Ed25519Sign.KeyPair.newKeyPairFromSeed(adminSeed).publicKey)
     override suspend fun umk(reason: String): ByteArray = umkSeed
     override suspend fun sensitive(reason: String): Ed25519Sign = Ed25519Sign(irk)
     override suspend fun accountKey(reason: String): Ed25519Sign = Ed25519Sign(irk)
     override suspend fun irkSeed(reason: String): ByteArray = irk
+    override fun adminRootPubHex(): String = adminPubHex
+    override suspend fun adminRoot(reason: String): Ed25519Sign = Ed25519Sign(adminSeed)
 }
 
 class MockShareWorld(
@@ -63,11 +74,12 @@ class MockShareWorld(
     private val homeDomain: String,
     private val homeStkPubHex: String,
 ) {
-    val phone = MockShareKeys(0x11)
-    private val sam = MockShareKeys(0x21)
-    private val alex = MockShareKeys(0x31)
-    private val jordan = MockShareKeys(0x41)
-    private val mina = MockShareKeys(0x51)
+    val phone = MockShareKeys(0x11, username)
+    private val sam = MockShareKeys(0x21, "sam-lee")
+    private val alex = MockShareKeys(0x31, "alex-kim")
+    private val jordan = MockShareKeys(0x41, "jordan-reyes")
+    private val mina = MockShareKeys(0x51, "mina-park")
+    private val accounts = listOf(phone, sam, alex, jordan, mina).associateBy { it.username }
     private val garageStk = ByteArray(32) { 0x61 }
     private val garageStkPubHex = HexUtil.encode(Ed25519Sign.KeyPair.newKeyPairFromSeed(garageStk).publicKey)
     private val diskKey = ByteArray(32) { 0x71 }
@@ -89,6 +101,8 @@ class MockShareWorld(
         var acceptance: String? = null,
         var ended: Boolean = false,
         var unlockCopy: String? = null,
+        /** The link secret, for rows this world opens itself (Studio): `/accept` checks the admin proof inside. */
+        val secret: ByteArray? = null,
     )
 
     private val lock = Any()
@@ -107,10 +121,12 @@ class MockShareWorld(
     private val apiTransport = transport(seedFirst = true)
     private val seedTransport = transport(seedFirst = false)
 
-    fun client(keys: ShareKeys, seeding: Boolean = false) = ServerShareClient(
+    fun client(keys: MockShareKeys, seeding: Boolean = false, random: ((Int) -> ByteArray)? = null) = ServerShareClient(
         apex = if (seeding) seedTransport else apiTransport,
         box = if (seeding) seedTransport else apiTransport,
         keys = keys,
+        account = { ShareAccount(keys.username, isDemo = false) },
+        random = random ?: { n -> ByteArray(n).also(java.security.SecureRandom()::nextBytes) },
     )
 
     private suspend fun seedOnce() {
@@ -158,9 +174,36 @@ class MockShareWorld(
         jordanOwner.ownerShares("jordan-reyes", MockServerShares.CABIN_DOMAIN, MockServerShares.OWNER_SESSION).accepted
             .firstOrNull { it.shareId == cabin.shareId }
             ?.let { jordanOwner.confirm("jordan-reyes", MockServerShares.CABIN_DOMAIN, MockServerShares.OWNER_SESSION, it) }
+
+        // Studio: offered to the phone with a fixed link, not accepted yet.
+        val studio = client(mina, seeding = true, random = { n -> ByteArray(n) { 0x5a } }).createOffer(
+            "mina-park", MockServerShares.STUDIO_DOMAIN, "Studio", HexUtil.encode(mina.irkPub),
+            ShareOptions("Bright", ServerShare.LEVEL_MANAGE, unlockAtBoot = false, seeAppData = false),
+        )
+        rows[studio.shareId]?.let { rows[studio.shareId] = Row(it.username, it.serverDomain, it.tokenHash, it.offer, it.owner, it.expiresAt, secret = ByteArray(32) { 0x5a }) }
     }
 
-    private suspend fun accept(keys: ShareKeys, link: String) {
+    /** The joining account's admin proof, checked as the shared box does (acceptAdmin.ts): null when it holds. */
+    private fun adminRefusal(accept: ServerShare.Accept?, proof: ServerShare.AcceptAdminProof?): Pair<Int, JsonElement>? {
+        if (accept == null || proof == null) {
+            return 403 to buildJsonObject {
+                put("error", "Only an admin device of their account can accept a co-manage invitation. Cancel this link and send a new one for them to open on an admin device.")
+                put("code", "accept-not-admin")
+            }
+        }
+        val a = proof.admit
+        val known = accounts.values.any { it.adminPubHex == proof.attestation.keyPubHex }
+        val ok = known && a.keyKind == ServerShare.KEY_KIND_ADMIN_ROOT && a.keyPubHex == proof.attestation.keyPubHex &&
+            a.serverDomain == accept.serverDomain && a.shareId == accept.shareId && a.memberPubHex == accept.memberPubHex &&
+            a.acceptedAt == accept.acceptedAt && ServerShare.verify(a, HexUtil.decode(proof.signature)!!, HexUtil.decode(a.keyPubHex)!!)
+        if (ok) return null
+        return 403 to buildJsonObject {
+            put("error", "Their acceptance isn't signed by their account's admin key, so this server can't trust it. Cancel this link and send a new one.")
+            put("code", "accept-signature")
+        }
+    }
+
+    private suspend fun accept(keys: MockShareKeys, link: String) {
         val member = client(keys, seeding = true)
         member.accept(member.open(ServerShare.parseShareLink(link)!!))
     }
@@ -198,7 +241,21 @@ class MockShareWorld(
         val share = Regex("/api/server-shares/([0-9a-f]{32})(/accept|/leave|/push)?").matchEntire(path)
         val luks = Regex("/api/server/([^/]+)/sealed-luks-key").matchEntire(path)
         val boot = Regex("/api/boot/share/(pending|key)/([^/]+)").matchEntire(path)
+        val attest = Regex("/api/users/([^/]+)/account-key-attestation").matchEntire(path)
+        val demoSign = Regex("/api/dev/sample-user/([^/]+)/share-accept").matchEntire(path)
         return when {
+            attest != null -> {
+                val who = accounts[java.net.URLDecoder.decode(attest.groupValues[1], "UTF-8")] ?: return err(404, "username not registered")
+                val now = System.currentTimeMillis()
+                ok(buildJsonObject {
+                    put("attestation", buildJsonObject {
+                        put("kind", "AccountKeyAttestation"); put("version", 1); put("keyKind", ServerShare.KEY_KIND_ADMIN_ROOT)
+                        put("keyPubHex", who.adminPubHex); put("issuedAt", now - 1000); put("expiresAt", now + 14 * 86_400_000L)
+                        put("signedBy", "ca".repeat(32)); put("signature", "00".repeat(64))
+                    })
+                })
+            }
+            demoSign != null -> err(404, "no such demo user")
             users != null && users.groupValues[1].isNotEmpty() && users.groupValues[2].isEmpty() -> {
                 val offer = ServerShare.parseServerShareOffer(b?.get("offer")) ?: return err(400, "malformed offer")
                 rows[offer.shareId] = Row(
@@ -246,7 +303,17 @@ class MockShareWorld(
                         put("expiresAt", row.expiresAt); put("unlock", row.unlockCopy != null)
                     })
                     "/accept" -> if (row.acceptance != null) err(409, "this link was already used") else {
-                        row.acceptance = str(b, "acceptance")
+                        val sealed = str(b, "acceptance")
+                        val secret = row.secret
+                        if (secret != null) {
+                            val payload = runCatching {
+                                ServerShare.parseShareAcceptancePayload(
+                                    ServerShare.openShareJson(ServerShare.shareLinkKey(secret), ServerShare.shareAad(ServerShare.AAD_SHARE_ACCEPTANCE, id), sealed!!),
+                                )
+                            }.getOrNull()
+                            adminRefusal(payload?.accept, payload?.admin)?.let { return it }
+                        }
+                        row.acceptance = sealed
                         ok()
                     }
                     "/push" -> if (row.unlockCopy == null) err(403, "unlock-not-shared") else ok(buildJsonObject { put("ok", true) })
@@ -319,6 +386,9 @@ class MockShareWorld(
             }
             path == "/api/screens/shares" -> {
                 val g = ServerShare.parseServerShareGrant(b?.get("grant")) ?: return err(400, "malformed grant")
+                if (held[host]?.containsKey(g.shareId) != true) {
+                    adminRefusal(ServerShare.parseServerShareAccept(b?.get("accept")), ServerShare.parseShareAcceptAdminProof(b?.get("acceptAdmin")))?.let { return it }
+                }
                 held.getOrPut(host) { LinkedHashMap() }[g.shareId] = g
                 ok()
             }

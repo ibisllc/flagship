@@ -409,8 +409,13 @@ fun HomeTab() {
                 navArgument("k") { type = NavType.StringType; nullable = true; defaultValue = null },
             ),
         ) { entry ->
+            // Only an admin device of this account accepts a co-manage share;
+            // the shared server checks its admin key (docs/share-a-server.md §5.1).
             if (!AddServerGate.allows(app)) {
-                AddServerAdminOnlyScreen(onBack = { nav.popBackStack() })
+                AddServerAdminOnlyScreen(
+                    onBack = { nav.popBackStack() },
+                    message = com.flagshipserver.app.core.ServerShareClient.ACCEPT_ADMIN_ONLY,
+                )
                 return@composable
             }
             val s = entry.arguments?.getString("s")

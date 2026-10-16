@@ -25,7 +25,7 @@ import com.flagshipserver.app.ui.theme.FS
 import com.flagshipserver.app.ui.theme.FSLayout
 
 @Composable
-fun AddServerAdminOnlyScreen(onBack: () -> Unit) {
+fun AddServerAdminOnlyScreen(onBack: () -> Unit, message: String = AddServerGate.ADMIN_ONLY) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
             Modifier
@@ -41,7 +41,7 @@ fun AddServerAdminOnlyScreen(onBack: () -> Unit) {
                 style = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
             )
             Text(
-                AddServerGate.ADMIN_ONLY,
+                message,
                 color = FS.colors.textMuted,
                 style = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
                 textAlign = TextAlign.Center,

@@ -77,7 +77,7 @@
       "ref": "web",
       "surfaces": {
         "ios": { "status": "missing", "reason": "Built on the box, .com and the webapp first (2026-10-16); the iOS port follows docs/share-a-server.md §5.1.", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/ServerShare.swift", "flagship/server-share-accept-admin/v1"]] },
-        "android": { "status": "missing", "reason": "Built on the box, .com and the webapp first (2026-10-16); the Android port follows docs/share-a-server.md §5.1.", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerShare.kt", "flagship/server-share-accept-admin/v1"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerShare.kt", "flagship/server-share-accept-admin/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/ServerShareClient.kt", "account-key-attestation"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/shell/tabs/HomeTab.kt", "ServerShareClient.ACCEPT_ADMIN_ONLY"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/serverShare.js", "flagship/server-share-accept-admin/v1"], ["apps/web/public/webapp/lib/serverShares.js", "account-key-attestation"], ["apps/web/public/webapp/views/share-accept.js", "SHARE_ACCEPT_ADMIN_ONLY"]] }
       }
     },

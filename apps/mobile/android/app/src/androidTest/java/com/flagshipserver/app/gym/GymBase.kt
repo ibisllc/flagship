@@ -96,6 +96,8 @@ abstract class GymBase {
         fakePasskeys: Boolean = false,
         realBiometrics: Boolean = false,
         persistSession: Boolean = false,
+        /** An App Link to open at launch (e.g. a share link). */
+        deepLink: String? = null,
     ) {
         // A test may relaunch with different seeds (e.g. the admin/non-admin
         // state pair) — close the prior scenario so activities never stack.
@@ -118,6 +120,7 @@ abstract class GymBase {
             if (fakePasskeys) putExtra(SmokeModeConfig.EXTRA_SMOKE_FAKE_PASSKEYS, true)
             if (realBiometrics) putExtra(SmokeModeConfig.EXTRA_SMOKE_REAL_BIOMETRICS, true)
             if (persistSession) putExtra(SmokeModeConfig.EXTRA_SMOKE_PERSIST_SESSION, true)
+            if (deepLink != null) data = android.net.Uri.parse(deepLink)
         }
         scenario = ActivityScenario.launch(intent)
         composeRule.waitForIdle()

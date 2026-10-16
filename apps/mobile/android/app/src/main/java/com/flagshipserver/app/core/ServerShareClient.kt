@@ -30,10 +30,19 @@ interface ShareKeys {
 
     /** True when a key can be used without prompting (background refreshes skip otherwise). */
     fun unlocked(): Boolean = true
+
+    /** This device's admin root public key, lowercase hex, or null on a non-admin device. Never prompts. */
+    fun adminRootPubHex(): String? = null
+
+    /** The admin root, behind the biometric gate; only asked for when [adminRootPubHex] is set. */
+    suspend fun adminRoot(reason: String): Ed25519Sign = error("no admin root on this device")
 }
 
+/** Who this phone accepts shares as: `.com` attests this account's admin key. */
+data class ShareAccount(val username: String, val isDemo: Boolean)
+
 class ShareException(val kind: Kind, message: String) : Exception(message) {
-    enum class Kind { BadLink, Expired, AlreadyUsed, Ended, NotShared, NotFound, Refused, Invalid }
+    enum class Kind { BadLink, Expired, AlreadyUsed, Ended, NotShared, NotFound, Refused, Invalid, NotAdmin, Cancelled }
 }
 
 // ── Wire ──────────────────────────────────────────────────────────────────
@@ -155,7 +164,12 @@ data class ShareGrantBody(
     val signature: String,
     val accept: ServerShare.Accept? = null,
     val acceptSignature: String? = null,
+    /** The joining account's admin proof (#12 + `.com`'s attestation), on the first grant. */
+    val acceptAdmin: ServerShare.AcceptAdminProof? = null,
 )
+
+@Serializable
+private data class DemoShareAcceptBody(val admit: ServerShare.AcceptAdmin)
 
 @Serializable
 data class ShareRevokeBody(val revoke: ServerShare.Revoke, val signature: String)
@@ -269,6 +283,8 @@ data class AcceptedShare(
     val acceptSignature: String,
     /** `"123456"`, or null when the acceptance doesn't check out. */
     val sas: String?,
+    /** The joining account's admin proof the box checks; null from an older app (the box refuses it). */
+    val acceptAdmin: ServerShare.AcceptAdminProof? = null,
 )
 
 /** A link opened by the other account, before accepting. */
@@ -321,6 +337,8 @@ class ServerShareClient(
     private val pushStore: SharePushStore = InMemorySharePushStore(),
     /** This device's push token and its platform, or null when it has none. */
     private val pushToken: suspend () -> Pair<String, String>? = { null },
+    /** The account this phone accepts shares as (docs/share-a-server.md §5.1). */
+    private val account: () -> ShareAccount? = { null },
 ) {
     companion object {
         private val rng = SecureRandom()
@@ -331,6 +349,13 @@ class ServerShareClient(
 
         const val NOTICES_NOT_SHARED = "The owner hasn't let you approve this server's start-up."
         const val NOTICES_NO_TOKEN = "This phone can't receive notices right now. Check that notifications are allowed for Flagship."
+        /** Only an admin device of the joining account accepts (owner rule 2026-10-16); the shared server checks it. */
+        const val ACCEPT_ADMIN_ONLY = "Only an admin device of your account can accept a co-manage invitation."
+        /** The box's refusals of a first grant; each carries a sentence for the owner. */
+        private val ACCEPT_REFUSAL_CODES = setOf("accept-not-admin", "accept-signature", "accept-stale", "accept-unverifiable")
+
+        /** Whether this phone may accept a co-manage share: it holds the admin root, or the account is a demo. */
+        fun canAccept(holdsAdminRoot: Boolean, isDemoAccount: Boolean): Boolean = holdsAdminRoot || isDemoAccount
 
         /** What to tell the person when the box refuses a co-manager's update order. */
         fun updateRefusalText(code: String?, error: String?): String = when (code) {
@@ -477,13 +502,17 @@ class ServerShareClient(
             accept.shareId == row.shareId &&
             ServerShare.verify(accept, HexUtil.decode(payload.signature)!!, HexUtil.decode(accept.memberPubHex)!!)
         val shown = accept ?: ServerShare.Accept(serverDomain, row.shareId, "0".repeat(64), 0)
+        // The admin proof is the box's to check; it must at least name this acceptance.
+        val admit = payload?.admin?.admit
+        val adminNamesIt = admit == null || (admit.shareId == shown.shareId && admit.memberPubHex == shown.memberPubHex && admit.serverDomain == shown.serverDomain)
         return AcceptedShare(
             shareId = row.shareId,
             label = options.label,
             options = options,
             accept = shown,
             acceptSignature = payload?.signature.orEmpty(),
-            sas = if (valid) ServerShare.shareSas(row.shareId, shown.memberPubHex, secret) else null,
+            sas = if (valid && adminNamesIt) ServerShare.shareSas(row.shareId, shown.memberPubHex, secret) else null,
+            acceptAdmin = payload?.admin,
         )
     }
 
@@ -501,8 +530,11 @@ class ServerShareClient(
             issuedAt = now(),
         )
         val key = keys.sensitive("Give ${share.label} access to this server")
-        val body = ShareGrantBody(grant, ServerShare.signHex(grant, key), share.accept, share.acceptSignature)
-        expectOk(boxPost(serverDomain, "/api/screens/shares", ownerSession, body, ShareGrantBody.serializer()), "give access")
+        val body = ShareGrantBody(grant, ServerShare.signHex(grant, key), share.accept, share.acceptSignature, share.acceptAdmin)
+        val r = boxPost(serverDomain, "/api/screens/shares", ownerSession, body, ShareGrantBody.serializer())
+        // The box says why it can't take this acceptance, in words for the owner.
+        if (errorCode(r) in ACCEPT_REFUSAL_CODES) throw ShareException(ShareException.Kind.Refused, errorText(r))
+        expectOk(r, "give access")
         if (share.options.unlockAtBoot) setUnlock(username, serverDomain, share.shareId, share.accept.memberPubHex, on = true)
     }
 
@@ -643,6 +675,10 @@ class ServerShareClient(
      */
     suspend fun accept(opened: OpenedShare): Pair<SharedEntry, String> {
         if (opened.state == "ended") throw ShareException(ShareException.Kind.Ended, "The owner has stopped sharing this server.")
+        val who = account()
+        if (opened.acceptanceHex == null && (who == null || !canAccept(keys.adminRootPubHex() != null, who.isDemo))) {
+            throw ShareException(ShareException.Kind.NotAdmin, ACCEPT_ADMIN_ONLY)
+        }
         val secret = HexUtil.decode(opened.secretHex)!!
         val umk = keys.umk("Accept ${opened.offer.serverName}")
         val member = ServerShare.deriveShareMemberKey(umk, opened.shareId)
@@ -665,7 +701,8 @@ class ServerShareClient(
         }
 
         val accept = ServerShare.Accept(serverDomain, opened.shareId, memberPubHex, now())
-        val payload = ServerShare.AcceptancePayload(accept = accept, signature = ServerShare.signHex(accept, member))
+        val admin = adminProof(who!!, accept, "Accept ${opened.offer.serverName}")
+        val payload = ServerShare.AcceptancePayload(accept = accept, signature = ServerShare.signHex(accept, member), admin = admin)
         val sealed = ServerShare.sealShareJson(
             ServerShare.shareLinkKey(secret),
             ServerShare.shareAad(ServerShare.AAD_SHARE_ACCEPTANCE, opened.shareId),
@@ -681,6 +718,36 @@ class ServerShareClient(
         expectOk(r, "accept")
         val entry = SharedEntry(null, opened.shareId, opened.secretHex, serverDomain, opened.offer.serverName, accept.acceptedAt)
         return saveToInbox(umk, entry) to sas
+    }
+
+    /**
+     * The joining account's admin proof (docs/share-a-server.md §5.1): `.com`'s
+     * attestation of this account's sensitive key, fetched about our own
+     * account, and #12 signed with that key under the biometric the UMK just
+     * took. A demo account's device holds no admin root: `.com` signs for it.
+     */
+    private suspend fun adminProof(who: ShareAccount, accept: ServerShare.Accept, reason: String): ServerShare.AcceptAdminProof {
+        val r = call(apex, "GET", "${apexBase()}/api/users/${enc(who.username)}/account-key-attestation")
+        expectOk(r, "accept")
+        val attestation = ServerShare.parseAccountKeyAttestation(errorObject(r)?.get("attestation"))
+            ?: throw ShareException(ShareException.Kind.Refused, "Couldn't accept. Try again.")
+        val admit = ServerShare.AcceptAdmin(accept.serverDomain, accept.shareId, accept.memberPubHex, accept.acceptedAt, attestation.keyKind, attestation.keyPubHex)
+        val signature = when {
+            who.isDemo -> {
+                val d = post(apex, "${apexBase()}/api/dev/sample-user/${enc(who.username)}/share-accept", DemoShareAcceptBody(admit), DemoShareAcceptBody.serializer())
+                expectOk(d, "accept")
+                (errorObject(d)?.get("signature") as? JsonPrimitive)?.content
+                    ?: throw ShareException(ShareException.Kind.Refused, "Couldn't accept. Try again.")
+            }
+            attestation.keyKind == ServerShare.KEY_KIND_ADMIN_ROOT -> {
+                // This phone's admin root must be the one the account pins now.
+                if (keys.adminRootPubHex() != attestation.keyPubHex) throw ShareException(ShareException.Kind.NotAdmin, ACCEPT_ADMIN_ONLY)
+                ServerShare.signHex(admit, keys.adminRoot(reason))
+            }
+            // An account that pins no admin root: its IRK is its sensitive key.
+            else -> ServerShare.signHex(admit, keys.accountKey(reason))
+        }
+        return ServerShare.AcceptAdminProof(admit, signature, attestation)
     }
 
     private suspend fun saveToInbox(umk: ByteArray, entry: SharedEntry): SharedEntry {

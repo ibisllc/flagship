@@ -236,7 +236,16 @@ class MainActivity : FragmentActivity() {
         val appContext = applicationContext
         val liveBuild = LiveBuildClient(client = okHttp, store = sessionStore)
         val liveRelay = LiveQrRelayClient(client = okHttp)
-        val liveShares = com.flagshipserver.app.viewmodels.ServerShareRuntime.live(okHttp, appContext) { trustCenter.isServerTrusted }
+        // Accepting a share asks `.com` about this account's own admin key (docs/share-a-server.md §5.1).
+        val liveShares = com.flagshipserver.app.viewmodels.ServerShareRuntime.live(
+            okHttp,
+            appContext,
+            account = {
+                appState.currentUser.value?.let {
+                    com.flagshipserver.app.core.ShareAccount(it, com.flagshipserver.app.core.AppState.isDemoAccount(appState.activeProfile, appState.pods.value))
+                }
+            },
+        ) { trustCenter.isServerTrusted }
         val liveTransfer = LiveServerTransferClient(OkHttpJsonTransport(okHttp))
         // A′ pinning — every live /pods fetch reconciles the cert-pin
         // registry under STKs derived from THIS device's UMK. Live-only by
