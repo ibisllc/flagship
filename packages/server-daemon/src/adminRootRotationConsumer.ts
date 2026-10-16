@@ -1,7 +1,4 @@
-import { existsSync } from "node:fs";
-import { readFile, rename } from "node:fs/promises";
-import { dirname } from "node:path";
-import { writeFileDurable } from "./durableFile.js";
+import { keepCorruptAside, readStateFile, writeFileDurable } from "./durableFile.js";
 import {
   verifyAdminRootRotation,
   type AdminRootRotation,
@@ -75,29 +72,58 @@ export interface AdminRootPin {
 }
 
 export interface AdminRootPinStore {
+  /** The re-pin, or null when none was ever written. Throws {@link AdminRootPinLostError} when it was lost. */
   read(): Promise<AdminRootPin | null>;
   write(pin: AdminRootPin): Promise<void>;
 }
 
-/** Default file-backed pin store (atomic write-then-rename, 0600). */
-export function fileAdminRootPinStore(pinPath: string): AdminRootPinStore {
+/**
+ * The pin file was there but unreadable, so which root holds authority is
+ * unknown. Falling back to the seed would hand authority back to a root a
+ * recovery may have rotated away (a lost or stolen device), so the box
+ * instead replays the rotation chain from the seed before trusting any root.
+ */
+export class AdminRootPinLostError extends Error {
+  constructor(public readonly since: number) {
+    super("the admin-root pin was lost; replay the rotation chain from the seed first");
+  }
+}
+
+/**
+ * Default file-backed pin store (durable write, 0600). An unreadable pin is
+ * set aside and replaced by a `lost` marker, so every boot until the chain is
+ * replayed fails closed, never back to the seed.
+ */
+export function fileAdminRootPinStore(pinPath: string, now: () => number = () => Date.now()): AdminRootPinStore {
   return {
     async read() {
-      if (!existsSync(pinPath)) return null;
+      const read = await readStateFile(pinPath);
+      if (read.kind === "missing") return null;
+      let p: Partial<AdminRootPin> & { lost?: unknown; since?: unknown };
       try {
-        const raw = await readFile(pinPath, "utf8");
-        const p = JSON.parse(raw) as Partial<AdminRootPin>;
+        if (read.kind === "unreadable") throw read.error;
+        p = JSON.parse(read.text) as typeof p;
+        if (!p || typeof p !== "object") throw new Error("not an admin-root pin");
+        if (p.lost === true) throw new AdminRootPinLostError(typeof p.since === "number" ? p.since : 0);
         if (typeof p.adminRootPubHex !== "string" || !HEX64.test(p.adminRootPubHex.toLowerCase())) {
-          return null;
+          throw new Error("the pin names no admin root");
         }
-        return {
-          adminRootPubHex: p.adminRootPubHex.toLowerCase(),
-          seq: typeof p.seq === "number" ? p.seq : 0,
-          updatedAt: typeof p.updatedAt === "number" ? p.updatedAt : 0,
-        };
-      } catch {
-        return null;
+      } catch (e) {
+        if (e instanceof AdminRootPinLostError) throw e;
+        const since = now();
+        await keepCorruptAside(
+          pinPath,
+          e,
+          "This server refuses admin orders until it has re-checked your account's admin key with Flagship.",
+        );
+        await writeFileDurable(pinPath, JSON.stringify({ lost: true, since }, null, 2));
+        throw new AdminRootPinLostError(since);
       }
+      return {
+        adminRootPubHex: p.adminRootPubHex.toLowerCase(),
+        seq: typeof p.seq === "number" ? p.seq : 0,
+        updatedAt: typeof p.updatedAt === "number" ? p.updatedAt : 0,
+      };
     },
     async write(pin) {
       await writeFileDurable(pinPath, JSON.stringify(pin, null, 2));
@@ -108,7 +134,9 @@ export function fileAdminRootPinStore(pinPath: string): AdminRootPinStore {
 /**
  * The effective pinned admin root for this boot: the persisted re-pin if one
  * exists (and is at least as advanced), else the config SEED. Returns lowercase
- * hex, or null when the box has no admin root at all.
+ * hex, or null when the box has no admin root at all. Throws
+ * {@link AdminRootPinLostError} when the pin was lost (see
+ * {@link recoverLostAdminRootPin}).
  */
 export async function resolvePinnedAdminRoot(
   seedAdminRootHex: string | null,
@@ -120,6 +148,44 @@ export async function resolvePinnedAdminRoot(
   const pin = await store.read();
   if (pin && HEX64.test(pin.adminRootPubHex)) return pin.adminRootPubHex;
   return seed;
+}
+
+/**
+ * Rebuild a lost pin: fetch the account's rotation chain and replay it from
+ * the SEED (each hop verified against the root before it, exactly as a box
+ * that never rotated would), then write the result as the pin. Returns the
+ * pinned root, or null when the chain couldn't be fetched (try again later;
+ * the box keeps refusing admin orders meanwhile). Never throws.
+ */
+export async function recoverLostAdminRootPin(opts: {
+  seedAdminRootHex: string;
+  username: string;
+  controlPlaneBaseUrl: string;
+  pinStore: AdminRootPinStore;
+  fetchImpl?: typeof fetch;
+  now?: () => number;
+  onLog?: (m: string) => void;
+}): Promise<string | null> {
+  const log = opts.onLog ?? (() => {});
+  const seed = opts.seedAdminRootHex.toLowerCase();
+  const chain = await fetchRotationChainOrNull(opts.controlPlaneBaseUrl, opts.username, opts.fetchImpl ?? fetch, log);
+  if (chain === null) return null;
+  const result = applyRotationChain({ pinnedHex: seed, username: opts.username.toLowerCase(), chain });
+  try {
+    await opts.pinStore.write({
+      adminRootPubHex: result.pinnedHex,
+      seq: result.lastSeq,
+      updatedAt: (opts.now ?? (() => Date.now()))(),
+    });
+  } catch (e) {
+    log(`[admin-root-rotation] couldn't write the recovered pin (${(e as Error).message})`);
+    return null;
+  }
+  log(
+    `[admin-root-rotation] lost pin rebuilt from the seed: ${result.pinnedHex.slice(0, 12)} ` +
+      `(${result.applied} hop(s) replayed)`,
+  );
+  return result.pinnedHex;
 }
 
 export interface ApplyChainResult {
@@ -191,6 +257,11 @@ export interface ClaimAdminRootRotationOptions {
    * fallback anchor when no re-pin is persisted. Null ⇒ no admin root; no-op.
    */
   seedAdminRootHex: string | null;
+  /**
+   * The recipe's own admin root (before any re-pin), to rebuild a pin lost
+   * while running from. Defaults to `seedAdminRootHex`.
+   */
+  recoverySeedHex?: string;
   /** `.com` base URL. */
   controlPlaneBaseUrl: string;
   /** Persisted re-pin store. */
@@ -216,6 +287,16 @@ export async function fetchRotationChain(
   fetchImpl: typeof fetch,
   onLog: (m: string) => void,
 ): Promise<RotationChainEntry[]> {
+  return (await fetchRotationChainOrNull(baseUrl, username, fetchImpl, onLog)) ?? [];
+}
+
+/** The served rotation chain: [] when the account has none (404), null when it couldn't be fetched. */
+async function fetchRotationChainOrNull(
+  baseUrl: string,
+  username: string,
+  fetchImpl: typeof fetch,
+  onLog: (m: string) => void,
+): Promise<RotationChainEntry[] | null> {
   const base = baseUrl.replace(/\/+$/, "");
   const url = `${base}/api/users/${encodeURIComponent(username)}/admin-root-rotations`;
   try {
@@ -223,7 +304,7 @@ export async function fetchRotationChain(
     if (res.status === 404) return [];
     if (!res.ok) {
       onLog(`[admin-root-rotation] GET ${res.status}; ignoring`);
-      return [];
+      return null;
     }
     const body = (await res.json()) as { rotations?: unknown };
     const rows = Array.isArray(body?.rotations) ? body.rotations : [];
@@ -251,7 +332,7 @@ export async function fetchRotationChain(
     return out;
   } catch (e) {
     onLog(`[admin-root-rotation] GET failed: ${(e as Error).message}`);
-    return [];
+    return null;
   }
 }
 
@@ -266,7 +347,23 @@ export async function claimAdminRootRotations(
   const log = opts.onLog ?? (() => {});
   const now = (opts.now ?? (() => Date.now()))();
 
-  const current = await resolvePinnedAdminRoot(opts.seedAdminRootHex, opts.pinStore);
+  let current: string | null;
+  try {
+    current = await resolvePinnedAdminRoot(opts.seedAdminRootHex, opts.pinStore);
+  } catch (e) {
+    if (!(e instanceof AdminRootPinLostError)) {
+      log(`[admin-root-rotation] couldn't read the pin (${(e as Error).message})`);
+      return { rotated: false, reason: "error" };
+    }
+    // Lost while running: rebuild it from the recipe's seed, then restart so
+    // every handler re-binds to the rebuilt root.
+    const seed = opts.recoverySeedHex ?? opts.seedAdminRootHex;
+    if (!seed) return { rotated: false, reason: "no-admin-root" };
+    const pinned = await recoverLostAdminRootPin({ ...opts, seedAdminRootHex: seed, fetchImpl, now: () => now });
+    if (!pinned) return { rotated: false, reason: "error" };
+    opts.restart();
+    return { rotated: true, from: seed, to: pinned, applied: 0, seq: 0 };
+  }
   if (!current) return { rotated: false, reason: "no-admin-root" };
 
   const chain = await fetchRotationChain(opts.controlPlaneBaseUrl, opts.username, fetchImpl, log);

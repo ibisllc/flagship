@@ -301,7 +301,7 @@ describe("one access list per app", () => {
     await f.settle();
     const reloaded = new ServiceAccessStore(join(f.box("home").dir, "data/flagship-access/service-access.json"));
     await reloaded.load();
-    expect(reloaded.failedOpen()).toBe(false);
+    expect(reloaded.failedClosed()).toBe(false);
     expect(reloaded.mode(SERVICE)).toBe("restricted");
     for (const n of ["home", "home2", "home3"]) {
       expect(f.box(n).store.mode(SERVICE)).toBe("restricted");

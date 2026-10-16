@@ -1,5 +1,4 @@
 import { execFile } from "node:child_process";
-import { readFile } from "node:fs/promises";
 import {
   verifyDeadManAffirmation,
   verifySetDeadManPolicy,
@@ -8,7 +7,7 @@ import {
   type SetDeadManPolicy,
 } from "@flagship/protocol";
 import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
-import { writeFileDurable } from "./durableFile.js";
+import { keepCorruptAside, readStateFile, writeFileDurable } from "./durableFile.js";
 
 /**
  * Lock & power-off + dead-man heartbeat-lock (docs/lock-and-poweroff.md).
@@ -330,23 +329,47 @@ export class DeadManController {
   }
 
   private async loadState(): Promise<void> {
+    const read = await readStateFile(this.statePath);
+    if (read.kind === "missing") return; // never set: keep defaults (disabled)
+    let obj: Partial<PersistedDeadManState>;
     try {
-      const raw = await readFile(this.statePath, "utf8");
-      const obj = JSON.parse(raw) as Partial<PersistedDeadManState>;
-      if (obj.policy && typeof obj.policy === "object") {
-        this.state.policy = {
-          enabled: Boolean(obj.policy.enabled),
-          windowMs: Number(obj.policy.windowMs) || DEFAULT_POLICY.windowMs,
-          graceMs: Number(obj.policy.graceMs) || DEFAULT_POLICY.graceMs,
-          lockoutMode: obj.policy.lockoutMode === "restart" ? "restart" : "off",
-        };
-      }
-      if (typeof obj.leaseExpiry === "number") this.state.leaseExpiry = obj.leaseExpiry;
-      if (Array.isArray(obj.usedNonces)) {
-        this.state.usedNonces = obj.usedNonces.filter((n): n is string => typeof n === "string");
-      }
-    } catch {
-      // No prior state — keep defaults (disabled).
+      if (read.kind === "unreadable") throw read.error;
+      obj = JSON.parse(read.text) as Partial<PersistedDeadManState>;
+      if (!obj || typeof obj !== "object" || Array.isArray(obj)) throw new Error("not a dead-man state object");
+    } catch (e) {
+      // The file only exists once the owner set a policy, so an unreadable
+      // one means a dead-man switch we can no longer see. Fail closed: treat
+      // it as on and lapsed now (restart into phone approval after the
+      // default grace unless the owner affirms), and write that back so a
+      // restart can't quietly turn it off.
+      const now = this.now();
+      this.state = {
+        policy: { ...DEFAULT_POLICY, enabled: true, lockoutMode: "restart" },
+        leaseExpiry: now,
+        usedNonces: [],
+      };
+      const hours = Math.round(DEFAULT_POLICY.graceMs / 3600_000);
+      await keepCorruptAside(
+        this.statePath,
+        e,
+        `The dead-man switch is on and counts as missed: affirm it within ${hours} hours or the server restarts and asks your phone to unlock it.`,
+      );
+      await this.saveState().catch((we: Error) =>
+        console.error(`[dead-man] couldn't write the fail-closed state: ${we.message}`),
+      );
+      return;
+    }
+    if (obj.policy && typeof obj.policy === "object") {
+      this.state.policy = {
+        enabled: Boolean(obj.policy.enabled),
+        windowMs: Number(obj.policy.windowMs) || DEFAULT_POLICY.windowMs,
+        graceMs: Number(obj.policy.graceMs) || DEFAULT_POLICY.graceMs,
+        lockoutMode: obj.policy.lockoutMode === "restart" ? "restart" : "off",
+      };
+    }
+    if (typeof obj.leaseExpiry === "number") this.state.leaseExpiry = obj.leaseExpiry;
+    if (Array.isArray(obj.usedNonces)) {
+      this.state.usedNonces = obj.usedNonces.filter((n): n is string => typeof n === "string");
     }
   }
 

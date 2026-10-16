@@ -105,7 +105,7 @@ async function box(app: InstalledService, apiKeys: AppApiKeyStore | null = null)
     resolveSession: buildAppSessionResolver({ sessions, access }),
     deniedPage: accessWeb.maybeServeKnock,
     accessMode: (id: string) =>
-      access.failedOpen() ? null : access.mode(id) === "open" ? ("open" as const) : ("members-only" as const),
+      access.mode(id) === "open" ? ("open" as const) : ("members-only" as const),
   };
   const sockets = new Set<Socket>();
   const server = createNetServer((sock) => {
@@ -376,7 +376,7 @@ describe("everyone else is anonymous", () => {
     const { writeFile } = await import("node:fs/promises");
     await writeFile(join(dir, "access.json"), "{not json");
     await access.load();
-    expect(access.failedOpen()).toBe(true);
+    expect(access.failedClosed()).toBe(true);
     const up = await container();
     const b = await box(makeApp(up.port));
     expect((await send(b.port, "/private")).status).toBe(403);

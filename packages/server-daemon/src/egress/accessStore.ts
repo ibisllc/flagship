@@ -19,8 +19,7 @@
  * decide yet. A draft opens nothing until the owner signs it as a list.
  */
 import { readFile, rename } from "node:fs/promises";
-import { dirname } from "node:path";
-import { writeFileDurable } from "../durableFile.js";
+import { keepCorruptAside, writeFileDurable } from "../durableFile.js";
 import {
   DEFAULT_ACCESS_LIST,
   accessListFromEgressHosts,
@@ -154,7 +153,15 @@ export class AppAccessStore {
    */
   async load(auth: AccessAuthorizer, serverDomain: string): Promise<{ dropped: number; migrated: number }> {
     if (!this.path || !this.swk) return { dropped: 0, migrated: 0 };
-    const raw = await this.readSealed(this.path);
+    let raw: unknown;
+    try {
+      raw = await this.readSealed(this.path);
+    } catch (e) {
+      // Closed (no app reaches the internet); set aside so the next save
+      // doesn't overwrite the owner's signed lists.
+      await keepCorruptAside(this.path, e, "No app can reach the internet until you approve its hosts again.");
+      throw e;
+    }
     if (raw === null) return this.migrateLegacy(auth, serverDomain);
     const parsed = raw as {
       lists?: unknown;

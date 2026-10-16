@@ -15,8 +15,7 @@
  */
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { dirname } from "node:path";
-import { writeFileDurable } from "./durableFile.js";
+import { keepCorruptAside, writeFileDurable } from "./durableFile.js";
 import type { AppRankOrder, ServiceAccessModeOrder, ServiceAllowRemoveOrder } from "@flagship/protocol";
 
 export type AccessEntry =
@@ -131,12 +130,24 @@ interface AppJournal {
 
 export class AccessJournal {
   private byApp = new Map<string, AppJournal>();
+  private lost = false;
 
   constructor(private readonly path: string) {}
 
+  /**
+   * True when the last load found the journal unreadable: which apps other
+   * servers run is unknown, so every shared app waits for its list from them
+   * before letting invited people or co-managers in (accessSync start()).
+   */
+  wasLost(): boolean {
+    return this.lost;
+  }
+
   async load(): Promise<void> {
+    this.lost = false;
     try {
       const raw = JSON.parse(await readFile(this.path, "utf8")) as Record<string, { entries?: unknown; peers?: unknown }>;
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("not an access journal");
       this.byApp.clear();
       for (const [ref, j] of Object.entries(raw ?? {})) {
         const entries: Record<string, AccessEntry> = {};
@@ -149,8 +160,15 @@ export class AccessJournal {
         const peers = Array.isArray(j?.peers) ? j.peers.filter((p): p is string => typeof p === "string") : [];
         this.byApp.set(ref, { entries, peers });
       }
-    } catch {
+    } catch (e) {
       this.byApp.clear();
+      if ((e as NodeJS.ErrnoException)?.code === "ENOENT") return;
+      this.lost = true;
+      await keepCorruptAside(
+        this.path,
+        e,
+        "Apps shared with your other servers let invited people in again once this server has their list from them.",
+      );
     }
   }
 

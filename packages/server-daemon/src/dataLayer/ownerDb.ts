@@ -19,7 +19,6 @@
  * this handler runs).
  */
 import { readFile } from "node:fs/promises";
-import { dirname } from "node:path";
 import { writeFileDurable } from "../durableFile.js";
 import { appDbSqlSha256, parseAppDbWriteGrant, verifyAppDbWriteGrant } from "@flagship/protocol";
 import { shareCallerOf } from "../shares/sharesHttp.js";

@@ -1,6 +1,6 @@
 import { execFile, execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { removeDurable, withFileLock, writeFileDurable } from "./durableFile.js";
+import { keepCorruptAside, readStateFile, removeDurable, withFileLock, writeFileDurable } from "./durableFile.js";
 import { promisify } from "node:util";
 import {
   verifyUpdateOrder,
@@ -173,35 +173,68 @@ export function buildCurrentCommitProvider(
 
 /** Single-use-nonce persistence (survives restarts + rollbacks). */
 export interface UsedNonceStore {
-  has(nonce: string): Promise<boolean>;
+  /** Whether the order (`nonce`, `issuedAt`) must be treated as already used. */
+  has(nonce: string, issuedAt: number): Promise<boolean>;
   mark(nonce: string): Promise<void>;
 }
 
 const MAX_STORED_NONCES = 500;
 
-/** Default file-backed store: a small JSON `{nonces: string[]}`, newest-last. */
-export function fileUsedNonceStore(path: string): UsedNonceStore {
-  async function load(): Promise<string[]> {
+interface UsedNonces {
+  nonces: string[];
+  /** Set when the file was lost: every order issued at or before it counts as used. */
+  refuseIssuedBefore?: number;
+}
+
+function parseUsedNonces(text: string): UsedNonces {
+  const v = JSON.parse(text) as { nonces?: unknown; refuseIssuedBefore?: unknown };
+  if (!v || typeof v !== "object" || !Array.isArray(v.nonces)) throw new Error("not a used-nonce list");
+  return {
+    nonces: v.nonces.filter((n): n is string => typeof n === "string"),
+    ...(typeof v.refuseIssuedBefore === "number" ? { refuseIssuedBefore: v.refuseIssuedBefore } : {}),
+  };
+}
+
+/**
+ * Default file-backed store: a small JSON `{nonces: string[]}`, newest-last.
+ * An unreadable file can't say which orders were used, so it fails closed:
+ * it is set aside and every order issued before that moment counts as used
+ * (the owner sends a fresh one), never as unused.
+ */
+export function fileUsedNonceStore(path: string, now: () => number = () => Date.now()): UsedNonceStore {
+  async function current(): Promise<UsedNonces> {
+    const read = await readStateFile(path);
+    if (read.kind === "missing") return { nonces: [] };
     try {
-      const parsed = JSON.parse(await readFile(path, "utf-8")) as { nonces?: unknown };
-      return Array.isArray(parsed.nonces)
-        ? parsed.nonces.filter((n): n is string => typeof n === "string")
-        : [];
-    } catch {
-      return [];
+      if (read.kind === "unreadable") throw read.error;
+      return parseUsedNonces(read.text);
+    } catch (e) {
+      const closed: UsedNonces = { nonces: [], refuseIssuedBefore: now() };
+      await keepCorruptAside(path, e, "Update orders sent before now are refused; send the update again.");
+      await writeFileDurable(path, JSON.stringify(closed));
+      return closed;
     }
   }
   return {
-    async has(nonce) {
-      return (await load()).includes(nonce.toLowerCase());
+    async has(nonce, issuedAt) {
+      const s = await current();
+      if (s.refuseIssuedBefore !== undefined && issuedAt <= s.refuseIssuedBefore) return true;
+      return s.nonces.includes(nonce.toLowerCase());
     },
     async mark(nonce) {
+      await current();
       // Read-modify-write in turn: the update consumer and a co-manager's
       // update share this file, and two marks at once kept only one nonce.
       await withFileLock(path, async (write) => {
-        const nonces = await load();
-        nonces.push(nonce.toLowerCase());
-        await write(JSON.stringify({ nonces: nonces.slice(-MAX_STORED_NONCES) }));
+        let s: UsedNonces;
+        try {
+          s = parseUsedNonces(await readFile(path, "utf-8"));
+        } catch (e) {
+          s = (e as NodeJS.ErrnoException)?.code === "ENOENT" ? { nonces: [] } : { nonces: [], refuseIssuedBefore: now() };
+        }
+        s.nonces.push(nonce.toLowerCase());
+        s.nonces = s.nonces.slice(-MAX_STORED_NONCES);
+        await write(JSON.stringify(s));
       });
     },
   };
@@ -530,12 +563,15 @@ export async function admitUpdateOrder(
   // 6. Nonce single-use (survives rollback + redelivery — a rolled-back update
   //    can never be replayed onto the box with the same order).
   try {
-    if (await opts.usedNonceStore.has(order.nonce)) {
+    if (await opts.usedNonceStore.has(order.nonce, order.issuedAt)) {
       log("[self-update] nonce already consumed; ignoring replay");
       return refuse("replayed-nonce");
     }
-  } catch {
-    /* an unreadable store is treated as "not used" — .com consume-once is primary */
+  } catch (e) {
+    // A store that can't answer can't rule out a replay (a rolled-back
+    // release coming back): refuse rather than assume "not used".
+    log(`[self-update] used-nonce store unreadable (${(e as Error).message}); refusing`);
+    return refuse("error");
   }
 
   // 7. fromCommit must equal the CURRENT HEAD (anti-replay/anti-skip: an order

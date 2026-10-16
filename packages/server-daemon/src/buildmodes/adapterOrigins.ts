@@ -5,7 +5,6 @@
  */
 
 import { readFile } from "node:fs/promises";
-import { dirname } from "node:path";
 import { writeFileDurable } from "../durableFile.js";
 
 export interface AdapterOrigin {

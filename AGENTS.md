@@ -651,6 +651,16 @@ allowances (1M / 5M / 20M a month) are placeholders.
   same framing headers (`pageHeaders.ts`, `d0658fb6`), which needs an endorsed box
   release. Reporter credit pending; listed in the security page's hall of
   fame.
+- **Box state files written whole, corrupt ones fail closed (2026-10-16):**
+  every daemon state write goes through `durableFile.ts` (one queue per
+  path, unique fsynced temp file; `withFileLock` for read-modify-writes). An
+  unreadable security file is kept as `<file>.corrupt-<ms>`, noted in
+  Activity (`server.state.corrupt`) and loads closed: access state makes
+  every app members-only until an admin opens it again, a lost dead-man
+  file arms the switch as missed, a lost admin-root pin holds boot until
+  the rotation chain is replayed from the seed, lost update nonces refuse
+  older orders, a lost journal holds shared apps until caught up. Needs an
+  endorsed box release.
 - **App "Back up now" (2026-10-15):** the box never mounted `/api/backups/<id>`,
   so every client's archive fetch 404'd; now mounted (owner sessions only).
   The webapp fetches it with the session and saves the Blob, like iOS/Android.

@@ -390,9 +390,11 @@ export function buildAccessSync(opts: AccessSyncOptions): AccessSync {
       await opts.journal.forget(ref);
     },
     start() {
-      // Apps other servers ran (as of the last run) wait for the list first.
+      // Apps other servers ran (as of the last run) wait for the list first;
+      // with the journal lost, which those were is unknown, so every one does.
+      const lost = opts.journal.wasLost();
       for (const ref of opts.apps()) {
-        if (shared(ref) && opts.journal.peers(ref).length > 0) opts.store.setCatchingUp(ref, true);
+        if (shared(ref) && (lost || opts.journal.peers(ref).length > 0)) opts.store.setCatchingUp(ref, true);
       }
       const every = (ms: number, f: () => Promise<void>) => {
         const t = setInterval(() => void f().catch(() => {}), ms);

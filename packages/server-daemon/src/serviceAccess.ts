@@ -65,6 +65,7 @@ import type { HttpRequest, HttpResponse } from "./runtime.js";
 import type { Principal, PrincipalResolver } from "./accessPrincipals.js";
 import type { AccessEntry } from "./accessJournal.js";
 import { serialFileWriter } from "./serialFileWriter.js";
+import { keepCorruptAside } from "./durableFile.js";
 
 const H = { "content-type": "application/json" };
 
@@ -232,24 +233,35 @@ type PersistShape = Record<string, Omit<ServiceAccessEntry, "roles"> & { roles?:
 export const ALLOW_LIST_CAP = 5000;
 
 /**
+ * The row that holds the mode of every app without a row of its own. Written
+ * only after the state file was lost: from then on an app nobody has set
+ * stays members-only (a service ref is never `*`).
+ */
+const DEFAULT_ROW = "*";
+
+/**
  * Persisted per-service access state — mode, allow-list, grants, ranks. Default
  * mode is `open`, so a service with no row behaves exactly as before this
- * feature. Who a signing key is (an account device, a co-manager) comes from
- * the {@link PrincipalResolver}; the account's people get default ranks the
- * admin can override per app (docs/service-access-gating.md "Account members").
+ * feature, unless the state file was ever lost (see {@link DEFAULT_ROW}). Who
+ * a signing key is (an account device, a co-manager) comes from the
+ * {@link PrincipalResolver}; the account's people get default ranks the admin
+ * can override per app (docs/service-access-gating.md "Account members").
  */
 export class ServiceAccessStore {
   private byService = new Map<string, ServiceAccessEntry>();
   private readonly statePath: string;
   private readonly legacyPath: string | null;
+  /** The mode of an app with no row: `restricted` once the state file was lost. */
+  private defaultMode: ServiceAccessMode = "open";
   /**
-   * M4 fail-open alert: set true when `load` hit absent/corrupt state and fell
-   * open (every service back to OPEN). Surfaced to the owner so a silent revert
-   * to OPEN is visible, not hidden. Distinguished from a genuinely-empty store.
+   * M4: set when `load` found the state file present but unreadable. Every app
+   * is then members-only (and stays so across restarts) until an admin opens
+   * it again; the file is kept aside and the owner told. Distinguished from a
+   * genuinely-empty store.
    */
-  private loadFellOpen = false;
-  private loadError: string | null = null;
-  private readonly onFailOpen?: (info: { error: string }) => void;
+  private loadFailedClosed = false;
+  private loadErrorMessage: string | null = null;
+  private readonly onCorrupt?: (info: { error: string }) => void;
 
   private readonly ownerAidHex: string | null;
   private principals: PrincipalResolver | null;
@@ -259,7 +271,7 @@ export class ServiceAccessStore {
   constructor(
     statePath = "/var/flagship/data/flagship-access/service-access.json",
     opts: {
-      onFailOpen?: (info: { error: string }) => void;
+      onCorrupt?: (info: { error: string }) => void;
       /**
        * The owner's stable AID. With no resolver it is the owner (an admin
        * device, master); with one, the resolver decides (a legacy device).
@@ -276,10 +288,10 @@ export class ServiceAccessStore {
   ) {
     this.statePath = statePath;
     // Changes land concurrently (requests, peers' hand-overs, the revocation
-    // poller); a torn file would fail open on the next boot.
+    // poller); a torn file would leave every app members-only on the next boot.
     this.persist = serialFileWriter(statePath, () => this.snapshot());
     this.legacyPath = opts.legacyPath ?? null;
-    this.onFailOpen = opts.onFailOpen;
+    this.onCorrupt = opts.onCorrupt;
     this.ownerAidHex = opts.ownerAidHex?.toLowerCase() ?? null;
     this.principals = opts.principals ?? null;
   }
@@ -338,14 +350,16 @@ export class ServiceAccessStore {
   async load(): Promise<void> {
     let raw: PersistShape;
     let fromLegacy = false;
+    let readPath = this.statePath;
     try {
-      raw = JSON.parse(await readFile(this.statePath, "utf8")) as PersistShape;
+      raw = parseAccessState(await readFile(this.statePath, "utf8"));
     } catch (e) {
       const code = (e as NodeJS.ErrnoException)?.code;
       let legacy: PersistShape | null = null;
       if (code === "ENOENT" && this.legacyPath) {
+        readPath = this.legacyPath;
         try {
-          legacy = JSON.parse(await readFile(this.legacyPath, "utf8")) as PersistShape;
+          legacy = parseAccessState(await readFile(this.legacyPath, "utf8"));
         } catch (le) {
           if ((le as NodeJS.ErrnoException)?.code !== "ENOENT") e = le;
         }
@@ -354,27 +368,37 @@ export class ServiceAccessStore {
         raw = legacy;
         fromLegacy = true;
       } else {
-        // A genuinely-absent file (first boot, no restricted service yet) is the
-        // normal empty case — NOT an alert. A PRESENT-but-corrupt file is the M4
-        // case: we fall open (so an existing OPEN service is never bricked) but
-        // RAISE a visible owner flag instead of failing silently.
-        const c = (e as NodeJS.ErrnoException)?.code;
         this.byService.clear();
-        this.loadFellOpen = c !== "ENOENT";
-        this.loadError = this.loadFellOpen ? String((e as Error)?.message ?? e) : null;
-        if (this.loadFellOpen) {
-          console.error(
-            `[service-access] state file unreadable (${this.loadError}); FAILING OPEN — restricted services revert to open until repaired`,
+        this.defaultMode = "open";
+        const c = (e as NodeJS.ErrnoException)?.code;
+        // A genuinely-absent file (first boot, no restricted service yet) is
+        // the normal empty case. A present-but-unreadable one is the M4 case:
+        // which apps were members-only is lost, so every app is members-only
+        // (allow-lists empty) until an admin opens it again. The default is
+        // written back at once so a restart can't fall open either.
+        this.loadFailedClosed = c !== "ENOENT";
+        this.loadErrorMessage = this.loadFailedClosed ? String((e as Error)?.message ?? e) : null;
+        if (this.loadFailedClosed) {
+          await keepCorruptAside(
+            readPath,
+            e,
+            "Every app on this server is members-only until you open it again; people you invited need inviting again.",
           );
-          this.onFailOpen?.({ error: this.loadError ?? "corrupt state" });
+          this.defaultMode = "restricted";
+          await this.persist().catch((we: Error) =>
+            console.error(`[service-access] couldn't write the members-only default: ${we.message}`),
+          );
+          this.onCorrupt?.({ error: this.loadErrorMessage ?? "corrupt state" });
         }
         return;
       }
     }
     this.byService.clear();
-    this.loadFellOpen = false;
-    this.loadError = null;
-    for (const [ref, e] of Object.entries(raw ?? {})) {
+    this.loadFailedClosed = false;
+    this.loadErrorMessage = null;
+    this.defaultMode = raw[DEFAULT_ROW]?.mode === "restricted" ? "restricted" : "open";
+    for (const [ref, e] of Object.entries(raw)) {
+      if (ref === DEFAULT_ROW) continue;
       if (!e || (e.mode !== "open" && e.mode !== "restricted")) continue;
       const allow = Array.isArray(e.allow)
         ? e.allow.filter((x): x is string => typeof x === "string").map((x) => x.toLowerCase())
@@ -396,18 +420,18 @@ export class ServiceAccessStore {
     }
   }
 
-  /** M4 — true iff the last load fell open because the state file was corrupt. */
-  failedOpen(): boolean {
-    return this.loadFellOpen;
+  /** M4 — true iff the last load found the state file unreadable (every app went members-only). */
+  failedClosed(): boolean {
+    return this.loadFailedClosed;
   }
 
-  /** M4 — the load error message when `failedOpen()`, else null. */
-  failOpenError(): string | null {
-    return this.loadError;
+  /** M4 — the load error message when `failedClosed()`, else null. */
+  loadError(): string | null {
+    return this.loadErrorMessage;
   }
 
   mode(serviceRef: string): ServiceAccessMode {
-    return this.byService.get(serviceRef)?.mode ?? "open";
+    return this.byService.get(serviceRef)?.mode ?? this.defaultMode;
   }
 
   /**
@@ -458,7 +482,7 @@ export class ServiceAccessStore {
   private entry(serviceRef: string): ServiceAccessEntry {
     let e = this.byService.get(serviceRef);
     if (!e) {
-      e = { mode: "open", allow: [], groups: {}, roles: emptyRoles() };
+      e = { mode: this.defaultMode, allow: [], groups: {}, roles: emptyRoles() };
       this.byService.set(serviceRef, e);
     }
     return e;
@@ -469,7 +493,9 @@ export class ServiceAccessStore {
     serviceRef: string,
   ): { mode: ServiceAccessMode; allow: string[]; groups: Record<string, string[]>; roles: MemberRoles } | null {
     const e = this.byService.get(serviceRef);
-    if (!e) return null;
+    if (!e) {
+      return this.defaultMode === "open" ? null : { mode: this.defaultMode, allow: [], groups: {}, roles: emptyRoles() };
+    }
     return {
       mode: e.mode,
       allow: [...e.allow],
@@ -823,11 +849,19 @@ export class ServiceAccessStore {
 
   private snapshot(): string {
     const out: PersistShape = {};
+    if (this.defaultMode !== "open") out[DEFAULT_ROW] = { mode: this.defaultMode, allow: [], groups: {} };
     for (const [ref, e] of this.byService) {
       out[ref] = { mode: e.mode, allow: e.allow, groups: e.groups, roles: e.roles };
     }
     return JSON.stringify(out);
   }
+}
+
+/** The state file's rows; anything but a JSON object is unreadable. */
+function parseAccessState(text: string): PersistShape {
+  const v = JSON.parse(text) as unknown;
+  if (!v || typeof v !== "object" || Array.isArray(v)) throw new Error("not an access-state object");
+  return v as PersistShape;
 }
 
 /** The override key of an account person. */
@@ -926,9 +960,13 @@ export class ServiceSessionStore {
         this.byToken.set(tok, entry);
         if (entry.secretId) this.bySecretId.set(entry.secretId, tok);
       }
-    } catch {
+    } catch (e) {
+      // No session is the closed side: everyone signs in again.
       this.byToken.clear();
       this.bySecretId.clear();
+      if ((e as NodeJS.ErrnoException)?.code !== "ENOENT") {
+        await keepCorruptAside(this.statePath, e, "Everyone signed in to an app on this server has to sign in again.");
+      }
     }
   }
 

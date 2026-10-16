@@ -31,7 +31,7 @@ import {
   type AppApiKeyScope,
 } from "@flagship/protocol";
 import { authorizeSensitiveOrder } from "./adminAuthorityLocal.js";
-import { writeFileDurable } from "./durableFile.js";
+import { keepCorruptAside, writeFileDurable } from "./durableFile.js";
 import type { SwkOps } from "./keyCustodian.js";
 import type { HttpRequest, HttpResponse } from "./runtime.js";
 
@@ -149,10 +149,17 @@ export class AppApiKeyStore implements ApiKeyAuthenticator {
       if ((e as NodeJS.ErrnoException).code === "ENOENT") return { dropped: 0 };
       throw e;
     }
-    const buf = Buffer.from(hexText, "hex");
-    if (buf.length < 12) throw new Error(`${this.path} is truncated`);
-    const plain = this.swk.openWithSwk({ nonce: buf.subarray(0, 12), ciphertext: buf.subarray(12) });
-    const parsed = JSON.parse(Buffer.from(plain).toString("utf8")) as { keys?: unknown };
+    let parsed: { keys?: unknown };
+    try {
+      const buf = Buffer.from(hexText, "hex");
+      if (buf.length < 12) throw new Error(`${this.path} is truncated`);
+      const plain = this.swk.openWithSwk({ nonce: buf.subarray(0, 12), ciphertext: buf.subarray(12) });
+      parsed = JSON.parse(Buffer.from(plain).toString("utf8")) as { keys?: unknown };
+    } catch (e) {
+      // Closed (no key works); set aside so the next save doesn't overwrite it.
+      await keepCorruptAside(this.path, e, "No app API key works until you make new ones.");
+      throw e;
+    }
     let dropped = 0;
     this.keys.clear();
     for (const raw of Array.isArray(parsed.keys) ? parsed.keys : []) {

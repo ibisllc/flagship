@@ -743,7 +743,7 @@ data-URI. Reuse the existing `qrSvg.ts` / `qrEncoder.js`.
 - **Random 128-bit invite ids** (M2 — drop the `hash(devicePub)` device-fingerprint leak baked into the id).
 - **Nonce-challenge + client-bind the establish-session cookie** (M3 — a captured 5-min visit proof currently
   mints a 12h freely-transferable bearer cookie).
-- **Fail-open alert** (M4 — owner-facing signal when access-state reverts to `open` unexpectedly).
+- **Corrupt access state fails closed** (M4 — an unreadable access-state file leaves every app members-only until an admin opens it again, is kept aside as `.corrupt-<ms>` and shows in Activity; it used to revert to `open` with an alert).
 - **Allow-list size cap + redeem/establish/knock rate-limits** (M5). **Poll `unknown`→`pending`** (L — kill
   the pageId oracle).
 

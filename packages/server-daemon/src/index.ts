@@ -1,8 +1,8 @@
 import { existsSync } from "node:fs";
 import { setDockerRepairedHook } from "./dockerHealth.js";
 import { readFile, rename, rm, stat } from "node:fs/promises";
-import { withFileLock, writeFileDurable } from "./durableFile.js";
-import { dirname, join } from "node:path";
+import { onCorruptState, withFileLock, writeFileDurable } from "./durableFile.js";
+import { basename, join } from "node:path";
 import { buildModelRedactor } from "./llm/modelPrivacy.js";
 import { X509Certificate } from "node:crypto";
 import {
@@ -224,8 +224,10 @@ import {
   fileCgkMarkerStore,
 } from "./cgkDepositConsumer.js";
 import {
+  AdminRootPinLostError,
   buildAdminRootRotationPoller,
   fileAdminRootPinStore,
+  recoverLostAdminRootPin,
   resolvePinnedAdminRoot,
 } from "./adminRootRotationConsumer.js";
 import { buildServerOrderHolder, type ServerOrderHolder } from "./serverOrderHolder.js";
@@ -583,6 +585,11 @@ async function main(): Promise<void> {
   // process; shares, migration, updates, backups and app changes all write to it.
   const activityLog = new ActivityLog(defaultActivityLogPath(dataDir));
   await activityLog.load().catch((e: Error) => console.warn(`[activity] load failed: ${e.message}`));
+  // A state file found unreadable is set aside and loaded closed; the owner
+  // sees it in Activity (reports made before this line are replayed).
+  onCorruptState((r) =>
+    activityLog.note("server.state.corrupt", `${basename(r.path)} couldn't be read and was set aside. ${r.effect}`, { ok: false }),
+  );
   // The owner-assigned front page (its own route below, and server backups).
   const frontPage = new FrontPageStore();
   await frontPage.load();
@@ -663,9 +670,34 @@ async function main(): Promise<void> {
   // anchor could have written this file (the rotation consumer verifies it).
   // (adminRootPinPath is hoisted above the re-home marker apply, which resets
   // the pin file once on a transfer so a giver-era pin can't win here.)
+  let adminRootSeedHex: string | undefined;
   if (cfg?.adminRootPub) {
     const seedHex = bytesToHexLocal(cfg.adminRootPub);
-    const pinned = await resolvePinnedAdminRoot(seedHex, fileAdminRootPinStore(adminRootPinPath));
+    adminRootSeedHex = seedHex;
+    let pinned: string | null = null;
+    try {
+      pinned = await resolvePinnedAdminRoot(seedHex, fileAdminRootPinStore(adminRootPinPath));
+    } catch (e) {
+      if (!(e instanceof AdminRootPinLostError)) throw e;
+      // Fail closed: the seed may be a root a recovery rotated away, so
+      // nothing that takes admin orders is wired until the chain has been
+      // replayed from the seed (verified hop by hop, as on a fresh box).
+      console.error("[daemon] admin-root pin was lost; rebuilding it from the rotation chain before serving");
+      for (;;) {
+        pinned = env.controlPlaneBaseUrl
+          ? await recoverLostAdminRootPin({
+              seedAdminRootHex: seedHex,
+              username: cfg.userId,
+              controlPlaneBaseUrl: env.controlPlaneBaseUrl,
+              pinStore: fileAdminRootPinStore(adminRootPinPath),
+              onLog: (m) => console.log(m),
+            })
+          : null;
+        if (pinned) break;
+        console.error("[daemon] couldn't fetch the admin-root rotation chain; retrying in 30 s");
+        await new Promise((r) => setTimeout(r, 30_000));
+      }
+    }
     if (pinned && pinned !== seedHex) {
       cfg = { ...cfg, adminRootPub: hexToBytes(pinned) };
       console.log(
@@ -910,6 +942,7 @@ async function main(): Promise<void> {
     const adminRotationPoller = buildAdminRootRotationPoller({
       username: cfg.userId,
       seedAdminRootHex: bytesToHexLocal(cfg.adminRootPub),
+      ...(adminRootSeedHex ? { recoverySeedHex: adminRootSeedHex } : {}),
       controlPlaneBaseUrl: env.controlPlaneBaseUrl,
       pinStore: fileAdminRootPinStore(adminRootPinPath),
       restart: () => restarts.request("admin root rotated; restarting to re-bind the authority anchor"),
@@ -2989,11 +3022,11 @@ async function wireRuntimeSurfaces(deps: {
   const screensHandle = buildScreensHttp({
     gate: sharesBundle?.gate ?? pairedSessions,
     shares: sharesBundle?.shares ?? null,
-    // An unreadable access state leaves every app members-only, as the proxy does.
+    // An unreadable access state leaves every app members-only (the store's own default).
     accessMode: (serviceId) => {
       const store = deps.serviceAccessRef.current;
       if (!store) return null;
-      return !store.failedOpen() && store.mode(serviceId) === "open" ? "open" : "members-only";
+      return store.mode(serviceId) === "open" ? "open" : "members-only";
     },
     appEgress: runtime.egress.appEgress,
     appCopy: appCopyTarget,
@@ -3349,9 +3382,9 @@ async function wireOwnerHandlers(deps: {
   // over its pinned pipe like the SWK; absent ⇒ bundle decrypt is unavailable
   // (the gating itself still works). Default mode is OPEN, so existing services
   // are unaffected until the owner restricts one.
-  // M4 — fail-open alert: if the access-state file is present-but-corrupt the
-  // store falls open (so an OPEN service is never bricked) but raises a visible
-  // owner-facing flag instead of failing silently.
+  // M4: if the access-state file is present but unreadable, every app is
+  // members-only until an admin opens it again (kept across restarts), the
+  // file is set aside and the owner sees it in Activity.
   // The account's devices, verified here (docs/service-access-gating.md
   // "Account members"): refreshed every 5 minutes, and when an unknown key signs.
   const accessDataDir = process.env.FLAGSHIP_DATA_DIR ?? "/var/flagship";
@@ -3386,9 +3419,9 @@ async function wireOwnerHandlers(deps: {
     legacyPath: "/var/flagship/service-access.json",
     principals: deps.accessPrincipals,
     ...(cfg.ownerAidPub ? { ownerAidHex: bytesToHexStr(cfg.ownerAidPub) } : {}),
-    onFailOpen: ({ error }) =>
+    onCorrupt: ({ error }) =>
       console.error(
-        `[daemon] ⚠️  service-access state corrupt (${error}); restricted services FELL OPEN — owner action required`,
+        `[daemon] service-access state corrupt (${error}); every app is members-only until an admin opens it again`,
       ),
   });
   await accessStore.load();
@@ -3774,10 +3807,9 @@ async function wireOwnerHandlers(deps: {
   runtime.setAppIdentity({
     resolveSession: buildAppSessionResolver({ sessions: sessionStore, access: accessStore }),
     deniedPage: accessWeb.maybeServeKnock,
-    // Fail closed: a state file that couldn't be read leaves every mode
-    // unknown, and an unknown app is members-only.
-    accessMode: (serviceId) =>
-      accessStore.failedOpen() ? null : accessStore.mode(serviceId) === "open" ? "open" : "members-only",
+    // Fail closed: a state file that couldn't be read leaves every app
+    // members-only until an admin opens it again (ServiceAccessStore.load).
+    accessMode: (serviceId) => (accessStore.mode(serviceId) === "open" ? "open" : "members-only"),
   });
   process.once("SIGTERM", () => deadMan.stop());
   process.once("SIGINT", () => deadMan.stop());

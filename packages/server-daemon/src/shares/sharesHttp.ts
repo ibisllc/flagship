@@ -17,7 +17,7 @@
  */
 import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { writeFileDurable } from "../durableFile.js";
+import { keepCorruptAside, writeFileDurable } from "../durableFile.js";
 import { join } from "node:path";
 import {
   parseServerShareAccept,
@@ -91,12 +91,15 @@ export class ShareSessionStore {
     try {
       const raw = JSON.parse(await readFile(this.path, "utf8")) as Record<string, { shareId?: unknown; expiresAt?: unknown }>;
       for (const [t, v] of Object.entries(raw)) {
-        if (typeof v.shareId === "string" && typeof v.expiresAt === "number" && v.expiresAt > this.now()) {
+        if (typeof v?.shareId === "string" && typeof v.expiresAt === "number" && v.expiresAt > this.now()) {
           this.byToken.set(t, { shareId: v.shareId, expiresAt: v.expiresAt });
         }
       }
     } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+      if ((e as NodeJS.ErrnoException).code === "ENOENT") return;
+      // No session is the closed side (co-managers sign in again), not a crash loop.
+      this.byToken.clear();
+      await keepCorruptAside(this.path, e, "People you shared this server with have to open it again from their app.");
     }
   }
 

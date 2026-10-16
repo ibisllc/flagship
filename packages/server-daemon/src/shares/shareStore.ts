@@ -7,7 +7,7 @@
  * owner's sensitive key on load, so a file edit can't add a share.
  */
 import { readFile } from "node:fs/promises";
-import { writeFileDurable } from "../durableFile.js";
+import { keepCorruptAside, writeFileDurable } from "../durableFile.js";
 import { join } from "node:path";
 import {
   parseServerShareAccept,
@@ -65,14 +65,16 @@ export class ShareStore {
 
   async load(): Promise<{ dropped: number }> {
     if (!this.path) return { dropped: 0 };
-    let raw: string;
+    let parsed: { active?: unknown[]; ended?: unknown[]; endsCursor?: unknown };
     try {
-      raw = await readFile(this.path, "utf8");
+      parsed = JSON.parse(await readFile(this.path, "utf8")) as typeof parsed;
+      if (!parsed || typeof parsed !== "object") throw new Error("not a share list");
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "ENOENT") return { dropped: 0 };
-      throw e;
+      // Closed, not a crash loop: no share is held until the owner shares again.
+      await keepCorruptAside(this.path, e, "Nobody you shared this server with can reach it until you share it again.");
+      return { dropped: 0 };
     }
-    const parsed = JSON.parse(raw) as { active?: unknown[]; ended?: unknown[]; endsCursor?: unknown };
     let dropped = 0;
     for (const r of Array.isArray(parsed.ended) ? parsed.ended : []) {
       const e = r as Partial<EndedShare>;

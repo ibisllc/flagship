@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -281,7 +281,7 @@ describe("ServiceAccessStore", () => {
     expect(raw[SERVICE].mode).toBe("restricted");
   });
 
-  it("overlapping changes all land and leave a whole file (a torn one fails open on reload)", async () => {
+  it("overlapping changes all land and leave a whole file (a torn one would leave every app members-only)", async () => {
     const path = join(mkdtempSync(join(tmpdir(), "sa-")), "service-access.json");
     const a = new ServiceAccessStore(path);
     await a.load();
@@ -289,7 +289,7 @@ describe("ServiceAccessStore", () => {
     await Promise.all(refs.map((r) => a.setMode(r, "restricted")));
     const b = new ServiceAccessStore(path);
     await b.load();
-    expect(b.failedOpen()).toBe(false);
+    expect(b.failedClosed()).toBe(false);
     for (const r of refs) expect(b.mode(r)).toBe("restricted");
   });
 });
@@ -1196,28 +1196,46 @@ describe("v2 — group binding + group-prune", () => {
   });
 });
 
-describe("v2 — M4 fail-open alert + M5 allow-list cap", () => {
-  it("M4 — a CORRUPT state file fails open AND raises the owner flag", async () => {
-    const path = join(mkdtempSync(join(tmpdir(), "sa-")), "service-access.json");
-    // First write a valid restricted state, then corrupt the file.
+describe("v2 — M4 corrupt state fails closed + M5 allow-list cap", () => {
+  it("M4 — a CORRUPT state file leaves every app members-only, across restarts, and raises the owner flag", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "sa-"));
+    const path = join(dir, "service-access.json");
+    // First write a valid state (one restricted, one open app), then corrupt the file.
     const a = new ServiceAccessStore(path);
     await a.load();
     await a.setMode(SERVICE, "restricted");
+    await a.setMode("alice--blog", "open");
     writeFileSync(path, "{ this is not json");
     let alerted: { error: string } | null = null;
-    const b = new ServiceAccessStore(path, { onFailOpen: (info) => (alerted = info) });
+    const b = new ServiceAccessStore(path, { onCorrupt: (info) => (alerted = info) });
     await b.load();
-    expect(b.failedOpen()).toBe(true);
+    expect(b.failedClosed()).toBe(true);
     expect(alerted).not.toBeNull();
-    expect(b.mode(SERVICE)).toBe("open"); // fell open
+    expect(b.mode(SERVICE)).toBe("restricted");
+    expect(b.mode("alice--blog")).toBe("restricted");
+    expect(b.mode("never-seen")).toBe("restricted");
+    // The unreadable file is kept for forensics.
+    expect(readdirSync(dir).some((f) => f.startsWith("service-access.json.corrupt-"))).toBe(true);
+    // A restart reads the members-only default back; an admin can still open one app.
+    const c = new ServiceAccessStore(path);
+    await c.load();
+    expect(c.failedClosed()).toBe(false);
+    expect(c.mode("alice--blog")).toBe("restricted");
+    await c.setMode("alice--blog", "open");
+    await c.addAllowed("alice--new", hex(friendAid.publicKey));
+    const d = new ServiceAccessStore(path);
+    await d.load();
+    expect(d.mode("alice--blog")).toBe("open");
+    expect(d.mode("alice--new")).toBe("restricted");
+    expect(d.mode(SERVICE)).toBe("restricted");
   });
 
   it("M4 — a genuinely-ABSENT file is the normal empty case (no alert)", async () => {
     const path = join(mkdtempSync(join(tmpdir(), "sa-")), "missing.json");
     let alerted = false;
-    const store = new ServiceAccessStore(path, { onFailOpen: () => (alerted = true) });
+    const store = new ServiceAccessStore(path, { onCorrupt: () => (alerted = true) });
     await store.load();
-    expect(store.failedOpen()).toBe(false);
+    expect(store.failedClosed()).toBe(false);
     expect(alerted).toBe(false);
   });
 

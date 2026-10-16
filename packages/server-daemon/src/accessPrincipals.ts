@@ -19,7 +19,6 @@
  * (device-admin-tier-spec §4.1).
  */
 import { readFile } from "node:fs/promises";
-import { dirname } from "node:path";
 import { writeFileDurable } from "./durableFile.js";
 import {
   DEVICE_SCOPES,

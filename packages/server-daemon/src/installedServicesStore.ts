@@ -10,8 +10,7 @@
  */
 
 import { readFile } from "node:fs/promises";
-import { dirname } from "node:path";
-import { writeFileDurable } from "./durableFile.js";
+import { keepCorruptAside, writeFileDurable } from "./durableFile.js";
 import type { SwkOps } from "./keyCustodian.js";
 import type { AppDataCredentials } from "./dataLayer/provisioner.js";
 import type { AppMembershipSnapshot } from "./membership.js";
@@ -61,11 +60,18 @@ export class SealedInstalledServicesStore implements InstalledServicesStore {
       if ((e as NodeJS.ErrnoException).code === "ENOENT") return [];
       throw e;
     }
-    const buf = Buffer.from(hex, "hex");
-    if (buf.length < 12) throw new Error("installed-services file is truncated");
-    const plain = this.swk.openWithSwk({ nonce: buf.subarray(0, 12), ciphertext: buf.subarray(12) });
-    const parsed = JSON.parse(Buffer.from(plain).toString("utf8")) as { v: number; services: PersistedService[] };
-    return Array.isArray(parsed.services) ? parsed.services : [];
+    try {
+      const buf = Buffer.from(hex, "hex");
+      if (buf.length < 12) throw new Error("installed-services file is truncated");
+      const plain = this.swk.openWithSwk({ nonce: buf.subarray(0, 12), ciphertext: buf.subarray(12) });
+      const parsed = JSON.parse(Buffer.from(plain).toString("utf8")) as { v: number; services: PersistedService[] };
+      return Array.isArray(parsed.services) ? parsed.services : [];
+    } catch (e) {
+      // Set aside before the next install overwrites it: it holds every
+      // app's database credentials.
+      await keepCorruptAside(this.path, e, "No app was started; the old list of apps was kept for recovery.");
+      throw e;
+    }
   }
 
   save(services: PersistedService[]): Promise<void> {
