@@ -510,8 +510,12 @@ async function onAdd(serviceRef) {
     if (linkEl) linkEl.value = r.link;
     $("sa-manual-hint")?.classList.toggle("hidden", !manual);
     await renderQrInto($("sa-qr"), r.link);
-    $("sa-share")?.addEventListener("click", () => shareIt(r.link));
-    $("sa-copy")?.addEventListener("click", () => copyIt(r.link));
+    // One handler each, for the newest link: a second invite must not also
+    // hand over the first one's link.
+    const share = $("sa-share");
+    if (share) share.onclick = () => shareIt(r.link);
+    const copy = $("sa-copy");
+    if (copy) copy.onclick = () => copyIt(r.link);
     if ($("sa-name")) $("sa-name").value = "";
     if ($("sa-photo")) $("sa-photo").value = "";
     if ($("sa-approve")) $("sa-approve").checked = false;
@@ -570,7 +574,9 @@ async function onFinalizeAccept(serviceRef) {
     if ($("sa-accept-input")) $("sa-accept-input").value = "";
     await renderPeople(serviceRef);
   } catch (e) {
-    if (status) { status.className = "mt-2 text-sm err-text"; status.textContent = humanError(e); }
+    // A pasted reply that isn't an acceptance code says so; anything else is the box's.
+    const text = e?.code === "bad-accept" ? e.message : humanError(e);
+    if (status) { status.className = "mt-2 text-sm err-text"; status.textContent = text; }
     throw e;
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = "Finalize & grant access"; }
