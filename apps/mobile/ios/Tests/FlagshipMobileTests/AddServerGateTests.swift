@@ -94,5 +94,49 @@ final class AddServerGateTests: XCTestCase {
         let issued = try XCTUnwrap(server.issuedAuthCodes.values.first)
         XCTAssertEqual(issued.adminRootPubKey, pub, "the recipe pins the account's existing admin root")
         XCTAssertEqual(Keystore.adminRootPubHex(), pub, "minting never replaces the admin root")
+
+        // `.com` refuses the code without the admin root's approval of it.
+        let approval = try XCTUnwrap(server.issuedAdminSignatures[issued.serial], "the issue carries the admin approval")
+        let root = try Curve25519.Signing.PublicKey(rawRepresentation: try XCTUnwrap(HexUtil.decode(pub)))
+        let code = try Self.authCode(issued)
+        XCTAssertTrue(root.isValidSignature(try XCTUnwrap(HexUtil.decode(approval)), for: try code.adminCanonicalBytes()))
+    }
+
+    // MARK: - what `.com` sees
+
+    /// A demo account pins no root, so its issue carries no admin approval
+    /// (`.com` keeps the demo account's IRK-only path).
+    func test_aDemoAccountIssuesWithoutAnAdminApproval() async throws {
+        Keystore.wipe()
+        try await Keystore.generateUMK(reason: "demo")
+        let server = MockFlagshipServerClient()
+        server.simulatedLatency = 0
+        let vm = CreateServerViewModel(
+            username: "harry", server: server, relay: MockQrRelayClient(),
+            adminRootSigner: { _ in XCTFail("a demo account never unseals an admin root"); throw AddServerRefused() },
+            isDemoAccount: true
+        )
+        vm.name = "home"
+        _ = try await vm.mintRecipeJSON()
+        let issued = try XCTUnwrap(server.issuedAuthCodes.values.first)
+        XCTAssertNil(issued.adminRootPubKey)
+        XCTAssertNil(server.issuedAdminSignatures[issued.serial])
+    }
+
+    /// `.com`'s 403 for a non-admin device reads as the apps' own sentence.
+    func test_theServersRefusalShowsTheSameSentence() {
+        let body = #"{"error":"Only an admin device of this account can add servers.","code":"add-server-admin-only"}"#
+        XCTAssertEqual(ScreensClientError.http(status: 403, message: body).localizedDescription, AddServerGate.adminOnlyMessage)
+    }
+
+    private static func authCode(_ w: AuthCodeWire) throws -> AuthCode {
+        AuthCode(
+            version: w.version, serial: w.serial, username: w.username, serverName: w.serverName,
+            serverDomain: w.serverDomain,
+            delegatedPubKey: try XCTUnwrap(HexUtil.decode(w.delegatedPubKey)),
+            userPubKey: try XCTUnwrap(HexUtil.decode(w.userPubKey)),
+            issuedAt: w.issuedAt, expiresAt: w.expiresAt,
+            adminRootPubKey: try w.adminRootPubKey.map { try XCTUnwrap(HexUtil.decode($0)) }
+        )
     }
 }

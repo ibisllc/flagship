@@ -170,6 +170,8 @@ public final class CreateServerViewModel {
     /// The admin root this device holds (its public key), or nil. A recipe
     /// pins it; a device without one is refused ([AddServerGate]).
     private let adminRootPubHex: @MainActor () -> String?
+    /// Unseals the admin root (one biometric) to approve the new server.
+    private let adminRootSigner: (String) async throws -> Curve25519.Signing.PrivateKey
     private let isDemoAccount: Bool
 
     public init(
@@ -185,10 +187,14 @@ public final class CreateServerViewModel {
         mailbox: any SecretMailboxClient = MockSecretMailboxClient(),
         sessionStore: any SessionStoring = SessionStore(),
         adminRootPubHex: @escaping @MainActor () -> String? = { Keystore.hasAdminRoot ? Keystore.adminRootPubHex() : nil },
+        adminRootSigner: @escaping (String) async throws -> Curve25519.Signing.PrivateKey = { reason in
+            try await Keystore.adminRootKey(reason: reason)
+        },
         isDemoAccount: Bool = false
     ) {
         self.username = username
         self.adminRootPubHex = adminRootPubHex
+        self.adminRootSigner = adminRootSigner
         self.isDemoAccount = isDemoAccount
         self.server = server
         self.relay = relay
@@ -418,6 +424,14 @@ public final class CreateServerViewModel {
             adminRootPubKey: adminRootHex.flatMap { HexUtil.decode($0) }
         )
         let acSig = try irk.signature(for: authCode.canonicalBytes())
+        // Adding a server is admin-only, and `.com` checks it: the admin root
+        // approves the AuthCode (which pins it), and the same unsealed key then
+        // signs the RCK and any restore order below. A demo account pins no
+        // root and signs with the IRK alone.
+        let adminKey: Curve25519.Signing.PrivateKey? = adminRootHex == nil
+            ? nil
+            : try await adminRootSigner("Add \(name) to your account")
+        let acAdminSig = try adminKey.map { try $0.signature(for: authCode.adminCanonicalBytes()) }
         try await server.issueAuthCode(.init(
             code: .init(
                 version: authCode.version,
@@ -431,7 +445,8 @@ public final class CreateServerViewModel {
                 expiresAt: authCode.expiresAt,
                 adminRootPubKey: authCode.adminRootPubKey.map { HexUtil.encode($0) }
             ),
-            signature: HexUtil.encode(acSig)
+            signature: HexUtil.encode(acSig),
+            adminSignature: acAdminSig.map { HexUtil.encode($0) }
         ))
 
         let rck = Curve25519.Signing.PrivateKey()
@@ -442,13 +457,9 @@ public final class CreateServerViewModel {
             rckPubHex: HexUtil.encode(rck.publicKey.rawRepresentation),
             issuedAt: rckIssuedAt
         )
-        // register-rck is a sensitive routing-authority operation. Accounts
-        // with a pinned admin root must sign it with that root; legacy
-        // accounts still use the IRK already unsealed above.
-        let rckSigner = Keystore.hasAdminRoot
-            ? try await Keystore.adminRootKey(reason: "Authorize routing for \(name)")
-            : irk
-        let rckSig = try rckSigner.signature(for: rckBytes)
+        // register-rck is a sensitive routing-authority operation and a step
+        // of adding a server: the admin root signs it (a demo account's IRK).
+        let rckSig = try (adminKey ?? irk).signature(for: rckBytes)
         try await server.registerRck(.init(
             request: .init(
                 username: username,
@@ -508,7 +519,8 @@ public final class CreateServerViewModel {
                 serverDomain: serverDomain, archiveId: restore.archiveId, bytes: restore.bytes,
                 sha256: restore.sha256, issuedAt: Int64(Date().timeIntervalSince1970 * 1000)
             )
-            let sig = try irk.signature(for: try order.canonicalBytes())
+            // An admin-pinned box takes a restore order only from the admin root.
+            let sig = try (adminKey ?? irk).signature(for: try order.canonicalBytes())
             pairingOrderJson = ServerBackupFormat.attachRestore(toPairingJson: json, order: order, signatureHex: HexUtil.encode(sig))
         }
 

@@ -1684,8 +1684,12 @@ public struct AccountBootstrapResponse: Codable, Equatable, Sendable {
 public struct AuthCodeIssueRequest: Codable, Equatable, Sendable {
     public let code: AuthCodeWire
     public let signature: String        // hex, IRK over canonical bytes
-    public init(code: AuthCodeWire, signature: String) {
-        self.code = code; self.signature = signature
+    /// hex, the admin root over `AuthCode.adminCanonicalBytes()`. Adding a
+    /// server is admin-only: `.com` refuses a code on an admin-pinned account
+    /// without it. Nil only for a demo account (no admin root pinned).
+    public let adminSignature: String?
+    public init(code: AuthCodeWire, signature: String, adminSignature: String? = nil) {
+        self.code = code; self.signature = signature; self.adminSignature = adminSignature
     }
 }
 
@@ -2320,6 +2324,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     /// test see whether a retry re-used the device or minted a second one.
     public private(set) var bootstrapDeviceIds: [String: [String]] = [:]
     public private(set) var issuedAuthCodes: [String: AuthCodeWire] = [:]   // serial → wire
+    public private(set) var issuedAdminSignatures: [String: String] = [:]   // serial → admin approval hex
     public private(set) var revokedAuthCodes: Set<String> = []        // serial set
     public private(set) var releasedServerNames: [ReleaseServerNameRequest] = [] // recorded releases
     public private(set) var revokedServers: [ServerRevocationRequest] = [] // recorded P13 kill-switch calls
@@ -2382,6 +2387,9 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public func issueAuthCode(_ req: AuthCodeIssueRequest) async throws {
         try await tick()
         issuedAuthCodes[req.code.serial] = req.code
+        if let adminSignature = req.adminSignature {
+            issuedAdminSignatures[req.code.serial] = adminSignature
+        }
     }
 
     public func registerRck(_ req: RckRegisterRequest) async throws {

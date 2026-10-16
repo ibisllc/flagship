@@ -297,6 +297,7 @@ public enum ScreensClientError: Error, LocalizedError, Sendable {
             return "Your connection to this box expired. Reconnect and try again."
         case .http(let s, let body):
             if let r = RateLimitedRefusal.from(status: s, body: body) { return r.message }
+            if AddServerRefusal.matches(status: s, body: body) { return AddServerRefusal.message }
             return Self.plainLanguage(forStatus: s)
         case .decoding:
             return "Something came back we couldn't read. Try again in a moment."

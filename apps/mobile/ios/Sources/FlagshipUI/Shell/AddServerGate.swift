@@ -1,6 +1,7 @@
 import SwiftUI
 import Flagship
 import FlagshipCore
+import FlagshipAPI
 
 /// Adding a server to the account (create one, co-manage someone's running
 /// server, take over a box, import a backup) is for the account's admin
@@ -12,7 +13,7 @@ import FlagshipCore
 /// recipe minting all ask this one rule. Mirrors the webapp's
 /// lib/addServerGate.js and Android's AddServerGate.
 public enum AddServerGate {
-    public static let adminOnlyMessage = "Only an admin device of this account can add servers."
+    public static let adminOnlyMessage = AddServerRefusal.message
 
     public static func allows(holdsAdminRoot: Bool, isDemoAccount: Bool) -> Bool {
         holdsAdminRoot || isDemoAccount

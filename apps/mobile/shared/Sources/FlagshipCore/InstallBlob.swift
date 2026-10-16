@@ -167,6 +167,23 @@ public struct AuthCode: Equatable, Sendable {
         }
         return Data(parts.joined(separator: "|").utf8)
     }
+
+    public static let adminCanonicalTag = "flagship/auth-code-admin/v1"
+
+    /// An admin device's approval of this new server: adding a server is
+    /// admin-only (owner rule 2026-10-16) and `.com` refuses an AuthCode on an
+    /// admin-pinned account without it. The admin root signs
+    /// `flagship/auth-code-admin/v1|<canonicalBytes()>`, which commits to the
+    /// `ar=` root the box will pin; an AuthCode without one has no admin form.
+    /// Pinned by packages/protocol/test-vectors/add-server/vectors.json.
+    public func adminCanonicalBytes() throws -> Data {
+        guard let ar = adminRootPubKey, ar.count == 32 else { throw AuthCodeAdminError.noAdminRoot }
+        return Data("\(AuthCode.adminCanonicalTag)|".utf8) + canonicalBytes()
+    }
+}
+
+public enum AuthCodeAdminError: Error, Equatable {
+    case noAdminRoot
 }
 
 public enum UsernameClaim {
