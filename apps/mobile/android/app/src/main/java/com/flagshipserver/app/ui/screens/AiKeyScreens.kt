@@ -593,6 +593,8 @@ fun AiKeysManagerScreen(
         if (showForm) {
             AiKeyEntryForm(
                 confirmLabel = "Save key",
+                // Settings always saves the key on this device, so no toggle.
+                showSaveToggle = false,
                 onSubmit = { provider, apiKey, label, baseUrl, _, relay ->
                     if (vm.add(provider, apiKey, label, baseUrl, relay)) showForm = false
                 },
