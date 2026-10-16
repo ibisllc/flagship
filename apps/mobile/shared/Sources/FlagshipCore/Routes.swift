@@ -37,6 +37,16 @@ public enum HomeRoute: Hashable, Sendable {
         if case .provisionServerForBuilder(let link) = self { return link }
         return nil
     }
+
+    /// The flows that bring a server into the account (create, take over,
+    /// co-manage, import a backup): only an admin device of the account may
+    /// open them.
+    public var addsServerToAccount: Bool {
+        switch self {
+        case .provisionServer, .provisionServerForBuilder, .transferAcquirer, .acceptShare, .importBackup: return true
+        case .serverDetail, .installProgress, .sharedServer, .sharedApp: return false
+        }
+    }
 }
 
 public enum AppsRoute: Hashable, Sendable {

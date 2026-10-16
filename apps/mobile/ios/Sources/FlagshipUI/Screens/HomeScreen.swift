@@ -197,10 +197,10 @@ public struct HomeScreen: View {
     /// account never lacks an admin device. A demo account's device stands in
     /// for its owner (it holds no keys; the operator runs the account).
     public static func showsAddServer(holdsAdminRoot: Bool, isDemoAccount: Bool) -> Bool {
-        holdsAdminRoot || isDemoAccount
+        AddServerGate.allows(holdsAdminRoot: holdsAdminRoot, isDemoAccount: isDemoAccount)
     }
 
-    static let addServersAdminOnly = "Only an admin device of this account can add servers."
+    static let addServersAdminOnly = AddServerGate.adminOnlyMessage
 
     /// What the empty Home says, and whether it carries Add/Import a server.
     struct EmptyState: Equatable {

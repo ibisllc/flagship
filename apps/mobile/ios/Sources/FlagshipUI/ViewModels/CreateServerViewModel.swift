@@ -167,6 +167,10 @@ public final class CreateServerViewModel {
     /// Pod session store — the create-time pairing token is persisted here so
     /// the BFF authenticates the moment the box claims the order.
     private let sessionStore: any SessionStoring
+    /// The admin root this device holds (its public key), or nil. A recipe
+    /// pins it; a device without one is refused ([AddServerGate]).
+    private let adminRootPubHex: @MainActor () -> String?
+    private let isDemoAccount: Bool
 
     public init(
         username: String,
@@ -179,9 +183,13 @@ public final class CreateServerViewModel {
         pairingDepositStore: PendingPairingDepositStore = PendingPairingDepositStore(),
         cgkDepositStore: PendingCgkDepositStore = PendingCgkDepositStore(),
         mailbox: any SecretMailboxClient = MockSecretMailboxClient(),
-        sessionStore: any SessionStoring = SessionStore()
+        sessionStore: any SessionStoring = SessionStore(),
+        adminRootPubHex: @escaping @MainActor () -> String? = { Keystore.hasAdminRoot ? Keystore.adminRootPubHex() : nil },
+        isDemoAccount: Bool = false
     ) {
         self.username = username
+        self.adminRootPubHex = adminRootPubHex
+        self.isDemoAccount = isDemoAccount
         self.server = server
         self.relay = relay
         self.bootUnlock = bootUnlock
@@ -352,6 +360,13 @@ public final class CreateServerViewModel {
     /// receives a byte-identical `SignedInstallBlob`, just over a different
     /// transport. Configure the design fields, then call this.
     func mintInstallBlob() async throws -> SignedInstallBlob {
+        // Only an admin device of the account adds servers, and only opening
+        // the account mints an admin root: refuse here, before any prompt or
+        // `.com` call, rather than mint a recipe the account's admins don't
+        // anchor.
+        let adminRootHex = try AddServerGate.recipeAdminRootPin(
+            adminRootPubHex: adminRootPubHex(), isDemoAccount: isDemoAccount
+        )
         // Phase 2 — the username claim moved to OpenAccountViewModel
         // (the open-account step). By the time we mint a server the
         // account already exists: the UMK was generated and the
@@ -389,9 +404,8 @@ public final class CreateServerViewModel {
         // Slice D (D-1) — pin the account's ADMIN MASTER ROOT into the AuthCode so
         // a fresh box learns its authority anchor at first boot. Biometric-free
         // (the pub is device-local but not secret); still IRK-signature-covered
-        // via the AuthCode signature below. Absent on pre-D accounts (canonical
-        // bytes stay byte-identical).
-        let adminRootHex = Keystore.adminRootPubHex()
+        // via the AuthCode signature below. Absent only on a demo account
+        // (canonical bytes stay byte-identical).
         let authCode = AuthCode(
             serial: SerialGen.random(),
             username: username,

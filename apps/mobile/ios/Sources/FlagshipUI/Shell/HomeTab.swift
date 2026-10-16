@@ -147,10 +147,7 @@ public struct HomeTab: View {
                     awaitingEntitlement: app.serversAwaiting(.entitlement),
                     statusPaused: app.accountStatusPaused,
                     serverListLocked: app.isServerListLocked,
-                    canAddServers: HomeScreen.showsAddServer(
-                        holdsAdminRoot: Keystore.hasAdminRoot || GymSeams.forceAdminRoot,
-                        isDemoAccount: app.isDemoAccount
-                    ),
+                    canAddServers: AddServerGate.allows(app),
                     onOpenPod: { pod in path.append(.serverDetail(podId: pod.podId)) },
                     onCancelServer: { pod in
                         Task { await cancelPendingServer(pod: pod, server: server, app: app, toasts: toasts) }
@@ -303,8 +300,20 @@ public struct HomeTab: View {
         if let recovery { app.hasCloudRecovery = recovery }
     }
 
+    /// Every way into a flow that adds a server (Home's menu, a share,
+    /// transfer or Studio link, a push) lands here, so a device that isn't an
+    /// admin device of the account gets the short refusal instead of the flow.
     @ViewBuilder
     private func destination(for route: HomeRoute) -> some View {
+        if route.addsServerToAccount, !AddServerGate.allows(app) {
+            AddServerAdminOnlyScreen()
+        } else {
+            flowDestination(for: route)
+        }
+    }
+
+    @ViewBuilder
+    private func flowDestination(for route: HomeRoute) -> some View {
         switch route {
         case .serverDetail(let podId):
             // Pending pods get the placeholder detail page; online pods
@@ -669,7 +678,8 @@ struct CreateServerContainer: View {
                     server: serverClient,
                     relay: qrRelay,
                     mailbox: mailbox,
-                    sessionStore: sessionStore
+                    sessionStore: sessionStore,
+                    isDemoAccount: app.isDemoAccount
                 )
             }
         }

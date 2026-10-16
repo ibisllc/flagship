@@ -203,6 +203,8 @@ final class CreateServerNoReclaimTests: XCTestCase {
         // Account already open: UMK present (open-account ran earlier).
         Keystore.wipe()
         try await Keystore.generateUMK(reason: "test open account")
+        // Only an admin device adds servers: open-account sealed one here.
+        try await Keystore.generateAdminRoot(reason: "test open account")
 
         let server = MockFlagshipServerClient()
         server.simulatedLatency = 0
@@ -244,6 +246,8 @@ final class CreateServerNoReclaimTests: XCTestCase {
         // UMK — i.e. the UMK is the same one open-account created.
         Keystore.wipe()
         try await Keystore.generateUMK(reason: "test open account")
+        // Only an admin device adds servers: open-account sealed one here.
+        try await Keystore.generateAdminRoot(reason: "test open account")
         let expectedIrk = try await Keystore.deriveIRK(reason: "expected")
         let expectedPubHex = HexUtil.encode(expectedIrk.publicKey.rawRepresentation)
 
