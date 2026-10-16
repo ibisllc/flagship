@@ -435,11 +435,7 @@ export async function deriveAccountIdFromSeed(umkSeed) {
 }
 
 export async function deriveAccountDeviceKeyFromSeed(umkSeed, accountId, deviceId) {
-  if (typeof accountId !== "string" || !accountId || accountId.includes("|") ||
-      typeof deviceId !== "string" || !/^[0-9a-f]{32}$/.test(deviceId)) {
-    throw new Error("invalid account-scoped device key coordinates");
-  }
-  return irkFromInfoSeed(umkSeed, accountDeviceInfo(accountId, deviceId));
+  return deriveAdminRootFromSeed(await deriveAccountDeviceSeedFromSeed(umkSeed, accountId, deviceId));
 }
 
 export async function deriveAccountDeviceSeedFromSeed(umkSeed, accountId, deviceId) {
@@ -447,7 +443,62 @@ export async function deriveAccountDeviceSeedFromSeed(umkSeed, accountId, device
       typeof deviceId !== "string" || !/^[0-9a-f]{32}$/.test(deviceId)) {
     throw new Error("invalid account-scoped device key coordinates");
   }
-  return hkdf32(umkSeed, accountDeviceInfo(accountId, deviceId));
+  const stored = await loadAccountDeviceSeed(umkSeed, accountId, deviceId);
+  return stored ?? hkdf32(umkSeed, accountDeviceInfo(accountId, deviceId));
+}
+
+// A browser that joins an account with a pairing code picks its device key
+// before it holds the account key (the admin vouches for that key first), so
+// the key can't be derived from the account key afterwards. It is kept here,
+// wrapped under the account key, and read back by the two functions above.
+const ACCOUNT_DEVICE_SEED_KEY = "accountDeviceSeed";
+const ACCOUNT_DEVICE_SEED_WRAP_INFO = "flagship.account-device-seed-wrap.v1";
+const accountDeviceSeedCache = new Map();
+
+function accountDeviceSeedRecordKey(accountId, deviceId) {
+  return `${ACCOUNT_DEVICE_SEED_KEY}.${accountId.toLowerCase()}|${deviceId}`;
+}
+
+async function accountDeviceSeedWrapKey(umkSeed) {
+  const raw = await hkdf32(umkSeed, ACCOUNT_DEVICE_SEED_WRAP_INFO);
+  return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+}
+
+/** Keep a device key picked before the account key was known (a pairing-code
+ *  join), wrapped under the account key. */
+export async function persistAccountDeviceSeed(umkSeed, accountId, deviceId, deviceSeed) {
+  if (!(deviceSeed instanceof Uint8Array) || deviceSeed.length !== 32) {
+    throw new Error("device seed must be a 32-byte Uint8Array");
+  }
+  const recordKey = accountDeviceSeedRecordKey(accountId, deviceId);
+  const kek = await accountDeviceSeedWrapKey(umkSeed);
+  const nonce = randomBytes(AES_NONCE_BYTES);
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, kek, deviceSeed));
+  await dbPut(recordKey, { version: 1, nonce: bytesToHex(nonce), ciphertext: bytesToHex(ct) });
+  accountDeviceSeedCache.set(recordKey, { umkHex: bytesToHex(umkSeed), seed: deviceSeed.slice() });
+}
+
+async function loadAccountDeviceSeed(umkSeed, accountId, deviceId) {
+  const recordKey = accountDeviceSeedRecordKey(accountId, deviceId);
+  const umkHex = bytesToHex(umkSeed);
+  const cached = accountDeviceSeedCache.get(recordKey);
+  if (cached && cached.umkHex === umkHex) return cached.seed ? cached.seed.slice() : null;
+  if (typeof indexedDB === "undefined") return null;
+  try {
+    const blob = await dbGet(recordKey);
+    if (!blob) {
+      accountDeviceSeedCache.set(recordKey, { umkHex, seed: null });
+      return null;
+    }
+    const kek = await accountDeviceSeedWrapKey(umkSeed);
+    const seed = new Uint8Array(await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: hexToBytes(blob.nonce) }, kek, hexToBytes(blob.ciphertext),
+    ));
+    accountDeviceSeedCache.set(recordKey, { umkHex, seed: seed.slice() });
+    return seed;
+  } catch {
+    return null;
+  }
 }
 
 /** Sign canonical-bytes with this device's account device key. */

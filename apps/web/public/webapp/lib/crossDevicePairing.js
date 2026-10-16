@@ -46,13 +46,45 @@
 import { controlApex } from "./apex.js";
 import { throwIfRateLimited } from "./rateLimited.js";
 import { isLocalPassphrase } from "./localPassphrase.js";
-import { persistAdminRootSeed as ksPersistAdminRootSeed } from "../keystore.js";
+import {
+  canonicalDeviceSelfProfile,
+  deriveDeviceDirectoryKey,
+  encryptProfile,
+  validateProfileDisplayName,
+} from "./accountMetadata.js";
+import {
+  adminRootPubHex as ksAdminRootPubHex,
+  persistAccountDeviceSeed as ksPersistAccountDeviceSeed,
+  persistAdminRootSeed as ksPersistAdminRootSeed,
+} from "../keystore.js";
 
 const APEX = controlApex();
 
 /** Canonical-bytes tag for the device-admit envelope. MUST match
  *  packages/protocol/src/auth.ts TAG_DEVICE_ADMIT and the Worker. */
 export const TAG_DEVICE_ADMIT = "flagship/device-admit/v2";
+
+/** The device grant every added device carries (`.com` refuses an admit
+ *  without one). MUST match packages/protocol/src/deviceCapability.ts. */
+export const TAG_DEVICE_GRANT = "flagship/device-capability-grant/v2";
+
+/** Canonical scope order (the index is the canonical-bytes sort key).
+ *  Mirrors DEVICE_SCOPES in packages/protocol/src/deviceCapability.ts. */
+export const DEVICE_SCOPE_ORDER = [
+  "browse", "install-service", "vibe-code", "add-device", "manage-services",
+  "revoke-others", "demo-provision", "admin", "view-directory",
+];
+
+/** A device added without the admin root: it uses everything, administers
+ *  nothing. Same list on iOS and Android. */
+export const MEMBER_DEVICE_SCOPES = ["browse", "install-service", "vibe-code", "view-directory"];
+
+/** Device grants last 90 days, like every other client's. */
+export const DEVICE_GRANT_TTL_MS = 90 * 24 * 3_600_000;
+
+/** Shown in place of Add device on a device without the admin root (the
+ *  `add-device` scope is an admin's; docs/v2-device-addressing-and-real-ticket.md §2). */
+export const ADD_DEVICE_ADMIN_ONLY = "Only an admin device of this account can add devices.";
 
 /** The relay session's single-use TTL. Short by design (Safeguard 1):
  *  a leaked screenshot of the QR is useless once the session expires.
@@ -254,6 +286,44 @@ export async function verifyAdmit({ admit, admitSigHex, irkPubHex, verifyEd25519
 }
 
 /* ─────────────────────────────────────────────────────────────────────
+ * Device grant — the admin signs it for the new device's key (the account
+ * key for a member device, the admin root for a promoted one); the new
+ * device presents it with the admit.
+ * ───────────────────────────────────────────────────────────────────── */
+
+/** Build the grant for the device the admit names. Pure.
+ *  @param {{ admit: object, promoted: boolean, grantId?: string, ttlMs?: number }} args */
+export function buildDeviceGrant({ admit, promoted, grantId, ttlMs = DEVICE_GRANT_TTL_MS }) {
+  const id = grantId ?? crypto.randomUUID().toLowerCase();
+  return {
+    grantId: id,
+    username: admit.username,
+    deviceId: admit.deviceId,
+    devicePubHex: admit.newDevicePubHex,
+    scopes: promoted ? DEVICE_SCOPE_ORDER.slice() : MEMBER_DEVICE_SCOPES.slice(),
+    issuedAt: admit.issuedAt,
+    expiresAt: admit.issuedAt + ttlMs,
+    signerRoot: promoted ? "admin-root" : "membership",
+  };
+}
+
+/** Canonical bytes of a device grant: `tag|grantId|username|deviceId|devicePubHex|scopes|issuedAt|expiresAt`,
+ *  scopes sorted by {@link DEVICE_SCOPE_ORDER}. */
+export function deviceGrantCanonicalBytes(grant) {
+  const scopes = [...grant.scopes].sort((a, b) => DEVICE_SCOPE_ORDER.indexOf(a) - DEVICE_SCOPE_ORDER.indexOf(b));
+  return canonical([
+    TAG_DEVICE_GRANT,
+    grant.grantId,
+    grant.username,
+    grant.deviceId,
+    String(grant.devicePubHex).toLowerCase(),
+    scopes.join(","),
+    grant.issuedAt,
+    grant.expiresAt,
+  ]);
+}
+
+/* ─────────────────────────────────────────────────────────────────────
  * Account IRK-pub resolution — the incoming side fetches the account's
  * CURRENTLY-REGISTERED IRK pub to verify the admit under it. We use the
  * /api/users/:u/pubkey-cert binding (the only endpoint that returns the
@@ -450,20 +520,34 @@ export async function runAdminAddDevice(deps) {
     bytesToHex: toHex,
   });
 
-  // Seal { umkSeed, admit, admitSig } over the relay's AEAD channel. The
-  // umkSeed is the key material iCloud would otherwise sync. When promoting,
-  // `wrappedAdminRoot` (the admin-root seed hex) rides in the SAME bundle,
-  // protected by the SAME relay AEAD seal as the UMK — the new device unwraps
-  // it and stores it device-local to become a bare-root admin.
+  // The device grant: signed by the account key for a member device, by the
+  // admin root when promoting (`.com` checks it under the matching key).
+  const grant = buildDeviceGrant({ admit, promoted: promoteAdmin, grantId: deps.grantId });
+  const grantBytes = deviceGrantCanonicalBytes(grant);
+  const grantSig = promoteAdmin
+    ? await deps.signWithAdminRoot(adminRootSeed, grantBytes)
+    : await deps.signWithIrk(seed, grantBytes);
+  const irkPubHex = String(deps.irkPubHex ?? "").toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(irkPubHex)) throw new Error("runAdminAddDevice: account key unavailable");
+
+  // Seal the bundle over the relay's AEAD channel. The umkSeed is the key
+  // material iCloud would otherwise sync. When promoting, `wrappedAdminRoot`
+  // (the admin-root seed hex) rides in the SAME bundle, protected by the SAME
+  // relay AEAD seal as the UMK — the new device unwraps it and stores it
+  // device-local to become a bare-root admin. Same shape on iOS and Android
+  // (packages/protocol/test-vectors/device-pairing).
   const bundle = {
     umkSeedHex: toHex(seed),
     admit,
     admitSig: admitSigHex,
+    irkPubHex,
+    grant,
+    grantSignature: toHex(grantSig),
     ...(promoteAdmin && adminRootSeed ? { wrappedAdminRoot: toHex(adminRootSeed) } : {}),
   };
   await relay.seal(new TextEncoder().encode(JSON.stringify(bundle)));
   relay.close?.();
-  return { outcome: "sealed", admit, admitSigHex, promotedAdmin: promoteAdmin };
+  return { outcome: "sealed", admit, admitSigHex, grant, promotedAdmin: promoteAdmin };
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -513,39 +597,65 @@ export function parseSealedBundle(plaintext, opts = {}) {
       throw new Error("sealed bundle wrappedAdminRoot must be 32 bytes");
     }
   }
-  return { seed, admit: parsed.admit, admitSigHex: parsed.admitSig, adminRootSeed };
+  const grant = parsed.grant;
+  if (!grant || typeof grant !== "object" || typeof parsed.grantSignature !== "string" ||
+      typeof grant.grantId !== "string" || typeof grant.username !== "string" ||
+      typeof grant.deviceId !== "string" || typeof grant.devicePubHex !== "string" ||
+      !Array.isArray(grant.scopes) || typeof grant.issuedAt !== "number" ||
+      typeof grant.expiresAt !== "number" || typeof grant.signerRoot !== "string") {
+    throw new Error(BUNDLE_OUT_OF_DATE);
+  }
+  return {
+    seed,
+    admit: parsed.admit,
+    admitSigHex: parsed.admitSig,
+    adminRootSeed,
+    grant,
+    grantSignatureHex: parsed.grantSignature.toLowerCase(),
+    irkPubHex: typeof parsed.irkPubHex === "string" ? parsed.irkPubHex.toLowerCase() : null,
+  };
 }
+
+/** A bundle from an app that predates device grants: `.com` would refuse it. */
+export const BUNDLE_OUT_OF_DATE =
+  "The device showing the code needs an update before it can add devices. Update its Flagship app and try again.";
 
 /** Run the incoming side end-to-end once the relay has delivered the
  *  sealed bundle.
  *
  *  Steps:
- *    1. Parse the sealed bundle → { seed, admit, admitSig }.
- *    2. Resolve the account's CURRENT IRK pub and VERIFY the admit under
- *       it (reject a bad vouch BEFORE persisting anything).
- *    3. Mint this profile's FRESH device key — wrap the recovered UMK
- *       under the passphrase the owner chose (`localPassphrase`), in the
- *       NEW profile's keystore record (per-profile keying; NEVER clobbers
- *       an existing profile).
- *    4. Derive this device's IRK pub (from the seed); the admit's
- *       `newDevicePubHex` MUST equal it (the admin vouched for THIS key).
- *    5. Register push (the incoming device's token) + POST
- *       /api/users/:u/devices/admit (server admits it QUARANTINED).
+ *    1. Parse the sealed bundle → { seed, admit, admitSig, grant, … }.
+ *    2. The admit and the grant MUST name THIS device's fresh key and id.
+ *    3. Resolve the account's CURRENT IRK pub and VERIFY the admit, then the
+ *       grant (under the account key, or the sealed admin root when the admin
+ *       promoted this device). A bad vouch never touches the keystore.
+ *    4. Register push, sign this device's encrypted name, and POST
+ *       /api/users/:u/devices/admit (the server admits it QUARANTINED). Only
+ *       once `.com` has accepted the device is anything stored.
+ *    5. Persist the UMK under a NEW profile (per-profile keying; NEVER
+ *       clobbers an existing one) wrapped under the passphrase the owner
+ *       chose, keep the device key and any sealed admin root, unlock.
  *    6. addProfile(setActive) + return the quarantine surface.
  *
  *  All side-effecting collaborators injected → unit-testable.
  *
  *  @param {{
  *    bundlePlaintext: string|Uint8Array,
- *    deviceIrkPubHex: string,                    THIS profile's fresh device IRK pub hex
+ *    deviceIrkPubHex: string,                    THIS device's fresh device key (Ed25519 pub hex)
+ *    deviceId: string,
+ *    deviceSeed?: Uint8Array,                    that key's 32-byte seed, kept under the account key
+ *    signWithDevice: (bytes: Uint8Array) => Promise<Uint8Array>,
+ *    deviceDisplayName?: string,
  *    setActiveKeystoreProfile?: (cloudName: string) => unknown,
  *    persistSeedForProfile: (seed: Uint8Array, cloudName: string, passphrase: string) => Promise<unknown>,
+ *    persistAccountDeviceSeed?: (umkSeed: Uint8Array, accountId: string, deviceId: string, deviceSeed: Uint8Array) => Promise<void>,
  *    persistAdminRootSeed?: (umkSeed: Uint8Array, adminSeed: Uint8Array) => Promise<void>,
+ *    adminRootPubHexOf?: (adminSeed: Uint8Array) => Promise<string>,
  *    unlockSession: (seed: Uint8Array, username?: string) => Promise<void>|void,
  *    fetchAccountIrkPubHex?: (args: object) => Promise<string>,
  *    verifyAdmit?: (args: object) => Promise<boolean>,
  *    verifyEd25519: (pub: Uint8Array, sig: Uint8Array, bytes: Uint8Array) => Promise<boolean>,
- *    registerPush: (args: { username: string, deviceIrkPubHex: string }) => Promise<{ request: object, signatureHex: string }>,
+ *    registerPush: (args: { username: string, deviceId: string, deviceIrkPubHex: string }) => Promise<{ request: object, signatureHex: string }>,
  *    postDeviceAdmit?: (args: object) => Promise<object>,
  *    addProfile?: (profile: object, opts?: object) => unknown,
  *    setUsername?: (username: string) => void,
@@ -556,7 +666,7 @@ export function parseSealedBundle(plaintext, opts = {}) {
  *    baseUrl?: string,
  *    now?: () => number,
  *  }} deps
- *  @returns {Promise<{ username: string, quarantine: object, admitResponse: object }>}
+ *  @returns {Promise<{ username: string, quarantine: object, admitResponse: object, promotedAdmin: boolean }>}
  */
 export async function runIncomingJoin(deps) {
   const toHex = deps.bytesToHex || defaultBytesToHex;
@@ -566,19 +676,22 @@ export async function runIncomingJoin(deps) {
   if (!isLocalPassphrase(deps.localPassphrase)) {
     throw new Error("choose a passphrase of 8+ characters to lock this browser");
   }
+  if (typeof deps.signWithDevice !== "function") throw new Error("incoming device key unavailable");
   const now = deps.now ?? (() => Date.now());
   const fetchPub = deps.fetchAccountIrkPubHex || fetchAccountIrkPubHex;
   const verify = deps.verifyAdmit || verifyAdmit;
   const post = deps.postDeviceAdmit || postDeviceAdmit;
+  const deviceDisplayName = validateProfileDisplayName(deps.deviceDisplayName ?? "This browser");
 
   // 1 — parse the sealed bundle (carries the OPTIONAL sealed admin root when
   // the admin promoted this device, Slice D D-4).
-  const { seed, admit, admitSigHex, adminRootSeed } = parseSealedBundle(deps.bundlePlaintext, { hexToBytes });
+  const { seed, admit, admitSigHex, adminRootSeed, grant, grantSignatureHex } =
+    parseSealedBundle(deps.bundlePlaintext, { hexToBytes });
   const username = admit?.username;
   if (!username) throw new Error("admit missing username");
 
-  // 4 (checked early) — the admin must have vouched for THIS device's
-  // freshly-minted key. Reject a bundle aimed at a different device.
+  // 2 — the admin must have vouched for THIS device's freshly-minted key.
+  // Reject a bundle aimed at a different device.
   const myPub = String(deps.deviceIrkPubHex || "").toLowerCase();
   if (!/^[0-9a-f]{64}$/.test(myPub)) {
     throw new Error("incoming device key unavailable");
@@ -586,9 +699,14 @@ export async function runIncomingJoin(deps) {
   if (String(admit.newDevicePubHex).toLowerCase() !== myPub || admit.deviceId !== deps.deviceId) {
     throw new Error("admit is for a different device — refusing");
   }
+  if (String(grant.username).toLowerCase() !== String(username).toLowerCase() ||
+      grant.deviceId !== deps.deviceId || String(grant.devicePubHex).toLowerCase() !== myPub ||
+      !grant.scopes.includes("view-directory")) {
+    throw new Error("the device grant is for a different device — refusing");
+  }
 
-  // 2 — resolve the account IRK pub + VERIFY the admit under it BEFORE
-  // persisting anything. A bad vouch never touches the keystore.
+  // 3 — resolve the account IRK pub + VERIFY the admit and the grant BEFORE
+  // anything is sent or stored.
   const irkPubHex = await fetchPub({
     username,
     fetch: deps.fetch,
@@ -602,14 +720,77 @@ export async function runIncomingJoin(deps) {
     hexToBytes,
   });
   if (!ok) throw new Error("admit signature did not verify under the account key");
+  let grantAuthorityHex = null;
+  if (grant.signerRoot === "membership") grantAuthorityHex = irkPubHex;
+  else if (grant.signerRoot === "admin-root" && adminRootSeed) {
+    grantAuthorityHex = await (deps.adminRootPubHexOf || ksAdminRootPubHex)(adminRootSeed);
+  }
+  let grantOk = false;
+  if (grantAuthorityHex) {
+    try {
+      grantOk = await deps.verifyEd25519(
+        hexToBytes(grantAuthorityHex),
+        hexToBytes(grantSignatureHex),
+        deviceGrantCanonicalBytes(grant),
+      );
+    } catch {
+      grantOk = false;
+    }
+  }
+  if (!grantOk) throw new Error("the device grant did not verify — refusing");
 
-  // 3 — persist the recovered UMK under a NEW profile (per-profile
-  // keying; NEVER clobbers an existing one). Point the keystore at this
-  // cloud FIRST so the wrap lands under its own record.
+  // 4 — register THIS device's push token and sign its private name (both
+  // with the fresh device key), then POST the admit. `.com` admits it
+  // QUARANTINED; until it has, nothing is stored here.
+  const { request, signatureHex } = await deps.registerPush({
+    username,
+    deviceId: admit.deviceId,
+    deviceIrkPubHex: myPub,
+  });
+  const profileIssuedAt = now();
+  const encrypted = await encryptProfile(deviceDisplayName, await deriveDeviceDirectoryKey(seed), {
+    accountId: username,
+    deviceId: admit.deviceId,
+    recordType: "device-self-profile",
+    revision: 1,
+    keyVersion: 1,
+  });
+  const profileUnsigned = {
+    accountId: username,
+    deviceId: admit.deviceId,
+    revision: 1,
+    keyVersion: 1,
+    ...encrypted,
+    issuedAt: profileIssuedAt,
+    signerPubHex: myPub,
+  };
+  const profile = {
+    ...profileUnsigned,
+    signatureHex: toHex(await deps.signWithDevice(canonicalDeviceSelfProfile(profileUnsigned))),
+  };
+  const admitResponse = await post({
+    username,
+    admit,
+    admitSigHex,
+    grant,
+    grantSignatureHex,
+    profile,
+    request,
+    signatureHex,
+    fetch: deps.fetch,
+    baseUrl: deps.baseUrl,
+  });
+
+  // 5 — persist the recovered UMK under a NEW profile (per-profile keying;
+  // NEVER clobbers an existing one). Point the keystore at this cloud FIRST
+  // so the wrap lands under its own record.
   if (typeof deps.setActiveKeystoreProfile === "function") {
     deps.setActiveKeystoreProfile(username);
   }
   await deps.persistSeedForProfile(seed, username, deps.localPassphrase);
+  if (deps.deviceSeed instanceof Uint8Array) {
+    await (deps.persistAccountDeviceSeed || ksPersistAccountDeviceSeed)(seed, username, admit.deviceId, deps.deviceSeed);
+  }
   if (typeof deps.setUsername === "function") deps.setUsername(username);
   // Slice D (D-4): if the admin sealed the admin root into the bundle, store it
   // device-local (under THIS profile — active profile is now `username`) BEFORE
@@ -620,24 +801,6 @@ export async function runIncomingJoin(deps) {
     await persistAdminRoot(seed, adminRootSeed);
   }
   await deps.unlockSession(seed, username);
-
-  // 5 — register THIS device's push token, then POST the admit (server
-  // admits QUARANTINED; the registration signature rides for storage but
-  // the admit is the IRK consent so the server doesn't verify it).
-  const { request, signatureHex } = await deps.registerPush({
-    username,
-    deviceId: admit.deviceId,
-    deviceIrkPubHex: myPub,
-  });
-  const admitResponse = await post({
-    username,
-    admit,
-    admitSigHex,
-    request,
-    signatureHex,
-    fetch: deps.fetch,
-    baseUrl: deps.baseUrl,
-  });
 
   // 6 — add the profile (set active) + surface the quarantine.
   if (typeof deps.addProfile === "function") {
