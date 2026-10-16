@@ -1409,6 +1409,8 @@ export interface ServerHealthRecord {
 export interface ServerHealthStorage {
   put(rec: ServerHealthRecord): Promise<void>;
   get(serverDomain: string): Promise<ServerHealthRecord | undefined>;
+  /** Drop the server's report (server Delete, account Delete). Idempotent. */
+  delete(serverDomain: string): Promise<void>;
 }
 
 export interface DaemonStatusStorage {

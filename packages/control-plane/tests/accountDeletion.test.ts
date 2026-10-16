@@ -57,6 +57,7 @@ function deps(storage: InMemoryStorage, now = NOW): AccountDeletionDeps {
     autoUnlockLeases: storage.autoUnlockLeases,
     boxSealedLeases: storage.boxSealedLeases,
     luksKeys: storage.luksKeys,
+    serverHealth: storage.serverHealth,
     webauthnRecovery: storage.webauthnRecovery,
     pushTokens: storage.pushTokens,
     secretMailbox: storage.secretMailbox,
@@ -134,6 +135,7 @@ describe("handleAccountDeletionBundle — account-self-delete", () => {
         lastTargetUpdate: NOW,
         lastTargetNonce: "0",
       });
+      await storage.serverHealth.put({ serverDomain: domain, reportJson: "{}", reportedAt: NOW, receivedAt: NOW });
     }
 
     const res = await handleAccountDeletionBundle(deps(storage), {
@@ -146,6 +148,8 @@ describe("handleAccountDeletionBundle — account-self-delete", () => {
     expect((await storage.servers.get(d2))?.revokedAt).toBeTruthy();
     expect(await storage.routing.get(d1)).toBeUndefined();
     expect(await storage.routing.get(d2)).toBeUndefined();
+    expect(await storage.serverHealth.get(d1)).toBeUndefined();
+    expect(await storage.serverHealth.get(d2)).toBeUndefined();
   });
 
   it("rejects a bad signature without deleting the account", async () => {

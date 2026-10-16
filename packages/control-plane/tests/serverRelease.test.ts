@@ -124,6 +124,7 @@ function deps(storage: InMemoryStorage) {
     authCodes: storage.authCodes,
     servers: storage.servers,
     luksKeys: storage.luksKeys,
+    serverHealth: storage.serverHealth,
   };
 }
 
@@ -297,6 +298,7 @@ describe("POST /api/server/release (cancel the server / free the name)", () => {
       sealedKeyHex: "ab".repeat(48),
       sealedAt: Date.now(),
     });
+    await storage.serverHealth.put({ serverDomain: DOMAIN, reportJson: "{}", reportedAt: 1, receivedAt: 1 });
 
     const { body } = releaseBody();
     const r = await handleServerReleaseName(deps(storage), body);
@@ -308,6 +310,7 @@ describe("POST /api/server/release (cancel the server / free the name)", () => {
     expect((await storage.servers.get(DOMAIN))?.revokedAt).toBeGreaterThan(0);
     // Sealed material is gone — a reused name doesn't inherit a stale blob.
     expect(await storage.luksKeys.getSealed(DOMAIN)).toBeUndefined();
+    expect(await storage.serverHealth.get(DOMAIN)).toBeUndefined();
   });
 
   it("stays idempotent + safe without the optional luksKeys dep", async () => {

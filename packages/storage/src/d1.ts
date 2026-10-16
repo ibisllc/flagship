@@ -3480,6 +3480,12 @@ export class D1ServerHealthStorage implements ServerHealthStorage {
     if (!r) return undefined;
     return { serverDomain: r.server_domain, reportJson: r.report_json, reportedAt: r.reported_at, receivedAt: r.received_at };
   }
+  async delete(serverDomain: string) {
+    await this.db
+      .prepare(`DELETE FROM server_health WHERE server_domain = ?1`)
+      .bind(serverDomain.toLowerCase())
+      .run();
+  }
 }
 
 export class D1DaemonStatusStorage implements DaemonStatusStorage {

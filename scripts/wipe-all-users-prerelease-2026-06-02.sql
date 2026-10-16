@@ -38,6 +38,13 @@
 -- metering core's per-account counters (egress bytes, AI tokens), and
 -- meter_batches (0070), the relay's recent batch ids (no account in it; wiped
 -- with the counters it guards).
+-- Re-audited 2026-10-16 through 0103: added server_health (0084, one box
+-- health report per server). PRESERVED: adapter_insights (0086, anonymous),
+-- model_capabilities (0095, a public model catalog cache), rate_limit_log
+-- (0101, hourly counts with nothing about any caller) and inference_settings
+-- (0103, operator config). wipe-all-users.test.ts now fails when a migration
+-- adds a table that is neither wiped here nor named on the line below.
+-- PRESERVED-TABLES: marketplace_listings schema_version username_suggestion_queue repo_adapters adapter_blocklist adapter_attempts adapter_complaints adapter_insights model_capabilities rate_limit_log inference_settings
 --
 -- ⚠️ DO NOT run this file via `wrangler d1 execute --file`. Prod D1's schema
 -- DRIFTS from the repo (migrations are applied by hand; e.g. nfc_rendezvous/0040
@@ -64,6 +71,7 @@ DELETE FROM auth_codes;
 DELETE FROM routing;
 DELETE FROM box_serials;
 DELETE FROM daemon_status;
+DELETE FROM server_health;
 DELETE FROM provision_status;
 DELETE FROM install_events;
 DELETE FROM install_policy_fanout;

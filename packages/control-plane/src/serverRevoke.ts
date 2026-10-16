@@ -9,6 +9,7 @@ import type {
   DeviceCapabilityGrantStorage,
   LuksKeyStorage,
   RoutingStorage,
+  ServerHealthStorage,
   ServerStorage,
   UsernameStorage,
 } from "@flagship/storage";
@@ -131,6 +132,8 @@ export interface ServerReleaseDeps {
    * sealed to the old box's STK and overwritten on reuse).
    */
   luksKeys?: LuksKeyStorage;
+  /** Optional. When wired, the box's last health report is dropped too. */
+  serverHealth?: Pick<ServerHealthStorage, "delete">;
   /** Slice D — device-grant store for the master-admin authority gate (§2 row
    *  30). Optional: absent ⇒ only the bare admin root satisfies the open gate. */
   grants?: DeviceCapabilityGrantStorage;
@@ -256,6 +259,9 @@ export async function handleServerReleaseName(
   //    a release→boot-worker cleanup hop if we want the rows GC'd eagerly.
   if (deps.luksKeys) {
     await deps.luksKeys.deleteSealed(r.serverDomain);
+  }
+  if (deps.serverHealth) {
+    await deps.serverHealth.delete(r.serverDomain);
   }
 
   return ok({

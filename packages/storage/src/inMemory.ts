@@ -1665,6 +1665,9 @@ export class InMemoryServerHealthStorage implements ServerHealthStorage {
     const r = this.rows.get(serverDomain.toLowerCase());
     return r ? { ...r } : undefined;
   }
+  async delete(serverDomain: string) {
+    this.rows.delete(serverDomain.toLowerCase());
+  }
 }
 
 export class InMemoryDaemonStatusStorage implements DaemonStatusStorage {

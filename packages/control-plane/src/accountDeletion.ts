@@ -34,6 +34,7 @@ import type {
   DeviceCapabilityGrantStorage,
   LuksKeyStorage,
   PushTokenStorage,
+  ServerHealthStorage,
   ServerOrderStorage,
   RoutingStorage,
   SecretMailboxStorage,
@@ -70,6 +71,7 @@ export interface AccountDeletionDeps {
   autoUnlockLeases?: AutoUnlockLeaseStorage;
   boxSealedLeases?: BoxSealedLeaseStorage;
   luksKeys?: LuksKeyStorage;
+  serverHealth?: Pick<ServerHealthStorage, "delete">;
   webauthnRecovery?: WebauthnRecoveryStorage;
   pushTokens?: PushTokenStorage;
   serverOrders?: ServerOrderStorage;
@@ -188,6 +190,13 @@ async function teardownServer(
   if (deps.luksKeys) {
     try {
       await deps.luksKeys.deleteSealed(domain);
+    } catch {
+      /* swallow */
+    }
+  }
+  if (deps.serverHealth) {
+    try {
+      await deps.serverHealth.delete(domain);
     } catch {
       /* swallow */
     }

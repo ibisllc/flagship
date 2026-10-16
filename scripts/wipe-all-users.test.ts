@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -13,6 +13,26 @@ import { join } from "node:path";
 
 const SCRIPT = join(__dirname, "wipe-all-users.sh");
 const SQL = join(__dirname, "wipe-all-users-prerelease-2026-06-02.sql");
+const MIGRATIONS = join(__dirname, "..", "packages", "storage", "migrations");
+
+/** Tables main's migrations leave in place, replaying CREATE/DROP/RENAME in order. */
+function liveMigrationTables(): Set<string> {
+  const live = new Set<string>();
+  const stmt =
+    /CREATE\s+(?:VIRTUAL\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["`]?(\w+)|DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?["`]?(\w+)|ALTER\s+TABLE\s+["`]?(\w+)["`]?\s+RENAME\s+TO\s+["`]?(\w+)/gi;
+  for (const f of readdirSync(MIGRATIONS).filter((n) => n.endsWith(".sql")).sort()) {
+    const text = readFileSync(join(MIGRATIONS, f), "utf8").replace(/--[^\n]*/g, "");
+    for (const m of text.matchAll(stmt)) {
+      if (m[1]) live.add(m[1].toLowerCase());
+      else if (m[2]) live.delete(m[2].toLowerCase());
+      else if (m[3] && m[4]) {
+        live.delete(m[3].toLowerCase());
+        live.add(m[4].toLowerCase());
+      }
+    }
+  }
+  return live;
+}
 
 let binDir = "";
 let callLog = "";
@@ -186,6 +206,25 @@ describe("wipe-all-users SQL table list — in sync with migrations", () => {
 
   it("includes the server orders (0096)", () => {
     expect(readFileSync(SQL, "utf8")).toContain("DELETE FROM server_orders;");
+  });
+
+  it("wipes or explicitly preserves every table the migrations leave live", () => {
+    const sql = readFileSync(SQL, "utf8");
+    const deleted = new Set([...sql.matchAll(/^DELETE FROM ([a-z_]+);/gm)].map((m) => m[1]!));
+    const preservedLine = sql.match(/^-- PRESERVED-TABLES: (.+)$/m);
+    expect(preservedLine).not.toBeNull();
+    const preserved = new Set(preservedLine![1]!.trim().split(/\s+/));
+    const live = liveMigrationTables();
+    expect(live.size).toBeGreaterThan(50);
+    const unaccounted = [...live].filter((t) => !deleted.has(t) && !preserved.has(t)).sort();
+    expect(unaccounted, "add each to the DELETE list or the PRESERVED-TABLES line").toEqual([]);
+    const gone = [...deleted, ...preserved].filter((t) => !live.has(t)).sort();
+    expect(gone, "these tables no longer exist on main's migrations").toEqual([]);
+    for (const t of preserved) expect(deleted.has(t), t).toBe(false);
+  });
+
+  it("wipes the per-server health reports (0084)", () => {
+    expect(readFileSync(SQL, "utf8")).toContain("DELETE FROM server_health;");
   });
 
   it("does NOT delete build_tickets (dropped in migration 0033)", () => {
