@@ -42,11 +42,25 @@ export const aiChat: Group = {
       const deadline = Date.now() + minutes * 60_000;
       let last: any = {};
       let answered = 0;
+      let retried = 0;
       while (Date.now() < deadline) {
         last = await state(id);
         maxTokens = Math.max(maxTokens, Number(last.conversationTokens ?? 0));
         if (want.test(String(last.status))) return last;
-        if (/failed|cancelled/.test(String(last.status)) && !want.test(String(last.status))) throw new Error(`${last.status}: ${short(last.failureReason ?? last.errorReason, 300)}`);
+        const why = String(last.failureReason ?? last.errorReason ?? "");
+        // A provider that is briefly overloaded fails the turn; a failed chat
+        // takes a new message and runs again (docs/build-modes.md
+        // "Continuing a chat"), which is what an owner would do.
+        if (last.status === "failed" && last.canContinue && retried < 2 && /busy|overload|rate.?limit|429|503|timed? ?out|temporar/i.test(why)) {
+          retried++;
+          usage.retries = (Number(usage.retries) || 0) + 1;
+          rec.log(`the provider failed the turn (${short(why, 120)}); continuing the chat`);
+          await sleep(20_000);
+          const again = await postJson(`https://${b.fqdn}/api/screens/llm/sessions/${encodeURIComponent(id)}/reply`, { text: "That failed on the provider's side. Please carry on where you stopped." }, s, 60_000);
+          assert(again.status === 200, `continue after failure ${again.status}: ${short(again.text)}`);
+          continue;
+        }
+        if (/failed|cancelled/.test(String(last.status)) && !want.test(String(last.status))) throw new Error(`${last.status}: ${short(why, 300)}`);
         if (last.status === "awaiting-tool-response" && last.pendingRequest?.kind === "talkToUser" && answered < 3) {
           answered++;
           await postJson(`https://${b.fqdn}/api/screens/llm/sessions/${encodeURIComponent(id)}/reply`, { text: "Use your best judgement and keep it to one static page." }, s, 60_000);
