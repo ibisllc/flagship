@@ -35,6 +35,8 @@ class VibeCodeStreamViewModel(
     private val operations: ActiveOperationsCenter? = null,
     private val serviceLabel: String? = null,
     private val serverLabel: String? = null,
+    /** The server (fqdn) the build runs on, so a tap on the sliver opens the chat there. */
+    private val serverFqdn: String? = null,
 ) {
     enum class Status { STREAMING, BUILDING, DEPLOYED, FAILED, DONE }
 
@@ -93,7 +95,7 @@ class VibeCodeStreamViewModel(
                     id = sessionId,
                     subject = serviceLabel ?: "a service",
                     onServer = serverLabel,
-                    target = DeepLink.VibeCodeChat(sessionId),
+                    target = DeepLink.VibeCodeChat(sessionId, serverFqdn),
                 )
             }
             is VibeCodeFrame.BuildLog -> _buildLogs.value = _buildLogs.value + frame.line

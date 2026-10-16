@@ -644,6 +644,7 @@ fun VibeCodeGeneratingScreen(nav: NavController, sessionId: String = "") {
             client = client,
             operations = operations,
             serverLabel = serverLabel,
+            serverFqdn = podScope?.pod?.fqdn ?: appState.sessionPod?.fqdn,
         )
     }
     val status by vm.status.collectAsState()

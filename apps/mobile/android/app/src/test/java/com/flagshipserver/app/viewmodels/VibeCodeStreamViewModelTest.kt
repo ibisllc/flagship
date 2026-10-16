@@ -44,6 +44,7 @@ class VibeCodeStreamViewModelTest {
         serverLabel: String? = null,
         client: ScreensClient = MockScreensClient(simulatedLatencyMs = 0),
         scope: kotlinx.coroutines.CoroutineScope,
+        serverFqdn: String? = null,
     ) = VibeCodeStreamViewModel(
         sessionId = sessionId,
         client = client,
@@ -51,6 +52,7 @@ class VibeCodeStreamViewModelTest {
         operations = operations,
         serviceLabel = "blog",
         serverLabel = serverLabel,
+        serverFqdn = serverFqdn,
     )
 
     // ── apply(): per-frame transitions ─────────────────────────────
@@ -118,6 +120,14 @@ class VibeCodeStreamViewModelTest {
         assertEquals("building blog on Home", op.label)
         // Tapping the sliver opens THIS build's own surface — the chat.
         assertEquals(DeepLink.VibeCodeChat("sess-1"), op.target)
+    }
+
+    /** A build on another server opens its chat on that server. */
+    @Test fun theSliverNamesTheServerTheBuildRunsOn() = runTest {
+        val center = ActiveOperationsCenter()
+        val m = vm(sessionId = "sess-2", operations = center, serverLabel = "Office", scope = backgroundScope, serverFqdn = "office.harry.flagship.services")
+        m.apply(VibeCodeFrame.BuildStart)
+        assertEquals(DeepLink.VibeCodeChat("sess-2", "office.harry.flagship.services"), center.primary!!.target)
     }
 
     @Test fun deploy_removesBuildOp() = runTest {
