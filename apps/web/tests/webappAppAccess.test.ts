@@ -456,6 +456,25 @@ describe("suggested lists (drafts)", () => {
     expect(handle.mock.calls[1]![0]).toBe(req);
   });
 
+  it("asks every server this device has a session for, tagging each request with its server", async () => {
+    const { fetchAccessRequestsOnServers, accessRequestKey } = await loadAlerts();
+    const reply = (host: string) => async () => ({ requests: [{ serviceId: "harry-weather", appName: "Weather", host, source: "attempt", attempts: 1 }] });
+    const got = await fetchAccessRequestsOnServers([
+      { fqdn: "home.harry.flagship.services", fetchJson: reply("a.com") },
+      { fqdn: "office.harry.flagship.services", fetchJson: reply("b.com") },
+      { fqdn: "down.harry.flagship.services", fetchJson: async () => { throw new Error("offline"); } },
+    ]);
+    expect(got.map((r: { serverDomain: string; host: string }) => [r.serverDomain, r.host])).toEqual([
+      ["home.harry.flagship.services", "a.com"],
+      ["office.harry.flagship.services", "b.com"],
+    ]);
+    // The same app and host on two servers are two alerts.
+    expect(accessRequestKey({ ...got[0], host: "b.com" })).not.toBe(accessRequestKey(got[1]));
+    const alerts = await asset("/webapp/lib/accessAlerts.js");
+    expect(alerts).toContain("fetchAccessRequestsOnServers(sessionServers(await loadAccountPods(");
+    expect(alerts).toContain('const client = boxClient(req.serverDomain || "");');
+  });
+
   it("the pages wire Review, Dismiss, the badge and the editor's draft mode", async () => {
     const detail = await asset("/webapp/views/service-detail.js");
     expect(detail).toContain("dismissAccessDraft({");
@@ -466,7 +485,7 @@ describe("suggested lists (drafts)", () => {
     expect(view).toContain("current.list = access.list;");
     const alerts = await asset("/webapp/lib/accessAlerts.js");
     expect(alerts).toContain("presentDraft: showAccessDraftSheet");
-    expect(alerts).toContain("enterAppAccess(r.serviceId, r.appName, { draft: true })");
+    expect(alerts).toContain("openDraft: (r) => openOnServer(r, { draft: true })");
     const list = await asset("/webapp/views/services-list.js");
     expect(list).toContain("hasAccessDraft(s)");
     expect(list).toContain("ACCESS_DRAFT_BADGE");

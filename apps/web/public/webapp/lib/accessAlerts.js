@@ -16,7 +16,8 @@
 // "<App> suggests an access list" with its hosts, Review (opens the app's
 // access-list editor with the draft) and Not now.
 
-import { getPodBaseUrl, getSessionToken, screensFetch } from "./api.js";
+import { boxClient, getPodBaseUrl, getSessionToken, makeCurrentPod } from "./api.js";
+import { loadAccountPods, sessionServers } from "./appPlacement.js";
 import { getSession } from "./state.js";
 import { sensitiveSigner } from "./adminRoot.js";
 import { isCompanionProfile } from "./companionGuard.js";
@@ -54,7 +55,28 @@ export const ACCESS_RECHECK_MS = 15 * 1000;
 export const ACCESS_SW_MESSAGE = "ACCESS_REQUESTS";
 
 export const accessRequestKey = (r) =>
-  isAccessDraft(r) ? `${r.serviceId}\ndraft\n${r.createdAt ?? ""}` : `${r.serviceId}\n${r.host}`;
+  `${r.serverDomain ?? ""}\n${isAccessDraft(r) ? `${r.serviceId}\ndraft\n${r.createdAt ?? ""}` : `${r.serviceId}\n${r.host}`}`;
+
+/**
+ * The waiting requests of every server this device has a session for, each
+ * tagged with its `serverDomain`, as iOS's AppAccessAlertCenter and Android's
+ * AccessRequestCenter ask every box they manage: an app on the second server
+ * asks for the internet as much as one on the current server. A server that
+ * can't be reached is left out until the next check.
+ * `servers` are `{fqdn, fetchJson}` (lib/appPlacement.js sessionServers).
+ */
+export async function fetchAccessRequestsOnServers(servers) {
+  const lists = await Promise.all(
+    (servers ?? []).map(async (s) => {
+      try {
+        return (await fetchAccessRequests(s.fetchJson)).map((r) => ({ ...r, serverDomain: s.fqdn }));
+      } catch {
+        return [];
+      }
+    }),
+  );
+  return lists.flat();
+}
 
 /**
  * Fetches the pending requests and hands each one, in order, to `handle`
@@ -345,20 +367,29 @@ export function showAccessAnsweredSheet(text) {
   return sheetChoice(overlay, "close");
 }
 
-/** Allow or Deny one request with this session's sensitive-order key. */
+/** Allow or Deny one request with this session's sensitive-order key, on the
+ *  server it came from. */
 export async function answerWithSession(req, action) {
   const session = getSession();
   if (!session?.umk) throw new Error("Unlock the webapp first");
+  const client = boxClient(req.serverDomain || "");
   return answerAccessRequest({
-    serverDomain: podServerDomain(),
+    serverDomain: client.fqdn || podServerDomain(),
     serviceId: req.serviceId,
     host: req.host,
     action,
     umk: session.umk,
     signWithIrk: sensitiveSigner(),
-    fetchJson: (path, init) => screensFetch(path, init),
+    fetchJson: client.fetch,
     bytesToHex,
   });
+}
+
+/** The app's access list opens on the server the request came from. */
+async function openOnServer(r, opts) {
+  if (r.serverDomain) makeCurrentPod(r.serverDomain);
+  const { enterAppAccess } = await import("../views/app-access.js");
+  await enterAppAccess(r.serviceId, r.appName, opts);
 }
 
 /**
@@ -384,21 +415,15 @@ export function startAccessAlerts({ isUnlocked }) {
   };
   const controller = createAccessAlertController({
     isActive,
-    fetchRequests: () => fetchAccessRequests((path, init) => screensFetch(path, init)),
+    fetchRequests: async () => fetchAccessRequestsOnServers(sessionServers(await loadAccountPods(getSession()?.username))),
     handle: (req) =>
       handleAccessRequest(req, {
         present: showAccessRequestSheet,
         answer: answerWithSession,
         confirm: showAccessAnsweredSheet,
-        openList: async (r) => {
-          const { enterAppAccess } = await import("../views/app-access.js");
-          await enterAppAccess(r.serviceId, r.appName);
-        },
+        openList: (r) => openOnServer(r),
         presentDraft: showAccessDraftSheet,
-        openDraft: async (r) => {
-          const { enterAppAccess } = await import("../views/app-access.js");
-          await enterAppAccess(r.serviceId, r.appName, { draft: true });
-        },
+        openDraft: (r) => openOnServer(r, { draft: true }),
         notify: (e) => toast(e?.status || e?.name === "AccessListError" ? accessErrorMessage(e) : humanError(e), "err"),
       }),
   });
