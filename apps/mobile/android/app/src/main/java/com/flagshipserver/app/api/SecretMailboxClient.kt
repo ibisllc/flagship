@@ -486,6 +486,14 @@ data class BoxHealthDaemonWire(
     val lastExit: Long? = null,
 )
 
+/** `/pods` `awaitingBackup`: the backup a server waits for, and whether it is restoring it. */
+@Serializable
+data class AwaitingBackupWire(
+    val archiveId: String,
+    /** `waiting` | `restoring` */
+    val state: String,
+)
+
 @Serializable
 data class PodDirectoryEntry(
     val serverDomain: String,
@@ -547,6 +555,10 @@ data class PodDirectoryEntry(
     /** `issuedAt` of the server order this box last reported holding
      *  (docs/server-order.md); null when none or unknown. */
     val orderIssuedAt: Long? = null,
+    /** The box was created to restore a backup and is waiting for it (or
+     *  restoring it): Home says so. Advisory, from the box's heartbeat; null
+     *  once the backup is in (docs/server-backup-and-clone.md). */
+    val awaitingBackup: AwaitingBackupWire? = null,
 ) {
     /** A box that has reported daemon status OR holds a cert has come online
      *  at least once. Mirror of iOS PodDirectoryEntry.cameOnline. */

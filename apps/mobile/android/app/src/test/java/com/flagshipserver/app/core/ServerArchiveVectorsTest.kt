@@ -10,7 +10,6 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
@@ -57,20 +56,8 @@ class ServerArchiveVectorsTest {
         assertNull(ServerArchive.deriveKey(ByteArray(5), "a".repeat(32)))
     }
 
-    @Test fun readsAHeaderAndRefusesOtherFiles() {
-        val head = ("{\"magic\":\"flagship-archive\",\"v\":1,\"archiveId\":\"00112233445566778899aabbccddeeff\"," +
-            "\"createdAt\":5,\"sourceServer\":\"home.alice.flagship.services\",\"apps\":[{\"serviceId\":\"alice--wiki\",\"name\":\"Wiki\"}]}\nBINARY")
-            .toByteArray()
-        val h = ServerArchive.parseHeader(head)
-        assertEquals("00112233445566778899aabbccddeeff", h.archiveId)
-        assertEquals(listOf("Wiki"), h.appNames)
-        assertEquals("That isn't a Flagship backup.", assertThrows(ServerArchive.HeaderException::class.java) { ServerArchive.parseHeader("hello\n".toByteArray()) }.message)
-        assertTrue(assertThrows(ServerArchive.HeaderException::class.java) { ServerArchive.parseHeader("{\"magic\":\"flagship-archive\",\"v\":2}\n".toByteArray()) }.message!!.contains("newer version"))
-        assertTrue(assertThrows(ServerArchive.HeaderException::class.java) { ServerArchive.parseHeader("{\"magic\":\"flagship-archive\",\"v\":1,\"archiveId\":\"zz\"}\n".toByteArray()) }.message!!.contains("damaged"))
-    }
-
     @Test fun namesAndSizes() {
-        assertEquals("Home-2026-10-14.flagship-backup", ServerArchive.fileName("Home.alice.flagship.services", 1_792_000_000_000L))
+        assertEquals("Home-2026-10-14", ServerArchive.fileStem("Home.alice.flagship.services", 1_792_000_000_000L))
         assertEquals("900 KB", ServerArchive.formatBytes(900L * 1024))
         assertEquals("5.0 MB", ServerArchive.formatBytes(5L * 1024 * 1024))
         assertEquals("3.0 GB", ServerArchive.formatBytes(3L * 1024 * 1024 * 1024))

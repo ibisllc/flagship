@@ -1029,6 +1029,107 @@ class MockScreensClient(
         return CompanionResolvePendingResponse(ok = true, alreadyResolved = false)
     }
 
+    // Backup/clone server (in-memory: the data file is a fixed blob).
+
+    var archiveBytes: ByteArray = ByteArray(5_000) { 7 }
+    val archiveStarts: MutableList<ServerArchiveStartRequest> = mutableListOf()
+    var archiveForgotten = false
+        private set
+    /** A small backup file the mock hands out (a real one comes from the box). */
+    var archiveBackupFile: ByteArray = "{\"magic\":\"flagship-backup\",\"v\":2}\n".toByteArray()
+    val archiveApprovals: MutableList<ServerArchiveApproveRequest> = mutableListOf()
+    val restoreStarts: MutableList<ServerRestoreStartRequest> = mutableListOf()
+    /** Each chunk's offset and size. */
+    val restoreChunks: MutableList<Pair<Long, Int>> = mutableListOf()
+    val restoreCommits: MutableList<ServerRestoreCommitRequest> = mutableListOf()
+    var restoreApps: List<ServerRestoreApp> = listOf(ServerRestoreApp(serviceId = "alice--wiki", name = "Wiki", state = "done"))
+    var restoreFinalState = "done"
+    var restoreFailure: String? = null
+    /** The backup this (mock) server waits for; null ⇒ it isn't waiting. */
+    var restoreWaiting: ServerRestoreWaiting? = null
+    /** How much of the data file the server already holds when an upload starts. */
+    var restoreAlreadyReceived: Long = 0
+
+    override suspend fun serverArchiveStart(req: ServerArchiveStartRequest) {
+        tick()
+        archiveStarts += req
+        archiveForgotten = false
+    }
+
+    override suspend fun serverArchiveStatus(): ServerArchiveStatus? {
+        tick()
+        val id = archiveStarts.lastOrNull()?.archiveId ?: return null
+        if (archiveForgotten) return null
+        val sha = java.security.MessageDigest.getInstance("SHA-256").digest(archiveBytes).joinToString("") { "%02x".format(it) }
+        return ServerArchiveStatus(
+            archiveId = id,
+            state = "ready",
+            startedAt = 1,
+            bytes = archiveBytes.size.toLong(),
+            sha256 = sha,
+            backupFileName = "home-1970-01-01.flagship-backup",
+            dataFileName = "home-1970-01-01.flagship-data",
+            apps = listOf(ServerArchiveApp("alice--wiki", "Wiki")),
+        )
+    }
+
+    override suspend fun serverArchiveChunk(offset: Long): ByteArray {
+        tick()
+        val start = offset.toInt()
+        return archiveBytes.copyOfRange(start, minOf(start + 4 * 1024 * 1024, archiveBytes.size))
+    }
+
+    override suspend fun serverArchiveBackupFile(): ByteArray {
+        tick()
+        return archiveBackupFile
+    }
+
+    override suspend fun serverArchiveForget() {
+        tick()
+        archiveForgotten = true
+    }
+
+    override suspend fun serverArchiveApprove(req: ServerArchiveApproveRequest) {
+        tick()
+        archiveApprovals += req
+    }
+
+    override suspend fun serverRestoreStart(req: ServerRestoreStartRequest): ServerRestoreStartResponse {
+        tick()
+        restoreStarts += req
+        return ServerRestoreStartResponse(received = restoreAlreadyReceived)
+    }
+
+    override suspend fun serverRestoreChunk(offset: Long, data: ByteArray) {
+        tick()
+        restoreChunks += offset to data.size
+    }
+
+    override suspend fun serverRestoreCommit(req: ServerRestoreCommitRequest) {
+        tick()
+        restoreCommits += req
+    }
+
+    override suspend fun serverRestoreStatus(): ServerRestoreStatusResponse {
+        tick()
+        val id = restoreStarts.lastOrNull()?.archiveId
+        if (id == null || restoreCommits.isEmpty()) return ServerRestoreStatusResponse(waiting = restoreWaiting, restore = null)
+        val failed = restoreFailure != null
+        val done = !failed && restoreFinalState == "done"
+        val bytes = restoreStarts.last().bytes
+        return ServerRestoreStatusResponse(
+            waiting = if (done) null else restoreWaiting,
+            restore = ServerRestoreStatus(
+                archiveId = id,
+                state = if (failed) "failed" else restoreFinalState,
+                bytes = bytes,
+                received = bytes,
+                apps = restoreApps,
+                reason = restoreFailure,
+            ),
+        )
+    }
+
     companion object {
         /** The mock box's device book: this phone, and the account's other one. */
         const val SELF_DEVICE_ID = "0123456789abcdef0123456789abcdef"

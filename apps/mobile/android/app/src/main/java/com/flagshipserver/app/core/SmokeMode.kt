@@ -12,6 +12,7 @@
 //   iOS -smoke-trust-untrusted  ↔ --ez flagship.smokeTrustUntrusted true
 //   iOS -smoke-awaiting-unlock  ↔ --es flagship.smokePods awaiting-unlock
 //   iOS -smoke-dead             ↔ --es flagship.smokePods dead
+//   iOS -smoke-awaiting-backup  ↔ --es flagship.smokePods awaiting-backup
 //   iOS -smoke-username <name>  ↔ --es flagship.smokeUsername <name>
 //
 // PRODUCTION SAFETY: MainActivity only calls into here when the app is
@@ -30,7 +31,7 @@ data class SmokeModeConfig(
     val tab: RootDestination,
     val seedOps: Boolean,
     val seedTrustUntrusted: Boolean,
-    /** "awaiting-unlock" | "dead" | null — picks the variant fixture pod set. */
+    /** "awaiting-unlock" | "dead" | "awaiting-backup" | null — picks the variant fixture pod set. */
     val podsVariant: String?,
     /** Treat this device as holding the admin master root (GymSeams twin of
      *  iOS `-smoke-admin-root`) so the Slice-D admin-gated surfaces render. */
@@ -111,6 +112,15 @@ object SmokeMode {
                 pod.copy(identityPubKeyHex = "%02x".format(0x51 + i).repeat(32))
             }
             appState.completeOnboarding(username = user, pods = pods)
+        }
+        // The first online server was made to restore a backup and still waits
+        // for it: Home's "Waiting for its backup" and Send the backup.
+        if (config.podsVariant == "awaiting-backup") {
+            appState.pods.value.firstOrNull { it.status == PodInfo.Status.ONLINE }?.let { pod ->
+                appState.setPodsAwaitingBackup(
+                    mapOf(pod.fqdn to com.flagshipserver.app.api.AwaitingBackupWire("ab".repeat(16), "waiting")),
+                )
+            }
         }
 
         // The gym drives an UNLOCKED shell (mirror of iOS's deterministic-unlock

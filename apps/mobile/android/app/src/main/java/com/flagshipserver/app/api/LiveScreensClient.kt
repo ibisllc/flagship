@@ -365,6 +365,9 @@ class LiveScreensClient(
     override suspend fun serverArchiveChunk(offset: Long): ByteArray =
         requestBytes("/api/screens/server-archive/chunk?offset=$offset", readTimeoutSeconds = 300)
 
+    override suspend fun serverArchiveBackupFile(): ByteArray =
+        requestBytes("/api/screens/server-archive/backup-file", readTimeoutSeconds = 60)
+
     override suspend fun serverArchiveForget() {
         request<Unit>("/api/screens/server-archive", null, "DELETE", null, readTimeoutSeconds = 30)
     }
@@ -374,9 +377,9 @@ class LiveScreensClient(
         request<Unit>("/api/screens/server-archive/approve", null, "POST", body, readTimeoutSeconds = 30)
     }
 
-    override suspend fun serverRestoreStart(req: ServerRestoreStartRequest) {
+    override suspend fun serverRestoreStart(req: ServerRestoreStartRequest): ServerRestoreStartResponse {
         val body = json.encodeToString(ServerRestoreStartRequest.serializer(), req).toByteArray()
-        request<Unit>("/api/screens/server-restore/start", null, "POST", body, readTimeoutSeconds = 30)
+        return request("/api/screens/server-restore/start", ServerRestoreStartResponse.serializer(), "POST", body, readTimeoutSeconds = 30)
     }
 
     override suspend fun serverRestoreChunk(offset: Long, data: ByteArray) {
@@ -388,8 +391,8 @@ class LiveScreensClient(
         request<Unit>("/api/screens/server-restore/commit", null, "POST", body, readTimeoutSeconds = 60)
     }
 
-    override suspend fun serverRestoreStatus(): ServerRestoreStatus? =
-        request("/api/screens/server-restore", ServerRestoreStatusResponse.serializer()).restore
+    override suspend fun serverRestoreStatus(): ServerRestoreStatusResponse =
+        request("/api/screens/server-restore", ServerRestoreStatusResponse.serializer())
 
     override suspend fun boxActivity(limit: Int, before: Int?): List<BoxActivityEntry> {
         val q = if (before != null) "&before=$before" else ""

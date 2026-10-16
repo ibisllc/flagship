@@ -305,17 +305,7 @@ fun HomeTab() {
                 hasCloudRecovery = hasRecovery,
                 dismissed = bannerDismissed,
             )
-            var showImportBackup by remember { androidx.compose.runtime.mutableStateOf(false) }
-            if (showImportBackup) {
-                if (AddServerGate.allows(app)) {
-                    com.flagshipserver.app.ui.screens.ImportBackupDialog(onDismiss = { showImportBackup = false })
-                } else {
-                    LaunchedEffect(Unit) {
-                        toasts.warning(AddServerGate.ADMIN_ONLY)
-                        showImportBackup = false
-                    }
-                }
-            }
+            val awaitingBackup by app.podsAwaitingBackup.collectAsState()
             HomeScreen(
                 state = vm.state.collectAsState().value,
                 username = app.currentUser.collectAsState().value ?: "",
@@ -332,7 +322,7 @@ fun HomeTab() {
                 // box. Pairing an existing box is automatic (Slice B); taking
                 // over a transferred box is a link/QR ingestion (Slice C).
                 onAddServer = { nav.navigate("create-server") },
-                onImportBackup = { showImportBackup = true },
+                onImportBackup = { nav.navigate("import-backup") },
                 onCoManage = { nav.navigate("share-accept") },
                 onMakeLeader = { pod -> saveOrder { orderSaver.makeLeader(pod.podId) } },
                 onReorder = { ids -> saveOrder { orderSaver.reorder(ids) } },
@@ -388,6 +378,28 @@ fun HomeTab() {
                         onOpen = { shareId -> nav.navigate("shared-server/$shareId") },
                     )
                 },
+                awaitingBackup = awaitingBackup,
+                onSendBackup = { pod -> nav.navigate("import-backup?target=${URLEncoder.encode(pod.fqdn, "UTF-8")}") },
+            )
+        }
+        composable(
+            "import-backup?target={target}",
+            arguments = listOf(navArgument("target") { type = NavType.StringType; nullable = true; defaultValue = null }),
+        ) { entry ->
+            if (!AddServerGate.allows(app)) {
+                AddServerAdminOnlyScreen(onBack = { nav.popBackStack() })
+                return@composable
+            }
+            // Import a backup onto a new server, or send it to a server waiting
+            // for it (docs/server-backup-and-clone.md).
+            val target = entry.arguments?.getString("target")?.let { URLDecoder.decode(it, "UTF-8") }
+            com.flagshipserver.app.ui.screens.ImportBackupRoute(
+                targetFqdn = target,
+                onServerCreated = { serverDomain, serial, name ->
+                    // Like any new server: on Home at once, cancellable.
+                    app.upsertPendingPod(name = name, fqdn = serverDomain, serial = serial)
+                },
+                onClose = { nav.popBackStack("home-root", inclusive = false) },
             )
         }
         composable(

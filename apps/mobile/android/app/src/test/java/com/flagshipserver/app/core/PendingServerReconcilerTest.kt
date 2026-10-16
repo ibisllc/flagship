@@ -63,6 +63,24 @@ class PendingServerReconcilerTest {
         assertNull(pending.pendingAuthCodeSerial)
     }
 
+    // A server made to restore a backup shows as waiting while its box says so,
+    // and stops once the box no longer reports it (docs/server-backup-and-clone.md).
+    @Test fun aServerWaitingForItsBackupIsTrackedPerListedServer() = runTest {
+        val app = signedInApp()
+        val wait = com.flagshipserver.app.api.AwaitingBackupWire("ab".repeat(16), "waiting")
+        app.setPodsAwaitingBackup(mapOf("other.harry.flagship.services" to wait))
+        val mailbox = MockSecretMailboxClient().apply {
+            directory = listOf(registered("Clone.harry.flagship.services").copy(awaitingBackup = wait))
+        }
+        PendingServerReconciler(app, mailbox).reconcile()
+        assertEquals(wait, app.podsAwaitingBackup.value["clone.harry.flagship.services"])
+        assertEquals("a server the directory doesn't list keeps its state", wait, app.podsAwaitingBackup.value["other.harry.flagship.services"])
+
+        mailbox.directory = listOf(registered("clone.harry.flagship.services"))
+        PendingServerReconciler(app, mailbox).reconcile()
+        assertNull(app.podsAwaitingBackup.value["clone.harry.flagship.services"])
+    }
+
     // (2) a pending order with NO local record appears as a pending pod.
     @Test fun pendingOrderWithoutLocalRecord_appears() = runTest {
         val app = signedInApp()

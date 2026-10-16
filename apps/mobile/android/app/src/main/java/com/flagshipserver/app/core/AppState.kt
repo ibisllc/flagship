@@ -262,6 +262,19 @@ class AppState(
      *  AppState.isDemoAccount. */
     fun isDemoAccountNow(): Boolean = isDemoAccount(activeProfile, _pods.value)
 
+    /** Servers created to restore a backup that are still waiting for it (or
+     *  restoring it), per lowercased fqdn, from `/pods` `awaitingBackup`. Home
+     *  shows "Waiting for its backup" and offers to send it. */
+    private val _podsAwaitingBackup = MutableStateFlow<Map<String, com.flagshipserver.app.api.AwaitingBackupWire>>(emptyMap())
+    val podsAwaitingBackup: StateFlow<Map<String, com.flagshipserver.app.api.AwaitingBackupWire>> = _podsAwaitingBackup.asStateFlow()
+    fun setPodsAwaitingBackup(waiting: Map<String, com.flagshipserver.app.api.AwaitingBackupWire>) {
+        val next = waiting.mapKeys { it.key.lowercase() }
+        if (_podsAwaitingBackup.value != next) _podsAwaitingBackup.value = next
+    }
+    fun clearAwaitingBackup(fqdn: String) {
+        _podsAwaitingBackup.value = _podsAwaitingBackup.value - fqdn.lowercase()
+    }
+
     /**
      * The Box Request Inbox (docs/box-request-inbox.md): ONE typed object, keyed
      * by lowercased fqdn → the list of approvals that box is currently asking its

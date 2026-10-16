@@ -82,6 +82,8 @@ import com.flagshipserver.app.core.ServerKeys
 import com.flagshipserver.app.core.ServerSettingsStore
 import com.flagshipserver.app.core.Endpoints
 import com.flagshipserver.app.core.ServerLabel
+import com.flagshipserver.app.core.ServerBackupFormat
+import com.flagshipserver.app.viewmodels.ImportBackupViewModel
 import com.flagshipserver.app.core.WireAuthCode
 import com.flagshipserver.app.core.WireBlob
 import com.flagshipserver.app.keystore.Keystore
@@ -102,6 +104,25 @@ import kotlinx.serialization.json.Json
 // Save/Copy mint inline and route straight to onDelivered.
 private enum class Phase { Design, DeliveryChooser, Scan, Match, Pair, Burn }
 
+/** A server made with settings decided elsewhere (Import a backup,
+ *  docs/server-backup-and-clone.md): the screen opens at the delivery chooser,
+ *  and the owner-signed restore order rides beside the pairing order so the box
+ *  waits for exactly that data file. */
+data class CreateServerPreset(
+    val name: String,
+    /** `auto` | `approve` */
+    val bootUnlockMode: String,
+    val encryptDisk: Boolean,
+    val restore: ImportBackupViewModel.RestoreTarget,
+)
+
+/** The pairing order couldn't be built, so a server made to restore a backup can't be told which one. */
+internal class RestoreNeedsPairingException :
+    Exception("This server couldn't be prepared to receive the backup. Try again.")
+
+private fun createError(t: Throwable): String =
+    if (t is RestoreNeedsPairingException) t.message!! else NetworkErrorHumanizer.humanize(t)
+
 @Composable
 fun CreateServerScreen(
     onDelivered: (serverDomain: String, serial: String, name: String, description: String) -> Unit,
@@ -114,6 +135,7 @@ fun CreateServerScreen(
     /** A Studio pairing QR the phone's camera opened the app with: once the
      *  server is designed, pairing starts with it instead of the scanner. */
     builderLink: String? = null,
+    preset: CreateServerPreset? = null,
 ) {
     val app = LocalAppState.current
     val flagshipServer = LocalFlagshipServerClient.current
@@ -127,13 +149,13 @@ fun CreateServerScreen(
     // into the InstallBlob; reset on delivery. Mirror of iOS's draftStore.
     val draftStore = remember { CreateServerDraftStore.from(context) }
 
-    var phase by remember { mutableStateOf(Phase.Design) }
+    var phase by remember { mutableStateOf(if (preset != null) Phase.DeliveryChooser else Phase.Design) }
     // Which sub-step of the design phase is showing — the long single form is
     // split into one decision per page (0 identity, 1 boot unlock, 2 backups),
     // matching the iOS wizard.
     var designStep by remember { mutableStateOf(0) }
     val designStepCount = 3
-    var name by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf(preset?.name ?: "") }
     var description by remember { mutableStateOf("") }
     var qrText by remember { mutableStateOf("") }
     var matchCode by remember { mutableStateOf<String?>(null) }
@@ -145,10 +167,12 @@ fun CreateServerScreen(
     var recipeTtlMs by remember { mutableStateOf(DEFAULT_RECIPE_TTL_MS) }
     // Boot-unlock policy — "auto" default (self-unlock via box-sealed lease) vs
     // "approve" (phone-gated every boot). Only "approve" rides the wire.
-    var bootUnlockMode by remember { mutableStateOf(ServerSettingsStore.Mode.AUTO) }
+    var bootUnlockMode by remember {
+        mutableStateOf(if (preset?.bootUnlockMode == "approve") ServerSettingsStore.Mode.APPROVE else ServerSettingsStore.Mode.AUTO)
+    }
     // Disk encryption — ON (default) = "luks" (omitted from the wire). OFF =
     // "none": plaintext disk, for boxes that can't keep network at boot.
-    var encryptDisk by remember { mutableStateOf(true) }
+    var encryptDisk by remember { mutableStateOf(preset?.encryptDisk ?: true) }
     // ADVANCED MODE — one toggle, OFF by default ("for people who know what
     // they're doing"). On mobile it gates the offline path: embed-secrets (the
     // box SWK in the recipe), so a box installs fully offline with no
@@ -204,6 +228,7 @@ fun CreateServerScreen(
             pairingDepositStore = pairingDepositStore,
             sessionStore = sessionStore,
             isDemoAccount = app.isDemoAccountNow(),
+            restore = preset?.restore,
         )
         registerControlPlane(
             flagshipServer = flagshipServer,
@@ -392,9 +417,10 @@ fun CreateServerScreen(
                             val json = Json.encodeToString(InstallBlobBundle.serializer(), minted.bundle)
                             shareRecipeFile(context, name, json)
                             recordDelivered(minted.serverDomain)
+                            onDeliveredVisible(minted.serverDomain, minted.serial, name, description)
                             onDelivered(minted.serverDomain, minted.serial, name, description)
                         } catch (t: Throwable) {
-                            error = NetworkErrorHumanizer.humanize(t)
+                            error = createError(t)
                         } finally {
                             working = false
                         }
@@ -410,9 +436,10 @@ fun CreateServerScreen(
                             copyRecipeToClipboard(context, json)
                             toasts.success("Recipe copied.")
                             recordDelivered(minted.serverDomain)
+                            onDeliveredVisible(minted.serverDomain, minted.serial, name, description)
                             onDelivered(minted.serverDomain, minted.serial, name, description)
                         } catch (t: Throwable) {
-                            error = NetworkErrorHumanizer.humanize(t)
+                            error = createError(t)
                         } finally {
                             working = false
                         }
@@ -427,9 +454,10 @@ fun CreateServerScreen(
                             burnRecipeJson = Json.encodeToString(InstallBlobBundle.serializer(), minted.bundle)
                             burnMinted = minted
                             recordDelivered(minted.serverDomain)
+                            onDeliveredVisible(minted.serverDomain, minted.serial, name, description)
                             phase = Phase.Burn
                         } catch (t: Throwable) {
-                            error = NetworkErrorHumanizer.humanize(t)
+                            error = createError(t)
                         } finally {
                             working = false
                         }
@@ -478,6 +506,7 @@ fun CreateServerScreen(
                                 mailbox = mailbox,
                                 sessionStore = sessionStore,
                                 isDemoAccount = app.isDemoAccountNow(),
+                                restore = preset?.restore,
                             )
                             qrRelay.openAndHello(
                                 sid = delivery.sid,
@@ -488,7 +517,7 @@ fun CreateServerScreen(
                             phase = Phase.Match
                             error = null
                         } catch (t: Throwable) {
-                            error = NetworkErrorHumanizer.humanize(t)
+                            error = createError(t)
                         } finally {
                             working = false
                         }
@@ -525,6 +554,12 @@ fun CreateServerScreen(
                             // restoring this build's pick (mirrors iOS).
                             draftStore.reset()
                             toasts.success("Delivered. Watch Home for the new server.")
+                            onDeliveredVisible(
+                                delivery.bundle.blob.serverDomain,
+                                delivery.bundle.blob.authCode.serial,
+                                name,
+                                description,
+                            )
                             onDelivered(
                                 delivery.bundle.blob.serverDomain,
                                 delivery.bundle.blob.authCode.serial,
@@ -1127,6 +1162,7 @@ private suspend fun prepareDelivery(
     mailbox: com.flagshipserver.app.api.SecretMailboxClient? = null,
     sessionStore: com.flagshipserver.app.api.SessionStoring? = null,
     isDemoAccount: Boolean = false,
+    restore: ImportBackupViewModel.RestoreTarget? = null,
 ): PendingDelivery {
     val parsed = QrRelay.parseQrUrl(rawQr)
     val session = QrSession.fresh()
@@ -1145,6 +1181,7 @@ private suspend fun prepareDelivery(
         pairingDepositStore = pairingDepositStore,
         sessionStore = sessionStore,
         isDemoAccount = isDemoAccount,
+        restore = restore,
     )
 
     return PendingDelivery(
@@ -1194,6 +1231,9 @@ internal suspend fun mintRecipeBundle(
     pairingDepositStore: PendingPairingDepositStore? = null,
     sessionStore: com.flagshipserver.app.api.SessionStoring? = null,
     isDemoAccount: Boolean = false,
+    // Import a backup: sign a restore order for this server and attach it beside
+    // the pairing order (docs/server-backup-and-clone.md).
+    restore: ImportBackupViewModel.RestoreTarget? = null,
 ): MintedBundle {
     // Only an admin device of the account adds servers, and only opening the
     // account mints an admin root: refuse here, before any prompt or `.com`
@@ -1281,6 +1321,18 @@ internal suspend fun mintRecipeBundle(
         pairingOrderJson = pairing.pairingOrderJson
     } catch (_: Throwable) {
         // non-fatal — fall back to manual pairing when the box is up
+    }
+    if (restore != null) {
+        val json = pairingOrderJson ?: throw RestoreNeedsPairingException()
+        val order = ServerBackupFormat.RestoreOrder(
+            serverDomain = serverDomain,
+            archiveId = restore.archiveId,
+            bytes = restore.bytes,
+            sha256 = restore.sha256,
+            issuedAt = now,
+        )
+        val sig = irk.sign(order.canonicalBytes())
+        pairingOrderJson = ServerBackupFormat.attachRestore(json, order, HexUtil.encode(sig))
     }
 
     // Secret-free recipe (docs/recipe-delivery-and-remote-install.md).

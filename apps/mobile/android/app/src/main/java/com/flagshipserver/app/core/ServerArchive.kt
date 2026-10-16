@@ -1,18 +1,11 @@
-// "Backup/clone server" (docs/server-backup-and-clone.md): the key that seals an
-// archive, the readable header of an archive file, and the wording around both.
+// "Backup/clone server" (docs/server-backup-and-clone.md): the account's key for
+// a backup (the KEK of its account slot), the names of a backup's two files, and
+// the wording around them. The format is ServerBackupFormat.
 // Must pass packages/protocol/test-vectors/server-archive/vectors.json.
 // MIRRORS: apps/mobile/shared/Sources/FlagshipCore/ServerArchive.swift
 
 package com.flagshipserver.app.core
 
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.longOrNull
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -21,26 +14,26 @@ import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
 object ServerArchive {
-    const val FILE_EXTENSION = "flagship-backup"
     const val UPLOAD_CHUNK_BYTES = 4 * 1024 * 1024
-    const val HEADER_MAX_BYTES = 64 * 1024
 
     const val EXCLUDES_NOTE =
-        "Holds your apps' source, data and settings, never system images: the server you import onto rebuilds each app, so any Flagship server can open it. Not included: API keys, the server's name and certificate, peer backups, and the Git host."
-    const val CLONE_HINT =
-        "To clone a server under a new name: add the new server first, then import the backup onto it."
+        "Holds your apps' source, data and settings, never system images: the new server rebuilds each app, so any Flagship server can restore it. Not included: the server's keys and certificate, peer backups, and the Git host."
+    const val PASSCODE_NOTE =
+        "Anyone with both files and this passcode can restore the backup, on any account, so keep it somewhere safe and apart from the files. It can't be reset. Your own devices open your backups without it."
+    const val IMPORT_INTRO =
+        "Pick the backup's two files (the .flagship-backup and its .flagship-data) from wherever you keep them. " +
+            "You choose a name; everything else comes from the backup. Then set up the new server as usual, " +
+            "and this screen sends it the backup as soon as it comes online."
 
     private val ID_RE = Regex("^[0-9a-f]{32}$")
 
     fun isArchiveId(s: String): Boolean = ID_RE.matches(s)
 
-    fun newArchiveId(): String {
-        val b = ByteArray(16)
-        java.security.SecureRandom().nextBytes(b)
-        return b.joinToString("") { "%02x".format(it) }
-    }
+    fun newArchiveId(): String = HexUtil.encode(ServerBackupFormat.randomBytes(16))
 
-    /** HKDF-SHA256(umkSeed, salt: empty, info: "flagship/server-archive/v1|<archiveId>") -> 32 bytes. */
+    /** HKDF-SHA256(umkSeed, salt: empty, info: "flagship/server-archive/v1|<archiveId>"): the key
+     *  of a backup's account slot. Independent of any server id, so any device of the
+     *  account opens its backups under any new name. */
     fun deriveKey(umkSeed: ByteArray, archiveId: String): ByteArray? {
         if (umkSeed.size != 32 || !isArchiveId(archiveId)) return null
         return hkdfSha256(umkSeed, "flagship/server-archive/v1|$archiveId".toByteArray(Charsets.UTF_8), 32)
@@ -69,40 +62,11 @@ object ServerArchive {
         return out
     }
 
-    data class Header(
-        val archiveId: String,
-        val createdAt: Long,
-        val sourceServer: String,
-        val appNames: List<String>,
-    )
-
-    class HeaderException(message: String) : Exception(message)
-
-    /** Reads the readable first line of an archive file (pass its first ~64 KB). */
-    fun parseHeader(head: ByteArray): Header {
-        val nl = head.indexOf(0x0a.toByte())
-        val obj: JsonObject = try {
-            if (nl < 0) throw IllegalArgumentException("no header")
-            Json.parseToJsonElement(String(head, 0, nl, Charsets.UTF_8)).jsonObject
-        } catch (_: Exception) {
-            throw HeaderException("That isn't a Flagship backup.")
-        }
-        fun str(k: String) = obj[k]?.jsonPrimitive?.contentOrNull
-        if (str("magic") != "flagship-archive") throw HeaderException("That isn't a Flagship backup.")
-        if (obj["v"]?.jsonPrimitive?.intOrNull != 1) {
-            throw HeaderException("This backup is from a newer version of Flagship. Update the app and try again.")
-        }
-        val id = str("archiveId") ?: ""
-        if (!isArchiveId(id)) throw HeaderException("This backup's header is damaged.")
-        val names = (obj["apps"] as? JsonArray)?.mapNotNull { (it as? JsonObject)?.get("name")?.jsonPrimitive?.contentOrNull } ?: emptyList()
-        return Header(id, obj["createdAt"]?.jsonPrimitive?.longOrNull ?: 0, str("sourceServer") ?: "", names)
-    }
-
-    /** `<server label>-<yyyy-MM-dd>.flagship-backup` */
-    fun fileName(sourceServer: String, createdAtMs: Long): String {
+    /** `<server label>-<yyyy-MM-dd>`: the two files are this plus `.flagship-backup` / `.flagship-data`. */
+    fun fileStem(sourceServer: String, createdAtMs: Long): String {
         val label = sourceServer.substringBefore('.').filter { it.isLetterOrDigit() || it == '-' }
         val f = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
-        return "${label.ifEmpty { "server" }}-${f.format(Date(createdAtMs))}.$FILE_EXTENSION"
+        return "${label.ifEmpty { "server" }}-${f.format(Date(createdAtMs))}"
     }
 
     fun formatBytes(n: Long): String = when {

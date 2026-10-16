@@ -1,5 +1,6 @@
-// "Backup/clone server" (docs/server-backup-and-clone.md): the sealed archive a
-// box makes of all its apps, and the import of one onto a box.
+// "Backup/clone server" (docs/server-backup-and-clone.md): the two files a box
+// makes of all its apps, and the restore of them onto a new server made to wait
+// for them.
 // MIRRORS: apps/mobile/shared/Sources/FlagshipAPI/Models/ServerArchiveModels.swift
 
 package com.flagshipserver.app.api
@@ -19,8 +20,12 @@ data class ServerArchiveStatus(
     val state: String,
     val startedAt: Long = 0,
     val progress: ServerArchiveProgress? = null,
+    /** The data file's size and SHA-256. */
     val bytes: Long? = null,
     val sha256: String? = null,
+    /** The names the two files are saved under. */
+    val backupFileName: String? = null,
+    val dataFileName: String? = null,
     val apps: List<ServerArchiveApp>? = null,
     /** Apps that couldn't go in (no source to rebuild from), with why. */
     val left: List<ServerArchiveLeftApp>? = null,
@@ -33,12 +38,37 @@ data class ServerArchiveLeftApp(val serviceId: String, val name: String, val rea
 @Serializable
 data class ServerArchiveStatusResponse(val archive: ServerArchiveStatus? = null)
 
-/** `key` is the 32-byte key this device derived for the archive, lowercase hex. */
+/** One key slot of a backup file: the content key wrapped under a passcode
+ *  (Argon2id) or under the account's archive key (packages/protocol/src/serverBackup.ts). */
 @Serializable
-data class ServerArchiveStartRequest(val archiveId: String, val key: String)
+data class ServerBackupKdf(
+    val algo: String = "argon2id",
+    val m: Int,
+    val t: Int,
+    val p: Int,
+    val saltHex: String,
+)
+
+@Serializable
+data class ServerBackupSlot(
+    /** `passcode` | `account` */
+    val kind: String,
+    val kdf: ServerBackupKdf? = null,
+    val nonceHex: String,
+    val wrappedHex: String,
+)
+
+/** `key` is the random content key this device made for the backup, lowercase
+ *  hex; `slots` are the key slots the box writes into the backup file. */
+@Serializable
+data class ServerArchiveStartRequest(val archiveId: String, val key: String, val slots: List<ServerBackupSlot>)
 
 @Serializable
 data class ServerRestoreStartRequest(val archiveId: String, val bytes: Long)
+
+/** How much of the data file the server already holds: the upload goes on from here. */
+@Serializable
+data class ServerRestoreStartResponse(val received: Long = 0)
 
 @Serializable
 data class ServerRestoreCommitRequest(val key: String)
@@ -52,7 +82,7 @@ data class ServerRestoreApp(
     val reason: String? = null,
 )
 
-/** `uploading` | `ready` | `opening` | `restoring` | `done` | `failed` */
+/** `uploading` | `ready` | `checking` | `restoring` | `done` | `failed` */
 @Serializable
 data class ServerRestoreStatus(
     val archiveId: String,
@@ -63,8 +93,16 @@ data class ServerRestoreStatus(
     val reason: String? = null,
 )
 
+/** The backup a server created to restore one is waiting for. */
 @Serializable
-data class ServerRestoreStatusResponse(val restore: ServerRestoreStatus? = null)
+data class ServerRestoreWaiting(val archiveId: String, val bytes: Long, val sha256: String)
+
+/** `GET /api/screens/server-restore`. */
+@Serializable
+data class ServerRestoreStatusResponse(
+    val waiting: ServerRestoreWaiting? = null,
+    val restore: ServerRestoreStatus? = null,
+)
 
 /** One entry of the box's own activity log (`GET /api/screens/activity`). */
 @Serializable

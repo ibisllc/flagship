@@ -155,6 +155,10 @@ fun HomeScreen(
     /** Unlock the account key once, mint a read token and reload
      *  (docs/account-read-token.md "A refused read is never no servers"). */
     onShowServers: () -> Unit = {},
+    /** Servers created to restore a backup that still wait for it (lowercased
+     *  fqdn → state), and the action that sends it (docs/server-backup-and-clone.md). */
+    awaitingBackup: Map<String, com.flagshipserver.app.api.AwaitingBackupWire> = emptyMap(),
+    onSendBackup: (PodInfo) -> Unit = {},
 ) {
     var showAddOrImport by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     if (showAddOrImport) {
@@ -339,10 +343,15 @@ fun HomeScreen(
                         drag = drag,
                         onReorder = onReorder,
                     ) { pod, rowModifier, dragging, handle, moveActions ->
+                        val liveness = livenessOf(pod)
+                        val backupWait = awaitingBackup[pod.fqdn.lowercase()]
                         ServerRow(
                             pod = pod,
-                            liveness = livenessOf(pod),
-                            onTap = { onOpenPod(pod) },
+                            liveness = liveness,
+                            onTap = { if (liveness == PodInfo.LivenessState.ONLINE && backupWait?.state == "waiting") onSendBackup(pod) else onOpenPod(pod) },
+                            onOpen = { onOpenPod(pod) },
+                            backupWait = backupWait,
+                            onSendBackup = { onSendBackup(pod) },
                             onSetLeader = { onMakeLeader(pod) },
                             onDelete = { onDeleteServer(pod) },
                             leader = leader?.takeIf { it.podId == pod.podId },
@@ -569,8 +578,14 @@ fun ServerRow(
     /** The drag handle's slot; null when the list can't be reordered. */
     handle: (@Composable () -> Unit)? = null,
     moveActions: List<CustomAccessibilityAction> = emptyList(),
+    /** The menu's Open, when a tap does something else (sends a waiting server its backup). */
+    onOpen: () -> Unit = onTap,
+    /** Set while the server waits for its backup, or restores it (docs/server-backup-and-clone.md). */
+    backupWait: com.flagshipserver.app.api.AwaitingBackupWire? = null,
+    onSendBackup: () -> Unit = {},
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    val shownBackupWait = backupWait.takeIf { liveness == PodInfo.LivenessState.ONLINE }
     var confirming by remember { mutableStateOf(false) }
 
     val pillTag: String? = when (liveness) {
@@ -646,11 +661,19 @@ fun ServerRow(
                         // Per-service leadership (Phase 6): the services this box leads
                         // (from /pods `leadsServices`). Tolerant of absence.
                         LeadServicesPill(pod)
-                        FSPill(
-                            label = PodStatusStyle.label(pod, liveness),
-                            kind = PodStatusStyle.pillKind(liveness, pod.status),
-                            modifier = if (pillTag != null) Modifier.testTag(pillTag) else Modifier,
-                        )
+                        if (shownBackupWait != null) {
+                            FSPill(
+                                label = if (shownBackupWait.state == "restoring") "Restoring its backup" else "Waiting for its backup",
+                                kind = FSPillKind.Provisioning,
+                                modifier = Modifier.testTag("pod-card-awaiting-backup"),
+                            )
+                        } else {
+                            FSPill(
+                                label = PodStatusStyle.label(pod, liveness),
+                                kind = PodStatusStyle.pillKind(liveness, pod.status),
+                                modifier = if (pillTag != null) Modifier.testTag(pillTag) else Modifier,
+                            )
+                        }
                     }
                     leader?.standingInFor?.let { names ->
                         Text(
@@ -674,9 +697,16 @@ fun ServerRow(
                     onClick = { menuOpen = false; onSetLeader() },
                 )
             }
+            if (backupWait?.state == "waiting") {
+                DropdownMenuItem(
+                    text = { Text("Send the backup") },
+                    modifier = Modifier.testTag("pod-card-send-backup"),
+                    onClick = { menuOpen = false; onSendBackup() },
+                )
+            }
             DropdownMenuItem(
                 text = { Text("Open") },
-                onClick = { menuOpen = false; onTap() },
+                onClick = { menuOpen = false; onOpen() },
             )
             DropdownMenuItem(
                 text = {

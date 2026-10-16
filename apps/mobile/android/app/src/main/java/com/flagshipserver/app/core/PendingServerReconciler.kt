@@ -156,6 +156,14 @@ class PendingServerReconciler(
         }
 
         app.recordServerOrderAcks(acks)
+        // Per listed server: a box that stops reporting it has its backup.
+        val waiting = app.podsAwaitingBackup.value.toMutableMap()
+        for (entry in directory.pods) {
+            val key = entry.serverDomain.lowercase()
+            val w = entry.awaitingBackup.takeIf { entry.revokedAt == null }
+            if (w != null) waiting[key] = w else waiting.remove(key)
+        }
+        app.setPodsAwaitingBackup(waiting)
 
         // The non-pending pods are the live ones now (including the ones we
         // just flipped online).

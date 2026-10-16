@@ -223,26 +223,29 @@ interface ScreensClient {
     suspend fun serviceCopy(req: AppCopyRequest): AppCopyResponse =
         throw ScreensError.NotImplemented("copies")
 
-    // "Backup/clone server": a sealed archive of every app, downloaded in
-    // chunks; and the import of one onto this box.
+    // "Backup/clone server": the two files of a backup, the data file downloaded
+    // in chunks; and the restore of one onto a server waiting for it.
     suspend fun serverArchiveStart(req: ServerArchiveStartRequest): Unit =
         throw ScreensError.NotImplemented("server backup")
     suspend fun serverArchiveStatus(): ServerArchiveStatus? =
         throw ScreensError.NotImplemented("server backup")
     suspend fun serverArchiveChunk(offset: Long): ByteArray =
         throw ScreensError.NotImplemented("server backup")
+    /** The small backup file (JSON) of the ready backup. */
+    suspend fun serverArchiveBackupFile(): ByteArray =
+        throw ScreensError.NotImplemented("server backup")
     suspend fun serverArchiveForget(): Unit =
         throw ScreensError.NotImplemented("server backup")
     /** The owner's signed approval for one browser download request. */
     suspend fun serverArchiveApprove(req: ServerArchiveApproveRequest): Unit =
         throw ScreensError.NotImplemented("server backup")
-    suspend fun serverRestoreStart(req: ServerRestoreStartRequest): Unit =
+    suspend fun serverRestoreStart(req: ServerRestoreStartRequest): ServerRestoreStartResponse =
         throw ScreensError.NotImplemented("server import")
     suspend fun serverRestoreChunk(offset: Long, data: ByteArray): Unit =
         throw ScreensError.NotImplemented("server import")
     suspend fun serverRestoreCommit(req: ServerRestoreCommitRequest): Unit =
         throw ScreensError.NotImplemented("server import")
-    suspend fun serverRestoreStatus(): ServerRestoreStatus? =
+    suspend fun serverRestoreStatus(): ServerRestoreStatusResponse =
         throw ScreensError.NotImplemented("server import")
 
     /** What this box did, newest first (`before` is the `seq` cursor). */
