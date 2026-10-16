@@ -26,6 +26,7 @@ public enum ServerShare {
     static let infoLinkKey = "flagship/server-share/link-key/v1"
     static let infoInbox = "flagship/share-inbox/v1"
     static let infoInboxKey = "flagship/share-inbox-key/v1"
+    static let infoInviteBundle = "flagship/share-invite-bundle/v1"
     static let sasTag = "flagship/server-share/sas/v1"
 
     public static let aadOffer = "flagship/server-share/offer/v1"
@@ -58,6 +59,14 @@ public enum ServerShare {
     public static func deriveShareInboxSealKey(umkSeed: Data) throws -> Data {
         try checkSeed(umkSeed)
         return hk(umkSeed, infoInboxKey)
+    }
+
+    /// Seals the names of the people B invites to the shared server's apps
+    /// (AES-256-GCM key). Only B's devices derive it; the owner can't read them.
+    public static func deriveShareInviteBundleKey(umkSeed: Data, shareId: String) throws -> Data {
+        try checkSeed(umkSeed)
+        try checkShareId(shareId)
+        return hk(umkSeed, "\(infoInviteBundle)|\(shareId)")
     }
 
     /// The bearer token the link grants (`x-flagship-share-token`), lowercase hex.

@@ -179,10 +179,11 @@ public enum ServiceInvite {
     /// Returns lowercase hex of `nonce || ciphertext || tag`. Throws on a bad
     /// key. A bundle sealed here opens on the box / a sibling device (and the
     /// webapp / Android twins) and vice-versa.
-    public static func sealBundle(_ bundle: Bundle, householdKey: Data, inviteId: String) throws -> String {
+    /// `fixedNonce` is for test vectors only; leave it nil.
+    public static func sealBundle(_ bundle: Bundle, householdKey: Data, inviteId: String, nonce fixedNonce: Data? = nil) throws -> String {
         guard householdKey.count == 32 else { throw ServiceInviteError.badKey }
         let key = SymmetricKey(data: householdKey)
-        let nonce = try AES.GCM.Nonce(data: randomData(12))
+        let nonce = try AES.GCM.Nonce(data: fixedNonce ?? randomData(12))
         let sealed = try AES.GCM.seal(
             bundleJSON(bundle),
             using: key,

@@ -551,8 +551,8 @@ public struct VerifiedShareStartup: Equatable, Sendable, Identifiable {
 public struct ServerShareMemberFlow: Sendable {
     public let client: ServerShareClient
     /// The account's UMK seed (32 bytes). Argument: the Face ID reason.
-    private let umkSeed: @Sendable (_ reason: String) async throws -> Data
-    private let now: @Sendable () -> Int64
+    let umkSeed: @Sendable (_ reason: String) async throws -> Data
+    let now: @Sendable () -> Int64
 
     public init(client: ServerShareClient,
                 umkSeed: @escaping @Sendable (_ reason: String) async throws -> Data,

@@ -499,6 +499,85 @@ final class GymOctoberTests: XCTestCase {
         gymShot(app, "shared-server-member")
     }
 
+    // ─── Co-manager invites (docs/service-access-gating.md "Co-manager invites") ──
+
+    private func openSharedApp(_ app: XCUIApplication, _ serviceId: String) {
+        let row = app.buttons["shared-app-\(serviceId)"]
+        XCTAssertTrue(reveal(app, row), "The shared server lists \(serviceId).")
+        row.tap()
+    }
+
+    /// At Can manage, Plants offers Invite people: add a person at Member,
+    /// get a link on the shared server, see them under Your invites, withdraw.
+    func test_coManagerInvitesAPersonAndWithdraws() throws {
+        let app = launch(tab: "home", ["-smoke-shares", "-smoke-share-route", "member"])
+        XCTAssertTrue(app.buttons["shared-leave"].waitForExistence(timeout: 20))
+        XCTAssertFalse(app.staticTexts["co-invite-view-only"].exists, "Can manage has no view-only line.")
+        openSharedApp(app, "bright-maple--plants")
+        let open = app.buttons["co-invite-open"]
+        XCTAssertTrue(reveal(app, open), "A co-manager at Can manage gets Invite people.")
+        XCTAssertEqual(open.label, "Invite people")
+        open.tap()
+        let line = app.staticTexts["co-invite-line"]
+        XCTAssertTrue(line.waitForExistence(timeout: 10))
+        XCTAssertEqual(line.label, "People you invite join as Member. You can withdraw your own invites.")
+        XCTAssertTrue(app.staticTexts["co-invite-none"].exists, "Nothing sent yet.")
+        app.buttons["co-invite-add-person"].tap()
+        let name = app.textFields["co-invite-name"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        name.tap()
+        name.typeText("Alex")
+        let create = app.buttons["co-invite-create"]
+        XCTAssertTrue(reveal(app, create))
+        create.tap()
+        let url = app.staticTexts["co-invite-share-url"]
+        XCTAssertTrue(reveal(app, url), "The link shows after Create invite link.")
+        XCTAssertTrue(url.label.hasPrefix("https://garage.jordan-reyes.flagship.services/invite#"), url.label)
+        XCTAssertTrue(url.label.hasSuffix("&s=bright-maple--plants"), url.label)
+        let row = app.staticTexts.matching(NSPredicate(format: "label == %@", "Alex · Not opened yet")).firstMatch
+        XCTAssertTrue(reveal(app, row), "Your invites lists them.")
+        gymShot(app, "co-invite-created")
+        let withdraw = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "co-invite-withdraw-")).firstMatch
+        XCTAssertTrue(reveal(app, withdraw))
+        withdraw.tap()
+        XCTAssertTrue(app.staticTexts["Withdraw this invite?"].waitForExistence(timeout: 5), "Withdraw asks first.")
+        let confirm = app.buttons["co-invite-withdraw-confirm"].firstMatch
+        if confirm.waitForExistence(timeout: 3) { confirm.tap() } else { app.sheets.buttons["Withdraw"].firstMatch.tap() }
+        XCTAssertTrue(app.staticTexts["co-invite-none"].waitForExistence(timeout: 10), "The list is empty again.")
+    }
+
+    /// Wiki: an admin made the co-manager a Member there, so the panel shows
+    /// the box's sentence, their old invite without Withdraw, and no add.
+    func test_coManagerDemotedSeesWhyAndNoWithdraw() throws {
+        let app = launch(tab: "home", ["-smoke-shares", "-smoke-share-route", "member"])
+        XCTAssertTrue(app.buttons["shared-leave"].waitForExistence(timeout: 20))
+        openSharedApp(app, "bright-maple--wiki")
+        let open = app.buttons["co-invite-open"]
+        XCTAssertTrue(reveal(app, open))
+        open.tap()
+        let why = app.staticTexts["co-invite-why"]
+        XCTAssertTrue(why.waitForExistence(timeout: 10))
+        XCTAssertEqual(why.label, "An admin made you a Member of this app, so you can't invite people to it.")
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label == %@", "Jo · 1 person joined")).firstMatch.exists)
+        XCTAssertFalse(app.buttons["co-invite-add-person"].exists, "No add when demoted.")
+        XCTAssertFalse(app.buttons["co-invite-add-group"].exists)
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "co-invite-withdraw-")).firstMatch.exists,
+                       "No Withdraw when demoted.")
+        gymShot(app, "co-invite-demoted")
+    }
+
+    /// Can view: the Apps card says why there's no Invite people, and an app has none.
+    func test_coManagerViewOnlyCantInvite() throws {
+        let app = launch(tab: "home", ["-smoke-shares", "-smoke-share-route", "member-view"])
+        let line = app.staticTexts["co-invite-view-only"]
+        XCTAssertTrue(reveal(app, line), "The Apps card explains view-only.")
+        XCTAssertEqual(line.label, "You can view this server but not manage it, so you can't invite people to its apps.")
+        gymShot(app, "co-invite-view-only")
+        openSharedApp(app, "bright-maple--plants")
+        XCTAssertTrue(app.staticTexts["Plants"].waitForExistence(timeout: 15) || app.navigationBars["Plants"].exists)
+        XCTAssertFalse(app.buttons["co-invite-open"].exists, "No Invite people at Can view.")
+    }
+
     // ─── Admin-only orders on a non-admin device (MVP sweep) ────────────────
 
     /// A device without the admin root sees Plants' page read-only: no Allow,

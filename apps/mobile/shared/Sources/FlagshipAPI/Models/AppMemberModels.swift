@@ -38,10 +38,13 @@ public enum AppMemberRole: String, Codable, CaseIterable, Sendable, Identifiable
 }
 
 /// Who created an invite, as the box decided from the key that signed it:
-/// `admin` (the admin root) or `member` (a membership key; its joins are
-/// capped at Member). Nil on rows from before tiers were recorded.
+/// `admin` (the admin root), `member` (a membership key) or `co-manager`
+/// (someone the server is shared with, by their member key for the share);
+/// the last two have their joins capped at Member. Nil on rows from before
+/// tiers were recorded.
 public enum AppInviteTier: String, Codable, Sendable {
     case admin, member
+    case coManager = "co-manager"
 }
 
 public struct AppMemberGrant: Codable, Equatable, Sendable {
@@ -80,14 +83,21 @@ public struct AppMemberInviteRole: Codable, Equatable, Sendable {
     public let creatorPub: String?
     /// The account device that key belongs to, from the box's device book.
     public let creatorDeviceId: String?
+    /// A co-manager's invite: the share it came through (32 hex) and the
+    /// owner's label for that share.
+    public let creatorShareId: String?
+    public let creatorLabel: String?
     public init(inviteId: String, role: String, set: Bool, tier: String? = nil,
-                creatorPub: String? = nil, creatorDeviceId: String? = nil) {
+                creatorPub: String? = nil, creatorDeviceId: String? = nil,
+                creatorShareId: String? = nil, creatorLabel: String? = nil) {
         self.inviteId = inviteId
         self.role = role
         self.set = set
         self.tier = tier
         self.creatorPub = creatorPub
         self.creatorDeviceId = creatorDeviceId
+        self.creatorShareId = creatorShareId
+        self.creatorLabel = creatorLabel
     }
 }
 

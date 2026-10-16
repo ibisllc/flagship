@@ -791,6 +791,11 @@ struct SharedServerScreen: View {
             case .loaded(let apps) where apps.isEmpty:
                 Text("No apps on this server yet.").font(FS.font.bodySm()).foregroundColor(c.textMuted)
             case .loaded(let apps):
+                if model.level == .view {
+                    Text(ShareCoInviteCopy.viewOnly).font(FS.font.caption()).foregroundColor(c.textMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("co-invite-view-only")
+                }
                 VStack(spacing: FS.space.s2) {
                     ForEach(apps, id: \.serviceId) { app in
                         Button { onOpenApp(app.serviceId) } label: {
@@ -850,6 +855,7 @@ struct SharedAppScreen: View {
     @State private var server: SharedServerModel?
     @State private var detail: LoadingState<AppSummary> = .idle
     @State private var access: AppAccessController?
+    @State private var invites: CoInviteController?
     @State private var database: AppDatabaseController?
     @State private var showDatabase = false
     @State private var table: DbTable?
@@ -887,6 +893,7 @@ struct SharedAppScreen: View {
                         }
                     }
                     if let access { InternetAccessSection(controller: access) }
+                    if let invites { CoInviteSection(controller: invites) }
                     if let database {
                         FSSecondaryButton("Database", block: true) { showDatabase = true }
                             .accessibilityIdentifier("shared-app-database")
@@ -928,6 +935,9 @@ struct SharedAppScreen: View {
                                             serverDomain: entry.serverDomain, signer: server.memberSigner)
                 access = a
                 await a.load()
+            }
+            if session?.level == .manage, invites == nil {
+                invites = CoInviteController(store: store, shareId: shareId, serviceRef: serviceId, appName: appName)
             }
             if session?.seeAppData == true, database == nil {
                 database = AppDatabaseController(serviceId: serviceId, client: c)

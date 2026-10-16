@@ -76,6 +76,7 @@ public enum ServerShareCopy {
     public static func message(for error: Error) -> String {
         if let e = error as? ServerShareFlowError { return e.errorDescription ?? "Something went wrong." }
         if let e = error as? ShareUpdateRefusal { return e.message }
+        if let e = error as? ShareInviteRefusal { return e.message }
         if let e = error as? ServerShareHTTPError {
             switch e.status {
             case 0: return "Couldn't reach the server. Check your connection and try again."
@@ -97,7 +98,8 @@ public enum ServerShareCopy {
 
 /// Smoke-mode fixtures (`-smoke-mode -smoke-shares`): the share screens
 /// render these with no backend, for screenshots and the gym.
-/// `-smoke-share-route owner|sheet|accept|home|member` opens one screen.
+/// `-smoke-share-route owner|sheet|accept|home|member|member-view` opens one
+/// screen (`member` is the Can manage share, `member-view` the Can view one).
 public enum ServerShareDemo {
     private static var args: [String] { ProcessInfo.processInfo.arguments }
 
@@ -117,6 +119,8 @@ public enum ServerShareDemo {
             return .acceptShare(shareId: nil, secretHex: nil)
         case "member":
             return entries().first.map { .sharedServer(shareId: $0.shareId) }
+        case "member-view":
+            return entries().last.map { .sharedServer(shareId: $0.shareId) }
         default:
             return nil
         }
@@ -605,6 +609,61 @@ public final class SharedWithMeStore {
         if demo { return }
         guard let flow, let it = item(shareId), let stk = stks[shareId] else { throw ServerShareFlowError.noStartupWaiting }
         try await flow.approveStartup(it.entry, startup: startup, stkPubHex: stk)
+    }
+
+    // MARK: Co-manager invites (docs/service-access-gating.md "Co-manager invites")
+
+    /// The flow co-manager invites go through: the live one, or in smoke mode
+    /// one whose box is `ShareCoInvitesMockBox` (the box's exact wire).
+    @ObservationIgnored private var demoInviteFlow: ServerShareMemberFlow?
+    @ObservationIgnored public var inviteFlowOverride: ServerShareMemberFlow?
+
+    private var inviteFlow: ServerShareMemberFlow? {
+        if let inviteFlowOverride { return inviteFlowOverride }
+        guard demo else { return flow }
+        if let demoInviteFlow { return demoInviteFlow }
+        let shareId = ServerShareDemo.entries()[0].shareId
+        let key = GymSeams.accountRootSeed.flatMap { try? ServerShare.deriveShareInviteBundleKey(umkSeed: $0, shareId: shareId) }
+        let box = ShareCoInvitesMockBox.gym(bundleKey: key)
+        let made = ServerShareMemberFlow(
+            client: ServerShareClient(com: box, box: box, boxBase: { URL(string: "https://\($0)") }),
+            umkSeed: ServerShareServices.umkSeed)
+        demoInviteFlow = made
+        return made
+    }
+
+    /// Runs `body` with this share's token, signing in again once if the box
+    /// says the token expired (401).
+    private func withShareToken<T>(_ shareId: String,
+                                   _ body: (ServerShareMemberFlow, SharedServerEntry, String) async throws -> T) async throws -> T {
+        guard let flow = inviteFlow, let it = item(shareId) else { throw ServerShareFlowError.shareEnded }
+        let s = try await session(for: shareId)
+        do {
+            return try await body(flow, it.entry, s.token)
+        } catch let e as ServerShareHTTPError where e.status == 401 {
+            let fresh = try await session(for: shareId, forceNew: true)
+            return try await body(flow, it.entry, fresh.token)
+        }
+    }
+
+    public func coInvites(_ shareId: String, serviceRef: String) async throws -> ShareCoInviteState {
+        try await withShareToken(shareId) { flow, entry, token in
+            try await flow.coInvites(entry, shareToken: token, serviceRef: serviceRef)
+        }
+    }
+
+    public func createCoInvite(_ shareId: String, serviceRef: String, ownerAid: String?, name: String,
+                               group: ShareCoInviteGroup?) async throws -> ShareCoInviteCreated {
+        try await withShareToken(shareId) { flow, entry, token in
+            try await flow.createCoInvite(entry, shareToken: token, serviceRef: serviceRef, ownerAid: ownerAid,
+                                          name: name, group: group)
+        }
+    }
+
+    public func withdrawCoInvite(_ shareId: String, inviteId: String) async throws {
+        try await withShareToken(shareId) { flow, entry, token in
+            try await flow.withdrawCoInvite(entry, shareToken: token, inviteId: inviteId)
+        }
     }
 }
 

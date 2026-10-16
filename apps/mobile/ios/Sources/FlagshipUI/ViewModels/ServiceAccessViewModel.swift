@@ -76,6 +76,8 @@ public final class ServiceAccessViewModel {
         public let creatorDeviceId: String?
         public var id: String { inviteId }
         public var isGroup: Bool { groupMax != nil }
+        /// Made by someone the server is shared with (`.com` says `co-manager`).
+        public var isCoManagers: Bool { creatorTier == AppInviteTier.coManager.rawValue }
         public init(inviteId: String, name: String, photo: String?, bound: Bool, boundAID: String?, groupBoundAIDs: [String] = [], groupMax: Int? = nil, manual: Bool = false,
                     creatorTier: String? = nil, creatorDeviceId: String? = nil) {
             self.inviteId = inviteId
@@ -251,6 +253,7 @@ public final class ServiceAccessViewModel {
 
     private func createdHere(_ p: Person) -> Bool {
         let box = members?.invite(p.inviteId)
+        if p.isCoManagers || box?.tier == AppInviteTier.coManager.rawValue { return false }
         if let pub = ownDevicePub, let creator = box?.creatorPub?.lowercased() { return creator == pub }
         if let deviceId, let creator = box?.creatorDeviceId?.lowercased() { return creator == deviceId }
         guard let deviceId, p.creatorTier == "member" else { return false }
@@ -283,12 +286,22 @@ public final class ServiceAccessViewModel {
     /// "Invited by <device>" for one row, or nil for rows from before
     /// invites recorded who made them.
     public func invitedBy(for p: Person) -> String? {
-        Self.invitedByText(creatorTier: p.creatorTier, creatorDeviceId: p.creatorDeviceId,
-                           ownDeviceId: deviceId, names: deviceNames)
+        let box = members?.invite(p.inviteId)
+        let tier = p.isCoManagers || box?.tier == AppInviteTier.coManager.rawValue ? AppInviteTier.coManager.rawValue : p.creatorTier
+        return Self.invitedByText(creatorTier: tier, creatorDeviceId: p.creatorDeviceId,
+                                  ownDeviceId: deviceId, names: deviceNames, creatorLabel: box?.creatorLabel)
     }
 
+    /// A co-manager's invitee is named under their key, which this account can't open.
+    public static let coManagersInvitee = "Someone they invited"
+
     public static func invitedByText(creatorTier: String?, creatorDeviceId: String?,
-                                     ownDeviceId: String?, names: [String: String]?) -> String? {
+                                     ownDeviceId: String?, names: [String: String]?,
+                                     creatorLabel: String? = nil) -> String? {
+        if creatorTier == AppInviteTier.coManager.rawValue {
+            if let label = creatorLabel, !label.isEmpty { return "Invited by \(label) (co-manager)" }
+            return "Invited by a co-manager"
+        }
         guard creatorTier != nil || creatorDeviceId != nil else { return nil }
         guard let id = creatorDeviceId?.lowercased(), !id.isEmpty else { return "Invited by another device" }
         if let own = ownDeviceId?.lowercased(), id == own { return "Invited by this device" }
@@ -564,7 +577,7 @@ public final class ServiceAccessViewModel {
             people = rows
                 .filter { $0.serviceRef == serviceRef && $0.revokedAt == nil }
                 .map { row in
-                    var name = "unknown"
+                    var name = row.creatorTier == AppInviteTier.coManager.rawValue ? Self.coManagersInvitee : "unknown"
                     var photo: String?
                     if let b = try? ServiceInvite.openBundle(row.encryptedBundleHex, householdKey: keys.household, inviteId: row.inviteId) {
                         name = b.name

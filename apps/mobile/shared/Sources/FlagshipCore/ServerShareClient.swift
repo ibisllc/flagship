@@ -461,6 +461,29 @@ public final class ServerShareClient: Sendable {
                            body: ShareSignedBody(key: "leave", envelope: leave, signature: signature))
     }
 
+    // MARK: Box, co-manager invites (docs/service-access-gating.md "Co-manager invites")
+
+    public func boxInvites(serverDomain: String, shareToken: String, serviceRef: String) async throws -> ShareInvitesResponse {
+        let unreserved = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")
+        let q = serviceRef.addingPercentEncoding(withAllowedCharacters: unreserved) ?? serviceRef
+        return try await send(box, try boxURL(serverDomain), "GET", "/api/shares/invites?service=\(q)", body: nil as String?,
+                              headers: [Self.sessionHeader: shareToken])
+    }
+
+    public func boxCreateInvite(serverDomain: String, shareToken: String, request: ShareInviteCreateRequest,
+                                signature: String) async throws {
+        try await sendVoid(box, try boxURL(serverDomain), "POST", "/api/shares/invites",
+                           body: ShareInviteCreateBody(request: request, signature: signature),
+                           headers: [Self.sessionHeader: shareToken])
+    }
+
+    public func boxWithdrawInvite(serverDomain: String, shareToken: String, revoke: ShareInviteRevoke,
+                                  signature: String) async throws {
+        try await sendVoid(box, try boxURL(serverDomain), "POST", "/api/shares/invites/withdraw",
+                           body: ShareInviteWithdrawBody(revoke: revoke, signature: signature),
+                           headers: [Self.sessionHeader: shareToken])
+    }
+
     // MARK: Plumbing
 
     private func seg(_ s: String) -> String {
