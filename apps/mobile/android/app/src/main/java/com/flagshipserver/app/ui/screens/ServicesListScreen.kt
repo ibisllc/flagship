@@ -1,5 +1,14 @@
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Dns
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.MaterialTheme
+import com.flagshipserver.app.ui.components.FSEmptyState
+import com.flagshipserver.app.ui.components.FSScreen
 import com.flagshipserver.app.viewmodels.AppAccessViewModel
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -32,6 +41,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -165,70 +175,37 @@ fun ServicesListScreen(nav: NavController) {
         else -> if (allApps.isEmpty()) "Nothing installed yet." else "${allApps.size} installed"
     }
 
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
+    val refreshScope = androidx.compose.runtime.rememberCoroutineScope()
+    FSScreen(
+        title = "Services",
+        titleTag = "services-title",
+        subtitle = subtitle,
+        onRefresh = { refreshScope.launch { vm.refresh() } },
+        refreshing = state is LoadingState.Loading,
     ) {
-      // Reading column — clamp + center on expanded panes; a no-op on phones.
-      Column(
-        modifier = Modifier
-            .widthIn(max = FSLayout.readingMaxWidth)
-            .fillMaxWidth()
-            .padding(horizontal = FS.space.s6),
-      ) {
-        Spacer(Modifier.height(FS.space.s10))
-        Text(
-            text = "Services",
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 32.sp, lineHeight = 40.sp, fontWeight = FontWeight.Medium),
-            modifier = Modifier.testTag("services-title"),
-        )
-        Text(
-            text = subtitle,
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 17.sp, lineHeight = 24.sp),
-        )
-
         if (noServer) {
-            Spacer(Modifier.height(FS.space.s8))
-            FSCard(padding = PaddingValues(FS.space.s6), modifier = Modifier.testTag("services-no-server")) {
-                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                    Text(
-                        text = NO_SERVER_TITLE,
-                        color = FS.colors.text,
-                        style = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
-                    )
-                    Text(
-                        text = NO_SERVER_HINT,
-                        color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
-                    )
-                }
-            }
+            FSEmptyState(
+                title = NO_SERVER_TITLE,
+                message = NO_SERVER_HINT,
+                icon = Icons.Outlined.Dns,
+                modifier = Modifier.testTag("services-no-server"),
+            )
         } else if (allApps.isEmpty() && state !is LoadingState.Loading) {
-            Spacer(Modifier.height(FS.space.s8))
-            FSCard(padding = PaddingValues(FS.space.s6)) {
-                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-                    Text(
-                        text = "Build your first service",
-                        color = FS.colors.text,
-                        style = TextStyle(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
-                    )
-                    Text(
-                        text = "Describe what you want in plain English. The AI writes it; your server runs it.",
-                        color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 16.sp, lineHeight = 24.sp),
-                    )
+            FSEmptyState(
+                title = "Build your first service",
+                message = "Describe what you want in plain English. The AI writes it; your server runs it.",
+                icon = Icons.Outlined.AutoAwesome,
+                iconTint = FS.colors.primary,
+                action = {
                     FSPrimaryButton(
                         label = "Build a service",
                         onClick = { nav.navigate("build/source") },
                         block = true,
                         modifier = Modifier.testTag("services-build-cta"),
                     )
-                }
-            }
+                },
+            )
         } else {
-            Spacer(Modifier.height(FS.space.s4))
             // V8 — the server filter sits above search when the user owns more
             // than one pod, doubling as a context switcher ("All servers" =
             // every app regardless of which pod runs it).
@@ -241,7 +218,6 @@ fun ServicesListScreen(nav: NavController) {
                     allLabel = "All servers",
                     onPickAll = { serverFilter = null },
                 )
-                Spacer(Modifier.height(FS.space.s3))
             }
             FSSearchField(
                 value = query,
@@ -251,7 +227,6 @@ fun ServicesListScreen(nav: NavController) {
             // The owner chips only when there's a meaningful split (at least
             // one shared app), so a solo user isn't given a redundant toggle.
             if (hasShared) {
-                Spacer(Modifier.height(FS.space.s3))
                 FSChipRow(
                     items = listOf(
                         FSChipItem(OwnerFilter.ALL, OwnerFilter.ALL.label),
@@ -262,7 +237,6 @@ fun ServicesListScreen(nav: NavController) {
                     onSelect = { ownerFilter = it },
                 )
             }
-            Spacer(Modifier.height(FS.space.s4))
             Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
                 apps.forEach { app ->
                     AppRow(app, me = me, onClick = { nav.navigate("app-detail/${app.serviceId}") })
@@ -270,10 +244,10 @@ fun ServicesListScreen(nav: NavController) {
                 BuildAnotherAppRow(onClick = { nav.navigate("build/source") })
             }
         }
-      }
     }
 }
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun AppRow(app: AppSummary, me: String, onClick: () -> Unit) {
     val running = app.pill.tone == AppStatus.Tone.Online
@@ -287,50 +261,48 @@ private fun AppRow(app: AppSummary, me: String, onClick: () -> Unit) {
         subtitle = subtitleFor(app, isShared),
         detail = shortUrlText(app),
         onClick = onClick,
-    ) {
-        if (app.egressPending) {
-            FSPill(
-                label = AppAccessViewModel.BADGE,
-                kind = FSPillKind.Pending,
-                modifier = Modifier.testTag("services-row-egress-badge"),
-            )
-        }
-        // "On N servers" shows as N and Home's server icon; TalkBack reads the label.
-        val count = app.pill.serverCount
-        FSPill(
-            label = count?.toString() ?: app.pill.label,
-            kind = app.pill.tone.pillKind(),
-            modifier = Modifier
-                .testTag("services-row-status")
-                .clearAndSetSemantics { contentDescription = app.pill.label },
-            trailingIcon = if (count != null) Icons.Outlined.Dns else null,
-        )
-        Text("›", color = FS.colors.textMuted, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
-    }
+        // The tags go under the text: the app's name always gets the row's
+        // full width (a "Wants internet" tag beside it squeezed it to "…").
+        below = {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
+                verticalArrangement = Arrangement.spacedBy(FS.space.s1),
+            ) {
+                // "On N servers" shows as N and Home's server icon; TalkBack reads the label.
+                val count = app.pill.serverCount
+                FSPill(
+                    label = count?.toString() ?: app.pill.label,
+                    kind = app.pill.tone.pillKind(),
+                    modifier = Modifier
+                        .testTag("services-row-status")
+                        .clearAndSetSemantics { contentDescription = app.pill.label },
+                    trailingIcon = if (count != null) Icons.Outlined.Dns else null,
+                )
+                if (app.egressPending) {
+                    FSPill(
+                        label = AppAccessViewModel.BADGE,
+                        kind = FSPillKind.Pending,
+                        modifier = Modifier.testTag("services-row-egress-badge"),
+                    )
+                }
+            }
+        },
+    )
 }
 
-/** A dashed-outline "Build another service" affordance under the list. */
+/** "Build another service" under the list: a tonal button with a plus. */
 @Composable
 private fun BuildAnotherAppRow(onClick: () -> Unit) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
+    FilledTonalButton(
+        onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(FS.radius.md))
-            .background(FS.colors.primary.copy(alpha = 0.08f))
-            .border(1.dp, FS.colors.primary.copy(alpha = 0.25f), RoundedCornerShape(FS.radius.md))
-            .clickable(onClick = onClick)
-            .padding(horizontal = FS.space.s4, vertical = FS.space.s3)
+            .heightIn(min = 48.dp)
             .testTag("services-build-cta"),
     ) {
-        Icon(Icons.Outlined.Add, contentDescription = null, tint = FS.colors.primary, modifier = Modifier.size(16.dp))
-        Text(
-            text = "Build another service",
-            color = FS.colors.primary,
-            style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
-        )
-        Spacer(Modifier.weight(1f))
+        Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(FS.space.s2))
+        Text("Build another service", style = MaterialTheme.typography.labelLarge)
     }
 }
 

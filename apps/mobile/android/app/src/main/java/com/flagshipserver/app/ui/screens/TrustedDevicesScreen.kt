@@ -237,7 +237,8 @@ fun TrustedDevicesScreen(nav: NavController) {
                     icon = Icons.Outlined.QrCode2,
                     iconTint = if (canAddDevice) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     titleColor = if (canAddDevice) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    onClick = if (canAddDevice) { { nav.navigate("add-device") } } else null,
+                    onClick = { nav.navigate("add-device") },
+                    enabled = canAddDevice,
                     modifier = Modifier.semantics { contentDescription = "trusted-devices-add" },
                 )
             }

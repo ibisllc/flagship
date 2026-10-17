@@ -20,11 +20,20 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.outlined.Autorenew
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.EditNote
 import androidx.compose.material.icons.outlined.Feedback
+import androidx.compose.material.icons.outlined.GppMaybe
+import androidx.compose.material.icons.outlined.Public
+import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Tab
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -61,6 +70,13 @@ import com.flagshipserver.app.core.LocalToastCenter
 import com.flagshipserver.app.core.PodInfo
 import com.flagshipserver.app.core.SlugUtil
 import com.flagshipserver.app.ui.components.FSCard
+import com.flagshipserver.app.ui.components.FSCardDivider
+import com.flagshipserver.app.ui.components.FSDivider
+import com.flagshipserver.app.ui.components.FSGroup
+import com.flagshipserver.app.ui.components.FSRow
+import com.flagshipserver.app.ui.components.FSScreen
+import com.flagshipserver.app.ui.components.FSSectionHeader
+import com.flagshipserver.app.ui.components.plural
 import com.flagshipserver.app.ui.components.FSDangerButton
 import com.flagshipserver.app.ui.components.FSGhostButton
 import com.flagshipserver.app.ui.components.FSPill
@@ -86,16 +102,17 @@ import kotlinx.coroutines.launch
  * (loads app-detail off the box; no more sample data). Sections:
  *
  *   1. Header — slug, creator, status pill, version + immutable package id.
- *   2. RUNS ON — every server ticked exactly where the app is (from each
+ *   2. Internet access, then Edit / Report a problem with the adaptation.
+ *   3. Runs on — every server ticked exactly where the app is (from each
  *      server's own apps list); tick copies it there, untick removes that copy
  *      (docs/app-placement.md §4).
- *   3. WEB DOMAINS — canonical FQDN + per-pod aliases + Replace stem
+ *   4. Web domains — canonical FQDN + per-pod aliases + Replace stem
  *      (RenameServiceViewModel, unchanged).
- *   4. Browser viewer (conditional), Access control, recent logs, last backup.
- *   5. Uninstall — the owner-signed uninstall of this server's copy.
+ *   5. Browser viewer (conditional), Access control, Environment, API keys,
+ *      Database, recent logs, backup.
+ *   6. Uninstall — the owner-signed uninstall of this server's copy.
  *
- * "Configure environment" is reachable from the toolbar overflow → the
- * service-env route (see ServicesTab).
+ * The order follows iOS's ServiceDetailScreen.
  */
 @Composable
 fun ServiceDetailScreen(nav: NavController, serviceId: String) {
@@ -183,21 +200,11 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
         renameVm.loadLinks()
     }
 
-    val scroll = rememberScrollState()
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(scroll),
-        horizontalAlignment = Alignment.CenterHorizontally,
+    val loaded = detail.loadedValue()
+    FSScreen(
+        title = loaded?.app?.slug?.replaceFirstChar { it.uppercase() } ?: "Service",
+        onBack = { nav.popBackStack() },
     ) {
-      // Reading column — clamp + center on expanded panes; a no-op on phones.
-      Column(
-        modifier = Modifier
-            .widthIn(max = FSLayout.readingMaxWidth)
-            .fillMaxWidth()
-            .padding(horizontal = FS.space.s6),
-      ) {
-        Spacer(Modifier.height(FS.space.s10))
         when (val d = detail) {
             is LoadingState.Idle, is LoadingState.Loading -> {
                 ServerCardSkeleton()
@@ -205,14 +212,16 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
             is LoadingState.Failed -> {
                 if (certMismatch) {
                     FSCard(modifier = Modifier.semantics { testTag = "service-detail-cert-warning" }) {
-                        Column {
-                            Text(
-                                "Connection not trusted",
-                                color = FS.colors.danger,
-                                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-                            )
-                            Spacer(Modifier.height(FS.space.s1))
-                            Text(d.message, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+                        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                                Icon(Icons.Outlined.GppMaybe, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                                Text(
+                                    "Connection not trusted",
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.titleMedium,
+                                )
+                            }
+                            Text(d.message, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                 } else {
@@ -244,35 +253,35 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                         fallbackServerDomain = { pagePodState.value?.fqdn ?: appState.sessionPod?.fqdn },
                     )
                 }
-                // API keys (docs/app-apis.md §3); hidden on a box without them.
-                ApiKeysSection(
-                    serviceId = serviceId,
-                    appName = resp.app.slug.replaceFirstChar { it.uppercase() },
-                    restricted = appState.isRestrictedDevice() || !adminDevice,
-                    readOnlyNote = if (appState.isRestrictedDevice()) com.flagshipserver.app.viewmodels.AppApiKeysViewModel.READ_ONLY_NOTE
-                    else com.flagshipserver.app.core.AdminOrderGate.API_KEYS,
-                    fallbackServerDomain = { pagePodState.value?.fqdn ?: appState.sessionPod?.fqdn },
-                )
-                // The owner's Database section (docs/app-apis.md §6): owner
-                // only, hidden on a box without it.
-                DatabaseEntrySection(
-                    nav = nav,
-                    serviceId = serviceId,
-                    detail = resp,
-                    restricted = appState.isRestrictedDevice(),
-                )
                 AppStorageSection(resp.storage)
-                if (resp.editable == true) {
-                    Spacer(Modifier.height(FS.space.s4))
-                    EditRow(onClick = { nav.navigate("edit-service/$serviceId") })
+                val adaptedFrom = resp.adaptedFrom
+                if (resp.editable == true || adaptedFrom != null) {
+                    FSGroup {
+                        if (resp.editable == true) {
+                            FSRow(
+                                title = EditService.ROW_TITLE,
+                                subtitle = EditService.ROW_CAPTION,
+                                icon = Icons.Outlined.EditNote,
+                                iconTint = MaterialTheme.colorScheme.primary,
+                                onClick = { nav.navigate("edit-service/$serviceId") },
+                                modifier = Modifier.semantics { testTag = "service-detail-edit" },
+                            )
+                        }
+                        if (resp.editable == true && adaptedFrom != null) FSDivider()
+                        if (adaptedFrom != null) {
+                            FSRow(
+                                title = AdapterReport.ROW_TITLE,
+                                subtitle = AdapterReport.rowCaption(adaptedFrom.repo),
+                                icon = Icons.Outlined.Feedback,
+                                iconTint = MaterialTheme.colorScheme.primary,
+                                onClick = { showAdapterReport = true },
+                                modifier = Modifier.semantics { testTag = "service-detail-report-adapter" },
+                            )
+                        }
+                    }
                 }
-                resp.adaptedFrom?.let { from ->
-                    Spacer(Modifier.height(FS.space.s4))
-                    AdapterReportRow(repo = from.repo, onClick = { showAdapterReport = true })
-                }
-                Spacer(Modifier.height(FS.space.s8))
 
-                // ── RUNS ON (docs/app-placement.md §4) ─────────────────
+                // Runs on (docs/app-placement.md §4).
                 RunsOnSection(
                     vm = placementVm,
                     rows = placementRows,
@@ -291,9 +300,7 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                     onDismissMessage = { placementVm.dismissMessage() },
                 )
 
-                Spacer(Modifier.height(FS.space.s6))
-
-                // ── WEB DOMAINS (Replace) ──────────────
+                // Web domains (Replace).
                 val selectedPods = placementRows.filter { it.presence is com.flagshipserver.app.viewmodels.AppPlacementViewModel.Presence.Has }.map { it.pod }
                 WebDomainsSection(
                     fallbackLabel = resp.app.urlLabel,
@@ -306,126 +313,113 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                     },
                 )
 
-                // ── Browser viewer — only when the daemon reports tabs ──
+                // Browser viewer: only when the daemon reports tabs.
                 if (resp.browserTabs.isNotEmpty()) {
-                    Spacer(Modifier.height(FS.space.s6))
-                    SectionHeader("Browser")
-                    FSCard(
-                        padding = PaddingValues(FS.space.s4),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { nav.navigate("browser-tabs/$serviceId") },
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text("Open browser viewer", color = FS.colors.text, style = TextStyle(fontSize = 16.sp))
-                                Text(
-                                    "${resp.browserTabs.size} tab${if (resp.browserTabs.size == 1) "" else "s"} running server-side",
-                                    color = FS.colors.textMuted,
-                                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-                                )
-                            }
-                            Text("›", color = FS.colors.textMuted, style = TextStyle(fontSize = 24.sp))
-                        }
+                    FSGroup(header = "Browser") {
+                        FSRow(
+                            title = "Open browser viewer",
+                            subtitle = "${plural(resp.browserTabs.size, "tab")} running on your server",
+                            icon = Icons.Outlined.Tab,
+                            iconTint = MaterialTheme.colorScheme.primary,
+                            onClick = { nav.navigate("browser-tabs/$serviceId") },
+                            modifier = Modifier.semantics { testTag = "service-detail-open-browser-viewer" },
+                        )
                     }
                 }
 
-                // ── Access control (#92) ───────────────────────────────
-                Spacer(Modifier.height(FS.space.s4))
-                SectionHeader("Access control")
-                FSCard(
-                    padding = PaddingValues(FS.space.s4),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .semantics { testTag = "service-detail-access-row" }
-                        .clickable { nav.navigate("service-access/$serviceId") },
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Filled.People, contentDescription = null, tint = FS.colors.primary)
-                        Spacer(Modifier.width(FS.space.s3))
-                        Column(Modifier.weight(1f)) {
-                            Text("Access control", color = FS.colors.text, style = TextStyle(fontSize = 16.sp))
-                            Text(
-                                "Open to all or members only, and each member's rank",
-                                color = FS.colors.textMuted,
-                                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-                            )
-                        }
-                        Text("›", color = FS.colors.textMuted, style = TextStyle(fontSize = 24.sp))
-                    }
+                // Access control (#92).
+                FSGroup(header = "Access control") {
+                    FSRow(
+                        title = "Access control",
+                        subtitle = "Open to all or members only, and each member's rank",
+                        icon = Icons.Filled.People,
+                        iconTint = MaterialTheme.colorScheme.primary,
+                        onClick = { nav.navigate("service-access/$serviceId") },
+                        modifier = Modifier.semantics { testTag = "service-detail-access-row" },
+                    )
                 }
 
-                // ── Configure environment ──────────────────────────────
-                Spacer(Modifier.height(FS.space.s4))
-                SectionHeader("Environment")
-                FSCard(
-                    padding = PaddingValues(FS.space.s4),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .semantics { testTag = "service-detail-env-row" }
-                        .clickable { nav.navigate("service-env/$serviceId") },
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text("Configure environment", color = FS.colors.text, style = TextStyle(fontSize = 16.sp))
-                            Text(
-                                "Set API keys + secrets. Values stay on your server.",
-                                color = FS.colors.textMuted,
-                                style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-                            )
-                        }
-                        Text("›", color = FS.colors.textMuted, style = TextStyle(fontSize = 24.sp))
-                    }
+                // Environment.
+                FSGroup(header = "Environment") {
+                    FSRow(
+                        title = "Configure environment",
+                        subtitle = "Set API keys and secrets. Values stay on your server.",
+                        icon = Icons.Outlined.Tune,
+                        iconTint = MaterialTheme.colorScheme.primary,
+                        onClick = { nav.navigate("service-env/$serviceId") },
+                        modifier = Modifier.semantics { testTag = "service-detail-env-row" },
+                    )
                 }
 
-                // ── Recent logs ────────────────────────────────────────
-                if (resp.recentLogs.isNotEmpty()) {
-                    Spacer(Modifier.height(FS.space.s6))
-                    SectionHeader("Recent logs")
-                    FSCard(padding = PaddingValues(FS.space.s4)) {
-                        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
-                            resp.recentLogs.forEach { line ->
-                                Text(
-                                    line,
-                                    color = FS.colors.text,
-                                    style = TextStyle(fontSize = 13.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // ── Backup ─────────────────────────────────────────────
-                Spacer(Modifier.height(FS.space.s4))
-                SectionHeader("Backup")
-                AppBackupCard(
+                // API keys (docs/app-apis.md §3); hidden on a box without them.
+                ApiKeysSection(
                     serviceId = serviceId,
-                    client = client,
-                    lastBackup = resp.lastBackup?.let { "Last backup: ${it.bytes / 1024 / 1024} MB · ${relativeTime(it.createdAt)}" },
+                    appName = resp.app.slug.replaceFirstChar { it.uppercase() },
+                    restricted = appState.isRestrictedDevice() || !adminDevice,
+                    readOnlyNote = if (appState.isRestrictedDevice()) com.flagshipserver.app.viewmodels.AppApiKeysViewModel.READ_ONLY_NOTE
+                    else com.flagshipserver.app.core.AdminOrderGate.API_KEYS,
+                    fallbackServerDomain = { pagePodState.value?.fqdn ?: appState.sessionPod?.fqdn },
+                )
+                // The owner's Database section (docs/app-apis.md §6): owner
+                // only, hidden on a box without it.
+                DatabaseEntrySection(
+                    nav = nav,
+                    serviceId = serviceId,
+                    detail = resp,
+                    restricted = appState.isRestrictedDevice(),
                 )
 
-                // ── Uninstall (this server's copy) ─────────────────────
-                Spacer(Modifier.height(FS.space.s8))
+                // Recent logs.
+                if (resp.recentLogs.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                        FSSectionHeader("Recent logs")
+                        FSCard {
+                            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
+                                resp.recentLogs.forEach { line ->
+                                    Text(
+                                        line,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Backup.
+                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                    FSSectionHeader("Backup")
+                    AppBackupCard(
+                        serviceId = serviceId,
+                        client = client,
+                        lastBackup = resp.lastBackup?.let { "Last backup: ${it.bytes / 1024 / 1024} MB · ${relativeTime(it.createdAt)}" },
+                    )
+                }
+
+                // Uninstall (this server's copy).
                 if (adminDevice) {
                     FSDangerButton(
                         label = "Uninstall",
                         onClick = { showUninstallDialog = true },
                         enabled = !uninstalling,
                         block = true,
-                        modifier = Modifier.semantics { testTag = "service-detail-uninstall-btn" },
+                        modifier = Modifier
+                            .padding(top = FS.space.s4)
+                            .semantics { testTag = "service-detail-uninstall-btn" },
                     )
                 } else {
                     Text(
                         UNINSTALL_ADMIN_ONLY_LINE,
-                        color = FS.colors.textMuted,
-                        style = TextStyle(fontSize = 13.sp),
-                        modifier = Modifier.semantics { testTag = "service-detail-uninstall-admin-only" },
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier
+                            .padding(top = FS.space.s4, start = FS.space.s1)
+                            .semantics { testTag = "service-detail-uninstall-admin-only" },
                     )
                 }
-                Spacer(Modifier.height(FS.space.s12))
             }
         }
-      }
     }
 
     if (showReplaceDialog) {
@@ -455,8 +449,8 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
             text = {
                 Text(
                     "The copy on ${row.pod.name} and its data are deleted. The other copies keep running with their own data.",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
                 )
             },
             confirmButton = {
@@ -466,7 +460,7 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                         scope.launch { placementVm.removeFrom(row.pod.podId) }
                     },
                     modifier = Modifier.semantics { testTag = "runs-on-remove-confirm" },
-                ) { Text("Remove", color = FS.colors.danger) }
+                ) { Text("Remove", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { confirmRemoveFrom = null }) { Text("Cancel") } },
         )
@@ -480,8 +474,8 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                 Text(
                     "This removes the service from ${pagePod?.name ?: "your server"} and frees its data there. " +
                         "Links to that copy stop working immediately. This can't be undone.",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
                 )
             },
             confirmButton = {
@@ -506,7 +500,7 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
                             }
                         }
                     },
-                ) { Text(if (uninstalling) "Uninstalling…" else "Uninstall", color = FS.colors.danger) }
+                ) { Text(if (uninstalling) "Uninstalling…" else "Uninstall", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
                 TextButton(onClick = { if (!uninstalling) showUninstallDialog = false }) { Text("Cancel") }
@@ -515,8 +509,6 @@ fun ServiceDetailScreen(nav: NavController, serviceId: String) {
     }
 }
 
-/** "Report a problem with this adaptation", for a service built from a
- *  shared adaptation. */
 /**
  * The v1 internet approval, for a box that sends `egress` but no `access`
  * (from before access lists). Shown only when the box reports `egress` (it has
@@ -543,111 +535,85 @@ private fun EgressSection(
     val error by vm.error.collectAsState()
     val card = EgressCardState.from(current, restricted) ?: return
 
-    if (card.showsPending) {
-        Spacer(Modifier.height(FS.space.s4))
-        FSCard(
-            padding = PaddingValues(FS.space.s4),
-            modifier = Modifier.fillMaxWidth().semantics { testTag = "service-detail-egress-pending" },
-        ) {
-            Column {
-                Text(
-                    AppEgressViewModel.PENDING_TITLE,
-                    color = FS.colors.text,
-                    style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-                )
-                Spacer(Modifier.height(FS.space.s2))
-                card.pending.forEach { host ->
-                    Text(host, color = FS.colors.text, style = TextStyle(fontSize = 14.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace))
-                }
-                Spacer(Modifier.height(FS.space.s2))
-                Text(
-                    AppEgressViewModel.PENDING_NOTE,
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-                )
-                if (card.canSign) {
-                    Spacer(Modifier.height(FS.space.s3))
-                    FSPrimaryButton(
-                        label = if (busy) "Allowing…" else AppEgressViewModel.ALLOW,
-                        enabled = !busy,
-                        block = true,
-                        modifier = Modifier.semantics { testTag = "service-detail-egress-allow" },
-                        onClick = {
-                            scope.launch {
-                                if (vm.allow()) toasts.success("The app can reach these hosts now.")
-                            }
-                        },
+    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s4)) {
+        if (card.showsPending) {
+            FSCard(
+                padding = PaddingValues(FS.space.s4),
+                modifier = Modifier.fillMaxWidth().semantics { testTag = "service-detail-egress-pending" },
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                        Icon(Icons.Outlined.Public, contentDescription = null, tint = FS.colors.warning)
+                        Text(
+                            AppEgressViewModel.PENDING_TITLE,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                    }
+                    card.pending.forEach { host ->
+                        Text(host, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace))
+                    }
+                    Text(
+                        AppEgressViewModel.PENDING_NOTE,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
                     )
+                    if (card.canSign) {
+                        FSPrimaryButton(
+                            label = if (busy) "Allowing…" else AppEgressViewModel.ALLOW,
+                            enabled = !busy,
+                            block = true,
+                            modifier = Modifier.padding(top = FS.space.s1).semantics { testTag = "service-detail-egress-allow" },
+                            onClick = {
+                                scope.launch {
+                                    if (vm.allow()) toasts.success("The app can reach these hosts now.")
+                                }
+                            },
+                        )
+                    }
                 }
             }
         }
-    }
-    if (card.showsApproved) {
-        Spacer(Modifier.height(FS.space.s4))
-        FSCard(
-            padding = PaddingValues(FS.space.s4),
-            modifier = Modifier.fillMaxWidth().semantics { testTag = "service-detail-egress-approved" },
-        ) {
-            Column {
-                Text(
-                    AppEgressViewModel.APPROVED_TITLE,
-                    color = FS.colors.text,
-                    style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-                )
-                Spacer(Modifier.height(FS.space.s1))
-                Text(
-                    AppEgressViewModel.APPROVED_NOTE,
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-                )
-                Spacer(Modifier.height(FS.space.s2))
-                card.approved.forEach { host ->
-                    Text(host, color = FS.colors.text, style = TextStyle(fontSize = 14.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace))
-                }
-                if (card.canSign) {
-                    Spacer(Modifier.height(FS.space.s3))
-                    FSDangerButton(
-                        label = if (busy) "Stopping…" else AppEgressViewModel.STOP,
-                        enabled = !busy,
-                        modifier = Modifier.semantics { testTag = "service-detail-egress-stop" },
-                        onClick = {
-                            scope.launch {
-                                if (vm.stopAccess()) toasts.success("The app can't reach the internet now.")
-                            }
-                        },
-                    )
+        if (card.showsApproved) {
+            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                FSSectionHeader("Internet access")
+                FSCard(
+                    padding = PaddingValues(FS.space.s4),
+                    modifier = Modifier.fillMaxWidth().semantics { testTag = "service-detail-egress-approved" },
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                        Text(
+                            AppEgressViewModel.APPROVED_TITLE,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            AppEgressViewModel.APPROVED_NOTE,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        card.approved.forEach { host ->
+                            Text(host, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace))
+                        }
+                        if (card.canSign) {
+                            FSDangerButton(
+                                label = if (busy) "Stopping…" else AppEgressViewModel.STOP,
+                                enabled = !busy,
+                                block = true,
+                                modifier = Modifier.padding(top = FS.space.s1).semantics { testTag = "service-detail-egress-stop" },
+                                onClick = {
+                                    scope.launch {
+                                        if (vm.stopAccess()) toasts.success("The app can't reach the internet now.")
+                                    }
+                                },
+                            )
+                        }
+                    }
                 }
             }
         }
-    }
-    error?.let {
-        Spacer(Modifier.height(FS.space.s2))
-        Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp))
-    }
-}
-
-@Composable
-private fun AdapterReportRow(repo: String, onClick: () -> Unit) {
-    FSCard(
-        padding = PaddingValues(FS.space.s4),
-        modifier = Modifier
-            .fillMaxWidth()
-            .semantics { testTag = "service-detail-report-adapter" }
-            .clickable(onClick = onClick),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.Feedback, contentDescription = null, tint = FS.colors.primary)
-            Spacer(Modifier.width(FS.space.s3))
-            Column(Modifier.weight(1f)) {
-                Text(AdapterReport.ROW_TITLE, color = FS.colors.text, style = TextStyle(fontSize = 16.sp))
-                Text(
-                    AdapterReport.rowCaption(repo),
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-                    maxLines = 2,
-                )
-            }
-            Text("›", color = FS.colors.textMuted, style = TextStyle(fontSize = 24.sp))
+        error?.let {
+            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
@@ -669,16 +635,19 @@ private fun AdapterReportDialog(serviceId: String, onDismiss: () -> Unit) {
                     Text(
                         AdapterReport.SENT,
                         color = FS.colors.success,
-                        style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+                        style = MaterialTheme.typography.titleMedium,
                     )
-                    Text(AdapterReport.SENT_NEXT, color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
+                    Text(AdapterReport.SENT_NEXT, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                 } else {
-                    Text(AdapterReport.PROMPT, color = FS.colors.text, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
-                    Text(
-                        "⚠ ${AdapterReport.WARNING}",
-                        color = FS.colors.warning,
-                        style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-                    )
+                    Text(AdapterReport.PROMPT, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodyMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                        Icon(Icons.Outlined.Shield, contentDescription = null, tint = FS.colors.warning)
+                        Text(
+                            AdapterReport.WARNING,
+                            color = FS.colors.warning,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
                     OutlinedTextField(
                         value = detail,
                         onValueChange = { detail = it },
@@ -691,9 +660,9 @@ private fun AdapterReportDialog(serviceId: String, onDismiss: () -> Unit) {
                     Text(
                         AdapterReport.counter(detail),
                         color = if (detail.length > AdapterReport.MAX_LENGTH) FS.colors.danger else FS.colors.textMuted,
-                        style = TextStyle(fontSize = 12.sp),
+                        style = MaterialTheme.typography.bodySmall,
                     )
-                    error?.let { Text(it, color = FS.colors.danger, style = TextStyle(fontSize = 13.sp)) }
+                    error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
                 }
             }
         },
@@ -717,70 +686,52 @@ private fun AdapterReportDialog(serviceId: String, onDismiss: () -> Unit) {
 private fun LoadingState<AppDetailResponse>.loadedValue(): AppDetailResponse? =
     (this as? LoadingState.Loaded)?.value
 
-/** "Edit this service", shown when the box says it can be edited here. */
-@Composable
-private fun EditRow(onClick: () -> Unit) {
-    FSCard(
-        padding = PaddingValues(FS.space.s4),
-        modifier = Modifier
-            .fillMaxWidth()
-            .semantics { testTag = "service-detail-edit" }
-            .clickable(onClick = onClick),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Outlined.EditNote, contentDescription = null, tint = FS.colors.primary)
-            Spacer(Modifier.width(FS.space.s3))
-            Column(Modifier.weight(1f)) {
-                Text(EditService.ROW_TITLE, color = FS.colors.text, style = TextStyle(fontSize = 16.sp))
-                Text(
-                    EditService.ROW_CAPTION,
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-                )
-            }
-            Text("›", color = FS.colors.textMuted, style = TextStyle(fontSize = 24.sp))
-        }
-    }
-}
-
 @Composable
 private fun Header(app: AppSummary) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = app.slug.replaceFirstChar { it.uppercase() },
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 32.sp, lineHeight = 40.sp, fontWeight = FontWeight.Medium),
-            modifier = Modifier.weight(1f),
-        )
-        // This server's state of the app (docs/app-placement.md §6); an older
-        // box's "unknown" shows no pill.
-        com.flagshipserver.app.core.AppStatus.pill(app)?.let { pill ->
-            FSPill(
-                label = pill.label,
-                kind = pill.tone.pillKind(),
-                modifier = Modifier.semantics { testTag = "app-status-pill" },
+    FSCard {
+        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                Text(
+                    text = app.slug.replaceFirstChar { it.uppercase() },
+                    color = MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.weight(1f),
+                )
+                // This server's state of the app (docs/app-placement.md §6); an older
+                // box's "unknown" shows no pill.
+                com.flagshipserver.app.core.AppStatus.pill(app)?.let { pill ->
+                    FSPill(
+                        label = pill.label,
+                        kind = pill.tone.pillKind(),
+                        modifier = Modifier.semantics { testTag = "app-status-pill" },
+                    )
+                }
+            }
+            Text(
+                text = "by ${app.creator}",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodyLarge,
             )
+            // `id:` is the IMMUTABLE composite package id (`<creator>--<slug>`, double
+            // dash). It never changes — Replace only rotates the user-facing URL stem.
+            Text(
+                text = buildString {
+                    app.version?.let { append("ver: ").append(it).append("  ·  ") }
+                    append("id: ").append(app.serviceId)
+                },
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.semantics { testTag = "app-detail-package-id" },
+            )
+            app.summary?.takeIf { it.isNotEmpty() }?.let {
+                Text(
+                    it,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(top = FS.space.s1),
+                )
+            }
         }
-    }
-    Text(
-        text = "by ${app.creator}",
-        color = FS.colors.textMuted,
-        style = TextStyle(fontSize = 17.sp, lineHeight = 24.sp),
-    )
-    // `id:` is the IMMUTABLE composite package id (`<creator>--<slug>`, double
-    // dash). It never changes — Replace only rotates the user-facing URL stem.
-    Text(
-        text = buildString {
-            app.version?.let { append("ver: ").append(it).append("  ·  ") }
-            append("id: ").append(app.serviceId)
-        },
-        color = FS.colors.textMuted,
-        style = TextStyle(fontSize = 12.sp, lineHeight = 16.sp),
-        modifier = Modifier.padding(top = FS.space.s1),
-    )
-    app.summary?.takeIf { it.isNotEmpty() }?.let {
-        Spacer(Modifier.height(FS.space.s2))
-        Text(it, color = FS.colors.text, style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp))
     }
 }
 
@@ -798,73 +749,74 @@ private fun RunsOnSection(
     onRemove: (com.flagshipserver.app.viewmodels.AppPlacementViewModel.Row) -> Unit,
     onDismissMessage: () -> Unit,
 ) {
-    SectionHeader("Runs on")
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+        FSGroup(header = "Runs on") {
             if (rows.isEmpty()) {
-                Text("Checking your servers…", color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+                FSRow(title = "Checking your servers…", titleColor = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            rows.forEach { row ->
+            rows.forEachIndexed { idx, row ->
+                if (idx > 0) FSDivider(inset = 64.dp)
                 val unknown = row.presence is com.flagshipserver.app.viewmodels.AppPlacementViewModel.Presence.Unknown
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = FS.space.s2, end = FS.space.s4, top = FS.space.s2, bottom = FS.space.s2),
+                ) {
                     Checkbox(
                         checked = row.ticked,
                         enabled = !restricted && adminDevice && vm.canChange(row),
                         onCheckedChange = { on -> if (on) onCopy(row) else onRemove(row) },
                         modifier = Modifier.semantics { testTag = "runs-on-toggle-${row.pod.podId}" },
                     )
-                    Spacer(Modifier.padding(start = FS.space.s2))
-                    Column(Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(row.pod.name, color = FS.colors.text, style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold))
-                            if (row.pod.podId == leaderPodId) {
-                                Spacer(Modifier.padding(start = FS.space.s2))
-                                FSPill(label = "Preferred", kind = FSPillKind.Idle)
-                            }
-                            if (unknown) {
-                                Spacer(Modifier.padding(start = FS.space.s2))
-                                FSPill(label = "Unknown", kind = FSPillKind.Idle)
-                            }
+                    Column(Modifier.weight(1f).padding(start = FS.space.s2), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                            Text(
+                                row.pod.name,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.weight(1f, fill = false),
+                            )
+                            if (row.pod.podId == leaderPodId) FSPill(label = "Preferred", kind = FSPillKind.Idle)
+                            if (unknown) FSPill(label = "Unknown", kind = FSPillKind.Idle)
                         }
                         com.flagshipserver.app.viewmodels.AppPlacementViewModel.rowNote(vm, row)?.let {
-                            Text(it, color = FS.colors.textMuted, style = TextStyle(fontSize = 13.sp))
+                            Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                     // That server's state of the app (docs/app-placement.md §6).
                     com.flagshipserver.app.viewmodels.AppPlacementViewModel.rowPill(row)?.let { pill ->
-                        Spacer(Modifier.padding(start = FS.space.s2))
                         FSPill(
                             label = pill.label,
                             kind = pill.tone.pillKind(),
-                            modifier = Modifier.semantics { testTag = "runs-on-status-${row.pod.podId}" },
+                            modifier = Modifier
+                                .padding(start = FS.space.s2)
+                                .semantics { testTag = "runs-on-status-${row.pod.podId}" },
                         )
                     }
                 }
             }
         }
-    }
-    if (message != null) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(top = FS.space.s2),
-        ) {
-            Text(
-                message,
-                color = FS.colors.danger,
-                style = TextStyle(fontSize = 13.sp),
-                modifier = Modifier.weight(1f).semantics { testTag = "runs-on-message" },
-            )
-            TextButton(onClick = onDismissMessage) { Text("OK") }
+        if (message != null) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    message,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f).padding(start = FS.space.s1).semantics { testTag = "runs-on-message" },
+                )
+                FSGhostButton(label = "OK", onClick = onDismissMessage)
+            }
         }
+        Text(
+            text = if (adminDevice) "Tick a server to copy the app there with its data as it is now. Each copy then keeps its own data."
+            else com.flagshipserver.app.core.AdminOrderGate.RUNS_ON,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(horizontal = FS.space.s4)
+                .semantics { testTag = if (adminDevice) "runs-on-help" else "runs-on-admin-only" },
+        )
     }
-    Text(
-        text = if (adminDevice) "Tick a server to copy the app there with its data as it is now. Each copy then keeps its own data."
-        else com.flagshipserver.app.core.AdminOrderGate.RUNS_ON,
-        color = FS.colors.textMuted,
-        style = TextStyle(fontSize = 12.sp),
-        modifier = Modifier.padding(top = FS.space.s2, start = FS.space.s1)
-            .semantics { testTag = if (adminDevice) "runs-on-help" else "runs-on-admin-only" },
-    )
 }
 
 private fun relativeTime(ms: Long): String {
@@ -876,48 +828,6 @@ private fun relativeTime(ms: Long): String {
         mins < 60 * 24 -> "${mins / 60} hr ago"
         else -> "${mins / (60 * 24)} d ago"
     }
-}
-
-/** The app's disk use against its limits (docs/app-runtimes.md 5.3), and why new data is refused when it is full. Hidden on a box that sends none. */
-@Composable
-internal fun AppStorageSection(storage: com.flagshipserver.app.api.AppStorage?) {
-    val lines = com.flagshipserver.app.core.AppStorageText.appLines(storage)
-    if (lines.isEmpty()) return
-    Spacer(Modifier.height(FS.space.s4))
-    SectionHeader("Storage")
-    FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.semantics { testTag = "service-detail-storage" }) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
-            lines.forEach { l ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(l.label, color = FS.colors.textMuted, style = TextStyle(fontSize = 14.sp), modifier = Modifier.weight(1f))
-                    Text(
-                        l.text,
-                        color = if (l.full) FS.colors.danger else FS.colors.text,
-                        style = TextStyle(fontSize = 14.sp),
-                        modifier = Modifier.semantics { testTag = "service-detail-storage-${l.label.lowercase()}" },
-                    )
-                }
-                if (l.note.isNotEmpty()) {
-                    Text(
-                        l.note,
-                        color = FS.colors.danger,
-                        style = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-                        modifier = Modifier.semantics { testTag = "service-detail-storage-full" },
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SectionHeader(label: String) {
-    Text(
-        text = label.uppercase(),
-        color = FS.colors.textMuted,
-        style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp),
-        modifier = Modifier.padding(bottom = FS.space.s3),
-    )
 }
 
 // ---------------------------------------------------------------
@@ -938,43 +848,52 @@ private fun WebDomainsSection(
 ) {
     val stem = links?.displayLabel ?: fallbackLabel
     val user = username ?: "you"
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = "WEB DOMAINS",
-            color = FS.colors.textMuted,
-            style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp),
-            modifier = Modifier.weight(1f),
-        )
-        FSDangerButton(
-            label = "Replace",
-            onClick = onReplaceTap,
-            block = false,
-        )
-    }
-    Spacer(Modifier.height(FS.space.s3))
-    FSCard(padding = PaddingValues(FS.space.s4)) {
-        Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
-            UrlGroupLabel("SHORT REDIRECT")
-            val short = links?.shortUrl
-            if (!short.isNullOrEmpty()) {
-                UrlRowProminent(url = short)
-            } else {
-                Text(
-                    text = "No short link yet. Tap Replace to mint one.",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp),
+    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            FSSectionHeader("Web domains", modifier = Modifier.weight(1f))
+            TextButton(
+                onClick = onReplaceTap,
+                modifier = Modifier.semantics { testTag = "app-replace-stem-btn" },
+            ) {
+                Icon(
+                    Icons.Outlined.Autorenew,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(end = FS.space.s1),
                 )
+                Text("Replace", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelLarge)
             }
-            HorizontalRule()
-
-            UrlGroupLabel("CANONICAL (SHARED BY ALL INSTANCES)")
-            UrlRowNormal(url = links?.canonicalUrl ?: "https://$stem.$user.${com.flagshipserver.app.core.Endpoints.dataApex}")
-
-            if (selectedPods.isNotEmpty()) {
-                HorizontalRule()
-                UrlGroupLabel("INDIVIDUAL INSTANCES")
-                selectedPods.forEach { pod ->
-                    UrlRowMuted(url = "https://$stem.${SlugUtil.slugify(pod.name)}.$user.${com.flagshipserver.app.core.Endpoints.dataApex}")
+        }
+        FSCard(padding = PaddingValues(FS.space.s4)) {
+            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
+                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
+                    UrlGroupLabel("Short redirect")
+                    UrlGroupNote("A convenient short link that redirects to your service.")
+                    val short = links?.shortUrl
+                    if (!short.isNullOrEmpty()) {
+                        UrlRow(url = short, prominent = true)
+                    } else {
+                        Text(
+                            text = "No short link yet. Tap Replace to mint one.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
+                FSCardDivider()
+                Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
+                    UrlGroupLabel("Canonical (shared by all instances)")
+                    UrlGroupNote("The permanent, verifiable address. Safe to share.")
+                    UrlRow(url = links?.canonicalUrl ?: "https://$stem.$user.${com.flagshipserver.app.core.Endpoints.dataApex}")
+                }
+                if (selectedPods.isNotEmpty()) {
+                    FSCardDivider()
+                    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s1)) {
+                        UrlGroupLabel("Individual instances")
+                        selectedPods.forEach { pod ->
+                            UrlRowMuted(url = "https://$stem.${SlugUtil.slugify(pod.name)}.$user.${com.flagshipserver.app.core.Endpoints.dataApex}")
+                        }
+                    }
                 }
             }
         }
@@ -985,47 +904,34 @@ private fun WebDomainsSection(
 private fun UrlGroupLabel(label: String) {
     Text(
         text = label,
-        color = FS.colors.textMuted,
-        style = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp),
+        color = MaterialTheme.colorScheme.onSurface,
+        style = MaterialTheme.typography.labelLarge,
     )
 }
 
 @Composable
-private fun HorizontalRule() {
-    Box(
-        modifier = Modifier.fillMaxWidth()
-            .height(1.dp)
-            .padding(vertical = 0.dp),
-    ) {
-        Text("", color = FS.colors.border)
-    }
+private fun UrlGroupNote(text: String) {
+    Text(
+        text = text,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = MaterialTheme.typography.bodySmall,
+    )
 }
 
 @Composable
-private fun UrlRowProminent(url: String) {
+private fun UrlRow(url: String, prominent: Boolean = false) {
     val ctx = LocalContext.current
-    Row(verticalAlignment = Alignment.Top) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = wrapAtDots(stripScheme(url)),
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+            color = MaterialTheme.colorScheme.onSurface,
+            style = (if (prominent) MaterialTheme.typography.titleSmall else MaterialTheme.typography.bodyMedium)
+                .copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
             modifier = Modifier.weight(1f),
         )
-        FSGhostButton(label = "Copy", onClick = { copyToClipboard(ctx, url) })
-    }
-}
-
-@Composable
-private fun UrlRowNormal(url: String) {
-    val ctx = LocalContext.current
-    Row(verticalAlignment = Alignment.Top) {
-        Text(
-            text = wrapAtDots(stripScheme(url)),
-            color = FS.colors.text,
-            style = TextStyle(fontSize = 14.sp),
-            modifier = Modifier.weight(1f),
-        )
-        FSGhostButton(label = "Copy", onClick = { copyToClipboard(ctx, url) })
+        IconButton(onClick = { copyToClipboard(ctx, url) }) {
+            Icon(Icons.Outlined.ContentCopy, contentDescription = "Copy $url", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 
@@ -1033,9 +939,8 @@ private fun UrlRowNormal(url: String) {
 private fun UrlRowMuted(url: String) {
     Text(
         text = wrapAtDots(stripScheme(url)),
-        color = FS.colors.textMuted,
-        style = TextStyle(fontSize = 13.sp),
-        modifier = Modifier.padding(start = FS.space.s2),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = MaterialTheme.typography.bodyMedium.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace),
     )
 }
 
@@ -1072,8 +977,8 @@ private fun ReplaceStemDialog(
                         "“$currentStem” with a new stem. All existing links break " +
                         "immediately, including the short link. If you have attached " +
                         "external domains, those stay unaffected.",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 13.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
                 )
                 OutlinedTextField(
                     value = draft,
@@ -1083,11 +988,11 @@ private fun ReplaceStemDialog(
                 )
                 Text(
                     text = "Lowercase letters, digits, or hyphens. 1–40 chars. No leading or trailing hyphen.",
-                    color = FS.colors.textMuted,
-                    style = TextStyle(fontSize = 11.sp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
                 )
                 (phase as? RenameServicePhase.Failed)?.let { f ->
-                    Text(f.message, color = FS.colors.danger, style = TextStyle(fontSize = 12.sp))
+                    Text(f.message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
             }
         },
@@ -1102,7 +1007,7 @@ private fun ReplaceStemDialog(
                         is RenameServicePhase.Posting -> "Replacing…"
                         else -> "Replace"
                     },
-                    color = FS.colors.danger,
+                    color = MaterialTheme.colorScheme.error,
                 )
             }
         },
@@ -1118,4 +1023,37 @@ private fun stripScheme(s: String): String =
 private fun copyToClipboard(context: Context, text: String) {
     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
     cm?.setPrimaryClip(ClipData.newPlainText("flagship", text))
+}
+
+/** The app's disk use against its limits (docs/app-runtimes.md 5.3), and why new data is refused when it is full. Hidden on a box that sends none. */
+@Composable
+internal fun AppStorageSection(storage: com.flagshipserver.app.api.AppStorage?) {
+    val lines = com.flagshipserver.app.core.AppStorageText.appLines(storage)
+    if (lines.isEmpty()) return
+    Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+        FSSectionHeader("Storage")
+        FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.semantics { testTag = "service-detail-storage" }) {
+            Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
+                lines.forEach { l ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(l.label, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                        Text(
+                            l.text,
+                            color = if (l.full) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.semantics { testTag = "service-detail-storage-${l.label.lowercase()}" },
+                        )
+                    }
+                    if (l.note.isNotEmpty()) {
+                        Text(
+                            l.note,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.semantics { testTag = "service-detail-storage-full" },
+                        )
+                    }
+                }
+            }
+        }
+    }
 }

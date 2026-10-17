@@ -164,7 +164,7 @@ class GymSettingsTest : GymBase() {
             "settings-companion-requests" to "Companion requests",
             "settings-secured-sessions" to "secured-sessions-title",
             "settings-process-url" to "process-url-title",
-            "settings-cloud-recovery" to "CLOUD RECOVERY",
+            "settings-cloud-recovery" to "Cloud recovery",
             "settings-backup-key" to "keyfile-export-create",
         )
         for ((row, landmark) in rows) {

@@ -131,7 +131,7 @@ class GymShareTest : GymBase() {
         val link = textOfTag("share-link")
         tapText("Copy link")
         eventually(what = "clipboard") { clipboardText() == link }
-        tapText("Share…")
+        tapText("Share")
         eventually(what = "share sheet") { sharedTexts().contains(link) }
         gymShot("share-link")
         tapText("Done")

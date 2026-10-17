@@ -67,7 +67,7 @@ class GymAppsTest : GymBase() {
         tap("service-env-save-btn")
         waitUntilExists("service-env-row-GYM_COLOR", 15_000)
         gymShot("env-added")
-        composeRule.onNode(hasText("Remove") and hasAnyAncestor(hasTestTag("service-env-row-GYM_COLOR"))).performClick()
+        tap("service-env-remove-GYM_COLOR")
         waitGone("service-env-row-GYM_COLOR", 15_000)
     }
 
@@ -162,7 +162,7 @@ class GymAppsTest : GymBase() {
     @Test
     fun copyTheAppsAddress() {
         openPlants()
-        tapText("Copy")
+        tapMatching(androidx.compose.ui.test.hasContentDescription("Copy https", substring = true))
         eventually(what = "clipboard") { clipboardText().startsWith("https://") }
     }
 

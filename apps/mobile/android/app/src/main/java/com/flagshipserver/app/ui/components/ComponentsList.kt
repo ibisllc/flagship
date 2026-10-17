@@ -312,10 +312,7 @@ fun FSSettingsGroup(
 ) {
     FSGroup(modifier = modifier, header = header) {
         rows.forEachIndexed { idx, row ->
-            FSSettingsRow(
-                row,
-                modifier = if (row.testTag != null) Modifier.testTag(row.testTag) else Modifier,
-            )
+            FSSettingsRow(row)
             if (idx < rows.size - 1) FSDivider()
         }
     }
@@ -364,7 +361,7 @@ fun FSSettingsRow(data: FSSettingsRowData, modifier: Modifier = Modifier) {
         icon = data.icon,
         iconTint = data.iconTint,
         onClick = data.onClick,
-        modifier = modifier,
+        modifier = modifier.then(if (data.testTag != null) Modifier.testTag(data.testTag) else Modifier),
         trailing = if (data.value != null || (data.badge != null && data.badge > 0)) {
             {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(FS.space.s2)) {

@@ -81,7 +81,7 @@ class GymServerPageTest : GymBase() {
         assertEquals("4b1e0c9d8f7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c", mailboxMock.updateDeposits.single().second.order.targetCommit)
         waitUntilExistsDesc("sd-update-pending")
         gymShot("update-sent")
-        tapText("Done")
+        tap("sheet-close")
         waitUntilExistsDesc("sd-update-pending")
     }
 

@@ -23,6 +23,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
@@ -72,7 +73,7 @@ class GymHomeTest : GymBase() {
         waitUntilExists("home-co-manage")
         assertEquals(1, tagCount("home-import-backup"))
         gymShot("add-import-menu")
-        tapText("Cancel")
+        Espresso.pressBack()
         waitGone("home-co-manage")
 
         tap("home-add-server")
@@ -220,6 +221,11 @@ class GymHomeTest : GymBase() {
         waitText(home, 20_000)
         composeRule.waitUntil(15_000) { composeRule.onAllNodes(tagPrefix("home-server-handle-")).fetchSemanticsNodes().size >= 2 }
         val before = shownOrder()
+        composeRule.onAllNodes(tagPrefix("home-server-handle-")).onFirst().performScrollTo()
+        // Bring the handle clear of the tab bar so the drag stays on the list.
+        composeRule.onAllNodes(androidx.compose.ui.test.hasScrollAction()).onFirst()
+            .performTouchInput { swipeUp(startY = this.height * 0.7f, endY = this.height * 0.4f) }
+        composeRule.waitForIdle()
         val handle = composeRule.onAllNodes(tagPrefix("home-server-handle-")).onFirst()
         val height = handle.fetchSemanticsNode().size.height.toFloat()
         handle.performTouchInput {
@@ -242,6 +248,7 @@ class GymHomeTest : GymBase() {
         waitText("No servers match")
         gymShot("no-match")
         composeRule.onNode(androidx.compose.ui.test.hasSetTextAction()).performTextClearance()
+        Espresso.closeSoftKeyboard()
         waitText(office)
         chip("Offline").performClick()
         eventually(what = "only Music") { textCount(music) > 0 && textCount(office) == 0 }
