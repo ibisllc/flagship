@@ -76,7 +76,9 @@ export async function describePeerRoot({ client = null, umkSeed, serverId, fetch
   const id = String(serverId).trim().toLowerCase();
   const pbkHex = await derivePbkHex(umkSeed, id);
   if (client) {
-    return client.fetch(PEER_ROOT_PATH, { method: "POST", body: JSON.stringify({ serverId: id, pbkHex }) });
+    const r = await client.fetch(PEER_ROOT_PATH, { method: "POST", body: JSON.stringify({ serverId: id, pbkHex }) });
+    if (!r?.archive) throw userError("No peer backup of that server was found.");
+    return r;
   }
   const f = fetchImpl ?? (await import("./comFetch.js")).comFetch;
   const url = fetchImpl ? `${comBase}/api/peer-backup/root/${encodeURIComponent(id)}` : `/api/peer-backup/root/${encodeURIComponent(id)}`;

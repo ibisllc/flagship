@@ -624,7 +624,7 @@ test.describe("gym webapp archive", () => {
       const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce, additionalData: new TextEncoder().encode(`flagship/pb-root/v1|${HOME}`) }, key, new TextEncoder().encode(JSON.stringify(root))));
       return { nonceHex: ks.bytesToHex(nonce), ciphertextHex: ks.bytesToHex(ct) };
     }, { HOME, backupText: fx.backupText, archiveId: fx.archiveId, bytes: fx.bytes, sha256: fx.sha256 });
-    m.get((u) => u.pathname === `/api/peer-backup/root/${HOME}`, { json: sealed });
+    m.get((u) => u.pathname === `/api/peer-backup/root/${HOME}`, () => ({ json: sealed }));
     await renderHome(page);
     await page.click("#home-add-server");
     await page.locator('dialog[aria-label="Add or import a server"] [data-choice-peers]').click();
@@ -632,13 +632,14 @@ test.describe("gym webapp archive", () => {
     await dlg.locator("[data-pr-find]").click();
     await expect(dlg.locator("[data-pr-summary]")).toContainText("1 server hold its pieces", { timeout: 15_000 });
     await expect(dlg.locator("[data-pr-name]")).toBeVisible();
+    await shot(page, testInfo, "peers-from-com");
   });
 
-  test("gym archive restore from other servers says so when the lost server has no peer backup", async ({ page }) => {
+  test("gym archive restore from other servers says so when the lost server has no peer backup", async ({ page }, testInfo) => {
     await reachHome(page, { kind: "admin", servers: [OFFICE] });
     const m = await mock(page);
     m.get("/api/users/smoketest/pods", { pods: [livePod(OFFICE), livePod(HOME, { revokedAt: Date.now() - 1000, liveness: "unreachable" })] });
-    m.post(at(OFFICE, "/api/screens/peer-backup/root"), { status: 404, json: { error: "No peer backup of that server was found." } });
+    m.post(at(OFFICE, "/api/screens/peer-backup/root"), () => ({ status: 404, json: { error: "No peer backup of that server was found." } }));
     await renderHome(page);
     await page.click("#home-add-server");
     await page.locator('dialog[aria-label="Add or import a server"] [data-choice-peers]').click();
@@ -646,6 +647,7 @@ test.describe("gym webapp archive", () => {
     await dlg.locator("[data-pr-find]").click();
     await expect(dlg.locator("[data-pr-error]")).toContainText("No peer backup of that server was found", { timeout: 15_000 });
     await expect(dlg.locator("[data-pr-name]")).toBeHidden();
+    await shot(page, testInfo, "peers-none");
   });
 
   test("gym archive import another account's backup needs its passcode", async ({ page }, testInfo) => {

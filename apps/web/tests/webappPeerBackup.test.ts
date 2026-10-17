@@ -38,7 +38,7 @@ describe("peer backup keys on the webapp", () => {
 
 describe("finding a lost server's backup", () => {
   it("asks a running server with the PBK, never the key itself", async () => {
-    const fetch = vi.fn(async () => ({ serverId: V.serverId }));
+    const fetch = vi.fn(async () => ({ serverId: V.serverId, archive: { archiveId: "x" } }));
     const r = await pb.describePeerRoot({ client: { fetch }, umkSeed: seed, serverId: V.serverId.toUpperCase() });
     expect(r.serverId).toBe(V.serverId);
     expect(fetch).toHaveBeenCalledWith("/api/screens/peer-backup/root", { method: "POST", body: JSON.stringify({ serverId: V.serverId, pbkHex: V.pbkHex }) });

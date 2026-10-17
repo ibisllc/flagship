@@ -147,11 +147,11 @@ export const WEB_MISC: readonly Scenario[] = [
   ),
   row(
     "web-total-misc-peer-backup",
-    "Peer-backup (from Settings): Enable POSTs participate:true and the pool shows participating; Opt out POSTs participate:false.",
-    "gym misc peer-backup enables and opts out from its Settings row",
-    "#peer-backup-toggle",
-    [{ describe: "Toggle", handle: "#peer-backup-toggle", expect: "present" }],
-    [["peer-backup-on", "Participating."]],
+    "Peer-backup (from Settings): the v2 status shows the state, 'pieces safe', the servers holding the pieces as Server 1..n (never named) with their last proof, what the server keeps for others and, once a backup is at risk, the restore-by date; Refresh re-reads; a pre-v2 box says it needs an update; there is no toggle (peer backup is a backup policy).",
+    "gym misc peer-backup shows the v2 status from its Settings row, holders as Server n",
+    "[data-pb-holder]",
+    [{ describe: "Holders", handle: "[data-pb-holder]", expect: "present" }],
+    [["peer-backup-v2", "The v2 status."]],
   ),
   row(
     "web-total-misc-take-over-cancel",

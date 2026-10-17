@@ -101,6 +101,49 @@ export const WEB_ARCHIVE: readonly Scenario[] = [
     },
   ),
   webTotal(
+    "web-total-archive-restore-from-peers",
+    "Restore from other servers (Add/Import → Restore from other servers): the lost server is pre-filled; Find its backup has a running server read the record with the PBK the account makes (never the key itself), shows how many servers hold the pieces and the restore-by date, opens the backup with the account key; the name step creates the server (restore order under the admin root); the new server is told to fetch the pieces (from-peers with the PBK), commit follows and each app's outcome is listed.",
+    "gym archive restore from other servers finds the lost server's record, creates a server and has it fetch the pieces",
+    {
+      steps: [
+        { kind: "tap", describe: "Add/Import → Restore from other servers.", handle: "[data-choice-peers]" },
+        { kind: "tap", describe: "Find its backup.", handle: "[data-pr-find]" },
+        { kind: "type", describe: "Name: attic.", handle: "#pr-server-name" },
+        { kind: "tap", describe: "Create the server.", handle: "[data-pr-create]" },
+      ],
+      assertions: [
+        { describe: "Pieces", handle: "[data-pr-summary]", expect: "text", text: "8 servers hold its pieces; 4 bring it back." },
+        { describe: "Restored", handle: "[data-pr-status]", expect: "text", text: "attic: Restored 1 app." },
+      ],
+      screenshots: [shot("peers-pick", "The lost server picker."), shot("peers-restored", "The restored apps.")],
+      dimension: "D1",
+    },
+  ),
+  webTotal(
+    "web-total-archive-restore-from-peers-no-server",
+    "Restore from other servers with no server of the account running: the device reads the sealed record from .com itself, opens it with the PBK and goes on to the name step.",
+    "gym archive restore from other servers with no server running reads the sealed record from .com",
+    {
+      steps: [
+        { kind: "tap", describe: "Add/Import → Restore from other servers, Find its backup.", handle: "[data-pr-find]" },
+      ],
+      assertions: [{ describe: "Name step", handle: "[data-pr-name]", expect: "present" }],
+      screenshots: [shot("peers-from-com", "The record read from .com.")],
+      dimension: "D1",
+    },
+  ),
+  webTotal(
+    "web-total-archive-restore-from-peers-none",
+    "Restore from other servers for a server with no peer backup: the box's sentence 'No peer backup of that server was found.' shows and nothing is created.",
+    "gym archive restore from other servers says so when the lost server has no peer backup",
+    {
+      steps: [{ kind: "tap", describe: "Find its backup.", handle: "[data-pr-find]" }],
+      assertions: [{ describe: "Sentence", handle: "[data-pr-error]", expect: "text", text: "No peer backup of that server was found" }],
+      screenshots: [shot("peers-none", "The sentence.")],
+      dimension: "D4",
+    },
+  ),
+  webTotal(
     "web-total-archive-import-passcode",
     "Import another account's backup: a file that isn't a backup is named; the backup asks for its passcode; a wrong one is refused in words, the right one opens it.",
     "gym archive import another account's backup needs its passcode",

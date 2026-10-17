@@ -633,6 +633,16 @@
         "ios": { "status": "missing", "reason": "being built by the backup agent's iOS sub-agent (2026-10-16)" },
         "android": { "status": "missing", "reason": "being built by the backup agent's Android sub-agent (2026-10-16)" }
       }
+    },
+    {
+      "id": "peer-backup-v2",
+      "title": "Peer backup between accounts (docs/peer-backup.md): v2 status page (state, Server 1..n holders, restore-by, what the server keeps for others) and Add/Import a server → Restore from other servers (PBK from the account key, the lost server's record read by a running server or from .com, the waiting server fetches the pieces)",
+      "ref": "web",
+      "surfaces": {
+        "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/peerBackup.js", "flagship/peer-backup-key/v1"], ["apps/web/public/webapp/views/peer-backup.js", "peer-backup/status"], ["apps/web/public/webapp/views/import-backup.js", "openRestoreFromPeers"]] },
+        "ios": { "status": "missing", "reason": "iOS still has the pre-v2 PeerBackupScreen (pool toggle and shard list); the v2 status and Restore from other servers are not ported yet (C2, 2026-10-17)" },
+        "android": { "status": "missing", "reason": "Android still has the pre-v2 PeerBackupScreen (pool toggle and shard list); the v2 status and Restore from other servers are not ported yet (C2, 2026-10-17)" }
+      }
     }
   ]
 }
