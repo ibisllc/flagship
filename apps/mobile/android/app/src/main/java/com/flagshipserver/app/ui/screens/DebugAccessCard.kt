@@ -85,12 +85,7 @@ internal fun DebugAccessCard(vm: DebugAccessViewModel, onChanged: () -> Unit) {
     val on = vm.isOn()
     val view = state.view
 
-    Text(
-        "Debug access",
-        color = FS.colors.text,
-        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-    )
-    Spacer(Modifier.height(FS.space.s2))
+    com.flagshipserver.app.ui.components.FSSectionHeader("Debug access")
     FSCard(padding = PaddingValues(FS.space.s4)) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {
             if (on && view != null) {

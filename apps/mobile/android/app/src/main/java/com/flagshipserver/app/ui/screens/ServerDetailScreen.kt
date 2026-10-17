@@ -759,9 +759,9 @@ private fun ServerInfoCard(detail: com.flagshipserver.app.api.ServerDetailRespon
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             FSPill("Online", kind = FSPillKind.Online)
             Text(
-                detail.serverFqdn,
+                detail.serverFqdn.replace(".", ".\u200B"),
                 color = MaterialTheme.colorScheme.onSurface,
-                style = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
+                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
             )
             androidx.compose.foundation.layout.FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(FS.space.s6),

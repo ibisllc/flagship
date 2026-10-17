@@ -101,7 +101,7 @@ internal fun ServerBackupsContent(vm: ServerBackupsViewModel, copies: PhoneBacku
         onResult = { ok -> saveNote = if (ok) "Saved." else "Couldn't save the backup there. Pick another place." },
     )
 
-    Text("Backups", color = FS.colors.text, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold))
+    com.flagshipserver.app.ui.components.FSSectionHeader("Backups")
     Spacer(Modifier.height(FS.space.s2))
     FSCard(padding = PaddingValues(FS.space.s4), modifier = Modifier.testTag("sd-backups")) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s2)) {

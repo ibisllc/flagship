@@ -61,7 +61,25 @@ private val ButtonPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp)
 
 @Composable
 private fun ButtonLabel(label: String) {
-    Text(label, style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.Center)
+    // A label change ("Save" -> "Working...") fades instead of jumping.
+    androidx.compose.animation.Crossfade(targetState = label, animationSpec = androidx.compose.animation.core.tween(150), label = "button-label") {
+        Text(it, style = MaterialTheme.typography.labelLarge, textAlign = TextAlign.Center)
+    }
+}
+
+/** [onClick] with a short confirming tick (or a firmer one for a destructive action). */
+@Composable
+private fun withHaptic(destructive: Boolean, onClick: () -> Unit): () -> Unit {
+    val view = androidx.compose.ui.platform.LocalView.current
+    return {
+        val kind = when {
+            destructive -> android.view.HapticFeedbackConstants.LONG_PRESS
+            android.os.Build.VERSION.SDK_INT >= 30 -> android.view.HapticFeedbackConstants.CONFIRM
+            else -> android.view.HapticFeedbackConstants.VIRTUAL_KEY
+        }
+        view.performHapticFeedback(kind)
+        onClick()
+    }
 }
 
 // ── Button ─────────────────────────────────────────────────────
@@ -78,7 +96,7 @@ fun FSPrimaryButton(
     large: Boolean = false,
 ) {
     Button(
-        onClick = onClick,
+        onClick = withHaptic(false, onClick),
         enabled = enabled,
         modifier = modifier.buttonSize(block, large),
         contentPadding = ButtonPadding,
@@ -144,7 +162,7 @@ fun FSDangerButton(
 ) {
     val fg = if (muted) FS.colors.textMuted else MaterialTheme.colorScheme.error
     OutlinedButton(
-        onClick = onClick,
+        onClick = withHaptic(true, onClick),
         enabled = enabled,
         modifier = modifier.buttonSize(block, large),
         contentPadding = ButtonPadding,

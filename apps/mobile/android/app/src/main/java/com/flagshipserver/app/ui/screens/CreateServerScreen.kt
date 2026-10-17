@@ -366,6 +366,7 @@ fun CreateServerScreen(
         Phase.Match -> "Confirm match code"
         else -> "New server"
     }
+    androidx.activity.compose.BackHandler(enabled = phase == Phase.Design && designStep > 0) { designStep -= 1 }
     FSScreen(
         title = pageTitle,
         // The app bar's back steps back through the design pages, else leaves.

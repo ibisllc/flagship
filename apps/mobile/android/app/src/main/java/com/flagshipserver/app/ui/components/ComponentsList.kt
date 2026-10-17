@@ -267,7 +267,7 @@ fun FSAnnouncementCard(
                 }
             }
             if (onDismiss != null) {
-                IconButton(onClick = onDismiss, modifier = Modifier.padding(top = 0.dp).size(40.dp)) {
+                IconButton(onClick = onDismiss, modifier = Modifier.size(48.dp)) {
                     Icon(Icons.Outlined.Close, contentDescription = "Dismiss", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }

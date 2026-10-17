@@ -106,14 +106,18 @@ fun FSScreen(
             .nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = bg,
         topBar = {
-          Column {
-            TopAppBar(
+          Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            // The bar shares the body's reading width, so on a tablet the title
+            // lines up with the column instead of hugging the pane's edge.
+            Box(Modifier.widthIn(max = FSLayout.readingMaxWidth).fillMaxWidth()) {
+              TopAppBar(
                 title = titleText,
                 navigationIcon = navIcon,
                 actions = actions,
                 scrollBehavior = scrollBehavior,
                 colors = barColors,
-            )
+              )
+            }
             if (scrollable && scrollState.value > 0) {
                 HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
             }
