@@ -531,7 +531,7 @@ struct FlagshipApp: App {
                              lockPower: mockLockPower, frontPage: mockFrontPage, uninstall: mockServiceUninstall,
                              access: mockServiceAccess, transfer: mockServerTransfer, migration: mockServerMigration,
                              relay: mockRelay)
-        mocks.pairingRelay = pairingRelay
+        mocks.pairingRelay = pairingRelay as? MockPairingRelayClient
         return mocks
     }
     #else
