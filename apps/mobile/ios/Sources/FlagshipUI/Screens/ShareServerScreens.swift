@@ -24,6 +24,11 @@ private func relative(_ ms: Int64) -> String {
 /// Self-contained like the other server-page cards: it finds the pod and the
 /// box token itself, so the server page only places it.
 struct ShareServerCard: View {
+    #if DEBUG
+    private static let gymStkPubHex = GymShareTransport.stkPubHex
+    #else
+    private static let gymStkPubHex = ""
+    #endif
     @Environment(\.colorScheme) private var scheme
     @Environment(\.sessionStore) private var sessionStore
     @Environment(AppState.self) private var app
@@ -103,7 +108,7 @@ struct ShareServerCard: View {
             model = ShareServerCardModel(
                 serverDomain: fqdn,
                 serverName: pod?.name ?? ServerShareNames.serverLabel(fromDomain: fqdn),
-                stkPubHex: stk.isEmpty && gym ? GymShareTransport.stkPubHex : stk,
+                stkPubHex: stk.isEmpty && gym ? Self.gymStkPubHex : stk,
                 flow: demo ? nil : app.currentUser.map {
                     ServerShareOwnerFlow(client: ServerShareServices.client, username: $0, keys: ServerShareServices.ownerKeys())
                 },

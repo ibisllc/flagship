@@ -106,6 +106,9 @@ public enum ServerShareCopy {
 public enum ServerShareDemo {
     #if !DEBUG
     public static let isOn = false
+    public static let flowsOn = false
+    static let gymTransport: (any ServerShareTransport)? = nil
+    static let gymPushToken = ""
     public static let route: String? = nil
     public static func initialRoute(pods: [PodInfo]) -> HomeRoute? { nil }
     #else
