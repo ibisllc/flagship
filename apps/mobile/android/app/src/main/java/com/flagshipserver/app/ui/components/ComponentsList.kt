@@ -42,6 +42,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -299,7 +301,9 @@ fun FSSectionHeader(text: String, modifier: Modifier = Modifier) {
         text = text,
         color = MaterialTheme.colorScheme.primary,
         style = MaterialTheme.typography.titleSmall,
-        modifier = modifier.padding(start = FS.space.s4, top = FS.space.s2),
+        modifier = modifier
+            .padding(start = FS.space.s1, top = FS.space.s2)
+            .semantics { heading() },
     )
 }
 

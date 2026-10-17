@@ -183,7 +183,7 @@ private fun ScreenSubtitle(text: String, tag: String?) {
         text,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         style = MaterialTheme.typography.bodyLarge,
-        modifier = (if (tag != null) Modifier.testTag(tag) else Modifier).padding(horizontal = FS.space.s1),
+        modifier = if (tag != null) Modifier.testTag(tag) else Modifier,
     )
 }
 

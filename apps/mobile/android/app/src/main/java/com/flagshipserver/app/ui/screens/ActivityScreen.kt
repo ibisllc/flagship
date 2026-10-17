@@ -46,6 +46,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.flagshipserver.app.ui.components.FSScreen
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.flagshipserver.app.core.LocalScreensClient
@@ -89,34 +90,19 @@ fun ActivityScreen(nav: NavController) {
     val effectiveServerFilter = serverFilter?.takeIf { id -> pods.any { it.podId == id } }
     val filterPodName = pods.firstOrNull { it.podId == effectiveServerFilter }?.name
 
-    val scroll = rememberScrollState()
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(scroll)
-            .padding(horizontal = FS.space.s6),
+    FSScreen(
+        title = "Activity",
+        titleTag = "activity-title",
+        spacing = 0.dp,
+        actions = {
+            androidx.compose.material3.TextButton(onClick = { vm.load() }) { Text("Refresh") }
+        },
     ) {
-        Spacer(Modifier.height(FS.space.s8))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    "Activity",
-                    color = FS.colors.text,
-                    // Match the Home/Services large-title size (32/40) so the
-                    // tab headers are consistent — was 28sp here.
-                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Medium),
-                    modifier = Modifier.testTag("activity-title"),
-                )
-            }
-            FSGhostButton(label = "Refresh", onClick = { vm.load() })
-        }
-
         // Server filter — shown only when the user owns more than one pod
         // (matches the Services list rule). "All servers" shows the full feed;
         // a specific server names the server section after it (account-wide
         // rows stay either way).
         if (pods.size > 1) {
-            Spacer(Modifier.height(FS.space.s4))
             PodSwitcher(
                 pods = pods,
                 currentPodId = effectiveServerFilter,
@@ -205,7 +191,6 @@ fun ActivityScreen(nav: NavController) {
                 ServerCardSkeleton()
             }
         }
-        Spacer(Modifier.height(FS.space.s12))
     }
 }
 
