@@ -21,7 +21,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MediumTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -77,11 +76,7 @@ fun FSScreen(
     scrollable: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val scrollBehavior = if (largeTitle) {
-        TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-    } else {
-        TopAppBarDefaults.pinnedScrollBehavior()
-    }
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     val bg = MaterialTheme.colorScheme.background
     val barColors = TopAppBarDefaults.topAppBarColors(
         containerColor = bg,
@@ -92,7 +87,8 @@ fun FSScreen(
     val titleText: @Composable () -> Unit = {
         Text(
             title,
-            maxLines = if (largeTitle) 2 else 1,
+            style = if (largeTitle) MaterialTheme.typography.headlineSmall.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Medium) else MaterialTheme.typography.titleLarge,
+            maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = if (titleTag != null) Modifier.testTag(titleTag) else Modifier,
         )
@@ -111,26 +107,13 @@ fun FSScreen(
         containerColor = bg,
         topBar = {
           Column {
-            if (largeTitle) {
-                MediumTopAppBar(
-                    title = titleText,
-                    navigationIcon = navIcon,
-                    actions = actions,
-                    scrollBehavior = scrollBehavior,
-                    colors = TopAppBarDefaults.mediumTopAppBarColors(
-                        containerColor = bg,
-                        scrolledContainerColor = bg,
-                    ),
-                )
-            } else {
-                TopAppBar(
-                    title = titleText,
-                    navigationIcon = navIcon,
-                    actions = actions,
-                    scrollBehavior = scrollBehavior,
-                    colors = barColors,
-                )
-            }
+            TopAppBar(
+                title = titleText,
+                navigationIcon = navIcon,
+                actions = actions,
+                scrollBehavior = scrollBehavior,
+                colors = barColors,
+            )
             if (scrollable && scrollState.value > 0) {
                 HorizontalDivider(thickness = 1.dp, color = MaterialTheme.colorScheme.outlineVariant)
             }

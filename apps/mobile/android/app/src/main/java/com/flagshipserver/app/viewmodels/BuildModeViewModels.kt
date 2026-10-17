@@ -52,7 +52,7 @@ private fun friendly(t: Throwable): String {
 private fun friendlyBuildEntry(t: Throwable): String =
     if (t is ScreensError.Http && t.status == 404) {
         "This server isn't set up to build services yet. " +
-            "Building services needs the services feature enabled on this box."
+            "Building services needs the services feature enabled on this server."
     } else {
         friendly(t)
     }

@@ -16,7 +16,7 @@ import javax.net.ssl.SSLPeerUnverifiedException
 class NetworkErrorHumanizerTest {
 
     private val pinFailure = SSLPeerUnverifiedException(
-        "Certificate for x.box does not match the box's STK-signed " +
+        "Certificate for x.box does not match the server's STK-signed " +
             "fingerprint — refusing connection",
     )
 

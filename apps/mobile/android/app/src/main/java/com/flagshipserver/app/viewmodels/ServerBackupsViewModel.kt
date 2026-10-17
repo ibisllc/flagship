@@ -229,7 +229,7 @@ class ServerBackupsViewModel(
     // ── Download ───────────────────────────────────────────────────
 
     /** A saved backup's one `.flagship` file, in 4 MiB parts, several at once,
-     *  resuming and checked against the box's SHA-256. The box keeps its copy. */
+     *  resuming and checked against the box's SHA-256. The server keeps its copy. */
     suspend fun download(b: SavedBackup): File? {
         if (downloading.containsKey(b.archiveId)) return null
         downloading[b.archiveId] = 0.0

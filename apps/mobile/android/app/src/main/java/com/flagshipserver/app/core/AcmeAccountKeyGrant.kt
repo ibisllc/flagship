@@ -7,7 +7,7 @@
 // (cert model A′: the box's per-box `[<server>.<user>, *.<server>.<user>]`
 // cert). An admin device seals the raw PKCS#8 account key FOR a box's STK
 // (SecretSeal.sealForEd25519Recipient), then IRK-signs THIS envelope binding
-// the sealed blob to the recipient STK + accountKeyId. The box later unseals
+// the sealed blob to the recipient STK + accountKeyId. The server later unseals
 // with its own STK seed and mints under the user's shared LE account; `.com`
 // stores only the ciphertext (audit / escrow) and never sees the key.
 //

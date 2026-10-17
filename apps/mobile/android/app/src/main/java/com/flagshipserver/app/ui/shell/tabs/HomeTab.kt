@@ -276,7 +276,12 @@ fun HomeTab() {
         }
     }
 
-    NavHost(navController = nav, startDestination = "home-root") {
+    NavHost(navController = nav, startDestination = "home-root",
+        enterTransition = com.flagshipserver.app.ui.theme.FSMotion.enter,
+        exitTransition = com.flagshipserver.app.ui.theme.FSMotion.exit,
+        popEnterTransition = com.flagshipserver.app.ui.theme.FSMotion.popEnter,
+        popExitTransition = com.flagshipserver.app.ui.theme.FSMotion.popExit,
+    ) {
         composable("home-root") {
             // shouldShowRecoveryNudgeNow is a pure getter off
             // AppState; the StateFlows it reads are subscribed to via

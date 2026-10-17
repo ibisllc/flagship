@@ -12,7 +12,7 @@
 //
 // The migration ORDER/CONTROL are SENSITIVE (Slice D) → they sign with the
 // admin master root when this device holds one, else the legacy owner IRK;
-// the mailbox AUTH stays IRK-signed. The box STK is resolved from the
+// the mailbox AUTH stays IRK-signed. The server STK is resolved from the
 // directory BEFORE the biometric (same trust model as the Replace flow).
 
 package com.flagshipserver.app.viewmodels
@@ -137,7 +137,7 @@ class MigrationViewModel(
             val stk = pods.identityPubKey(serverFqdn)
             if (stk == null) {
                 _mode.value = MigrationMode.Failed(
-                    "Couldn't read this box's current key from the directory — is it online? It must be reachable to migrate.",
+                    "Couldn't read this server's current key from the directory — is it online? It must be reachable to migrate.",
                 )
                 return
             }
@@ -196,7 +196,7 @@ class MigrationViewModel(
         _errorMessage.value = null
         val oldStk = oldStkPubHex
         if (oldStk == null) {
-            _errorMessage.value = "Couldn't read this box's current key — refresh and try again."
+            _errorMessage.value = "Couldn't read this server's current key — refresh and try again."
             return
         }
         if (backupMissing) {
@@ -249,7 +249,7 @@ class MigrationViewModel(
         _errorMessage.value = null
         _working.value = true
         try {
-            val reason = "Hand $serverFqdn off to the new box"
+            val reason = "Hand $serverFqdn off to the new server"
             val irk = signer(reason)
             val pub = irkPubHex()
             val orderKey = orderSigner(reason)

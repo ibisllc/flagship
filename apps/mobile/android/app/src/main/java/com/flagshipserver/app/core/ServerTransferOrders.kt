@@ -63,7 +63,7 @@ object ServerTransferClaimOrder {
 // of the spine's `flagship/server-rehome-auth/v1` envelope + the Swift
 // `RehomeAuthorizationOrder`. A box with NO pinned admin master root re-homes
 // ONLY on this proof, signed by the GIVER's owner IRK (the box's pinned owner
-// IRK until it re-homes), naming the acquirer explicitly. The box verifies it
+// IRK until it re-homes), naming the acquirer explicitly. The server verifies it
 // against its pin before writing the re-home marker; `.com` relays but cannot
 // forge it.
 //

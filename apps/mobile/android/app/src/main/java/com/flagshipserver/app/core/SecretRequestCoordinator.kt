@@ -90,15 +90,15 @@ class SecretRequestCoordinator(
 ) {
     sealed class CoordinatorException(message: String) : Exception(message) {
         object NoSealedLuksKey :
-            CoordinatorException("No sealed disk key is on file for this box yet.")
+            CoordinatorException("No sealed disk key is on file for this server yet.")
         object LuksUnsealFailed :
             CoordinatorException("Couldn't unseal the disk key with this phone's keys.")
         class DirectoryMissingServer(domain: String) :
-            CoordinatorException("This box ($domain) isn't registered to your account.")
+            CoordinatorException("This server ($domain) isn't registered to your account.")
         class PurposeUnsupported(purpose: String) :
             CoordinatorException("Unsupported secret request type: $purpose.")
         class NoPendingRequest(domain: String) :
-            CoordinatorException("This box ($domain) isn't waiting for an unlock right now.")
+            CoordinatorException("This server ($domain) isn't waiting for an unlock right now.")
     }
 
     /** A request that PASSED directory re-verification, ready to show the
@@ -128,7 +128,7 @@ class SecretRequestCoordinator(
      *  fails under that STK) is SILENTLY dropped — never offered for
      *  confirm. */
     suspend fun fetchVerifiedRequests(): List<VerifiedRequest> {
-        val material = irk.resolve("Check for boxes waiting for approval")
+        val material = irk.resolve("Check for servers waiting for approval")
         val auth = buildMailboxAuth(material)
         val pendingResp = mailbox.fetchPendingRequests(auth)
         val directory = mailbox.fetchPods(username)
@@ -180,7 +180,7 @@ class SecretRequestCoordinator(
             ?.takeIf { it.size == 32 }
             ?: throw CoordinatorException.DirectoryMissingServer(verified.serverDomain)
 
-        val material = irk.resolve("Approve your box's boot secret")
+        val material = irk.resolve("Approve your server's boot secret")
         val delegate: WatchDelegateSigner? =
             if (purpose == SecretPurpose.UNLOCK_KEY && !depositAutoLease) watchDelegate() else null
         // Slice D — resolve the admin master root ONCE for this ceremony (silent
@@ -189,7 +189,7 @@ class SecretRequestCoordinator(
         // it; null ⇒ this device is non-admin/legacy ⇒ they stay IRK-signed. A
         // watch-delegate approval mints neither, so it never asks for it.
         val orderKey: Ed25519Sign? =
-            if (delegate == null) adminSigner?.invoke("Authorize your box to serve") else null
+            if (delegate == null) adminSigner?.invoke("Authorize your server to serve") else null
 
         var unlockKey: ByteArray? = null
         val sealedHex = when (purpose) {
@@ -311,7 +311,7 @@ class SecretRequestCoordinator(
         return confirmAndRespond(live, depositAutoLease = false)
     }
 
-    /** Kill switch — revoke a server's auto-unlock lease. The box can no
+    /** Kill switch — revoke a server's auto-unlock lease. The server can no
      *  longer self-unlock and falls back to phone-gated approval (downgrade,
      *  not brick). [leaseId] is the one returned by confirmAndRespond. */
     suspend fun revokeAutoUnlockLease(serverDomain: String, leaseId: String) {

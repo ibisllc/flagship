@@ -65,8 +65,8 @@ object NetworkErrorHumanizer {
         return when {
             isCertPinMismatch(t) -> Classified(
                 Kind.CERT_PIN_MISMATCH,
-                "This box's certificate doesn't match — someone may be " +
-                    "intercepting the connection. Reinstall the box or contact " +
+                "This server's certificate doesn't match — someone may be " +
+                    "intercepting the connection. Reinstall the server or contact " +
                     "its admin.",
             )
             rateLimit != null -> Classified(Kind.RATE_LIMITED, rateLimit.userMessage)

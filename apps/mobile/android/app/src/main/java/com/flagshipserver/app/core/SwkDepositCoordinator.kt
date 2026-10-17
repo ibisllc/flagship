@@ -8,7 +8,7 @@
 // `/pods` (with its identity pub), derives the box's deterministic SWK
 // (ServerKeys.deriveSwk — the same DOTS box key as create) under ONE biometric,
 // seals it to the box's REGISTERED identity, IRK-signs the wrapper, and deposits
-// the sealed carrier on `.com`'s blind swk-deposit lane. The box claims it on
+// the sealed carrier on `.com`'s blind swk-deposit lane. The server claims it on
 // boot and turns on its service/build platform.
 //
 // Best-effort + idempotent: it no-ops unless a deposit is owed

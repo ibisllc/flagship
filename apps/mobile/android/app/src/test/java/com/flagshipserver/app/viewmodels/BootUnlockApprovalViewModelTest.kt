@@ -114,7 +114,7 @@ class BootUnlockApprovalViewModelTest {
         m.approve()
         val s = m.state.value
         assertTrue(s is BootUnlockApprovalViewModel.State.Failed)
-        assertEquals("Sign in to approve this box.", (s as BootUnlockApprovalViewModel.State.Failed).message)
+        assertEquals("Sign in to approve this server.", (s as BootUnlockApprovalViewModel.State.Failed).message)
     }
 
     @Test fun approved_terminal_lateAwaitingFalseDoesNotUndo() = runTest {

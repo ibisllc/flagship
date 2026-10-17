@@ -240,7 +240,7 @@ fun BuildSourceChooserScreen(nav: NavController) {
         Column(verticalArrangement = Arrangement.spacedBy(FS.space.s3)) {
             SourceTile(
                 title = "Start from scratch with AI",
-                body = "Describe what you want. The AI writes it and the box runs it.",
+                body = "Describe what you want. The AI writes it and the server runs it.",
                 // The box's model drives this build, so confirm an AI key first.
                 onClick = { nav.navigate("vibe/key") },
                 testTag = "build-src-scratch",
@@ -253,7 +253,7 @@ fun BuildSourceChooserScreen(nav: NavController) {
             )
             SourceTile(
                 title = "Connect your IDE (Cursor/Cline)",
-                body = "Build from your editor using your own AI. No model key lives on the box.",
+                body = "Build from your editor using your own AI. No model key lives on the server.",
                 onClick = { nav.navigate("build/mcp") },
                 testTag = "build-src-mcp",
             )
@@ -595,7 +595,7 @@ fun BuildGitScreen(nav: NavController) {
             is BuildGitViewModel.GitPhase.NotLive -> NotLiveCard(p.reason, nav, vm, recheckEnabled = !nameRefused) { checkRepo() }
             is BuildGitViewModel.GitPhase.Sealed -> SealedCard(p.message, nav, vm, recheckEnabled = !nameRefused) { checkRepo() }
             is BuildGitViewModel.GitPhase.Adapted -> AdaptedCard(p, vm, nav)
-            is BuildGitViewModel.GitPhase.Deploying -> InfoCard("Installing…", "Building and deploying to your box.")
+            is BuildGitViewModel.GitPhase.Deploying -> InfoCard("Installing…", "Building and deploying to your server.")
             is BuildGitViewModel.GitPhase.Deployed -> DeployedCard(p.url, vm)
             is BuildGitViewModel.GitPhase.Failed -> {
                 ErrorCardSimple(p.message)
@@ -922,7 +922,7 @@ fun BuildMcpScreen(nav: NavController, editServiceId: String? = null) {
     ScreenScaffold(
         title = "Connect your IDE",
         subtitle = vm.editingName?.let { EditService.ideIntro(it) }
-            ?: "Build from your own IDE (Claude Code, Cursor, VS Code or Cline) using your own AI. The box runs an MCP server scoped to just this build — no model key on the box.",
+            ?: "Build from your own IDE (Claude Code, Cursor, VS Code or Cline) using your own AI. The server runs an MCP server scoped to just this build — no model key on the server.",
         onBack = { nav.popBackStack() },
     ) {
         val creating = phase is BuildMcpViewModel.McpPhase.Creating
@@ -1065,7 +1065,7 @@ private fun EnvRequestsCard(requests: List<BuildEnvRequest>, onRefresh: () -> Un
         Text("Your IDE asked for these secrets", color = FS.colors.text, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold))
         Spacer(Modifier.height(FS.space.s2))
         Text(
-            "The editor and its AI never see the value — you set it here on your box. Open Configure environment on the service after it's deployed and enter each value there; it never travels through your IDE.",
+            "The editor and its AI never see the value — you set it here on your server. Open Configure environment on the service after it's deployed and enter each value there; it never travels through your IDE.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall,
         )

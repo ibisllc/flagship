@@ -154,7 +154,12 @@ fun ServicesTab() {
             else -> { /* not for this tab */ }
         }
     }
-    NavHost(navController = nav, startDestination = "apps-list") {
+    NavHost(navController = nav, startDestination = "apps-list",
+        enterTransition = com.flagshipserver.app.ui.theme.FSMotion.enter,
+        exitTransition = com.flagshipserver.app.ui.theme.FSMotion.exit,
+        popEnterTransition = com.flagshipserver.app.ui.theme.FSMotion.popEnter,
+        popExitTransition = com.flagshipserver.app.ui.theme.FSMotion.popExit,
+    ) {
         composable("apps-list") { ServicesListScreen(nav) }
         composable(
             route = "service-access-list/{serviceId}?draft={draft}",

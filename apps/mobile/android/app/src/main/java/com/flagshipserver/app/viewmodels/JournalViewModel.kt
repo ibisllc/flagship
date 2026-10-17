@@ -72,13 +72,13 @@ class JournalViewModel(
             _phase.value = JournalPhase.Loaded(ack.unit.ifEmpty { unit }, ack.lines)
         } catch (e: HttpException) {
             val friendly = when (e.status) {
-                403 -> "The box rejected the request. Sign in again and retry."
-                404, 502, 503 -> "The box isn't reachable right now."
+                403 -> "The server rejected the request. Sign in again and retry."
+                404, 502, 503 -> "The server isn't reachable right now."
                 else -> "Server error (${e.status}): ${e.body}"
             }
             _phase.value = JournalPhase.Failed(friendly)
         } catch (e: Throwable) {
-            _phase.value = JournalPhase.Failed("Couldn't reach the box: ${e.message}")
+            _phase.value = JournalPhase.Failed("Couldn't reach the server: ${e.message}")
         }
     }
 }

@@ -219,7 +219,7 @@ class ServerMigrationTimelineTest {
     fun waitCopyHonestPerPhase() {
         assertTrue(
             ServerMigrationTimeline.waitCopy(session(phase = "initiated"), 10)
-                .contains("Waiting for the new box"),
+                .contains("Waiting for the new server"),
         )
         assertTrue(
             ServerMigrationTimeline.waitCopy(session(phase = "pre-seeded", attachedAt = 2, preSeededAt = 3), 10)

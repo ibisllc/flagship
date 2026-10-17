@@ -169,7 +169,7 @@ class TransferGiverViewModel(
                 client.postAdminHandoff(serverDomain, handoff)
             } catch (e: Throwable) {
                 _phase.value = TransferGiverPhase.Failed(
-                    "Ownership moved, but the admin hand-off failed: ${e.message}. A box with a pinned admin root will wait for this hand-off before re-homing — retry from this device.",
+                    "Ownership moved, but the admin hand-off failed: ${e.message}. A server with a pinned admin root will wait for this hand-off before re-homing — retry from this device.",
                 )
                 return true
             }
@@ -187,7 +187,7 @@ class TransferGiverViewModel(
                     client.postRehomeAuth(serverDomain, rehomeAuth)
                 } catch (e: Throwable) {
                     _phase.value = TransferGiverPhase.Failed(
-                        "Ownership moved, but the re-home authorization failed: ${e.message}. The new owner's box will wait for this authorization before re-homing — retry from this device.",
+                        "Ownership moved, but the re-home authorization failed: ${e.message}. The new owner's server will wait for this authorization before re-homing — retry from this device.",
                     )
                     return true
                 }

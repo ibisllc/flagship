@@ -125,7 +125,7 @@ class DeadManViewModel(
             _phase.value = DeadManPhase.Failed(friendly(e))
             return false
         } catch (e: Throwable) {
-            _phase.value = DeadManPhase.Failed("Couldn't reach the box: ${e.message}")
+            _phase.value = DeadManPhase.Failed("Couldn't reach the server: ${e.message}")
             return false
         }
         _phase.value = DeadManPhase.Completed
@@ -173,7 +173,7 @@ class DeadManViewModel(
             _phase.value = DeadManPhase.Failed(friendly(e))
             return null
         } catch (e: Throwable) {
-            _phase.value = DeadManPhase.Failed("Couldn't reach the box: ${e.message}")
+            _phase.value = DeadManPhase.Failed("Couldn't reach the server: ${e.message}")
             return null
         }
         _phase.value = DeadManPhase.Completed
@@ -181,8 +181,8 @@ class DeadManViewModel(
     }
 
     private fun friendly(e: HttpException): String = when (e.status) {
-        403 -> "The box rejected the request. Sign in again and retry."
-        404, 502, 503 -> "The box isn't reachable right now."
+        403 -> "The server rejected the request. Sign in again and retry."
+        404, 502, 503 -> "The server isn't reachable right now."
         else -> "Server error (${e.status}): ${e.body}"
     }
 

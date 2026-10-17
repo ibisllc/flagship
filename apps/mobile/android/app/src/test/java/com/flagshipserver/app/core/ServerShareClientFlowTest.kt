@@ -466,7 +466,7 @@ class ServerShareClientFlowTest {
         assertNotNull(accepted.acceptAdmin)
         try {
             owner.confirm("alice", domain, "owner-session", accepted.copy(acceptAdmin = null))
-            fail("the box refuses an acceptance with no admin proof")
+            fail("the server refuses an acceptance with no admin proof")
         } catch (e: ShareException) {
             assertEquals(
                 "Only an admin device of their account can accept a co-manage invitation. Cancel this link and send a new one for them to open on an admin device.",
@@ -710,7 +710,7 @@ class ServerShareClientFlowTest {
         assertEquals("An update is already underway.", ServerShareClient.updateRefusalText("busy", "x"))
         assertEquals("An update is already underway.", ServerShareClient.updateRefusalText("pending-verify", "x"))
         assertEquals("Your device's clock looks off. Check it and try again.", ServerShareClient.updateRefusalText("stale", "x"))
-        assertEquals("the box said no", ServerShareClient.updateRefusalText("wrong-domain", "the box said no"))
+        assertEquals("the server said no", ServerShareClient.updateRefusalText("wrong-domain", "the server said no"))
     }
 
     @Test fun shareBootHeaderSignsTheCanonicalBytes() {

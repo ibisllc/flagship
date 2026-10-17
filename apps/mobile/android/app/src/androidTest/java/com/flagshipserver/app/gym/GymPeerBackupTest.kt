@@ -95,7 +95,7 @@ class GymPeerBackupTest : GymBase() {
         waitUntilExists("import-backup-name", timeoutMs = 20_000)
         waitUntilTextExists("Backup of $lost")
         waitUntilTextExists("3 servers hold its pieces; 2 bring it back.")
-        assertEquals("the box was asked with the PBK, not the key", 1, mock.peerRootRequests.size)
+        assertEquals("the server was asked with the PBK, not the key", 1, mock.peerRootRequests.size)
         assertEquals(64, mock.peerRootRequests.single().pbkHex.length)
         gymShot("restore-peers-found")
     }

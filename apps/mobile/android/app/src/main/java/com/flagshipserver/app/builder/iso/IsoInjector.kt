@@ -60,7 +60,7 @@ class VerbatimInjector(
         log(
             "VerbatimInjector: writing base ISO UNCHANGED for ${recipe.serverDomain} " +
                 "(serial=${recipe.serial}). Recipe is NOT yet embedded — the stick will boot " +
-                "stock Debian, not an auto-provisioned box. See OTG-BUILDER-NOTES.md.",
+                "stock Debian, not an auto-provisioned server. See OTG-BUILDER-NOTES.md.",
         )
         val stream = baseIso.inputStream().buffered(1 shl 20)
         return InjectedImage(

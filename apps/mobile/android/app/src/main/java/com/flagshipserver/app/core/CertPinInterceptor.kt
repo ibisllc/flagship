@@ -47,7 +47,7 @@ class CertPinInterceptor(private val pinFor: (String) -> String?) : Interceptor 
         fun enforce(host: String, leafDer: ByteArray?, pinFor: (String) -> String?) {
             if (!CertPinDecision.accept(leafDerSha256Hex(leafDer), host, pinFor)) {
                 throw SSLPeerUnverifiedException(
-                    "Certificate for $host does not match the box's STK-signed " +
+                    "Certificate for $host does not match the server's STK-signed " +
                         "fingerprint — refusing connection",
                 )
             }

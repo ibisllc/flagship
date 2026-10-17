@@ -56,7 +56,7 @@ class VibeCodeDeployViewModel(
             when {
                 r.started == true -> follow()
                 r.ok && r.url != null -> _phase.value = Phase.Deployed(r.url, leftOpen = r.inviteOnly == false)
-                else -> _phase.value = Phase.Failed("Deploy was rejected by the box.")
+                else -> _phase.value = Phase.Failed("Deploy was rejected by the server.")
             }
         } catch (e: CancellationException) {
             throw e

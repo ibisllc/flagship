@@ -35,7 +35,12 @@ fun ActivityTab() {
             else -> { /* not for this tab */ }
         }
     }
-    NavHost(navController = nav, startDestination = "activity") {
+    NavHost(navController = nav, startDestination = "activity",
+        enterTransition = com.flagshipserver.app.ui.theme.FSMotion.enter,
+        exitTransition = com.flagshipserver.app.ui.theme.FSMotion.exit,
+        popEnterTransition = com.flagshipserver.app.ui.theme.FSMotion.popEnter,
+        popExitTransition = com.flagshipserver.app.ui.theme.FSMotion.popExit,
+    ) {
         composable("activity") { ActivityScreen(nav) }
         composable("secret-requests") { SecretRequestsScreen(nav) }
         composable("post-recovery") { PostRecoveryScreen(nav) }

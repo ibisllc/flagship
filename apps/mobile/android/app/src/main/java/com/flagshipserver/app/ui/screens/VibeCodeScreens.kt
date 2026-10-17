@@ -670,7 +670,6 @@ fun VibeCodeGeneratingScreen(nav: NavController, sessionId: String = "") {
             modifier = Modifier.fillMaxWidth().weight(1f),
             shape = MaterialTheme.shapes.medium,
             color = MaterialTheme.colorScheme.surfaceContainerLowest,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         ) {
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(FS.space.s2),

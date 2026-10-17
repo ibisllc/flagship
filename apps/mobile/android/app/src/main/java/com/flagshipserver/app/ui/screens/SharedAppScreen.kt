@@ -91,7 +91,12 @@ fun SharedAppScreen(shareId: String, serviceId: String, onBack: () -> Unit) {
     val nav = rememberNavController()
     val invites = remember(vm) { vm.coInvites() }
     CompositionLocalProvider(LocalScreensClient provides client, LocalAppOrderSigning provides signing) {
-        NavHost(navController = nav, startDestination = "app") {
+        NavHost(navController = nav, startDestination = "app",
+        enterTransition = com.flagshipserver.app.ui.theme.FSMotion.enter,
+        exitTransition = com.flagshipserver.app.ui.theme.FSMotion.exit,
+        popEnterTransition = com.flagshipserver.app.ui.theme.FSMotion.popEnter,
+        popExitTransition = com.flagshipserver.app.ui.theme.FSMotion.popExit,
+    ) {
             composable("app") {
                 SharedAppContent(vm.appName, ui, nav, onBack = onBack, onRetry = { scope.launch { vm.load() } }, invites = invites)
             }

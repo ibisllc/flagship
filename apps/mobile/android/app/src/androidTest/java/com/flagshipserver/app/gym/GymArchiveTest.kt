@@ -44,7 +44,7 @@ class GymArchiveTest : GymBase() {
         composeRule.onNodeWithTag("backup-start").assertIsEnabled()
         gymShot("backup-passcode")
         tap("backup-start")
-        eventually(90_000, "the box asked to build it") { screensMock.archiveStarts.size == 1 }
+        eventually(90_000, "the server asked to build it") { screensMock.archiveStarts.size == 1 }
         tap("backup-download", 20_000)
         waitUntilExists("backup-share", 20_000)
         gymShot("backup-downloaded")
@@ -65,7 +65,7 @@ class GymArchiveTest : GymBase() {
         type("backup-own-passcode-again", "correct horse battery staple")
         tap("backup-passcode-saved")
         tap("backup-start")
-        eventually(90_000, "the box asked to build it") { screensMock.archiveStarts.size == 1 }
+        eventually(90_000, "the server asked to build it") { screensMock.archiveStarts.size == 1 }
         waitUntilExists("backup-download", 20_000)
     }
 

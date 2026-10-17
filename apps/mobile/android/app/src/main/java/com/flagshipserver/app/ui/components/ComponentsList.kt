@@ -195,7 +195,6 @@ fun FSProfileCard(
         modifier = modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerLowest,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -338,7 +337,6 @@ fun FSGroup(
             modifier = Modifier.fillMaxWidth(),
             shape = MaterialTheme.shapes.medium,
             color = MaterialTheme.colorScheme.surfaceContainerLowest,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         ) {
             Column { content() }
         }
@@ -453,7 +451,6 @@ fun FSListRow(
         modifier = modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerLowest,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -482,7 +479,7 @@ fun FSListRow(
                 }
                 if (!detail.isNullOrEmpty()) {
                     Text(
-                        detail,
+                        fsMiddleEllipsis(detail),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -498,3 +495,9 @@ fun FSListRow(
         }
     }
 }
+
+
+/** A long host or address shortened in the middle ("plants--bright-ma…flagship.services"):
+ *  the start names it, the end says where it lives. The full text is on the detail page. */
+fun fsMiddleEllipsis(text: String, head: Int = 18, tail: Int = 16): String =
+    text.removeSuffix(".flagship.services").let { s -> if (s.length <= head + tail + 1) s else s.take(head) + "…" + s.takeLast(tail) }

@@ -945,7 +945,7 @@ data class AuthCodeWire(
     /** Slice D (D-1) — the account's ADMIN MASTER ROOT pubkey (hex). Rides
      *  INSIDE the AuthCode so it is signature-covered by `authCodeUserSignature`
      *  and `.com`'s registration gate (a compromised network can't swap the
-     *  admin anchor). The box pins it at first boot into
+     *  admin anchor). The server pins it at first boot into
      *  `ServerConfig.adminRootPub`. Backward-compatible: null ⇒ the canonical
      *  bytes are byte-identical to a pre-D AuthCode (no `ar=` segment). */
     val adminRootPubKey: String? = null,

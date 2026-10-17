@@ -114,7 +114,7 @@ class BootUnlockApprovalViewModel(
     suspend fun approve() {
         val source = makeSource()
         if (source == null) {
-            _state.value = State.Failed("Sign in to approve this box.")
+            _state.value = State.Failed("Sign in to approve this server.")
             return
         }
         _state.value = State.Approving

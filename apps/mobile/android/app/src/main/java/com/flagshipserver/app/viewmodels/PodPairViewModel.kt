@@ -100,14 +100,14 @@ class PodPairViewModel(
         } catch (e: HttpException) {
             _phase.value = PodPairPhase.Failed(
                 when (e.status) {
-                    403 -> "The box rejected the request. Sign in again and retry."
-                    404, 502, 503 -> "The box isn't reachable right now."
+                    403 -> "The server rejected the request. Sign in again and retry."
+                    404, 502, 503 -> "The server isn't reachable right now."
                     else -> "Server error (${e.status})."
                 },
             )
             return
         } catch (e: Throwable) {
-            _phase.value = PodPairPhase.Failed("Couldn't reach the box: ${e.message}")
+            _phase.value = PodPairPhase.Failed("Couldn't reach the server: ${e.message}")
             return
         }
 

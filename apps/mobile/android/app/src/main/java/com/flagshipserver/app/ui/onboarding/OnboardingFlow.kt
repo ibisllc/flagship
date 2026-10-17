@@ -75,7 +75,12 @@ fun OnboardingFlow(onFinished: () -> Unit) {
             .fillMaxSize()
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)),
     ) {
-    NavHost(navController = nav, startDestination = "welcome") {
+    NavHost(navController = nav, startDestination = "welcome",
+        enterTransition = com.flagshipserver.app.ui.theme.FSMotion.enter,
+        exitTransition = com.flagshipserver.app.ui.theme.FSMotion.exit,
+        popEnterTransition = com.flagshipserver.app.ui.theme.FSMotion.popEnter,
+        popExitTransition = com.flagshipserver.app.ui.theme.FSMotion.popExit,
+    ) {
         composable("welcome") { WelcomeScreen(nav) }
         composable("username") {
             // CREATE path. Picking a username opens the ACCOUNT, not a

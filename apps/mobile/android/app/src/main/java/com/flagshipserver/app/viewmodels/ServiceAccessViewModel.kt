@@ -351,7 +351,7 @@ class ServiceAccessViewModel(
             refreshPeople()
             refreshMembers()
         } catch (e: Throwable) {
-            _phase.value = ServiceAccessPhase.Failed("Couldn't reach the box to load access settings.")
+            _phase.value = ServiceAccessPhase.Failed("Couldn't reach the server to load access settings.")
         }
     }
 

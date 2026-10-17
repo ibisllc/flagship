@@ -226,7 +226,7 @@ open class ServiceAccessClient(
     /**
      * AUTHOR-side finalize of a MANUAL-approve invite (v2 Phase 3 tier 2). POSTs
      * ONLY the friend's AID-signed `AcceptServiceInvite` (`accept` + `acceptSig`)
-     * to the AUTHOR's OWN box. The box FETCHES the owner's signed create from .com
+     * to the AUTHOR's OWN box. The server FETCHES the owner's signed create from .com
      * by the acceptance's inviteId (STK-signed), verifies both, then binds the
      * contact AID — so the author can finalize from ANY device. Runs on
      * Dispatchers.IO.

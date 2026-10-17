@@ -1,5 +1,5 @@
 // STK-signed LAN hint — Kotlin mirror of packages/protocol/src/lanHint.ts
-// (docs/lan-direct.md). The box serves it to paired devices; this side checks
+// (docs/lan-direct.md). The server serves it to paired devices; this side checks
 // it under the STK derived from the phone's own UMK before ever dialing a local
 // address. Byte-identical canonical form, pinned by LanHintTest against the
 // shared vector.

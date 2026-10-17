@@ -170,13 +170,13 @@ object ServerMigrationTimeline {
         val aborted = s.abortedAt != null
         val rows = listOf(
             Triple("initiate", "Migration authorized", s.initiatedAt),
-            Triple("provision", "New box online + attached", s.attachedAt),
-            Triple("pre-seed", "Data restored to the new box", s.preSeededAt),
+            Triple("provision", "New server online + attached", s.attachedAt),
+            Triple("pre-seed", "Data restored to the new server", s.preSeededAt),
             Triple("ready", "Confirmed ready to take over", s.readyAt),
             Triple("freeze", "Old server frozen — final backup", s.freezeAt),
             Triple("final-delta", "Final backup flushed", s.finalDeltaAt),
-            Triple("take-over", "New box took over the name", s.takenOverAt),
-            Triple("close-out", "Old box closed out", s.oldClosedOutAt),
+            Triple("take-over", "New server took over the name", s.takenOverAt),
+            Triple("close-out", "Old server closed out", s.oldClosedOutAt),
         )
         var activeSeen = false
         return rows.map { (key, label, at) ->
@@ -197,16 +197,16 @@ object ServerMigrationTimeline {
         if (s.abortedAt != null) {
             return "Migration aborted — your old server stays active with all its data."
         }
-        if (s.done) return "Migration complete — the server now runs on the new box."
+        if (s.done) return "Migration complete — the server now runs on the new server."
         return when (s.phase) {
             "initiated" ->
-                "Waiting for the new box to come online. Apply the recipe on the new machine / VM; it will attach itself here."
+                "Waiting for the new server to come online. Apply the recipe on the new machine / VM; it will attach itself here."
             "provisioned" -> {
                 val attachedAt = s.attachedAt
                 if (attachedAt != null && nowMs - attachedAt > PRE_SEED_STUCK_MS) {
-                    "The new box attached but hasn't restored any data yet. If this server has no backup enabled, enable backup first — the migration restores from it."
+                    "The new server attached but hasn't restored any data yet. If this server has no backup enabled, enable backup first — the migration restores from it."
                 } else {
-                    "New box attached — restoring this server's data from backup. The old server keeps serving meanwhile."
+                    "New server attached — restoring this server's data from backup. The old server keeps serving meanwhile."
                 }
             }
             "pre-seeded" ->
@@ -217,10 +217,10 @@ object ServerMigrationTimeline {
                 if (s.finalDeltaAt == null) {
                     "Old server is frozen and flushing its final backup…"
                 } else {
-                    "Final backup flushed — the new box is applying it and claiming the name…"
+                    "Final backup flushed — the new server is applying it and claiming the name…"
                 }
             "taken-over" ->
-                "The new box is serving the name. Waiting for the old box to close out."
+                "The new server is serving the name. Waiting for the old server to close out."
             else -> ""
         }
     }

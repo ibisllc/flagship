@@ -87,14 +87,14 @@ class PowerOffViewModel(
             )
         } catch (e: HttpException) {
             val friendly = when (e.status) {
-                403 -> "The box rejected the request. Sign in again and retry."
-                404, 502, 503 -> "The box isn't reachable right now."
+                403 -> "The server rejected the request. Sign in again and retry."
+                404, 502, 503 -> "The server isn't reachable right now."
                 else -> "Server error (${e.status}): ${e.body}"
             }
             _phase.value = PowerOffPhase.Failed(friendly)
             return
         } catch (e: Throwable) {
-            _phase.value = PowerOffPhase.Failed("Couldn't reach the box: ${e.message}")
+            _phase.value = PowerOffPhase.Failed("Couldn't reach the server: ${e.message}")
             return
         }
         _phase.value = PowerOffPhase.Completed(mode)

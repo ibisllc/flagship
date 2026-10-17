@@ -77,7 +77,12 @@ fun SettingsTab() {
             if (accountRoute != "settings-root") nav.navigate(accountRoute)
         }
     }
-    NavHost(navController = nav, startDestination = "settings-root") {
+    NavHost(navController = nav, startDestination = "settings-root",
+        enterTransition = com.flagshipserver.app.ui.theme.FSMotion.enter,
+        exitTransition = com.flagshipserver.app.ui.theme.FSMotion.exit,
+        popEnterTransition = com.flagshipserver.app.ui.theme.FSMotion.popEnter,
+        popExitTransition = com.flagshipserver.app.ui.theme.FSMotion.popExit,
+    ) {
         composable("settings-root") { SettingsScreen(nav) }
         composable("delete-account") { AccountDeletionScreen(nav) }
         composable("trusted-devices") { TrustedDevicesScreen(nav) }

@@ -1052,7 +1052,7 @@ private fun PowerCard(serverDomain: String, isLuks: Boolean = true) {
                 (phase as? PowerOffPhase.Completed)?.let { c ->
                     IconLine(
                         if (c.mode == PowerMode.RESTART) Icons.Outlined.RestartAlt else Icons.Outlined.PowerSettingsNew,
-                        "This box is ${if (c.mode == PowerMode.RESTART) "restarting" else "powering off"} — it will go offline.",
+                        "This server is ${if (c.mode == PowerMode.RESTART) "restarting" else "powering off"} — it will go offline.",
                     )
                 }
                 FSSecondaryButton(

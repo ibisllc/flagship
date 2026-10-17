@@ -128,7 +128,7 @@ class TransferAcquirerViewModel(
             }
         } catch (e: Throwable) {
             _phase.value = TransferAcquirerPhase.Failed(
-                if (AddServerGate.isServerRefusal(e)) AddServerGate.ADMIN_ONLY else "Couldn't claim the box: ${e.message}",
+                if (AddServerGate.isServerRefusal(e)) AddServerGate.ADMIN_ONLY else "Couldn't claim the server: ${e.message}",
             )
         }
     }

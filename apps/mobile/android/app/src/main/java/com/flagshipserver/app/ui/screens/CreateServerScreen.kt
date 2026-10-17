@@ -1109,7 +1109,7 @@ private fun DeliveryChooserPhase(
     DeliveryCard(
         icon = Icons.Outlined.ContentCopy,
         title = "Copy recipe to clipboard",
-        body = "Copy the recipe text, then paste it into the builder's \"I have a recipe\" box.",
+        body = "Copy the recipe text, then paste it into the builder's \"I have a recipe\" field.",
         enabled = !busy,
         testTag = "cs-delivery-copy",
         onClick = onCopy,
@@ -1151,7 +1151,6 @@ private fun DeliveryCard(
         modifier = Modifier.fillMaxWidth().testTag(testTag),
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerLowest,
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         com.flagshipserver.app.ui.components.FSRow(
             title = title,
@@ -1386,7 +1385,7 @@ internal suspend fun mintRecipeBundle(
     // + serverId (serverDomain) used for the STK/BAK above, via ServerKeys.deriveSwk
     // (DOTS info "flagship.swk.v1|<serverId>" — the protocol/daemon derivation),
     // and embed it as an UNSIGNED `swkHex` recipe sibling the daemon persists at
-    // first boot. The box can't derive it (no UMK). Reuses the in-hand UMK seed —
+    // first boot. The server can't derive it (no UMK). Reuses the in-hand UMK seed —
     // no extra biometric.
     val derivedSwkHex = HexUtil.encode(ServerKeys.deriveSwk(Keystore.currentUmkSeed(), serverDomain))
 

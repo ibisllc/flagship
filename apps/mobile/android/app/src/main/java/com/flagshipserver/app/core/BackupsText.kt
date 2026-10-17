@@ -1,7 +1,7 @@
 // The server page's Backups section and the create wizard's backup policy
 // (docs/server-backup-and-clone.md, "Backup policy" and "Scheduled backups"):
 // the wording (the same on iOS and the webapp) and the schedule's local-time
-// conversion. The box keeps the schedule in UTC; the apps show and set it in
+// conversion. The server keeps the schedule in UTC; the apps show and set it in
 // the phone's own time zone.
 
 package com.flagshipserver.app.core

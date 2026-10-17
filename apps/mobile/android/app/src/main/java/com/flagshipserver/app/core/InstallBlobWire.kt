@@ -58,11 +58,11 @@ data class WireBlob(
     val rckPubKey: String,               // hex
     // Only present for "approve" servers — null (omitted, since the default
     // Json has encodeDefaults=false) for the "auto" default, mirroring the
-    // webapp's onWireBlob. The box reads blob.bootUnlockMode; absent ⇒ "auto".
+    // webapp's onWireBlob. The server reads blob.bootUnlockMode; absent ⇒ "auto".
     val bootUnlockMode: String? = null,
     // Disk-encryption policy: "luks" | "none". Only present when the user
     // opted out of encryption ("none") — null (omitted, encodeDefaults=false)
-    // for the "luks" default, mirroring the webapp's onWireBlob. The box reads
+    // for the "luks" default, mirroring the webapp's onWireBlob. The server reads
     // blob.diskEncryption; absent ⇒ "luks". trailer.ts reconstructs it so the
     // daemon's canonical bytes match the signature.
     val diskEncryption: String? = null,

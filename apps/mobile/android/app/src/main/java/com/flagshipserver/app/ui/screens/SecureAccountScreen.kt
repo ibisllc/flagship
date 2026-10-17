@@ -120,7 +120,12 @@ fun SecureAccountOverlay(onDismiss: () -> Unit) {
             .background(FS.colors.bg)
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom)),
     ) {
-        NavHost(navController = nav, startDestination = "secure") {
+        NavHost(navController = nav, startDestination = "secure",
+        enterTransition = com.flagshipserver.app.ui.theme.FSMotion.enter,
+        exitTransition = com.flagshipserver.app.ui.theme.FSMotion.exit,
+        popEnterTransition = com.flagshipserver.app.ui.theme.FSMotion.popEnter,
+        popExitTransition = com.flagshipserver.app.ui.theme.FSMotion.popExit,
+    ) {
             composable("secure") {
                 SecureAccountScreen(
                     onDone = onDismiss,

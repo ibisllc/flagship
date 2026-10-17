@@ -169,7 +169,7 @@ class GymBackupsTest : GymBase() {
         assertEquals("Downloaded ${newest.bundleFileName}.", textOf("sd-backups-downloaded-${newest.archiveId}"))
         assertTrue(newest.bundleFileName.endsWith(".flagship"))
         assertTrue(exists("sd-backups-save-${newest.archiveId}"))
-        assertTrue("the box keeps saved backups", mock.savedBackupsList.any { it.archiveId == newest.archiveId })
+        assertTrue("the server keeps saved backups", mock.savedBackupsList.any { it.archiveId == newest.archiveId })
         gymShot("backups-downloaded")
         composeRule.onNodeWithTag("sd-backups-delete-${oldest.archiveId}").performScrollTo().performClick()
         waitUntilTextExists(BackupsText.DELETE_CONFIRM)

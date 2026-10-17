@@ -111,7 +111,7 @@ fun VibeCodeChatScreen(nav: NavController, sessionId: String) {
     var envValueDraft by remember { mutableStateOf("") }
     var submitting by remember { mutableStateOf(false) }
     // Deploy state. `ready-to-deploy` (the model finished emitting files + no
-    // tool pending) surfaces the Deploy button. The box stages the app on a
+    // tool pending) surfaces the Deploy button. The server stages the app on a
     // private copy first, then installs the tested image; the deploy VM
     // follows those phases. The scratch deploy has no other trigger (the WS
     // stream is a pure relay), so this button IS how a chat-built service
@@ -710,7 +710,6 @@ private fun InputBar(content: @Composable () -> Unit) {
         modifier = Modifier.fillMaxWidth().padding(bottom = FS.space.s3),
         shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         Box(Modifier.padding(FS.space.s3)) { content() }
     }

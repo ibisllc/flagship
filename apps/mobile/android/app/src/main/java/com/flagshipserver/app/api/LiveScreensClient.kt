@@ -232,7 +232,7 @@ class LiveScreensClient(
         // BFF has no deploy route, and the WS stream is a pure relay. The vibe
         // session registry is shared between the screens-BFF start and this
         // legacy handler, so a session started via /api/screens/vibe-code/start
-        // is deployable here. The box answers only once `docker build` and the
+        // is deployable here. The server answers only once `docker build` and the
         // install finish, which takes minutes, not the client's 60 s default.
         return request(
             "/api/llm/sessions/$sessionId/deploy", BuildDeployResponse.serializer(), "POST", "{}".toByteArray(),

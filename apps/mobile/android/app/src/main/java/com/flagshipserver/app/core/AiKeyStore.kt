@@ -53,7 +53,7 @@ data class AiCredential(
     val relay: Boolean = true,
     val keyId: String? = null,
     /** "promo" for a free-AI-credits credential (FreeAiCredits); null for
-     *  the owner's own key. The box pins a promo credential to its host. */
+     *  the owner's own key. The server pins a promo credential to its host. */
     val source: String? = null,
     /** The model a free-AI credential names; sent as the build's model. */
     val model: String? = null,

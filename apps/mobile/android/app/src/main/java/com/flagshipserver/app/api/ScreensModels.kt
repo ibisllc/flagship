@@ -714,7 +714,7 @@ data class VibeCodeStartRequest(
     /** Owner-chosen reach: "just-me" or "link". Applied at install. */
     val visibility: String? = null,
     /** Change this installed service (`<creator>--<slug>`) instead of building
-     *  a new one. The box ignores [name] and [visibility] when it's set. */
+     *  a new one. The server ignores [name] and [visibility] when it's set. */
     val editServiceId: String? = null,
 )
 

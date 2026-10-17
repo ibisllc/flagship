@@ -67,7 +67,7 @@ class FrontPageViewModel(
             }
             _phase.value = FrontPagePhase.Ready
         } catch (e: Throwable) {
-            _phase.value = FrontPagePhase.Failed("Couldn't reach the box to load front-page settings.")
+            _phase.value = FrontPagePhase.Failed("Couldn't reach the server to load front-page settings.")
         }
     }
 
@@ -110,15 +110,15 @@ class FrontPageViewModel(
             )
         } catch (e: HttpException) {
             val friendly = when (e.status) {
-                403 -> "The box rejected the request. Sign in again and retry."
-                404, 502, 503 -> "The box isn't reachable right now."
-                422 -> "That app is no longer installed on the box."
+                403 -> "The server rejected the request. Sign in again and retry."
+                404, 502, 503 -> "The server isn't reachable right now."
+                422 -> "That app is no longer installed on the server."
                 else -> "Server error (${e.status}): ${e.body}"
             }
             _phase.value = FrontPagePhase.Failed(friendly)
             return
         } catch (e: Throwable) {
-            _phase.value = FrontPagePhase.Failed("Couldn't reach the box: ${e.message}")
+            _phase.value = FrontPagePhase.Failed("Couldn't reach the server: ${e.message}")
             return
         }
         _current.value = label.ifEmpty { null }

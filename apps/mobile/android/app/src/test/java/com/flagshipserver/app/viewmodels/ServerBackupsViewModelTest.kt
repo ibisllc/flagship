@@ -55,7 +55,7 @@ class ServerBackupsViewModelTest {
         val mints = mutableListOf<Int>()
         val vm = vm(c, mints = mints)
         vm.load()
-        assertEquals("one batch of the keys the box wants", listOf(800 - 0).map { minOf(it, 400) }, mints)
+        assertEquals("one batch of the keys the server wants", listOf(800 - 0).map { minOf(it, 400) }, mints)
         val d = c.backupKeyDeposits.single()
         assertEquals(fqdn, d.deposit.serverDomain)
         assertEquals(400, d.deposit.count)
@@ -64,7 +64,7 @@ class ServerBackupsViewModelTest {
         // Each kek is this account's key for that archive id.
         assertEquals(HexUtil.encode(ServerArchive.deriveKey(umk, d.keys[0].archiveId)!!), d.keys[0].kekHex)
         assertEquals(400, vm.view!!.keysLeft)
-        assertNotNull("the next backup shows once the box has keys", BackupsText.nextLine(vm.view!!))
+        assertNotNull("the next backup shows once the server has keys", BackupsText.nextLine(vm.view!!))
         assertFalse(vm.needsApproval)
     }
 
@@ -177,7 +177,7 @@ class ServerBackupsViewModelTest {
         assertEquals(b.bundleFileName, f.name)
         assertTrue(f.name.endsWith(".flagship"))
         assertArrayEquals(c.archiveBundle, f.readBytes())
-        assertTrue("saved backups stay on the box", c.savedBackupsList.any { it.archiveId == b.archiveId })
+        assertTrue("saved backups stay on the server", c.savedBackupsList.any { it.archiveId == b.archiveId })
     }
 
     @Test fun policyChangeIsSignedAndARefusalIsTheBoxsSentence() = runBlocking {

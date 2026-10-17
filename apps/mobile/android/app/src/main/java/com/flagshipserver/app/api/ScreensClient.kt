@@ -58,7 +58,7 @@ interface ScreensClient {
     // P1.19 app-backup/start
     suspend fun appBackupStart(req: AppBackupStartRequest): AppBackupStartResponse
 
-    /** The finished archive at `fetchPath` (`/api/backups/<id>`). The box hands
+    /** The finished archive at `fetchPath` (`/api/backups/<id>`). The server hands
      *  it out once and deletes it. */
     suspend fun appBackupFetch(fetchPath: String): ByteArray =
         throw ScreensError.NotImplemented("app backup download")

@@ -309,7 +309,7 @@ fun HomeScreen(
                         pods.size.toString(),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.titleSmall,
-                        modifier = Modifier.padding(end = FS.space.s4, top = FS.space.s2),
+                        modifier = Modifier.padding(end = FS.space.s4, top = FS.space.s2, bottom = FS.space.s1),
                     )
                 }
                 if (canAddServers) AddOrImportServerButton(onClick = { showAddOrImport = true })
@@ -556,7 +556,7 @@ private fun AddOrImportServerButton(onClick: () -> Unit, primary: Boolean = fals
     } else {
         ButtonDefaults.filledTonalButtonColors()
     }
-    Button(
+    androidx.compose.material3.FilledTonalButton(
         onClick = onClick,
         colors = colors,
         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).testTag("home-add-server"),
@@ -589,7 +589,6 @@ private fun BuildServiceAction(enabled: Boolean, onClick: () -> Unit) {
         modifier = Modifier.fillMaxWidth().testTag("quick-action-vibe-code"),
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerLowest,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
         FSRow(
             title = "Build a service",
@@ -705,7 +704,6 @@ fun ServerRow(
             modifier = rowModifier.fillMaxWidth(),
             shape = MaterialTheme.shapes.medium,
             color = MaterialTheme.colorScheme.surfaceContainerLowest,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
