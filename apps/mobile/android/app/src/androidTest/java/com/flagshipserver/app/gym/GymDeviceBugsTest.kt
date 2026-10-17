@@ -20,6 +20,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -95,5 +97,27 @@ class GymDeviceBugsTest : GymBase() {
         val value = subdomainField().fetchSemanticsNode().config
             .getOrNull(SemanticsProperties.EditableText)?.text
         assertEquals("gymbox", value)
+    }
+
+    // M14: the passphrase typed into both fields and the acknowledgement
+    // ticked must enable "Create backup file".
+    @Test
+    fun keyBackupEnablesCreateOnceTypedAndAcknowledged() {
+        launch(tab = "settings", adminRoot = true)
+        waitUntilExists("settings-title")
+        composeRule.onNodeWithText("Back up account key").performScrollTo().performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodes(androidx.compose.ui.test.hasContentDescription("keyfile-export")).fetchSemanticsNodes().isNotEmpty()
+        }
+        val create = androidx.compose.ui.test.hasContentDescription("keyfile-export-create")
+        composeRule.onNode(create).assertIsNotEnabled()
+        val fields = composeRule.onAllNodes(hasSetTextAction())
+        fields[0].performTextInput("Caracal-keyfile-1016x")
+        fields[1].performTextInput("Caracal-keyfile-1016x")
+        composeRule.onNode(androidx.compose.ui.test.hasContentDescription("keyfile-export-ack-control"))
+            .performScrollTo().performClick()
+        composeRule.waitForIdle()
+        gymShot("key-backup-ready")
+        composeRule.onNode(create).performScrollTo().assertIsEnabled()
     }
 }

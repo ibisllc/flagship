@@ -104,6 +104,17 @@ fun KeyfileExportScreen(
     }
 
     val working = phase is KeyfileExportPhase.Working
+    // Derived here from the collected values: the card lambdas read them in
+    // their own scopes, so reading vm.canCreate (plain StateFlow.value) left
+    // this scope stale and the button stuck disabled (device bug M14).
+    val canCreate = KeyfileExportViewModel.isStrong(passphrase) &&
+        confirm.isNotEmpty() && passphrase == confirm && ackControl
+    LaunchedEffect(passphrase, confirm, ackControl) {
+        com.flagshipserver.app.core.ErrorLog.step(
+            "key-backup",
+            "inputs len=${passphrase.length}/${confirm.length} strong=${KeyfileExportViewModel.isStrong(passphrase)} match=${passphrase == confirm} ack=$ackControl",
+        )
+    }
 
     Column(
         Modifier
@@ -183,7 +194,7 @@ fun KeyfileExportScreen(
         FSPrimaryButton(
             label = if (working) "Creating…" else "Create backup file",
             onClick = { vm.createBackup() },
-            enabled = vm.canCreate && !working,
+            enabled = canCreate && !working,
             block = true,
             large = true,
             modifier = Modifier.semantics { contentDescription = "keyfile-export-create" },

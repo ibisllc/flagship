@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ripple
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -252,6 +253,14 @@ fun FSField(
                 cursorBrush = SolidColor(FS.colors.primary),
                 textStyle = TextStyle(color = FS.colors.text, fontSize = 16.sp),
                 visualTransformation = visualTransformation,
+                // A masked field must tell the keyboard so: as plain text the
+                // IME autocorrects or appends a space to a passphrase, so the
+                // two entries differ and the backup stays disabled (M14).
+                keyboardOptions = if (visualTransformation is androidx.compose.ui.text.input.PasswordVisualTransformation) {
+                    KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false)
+                } else {
+                    KeyboardOptions(keyboardType = keyboardType)
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .then(if (fieldTag != null) Modifier.testTag(fieldTag) else Modifier),
