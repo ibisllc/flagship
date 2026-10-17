@@ -10,7 +10,7 @@ import { toast } from "../lib/toast.js";
 import { userError } from "../lib/humanError.js";
 import { boxClient } from "../lib/api.js";
 import { serverFqdn } from "../lib/apex.js";
-import { loadAccountPods, podFqdn } from "../lib/appPlacement.js";
+import { loadAccountPods, podFqdn, accountPods, isPodOnline } from "../lib/appPlacement.js";
 import { podShortName } from "../lib/podSwitcher.js";
 import { deriveServerArchiveKeyFromSeed } from "../keystore.js";
 import { depositSwkIfNeeded } from "../lib/swkDeposit.js";
@@ -36,6 +36,7 @@ import {
 } from "../lib/serverBackupFormat.js";
 import { createServerForRestore, isValidServerName } from "./create-server.js";
 import { canAddServers, refuseAddServer } from "../lib/addServerGate.js";
+import { describePeerRoot, startPeerRestore, waitForPeerData, rootLines } from "../lib/peerBackup.js";
 
 export const ADD_IMPORT_LABEL = "+ Add/Import a server";
 
@@ -62,6 +63,7 @@ export function openAddOrImport({ onAdd, onCoManage }) {
     <button class="full-width" data-choice-add>Create a new server</button>
     <button class="secondary full-width mt-2" data-choice-co-manage>Co-manage a running server</button>
     <button class="secondary full-width mt-2" data-choice-import>Import a backup</button>
+    <button class="secondary full-width mt-2" data-choice-peers>Restore from other servers</button>
     <div class="row-2 mt-3"><button class="secondary" data-choice-cancel>Cancel</button></div>
   `,
   );
@@ -77,6 +79,12 @@ export function openAddOrImport({ onAdd, onCoManage }) {
   dlg.querySelector("[data-choice-import]").addEventListener("click", () => {
     close();
     openImportBackup().catch((e) => {
+      if (e?.code !== "cancelled") toast(archiveErrorText(e), "err");
+    });
+  });
+  dlg.querySelector("[data-choice-peers]").addEventListener("click", () => {
+    close();
+    openRestoreFromPeers().catch((e) => {
       if (e?.code !== "cancelled") toast(archiveErrorText(e), "err");
     });
   });
@@ -451,6 +459,270 @@ export async function openImportBackup({ targetFqdn = null } = {}) {
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+export const PEERS_INTRO =
+  "Your lost server's newest backup is kept in pieces on other Flagship servers. Pick the lost server " +
+  "and this page gets the pieces back, with nothing from the lost server itself. You choose a name for the new one; " +
+  "everything else comes from the backup.";
+
+/** A running server of the account this browser can talk to (it reads the lost server's record), or null. */
+export function helperServer(pods, lost, hasSession = (fqdn) => boxClient(fqdn).hasSession()) {
+  const gone = String(lost ?? "").toLowerCase();
+  const p = accountPods(pods).find((x) => podFqdn(x) !== gone && isPodOnline(x) && hasSession(podFqdn(x)));
+  return p ? podFqdn(p) : null;
+}
+
+/** Datalist options for the lost server: the account's servers, revoked and offline first. */
+export function lostServerChoices(pods) {
+  const list = pods instanceof Map ? [...pods.values()] : Array.isArray(pods) ? pods : [];
+  const seen = new Set();
+  const rows = [];
+  for (const p of list) {
+    const fqdn = podFqdn(p);
+    if (!fqdn || seen.has(fqdn)) continue;
+    seen.add(fqdn);
+    rows.push({ fqdn, gone: p.revokedAt != null || !isPodOnline(p) });
+  }
+  return rows.sort((a, b) => Number(b.gone) - Number(a.gone) || a.fqdn.localeCompare(b.fqdn));
+}
+
+/**
+ * Add/Import a server → Restore from other servers: the lost server's backup
+ * comes back from the pieces other accounts' servers keep (docs/peer-backup.md
+ * §9). Nothing is read from the lost server.
+ */
+export async function openRestoreFromPeers() {
+  const session = getSession();
+  if (!session.umk) {
+    toast("Unlock the webapp first", "err");
+    return;
+  }
+  if (!canAddServers(session)) return refuseAddServer();
+  const { dlg, close } = openDialog(
+    "Restore from other servers",
+    `
+    <h3 class="modal-title">Restore from other servers</h3>
+    <p class="note">${escapeHtml(PEERS_INTRO)}</p>
+    <div data-pr-pick>
+      <label class="caption mt-2" for="pr-lost">The lost server</label>
+      <input id="pr-lost" class="full-width" list="pr-lost-list" autocomplete="off" autocapitalize="off" spellcheck="false" data-pr-lost />
+      <datalist id="pr-lost-list" data-pr-list></datalist>
+      <button class="full-width mt-2" data-pr-find>Find its backup</button>
+    </div>
+    <p class="note hidden" data-pr-summary></p>
+    <div class="hidden" data-pr-name>
+      <label class="caption mt-2" for="pr-server-name">Name of the new server</label>
+      <input id="pr-server-name" class="full-width" autocomplete="off" autocapitalize="off" spellcheck="false" data-pr-server-name />
+      <p class="note small err-text hidden" data-pr-name-error></p>
+      <p class="note small" data-pr-address></p>
+      <p class="note small" data-pr-settings></p>
+      <button class="full-width mt-2" data-pr-create>Create the server</button>
+    </div>
+    <div class="hidden" data-pr-waiting-choice>
+      <button class="full-width mt-2" data-pr-send-existing></button>
+      <button class="secondary full-width mt-2" data-pr-new-instead>Create a new server instead</button>
+    </div>
+    <progress class="full-width hidden" data-pr-bar max="100" value="0"></progress>
+    <p class="note" data-pr-status></p>
+    <ul class="hidden" data-pr-apps style="list-style:none;padding-left:0"></ul>
+    <p class="modal-error err-text hidden" data-pr-error></p>
+    <div class="row-2 mt-3"><button class="secondary" data-pr-close>Close</button></div>
+  `,
+  );
+  const q = (s) => dlg.querySelector(s);
+  const show = (el, on = true) => el.classList.toggle("hidden", !on);
+  const el = {
+    pick: q("[data-pr-pick]"), lost: q("[data-pr-lost]"), list: q("[data-pr-list]"), find: q("[data-pr-find]"),
+    summary: q("[data-pr-summary]"), name: q("[data-pr-name]"), nameInput: q("[data-pr-server-name]"),
+    nameErr: q("[data-pr-name-error]"), address: q("[data-pr-address]"), settings: q("[data-pr-settings]"),
+    create: q("[data-pr-create]"), choice: q("[data-pr-waiting-choice]"), sendExisting: q("[data-pr-send-existing]"),
+    newInstead: q("[data-pr-new-instead]"), bar: q("[data-pr-bar]"), status: q("[data-pr-status]"),
+    apps: q("[data-pr-apps]"), err: q("[data-pr-error]"),
+  };
+  let closed = false;
+  const isCancelled = () => closed;
+  q("[data-pr-close]").addEventListener("click", () => {
+    closed = true;
+    close();
+  });
+  dlg.addEventListener("close", () => {
+    closed = true;
+  });
+  const status = (t) => {
+    el.status.textContent = t;
+  };
+  const bar = (n, total) => {
+    show(el.bar, total != null);
+    if (total) el.bar.value = Math.round((n / total) * 100);
+    else el.bar.removeAttribute("value");
+  };
+  const fail = (e) => {
+    if (e?.code === "cancelled") return;
+    el.err.textContent = archiveErrorText(e);
+    show(el.err);
+  };
+  const state = { lost: "", root: null, opened: null, pods: [] };
+
+  const pods = await loadAccountPods(session.username).catch(() => []);
+  state.pods = pods;
+  el.list.innerHTML = lostServerChoices(pods).map((c) => `<option value="${escapeHtml(c.fqdn)}"></option>`).join("");
+  const first = lostServerChoices(pods).find((c) => c.gone);
+  if (first) el.lost.value = first.fqdn;
+
+  el.find.addEventListener("click", async () => {
+    show(el.err, false);
+    const lost = el.lost.value.trim().toLowerCase();
+    if (!lost) return fail(userError("Pick the lost server."));
+    el.find.disabled = true;
+    status("Looking for the backup…");
+    try {
+      const helper = helperServer(pods, lost);
+      state.lost = lost;
+      state.root = await describePeerRoot({ client: helper ? boxClient(helper) : null, umkSeed: session.umk, serverId: lost });
+      const file = parseBackupFile(state.root.archive.backupFile);
+      const kek = await deriveServerArchiveKeyFromSeed(session.umk, file.archiveId);
+      state.opened = await openWithAccountKey(file, kek);
+      if (!state.opened) throw userError("This backup can't be opened with this account's key.");
+      const a = state.root.archive;
+      const d = state.opened.body.data;
+      if (file.archiveId !== a.archiveId || d.bytes !== a.bytes || d.sha256 !== a.sha256) {
+        throw userError("The backup record doesn't match its file. Nothing was restored.");
+      }
+      const body = state.opened.body;
+      el.summary.textContent =
+        rootLines(state.root).join(" ") + ` Apps: ${body.apps.map((x) => x.name).join(", ") || "none"}.`;
+      show(el.summary);
+      show(el.pick, false);
+      status("");
+      await chooseTarget(a);
+    } catch (e) {
+      status("");
+      fail(e);
+    } finally {
+      el.find.disabled = false;
+    }
+  });
+
+  async function chooseTarget(archive) {
+    const inv = await loadInventory(session.username).catch(() => ({ pods: [], pending: [] }));
+    const waiting = serverWaitingFor(inv.pods, archive.archiveId);
+    if (waiting) {
+      el.sendExisting.textContent = `Get it onto ${podShortName(waiting) || waiting} (waiting for this backup)`;
+      show(el.choice);
+      el.sendExisting.onclick = () => {
+        show(el.choice, false);
+        void fetchInto(waiting);
+      };
+      el.newInstead.onclick = () => {
+        show(el.choice, false);
+        showNameStep(inv);
+      };
+      return;
+    }
+    showNameStep(inv);
+  }
+
+  function showNameStep(inv) {
+    const taken = takenServerNames(inv.pods, inv.pending);
+    const saved = state.opened.body.server;
+    el.nameInput.value = restoreNameFor(saved.name, taken);
+    el.settings.textContent = savedSettingsLine(saved);
+    const update = () => {
+      const problem = el.nameInput.value ? restoreNameProblem(el.nameInput.value, taken) : null;
+      el.nameErr.textContent = problem ?? "";
+      show(el.nameErr, !!problem);
+      const n = el.nameInput.value.trim().toLowerCase();
+      el.address.textContent = n && !problem ? `Its address: ${serverFqdn(n, session.username)}` : "";
+      el.create.disabled = !n || !!problem;
+    };
+    el.nameInput.addEventListener("input", update);
+    update();
+    show(el.name);
+    el.create.onclick = async () => {
+      show(el.err, false);
+      const name = el.nameInput.value.trim().toLowerCase();
+      if (restoreNameProblem(name, taken)) return update();
+      el.create.disabled = true;
+      el.nameInput.disabled = true;
+      try {
+        status("Creating the server…");
+        const a = state.root.archive;
+        const { serverDomain } = await createServerForRestore({
+          serverName: name,
+          bootUnlockMode: saved.bootUnlockMode,
+          diskEncryption: saved.diskEncryption,
+          restore: { archiveId: a.archiveId, bytes: a.bytes, sha256: a.sha256 },
+        });
+        show(el.name, false);
+        el.summary.innerHTML =
+          `${escapeHtml(`The recipe for ${serverDomain} is downloaded. Open it in Flagship Studio to host the server on this computer, or to write a USB stick for another one.`)} ` +
+          `<a href="https://flagshipserver.com/studio" target="_blank" rel="noopener">Get Flagship Studio</a>.`;
+        await fetchInto(serverDomain);
+      } catch (e) {
+        el.create.disabled = false;
+        el.nameInput.disabled = false;
+        status("");
+        fail(e);
+      }
+    };
+  }
+
+  /** Wait for the new server to come online, then have it fetch the pieces. */
+  async function fetchInto(fqdn) {
+    const name = podShortName(fqdn) || fqdn;
+    const client = boxClient(fqdn);
+    const a = state.root.archive;
+    try {
+      for (;;) {
+        if (closed) return;
+        await helpTheNewServer(fqdn);
+        if (client.hasSession()) {
+          const st = await restoreStatus({ client }).catch(() => null);
+          if (st?.waiting?.archiveId === a.archiveId) {
+            if (st.restore && ["checking", "restoring"].includes(st.restore.state)) break;
+            status(`${name} is getting the backup from other servers…`);
+            bar(0, null);
+            await startPeerRestore({ client, umkSeed: session.umk, serverId: state.lost });
+            await waitForPeerData({
+              client,
+              isCancelled,
+              onProgress: (r) => bar(r.received ?? 0, r.bytes || null),
+            });
+            await commitRestore({ client, contentKey: state.opened.contentKey });
+            break;
+          }
+          if (st && !st.waiting && st.restore?.state === "done") break;
+          if (st?.waiting && st.waiting.archiveId !== a.archiveId) throw userError(`${name} is waiting for a different backup.`);
+        }
+        status(
+          `Waiting for ${name} to come online… Set it up with the recipe if you haven't yet. Keep this page open: ` +
+            `it gets the backup as soon as the server is up. If you leave, ${name} keeps waiting and shows on Home.`,
+        );
+        await sleep(5000);
+      }
+      status("Restoring the apps…");
+      bar(0, null);
+      const done = await waitForRestore({
+        client,
+        isCancelled,
+        onProgress: (r) => {
+          show(el.apps);
+          el.apps.innerHTML = (r.apps ?? []).map((x) => `<li>${escapeHtml(describeRestoreApp(x))}</li>`).join("");
+        },
+      });
+      show(el.bar, false);
+      show(el.apps);
+      el.apps.innerHTML = done.apps.map((x) => `<li>${escapeHtml(describeRestoreApp(x))}</li>`).join("");
+      status(`${name}: ${restoreSummary(done.apps)}`);
+      toast("Backup restored", "ok");
+    } catch (e) {
+      show(el.bar, false);
+      if (e?.code === "cancelled") return;
+      status("The server keeps waiting for its backup. Start again from Add/Import a server, or delete the server on Home.");
+      fail(e);
+    }
+  }
+}
 
 /** What Home's refresh does for a new server, done here too so the restore
  *  doesn't depend on Home being open: hand it its keys and this browser's

@@ -535,6 +535,119 @@ test.describe("gym webapp archive", () => {
     await expect(dlg).toHaveCount(0);
   });
 
+  test("gym archive restore from other servers finds the lost server's record, creates a server and has it fetch the pieces", async ({ page }, testInfo) => {
+    test.setTimeout(120_000);
+    const keys = await reachHome(page, { kind: "admin", servers: [OFFICE] });
+    const m = await mock(page);
+    m.get("/api/users/smoketest/pods", { pods: [livePod(OFFICE), livePod(HOME, { revokedAt: Date.now() - 1000, liveness: "unreachable" })] });
+    m.post("/api/auth-code/issue", { ok: true });
+    m.post("/api/routing/register-rck", sensitive(page, keys, rckCanon, (b) => ({ arg: b.request, sig: b.signature }), () => ({ json: { ok: true } })));
+    const fx = await makeBackup(page, { account: true });
+    const pbk = await page.evaluate(async (HOME) => (await import("/lib/peerBackup.js")).derivePbkHex((await import("/lib/state.js")).getSession().umk, HOME), HOME);
+    // A running server of the account reads the lost server's record for this device.
+    const rootCalls: Call[] = [];
+    m.post(at(OFFICE, "/api/screens/peer-backup/root"), (call) => {
+      rootCalls.push(call);
+      return {
+        json: {
+          serverId: HOME, generation: 1, revision: 1, createdAt: Date.now() - 86_400_000, holders: 8, needed: 4,
+          keepUntil: Date.now() + 40 * 86_400_000,
+          archive: { archiveId: fx.archiveId, createdAt: Date.now() - 86_400_000, bytes: fx.bytes, sha256: fx.sha256, backupFile: fx.backupText },
+        },
+      };
+    });
+    const NEW = "attic.smoketest.flagship.services";
+    const calls: Call[] = [];
+    let pulled = 0;
+    let committed = false;
+    let pulling = false;
+    m.get(at(NEW, RESTORE), () => {
+      if (committed) return { json: { waiting: null, restore: { state: "done", apps: [{ name: "notes", state: "done" }] } } };
+      if (!pulling) return { json: { waiting: { archiveId: fx.archiveId }, restore: null } };
+      pulled += 1;
+      return { json: { waiting: { archiveId: fx.archiveId }, restore: { state: pulled < 2 ? "uploading" : "ready", received: pulled < 2 ? 1000 : fx.bytes, bytes: fx.bytes } } };
+    });
+    m.post(at(NEW, `${RESTORE}/from-peers`), (call) => {
+      calls.push(call);
+      pulling = true;
+      return { status: 202, json: { archiveId: fx.archiveId, received: 0 } };
+    });
+    m.post(at(NEW, `${RESTORE}/commit`), () => {
+      committed = true;
+      return { json: { ok: true } };
+    });
+    await renderHome(page);
+
+    await page.click("#home-add-server");
+    await page.locator('dialog[aria-label="Add or import a server"] [data-choice-peers]').click();
+    const dlg = page.locator('dialog[aria-label="Restore from other servers"]');
+    await expect(dlg.locator("[data-pr-lost]")).toHaveValue(HOME);
+    await shot(page, testInfo, "peers-pick");
+    await dlg.locator("[data-pr-find]").click();
+    await expect(dlg.locator("[data-pr-summary]")).toContainText("8 servers hold its pieces; 4 bring it back.", { timeout: 15_000 });
+    await expect(dlg.locator("[data-pr-summary]")).toContainText("Restore by");
+    await expect(dlg.locator("[data-pr-summary]")).toContainText("Apps: notes, blog");
+    expect(rootCalls[0]!.body).toEqual({ serverId: HOME, pbkHex: pbk });
+    await dlg.locator("#pr-server-name").fill("attic");
+    await expect(dlg.locator("[data-pr-address]")).toHaveText(`Its address: ${NEW}`);
+    const recipe = page.waitForEvent("download");
+    await dlg.locator("[data-pr-create]").click();
+    await recipe;
+    await expect(dlg.locator("[data-pr-status]")).toHaveText("attic: Restored 1 app.", { timeout: 30_000 });
+    expect(calls[0]!.body).toEqual({ serverId: HOME, pbkHex: pbk });
+    const pairing = await page.evaluate(async (fqdn) => (await import("/lib/pairingDeposit.js")).pendingPairingOrder(fqdn), NEW);
+    const restore = JSON.parse(pairing as string).restore as { order: { archiveId: string; bytes: number; sha256: string }; signatureHex: string };
+    expect(restore.order).toMatchObject({ archiveId: fx.archiveId, bytes: fx.bytes, sha256: fx.sha256 });
+    expect(await signer(page, keys, RESTORE_CANON, restore.order, restore.signatureHex)).toBe("admin");
+    await sawToast(page, "Backup restored");
+    await shot(page, testInfo, "peers-restored");
+  });
+
+  test("gym archive restore from other servers with no server running reads the sealed record from .com", async ({ page }, testInfo) => {
+    await reachHome(page, { kind: "admin", servers: [HOME] });
+    const m = await mock(page);
+    m.get("/api/users/smoketest/pods", { pods: [livePod(HOME, { revokedAt: Date.now() - 1000, liveness: "unreachable" })] });
+    const fx = await makeBackup(page, { account: true });
+    const sealed = await page.evaluate(async ({ HOME, backupText, archiveId, bytes, sha256 }) => {
+      const pb = await import("/lib/peerBackup.js");
+      const ks = await import("/keystore.js");
+      const { getSession } = await import("/lib/state.js");
+      const pbkHex = await pb.derivePbkHex(getSession().umk, HOME);
+      const rootKey = await ks.hkdf32(ks.hexToBytes(pbkHex), "flagship/pb-root/v1");
+      const key = await crypto.subtle.importKey("raw", rootKey, "AES-GCM", false, ["encrypt"]);
+      const nonce = crypto.getRandomValues(new Uint8Array(12));
+      const root = {
+        v: 1, serverId: HOME, generation: 1, revision: 1, createdAt: Date.now(), network: { k: 1, n: 1 },
+        archive: { archiveId, createdAt: Date.now(), bytes, sha256, backupFile: backupText },
+        stripes: [[{ expiresAt: Date.now() + 30 * 86_400_000 }]],
+      };
+      const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce, additionalData: new TextEncoder().encode(`flagship/pb-root/v1|${HOME}`) }, key, new TextEncoder().encode(JSON.stringify(root))));
+      return { nonceHex: ks.bytesToHex(nonce), ciphertextHex: ks.bytesToHex(ct) };
+    }, { HOME, backupText: fx.backupText, archiveId: fx.archiveId, bytes: fx.bytes, sha256: fx.sha256 });
+    m.get((u) => u.pathname === `/api/peer-backup/root/${HOME}`, { json: sealed });
+    await renderHome(page);
+    await page.click("#home-add-server");
+    await page.locator('dialog[aria-label="Add or import a server"] [data-choice-peers]').click();
+    const dlg = page.locator('dialog[aria-label="Restore from other servers"]');
+    await dlg.locator("[data-pr-find]").click();
+    await expect(dlg.locator("[data-pr-summary]")).toContainText("1 server hold its pieces", { timeout: 15_000 });
+    await expect(dlg.locator("[data-pr-name]")).toBeVisible();
+  });
+
+  test("gym archive restore from other servers says so when the lost server has no peer backup", async ({ page }) => {
+    await reachHome(page, { kind: "admin", servers: [OFFICE] });
+    const m = await mock(page);
+    m.get("/api/users/smoketest/pods", { pods: [livePod(OFFICE), livePod(HOME, { revokedAt: Date.now() - 1000, liveness: "unreachable" })] });
+    m.post(at(OFFICE, "/api/screens/peer-backup/root"), { status: 404, json: { error: "No peer backup of that server was found." } });
+    await renderHome(page);
+    await page.click("#home-add-server");
+    await page.locator('dialog[aria-label="Add or import a server"] [data-choice-peers]').click();
+    const dlg = page.locator('dialog[aria-label="Restore from other servers"]');
+    await dlg.locator("[data-pr-find]").click();
+    await expect(dlg.locator("[data-pr-error]")).toContainText("No peer backup of that server was found", { timeout: 15_000 });
+    await expect(dlg.locator("[data-pr-name]")).toBeHidden();
+  });
+
   test("gym archive import another account's backup needs its passcode", async ({ page }, testInfo) => {
     await reachHome(page, { kind: "admin", servers: [HOME] });
     const m = await mock(page);

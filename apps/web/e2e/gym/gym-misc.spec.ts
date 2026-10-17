@@ -591,30 +591,43 @@ test.describe("gym webapp misc", () => {
     await expect(page.locator("#view-about")).toBeVisible();
   });
 
-  test("gym misc peer-backup enables and opts out from its Settings row", async ({ page }, testInfo) => {
+  test("gym misc peer-backup shows the v2 status from its Settings row, holders as Server n", async ({ page }, testInfo) => {
     await reachHome(page, { kind: "admin", servers: [HOME] });
     const m = await mock(page);
     basePods(m);
-    let participating = false;
-    m.get("/api/screens/peer-backup/status", () => ({ json: { participating, peersBackingYouUp: [], peersYouBackUp: [], shards: [], stats: {} } }));
-    m.post("/api/screens/peer-backup/toggle", (call) => {
-      participating = call.body.participate === true;
-      return { json: { ok: true, participating } };
+    const status = (extra: Record<string, unknown>) => ({
+      v: 2, policy: "peer", state: "protected", lastPlacedAt: Date.now() - 3_600_000, healthyBricks: 8, totalBricks: 8, holders: 2,
+      archiveId: "ab".repeat(16), archiveCreatedAt: Date.now() - 7_200_000, hostingBytes: 0, provenBytes: 0, poolBytes: 0, keepUntil: null,
+      holderList: [
+        { label: "Server 1", state: "ok", lastProofAt: Date.now() - 600_000, bricks: 4 },
+        { label: "Server 2", state: "failing", lastProofAt: null, bricks: 4 },
+      ],
+      hosting: { poolBytes: 8 * 1024 ** 3, realBytes: 2 * 1024 ** 3, fillerBytes: 5 * 1024 ** 3, provenBytes: 7 * 1024 ** 3, leases: 2, bricks: 6, reliability: 90, leaving: false },
+      ...extra,
     });
+    let body = status({});
+    m.get("/api/screens/peer-backup/status", () => ({ json: body }));
     await openSettings(page);
     await page.click("#settings-tab-peer-backup");
-    const toggle = page.locator("#peer-backup-toggle");
-    await expect(toggle).toHaveText("Enable", { timeout: 10_000 });
-    await toggle.click();
-    await sawToast(page, "peer-backup enabled");
-    expect(m.last("/peer-backup/toggle")!.body).toEqual({ participate: true });
-    await expect(toggle).toHaveText("Opt out", { timeout: 10_000 });
-    await expect(page.locator("#peer-backup-content")).toContainText("participating");
-    await shot(page, testInfo, "peer-backup-on");
-    await toggle.click();
-    await sawToast(page, "peer-backup disabled");
-    expect(m.last("/peer-backup/toggle")!.body).toEqual({ participate: false });
-    await expect(toggle).toHaveText("Enable", { timeout: 10_000 });
+    const content = page.locator("#peer-backup-content");
+    await expect(content).toContainText("Protected", { timeout: 10_000 });
+    await expect(content).toContainText("8 of 8");
+    await expect(content.locator("[data-pb-holder]")).toHaveCount(2);
+    await expect(content).toContainText("Server 2");
+    await expect(content).toContainText("Not answering · no proof yet · 4 pieces");
+    await expect(content).toContainText("Reliability score: 90 of 100");
+    await expect(page.locator("#peer-backup-toggle")).toHaveCount(0);
+    await shot(page, testInfo, "peer-backup-v2");
+    body = status({ state: "at-risk", reason: "two servers holding pieces went away", healthyBricks: 3, keepUntil: Date.now() + 5 * 86_400_000 });
+    await page.click("#peer-backup-refresh");
+    await expect(content).toContainText("At risk", { timeout: 10_000 });
+    await expect(content).toContainText("two servers holding pieces went away");
+    await expect(content).toContainText("Restore by");
+    await expect(content).toContainText("3 of 8");
+    // A server that still runs the pre-v2 peer backup says so.
+    body = { participating: true, peersBackingYouUp: [], shards: [], stats: {} } as unknown as ReturnType<typeof status>;
+    await page.click("#peer-backup-refresh");
+    await expect(content).toContainText("older peer backup", { timeout: 10_000 });
   });
 
   test("gym misc the take-over dialog's Cancel closes it, and Scan is offered only with a camera API", async ({ page }, testInfo) => {
