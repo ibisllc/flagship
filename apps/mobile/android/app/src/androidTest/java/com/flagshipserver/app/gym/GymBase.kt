@@ -227,7 +227,7 @@ abstract class GymBase {
                 false
             }
         } catch (e: Throwable) {
-            runCatching { composeRule.onRoot(useUnmergedTree = true).printToLog("GYMTREE") }
+            dumpTree()
             throw e
         }
         composeRule.onAllNodes(enabled).onFirst().scrollIfNeeded().performClick()
@@ -276,14 +276,34 @@ abstract class GymBase {
             if (check()) return
             Thread.sleep(50)
         }
-        if (!check()) throw AssertionError("Timed out waiting for $what")
+        if (!check()) {
+            dumpTree()
+            throw AssertionError("Timed out waiting for $what")
+        }
+    }
+
+    /** On a failure: what the screen shows (texts, tags, descriptions) in the log, tag GYMTREE. */
+    protected fun dumpTree() {
+        runCatching {
+            composeRule.onAllNodes(androidx.compose.ui.test.SemanticsMatcher("any") { true }, useUnmergedTree = true)
+                .fetchSemanticsNodes().forEach { n ->
+                    val c = n.config
+                    val text = c.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)?.joinToString("") { it.text }
+                    val tag = c.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.TestTag)
+                    val desc = c.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.ContentDescription)?.joinToString("|")
+                    val off = c.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Disabled) != null
+                    if (text != null || tag != null || desc != null) {
+                        android.util.Log.w("GYMTREE", "tag=$tag text=$text desc=$desc${if (off) " DISABLED" else ""}")
+                    }
+                }
+        }
     }
 
     /** The orders the mocks verified: "<what>:admin", "<what>:share" or "<what>:refused". */
     protected fun signedChecks(): List<String> = com.flagshipserver.app.api.MockSignatures.checks()
 
     protected fun assertSigned(what: String, by: String, timeoutMs: Long = 10_000) =
-        eventually(timeoutMs, "$what signed with the $by key (saw ${signedChecks()})") { "$what:$by" in signedChecks() }
+        eventually(timeoutMs, "$what signed with the $by key (saw ${signedChecks()}, verify=${com.flagshipserver.app.core.GymSeams.verifySignatures}, approvals=${runCatching { screensMock.archiveApprovals.size }.getOrNull()})") { "$what:$by" in signedChecks() }
 
     protected val screensMock get() = com.flagshipserver.app.core.GymProbe.screens!!
     protected val buildMock get() = com.flagshipserver.app.core.GymProbe.build!!

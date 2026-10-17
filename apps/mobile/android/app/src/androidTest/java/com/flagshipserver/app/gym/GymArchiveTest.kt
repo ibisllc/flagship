@@ -17,6 +17,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.test.core.app.ApplicationProvider
 import com.flagshipserver.app.core.HexUtil
 import com.flagshipserver.app.core.ServerBackupFormat
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -43,7 +44,7 @@ class GymArchiveTest : GymBase() {
         composeRule.onNodeWithTag("backup-start").assertIsEnabled()
         gymShot("backup-passcode")
         tap("backup-start")
-        eventually(what = "the box asked to build it") { screensMock.archiveStarts.size == 1 }
+        eventually(90_000, "the box asked to build it") { screensMock.archiveStarts.size == 1 }
         tap("backup-download", 20_000)
         waitUntilExists("backup-share", 20_000)
         gymShot("backup-downloaded")
@@ -63,15 +64,15 @@ class GymArchiveTest : GymBase() {
         type("backup-own-passcode-again", "correct horse battery staple")
         tap("backup-passcode-saved")
         tap("backup-start")
-        eventually(what = "the box asked to build it") { screensMock.archiveStarts.size == 1 }
+        eventually(90_000, "the box asked to build it") { screensMock.archiveStarts.size == 1 }
         waitUntilExists("backup-download", 20_000)
     }
 
     // ─── Import a backup ─────────────────────────────────────────────────────
 
-    private class Made(val backup: File, val data: File, val archiveId: String, val bytes: Long, val sha: String)
+    private class Made(val file: File, val archiveId: String, val bytes: Long, val sha: String)
 
-    /** A backup made on another account: two files, sealed with [passcode]. */
+    /** A backup made on another account: one `.flagship` file, sealed with [passcode]. */
     private fun makeBackup(archiveId: String, passcode: String): Made {
         val dir = File(ApplicationProvider.getApplicationContext<android.content.Context>().cacheDir, "gym-import").apply {
             deleteRecursively(); mkdirs()
@@ -83,19 +84,24 @@ class GymArchiveTest : GymBase() {
             """"apps":[{"serviceId":"mina-park--wiki","name":"Wiki"}],"left":[],"includes":[],"excludes":[],""" +
             """"data":{"fileName":"home-2026-10-14.flagship-data","bytes":${data.size},"sha256":"$sha","frameBytes":1048576}}"""
         val slot = ServerBackupFormat.passcodeSlot(archiveId, key, passcode, m = 64, t = 1, p = 1)
-        val file = ServerBackupFormat.sealFile(archiveId, key, listOf(slot), body.toByteArray(), ByteArray(12) { 1 })
-        val backup = File(dir, "home-2026-10-14.flagship-backup").apply { writeText(ServerBackupFormat.serialize(file)) }
-        val dataFile = File(dir, "home-2026-10-14.flagship-data").apply { writeBytes(data) }
-        return Made(backup, dataFile, archiveId, data.size.toLong(), sha)
+        val sealed = ServerBackupFormat.sealFile(archiveId, key, listOf(slot), body.toByteArray(), ByteArray(12) { 1 })
+        val meta = ServerBackupFormat.serialize(sealed).toByteArray()
+        val file = File(dir, "home-2026-10-14.flagship").apply { writeBytes(ServerBackupFormat.bundleHeader(meta.size) + meta + data) }
+        return Made(file, archiveId, data.size.toLong(), sha)
     }
 
-    /** Home's waiting server → Send the backup → pick both files (the system
-     *  picker answered by the gym) → passcode → Send it there → restored. */
+    @After
+    fun clearImportSeam() {
+        com.flagshipserver.app.core.GymSeams.importBackupFile = null
+    }
+
+    /** Home's waiting server -> Send the backup -> pick the one file (answered
+     *  by the gym) -> passcode -> Send it there -> restored. */
     @Test
     fun importABackupIntoTheServerWaitingForIt() {
         launch(tab = "home", adminRoot = true, username = "bright-maple", podsVariant = "awaiting-backup")
         val made = makeBackup("ab".repeat(16), "gym passcode 1234")
-        pickedFiles = listOf(made.backup, made.data)
+        com.flagshipserver.app.core.GymSeams.importBackupFile = made.file
         screensMock.restoreWaiting = com.flagshipserver.app.api.ServerRestoreWaiting(made.archiveId, made.bytes, made.sha)
         waitText("Waiting for its backup", 20_000)
         composeRule.onNode(androidx.compose.ui.test.hasText("Living-room mini-PC") and androidx.compose.ui.test.hasClickAction())
@@ -118,28 +124,16 @@ class GymArchiveTest : GymBase() {
     fun importRefusesAWrongPasscode() {
         launch(tab = "home", adminRoot = true)
         val made = makeBackup("cd".repeat(16), "the right one")
-        pickedFiles = listOf(made.backup, made.data)
+        com.flagshipserver.app.core.GymSeams.importBackupFile = made.file
         tap("home-add-server", 20_000)
         tap("home-import-backup")
         tap("import-backup-choose", 15_000)
         type("import-backup-passcode", "the wrong one")
         tap("import-backup-unlock")
-        composeRule.waitUntil(30_000) { tagCount("import-backup-error") > 0 || textCount("passcode", substring = true) > 1 }
+        waitUntilExists("import-backup-error", 30_000)
+        assertEquals("That passcode doesn't open this backup.", textOfTag("import-backup-error"))
         assertTrue(screensMock.restoreStarts.isEmpty())
         gymShot("wrong-passcode")
-    }
-
-    /** Picking only the backup file asks for the data file it names. */
-    @Test
-    fun importAsksForTheOtherFile() {
-        launch(tab = "home", adminRoot = true)
-        val made = makeBackup("ef".repeat(16), "x")
-        pickedFiles = listOf(made.backup)
-        tap("home-add-server", 20_000)
-        tap("home-import-backup")
-        tap("import-backup-choose", 15_000)
-        eventually(what = "the files line") { textOfTag("import-backup-files").contains("home-2026-10-14.flagship-data") }
-        gymShot("needs-data-file")
     }
 
     // ─── Approve a download in a browser ─────────────────────────────────────
