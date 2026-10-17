@@ -119,7 +119,7 @@ public struct RecoveryScreen: View {
                         Image(systemName: "info.circle.fill").foregroundColor(c.primary)
                         VStack(alignment: .leading, spacing: 4) {
                             Text("How this works").font(FS.font.bodySm()).foregroundColor(c.text)
-                            Text("Recovery requires both your recovery passphrase and access to the iCloud Keychain that holds your Flagship passkey. Together they unlock the encrypted copy of your account key stored on our servers; we cannot read it or reset your passphrase.")
+                            Text("Recovery requires both your recovery passphrase and access to the passkey you saved for Flagship (in iCloud Keychain or your password manager). Together they unlock the encrypted copy of your account key stored on our servers; we cannot read it or reset your passphrase.")
                                 .font(FS.font.caption())
                                 .foregroundColor(c.textMuted)
                         }

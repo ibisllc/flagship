@@ -89,7 +89,7 @@ fun SecretRequestsScreen(nav: NavController) {
     suspend fun reload() {
         val coord = coordinator
         if (coord == null) {
-            state = LoadingState.Failed("Sign in to approve a box.")
+            state = LoadingState.Failed("Sign in to approve a server.")
             return
         }
         state = LoadingState.Loading

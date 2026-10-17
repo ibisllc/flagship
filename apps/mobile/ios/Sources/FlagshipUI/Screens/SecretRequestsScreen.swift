@@ -114,7 +114,7 @@ struct SecretRequestsContainer: View {
 
     private func reload() async {
         guard let coord = makeCoordinator() else {
-            state = .failed("Sign in to approve a box.")
+            state = .failed("Sign in to approve a server.")
             return
         }
         state = .loading

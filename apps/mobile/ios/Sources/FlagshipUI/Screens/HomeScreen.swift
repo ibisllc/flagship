@@ -298,7 +298,7 @@ public struct HomeScreen: View {
             FSAnnouncementCard(
                 icon: "key.horizontal.fill",
                 title: "Your account isn't backed up yet",
-                message: "If you lose access to this device, you may lose access to your Flagship cloud",
+                message: "If you lose access to this device, you may lose access to your Flagship cloud.",
                 ctaLabel: "Secure my account",
                 onCta: onSetUpRecovery,
                 onDismiss: onDismissRecoveryBackupBanner

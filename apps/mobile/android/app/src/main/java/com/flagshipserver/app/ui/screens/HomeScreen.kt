@@ -417,7 +417,7 @@ private fun TopAnnouncement(
             FSAnnouncementCard(
                 icon = Icons.Outlined.VpnKey,
                 title = "Your account isn't backed up yet",
-                message = "If you lose access to this device, you may lose access to your Flagship cloud",
+                message = "If you lose access to this device, you may lose access to your Flagship cloud.",
                 ctaLabel = "Secure my account",
                 onCta = onSetUpRecovery,
                 onDismiss = onDismissRecoveryBackupBanner,
