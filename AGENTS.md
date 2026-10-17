@@ -102,11 +102,14 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   Recents screenshot block for the app lock (`setRecentsScreenshotEnabled`,
   API 33), the sensitive-clipboard flag for API keys (33), the runtime
   notification permission for content-free pushes (33), non-exported broadcast
-  receivers, and the biometric-or-credential key auth parameters (30). Older
-  branches (Android 9 to 12) no longer get vendor security fixes on most
-  devices and lack the first three, so they were dropped rather than carried
-  with weaker behaviour; the API-level branches for them are gone from the
-  code. Wear OS 4 is Android 13, so the watch matches the phone.
+  receivers, and the biometric-or-credential key auth parameters (30). Android
+  9 to 12 lack the first three, so they were dropped rather than carried with
+  weaker behaviour; the API-level branches for them are gone from the code.
+  That older Android branches are mostly out of vendor security support is
+  general knowledge, to verify against vendor bulletins (a mid-2026 check found
+  Samsung S22 and later, and Pixel 6 and later, still patched, older phones
+  phasing out); the decision rests on the three missing features. Wear OS 4 is
+  Android 13, so the watch matches the phone.
   **macOS 15** for Studio (Sequoia; Sonoma stopped getting fixes, owner
   decision 2026-10-17; the mobile packages' `.macOS("15.0")` is host-build
   only and follows Studio). Platform versions in the `swift-tools-version:5.9` manifests use the

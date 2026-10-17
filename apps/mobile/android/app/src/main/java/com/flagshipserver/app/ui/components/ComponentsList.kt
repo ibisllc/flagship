@@ -89,7 +89,7 @@ fun FSChip(
     FilterChip(
         selected = selected,
         onClick = onClick,
-        modifier = modifier,
+        modifier = modifier.fsFocusRing(8.dp),
         label = {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(label)

@@ -94,7 +94,7 @@ fun FSPrimaryButton(
     Button(
         onClick = withHaptic(false, onClick),
         enabled = enabled,
-        modifier = modifier.buttonSize(block, large),
+        modifier = modifier.buttonSize(block, large).fsFocusRing(20.dp),
         contentPadding = ButtonPadding,
         colors = ButtonDefaults.buttonColors(
             containerColor = FS.colors.fill,
@@ -115,7 +115,7 @@ fun FSSecondaryButton(
     OutlinedButton(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier.buttonSize(block, large),
+        modifier = modifier.buttonSize(block, large).fsFocusRing(20.dp),
         contentPadding = ButtonPadding,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = if (enabled) 1f else 0.4f)),
         colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurface),
@@ -137,7 +137,7 @@ fun FSGhostButton(
     TextButton(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier.buttonSize(block, large),
+        modifier = modifier.buttonSize(block, large).fsFocusRing(20.dp),
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
     ) { ButtonLabel(label) }
 }
@@ -160,7 +160,7 @@ fun FSDangerButton(
     OutlinedButton(
         onClick = withHaptic(true, onClick),
         enabled = enabled,
-        modifier = modifier.buttonSize(block, large),
+        modifier = modifier.buttonSize(block, large).fsFocusRing(20.dp),
         contentPadding = ButtonPadding,
         border = BorderStroke(1.dp, fg.copy(alpha = if (enabled) 1f else 0.4f)),
         colors = ButtonDefaults.outlinedButtonColors(contentColor = fg),
@@ -231,6 +231,7 @@ fun FSField(
         shape = MaterialTheme.shapes.small,
         modifier = Modifier
             .fillMaxWidth()
+            .fsFocusRing(8.dp)
             .then(if (fieldTag != null) Modifier.testTag(fieldTag) else Modifier),
     )
     }
@@ -321,7 +322,7 @@ fun TextButton(
     content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit,
 ) = androidx.compose.material3.TextButton(
     onClick = onClick,
-    modifier = modifier,
+    modifier = modifier.fsFocusRing(20.dp),
     enabled = enabled,
     colors = colors,
     contentPadding = contentPadding,
