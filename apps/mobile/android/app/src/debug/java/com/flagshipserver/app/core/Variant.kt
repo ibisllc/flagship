@@ -58,6 +58,9 @@ object Variant : AppVariant {
             com.flagshipserver.app.keystore.Keystore.loadOrCreateUmkSeed()
             PrivacySettings.fromContext(context).setRequireBiometricAtLaunch(true)
         }
+        // One process runs every scenario: a pending update order from one must not
+        // replace the next one's Update button.
+        context.getSharedPreferences("flagship.pendingUpdate", android.content.Context.MODE_PRIVATE).edit().clear().commit()
         val tab = SmokeMode.apply(config = cfg, appState = appState, operations = operations, trust = trust)
         mockRun = !cfg.live
         if (cfg.live) return GymLaunch(tab, mocks = null)

@@ -25,7 +25,7 @@ class MockBuildClient(
     var entryFailStatus: Int? = null,
 ) : BuildClient {
 
-    private suspend fun tick() { if (simulatedLatencyMs > 0) kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { delay(simulatedLatencyMs) } }
+    private suspend fun tick() { if (simulatedLatencyMs > 0) delay(simulatedLatencyMs) }
     private fun failEntryIfRequested() {
         entryFailStatus?.let { throw ScreensError.Http(it, """{"error":"not found"}""") }
     }

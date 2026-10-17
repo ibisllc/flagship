@@ -32,9 +32,7 @@ class MockScreensClient(
     val unreachablePodContexts: MutableSet<String> = mutableSetOf()
 
     private suspend fun tick() {
-        // Off the caller's dispatcher: a compose scope under the gym's test clock
-        // may never advance a plain delay.
-        if (simulatedLatencyMs > 0) kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { delay(simulatedLatencyMs) }
+        if (simulatedLatencyMs > 0) delay(simulatedLatencyMs)
         if (shouldFail) throw ScreensError.Http(503, "simulated failure")
     }
 

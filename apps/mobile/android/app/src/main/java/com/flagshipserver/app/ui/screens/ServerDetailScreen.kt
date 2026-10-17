@@ -6,6 +6,9 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -2126,35 +2129,40 @@ private fun RevokeServerSheetBody(
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
                 .clip(RoundedCornerShape(FS.radius.md))
+                // The button inside takes the press itself, so watch it before the
+                // button does (Initial pass, consumed or not): a hold must still count.
                 .pointerInput(reason, phase) {
-                    detectTapGestures(
-                        onPress = {
-                            if (isBusy(phase)) return@detectTapGestures
-                            holding = true
-                            var fired = false
-                            try {
-                                kotlinx.coroutines.withTimeout(REVOKE_HOLD_MS) {
-                                    tryAwaitRelease()
-                                }
-                                // Released before timeout → no-op (short tap).
-                            } catch (_: kotlinx.coroutines.TimeoutCancellationException) {
-                                // Held 1.5s → fire the run.
-                                fired = true
+                    awaitEachGesture {
+                        awaitFirstDown(
+                            requireUnconsumed = false,
+                            pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial,
+                        )
+                        if (isBusy(phase)) return@awaitEachGesture
+                        holding = true
+                        var fired = false
+                        try {
+                            withTimeout(REVOKE_HOLD_MS) {
+                                waitForUpOrCancellation(
+                                    pass = androidx.compose.ui.input.pointer.PointerEventPass.Initial,
+                                )
                             }
-                            holding = false
-                            if (fired) {
-                                scope.launch {
-                                    val chosen = reason
-                                    vm.run(chosen)
-                                    when (val p = vm.phase.value) {
-                                        is RevokeServerPhase.Completed -> onCompleted(chosen)
-                                        is RevokeServerPhase.Failed -> onFailed(p.message)
-                                        else -> {}
-                                    }
+                            // Released before the time was up: a short tap, nothing happens.
+                        } catch (_: androidx.compose.ui.input.pointer.PointerEventTimeoutCancellationException) {
+                            fired = true
+                        }
+                        holding = false
+                        if (fired) {
+                            scope.launch {
+                                val chosen = reason
+                                vm.run(chosen)
+                                when (val p = vm.phase.value) {
+                                    is RevokeServerPhase.Completed -> onCompleted(chosen)
+                                    is RevokeServerPhase.Failed -> onFailed(p.message)
+                                    else -> {}
                                 }
                             }
-                        },
-                    )
+                        }
+                    }
                 }
                 .semantics { contentDescription = "revoke-confirm-hold" },
             contentAlignment = Alignment.Center,
