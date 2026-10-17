@@ -269,13 +269,13 @@ public enum ServerMigrationTimeline {
         let aborted = s.abortedAt != nil
         let rows: [(String, String, Int64?)] = [
             ("initiate", "Migration authorized", s.initiatedAt),
-            ("provision", "New box online + attached", s.attachedAt),
-            ("pre-seed", "Data restored to the new box", s.preSeededAt),
+            ("provision", "New server online and attached", s.attachedAt),
+            ("pre-seed", "Data restored to the new server", s.preSeededAt),
             ("ready", "Confirmed ready to take over", s.readyAt),
             ("freeze", "Old server frozen — final backup", s.freezeAt),
             ("final-delta", "Final backup flushed", s.finalDeltaAt),
-            ("take-over", "New box took over the name", s.takenOverAt),
-            ("close-out", "Old box closed out", s.oldClosedOutAt),
+            ("take-over", "New server took over the name", s.takenOverAt),
+            ("close-out", "Old server closed out", s.oldClosedOutAt),
         ]
         var activeSeen = false
         return rows.map { key, label, at in

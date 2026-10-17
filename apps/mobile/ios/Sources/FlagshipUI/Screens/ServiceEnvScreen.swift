@@ -93,7 +93,7 @@ public struct ServiceEnvScreen: View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s2) {
                 Text("Environment variables").font(FS.font.h4()).foregroundColor(c.text)
-                Text("Names appear here; values stay on this server. They're sealed at rest and never leave your pod.")
+                Text("Names appear here; values stay on this server. They're sealed at rest and never leave your server.")
                     .font(FS.font.bodySm())
                     .foregroundColor(c.textMuted)
             }

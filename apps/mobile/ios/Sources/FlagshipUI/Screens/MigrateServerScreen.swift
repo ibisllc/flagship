@@ -117,8 +117,14 @@ public struct MigrateServerScreen: View {
 
     @ViewBuilder private func progress(_ c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
-            Text("Migrating \(vm.serverFqdn)")
-                .font(FS.font.h2()).foregroundColor(c.text)
+            VStack(alignment: .leading, spacing: FS.space.s1) {
+                Text("Moving to a new server")
+                    .font(FS.font.h2()).foregroundColor(c.text)
+                    .accessibilityAddTraits(.isHeader)
+                Text(vm.serverFqdn)
+                    .font(FS.font.mono()).foregroundColor(c.textMuted)
+                    .textSelection(.enabled)
+            }
 
             if vm.session?.phase == "initiated" {
                 MigrateCallout(
@@ -170,27 +176,34 @@ public struct MigrateServerScreen: View {
             if vm.canAbort {
                 // Secondary, not danger — aborting is the SAFE exit (mirrors
                 // the webapp): the old server stays active with all its data.
-                FSSecondaryButton(vm.working ? "Working…" : "Abort migration — old server stays active with all data", block: true) {
+                FSSecondaryButton(vm.working ? "Working…" : "Abort migration", block: true) {
                     if !vm.working { Task { await vm.abort() } }
                 }
                 .disabled(vm.working)
                 .accessibilityIdentifier("migrate-abort")
+                Text("Aborting is safe: the old server stays active with all its data.")
+                    .font(FS.font.caption()).foregroundColor(c.textMuted)
             }
         }
     }
 
     @ViewBuilder private func stepRow(_ c: FSColors, _ step: ServerMigrationTimeline.Step) -> some View {
         HStack(alignment: .center, spacing: FS.space.s3) {
-            switch step.state {
-            case .done:
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundColor(c.success)
-            case .active:
-                ProgressView().controlSize(.small)
-            case .pending:
-                Image(systemName: "circle")
-                    .foregroundColor(c.textMuted)
+            Group {
+                switch step.state {
+                case .done:
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(c.success)
+                case .active:
+                    ProgressView().controlSize(.small)
+                case .pending:
+                    Image(systemName: "circle")
+                        .foregroundColor(c.textMuted)
+                }
             }
+            .font(FS.font.scaled(20))
+            .frame(width: 26)
+            .accessibilityHidden(true)
             Text(step.label)
                 .font(FS.font.bodySm())
                 .foregroundColor(step.state == .pending ? c.textMuted : c.text)

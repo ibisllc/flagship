@@ -993,7 +993,7 @@ struct UpdateServerCard: View {
                             onForget: { forget() }
                         )
                     } else {
-                        FSDangerButton(latestTag == nil ? "Update this server" : "Update to latest", block: true) {
+                        FSPrimaryButton(latestTag == nil ? "Update this server" : "Update to latest", block: true) {
                             showSheet = true
                         }
                         .disabled(!reported)

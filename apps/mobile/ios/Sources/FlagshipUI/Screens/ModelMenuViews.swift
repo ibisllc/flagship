@@ -21,11 +21,11 @@ struct ModelMenuButton: View {
                     .font(FS.font.scaled(13, weight: .semibold))
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Image(systemName: "chevron.down").font(FS.font.scaled(10, weight: .semibold))
+                Image(systemName: "chevron.down").font(FS.font.scaled(10, weight: .semibold)).foregroundColor(c.accent)
             }
-            .foregroundColor(c.accent)
+            .foregroundColor(c.text)
             .padding(.horizontal, 10).padding(.vertical, 5)
-            .background(Capsule().fill(c.primary.opacity(0.10)))
+            .background(Capsule().fill(c.accent.opacity(0.14)))
             .frame(maxWidth: 180)
         }
         .buttonStyle(.plain)
@@ -186,11 +186,11 @@ struct GroupedModelMenuButton: View {
                     .font(FS.font.scaled(13, weight: .semibold))
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Image(systemName: "chevron.down").font(FS.font.scaled(10, weight: .semibold))
+                Image(systemName: "chevron.down").font(FS.font.scaled(10, weight: .semibold)).foregroundColor(c.accent)
             }
-            .foregroundColor(c.accent)
+            .foregroundColor(c.text)
             .padding(.horizontal, 10).padding(.vertical, 5)
-            .background(Capsule().fill(c.primary.opacity(0.10)))
+            .background(Capsule().fill(c.accent.opacity(0.14)))
             .frame(maxWidth: 200)
         }
         .buttonStyle(.plain)
@@ -376,7 +376,7 @@ struct AttachButton: View {
             Image(systemName: "paperclip")
                 .font(FS.font.scaled(18, weight: .medium))
                 .foregroundColor(c.accent)
-                .frame(width: 30, height: 30)
+                .frame(width: 44, height: 44)
         }
         .accessibilityLabel(ChatAttachmentCopy.attach)
         .accessibilityIdentifier("chat-attach")

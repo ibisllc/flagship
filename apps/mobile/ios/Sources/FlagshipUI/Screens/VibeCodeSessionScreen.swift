@@ -242,14 +242,14 @@ public struct VibeCodeSessionScreen: View {
         }
         if status == "streaming", !stream.transcript.isEmpty {
             Text(VibeTranscript.compact(stream.transcript, live: true) + " ▍")
-                .font(FS.font.mono())
+                .font(FS.font.scaled(16))
                 .foregroundColor(c.text)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .textSelection(.enabled)
         } else if state == nil && stream.transcript.isEmpty {
             HStack(spacing: FS.space.s2) {
                 ProgressView()
-                Text("Starting the session…").font(FS.font.mono()).foregroundColor(c.textMuted)
+                Text("Starting the session…").font(FS.font.bodySm()).foregroundColor(c.textMuted)
             }
         }
         ForEach(stream.buildLogs.indices, id: \.self) { i in
@@ -262,52 +262,60 @@ public struct VibeCodeSessionScreen: View {
             pendingLine(pending, c: c)
         }
         if !["ready-to-deploy", "failed", "cancelled"].contains(status), let err = errorMessage ?? stream.errorMessage {
-            Text("✗ \(err)").font(FS.font.mono()).foregroundColor(c.danger)
+            Label(err, systemImage: "exclamationmark.triangle.fill").font(FS.font.bodySm()).foregroundColor(c.danger)
         }
         if let url = liveUrl, !url.isEmpty {
-            Text("✓ Live at \(url)")
-                .font(FS.font.mono())
+            Label("Live at \(url)", systemImage: "checkmark.circle.fill")
+                .font(FS.font.bodySm())
                 .foregroundColor(c.success)
                 .accessibilityIdentifier("vibecode-deployed-url")
         }
     }
 
+    /// One message as a chat bubble: yours on the right in a soft teal wash,
+    /// the AI's on the left on the surface. System type, so it follows the
+    /// reader's text size.
     func line(_ msg: VibeTranscript.Line, c: FSColors) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: FS.space.s2) {
-            Text(msg.role == "user" ? "›" : " ")
-                .font(FS.font.mono().weight(.bold))
-                .foregroundColor(c.primary)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(msg.text)
-                    .font(FS.font.mono())
-                    .foregroundColor(msg.role == "user" ? c.primary : c.text)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
-                if let a = msg.attachments, !a.isEmpty {
-                    SentAttachments(attachments: a)
-                }
-                if msg.role == "assistant", let credits = msg.credits {
-                    Text(ModelMenuText.creditsUsed(credits))
-                        .font(FS.font.scaled(11))
-                        .foregroundColor(c.textMuted)
-                        .accessibilityIdentifier("vibecode-credits")
-                }
+        let mine = msg.role == "user"
+        return VStack(alignment: mine ? .trailing : .leading, spacing: 4) {
+            Text(msg.text)
+                .font(FS.font.scaled(16))
+                .foregroundColor(c.text)
+                .textSelection(.enabled)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(mine ? c.accent.opacity(0.18) : c.surface,
+                            in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(mine ? Color.clear : c.border, lineWidth: 1))
+                .frame(maxWidth: 560, alignment: mine ? .trailing : .leading)
+            if let a = msg.attachments, !a.isEmpty {
+                SentAttachments(attachments: a)
+            }
+            if msg.role == "assistant", let credits = msg.credits {
+                Text(ModelMenuText.creditsUsed(credits))
+                    .font(FS.font.scaled(12))
+                    .foregroundColor(c.textMuted)
+                    .padding(.leading, 4)
+                    .accessibilityIdentifier("vibecode-credits")
             }
         }
+        .frame(maxWidth: .infinity, alignment: mine ? .trailing : .leading)
     }
 
     @ViewBuilder
     private func pendingLine(_ pending: VibeCodePendingRequest, c: FSColors) -> some View {
         switch pending {
         case .talkToUser(_, let message):
-            Text("? \(message)").font(FS.font.mono().weight(.semibold)).foregroundColor(c.text)
+            Label(message, systemImage: "questionmark.bubble.fill")
+                .font(FS.font.scaled(16, weight: .semibold)).foregroundColor(c.text)
         case .requestEnvVar(_, let name, let description, let why, let example, _):
             VStack(alignment: .leading, spacing: 4) {
-                Text("? The app needs \(name): \(description)")
-                    .font(FS.font.mono().weight(.semibold)).foregroundColor(c.text)
-                Text("  why: \(why)").font(FS.font.mono()).foregroundColor(c.textMuted)
+                Label("The app needs \(name): \(description)", systemImage: "questionmark.bubble.fill")
+                    .font(FS.font.scaled(16, weight: .semibold)).foregroundColor(c.text)
+                Text("Why: \(why)").font(FS.font.bodySm()).foregroundColor(c.textMuted)
                 if let example, !example.isEmpty {
-                    Text("  e.g. \(example)").font(FS.font.mono()).foregroundColor(c.textMuted)
+                    Text("For example: \(example)").font(FS.font.bodySm()).foregroundColor(c.textMuted)
                 }
             }
         }
@@ -428,7 +436,7 @@ public struct VibeCodeSessionScreen: View {
             HStack(spacing: FS.space.s2) {
                 AttachButton(stager: stager)
                 TextField(placeholder, text: $replyDraft, axis: .vertical)
-                    .font(FS.font.mono())
+                    .font(.system(.body))
                     .lineLimit(1...4)
                     .submitLabel(.send)
                     .onSubmit { Task { await submitReply() } }

@@ -397,7 +397,7 @@ public struct SettingsScreen: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Your account keeps the same username and your pods keep their data. Every device currently on this account will be disconnected — including this phone, which becomes the new root of trust. You'll re-pair each one fresh.\n\nThis can't be undone from another device.")
+            Text("Your account keeps the same username and your servers keep their data. Every device currently on this account will be disconnected — including this phone, which becomes the new root of trust. You'll re-pair each one fresh.\n\nThis can't be undone from another device.")
         }
         .confirmationDialog(
             "Sign out?",
@@ -934,7 +934,8 @@ public struct SettingsScreen: View {
     @ViewBuilder
     private func section<C: View>(_ label: String, c: FSColors, @ViewBuilder content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            FSSectionLabel(label)
+            // Indented like the native group headers above and below it.
+            FSSectionLabel(label).padding(.leading, FS.space.s4)
             content()
         }
     }

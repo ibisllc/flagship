@@ -440,7 +440,7 @@ public struct CreateServerStubScreen: View {
             .tint(c.accent)
             .accessibilityIdentifier("cs-encrypt-disk-toggle")
             Text(vm.encryptDisk
-                 ? "Recommended. Your data disk is LUKS-encrypted; the server unlocks it at boot."
+                 ? "Recommended. Your data disk is encrypted; the server unlocks it at boot."
                  : "Less safe — the disk is left unencrypted. Only for servers that can't keep network at boot (e.g. Wi-Fi-only), where the boot-time unlock can't run.")
                 .font(.caption)
                 .foregroundColor(c.textMuted)
