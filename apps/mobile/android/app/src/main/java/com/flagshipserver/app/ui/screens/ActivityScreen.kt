@@ -5,6 +5,9 @@
 
 package com.flagshipserver.app.ui.screens
 
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import com.flagshipserver.app.ui.components.FSNote
+import androidx.compose.runtime.SideEffect
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.heightIn
@@ -91,14 +94,21 @@ fun ActivityScreen(nav: NavController) {
     val effectiveServerFilter = serverFilter?.takeIf { id -> pods.any { it.podId == id } }
     val filterPodName = pods.firstOrNull { it.podId == effectiveServerFilter }?.name
 
+    val wide = com.flagshipserver.app.ui.shell.LocalWindowWidthClass.current == com.flagshipserver.app.ui.shell.WindowWidthSizeClass.EXPANDED
+    val pane = remember { ActivityPane() }
+    var open by rememberSaveable { mutableStateOf<ActivitySection?>(null) }
+    // A wide window always has a section open on the right.
+    LaunchedEffect(wide) { if (wide && open == null) open = ActivitySection.Server }
     FSScreen(
         title = "Activity",
         titleTag = "activity-title",
         spacing = 0.dp,
+        maxContentWidth = if (wide) 1120.dp else com.flagshipserver.app.ui.theme.FSLayout.readingMaxWidth,
         actions = {
             com.flagshipserver.app.ui.components.TextButton(onClick = { vm.load() }) { Text("Refresh") }
         },
     ) {
+        val list: @Composable () -> Unit = {
         // Server filter — shown only when the user owns more than one pod
         // (matches the Services list rule). "All servers" shows the full feed;
         // a specific server names the server section after it (account-wide
@@ -117,7 +127,6 @@ fun ActivityScreen(nav: NavController) {
         Spacer(Modifier.height(FS.space.s4))
 
         // One section open at a time, so every title stays on screen.
-        var open by rememberSaveable { mutableStateOf<ActivitySection?>(null) }
         fun toggle(which: ActivitySection) { open = if (open == which) null else which }
 
         // ALWAYS visible, OUTSIDE the loaded-state branch: a box waiting for an
@@ -192,10 +201,41 @@ fun ActivityScreen(nav: NavController) {
                 ServerCardSkeleton()
             }
         }
+        }
+        if (wide) {
+            androidx.compose.runtime.CompositionLocalProvider(LocalActivityPane provides pane) {
+                Row(horizontalArrangement = Arrangement.spacedBy(FS.space.s4), modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.weight(1f)) { list() }
+                    Column(Modifier.weight(1.4f).testTag("activity-detail-pane")) {
+                        val c = pane.content
+                        if (open != null && c != null) {
+                            FSCard(padding = PaddingValues(FS.space.s4)) {
+                                Text(pane.title, style = MaterialTheme.typography.titleMedium)
+                                Spacer(Modifier.height(FS.space.s3))
+                                c()
+                            }
+                        } else {
+                            FSNote("Pick a section to read it here.")
+                        }
+                    }
+                }
+            }
+        } else {
+            list()
+        }
     }
 }
 
 internal enum class ActivitySection { Approvals, Recovery, Account, Server }
+
+/** The detail pane of Activity on an expanded window: the open section's content
+ *  is drawn here instead of under its title. Null on a phone. */
+internal class ActivityPane {
+    var content by mutableStateOf<(@Composable () -> Unit)?>(null)
+    var title by mutableStateOf("")
+}
+
+internal val LocalActivityPane = androidx.compose.runtime.compositionLocalOf<ActivityPane?> { null }
 
 /** "Server · home2": the server this log belongs to (the one picked in the
  *  switcher, else the only one). */
@@ -217,6 +257,8 @@ private fun Accordion(
 ) {
     val tag = "activity-section-${section.name.lowercase()}"
     val view = androidx.compose.ui.platform.LocalView.current
+    val pane = LocalActivityPane.current
+    if (pane != null && isOpen) SideEffect { pane.content = content; pane.title = title }
     FSCard(padding = PaddingValues(0.dp)) {
         Column(Modifier.fillMaxWidth()) {
             Row(
@@ -239,14 +281,18 @@ private fun Accordion(
                     Text("$count", color = FS.colors.textMuted, style = MaterialTheme.typography.bodySmall)
                     Spacer(Modifier.width(FS.space.s2))
                 }
-                Icon(
-                    Icons.Filled.KeyboardArrowDown,
-                    contentDescription = null,
-                    tint = FS.colors.textMuted,
-                    modifier = Modifier.rotate(if (isOpen) 180f else 0f),
-                )
+                if (pane != null) {
+                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = if (isOpen) FS.colors.accent else FS.colors.textMuted)
+                } else {
+                    Icon(
+                        Icons.Filled.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = FS.colors.textMuted,
+                        modifier = Modifier.rotate(if (isOpen) 180f else 0f),
+                    )
+                }
             }
-            if (isOpen) {
+            if (isOpen && pane == null) {
                 Divider(color = FS.colors.border)
                 Column(Modifier.fillMaxWidth().padding(FS.space.s4).testTag("$tag-body")) { content() }
             }
@@ -274,7 +320,7 @@ private fun EventList(
     Column(
         Modifier
             .fillMaxWidth()
-            .heightIn(max = ACTIVITY_LIST_MAX_HEIGHT)
+            .heightIn(max = if (LocalActivityPane.current != null) 720.dp else ACTIVITY_LIST_MAX_HEIGHT)
             .verticalScroll(rememberScrollState())
             .testTag("activity-event-list"),
         verticalArrangement = Arrangement.spacedBy(FS.space.s3),

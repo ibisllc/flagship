@@ -70,6 +70,8 @@ fun FSScreen(
     refreshing: Boolean = false,
     scrollState: ScrollState = rememberScrollState(),
     spacing: Dp = FS.space.s4,
+    /** The reading width; a list-and-detail screen on a tablet asks for more. */
+    maxContentWidth: Dp = FSLayout.readingMaxWidth,
     floatingActionButton: @Composable () -> Unit = {},
     bottomBar: @Composable () -> Unit = {},
     /** False when the body scrolls itself (a LazyColumn, a chat). */
@@ -109,7 +111,7 @@ fun FSScreen(
           Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
             // The bar shares the body's reading width, so on a tablet the title
             // lines up with the column instead of hugging the pane's edge.
-            Box(Modifier.widthIn(max = FSLayout.readingMaxWidth).fillMaxWidth()) {
+            Box(Modifier.widthIn(max = maxContentWidth).fillMaxWidth()) {
               TopAppBar(
                 title = titleText,
                 navigationIcon = navIcon,
@@ -128,7 +130,7 @@ fun FSScreen(
     ) { inner ->
         val body: @Composable () -> Unit = {
             val column = Modifier
-                .widthIn(max = FSLayout.readingMaxWidth)
+                .widthIn(max = maxContentWidth)
                 .fillMaxWidth()
                 .padding(horizontal = FS.space.s4)
                 .padding(top = FS.space.s2, bottom = FS.space.s6)

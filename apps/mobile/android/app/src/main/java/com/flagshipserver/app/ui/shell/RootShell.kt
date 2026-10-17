@@ -52,6 +52,10 @@ import com.flagshipserver.app.ui.theme.FS
  *  result into this via mapWidth. */
 enum class WindowWidthSizeClass { COMPACT, MEDIUM, EXPANDED }
 
+/** The window's width class, for screens that lay out differently when wide
+ *  (Activity is list and detail on an expanded window). */
+val LocalWindowWidthClass = androidx.compose.runtime.compositionLocalOf { WindowWidthSizeClass.COMPACT }
+
 /** Root entry point invoked from MainActivity once the user is paired.
  *  The compact-vs-expanded branch lets the same code run on phones,
  *  foldables, and tablets without a second layout. Also consumes the
@@ -132,10 +136,14 @@ fun RootShell(
         )
     }
 
-    if (widthSizeClass == WindowWidthSizeClass.EXPANDED) {
-        ExpandedShell(selected) { selected = it }
-    } else {
-        CompactShell(selected) { selected = it }
+    androidx.compose.runtime.CompositionLocalProvider(LocalWindowWidthClass provides widthSizeClass) {
+        // Medium and expanded windows put the destinations in a rail beside the content
+        // (Material's guidance); only a compact window uses the bottom bar.
+        if (widthSizeClass != WindowWidthSizeClass.COMPACT) {
+            ExpandedShell(selected) { selected = it }
+        } else {
+            CompactShell(selected) { selected = it }
+        }
     }
 }
 
