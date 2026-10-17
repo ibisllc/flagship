@@ -222,7 +222,7 @@ fun ConnectAccountContent(
                     value = username,
                     onValueChange = onUsernameChange,
                     label = "Account name",
-                    placeholder = "bright-maple",
+                    placeholder = "account-name",
                     helper = "The name you picked when you made the account.",
                     error = nameError,
                     fieldTag = "connect-name-field",

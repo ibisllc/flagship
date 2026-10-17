@@ -13,6 +13,8 @@ import com.flagshipserver.app.api.ServerTransferClient
 object Variant : AppVariant {
     override fun applyLaunchOverrides(intent: Intent?) = Unit
 
+    override fun isGymLaunch(intent: Intent?): Boolean = false
+
     override fun gymLaunch(
         context: android.content.Context,
         intent: Intent?,
