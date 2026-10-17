@@ -347,8 +347,11 @@ public final class CreateServerViewModel {
 
     /// After the design step, go to the delivery-method chooser instead of
     /// the old "scan the website QR" path.
+    /// The design wizard's Continue is enabled only by `canContinueFromBackups`
+    /// (a backup pick); Import a backup comes straight here with the server's
+    /// name and no pick, so the server starts with its policy "not chosen yet".
     public func proceedToDelivery() {
-        guard canContinueFromBackups else { return }
+        guard canAdvanceFromDesign else { return }
         phase = .deliveryChooser
     }
 

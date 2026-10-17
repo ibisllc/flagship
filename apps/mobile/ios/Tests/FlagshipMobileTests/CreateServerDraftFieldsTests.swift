@@ -57,14 +57,15 @@ final class CreateServerDraftFieldsTests: XCTestCase {
         XCTAssertNil(d.string(forKey: "flagship.createServerDraft.backupPolicy"), "clearing the pick clears the draft")
     }
 
-    func test_proceedToDeliveryNeedsABackupChoice() {
+    func test_importPathReachesDeliveryWithoutAPick() {
+        // Import a backup comes straight to delivery with a name; the wizard's own
+        // Continue (canContinueFromBackups) is what waits for a pick.
         let (vm, _) = makeVM()
         vm.name = "lab"
+        XCTAssertFalse(vm.canContinueFromBackups)
         vm.proceedToDelivery()
-        if case .deliveryChooser = vm.phase { XCTFail("the delivery step needs a backup choice first") }
-        vm.backupPolicy = .peer
-        vm.proceedToDelivery()
-        guard case .deliveryChooser = vm.phase else { return XCTFail("a pick lets the owner on") }
+        guard case .deliveryChooser = vm.phase else { return XCTFail("delivery opens for the import path") }
+        XCTAssertNil(vm.backupPolicy, "and no policy is chosen for the owner")
     }
 
     func test_backupPolicyVocabularyMatchesWebapp() {
