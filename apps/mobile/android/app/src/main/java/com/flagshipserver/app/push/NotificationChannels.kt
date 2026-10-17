@@ -9,7 +9,6 @@ package com.flagshipserver.app.push
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
-import android.os.Build
 
 object NotificationChannels {
     data class Channel(val id: String, val name: String, val description: String, val importance: Int)
@@ -74,7 +73,6 @@ object NotificationChannels {
     }
 
     fun ensureAll(context: Context) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val mgr = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         for (c in all) {
             // Re-creating an existing channel only updates its name and

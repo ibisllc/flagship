@@ -28,7 +28,7 @@ android {
 
     defaultConfig {
         applicationId = "com.flagshipserver.app"
-        minSdk = 28
+        minSdk = 33
         targetSdk = 36
         versionCode = 8
         versionName = "0.0.8"

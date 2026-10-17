@@ -618,7 +618,7 @@ class MainActivity : FragmentActivity() {
             // (the lock screen only arrives after the app is already gone).
             val lockOn by privacy.requireBiometricAtLaunch.collectAsState()
             LaunchedEffect(lockOn) {
-                if (android.os.Build.VERSION.SDK_INT >= 33) setRecentsScreenshotEnabled(!lockOn)
+                setRecentsScreenshotEnabled(!lockOn)
             }
 
             FlagshipTheme(darkTheme = useDark) {

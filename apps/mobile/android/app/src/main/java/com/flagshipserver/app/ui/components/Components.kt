@@ -72,11 +72,7 @@ private fun ButtonLabel(label: String) {
 private fun withHaptic(destructive: Boolean, onClick: () -> Unit): () -> Unit {
     val view = androidx.compose.ui.platform.LocalView.current
     return {
-        val kind = when {
-            destructive -> android.view.HapticFeedbackConstants.LONG_PRESS
-            android.os.Build.VERSION.SDK_INT >= 30 -> android.view.HapticFeedbackConstants.CONFIRM
-            else -> android.view.HapticFeedbackConstants.VIRTUAL_KEY
-        }
+        val kind = if (destructive) android.view.HapticFeedbackConstants.LONG_PRESS else android.view.HapticFeedbackConstants.CONFIRM
         view.performHapticFeedback(kind)
         onClick()
     }

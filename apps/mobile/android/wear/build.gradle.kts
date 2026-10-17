@@ -3,9 +3,9 @@
 // security events, a tile and a complication. Same applicationId and signing
 // key as the phone app, which the Wearable Data Layer requires.
 //
-// minSdk 30 = Wear OS 3, the oldest Wear OS still supported (AGENTS.md's
-// minimum-OS rule; Wear OS 2 watches no longer get updates). Re-check on each
-// toolchain update.
+// minSdk 33 = Wear OS 4 (Android 13), the same floor as the phone app
+// (AGENTS.md's minimum-OS rule: Wear OS 3 watches that can't take Wear OS 4
+// are out of security support). Re-check on each toolchain update.
 
 import java.util.Properties
 
@@ -26,7 +26,7 @@ android {
 
     defaultConfig {
         applicationId = "com.flagshipserver.app"
-        minSdk = 30
+        minSdk = 33
         targetSdk = 36
         // Play needs every APK/bundle of one app to have its own version code:
         // the watch build is the phone's plus 1,000,000.

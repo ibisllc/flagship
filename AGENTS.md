@@ -96,8 +96,18 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   or a security-critical API needs it. Re-check on every toolchain update.
   Current floors: **iOS/iPadOS 18.0** (iOS 17 stopped receiving fixes, every
   iOS 17 iPhone can run 18, and passkey PRF — cloud recovery — is iOS 18+),
-  **watchOS 11.0** (the iOS 18 companion). Not yet reviewed against the rule:
-  the Mac Studio app (`macOS 14`) and Android (`minSdk 28`) — see the open
+  **watchOS 11.0** (the iOS 18 companion), **Android 13 (`minSdk 33`)** and
+  **Wear OS 4 (`minSdk 33`, owner decision 2026-10-17)**. Android 13 is the
+  oldest branch where every security feature the app leans on exists: the
+  Recents screenshot block for the app lock (`setRecentsScreenshotEnabled`,
+  API 33), the sensitive-clipboard flag for API keys (33), the runtime
+  notification permission for content-free pushes (33), non-exported broadcast
+  receivers, and the biometric-or-credential key auth parameters (30). Older
+  branches (Android 9 to 12) no longer get vendor security fixes on most
+  devices and lack the first three, so they were dropped rather than carried
+  with weaker behaviour; the API-level branches for them are gone from the
+  code. Wear OS 4 is Android 13, so the watch matches the phone. Not yet
+  reviewed against the rule: the Mac Studio app (`macOS 14`) — see the open
   list. Platform versions in the `swift-tools-version:5.9` manifests use the
   string form (`.iOS("18.0")`); `.v18` needs tools 6.0, which also flips on
   Swift 6 strict concurrency.
@@ -867,7 +877,7 @@ allowances (1M / 5M / 20M a month) are placeholders.
   Activity; `provision-status` pushes no longer post one notification per
   phase); launcher shortcuts (Approvals + one per server); a notification
   channel per push category (`flagship.alerts` stays as "Other"). Wear OS app
-  (minSdk 30 = Wear OS 3, versionCode = phone + 1,000,000, same applicationId
+  (minSdk 33 = Wear OS 4, versionCode = phone + 1,000,000, same applicationId
   and signing key, which the Data Layer needs): servers, boxes waiting to
   unlock, recent activity, install progress, a tile and a complication. Its
   Approve is a Data Layer request the phone answers with its own approval:
@@ -1048,8 +1058,8 @@ metal), plus the Debian 13.7.0 check. Record results under "Desktop Studio".
    the same appliance since 2026-10-15 (not yet run on real hardware).
 3. **Hetzner:** account suspended; five orphaned servers to delete by hand when
    it unlocks (153213447, 153638469, 153643080, 153813669, 155315594).
-4. **Minimum-OS review** (Conventions rule): Mac Studio is macOS 14, Android is
-   `minSdk 28`. Decide for the next releases.
+4. **Minimum-OS review** (Conventions rule): Mac Studio is macOS 14. Decide
+   for the next releases. (Android and Wear OS are done: `minSdk 33`.)
 5. **Restricted-device profile-key delivery is unimplemented.** The server
    stores and authorizes `accountDirectoryKeyGrant`s, but no client seals or
    unseals `sealedKeyHex`. Mirror the `AcmeAccountKeyGrant` envelope with

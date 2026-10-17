@@ -26,7 +26,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -94,18 +93,13 @@ fun BuilderOnDeviceScreen(recipeJson: String, onDone: () -> Unit) {
             }
         }
         val filter = IntentFilter(UsbHost.ACTION_USB_PERMISSION)
-        if (Build.VERSION.SDK_INT >= 33) {
-            context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
-        } else {
-            @Suppress("UnspecifiedRegisterReceiverFlag")
-            context.registerReceiver(receiver, filter)
-        }
+        context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
         onDispose { runCatching { context.unregisterReceiver(receiver) } }
     }
 
     fun requestPermission() {
         val sel = state.selected ?: return
-        val flags = if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0
+        val flags = PendingIntent.FLAG_MUTABLE
         val pi = PendingIntent.getBroadcast(
             context, 0, Intent(UsbHost.ACTION_USB_PERMISSION).setPackage(context.packageName), flags,
         )
