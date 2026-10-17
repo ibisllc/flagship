@@ -92,7 +92,12 @@ class GymPeerBackupTest : GymBase() {
         mock.peerRootFixture = record("00112233445566778899aabbccddeeff")
         composeRule.onNodeWithTag("restore-peers-lost").performTextInput(lost)
         composeRule.onNodeWithTag("restore-peers-find").performClick()
-        waitUntilExists("import-backup-name", timeoutMs = 20_000)
+        // Opening the record runs the account-key crypto: wait for the name step or the refusal, and name the refusal.
+        composeRule.waitUntil(40_000) {
+            composeRule.onAllNodesWithTag("import-backup-name").fetchSemanticsNodes().isNotEmpty() ||
+                composeRule.onAllNodesWithTag("import-backup-error").fetchSemanticsNodes().isNotEmpty()
+        }
+        assertTrue("the record opened: " + (if (count("import-backup-error") > 0) textOf("import-backup-error") else ""), count("import-backup-name") > 0)
         waitUntilTextExists("Backup of $lost")
         waitUntilTextExists("3 servers hold its pieces; 2 bring it back.")
         assertEquals("the server was asked with the PBK, not the key", 1, mock.peerRootRequests.size)
