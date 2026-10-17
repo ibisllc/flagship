@@ -6,9 +6,9 @@ package com.flagshipserver.companion
 
 object StatusPalette {
     // Light theme.
-    const val LIGHT_OK = 0xFF15803DL
+    const val LIGHT_OK = 0xFF166534L
     const val LIGHT_ERR = 0xFFB91C1CL
-    const val LIGHT_WARN = 0xFFA15C07L
+    const val LIGHT_WARN = 0xFF944D05L
     const val LIGHT_MUTED = 0xFF555149L
 
     // Dark theme (the watch is always dark).

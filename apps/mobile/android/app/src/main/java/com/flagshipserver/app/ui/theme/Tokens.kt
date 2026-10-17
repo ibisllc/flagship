@@ -58,6 +58,10 @@ data class FlagshipColors(
     val success: Color,
     val warning: Color,
     val danger: Color,
+    /** Soft status washes behind status text (web `--ok-soft` etc.). */
+    val okWash: Color,
+    val warnWash: Color,
+    val dangerWash: Color,
 )
 
 // The website's palette (apps/web/public/tokens.css), as the webapp carries it
@@ -72,14 +76,17 @@ val LightColors = FlagshipColors(
     text            = Color(0xFF14140F), // --ink
     textMuted       = Color(0xFF555149), // --ink-muted
     primary         = Color(0xFF0F766E), // --accent
-    accent          = Color(0xFF0D9488), // graphics, large bold
+    accent          = Color(0xFF0E9488), // graphics, large bold
     accentText      = Color(0xFF0F766E), // small text, links
     primaryHover    = Color(0xFF0B5F58), // --accent-press
     fill            = Color(0xFF14B8A6), // --teal
     onAccent        = Color(0xFF0A0A09), // --accent-on
-    success         = Color(0xFF15803D), // --ok
-    warning         = Color(0xFFA15C07), // --warn
+    success         = Color(0xFF166534), // --ok
+    warning         = Color(0xFF944D05), // --warn
     danger          = Color(0xFFB91C1C), // --err
+    okWash          = Color(0x14166534), // rgba(22,101,52,.08)
+    warnWash        = Color(0x14944D05), // rgba(148,77,5,.08)
+    dangerWash      = Color(0x0FB91C1C), // rgba(185,28,28,.06)
 )
 
 val DarkColors = FlagshipColors(
@@ -98,6 +105,9 @@ val DarkColors = FlagshipColors(
     success         = Color(0xFF4ADE80), // --ok
     warning         = Color(0xFFFBBF24), // --warn
     danger          = Color(0xFFF87171), // --err
+    okWash          = Color(0x144ADE80), // rgba(74,222,128,.08)
+    warnWash        = Color(0x14FBBF24), // rgba(251,191,36,.08)
+    dangerWash      = Color(0x14F87171), // rgba(248,113,113,.08)
 )
 
 val LocalFlagshipColors = staticCompositionLocalOf { LightColors }
@@ -301,8 +311,12 @@ object FS {
  * token + iOS `FSColors.softTint`. Pass a semantic color to tint other leading
  * glyphs (status icons in a list row) at the same weight.
  */
-fun FlagshipColors.softTint(color: Color? = null): Color =
-    (color ?: primary).copy(alpha = 0.12f)
+fun FlagshipColors.softTint(color: Color? = null): Color = when (color) {
+    success -> okWash
+    warning -> warnWash
+    danger -> dangerWash
+    else -> (color ?: accent).copy(alpha = 0.12f)
+}
 
 /**
  * Initials for a monogram avatar. First two alphanumeric characters of the

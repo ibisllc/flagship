@@ -1,18 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Teal disc with the server glyph (the phone app's classic icon colours). -->
+<!-- Teal disc with the server glyph (the fill teal with dark ink, as the primary buttons). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="48dp"
     android:height="48dp"
     android:viewportWidth="48"
     android:viewportHeight="48">
     <path
-        android:fillColor="#FF0F766E"
+        android:fillColor="#FF14B8A6"
         android:pathData="M24,0a24,24 0,1 1,0 48a24,24 0,1 1,0 -48z" />
     <group
         android:translateX="12"
         android:translateY="12">
         <path
-            android:fillColor="#FFFFFFFF"
+            android:fillColor="#FF0A0A09"
             android:pathData="M20,13L4,13c-0.55,0 -1,0.45 -1,1v6c0,0.55 0.45,1 1,1h16c0.55,0 1,-0.45 1,-1v-6c0,-0.55 -0.45,-1 -1,-1zM7,19c-1.1,0 -2,-0.9 -2,-2s0.9,-2 2,-2 2,0.9 2,2 -0.9,2 -2,2zM20,3L4,3c-0.55,0 -1,0.45 -1,1v6c0,0.55 0.45,1 1,1h16c0.55,0 1,-0.45 1,-1L21,4c0,-0.55 -0.45,-1 -1,-1zM7,9c-1.1,0 -2,-0.9 -2,-2s0.9,-2 2,-2 2,0.9 2,2 -0.9,2 -2,2z" />
     </group>
 </vector>

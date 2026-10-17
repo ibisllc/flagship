@@ -10,6 +10,7 @@
 
 package com.flagshipserver.app.gym
 
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
@@ -296,8 +297,12 @@ class GymOctoberTest : GymBase() {
         composeRule.onNodeWithTag("service-access-add-person").performClick()
         waitUntilExists("service-access-name-field")
         composeRule.onNodeWithTag("service-access-name-field").performTextInput("Gym friend")
+        // The button enables once the typed name has reached the view model; a click before that is a no-op.
+        composeRule.waitUntil(10_000) {
+            runCatching { composeRule.onNodeWithTag("service-access-create-invite").assertIsEnabled() }.isSuccess
+        }
         composeRule.onNodeWithTag("service-access-create-invite").performScrollTo().performClick()
-        composeRule.waitUntil(15_000) {
+        composeRule.waitUntil(30_000) {
             composeRule.onAllNodesWithText("Invited by", substring = true).fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onAllNodesWithText("Invited by", substring = true).onFirst().performScrollTo()

@@ -1,6 +1,7 @@
 package com.flagshipserver.app.ui.theme
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -27,6 +28,23 @@ class TealContrastTest {
         assertTrue("$name text on bg", ratio(c.text, c.bg) >= 4.5)
         assertTrue("$name muted text on bg", ratio(c.textMuted, c.bg) >= 4.5)
     }
+
+    private fun over(top: Color, base: Color): Color = top.compositeOver(base)
+
+    private fun checkStatus(name: String, c: FlagshipColors, canvas2: Color) {
+        val surfaces = listOf("bg" to c.bg, "canvas-2" to canvas2, "surface" to c.surface, "sunken" to c.surfaceSunken)
+        val tones = listOf(
+            Triple("ok", c.success, c.okWash), Triple("warn", c.warning, c.warnWash), Triple("err", c.danger, c.dangerWash),
+        )
+        for ((tn, fg, wash) in tones) for ((sn, surface) in surfaces) {
+            assertTrue("$name $tn on $sn ${ratio(fg, surface)}", ratio(fg, surface) >= 4.5)
+            val washed = over(wash, surface)
+            assertTrue("$name $tn on its wash over $sn ${ratio(fg, washed)}", ratio(fg, washed) >= 4.5)
+        }
+    }
+
+    @Test fun lightStatusTextHoldsItsContrast() = checkStatus("light", LightColors, Color(0xFFF0EEE8))
+    @Test fun darkStatusTextHoldsItsContrast() = checkStatus("dark", DarkColors, Color(0xFF14130F))
 
     @Test fun lightTealRolesHoldTheirContrast() = check("light", LightColors)
     @Test fun darkTealRolesHoldTheirContrast() = check("dark", DarkColors)
