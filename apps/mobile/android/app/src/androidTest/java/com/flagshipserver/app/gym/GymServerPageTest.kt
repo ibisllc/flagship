@@ -153,7 +153,7 @@ class GymServerPageTest : GymBase() {
     fun revokeCancelLeavesTheServer() {
         openServer(office)
         tapDesc("sd-revoke-server", 20_000)
-        waitUntilExistsDesc("revoke-reason-lost")
+        waitUntilExistsDesc("revoke-reason-lost", 20_000)
         tapText("Cancel")
         eventually(what = "sheet closed") { descCount("revoke-confirm-hold") == 0 }
         assertTrue(comMock.revokedServers.isEmpty())

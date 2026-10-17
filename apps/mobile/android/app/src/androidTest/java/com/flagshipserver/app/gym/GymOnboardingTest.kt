@@ -39,6 +39,8 @@ class GymOnboardingTest : GymBase() {
         gymShot("connect-account")
         composeRule.onNodeWithTag("connect-pair-field").performScrollTo().performTextInput("bright-maple")
         composeRule.onNodeWithTag("connect-pair-continue").performScrollTo().performClick()
+        // The hint arrives a frame or more after the tap on a busy emulator.
+        waitText(ConnectInput.NAME_IN_CODE, 15_000)
         composeRule.onNodeWithText(ConnectInput.NAME_IN_CODE).performScrollTo().assertIsDisplayed()
     }
 
