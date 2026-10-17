@@ -466,7 +466,7 @@ final class GymOctoberTests: XCTestCase {
 
         XCTAssertTrue(reveal(app, off, tries: 16))
         off.tap()
-        let confirm = app.buttons["sd-debug-access-confirm-off"]
+        let confirm = app.buttons["sd-debug-access-confirm-off"].firstMatch
         XCTAssertTrue(confirm.waitForExistence(timeout: 5))
         confirm.tap()
         XCTAssertTrue(app.buttons["sd-debug-access-on"].waitForExistence(timeout: 15), "Turned off, it offers Turn on again.")
