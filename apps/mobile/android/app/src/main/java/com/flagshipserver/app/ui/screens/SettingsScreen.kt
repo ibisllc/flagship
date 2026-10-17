@@ -354,7 +354,7 @@ fun SettingsScreen(nav: NavController) {
                 FSSettingsRowData(
                     icon = Icons.Outlined.Backup,
                     title = "Peer-backup",
-                    subtitle = "Shard health across peers + repair status.",
+                    subtitle = "How your backup is kept on other servers.",
                     onClick = { nav.navigate("peer-backup") },
                 ),
             ),

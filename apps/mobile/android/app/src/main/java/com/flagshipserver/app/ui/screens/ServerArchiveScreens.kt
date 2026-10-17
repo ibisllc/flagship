@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.flagshipserver.app.core.LocalAppState
 import com.flagshipserver.app.core.LocalPodClients
+import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.core.LocalScreensClient
 import com.flagshipserver.app.core.PodInfo
 import com.flagshipserver.app.core.BackupsText
@@ -331,6 +332,8 @@ private class SafPickedFile(private val context: Context, private val uri: Uri) 
 @Composable
 internal fun ImportBackupRoute(
     targetFqdn: String?,
+    /** Restore from other servers (peer backup) instead of importing a file. */
+    fromPeers: Boolean = false,
     /** The create screen made a server (put it on Home like any new server). */
     onServerCreated: (serverDomain: String, serial: String, name: String) -> Unit,
     onClose: () -> Unit,
@@ -344,16 +347,24 @@ internal fun ImportBackupRoute(
             label.lowercase().ifEmpty { null }
         }.toSet()
         val waiting = app.podsAwaitingBackup.value.entries.associate { (fqdn, w) -> w.archiveId to fqdn }
+        val clientFor: suspend (String) -> ScreensClient? = { fqdn ->
+            val pod = app.pods.value.firstOrNull { it.fqdn.equals(fqdn, ignoreCase = true) }
+                ?: PodInfo(podId = PodInfo.podId(fqdn), name = fqdn.substringBefore('.'), fqdn = fqdn, status = PodInfo.Status.PENDING)
+            podClients.screens(pod)
+        }
         ImportBackupViewModel(
+            peers = if (fromPeers) {
+                com.flagshipserver.app.viewmodels.LivePeerRestoreSource(
+                    pods = { app.pods.value },
+                    clientFor = clientFor,
+                    umkSeed = { Keystore.currentUmkSeed() },
+                )
+            } else null,
             username = app.currentUser.value ?: "you",
             takenNames = taken,
             waitingServers = waiting,
             targetFqdn = targetFqdn,
-            clientFor = { fqdn ->
-                val pod = app.pods.value.firstOrNull { it.fqdn.equals(fqdn, ignoreCase = true) }
-                    ?: PodInfo(podId = PodInfo.podId(fqdn), name = fqdn.substringBefore('.'), fqdn = fqdn, status = PodInfo.Status.PENDING)
-                podClients.screens(pod)
-            },
+            clientFor = clientFor,
             accountKek = { id -> Keystore.deriveServerArchiveKey(id, "Open the backup") },
             onRestored = { fqdn -> app.clearAwaitingBackup(fqdn) },
         )
@@ -416,8 +427,9 @@ internal fun ImportBackupScreen(vm: ImportBackupViewModel, onClose: () -> Unit =
     val title = when (phase) {
         is ImportBackupViewModel.Phase.Waiting, is ImportBackupViewModel.Phase.Sending,
         is ImportBackupViewModel.Phase.Restoring, is ImportBackupViewModel.Phase.Done,
+        is ImportBackupViewModel.Phase.Fetching,
         -> "Restore a backup"
-        else -> "Import a backup"
+        else -> if (vm.isPeerRestore) "Restore from other servers" else "Import a backup"
     }
     fun serverName(fqdn: String) = fqdn.substringBefore('.')
 
@@ -456,6 +468,48 @@ internal fun ImportBackupScreen(vm: ImportBackupViewModel, onClose: () -> Unit =
                         color = FS.colors.textMuted,
                         style = captionStyle,
                     )
+                }
+                ImportBackupViewModel.Phase.PickLost -> Column(
+                    verticalArrangement = Arrangement.spacedBy(FS.space.s3),
+                    modifier = Modifier.testTag("restore-peers-pick"),
+                ) {
+                    Text(com.flagshipserver.app.core.PeerBackup.RESTORE_INTRO, color = FS.colors.textMuted)
+                    FSField(
+                        value = vm.lost,
+                        onValueChange = { vm.lost = it },
+                        label = "The lost server",
+                        placeholder = "home.you.flagship.services",
+                        fieldTag = "restore-peers-lost",
+                    )
+                    vm.lostChoices.take(6).forEach { choice ->
+                        FSSecondaryButton(
+                            label = choice,
+                            onClick = { vm.lost = choice },
+                            block = true,
+                            modifier = Modifier.testTag("restore-peers-choice-$choice"),
+                        )
+                    }
+                    FSPrimaryButton(
+                        label = "Find its backup",
+                        onClick = { scope.launch { vm.findPeerBackup() } },
+                        enabled = vm.lost.isNotBlank(),
+                        block = true,
+                        modifier = Modifier.testTag("restore-peers-find"),
+                    )
+                }
+                ImportBackupViewModel.Phase.Finding -> Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(FS.space.s2),
+                ) {
+                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Text("Looking for the backup…", color = FS.colors.text)
+                }
+                is ImportBackupViewModel.Phase.Fetching -> {
+                    Text("${serverName(p.fqdn)} is getting the backup from other servers…", color = FS.colors.text, modifier = Modifier.testTag("restore-peers-fetching"))
+                    val f = p.fraction
+                    if (f == null) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    else LinearProgressIndicator(progress = { f.toFloat() }, modifier = Modifier.fillMaxWidth())
+                    Text("Keep this screen open. If it stops, the server keeps waiting and shows on Home.", color = FS.colors.textMuted, style = captionStyle)
                 }
                 ImportBackupViewModel.Phase.Passcode -> {
                     Text("This backup was made on another account. Enter its passcode to open it.", color = FS.colors.text)

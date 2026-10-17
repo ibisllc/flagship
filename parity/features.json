@@ -257,7 +257,7 @@
       "ref": "ios",
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Screens/ConnectAccountScreen.swift", "Connect to an existing account"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/WelcomeScreen.swift", "welcome-connect"]] },
-        "android": { "status": "missing", "reason": "Welcome still has the old separate entries.", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/onboarding/ConnectAccountScreen.kt", "Connect to an existing account"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/WelcomeScreen.kt", "welcome-connect"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/onboarding/ConnectAccountScreen.kt", "Connect to an existing account"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/WelcomeScreen.kt", "welcome-connect"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/index.html", "data-testid=\"welcome-connect\"[^>]*>Connect to an existing account<"], ["apps/web/public/webapp/lib/connectAccount.js", "export function readNameField"]] }
       }
     },
@@ -287,7 +287,7 @@
       "ref": "web",
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Shell/AddServerGate.swift", "enum AddDeviceGate"], ["apps/mobile/shared/Sources/FlagshipCore/PairingBundle.swift", "grantSignature"], ["apps/mobile/shared/Tests/FlagshipSharedTests/DevicePairingVectorTests.swift", "adminOnlyLine"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/SettingsScreen.swift", "settings-add-device-admin-only"]] },
-        "android": { "status": "partial", "reason": "Same as iOS: the bundle carries the grant, Add device is not yet admin-only and Kotlin does not read test-vectors/device-pairing yet.", "anchors": [["apps/mobile/android/app/src/test/java/com/flagshipserver/app/core/DevicePairingTest.kt", "grant"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/DeepLink.kt", "\"account\" -> when"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/crossDevicePairing.js", "ADD_DEVICE_ADMIN_ONLY"], ["apps/web/public/webapp/views/join.js", "signWithDevice"], ["packages/protocol/test-vectors/device-pairing/vectors.json", "adminOnlyLine"]] }
       }
     },
@@ -317,7 +317,7 @@
       "ref": "ios",
       "surfaces": {
         "ios": { "status": "present", "anchors": [["apps/mobile/ios/Sources/FlagshipUI/Shell/SettingsTab.swift", "case \\.joinAccount"]] },
-        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/onboarding/JoinAccountContainer.kt", "fun "], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/SettingsScreen.kt", "join-device-scan"]] },
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/onboarding/ConnectAccountScreen.kt", "fun ConnectAccountScreen"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/SettingsScreen.kt", "join-device-scan"]] },
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/views/join.js", "export async function openJoinAnotherAccount"], ["apps/web/public/webapp/index.html", "settings-tab-join-account"]] }
       }
     },
@@ -641,7 +641,7 @@
       "surfaces": {
         "web": { "status": "present", "anchors": [["apps/web/public/webapp/lib/peerBackup.js", "flagship/peer-backup-key/v1"], ["apps/web/public/webapp/views/peer-backup.js", "peer-backup/status"], ["apps/web/public/webapp/views/import-backup.js", "openRestoreFromPeers"]] },
         "ios": { "status": "present", "anchors": [["apps/mobile/shared/Sources/FlagshipCore/PeerBackupKeys.swift", "flagship/peer-backup-key/v1"], ["apps/mobile/shared/Tests/FlagshipSharedTests/PeerBackupVectorTests.swift", "peer-backup/vectors.json"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/PeerBackupScreen.swift", "Servers holding your pieces"], ["apps/mobile/ios/Sources/FlagshipUI/Screens/HomeScreen.swift", "Restore from other servers"], ["apps/mobile/ios/Sources/FlagshipUI/ViewModels/ServerArchiveViewModels.swift", "func findPeerBackup"]] },
-        "android": { "status": "missing", "reason": "Android still has the pre-v2 PeerBackupScreen (pool toggle and shard list); the v2 status and Restore from other servers are not ported yet (C2, 2026-10-17)" }
+        "android": { "status": "present", "anchors": [["apps/mobile/android/app/src/main/java/com/flagshipserver/app/core/PeerBackup.kt", "flagship/peer-backup-key/v1"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/PeerBackupScreen.kt", "peer-backup-state-"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/viewmodels/ServerArchiveViewModels.kt", "findPeerBackup"], ["apps/mobile/android/app/src/main/java/com/flagshipserver/app/ui/screens/HomeScreen.kt", "Restore from other servers"], ["apps/mobile/android/app/src/test/java/com/flagshipserver/app/core/PeerBackupVectorsTest.kt", "derivePbkHex"]] }
       }
     }
   ]

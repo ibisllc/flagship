@@ -94,6 +94,9 @@ fun HomeScreen(
     onAddServer: () -> Unit,
     /** "Import a backup" in the Add/Import chooser. */
     onImportBackup: () -> Unit = {},
+    /** "Restore from other servers": a lost server's backup comes back from
+     *  the pieces other accounts' servers keep (docs/peer-backup.md). */
+    onRestoreFromPeers: () -> Unit = {},
     /** "Co-manage a running server": accept a server another account
      *  shares (docs/share-a-server.md), from the Add/Import chooser. */
     onCoManage: () -> Unit = {},
@@ -184,6 +187,12 @@ fun HomeScreen(
                         modifier = Modifier.testTag("home-import-backup"),
                     ) {
                         androidx.compose.material3.Text("Import a backup")
+                    }
+                    androidx.compose.material3.TextButton(
+                        onClick = { showAddOrImport = false; onRestoreFromPeers() },
+                        modifier = Modifier.testTag("home-restore-peers"),
+                    ) {
+                        androidx.compose.material3.Text("Restore from other servers")
                     }
                 }
             },

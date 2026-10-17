@@ -368,4 +368,4 @@ internal const val SECOND_PASSKEY_PROMPT =
 
 /** Where restoring happens (iOS RecoveryScreen's line). */
 internal const val RECOVER_ON_NEW_DEVICE =
-    "If you lose this device, install Flagship on a new one, choose \"I already have an account,\" and recover with your passphrase."
+    "If you lose this device, install Flagship on a new one, choose \"Connect to an existing account,\" and recover with your passphrase."

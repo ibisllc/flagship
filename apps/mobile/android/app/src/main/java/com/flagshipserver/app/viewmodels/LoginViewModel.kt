@@ -1,7 +1,7 @@
 // Phase 3 (login redesign) — REAL single/multi login state machine.
 //
 // The sign-in space is access-control EVALUATION, not a fetch. Phase 1's
-// JoinAccountContainer resolves a bare username (GET /api/account/
+// ConnectAccountScreen resolves a bare username (GET /api/account/
 // resolve/<u>, 200 ALWAYS) and, for `kind == single | multi`, handed off
 // to the legacy WebAuthn-PRF recovery container (a stopgap that paired
 // with `username = "recovered-user"` and never installed the recovered

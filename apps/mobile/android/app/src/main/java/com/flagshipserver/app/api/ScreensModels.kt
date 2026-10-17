@@ -1362,10 +1362,74 @@ data class PeerBackupStatusResponse(
     val shards: List<PeerBackupShardSummary>,
     val repair: PeerBackupRepairStatus,
     val stats: PeerBackupStats,
+    // v2 (docs/peer-backup.md): the engine's own screen. Absent on a box that
+    // still runs the pre-v2 engine (then [v] is null and the app says to update).
+    val v: Int? = null,
+    val state: String? = null,
+    val reason: String? = null,
+    val policy: String? = null,
+    val healthyBricks: Int? = null,
+    val totalBricks: Int? = null,
+    val lastPlacedAt: Long? = null,
+    val archiveCreatedAt: Long? = null,
+    val holderList: List<PeerBackupHolder>? = null,
+    val keepUntil: Long? = null,
+    val hosting: PeerBackupHosting? = null,
+)
+
+/** One server holding a piece of this server's newest backup (never named: Server 1..n). */
+@Serializable
+data class PeerBackupHolder(
+    val label: String,
+    /** `ok` | `checking` | `failing` | `offline` */
+    val state: String,
+    val lastProofAt: Long? = null,
+    val bricks: Int = 0,
+)
+
+/** What this server keeps for others. */
+@Serializable
+data class PeerBackupHosting(
+    val poolBytes: Long = 0,
+    val realBytes: Long = 0,
+    val fillerBytes: Long = 0,
+    val provenBytes: Long = 0,
+    val leases: Int = 0,
+    val bricks: Int = 0,
+    val reliability: Int? = null,
+    val leaving: Boolean = false,
 )
 
 @Serializable
 data class PeerBackupToggleRequest(val participate: Boolean)
+
+// ---------- Restore from other servers (docs/peer-backup.md §9) ----------
+
+@Serializable
+data class PeerRootRequest(val serverId: String, val pbkHex: String)
+
+@Serializable
+data class PeerRootArchive(
+    val archiveId: String,
+    val createdAt: Long = 0,
+    val bytes: Long,
+    val sha256: String,
+    /** The small `.flagship` metadata part as the lost server wrote it (JSON text). */
+    val backupFile: String,
+)
+
+/** A lost server's record, as a running box or the sealed copy on `.com` says. */
+@Serializable
+data class PeerRootSummary(
+    val serverId: String,
+    val generation: Long? = null,
+    val revision: Long? = null,
+    val createdAt: Long? = null,
+    val archive: PeerRootArchive,
+    val holders: Int = 0,
+    val needed: Int = 1,
+    val keepUntil: Long = 0,
+)
 
 // ---------- P14 — companion-dock (browser pairing tickets) -------------
 //

@@ -18,6 +18,7 @@
 //   (Android only)              ↔ --ez flagship.smokeLive true   (keep the LIVE
 //                                  clients; pair with flagship.apexHost set to
 //                                  an unreachable host so nothing leaves the device)
+//   iOS -smoke-onboarding       ↔ --ez flagship.smokeOnboarding true
 //
 // PRODUCTION SAFETY: MainActivity only calls into here when the app is
 // debuggable (ApplicationInfo.FLAG_DEBUGGABLE) AND the smokeMode extra is set —
@@ -66,6 +67,8 @@ data class SmokeModeConfig(
     /** The mock box's saved backups and policy (iOS `-smoke-backups`):
      *  "empty" | "failed" | "unset" | "over" | "restore-partial" | null (the default box). */
     val backups: String? = null,
+    /** Start unpaired on Welcome against the mock clients (iOS `-smoke-onboarding`). */
+    val onboarding: Boolean = false,
 ) {
     companion object {
         const val EXTRA_SMOKE_MODE = "flagship.smokeMode"
@@ -83,6 +86,7 @@ data class SmokeModeConfig(
         const val EXTRA_SMOKE_REAL_BIOMETRICS = "flagship.smokeRealBiometrics"
         const val EXTRA_SMOKE_PERSIST_SESSION = "flagship.smokePersistSession"
         const val EXTRA_SMOKE_BACKUPS = "flagship.smokeBackups"
+        const val EXTRA_SMOKE_ONBOARDING = "flagship.smokeOnboarding"
 
         const val SMOKE_USERNAME = "smoketest"
 
@@ -111,6 +115,7 @@ data class SmokeModeConfig(
                 persistSession = intent.getBooleanExtra(EXTRA_SMOKE_PERSIST_SESSION, false),
                 backups = intent.getStringExtra(EXTRA_SMOKE_BACKUPS)?.trim()?.lowercase()
                     ?.takeIf { it in setOf("empty", "failed", "unset", "over", "restore-partial") },
+                onboarding = intent.getBooleanExtra(EXTRA_SMOKE_ONBOARDING, false),
             )
         }
     }
@@ -128,6 +133,11 @@ object SmokeMode {
         operations: ActiveOperationsCenter,
         trust: TrustCenter,
     ): RootDestination {
+        if (config.onboarding) {
+            if (appState.isPaired.value) appState.signOut()
+            GymSeams.bypassBiometricGates = true
+            return config.tab
+        }
         if (!appState.isPaired.value) {
             val user = config.username
             val pods = when (config.podsVariant) {

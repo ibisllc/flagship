@@ -37,6 +37,143 @@ const EVERY_MERGE: readonly Scenario[] = [
     },
   ),
   android(
+    "android-connect-account-page",
+    "Welcome offers Create your account + one Connect to an existing account; the connect page holds sign-in by account name above an 'or' and the pairing code (scan + paste) below; a name in the code field gets a sentence (flagship.smokeOnboarding).",
+    `${PKG}.GymOnboardingTest#connectPageHoldsSignInAndPairing`,
+    {
+      steps: [
+        { kind: "launch", describe: "Launch with flagship.smokeOnboarding (unpaired, mock clients)." },
+        { kind: "tap", describe: "Connect to an existing account.", handle: "welcome-connect" },
+        { kind: "tap", describe: "Join with an account name typed as the code.", handle: "connect-pair-continue" },
+      ],
+      assertions: [
+        { describe: "Sign-in field", handle: "connect-name-field", expect: "present" },
+        { describe: "Scan a code", handle: "connect-scan", expect: "present" },
+      ],
+      screenshots: [shot("welcome", "Welcome."), shot("connect-account", "The connect page.")],
+      dimension: "D1",
+    },
+  ),
+  android(
+    "android-lock-footer",
+    "The lock screen ends like Welcome: Unlock, Sign out right below, a gap, then Patent Pending above the navigation bar.",
+    `${PKG}.GymOnboardingTest#lockScreenSharesTheWelcomeFooter`,
+    {
+      steps: [
+        { kind: "launch", describe: "Launch smokeTab=settings." },
+        { kind: "tap", describe: "Lock.", handle: "settings-lock-btn" },
+      ],
+      assertions: [
+        { describe: "Unlock", handle: "biometric-unlock-btn", expect: "present" },
+        { describe: "Sign out", handle: "lock-sign-out-btn", expect: "present" },
+        { describe: "Patent Pending", handle: "patent-pending", expect: "present" },
+      ],
+      screenshots: [shot("lock-screen", "The lock screen's footer.")],
+      dimension: "D7",
+    },
+  ),
+  android(
+    "android-connect-link-to-join",
+    "A pairing link typed into the account-name field opens the join flow (flagship.smokeOnboarding).",
+    `${PKG}.GymOnboardingTest#pairingLinkTypedAsTheNameOpensJoin`,
+    {
+      steps: [
+        { kind: "type", describe: "Paste a /join link as the name.", handle: "connect-name-field" },
+        { kind: "tap", describe: "Continue.", handle: "connect-name-continue" },
+      ],
+      assertions: [{ describe: "Join screen", handle: "join-device", expect: "present" }],
+      screenshots: [shot("connect-link-to-join", "The join flow.")],
+      dimension: "D1",
+    },
+  ),
+  android(
+    "android-add-device-non-admin",
+    "Adding a device is admin-only: on a non-admin device Add device is disabled and the sentence 'Only an admin device of this account can add devices.' shows.",
+    `${PKG}.GymAddDeviceTest#nonAdminDeviceCannotAddADevice`,
+    {
+      steps: [
+        { kind: "launch", describe: "Launch smokeTab=settings (non-admin device)." },
+        { kind: "tap", describe: "Trusted devices." },
+      ],
+      assertions: [{ describe: "Add device", handle: "trusted-devices-add", expect: "present" }],
+      screenshots: [shot("add-device-non-admin", "Add device disabled with the sentence.")],
+      dimension: "D1",
+    },
+  ),
+  android(
+    "android-add-device-admin",
+    "An admin device opens the pairing code from Trusted devices > Add device.",
+    `${PKG}.GymAddDeviceTest#adminDeviceOpensThePairingCode`,
+    {
+      steps: [
+        { kind: "launch", describe: "Launch smokeTab=settings with the admin root." },
+        { kind: "tap", describe: "Trusted devices, then Add device.", handle: "trusted-devices-add" },
+      ],
+      assertions: [{ describe: "Add a device", handle: "add-device", expect: "present" }],
+      screenshots: [shot("add-device-admin", "The pairing code.")],
+      dimension: "D1",
+    },
+  ),
+  android(
+    "android-peer-backup-status",
+    "Settings > Peer-backup shows the v2 status: the state, the servers holding the pieces as Server 1..n (never named), the restore-by date and what this server keeps for others.",
+    `${PKG}.GymPeerBackupTest#theStatusPageNamesServersNotOwners`,
+    {
+      steps: [
+        { kind: "launch", describe: "Launch smokeTab=settings." },
+        { kind: "tap", describe: "Peer-backup." },
+      ],
+      assertions: [
+        { describe: "Protected", handle: "peer-backup-state-protected", expect: "present" },
+        { describe: "Holders", handle: "peer-backup-holder", expect: "present" },
+        { describe: "Restore by", handle: "peer-backup-restore-by", expect: "present" },
+      ],
+      screenshots: [shot("peer-backup-status", "The peer backup status.")],
+      dimension: "D1",
+    },
+  ),
+  android(
+    "android-restore-from-peers-find",
+    "Add/Import a server > Restore from other servers: the lost server's record is read, opened with this account's key and summarised; a missing record gets a sentence.",
+    `${PKG}.GymPeerBackupTest#restoreFromOtherServersFindsAndOpensTheRecord`,
+    {
+      steps: [
+        { kind: "launch", describe: "Launch smokeTab=home with the admin root." },
+        { kind: "tap", describe: "Add/Import a server, then Restore from other servers.", handle: "home-restore-peers" },
+        { kind: "type", describe: "The lost server's address.", handle: "restore-peers-lost" },
+        { kind: "tap", describe: "Find its backup.", handle: "restore-peers-find" },
+      ],
+      assertions: [{ describe: "Name step", handle: "import-backup-name", expect: "present" }],
+      screenshots: [shot("restore-peers-found", "The record found.")],
+      dimension: "D1",
+    },
+  ),
+  android(
+    "android-restore-from-peers-not-found",
+    "A lost server with no peer backup record gets the box's sentence and the picker stays.",
+    `${PKG}.GymPeerBackupTest#aMissingRecordSaysSo`,
+    {
+      steps: [{ kind: "tap", describe: "Find its backup for a server with no record.", handle: "restore-peers-find" }],
+      assertions: [{ describe: "Error", handle: "import-backup-error", expect: "present" }],
+      screenshots: [shot("restore-peers-not-found", "The sentence.")],
+      dimension: "D1",
+    },
+  ),
+  android(
+    "android-restore-from-peers-waiting-server",
+    "A server waiting for this backup fetches the pieces from other servers (nothing is uploaded from the phone), the phone commits the key and the apps restore.",
+    `${PKG}.GymPeerBackupTest#aWaitingServerFetchesThePiecesAndRestores`,
+    {
+      steps: [
+        { kind: "launch", describe: "Launch with the awaiting-backup server." },
+        { kind: "tap", describe: "Send it to the waiting server.", handle: "import-backup-send-existing" },
+      ],
+      assertions: [{ describe: "Restored", handle: "import-backup-restored", expect: "present" }],
+      screenshots: [shot("restore-peers-done", "The restore result.")],
+      dimension: "D1",
+    },
+  ),
+  android(
     "android-home-tab",
     "The Home tab renders its large-title landmark in smoke mode.",
     `${PKG}.GymEveryMergeTest#homeTabRenders`,

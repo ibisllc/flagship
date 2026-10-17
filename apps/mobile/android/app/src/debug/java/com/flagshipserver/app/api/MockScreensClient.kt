@@ -939,6 +939,24 @@ class MockScreensClient(
         tick()
         peerBackupStatusFixture?.let { return it }
         return PeerBackupStatusResponse(
+            v = 2,
+            state = "protected",
+            policy = "peer",
+            healthyBricks = 8,
+            totalBricks = 9,
+            lastPlacedAt = now() - 3_600_000L * 5,
+            archiveCreatedAt = now() - 3_600_000L * 6,
+            keepUntil = now() + 3_600_000L * 24 * 60,
+            holderList = listOf(
+                PeerBackupHolder("Server 1", "ok", now() - 3_600_000L * 2, 3),
+                PeerBackupHolder("Server 2", "ok", now() - 3_600_000L * 3, 3),
+                PeerBackupHolder("Server 3", "failing", now() - 3_600_000L * 30, 3),
+            ),
+            hosting = PeerBackupHosting(
+                poolBytes = 40L * 1024 * 1024 * 1024, realBytes = 6L * 1024 * 1024 * 1024,
+                fillerBytes = 34L * 1024 * 1024 * 1024, provenBytes = 40L * 1024 * 1024 * 1024,
+                leases = 4, bricks = 24, reliability = 97, leaving = false,
+            ),
             participating = false,
             peersBackingYouUp = emptyList(),
             peersYouBackUp = emptyList(),
@@ -1199,8 +1217,35 @@ class MockScreensClient(
         restoreCommits += req
     }
 
+    /** The lost server's record a running box would answer (null: nothing found). */
+    var peerRootFixture: PeerRootSummary? = null
+    val peerRootRequests: MutableList<PeerRootRequest> = mutableListOf()
+    val peerFetches: MutableList<PeerRootRequest> = mutableListOf()
+
+    override suspend fun peerBackupRoot(req: PeerRootRequest): PeerRootSummary {
+        tick()
+        peerRootRequests += req
+        return peerRootFixture ?: throw ScreensError.Http(404, "{\"error\":\"No peer backup of that server was found.\"}")
+    }
+
+    override suspend fun serverRestoreFromPeers(req: PeerRootRequest) {
+        tick()
+        peerFetches += req
+        val w = restoreWaiting ?: throw ScreensError.Http(409, "{\"error\":\"this server isn't waiting for a backup\"}")
+        restoreStarts += ServerRestoreStartRequest(w.archiveId, w.bytes)
+    }
+
     override suspend fun serverRestoreStatus(): ServerRestoreStatusResponse {
         tick()
+        if (peerFetches.isNotEmpty() && restoreCommits.isEmpty()) {
+            val w = restoreWaiting
+            if (w != null) {
+                return ServerRestoreStatusResponse(
+                    waiting = w,
+                    restore = ServerRestoreStatus(archiveId = w.archiveId, state = "ready", bytes = w.bytes, received = w.bytes),
+                )
+            }
+        }
         val id = restoreStarts.lastOrNull()?.archiveId
         if (id == null || restoreCommits.isEmpty()) return ServerRestoreStatusResponse(waiting = restoreWaiting, restore = null)
         val failed = restoreFailure != null

@@ -1,175 +1,80 @@
-// P9 — PeerBackupViewModel state machine + toggle round-trip.
-//
-// Mirrors FlagshipMobileTests/PeerBackupViewModelTests.swift 1:1:
-//   - default fixture is honest-empty (matches the daemon's honest default).
-//   - load() Idle → Loading → Loaded transition.
-//   - toggle() flips and re-stores via the same wire shape.
-//   - toggle() before load() defaults to participate=true (matches iOS).
-//   - failures land in LoadingState.Failed.
+// Peer-backup status view model: loads the v2 screen and humanises failures.
+// Mirrors the webapp's views/peer-backup.js (the participation toggle is gone:
+// peer backup is a backup policy now).
 
 package com.flagshipserver.app.viewmodels
 
 import com.flagshipserver.app.api.MockScreensClient
-import com.flagshipserver.app.api.PeerBackupPeerHostingYou
-import com.flagshipserver.app.api.PeerBackupPeerYouHost
-import com.flagshipserver.app.api.PeerBackupRepairStatus
-import com.flagshipserver.app.api.PeerBackupShardSummary
-import com.flagshipserver.app.api.PeerBackupStats
+import com.flagshipserver.app.api.PeerBackupHolder
 import com.flagshipserver.app.api.PeerBackupStatusResponse
 import com.flagshipserver.app.api.ScreensClient
 import com.flagshipserver.app.api.ScreensError
+import com.flagshipserver.app.core.PeerBackup
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class PeerBackupViewModelTest {
 
-    @Test fun mockDefault_isHonestEmpty() = runTest {
-        val client = MockScreensClient(simulatedLatencyMs = 0)
-        val r = client.peerBackupStatus()
-        assertFalse(r.participating)
-        assertTrue(r.peersBackingYouUp.isEmpty())
-        assertTrue(r.peersYouBackUp.isEmpty())
-        assertTrue(r.shards.isEmpty())
-        assertEquals(0, r.stats.total)
-        assertEquals(0, r.stats.durable)
-        assertEquals(0, r.stats.atRisk)
-        assertEquals(0L, r.stats.yourBytesStored)
-        assertEquals(0L, r.stats.peerBytesHosted)
-        assertEquals("idle", r.repair.state)
-        assertNull(r.repair.lastTickMs)
-        assertEquals(0, r.repair.queued)
-        assertEquals(0, r.repair.completed24h)
-        assertNull(r.repair.lastError)
+    @Test fun mockDefault_isTheV2Screen() = runTest {
+        val r = MockScreensClient(simulatedLatencyMs = 0).peerBackupStatus()
+        assertEquals(2, r.v)
+        assertEquals("protected", r.state)
+        assertEquals(listOf("Server 1", "Server 2", "Server 3"), r.holderList!!.map { it.label })
     }
 
-    @Test fun load_defaultFixture_landsLoaded() = runTest {
-        val client = MockScreensClient(simulatedLatencyMs = 0)
-        val vm = PeerBackupViewModel(client, scope = backgroundScope)
+    @Test fun load_landsLoadedWithTheV2Fields() = runTest {
+        val vm = PeerBackupViewModel(MockScreensClient(simulatedLatencyMs = 0), scope = backgroundScope)
         vm.load().join()
         val s = vm.state.first() as LoadingState.Loaded
-        assertFalse(s.value.participating)
-        assertTrue(s.value.peersBackingYouUp.isEmpty())
+        assertEquals(8, s.value.healthyBricks)
+        assertEquals(9, s.value.totalBricks)
+        val rows = PeerBackup.holderRows(s.value, formatTime = { "T" })
+        assertEquals(3, rows.size)
+        assertEquals("Server 1", rows[0].label)
+        assertTrue(rows[2].line, rows[2].line.startsWith("Not answering"))
     }
 
     @Test fun load_pinnedFixture_isReturnedVerbatim() = runTest {
+        val base = MockScreensClient(simulatedLatencyMs = 0).peerBackupStatus()
         val client = MockScreensClient(simulatedLatencyMs = 0).apply {
-            peerBackupStatusFixture = PeerBackupStatusResponse(
-                participating = true,
-                peersBackingYouUp = listOf(
-                    PeerBackupPeerHostingYou(
-                        peerFqdn = "bob.bob.flagship.services",
-                        shardsHosted = 4,
-                        lastSeenMs = 1_700_000_000_000L,
-                        online = true,
-                    ),
-                ),
-                peersYouBackUp = listOf(
-                    PeerBackupPeerYouHost(
-                        peerFqdn = "carol.carol.flagship.services",
-                        shardsHosted = 7,
-                        bytesHosted = 1024L * 1024,
-                        lastFetchedMs = 1_700_000_001_000L,
-                    ),
-                ),
-                shards = listOf(
-                    PeerBackupShardSummary(shardId = "deadbeef", replicas = 3, minReplicas = 3, bytes = 0L),
-                    PeerBackupShardSummary(shardId = "feedface", replicas = 1, minReplicas = 3, bytes = 0L),
-                ),
-                repair = PeerBackupRepairStatus(
-                    state = "running",
-                    lastTickMs = 1_700_000_002_000L,
-                    queued = 2,
-                    completed24h = 17,
-                    lastError = null,
-                ),
-                stats = PeerBackupStats(
-                    total = 2, durable = 1, atRisk = 1,
-                    yourBytesStored = 0L, peerBytesHosted = 1024L * 1024,
-                ),
-            )
+            peerBackupStatusFixture = base.copy(state = "at-risk", holderList = listOf(PeerBackupHolder("Server 1", "offline", null, 0)))
         }
         val vm = PeerBackupViewModel(client, scope = backgroundScope)
         vm.load().join()
         val s = vm.state.first() as LoadingState.Loaded
-        assertTrue(s.value.participating)
-        assertEquals(1, s.value.peersBackingYouUp.size)
-        assertEquals("bob.bob.flagship.services", s.value.peersBackingYouUp.first().peerFqdn)
-        assertEquals(4, s.value.peersBackingYouUp.first().shardsHosted)
-        assertTrue(s.value.peersBackingYouUp.first().online)
-        assertEquals(1024L * 1024, s.value.peersYouBackUp.first().bytesHosted)
-        assertEquals(2, s.value.shards.size)
-        assertEquals(1, s.value.stats.atRisk)
-        assertEquals("running", s.value.repair.state)
-        assertEquals(17, s.value.repair.completed24h)
+        assertEquals("at-risk", s.value.state)
+        assertEquals("Offline · no proof yet · 0 pieces", PeerBackup.holderRows(s.value)[0].line)
     }
 
-    @Test fun toggle_fromUnenrolled_flipsToParticipating() = runTest {
-        val client = MockScreensClient(simulatedLatencyMs = 0)
-        val vm = PeerBackupViewModel(client, scope = backgroundScope)
+    private fun failing(status: Int): ScreensClient = object : ScreensClient by MockScreensClient(simulatedLatencyMs = 0) {
+        override suspend fun peerBackupStatus(): PeerBackupStatusResponse = throw ScreensError.Http(status, "transport down")
+    }
+
+    @Test fun load_aBoxWithoutTheEndpointSaysToUpdate() = runTest {
+        val vm = PeerBackupViewModel(failing(404), scope = backgroundScope)
         vm.load().join()
-        vm.toggle().join()
-        assertEquals(listOf(true), client.togglePeerBackupCalls)
-        val s = vm.state.first() as LoadingState.Loaded
-        assertTrue(s.value.participating)
+        assertEquals(PeerBackup.OLDER_ENGINE, (vm.state.first() as LoadingState.Failed).message)
     }
 
-    @Test fun toggle_fromParticipating_flipsToUnenrolled() = runTest {
-        val client = MockScreensClient(simulatedLatencyMs = 0).apply {
-            peerBackupStatusFixture = PeerBackupStatusResponse(
-                participating = true,
-                peersBackingYouUp = emptyList(),
-                peersYouBackUp = emptyList(),
-                shards = emptyList(),
-                repair = PeerBackupRepairStatus(
-                    state = "idle", lastTickMs = null, queued = 0, completed24h = 0, lastError = null,
-                ),
-                stats = PeerBackupStats(0, 0, 0, 0L, 0L),
-            )
-        }
-        val vm = PeerBackupViewModel(client, scope = backgroundScope)
+    @Test fun load_notSetUpSaysSo() = runTest {
+        val vm = PeerBackupViewModel(failing(503), scope = backgroundScope)
         vm.load().join()
-        vm.toggle().join()
-        assertEquals(listOf(false), client.togglePeerBackupCalls)
-        val s = vm.state.first() as LoadingState.Loaded
-        assertFalse(s.value.participating)
+        assertEquals(PeerBackupViewModel.NOT_SET_UP, (vm.state.first() as LoadingState.Failed).message)
     }
 
-    @Test fun toggle_beforeLoad_sendsTrue() = runTest {
-        val client = MockScreensClient(simulatedLatencyMs = 0)
-        val vm = PeerBackupViewModel(client, scope = backgroundScope)
-        vm.toggle().join()
-        assertEquals(listOf(true), client.togglePeerBackupCalls)
-    }
-
-    @Test fun load_transportError_landsInFailed() = runTest {
-        val throwing = object : ScreensClient by MockScreensClient(simulatedLatencyMs = 0) {
-            override suspend fun peerBackupStatus(): PeerBackupStatusResponse =
-                throw ScreensError.Http(503, "transport down")
-        }
-        val vm = PeerBackupViewModel(throwing, scope = backgroundScope)
+    @Test fun load_transportError_landsInFailedHumanised() = runTest {
+        val vm = PeerBackupViewModel(failing(500), scope = backgroundScope)
         vm.load().join()
         val s = vm.state.first()
         assertTrue("expected Failed, was $s", s is LoadingState.Failed)
         val msg = (s as LoadingState.Failed).message
-        // UX-B: the raw status / body is humanized away.
-        assertFalse(msg, msg.contains("503") || msg.contains("transport down"))
+        assertFalse(msg, msg.contains("500") || msg.contains("transport down"))
         assertTrue(msg, msg.contains("try again", ignoreCase = true))
-    }
-
-    @Test fun toggle_transportError_landsInFailed() = runTest {
-        val client = MockScreensClient(simulatedLatencyMs = 0)
-        val vm = PeerBackupViewModel(client, scope = backgroundScope)
-        vm.load().join()
-        client.shouldFail = true
-        vm.toggle().join()
-        val s = vm.state.first()
-        assertTrue("expected Failed, was $s", s is LoadingState.Failed)
     }
 }
