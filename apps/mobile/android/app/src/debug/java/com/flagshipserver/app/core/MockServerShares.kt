@@ -94,7 +94,9 @@ class MockShareWorld(
     private val ownerOf = mapOf(
         homeDomain to phone,
         MockServerShares.GARAGE_DOMAIN to jordan,
+        MockServerShares.CABIN_DOMAIN to jordan,
         MockServerShares.PHOTOS_DOMAIN to mina,
+        MockServerShares.STUDIO_DOMAIN to mina,
     )
 
     /** Co-manager updates the Garage box took (target commits). */
