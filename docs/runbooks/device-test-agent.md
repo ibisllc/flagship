@@ -66,8 +66,9 @@ build, then:
 2. **Remote.** Open `https://remote.flagshipserver.com/`: a QR shows at once;
    Harry scans it, picks a server, approves. Pass = the browser opens that
    server's page.
-3. **Backup to this PC.** On a disposable server: Backup → download both files
-   (`.flagship-backup` + `.flagship-data`) to the PC. Then Add/Import a server →
+3. **Backup to this PC.** On a disposable server: Backups → Back up now (a
+   passcode is required; the app says why) → download the single `.flagship`
+   file to the PC. Then Add/Import a server →
    Import a backup onto a new server hosted by Studio on this PC. Pass = the
    apps come back and open.
 4. **USB burn + metal boot.** Section 2.7: burn a stick with Wi-Fi, boot a spare
