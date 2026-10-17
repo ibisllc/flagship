@@ -20,6 +20,9 @@ public struct PendingServerScreen: View {
     /// directory's `pending[].phase` instead of the per-order endpoint).
     let username: String?
     var onCancelOrder: () -> Void = {}
+    /// Set on a device that may not cancel (not an admin device): the
+    /// sentence shown instead of Cancel order.
+    var cancelRefusal: String?
     /// Live "this box is waiting for a boot-unlock approval" signal, computed by
     /// the container from the account-level 5s watcher set (the per-pod flag
     /// alone is stale between full reconciles). Feeds the on-checklist Approve
@@ -28,7 +31,9 @@ public struct PendingServerScreen: View {
 
     @State private var timeline: ProvisionTimelineViewModel?
 
-    public init(pod: PodInfo, username: String? = nil, awaitingUnlock: Bool = false, onCancelOrder: @escaping () -> Void = {}) {
+    public init(pod: PodInfo, username: String? = nil, awaitingUnlock: Bool = false, cancelRefusal: String? = nil,
+                onCancelOrder: @escaping () -> Void = {}) {
+        self.cancelRefusal = cancelRefusal
         self.pod = pod
         self.username = username
         self.awaitingUnlock = awaitingUnlock
@@ -98,8 +103,15 @@ public struct PendingServerScreen: View {
                     .padding(.vertical, FS.space.s3)
                 }
 
-                FSDangerButton("Cancel order", block: true, large: true, action: onCancelOrder)
-                    .accessibilityIdentifier("pending-cancel-order-button")
+                if let cancelRefusal {
+                    Text(cancelRefusal)
+                        .font(FS.font.bodySm())
+                        .foregroundColor(c.textMuted)
+                        .accessibilityIdentifier("pending-cancel-admin-only")
+                } else {
+                    FSDangerButton("Cancel order", block: true, large: true, action: onCancelOrder)
+                        .accessibilityIdentifier("pending-cancel-order-button")
+                }
 
                 Spacer().frame(height: FS.space.s12)
             }

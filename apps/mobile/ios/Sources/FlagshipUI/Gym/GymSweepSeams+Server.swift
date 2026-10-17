@@ -16,8 +16,68 @@ extension GymSweepSeams {
     /// picker can't be driven from a test). Set by `-smoke-restore-*`.
     @MainActor public static var importFile: URL?
 
+    /// A scripted builder peer for "Pair with the builder app"
+    /// (`-smoke-builder-peer`); nil uses the live relay.
+    static var builderPairClient: (any BuilderPairClient)?
+    static let gymFirewallReason = "its internet firewall isn't running: nftables isn't installed"
+    static let gymGvisorReason = "runsc failed its test container"
+
     /// Server seams for GymSweepServerTests.
     static func server(_ args: [String], _ app: AppState, _ mocks: GymMocks) {
+        // Every launch: what the server page's cards read from their mocks.
+        mocks.frontPage.options = [
+            FrontPageOption(urlLabel: "plants", name: "Plants"),
+            FrontPageOption(urlLabel: "wiki", name: "Wiki"),
+        ]
+        mocks.lockPower.journalLines = ["gym: flagship-daemon started", "gym: serving 2 apps"]
+        mocks.migration.scripted = true
+
+        // `-smoke-server-fresh`: forget what earlier runs left in this
+        // simulator's defaults (lock-down policies, pending updates).
+        if args.contains("-smoke-server-fresh") {
+            for pod in app.pods where !pod.fqdn.isEmpty {
+                DeadManStore().clear(for: pod.fqdn)
+                PendingUpdateStore().clear(serverFqdn: pod.fqdn)
+            }
+        }
+        // `-smoke-server-identity`: the online servers' STKs are known, so a
+        // delete also deposits the erase order.
+        if args.contains("-smoke-server-identity") || args.contains("-smoke-server-directory") {
+            for pod in app.pods where pod.status == .online {
+                app.upsertRegisteredPod(fqdn: pod.fqdn, name: pod.name, liveness: .live,
+                                        identityPubKeyHex: stkHex(pod.fqdn))
+            }
+        }
+        // `-smoke-server-directory`: `.com`'s directory lists the online
+        // servers with their STKs and peer-backup is on, so Migrate can start.
+        if args.contains("-smoke-server-directory") {
+            let now = Int64(Date().timeIntervalSince1970 * 1000)
+            mocks.mailbox.directory = app.pods.filter { $0.status == .online }.map {
+                PodDirectoryEntry(serverDomain: $0.fqdn, identityPubKey: stkHex($0.fqdn), lastReported: now,
+                                  registeredAt: now - 86_400_000, hasCert: true, liveness: "live", lastSeenMsAgo: 0)
+            }
+            mocks.screens.peerBackupStatusFixture = PeerBackupStatusResponse(
+                participating: true,
+                peersBackingYouUp: [PeerBackupPeerHostingYou(peerFqdn: "office.bright-maple.flagship.services",
+                                                             shardsHosted: 4, lastSeenMs: now, online: true)],
+                peersYouBackUp: [], shards: [],
+                repair: PeerBackupRepairStatus(state: "idle", lastTickMs: nil, queued: 0, completed24h: 0, lastError: nil),
+                stats: PeerBackupStats(total: 4, durable: 4, atRisk: 0, yourBytesStored: 4096, peerBytesHosted: 0))
+        }
+        if args.contains("-smoke-sandbox-firewall-down") {
+            mocks.screens.appSandboxFixture = AppSandbox(state: "unavailable", reason: gymFirewallReason)
+        } else if args.contains("-smoke-sandbox-gvisor-down") {
+            mocks.screens.appSandboxFixture = AppSandbox(state: "unavailable", reason: gymGvisorReason)
+        }
+        // `-smoke-update-stale`: Home was sent an update 31 minutes ago and
+        // hasn't applied it (Send again / Forget it).
+        if args.contains("-smoke-update-stale"), let home = app.pods.first(where: { $0.status == .online }) {
+            let now = Int64(Date().timeIntervalSince1970 * 1000)
+            PendingUpdateStore().save(
+                PendingUpdateOrder(targetCommit: String(repeating: "4b1e0c9d", count: 5), targetTag: "v0.0.0-gym",
+                                   fromCommit: "9f2c1ab3de4567890abcdef1234567890abcdef1", orderedAt: now - 31 * 60_000),
+                serverFqdn: home.fqdn)
+        }
         let s = mocks.screens
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         let day: Int64 = 86_400_000
@@ -111,12 +171,27 @@ extension GymSweepSeams {
                 importFile = url
             }
         }
+        // `-smoke-import-archive [other]`: a backup Import opens by itself
+        // (made on this account, or `other` for another account's).
+        if args.contains("-smoke-import-archive") {
+            let other = value(args, "-smoke-import-archive") == "other"
+            if let made = try? makeBackupFile(server: "attic.bright-maple.flagship.services", otherAccount: other) {
+                importFile = made.url
+                mocks.screens.restoreWaiting = ServerRestoreWaiting(archiveId: restoreArchiveId, bytes: made.dataBytes, sha256: made.sha256)
+            }
+        }
+        builderPairClient = args.contains("-smoke-builder-peer") ? GymBuilderPairClient() : nil
+    }
+
+    /// A stable fake STK for a server.
+    static func stkHex(_ fqdn: String) -> String {
+        HexUtil.encode(Data(SHA256.hash(data: Data("gym-stk|\(fqdn.lowercased())".utf8))))
     }
 
     /// A real one-file backup of `server` with this smoke account's account
     /// slot, so Import opens it with the account key as on a phone.
-    static func makeBackupFile(server: String) throws -> (url: URL, dataBytes: Int64, sha256: String, metaJson: String) {
-        guard let seed = GymSeams.accountRootSeed, let kek = ServerArchive.deriveKey(umkSeed: seed, archiveId: restoreArchiveId) else {
+    static func makeBackupFile(server: String, otherAccount: Bool = false) throws -> (url: URL, dataBytes: Int64, sha256: String, metaJson: String) {
+        guard let seed = otherAccount ? Data(repeating: 0x11, count: 32) : GymSeams.accountRootSeed, let kek = ServerArchive.deriveKey(umkSeed: seed, archiveId: restoreArchiveId) else {
             throw CocoaError(.featureUnsupported)
         }
         let data = Data(ServerBackupFormat.dataMagic.utf8) + Data((0..<(6 << 20)).map { UInt8(($0 * 13) & 0xff) })
@@ -145,6 +220,35 @@ extension GymSweepSeams {
         let metaData = try JSONSerialization.data(withJSONObject: meta)
         try ServerBackupBundle.make(meta: metaData, data: data).write(to: url)
         return (url, Int64(data.count), sha, String(decoding: metaData, as: UTF8.self))
+    }
+}
+
+/// Gym-only builder peer: accepts the phone, greets it with a fixed key and
+/// confirms receipt of the recipe, as Flagship Studio does over the relay.
+final class GymBuilderPairClient: BuilderPairClient, @unchecked Sendable {
+    private var continuation: AsyncStream<BuilderInbound>.Continuation?
+    private let builderKey = Curve25519.KeyAgreement.PrivateKey()
+
+    func connect(sid: String) async throws -> AsyncStream<BuilderInbound> {
+        GymProbe.note("builder connected")
+        let pk = Base64URL.encode(builderKey.publicKey.rawRepresentation)
+        return AsyncStream { cont in
+            self.continuation = cont
+            cont.yield(.accepted)
+            cont.yield(.builderHello(builderPkB64: pk))
+        }
+    }
+
+    func send(_ frame: BuilderOutbound) async throws {
+        if case .deliver = frame {
+            GymProbe.note("recipe delivered to the builder")
+            continuation?.yield(.recipeAccepted)
+        }
+    }
+
+    func close() async {
+        continuation?.finish()
+        continuation = nil
     }
 }
 #endif

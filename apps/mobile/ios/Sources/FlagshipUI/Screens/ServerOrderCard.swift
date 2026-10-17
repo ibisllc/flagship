@@ -50,7 +50,7 @@ struct ServerOrderCard: View {
                                 .foregroundColor(c.text)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
-                        if position > 0 {
+                        if position > 0 && AdminOrderGate.allows(app) {
                             FSPrimaryButton(working ? "Saving…" : "Make leader", enabled: !working, block: true) {
                                 Task { await makeLeader(pod) }
                             }

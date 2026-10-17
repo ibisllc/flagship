@@ -62,7 +62,17 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
 
     // MARK: - P1.1 server-detail
 
+    /// What every server detail reports as its app sandbox (nil: absent, as
+    /// from an older daemon).
+    public var appSandboxFixture: AppSandbox?
+
     public func serverDetail() async throws -> ServerDetailResponse {
+        var detail = try await serverDetailFixture()
+        detail.appSandbox = appSandboxFixture
+        return detail
+    }
+
+    private func serverDetailFixture() async throws -> ServerDetailResponse {
         try await tick()
         if unreachablePodIds.contains(podContext) { throw URLError(.cannotConnectToHost) }
         let now = Int64(Date().timeIntervalSince1970 * 1000)
@@ -203,6 +213,20 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         try await tick()
         if let appsListError { throw appsListError }
         if let appsListFixture { return appsListFixture }
+        let all = try await defaultAppsList()
+        return AppsListResponse(apps: all.apps.filter { !hiddenApps.contains($0.serviceId) }.map { app in
+            var a = app
+            if membersOnlyApps.contains(a.serviceId) { a.accessMode = "members-only" }
+            return a
+        })
+    }
+
+    /// Apps this box doesn't have (filtered out of the default list).
+    public var hiddenApps: Set<String> = []
+    /// Apps the default list reports as members only.
+    public var membersOnlyApps: Set<String> = []
+
+    private func defaultAppsList() async throws -> AppsListResponse {
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         // url mirrors the live daemon's tier-1 form
         // `https://<urlLabel>.<serverFqdn>` (screensHttp builds it off the
@@ -247,6 +271,19 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                 installedAt: now - 60_000 * 60 * 24 * 12
             )
         ])
+    }
+
+    /// Set on the mock a co-manager's session reads a shared server through:
+    /// its orders verify under that share's member key, as the box checks a
+    /// share's orders (docs/share-a-server.md), not under the admin root.
+    public var signingShareId: String?
+
+    func requireOwnerOrShare(kind: String, signatureHex: String, over bytes: Data?) throws {
+        if let share = signingShareId {
+            try MockOrderSigners.shared.requireShare(shareId: share, kind: kind, signatureHex: signatureHex, over: bytes)
+        } else {
+            try MockOrderSigners.shared.require(.sensitive, kind: kind, signatureHex: signatureHex, over: bytes)
+        }
     }
 
     // MARK: - App copies (docs/app-placement.md §5)
@@ -418,7 +455,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                 throw refuse(403, "bad signature")
             }
         } else {
-            try MockOrderSigners.shared.require(.sensitive, kind: "app-access", signatureHex: req.signature, over: req.grant.canonicalBytes())
+            try requireOwnerOrShare(kind: "app-access", signatureHex: req.signature, over: req.grant.canonicalBytes())
         }
         if let last = mockAccessIssuedAt[serviceId], req.grant.issuedAt <= last {
             throw refuse(409, "not newer than the applied list")
@@ -449,6 +486,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public func serviceAccessDismiss(serviceId: String, host: String) async throws -> AppAccessState? {
         try await tick()
         serviceAccessDismissCalls.append((serviceId, host))
+        GymProbe.note("ignored \(host) for \(serviceId)")
         guard let current = mockAccess[serviceId] else {
             throw ScreensClientError.http(status: 404, message: #"{"error":"no such service"}"#)
         }
@@ -463,6 +501,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public func serviceAccessDraftDismiss(serviceId: String) async throws -> AppAccessState? {
         try await tick()
         serviceAccessDraftDismissCalls.append(serviceId)
+        GymProbe.note("dismissed draft for \(serviceId)")
         guard let current = mockAccess[serviceId] else {
             throw ScreensClientError.http(status: 404, message: #"{"error":"no such service"}"#)
         }
@@ -621,6 +660,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public func serviceDbExportCsv(serviceId: String, store: String, table: String) async throws -> Data {
         try await tick()
         serviceDbExportCalls.append(table)
+        GymProbe.note("exported csv \(table)")
         guard let t = try dbStore(serviceId, store)[table] else {
             throw dbRefuse(404, #"{"error":"no such table"}"#)
         }
@@ -668,7 +708,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
                     throw dbRefuse(403, #"{"error":"invalid signature"}"#)
                 }
             } else {
-                try MockOrderSigners.shared.require(.sensitive, kind: "app-db-write", signatureHex: sigHex, over: grant.canonicalBytes())
+                try requireOwnerOrShare(kind: "app-db-write", signatureHex: sigHex, over: grant.canonicalBytes())
             }
             let order = "\(grant.serviceId)|\(grant.store)|\(grant.sqlSha256)|\(grant.issuedAt)"
             if mockDbForceReplays > 0 || mockDbUsedOrders.contains(order) {
@@ -766,6 +806,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         }
         keys.removeAll { $0.keyId == keyId }
         mockApiKeys[serviceId] = keys
+        GymProbe.note("revoked api key \(keyId)")
     }
 
     private var accessEventContinuations: [AsyncStream<Void>.Continuation] = []
@@ -843,7 +884,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             throw ScreensClientError.http(status: 404, message: "no such app")
         }
         let now = Int64(Date().timeIntervalSince1970 * 1000)
-        return AppDetailResponse(
+        var detail = AppDetailResponse(
             app: app,
             manifest: [
                 "name": AnyCodable(app.slug),
@@ -856,7 +897,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             members: [
                 .init(stableIdPrefix: "ab12cd", role: "owner", addedAt: app.installedAt)
             ],
-            browserTabs: [],
+            browserTabs: (mockBrowserTabIds[serviceId] ?? []).map { .init(tabId: $0) },
             lastBackup: .init(backupId: "bk-\(app.slug)-001", createdAt: now - 60_000 * 60 * 2, bytes: 4_812_000),
             recentLogs: [
                 "[\(Self.relativeTime(60))] listening on :8080",
@@ -865,16 +906,33 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             ],
             storage: appStorageFixture[serviceId]
         )
+        if mockEditableApps.contains(serviceId) { detail.editable = true }
+        if let repo = mockAdaptedFrom[serviceId] { detail.adaptedFrom = .init(repo: repo) }
+        return detail
     }
+
+    /// Apps the box says can be edited here ("Edit this service").
+    public var mockEditableApps: Set<String> = []
+    /// Apps installed from a shared adaptation: serviceId → repo.
+    public var mockAdaptedFrom: [String: String] = [:]
+    /// Headless-browser tabs running for an app: serviceId → tab ids.
+    public var mockBrowserTabIds: [String: [String]] = [:]
 
     // MARK: - P1.5 vibe-code/start
 
+    /// Thrown by `vibeCodeStart`, once (an edit the box refuses).
+    public var vibeCodeStartError: Error?
+
     public func vibeCodeStart(_ req: VibeCodeStartRequest) async throws -> VibeCodeStartResponse {
         try await tick()
+        if let e = vibeCodeStartError { vibeCodeStartError = nil; throw e }
+        if let edit = req.editServiceId { GymProbe.note("started edit of \(edit)") }
         // Mirror the daemon's graceful-absence signal: a start with no BYOK
         // credential (and nothing stored) can't drive a model, so the box
         // answers `needsCredential: true` (the session still exists). The
         // client routes back into the AI-key step to deliver one + retry.
+        GymProbe.note("started chat: name=\(req.name ?? "-") visibility=\(req.visibility ?? "-") model=\(req.model ?? "-") "
+            + "effort=\(req.effort ?? "-") provider=\(req.credential?.provider ?? "none") attachments=\(req.attachments?.count ?? 0)")
         return VibeCodeStartResponse(
             sessionId: "vc-\(UUID().uuidString.prefix(8).lowercased())",
             needsCredential: req.credential == nil ? true : nil
@@ -915,7 +973,10 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
 
     public func browserTabsList(serviceId: String) async throws -> BrowserTabsListResponse {
         try await tick()
-        return BrowserTabsListResponse(tabs: [])
+        return BrowserTabsListResponse(tabs: (mockBrowserTabIds[serviceId] ?? []).map {
+            BrowserTab(tabId: $0, serviceId: serviceId, currentUrl: "https://example.com/\($0)", title: "Tab \($0)",
+                       screenshotKey: nil, needsField: nil)
+        })
     }
 
     // MARK: - P1.12 / P1.13 paired-sessions
@@ -933,6 +994,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
 
     public func revokePairedSession(tokenPrefix: String) async throws {
         try await tick()
+        GymProbe.note("revoked paired session \(tokenPrefix)")
     }
 
     // MARK: - P1.14 orders/send
@@ -1036,6 +1098,15 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         return PostRecoveryStatusResponse(report: postRecoveryReport)
     }
 
+    /// The box's own activity log (`GET /api/screens/activity`), newest first.
+    public var mockBoxActivity: [BoxActivityEntry] = []
+
+    public func boxActivity(limit: Int, before: Int?) async throws -> [BoxActivityEntry] {
+        try await tick()
+        GymProbe.note("read box activity")
+        return Array(mockBoxActivity.filter { before == nil || ($0.seq ?? 0) < before! }.prefix(limit))
+    }
+
     // MARK: - P1.15 install-events (mock SSE)
 
     public func installEvents(serial: String) -> AsyncStream<InstallEvent> {
@@ -1068,7 +1139,8 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     // MARK: - P1.6 vibe-code stream (mock WS)
 
     public func vibeCodeStream(sessionId: String) -> AsyncStream<VibeCodeFrame> {
-        AsyncStream { continuation in
+        if vibeCodeQuietStreams.contains(sessionId) { return AsyncStream { $0.finish() } }
+        return AsyncStream { continuation in
             let task = Task {
                 let tokens = [
                     "Sketching ", "schema. ", "Two tables: ", "habits, ", "check_ins.\n",
@@ -1104,6 +1176,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
 
     public func appBackupStart(_ req: AppBackupStartRequest) async throws -> AppBackupStartResponse {
         try await tick()
+        GymProbe.note("backup \(req.serviceId) data=\(req.includeUserData == true) encrypted=\(req.password != nil)")
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         return AppBackupStartResponse(
             backupId: "bk-\(UUID().uuidString.prefix(8).lowercased())",
@@ -1169,6 +1242,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         try await tick()
         try acceptEnvChange(appId: appId, op: "set", req.change, value: req.value)
         var names = Set(mockEnvNames[appId] ?? [])
+        GymProbe.note("set env \(req.change.name) on \(appId)")
         names.insert(req.change.name)
         mockEnvNames[appId] = Array(names).sorted()
         return ServiceEnvOpResponse(ok: true)
@@ -1177,6 +1251,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         try await tick()
         try acceptEnvChange(appId: appId, op: "unset", req.change, value: nil)
         var names = Set(mockEnvNames[appId] ?? [])
+        GymProbe.note("unset env \(req.change.name) on \(appId)")
         names.remove(req.change.name)
         mockEnvNames[appId] = Array(names).sorted()
         return ServiceEnvOpResponse(ok: true)
@@ -1184,8 +1259,26 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
 
     /// What `vibeCodeSessionState` answers instead of the env-var fixture.
     public var vibeCodeSessionStateFixture: VibeCodeSessionPublicState?
+    /// Per-session states, before `vibeCodeSessionStateFixture`.
+    public var vibeCodeSessionStateFixtures: [String: VibeCodeSessionPublicState] = [:]
+    /// Sessions whose stream sends nothing (a chat that isn't running).
+    public var vibeCodeQuietStreams: Set<String> = []
+    /// What `vibeCodeNameCheck` answers per name; others are free.
+    public var vibeCodeNameCheckFixtures: [String: VibeCodeNameCheck] = [:]
+    public func vibeCodeNameCheck(name: String) async throws -> VibeCodeNameCheck {
+        try await tick()
+        return vibeCodeNameCheckFixtures[name] ?? VibeCodeNameCheck(ok: true, name: name)
+    }
+    public private(set) var vibeCodeDiscardCalls: [String] = []
+    public func vibeCodeDiscard(sessionId: String) async throws {
+        try await tick()
+        vibeCodeDiscardCalls.append(sessionId)
+        vibeCodeSessionsFixture.removeAll { $0.sessionId == sessionId }
+        GymProbe.note("discarded chat \(sessionId)")
+    }
     public func vibeCodeSessionState(sessionId: String) async throws -> VibeCodeSessionPublicState {
         try await tick()
+        if let s = vibeCodeSessionStateFixtures[sessionId] { return s }
         if let vibeCodeSessionStateFixture { return vibeCodeSessionStateFixture }
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         return VibeCodeSessionPublicState(
@@ -1213,7 +1306,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     /// deployed or stopped takes no message, and a new one needs text.
     public func vibeCodeSessionReply(sessionId: String, _ req: VibeCodeReplyRequest) async throws -> VibeCodeReplyResponse {
         try await tick()
-        if let s = vibeCodeSessionStateFixture {
+        if let s = vibeCodeSessionStateFixtures[sessionId] ?? vibeCodeSessionStateFixture {
             let answering = s.status == "awaiting-tool-response" && s.pendingRequest != nil
             if !answering && s.canContinue != true {
                 let refusal: String
@@ -1231,6 +1324,21 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
             }
         }
         vibeCodeReplies.append(req)
+        // What reached the box, never the key: the text kind, model, effort
+        // and the provider of a key the message carried ("keep" for none).
+        let kind = req.envVarStatus.map { "env=\($0)" } ?? "text"
+        GymProbe.note("replied to \(sessionId): \(kind) model=\(req.model ?? "-") effort=\(req.effort ?? "-") "
+            + "provider=\(req.credential?.provider ?? "keep") attachments=\(req.attachments?.count ?? 0)")
+        if let s = vibeCodeSessionStateFixtures[sessionId], let text = req.text, req.envVarStatus == nil {
+            let now = Int64(Date().timeIntervalSince1970 * 1000)
+            vibeCodeSessionStateFixtures[sessionId] = VibeCodeSessionPublicState(
+                id: s.id, appId: s.appId, status: s.status,
+                messages: s.messages + [VibeCodeSessionMessage(role: "user", text: text, timestamp: now)],
+                pendingRequest: s.pendingRequest, failureReason: s.failureReason, needsCredential: false,
+                deployPhase: s.deployPhase, model: req.model ?? s.model, effort: req.model == nil ? s.effort : req.effort,
+                summarised: s.summarised, canContinue: s.canContinue,
+                provider: req.credential?.provider ?? s.provider, conversationTokens: s.conversationTokens)
+        }
         return VibeCodeReplyResponse(ok: true)
     }
 
@@ -1289,6 +1397,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         try await tick()
         vibeCodeDeployStartCalls.append(sessionId)
         vibeCodeDeployStartCredentials.append(credential)
+        GymProbe.note("deploy started \(sessionId) provider=\(credential?.provider ?? "none")")
         if let e = vibeCodeDeployStartError { throw e }
         if let f = vibeCodeDeployStartFixture { return f }
         stagedDeployPolls[sessionId] = 0
@@ -1328,6 +1437,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
         try await tick()
         archiveStarts.append(req)
         archiveForgotten = false
+        GymProbe.note("backup started with \(req.slots.count) slots")
     }
     public func serverArchiveStatus() async throws -> ServerArchiveStatus? {
         try await tick()
@@ -1352,6 +1462,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public func serverArchiveForget() async throws {
         try await tick()
         archiveForgotten = true
+        GymProbe.note("backup forgotten")
     }
     public private(set) var archiveApprovals: [ServerArchiveApproveRequest] = []
     public func serverArchiveApprove(_ req: ServerArchiveApproveRequest) async throws {
@@ -1370,6 +1481,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public func serverRestoreCommit(_ req: ServerRestoreCommitRequest) async throws {
         try await tick()
         restoreCommits.append(req)
+        GymProbe.note("restore committed")
     }
     /// The lost server's peer record this box opens, and what it was asked.
     public var peerRootFixture: PeerRootSummary?
@@ -1773,6 +1885,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public func companionMintTicket(_ req: CompanionMintTicketRequest) async throws -> CompanionMintTicketResponse {
         try await tick()
         companionMintCalls.append(req)
+        GymProbe.note("minted companion ticket")
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
         let ticketId = (0..<16).map { _ in
             String(format: "%02x", UInt8.random(in: 0...255))
@@ -1796,6 +1909,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public func companionRevoke(_ req: CompanionRevokeRequest) async throws -> CompanionRevokeResponse {
         try await tick()
         companionRevokeCalls.append(req.tokenPrefix)
+        GymProbe.note("revoked companion \(req.tokenPrefix)")
         if var fixture = companionListFixture {
             fixture = CompanionListResponse(
                 companions: fixture.companions.filter { $0.tokenPrefix != req.tokenPrefix }
@@ -1830,6 +1944,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public func companionResolvePending(_ req: CompanionResolvePendingRequest) async throws -> CompanionResolvePendingResponse {
         try await tick()
         companionResolveCalls.append(req)
+        GymProbe.note("resolved companion request \(req.requestId) \(req.outcome)")
         if var fixture = companionPendingWritesFixture {
             fixture = CompanionPendingWritesResponse(
                 pending: fixture.pending.filter { $0.requestId != req.requestId }
@@ -1937,6 +2052,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public func buildGit(_ req: BuildGitRequest) async throws -> BuildGitResponse {
         try await tick()
         buildGitCalls.append(req)
+        GymProbe.note("git check \(req.gitUrl) ref=\(req.ref ?? "-") name=\(req.name ?? "-")")
         if let e = buildGitError { throw e }
         if let f = buildGitFixture { return f }
         let buildId = "bld-\(UUID().uuidString.prefix(8).lowercased())"
@@ -1979,6 +2095,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public func buildAdaptStart(buildId: String, _ req: BuildAdaptRequest) async throws -> BuildAdaptReply {
         try await tick()
         buildAdaptStartCalls.append((buildId, req))
+        GymProbe.note("adapt started share=\(req.share.map { String($0) } ?? "-") provider=\(req.credential?.provider ?? "none")")
         if let e = buildAdaptStartError { throw e }
         if buildAdaptUnavailable {
             throw ScreensClientError.http(status: 503, message: "AI adapt not configured")
@@ -2009,6 +2126,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public func adapterReport(serviceId: String, detail: String) async throws {
         try await tick()
         adapterReports.append((serviceId, detail))
+        GymProbe.note("reported adapter for \(serviceId)")
     }
 
     public func buildAdapterFile(buildId: String) async throws -> String {
@@ -2019,11 +2137,16 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public func buildDiscard(buildId: String) async throws {
         try await tick()
         buildDiscardCalls.append(buildId)
+        GymProbe.note("discarded build \(buildId)")
+        buildSessionsFixture = buildSessionsFixture.map {
+            BuildSessionsResponse(builds: $0.builds.filter { $0.buildId != buildId })
+        }
     }
 
     public func buildMcpCreate(_ req: BuildMcpRequest) async throws -> BuildMcpResponse {
         try await tick()
         buildMcpCreateCalls.append(req)
+        GymProbe.note("mcp created")
         let buildId = "bld-\(UUID().uuidString.prefix(8).lowercased())"
         return BuildMcpResponse(buildId: buildId, connection: mockMcpConnection(buildId: buildId))
     }
@@ -2036,6 +2159,7 @@ public final class MockScreensClient: ScreensClient, @unchecked Sendable {
     public func buildMcpRotate(buildId: String, _ req: BuildMcpRequest) async throws -> BuildMcpConnection {
         try await tick()
         buildMcpRotateCalls.append((buildId, req))
+        GymProbe.note("mcp rotated \(buildId)")
         // A fresh key each rotate (unless a fixture pins it).
         if let f = buildMcpFixture { return f }
         return mockMcpConnection(buildId: buildId)

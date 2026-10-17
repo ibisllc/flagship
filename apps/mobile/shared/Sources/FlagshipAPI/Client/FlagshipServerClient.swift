@@ -2358,6 +2358,11 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         }
     }
 
+    /// Gym: an account that already exists on `.com` (Join → sign in).
+    public func seedClaimedUsername(_ username: String, irkPubHex: String) {
+        claimedUsernames[username.lowercased()] = irkPubHex
+    }
+
     public func claimUsername(_ req: UsernameClaimRequest) async throws {
         try await tick()
         let u = req.request.username.lowercased()
@@ -2389,6 +2394,11 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
 
     public func issueAuthCode(_ req: AuthCodeIssueRequest) async throws {
         try await tick()
+        // Adding a server is admin-only on an admin-pinned account.
+        if MockOrderSigners.shared.isEnforcing {
+            try MockOrderSigners.shared.require(.sensitive, kind: "auth-code-admin",
+                                                signatureHex: req.adminSignature ?? "", payload: req)
+        }
         issuedAuthCodes[req.code.serial] = req.code
         if let adminSignature = req.adminSignature {
             issuedAdminSignatures[req.code.serial] = adminSignature
@@ -2403,6 +2413,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public func revokeAuthCode(_ req: AuthCodeRevokeRequest) async throws {
         try await tick()
         revokedAuthCodes.insert(req.request.serial)
+        GymProbe.note("auth code revoked")
     }
 
     public func releaseServerName(_ req: ReleaseServerNameRequest) async throws {
@@ -2778,6 +2789,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         guard body.grant.expiresAt > nowProvider() else {
             throw ScreensClientError.http(status: 400, message: "delegate already expired")
         }
+        try MockOrderSigners.shared.require(.sensitive, kind: "watch-delegate", signatureHex: body.signature, payload: body)
         // One active per user — replace the prior (matches the Worker, which
         // revokes the existing active row before insert).
         let prior = watchDelegatesByUser[u]?.first
@@ -2807,6 +2819,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
 
     public func revokeWatchDelegate(username: String, body: WatchDelegateRevokeRequest) async throws {
         try await tick()
+        try MockOrderSigners.shared.require(.sensitive, kind: "watch-delegate-revoke", signatureHex: body.signature, payload: body)
         let u = username.lowercased()
         watchDelegatesByUser[u]?.removeAll { $0.grantId == body.request.grantId }
     }
@@ -2819,6 +2832,40 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     public var installEventScripts: [String: [(eventName: String, detail: String, postedAt: Int64)]] = [:]
 
     public var accountDirectories: [String: AccountDirectoryResponse] = [:]
+
+    // Account-directory writes: accepted and noted for the gym; a device
+    // revoke drops it from the scripted directory.
+    public func putAccountProfile(accountId: String, authorization: AccountDirectoryAuthorization, body: DirectoryProfileWriteRequest) async throws {
+        try await tick()
+        GymProbe.note("put account profile")
+    }
+    public func putDeviceSelfProfile(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, body: DirectoryProfileWriteRequest) async throws {
+        try await tick()
+        GymProbe.note("put device profile \(deviceId)")
+    }
+    public func putDeviceManagedProfile(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, body: DirectoryManagedProfileWriteRequest) async throws {
+        try await tick()
+        GymProbe.note("put managed profile \(deviceId)")
+    }
+    public func deleteDeviceManagedProfile(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization, expectedRevision: Int64) async throws {
+        try await tick()
+        GymProbe.note("removed managed profile \(deviceId)")
+    }
+    public func revokeAccountDevice(accountId: String, deviceId: String, authorization: AccountDirectoryAuthorization) async throws {
+        try await tick()
+        let key = accountId.lowercased()
+        if let d = accountDirectories[key] {
+            accountDirectories[key] = AccountDirectoryResponse(
+                accountId: d.accountId, accountProfile: d.accountProfile,
+                devices: d.devices.filter { $0.deviceId != deviceId },
+                grants: d.grants.filter { $0.deviceId != deviceId },
+                selfProfiles: d.selfProfiles, managedProfiles: d.managedProfiles)
+        }
+        GymProbe.note("revoked account device \(deviceId)")
+    }
+
+    /// Thrown by `totpEnrollBegin` while set (e.g. `.com`'s 429).
+    public var totpEnrollBeginError: Error?
 
     /// Scripted audit log per username. Tests configure the array
     /// to drive ActivityViewModel renders without hitting the
@@ -3037,6 +3084,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
     ) async throws -> AppRenameResponse {
         try await tick()
         lastAppRename = (username, serviceId, body)
+        GymProbe.note("renamed \(serviceId) to \(body.request.newDisplayLabel)")
         switch appRenameBehavior {
         case .collision:
             throw ScreensClientError.http(status: 409, message: "label collision")
@@ -3213,6 +3261,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         body: TotpEnrollBeginRequest
     ) async throws -> TotpEnrollBeginResponse {
         try await tick()
+        if let totpEnrollBeginError { throw totpEnrollBeginError }
         let u = username.lowercased()
         // Synthesize a deterministic base32 secret per username so
         // tests can assert on it without depending on Mock-internal
@@ -3353,6 +3402,7 @@ public final class MockFlagshipServerClient: FlagshipServerClient, @unchecked Se
         try await tick()
         if let err = selfDeleteError { throw err }
         selfDeleteBundles.append(req)
+        GymProbe.note("deleted account \(req.accountSelfDelete.request.username.lowercased())")
         let u = req.accountSelfDelete.request.username.lowercased()
         // Mirror the Worker's hard-delete side effects for the in-memory mock so
         // a follow-on resolveAccount/usernameAvailable reflects the freed name.

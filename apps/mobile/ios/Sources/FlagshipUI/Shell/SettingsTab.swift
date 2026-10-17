@@ -278,6 +278,10 @@ public struct SettingsTab: View {
                     onDeleteAccount: {
                         if app.isDemoAccount {
                             showDemoDeleteNotice = true
+                        } else if !AdminOrderGate.allows(app) {
+                            // `.com` deletes an account only on an admin-root
+                            // order; this device would be refused.
+                            toasts.warning(AdminOrderGate.deleteAccount)
                         } else {
                             path.append(.deleteAccount)
                         }
@@ -376,7 +380,10 @@ public struct SettingsTab: View {
                     username: { [app] in app.currentUser },
                     onWiped: { app.signOut() }
                 ),
-                username: app.currentUser ?? ""
+                username: app.currentUser ?? "",
+                onTransferGuidance: {
+                    toasts.info("To keep a server, open it from Home and choose Transfer to another account before you delete.", duration: 6)
+                }
             )
         case .aiKeys:
             AiKeysScreen(
@@ -818,7 +825,7 @@ struct AccountSecurityContainer: View {
         ZStack {
             FSColors.scheme(.light).bg.ignoresSafeArea()
             if let vm {
-                AccountSecurityScreen(viewModel: vm)
+                AccountSecurityScreen(viewModel: vm, canSignAdminOrders: AdminOrderGate.allows(app))
             } else { ProgressView() }
         }
         .task {

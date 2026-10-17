@@ -385,7 +385,7 @@ final class GymOctoberTests: XCTestCase {
     // ─── Server order: Make leader stays gray until the box confirms ─────────
 
     func test_makeLeaderWaitsForTheServerToConfirm() throws {
-        let app = launch(tab: "home")
+        let app = launch(tab: "home", ["-smoke-admin-root"])
         openServerPage(app, named: "Office")
         let make = app.buttons["sd-make-leader"]
         XCTAssertTrue(reveal(app, make), "A server that doesn't lead offers Make leader.")
@@ -489,7 +489,7 @@ final class GymOctoberTests: XCTestCase {
     // ─── Update this server ──────────────────────────────────────────────────
 
     func test_updateCardOffersTheNewRelease() throws {
-        let app = launch(tab: "home")
+        let app = launch(tab: "home", ["-smoke-admin-root"])
         openServerPage(app, named: "Home")
         let available = app.descendants(matching: .any)["sd-update-available"]
         XCTAssertTrue(reveal(app, available), "The update card names the newer release.")
@@ -563,7 +563,7 @@ final class GymOctoberTests: XCTestCase {
     /// A server that stopped reporting (Music) doesn't answer: its page says
     /// so honestly instead of "Connecting…", and still offers Revoke.
     func test_offlineServerPageSaysOffline() throws {
-        let app = launch(tab: "home")
+        let app = launch(tab: "home", ["-smoke-admin-root"])
         openServerPage(app, named: "Music")
         let offline = app.descendants(matching: .any)["server-detail-offline"]
         XCTAssertTrue(offline.waitForExistence(timeout: 20), "An offline server's page says it's offline.")
@@ -595,7 +595,7 @@ final class GymOctoberTests: XCTestCase {
     // ─── Share this server ───────────────────────────────────────────────────
 
     func test_shareServerOwnerSeesSharesAndConfirmsCode() throws {
-        let app = launch(tab: "home", ["-smoke-shares", "-smoke-share-route", "owner"])
+        let app = launch(tab: "home", ["-smoke-shares", "-smoke-share-route", "owner", "-smoke-admin-root"])
         let card = app.descendants(matching: .any)["share-server-card"]
         XCTAssertTrue(reveal(app, card), "The owner's server page has the Shared with card.")
         let alex = String(repeating: "a1", count: 16)

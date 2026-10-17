@@ -74,7 +74,7 @@ final class GymFeatureMirrorTests: XCTestCase {
     /// and the danger CTA. Asserted at the confirm stage only — the FQDN is
     /// never typed and the CTA never fired, so no offer is signed.
     func test_transferOfferEntryOpensCeremony() throws {
-        let app = launch(tab: "home")
+        let app = launch(tab: "home", extra: ["-smoke-admin-root"])
         openPodDetail(app, named: "Home")
         let entry = app.buttons["sd-transfer-server"]
         XCTAssertTrue(revealBySwipe(app, entry), "Server-detail should offer the transfer entry.")

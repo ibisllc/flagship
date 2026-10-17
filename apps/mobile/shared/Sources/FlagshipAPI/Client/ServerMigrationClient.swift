@@ -239,11 +239,21 @@ public final class MockServerMigrationClient: ServerMigrationClient, @unchecked 
     public private(set) var freezes: [(serverDomain: String, body: DecommissionDepositBody)] = []
     public private(set) var aborts: [(serverDomain: String, body: MigrationControlBody)] = []
     public private(set) var fetches: [String] = []
+    /// Gym: walk the session through its phases as `.com` would (start →
+    /// the new box restored the backup, hand-off → freezing, abort → aborted).
+    public var scripted = false
     public init() {}
 
     public func startMigration(serverDomain: String, body: MigrationStartBody) async throws {
         if let e = nextStartError { nextStartError = nil; throw e }
+        try MockOrderSigners.shared.require(.sensitive, kind: "server-migration", signatureHex: body.signature, payload: body)
         starts.append((serverDomain, body))
+        if scripted {
+            let now = Int64(Date().timeIntervalSince1970 * 1000)
+            session = MigrationSession(serverDomain: serverDomain, phase: "pre-seeded", disposition: body.order.diskDisposition,
+                                       oldStkPubHex: body.order.oldStkPubHex, newServerDomain: "migrate-target.\(serverDomain)",
+                                       initiatedAt: now, attachedAt: now, preSeededAt: now)
+        }
     }
     public func fetchMigration(serverDomain: String) async throws -> MigrationSession? {
         fetches.append(serverDomain)
@@ -252,15 +262,36 @@ public final class MockServerMigrationClient: ServerMigrationClient, @unchecked 
     }
     public func confirmReady(serverDomain: String, body: MigrationControlBody) async throws {
         if let e = nextConfirmError { nextConfirmError = nil; throw e }
+        try MockOrderSigners.shared.require(.sensitive, kind: "server-migration-control", signatureHex: body.signature, payload: body)
         confirms.append((serverDomain, body))
+        if scripted, let s = session { session = s.moved(to: "ready") }
     }
     public func freeze(serverDomain: String, body: DecommissionDepositBody) async throws {
         if let e = nextFreezeError { nextFreezeError = nil; throw e }
+        try MockOrderSigners.shared.require(.sensitive, kind: "server-decommission", signatureHex: body.signature, payload: body)
         freezes.append((serverDomain, body))
+        if scripted, let s = session { session = s.moved(to: "freezing") }
     }
     public func abortMigration(serverDomain: String, body: MigrationControlBody) async throws {
         if let e = nextAbortError { nextAbortError = nil; throw e }
+        try MockOrderSigners.shared.require(.sensitive, kind: "server-migration-control", signatureHex: body.signature, payload: body)
         aborts.append((serverDomain, body))
+        if scripted, let s = session { session = s.moved(to: s.phase, aborted: true) }
+    }
+}
+
+extension MigrationSession {
+    /// The same session at `phase` (gym mock), stamped as `.com` would.
+    func moved(to phase: String, aborted: Bool = false) -> MigrationSession {
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        return MigrationSession(
+            serverDomain: serverDomain, phase: phase, disposition: disposition, oldStkPubHex: oldStkPubHex,
+            newServerDomain: newServerDomain, newStkPubHex: newStkPubHex, initiatedAt: initiatedAt,
+            attachedAt: attachedAt, preSeededAt: preSeededAt,
+            readyAt: phase == "ready" || phase == "freezing" ? (readyAt ?? now) : readyAt,
+            freezeAt: phase == "freezing" ? now : freezeAt, finalDeltaAt: finalDeltaAt, takenOverAt: takenOverAt,
+            abortedAt: aborted ? now : abortedAt, oldClosedOutAt: oldClosedOutAt, done: done
+        )
     }
 }
 #endif

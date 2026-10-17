@@ -188,7 +188,12 @@ public struct CreateServerStubScreen: View {
     }
 
     private func startPair() {
-        pairVM = BuilderPairViewModel(client: LiveBuilderPairClient(), minter: vm)
+        #if DEBUG
+        let client: any BuilderPairClient = GymSweepSeams.builderPairClient ?? LiveBuilderPairClient()
+        #else
+        let client: any BuilderPairClient = LiveBuilderPairClient()
+        #endif
+        pairVM = BuilderPairViewModel(client: client, minter: vm)
     }
 
     private func pairWithLinkedBuilder() {

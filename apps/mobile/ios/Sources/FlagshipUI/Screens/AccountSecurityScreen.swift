@@ -19,9 +19,13 @@ public struct AccountSecurityScreen: View {
     @State private var showRotateConfirm = false
     @State private var reEscrowPassphrase = ""
     @Bindable var viewModel: AccountSecurityViewModel
+    /// The Watch delegate grant is an admin-only order (`.com` checks it
+    /// under the admin root); a non-admin device sees it read-only.
+    var canSignAdminOrders: Bool = true
 
-    public init(viewModel: AccountSecurityViewModel) {
+    public init(viewModel: AccountSecurityViewModel, canSignAdminOrders: Bool = true) {
         self.viewModel = viewModel
+        self.canSignAdminOrders = canSignAdminOrders
     }
 
     public var body: some View {
@@ -181,7 +185,14 @@ public struct AccountSecurityScreen: View {
                     }
                 }
                 .accessibilityIdentifier("watch-delegate-toggle")
-                .disabled(vm.phase == .enabling || vm.phase == .disabling)
+                .disabled(!canSignAdminOrders || vm.phase == .enabling || vm.phase == .disabling)
+
+                if !canSignAdminOrders {
+                    Text(AdminOrderGate.watchQuickApprove)
+                        .font(FS.font.caption())
+                        .foregroundColor(c.textMuted)
+                        .accessibilityIdentifier("watch-delegate-admin-only")
+                }
 
                 Text("Approve a server boot from your Apple Watch while Flagship is unlocked on this iPhone. Other actions (revoke server, wipe & restart, replace device) always need your iPhone. Off by default.")
                     .accessibilityIdentifier("watch-delegate-note")

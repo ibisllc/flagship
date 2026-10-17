@@ -419,12 +419,29 @@ struct iPadShell: View {
                     // never builds this branch, so the id is iPad-only by construction.
                     .accessibilityIdentifier("ipad-sidebar")
                 Divider()
-                destinationContent(selected)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Every destination visited stays alive (hidden when not
+                // selected), as the iPhone TabView keeps its tabs: switching
+                // destinations keeps each one's navigation, so a server page
+                // opened on Home is still open after a visit to Services.
+                ZStack {
+                    ForEach(RootDestination.allCases.filter { visited.contains($0) || $0 == selected }) { dest in
+                        let on = dest == selected
+                        destinationContent(dest)
+                            .opacity(on ? 1 : 0)
+                            .allowsHitTesting(on)
+                            .accessibilityHidden(!on)
+                            .zIndex(on ? 1 : 0)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .tint(c.primary)
+        .onAppear { visited.insert(selected) }
+        .onChange(of: selected) { _, dest in visited.insert(dest) }
     }
+
+    @State private var visited: Set<RootDestination> = []
 }
 
 private struct Sidebar: View {

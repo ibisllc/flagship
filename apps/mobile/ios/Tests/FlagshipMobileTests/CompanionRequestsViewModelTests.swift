@@ -2,6 +2,7 @@ import XCTest
 import CryptoKit
 @testable import FlagshipAPI
 @testable import FlagshipUI
+import FlagshipCore
 
 /// P14 Phase 2 — CompanionRequestsViewModel state machine.
 ///
@@ -138,6 +139,33 @@ final class CompanionRequestsViewModelTests: XCTestCase {
             XCTFail("expected loaded, got \(vm.state)"); return
         }
         XCTAssertTrue(rows.isEmpty)
+    }
+
+    /// Releasing a name is a sensitive order: on an admin-pinned account
+    /// `.com` takes it only under the admin root, so it signs with the
+    /// sensitive-order key, while a revoke stays with the IRK.
+    func test_approve_releaseServer_signsWithTheSensitiveOrderKey() async throws {
+        let (screens, server) = makeClients()
+        let row = releaseRow()
+        screens.companionPendingWritesFixture = CompanionPendingWritesResponse(pending: [row])
+        let irk = Curve25519.Signing.PrivateKey()
+        let admin = Curve25519.Signing.PrivateKey()
+        let vm = CompanionRequestsViewModel(
+            client: screens,
+            server: server,
+            username: { "alice" },
+            signer: { _ in irk },
+            sensitiveSigner: { _ in admin }
+        )
+        await vm.load()
+        await vm.approve(row)
+        let sent = try XCTUnwrap(server.releasedServerNames.first)
+        let bytes = ReleaseServerName.canonicalBytes(username: sent.request.username,
+                                                     serverDomain: sent.request.serverDomain,
+                                                     issuedAt: sent.request.issuedAt)
+        let sig = try XCTUnwrap(HexUtil.decode(sent.signature))
+        XCTAssertTrue(admin.publicKey.isValidSignature(sig, for: bytes))
+        XCTAssertFalse(irk.publicKey.isValidSignature(sig, for: bytes))
     }
 
     // MARK: - approve(revoke-server)

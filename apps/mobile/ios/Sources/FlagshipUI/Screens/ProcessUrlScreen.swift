@@ -72,6 +72,12 @@ public struct ProcessUrlScreen: View {
         // Hand off to the shared router (RootShell presents the authorize cover).
         // Pop first so the cover isn't presented under this pushed screen.
         dismiss()
-        linker.enqueue(link)
+        // After the pop: a Settings link pushed in the same transaction as
+        // the pop left the stack on a blank page.
+        let linker = self.linker
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(500))
+            linker.enqueue(link)
+        }
     }
 }

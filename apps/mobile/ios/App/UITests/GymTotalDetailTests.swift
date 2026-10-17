@@ -109,7 +109,7 @@ final class GymTotalDetailTests: XCTestCase {
     /// enable toggle + the keep-unlocked affirm control render. Stops at render
     /// (no affirmation fired — Tier-1, no backend).
     func test_serverDetailDeadManScreenOpens() throws {
-        let app = launch(tab: "home")
+        let app = launch(tab: "home", extra: ["-smoke-admin-root"])
         openPodDetail(app, named: "Home")
         let open = app.buttons["sd-deadman-open"]
         XCTAssertTrue(revealBySwipe(app, open), "Server-detail should render the dead-man (lock-down) card.")
@@ -165,7 +165,7 @@ final class GymTotalDetailTests: XCTestCase {
     /// present; never fires it (Tier-1, no backend, and the guardrail keeps
     /// deletes off real entities).
     func test_serverDetailDeadServerDeleteButton() throws {
-        let app = launch(tab: "home", extra: ["-smoke-dead"])
+        let app = launch(tab: "home", extra: ["-smoke-dead", "-smoke-admin-root"])
         openPodDetail(app, named: "Attic")
         let delete = app.buttons["sd-delete-server"]
         XCTAssertTrue(
@@ -528,7 +528,7 @@ final class GymTotalDetailTests: XCTestCase {
     /// approve→unseal ceremony is the live slice, G12). The detail must NOT show
     /// the decommission card — a waiting box is not a dead box.
     func test_serverDetailAwaitingUnlockSurfaces() throws {
-        let app = launch(tab: "home", extra: ["-smoke-awaiting-unlock"])
+        let app = launch(tab: "home", extra: ["-smoke-awaiting-unlock", "-smoke-admin-root"])
         openPodDetail(app, named: "Cabin")
         // The approve card is hoisted to the TOP (outside the state switch); the
         // boot-unlock card renders in the loaded detail. Either proves the

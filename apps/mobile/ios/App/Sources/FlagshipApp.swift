@@ -320,6 +320,10 @@ struct FlagshipApp: App {
     private static func applySmokeOnboardingIfRequested() {
         guard ProcessInfo.processInfo.arguments.contains("-smoke-onboarding") else { return }
         Keystore.wipeAllProfiles()
+        // A demo account joined by an earlier walk lives in the session
+        // store, not the keychain: drop it too, or the next launch restores
+        // that demo instead of showing Welcome.
+        UserDefaults.standard.removeObject(forKey: "flagship.demoSession.v1")
         GymSeams.bypassBiometricGates = true
         GymSeams.suppressAccessAlerts = true
     }
@@ -523,9 +527,12 @@ struct FlagshipApp: App {
     }
     /// Every mock client, for the gym's launch seams.
     private var gymMocks: GymMocks {
-        GymMocks(screens: mockClient, server: mockServerClient as? MockFlagshipServerClient, mailbox: mockMailbox,
-                 lockPower: mockLockPower, frontPage: mockFrontPage, uninstall: mockServiceUninstall,
-                 access: mockServiceAccess, transfer: mockServerTransfer, migration: mockServerMigration, relay: mockRelay)
+        var mocks = GymMocks(screens: mockClient, server: mockServerClient as? MockFlagshipServerClient, mailbox: mockMailbox,
+                             lockPower: mockLockPower, frontPage: mockFrontPage, uninstall: mockServiceUninstall,
+                             access: mockServiceAccess, transfer: mockServerTransfer, migration: mockServerMigration,
+                             relay: mockRelay)
+        mocks.pairingRelay = pairingRelay as? MockPairingRelayClient
+        return mocks
     }
     #else
     private var accessFixtureKeys: ServiceAccessKeys? { nil }
@@ -540,7 +547,10 @@ struct FlagshipApp: App {
     }
     private var activePodClients: PodScreensClientFactory {
         #if DEBUG
-        if GymLaunch.usesMocks { return .shared(mockClient) }
+        if GymLaunch.usesMocks {
+            let mock = mockClient
+            return PodScreensClientFactory { fqdn in GymSweepSeams.podClient(forFqdn: fqdn) ?? mock }
+        }
         #endif
         return livePodClients
     }
@@ -659,6 +669,7 @@ struct FlagshipApp: App {
                     #if DEBUG
                     Self.applySmokeModeIfRequested(appState, linker: linker, operations: operations, trust: trust, privacy: privacy,
                                                    screens: mockClient, mocks: gymMocks)
+                    GymSweepSeams.applyOnboarding(args: ProcessInfo.processInfo.arguments, mocks: gymMocks)
                     #endif
                     appDelegate.linker = linker
                     linker.makeCurrent()

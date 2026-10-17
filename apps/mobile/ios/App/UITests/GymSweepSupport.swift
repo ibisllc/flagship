@@ -11,8 +11,54 @@ import XCTest
 /// box, which the per-server cards look pods up by.
 class GymSweepCase: XCTestCase {
 
+    private var launched: XCUIApplication?
+
     override func setUpWithError() throws {
         continueAfterFailure = false
+    }
+
+    /// A failed scenario keeps the screen's accessibility tree, so a red
+    /// assertion can be read without rerunning it.
+    override func tearDownWithError() throws {
+        if let app = launched, let run = testRun, run.totalFailureCount > 0 {
+            let a = XCTAttachment(string: app.debugDescription)
+            a.name = "Screen at failure"
+            a.lifetime = .keepAlways
+            add(a)
+        }
+        launched = nil
+    }
+
+    /// Replace a field's text: Create server starts with the next free
+    /// "home" name in it.
+    func replaceText(_ field: XCUIElement, with text: String) {
+        // The caret goes to the end of the text, so the deletes clear all of it.
+        field.coordinate(withNormalizedOffset: CGVector(dx: 0.97, dy: 0.97)).tap()
+        let current = (field.value as? String) ?? ""
+        if !current.isEmpty, current != (field.placeholderValue ?? "") {
+            field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count))
+        }
+        field.typeText(text)
+    }
+
+    /// Put the keyboard away so it can't cover a button below the field.
+    func dismissKeyboard(_ app: XCUIApplication) {
+        guard app.keyboards.count > 0 else { return }
+        let ret = app.keyboards.buttons["return"].firstMatch
+        if ret.exists, ret.isHittable { ret.tap() }
+        if app.keyboards.count > 0 { app.navigationBars.firstMatch.tap() }
+    }
+
+    /// Dismiss a confirmation dialog without acting. On iOS 27 an iPhone
+    /// shows it as a popover with no Cancel button: press Cancel when there
+    /// is one, else tap the popover's dismiss region.
+    func cancelDialog(_ app: XCUIApplication) {
+        let sheet = app.sheets.buttons["Cancel"].firstMatch
+        if sheet.waitForExistence(timeout: 2), sheet.isHittable { sheet.tap(); return }
+        let plain = app.buttons.matching(NSPredicate(format: "label == 'Cancel'")).firstMatch
+        if plain.exists, plain.isHittable { plain.tap(); return }
+        let region = app.otherElements["PopoverDismissRegion"]
+        if region.exists { region.tap() } else { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.08)).tap() }
     }
 
     /// Attach a screenshot for the gym's advisory judge.
@@ -32,6 +78,7 @@ class GymSweepCase: XCTestCase {
         app.launchArguments = ["-smoke-mode", "-smoke-tab", tab, "-smoke-username", username]
             + (admin ? ["-smoke-admin-root"] : []) + extra
         app.launch()
+        launched = app
         return app
     }
 
