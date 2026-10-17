@@ -44,6 +44,9 @@ public struct GymMocks {
 public enum GymSweepSeams {
     public static func apply(args: [String], app: AppState, operations: ActiveOperationsCenter, mocks: GymMocks) {
         resetAiKeys()
+        // The create form's draft (including the backup pick) lives in
+        // UserDefaults: every launch starts with nothing chosen.
+        CreateServerDraftStore().reset()
         if let server = mocks.server {
             let mailbox = mocks.mailbox
             server.onServerNameReleased = { [weak mailbox] domain in mailbox?.deletedDomains.insert(domain.lowercased()) }

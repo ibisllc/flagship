@@ -129,9 +129,7 @@ public struct AccountSecurityScreen: View {
     @ViewBuilder
     private func explainer(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s2) {
-            Text(viewModel.isMultiDevice ? "Currently enabled" : "Why enable this?")
-                .font(FS.font.scaled(13, weight: .semibold))
-                .foregroundColor(c.textMuted)
+            FSSectionLabel(viewModel.isMultiDevice ? "Currently enabled" : "Why enable this?")
             Text(viewModel.isMultiDevice
                  ? "Your TOTP secret was generated on this device on \(formattedDate(viewModel.totpEnrolledAt)). Store your recovery codes somewhere safe — they're the only way back in if your authenticator app is lost."
                  : "A second factor outside Apple's iCloud Keychain. If your iCloud password is ever compromised, the attacker still needs a live 6-digit code from your authenticator app to take over your account.")
@@ -399,9 +397,7 @@ struct AccountSecurityEnableSheet: View {
     @ViewBuilder
     private func step1(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
-            Text("Step 1 of 4")
-                .font(FS.font.scaled(13, weight: .semibold))
-                .foregroundColor(c.textMuted)
+            FSSectionLabel("Step 1 of 4")
             Text("You'll need an authenticator app like 1Password, Google Authenticator, or Authy. We'll show a QR code and a manual key — scan or paste either one.")
                 .foregroundColor(c.text)
             Text("After 2FA is on, account recovery becomes a 24-hour grace window that requires your 6-digit code (or a recovery code) instead of the 3-day waiting period.")
@@ -420,9 +416,7 @@ struct AccountSecurityEnableSheet: View {
     @ViewBuilder
     private func step2(c: FSColors, staged: AccountSecurityViewModel.StagedSecret) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s4) {
-            Text("Step 2 of 4 — scan or paste")
-                .font(FS.font.scaled(13, weight: .semibold))
-                .foregroundColor(c.textMuted)
+            FSSectionLabel("Step 2 of 4 — scan or paste")
             FSCard {
                 if let image = pngImage(fromBase64: staged.qrPngBase64) {
                     image

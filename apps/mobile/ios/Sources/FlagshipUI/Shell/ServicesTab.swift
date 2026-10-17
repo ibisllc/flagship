@@ -361,7 +361,7 @@ public struct ServicesTab: View {
                 Button(action: { startCreation(pinnedFqdn: nil) }) {
                     HStack(spacing: 8) {
                         Image(systemName: "sparkles").foregroundColor(c.accent)
-                        Text("Build another service").font(FS.font.scaled(15, weight: .semibold)).foregroundColor(c.primary)
+                        Text("Build another service").font(FS.font.scaled(15, weight: .semibold)).foregroundColor(c.text)
                         Spacer()
                     }
                     .padding(.horizontal, FS.space.s4)

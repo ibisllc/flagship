@@ -388,7 +388,7 @@ private struct iPhoneShell: View {
                     .tag(dest)
             }
         }
-        .tint(FSColors.scheme(scheme).primary)
+        .tint(FSColors.scheme(scheme).text)
     }
 }
 
@@ -468,9 +468,7 @@ private struct Sidebar: View {
             .padding(.top, FS.space.s8)
             .padding(.bottom, FS.space.s6)
 
-            Text("Destinations")
-                .font(FS.font.scaled(13, weight: .semibold))
-                .foregroundColor(c.textMuted)
+            FSSectionLabel("Destinations")
                 .padding(.horizontal, FS.space.s6)
                 .padding(.bottom, FS.space.s2)
 

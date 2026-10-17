@@ -160,9 +160,7 @@ public struct DemoInstallProgressScreen: View {
         if let b = block, b.ip != nil || b.region != nil || b.image != nil || b.serverType != nil {
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
-                    Text("This device")
-                        .font(FS.font.scaled(13, weight: .semibold))
-                        .foregroundColor(c.textMuted)
+                    FSSectionLabel("This device")
                     if let ip = b.ip { infoRow("IP", ip, mono: true, c) }
                     if let region = b.region { infoRow("Location", region, mono: false, c) }
                     if let image = b.image { infoRow("OS", image, mono: false, c) }

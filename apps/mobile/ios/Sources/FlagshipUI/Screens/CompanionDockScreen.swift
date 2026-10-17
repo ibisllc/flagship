@@ -197,9 +197,7 @@ public struct CompanionDockScreen: View {
     @ViewBuilder
     private func activeList(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("Connected browsers")
-                .font(FS.font.scaled(13, weight: .semibold))
-                .foregroundColor(c.textMuted)
+            FSSectionLabel("Connected browsers")
             switch vm.state {
             case .idle, .loading:
                 FSCard {

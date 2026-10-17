@@ -14,8 +14,7 @@ struct ApiKeysSection: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text(AppApiKeysCopy.sectionTitle).font(FS.font.scaled(13, weight: .semibold))
-                .foregroundColor(c.textMuted)
+            FSSectionLabel(AppApiKeysCopy.sectionTitle)
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
                     Text(AppApiKeysCopy.intro)

@@ -511,9 +511,7 @@ public struct ServerDetailScreen: View {
     @ViewBuilder
     private func sectionWrap<C: View>(_ label: String, c: FSColors, @ViewBuilder content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text(label)
-                .font(FS.font.scaled(13, weight: .semibold))
-                .foregroundColor(c.textMuted)
+            FSSectionLabel(label)
             content()
         }
     }
@@ -570,9 +568,7 @@ struct BootUnlockCard: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("Boot unlock")
-                .font(FS.font.scaled(13, weight: .semibold))
-                .foregroundColor(c.textMuted)
+            FSSectionLabel("Boot unlock")
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
                     switch mode {
@@ -775,9 +771,7 @@ struct BootUnlockApprovalCard: View {
     @ViewBuilder
     private func sectionWrap<C: View>(_ label: String, c: FSColors, @ViewBuilder content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text(label)
-                .font(FS.font.scaled(13, weight: .semibold))
-                .foregroundColor(c.textMuted)
+            FSSectionLabel(label)
             content()
         }
     }
@@ -966,9 +960,7 @@ struct UpdateServerCard: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("Update server")
-                .font(FS.font.scaled(13, weight: .semibold))
-                .foregroundColor(c.textMuted)
+            FSSectionLabel("Update server")
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
                     if let short = ServerDetailScreen.shortCommit(currentCommit) {
@@ -980,8 +972,8 @@ struct UpdateServerCard: View {
                     }
                     if let latestTag, pending == nil {
                         Label("New release available: \(latestTag)", systemImage: "arrow.up.circle.fill")
-                            .font(FS.font.caption())
-                            .foregroundColor(c.primary)
+                            .font(FS.font.scaled(13, weight: .semibold))
+                            .foregroundColor(c.text)
                             .accessibilityIdentifier("sd-update-available")
                     }
                     if let summary = lastUpdate?.summary {
@@ -1377,9 +1369,7 @@ struct DangerZoneCard: View {
         let appState = app
         let fqdn = serverDomain
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("Danger zone")
-                .font(FS.font.scaled(13, weight: .semibold))
-                .foregroundColor(c.textMuted)
+            FSSectionLabel("Danger zone")
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
                     if canTransfer && admin {
@@ -1496,9 +1486,7 @@ struct RevokeServerSheet: View {
                     .font(FS.font.body())
                     .foregroundColor(c.textMuted)
 
-                Text("Reason")
-                    .font(FS.font.scaled(13, weight: .semibold))
-                    .foregroundColor(c.textMuted)
+                FSSectionLabel("Reason")
                     .padding(.top, FS.space.s2)
 
                 Picker("Reason", selection: $reason) {

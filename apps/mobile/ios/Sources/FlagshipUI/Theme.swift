@@ -28,10 +28,12 @@ public struct FSColors {
     /// The teal as text, icons, links and outlines: `--accent`, deepened to
     /// #0F766E in light so it passes AA on paper.
     public let primary: Color
-    /// The teal for graphics and large or bold text only: icons beside a
-    /// label, section markers, switches, progress, chart bits, headers of
-    /// 14pt bold and up. Lighter than `primary` (3:1 is enough there, 4.5:1
-    /// is not promised); never for body-size text or links.
+    /// The brand teal (#14B8A6) for graphics and fills only: icons beside a
+    /// label, section markers, rings, spinners, switches, progress, selected
+    /// borders, large display headings. About 2.3:1 on paper, so it never
+    /// colours body-size text and no icon-only control relies on it (they
+    /// carry accessibility labels). Small teal text is `primary`, for inline
+    /// links only; every other label is ink with a teal marker.
     public let accent: Color
     public let primaryHover: Color
     /// The teal as a fill (primary buttons, selection, bars): `--teal`.
@@ -64,7 +66,7 @@ public struct FSColors {
         text: hex(0x14140F),
         textMuted: hex(0x555149),
         primary: hex(0x0F766E),
-        accent: hex(0x0E9488),
+        accent: hex(0x14B8A6),
         primaryHover: hex(0x0B5F58),
         primaryFill: hex(0x14B8A6),
         onPrimary: hex(0x0A0A09),
@@ -192,6 +194,26 @@ public enum FSFont {
     public static func scaled(_ size: CGFloat, weight: Font.Weight = .regular, design: Font.Design = .default) -> Font {
         guard let style = style(for: size) else { return .system(size: size, weight: weight, design: design) }
         return .system(style, design: design, weight: weight)
+    }
+}
+
+/// A section's label: ink, semibold, with a small brand-teal marker (the
+/// teal is a graphic here, so the text stays ink and passes AA).
+public struct FSSectionLabel: View {
+    @Environment(\.colorScheme) private var scheme
+    let title: String
+    public init(_ title: String) { self.title = title }
+    public var body: some View {
+        let c = FSColors.scheme(scheme)
+        HStack(spacing: 7) {
+            Capsule().fill(c.accent).frame(width: 3, height: 13)
+                .accessibilityHidden(true)
+            Text(title)
+                .font(FS.font.scaled(13, weight: .semibold))
+                .foregroundColor(c.text)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
     }
 }
 

@@ -116,8 +116,9 @@ public final class CreateServerViewModel {
     /// The server's backup policy (docs/server-backup-and-clone.md, "Backup
     /// policy"): signed as `flagship/backup-policy/v1` with the sensitive-order
     /// key at mint time and carried beside the pairing order, so the box
-    /// adopts it when it pairs. Defaults to phone-side backups.
-    public var backupPolicy: CreateServerDraftStore.BackupPolicy = .phoneOnly {
+    /// adopts it when it pairs. Nothing is preselected: nil until the owner
+    /// picks, and the form's Continue stays off until then.
+    public var backupPolicy: CreateServerDraftStore.BackupPolicy? = nil {
         didSet { draftStore.setBackupPolicy(backupPolicy) }
     }
     /// Phone-side: the space this phone keeps for the server's backup, which
@@ -243,6 +244,11 @@ public final class CreateServerViewModel {
         ServerLabel.isValid(name)
     }
 
+    /// The last design step (Backups) needs a pick before Continue.
+    public var canContinueFromBackups: Bool {
+        canAdvanceFromDesign && backupPolicy != nil
+    }
+
     /// Inline validation message for the subdomain field — nil when the field
     /// is empty (no error yet) or valid.
     public var nameError: String? {
@@ -342,7 +348,7 @@ public final class CreateServerViewModel {
     /// After the design step, go to the delivery-method chooser instead of
     /// the old "scan the website QR" path.
     public func proceedToDelivery() {
-        guard canAdvanceFromDesign else { return }
+        guard canContinueFromBackups else { return }
         phase = .deliveryChooser
     }
 
@@ -557,7 +563,7 @@ public final class CreateServerViewModel {
         }
         // The backup policy rides beside the pairing order too, signed like a
         // restore order (the admin root; the IRK only on a demo account).
-        if let json = pairingOrderJson {
+        if let json = pairingOrderJson, let backupPolicy {
             let order = BackupPolicyOrder.make(serverDomain: serverDomain, draft: backupPolicy, reserveBytes: phoneReserveBytes,
                                                issuedAt: Int64(Date().timeIntervalSince1970 * 1000))
             let sig = try (adminKey ?? irk).signature(for: try order.canonicalBytes())

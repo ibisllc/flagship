@@ -239,7 +239,7 @@ public struct FSMonogram: View {
             .overlay(
                 Text(fsInitials(name))
                     .font(.system(size: size * 0.40, weight: .semibold))
-                    .foregroundColor(c.primary)
+                    .foregroundColor(c.text)
             )
     }
 }
@@ -436,9 +436,7 @@ public struct FSSettingsGroup<Content: View>: View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s2) {
             if let header {
-                Text(header)
-                    .font(FS.font.scaled(13, weight: .semibold))
-                    .foregroundColor(c.textMuted)
+                FSSectionLabel(header)
                     .padding(.leading, FS.space.s1)
             }
             VStack(spacing: 0) { content() }

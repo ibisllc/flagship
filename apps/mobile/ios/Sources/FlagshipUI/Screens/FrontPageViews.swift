@@ -25,9 +25,7 @@ struct FrontPageCard: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("Front page")
-                .font(FS.font.scaled(13, weight: .semibold))
-                .foregroundColor(c.textMuted)
+            FSSectionLabel("Front page")
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
                     Text("What visitors see at \(serverDomain). Point it at one of your services, or keep the default Flagship page.")

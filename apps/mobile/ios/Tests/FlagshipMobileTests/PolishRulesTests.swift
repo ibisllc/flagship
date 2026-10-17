@@ -75,4 +75,25 @@ final class PolishRulesTests: XCTestCase {
         _ = FSPressStyle()
         _ = FSRowPressStyle()
     }
+
+    /// The brand teal is a graphic: it never colours text, and an icon-only
+    /// button (which can lean on it) always carries an accessibility label.
+    func test_brandTealIsNeverTextAndIconOnlyButtonsAreLabelled() throws {
+        let iconOnly = try NSRegularExpression(
+            pattern: #"Button\s*(?:\([^)]*\))?\s*\{[^{}]*\}\s*label:\s*\{\s*Image\(systemName:[^\n]*\n(?:[^\n]*\n){0,6}?\s*\}"#)
+        for (path, text) in try uiSources() where !path.contains("/Gym/") {
+            for line in text.split(separator: "\n") {
+                let s = String(line)
+                if s.contains("Text("), s.contains("foregroundColor(c.accent)") || s.contains("foregroundStyle(c.accent)") {
+                    XCTFail("\(path): the brand teal colours text: \(s.trimmingCharacters(in: .whitespaces))")
+                }
+            }
+            for m in iconOnly.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
+                guard let r = Range(m.range, in: text) else { continue }
+                let end = text.index(r.upperBound, offsetBy: 250, limitedBy: text.endIndex) ?? text.endIndex
+                XCTAssertTrue(text[r.lowerBound..<end].contains("accessibilityLabel"),
+                              "\(path): an icon-only button has no accessibility label")
+            }
+        }
+    }
 }

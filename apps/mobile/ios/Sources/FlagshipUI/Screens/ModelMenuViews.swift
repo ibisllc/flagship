@@ -136,9 +136,7 @@ struct ModelMenuPanel: View {
 /// The rows both menus draw.
 enum ModelMenuRows {
     static func header(_ t: String, c: FSColors) -> some View {
-        Text(t)
-            .font(FS.font.scaled(13, weight: .semibold))
-            .foregroundColor(c.textMuted)
+        FSSectionLabel(t)
             .lineLimit(1)
             .truncationMode(.middle)
             .padding(.horizontal, FS.space.s4)

@@ -58,7 +58,7 @@ public struct AiKeysScreen: View {
                                             .lineLimit(1).truncationMode(.middle)
                                         if e.id == vm.activeId {
                                             Text("Default for new builds")
-                                                .font(FS.font.bodySm()).foregroundColor(c.primary)
+                                                .font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.text)
                                         }
                                     }
                                     .frame(maxWidth: .infinity, alignment: .leading)

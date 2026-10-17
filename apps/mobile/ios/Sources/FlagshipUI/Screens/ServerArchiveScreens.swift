@@ -123,7 +123,7 @@ struct ServerBackupSheet: View {
             } else {
                 FSCard {
                     VStack(alignment: .leading, spacing: FS.space.s2) {
-                        Text("Suggested passcode").font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.textMuted)
+                        FSSectionLabel("Suggested passcode")
                         Text(vm.suggestedPasscode)
                             .font(FS.font.scaled(20, weight: .semibold, design: .monospaced))
                             .foregroundColor(c.text)

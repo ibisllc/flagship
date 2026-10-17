@@ -43,9 +43,7 @@ struct DebugAccessCard: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("Debug access")
-                .font(FS.font.scaled(13, weight: .semibold))
-                .foregroundColor(c.textMuted)
+            FSSectionLabel("Debug access")
             FSCard {
                 if let vm {
                     content(vm, c: c)

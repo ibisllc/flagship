@@ -17,7 +17,7 @@ public struct CreateServerDraftStore {
     public enum BackupPolicy: String, Sendable, Hashable, CaseIterable {
         /// No automatic backup. Power-user opt-out.
         case none
-        /// Phone-side scheduled pull; the default. Mirrors the webapp default.
+        /// Phone-side scheduled pull. Never a default: the owner picks.
         case phoneOnly = "phone-only"
         /// Peer-backup distribution to other Flagship users.
         case peer
@@ -29,16 +29,16 @@ public struct CreateServerDraftStore {
 
     public init(defaults: UserDefaults = .standard) { self.defaults = defaults }
 
-    public func backupPolicy() -> BackupPolicy {
-        guard let raw = defaults.string(forKey: Self.backupPolicyKey),
-              let v = BackupPolicy(rawValue: raw) else {
-            return .phoneOnly
-        }
-        return v
+    /// The owner's pick, or nil until they have made one (nothing is
+    /// preselected, and creating a server stays off until they do).
+    public func backupPolicy() -> BackupPolicy? {
+        defaults.string(forKey: Self.backupPolicyKey).flatMap(BackupPolicy.init(rawValue:))
     }
 
-    public func setBackupPolicy(_ policy: BackupPolicy) {
-        defaults.set(policy.rawValue, forKey: Self.backupPolicyKey)
+    public func setBackupPolicy(_ policy: BackupPolicy?) {
+        if let policy { defaults.set(policy.rawValue, forKey: Self.backupPolicyKey) } else {
+            defaults.removeObject(forKey: Self.backupPolicyKey)
+        }
     }
 
     /// The space the phone keeps for a phone-side server's backup, or nil

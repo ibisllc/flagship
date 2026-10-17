@@ -595,6 +595,9 @@ final class GymSweepServerTests: GymSweepCase {
         app.buttons["cs-next-button"].tap()
         let cont = app.buttons["cs-continue-button"]
         XCTAssertTrue(cont.waitForExistence(timeout: 10))
+        XCTAssertFalse(cont.isEnabled, "Nothing is preselected: Continue waits for a backup choice.")
+        app.chooseBackupPolicy()
+        wait(cont, "isEnabled == true")
         cont.tap()
         let copy = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Copy recipe to clipboard")).firstMatch
         XCTAssertTrue(copy.waitForExistence(timeout: 10))
@@ -621,6 +624,7 @@ final class GymSweepServerTests: GymSweepCase {
         replaceText(name, with: "loft")
         app.buttons["cs-next-button"].tap()
         app.buttons["cs-next-button"].tap()
+        app.chooseBackupPolicy()
         app.buttons["cs-continue-button"].tap()
         app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Copy recipe to clipboard")).firstMatch.tap()
         let done = app.buttons["cs-done-button"]
@@ -641,6 +645,7 @@ final class GymSweepServerTests: GymSweepCase {
         replaceText(name, with: "den")
         app.buttons["cs-next-button"].tap()
         app.buttons["cs-next-button"].tap()
+        app.chooseBackupPolicy()
         app.buttons["cs-continue-button"].tap()
         app.buttons["cs-delivery-pair"].tap()
         let byCode = button(app, "Enter the code instead")
@@ -679,6 +684,7 @@ final class GymSweepServerTests: GymSweepCase {
         replaceText(name, with: "shed")
         app.buttons["cs-next-button"].tap()
         app.buttons["cs-next-button"].tap()
+        app.chooseBackupPolicy()
         app.buttons["cs-continue-button"].tap()
         app.buttons["cs-delivery-pair"].tap()
         button(app, "Enter the code instead").tap()
@@ -845,14 +851,24 @@ final class GymSweepServerTests: GymSweepCase {
         app.buttons["cs-next-button"].tap()
         let phone = any(app, "cs-backup-policy-phone-only")
         XCTAssertTrue(phone.waitForExistence(timeout: 10), "The create form offers the backup policies.")
-        // The draft persists between runs (the last run left it on "No backups").
+        XCTAssertTrue(text(app, containing: "Where should this server's backups go?").exists)
+        XCTAssertTrue(text(app, containing: "You can change it any time in the server's Backups section.").exists)
+        for id in ["none", "phone-only", "peer"] {
+            XCTAssertFalse(any(app, "cs-backup-policy-\(id)").isSelected, "Nothing is preselected (\(id)).")
+        }
+        XCTAssertFalse(app.buttons["cs-continue-button"].isEnabled, "Continue waits for a choice.")
+        XCTAssertFalse(any(app, "cs-backup-policy-reserve").exists, "The reserve shows only once phone is picked.")
+        // The options read No backup, On my phone, On other servers.
+        let noBackup = any(app, "cs-backup-policy-none"), peer = any(app, "cs-backup-policy-peer")
+        XCTAssertTrue(noBackup.frame.minY < phone.frame.minY && phone.frame.minY < peer.frame.minY, "Options are in order.")
         phone.tap()
-        XCTAssertTrue(text(app, containing: "this phone keeps a copy, over Wi-Fi while charging").exists)
-        XCTAssertTrue(reveal(app, any(app, "cs-backup-policy-reserve"), tries: 4), "Phone-side asks how much this phone keeps.")
+        XCTAssertTrue(text(app, containing: "An encrypted copy is kept on this phone.").exists)
+        XCTAssertTrue(app.buttons["cs-continue-button"].isEnabled)
+        XCTAssertTrue(reveal(app, any(app, "cs-backup-policy-reserve"), tries: 4), "Phone asks how much this phone keeps.")
         XCTAssertTrue(text(app, containing: "free.").exists, "It says how much the phone has free.")
         any(app, "cs-backup-policy-none").tap()
-        XCTAssertTrue(text(app, containing: "If this server's disk fails, its apps and data are gone.").exists)
-        XCTAssertFalse(any(app, "cs-backup-policy-reserve").exists, "The reserve is for phone-side only.")
+        XCTAssertTrue(text(app, containing: "Nothing is copied. You can turn backups on later.").exists)
+        XCTAssertFalse(any(app, "cs-backup-policy-reserve").exists, "The reserve is for phone only.")
         shot(app, "create-backup-policy")
     }
 
@@ -862,7 +878,7 @@ final class GymSweepServerTests: GymSweepCase {
         openBackups(app, "-smoke-backups-ready")
         let policy = any(app, "sd-backups-policy")
         XCTAssertTrue(revealUp(app, policy))
-        XCTAssertEqual(policy.label, "Backup policy: Phone-side backups · up to 32.0 GB")
+        XCTAssertEqual(policy.label, "Backup policy: On my phone · up to 32.0 GB")
         XCTAssertTrue(any(app, "sd-backups-usage").label.hasPrefix("Apps use 3.2 GB of 32.0 GB"))
         let change = app.buttons["sd-backups-policy-change"]
         XCTAssertTrue(reveal(app, change))
@@ -877,7 +893,7 @@ final class GymSweepServerTests: GymSweepCase {
         app.buttons["backup-policy-save"].tap()
         expectProbe(app, "signed backup-policy by admin-root")
         expectProbe(app, "set backup-policy peer 0")
-        wait(any(app, "sd-backups-policy"), "label BEGINSWITH 'Backup policy: Peer-distributed backups'", timeout: 10)
+        wait(any(app, "sd-backups-policy"), "label BEGINSWITH 'Backup policy: On other servers'", timeout: 10)
     }
 
     // 8b. Over the limit, peer status, and a refused change with the box's sentence.
@@ -918,7 +934,7 @@ final class GymSweepServerTests: GymSweepCase {
         none.tap()
         app.buttons["backup-policy-save"].tap()
         expectProbe(app, "set backup-policy none 0")
-        wait(any(app, "sd-backups-policy"), "label == 'Backup policy: No backups'", timeout: 10)
+        wait(any(app, "sd-backups-policy"), "label == 'Backup policy: No backup'", timeout: 10)
         XCTAssertFalse(any(app, "sd-backups-schedule").exists, "No backups: the schedule is hidden.")
         XCTAssertTrue(app.buttons["sd-backups-run"].exists, "Back up now stays.")
     }

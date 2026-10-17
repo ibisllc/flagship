@@ -133,8 +133,7 @@ struct AppDatabaseScreen: View {
 
     private func storeSection(_ store: AppDbStore, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text(AppDbCopy.storeTitle(store.store).uppercased())
-                .font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.textMuted)
+            FSSectionLabel(AppDbCopy.storeTitle(store.store))
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
                     if store.tables.isEmpty {

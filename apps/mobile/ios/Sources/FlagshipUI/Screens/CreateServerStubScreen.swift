@@ -313,7 +313,7 @@ public struct CreateServerStubScreen: View {
                 }
                 .accessibilityIdentifier("cs-next-button")
             } else {
-                FSPrimaryButton("Continue", enabled: vm.canAdvanceFromDesign, block: true, large: true) {
+                FSPrimaryButton("Continue", enabled: vm.canContinueFromBackups, block: true, large: true) {
                     vm.proceedToDelivery()
                 }
                 .accessibilityIdentifier("cs-continue-button")
@@ -517,9 +517,14 @@ public struct CreateServerStubScreen: View {
     // (`flagship/backup-policy/v1`) and rides beside the pairing order.
     private func backupPolicyPicker(c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s2) {
-            Text("Backup policy")
-                .font(.subheadline)
+            Text("Where should this server's backups go?")
+                .font(FS.font.scaled(17, weight: .semibold))
                 .foregroundStyle(c.text)
+                .accessibilityAddTraits(.isHeader)
+            Text(BackupPolicyOptions.pickHint)
+                .font(FS.font.bodySm())
+                .foregroundStyle(c.textMuted)
+                .accessibilityIdentifier("cs-backup-policy-hint")
             BackupPolicyOptions(policy: $vm.backupPolicy, reserveBytes: $vm.phoneReserveBytes, idPrefix: "cs-backup-policy")
         }
     }

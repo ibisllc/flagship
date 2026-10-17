@@ -62,6 +62,7 @@ final class OnboardingSmokeTests: XCTestCase {
         XCTAssertTrue(next.waitForExistence(timeout: 5))
         next.tap()
 
+        app.chooseBackupPolicy()
         let cont = app.buttons["cs-continue-button"]
         XCTAssertTrue(cont.waitForExistence(timeout: 5))
         cont.tap()

@@ -52,9 +52,7 @@ struct ReplaceServiceStemSheet: View {
                 .foregroundColor(c.textMuted)
 
             VStack(alignment: .leading, spacing: FS.space.s2) {
-                Text("New stem")
-                    .font(FS.font.scaled(13, weight: .semibold))
-                    .foregroundColor(c.textMuted)
+                FSSectionLabel("New stem")
                 TextField("mynotes", text: $draft)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()

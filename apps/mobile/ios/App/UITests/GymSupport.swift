@@ -27,6 +27,14 @@ extension XCUIApplication {
         add.tap()
     }
 
+    /// The Backups step preselects nothing and Continue stays off until the
+    /// owner picks: choose `none` | `phone-only` | `peer`.
+    func chooseBackupPolicy(_ policy: String = "none", file: StaticString = #filePath, line: UInt = #line) {
+        let option = descendants(matching: .any).matching(identifier: "cs-backup-policy-\(policy)").firstMatch
+        XCTAssertTrue(option.waitForExistence(timeout: 10), "The Backups step should offer \(policy).", file: file, line: line)
+        option.tap()
+    }
+
     /// Create server starts with the next free "home" in the name field:
     /// clears it, then types `text`.
     func typeServerName(_ field: XCUIElement, _ text: String) {

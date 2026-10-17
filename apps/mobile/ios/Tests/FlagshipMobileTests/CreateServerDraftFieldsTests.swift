@@ -43,9 +43,28 @@ final class CreateServerDraftFieldsTests: XCTestCase {
 
     // MARK: - Defaults match the webapp
 
-    func test_defaultBackupPolicyIsPhoneOnly() {
+    func test_noBackupPolicyIsPreselected() {
+        let (vm, d) = makeVM()
+        XCTAssertNil(vm.backupPolicy, "the owner picks; nothing is preselected")
+        XCTAssertNil(d.string(forKey: "flagship.createServerDraft.backupPolicy"))
+        XCTAssertFalse(vm.canContinueFromBackups, "Continue waits for a pick")
+        vm.name = "lab"
+        XCTAssertTrue(vm.canAdvanceFromDesign)
+        XCTAssertFalse(vm.canContinueFromBackups)
+        vm.backupPolicy = CreateServerDraftStore.BackupPolicy.none
+        XCTAssertTrue(vm.canContinueFromBackups, "any pick, even No backup, lets the owner continue")
+        vm.backupPolicy = nil
+        XCTAssertNil(d.string(forKey: "flagship.createServerDraft.backupPolicy"), "clearing the pick clears the draft")
+    }
+
+    func test_proceedToDeliveryNeedsABackupChoice() {
         let (vm, _) = makeVM()
-        XCTAssertEqual(vm.backupPolicy, .phoneOnly)
+        vm.name = "lab"
+        vm.proceedToDelivery()
+        if case .deliveryChooser = vm.phase { XCTFail("the delivery step needs a backup choice first") }
+        vm.backupPolicy = .peer
+        vm.proceedToDelivery()
+        guard case .deliveryChooser = vm.phase else { return XCTFail("a pick lets the owner on") }
     }
 
     func test_backupPolicyVocabularyMatchesWebapp() {
@@ -62,7 +81,7 @@ final class CreateServerDraftFieldsTests: XCTestCase {
         let (vm, d) = makeVM()
         vm.backupPolicy = .peer
         XCTAssertEqual(d.string(forKey: "flagship.createServerDraft.backupPolicy"), "peer")
-        vm.backupPolicy = .none
+        vm.backupPolicy = CreateServerDraftStore.BackupPolicy.none
         XCTAssertEqual(d.string(forKey: "flagship.createServerDraft.backupPolicy"), "none")
     }
 
@@ -121,6 +140,6 @@ final class CreateServerDraftFieldsTests: XCTestCase {
         CreateServerDraftStore(defaults: d).reset()
         // A freshly-constructed VM should now see defaults again.
         let (vm2, _) = makeVM(defaults: d)
-        XCTAssertEqual(vm2.backupPolicy, .phoneOnly)
+        XCTAssertNil(vm2.backupPolicy)
     }
 }

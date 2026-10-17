@@ -106,9 +106,10 @@ cd apps/com && npx wrangler d1 execute flagship-state \
   branches (Android 9 to 12) no longer get vendor security fixes on most
   devices and lack the first three, so they were dropped rather than carried
   with weaker behaviour; the API-level branches for them are gone from the
-  code. Wear OS 4 is Android 13, so the watch matches the phone. Not yet
-  reviewed against the rule: the Mac Studio app (`macOS 14`) — see the open
-  list. Platform versions in the `swift-tools-version:5.9` manifests use the
+  code. Wear OS 4 is Android 13, so the watch matches the phone.
+  **macOS 15** for Studio (Sequoia; Sonoma stopped getting fixes, owner
+  decision 2026-10-17; the mobile packages' `.macOS("15.0")` is host-build
+  only and follows Studio). Platform versions in the `swift-tools-version:5.9` manifests use the
   string form (`.iOS("18.0")`); `.v18` needs tools 6.0, which also flips on
   Swift 6 strict concurrency.
 - **An AI never learns who or where the owner is** (owner rule, 2026-10-12;
@@ -1058,8 +1059,8 @@ metal), plus the Debian 13.7.0 check. Record results under "Desktop Studio".
    the same appliance since 2026-10-15 (not yet run on real hardware).
 3. **Hetzner:** account suspended; five orphaned servers to delete by hand when
    it unlocks (153213447, 153638469, 153643080, 153813669, 155315594).
-4. **Minimum-OS review** (Conventions rule): Mac Studio is macOS 14. Decide
-   for the next releases. (Android and Wear OS are done: `minSdk 33`.)
+4. **Minimum-OS review** (Conventions rule): done. Android and Wear OS are
+   `minSdk 33`; Mac Studio is macOS 15 (2026-10-17).
 5. **Restricted-device profile-key delivery is unimplemented.** The server
    stores and authorizes `accountDirectoryKeyGrant`s, but no client seals or
    unseals `sealedKeyHex`. Mirror the `AcmeAccountKeyGrant` envelope with

@@ -164,7 +164,7 @@ public struct ServiceDetailScreen: View {
         let lines = AppStorageText.appLines(storage)
         if !lines.isEmpty {
             VStack(alignment: .leading, spacing: FS.space.s2) {
-                Text("Storage").font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.textMuted)
+                FSSectionLabel("Storage")
                 FSCard {
                     VStack(alignment: .leading, spacing: FS.space.s2) {
                         ForEach(lines, id: \.label) { l in
@@ -196,9 +196,7 @@ public struct ServiceDetailScreen: View {
         // Replace button floats top-right of the section header.
         VStack(alignment: .leading, spacing: FS.space.s3) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Web domains")
-                    .font(FS.font.scaled(13, weight: .semibold))
-                    .foregroundColor(c.textMuted)
+                FSSectionLabel("Web domains")
                 Spacer()
                 Button {
                     replaceDraft = currentDisplayLabel ?? ""
@@ -359,9 +357,7 @@ public struct ServiceDetailScreen: View {
     }
 
     private func sectionLabel(_ s: String, c: FSColors) -> some View {
-        Text(s)
-            .font(FS.font.scaled(13, weight: .semibold))
-            .foregroundColor(c.textMuted)
+        FSSectionLabel(s)
     }
 
     private func stripScheme(_ s: String) -> String {
@@ -674,7 +670,7 @@ public struct ServiceDetailScreen: View {
     @ViewBuilder
     private func section<C: View>(_ label: String, c: FSColors, @ViewBuilder content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text(label).font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.textMuted)
+            FSSectionLabel(label)
             content()
         }
     }

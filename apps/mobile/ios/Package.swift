@@ -21,7 +21,7 @@ let package = Package(
     name: "FlagshipMobile",
     platforms: [
         .iOS("18.0"),
-        .macOS(.v14)
+        .macOS("15.0")
     ],
     products: [
         .library(name: "Flagship", targets: ["Flagship"]),

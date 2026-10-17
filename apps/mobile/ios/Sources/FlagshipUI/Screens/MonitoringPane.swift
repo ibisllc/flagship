@@ -122,9 +122,7 @@ struct MonitoringPane: View {
             let rows = MonitoringRows.build(health: health, metrics: metrics, cert: cert, nowMs: nowMs)
             if !rows.isEmpty {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
-                    Text("Monitoring")
-                        .font(FS.font.scaled(13, weight: .semibold))
-                        .foregroundColor(c.textMuted)
+                    FSSectionLabel("Monitoring")
                         .accessibilityAddTraits(.isHeader)
                     VStack(spacing: 0) {
                         ForEach(rows) { row in

@@ -12,8 +12,7 @@ struct InternetAccessSection: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text(AppAccessCopy.sectionTitle).font(FS.font.scaled(13, weight: .semibold))
-                .foregroundColor(c.textMuted)
+            FSSectionLabel(AppAccessCopy.sectionTitle)
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
                     switch controller.state {

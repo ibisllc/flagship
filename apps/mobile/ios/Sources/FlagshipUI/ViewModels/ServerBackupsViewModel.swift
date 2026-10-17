@@ -340,14 +340,14 @@ public final class ServerBackupsViewModel {
 
     public static func policyName(_ p: String) -> String {
         switch p {
-        case "phone": return "Phone-side backups"
-        case "peer": return "Peer-distributed backups"
-        case "none": return "No backups"
+        case "phone": return "On my phone"
+        case "peer": return "On other servers"
+        case "none": return "No backup"
         default: return "Not chosen yet"
         }
     }
 
-    /// "Backup policy: Phone-side backups · up to 32 GB".
+    /// "Backup policy: On my phone · up to 32 GB".
     public var policyLine: String {
         guard let p = policy else { return "Backup policy: Not chosen yet" }
         let name = Self.policyName(p.policy.policy)

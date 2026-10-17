@@ -229,9 +229,9 @@ public struct FSPill: View {
         let c = FSColors.scheme(scheme)
         let (fg, bg) = colors(c, kind)
         HStack(spacing: 6) {
-            Circle().fill(fg).frame(width: 6, height: 6)
+            Circle().fill(kind == .provisioning ? c.accent : fg).frame(width: 6, height: 6)
             HStack(spacing: 3) {
-                Text(label).font(FS.font.caption()).foregroundColor(fg)
+                Text(label).font(FS.font.caption()).foregroundColor(kind == .provisioning ? c.text : fg)
                 if let trailingIcon {
                     Image(systemName: trailingIcon)
                         .font(FS.font.scaled(10, weight: .semibold))

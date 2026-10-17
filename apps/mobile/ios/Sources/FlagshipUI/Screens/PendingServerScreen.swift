@@ -79,9 +79,7 @@ public struct PendingServerScreen: View {
                 if let domain = timeline?.status?.serverDomain, !domain.isEmpty {
                     FSCard {
                         VStack(alignment: .leading, spacing: FS.space.s2) {
-                            Text("Address")
-                                .font(FS.font.scaled(13, weight: .semibold))
-                                .foregroundColor(c.textMuted)
+                            FSSectionLabel("Address")
                             Text(domain)
                                 .font(FS.font.mono())
                                 .foregroundColor(c.text)

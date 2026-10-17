@@ -23,9 +23,7 @@ struct JournalCard: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("Diagnostics")
-                .font(FS.font.scaled(13, weight: .semibold))
-                .foregroundColor(c.textMuted)
+            FSSectionLabel("Diagnostics")
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s2) {
                     if JournalUnits.all.count > 1 {

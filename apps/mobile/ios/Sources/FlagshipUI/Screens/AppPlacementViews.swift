@@ -100,8 +100,7 @@ struct ServerAppsSection: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text(AppPlacementCopy.serverAppsSection)
-                .font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.textMuted)
+            FSSectionLabel(AppPlacementCopy.serverAppsSection)
             switch controller.state {
             case .idle, .loading:
                 ServerCardSkeleton()
@@ -174,8 +173,7 @@ struct RunsOnSection: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text(AppPlacementCopy.runsOnSection)
-                .font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.textMuted)
+            FSSectionLabel(AppPlacementCopy.runsOnSection)
             FSCard {
                 VStack(spacing: FS.space.s3) {
                     ForEach(controller.rows) { row in

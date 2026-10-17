@@ -84,8 +84,8 @@ public struct ProfilesScreen: View {
                 Spacer()
                 if isActive {
                     Text("Active")
-                        .font(FS.font.caption())
-                        .foregroundColor(c.primary)
+                        .font(FS.font.scaled(12, weight: .semibold))
+                        .foregroundColor(c.text)
                 }
             }
             .padding(FS.space.s4)

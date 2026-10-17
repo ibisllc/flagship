@@ -219,6 +219,9 @@ final class GymTotalDetailTests: XCTestCase {
             app.buttons["cs-continue-button"].exists,
             "The final design step should offer Continue (→ the delivery chooser)."
         )
+        XCTAssertFalse(app.buttons["cs-continue-button"].isEnabled, "Nothing is preselected: Continue waits for a backup choice.")
+        app.chooseBackupPolicy("peer")
+        XCTAssertTrue(app.buttons["cs-continue-button"].isEnabled, "A pick turns Continue on.")
         gymShot(app, "create-step2-backup")
     }
 

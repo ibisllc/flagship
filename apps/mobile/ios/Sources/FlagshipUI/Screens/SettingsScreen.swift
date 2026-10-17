@@ -615,7 +615,7 @@ public struct SettingsScreen: View {
                             .foregroundColor(c.text)
                             .lineLimit(1)
                             .truncationMode(.tail)
-                        if d.isCurrent { Text("This device").font(FS.font.caption()).foregroundColor(c.primary) }
+                        if d.isCurrent { Text("This device").font(FS.font.scaled(12, weight: .semibold)).foregroundColor(c.text) }
                         if d.isLocked { Image(systemName: "lock.fill").foregroundColor(c.textMuted) }
                     }
                     HStack(spacing: 4) {
@@ -897,9 +897,7 @@ public struct SettingsScreen: View {
                     selection: privacy.themeMode,
                     onSelect: { privacy.themeMode = $0 }
                 )
-                Text("App icon")
-                    .font(FS.font.scaled(13, weight: .semibold))
-                    .foregroundColor(c.textMuted)
+                FSSectionLabel("App icon")
                 FSSegmentedControl(
                     segments: [
                         .init(value: String?.none, title: "Classic", identifier: "appicon-classic"),
@@ -943,7 +941,7 @@ public struct SettingsScreen: View {
     @ViewBuilder
     private func section<C: View>(_ label: String, c: FSColors, @ViewBuilder content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text(label).font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.textMuted)
+            FSSectionLabel(label)
             content()
         }
     }

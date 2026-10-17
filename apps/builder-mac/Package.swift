@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "FlagshipBuilder",
     platforms: [
-        .macOS(.v14)
+        .macOS("15.0")
     ],
     products: [
         .executable(name: "FlagshipBuilder", targets: ["FlagshipBuilder"]),

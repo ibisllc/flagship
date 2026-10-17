@@ -17,28 +17,27 @@ enum DeviceStorage {
 /// server page's "Change".
 struct BackupPolicyOptions: View {
     @Environment(\.colorScheme) private var scheme
-    @Binding var policy: CreateServerDraftStore.BackupPolicy
+    /// nil until the owner picks: nothing is preselected.
+    @Binding var policy: CreateServerDraftStore.BackupPolicy?
     @Binding var reserveBytes: Int64
     /// Accessibility id prefix (`cs-backup-policy` on the create form).
     var idPrefix = "backup-policy"
     var freeBytes: Int64 = DeviceStorage.freeBytes()
 
-    static let phoneText =
-        "Your server makes an encrypted backup every night and this phone keeps a copy, over Wi-Fi while charging. Your server's apps can hold up to the space you reserve here."
-    static let peerText =
-        "Encrypted pieces of your backup are kept on other Flagship servers, and yours keeps theirs. Your apps can use up to a third of this server's disk; the rest holds other servers' pieces."
-    static let noneText =
-        "Nothing is backed up. If this server's disk fails, its apps and data are gone. You can still use Back up now on the server page."
+    static let pickHint = "Pick one to continue. You can change it any time in the server's Backups section."
+    static let noneText = "Nothing is copied. You can turn backups on later."
+    static let phoneText = "An encrypted copy is kept on this phone."
+    static let peerText = "Encrypted pieces are kept on other Flagship servers, and yours keeps theirs."
 
     private static let gb: Int64 = 1 << 30
 
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s2) {
-            option(.phoneOnly, "Phone-side backups", Self.phoneText, c: c)
+            option(.none, "No backup", Self.noneText, c: c)
+            option(.phoneOnly, "On my phone", Self.phoneText, c: c)
             if policy == .phoneOnly { reservePicker(c) }
-            option(.peer, "Peer-distributed backups", Self.peerText, c: c)
-            option(.none, "No backups", Self.noneText, warning: true, c: c)
+            option(.peer, "On other servers", Self.peerText, c: c)
         }
     }
 
@@ -108,9 +107,7 @@ struct ServerBackupsSection: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("Backups")
-                .font(FS.font.scaled(13, weight: .semibold))
-                .foregroundColor(c.textMuted)
+            FSSectionLabel("Backups")
             if let vm {
                 ServerBackupsCard(vm: vm)
             }
@@ -302,8 +299,7 @@ struct ServerBackupsCard: View {
     private func listBlock(_ c: FSColors) -> some View {
         if let backups = vm.saved?.backups, !backups.isEmpty {
             VStack(alignment: .leading, spacing: FS.space.s2) {
-                Text("On this server")
-                    .font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.textMuted)
+                FSSectionLabel("On this server")
                 ForEach(backups) { b in row(b, c) }
                 Text(ServerBackupsViewModel.oneFileNote)
                     .font(FS.font.caption()).foregroundColor(c.textMuted)
@@ -453,7 +449,7 @@ struct BackupPolicyEditor: View {
     @Environment(\.colorScheme) private var scheme
     @Bindable var vm: ServerBackupsViewModel
     var onDone: () -> Void
-    @State private var policy: CreateServerDraftStore.BackupPolicy = .phoneOnly
+    @State private var policy: CreateServerDraftStore.BackupPolicy? = nil
     @State private var reserve: Int64 = PhoneBackupRetention.defaultReserveBytes(freeBytes: DeviceStorage.freeBytes())
     @State private var loaded = false
 
@@ -461,7 +457,7 @@ struct BackupPolicyEditor: View {
         let c = FSColors.scheme(scheme)
         ScrollView {
             VStack(alignment: .leading, spacing: FS.space.s4) {
-                Text("Choose how this server is backed up. The policy also sets how much the server's apps may hold.")
+                Text("Where should this server's backups go? The choice also sets how much the server's apps may hold.")
                     .font(FS.font.bodySm()).foregroundColor(c.textMuted)
                 BackupPolicyOptions(policy: $policy, reserveBytes: $reserve)
                 if let e = vm.policyError {
@@ -470,9 +466,10 @@ struct BackupPolicyEditor: View {
                         .accessibilityIdentifier("backup-policy-error")
                 }
                 FSPrimaryButton(vm.savingPolicy ? "Saving…" : "Save", block: true) {
+                    guard let policy else { return }
                     Task { if await vm.changePolicy(to: policy, reserveBytes: reserve) { onDone() } }
                 }
-                .disabled(vm.savingPolicy)
+                .disabled(vm.savingPolicy || policy == nil)
                 .accessibilityIdentifier("backup-policy-save")
             }
             .padding(FS.space.s4)
@@ -484,7 +481,7 @@ struct BackupPolicyEditor: View {
         .onAppear {
             guard !loaded else { return }
             loaded = true
-            policy = vm.policyDraft
+            policy = vm.policyKind == "unset" ? nil : vm.policyDraft
             if vm.policyKind == "phone", let r = vm.policy?.policy.phoneReserveBytes, r > 0 { reserve = r }
         }
     }

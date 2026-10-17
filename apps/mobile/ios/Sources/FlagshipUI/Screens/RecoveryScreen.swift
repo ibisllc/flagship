@@ -60,7 +60,7 @@ public struct RecoveryScreen: View {
 
                 FSCard {
                     VStack(alignment: .leading, spacing: FS.space.s3) {
-                        Text("Cloud recovery").font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.textMuted)
+                        FSSectionLabel("Cloud recovery")
                         switch vm.phase {
                         case .idle:
                             Text("Recovery isn't set up yet.").foregroundColor(c.text)

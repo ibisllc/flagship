@@ -204,6 +204,7 @@ outside the store invites a 2.4.5 rejection, and the URL handoff needs none of i
 - Should the site keep offering the sandboxed Studio, or send Mac users to the
   store only? Recommendation: keep both; some Macs are managed without the
   App Store.
-- Minimum macOS: Studio is macOS 14. Review it under the minimum-OS rule
-  before submitting (`AGENTS.md`, Conventions).
+- Minimum macOS: Studio is macOS 15 (Sequoia; Sonoma stopped getting security
+  fixes). Re-check it under the minimum-OS rule before submitting
+  (`AGENTS.md`, Conventions).
 - Name: "Flagship USB Writer" is a placeholder.

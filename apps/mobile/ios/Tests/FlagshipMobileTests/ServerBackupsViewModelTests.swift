@@ -195,7 +195,7 @@ final class ServerBackupsViewModelTests: XCTestCase {
         c.policyCurrent = BackupPolicyCurrent(policy: "phone", phoneReserveBytes: 32 << 30, issuedAt: now - 10)
         let m = vm(c)
         await m.start()
-        XCTAssertEqual(m.policyLine, "Backup policy: Phone-side backups · up to 32.0 GB")
+        XCTAssertEqual(m.policyLine, "Backup policy: On my phone · up to 32.0 GB")
         XCTAssertEqual(m.usageLine, "Apps use 3.2 GB of 32.0 GB")
         XCTAssertTrue(m.phoneCopyShown)
         let ok = await m.changePolicy(to: .peer, reserveBytes: 32 << 30)
@@ -231,7 +231,7 @@ final class ServerBackupsViewModelTests: XCTestCase {
         XCTAssertFalse(m.scheduleShown)
         XCTAssertNil(m.nextLine)
         XCTAssertTrue(m.canRun)
-        XCTAssertEqual(m.policyLine, "Backup policy: No backups")
+        XCTAssertEqual(m.policyLine, "Backup policy: No backup")
     }
 
     // MARK: The phone's copy

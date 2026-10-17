@@ -36,9 +36,7 @@ struct LockPowerCard: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("Power")
-                .font(FS.font.scaled(13, weight: .semibold))
-                .foregroundColor(c.textMuted)
+            FSSectionLabel("Power")
             FSCard {
                 switch vm?.phase {
                 case .sent(let mode):
@@ -108,9 +106,7 @@ struct DeadManCard: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("Lock-down")
-                .font(FS.font.scaled(13, weight: .semibold))
-                .foregroundColor(c.textMuted)
+            FSSectionLabel("Lock-down")
             Button { open = true } label: {
                 FSCard {
                     HStack {
@@ -216,7 +212,7 @@ struct DeadManScreen: View {
     @ViewBuilder
     private func windowSection(vm: DeadManViewModel, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("Window").font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.textMuted)
+            FSSectionLabel("Window")
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
                     Picker("Window", selection: Binding(
@@ -244,7 +240,7 @@ struct DeadManScreen: View {
     @ViewBuilder
     private func lockoutSection(vm: DeadManViewModel, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("On lapse").font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.textMuted)
+            FSSectionLabel("On lapse")
             FSCard {
                 Picker("On lapse", selection: Binding(
                     get: { vm.lockoutMode },
@@ -263,7 +259,7 @@ struct DeadManScreen: View {
     @ViewBuilder
     private func leaseSection(vm: DeadManViewModel, c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("Stay unlocked").font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.textMuted)
+            FSSectionLabel("Stay unlocked")
             FSCard {
                 // `nowTick` is read here so the countdown re-renders each
                 // second; the value itself is unused.

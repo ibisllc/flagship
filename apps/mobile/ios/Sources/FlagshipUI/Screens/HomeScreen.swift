@@ -575,11 +575,9 @@ public struct HomeScreen: View {
                 .accessibilityIdentifier("home-empty-state")
             } else {
                 HStack {
-                    Text("Your servers")
-                        .font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.textMuted)
+                    FSSectionLabel("Your servers")
                     Spacer()
-                    Text("\(pods.count)")
-                        .font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.textMuted)
+                    Text("\(pods.count)").font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.textMuted)
                 }
                 if canAddServers { addServerButton(c: c) }
                 if !canChangeServers {
@@ -654,7 +652,7 @@ public struct HomeScreen: View {
         Button(action: { showAddOrImport = true }) {
             HStack(spacing: 8) {
                 Image(systemName: "plus.circle.fill").foregroundColor(c.accent)
-                Text("Add/Import a server").font(FS.font.scaled(15, weight: .semibold)).foregroundColor(c.primary)
+                Text("Add/Import a server").font(FS.font.scaled(15, weight: .semibold)).foregroundColor(c.text)
                 Spacer()
             }
             .padding(.horizontal, FS.space.s4)
@@ -890,9 +888,7 @@ public struct HomeScreen: View {
 
     private func recentActivity(events: [RecentInstallEvent], c: FSColors) -> some View {
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("Recent activity")
-                .font(FS.font.scaled(13, weight: .semibold))
-                .foregroundColor(c.textMuted)
+            FSSectionLabel("Recent activity")
             if events.isEmpty {
                 FSCard { Text("No recent activity.").foregroundColor(c.textMuted) }
             } else {
@@ -1206,11 +1202,11 @@ public struct LeadServicesBadge: View {
                 Image(systemName: "crown.fill").font(FS.font.scaled(10, weight: .semibold))
                 Text(label).font(FS.font.scaled(11, weight: .semibold)).lineLimit(1)
             }
-            .foregroundColor(c.primary)
+            .foregroundColor(c.text)
             .padding(.horizontal, 10)
             .padding(.vertical, 2)
             .frame(minHeight: 22)
-            .background(c.primary.opacity(0.12))
+            .background(c.accent.opacity(0.16))
             .clipShape(Capsule())
             .accessibilityIdentifier("pod-leads-badge")
         }

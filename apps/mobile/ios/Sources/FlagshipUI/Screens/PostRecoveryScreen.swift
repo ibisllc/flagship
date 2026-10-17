@@ -118,9 +118,7 @@ public struct PostRecoveryScreen: View {
     private func phaseCard(c: FSColors) -> some View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s3) {
-                Text("Status")
-                    .font(FS.font.scaled(13, weight: .semibold))
-                    .foregroundColor(c.textMuted)
+                FSSectionLabel("Status")
                 switch vm.phase {
                 case .loading:
                     HStack { ProgressView(); Text("Loading…").foregroundColor(c.textMuted) }
@@ -152,9 +150,7 @@ public struct PostRecoveryScreen: View {
     private func appsCard(report r: ReissuanceReportPayload, c: FSColors) -> some View {
         FSCard {
             VStack(alignment: .leading, spacing: FS.space.s3) {
-                Text("Per-app results")
-                    .font(FS.font.scaled(13, weight: .semibold))
-                    .foregroundColor(c.textMuted)
+                FSSectionLabel("Per-app results")
                 ForEach(r.apps.filter { $0.rewrittenCount > 0 || $0.error != nil }) { app in
                     HStack(alignment: .top, spacing: FS.space.s2) {
                         Image(systemName: app.error == nil ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")

@@ -51,7 +51,7 @@ final class ThemeTokensTests: XCTestCase {
         XCTAssertEqual(hex(FSColors.dark.success), "#4ADE80")
         XCTAssertEqual(hex(FSColors.dark.warning), "#FBBF24")
         XCTAssertEqual(hex(FSColors.dark.danger), "#F87171")
-        XCTAssertEqual(hex(FSColors.light.accent), "#0E9488")
+        XCTAssertEqual(hex(FSColors.light.accent), "#14B8A6", "the brand teal is the graphic accent")
         XCTAssertEqual(hex(FSColors.dark.accent), "#2DD4BF")
         XCTAssertEqual(FSRadius.sm, 8)
         XCTAssertEqual(FSRadius.md, 12)
@@ -97,17 +97,27 @@ final class ThemeTokensTests: XCTestCase {
         }
     }
 
-    /// Small teal text and links use `primary` (>= 4.5); the lighter `accent`
-    /// is for graphics and large or bold text, where 3:1 is the bar.
-    func test_accentClearsTheGraphicsBar_inBothThemes() {
+    /// Small teal text (inline links only) is `primary` (>= 4.5). The brand
+    /// teal `accent` is for labelled or decorative graphics, documented at
+    /// 2.3:1 on paper (3:1 and up in dark); the sunken surfaces sit a little
+    /// lower, which is why graphics there keep their label.
+    func test_accentIsDocumentedAndTextTealClearsAA_inBothThemes() {
+        XCTAssertGreaterThanOrEqual(contrast(FSColors.light.accent, FSColors.light.bg), 2.3, "light accent/paper")
+        XCTAssertGreaterThanOrEqual(contrast(FSColors.light.accent, FSColors.light.surface), 2.3, "light accent/surface")
+        XCTAssertGreaterThanOrEqual(contrast(FSColors.light.accent, FSColors.light.surfaceSunken), 2.1, "light accent/sunken")
         for (name, c) in [("light", FSColors.light), ("dark", FSColors.dark)] {
+            if name == "dark" {
+                for (label, bg) in [("bg", c.bg), ("surface", c.surface), ("surfaceSunken", c.surfaceSunken)] {
+                    XCTAssertGreaterThanOrEqual(contrast(c.accent, bg), 3.0, "dark accent/\(label)")
+                }
+            }
             for (label, bg) in [("bg", c.bg), ("surface", c.surface), ("surfaceSunken", c.surfaceSunken)] {
-                XCTAssertGreaterThanOrEqual(contrast(c.accent, bg), 3.0, "\(name) accent/\(label)")
                 XCTAssertGreaterThanOrEqual(contrast(c.primary, bg), 4.5, "\(name) primary/\(label)")
             }
             XCTAssertGreaterThanOrEqual(contrast(c.onPrimary, c.primaryFill), 7.0, "\(name) onPrimary/fill")
         }
         XCTAssertLessThan(contrast(FSColors.light.accent, FSColors.light.bg), 4.5,
-                          "the accent is deliberately lighter than the text teal")
+                          "the accent is a graphic: it must never be used for body-size text")
+        XCTAssertEqual(hex(FSColors.light.accent), hex(FSColors.light.primaryFill), "one brand teal for graphics and fills")
     }
 }

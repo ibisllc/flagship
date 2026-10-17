@@ -134,7 +134,7 @@ struct CoInviteSection: View {
     var body: some View {
         let c = FSColors.scheme(scheme)
         VStack(alignment: .leading, spacing: FS.space.s3) {
-            Text("Invite people").font(FS.font.scaled(13, weight: .semibold)).foregroundColor(c.textMuted)
+            FSSectionLabel("Invite people")
             FSCard {
                 VStack(alignment: .leading, spacing: FS.space.s3) {
                     FSSecondaryButton(ShareCoInviteCopy.open, block: true) {

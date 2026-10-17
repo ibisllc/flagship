@@ -9,9 +9,7 @@ import FlagshipCore
 // server's page, which shows only what the share's level allows.
 
 private func sectionHeader(_ title: String, c: FSColors) -> some View {
-    Text(title)
-        .font(FS.font.scaled(13, weight: .semibold))
-        .foregroundColor(c.textMuted)
+    FSSectionLabel(title)
 }
 
 private func relative(_ ms: Int64) -> String {
