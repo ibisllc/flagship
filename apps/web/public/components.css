@@ -37,6 +37,7 @@ a:hover { color: var(--accent); border-bottom-color: var(--teal); }
 a:focus-visible {
   outline: 2px solid var(--accent-graphic);
   outline-offset: 3px;
+  box-shadow: 0 0 0 3px var(--focus-inner);
   border-bottom-color: transparent;
 }
 
@@ -189,7 +190,7 @@ main {
 .btn:hover { border-bottom: none; }
 .btn:active:not(:disabled) { transform: translateY(1px); }
 .btn:disabled, .btn[aria-disabled="true"] { opacity: 0.4; cursor: not-allowed; }
-.btn:focus-visible { outline: 2px solid var(--accent-graphic); outline-offset: 3px; }
+.btn:focus-visible { outline: 2px solid var(--accent-graphic); outline-offset: 3px; box-shadow: 0 0 0 3px var(--focus-inner); }
 
 .btn--primary, .btn--solid {
   background: var(--teal);
@@ -285,7 +286,7 @@ input[type="search"], textarea, select {
   outline: none;
   border-color: var(--teal);
   background: var(--canvas);
-  box-shadow: 0 0 0 3px var(--teal-soft);
+  box-shadow: 0 0 0 2px var(--focus-inner), 0 0 0 4px var(--accent-graphic);
 }
 .input[aria-invalid="true"], input[aria-invalid="true"] { border-color: var(--err); }
 textarea { min-height: 112px; padding: 12px 14px; resize: vertical; line-height: 1.55; }

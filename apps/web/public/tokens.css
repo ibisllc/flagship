@@ -164,6 +164,8 @@
   --accent-deep:     var(--teal-deep);
   --accent-soft:     var(--teal-soft);
   --accent-on:       var(--on-teal);
+  /* Inner ring of every focus indicator (3:1 on any surface). */
+  --focus-inner:     var(--ink);
   --primary:         var(--teal);
   --primary-hover:   var(--teal-bright);
   --success:         var(--ok);

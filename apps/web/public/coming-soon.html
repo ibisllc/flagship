@@ -58,10 +58,15 @@
       border-radius: 4px;
       transition: border-color 160ms ease, color 160ms ease;
     }
-    .repo:hover, .repo:focus-visible {
+    .repo:hover {
+      color: var(--ink);
+      border-color: var(--teal);
+    }
+    .repo:focus-visible {
       color: var(--ink);
       border-color: var(--teal);
       outline: none;
+      box-shadow: 0 0 0 2px var(--focus-inner), 0 0 0 4px var(--accent-graphic);
     }
     .repo svg { width: 14px; height: 14px; }
     .mark {

@@ -316,7 +316,9 @@
 //  v140: the light teal #14B8A6 is the look again: --accent-graphic is the
 //       brand teal, --accent is for inline links only, other teal text is ink;
 //       Create a server picks its backup policy with nothing preselected.
-const SHELL_VERSION = "v140";
+//  v141: every focus indicator is the bright teal ring plus a 2px ink (light)
+//       or cream (dark) inner ring, 3:1 on any surface.
+const SHELL_VERSION = "v141";
 const SHELL_CACHE = `flagship-webapp-shell-${SHELL_VERSION}`;
 
 // ESSENTIAL_PATHS: the absolute minimum to render the unlock view and

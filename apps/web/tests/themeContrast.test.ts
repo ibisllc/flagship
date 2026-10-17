@@ -130,6 +130,12 @@ describe.each(sheets)("teal roles in $name", (sheet) => {
         }
       });
 
+      it("--focus-inner (the ink ring inside every focus indicator) holds 3:1 on every surface", () => {
+        for (const sf of surfaces(t, ALL_SURFACES)) {
+          expect(ratio(colour(t, "--focus-inner"), colour(t, sf)), `--focus-inner on ${sf}`).toBeGreaterThanOrEqual(3);
+        }
+      });
+
       it("--accent stays text-safe on the tinted selection wash", () => {
         const wash = over(colour(t, "--accent-soft"), colour(t, "--canvas"));
         expect(ratio(colour(t, "--accent"), wash)).toBeGreaterThanOrEqual(4.5);
@@ -244,5 +250,32 @@ describe("no icon-only control leans on the graphic teal alone", () => {
       }
     }
     expect(offenders).toEqual([]);
+  });
+});
+
+describe("focus indicators pair the bright teal with an inner ring", () => {
+  it("every focus rule that draws a ring or border uses --focus-inner, and none relies on teal alone", () => {
+    const offenders: string[] = [];
+    for (const f of walk(PUBLIC)) {
+      if (!/\.(css|html)$/.test(f) || /^recovery[\\/]/.test(relative(PUBLIC, f))) continue;
+      const src = readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+      for (const m of src.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        const sel = m[1]!.trim().replace(/\s+/g, " ");
+        if (!/:focus-visible|:focus-within|(^|[^-\w]):focus(?![-\w])/.test(sel) || /^\.?skip|-step:focus/.test(sel)) continue;
+        const body = m[2]!;
+        if (!/(^|[;\s])(outline|box-shadow|border-color)\s*:/.test(body)) continue;
+        if (/outline:\s*none/.test(body) && !/box-shadow/.test(body)) continue;
+        const shadow = /box-shadow:([^;]*)/.exec(body)?.[1] ?? "";
+        const teal = /var\(--(accent-graphic|teal)\)/.test(body);
+        if (teal && !shadow.includes("--focus-inner")) offenders.push(`${relative(PUBLIC, f)}: ${sel}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("the ring is two pixels or more of ink beside the bright teal", () => {
+    const css = readFileSync(join(PUBLIC, "webapp", "style.css"), "utf8");
+    expect(css).toMatch(/button:focus-visible, \.btn:focus-visible \{[^}]*outline: 2px solid var\(--accent-graphic\)[^}]*box-shadow: 0 0 0 2px var\(--focus-inner\)/);
+    expect(css).toMatch(/a:focus-visible \{[^}]*box-shadow: 0 0 0 3px var\(--focus-inner\)/);
   });
 });

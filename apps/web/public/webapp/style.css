@@ -57,6 +57,9 @@
   --accent-press:    #0B5F58;
   --accent-soft:     rgba(20, 184, 166, 0.10);
   --accent-fill:     var(--teal);
+  /* The inner ring of every focus indicator: ink in light, cream in dark,
+     so the ring holds 3:1 on any surface beside the bright teal. */
+  --focus-inner:     var(--ink);
   --accent-on:       #0A0A09;
 
   --ok:              #166534;
@@ -612,7 +615,7 @@ button:where(:not(:has(> :not(.icon, svg, .glyph)))),
 }
 button:where(:hover), .btn:where(:hover) { background: var(--teal-bright); border-color: var(--teal-bright); }
 button:where(:active), .btn:where(:active) { transform: translateY(1px); }
-button:focus-visible, .btn:focus-visible { outline: 2px solid var(--accent-graphic); outline-offset: 2px; }
+button:focus-visible, .btn:focus-visible { outline: 2px solid var(--accent-graphic); outline-offset: 2px; box-shadow: 0 0 0 2px var(--focus-inner); }
 button:disabled, .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 button:where(:disabled:hover), .btn:where(:disabled:hover) { background: var(--teal); border-color: var(--teal); }
 /* Recovery-gated session buttons: greyed but still TAPPABLE (a tap shows a
@@ -933,6 +936,9 @@ input:focus, textarea:focus, select:focus {
 }
 input:focus-visible, textarea:focus-visible, select:focus-visible {
   border-color: var(--accent-graphic);
+  outline: 2px solid var(--accent-graphic);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--focus-inner);
 }
 input[type="checkbox"], input[type="radio"] { accent-color: var(--teal); }
 textarea {
@@ -1010,7 +1016,7 @@ a {
   transition: color var(--motion-state), text-decoration-color var(--motion-state);
 }
 a:hover { text-decoration-color: currentColor; }
-a:focus-visible { outline: 2px solid var(--accent-graphic); outline-offset: 3px; border-radius: 2px; }
+a:focus-visible { outline: 2px solid var(--accent-graphic); outline-offset: 3px; border-radius: 2px; box-shadow: 0 0 0 3px var(--focus-inner); }
 /* An anchor dressed as a secondary button (e.g. "Get Flagship Studio"). */
 a.secondary, a.primary {
   display: flex;
@@ -1445,6 +1451,7 @@ section:not(.hidden) {
 .tab-bar-btn:focus-visible {
   outline: 2px solid var(--accent-graphic);
   outline-offset: -4px;
+  box-shadow: inset 0 0 0 2px var(--focus-inner);
   border-radius: 4px;
 }
 /* Hide the tab bar entirely when the user is on bootstrap/unlock — no
@@ -1964,7 +1971,7 @@ section h2.fs-hero-title::before { content: none; }
   color: var(--ink-faint);
 }
 .fs-chip.is-selected .fs-chip-count { color: var(--ink); }
-.fs-chip:focus-visible { outline: 2px solid var(--accent-graphic); outline-offset: 2px; }
+.fs-chip:focus-visible { outline: 2px solid var(--accent-graphic); outline-offset: 2px; box-shadow: 0 0 0 2px var(--focus-inner); }
 
 /* Pod-switcher leader marker: a small teal flag next to the main server's
    chip. Tinted with the accent so it reads as "leader" distinctly from the
@@ -1995,7 +2002,7 @@ section h2.fs-hero-title::before { content: none; }
   border-radius: var(--radius-sm);
   transition: border-color var(--motion-state), background var(--motion-state);
 }
-.fs-search:focus-within { border-color: var(--teal); background: var(--canvas); box-shadow: 0 0 0 3px var(--accent-soft); }
+.fs-search:focus-within { border-color: var(--teal); background: var(--canvas); box-shadow: 0 0 0 2px var(--focus-inner), 0 0 0 4px var(--accent-graphic); }
 .fs-search-icon { width: 16px; height: 16px; color: var(--ink-muted); }
 .fs-search-input {
   flex: 1;
@@ -2512,7 +2519,7 @@ section h2.fs-hero-title::before { content: none; }
 }
 .monitor-row:hover { background: var(--surface-elev); }
 .monitor-row:active { transform: none; background: var(--surface-elev); }
-.monitor-row:focus-visible { outline: 2px solid var(--accent-graphic); outline-offset: -2px; }
+.monitor-row:focus-visible { outline: 2px solid var(--accent-graphic); outline-offset: -4px; box-shadow: inset 0 0 0 2px var(--focus-inner); }
 .monitor-name { display: inline-flex; align-items: center; gap: var(--space-3); flex: 1 1 auto; min-width: 0; }
 .monitor-value {
   flex: 0 1 auto;
@@ -2602,7 +2609,7 @@ section h2.fs-hero-title::before { content: none; }
   border-color: var(--border);
   color: var(--ink);
 }
-.fs-segmented > button:focus-visible { outline: 2px solid var(--accent-graphic); outline-offset: 2px; }
+.fs-segmented > button:focus-visible { outline: 2px solid var(--accent-graphic); outline-offset: 2px; box-shadow: 0 0 0 2px var(--focus-inner); }
 .fs-segmented[aria-disabled="true"] > button { cursor: progress; opacity: 0.7; }
 
 /* Access control — member rows (views/service-access.js). */
